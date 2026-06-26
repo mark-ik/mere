@@ -117,6 +117,24 @@ impl PaneSession {
         crate::serval_render::scene_from_session(session, &dom_ref, cursor, scroll, w, h)
     }
 
+    /// Scroll the nearest nested `overflow: scroll/auto` container under scene point
+    /// `(x, y)` by `(dx, dy)` device px, recording it in the retained layout's
+    /// `element_scroll` (the wheel default action; the engine hit-tests the point,
+    /// walks to the scroll container, clamps, and chains). The next [`scene`](Self::scene)
+    /// paints + [`hit_test`](Self::hit_test)s at the new offset. Returns whether anything
+    /// scrolled (a pane, or the document fallback). (Host-scroll P2.)
+    pub(crate) fn scroll_at(&mut self, dom: &ScriptedDom, x: f32, y: f32, dx: f32, dy: f32) -> bool {
+        self.layout.scroll_at(dom, x, y, dx, dy)
+    }
+
+    /// The retained per-container nested scroll offsets the host reads for its **own**
+    /// geometry (a11y row bounds, the scrollbar overlay, mapping a pointer into a scrolled
+    /// pane). [`scene`](Self::scene) and [`hit_test`](Self::hit_test) already fold these into
+    /// paint + hit-test, so those callers pass empty host offsets. (Host-scroll P2.)
+    pub(crate) fn element_scroll(&self) -> &ScrollOffsets<NodeId> {
+        self.layout.element_scroll()
+    }
+
     /// Hit-test scene point `(x, y)` against the session's **retained** chrome
     /// layout — the C4 path that lets a click / region probe reuse the render's
     /// cascade+layout instead of re-running it (`hit_test_node`'s fresh pipeline).

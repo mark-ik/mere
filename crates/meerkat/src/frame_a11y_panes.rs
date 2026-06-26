@@ -34,7 +34,6 @@ impl WindowCtx<'_> {
             PaneContent::Apparatus => self.list_pane_a11y_tree(
                 ShellListPane::Apparatus,
                 "apparatus",
-                self.view.apparatus_scroll,
                 "Apparatus",
                 pane_id,
                 action_routes,
@@ -45,7 +44,6 @@ impl WindowCtx<'_> {
             PaneContent::Steward => self.list_pane_a11y_tree(
                 ShellListPane::Steward,
                 "steward",
-                self.view.steward_scroll,
                 "Steward",
                 pane_id,
                 action_routes,
@@ -53,7 +51,6 @@ impl WindowCtx<'_> {
             PaneContent::Inspector => self.list_pane_a11y_tree(
                 ShellListPane::Inspector,
                 "inspector",
-                self.view.inspector_scroll,
                 "Inspector",
                 pane_id,
                 action_routes,
@@ -61,7 +58,6 @@ impl WindowCtx<'_> {
             PaneContent::Trail => self.list_pane_a11y_tree(
                 ShellListPane::Trail,
                 "trail",
-                self.view.trail_scroll,
                 "Trail",
                 pane_id,
                 action_routes,
@@ -69,7 +65,6 @@ impl WindowCtx<'_> {
             PaneContent::Alembic => self.list_pane_a11y_tree(
                 ShellListPane::Alembic,
                 "alembic",
-                self.view.alembic_scroll,
                 "Alembic",
                 pane_id,
                 action_routes,
@@ -101,19 +96,19 @@ impl WindowCtx<'_> {
                 // inside the positioned roster pane, so their absolute bounds need the
                 // ancestor offsets summed in (the same accumulation the scrollbar
                 // overlay uses), not the bare `location`. (Phase 1.)
-                let mut origins = HashMap::new();
-                crate::serval_render::accumulate_origins(&dom, frags, root, (0.0, 0.0), &mut origins);
+                // Painted origins fold the roster pane's retained `element_scroll`, so a row's
+                // bounds already account for the wheel scroll. (Host-scroll P2.)
+                let origins =
+                    serval_layout::accumulate_painted_origins(&*dom, frags, session.element_scroll());
                 let mut rows = crate::all_with_class(&dom, root, "roster-row");
                 rows.extend(crate::all_with_class(&dom, root, "roster-row-selected"));
-                let scroll = self.view.roster_scroll;
                 for node in rows {
-                    if let (Some(member), Some(l), Some(&(x0, abs_y))) = (
+                    if let (Some(member), Some(l), Some(p)) = (
                         crate::member_attr(&dom, node),
                         frags.rect_of(node),
                         origins.get(&node),
                     ) {
-                        let y0 = abs_y - scroll;
-                        map.insert(member, [x0, y0, x0 + l.size.width, y0 + l.size.height]);
+                        map.insert(member, [p.x, p.y, p.x + l.size.width, p.y + l.size.height]);
                     }
                 }
             }
@@ -230,7 +225,6 @@ impl WindowCtx<'_> {
         &self,
         which: crate::window_view::ShellListPane,
         inner_class: &str,
-        scroll: f32,
         label: &str,
         pane_id: PaneId,
         action_routes: &mut HashMap<AccessNodeId, A11yHostAction>,
@@ -245,16 +239,15 @@ impl WindowCtx<'_> {
                 let frags = session.fragments();
                 let dom = self.view.dom.borrow();
                 let droot = dom.document();
-                let mut origins = HashMap::new();
-                crate::serval_render::accumulate_origins(&dom, frags, droot, (0.0, 0.0), &mut origins);
+                // Painted origins fold the pane's retained `element_scroll`, so a row's bounds
+                // already account for the wheel scroll — no host offset to subtract. (P2.)
+                let origins =
+                    serval_layout::accumulate_painted_origins(&*dom, frags, session.element_scroll());
                 if let Some(inner) = crate::first_with_class(&dom, droot, inner_class) {
                     for child in dom.dom_children(inner) {
                         if dom.kind(child) == NodeKind::Element {
                             let bounds = frags.rect_of(child).zip(origins.get(&child)).map(
-                                |(l, &(x0, abs_y))| {
-                                    let y0 = abs_y - scroll;
-                                    [x0, y0, x0 + l.size.width, y0 + l.size.height]
-                                },
+                                |(l, p)| [p.x, p.y, p.x + l.size.width, p.y + l.size.height],
                             );
                             out.push((child, bounds));
                         }

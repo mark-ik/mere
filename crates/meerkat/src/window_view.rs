@@ -225,20 +225,10 @@ pub(crate) struct WindowView {
     // ── Interaction state: in-progress gestures + scroll + transient view bits
     //    that belong to this window's pointer / keyboard, not the shared session. ─
     /// Per-member content scroll offset (px from the document top). Absent = top.
+    /// (The chrome panes — roster / settings body / utility panes — scroll through the
+    /// engine's retained `element_scroll` now, driven by `scroll_at`, so they carry no
+    /// host-side offset field. This is the per-node *content* document scroll only.)
     pub(crate) scroll: HashMap<GraphMemberId, f32>,
-    /// Roster pane scroll offset (device px), clamped at render.
-    pub(crate) roster_scroll: f32,
-    /// Inspector / steward / apparatus pane scroll offsets (device px), each clamped
-    /// to its own laid-out content extent at render. (Same vertical scroll as roster.)
-    pub(crate) inspector_scroll: f32,
-    pub(crate) steward_scroll: f32,
-    pub(crate) apparatus_scroll: f32,
-    pub(crate) trail_scroll: f32,
-    pub(crate) alembic_scroll: f32,
-    /// Open settings tile(s) body scroll offset (device px), applied to the
-    /// `.settings-pane-body` scroll container so serval clips + scrolls + draws
-    /// the thumb. Clamped to content extent by the render. (Menu/pane scroll.)
-    pub(crate) settings_scroll: f32,
     /// The last left-button release (time + window pos), for double-click detection.
     pub(crate) last_left_release: Option<(Instant, (f32, f32))>,
     /// Whether a left-button gesture inside the workbench pane is in flight (press →
@@ -1176,13 +1166,6 @@ impl WindowView {
             window_controls_tex: Default::default(),
             divider_tex: Default::default(),
             scroll: Default::default(),
-            roster_scroll: Default::default(),
-            inspector_scroll: Default::default(),
-            steward_scroll: Default::default(),
-            apparatus_scroll: Default::default(),
-            trail_scroll: Default::default(),
-            alembic_scroll: Default::default(),
-            settings_scroll: Default::default(),
             last_left_release: Default::default(),
             workbench_gesture: false,
             frame_divider_drag: Default::default(),

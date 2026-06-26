@@ -910,33 +910,19 @@ impl WindowCtx<'_> {
     /// suggestion / palette rows). A row / backdrop click that closes the palette
     /// restores focus so the caret doesn't dangle on the removed field.
     pub(super) fn chrome_click(&mut self, x: f32, y: f32) {
-        let mut offsets = ScrollOffsets::<NodeId>::default();
-        // The roster + the four folded list panes scroll their own inner containers; mirror
-        // the render's scroll offsets so the hit-test lands on the visible row. (Phase 1.)
-        {
-            let dom = self.view.dom.borrow();
-            let root = dom.document();
-            for (class, scroll) in [
-                ("roster", self.view.roster_scroll),
-                ("apparatus", self.view.apparatus_scroll),
-                ("steward", self.view.steward_scroll),
-                ("inspector", self.view.inspector_scroll),
-                ("trail", self.view.trail_scroll),
-                ("settings-pane-body", self.view.settings_scroll),
-            ] {
-                if let Some(node) = crate::first_with_class(&dom, root, class) {
-                    offsets.insert(node, (0.0, scroll));
-                }
-            }
-        }
+        // The retained chrome session folds its own `element_scroll` (the panes' wheel
+        // offsets) into hit-testing via `merged_scroll`, so the host no longer mirrors a
+        // per-pane offset map here. The stateless fallback (pre-first-render) has no scroll
+        // yet, so empty is correct there too. (Host-scroll P2.)
+        let scroll = ScrollOffsets::<NodeId>::default();
         let sheet = self.shared.presentation.chrome_sheet_refs();
         let hit = {
             let dom = self.view.dom.borrow();
             // C4: hit-test against the render's retained chrome layout (the
             // session); fall back to a stateless probe only before the first render.
             match &self.view.chrome_session {
-                Some(s) => s.hit_test(&dom, x, y, &offsets),
-                None => hit_test_node(&dom, &sheet, self.view.width, self.view.height, x, y, &offsets),
+                Some(s) => s.hit_test(&dom, x, y, &scroll),
+                None => hit_test_node(&dom, &sheet, self.view.width, self.view.height, x, y, &scroll),
             }
         };
         if let Some(node) = hit {
@@ -1157,22 +1143,10 @@ impl WindowCtx<'_> {
     ) -> Option<(uuid::Uuid, Vec<(f32, f32)>, (f32, f32), f32, f32, f32)> {
         let session = self.view.chrome_session.as_ref()?;
         let dom = self.view.dom.borrow();
-        // Mirror the render / chrome_click scroll offsets so the hit-test lands on the visible
-        // swatch (it sits inside the scrolled settings-pane-body).
-        let mut offsets = ScrollOffsets::<NodeId>::default();
+        // The engine folds the settings-pane-body's retained `element_scroll` into hit-testing,
+        // so the swatch resolves under the scroll without a mirrored host offset map. (P2.)
+        let offsets = ScrollOffsets::<NodeId>::default();
         let root = dom.document();
-        for (class, scroll) in [
-            ("roster", self.view.roster_scroll),
-            ("apparatus", self.view.apparatus_scroll),
-            ("steward", self.view.steward_scroll),
-            ("inspector", self.view.inspector_scroll),
-            ("trail", self.view.trail_scroll),
-            ("settings-pane-body", self.view.settings_scroll),
-        ] {
-            if let Some(node) = crate::first_with_class(&dom, root, class) {
-                offsets.insert(node, (0.0, scroll));
-            }
-        }
         // Walk up from the hit node to the `node-swatch` container.
         let mut node = session.hit_test(&dom, x, y, &offsets)?;
         let container = loop {
@@ -1197,10 +1171,13 @@ impl WindowCtx<'_> {
         let abs = serval_layout::absolute_origin(&*dom, frags, container)
             .map_or((0.0_f32, 0.0_f32), |p| (p.x, p.y));
         let edge = crate::swatch::swatch_edge_px();
-        // `settings_scroll` is a single shared value (one active settings pane), matching the
-        // host's existing model — `chrome_click` keys the same scroll onto the first
-        // settings-pane-body. A per-pane scroll is a later refinement.
-        let origin = (abs.0, abs.1 - self.view.settings_scroll);
+        // The container's painted top-left subtracts the settings-pane-body's retained scroll
+        // (the engine's `element_scroll`, keyed by that container node — one active settings
+        // pane, so a single lookup). (Host-scroll P2.)
+        let body_scroll = crate::first_with_class(&dom, root, "settings-pane-body")
+            .and_then(|n| session.element_scroll().get(&n).copied())
+            .map_or(0.0, |(_, sy)| sy);
+        let origin = (abs.0, abs.1 - body_scroll);
         let nx = (x - origin.0) / edge - 0.5;
         let ny = (y - origin.1) / edge - 0.5;
         Some((subject, hull, origin, edge, nx, ny))
@@ -1235,27 +1212,6 @@ impl WindowCtx<'_> {
     /// The shell document's vertical scroll offsets, keyed by each scrolling pane container, so a
     /// hit-test lands on the visible row of a scrolled pane. Mirrors the offsets
     /// [`chrome_click`](Self::chrome_click) builds for its dispatch. (Row reorder B2 helper.)
-    fn shell_scroll_offsets(
-        &self,
-        dom: &serval_scripted_dom::ScriptedDom,
-    ) -> ScrollOffsets<NodeId> {
-        let mut offsets = ScrollOffsets::<NodeId>::default();
-        let root = dom.document();
-        for (class, scroll) in [
-            ("roster", self.view.roster_scroll),
-            ("apparatus", self.view.apparatus_scroll),
-            ("steward", self.view.steward_scroll),
-            ("inspector", self.view.inspector_scroll),
-            ("trail", self.view.trail_scroll),
-            ("settings-pane-body", self.view.settings_scroll),
-        ] {
-            if let Some(node) = crate::first_with_class(dom, root, class) {
-                offsets.insert(node, (0.0, scroll));
-            }
-        }
-        offsets
-    }
-
     /// Try to begin a row-reorder drag from a left press at `(x, y)`: if the press landed on a
     /// reorderable row's **drag grip** (`app-reorder-grip`), arm the drag with that row's
     /// `data-reorder-id` and return `true` (the caller consumes the press); otherwise `false`
@@ -1283,7 +1239,8 @@ impl WindowCtx<'_> {
     fn row_reorder_grip_at(&self, x: f32, y: f32) -> Option<String> {
         let session = self.view.chrome_session.as_ref()?;
         let dom = self.view.dom.borrow();
-        let offsets = self.shell_scroll_offsets(&dom);
+        // The engine folds the panes' `element_scroll` into hit-testing. (Host-scroll P2.)
+        let offsets = ScrollOffsets::<NodeId>::default();
         let mut node = session.hit_test(&dom, x, y, &offsets)?;
         let mut on_grip = false;
         loop {
@@ -1309,7 +1266,8 @@ impl WindowCtx<'_> {
     fn row_reorder_id_at(&self, x: f32, y: f32) -> Option<String> {
         let session = self.view.chrome_session.as_ref()?;
         let dom = self.view.dom.borrow();
-        let offsets = self.shell_scroll_offsets(&dom);
+        // The engine folds the panes' `element_scroll` into hit-testing. (Host-scroll P2.)
+        let offsets = ScrollOffsets::<NodeId>::default();
         let mut node = session.hit_test(&dom, x, y, &offsets)?;
         loop {
             if let Some(id) = dom

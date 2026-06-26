@@ -305,21 +305,6 @@ impl ListPane {
         self.pane.frame(w, h, &scrolls)
     }
 
-    /// The maximum scroll (content height beyond the visible pane) of the last laid-
-    /// out frame, for the host to clamp its stored scroll. `0` before the first frame
-    /// or when nothing overflows.
-    pub fn max_scroll(&self) -> f32 {
-        let dom = self.pane.dom();
-        let dom = dom.borrow();
-        let Some(node) = crate::first_with_class(&dom, dom.document(), &self.root_class) else {
-            return 0.0;
-        };
-        let Some(frags) = self.pane.fragments() else { return 0.0 };
-        let Some(l) = frags.rect_of(node) else { return 0.0 };
-        let inner = l.size.height - l.padding.top - l.padding.bottom - l.border.top - l.border.bottom;
-        (l.content_size.height - inner).max(0.0)
-    }
-
     /// Hit-test pane-local `(x, y)` (with the pane scrolled by `scroll`).
     pub fn hit_test(&self, x: f32, y: f32, scroll: f32) -> Option<NodeId> {
         let scrolls = self.scroll_offsets(scroll);

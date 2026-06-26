@@ -455,10 +455,9 @@ impl WindowCtx<'_> {
                 editable: self.is_text_input(node),
             }
         });
-        let scroll = ScrollOffsets::<NodeId>::default();
-        // The chrome's own scroll (the command palette follows its selection); kept
-        // separate from the content `scroll` so a cmd-list offset never bleeds into
-        // another pane's DOM.
+        // The chrome's own scroll-into-view targets (the command palette / context menu follow
+        // their selection); the panes' wheel scroll lives in the session's `element_scroll`
+        // now, which `emit_paint_list` folds in, so this carries only the targets. (P2.)
         let mut chrome_scroll = ScrollOffsets::<NodeId>::default();
         if self.view.chrome().palette_open {
             // Bound the list to the window so a long palette can't overflow it. The
@@ -892,32 +891,10 @@ impl WindowCtx<'_> {
         // render lays the document out. Replaces the separate ListPane frames + composites.
         // (Phase 1, step 2.)
         self.snapshot_list_panes(list_pane_rects);
-        // The roster scrolls its own `.roster` container; add its offset to the shell
-        // ScrollOffsets so the one render scrolls it (chrome_click mirrors this for the
-        // hit-test). (Phase 1.)
-        if roster_rect.is_some() {
-            let dom = self.view.dom.borrow();
-            if let Some(node) = first_with_class(&dom, dom.document(), "roster") {
-                chrome_scroll.insert(node, (0.0, self.view.roster_scroll));
-            }
-        }
-        // Each open list pane scrolls its own inner root (`.apparatus` / `.steward` /
-        // `.inspector` / `.trail`, the unique-id class); add its offset to the shell
-        // ScrollOffsets so the one render scrolls it (chrome_click mirrors this). (Phase 1.)
-        {
-            let dom = self.view.dom.borrow();
-            let root = dom.document();
-            for (class, scroll) in [
-                ("apparatus", self.view.apparatus_scroll),
-                ("steward", self.view.steward_scroll),
-                ("inspector", self.view.inspector_scroll),
-                ("trail", self.view.trail_scroll),
-            ] {
-                if let Some(node) = first_with_class(&dom, root, class) {
-                    chrome_scroll.insert(node, (0.0, scroll));
-                }
-            }
-        }
+        // The roster + folded list panes scroll their own inner containers via the engine's
+        // retained `element_scroll` (the wheel drives `scroll_at`), which `emit_paint_list`
+        // folds in through `merged_scroll`. The host no longer mirrors per-pane offsets into
+        // `chrome_scroll` here; it carries only the scroll-into-view targets below. (Host-scroll P2.)
         let roster_css = crate::roster::roster_sheet(&self.shared.presentation.chrome_theme);
         // The folded list panes' CSS rides the shell stylesheet too; rules are inert when
         // no matching pane element is in the document, so they can be unconditional. The
@@ -1212,17 +1189,9 @@ impl WindowCtx<'_> {
             self.view.tile_rects.clear(); // no tile drag targets when the pane is closed
             self.snapshot_settings_panes(Vec::new()); // no settings tiles with the pane closed
         }
-        // An open settings tile scrolls its `.settings-pane-body`; add the offset to the
-        // shell ScrollOffsets now that the pane is in the document, so the one render scrolls
-        // it + serval draws the thumb (chrome_click mirrors this for the hit-test). Settings
-        // panes are folded after the list panes, so this insertion is here, not above. (Menu
-        // / pane scroll.)
-        if self.view.settings_panes_open() {
-            let dom = self.view.dom.borrow();
-            if let Some(node) = first_with_class(&dom, dom.document(), "settings-pane-body") {
-                chrome_scroll.insert(node, (0.0, self.view.settings_scroll));
-            }
-        }
+        // An open settings tile scrolls its `.settings-pane-body` via the engine's retained
+        // `element_scroll` (the wheel drives `scroll_at`); `emit_paint_list` folds it in, so the
+        // host no longer mirrors the offset into `chrome_scroll`. (Host-scroll P2.)
 
         // Build the chrome (shell document) scene now that every folded pane — roster, the
         // list panes, and the settings panes (positioned at this frame's tile rects) — is set,

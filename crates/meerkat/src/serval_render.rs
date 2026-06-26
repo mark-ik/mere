@@ -120,8 +120,16 @@ fn paint_list_from_session(
         }
     }
 
-    push_scrollbars(&mut plist, dom, session.fragments(), scroll);
-    push_focus_ring(&mut plist, session, dom, scroll, focus_node);
+    // The body paint folds the session's retained `element_scroll` (the panes' wheel offsets)
+    // in via `emit_paint_list`; the scrollbar thumbs + focus ring read offsets explicitly, so
+    // merge `element_scroll` with the host's scroll-into-view targets for them (host wins on
+    // conflict, matching the engine's `merged_scroll`). (Host-scroll P2.)
+    let mut merged = session.element_scroll().clone();
+    for (k, v) in scroll {
+        merged.insert(*k, *v);
+    }
+    push_scrollbars(&mut plist, dom, session.fragments(), &merged);
+    push_focus_ring(&mut plist, session, dom, &merged, focus_node);
     plist
 }
 

@@ -680,53 +680,26 @@ impl ApplicationHandler for Shell {
                 // orrery (pan, or Ctrl-zoom); over the workbench pane (off a tile) it
                 // does nothing.
                 let (cx, cy) = wc.view.cursor;
-                if wc
-                    .roster_leaf_rect()
-                    .is_some_and(|r| cx >= r[0] && cx < r[2] && cy >= r[1] && cy < r[3])
-                {
-                    // Render clamps to the current roster content extent; keeping
-                    // the wheel route here prevents a roster scroll from panning
-                    // the orrery underneath.
-                    wc.view.roster_scroll = (wc.view.roster_scroll - dy).max(0.0);
+                // Chrome-pane wheel: the engine hit-tests the cursor to the nearest
+                // `overflow:scroll` container (roster / settings body / inspector / steward /
+                // apparatus / trail / alembic) and scrolls it, clamping to its content extent
+                // and chaining — one `scroll_at` replacing the per-pane rect-routing + the
+                // manual f32 offsets + the manual lower-clamp. It returns `false` when no scroll
+                // container under the cursor moved (the cursor is over the orrery / a content
+                // card, or the chrome itself does not scroll), so the wheel falls through to the
+                // branches below. The host f32 convention was `offset -= dy`, so feed `-dy` to
+                // the engine's additive `scroll_at`. The next render paints + hit-tests at the
+                // engine's retained `element_scroll`. (Host-scroll P2.)
+                let pane_scrolled = {
+                    let view = &mut wc.view;
+                    let dom = view.dom.borrow();
+                    view.chrome_session
+                        .as_mut()
+                        .is_some_and(|s| s.scroll_at(&dom, cx, cy, 0.0, -dy))
+                };
+                if pane_scrolled {
                     wc.view.request_redraw();
                     return;
-                }
-                // A wheel over an open settings tile scrolls its body (the
-                // `.settings-pane-body` container); serval clips + draws the thumb,
-                // and the offset feeds the shell ScrollOffsets + the hit-test. Render
-                // clamps it to the content extent. (Menu / pane scroll.)
-                if wc
-                    .view
-                    .settings_rects
-                    .iter()
-                    .any(|(_, r)| cx >= r[0] && cx < r[2] && cy >= r[1] && cy < r[3])
-                {
-                    wc.view.settings_scroll = (wc.view.settings_scroll - dy).max(0.0);
-                    wc.view.request_redraw();
-                    return;
-                }
-                // A wheel over a scrollable utility pane (inspector / steward /
-                // apparatus) scrolls that pane rather than panning the orrery
-                // underneath. Render clamps each to its live content extent.
-                if let Some(content) = wc
-                    .laid_leaves()
-                    .into_iter()
-                    .find(|l| cx >= l.rect[0] && cx < l.rect[2] && cy >= l.rect[1] && cy < l.rect[3])
-                    .map(|l| l.content)
-                {
-                    let scroll = match content {
-                        frame::PaneContent::Inspector => Some(&mut wc.view.inspector_scroll),
-                        frame::PaneContent::Steward => Some(&mut wc.view.steward_scroll),
-                        frame::PaneContent::Apparatus => Some(&mut wc.view.apparatus_scroll),
-                        frame::PaneContent::Trail => Some(&mut wc.view.trail_scroll),
-                        frame::PaneContent::Alembic => Some(&mut wc.view.alembic_scroll),
-                        _ => None,
-                    };
-                    if let Some(s) = scroll {
-                        *s = (*s - dy).max(0.0);
-                        wc.view.request_redraw();
-                        return;
-                    }
                 }
                 let over_card = wc
                     .view
