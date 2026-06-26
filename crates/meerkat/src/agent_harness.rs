@@ -1084,6 +1084,54 @@ mod tests {
         assert!(!wc.soft_wrap_nav(1, false), "single-line omnibar: soft-wrap nav declines");
     }
 
+    /// The knot editor's close × lays out as a small button on the right of the header row
+    /// (the `.knot-editor-title` flex rule), not the full-width block bar `button { display:
+    /// block }` would otherwise make it. Laid out headlessly through the real `PaneSession::scene`
+    /// path, so it verifies the chrome-sheet rule without a window. (Knot editor header.)
+    #[test]
+    fn knot_editor_close_button_is_small_and_right_of_the_title() {
+        use layout_dom_api::LayoutDom;
+        use serval_layout::ScrollOffsets;
+        let mut app = test_app();
+        let mut wc = app.ctx();
+        wc.view.chrome_update(|c| c.open_knot_editor("a note"));
+
+        let sheet = wc.shared.presentation.chrome_sheet_refs();
+        let scroll = ScrollOffsets::default();
+        crate::pane_session::PaneSession::scene(
+            &mut wc.view.chrome_session,
+            &wc.view.dom,
+            &sheet,
+            1024,
+            600,
+            None,
+            &scroll,
+        );
+
+        let dom = wc.view.dom.borrow();
+        let session = wc.view.chrome_session.as_ref().expect("chrome session built");
+        let btn = crate::first_with_class(&dom, dom.document(), "knot-editor-btn")
+            .expect("the close button exists when the editor is open");
+        let title = crate::first_with_class(&dom, dom.document(), "knot-editor-title-text")
+            .expect("the title text exists");
+        let btn_r = session.fragments().rect_of(btn).expect("close button laid out");
+        let title_r = session.fragments().rect_of(title).expect("title laid out");
+
+        // Small (a flex item sized to the × glyph), not the ~600px full-width block bar.
+        assert!(
+            btn_r.size.width < 80.0,
+            "the × shrinks to a small button, not a full-width bar: width={}",
+            btn_r.size.width,
+        );
+        // To the right of the title in the header row (justify-content: space-between).
+        assert!(
+            btn_r.location.x > title_r.location.x,
+            "the × sits right of the title: btn.x={} title.x={}",
+            btn_r.location.x,
+            title_r.location.x,
+        );
+    }
+
     #[test]
     fn omnibar_right_arrow_accepts_the_ghost_completion() {
         // The driven half of ghost autocomplete: with `>ros` typed and the omnibar
