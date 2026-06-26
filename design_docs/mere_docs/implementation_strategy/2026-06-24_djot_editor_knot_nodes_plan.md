@@ -831,3 +831,36 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   but `input.rs`, `render.rs`, and `views.rs` remain in the in-flight graphlet work,
   and those are the three files the shell's call site, caret paint, and pane render
   land in.
+- **2026-06-25, editor model (the host brain).** Built `KnotEditor` in
+  `crates/inker/knot-editor-host/src/editor.rs` (added deps inker + nematic): holds the
+  knot source and derives the two things the editor surface draws — `highlights` (djot
+  structure + injected polyglot colouring via `full_pack`), `outline` / `folds`
+  (structure), and `rendered` (the preview `EngineDocument` via `DjotKnotEngine`, the
+  same engine path the app renders knots through); `set_source` syncs the host buffer.
+  `cargo test -p knot-editor-host` green: 6 tests (my code 0 warnings; the 22 are
+  pre-existing kernel/nematic dep warnings). This is the host-side editor brain,
+  collision-free. Remaining host-shell work is the **distributed pane render/input
+  wiring**: meerkat has no single pane-render switchboard — `render.rs` resolves each
+  pane type through scattered `pane_of_content` / `matches!` lookups with per-type draw
+  paths, so the editor pane (a `PaneContent::Custom("knot-editor")`, which avoids enum
+  churn) is a multi-point addition across the live `render.rs` (draw the editable
+  textarea + the document-canvas preview, driving `KnotEditor`) and `input.rs` (the
+  click-to-place call site over the landed `PaneSession::caret_byte_at_point`). That
+  pass is in the in-flight render/input files.
+- **2026-06-25, host shell increments A+B (meerkat, additive).** Mark OK'd working in
+  the live files. **Reframed the editor as a chrome panel** (like the comms pane, built
+  in views.rs with the `text_field` DSL) rather than a `PaneContent` leaf — no enum
+  churn, no distributed render dispatch, much cleaner. A (lib.rs `Chrome`): added
+  `knot_source: TextInput` + `knot_editor_open: bool` + `open_knot_editor` /
+  `close_knot_editor`. B (views.rs): a `knot_editor_pane(c)` builder — a `text_field`
+  lensed onto `knot_source` (class `knot-editor-source`, the focus key) in a
+  `knot-editor-pane` panel with a title + close, mirroring `comms_pane`; wired into the
+  chrome children behind `c.knot_editor_open`. `cargo check -p meerkat` green (1m21s,
+  0 errors; my code 0 warnings — the lone new warning is a pre-existing unused
+  `session_runtime::ShellbarEdge` import in his in-flight views.rs). Remaining to make
+  it visible + editable: a `Command::ToggleKnotEditor` (mirror `ToggleComms`, with the
+  Command-enum match arms); inline panel geometry in render.rs (comms/shellbar set
+  their rect via `set_attribute` each frame); and the focus/caret wiring (a
+  `FocusedField::KnotEditor` in ime.rs + the input.rs caret_field, so the field paints
+  a caret and takes IME — basic click-to-type already rides the existing text_field
+  DOM-focus path). The editor model (`KnotEditor`) then drives highlight + preview.
