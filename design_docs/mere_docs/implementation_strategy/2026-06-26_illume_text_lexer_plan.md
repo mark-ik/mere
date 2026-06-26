@@ -151,3 +151,11 @@ illume's first non-editor consumer.
   goal, and the #1/#2/#3 resolutions. Shipped tinct's `syntax` module (perceptual
   contrast-gated highlight palette, tincture `03661ce`) and serval's `styled_textarea`
   (serval `6a3ceace`). Remaining points 3-7 to address in order.
+- **2026-06-26, point 3 done (illume born).** Renamed the `knot-editor` crate to
+  **illume** in place (dir + package name + the host crate's dep/use; meerkat untouched,
+  since its `knot_editor_*` identifiers are local names, not crate uses; mere `bcaf834`),
+  and added the prose-entity pass: a `logos` lexer (`entity.rs`) emitting URL /
+  `@mention` / `#tag` / email spans for *any* text, with the matching `SyntaxKind`s (mere
+  `6d0a2ae`). illume now enriches the omnibar and comms, not just the editor; 32 tests
+  green. Point 3(c), the `SyntaxKind` → `SyntaxRole` map, is the host's and lands with
+  the point-5 bridge. Next: point 4 (unify serval's field body).
