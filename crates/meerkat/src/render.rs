@@ -590,22 +590,11 @@ impl WindowCtx<'_> {
                     first_with_class(&dom, root, "context-submenu"),
                 ) {
                     (Some(panel), Some(anchor), Some(sub)) => {
-                        // Taffy fragment locations are parent-relative; sum the chain for absolute
-                        // coords (the `accumulate_origins` pattern, walked upward for two nodes).
+                        // Absolute (document-space) origin via the engine's shared parent-chain
+                        // accumulation, instead of re-rolling it here. (Host-scroll P1.)
                         let abs_origin = |start| -> (f32, f32) {
-                            let mut n = start;
-                            let (mut x, mut y) = (0.0_f32, 0.0_f32);
-                            loop {
-                                if let Some(r) = frags.rect_of(n) {
-                                    x += r.location.x;
-                                    y += r.location.y;
-                                }
-                                match dom.parent(n) {
-                                    Some(p) => n = p,
-                                    None => break,
-                                }
-                            }
-                            (x, y)
+                            serval_layout::absolute_origin(&*dom, frags, start)
+                                .map_or((0.0, 0.0), |p| (p.x, p.y))
                         };
                         let panel_x = abs_origin(panel).0;
                         let row_y = abs_origin(anchor).1;

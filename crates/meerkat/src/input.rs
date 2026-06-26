@@ -1191,21 +1191,11 @@ impl WindowCtx<'_> {
         if hull.len() < 3 {
             return None;
         }
-        // The container's painted top-left: its absolute layout origin (Taffy locations are
-        // parent-relative, so sum the chain to the root) minus the body's scroll offset.
+        // The container's painted top-left: its absolute layout origin (via the engine's shared
+        // parent-chain accumulation) minus the body's scroll offset. (Host-scroll P1.)
         let frags = session.fragments();
-        let mut abs = (0.0_f32, 0.0_f32);
-        let mut n = container;
-        loop {
-            if let Some(l) = frags.rect_of(n) {
-                abs.0 += l.location.x;
-                abs.1 += l.location.y;
-            }
-            match dom.parent(n) {
-                Some(p) => n = p,
-                None => break,
-            }
-        }
+        let abs = serval_layout::absolute_origin(&*dom, frags, container)
+            .map_or((0.0_f32, 0.0_f32), |p| (p.x, p.y));
         let edge = crate::swatch::swatch_edge_px();
         // `settings_scroll` is a single shared value (one active settings pane), matching the
         // host's existing model — `chrome_click` keys the same scroll onto the first
