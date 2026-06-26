@@ -70,6 +70,17 @@ pub enum SyntaxKind {
     Punctuation,
     /// A bare identifier / variable (often left unstyled).
     Identifier,
+
+    // --- inline prose entities, emitted by the entity pass ([`crate::entity`])
+    // over any text (prose, the omnibar, comms), not by the djot highlighter ---
+    /// A URL (`https://…`).
+    Url,
+    /// An `@mention`.
+    Mention,
+    /// A `#tag`.
+    Tag,
+    /// An email address.
+    Email,
 }
 
 /// A source byte range tagged with its highlight class. Ranges are byte offsets
