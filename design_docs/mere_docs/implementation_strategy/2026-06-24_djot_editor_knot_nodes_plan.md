@@ -881,3 +881,15 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   caret primitive was already committed. Follow-ons: a multi-line textarea (the field is
   single-line today), the highlight overlay + the rendered preview pane (both driving
   `KnotEditor`), and responsive geometry.
+- **2026-06-25, multi-line textarea + command automation.** Swapped the editor field
+  from a single-line `text_field` to `textarea_typed` (the `edit_multiline` handler +
+  a `<textarea>` tag), so Enter inserts a newline and Up/Down move between lines, and
+  taught the focus model (`input_under_class`, `is_text_input`) to accept `<textarea>`
+  as well as `<input>` (a general fix, not editor-specific). Then, from Mark's question,
+  removed the two add-a-command footguns the earlier wiring hit: `Command::ALL` is now
+  `[Command; <Command as strum::EnumCount>::COUNT]` (auto-sized via strum, already in the
+  tree; a forgotten variant is a compile error, so the explicit ordered-list obligation
+  stays without a manual count), and `menu_scope` got a `_ => MenuScope::Always` default
+  (new commands need no arm; only narrower selection/node/edge scopes are explicit).
+  `cargo check -p meerkat` green, no new warnings. Committed my paths in two batches
+  (textarea; command automation), leaving Mark's graphlet work untouched.
