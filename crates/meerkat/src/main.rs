@@ -203,6 +203,14 @@ fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
             rgb(c.muted_text),
             rgb(c.menu_bg)
         ),
+        // The branch chip (graphlet wiring Phase 2): an accent pill (the add-pill's
+        // marked look) naming the anchor a tear-out branch window forked from, so the
+        // branch reads as a distinct grouping. Hidden on leaves / the primary.
+        format!(
+            ".branch-chip {{ font-size: 13px; color: {}; background-color: {}; padding: 6px 12px; margin: 4px; border-radius: 14px; }} .branch-chip-hidden {{ display: none; }}",
+            rgb(c.strong_text),
+            rgb(c.active_bg)
+        ),
         // The add pill — the primary create affordance, an accent pill (matching the
         // sync-chip's pill shape) with a "+" that opens the Add node/tile/session menu.
         format!(
@@ -266,6 +274,25 @@ fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
         format!(
             ".context-menu {{ background-color: {}; padding: 4px; }}",
             rgb(c.menu_bg)
+        ),
+        // The nested submenu panel: the same surface as the root menu, positioned beside its
+        // parent row each frame by `render`. Child rows reuse `.context-item`. (Nested submenus.)
+        format!(
+            ".context-submenu {{ background-color: {}; padding: 4px; }}",
+            rgb(c.menu_bg)
+        ),
+        // The wrapper holding the root menu + its submenu panel. It MUST be positioned (absolute at
+        // the chrome origin), not in-flow: serval resolves an absolute child's inset against its
+        // tree parent, so an in-flow wrapper would push both panels down by the toolbar height.
+        // Zero-offset, so it contributes nothing to the panels' painted origin. (Nested submenus.)
+        ".context-menu-layer { position: absolute; left: 0; top: 0; }".to_string(),
+        // The keyboard-highlighted submenu child row — its own accent class (not
+        // `.context-item-active`) so the root menu's scroll-into-view never latches onto a child
+        // rect, and the submenu's own scroll can target it. (Nested submenus.)
+        format!(
+            ".context-subitem-active {{ font-size: 16px; color: {}; background-color: {}; padding: 8px 18px; }}",
+            rgb(c.strong_text),
+            rgb(c.active_bg)
         ),
         // The tear-out drag ghost: a small pill carrying the dragged node's title, floated
         // at the cursor (positioned each frame by `render`). Pointer-events off so it never
@@ -743,6 +770,12 @@ struct Shell {
     /// save; switching back to it reloads from disk. (Window composition P1, OQ2 —
     /// the unload half of pool eviction.)
     orrery_lru: Vec<GraphId>,
+    /// Per-session graphlet indices, keyed by graph (a sibling pool to `orreries`).
+    /// Each holds the named sub-structures over that graph's nodes — today a tear-out
+    /// **branch** graphlet, later document-groups / relational-browse neighborhoods.
+    /// Loaded lazily from the `graphlets.json` sidecar; mutated + persisted on branch.
+    /// (Graphlet-wiring Phase 1; reuses forme's `GraphletRef`, not its `GraphTree`.)
+    graphlets: HashMap<GraphId, graphlets::SessionGraphlets>,
     /// All live windows, keyed by OS `WindowId` — the registry. Every per-window
     /// handler is dispatched by resolving the event's id to its view here. At N=1
     /// it holds just the primary; tear-out (MW3+) inserts more. (Multi-window MW2 (d).)
@@ -866,6 +899,12 @@ enum ShellCommand {
     /// loop (the window), so it defers here. The donor session is untouched. (Tear-out
     /// gestures G4.)
     ForkNode { node: uuid::Uuid, from: GraphId },
+    /// Branch (Shift tear, G3): mint a `Branched` graphlet anchored on the dragged node
+    /// in the donor's session graphlet index (sharing the donor's `GraphId` + kernel
+    /// nodes — no copy), then open a new window scoped to it. Needs `&mut Shell` (the
+    /// graphlet pool + persistence) and the event loop (the window). The donor is
+    /// untouched. (Tear-out gestures G3; graphlet wiring Phase 1.)
+    BranchNode { node: uuid::Uuid, from: GraphId },
     /// Close window `id` and drop its view. The primary is exempt — its close saves
     /// the session and exits the app; a secondary just releases its surface. (MW3.)
     #[allow(dead_code)] // queued by the close fork once leaf windows can self-close (MW4)
@@ -1356,6 +1395,7 @@ impl Shell {
             },
             orreries,
             orrery_lru,
+            graphlets: HashMap::new(),
             windows: HashMap::new(),
             primary: None,
             pending_view: Some(view),

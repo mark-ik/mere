@@ -331,6 +331,12 @@ pub(crate) struct WindowView {
     /// `self.orrery`. At one graph per window it tracks the active session's graph;
     /// session-switch updates it. (Window composition P1.)
     pub(crate) focused_graph: GraphId,
+    /// If this window is a tear-out **branch**, the `GraphletId` it is scoped to (in its
+    /// `focused_graph`'s session graphlet index). `None` for the primary + plain leaf
+    /// windows (which are the whole-session default graphlet). Phase 1 only *carries* it;
+    /// Phase 2 makes the scope visible + accumulates the branch's lineage. (Graphlet
+    /// wiring; tear-out gestures G3.)
+    pub(crate) branch_graphlet: Option<forme::GraphletId>,
     /// This window's per-pane camera: one [`orrery::Viewport`] per graph it shows in
     /// an Orrery pane. The pooled `Orrery` is the *authority* (graph + physics + node
     /// positions, shared across windows); the **camera/viewport is view state and
@@ -1180,6 +1186,7 @@ impl WindowView {
             swatch_drag: Default::default(),
             row_reorder_drag: Default::default(),
             tear_out_drag: Default::default(),
+            branch_graphlet: None,
             cursor_icon: Default::default(),
             pending_exit: Default::default(),
             context_set: Default::default(),

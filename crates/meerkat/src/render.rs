@@ -553,6 +553,109 @@ impl WindowCtx<'_> {
                 }
             }
         }
+        // The open submenu panel sits beside its parent row. Anchor it off the parent row's rect
+        // (the `.context-submenu-anchor` marker) with xilem-serval's geometry helper: default to
+        // the parent's right (frame-1 correct — RightOf ignores the popup size), flipping left when
+        // it would overflow the window. (Nested submenus.)
+        let submenu_pos = if self
+            .view
+            .chrome()
+            .context_menu
+            .as_ref()
+            .is_some_and(|m| m.submenu.is_some())
+        {
+            if let Some(session) = &self.view.chrome_session {
+                let frags = session.fragments();
+                let dom = self.view.dom.borrow();
+                let root = dom.document();
+                match (
+                    first_with_class(&dom, root, "context-menu"),
+                    first_with_class(&dom, root, "context-submenu-anchor"),
+                    first_with_class(&dom, root, "context-submenu"),
+                ) {
+                    (Some(panel), Some(anchor), Some(sub)) => {
+                        // Taffy fragment locations are parent-relative; sum the chain for absolute
+                        // coords (the `accumulate_origins` pattern, walked upward for two nodes).
+                        let abs_origin = |start| -> (f32, f32) {
+                            let mut n = start;
+                            let (mut x, mut y) = (0.0_f32, 0.0_f32);
+                            loop {
+                                if let Some(r) = frags.rect_of(n) {
+                                    x += r.location.x;
+                                    y += r.location.y;
+                                }
+                                match dom.parent(n) {
+                                    Some(p) => n = p,
+                                    None => break,
+                                }
+                            }
+                            (x, y)
+                        };
+                        let panel_x = abs_origin(panel).0;
+                        let row_y = abs_origin(anchor).1;
+                        let panel_w = frags.rect_of(panel).map_or(0.0, |r| r.size.width);
+                        let row_h = frags.rect_of(anchor).map_or(0.0, |r| r.size.height);
+                        let (sub_w, sub_h) = frags
+                            .rect_of(sub)
+                            .map_or((0.0, 0.0), |r| (r.size.width, r.size.height));
+                        // Trigger is the root panel's right edge at the parent row's top.
+                        let place = if panel_x + panel_w + sub_w > w as f32 && sub_w > 0.0 {
+                            xilem_serval::Placement::LeftOf
+                        } else {
+                            xilem_serval::Placement::RightOf
+                        };
+                        let (sx, sy) = xilem_serval::anchor_point(
+                            (panel_x, row_y, panel_w, row_h),
+                            (sub_w, sub_h),
+                            place,
+                        );
+                        // Clamp to the left edge so a left-flip near the window's left edge can't
+                        // run the panel off-screen. (Nested submenus.)
+                        Some((sub, sx.max(0.0), sy))
+                    }
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        if let Some((sub, sx, sy)) = submenu_pos {
+            let max_h = (h as f32 - sy - 16.0).max(120.0);
+            let mut dom = self.view.dom.borrow_mut();
+            let attr = QualName::new(None, Namespace::from(""), LocalName::from("style"));
+            dom.set_attribute(
+                sub,
+                attr,
+                &format!(
+                    "position: absolute; left: {sx}px; top: {sy}px; overflow: scroll; max-height: {max_h}px;"
+                ),
+            );
+        }
+        // Scroll the highlighted submenu child into view within its own panel (mirrors the root
+        // list scroll). The child carries `context-subitem-active`, distinct from the root rows'
+        // `context-item-active`, so this targets the submenu and the root block targets the root.
+        // (Nested submenus.)
+        if self.view.chrome().context_menu.as_ref().is_some_and(|m| m.submenu.is_some()) {
+            if let Some(session) = &self.view.chrome_session {
+                let frags = session.fragments();
+                let dom = self.view.dom.borrow();
+                let root = dom.document();
+                if let (Some(sub), Some(active)) = (
+                    first_with_class(&dom, root, "context-submenu"),
+                    first_with_class(&dom, root, "context-subitem-active"),
+                ) {
+                    if let (Some(lr), Some(ar)) = (frags.rect_of(sub), frags.rect_of(active)) {
+                        let viewport_h = lr.size.height;
+                        let content_h = lr.content_size.height;
+                        let target = (ar.location.y + ar.size.height / 2.0 - viewport_h / 2.0)
+                            .clamp(0.0, (content_h - viewport_h).max(0.0));
+                        chrome_scroll.insert(sub, (0.0, target));
+                    }
+                }
+            }
+        }
         // Position the shellbar strip at its docked edge. The flex-direction
         // follows the edge so buttons stack vertically (Left/Right) or
         // horizontally (Top/Bottom). (Shellbar F2.1.)

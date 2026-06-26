@@ -801,3 +801,33 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   (cssparser / html5ever / pulldown-cmark / oxttl), so those are host-side reuse, not
   logos floors. Pack labels now: json, json-ld, jsonld, toml, rust, rs, js,
   javascript, mjs, rhai, rune, lua.
+- **2026-06-25, container tree (dir 1) + reuse crate (dir 2).** Direction 1: added
+  `src/tree.rs` (portable) — `container_tree` folds jotdown's nested events into a
+  block-container tree, deriving `folds` (multi-line sections / lists / quotes / code
+  / divs), `outline` (headings with levels and text, for the gloss outline lens), and
+  `expand_selection` (smallest enclosing container, for Alt-Up grow-selection). All
+  jotdown container-variant guesses compiled (Section / Heading / List / ListItem /
+  TaskListItem / Blockquote / CodeBlock / Div / Paragraph / Table). `cargo test -p
+  knot-editor` green: 26 tests. The portable editor core is now complete: highlight +
+  injection + 8 floor languages + structure. Direction 2: created
+  `crates/inker/knot-editor-host` (the host-side reuse layer, dep knot-editor +
+  pulldown-cmark), with a Markdown reuse-lexer over pulldown-cmark's offset-iter (the
+  same shape as the djot highlighter) and `full_pack()` = portable pack + reuse
+  overrides. `cargo test -p knot-editor-host` green: 2 tests. CSS (cssparser), HTML
+  (html5ever), precise JS (boa_parser), Turtle (oxttl) are the documented next
+  reuse-lexers there, each over its existing host tokenizer. Direction 3 (the host
+  edit surface) stays parked on the in-flight pane/graphlet work.
+- **2026-06-25, CSS + HTML floors.** Added `src/pack/web.rs` (portable): coarse
+  `logos` floors for CSS (`/* */` comments, strings, hex colors, numbers with units
+  via a callback, `@`-rules) and HTML (`<!-- -->` comments, tag openers, attribute
+  strings, `&entities;`). Chose logos over cssparser / html5ever reuse: those are
+  parse-oriented and do not yield clean highlight byte-spans, so a DFA is the right
+  tool and stays engine-independent. logos caught two ambiguities (a number's unit
+  suffix overlapping idents; a `-`-led ident), fixed via a unit-attaching callback
+  and a tighter ident start. `cargo test -p knot-editor` green: 28 tests, 0 warnings.
+  Pack now: json, json-ld, jsonld, toml, rust, rs, js, javascript, mjs, rhai, rune,
+  lua, css, html, htm. Direction 3 (host shell) re-checked: still blocked. mere is
+  ahead 2 (some pane work committed: pane_data / pane_geom / pane_session now clean),
+  but `input.rs`, `render.rs`, and `views.rs` remain in the in-flight graphlet work,
+  and those are the three files the shell's call site, caret paint, and pane render
+  land in.

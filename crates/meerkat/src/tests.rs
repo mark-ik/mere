@@ -26,8 +26,8 @@ fn toolbar_renders_from_reused_state() {
     let root = runner.root();
     assert_eq!(count_tag(&dom, root, "button"), 13, "back + forward + pause + add-pill toolbar buttons + 9 shellbar buttons");
     assert_eq!(count_tag(&dom, root, "input"), 1, "the omnibar input");
-    // chrome container + toolbar row + sync chip + crawl chip + (empty) suggestions + shellbar.
-    assert_eq!(count_tag(&dom, root, "div"), 6, "chrome + toolbar + sync-chip + crawl-chip + suggestions + shellbar");
+    // chrome container + toolbar row + branch chip + sync chip + crawl chip + (empty) suggestions + shellbar.
+    assert_eq!(count_tag(&dom, root, "div"), 7, "chrome + toolbar + branch-chip + sync-chip + crawl-chip + suggestions + shellbar");
 }
 
 /// Ghost autocomplete in command mode: a partial `>ros` shows the dim `ter`
@@ -355,6 +355,86 @@ fn context_menu_renders_and_captures_an_action() {
     runner.update(|c| c.pick_context(ContextAction::Stack));
     assert_eq!(runner.state().pending_context, Some(ContextAction::Stack));
     assert!(runner.state().context_menu.is_none(), "the menu closes on pick");
+}
+
+/// A submenu-parent row expands a second panel of its children; keyboard `ArrowRight` focuses
+/// the first child, the arrows nav it, and `Enter` picks a child and closes the whole menu.
+/// (Nested submenus.)
+#[test]
+fn submenu_renders_expands_and_picks() {
+    use kernel::graph::SemanticSubKind;
+    let mut runner = runner("mere://welcome");
+    runner.update(|c| {
+        c.open_context_menu(
+            40.0,
+            40.0,
+            vec![
+                ContextItem::new("Open in splits", ContextAction::OpenSplits),
+                ContextItem::with_children(
+                    "Relate as\u{2026}",
+                    vec![
+                        ContextItem::new("Cites", ContextAction::RelateAs(SemanticSubKind::Cites)),
+                        ContextItem::new("Quotes", ContextAction::RelateAs(SemanticSubKind::Quotes)),
+                    ],
+                ),
+            ],
+        );
+    });
+    // No child panel until a parent is expanded.
+    {
+        let dom = runner.dom();
+        let dom = dom.borrow();
+        assert_eq!(count_class(&dom, runner.root(), "context-submenu"), 0, "no submenu yet");
+    }
+    // Highlight the parent (index 1) and ArrowRight: the child panel renders, focused on child 0.
+    runner.update(|c| {
+        c.step_context_menu(1);
+        c.step_context_menu(1);
+    });
+    runner.update(Chrome::enter_submenu);
+    {
+        let sub = runner.state().context_menu.as_ref().unwrap().submenu.clone();
+        assert_eq!(sub.as_ref().map(|s| s.parent), Some(1), "the parent expanded");
+        assert_eq!(sub.unwrap().selected, Some(0), "ArrowRight focuses the first child");
+        let dom = runner.dom();
+        let dom = dom.borrow();
+        assert_eq!(count_class(&dom, runner.root(), "context-submenu"), 1, "the child panel renders");
+    }
+    // Step to the second child and pick it: the kind drains, the whole menu closes.
+    runner.update(|c| c.step_context_menu(1));
+    runner.update(Chrome::run_context_selection);
+    assert_eq!(
+        runner.state().pending_context,
+        Some(ContextAction::RelateAs(SemanticSubKind::Quotes)),
+        "Enter picks the highlighted child"
+    );
+    assert!(runner.state().context_menu.is_none(), "picking a child closes the whole menu");
+}
+
+/// `ArrowLeft` / `Escape` collapse the open submenu one level, keeping the root menu up.
+/// (Nested submenus.)
+#[test]
+fn submenu_collapses_one_level() {
+    let mut runner = runner("mere://welcome");
+    runner.update(|c| {
+        c.open_context_menu(
+            40.0,
+            40.0,
+            vec![ContextItem::with_children(
+                "Layout",
+                vec![ContextItem::new("Grid", ContextAction::SetLayoutStrategy("grid"))],
+            )],
+        );
+        c.open_submenu(0);
+    });
+    assert!(runner.state().context_menu.as_ref().unwrap().submenu.is_some());
+    // Collapse one level: the submenu closes but the root menu stays open.
+    runner.update(Chrome::escape_context_menu);
+    assert!(runner.state().context_menu.as_ref().unwrap().submenu.is_none(), "submenu collapsed");
+    assert!(runner.state().context_menu.is_some(), "root menu still open");
+    // A second collapse closes the whole menu.
+    runner.update(Chrome::escape_context_menu);
+    assert!(runner.state().context_menu.is_none(), "second Escape closes the menu");
 }
 
 /// Count elements carrying exactly class `class` in the subtree at `id`.

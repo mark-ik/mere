@@ -17,8 +17,10 @@ use crate::highlight::{Span, SyntaxKind};
 use crate::injection::{InjectionLexer, InjectionRegistry};
 
 mod lua;
+mod web;
 
 pub use lua::LuaLexer;
+pub use web::{CssLexer, HtmlLexer};
 
 /// An [`InjectionRegistry`] pre-loaded with the built-in curated pack. The host
 /// extends it with hand-lexers and mod lexers (all the same trait).
@@ -43,6 +45,13 @@ pub fn default_pack() -> InjectionRegistry {
     reg.register("rune", Box::new(ClikeLexer::new(RUNE_KEYWORDS)));
     // Lua (piccolo): its own lexer, since piccolo is not a dependency to reuse.
     reg.register("lua", Box::new(LuaLexer));
+    // CSS and HTML: logos floors. cssparser / html5ever are parse-oriented and do
+    // not hand back clean highlight spans, so a coarse DFA is the right tool; a
+    // host may override for precision.
+    reg.register("css", Box::new(CssLexer));
+    for label in ["html", "htm"] {
+        reg.register(label, Box::new(HtmlLexer));
+    }
     reg
 }
 
@@ -326,6 +335,7 @@ mod tests {
         let reg = default_pack();
         for label in [
             "json", "json-ld", "toml", "rust", "rs", "js", "javascript", "rhai", "rune", "lua",
+            "css", "html", "htm",
         ] {
             assert!(reg.has(label), "missing {label}");
         }

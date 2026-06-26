@@ -69,7 +69,9 @@ impl WindowCtx<'_> {
             if self.view.context_field.is_some() {
                 items.push(ContextItem::new("Delete field", ContextAction::DeleteField));
             }
-            items.extend(self.layout_picker_items());
+            // The 10 layout strategies fold under one "Layout" submenu instead of a flat tail on
+            // the empty-canvas menu (the active one is ✓-marked inside). (Submenus.)
+            items.push(ContextItem::with_children("Layout", self.layout_picker_items()));
         } else if self.orrery().focused_key().is_some() {
             // Radial centers the orrery on the focused node (BFS rings) and re-centers live; a
             // focus-driven toggle (✓ when active), so it rides the selection menu. (Layout — radial.)
@@ -83,10 +85,14 @@ impl WindowCtx<'_> {
                 },
             ));
         }
-        // A two-node selection: offer the relation-kind picker so a drawn edge can carry a
-        // semantic kind (cites / supports / …), not just the default UserGrouped. (Audit A3.)
+        // A two-node selection: offer the relation-kind picker as a "Relate as…" submenu so a
+        // drawn edge can carry a semantic kind (cites / supports / …), not just the default
+        // UserGrouped — one parent row expanding the 11 kinds instead of 11 flat rows. (A3 / submenus.)
         if len == 2 {
-            items.extend(self.relate_picker_items());
+            items.push(ContextItem::with_children(
+                "Relate as\u{2026}",
+                self.relate_picker_items(),
+            ));
         }
         if self.has_multiple_graph_panes() {
             items.push(ContextItem::new("Close graph view", ContextAction::CloseGraphPane));
@@ -185,6 +191,9 @@ impl WindowCtx<'_> {
             if let Some(menu) = &mut c.context_menu {
                 menu.items = items;
                 menu.selected = None;
+                // The rows changed, so any open submenu's parent index is stale — collapse it.
+                // (Typing into the menu exits a submenu; nested submenus.)
+                menu.submenu = None;
             }
         });
         self.view.request_redraw();
@@ -409,28 +418,30 @@ impl WindowCtx<'_> {
     /// with the current edge marked. (Shellbar F2.2.)
     pub(super) fn open_shellbar_menu_at(&mut self, x: f32, y: f32) {
         let current = self.shared.presentation.shellbar_edge;
-        let mut items: Vec<ContextItem> = [
-            (ShellbarEdge::Left, "Move shellbar to left"),
-            (ShellbarEdge::Right, "Move shellbar to right"),
-            (ShellbarEdge::Top, "Move shellbar to top"),
-            (ShellbarEdge::Bottom, "Move shellbar to bottom"),
+        // The four edges fold under a "Move shellbar" submenu (the current edge ✓-marked); "Hide"
+        // stays a top-level row. (Submenus.)
+        let edges: Vec<ContextItem> = [
+            (ShellbarEdge::Left, "Left"),
+            (ShellbarEdge::Right, "Right"),
+            (ShellbarEdge::Top, "Top"),
+            (ShellbarEdge::Bottom, "Bottom"),
         ]
         .iter()
         .map(|&(edge, label)| {
             let label = if edge == current {
-                format!("{label} \u{2713}") // ✓ marks current position
+                format!("{label}  \u{2713}") // ✓ marks the current edge
             } else {
                 label.to_string()
             };
             ContextItem::new(label, ContextAction::ShellbarMove(edge))
         })
         .collect();
-        // Hide the shellbar (reveal it again from the palette / `>shellbar`). A hidden
-        // strip can't be right-clicked, so this row only ever hides. (Hide-shellbar.)
-        items.push(ContextItem::new(
-            "Hide shellbar".to_string(),
-            ContextAction::ShellbarToggleVisibility,
-        ));
+        let items = vec![
+            ContextItem::with_children("Move shellbar", edges),
+            // Hide the shellbar (reveal it again from the palette / `>shellbar`). A hidden strip
+            // can't be right-clicked, so this row only ever hides. (Hide-shellbar.)
+            ContextItem::new("Hide shellbar", ContextAction::ShellbarToggleVisibility),
+        ];
         self.view.chrome_update(move |c| c.open_context_menu(x, y, items));
         self.view.request_redraw();
     }
@@ -457,6 +468,12 @@ impl WindowCtx<'_> {
             return;
         };
         self.view.chrome_update(|c| c.pending_context = None);
+        // A submenu-parent sentinel never picks an action (it expands its children via the
+        // press-gate intercept / `open_submenu`); a stray dispatch is a harmless no-op, returned
+        // before any audit so it emits no diagnostic noise. (Submenus.)
+        if let ContextAction::OpenSubmenu = action {
+            return;
+        }
         // Audit the context action by its registry id (the Debug name for the not-yet-cataloged
         // parameterized ones), through the same spine as host commands. (Command registry P3.)
         let invoked_id = meerkat::command::context_action_id(action)
@@ -723,6 +740,7 @@ impl WindowCtx<'_> {
             | ContextAction::ShellbarToggleVisibility
             | ContextAction::Relate
             | ContextAction::RelateAs(_)
+            | ContextAction::OpenSubmenu
             | ContextAction::AddNode
             | ContextAction::AddTile
             | ContextAction::AddSession

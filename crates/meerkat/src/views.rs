@@ -18,7 +18,7 @@ use session_runtime::ShellbarEdge;
 use super::command::Command;
 use super::nav;
 use super::suggest;
-use super::{Chrome, ContextMenu, HistoryStep, ShellbarPaneStates};
+use super::{Chrome, ContextItem, ContextMenu, HistoryStep, ShellbarPaneStates};
 
 /// The erased view type meerkat's logic produces, so the toolbar's concrete
 /// `El<…>` tuple need not be spelled (it grows as the chrome does).
@@ -131,9 +131,21 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
                 as fn(&mut Chrome, PointerClick),
         )
     });
+    // The branch chip (graphlet wiring Phase 2): a tear-out **branch** window shows the
+    // anchor it forked from, so it reads as a distinct grouping, not a plain leaf. Like
+    // the crawl chip, it is always present and toggles a `branch-chip-hidden` class (a
+    // leaf / the primary leaves `branch_label` `None`), keeping the toolbar tuple arity
+    // fixed. (Tear-out gestures G3.)
+    let branch_summary = c.branch_label.clone().unwrap_or_default();
+    let branch_class = if branch_summary.is_empty() {
+        "branch-chip branch-chip-hidden"
+    } else {
+        "branch-chip"
+    };
+    let branch_chip = el::<_, Chrome, ()>("div", branch_summary).attr("class", branch_class);
     let toolbar = el::<_, Chrome, ()>(
         "div",
-        (back, forward, pause, omnibar, add_pill, sync_chip, crawl_chip),
+        (back, forward, pause, branch_chip, omnibar, add_pill, sync_chip, crawl_chip),
     )
     .attr("class", "toolbar");
 
@@ -200,6 +212,64 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
 /// The right-click context menu: a small panel of action rows floated at the
 /// cursor (abs-positioned in window coords). Each row captures its
 /// [`ContextAction`] for the host. Rendered in the chrome root over everything.
+/// One context-menu row: a submenu parent (`›`, expands its children), a search-result row
+/// (label + pin toggle), or a plain leaf (runs its action). `active` marks the keyboard
+/// highlight; `open_parent` marks the parent whose submenu is currently expanded (so the render
+/// pass can anchor the child panel off this row's rect). (Nested submenus.)
+fn menu_item_view(i: usize, item: &ContextItem, active: bool, open_parent: bool) -> ChromeView {
+    let base = if active { "context-item-active" } else { "context-item" };
+    if item.has_submenu() {
+        // Parent row: mouse opens it via the press-gate intercept; this `on_click` serves the
+        // keyboard / a11y synthetic-dispatch path. `data-submenu=<i>` + the anchor class let the
+        // render pass find this row's rect to place the child panel beside it.
+        let class = if open_parent {
+            format!("{base} context-submenu-anchor")
+        } else {
+            base.to_string()
+        };
+        return Box::new(on_click(
+            el::<_, Chrome, ()>("div", format!("{}\u{2002}\u{203a}", item.label))
+                .attr("class", class)
+                .attr("data-submenu", i.to_string()),
+            move |c: &mut Chrome, _: PointerClick| c.open_submenu(i),
+        )) as ChromeView;
+    }
+    let action = item.action;
+    match item.pin {
+        // A search result (cursor palette): the label runs it, an inline pin toggle pins / unpins
+        // it to the curated menu (a ✓ when already pinned). (Searchable context menu S2.)
+        Some(pin) => {
+            let label = on_click(
+                el::<_, Chrome, ()>("div", item.label.clone())
+                    .attr("class", base)
+                    .attr("style", "flex:1;min-width:0;"),
+                move |c: &mut Chrome, _: PointerClick| c.pick_context(action),
+            );
+            let id = pin.id;
+            let (glyph, pin_class) =
+                if pin.pinned { ("\u{2713}", "context-pin-on") } else { ("\u{002b}", "context-pin") };
+            let pin_btn = on_click(
+                el::<_, Chrome, ()>("div", glyph).attr("class", pin_class),
+                move |c: &mut Chrome, _: PointerClick| c.pin_from_menu(id),
+            );
+            let row = el::<_, Chrome, ()>(
+                "div",
+                vec![Box::new(label) as ChromeView, Box::new(pin_btn) as ChromeView],
+            )
+            .attr("class", "context-search-row")
+            .attr("style", "display: flex; gap: 4px; align-items: stretch;");
+            Box::new(row) as ChromeView
+        }
+        None => {
+            let row = on_click(
+                el::<_, Chrome, ()>("div", item.label.clone()).attr("class", base),
+                move |c: &mut Chrome, _: PointerClick| c.pick_context(action),
+            );
+            Box::new(row) as ChromeView
+        }
+    }
+}
+
 fn context_menu_view(menu: &ContextMenu) -> ChromeView {
     // The search field (the cursor palette): shows the typed query, or a placeholder when empty.
     // Display-only — the open menu owns the keyboard, so `on_context_menu_key` edits the query.
@@ -210,53 +280,55 @@ fn context_menu_view(menu: &ContextMenu) -> ChromeView {
     };
     let search = el::<_, Chrome, ()>("div", search_text).attr("class", search_class);
 
-    let mut children: Vec<ChromeView> = vec![Box::new(search) as ChromeView];
-    children.extend(menu.items.iter().enumerate().map(|(i, item)| {
-        let action = item.action;
-        // The keyboard-highlighted row carries a distinct class (like the palette's
-        // `cmd-row-active`), which the render pass also uses to scroll it into view.
-        let class = if menu.selected == Some(i) { "context-item-active" } else { "context-item" };
-        match item.pin {
-            // A search result (cursor palette): the label runs it, an inline pin toggle pins /
-            // unpins it to the curated menu (a ✓ when already pinned). (Searchable context menu S2.)
-            Some(pin) => {
-                let label = on_click(
-                    el::<_, Chrome, ()>("div", item.label.clone())
-                        .attr("class", class)
-                        .attr("style", "flex:1;min-width:0;"),
-                    move |c: &mut Chrome, _: PointerClick| c.pick_context(action),
-                );
-                let id = pin.id;
-                let (glyph, pin_class) =
-                    if pin.pinned { ("\u{2713}", "context-pin-on") } else { ("\u{002b}", "context-pin") };
-                let pin_btn = on_click(
-                    el::<_, Chrome, ()>("div", glyph).attr("class", pin_class),
-                    move |c: &mut Chrome, _: PointerClick| c.pin_from_menu(id),
-                );
-                let row = el::<_, Chrome, ()>(
-                    "div",
-                    vec![Box::new(label) as ChromeView, Box::new(pin_btn) as ChromeView],
-                )
-                .attr("class", "context-search-row")
-                .attr("style", "display: flex; gap: 4px; align-items: stretch;");
-                Box::new(row) as ChromeView
-            }
-            None => {
-                let row = on_click(
-                    el::<_, Chrome, ()>("div", item.label.clone()).attr("class", class),
-                    move |c: &mut Chrome, _: PointerClick| c.pick_context(action),
-                );
-                Box::new(row) as ChromeView
-            }
-        }
+    let open_parent = menu.submenu.as_ref().map(|s| s.parent);
+    let mut rows: Vec<ChromeView> = vec![Box::new(search) as ChromeView];
+    rows.extend(menu.items.iter().enumerate().map(|(i, item)| {
+        menu_item_view(i, item, menu.selected == Some(i), open_parent == Some(i))
     }));
-    let panel = el::<_, Chrome, ()>("div", children)
+    let root_panel = el::<_, Chrome, ()>("div", rows)
         .attr("class", "context-menu")
         .attr(
             "style",
             format!("position: absolute; left: {}px; top: {}px;", menu.x, menu.y),
         );
-    Box::new(panel)
+
+    // Depth-1 submenu: a second panel of the open parent's children. The render pass anchors it
+    // off the parent row each frame (it starts at a rough beside-the-menu guess). Pushed after the
+    // root so serval's stacking paints it over the root panel. (Nested submenus.)
+    let mut layer: Vec<ChromeView> = vec![Box::new(root_panel) as ChromeView];
+    if let Some(sub) = &menu.submenu {
+        if let Some(parent) = menu.items.get(sub.parent) {
+            // Child rows are leaves: they run their action and carry their own active class (so the
+            // root menu's scroll-into-view never latches onto a child rect), and never emit
+            // `data-submenu` (so a stray nested parent can't shadow a root index in the press
+            // hit-test). (Nested submenus.)
+            let child_rows: Vec<ChromeView> = parent
+                .children
+                .iter()
+                .enumerate()
+                .map(|(i, item)| {
+                    let action = item.action;
+                    let class = if sub.selected == Some(i) {
+                        "context-subitem-active"
+                    } else {
+                        "context-item"
+                    };
+                    Box::new(on_click(
+                        el::<_, Chrome, ()>("div", item.label.clone()).attr("class", class),
+                        move |c: &mut Chrome, _: PointerClick| c.pick_context(action),
+                    )) as ChromeView
+                })
+                .collect();
+            let sub_panel = el::<_, Chrome, ()>("div", child_rows)
+                .attr("class", "context-submenu")
+                .attr(
+                    "style",
+                    format!("position: absolute; left: {}px; top: {}px;", menu.x + 200.0, menu.y),
+                );
+            layer.push(Box::new(sub_panel) as ChromeView);
+        }
+    }
+    Box::new(el::<_, Chrome, ()>("div", layer).attr("class", "context-menu-layer"))
 }
 
 /// The command-palette overlay: a centered panel with the query field and the

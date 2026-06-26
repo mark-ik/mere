@@ -1,8 +1,11 @@
 # Graphlet Wiring Plan — give graphlets a live home in the shell
 
 **Date**: 2026-06-25
-**Status**: Planning. Stub landed (`crates/meerkat/src/graphlets.rs`), not yet wired into
-the session lifecycle. Spun out of the
+**Status**: **Phase 1 + Phase 2 slice 1 done + driven (2026-06-25).** Branch (Shift+drag)
+mints a persisted `Branched` graphlet (round-trips a restart) and opens a window that now
+**reads as a distinct branch** — an accent `⎇ <anchor>` chip in its toolbar. Next:
+Phase 2 slice 2 (lineage accumulation — the branch graphlet grows as you work in it; the
+trigger is an open design choice). Spun out of the
 [tear-out gestures plan](2026-06-24_tearout_gestures_plan.md) (G3 / OQ-7 deferral) when
 scouting the forme graphlet API showed the whole layer is built but unwired.
 **Lane / conflict posture**: meerkat session/state + a small forme surface (reusing its
@@ -80,7 +83,7 @@ full container. The stub reflects (B).
 
 ## Phases
 
-### Phase 1 — Substrate: a live, persisted per-session graphlet index
+### Phase 1 — Substrate: a live, persisted per-session graphlet index — DONE (2026-06-25), driven
 
 Make graphlets real and durable; give branch a distinct identity.
 
@@ -102,16 +105,29 @@ identity-distinct from leaf even before it is visually distinct.
 
 A graphlet that nothing reads is still ≈ leaf. Give it visible scope + lineage.
 
-- The workbench (or a chrome surface) reflects graphlet membership — the branch window
-  shows it is scoped to its graphlet, not the whole graph.
-- In-window actions (navigation, node selection, tile additions) populate the branch
-  graphlet's roster / lineage, diverging from the donor while sharing kernel nodes
-  (brief §4.2 live behaviour).
-- Decide how the orrery scopes to a graphlet (a filtered cartography projection), if at
-  all in v0.
+**Slice 1 — visible branch marker — DONE (2026-06-25), driven.** A `Chrome::branch_label`
+shown as an accent `.branch-chip` pill in the branch window's toolbar, naming the anchor
+(`⎇ <node label>`). Set when the branch window spawns (the `BranchNode` dispatch resolves
+the anchor's `node_display_label`). `None` on leaves / the primary (hidden via a class,
+like the crawl chip). Drove headed: the branch window shows the chip + shares the donor's
+graph; a leaf shows none. Branch now reads as distinct from a leaf.
 
-**Done when:** a branch window shows a distinct grouping that accumulates its own lineage
-while node edits still propagate to the donor.
+**Slice 2 — lineage accumulation — remaining.** In-window actions populate the branch
+graphlet's roster, so it diverges from the donor while sharing kernel nodes (brief §4.2).
+Open design choice (the **trigger**): node *selection* (most direct "I'm grouping these",
+but transient + scattered across the gloss / orrery / omnibar select sites), node
+*navigation* (a more deliberate "I'm working with this", one focus-change choke point),
+or both. Mechanism: a `ShellCommand::RecordBranchMember { graph, graphlet, node }` pushed
+from the chosen hook when `view.branch_graphlet.is_some()`, handled on `Shell`
+(`SessionGraphlets::add_member` + persist) — the same command seam `BranchNode` uses, so
+no ctx threading.
+
+**Slice 3 (optional v0) — orrery scope.** Decide whether the branch window's orrery shows
+only the graphlet's members (a filtered cartography projection). Hardest (the orrery is
+pooled + shared); deferrable.
+
+**Done when:** a branch window shows a distinct grouping (Slice 1 ✓) that accumulates its
+own lineage (Slice 2) while node edits still propagate to the donor.
 
 ### Phase 3 — Reconciliation + the richer model (the broader payoff)
 
@@ -137,8 +153,10 @@ where (C) gets re-decided.
 ## Open questions
 
 - **OQ-A — the (A)/(B)/(C) structural choice.** Recommend (B); ratify before Phase 1.
-- **OQ-B — where the `GraphletId` rides on a window.** `WindowView` view-session bits, or
-  the frame leaf, or the (deferred) workbench projection.
+- **OQ-B — where the `GraphletId` rides on a window. RESOLVED (Phase 1):** a
+  `WindowView::branch_graphlet: Option<GraphletId>` field. `None` = the whole-session
+  default graphlet (primary + plain leaves). Secondary windows are ephemeral, so this is
+  live-only; the graphlet itself persists in the sidecar.
 - **OQ-C — persistence format + migration.** A `graphlets.json` sidecar; `GraphletRef`
   is already `Serialize`, so this is mostly plumbing. No migration (nothing persists
   graphlets yet).
@@ -156,3 +174,26 @@ where (C) gets re-decided.
   stub `crates/meerkat/src/graphlets.rs` (`SessionGraphlets` + `record_branch`) compiles
   and is module-registered but not yet wired into the session lifecycle — Phase 1 wires
   it. Build green.
+- **2026-06-25** — **Phase 1 done + driven.** Wired `SessionGraphlets` end to end:
+  serde + a `graphlets.json` sidecar (save/load); a `Shell::graphlets: HashMap<GraphId,
+  SessionGraphlets>` pool populated on session load (`load_active_session`, load-or-
+  default); `WindowView::branch_graphlet: Option<GraphletId>` (OQ-B); a
+  `ShellCommand::BranchNode` → `Shell::branch_graphlet_from` (mint a `Branched` graphlet
+  anchored on the torn node, persist, open a window on the donor's *same* graph scoped to
+  it); and the Shift-tear release path rewired from the leaf-stub to `BranchNode`. meerkat
+  85 lib / 158 bin green (incl. 2 graphlets unit tests). Drove headed: Shift+drag wrote
+  `graphlets.json` with a `Branched` graphlet anchored on the torn node's uuid + a branch
+  window on the donor graph; relaunched and branched again — the new graphlet got `id 2`
+  (not overwriting `id 1`) with `next_id 3`, confirming the sidecar round-trips a restart.
+  **Phase 1 caveat carried to Phase 2:** the branch window is visually identical to a leaf
+  (it shares the donor orrery); the graphlet is real + persisted but does not yet *scope*
+  anything. That visible scope + lineage is Phase 2.
+- **2026-06-25** — **Phase 2 slice 1 (visible branch marker) done + driven.** `Chrome::
+  branch_label` → an accent `.branch-chip` pill in the branch window's toolbar, set when
+  the branch window spawns (the `BranchNode` dispatch resolves the anchor's
+  `node_display_label`, prefixed with `⎇`). Drove headed: Shift+drag opened a branch
+  window carrying `⎇ node:…/info` while sharing the donor's graph — branch now reads as
+  distinct from a leaf (the half of the Phase 2 done-condition that is "shows a distinct
+  grouping"). meerkat green. **Remaining for Phase 2:** slice 2, lineage accumulation —
+  the branch graphlet grows as you work in the window; the trigger (selection vs
+  navigation) is an open design choice recorded under Phase 2 above.

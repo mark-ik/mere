@@ -158,6 +158,29 @@ impl WindowCtx<'_> {
                 // in a row — the host rebuilds it in place. (Searchable context menu S2.)
                 if self.view.chrome().context_menu.is_some() {
                     if button == MouseButton::Left {
+                        // A press on a submenu-parent row expands its child panel instead of
+                        // dismissing the menu — resolved by a dedicated hit-test, independent of
+                        // the dispatch/drain timing the close decision below rides. (Nested submenus.)
+                        if let Some(parent) = self.submenu_parent_at(x, y) {
+                            // Toggle: clicking the already-open parent collapses it; otherwise
+                            // expand (or switch to) it — mouse parity with ArrowLeft. (Submenus.)
+                            let already_open = self
+                                .view
+                                .chrome()
+                                .context_menu
+                                .as_ref()
+                                .and_then(|m| m.submenu.as_ref())
+                                .is_some_and(|s| s.parent == parent);
+                            self.view.chrome_update(move |c| {
+                                if already_open {
+                                    c.close_submenu();
+                                } else {
+                                    c.open_submenu(parent);
+                                }
+                            });
+                            self.view.request_redraw();
+                            return;
+                        }
                         self.chrome_click(x, y);
                     }
                     let pinning = matches!(
@@ -487,8 +510,9 @@ impl WindowCtx<'_> {
                                 to,
                             },
                             // Tear axis: the operation was fixed at press by the modifier.
-                            // Fork mints an independent session + graph snapshot; branch is
-                            // a leaf for now (its forme graphlet wiring is OQ-7 / G3).
+                            // Fork mints an independent session + graph snapshot; branch
+                            // mints a `Branched` graphlet in the donor's session (sharing
+                            // its graph + nodes) and opens a window scoped to it.
                             None => match drag.op {
                                 crate::window_view::TearOp::Fork => {
                                     super::ShellCommand::ForkNode {
@@ -497,7 +521,10 @@ impl WindowCtx<'_> {
                                     }
                                 }
                                 crate::window_view::TearOp::Branch => {
-                                    super::ShellCommand::TearOut { node: drag.node }
+                                    super::ShellCommand::BranchNode {
+                                        node: drag.node,
+                                        from: drag.source_graph,
+                                    }
                                 }
                             },
                         };
@@ -1100,6 +1127,29 @@ impl WindowCtx<'_> {
     /// the subject node, its current hull (cloned), the container's painted top-left (window px),
     /// the edge length, and the normalized press point `(nx, ny)` in `[-0.5, 0.5]`. `None` when
     /// the press is not over an editable swatch. (Swatch — Stage B / B3.)
+    /// The submenu-parent row index under window `(x, y)`, if the press lands on a context-menu
+    /// row that expands a submenu (one carrying `data-submenu=<index>`). The press gate uses this
+    /// to open a submenu rather than dismiss the menu; deterministic (a hit-test, not the
+    /// dispatch/drain path). (Nested submenus.)
+    fn submenu_parent_at(&self, x: f32, y: f32) -> Option<usize> {
+        let session = self.view.chrome_session.as_ref()?;
+        let dom = self.view.dom.borrow();
+        // The menu panel is a direct `.chrome` child, not one of the folded scrolling panes, so no
+        // extra scroll offsets are needed (matches `chrome_click`, whose offset set omits the menu).
+        let offsets = ScrollOffsets::<NodeId>::default();
+        let mut node = session.hit_test(&dom, x, y, &offsets)?;
+        loop {
+            if let Some(idx) = dom
+                .attributes(node)
+                .find(|a| a.name.local.as_ref() == "data-submenu")
+                .and_then(|a| a.value.parse::<usize>().ok())
+            {
+                return Some(idx);
+            }
+            node = dom.parent(node)?;
+        }
+    }
+
     fn swatch_geometry_at(
         &self,
         x: f32,
@@ -1834,11 +1884,17 @@ impl WindowCtx<'_> {
             }
             return;
         }
-        // An open context menu eats Escape to dismiss (other keys fall through).
+        // An open context menu eats Escape to dismiss (other keys fall through). With a submenu
+        // open, Escape collapses it one level first, keeping the root menu up. (Nested submenus.)
         if self.view.chrome().context_menu.is_some()
             && matches!(key, WinitKey::Named(WinitNamedKey::Escape))
         {
-            self.close_context_menu();
+            if self.view.chrome().context_menu.as_ref().is_some_and(|m| m.submenu.is_some()) {
+                self.view.chrome_update(Chrome::close_submenu);
+                self.view.request_redraw();
+            } else {
+                self.close_context_menu();
+            }
             return;
         }
         // Escape closes an open object card (after a menu, which eats Escape first). A
@@ -2321,6 +2377,16 @@ impl WindowCtx<'_> {
                 self.view.chrome_update(|c| c.step_context_menu(-1));
                 self.view.request_redraw();
             }
+            // ArrowRight expands the highlighted parent's submenu; ArrowLeft collapses it back to
+            // the root list. (Nested submenus.)
+            WinitKey::Named(WinitNamedKey::ArrowRight) => {
+                self.view.chrome_update(Chrome::enter_submenu);
+                self.view.request_redraw();
+            }
+            WinitKey::Named(WinitNamedKey::ArrowLeft) => {
+                self.view.chrome_update(Chrome::close_submenu);
+                self.view.request_redraw();
+            }
             WinitKey::Named(WinitNamedKey::Enter) => {
                 self.view.chrome_update(Chrome::run_context_selection);
                 self.drain_pending_context();
@@ -2329,8 +2395,16 @@ impl WindowCtx<'_> {
                 self.view.request_redraw();
             }
             WinitKey::Named(WinitNamedKey::Escape) => {
-                self.view.chrome_update(Chrome::close_context_menu);
-                self.view.request_redraw();
+                // Escape is normally consumed by the early intercept in `on_key_pressed` (which owns
+                // the full WindowCtx cleanup); this arm mirrors it exactly as a fallback so the two
+                // paths can't diverge: collapse one submenu level if open, else close the whole
+                // menu via the cleanup-clearing wrapper. (Nested submenus.)
+                if self.view.chrome().context_menu.as_ref().is_some_and(|m| m.submenu.is_some()) {
+                    self.view.chrome_update(Chrome::close_submenu);
+                    self.view.request_redraw();
+                } else {
+                    self.close_context_menu();
+                }
             }
             // Typing searches the menu (the cursor palette): edit its query buffer and rebuild the
             // rows. Backspace deletes; Space (a named key) inserts a space. (Searchable context menu S1.)

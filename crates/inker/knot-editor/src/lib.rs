@@ -19,7 +19,11 @@
 pub mod highlight;
 pub mod injection;
 pub mod pack;
+pub mod tree;
 
 pub use highlight::{SyntaxKind, Span, highlight_djot, highlight};
 pub use injection::{InjectionLexer, InjectionRegistry};
 pub use pack::default_pack;
+pub use tree::{
+    Fold, NodeKind, OutlineItem, TreeNode, container_tree, expand_selection, folds, outline,
+};

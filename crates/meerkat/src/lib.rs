@@ -137,6 +137,11 @@ pub struct Chrome {
     /// it at the live cursor each frame (so it follows without a chrome re-render per
     /// move). (Tear-out gestures, GA-5.)
     pub tear_ghost: Option<String>,
+    /// If this window is a tear-out **branch**, the anchor node's label, shown as a chip
+    /// in the chrome so the branch reads as a distinct grouping (not a plain leaf). Set
+    /// when the branch window spawns; `None` everywhere else. (Graphlet wiring Phase 2;
+    /// tear-out gestures G3.)
+    pub branch_label: Option<String>,
     /// A context-menu action a row captured, for the host to run over the menu's
     /// member set.
     pub pending_context: Option<ContextAction>,
@@ -268,6 +273,34 @@ pub struct ContextMenu {
     /// (pins / suggestions); non-empty -> the registry filtered by it. Edited by
     /// `on_context_menu_key`, which rebuilds `items` from it. (Searchable context menu S1.)
     pub query: String,
+    /// The open submenu (depth-1), if a parent row has been expanded — the child panel rendered
+    /// beside the parent. While `Some`, keyboard nav targets the child panel and `Escape` /
+    /// `ArrowLeft` collapses it back to the root. (Nested submenus.)
+    pub submenu: Option<SubmenuState>,
+}
+
+/// The open child panel of a [`ContextMenu`]: which parent row it hangs off, and its own
+/// keyboard highlight. The child rows are `items[parent].children`. Depth-1 only — the
+/// submenu substitutes (relation kinds, layout strategies, shellbar edges) are all one level.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SubmenuState {
+    /// Index into the root menu's `items` of the expanded parent row.
+    pub parent: usize,
+    /// The keyboard-highlighted child row, or `None` until the user steps into it.
+    pub selected: Option<usize>,
+}
+
+/// Wrap a keyboard highlight by `delta` within `count` rows: `None` -> first on a step down, last
+/// on a step up; otherwise modular. `count` must be > 0. (Context-menu / submenu nav.)
+fn step_wrapped(cur: Option<usize>, delta: isize, count: usize) -> usize {
+    match cur {
+        None if delta < 0 => count - 1,
+        None => 0,
+        Some(c) => {
+            let n = count as isize;
+            (((c as isize + delta) % n + n) % n) as usize
+        }
+    }
 }
 
 /// The pin affordance on a context-menu row (the cursor palette's search results): the registry
@@ -281,12 +314,17 @@ pub struct PinSpec {
 }
 
 /// One row of a [`ContextMenu`]: its label + the action it runs, plus an optional pin toggle.
+/// A row with non-empty `children` is a **submenu parent**: clicking (or `ArrowRight`-ing) it
+/// expands the children beside it rather than running `action`. (Nested submenus.)
 #[derive(Clone, Debug, PartialEq)]
 pub struct ContextItem {
     pub label: String,
     pub action: ContextAction,
     /// The pin toggle for a search result, or `None` for a plain (curated) row.
     pub pin: Option<PinSpec>,
+    /// The child rows shown when this row is expanded as a submenu; empty for a leaf row.
+    /// (Nested submenus — depth-1: the children are themselves leaves.)
+    pub children: Vec<ContextItem>,
 }
 
 impl ContextItem {
@@ -296,6 +334,7 @@ impl ContextItem {
             label: label.into(),
             action,
             pin: None,
+            children: Vec::new(),
         }
     }
 
@@ -311,7 +350,25 @@ impl ContextItem {
             label: label.into(),
             action,
             pin: Some(PinSpec { id: pin_id, pinned }),
+            children: Vec::new(),
         }
+    }
+
+    /// A submenu-parent row: `label` expands `children` beside it instead of running an action.
+    /// Carries the [`ContextAction::OpenSubmenu`] sentinel so a stray dispatch is a harmless no-op;
+    /// the real expansion is driven by `children` being non-empty. (Nested submenus.)
+    pub fn with_children(label: impl Into<String>, children: Vec<ContextItem>) -> Self {
+        Self {
+            label: label.into(),
+            action: ContextAction::OpenSubmenu,
+            pin: None,
+            children,
+        }
+    }
+
+    /// Whether this row expands a submenu (has child rows) rather than running an action.
+    pub fn has_submenu(&self) -> bool {
+        !self.children.is_empty()
     }
 }
 
@@ -336,6 +393,10 @@ pub enum ContextAction {
     /// tiles, no member-set mutation). The kind is `Copy`, so `ContextAction` stays `Copy`.
     /// (Audit A3 — relation-kind picker.)
     RelateAs(kernel::graph::SemanticSubKind),
+    /// Sentinel action for a submenu-parent row (`ContextItem::with_children`). A parent row
+    /// expands its children rather than running an action, so this is never meant to drain; a
+    /// stray dispatch is a harmless no-op. (Nested submenus.)
+    OpenSubmenu,
     /// Mint a fresh node at the saved cursor point (the no-selection right-click).
     /// The anchor in `context_origin` is leaf-local screen px; the camera inversion
     /// to world happens inside `Orrery::add_node_at`. Drains like `ShellbarMove` /
@@ -463,6 +524,7 @@ impl Chrome {
             settings: Settings::default(),
             context_menu: None,
             tear_ghost: None,
+            branch_label: None,
             pending_context: None,
             pending_palette_action: None,
             comms: CommsPane::new(),
@@ -778,7 +840,14 @@ impl Chrome {
     /// `items` (closing the suggestions dropdown so it can't overlap).
     pub fn open_context_menu(&mut self, x: f32, y: f32, items: Vec<ContextItem>) {
         self.close_suggestions();
-        self.context_menu = Some(ContextMenu { x, y, items, selected: None, query: String::new() });
+        self.context_menu = Some(ContextMenu {
+            x,
+            y,
+            items,
+            selected: None,
+            query: String::new(),
+            submenu: None,
+        });
     }
 
     /// Move the context-menu keyboard highlight by `delta`, wrapping within the rows — the
@@ -786,19 +855,65 @@ impl Chrome {
     /// down, last on a step up. (Context-menu keyboard nav.)
     pub fn step_context_menu(&mut self, delta: isize) {
         if let Some(menu) = &mut self.context_menu {
-            let count = menu.items.len();
-            if count == 0 {
-                return;
-            }
-            let next = match menu.selected {
-                None if delta < 0 => count - 1,
-                None => 0,
-                Some(cur) => {
-                    let n = count as isize;
-                    (((cur as isize + delta) % n + n) % n) as usize
+            // When a submenu is open, the arrows nav the child panel; otherwise the root list.
+            if let Some(sub) = &mut menu.submenu {
+                let count = menu.items.get(sub.parent).map_or(0, |p| p.children.len());
+                if count == 0 {
+                    return;
                 }
-            };
-            menu.selected = Some(next);
+                sub.selected = Some(step_wrapped(sub.selected, delta, count));
+            } else {
+                let count = menu.items.len();
+                if count == 0 {
+                    return;
+                }
+                menu.selected = Some(step_wrapped(menu.selected, delta, count));
+            }
+        }
+    }
+
+    /// Expand row `parent`'s submenu (a no-op if it has no children), highlighting nothing yet.
+    /// Idempotent: re-opening the same parent leaves it open. (Nested submenus.)
+    pub fn open_submenu(&mut self, parent: usize) {
+        if let Some(menu) = &mut self.context_menu {
+            if menu.items.get(parent).is_some_and(ContextItem::has_submenu) {
+                menu.submenu = Some(SubmenuState { parent, selected: None });
+            }
+        }
+    }
+
+    /// Collapse the open submenu back to the root list (one level). (Nested submenus.)
+    pub fn close_submenu(&mut self) {
+        if let Some(menu) = &mut self.context_menu {
+            menu.submenu = None;
+        }
+    }
+
+    /// `ArrowRight`: when a root parent row is highlighted and no submenu is open, expand it and
+    /// move the highlight to its first child. A no-op otherwise. (Nested submenus.)
+    pub fn enter_submenu(&mut self) {
+        let target = self.context_menu.as_ref().and_then(|menu| {
+            if menu.submenu.is_some() {
+                return None;
+            }
+            let i = menu.selected?;
+            menu.items.get(i).filter(|it| it.has_submenu()).map(|_| i)
+        });
+        if let Some(i) = target {
+            self.open_submenu(i);
+            if let Some(sub) = self.context_menu.as_mut().and_then(|m| m.submenu.as_mut()) {
+                sub.selected = Some(0);
+            }
+        }
+    }
+
+    /// `Escape` (and the early key intercept): collapse the open submenu first, else close the
+    /// whole menu — one level at a time. (Nested submenus.)
+    pub fn escape_context_menu(&mut self) {
+        if self.context_menu.as_ref().is_some_and(|m| m.submenu.is_some()) {
+            self.close_submenu();
+        } else {
+            self.close_context_menu();
         }
     }
 
@@ -806,14 +921,46 @@ impl Chrome {
     /// the keyboard `Enter` counterpart to a row click. A no-op close on an empty menu.
     /// (Context-menu keyboard nav.)
     pub fn run_context_selection(&mut self) {
-        let action = self.context_menu.as_ref().and_then(|menu| {
-            let pick = menu.selected.unwrap_or(0);
-            menu.items.get(pick).map(|item| item.action)
-        });
-        if let Some(action) = action {
-            self.pick_context(action);
-        } else {
-            self.close_context_menu();
+        // Decide first (immutable borrow), then act — a submenu child is picked, a parent row is
+        // expanded, a leaf row runs. (Nested submenus.)
+        enum Run {
+            Pick(ContextAction),
+            Open(usize),
+            Close,
+            Nothing,
+        }
+        let run = match &self.context_menu {
+            None => Run::Nothing,
+            Some(menu) => match &menu.submenu {
+                Some(sub) => match menu
+                    .items
+                    .get(sub.parent)
+                    .and_then(|p| p.children.get(sub.selected.unwrap_or(0)))
+                {
+                    Some(child) => Run::Pick(child.action),
+                    None => Run::Close,
+                },
+                None => {
+                    let pick = menu.selected.unwrap_or(0);
+                    match menu.items.get(pick) {
+                        Some(item) if item.has_submenu() => Run::Open(pick),
+                        Some(item) => Run::Pick(item.action),
+                        None => Run::Close,
+                    }
+                }
+            },
+        };
+        match run {
+            Run::Pick(action) => self.pick_context(action),
+            Run::Open(parent) => {
+                // Enter-to-open focuses the first child, matching ArrowRight (`enter_submenu`).
+                self.open_submenu(parent);
+                if let Some(sub) = self.context_menu.as_mut().and_then(|m| m.submenu.as_mut()) {
+                    sub.selected = Some(0);
+                }
+            }
+            Run::Close => self.close_context_menu(),
+            Run::Nothing => {}
         }
     }
 

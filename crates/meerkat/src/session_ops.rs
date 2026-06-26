@@ -425,6 +425,50 @@ impl super::Shell {
         Some(graph_id)
     }
 
+    /// Mint + persist a tear-out **branch** graphlet (G3) anchored on `node`, in donor
+    /// graph `from`'s session graphlet index. No new graph or session — the branch
+    /// shares the donor's `GraphId` + kernel nodes (brief §4.2); it diverges only in this
+    /// graphlet's lineage (Phase 2). Loads the donor's index from its sidecar on first
+    /// touch, records the branch, and persists immediately (graphlets change only on a
+    /// structural op like this, so the per-session save path need not carry them yet).
+    /// Returns the new `GraphletId` the torn window carries, or `None` if the donor has
+    /// no session manifest. (Graphlet wiring Phase 1.)
+    pub(super) fn branch_graphlet_from(
+        &mut self,
+        node: uuid::Uuid,
+        from: GraphId,
+    ) -> Option<forme::GraphletId> {
+        // The donor session's storage dir (manifests are keyed by session, each carries
+        // its `root_graph_id`). Inlines `WindowCtx::session_for_graph` for the Shell side.
+        let session_dir = self.shared.session.manifests.iter().find_map(|(id, m)| {
+            (m.root_graph_id == from).then(|| {
+                m.storage_path.clone().unwrap_or_else(|| {
+                    self.shared
+                        .session
+                        .mere_root
+                        .join("sessions")
+                        .join(id.as_uuid().to_string())
+                })
+            })
+        })?;
+        // Load-or-default the donor's graphlet index into the pool, mint the branch,
+        // persist. The window carries the returned id.
+        let graphlets = self
+            .graphlets
+            .entry(from)
+            .or_insert_with(|| crate::graphlets::SessionGraphlets::load(&session_dir));
+        let id = graphlets.record_branch(node, crate::graphlets::default_spec_for(node));
+        if let Err(err) = graphlets.save(&session_dir) {
+            tracing::warn!(%err, dir = ?session_dir, "failed to persist the branch graphlet");
+        }
+        self.shared.observability.record_probe(
+            "tear_out",
+            "branch",
+            format!("node={node} graphlet={id}"),
+        );
+        Some(id)
+    }
+
     /// Switch the active session to `target`: persist the current one, then load the
     /// target's graph + camera + frame. No-op if already active or unknown. (MG2.)
     pub(super) fn switch_session(&mut self, target: SessionId) {
@@ -527,6 +571,13 @@ impl super::Shell {
         // stays in the pool.
         let old_gid = self.focused_view().focused_graph;
         self.pool_orrery(target_graph, graph, empty);
+        // Pool this session's graphlet index alongside its orrery (load-or-default from
+        // the sidecar; a fresh session gets the default whole-session graphlet). Kept
+        // warm like the orrery — a switch-back reuses the live index. Eviction parity
+        // with the orrery LRU is a refinement (the index is tiny). (Graphlet wiring P1.)
+        self.graphlets
+            .entry(target_graph)
+            .or_insert_with(|| crate::graphlets::SessionGraphlets::load(&session_dir));
         self.focused_view_mut().focused_graph = target_graph;
 
         // Park the outgoing graph's physics (OQ2 park): a switched-away graph stays

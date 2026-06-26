@@ -90,9 +90,9 @@ side-by-side second graph pane).
 
 **Slice 3 — operation split — DONE (2026-06-25).** `TearOutDrag` carries a `TearOp` fixed at
 press by the modifier (Ctrl+Shift = `Fork`, plain Shift = `Branch`). The release dispatches the
-tear axis on it: `Fork` → `ForkNode` (G4, wired + driven); `Branch` → a leaf for now (its real
-forme graphlet op is G3 / OQ-7). Cross-graph-pane drops still short-circuit to the G5 copy before
-the op split.
+tear axis on it: `Fork` → `ForkNode` (G4, wired + driven); `Branch` → `BranchNode` (G3, wired +
+driven — mints a `Branched` graphlet, no longer a leaf-stub). Cross-graph-pane drops still
+short-circuit to the G5 copy before the op split.
 
 **Slice 2+ — remaining:** **branch**'s real operation (a forme graphlet, not the leaf stub — G3 /
 OQ-7); the **toast** on the ambiguous drop (new chrome element, escalating the leaf in place); the
@@ -111,11 +111,20 @@ windows resolve the same pooled orrery; closing the leaf does not delete the nod
 Done when: a torn leaf window shows the dragged node's live tile, navigates on its own,
 propagates node edits to the donor, and instantiates no orrery of its own.
 
-### G3 — Branch (Shift+drag) — DEFERRED (2026-06-25): graphlet layer is unwired
+### G3 — Branch (Shift+drag) — Phase 1 DONE + driven (2026-06-25); Phase 2 pending
 
 Mint a forme graphlet with `GraphletBinding::Branched { parent_spec, reason: "tearout-branch" }`
 in the donor's graph (brief §4.2); the torn window's leaf carries the donor `GraphId` + the new
 `GraphletId`. Branch + donor share kernel nodes, diverge in the graphlet's lineage facet.
+
+**Status (2026-06-25): Phase 1 of the [graphlet wiring plan](2026-06-25_graphlet_wiring_plan.md)
+landed + driven.** Shift+drag now dispatches `BranchNode` → `Shell::branch_graphlet_from`, which
+mints a persisted `Branched` graphlet anchored on the torn node (in the donor's `SessionGraphlets`
+sidecar) and opens a window on the donor's *same* graph carrying the new `GraphletId`. Verified the
+sidecar round-trips a restart. **Phase 1 caveat:** the branch window is visually a leaf (it shares
+the donor orrery); the graphlet is real + persisted but does not yet *scope* anything. The visible
+scope + lineage is the graphlet-wiring plan's Phase 2. The scouting that established the prerequisite
+is preserved below.
 
 **Substrate scouted (2026-06-25).** The prior "grep found neither" note was a wrong path — forme
 lives at `crates/forme/forme`, not `crates/graph/forme`. At the right path the API is **first-class
@@ -131,12 +140,13 @@ wiring a whole subsystem: a per-session `GraphTree`, projected into the workbenc
 a branch graphlet can group tiles + accumulate lineage in. Without that a branch graphlet is an
 orphan and branch collapses to leaf.
 
-**Decision (Mark, 2026-06-25): defer branch.** Shift+drag stays the leaf-stub it is now. Wiring
-the forme graphlet layer is its own plan — [graphlet wiring](2026-06-25_graphlet_wiring_plan.md)
-(stub landed at `crates/meerkat/src/graphlets.rs`), with broader payoff (document groups,
-reconciliation, the relational-browse front-end all want it); branch is its first consumer. When
-that plan's Phase 1 lands, G3 here calls `SessionGraphlets::record_branch` on the Shift path. The
-cheaper tear-out wins (the toast, the tile-tab leaf origin, G5 move) come first.
+**Decision (Mark, 2026-06-25): graphlet layer wired as its own plan** —
+[graphlet wiring](2026-06-25_graphlet_wiring_plan.md), with broader payoff (document groups,
+reconciliation, the relational-browse front-end all want it); branch is its first consumer.
+**Phase 1 has since landed** (Shift+drag mints + persists a `Branched` graphlet via
+`branch_graphlet_from`, driven), so branch is no longer a leaf-stub. Its **Phase 2** (the graphlet
+visibly scoping the window + accumulating lineage) is tracked in that plan. The remaining
+tear-out-gesture wins (the toast, the tile-tab leaf origin, G5 move) are independent of it.
 
 **Done in passing (2026-06-25):** renamed forme's `GraphletBinding::Forked` → `Branched` (forme
 green, 114 tests) so it no longer collides with the host's real `ForkNode` / `fork_session_from`

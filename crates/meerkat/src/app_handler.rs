@@ -912,6 +912,26 @@ impl Shell {
                         }
                     }
                 }
+                super::ShellCommand::BranchNode { node, from } => {
+                    // Mint + persist the branch graphlet in the donor's session (Shell),
+                    // then open a window on the donor's *same* graph, scoped to it.
+                    if self.render_core.is_some() {
+                        if let Some(graphlet_id) = self.branch_graphlet_from(node, from) {
+                            // The anchor node's label, for the branch chrome chip (P2).
+                            let anchor_label = self.orreries.get(&from).and_then(|o| {
+                                let g = o.graph();
+                                g.get_node_by_id(node)
+                                    .map(|(key, _)| g.node_display_label(key))
+                            });
+                            let mut view = self.build_window_view_for(from);
+                            view.branch_graphlet = Some(graphlet_id);
+                            if let Some(label) = anchor_label {
+                                view.chrome_update(|c| c.branch_label = Some(format!("\u{2387} {label}")));
+                            }
+                            self.spawn_window_with_view(event_loop, view);
+                        }
+                    }
+                }
                 super::ShellCommand::CloseWindow(id) => self.close_window(id),
                 super::ShellCommand::CreateSession => {
                     self.create_session();

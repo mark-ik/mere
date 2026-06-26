@@ -17,15 +17,22 @@
 //! `GraphletRef`, held here as a per-session index keyed by `GraphMemberId` (the kernel
 //! node uuid the orrery + workbench already use), rather than resurrecting `GraphTree`.
 
-#![allow(dead_code)] // STUB: wired into the session lifecycle in graphlet-wiring Phase 1.
+// Some accessors (`get`, future kinds) land ahead of their Phase 2 consumers.
+#![allow(dead_code)]
+
+use std::path::Path;
 
 use forme::{GraphMemberId, GraphletBinding, GraphletId, GraphletKind, GraphletRef, GraphletSpec};
+use serde::{Deserialize, Serialize};
+
+/// Sidecar filename for a session's graphlet index, beside `graph.json`.
+pub(crate) const GRAPHLETS_FILE: &str = "graphlets.json";
 
 /// The graphlets belonging to one session's graph: named sub-structures (a tear-out
 /// **branch**, later document-groups / relational-browse neighborhoods) over the same
 /// kernel nodes the orrery + workbench render. One per session, persisted beside the
 /// graph. (Graphlet-wiring Phase 1; plan recommendation B.)
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub(crate) struct SessionGraphlets {
     graphlets: Vec<GraphletRef<GraphMemberId>>,
     /// Monotonic id source. `GraphletId` is forme's lightweight `u32` index, unique
@@ -86,11 +93,38 @@ impl SessionGraphlets {
         id
     }
 
-    // Phase 1 persistence seam: `GraphletRef` is already `Serialize`/`Deserialize`, so
-    // save/load is a `graphlets.json` sidecar beside `graph.json` on the existing
-    // per-session save path. Left unimplemented in the stub.
-    // pub(crate) fn save(&self, dir: &Path) -> io::Result<()> { todo!() }
-    // pub(crate) fn load(dir: &Path) -> Self { todo!() }
+    /// Add `node` to graphlet `id`'s roster, returning whether it was newly added (not
+    /// already present). We reuse forme's `anchors` list as the live member set, since
+    /// the superseded `GraphTree` member map is not in play (Phase 3 may distinguish
+    /// seed anchors from a derived roster). A tear-out **branch** grows this as its
+    /// window navigates, so it diverges from the donor. (Graphlet wiring Phase 2.)
+    pub(crate) fn add_member(&mut self, id: GraphletId, node: GraphMemberId) -> bool {
+        if let Some(g) = self.graphlets.iter_mut().find(|g| g.id == id) {
+            if !g.anchors.contains(&node) {
+                g.anchors.push(node);
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Persist this index to `graphlets.json` in the session dir. Best-effort, like the
+    /// other per-session sidecars (graph / workbench / cartography).
+    pub(crate) fn save(&self, session_dir: &Path) -> std::io::Result<()> {
+        let json = serde_json::to_string_pretty(self)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        std::fs::write(session_dir.join(GRAPHLETS_FILE), json)
+    }
+
+    /// Load a session's graphlet index from its sidecar, falling back to a fresh
+    /// default-session index on a missing or corrupt file (the same forgiving posture
+    /// as [`load_workbench`](crate::session_ops::load_workbench)).
+    pub(crate) fn load(session_dir: &Path) -> Self {
+        std::fs::read_to_string(session_dir.join(GRAPHLETS_FILE))
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_else(|| Self::new().with_default_session())
+    }
 }
 
 /// A minimal `GraphletSpec` for a branch whose donor carried no canonical spec: a

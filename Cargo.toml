@@ -31,6 +31,7 @@ members = [
     "crates/inker",
     "crates/inker/document-canvas",
     "crates/inker/knot-editor",
+    "crates/inker/knot-editor-host",
     "crates/inker/engines/nematic",
     "crates/inker/engines/scrying-engine",
     "crates/verso-api",
