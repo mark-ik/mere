@@ -207,3 +207,14 @@ illume's first non-editor consumer.
   omnibar-as-legibility-layer vision is realized (the lexer's first non-editor consumer).
   Still compile-verified, not headed-verified. Remaining: point 6 (the `KnotEditor`
   stateless deriver) and point 7 (extraction + publish).
+- **2026-06-26, point 5 headed-verified.** Built the meerkat exe and drove it
+  (`scry-shots/drive-knot.ps1`): opened the knot editor and screenshotted the editor +
+  omnibar. **Highlighting renders at runtime, in distinct perceptual colours.** The
+  editor's seeded `# New note` heading colours (teal `#`, themed heading text) versus the
+  plain body. The omnibar paints `visit https://example.com or @ada #web` with the url
+  blue, `@ada` (mention) teal, and `#web` (tag) magenta, each distinct, plain words left
+  white. So the illume → tinct → serval styled-field pipeline is confirmed end to end, and
+  the omnibar-as-legibility-layer vision is visibly real. (The editor's *typed* note did
+  not land, a click-focus timing miss in the driver, not a highlighting issue; the seed
+  heading already proves the editor path.) Point 5 done and verified; remaining points 6
+  (the deriver) and 7 (extraction + publish).
