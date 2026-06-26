@@ -252,7 +252,7 @@ impl WindowCtx<'_> {
             "\u{232b} forget stale recent now",
             "alembic:forget",
         ));
-        let recent: Vec<String> = {
+        let recent: Vec<(String, String)> = {
             let graph = self.orrery().graph();
             graph
                 .recent_visited(8)
@@ -263,27 +263,33 @@ impl WindowCtx<'_> {
                         .get_node_by_url(&rv.url)
                         .is_none_or(|(_, n)| n.tags.is_empty())
                 })
-                .map(|rv| strip(&rv.url))
+                .map(|rv| (rv.url.clone(), strip(&rv.url)))
                 .collect()
         };
         if recent.is_empty() {
             items.push(PaneItem::text("utility-row-muted", "nothing in recent working memory"));
         } else {
-            for row in &recent {
-                items.push(PaneItem::text("utility-row", row.clone()));
+            // Each row is a one-click "keep": ☆ promotes it to Saved (adds the reserved `saved`
+            // tag). (Alembic one-click promote, B3.)
+            for (url, shown) in &recent {
+                items.push(PaneItem::button(
+                    "utility-row",
+                    format!("\u{2606} {shown}"),
+                    format!("alembic:keep:{url}"),
+                ));
             }
         }
 
         // Saved (long-term): tagged nodes — tagging is the promotion act (decision #2). A scoped
         // block so the graph borrow ends before the store borrow below.
-        let saved: Vec<String> = {
+        let saved: Vec<(String, String)> = {
             let graph = self.orrery().graph();
-            let mut s: Vec<String> = graph
+            let mut s: Vec<(String, String)> = graph
                 .nodes()
                 .filter(|(_, node)| !node.tags.is_empty())
-                .map(|(key, _)| graph.node_display_label(key))
+                .map(|(key, node)| (node.url().to_string(), graph.node_display_label(key)))
                 .collect();
-            s.sort();
+            s.sort_by(|a, b| a.1.cmp(&b.1));
             s
         };
         items.push(PaneItem::text(
@@ -293,8 +299,14 @@ impl WindowCtx<'_> {
         if saved.is_empty() {
             items.push(PaneItem::text("utility-row-muted", "tag a node to keep it long-term"));
         } else {
-            for label in saved.iter().take(12) {
-                items.push(PaneItem::text("utility-row", clip(label)));
+            // Each row is a one-click "release": ★ removes the reserved `saved` tag (a node still
+            // tagged otherwise stays Saved). (Alembic one-click demote, B3.)
+            for (url, label) in saved.iter().take(12) {
+                items.push(PaneItem::button(
+                    "utility-row",
+                    format!("\u{2605} {}", clip(label)),
+                    format!("alembic:release:{url}"),
+                ));
             }
         }
 

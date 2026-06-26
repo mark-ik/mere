@@ -979,6 +979,26 @@ impl Orrery {
         tagged
     }
 
+    /// Insert `tag` on the node addressed by `url`, if present — a by-url tagging gesture (the
+    /// Alembic "keep" one-click promote, distinct from the selection-based [`tag_selected`]).
+    /// Returns whether the node newly gained the tag. Tags are node truth the host persists.
+    pub fn tag_node_by_url(&mut self, url: &str, tag: &str) -> bool {
+        let Some(key) = self.graph.get_node_by_url(url).map(|(k, _)| k) else {
+            return false;
+        };
+        self.graph.insert_node_tag(key, tag.to_string())
+    }
+
+    /// Remove `tag` from the node addressed by `url`, if present (the Alembic "release"
+    /// one-click demote). Returns whether it was removed. A node still tagged otherwise stays
+    /// long-term (Saved) — only this tag is touched.
+    pub fn untag_node_by_url(&mut self, url: &str, tag: &str) -> bool {
+        let Some(key) = self.graph.get_node_by_url(url).map(|(k, _)| k) else {
+            return false;
+        };
+        self.graph.remove_node_tag(key, tag)
+    }
+
     /// Retract the user-asserted semantic relation(s) on the selected edge(s) —
     /// a true removal, not the display-only [`hide_selected_edges`]. Scoped to the
     /// `Semantic` family, so navigation / provenance history on the same edge

@@ -688,6 +688,34 @@ mod tests {
     }
 
     #[test]
+    fn keep_and_release_toggle_the_saved_tag() {
+        // The Alembic one-click promote/demote: keep adds the reserved `saved` tag (Recent ->
+        // Saved), release removes it (back to Recent). Promotion is a tag (decision #2). (B3.)
+        let mut app = test_app();
+        app.create_session();
+        let url = "https://example.test";
+        app.orrery_mut().visit(url); // a fresh Recent (untagged) node
+        app.ctx().keep_node(url);
+        assert!(
+            app.ctx()
+                .orrery()
+                .graph()
+                .get_node_by_url(url)
+                .is_some_and(|(_, n)| n.tags.iter().any(|t| t == "saved")),
+            "keep adds the saved tag",
+        );
+        app.ctx().release_node(url);
+        assert!(
+            app.ctx()
+                .orrery()
+                .graph()
+                .get_node_by_url(url)
+                .is_some_and(|(_, n)| n.tags.is_empty()),
+            "release removes the saved tag",
+        );
+    }
+
+    #[test]
     fn ctrl_shift_n_queues_a_spawn_window_command() {
         // The new-window verb can't create a window from a per-window handler (no
         // event loop, no registry access), so it queues a `SpawnWindow` the shell

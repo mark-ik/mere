@@ -1385,6 +1385,12 @@ impl WindowCtx<'_> {
                 // Cycle the Recent header's eviction policy (persisted; the next forgetting pass
                 // uses it). (Editable eviction policy, B4.)
                 self.cycle_eviction_policy();
+            } else if let Some(url) = key.strip_prefix("alembic:keep:") {
+                // One-click promote: add the reserved `saved` tag, moving the row to Saved. (B3.)
+                self.keep_node(url);
+            } else if let Some(url) = key.strip_prefix("alembic:release:") {
+                // One-click demote: remove the `saved` tag. (B3.)
+                self.release_node(url);
             }
         }
         // Steward: the focused-operation action buttons (retry / stop / background-pin)

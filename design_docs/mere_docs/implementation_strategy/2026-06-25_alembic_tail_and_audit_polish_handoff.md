@@ -88,12 +88,14 @@ From the 2026-06-24 audit, verified against the code. One audit item was already
    in the Apparatus log rather than replacing it. New test `steward_surfaces_a_recorded_forgetting_pass`
    pins both the not-run and the recorded-count states. (Built on the A2 Steward work.)
 
-3. **In-pane one-click promote/demote (slice C).** Promotion works today via the existing Add-tag
-   gesture (tags persist → Saved is durable). A one-click "keep" from a Recent row / "release" from a
-   Saved row would be nicer. Primitives exist: `Graph::insert_node_tag` / `remove_node_tag`,
-   `get_node_by_url`. **Open decision first:** is "keep" a magic `saved` tag, or a dedicated bookmark
-   flag on the node (a kernel schema add)? `is_pinned` is a physics position-pin, not a keep, so it is
-   not the answer. Decide before wiring. **[chrome-hot]** (`pane_data` + `input` drain).
+3. **In-pane one-click promote/demote (slice C).** ✅ **DONE 2026-06-25.** **Decision: magic `saved`
+   tag** (Mark, 2026-06-25 — "a bookmark is just a special case of tag anyway"; consistent with decision
+   #2, tagging is the promotion act, and `is_pinned` is a physics pin not a keep). Wired: the orrery
+   gained `tag_node_by_url` / `untag_node_by_url` (by-url variants of `tag_selected`); meerkat
+   `keep_node` / `release_node` (`node_ops.rs`) add/remove the reserved `saved` tag + `save_session`.
+   Alembic **Recent** rows are now `☆` keep buttons (`alembic:keep:<url>`) and **Saved** rows `★` release
+   buttons (`alembic:release:<url>`), routed in the Alembic drain (`input.rs`). Release only touches the
+   `saved` tag, so a node kept via a user tag stays Saved. New test `keep_and_release_toggle_the_saved_tag`.
 
 4. **Editable eviction policy (slice C).** ✅ **DONE 2026-06-25.** `EvictionPolicy` gained serde +
    `cycled()` (the `7d → 30d → 90d → forever` ladder); `PersonaSettings` carries an `eviction_policy`

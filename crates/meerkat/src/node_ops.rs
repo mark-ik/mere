@@ -89,6 +89,25 @@ impl WindowCtx<'_> {
         self.view.request_redraw();
     }
 
+    /// Keep a Recent node: add the reserved `saved` tag (promote to long-term Saved memory) and
+    /// persist. Promotion is a tag (decision #2: tagging is the promotion act), so a bookmark is
+    /// just this reserved tag; a no-op if the node is gone or already kept. (Alembic promote, B3.)
+    pub(super) fn keep_node(&mut self, url: &str) {
+        if self.orrery_mut().tag_node_by_url(url, "saved") {
+            self.save_session();
+            self.view.request_redraw();
+        }
+    }
+
+    /// Release a Saved node: remove the reserved `saved` tag and persist. A node still tagged
+    /// otherwise stays Saved (only this tag is touched). (Alembic demote, B3.)
+    pub(super) fn release_node(&mut self, url: &str) {
+        if self.orrery_mut().untag_node_by_url(url, "saved") {
+            self.save_session();
+            self.view.request_redraw();
+        }
+    }
+
     /// The focused node as an eidetic tombstone (url + title + tags), for the
     /// deleted-nodes log. `None` when zero or many nodes are focused.
     fn focused_tombstone(&self) -> Option<eidetic::DeletedNode> {
