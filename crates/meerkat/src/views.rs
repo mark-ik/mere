@@ -8,7 +8,7 @@ use std::rc::Rc;
 use serval_scripted_dom::ScriptedDom;
 use xilem_serval::{
     AnyView, El, OnClick, OptionalAction, PointerClick, ServalAppRunner, ServalCtx, ServalElement,
-    TextField, TextInput, el, lens, memoize, on_click, overlay_at, styled_textarea, text_field_typed,
+    TextField, TextInput, el, lens, memoize, on_click, overlay_at, styled_text_field, styled_textarea, text_field_typed,
     textarea_typed,
 };
 
@@ -114,10 +114,12 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
             (|c: &mut Chrome, _: PointerClick| c.physics_toggle = true) as fn(&mut Chrome, PointerClick),
         )
     });
-    // The omnibar text_field, lensed onto `Chrome::omnibar`. `text_field_typed`
-    // names its concrete view so the `lens` projection can be a `fn` pointer
-    // (no captured borrow), as in pelt-live.
-    let make: fn(&mut TextInput) -> TextField = |t: &mut TextInput| text_field_typed(t);
+    // The omnibar, lensed onto `Chrome::omnibar`. A styled single-line field, so
+    // illume's entity pass paints urls / mentions / tags as you type (the omnibar as
+    // the lexer's first non-editor consumer); `styled_text_field` names a `fn`-pointer
+    // view so the `lens` projection stays capture-free.
+    let make: fn(&mut TextInput) -> TextField =
+        |t: &mut TextInput| styled_text_field(t, &crate::knot_highlight::omnibar_styles(t.text()));
     let to_omnibar: fn(&mut Chrome) -> &mut TextInput = |c: &mut Chrome| &mut c.omnibar;
     let omnibar = lens(make, to_omnibar);
     // The tessera/sync status no longer rides the toolbar — it moved into the

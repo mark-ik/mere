@@ -94,6 +94,21 @@ pub fn knot_styles(text: &str) -> Vec<StyleRange> {
     styles
 }
 
+/// The styled ranges for an omnibar or other single-line surface: only the inline
+/// entities (urls, mentions, tags, emails) mapped to their classes. Unlike
+/// [`knot_styles`] it runs no djot structure pass (the omnibar is not a note).
+pub fn omnibar_styles(text: &str) -> Vec<StyleRange> {
+    entities(text)
+        .into_iter()
+        .filter_map(|span| {
+            syntax_role(span.kind).map(|role| StyleRange {
+                range: span.range,
+                class: role_class(role).to_string(),
+            })
+        })
+        .collect()
+}
+
 /// The seeds the syntax palette derives from until the live theme's seeds are
 /// plumbed through (a brand-coherent dark triad, matching the default chrome). This
 /// is the first cut; the follow-up reads the active theme's seeds so the syntax
