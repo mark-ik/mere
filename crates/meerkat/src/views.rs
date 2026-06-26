@@ -218,8 +218,12 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     // the live cursor (the host repositions it each frame in `render`). Pointer-events are
     // off so it never intercepts the drag. (Tear-out gestures, GA-5.)
     if let Some(label) = &c.tear_ghost {
+        // Point-anchored via the overlay primitive (placeholder origin); the render pass sets
+        // the live cursor position each frame, like the submenu's `anchor_point` reposition.
+        // Carrying `position: absolute` from `overlay_at` no longer leans on the `.tear-ghost`
+        // CSS rule for the positioning kind. (Tear-out gestures, GA-5.)
         children.push(Box::new(
-            el::<_, Chrome, ()>("div", label.clone()).attr("class", "tear-ghost"),
+            overlay_at::<_, Chrome, ()>(0.0, 0.0, label.clone()).attr("class", "tear-ghost"),
         ) as ChromeView);
     }
     Box::new(el::<_, Chrome, ()>("div", children).attr("class", "chrome"))
