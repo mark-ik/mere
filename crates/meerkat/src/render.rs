@@ -219,8 +219,9 @@ impl WindowCtx<'_> {
             // The apparatus is read-only diagnostics now; its settings sections moved to the
             // pelt settings lane (Settings lane P2).
             let system_rows = self.apparatus_system_rows();
+            let sync_rows = self.apparatus_sync_rows();
             let obs = self.apparatus_observability();
-            let items = crate::apparatus::apparatus_items(&system_rows, &obs);
+            let items = crate::apparatus::apparatus_items(&system_rows, &sync_rows, &obs);
             self.view.set_list_pane(Apparatus, "apparatus", items, Some(rect));
         } else if self.view.list_pane_open(Apparatus) {
             self.view.set_list_pane(Apparatus, "apparatus", Vec::new(), None);

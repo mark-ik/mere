@@ -285,6 +285,7 @@ mod tests {
             transition: TraceTransition::LinkClick,
             at_ms,
             dwell_ms: None,
+            candidates: Vec::new(),
         }
     }
 

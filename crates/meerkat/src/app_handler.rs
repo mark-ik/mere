@@ -1052,6 +1052,24 @@ impl Shell {
         }
     }
 
+    /// Close every *secondary* window whose focused graph is `graph`. The primary is
+    /// exempt (a session-delete caller has already switched it to a survivor). Used when a
+    /// session is deleted: its graph's **branch + leaf** windows die with it (brief §4.2),
+    /// while **forks** — which live on their own `GraphId` — survive untouched. More
+    /// generally this is the multi-window half of session-delete: a window must not outlive
+    /// the graph it shows. (Tear-out gestures G6.)
+    pub(super) fn close_windows_on_graph(&mut self, graph: super::GraphId) {
+        let doomed: Vec<WindowId> = self
+            .windows
+            .iter()
+            .filter(|(id, view)| Some(**id) != self.primary && view.focused_graph == graph)
+            .map(|(id, _)| *id)
+            .collect();
+        for id in doomed {
+            self.close_window(id);
+        }
+    }
+
     /// Honor a close request for `window_id`, forked by role: the primary saves its
     /// session and exits the app; a secondary just drops its view, leaving the graph
     /// and the other windows intact. Both `CloseRequested` and the custom close

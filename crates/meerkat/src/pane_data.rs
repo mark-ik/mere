@@ -4,7 +4,9 @@
 
 //! Pane row/data builders for a window: the roster's node rows (grouped by
 //! content bucket, with edge detail for a sole selection) and field rows, the
-//! Inspector / Steward utility rows, and the small label helpers they share.
+//! Inspector utility rows, the Apparatus at-rest sync record, the Alembic engram
+//! list, and the small label helpers they share. (The Steward pane's builders live
+//! in `steward.rs`.)
 //! These project graph + content state into the `(String, String)` / row shapes
 //! the list panes render. Factored out of `frame_ops.rs` to keep files under the
 //! 600-LOC ceiling.
@@ -345,140 +347,46 @@ impl WindowCtx<'_> {
         items
     }
 
-    pub(super) fn steward_rows(&self) -> Vec<(String, String)> {
-        let operations = self.shared.content.constellation.active_operations();
+    /// The at-rest sync record for Apparatus — the record half of the static-vs-live
+    /// split (Steward owns the live, actionable rows in `steward::steward_sync_rows`;
+    /// Apparatus owns the record). The lane's on/off state, the caught-up op total, and how
+    /// long since the last sync activity. Drawn from the same `SyncIndicator` the
+    /// host folds each frame, so it stays honest (no placebo). (Chrome bar P1.)
+    pub(super) fn apparatus_sync_rows(&self) -> Vec<(String, String)> {
+        let indicator = &self.view.chrome().sync;
+        if !indicator.active {
+            return vec![("Lane".to_string(), "off".to_string())];
+        }
         let mut rows = vec![
-            (
-                "Active operations".to_string(),
-                operations.len().to_string(),
-            ),
-            ("Tab cap".to_string(), self.shared.presentation.saved_tab_cap.to_string()),
-            (
-                "Live graphs".to_string(),
-                format!("{} / {}", self.orrery_pool_count, super::MAX_POOLED_ORRERIES),
-            ),
-            (
-                "Loading fetches".to_string(),
-                self.fetch_state_count(1).to_string(),
-            ),
-            (
-                "Failed fetches".to_string(),
-                self.fetch_state_count(3).to_string(),
-            ),
-            ("Sync".to_string(), self.sync_summary()),
-            (
-                // Athanor's last forgetting pass, surfaced live here (not only in the
-                // Apparatus diagnostics log). A real tracked op, no placebo. (Alembic B2.)
-                "Last forgetting".to_string(),
-                match self.shared.observability.last_forgetting() {
-                    Some(p) => format!(
-                        "dropped {} page(s) \u{b7} {}",
-                        p.dropped,
-                        crate::observability::age(p.at)
-                    ),
-                    None => "not run yet".to_string(),
-                },
-            ),
-            (
-                // The dialable ticket, readable + shareable here instead of only in the
-                // logs. (Tessera ticket surface.)
-                "Tessera ticket".to_string(),
-                self.view
-                    .chrome()
-                    .sync
-                    .ticket()
-                    .map(str::to_string)
-                    .unwrap_or_else(|| "\u{2014}".to_string()),
-            ),
+            ("Lane".to_string(), indicator.label.clone()),
+            ("Caught-up ops".to_string(), indicator.ops.to_string()),
         ];
-        let focused = self.focused_member();
-        rows.push((
-            "Focused operation".to_string(),
-            match focused {
-                Some(member) if self.shared.content.constellation.is_active(member) => format!(
-                    "active background={} recovering={}",
-                    self.shared.content.constellation.is_background(member),
-                    self.shared.content.constellation.is_recovering(member)
-                ),
-                Some(_) => "dormant".to_string(),
-                None => "none".to_string(),
-            },
-        ));
-        for operation in operations.into_iter().take(6) {
-            rows.push((
-                format!("Operation {}", short_member(operation.member)),
-                format!(
-                    "{} background={} recovering={} scene={} height={}",
-                    operation.url.as_deref().unwrap_or("not shown yet"),
-                    operation.background,
-                    operation.recovering,
-                    operation.scene_version,
-                    operation.content_height
-                ),
-            ));
+        if let Some(then_ms) = indicator.last_activity_ms {
+            rows.push(("Last activity".to_string(), unix_age(then_ms)));
         }
         rows
     }
-
-    /// The Steward pane as a clickable item list: the live-ops status rows (from
-    /// [`steward_rows`](Self::steward_rows)) followed by real action buttons for
-    /// the focused operation — retry / stop / background-pin. Each button queues a
-    /// `steward:*` key that `drain_list_pane_activations` routes to the existing
-    /// node-ops verb, so the actions are reachable by click, not only by typing
-    /// `>retry.focused`. Mirrors the Alembic pane's bespoke item builder rather
-    /// than the inert `utility_pane_items` path. (Audit A2.)
-    pub(super) fn steward_items(&self) -> Vec<crate::list_pane::PaneItem> {
-        use crate::list_pane::PaneItem;
-        let mut items = vec![PaneItem::text(
-            "utility-title",
-            crate::utility_panes::pane_title(&PaneContent::Steward),
-        )];
-        for (label, value) in self.steward_rows() {
-            items.push(PaneItem::text("utility-row", format!("{label}: {value}")));
-        }
-        // Real verbs on the focused operation (no placebo): the drain maps each key
-        // to its node-ops method.
-        items.push(PaneItem::button("utility-row", "\u{21bb} retry focused", "steward:retry"));
-        items.push(PaneItem::button("utility-row", "\u{23f9} stop focused", "steward:stop"));
-        items.push(PaneItem::button(
-            "utility-row",
-            "\u{2693} pin focused (background)",
-            "steward:pin",
-        ));
-        items.push(PaneItem::text(
-            "utility-row-muted",
-            crate::utility_panes::pane_status(&PaneContent::Steward),
-        ));
-        items
-    }
-
-    fn fetch_state_count(&self, tag: u8) -> usize {
-        self.shared.content.pages
-            .values()
-            .filter(|state| fetch::ContentState::tag(Some(*state)) == tag)
-            .count()
-    }
-
-    fn sync_summary(&self) -> String {
-        let indicator = &self.view.chrome().sync;
-        if !indicator.active {
-            return "off".to_string();
-        }
-        // The earned standing is the headline; ops is the raw catch-up plumbing behind
-        // it. (Tessera ledger fold.)
-        let standing = indicator
-            .standing
-            .map(|s| format!(" standing={s:+}"))
-            .unwrap_or_default();
-        format!(
-            "{} syncing={} ops={}{}",
-            indicator.label, indicator.syncing, indicator.ops, standing
-        )
-    }
 }
 
-fn short_member(member: GraphMemberId) -> String {
-    member.to_string().chars().take(8).collect()
+/// A coarse "N ago" readout from a Unix-epoch-ms timestamp, for the Apparatus
+/// at-rest sync record (`SyncIndicator::last_activity_ms` is Unix-epoch, not the
+/// monotonic `Instant` the observability `age` helper takes). (Chrome bar P1.)
+fn unix_age(then_ms: u64) -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    let secs = now_ms.saturating_sub(then_ms) / 1_000;
+    if secs < 1 {
+        "now".to_string()
+    } else if secs < 60 {
+        format!("{secs}s ago")
+    } else if secs < 3_600 {
+        format!("{}m ago", secs / 60)
+    } else {
+        format!("{}h ago", secs / 3_600)
+    }
 }
 
 fn content_bucket(content_type: Option<&str>) -> (u8, &'static str) {

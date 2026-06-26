@@ -96,6 +96,7 @@ where
                 transition,
                 at_ms: visit.created_at_ms,
                 dwell_ms: None,
+                candidates: Vec::new(),
             });
         }
         if !events.is_empty() {

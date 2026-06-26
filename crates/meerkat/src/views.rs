@@ -120,10 +120,10 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     let make: fn(&mut TextInput) -> TextField = |t: &mut TextInput| text_field_typed(t);
     let to_omnibar: fn(&mut Chrome) -> &mut TextInput = |c: &mut Chrome| &mut c.omnibar;
     let omnibar = lens(make, to_omnibar);
-    // The p2p sync-status chip (S5.0): an honest one-line readout of the joined
-    // lane, sitting at the toolbar's right (the omnibar's flex-grow pushes it
-    // there). The host folds the real `SyncStatus` into `c.sync`.
-    let sync_chip = el::<_, Chrome, ()>("div", c.sync.summary()).attr("class", "sync-chip");
+    // The tessera/sync status no longer rides the toolbar — it moved into the
+    // Steward pane (the live, actionable plane) and the Apparatus pane (the at-rest
+    // record), per the static-vs-live split. The host still folds the real
+    // `SyncStatus` into `c.sync`; the panes read it from there. (Chrome bar P1.)
     // The crawl-progress chip (relational-browse V2): "crawling/crawled: N pages" while
     // a crawl runs and after; hidden when none has run. We toggle a `crawl-chip-hidden`
     // class rather than rely on `:empty` — an empty-string text view still leaves an
@@ -159,7 +159,7 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     let branch_chip = el::<_, Chrome, ()>("div", branch_summary).attr("class", branch_class);
     let toolbar = el::<_, Chrome, ()>(
         "div",
-        (back, forward, pause, branch_chip, omnibar, add_pill, sync_chip, crawl_chip),
+        (back, forward, pause, branch_chip, omnibar, add_pill, crawl_chip),
     )
     .attr("class", "toolbar");
 

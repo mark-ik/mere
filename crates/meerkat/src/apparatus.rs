@@ -138,12 +138,20 @@ pub fn physics_section_items(physics_damping: f32) -> Vec<PaneItem> {
 /// renders these display rows. (Settings lane P2 — apparatus settings retired.)
 pub fn apparatus_items(
     system_rows: &[(String, String)],
+    sync_rows: &[(String, String)],
     obs: &ObservabilitySnapshot,
 ) -> Vec<PaneItem> {
     let mut items = Vec::new();
 
     items.push(PaneItem::text("app-title", "Overview"));
     for (label, value) in system_rows {
+        items.push(PaneItem::text("app-row", format!("{label}: {value}")));
+    }
+
+    // The at-rest sync record (the record half of the static-vs-live split; Steward
+    // owns the live, actionable rows). (Chrome bar P1 — tessera out of the omnibar.)
+    items.push(PaneItem::text("app-title", "Sync"));
+    for (label, value) in sync_rows {
         items.push(PaneItem::text("app-row", format!("{label}: {value}")));
     }
 

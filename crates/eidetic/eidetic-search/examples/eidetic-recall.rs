@@ -105,6 +105,7 @@ fn events_from_bookmarks(items: &[ImportedBookmarkItem]) -> Vec<TraceEvent> {
             transition: TraceTransition::Imported,
             at_ms: b.created_at_unix_secs.unwrap_or(0).max(0) as u64 * 1000,
             dwell_ms: None,
+            candidates: Vec::new(),
         })
         .collect();
     events.sort_by_key(|e| e.at_ms);
@@ -136,6 +137,7 @@ fn events_from_history(items: &[ImportedHistoryVisitItem]) -> Vec<TraceEvent> {
             transition: transition_of(v.transition.as_ref()),
             at_ms: v.visited_at_unix_secs.max(0) as u64 * 1000,
             dwell_ms: None,
+            candidates: Vec::new(),
         })
         .collect();
     events.sort_by_key(|e| e.at_ms);
@@ -611,6 +613,7 @@ mod tests {
                 transition: TraceTransition::Imported,
                 at_ms: i as u64,
                 dwell_ms: None,
+                candidates: Vec::new(),
             })
             .collect();
         let traces = traces_from_events("mark", events);
@@ -638,6 +641,7 @@ mod tests {
                     transition: TraceTransition::UrlTyped,
                     at_ms: 1_000,
                     dwell_ms: None,
+                    candidates: Vec::new(),
                 },
                 TraceEvent {
                     from: Some(PageRef {
@@ -651,6 +655,7 @@ mod tests {
                     transition: TraceTransition::LinkClick,
                     at_ms: 2_000,
                     dwell_ms: None,
+                    candidates: Vec::new(),
                 },
             ];
             let traces = traces_from_events("mark", events);

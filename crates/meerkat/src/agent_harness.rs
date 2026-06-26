@@ -627,6 +627,26 @@ mod tests {
     }
 
     #[test]
+    fn steward_shows_a_live_operations_section() {
+        // The process list (Chrome bar P2): a "Live operations" section, with an
+        // honest empty-state row when nothing is live (a fresh session loads no
+        // content, so no actor is active). The per-row verbs (`steward:<verb>:<uuid>`)
+        // appear once operations exist; that path is exercised headed in P3.
+        let mut app = test_app();
+        app.create_session();
+        let items = app.ctx().steward_items();
+        let texts: Vec<&str> = items.iter().map(|i| i.text.as_str()).collect();
+        assert!(
+            texts.contains(&"Live operations"),
+            "the process list has a section header: {texts:?}"
+        );
+        assert!(
+            texts.contains(&"No live operations"),
+            "with nothing live, the empty-state row is honest (no placebo): {texts:?}"
+        );
+    }
+
+    #[test]
     fn relate_picker_offers_the_semantic_kinds_as_actions() {
         // The two-node relate picker turns the edge vocabulary into clickable rows: each is a
         // "Relate as <kind>" label carrying a RelateAs(kind) action. Previously the kinds were

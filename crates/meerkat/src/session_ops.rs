@@ -549,6 +549,16 @@ impl super::Shell {
         {
             return;
         }
+        // The deleted session's graph, captured before `move_to_trash` removes the
+        // manifest. Its pooled state + windows are torn down below: a donor's branch /
+        // leaf windows die with it (brief §4.2), while forks (their own `GraphId`)
+        // survive. (Graphlet wiring #3 / tear-out G6.)
+        let dead_graph = self
+            .shared
+            .session
+            .manifests
+            .get(target)
+            .map(|m| m.root_graph_id);
         if target == self.shared.session.active_session_id {
             let survivor = self
                 .shared
@@ -564,6 +574,15 @@ impl super::Shell {
         }
         if let Err(err) = self.shared.session.manifests.move_to_trash(target) {
             tracing::warn!(%err, "failed to trash the closed session");
+        }
+        // Tear down the dead graph: close its secondary windows first (so none outlives
+        // its orrery), then drop its pooled orrery + graphlet index. The on-disk
+        // `graphlets.json` already went to `.trash` with the session dir above.
+        if let Some(graph) = dead_graph {
+            self.close_windows_on_graph(graph);
+            self.graphlets.remove(&graph);
+            self.orreries.remove(&graph);
+            self.orrery_lru.retain(|g| *g != graph);
         }
         self.focused_view_mut().renaming = None;
         self.ctx().refresh_session_thumbnails();

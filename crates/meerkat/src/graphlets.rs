@@ -20,9 +20,14 @@
 // Some accessors (`get`, future kinds) land ahead of their Phase 2 consumers.
 #![allow(dead_code)]
 
+use std::collections::HashSet;
 use std::path::Path;
 
-use forme::{GraphMemberId, GraphletBinding, GraphletId, GraphletKind, GraphletRef, GraphletSpec};
+use forme::{
+    GraphMemberId, GraphletBinding, GraphletId, GraphletKind, GraphletMemberDelta, GraphletRef,
+    GraphletSpec,
+};
+use kernel::graph::Graph;
 use serde::{Deserialize, Serialize};
 
 /// Sidecar filename for a session's graphlet index, beside `graph.json`.
@@ -108,6 +113,62 @@ impl SessionGraphlets {
         false
     }
 
+    /// Record a **Linked** graphlet (Phase 3): one whose roster is *derived* from the
+    /// graph by its [`GraphletSpec`] (kind + seed), not hand-built like a branch. The
+    /// initial roster is derived now; [`reconcile`](Self::reconcile) re-derives it when the
+    /// graph drifts. `anchors` holds the live derived set; `spec.primary_anchor` holds the
+    /// seed (the anchors-vs-members split). Returns the new id. (Graphlet wiring Phase 3.)
+    pub(crate) fn record_linked(&mut self, graph: &Graph, spec: GraphletSpec) -> GraphletId {
+        let id = self.mint_id();
+        let members = derive_members(graph, &spec);
+        let seed = spec.primary_anchor.as_deref().and_then(|s| s.parse().ok());
+        let mut g = GraphletRef::new_session(id);
+        g.kind = Some(spec.kind.clone());
+        g.anchors = members;
+        g.primary_anchor = seed;
+        g.binding = GraphletBinding::Linked { spec };
+        self.graphlets.push(g);
+        id
+    }
+
+    /// Re-derive a **Linked** graphlet `id` from the current graph and reconcile its live
+    /// roster to graph truth, returning the delta (added / removed members) or `None` when
+    /// the graphlet is not Linked or nothing drifted. v0 **auto-applies** (the live set
+    /// tracks truth); the user-choice proposal path (keep-linked / unlink / save-as-branch)
+    /// is a later sub-slice. The diff is the harvested `compute_roster_delta` over the
+    /// kernel-derived truth and the stored roster — no `GraphTree`. (Graphlet wiring P3.)
+    pub(crate) fn reconcile(
+        &mut self,
+        graph: &Graph,
+        id: GraphletId,
+    ) -> Option<GraphletMemberDelta<GraphMemberId>> {
+        let g = self.graphlets.iter().find(|g| g.id == id)?;
+        let spec = match &g.binding {
+            GraphletBinding::Linked { spec } => spec.clone(),
+            _ => return None, // only Linked graphlets reconcile against graph truth
+        };
+        let current = g.anchors.clone();
+        let truth = derive_members(graph, &spec);
+        let truth_set: HashSet<&GraphMemberId> = truth.iter().collect();
+        let cur_set: HashSet<&GraphMemberId> = current.iter().collect();
+        let added: Vec<GraphMemberId> =
+            truth.iter().filter(|m| !cur_set.contains(m)).copied().collect();
+        let removed: Vec<GraphMemberId> =
+            current.iter().filter(|m| !truth_set.contains(m)).copied().collect();
+        let delta = GraphletMemberDelta {
+            added,
+            removed,
+            rebased_seeds: Vec::new(),
+        };
+        if delta.is_empty() {
+            return None;
+        }
+        if let Some(gm) = self.graphlets.iter_mut().find(|g| g.id == id) {
+            gm.anchors = truth; // auto-apply: the live set tracks graph truth
+        }
+        Some(delta)
+    }
+
     /// Persist this index to `graphlets.json` in the session dir. Best-effort, like the
     /// other per-session sidecars (graph / workbench / cartography).
     pub(crate) fn save(&self, session_dir: &Path) -> std::io::Result<()> {
@@ -124,6 +185,22 @@ impl SessionGraphlets {
             .ok()
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or_else(|| Self::new().with_default_session())
+    }
+}
+
+/// Derive a Linked graphlet's member set from the graph per its [`GraphletSpec`]
+/// (Phase 3). The kind selects the kernel-graph algorithm; the seed is `primary_anchor`.
+/// `GraphTree`-free — the derivation lives on the kernel graph (where the primitives + the
+/// relation vocabulary are), forme supplies only the spec type. Selector / Corridor /
+/// Loop kinds are later sub-slices; they fall back to the seed alone for now.
+pub(crate) fn derive_members(graph: &Graph, spec: &GraphletSpec) -> Vec<GraphMemberId> {
+    let Some(seed) = spec.primary_anchor.as_deref().and_then(|s| s.parse().ok()) else {
+        return Vec::new();
+    };
+    match spec.kind {
+        GraphletKind::Component => graph.component_members(seed),
+        GraphletKind::Ego { radius } => graph.ego_members(seed, radius),
+        _ => vec![seed],
     }
 }
 
@@ -181,5 +258,86 @@ mod tests {
         assert!(!g.add_member(id, visited), "a revisit is a dedup'd no-op");
         assert!(!g.add_member(id, anchor), "the anchor is already present");
         assert_eq!(g.get(id).unwrap().anchors.len(), 2, "anchor + the one visited node");
+    }
+
+    #[test]
+    fn linked_component_graphlet_derives_and_reconciles_on_drift() {
+        use euclid::default::Point2D;
+        use kernel::graph::{EdgeAssertion, SemanticSubKind};
+        let mut graph = Graph::new();
+        let a = graph.add_node("https://a".to_string(), Point2D::new(0.0, 0.0));
+        let b = graph.add_node("https://b".to_string(), Point2D::new(1.0, 0.0));
+        let c = graph.add_node("https://c".to_string(), Point2D::new(2.0, 0.0));
+        let link = |g: &mut Graph, x, y| {
+            g.assert_relation(
+                x,
+                y,
+                EdgeAssertion::Semantic {
+                    sub_kind: SemanticSubKind::Hyperlink,
+                    label: None,
+                    decay_progress: None,
+                },
+            );
+        };
+        link(&mut graph, a, b); // A–B connected; C isolated
+        let a_id = graph.get_node(a).unwrap().id;
+        let c_id = graph.get_node(c).unwrap().id;
+
+        // A Linked Component graphlet seeded on A derives {A, B}.
+        let mut idx = SessionGraphlets::new();
+        let spec = GraphletSpec {
+            kind: GraphletKind::Component,
+            anchors: vec![a_id.to_string()],
+            primary_anchor: Some(a_id.to_string()),
+            selectors: Vec::new(),
+        };
+        let id = idx.record_linked(&graph, spec);
+        assert_eq!(idx.get(id).unwrap().anchors.len(), 2, "component of A is A plus B");
+        assert!(idx.reconcile(&graph, id).is_none(), "no drift yet, reconcile is a no-op");
+
+        // Connect C into the component; reconcile re-derives + auto-applies.
+        link(&mut graph, b, c);
+        let delta = idx.reconcile(&graph, id).expect("the component grew");
+        assert_eq!(delta.added, vec![c_id], "C joined A's component");
+        assert!(delta.removed.is_empty());
+        assert_eq!(idx.get(id).unwrap().anchors.len(), 3, "live roster is now A, B, C");
+    }
+
+    #[test]
+    fn linked_ego_graphlet_is_radius_bounded() {
+        use euclid::default::Point2D;
+        use kernel::graph::{EdgeAssertion, SemanticSubKind};
+        let mut graph = Graph::new();
+        let a = graph.add_node("https://a".to_string(), Point2D::new(0.0, 0.0));
+        let b = graph.add_node("https://b".to_string(), Point2D::new(1.0, 0.0));
+        let c = graph.add_node("https://c".to_string(), Point2D::new(2.0, 0.0));
+        let link = |g: &mut Graph, x, y| {
+            g.assert_relation(
+                x,
+                y,
+                EdgeAssertion::Semantic {
+                    sub_kind: SemanticSubKind::Hyperlink,
+                    label: None,
+                    decay_progress: None,
+                },
+            );
+        };
+        link(&mut graph, a, b);
+        link(&mut graph, b, c); // A–B–C chain
+        let a_id = graph.get_node(a).unwrap().id;
+
+        let mut idx = SessionGraphlets::new();
+        let spec = GraphletSpec {
+            kind: GraphletKind::Ego { radius: 1 },
+            anchors: vec![a_id.to_string()],
+            primary_anchor: Some(a_id.to_string()),
+            selectors: Vec::new(),
+        };
+        let id = idx.record_linked(&graph, spec);
+        assert_eq!(
+            idx.get(id).unwrap().anchors.len(),
+            2,
+            "ego radius 1 from A is A plus B; C is two hops away"
+        );
     }
 }

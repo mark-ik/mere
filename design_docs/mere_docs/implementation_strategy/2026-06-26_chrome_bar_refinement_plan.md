@@ -119,6 +119,14 @@ Done when:
 
 ---
 
+## Batched headed verification
+
+P1 and P2 are wired + unit-tested but their *rendering* (the sync rows, the process
+list, the per-row verbs firing) is confirmed in the **P3 headed pass**, which spins
+up the harness anyway. So P3's done-condition grows: confirm (1) P1 Steward/Apparatus
+sync rows, (2) P2 process list + per-row retry/stop/pin, (3) shellbar centering +
+glyph coverage — all in one driven session. (Decided 2026-06-26.)
+
 ## Sequencing notes
 
 P1 → P2 are the pane half (P2 builds on P1's Steward). P3 is independent and
@@ -127,4 +135,29 @@ self-contained — good to land early for a clean render baseline. P4 is the lar
 
 ## Progress
 
-_(session log + test results land here per DOC_POLICY §8)_
+**2026-06-26 — P1 landed.**
+- Removed the toolbar `sync-chip` (`views.rs` construction + tuple element) and its
+  `.sync-chip` CSS (`main.rs`). The host still folds the real `SyncStatus` into
+  `c.sync`; the panes read it from there.
+- Steward (live plane): replaced the single folded `Sync:` row + inline ticket with
+  first-class rows via `steward_sync_rows` — `Sync lane`, `Syncing now`, `Standing`
+  (when a ledger has folded), `Tessera ticket`. Retired the now-unused `sync_summary`.
+- Apparatus (at-rest record): new `Sync` section via `apparatus_sync_rows` +
+  `unix_age` (Unix-epoch `last_activity_ms`, distinct from the monotonic `Instant`
+  the observability `age` helper takes) — `Lane`, `Caught-up ops`, `Last activity`.
+  Threaded a `sync_rows` param through `apparatus_items` (`apparatus.rs`) and its
+  `render.rs` caller.
+- Placement note: kept both row builders (`steward_sync_rows` + `apparatus_sync_rows`)
+  together in `pane_data.rs` rather than splitting one into `frame_ops.rs` (already at
+  621 LOC, over the 600 ceiling) — the two halves of the split read as siblings there.
+- Tests: `cargo check -p meerkat` clean; `meerkat` lib 89/89, bin steward/apparatus/sync
+  9/9 (incl. `steward_exposes_clickable_action_verbs`, `..._live_graph_count`,
+  `agent_can_open_apparatus_switch_theme_and_open_roster`). Updated the toolbar div-count
+  assert (7 → 6; button count unchanged — the chip was a `div`).
+- Honesty caveat: the row wiring + item-building are verified by tests and read from
+  the real folded `SyncIndicator`; a live two-peer sync round was not driven, so the
+  non-default values (ops > 0, standing, ticket present) are unverified at runtime. A
+  headed pass to confirm rendering folds into P3 (which needs the harness anyway).
+
+Pre-existing (not P1): `views.rs` has unused-import warnings (`ShellbarEdge`,
+`textarea_typed`) untouched here; `views.rs` is chrome-hot, left for its owner.

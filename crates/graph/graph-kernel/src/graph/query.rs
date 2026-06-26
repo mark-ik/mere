@@ -487,6 +487,48 @@ impl Graph {
         components
     }
 
+    /// The connected component of `seed` — it plus every node reachable through relations
+    /// (undirected), breadth-first. Empty if `seed` is not in the graph. The **Component**
+    /// graphlet's derivation. (Graphlet derivation, Phase 3.)
+    pub fn component_members(&self, seed: uuid::Uuid) -> Vec<uuid::Uuid> {
+        self.bfs_members(seed, None)
+    }
+
+    /// The **Ego** neighborhood of `seed`: itself plus every node within `radius`
+    /// undirected hops, breadth-first (`radius` 0 = just the seed). The Ego graphlet's
+    /// derivation. (Graphlet derivation, Phase 3.)
+    pub fn ego_members(&self, seed: uuid::Uuid, radius: u8) -> Vec<uuid::Uuid> {
+        self.bfs_members(seed, Some(radius))
+    }
+
+    /// Breadth-first member uuids from `seed` over undirected neighbors, bounded to
+    /// `max_depth` hops (`None` = unbounded = the whole component). Shared by
+    /// [`component_members`](Self::component_members) and [`ego_members`](Self::ego_members).
+    fn bfs_members(&self, seed: uuid::Uuid, max_depth: Option<u8>) -> Vec<uuid::Uuid> {
+        let Some((start, _)) = self.get_node_by_id(seed) else {
+            return Vec::new();
+        };
+        let mut seen = HashSet::new();
+        let mut order = Vec::new();
+        let mut queue = std::collections::VecDeque::new();
+        seen.insert(start);
+        queue.push_back((start, 0u8));
+        while let Some((key, depth)) = queue.pop_front() {
+            if let Some(node) = self.get_node(key) {
+                order.push(node.id);
+            }
+            if max_depth.is_some_and(|m| depth >= m) {
+                continue;
+            }
+            for neighbor in self.neighbors_undirected_sorted(key) {
+                if seen.insert(neighbor) {
+                    queue.push_back((neighbor, depth + 1));
+                }
+            }
+        }
+        order
+    }
+
     /// Strongly connected components in the directed graph.
     pub fn strongly_connected_components(&self) -> Vec<Vec<NodeKey>> {
         kosaraju_scc(&self.inner)
@@ -505,5 +547,51 @@ impl Graph {
     /// Count of edges in the graph
     pub fn edge_count(&self) -> usize {
         self.inner.edge_count()
+    }
+}
+
+#[cfg(test)]
+mod derivation_tests {
+    use super::*;
+    use crate::graph::SemanticSubKind;
+    use euclid::default::Point2D;
+
+    /// An A–B–C chain plus an isolated D. Returns the graph and `[a, b, c, d]` uuids.
+    fn chain_plus_isolate() -> (Graph, [uuid::Uuid; 4]) {
+        let mut g = Graph::new();
+        let a = g.add_node("https://a".to_string(), Point2D::new(0.0, 0.0));
+        let b = g.add_node("https://b".to_string(), Point2D::new(1.0, 0.0));
+        let c = g.add_node("https://c".to_string(), Point2D::new(2.0, 0.0));
+        let d = g.add_node("https://d".to_string(), Point2D::new(9.0, 9.0));
+        let sem = || EdgeAssertion::Semantic {
+            sub_kind: SemanticSubKind::Hyperlink,
+            label: None,
+            decay_progress: None,
+        };
+        g.assert_relation(a, b, sem());
+        g.assert_relation(b, c, sem());
+        let ids = [
+            g.get_node(a).unwrap().id,
+            g.get_node(b).unwrap().id,
+            g.get_node(c).unwrap().id,
+            g.get_node(d).unwrap().id,
+        ];
+        (g, ids)
+    }
+
+    #[test]
+    fn component_members_is_the_whole_connected_component() {
+        let (g, [a, _b, _c, d]) = chain_plus_isolate();
+        assert_eq!(g.component_members(a).len(), 3, "A reaches B and C");
+        assert_eq!(g.component_members(d).len(), 1, "D is isolated");
+        assert!(g.component_members(uuid::Uuid::nil()).is_empty(), "unknown seed: empty");
+    }
+
+    #[test]
+    fn ego_members_is_radius_bounded() {
+        let (g, [a, _b, _c, _d]) = chain_plus_isolate();
+        assert_eq!(g.ego_members(a, 0).len(), 1, "radius 0 is just the seed");
+        assert_eq!(g.ego_members(a, 1).len(), 2, "radius 1 reaches B, not C");
+        assert_eq!(g.ego_members(a, 2).len(), 3, "radius 2 reaches C");
     }
 }

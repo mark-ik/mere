@@ -126,6 +126,13 @@ pub struct TraceEvent {
     /// Dwell on `to`, when the recorder knows it (live capture may; imports
     /// rarely do).
     pub dwell_ms: Option<u64>,
+    /// The other pages this navigation was chosen *against* — the relational
+    /// candidate set (the source page's outbound links, or a materialized
+    /// neighborhood). `to` is the chosen one; the rest are the in-context
+    /// "seen but not followed" negatives (the listwise relevance signal). Empty
+    /// when no relational context was available. (Capture plan C2.)
+    #[serde(default)]
+    pub candidates: Vec<PageRef>,
 }
 
 /// A chronological segment of one owner's traversals — the typed payload

@@ -1397,11 +1397,38 @@ impl WindowCtx<'_> {
         // queue `steward:*` keys; route each to its node-ops verb so the row is a real
         // action, not a typed-verb hint. (Audit A2 — Steward rows clickable.)
         for key in self.view.take_list_pane_activations(Steward) {
-            match key.as_str() {
-                "steward:retry" => self.retry_focused_content(),
-                "steward:stop" => self.stop_focused_operation(),
-                "steward:pin" => self.pin_focused_operation(),
-                _ => {}
+            // Per-row keys carry the member id (`steward:<verb>:<uuid>`) so the verb
+            // acts on that specific live operation; the bare keys act on the focused
+            // op. (Chrome bar P2 — Steward process list.)
+            if let Some(id) = key.strip_prefix("steward:stop:") {
+                if let Ok(member) = forme::GraphMemberId::parse_str(id) {
+                    self.stop_operation(member);
+                }
+            } else if let Some(id) = key.strip_prefix("steward:pin:") {
+                if let Ok(member) = forme::GraphMemberId::parse_str(id) {
+                    self.pin_operation(member);
+                }
+            } else if let Some(id) = key.strip_prefix("steward:retry:") {
+                if let Ok(member) = forme::GraphMemberId::parse_str(id) {
+                    if let Some(url) = self
+                        .shared
+                        .content
+                        .constellation
+                        .active_operations()
+                        .into_iter()
+                        .find(|op| op.member == member)
+                        .and_then(|op| op.url)
+                    {
+                        self.retry_content_url(&url);
+                    }
+                }
+            } else {
+                match key.as_str() {
+                    "steward:retry" => self.retry_focused_content(),
+                    "steward:stop" => self.stop_focused_operation(),
+                    "steward:pin" => self.pin_focused_operation(),
+                    _ => {}
+                }
             }
         }
         // The settings tiles' `pelt/*` pages carry the same control keys as the apparatus, so

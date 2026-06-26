@@ -296,6 +296,8 @@ accesskit_unix = { workspace = true }
 uuid = { workspace = true }
 # Mod-binding tests stage a throwaway `<mere_root>/mods/` dir of wasm fixtures.
 tempfile = "3"
+# Graphlet-derivation tests build small kernel graphs (nodes need a layout position).
+euclid = "0.22"
 
 [lints]
 workspace = true

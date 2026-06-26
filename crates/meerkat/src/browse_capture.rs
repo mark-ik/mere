@@ -38,6 +38,7 @@ fn build_nav_trace(
     from_url: &str,
     to_url: &str,
     transition: TraceTransition,
+    candidates: Vec<PageRef>,
     at_ms: u64,
 ) -> BrowsingTrace {
     let from = (!from_url.is_empty()).then(|| PageRef {
@@ -53,6 +54,7 @@ fn build_nav_trace(
         transition,
         at_ms,
         dwell_ms: None,
+        candidates,
     };
     BrowsingTrace::from_events(owner, vec![event])
 }
@@ -73,16 +75,41 @@ impl WindowCtx<'_> {
         // Resolve everything owned first, so no borrow outlives the mutable
         // store borrow below.
         let from_url = self.view.content_location.clone();
+        let candidates = self.candidate_links(&from_url);
         let owner = format!("{}", self.shared.session.active_persona.0);
         let now = now_ms();
-        let trace = build_nav_trace(&owner, &from_url, to, transition, now);
+        let trace = build_nav_trace(&owner, &from_url, to, transition, candidates, now);
 
         let Some(store) = self.shared.content.store.as_mut() else {
             return;
         };
-        if let Err(err) = pollster::block_on(save_trace(store, &trace, now)) {
-            tracing::warn!(?err, "failed to record a browsing trace");
+        match pollster::block_on(save_trace(store, &trace, now)) {
+            Ok(_) => tracing::debug!(to = %to, "recorded a browsing trace"),
+            Err(err) => tracing::warn!(?err, "failed to record a browsing trace"),
         }
+    }
+
+    /// The outbound links of the page being navigated *from* — the candidate set
+    /// the navigation was chosen against (capture plan C2). Read from the seed
+    /// node's out-neighbors in the session graph, so it is populated once a
+    /// page's neighborhood has been materialized or crawled (relational
+    /// browsing) and empty otherwise. `title` is left for the producer to fill.
+    fn candidate_links(&self, from_url: &str) -> Vec<PageRef> {
+        if from_url.is_empty() {
+            return Vec::new();
+        }
+        let graph = self.orrery().graph();
+        let Some((key, _)) = graph.get_node_by_url(from_url) else {
+            return Vec::new();
+        };
+        graph
+            .out_neighbors(key)
+            .filter_map(|neighbor| graph.get_node(neighbor))
+            .map(|node| PageRef {
+                url: node.url().to_string(),
+                title: None,
+            })
+            .collect()
     }
 }
 
@@ -90,9 +117,13 @@ impl WindowCtx<'_> {
 mod tests {
     use super::*;
 
+    fn page(url: &str) -> PageRef {
+        PageRef { url: url.to_string(), title: None }
+    }
+
     #[test]
     fn an_empty_from_is_an_origin_event() {
-        let trace = build_nav_trace("p", "", "https://to.test/", TraceTransition::UrlTyped, 42);
+        let trace = build_nav_trace("p", "", "https://to.test/", TraceTransition::UrlTyped, Vec::new(), 42);
         assert_eq!(trace.owner, "p");
         assert_eq!(trace.events.len(), 1);
         let event = &trace.events[0];
@@ -100,22 +131,29 @@ mod tests {
         assert_eq!(event.to.url, "https://to.test/");
         assert_eq!(event.transition, TraceTransition::UrlTyped);
         assert_eq!(event.at_ms, 42);
+        assert!(event.candidates.is_empty());
         assert_eq!(trace.started_at_ms, 42);
         assert_eq!(trace.ended_at_ms, 42);
     }
 
     #[test]
-    fn a_navigation_carries_both_ends_and_its_kind() {
+    fn a_navigation_carries_both_ends_its_kind_and_the_candidate_set() {
+        let candidates = vec![page("https://to.test/b"), page("https://other.test/c")];
         let trace = build_nav_trace(
             "persona-1",
             "https://from.test/a",
             "https://to.test/b",
             TraceTransition::Back,
+            candidates,
             100,
         );
         let event = &trace.events[0];
         assert_eq!(event.from.as_ref().map(|p| p.url.as_str()), Some("https://from.test/a"));
         assert_eq!(event.to.url, "https://to.test/b");
         assert_eq!(event.transition, TraceTransition::Back);
+        // The chosen `to` plus the in-context negative are both retained (the
+        // listwise signal); `to` is the positive, `other.test/c` the negative.
+        let urls: Vec<&str> = event.candidates.iter().map(|p| p.url.as_str()).collect();
+        assert_eq!(urls, vec!["https://to.test/b", "https://other.test/c"]);
     }
 }

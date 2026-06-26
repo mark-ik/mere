@@ -248,19 +248,27 @@ impl WindowCtx<'_> {
             );
             return;
         };
-        if !fetch::is_fetchable(&url) {
+        self.retry_content_url(&url);
+    }
+
+    /// Re-fetch `url`, bypassing the durable cache so the live fetch actor tries
+    /// again. Shared by the focused-op retry and the Steward per-row retry (which
+    /// resolves the row's member to its URL). (Chrome bar P2.)
+    pub(super) fn retry_content_url(&mut self, url: &str) {
+        if !fetch::is_fetchable(url) {
             self.shared.observability.record_diagnostic(
                 "meerkat.agent.intent_dropped",
                 super::observability::Severity::Warn,
-                format!("retry focused content: not fetchable: {url}"),
+                format!("retry content: not fetchable: {url}"),
             );
             return;
         }
         self.shared.content.pages
-            .insert(url.clone(), fetch::ContentState::Loading);
+            .insert(url.to_string(), fetch::ContentState::Loading);
         self.shared.observability
-            .record_actor("fetch", "started", Some(url.clone()));
-        self.shared.content.fetch_handle.command(fetch::FetchCommand::Page(url));
+            .record_actor("fetch", "started", Some(url.to_string()));
+        self.shared.content.fetch_handle
+            .command(fetch::FetchCommand::Page(url.to_string()));
         self.view.request_redraw();
     }
 
@@ -276,6 +284,13 @@ impl WindowCtx<'_> {
             );
             return;
         };
+        self.stop_operation(member);
+    }
+
+    /// Stop a specific live operation: reap its content actor (and, in Tree, close
+    /// its tile so a still-needed tile does not respawn). Shared by the focused-op
+    /// stop and the Steward per-row stop. (Chrome bar P2.)
+    pub(super) fn stop_operation(&mut self, member: GraphMemberId) {
         if self.workbench_active() {
             self.view.workbench.close_tile(member);
             if self.view.workbench.open_members().is_empty() {
@@ -312,6 +327,15 @@ impl WindowCtx<'_> {
         let gid = self.view.focused_graph;
         let needed: Vec<_> = self.needed_members().into_iter().map(|m| (m, gid)).collect();
         self.shared.content.constellation.reconcile(&needed);
+        self.pin_operation(member);
+    }
+
+    /// Keep a specific live operation alive in the background (exempt from cap
+    /// eviction). The operation must already be active (it is — the Steward per-row
+    /// pin only appears on listed live operations); this just flips its background
+    /// flag. The focused-op pin promotes a possibly-dormant node into a tile first,
+    /// then calls this. (Chrome bar P2.)
+    pub(super) fn pin_operation(&mut self, member: GraphMemberId) {
         if self.shared.content.constellation.set_background(member, true) {
             self.shared.observability
                 .record_actor("content", "pinned", Some(member.to_string()));

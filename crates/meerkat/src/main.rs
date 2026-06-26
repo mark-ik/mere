@@ -129,6 +129,7 @@ mod serval_a11y;
 mod serval_render;
 mod session_ops;
 mod shellbar;
+mod steward;
 mod switcher;
 mod tags;
 mod theme_edit;
@@ -204,14 +205,7 @@ fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
             rgb(c.field_text),
             rgb(c.field_bg)
         ),
-        // The p2p sync chip: small + muted, no flex-grow, so the omnibar pushes it
-        // to the toolbar's right edge.
-        format!(
-            ".sync-chip {{ font-size: 14px; color: {}; background-color: {}; padding: 8px 12px; margin: 4px; border-radius: 14px; }}",
-            rgb(c.muted_text),
-            rgb(c.menu_bg)
-        ),
-        // The crawl-progress chip (relational-browse V2), matching the sync chip's pill;
+        // The crawl-progress chip (relational-browse V2), a small muted pill;
         // hidden when empty (no crawl has run) via `:empty`.
         format!(
             ".crawl-chip {{ font-size: 14px; color: {}; background-color: {}; padding: 8px 12px; margin: 4px; border-radius: 14px; }} .crawl-chip-hidden {{ display: none; }}",

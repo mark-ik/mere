@@ -6,8 +6,11 @@ driven (2026-06-25).** Branch (Shift+drag) mints a persisted `Branched` graphlet
 (round-trips a restart), reads as a distinct branch (an accent `⎇ <anchor>` chip), and
 accumulates its own lineage as you navigate in it. Per-window focus/selection isolation now
 makes two windows on one graph independent (driven), which resolved the Slice 2
-cartography-focus nuance and unblocks Slice 3. Next candidate: **Phase 3** (Linked /
-auto-derived graphlets — OQ-2 is yes) or **#3** (branch lifecycle on donor delete). Spun out
+cartography-focus nuance and unblocks Slice 3. **#3 (branch lifecycle on donor delete) is
+done + driven** — deleting a session closes its windows and drops its pooled state, while
+forks survive. **Phase 3 slice 1 (derivation + Linked path + reconcile) done + tested** —
+`Component` / `Ego` graphlets derive from the kernel graph and reconcile on drift. Next:
+Phase 3 slice 2 (a consumer that creates Linked graphlets, e.g. relational-browse). Spun out
 of the [tear-out gestures plan](2026-06-24_tearout_gestures_plan.md) (G3 / OQ-7 deferral)
 when scouting the forme graphlet API showed the whole layer is built but unwired.
 **Lane / conflict posture**: meerkat session/state + a small forme surface (reusing its
@@ -40,8 +43,8 @@ What is actually in the tree, verified against the code:
   `GraphTree` or `GraphletRef` outside forme's own tests. meerkat imports exactly one
   forme item — `GraphMemberId` (29 files) — and nothing else.
 - **forme's `GraphTree` is superseded, not just unused.** `GraphTree<N>` ("the core data
-  structure, one per graph view") carries members + topology + projection lens + layout
-  + graphlets. But the **live** arrangement is the other model: platen's `Workbench`
+  structure, one per graph view") carries graphlets plus members, topology, a projection
+  lens, and layout. But the **live** arrangement is the other model: platen's `Workbench`
   (its own recursive split-tree of tab-stacks, which explicitly "replaces the legacy
   `FrameState` / `PaneBinding` frame model") plus the orrery. The architecture comment
   in `platen/workbench.rs` frames the orrery and the workbench as "two **projections of
@@ -168,6 +171,25 @@ in scope (not closed to "richer kinds as plain data"). Per the derivation findin
 built by **harvesting forme's types + the diff and writing derivation on the kernel graph**;
 `GraphTree` is not used.
 
+**Slice 1 — derivation + Linked path + reconcile — DONE (2026-06-25), kernel-tested.**
+Kernel derivation primitives `Graph::component_members(seed)` (whole connected component,
+BFS) and `Graph::ego_members(seed, radius)` (radius-bounded BFS), sharing a `bfs_members`
+helper — kernel-tested green (component: reaches the component, isolates stay singletons,
+unknown seed empty; ego: radius 0/1/2 bounded). In meerkat `graphlets.rs`:
+`derive_members(graph, spec)` dispatches the kind to the kernel primitive (`GraphTree`-free);
+`SessionGraphlets::record_linked(graph, spec)` mints a `Linked { spec }` graphlet whose
+`anchors` hold the live derived set and `spec.primary_anchor` the seed (the anchors-vs-members
+split, OQ-2-a); `reconcile(graph, id)` re-derives, diffs against the live roster with the
+harvested `compute_roster_delta` logic (reusing forme's plain `GraphletMemberDelta`), and
+auto-applies, returning the delta. Integration tests `linked_component_graphlet_derives_and_
+reconciles_on_drift` and `linked_ego_graphlet_is_radius_bounded` pass (kernel 255, meerkat 89
+lib / 169 bin green; a concurrent steward/eidetic refactor briefly broke the meerkat build mid-
+slice but settled). **Slice 2 (remaining):** a consumer that creates a Linked graphlet (relational-browse
+neighborhoods), the user-choice reconcile proposal (keep-linked / unlink / save-as-branch via
+forme's `ReconciliationChoice`), and the remaining kinds (Corridor / Loop / Frontier /
+selector match — currently fall back to the seed). The naming rename (OQ-2-b) only bites if we
+call forme's `apply_fork` etc.; we harvest the diff ourselves, so it stays deferred.
+
 - **Derivation (kernel graph).** A `Linked { spec }` graphlet derives its member set from
   the graph: Ego = BFS to radius N from the anchor; Component = `weakly_connected_components`
   (the fork primitive); Corridor = a path query; selector match = filter kernel edges by
@@ -229,20 +251,22 @@ reads the same index — all without `GraphTree`.
   interaction is a smaller follow-on. **Payoff:** any two windows on one graph are now
   independent (not just branches); the Slice 2 cartography-focus nuance is resolved; Slice 3
   (a branch-scoped orrery) is unblocked.
-- **#3 — Branch lifecycle on donor delete (G6).** `close_session` already switches away and
-  `move_to_trash`es the session dir, so `graphlets.json` trashes with it (no on-disk
-  orphan). **Missing:** the in-memory `self.graphlets` + `self.orreries` pool entries for
-  the deleted graph are not dropped, and open windows whose `focused_graph` is the deleted
-  graph are not closed (brief §4.2: killing the donor kills the branch). **Seam:** in
-  `close_session`, `self.graphlets.remove(graph)` + orrery eviction + close secondary
-  windows on that graph. **Note:** closing windows on session-delete is a *general*
-  multi-window gap (deleting any session with open windows orphans them), not
-  graphlet-specific — do it with that general handling, not as a one-off.
+- **#3 — Branch lifecycle on donor delete (G6) — DONE (2026-06-25), driven.**
+  `close_session` now, after switching the primary to a survivor and trashing the session
+  dir (which carries `graphlets.json` to `.trash`), tears down the dead graph: a new
+  `Shell::close_windows_on_graph(graph)` closes every *secondary* window whose
+  `focused_graph` is the dead graph (branches + leaves die with the donor, brief §4.2;
+  forks live on their own `GraphId` so they survive), then `self.graphlets` / `self.orreries`
+  / `orrery_lru` drop the dead entries. **Drove headed:** spawned a leaf on the active
+  session's graph (window count 2), deleted that session via the switcher × → count dropped
+  to **1** (the leaf closed) and the primary switched to the survivor with no crash. meerkat
+  89 lib / 167 bin green. As scoped, `close_windows_on_graph` is the *general* multi-window
+  session-delete fix (a window must not outlive its graph), not a graphlet one-off.
 - **OQ-D — does a branch window get a thin orrery?** Brief says workbench-only (§4.2); G2
   (leaf content) settles the workbench-pane mechanics this rides on. Ties into #1 / Slice 3.
 
-**Suggested order:** ~~#1 (keystone)~~ **done** → #3 (with general multi-window
-session-delete) → Phase 3 (now that OQ-2 is yes). The tear-out-gesture trailing items (toast,
+**Suggested order:** ~~#1 (keystone)~~ **done** → ~~#3 (donor-delete cascade)~~ **done** →
+**Phase 3** (now that OQ-2 is yes). The tear-out-gesture trailing items (toast,
 tile-tab leaf origin, G5 move, G2 leaf content, fork restore-into-switcher) live in the
 [gestures plan](2026-06-24_tearout_gestures_plan.md), independent of this subsystem.
 
@@ -317,3 +341,11 @@ tile-tab leaf origin, G5 move, G2 leaf content, fork restore-into-switcher) live
   (cartography focus is now per-window) and unblocked Slice 3. Edge selection + transient
   drags stay shared for v0. Built against concurrent chrome edits (a `button()` refactor in
   views.rs / lib.rs) without conflict — my work was the orrery + window-view + viewport seam.
+- **2026-06-25** — **Open item #3 (branch lifecycle on donor delete) done + driven.**
+  `close_session` now tears down the dead graph after switching the primary to a survivor +
+  trashing the dir: a new `Shell::close_windows_on_graph` closes every secondary window on
+  the dead graph (branches + leaves die with the donor; forks on their own graph survive),
+  then `graphlets` / `orreries` / `orrery_lru` drop the dead entries. Drove headed: a leaf on
+  the active graph (2 windows), deleted that session via the switcher × → 1 window (leaf
+  closed) + primary switched to the survivor, no crash. meerkat 89 lib / 167 bin green
+  (after a transient red from a concurrent `unix_age` test edit that settled). Next: Phase 3.

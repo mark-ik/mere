@@ -48,6 +48,7 @@ fn event(from: Option<&str>, to: &str, at_ms: u64) -> TraceEvent {
         transition: TraceTransition::LinkClick,
         at_ms,
         dwell_ms: None,
+        candidates: Vec::new(),
     }
 }
 
