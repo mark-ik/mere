@@ -181,3 +181,16 @@ illume's first non-editor consumer.
   actionable address). Remaining for point 5, the visible wiring: **5b** the chrome
   stylesheet (the `syntax-*` classes coloured from `derive_syntax_palette`), **5c** the
   editor field (`styled_textarea(t, &knot_styles(t.text()))`), **5d** the omnibar.
+- **2026-06-26, point 5 visible wiring (editor highlights end to end).** 5b: `syntax_css`
+  in `knot_highlight` derives the syntax palette (tinct, perceptual, contrast-gated) and
+  emits one `.syntax-* { color }` rule per role, appended to the chrome stylesheet at
+  theme-resolve time (main.rs). 5c: `knot_editor_pane`'s field is now
+  `styled_textarea(t, &knot_styles(t.text()))`, so the editor paints illume's highlight +
+  entity spans as the themed classes. `cargo check -p meerkat` green; mere `81d0c86`,
+  Mark's concurrent files untouched. **The whole pipeline is connected**: illume lexer →
+  kind → role → class bridge → serval styled field → tinct colours. Honest caveats: the
+  palette derives from fixed dark seeds for now (live-theme seeds are the follow-up,
+  gated on a register-theme `ThemeTokenSet.syntax` field that ripples to every token-set
+  constructor); and this is compile-verified, not yet headed-verified (running the app to
+  see the colours is the next confirmation). Remaining: **5d** (omnibar entities live as
+  you type), then point 6 (the deriver) and point 7 (extraction + publish).
