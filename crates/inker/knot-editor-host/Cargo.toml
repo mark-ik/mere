@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Host-side reuse-lexers for the Mere knot editor — precise inner-language injection over parsers the app already ships, layered as overrides on the portable knot-editor pack. Markdown via pulldown-cmark today; CSS/HTML/JS/Turtle to follow."
+description = "Host-side reuse-lexers for the Mere knot editor: precise inner-language injection over parsers the app already ships, layered as overrides on the portable illume pack. Markdown via pulldown-cmark today; CSS/HTML/JS/Turtle to follow."
 documentation = "https://docs.rs/knot-editor-host"
 keywords = ["djot", "editor", "syntax-highlighting", "injection"]
 categories = ["text-processing"]
@@ -13,7 +13,7 @@ categories = ["text-processing"]
 path = "src/lib.rs"
 
 [dependencies]
-knot-editor = { path = "../knot-editor" }
+illume = { path = "../illume" }
 # A parser the app already ships (nematic uses it for CommonMark knots). Its
 # offset-iter event stream maps to highlight spans the same way jotdown does.
 pulldown-cmark = { version = "0.13", default-features = false }

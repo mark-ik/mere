@@ -6,14 +6,14 @@
 //!
 //! Holds the knot source text and turns it into the two things the editor surface
 //! draws: the **highlight / structure** of the source (via the portable
-//! [`knot_editor`] pipe, with this crate's full pack so polyglot blocks colour),
+//! [`illume`] pipe, with this crate's full pack so polyglot blocks colour),
 //! and the **rendered preview** (via the same `DjotKnotEngine` the rest of the app
 //! renders knots through). The host wires its text widget's buffer to
 //! [`KnotEditor::set_source`] and draws [`highlights`](KnotEditor::highlights) over
 //! the source plus [`rendered`](KnotEditor::rendered) in the preview pane.
 
 use inker::{Engine, EngineDocument, EngineError, EngineInput};
-use knot_editor::{Fold, InjectionRegistry, OutlineItem, Span, folds, highlight, outline};
+use illume::{Fold, InjectionRegistry, OutlineItem, Span, folds, highlight, outline};
 use nematic::DjotKnotEngine;
 
 /// A knot being edited: its source text, the injection registry it highlights
@@ -79,7 +79,7 @@ impl KnotEditor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use knot_editor::SyntaxKind;
+    use illume::SyntaxKind;
 
     const SAMPLE: &str =
         "# Title\n\nSome _em_ and a code block:\n\n```json\n{\"a\": 1}\n```\n";

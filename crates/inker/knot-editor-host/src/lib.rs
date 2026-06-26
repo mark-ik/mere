@@ -4,7 +4,7 @@
 
 //! Host-side reuse-lexers for the knot editor.
 //!
-//! The portable [`knot_editor`] crate stays lean (jotdown + logos). This crate is
+//! The portable [`illume`] crate stays lean (jotdown + logos). This crate is
 //! the precision layer: `InjectionLexer` implementations that reuse a parser the
 //! app already ships, registered as overrides on the portable pack. They are
 //! optional precision over the always-present logos floor, so highlighting never
@@ -15,7 +15,7 @@
 //! Turtle/RDF (`oxttl`). [`full_pack`] returns the portable pack plus the reuse
 //! overrides registered here.
 
-use knot_editor::{InjectionLexer, InjectionRegistry, Span, SyntaxKind};
+use illume::{InjectionLexer, InjectionRegistry, Span, SyntaxKind};
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 
 pub mod editor;
@@ -25,7 +25,7 @@ pub use editor::KnotEditor;
 /// The portable pack plus the host reuse-lexers registered in this crate. The host
 /// calls this to get the full editor injection registry; mods register on top.
 pub fn full_pack() -> InjectionRegistry {
-    let mut reg = knot_editor::default_pack();
+    let mut reg = illume::default_pack();
     for label in ["markdown", "md", "commonmark"] {
         reg.register(label, Box::new(MarkdownLexer));
     }

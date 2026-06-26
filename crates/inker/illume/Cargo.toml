@@ -1,12 +1,12 @@
 [package]
-name = "knot-editor"
+name = "illume"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Portable djot note-editor core for the Mere browser — syntax highlighting and inner-language injection over knot source text, host-agnostic (no UI toolkit)."
-documentation = "https://docs.rs/knot-editor"
-keywords = ["djot", "editor", "syntax-highlighting", "notes"]
+description = "Portable text lexer and syntax highlighter for the Mere browser. Pure-Rust, wasm-safe djot structure plus a pluggable inner-language injection registry over a logos pack; host-agnostic, no UI toolkit."
+documentation = "https://docs.rs/illume"
+keywords = ["djot", "lexer", "syntax-highlighting", "logos"]
 categories = ["text-processing"]
 
 [lib]
