@@ -250,6 +250,9 @@ wgpu = { version = "29", default-features = false, features = ["std", "wgsl"] }
 arboard = "3"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+# Auto-derived enum metadata: `Command::COUNT` sizes `Command::ALL` so adding a
+# command needs no manual count bump (and a missing one is a compile error).
+strum = { version = "0.28", features = ["derive"] }
 # User / mod theme files (serde ThemeDef JSON in <mere_root>/themes/).
 serde_json = { workspace = true }
 # Durable cookie-jar records persisted to eidetic (native session store).

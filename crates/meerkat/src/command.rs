@@ -15,7 +15,7 @@
 /// mutation in `Chrome::run_command`. The set is intentionally small (the
 /// browser-chrome verbs that need no engine yet); reload / focus / settings join
 /// as their wiring lands.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::EnumCount)]
 pub enum Command {
     /// Step back one history entry.
     Back,
@@ -112,7 +112,7 @@ pub enum Command {
 
 impl Command {
     /// Every command, in display order.
-    pub const ALL: [Command; 33] = [
+    pub const ALL: [Command; <Command as strum::EnumCount>::COUNT] = [
         Command::Back,
         Command::Forward,
         Command::Home,
@@ -204,12 +204,14 @@ impl Command {
             // Navigation, app-level pane toggles, graph / pane ops, export — available in any
             // context (they target the focused node or the whole graph, not the selection).
             Back | Forward | Home | ConnectPeer | ToggleWorkbench | ToggleRoster | ToggleGloss
-            | ToggleApparatus | ToggleComms | ToggleKnotEditor | ToggleInspector | ToggleTrail
-            | ToggleSteward
+            | ToggleApparatus | ToggleComms | ToggleInspector | ToggleTrail | ToggleSteward
             | ToggleAlembic | ShowAllEdges | ToggleProjection | OpenSettings | CloseGraphPane
             | ExportGraph | SaveGraphEngram | ToggleShellbar | StopCrawl => {
                 MenuScope::Always
             }
+            // Any other command defaults to Always; narrow the scope above only for
+            // selection / node / edge gestures. New commands need no arm here.
+            _ => MenuScope::Always,
         }
     }
 
