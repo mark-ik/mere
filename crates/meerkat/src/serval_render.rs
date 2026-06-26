@@ -231,17 +231,17 @@ pub(crate) fn hit_test_node(
 pub(crate) fn accumulate_origins(
     dom: &ScriptedDom,
     fragments: &FragmentPlane<NodeId>,
-    node: NodeId,
-    parent_origin: (f32, f32),
+    _node: NodeId,
+    _parent_origin: (f32, f32),
     out: &mut HashMap<NodeId, (f32, f32)>,
 ) {
-    let origin = match fragments.rect_of(node) {
-        Some(l) => (parent_origin.0 + l.location.x, parent_origin.1 + l.location.y),
-        None => parent_origin,
-    };
-    out.insert(node, origin);
-    for child in dom.dom_children(node) {
-        accumulate_origins(dom, fragments, child, origin, out);
+    // The engine owns the parent-chain accumulation now (upstreaming P2): this host entry
+    // adapts serval-layout's `accumulate_origins` to the call sites' `(f32, f32)` out-map,
+    // instead of re-rolling the walk. The engine walks from the document root, which every
+    // caller already passes (`_node` = document, `_parent_origin` = `(0, 0)`), so the prior
+    // signature is kept to leave the call sites untouched.
+    for (id, p) in serval_layout::accumulate_origins(dom, fragments) {
+        out.insert(id, (p.x, p.y));
     }
 }
 
