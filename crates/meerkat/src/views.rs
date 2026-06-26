@@ -8,7 +8,8 @@ use std::rc::Rc;
 use serval_scripted_dom::ScriptedDom;
 use xilem_serval::{
     AnyView, El, OnClick, OptionalAction, PointerClick, ServalAppRunner, ServalCtx, ServalElement,
-    TextField, TextInput, el, lens, memoize, on_click, overlay_at, text_field_typed, textarea_typed,
+    TextField, TextInput, el, lens, memoize, on_click, overlay_at, styled_textarea, text_field_typed,
+    textarea_typed,
 };
 
 use comms::{Direction, ProtocolKind};
@@ -421,9 +422,11 @@ fn knot_editor_pane(_c: &Chrome) -> ChromeView {
 
     // The source field: a `text_field` lensed onto the knot buffer, exactly the
     // comms-draft pattern. Its class is the focus key (see ime.rs / input.rs).
-    // A multi-line textarea (the `edit_multiline` handler + a `<textarea>` tag), so
-    // Enter inserts a newline and Up/Down move between lines — a note, not a one-liner.
-    let make: fn(&mut TextInput) -> TextField = |t: &mut TextInput| textarea_typed(t);
+    // A multi-line styled textarea: the `edit_multiline` handler + a `<textarea>` tag
+    // (Enter inserts a newline, Up/Down move between lines), with illume's highlight +
+    // entity spans painted as `syntax-*` classes that tinct's palette colours.
+    let make: fn(&mut TextInput) -> TextField =
+        |t: &mut TextInput| styled_textarea(t, &crate::knot_highlight::knot_styles(t.text()));
     let to_source: fn(&mut Chrome) -> &mut TextInput = |c: &mut Chrome| &mut c.knot_source;
     let field = lens(make, to_source);
     let source = el::<_, Chrome, ()>("div", field)

@@ -11,7 +11,7 @@
 //! is the seam that keeps illume and tinct independent of each other.
 
 use illume::{default_pack, entities, highlight, Span, SyntaxKind};
-use tincture::SyntaxRole;
+use tincture::{derive_syntax_palette, Seeds, Srgb, SyntaxRole};
 use xilem_serval::StyleRange;
 
 /// Map an illume lexer kind onto a tinct highlight role. `None` for kinds that
@@ -92,6 +92,45 @@ pub fn knot_styles(text: &str) -> Vec<StyleRange> {
         push(span);
     }
     styles
+}
+
+/// The seeds the syntax palette derives from until the live theme's seeds are
+/// plumbed through (a brand-coherent dark triad, matching the default chrome). This
+/// is the first cut; the follow-up reads the active theme's seeds so the syntax
+/// colours track a theme switch.
+fn default_seeds() -> Seeds {
+    Seeds {
+        primary: Srgb::rgb(0x33, 0x66, 0xC8),
+        secondary: Srgb::rgb(0x2E, 0x9D, 0xA6),
+        tertiary: Srgb::rgb(0xE0, 0xA8, 0x46),
+        neutral: Srgb::rgb(0x10, 0x14, 0x22),
+        text_header: None,
+        text_body: None,
+        success: Srgb::rgb(0x4F, 0xB3, 0x6E),
+        danger: Srgb::rgb(0xD5, 0x4E, 0x4E),
+        dark: true,
+    }
+}
+
+/// CSS rules colouring the `syntax-*` classes from tinct's derived syntax palette,
+/// one rule per role, for the chrome stylesheet. The colours are *derived*
+/// (perceptual, contrast-gated against the surface), not hardcoded; the styled
+/// field's spans carry the classes these rules theme.
+pub fn syntax_css() -> Vec<String> {
+    let palette = derive_syntax_palette(&default_seeds());
+    SyntaxRole::ALL
+        .iter()
+        .map(|&role| {
+            let c = palette.role(role);
+            format!(
+                ".{} {{ color: rgb({}, {}, {}); }}",
+                role_class(role),
+                c.r,
+                c.g,
+                c.b
+            )
+        })
+        .collect()
 }
 
 #[cfg(test)]
