@@ -183,6 +183,9 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     if c.comms.is_open() {
         children.push(comms_pane(c));
     }
+    if c.knot_editor_open {
+        children.push(knot_editor_pane(c));
+    }
     // Shellbar: a pane-toggle strip docked to one window edge (F2.1). Its geometry is
     // set inline each frame by the host via `set_attribute` on the `.shellbar` class
     // node, following the comms-pane pattern. A slim (leaf) window omits it, and the
@@ -383,6 +386,43 @@ fn find_bar(c: &Chrome) -> ChromeView {
     let count = el::<_, Chrome, ()>("div", count_text).attr("class", "find-count");
     let panel = el::<_, Chrome, ()>("div", (label, input, count)).attr("class", "find-bar");
     Box::new(el::<_, Chrome, ()>("div", panel).attr("class", "find-overlay"))
+}
+
+/// The docked knot editor: a source field (a `text_field` over the knot buffer) in
+/// a panel, mirroring the comms pane's structure. Highlighting and the rendered
+/// preview layer on in later slices.
+fn knot_editor_pane(_c: &Chrome) -> ChromeView {
+    let title_text =
+        el::<_, Chrome, ()>("div", "Editor").attr("class", "knot-editor-title-text");
+    let close_x = on_click(
+        el::<_, Chrome, ()>("button", "\u{00d7}").attr("class", "knot-editor-btn"),
+        |c: &mut Chrome, _: PointerClick| c.close_knot_editor(),
+    );
+    let header =
+        el::<_, Chrome, ()>("div", (title_text, close_x)).attr("class", "knot-editor-title");
+
+    // The source field: a `text_field` lensed onto the knot buffer, exactly the
+    // comms-draft pattern. Its class is the focus key (see ime.rs / input.rs).
+    let make: fn(&mut TextInput) -> TextField = |t: &mut TextInput| text_field_typed(t);
+    let to_source: fn(&mut Chrome) -> &mut TextInput = |c: &mut Chrome| &mut c.knot_source;
+    let field = lens(make, to_source);
+    let source = el::<_, Chrome, ()>("div", field)
+        .attr("class", "knot-editor-source")
+        .attr(
+            "style",
+            "display: block; min-height: 360px; font-family: monospace; white-space: pre-wrap;",
+        );
+
+    Box::new(
+        el::<_, Chrome, ()>("div", (header, source))
+            .attr("class", "knot-editor-pane")
+            .attr(
+                "style",
+                "position: absolute; left: 160px; top: 72px; width: 640px; height: 520px; \
+                 background: #1b1b1f; color: #e6e6e6; border: 1px solid #3a3a42; \
+                 border-radius: 6px; padding: 12px; overflow: auto; z-index: 90;",
+            ),
+    )
 }
 
 /// The docked comms pane (P6): a right-edge panel of conversations, an open

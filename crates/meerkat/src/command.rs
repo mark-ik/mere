@@ -51,6 +51,9 @@ pub enum Command {
     /// Toggle the docked comms pane (conversations: misfin mail + murm cabals). A
     /// chrome-level action, like toggling the palette.
     ToggleComms,
+    /// Toggle the docked knot editor (a notes panel over a knot-source buffer). A
+    /// chrome-level action, like toggling comms.
+    ToggleKnotEditor,
     /// Toggle the roster pane (graph manifest: nodes/edges/fields) (host action).
     ToggleRoster,
     /// Toggle the gloss / Navigator pane (host action).
@@ -109,7 +112,7 @@ pub enum Command {
 
 impl Command {
     /// Every command, in display order.
-    pub const ALL: [Command; 32] = [
+    pub const ALL: [Command; 33] = [
         Command::Back,
         Command::Forward,
         Command::Home,
@@ -126,6 +129,7 @@ impl Command {
         Command::OpenSettings,
         Command::OpenNodeSettings,
         Command::ToggleComms,
+        Command::ToggleKnotEditor,
         Command::ToggleInspector,
         Command::ToggleTrail,
         Command::ToggleSteward,
@@ -200,7 +204,8 @@ impl Command {
             // Navigation, app-level pane toggles, graph / pane ops, export — available in any
             // context (they target the focused node or the whole graph, not the selection).
             Back | Forward | Home | ConnectPeer | ToggleWorkbench | ToggleRoster | ToggleGloss
-            | ToggleApparatus | ToggleComms | ToggleInspector | ToggleTrail | ToggleSteward
+            | ToggleApparatus | ToggleComms | ToggleKnotEditor | ToggleInspector | ToggleTrail
+            | ToggleSteward
             | ToggleAlembic | ShowAllEdges | ToggleProjection | OpenSettings | CloseGraphPane
             | ExportGraph | SaveGraphEngram | ToggleShellbar | StopCrawl => {
                 MenuScope::Always
@@ -230,6 +235,7 @@ impl Command {
             Command::ToggleSteward => "steward",
             Command::ToggleAlembic => "alembic",
             Command::ToggleComms => "comms",
+            Command::ToggleKnotEditor => "knot_editor",
             Command::OpenSettings => "settings",
             Command::OpenNodeSettings => "node_settings",
             Command::ToggleCompatView => "compat_view",
@@ -278,6 +284,7 @@ impl Command {
             Command::OpenSettings => "Settings",
             Command::OpenNodeSettings => "Node settings (focused node)",
             Command::ToggleComms => "Comms (conversations)",
+            Command::ToggleKnotEditor => "Knot editor (notes)",
             Command::ToggleRoster => "Roster (graph manifest)",
             Command::ToggleGloss => "Gloss (navigator / map)",
             Command::ToggleApparatus => "Apparatus (diagnostics)",

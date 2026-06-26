@@ -35,6 +35,7 @@ enum FocusedField {
     CommsTo,
     CommsBody,
     CommsDraft,
+    KnotEditor,
 }
 
 impl WindowCtx<'_> {
@@ -80,6 +81,8 @@ impl WindowCtx<'_> {
             FocusedField::CommsBody
         } else if focus == self.input_under_class("comms-compose") {
             FocusedField::CommsDraft
+        } else if focus == self.input_under_class("knot-editor-source") {
+            FocusedField::KnotEditor
         } else if self.view.chrome().palette_open {
             FocusedField::Palette
         } else {
@@ -98,6 +101,7 @@ impl WindowCtx<'_> {
                 FocusedField::CommsTo => &mut c.comms_new_to,
                 FocusedField::CommsBody => &mut c.comms_new_body,
                 FocusedField::CommsDraft => &mut c.comms_draft,
+                FocusedField::KnotEditor => &mut c.knot_source,
             };
             field.set_preedit(text);
         });

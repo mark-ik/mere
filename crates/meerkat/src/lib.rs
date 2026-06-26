@@ -204,6 +204,12 @@ pub struct Chrome {
     /// the switcher), leaving just the toolbar over workbench-only content. Set once
     /// from the window's `WindowKind`. (Multi-window MW3 step 4.)
     pub slim: bool,
+    /// The knot editor's live source buffer (caret / selection / IME), edited by a
+    /// `text_field` like the omnibar — the single source of truth the editor pipe
+    /// highlights and the engine renders, same host-owns-the-buffer split.
+    pub knot_source: TextInput,
+    /// Whether the docked knot-editor panel is open.
+    pub knot_editor_open: bool,
 }
 
 /// Which panes are currently open in the frame tree. The host syncs this into
@@ -536,6 +542,8 @@ impl Chrome {
             shellbar_edge: ShellbarEdge::default(),
             shellbar_hidden: false,
             slim: false,
+            knot_source: TextInput::new(""),
+            knot_editor_open: false,
         }
     }
 
@@ -762,6 +770,7 @@ impl Chrome {
             }
             // Chrome-level: toggle the docked comms pane in place.
             Command::ToggleComms => self.toggle_comms(),
+            Command::ToggleKnotEditor => self.toggle_knot_editor(),
             // Settings now opens as a workbench tile (the pelt settings lane), so it is a
             // host action like the other pane toggles, not the chrome overlay it was in P0.
             // (Settings lane P1.)
@@ -1016,6 +1025,26 @@ impl Chrome {
     /// Close the comms pane.
     pub fn close_comms(&mut self) {
         self.comms.close();
+    }
+
+    /// Open the docked knot editor, loading `source` into its buffer.
+    pub fn open_knot_editor(&mut self, source: impl Into<String>) {
+        self.knot_source = TextInput::new(source);
+        self.knot_editor_open = true;
+    }
+
+    /// Close the knot editor.
+    pub fn close_knot_editor(&mut self) {
+        self.knot_editor_open = false;
+    }
+
+    /// Toggle the knot editor: open a fresh note, or close it.
+    pub fn toggle_knot_editor(&mut self) {
+        if self.knot_editor_open {
+            self.close_knot_editor();
+        } else {
+            self.open_knot_editor("# New note\n\nStart typing.\n");
+        }
     }
 
     /// Open conversation `id`: select it (clearing the prior thread) and record an

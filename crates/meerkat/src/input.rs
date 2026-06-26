@@ -2508,6 +2508,8 @@ impl WindowCtx<'_> {
             &c.comms_new_body
         } else if focus == self.input_under_class("comms-compose") {
             &c.comms_draft
+        } else if focus == self.input_under_class("knot-editor-source") {
+            &c.knot_source
         } else if c.palette_open {
             &c.palette_input
         } else {

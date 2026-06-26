@@ -228,7 +228,8 @@ impl WindowCtx<'_> {
             | Command::Forward
             | Command::Home
             | Command::ConnectPeer
-            | Command::ToggleComms => {}
+            | Command::ToggleComms
+            | Command::ToggleKnotEditor => {}
         }
         note
     }
