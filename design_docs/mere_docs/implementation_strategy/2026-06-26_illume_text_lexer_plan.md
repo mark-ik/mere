@@ -169,3 +169,15 @@ illume's first non-editor consumer.
   dropped (it is `TextField` now). serval `3abaad8`; 75 tests pass, including the existing
   `text_field` behaviour tests over the new body. Next: point 5 (the bridge: illume spans
   → `SyntaxRole` → tinct colour → the styled field, editor first then omnibar).
+- **2026-06-26, point 5a (bridge brain) + tincture pinned.** Resolved the tincture gate:
+  github `main` already had the `syntax` module (`03661ce`), but mere's lock kept
+  resolving the branch to the pre-syntax `df4c898`; a non-precise `cargo update` did not
+  stick, so `cargo update -p tincture --precise 03661ce` pinned it. Added illume as a
+  meerkat dep and built the bridge brain (`knot_highlight.rs`): `syntax_role` maps each
+  `illume::SyntaxKind` to a tinct `SyntaxRole`, `role_class` names its `syntax-*` class,
+  and `knot_styles(text)` runs illume's highlight + entity passes into a `Vec<StyleRange>`
+  of (range, class). mere `39cec94`; 2 tests green (a sample yields heading / mention /
+  url classes; every role maps to a distinct class). Email mapped to the Url role (an
+  actionable address). Remaining for point 5, the visible wiring: **5b** the chrome
+  stylesheet (the `syntax-*` classes coloured from `derive_syntax_palette`), **5c** the
+  editor field (`styled_textarea(t, &knot_styles(t.text()))`), **5d** the omnibar.
