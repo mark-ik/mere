@@ -1167,6 +1167,7 @@ impl Chrome {
     }
 }
 
+pub mod knot_highlight;
 mod views;
 use views::sync_chrome_from_history;
 pub use views::{ChromeLogic, ChromeView, chrome_view, runner, submit_omnibar};

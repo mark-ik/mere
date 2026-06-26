@@ -257,8 +257,12 @@ strum = { version = "0.28", features = ["derive"] }
 serde_json = { workspace = true }
 # Durable cookie-jar records persisted to eidetic (native session store).
 serde = { workspace = true }
-# Seed colour manipulation for the in-app theme editor (HSL nudges on seeds).
+# Seed colour manipulation for the in-app theme editor (HSL nudges on seeds), plus
+# the perceptual syntax palette its `syntax` module derives for the editor.
 tincture = { workspace = true }
+# The illume text lexer: djot/code highlight + prose-entity spans for the knot
+# editor and any host text surface (the omnibar, comms).
+illume = { path = "../inker/illume" }
 # Unique ids for forked user themes.
 uuid = { workspace = true }
 
