@@ -1,7 +1,8 @@
 # Overlay primitive adoption
 
 **Date**: 2026-06-25
-**Status**: P1 executing 2026-06-25 (a/b/c below). From the [serval capability-misuse sweep](2026-06-25_context_submenus_plan.md).
+**Status**: Done 2026-06-25 (P1 + serval `overlay_rect` + P2 card + P3 helper, committed). From the
+[serval capability-misuse sweep](2026-06-25_context_submenus_plan.md).
 **Owners**: serval (overlay docs + a size-carrying variant) + meerkat (adopt `overlay_at`/`anchor_point`).
 
 ## Problem
@@ -84,3 +85,9 @@ full CSS 2.1 Appendix E stacking + z-index (`paint_stacking.rs`).
   P3 as served by `overlay_rect` + the card; (b) a small shared helper formatting the geometry string
   render hand-writes (cosmetic dedup, no behaviour change); (c) the full state-threading refactor
   (heaviest, questionable value). Recommend (a), optionally (b).
+- 2026-06-25: **P3 closed via (b); overlay plan complete.** Chose the geometry-string helper: render's
+  two hand-written comms / shellbar geometry strings now route through one `overlay_geometry_style(x, y,
+  w, h, flex)` (`6e7a142`), mirroring `overlay_rect`'s geometry (the shellbar's optional flex edge
+  included). No behaviour change; the surfaces stay render-patched because their rect is a layout output.
+  **Overlay plan done:** P1 (`fa5f32a`/`79dc637`), serval `overlay_rect` (`edafb400`), P2 card
+  (`2bd6336`), P3 helper (`6e7a142`).
