@@ -864,3 +864,20 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   `FocusedField::KnotEditor` in ime.rs + the input.rs caret_field, so the field paints
   a caret and takes IME — basic click-to-type already rides the existing text_field
   DOM-focus path). The editor model (`KnotEditor`) then drives highlight + preview.
+- **2026-06-25, host shell steps 1-3 (visible editable panel) + committed.** Finished the
+  chrome-panel editor end to end, all additive in the live files: a
+  `Command::ToggleKnotEditor` (verb `knot_editor`, label, `ALL` bumped to 33, `menu_scope`
+  Always, command_drain no-op, lib.rs handler + `toggle_knot_editor`) opens it via the
+  palette or the `>knot_editor` omnibar shell; `knot_editor_pane` renders an
+  absolutely-positioned styled panel; `FocusedField::KnotEditor` (ime.rs) + the input.rs
+  caret_field arm route caret / IME to the `knot-editor-source` field, so it edits through
+  the existing text_field DOM-focus path. Two compile fixes the checker caught (the `ALL`
+  array size 32→33; the `menu_scope` exhaustive arm). `cargo check -p meerkat` green (28s),
+  no new warnings from my code. **`>knot_editor` now opens a docked, editable knot panel.**
+  Committed my editor work to mere `main` in three batches (explicit pathspecs, no
+  attribution trailers, on top of Mark's `fa5f32a`): the `knot-editor-host` editor model;
+  the meerkat panel; this plan. Mark's graphlet work (app_handler / graphlets / main /
+  nav_sync / session_ops + the graphlet/tearout plans) left untouched; the serval-layout
+  caret primitive was already committed. Follow-ons: a multi-line textarea (the field is
+  single-line today), the highlight overlay + the rendered preview pane (both driving
+  `KnotEditor`), and responsive geometry.
