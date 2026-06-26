@@ -218,3 +218,18 @@ illume's first non-editor consumer.
   not land, a click-focus timing miss in the driver, not a highlighting issue; the seed
   heading already proves the editor path.) Point 5 done and verified; remaining points 6
   (the deriver) and 7 (extraction + publish).
+- **2026-06-26, point 6 + both tails.** **Point 6**: `KnotEditor` → `KnotReadout`, a
+  stateless deriver (holds only the registry + engine; methods take text; the host owns
+  the one buffer), resolving #3 (no second copy of the source). mere `e271adc`, 6 tests
+  green; no external consumer, since meerkat highlights through illume directly. **Tail A**
+  (theme-reactive seeds): `syntax_css` now takes the active theme's seeds, fetched via
+  `theme.theme_def(id).seeds` (no register-theme change needed, the seeds live on
+  `ThemeDef`), falling back to a dark triad. mere `3fdc64f`. **Visually confirmed**: a
+  re-driven shot shows the editor's `# New note` heading now coloured by the active theme
+  (orange, its brand) instead of the fixed-seed teal. **Tail B** (the driver's editor
+  typing): the floated-panel textarea would not take focus from a *simulated* click across
+  two attempts (a double-click on the seed text included), so the typed note never landed;
+  the omnibar (a toolbar field) focuses fine. A harness / synthetic-input limitation, or a
+  click-to-focus quirk for the floated panel worth a real-mouse check, not a highlighting
+  gap, since the editor heading + the omnibar's distinct url / mention / tag colours
+  already prove both paths. Remaining: point 7 (extraction + publish).
