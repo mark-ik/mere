@@ -246,3 +246,29 @@ checkout at `Code/.tantivy-probe` — and the design pass §7.5):**
   bootstrap + page that runs N save/load round-trips through `OpfsStore` and times
   `performance.now()`, vs a native `FjallStore` baseline. Edge is present; headless
   automation would drive it over CDP from Node, or Mark opens the page directly.
+- 2026-06-24 — **Gate (c) MEASURED → "pack small blobs" confirmed.** Ran the OPFS
+  substrate doing `OpfsStore`'s exact op sequence (file-per-blob, flush-per-op,
+  durable) in a worker via headless Edge (Edg/150, puppeteer-core connected to a
+  self-launched Edge over CDP; OPFS needs the `http://localhost` origin), vs
+  `eidetic-fjall` native (release, but LSM so save = memtable insert + load = cached,
+  i.e. RAM-speed, not flush-per-op — the comparison is durable-OPFS vs in-memory-fjall,
+  so the native side is an upper bound). Numbers (save / load ops/s):
+  - 1 KB:   OPFS **160 / 146**   vs fjall 155 159 / 2 066 115
+  - 64 KB:  OPFS **151 / 187**   vs fjall 4 561 / 163 657
+  - 1 MB:   OPFS **92 / 150** (97 / 157 MB/s)  vs fjall 219 / 418 (230 / 439 MB/s)
+
+  **Finding:** OPFS sync-handle *byte* throughput is solid (1 MB ~97 MB/s write /
+  ~157 MB/s read, within 2-3x of native), but OPFS ops/s is **flat at ~150 across all
+  sizes** — the per-blob cost is dominated by **file-handle + sync-handle creation
+  (~6 ms/op)**, not the I/O. So file-per-blob caps the small-blob (engram / manifest)
+  corpus at ~150 ops/s while a native LSM does memtable inserts orders of magnitude
+  faster. **Verdict (measured, not assumed): pack small blobs.** Phase 7 ships a
+  *packed* container for the corpus (one long-lived sync access handle over a log +
+  index, so the ~6 ms handle cost amortizes across many blobs), and keeps
+  file-per-blob only for large blobs (1 MB+), where it is already fine. This retires
+  the "file-per-blob-then-pack" open call: the scope's v0 one-file-per-blob is the
+  large-blob path; the corpus path is packed from the start. The exact OpfsStore
+  through-wasm delta (wasm-bindgen marshalling, a small constant on top) is the only
+  unmeasured piece, deferred (needs `wasm-bindgen-cli`); it does not change the
+  pack verdict. All probes (eidetic-opfs crate, the JS bench, the fjall bench) live in
+  the scratchpad; no code landed in-tree.
