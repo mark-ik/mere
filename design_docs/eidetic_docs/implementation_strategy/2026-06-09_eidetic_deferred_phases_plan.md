@@ -55,11 +55,14 @@ only one target-gated `getrandom = { features = ["wasm_js"] }` (a transitive pul
 jsonschema) plus `--cfg getrandom_backend="wasm_js"`, the same flag the engine lane
 sets; the abstract `Store` + Layer 1/2/3 logic is browser-ready today. The `Store`
 trait is async + blob-KV, so `eidetic-opfs` wraps synchronous sync-handle I/O in async
-fns (no executor inside). (b) `web-sys` reaches `FileSystemSyncAccessHandle`
-(historically behind `--cfg web_sys_unstable_apis` — pin the binding surface like the
+fns (no executor inside). (b) **VERIFIED 2026-06-24 — `web-sys` binds the OPFS
+sync-access surface** (`FileSystemSyncAccessHandle` + the file/dir handles +
+`StorageManager`, with `get_size`/`flush`/`close`/`create_sync_access_handle`/
+`get_directory`) under `--cfg web_sys_unstable_apis` (pin the binding surface like the
 engine lane pins `wasm-bindgen` 0.2.125). (c) a throughput measurement vs
-`eidetic-fjall` native for the blob round-trip, in a worker, Chrome + Firefox. So the
-remaining gates are (b) the web-sys binding and (c) the bench; (a) is cleared.
+`eidetic-fjall` native for the blob round-trip, in a worker, Chrome + Firefox. So (a)
+and (b) are cleared; the only remaining gate is (c) the bench (which needs the real
+`eidetic-opfs` crate + a worker harness).
 
 **Layout choice the measurement decides.** One-file-per-blob (the v0 scope above) is
 simplest but pays per-file OPFS overhead at corpus scale; a *packed* container (a
@@ -226,7 +229,9 @@ checkout at `Code/.tantivy-probe` — and the design pass §7.5):**
   second consumer of the same `OpfsStore`. Mark is in; next step is the measurement
   probe (OpfsStore vs FjallStore blob round-trip in a worker). A serval-side draft of
   this was discarded as mis-homed (durable store is eidetic, not serval).
-  **Feasibility floor cleared (measured):** `eidetic-core` compiles clean for
+  **Gates (a) + (b) cleared (measured):** `eidetic-core` compiles clean for
   `wasm32-unknown-unknown` (one target-gated `getrandom` `wasm_js` feature + the cfg
-  flag; verified then reverted — no code landed). Remaining gates: the `web-sys`
-  `FileSystemSyncAccessHandle` binding and the throughput bench.
+  flag; verified then reverted — no code landed), and `web-sys` binds the OPFS
+  sync-access surface under `--cfg web_sys_unstable_apis` (a throwaway scratch probe
+  compiled clean). Only gate (c), the throughput bench, remains; it needs the real
+  `eidetic-opfs` crate + a worker harness, which is the next build.
