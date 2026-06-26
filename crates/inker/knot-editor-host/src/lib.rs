@@ -18,6 +18,10 @@
 use knot_editor::{InjectionLexer, InjectionRegistry, Span, SyntaxKind};
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 
+pub mod editor;
+
+pub use editor::KnotEditor;
+
 /// The portable pack plus the host reuse-lexers registered in this crate. The host
 /// calls this to get the full editor injection registry; mods register on top.
 pub fn full_pack() -> InjectionRegistry {

@@ -17,3 +17,8 @@ knot-editor = { path = "../knot-editor" }
 # A parser the app already ships (nematic uses it for CommonMark knots). Its
 # offset-iter event stream maps to highlight spans the same way jotdown does.
 pulldown-cmark = { version = "0.13", default-features = false }
+# The editor model ties source text to the rendered preview through the same
+# engine path the rest of the app uses: inker's EngineDocument + nematic's
+# DjotKnotEngine.
+inker.workspace = true
+nematic = { path = "../engines/nematic" }
