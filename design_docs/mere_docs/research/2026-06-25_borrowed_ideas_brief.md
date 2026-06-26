@@ -15,7 +15,7 @@ little else in the landscape lives there. Grouped by axis, then the crossings.
 
 ## Spatial
 
-### Plex re-centering (TheBrain) [open design question]
+### Plex re-centering (TheBrain) [resolved 2026-06-25]
 
 The borrow: click a node and the surface re-homes on it with its relations fanned
 around it, so focus follows traversal. This is the Navigator's configurable-scope
@@ -23,9 +23,8 @@ idea expressed as an interaction. **Mark's framing:** a "center" context-menu
 action that either preserves the force-directed nature but re-lays-out the nodes,
 or moves them physically. Which one?
 
-Current leaning is a spectrum of three rungs, escalating in how much they disturb
-hand-placed positions, exposed as a strength (per the project's configurability
-stance):
+The design space is three rungs, escalating in how much they disturb hand-placed
+positions, exposed as a strength (per the project's configurability stance):
 
 1. **Camera-center, nodes stay put.** Pan and zoom the camera to frame the node
    and its neighborhood, dimming non-neighbors through LOD. Cheapest, fully
@@ -40,10 +39,31 @@ stance):
    tweened to their targets. Maximally legible and most TheBrain-like, but it
    overwrites hand-placed positions, so it sits behind a modifier or setting.
 
-Recommendation: ship rung 1 as the default "center" (it rides existing camera and
-LOD and mutates nothing), offer rung 2 as an explicit "gather," and defer rung 3.
-This keeps faith with the graph-canvas-as-infinite-document stance, where camera
-moves are preferred over destructive node moves.
+**Resolved (2026-06-25).** Ship all three as one escalating "Center," with rung 1
+the default and rung 2 reached three ways:
+
+- **Rung 1 is the default and already primitive.** The orrery has `center_on_field`
+  (meerkat `input.rs`), so "Center" is a thin wrapper that frames the node and its
+  neighborhood by camera, mutating nothing.
+- **Rung 2 (gather) is reached three ways.** (a) Re-invoke: invoking "Center" again
+  when already centered gathers (Mark's "rung 2 if the camera is already centered").
+  (b) Hold-to-gather, the chosen gesture: a quick tap selects, but press-and-hold a
+  node and its neighbors magnetize into rings while held, relaxing when released, so
+  rung 2's relax-on-release is the interaction itself and it commits nothing until
+  chosen. Long-press is a free slot (double-click already opens the node in pelt).
+  (c) The submenu, below.
+- **Rung 3 (reframe) stays deferred,** behind the submenu or a modifier, since it
+  overwrites hand-placed positions.
+
+The menu form rides a small general upgrade: "Center" becomes a selectable
+collapsing-tree row whose label runs the escalating action and whose disclosure
+chevron opens a submenu (Gather, Reframe) for direct reach. The `ContextItem` model
+already carries both an `action` and `children` (meerkat `lib.rs`); today the rule
+just suppresses the action when a row has children, so this is a contained change to
+that one rule rather than a new structure, and it generalizes (a click-to-relate,
+expand-for-kinds "Relate as…", for instance). Menu, the hold gesture, and a keybind
+(`C`, press again to gather) all route through the one Center/Gather action, so the
+escalation is identical across input modes. Spins out to its own plan when built.
 
 Other spatial borrows from the brainstorm (semantic zoom into a node, proximity as
 a soft relation, saved viewports) were not carried into this curation.
