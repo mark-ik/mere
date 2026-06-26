@@ -54,3 +54,17 @@ full CSS 2.1 Appendix E stacking + z-index (`paint_stacking.rs`).
 ## Progress
 
 - 2026-06-25: Drafted from the capability sweep; P1 (a/b/c) in flight.
+- 2026-06-25: **P1 done.** (a) the stale stacking docs in `overlay.rs` + `select.rs` already describe
+  the z-index / Appendix-E model and call the "must be last sibling" rule obsolete (landed `fa5f32a`);
+  (b) the submenu builds via `overlay_at(0,0,..)` and (c) the context menu via `overlay_at(menu.x,
+  menu.y,..)` (also `fa5f32a`); the tear-out ghost now builds via `overlay_at(0,0,..)` too (`79dc637`),
+  so render only re-stamps the live cursor left/top. No hand-written `position:absolute;left/top` left
+  at the menu / submenu / tear-ghost **build** sites.
+- 2026-06-25: **P2/P3 finding (sequencing).** P2 wants `focus_card_view` to feed `overlay_at`, but the
+  focus card needs width/height + shadow and `overlay_at` emits only left/top — adding a `.attr("style",
+  ..)` would clobber the position. That is exactly P3's size-carrying variant. So the natural order is
+  **P3 first** (add serval `overlay_rect(rect, content)`), then P2 adopts it in the card (with
+  `anchor_point` + `Placement` for the right/flip-left math, keeping the vertical-center + band clamp),
+  then P3 also lands comms-pane + shellbar. `anchored_card_rect` is host-side (called from render), and
+  the shell view already rebuilds each frame, so there is no per-frame-rebuild regression in moving the
+  card's position into the view.
