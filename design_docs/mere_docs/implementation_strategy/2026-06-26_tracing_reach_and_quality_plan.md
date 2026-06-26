@@ -120,17 +120,23 @@ What "quality" means here, concretely:
 
 ## Phases
 
-### T1 - Bridge fix (small, unblocks everything)
+### T1 - Bridge fix (DONE 2026-06-26)
 
-- Make `StructuredPayloadField.name` lossless (`String` / `Cow<'static, str>`); update the donor
-  call sites that pass `&'static str` (they still compile via `into`). Drop `static_field_name`.
-- Replace `interesting_target`'s hardcoded prefix list with a registry-driven / configured target
-  allowlist (env-overridable for dev), covering the first-party component targets.
-- Keep the `meerkat.tracing.event` generic channel as the catch-all; T2/T5 promote the hot ones to
+- **Field names are already lossless with no type change.** `tracing::Field::name()` returns
+  `&'static str` (compile-time metadata), so the bridge feeds the real name straight into
+  `StructuredPayloadField.name` (still `&'static str`); the `static_field_name` whitelist (which
+  collapsed unknown names to the literal `"field"`) is deleted, and typed `record_str/i64/u64/bool`
+  keep natural values. The feared `&'static str -> Cow` ripple through `register-diagnostics` did
+  **not** apply.
+- `interesting_target` now checks a default first-party component prefix allowlist
+  (`armillary`/`graph`/`inker`/`intel`/`orrery`/`mesh`/`moot`/`murm`/`persona`/`verso`/`serval`/...),
+  overridable per dev session via `MEERKAT_TRACE_TARGETS` (comma-separated prefixes) with no rebuild.
+- The `meerkat.tracing.event` generic channel stays the catch-all; T2/T5 promote the hot ones to
   schema'd channels.
 
-Done when a `tracing::info!(target: "armillary", field_x = 1)` shows up in Apparatus with
-`field_x` intact, and the field whitelist is gone.
+Done: a `tracing::info!(target: "armillary", custom_field = 7)` reaches the ring with `custom_field`
+intact; the whitelist is gone. 2 tests; 167 bin + 89 lib green. (Rode into `ac43edd` via a
+concurrent-commit collision; the change is intact.)
 
 ### T2 - Actor substrate instrumentation (highest value)
 
@@ -173,9 +179,10 @@ dumpable without a rebuild.
 
 ## Risks / gotchas
 
-- **`StructuredPayloadField.name` is a public type in `register-diagnostics`**, consumed by the
-  donor channel schemas too (`descriptor/types.rs:24` has the same `&'static str` field on a
-  descriptor). Changing it ripples; do T1 with the whole-crate compile, not just meerkat.
+- ~~`StructuredPayloadField.name` ripple.~~ **Resolved in T1: no change needed.**
+  `tracing::Field::name()` is already `&'static str`, so the bridge feeds the real name straight
+  through and the type stays as-is. The `descriptor/types.rs:24` schema field is a separate
+  compile-time declaration, also untouched.
 - **Chrome-hot concurrency.** Mark's shellbar / graph-signals / illume work has `views.rs`,
   `render.rs`, `menus.rs`, `lib.rs`, `main.rs`, plus `graph-kernel` dirty. The instrumentation
   touches some of these. Commit with explicit pathspec per the alembic-tail handoff's gotcha, and
@@ -215,3 +222,12 @@ component the later slices instrument.
   `StructuredPayloadField.name: &'static str`), `observability.rs` (the spine), `armillary::actor`
   (spawn/run shape), and a first-party tracing-coverage survey (armillary/graph/intel/mesh/moot/
   verso-* at zero). Spun out of the 06-08 diagnostics plan (D0-D8 landed). No code yet.
+- 2026-06-26: **T1 (bridge fix) landed.** `tracing_layer.rs`: dropped the `static_field_name`
+  whitelist (`tracing::Field::name()` is already `&'static str`, so the real field name flows
+  straight into `StructuredPayloadField.name` with no `register-diagnostics` change), added typed
+  `record_str/i64/u64/bool` for natural values, and replaced the `meerkat`/`frame`/`uxtree` target
+  filter with a default first-party prefix allowlist plus a `MEERKAT_TRACE_TARGETS` env override
+  (no rebuild). So the actor substrate + engines reach the diagnostics ring with intact structured
+  fields once they emit. 2 tests; 167 bin + 89 lib green. The `&'static str -> Cow` ripple gotcha
+  and open decision #3 are therefore moot. Landed inside `ac43edd` (a concurrent broad commit swept
+  the staged file into Mark's browse-trace commit; the change is intact). Next: T2 (actor substrate).
