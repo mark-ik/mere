@@ -286,31 +286,6 @@ fn push_scrollbars(
     }
 }
 
-/// Accumulate each laid-out node's **painted** origin: parent-relative taffy locations
-/// summed, with each scroll container's offset applied to its descendants (the way paint
-/// shifts scrolled content), so an overlay lands where an element actually renders. Distinct
-/// from [`accumulate_origins`], which is unscrolled (the scrollbar thumb sits at the
-/// container's own, unscrolled, edge). (Phase 1, step 3c.)
-fn accumulate_painted_origins(
-    dom: &ScriptedDom,
-    fragments: &FragmentPlane<NodeId>,
-    scroll: &HashMap<NodeId, (f32, f32)>,
-    node: NodeId,
-    parent_origin: (f32, f32),
-    out: &mut HashMap<NodeId, (f32, f32)>,
-) {
-    let origin = match fragments.rect_of(node) {
-        Some(l) => (parent_origin.0 + l.location.x, parent_origin.1 + l.location.y),
-        None => parent_origin,
-    };
-    out.insert(node, origin);
-    let (sx, sy) = scroll.get(&node).copied().unwrap_or((0.0, 0.0));
-    let child_origin = (origin.0 - sx, origin.1 - sy);
-    for child in dom.dom_children(node) {
-        accumulate_painted_origins(dom, fragments, scroll, child, child_origin, out);
-    }
-}
-
 /// Draw a focus ring (a thin outline) on the focused node at its painted bounds. The host
 /// builds the cursor from `runner.focus()`, so this rings whatever is focused, chrome control
 /// or folded-pane row/button (the engine leaves `:focus` styling to the host). No-op with
@@ -325,11 +300,11 @@ fn push_focus_ring(
     let Some(node) = focus else { return };
     let fragments = session.fragments();
     let Some(r) = fragments.rect_of(node) else { return };
-    let scroll: HashMap<NodeId, (f32, f32)> =
-        scroll_offsets.into_iter().map(|(n, o)| (*n, *o)).collect();
-    let mut origins: HashMap<NodeId, (f32, f32)> = HashMap::new();
-    accumulate_painted_origins(dom, fragments, &scroll, dom.document(), (0.0, 0.0), &mut origins);
-    let Some(&(x, y)) = origins.get(&node) else { return };
+    // Painted origin (the node's origin minus its ancestors' scroll) via the engine's shared
+    // walk, instead of a host copy of the painted accumulation. (Upstreaming P2.)
+    let origins = serval_layout::accumulate_painted_origins(dom, fragments, scroll_offsets);
+    let Some(p) = origins.get(&node) else { return };
+    let (x, y) = (p.x, p.y);
     // A transform-positioned element (an orrery card) paints at its fragment slot plus its
     // accumulated CSS transform, which the fragments omit; add it so the ring tracks the card
     // where it paints, not at its pre-transform origin. Zero for untransformed chrome. (cond 1 interim.)
