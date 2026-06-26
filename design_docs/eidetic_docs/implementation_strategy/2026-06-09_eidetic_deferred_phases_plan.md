@@ -233,5 +233,16 @@ checkout at `Code/.tantivy-probe` — and the design pass §7.5):**
   `wasm32-unknown-unknown` (one target-gated `getrandom` `wasm_js` feature + the cfg
   flag; verified then reverted — no code landed), and `web-sys` binds the OPFS
   sync-access surface under `--cfg web_sys_unstable_apis` (a throwaway scratch probe
-  compiled clean). Only gate (c), the throughput bench, remains; it needs the real
-  `eidetic-opfs` crate + a worker harness, which is the next build.
+  compiled clean). **Gate (c) build half done:** a real ~80-line `OpfsStore`
+  (`impl Store for OpfsStore` over a `FileSystemDirectoryHandle`, one file per blob,
+  `save`/`load`/`delete`) compiled clean for wasm32 on the first try — every web-sys
+  call resolved (`get_file_handle`(`_with_options`), `create_sync_access_handle`,
+  `get_size`/`read_with_u8_array`/`write_with_u8_array`/`truncate_with_f64`/`flush`/
+  `close`). So the **whole stack is proven at compile**; the impl wrote correctly
+  against the real API. (Probe lives in the scratchpad, not landed.) What's left for
+  the **throughput number**: it inherently needs a browser, and a *worker* (sync
+  access handles are worker-only, so it cannot be a main-thread `wasm-bindgen-test`).
+  The harness is: install `wasm-bindgen-cli` (none here), generate glue, a worker
+  bootstrap + page that runs N save/load round-trips through `OpfsStore` and times
+  `performance.now()`, vs a native `FjallStore` baseline. Edge is present; headless
+  automation would drive it over CDP from Node, or Mark opens the page directly.
