@@ -306,8 +306,7 @@ mod tests {
         let dom = dom.borrow();
         let frags = pane.fragments().expect("laid out");
         let node = crate::first_with_class(&dom, dom.document(), class).expect("class in document");
-        let mut origins = std::collections::HashMap::new();
-        crate::serval_render::accumulate_origins(&dom, frags, dom.document(), (0.0, 0.0), &mut origins);
+        let origins = crate::serval_render::accumulate_origins(&dom, frags);
         let &(ox, oy) = origins.get(&node).expect("origin for the node");
         let size = frags.rect_of(node).expect("node has a rect").size;
         (ox + size.width / 2.0, oy + size.height / 2.0)

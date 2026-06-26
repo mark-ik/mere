@@ -184,8 +184,7 @@ impl WindowCtx<'_> {
         };
         let dom = self.view.dom.borrow();
         let fragments = session.fragments();
-        let mut origins = std::collections::HashMap::new();
-        crate::serval_render::accumulate_origins(&dom, fragments, dom.document(), (0.0, 0.0), &mut origins);
+        let origins = crate::serval_render::accumulate_origins(&dom, fragments);
         let mut out = Vec::new();
         let mut stack = vec![dom.document()];
         while let Some(node) = stack.pop() {

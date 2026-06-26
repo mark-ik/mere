@@ -167,8 +167,7 @@ impl WindowCtx<'_> {
                 let frags = session.fragments();
                 let dom = self.view.dom.borrow();
                 let droot = dom.document();
-                let mut origins = HashMap::new();
-                crate::serval_render::accumulate_origins(&dom, frags, droot, (0.0, 0.0), &mut origins);
+                let origins = crate::serval_render::accumulate_origins(&dom, frags);
                 for node in crate::all_with_class(&dom, droot, "node-card") {
                     if let (Some(member), Some(l), Some(&(ox, oy))) = (
                         crate::member_attr(&dom, node),

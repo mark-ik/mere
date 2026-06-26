@@ -239,18 +239,14 @@ pub(crate) fn hit_test_node(
 pub(crate) fn accumulate_origins(
     dom: &ScriptedDom,
     fragments: &FragmentPlane<NodeId>,
-    _node: NodeId,
-    _parent_origin: (f32, f32),
-    out: &mut HashMap<NodeId, (f32, f32)>,
-) {
-    // The engine owns the parent-chain accumulation now (upstreaming P2): this host entry
-    // adapts serval-layout's `accumulate_origins` to the call sites' `(f32, f32)` out-map,
-    // instead of re-rolling the walk. The engine walks from the document root, which every
-    // caller already passes (`_node` = document, `_parent_origin` = `(0, 0)`), so the prior
-    // signature is kept to leave the call sites untouched.
-    for (id, p) in serval_layout::accumulate_origins(dom, fragments) {
-        out.insert(id, (p.x, p.y));
-    }
+) -> HashMap<NodeId, (f32, f32)> {
+    // The engine owns the parent-chain accumulation (upstreaming P2); this host entry just
+    // adapts serval-layout's `accumulate_origins` (a `Point` map, walked from the document
+    // root) to the call sites' `(f32, f32)` map.
+    serval_layout::accumulate_origins(dom, fragments)
+        .into_iter()
+        .map(|(id, p)| (id, (p.x, p.y)))
+        .collect()
 }
 
 /// Append a scrollbar thumb onto `plist` for each scrolled container: a bar on the
@@ -272,8 +268,7 @@ fn push_scrollbars(
     if scroll_offsets.is_empty() {
         return;
     }
-    let mut origins: HashMap<NodeId, (f32, f32)> = HashMap::new();
-    accumulate_origins(dom, fragments, dom.document(), (0.0, 0.0), &mut origins);
+    let origins = accumulate_origins(dom, fragments);
     for (&node, &(_ox, oy)) in scroll_offsets {
         let Some(r) = fragments.rect_of(node) else { continue };
         let inner_h =
