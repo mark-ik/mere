@@ -7,8 +7,8 @@ use std::rc::Rc;
 
 use serval_scripted_dom::ScriptedDom;
 use xilem_serval::{
-    AnyView, PointerClick, ServalAppRunner, ServalCtx, ServalElement, TextField, TextInput, el,
-    lens, memoize, on_click, overlay_at, text_field_typed,
+    AnyView, El, OnClick, OptionalAction, PointerClick, ServalAppRunner, ServalCtx, ServalElement,
+    TextField, TextInput, el, lens, memoize, on_click, overlay_at, text_field_typed, textarea_typed,
 };
 
 use comms::{Direction, ProtocolKind};
@@ -38,6 +38,23 @@ fn go_back(c: &mut Chrome, _: PointerClick) {
 /// Record a forward step. Mirror of [`go_back`].
 fn go_forward(c: &mut Chrome, _: PointerClick) {
     c.history_step = Some(HistoryStep::Forward);
+}
+
+/// A chrome `<button>`: the shared [`xilem_serval::button`] pinned to the chrome's
+/// `(Chrome, ())` view domain and carrying `class`. The single spot meerkat spells
+/// a button element, replacing the hand-rolled `on_click(el("button", ..), h)` form
+/// at every chrome button. The `<button>` tag stamps `role="button"` for the a11y
+/// tree, which the bare `el` form does not advertise.
+fn button<F, OA>(
+    label: impl Into<String>,
+    class: &'static str,
+    handler: F,
+) -> OnClick<El<String, Chrome, ()>, Chrome, (), F>
+where
+    F: Fn(&mut Chrome, PointerClick) -> OA + 'static,
+    OA: OptionalAction<()>,
+{
+    xilem_serval::button(label, handler).attr("class", class)
 }
 
 /// Mirror the current history entry into the reused chrome state: the toolbar
@@ -78,17 +95,11 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     // host sheet greys it; the handler is already a no-op at the history's edge).
     let back = memoize(c.toolbar.can_go_back, |&can_back: &bool| {
         let class = if can_back { "nav" } else { "nav disabled" };
-        on_click(
-            el::<_, Chrome, ()>("button", "back").attr("class", class),
-            go_back as fn(&mut Chrome, PointerClick),
-        )
+        button("back", class, go_back as fn(&mut Chrome, PointerClick))
     });
     let forward = memoize(c.toolbar.can_go_forward, |&can_forward: &bool| {
         let class = if can_forward { "nav" } else { "nav disabled" };
-        on_click(
-            el::<_, Chrome, ()>("button", "forward").attr("class", class),
-            go_forward as fn(&mut Chrome, PointerClick),
-        )
+        button("forward", class, go_forward as fn(&mut Chrome, PointerClick))
     });
     // The layout-physics pause/play button: ⏸ while running, ▶ while paused, the
     // same toggle as Space. Memoized on the synced `physics_paused` so the glyph
@@ -96,8 +107,9 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     // `orrery.toggle_physics_paused`. (Physics pause.)
     let pause = memoize(c.physics_paused, |&paused: &bool| {
         let glyph = if paused { "\u{25b6}" } else { "\u{23f8}" }; // ▶ / ⏸
-        on_click(
-            el::<_, Chrome, ()>("button", glyph).attr("class", "nav"),
+        button(
+            glyph,
+            "nav",
             (|c: &mut Chrome, _: PointerClick| c.physics_toggle = true) as fn(&mut Chrome, PointerClick),
         )
     });
@@ -125,8 +137,9 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     // slot). Static (icon + fixed handler) — memoize on `()` so it is built once.
     // The menu anchors at the click point (`PointerClick::local`, window coords).
     let add_pill = memoize((), |_: &()| {
-        on_click(
-            el::<_, Chrome, ()>("button", "\u{ff0b}").attr("class", "add-pill"),
+        button(
+            "\u{ff0b}",
+            "add-pill",
             (|c: &mut Chrome, ev: PointerClick| c.open_add_menu(ev.local.0, ev.local.1))
                 as fn(&mut Chrome, PointerClick),
         )
@@ -394,8 +407,9 @@ fn find_bar(c: &Chrome) -> ChromeView {
 fn knot_editor_pane(_c: &Chrome) -> ChromeView {
     let title_text =
         el::<_, Chrome, ()>("div", "Editor").attr("class", "knot-editor-title-text");
-    let close_x = on_click(
-        el::<_, Chrome, ()>("button", "\u{00d7}").attr("class", "knot-editor-btn"),
+    let close_x = button(
+        "\u{00d7}",
+        "knot-editor-btn",
         |c: &mut Chrome, _: PointerClick| c.close_knot_editor(),
     );
     let header =
@@ -403,7 +417,9 @@ fn knot_editor_pane(_c: &Chrome) -> ChromeView {
 
     // The source field: a `text_field` lensed onto the knot buffer, exactly the
     // comms-draft pattern. Its class is the focus key (see ime.rs / input.rs).
-    let make: fn(&mut TextInput) -> TextField = |t: &mut TextInput| text_field_typed(t);
+    // A multi-line textarea (the `edit_multiline` handler + a `<textarea>` tag), so
+    // Enter inserts a newline and Up/Down move between lines — a note, not a one-liner.
+    let make: fn(&mut TextInput) -> TextField = |t: &mut TextInput| textarea_typed(t);
     let to_source: fn(&mut Chrome) -> &mut TextInput = |c: &mut Chrome| &mut c.knot_source;
     let field = lens(make, to_source);
     let source = el::<_, Chrome, ()>("div", field)
@@ -435,8 +451,9 @@ fn comms_pane(c: &Chrome) -> ChromeView {
 
     // Header: title + close.
     let title_text = el::<_, Chrome, ()>("div", "Comms").attr("class", "comms-title-text");
-    let close_x = on_click(
-        el::<_, Chrome, ()>("button", "\u{00d7}").attr("class", "comms-btn"),
+    let close_x = button(
+        "\u{00d7}",
+        "comms-btn",
         |c: &mut Chrome, _: PointerClick| c.close_comms(),
     );
     children.push(Box::new(
@@ -453,8 +470,9 @@ fn comms_pane(c: &Chrome) -> ChromeView {
     if c.comms.selected().is_some() {
         // Thread view: back to the list, the conversation title, its messages, and
         // a compose row.
-        let back = on_click(
-            el::<_, Chrome, ()>("button", "\u{2039} Conversations").attr("class", "comms-back"),
+        let back = button(
+            "\u{2039} Conversations",
+            "comms-back",
             |c: &mut Chrome, _: PointerClick| c.comms.clear_selection(),
         );
         children.push(Box::new(back));
@@ -484,9 +502,9 @@ fn comms_pane(c: &Chrome) -> ChromeView {
             // A received cabal invite (a ticket in the body) gets a Join button.
             if message.direction == Direction::Incoming {
                 if let Some(ticket) = cabal_ticket_in(message.body.text()) {
-                    let join = on_click(
-                        el::<_, Chrome, ()>("button", "Join this cabal")
-                            .attr("class", "comms-new-btn"),
+                    let join = button(
+                        "Join this cabal",
+                        "comms-new-btn",
                         move |c: &mut Chrome, _: PointerClick| c.connect_cabal(ticket.clone()),
                     );
                     children.push(Box::new(join));
@@ -498,8 +516,9 @@ fn comms_pane(c: &Chrome) -> ChromeView {
         let make: fn(&mut TextInput) -> TextField = |t: &mut TextInput| text_field_typed(t);
         let to_draft: fn(&mut Chrome) -> &mut TextInput = |c: &mut Chrome| &mut c.comms_draft;
         let field = lens(make, to_draft);
-        let send = on_click(
-            el::<_, Chrome, ()>("button", "Send").attr("class", "comms-send"),
+        let send = button(
+            "Send",
+            "comms-send",
             |c: &mut Chrome, _: PointerClick| c.send_comms(),
         );
         children.push(Box::new(
@@ -524,15 +543,17 @@ fn comms_pane(c: &Chrome) -> ChromeView {
         }
     } else {
         // The conversation list, led by the compose / invite actions + connect info.
-        let new_btn = on_click(
-            el::<_, Chrome, ()>("button", "+ New message").attr("class", "comms-new-btn"),
+        let new_btn = button(
+            "+ New message",
+            "comms-new-btn",
             |c: &mut Chrome, _: PointerClick| c.open_new_message(),
         );
         children.push(Box::new(new_btn));
         if c.comms.cabal_ticket.is_some() {
             // Mails the cabal join ticket to a peer (pre-fills a misfin message).
-            let share = on_click(
-                el::<_, Chrome, ()>("button", "Share cabal invite").attr("class", "comms-new-btn"),
+            let share = button(
+                "Share cabal invite",
+                "comms-new-btn",
                 |c: &mut Chrome, _: PointerClick| c.share_cabal_invite(),
             );
             children.push(Box::new(share));
@@ -581,8 +602,9 @@ fn new_message_form(form: &comms::NewMessageForm) -> ChromeView {
 
     // Title + cancel.
     let title = el::<_, Chrome, ()>("div", "New message").attr("class", "comms-thread-title");
-    let cancel = on_click(
-        el::<_, Chrome, ()>("button", "Cancel").attr("class", "comms-btn"),
+    let cancel = button(
+        "Cancel",
+        "comms-btn",
         |c: &mut Chrome, _: PointerClick| c.close_new_message(),
     );
     rows.push(Box::new(
@@ -597,14 +619,14 @@ fn new_message_form(form: &comms::NewMessageForm) -> ChromeView {
             "comms-proto"
         }
     };
-    let misfin_btn = on_click(
-        el::<_, Chrome, ()>("button", "Misfin")
-            .attr("class", proto_class(form.protocol == ProtocolKind::Misfin)),
+    let misfin_btn = button(
+        "Misfin",
+        proto_class(form.protocol == ProtocolKind::Misfin),
         |c: &mut Chrome, _: PointerClick| c.set_new_message_protocol(ProtocolKind::Misfin),
     );
-    let cable_btn = on_click(
-        el::<_, Chrome, ()>("button", "Cable")
-            .attr("class", proto_class(form.protocol == ProtocolKind::Murm)),
+    let cable_btn = button(
+        "Cable",
+        proto_class(form.protocol == ProtocolKind::Murm),
         |c: &mut Chrome, _: PointerClick| c.set_new_message_protocol(ProtocolKind::Murm),
     );
     rows.push(Box::new(
@@ -635,8 +657,9 @@ fn new_message_form(form: &comms::NewMessageForm) -> ChromeView {
     ));
     let make: fn(&mut TextInput) -> TextField = |t: &mut TextInput| text_field_typed(t);
     let body_lens: fn(&mut Chrome) -> &mut TextInput = |c: &mut Chrome| &mut c.comms_new_body;
-    let send = on_click(
-        el::<_, Chrome, ()>("button", "Send").attr("class", "comms-send"),
+    let send = button(
+        "Send",
+        "comms-send",
         |c: &mut Chrome, _: PointerClick| c.send_new_message(),
     );
     rows.push(Box::new(
@@ -672,8 +695,9 @@ pub fn submit_omnibar(c: &mut Chrome) {
 fn shellbar_view(panes: &ShellbarPaneStates) -> ChromeView {
     fn btn(label: &'static str, active: bool, cmd: Command) -> ChromeView {
         let class = if active { "shellbar-btn-active" } else { "shellbar-btn" };
-        Box::new(on_click(
-            el::<_, Chrome, ()>("button", label).attr("class", class),
+        Box::new(button(
+            label,
+            class,
             move |c: &mut Chrome, _: PointerClick| c.run_command(cmd),
         )) as ChromeView
     }

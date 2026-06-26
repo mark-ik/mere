@@ -2496,7 +2496,8 @@ impl WindowCtx<'_> {
     /// or orrery card (focusable since Phase 1 / 2a) rings but shows no editing caret. (Phase 2a.)
     pub(super) fn is_text_input(&self, node: NodeId) -> bool {
         let dom = self.view.dom.borrow();
-        dom.element_name(node).map(|q| q.local.as_ref()) == Some("input")
+        let name = dom.element_name(node).map(|q| q.local.as_ref());
+        name == Some("input") || name == Some("textarea")
     }
 
     pub(super) fn caret_field(&self, node: NodeId) -> &xilem_serval::TextInput {
@@ -2638,12 +2639,13 @@ impl WindowCtx<'_> {
         Some((vis_h, content_h))
     }
 
-    /// The first `<input>` under the first element carrying CSS class `class`
-    /// (the omnibar under `.toolbar`, the query field under `.palette`).
+    /// The first `<input>` or `<textarea>` under the first element carrying CSS
+    /// class `class` (the omnibar under `.toolbar`, the knot source under
+    /// `.knot-editor-source`).
     pub(super) fn input_under_class(&self, class: &str) -> Option<NodeId> {
         let dom = self.view.dom.borrow();
         let container = first_with_class(&dom, dom.document(), class)?;
-        first_tag(&dom, container, "input")
+        first_tag(&dom, container, "input").or_else(|| first_tag(&dom, container, "textarea"))
     }
 }
 
