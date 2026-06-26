@@ -21,6 +21,7 @@
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::{self, JoinHandle};
+use std::time::Instant;
 
 use crate::pool::Pool;
 
@@ -110,11 +111,47 @@ where
     U: Send + 'static,
     F: FnOnce(Receiver<C>, Emitter<U>) + Send + 'static,
 {
+    spawn_named("actor", wake, run)
+}
+
+/// [`spawn`] with a diagnostic name. The actor's run loop is wrapped in an
+/// `info`-level `armillary` lifecycle span (`actor = name`) that brackets its
+/// wall-clock lifetime, with `actor started` / `actor finished` (`lifetime_ms`)
+/// events, so the host's diagnostics bridge can show actors spawning, dying, and
+/// how long they lived. `spawn` uses the generic name `"actor"`; pass a specific
+/// one (`"fetch"`, `"sync"`, `"content"`) for a legible trace. (Tracing reach T2.)
+pub fn spawn_named<C, U, F>(name: &'static str, wake: Wake, run: F) -> (ActorHandle<C>, Receiver<U>)
+where
+    C: Send + 'static,
+    U: Send + 'static,
+    F: FnOnce(Receiver<C>, Emitter<U>) + Send + 'static,
+{
     let (command_tx, command_rx) = mpsc::channel::<C>();
     let (update_tx, update_rx) = mpsc::channel::<U>();
     let emitter = Emitter { updates: update_tx, wake };
-    let join = thread::spawn(move || run(command_rx, emitter));
+    let join = thread::spawn(move || run_with_lifecycle_span(name, command_rx, emitter, run));
     (ActorHandle { commands: command_tx, join: Some(join) }, update_rx)
+}
+
+/// Run `run` on the actor thread under a lifecycle span. Shared by [`spawn_named`] and
+/// [`spawn_named_on`]; the span's paired enter/exit gives the host the actor's lifetime, and the
+/// bracketing events mark start/finish for the event log. A panic in `run` still exits the span
+/// (the guard drops on unwind), so a crashed actor reports a finish.
+fn run_with_lifecycle_span<C, U, F>(name: &'static str, commands: Receiver<C>, emitter: Emitter<U>, run: F)
+where
+    F: FnOnce(Receiver<C>, Emitter<U>),
+{
+    let span = tracing::info_span!(target: "armillary", "actor", actor = name);
+    let _guard = span.enter();
+    let start = Instant::now();
+    tracing::info!(target: "armillary", actor = name, "actor started");
+    run(commands, emitter);
+    tracing::info!(
+        target: "armillary",
+        actor = name,
+        lifetime_ms = start.elapsed().as_millis() as u64,
+        "actor finished",
+    );
 }
 
 /// Spawn an actor on a pooled worker thread instead of a fresh one.
@@ -133,10 +170,26 @@ where
     U: Send + 'static,
     F: FnOnce(Receiver<C>, Emitter<U>) + Send + 'static,
 {
+    spawn_named_on(pool, "actor", wake, run)
+}
+
+/// [`spawn_on`] with a diagnostic name — the pooled-worker twin of [`spawn_named`], with the same
+/// lifecycle span. (Tracing reach T2.)
+pub fn spawn_named_on<C, U, F>(
+    pool: &Pool,
+    name: &'static str,
+    wake: Wake,
+    run: F,
+) -> (ActorHandle<C>, Receiver<U>)
+where
+    C: Send + 'static,
+    U: Send + 'static,
+    F: FnOnce(Receiver<C>, Emitter<U>) + Send + 'static,
+{
     let (command_tx, command_rx) = mpsc::channel::<C>();
     let (update_tx, update_rx) = mpsc::channel::<U>();
     let emitter = Emitter { updates: update_tx, wake };
-    pool.submit(Box::new(move || run(command_rx, emitter)));
+    pool.submit(Box::new(move || run_with_lifecycle_span(name, command_rx, emitter, run)));
     (ActorHandle { commands: command_tx, join: None }, update_rx)
 }
 
@@ -202,5 +255,66 @@ mod tests {
         // ends, so collecting terminates rather than hanging.
         let got: Vec<u8> = updates.iter().collect();
         assert_eq!(got, vec![1, 2], "the actor ran to completion after the handle dropped");
+    }
+
+    #[test]
+    fn lifecycle_span_brackets_the_run_with_the_actor_name() {
+        use std::sync::Mutex;
+        use tracing::field::{Field, Visit};
+        use tracing_subscriber::Layer;
+        use tracing_subscriber::layer::{Context, SubscriberExt};
+
+        // A tiny collecting layer: keeps each event's (message, actor) pair.
+        #[derive(Clone, Default)]
+        struct Captured(Arc<Mutex<Vec<(String, String)>>>);
+        impl<S: tracing::Subscriber> Layer<S> for Captured {
+            fn on_event(&self, event: &tracing::Event<'_>, _ctx: Context<'_, S>) {
+                #[derive(Default)]
+                struct V {
+                    message: String,
+                    actor: String,
+                }
+                impl Visit for V {
+                    fn record_str(&mut self, field: &Field, value: &str) {
+                        if field.name() == "actor" {
+                            self.actor = value.to_string();
+                        }
+                    }
+                    fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
+                        match field.name() {
+                            "message" => self.message = format!("{value:?}"),
+                            "actor" if self.actor.is_empty() => self.actor = format!("{value:?}"),
+                            _ => {}
+                        }
+                    }
+                }
+                let mut v = V::default();
+                event.record(&mut v);
+                self.0.lock().unwrap().push((v.message, v.actor));
+            }
+        }
+
+        let captured = Captured::default();
+        let subscriber = tracing_subscriber::registry().with(captured.clone());
+        // Run the wrapper inline (not on a thread) so the thread-local subscriber sees it.
+        tracing::subscriber::with_default(subscriber, || {
+            let (command_tx, command_rx) = mpsc::channel::<u32>();
+            let (update_tx, _update_rx) = mpsc::channel::<u32>();
+            let emitter = Emitter { updates: update_tx, wake: Arc::new(|| {}) };
+            drop(command_tx); // close the command channel so `run` returns at once
+            run_with_lifecycle_span("test_actor", command_rx, emitter, |commands, _out| {
+                while commands.recv().is_ok() {}
+            });
+        });
+
+        let events = captured.0.lock().unwrap();
+        assert!(
+            events.iter().any(|(m, a)| m.contains("actor started") && a == "test_actor"),
+            "a named start event fires: {events:?}",
+        );
+        assert!(
+            events.iter().any(|(m, a)| m.contains("actor finished") && a == "test_actor"),
+            "a named finish event fires: {events:?}",
+        );
     }
 }

@@ -9,5 +9,13 @@ description = "Mere's host-neutral actor-kernel runtime: a !Send host-kernel bou
 [lib]
 path = "src/lib.rs"
 
+[dependencies]
+# Host-neutral instrumentation facade: the substrate emits actor-lifecycle spans/events; the host
+# installs the subscriber (meerkat's Apparatus bridge), so this stays host-neutral like `Wake`.
+tracing = { workspace = true }
+
+[dev-dependencies]
+tracing-subscriber = { workspace = true }
+
 [lints]
 workspace = true
