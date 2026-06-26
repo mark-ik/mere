@@ -157,7 +157,12 @@ fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
         format!("rgb({r}, {g}, {b})")
     };
     vec![
-        "div, button, input { display: block; }".to_string(),
+        // `textarea` included so the knot-editor source field is a block box of its own — it
+        // then holds its own inline text layout (keyed by its node), which the caret primitives
+        // (`caret_rect` / `caret_byte_at_point` / soft-wrap `caret_byte_vertical`) look up. Left
+        // as the CSS-initial `display: inline` it had no box (`fragments().rect_of` → `None`) and
+        // its text flowed into the parent div's context, so no caret op resolved for it.
+        "div, button, input, textarea { display: block; }".to_string(),
         // Shell z-stack: the chrome is the top layer. Making `.chrome` a stacking context
         // (position + z-index) above the orrery means every chrome surface — toolbar,
         // omnibar dropdown, context menu, palette, find, settings, shellbar — paints over
