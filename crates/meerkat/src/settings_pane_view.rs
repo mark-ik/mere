@@ -19,7 +19,7 @@
 //! `2026-06-21_settings_lane_consolidation_plan` (P1 render arm).
 
 use forme::GraphMemberId;
-use xilem_serval::{AnyView, PointerClick, ServalCtx, ServalElement, el, focusable, on_click};
+use xilem_serval::{AnyView, PointerClick, ServalCtx, ServalElement, clickable, el, on_click};
 
 use crate::list_pane::{PaneItem, ReorderSpec, SliderSpec};
 use crate::swatch::{swatch_view, SwatchSpec};
@@ -95,9 +95,9 @@ fn pane_view(pane: &SettingsPane, panel_bg: &str) -> SettingsPanesView {
             let class = if entry.active { "app-btn-active" } else { "app-btn" };
             let nav = format!("settings://{}/{}", pane.namespace, entry.id);
             let div = el::<_, SettingsPanesState, ()>("div", entry.title.clone()).attr("class", class);
-            Box::new(focusable(on_click(div, move |s: &mut SettingsPanesState, _: PointerClick| {
+            Box::new(clickable(div, move |s: &mut SettingsPanesState, _: PointerClick| {
                 s.pending_nav.push((member, nav.clone()))
-            }))) as SettingsPanesView
+            })) as SettingsPanesView
         })
         .collect();
     let spine = el::<_, SettingsPanesState, ()>("div", spine_children)
@@ -164,9 +164,9 @@ fn item_view(member: GraphMemberId, item: &PaneItem) -> SettingsPanesView {
     match &item.key {
         Some(key) => {
             let key = key.clone();
-            Box::new(focusable(on_click(div, move |s: &mut SettingsPanesState, _: PointerClick| {
+            Box::new(clickable(div, move |s: &mut SettingsPanesState, _: PointerClick| {
                 s.pending_keys.push((member, key.clone()))
-            })))
+            }))
         }
         None => Box::new(div),
     }
@@ -197,9 +197,9 @@ fn reorder_view(
     let label_el: SettingsPanesView = match key {
         Some(k) => {
             let k = k.to_string();
-            Box::new(focusable(on_click(label_div, move |s: &mut SettingsPanesState, _: PointerClick| {
+            Box::new(clickable(label_div, move |s: &mut SettingsPanesState, _: PointerClick| {
                 s.pending_keys.push((member, k.clone()))
-            })))
+            }))
         }
         None => Box::new(label_div),
     };
@@ -207,9 +207,9 @@ fn reorder_view(
         let btn = el::<_, SettingsPanesState, ()>("div", glyph.to_string())
             .attr("class", "app-btn")
             .attr("style", "flex-shrink:0;padding:8px 10px;");
-        Box::new(focusable(on_click(btn, move |s: &mut SettingsPanesState, _: PointerClick| {
+        Box::new(clickable(btn, move |s: &mut SettingsPanesState, _: PointerClick| {
             s.pending_keys.push((member, move_key.clone()))
-        })))
+        }))
     };
     let up = mk("\u{25B2}", spec.up_key.clone());
     let down = mk("\u{25BC}", spec.down_key.clone());

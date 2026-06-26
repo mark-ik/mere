@@ -12,7 +12,7 @@
 //!
 //! (Window composition P2 companion — list-pane view-ification.)
 
-use xilem_serval::{el, focusable, on_click, AnyView, PointerClick, ServalCtx, ServalElement};
+use xilem_serval::{el, clickable, AnyView, PointerClick, ServalCtx, ServalElement};
 
 // The `ListPane` bundle is a #[cfg(test)] harness now that the four list panes fold into
 // the shell document; its DOM / layout imports come along under the gate. (Phase 1, step 2.)
@@ -255,9 +255,9 @@ pub fn list_pane_view(state: &ListPaneState) -> ListView {
                     // `focusable` puts the button in the Tab order; the runner activates it on
                     // Enter/Space by synthesizing a click that fires this `on_click`, queuing
                     // the activation like a pointer click. (Phase 1, step 3c.)
-                    Box::new(focusable(on_click(div, move |s: &mut ListPaneState, _: PointerClick| {
+                    Box::new(clickable(div, move |s: &mut ListPaneState, _: PointerClick| {
                         s.pending.push(key.clone())
-                    }))) as ListView
+                    })) as ListView
                 }
                 None => Box::new(div) as ListView,
             }
