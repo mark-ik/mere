@@ -30,7 +30,7 @@ use serval_winit_host::WindowSurface;
 use winit::window::CursorIcon;
 use xilem_serval::{
     AnyView, Modifiers, PointerClick, ServalAppRunner, ServalCtx, ServalElement, WheelEvent, el,
-    external_texture, lens, on_click, on_wheel,
+    external_texture, lens, on_click, on_wheel, overlay_rect,
 };
 
 use super::{CachedTile, ContentPane, ResizeDrag};
@@ -840,38 +840,41 @@ fn focus_card_view(fc: &FocusCard) -> ShellView {
             // The preview is a PNG data-URI <img> (like the favicons), so it is opaque chrome
             // DOM after the node cards: document order paints it over them. Only the cached
             // image renders — there is no placeholder while it builds. (Layering fix.)
-            let inner: ShellView = Box::new(
+            let img: ShellView = Box::new(
                 el::<_, ShellState, ()>("img", ()).attr("src", data_uri.clone()).attr(
                     "style",
-                    format!(
-                        "position:absolute;left:0;top:0;width:{w}px;height:{h}px;\
-                         border-radius:8px;display:block"
-                    ),
+                    "width:100%;height:100%;border-radius:8px;display:block",
+                ),
+            );
+            // `overlay_rect` owns the geometry (and the hit-test class); the card's visuals
+            // (clip, radius, shadow) ride the inner div, which fills the positioned box —
+            // adding a `style` to the overlay element would clobber its geometry. (Overlay P2.)
+            let card: ShellView = Box::new(
+                el::<_, ShellState, ()>("div", vec![img]).attr(
+                    "style",
+                    "width:100%;height:100%;box-sizing:border-box;overflow:hidden;\
+                     border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,0.55)",
                 ),
             );
             Box::new(
-                el::<_, ShellState, ()>("div", vec![inner]).attr("class", "snapshot-card").attr(
-                    "style",
-                    format!(
-                        "position:absolute;left:{x0}px;top:{y0}px;width:{w}px;height:{h}px;\
-                         overflow:hidden;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,0.55)"
-                    ),
-                ),
+                overlay_rect::<_, ShellState, ()>(x0, y0, w, h, vec![card])
+                    .attr("class", "snapshot-card"),
             )
         }
-        FocusCardKind::Unvisited => Box::new(
-            el::<_, ShellState, ()>("div", "Double-click to load".to_string())
-                .attr("class", "unvisited-card")
-                .attr(
+        FocusCardKind::Unvisited => {
+            let inner: ShellView = Box::new(
+                el::<_, ShellState, ()>("div", "Double-click to load".to_string()).attr(
                     "style",
-                    format!(
-                        "position:absolute;left:{x0}px;top:{y0}px;width:{w}px;height:{h}px;\
-                         box-sizing:border-box;display:flex;align-items:center;justify-content:center;\
-                         border:1px dashed #5a6478;border-radius:8px;color:#8b94a6;font-size:13px;\
-                         background:rgba(28,32,40,0.88)"
-                    ),
+                    "width:100%;height:100%;box-sizing:border-box;display:flex;align-items:center;\
+                     justify-content:center;border:1px dashed #5a6478;border-radius:8px;\
+                     color:#8b94a6;font-size:13px;background:rgba(28,32,40,0.88)",
                 ),
-        ),
+            );
+            Box::new(
+                overlay_rect::<_, ShellState, ()>(x0, y0, w, h, vec![inner])
+                    .attr("class", "unvisited-card"),
+            )
+        }
         // The per-object action card: the widgets' (caption, control) rows flattened as direct
         // children of `object-card`, block-stacked exactly like the P0 single widget did (no
         // flex container, no per-widget wrapper) so the controls' clicks route + fire. The
@@ -883,15 +886,17 @@ fn focus_card_view(fc: &FocusCard) -> ShellView {
                 children.push(caption);
                 children.push(control);
             }
-            Box::new(
-                el::<_, ShellState, ()>("div", children).attr("class", "object-card").attr(
+            let inner: ShellView = Box::new(
+                el::<_, ShellState, ()>("div", children).attr(
                     "style",
-                    format!(
-                        "position:absolute;left:{x0}px;top:{y0}px;width:{w}px;height:{h}px;\
-                         box-sizing:border-box;padding:9px 12px;border-radius:8px;\
-                         background:rgba(28,32,40,0.96);box-shadow:0 6px 24px rgba(0,0,0,0.55)"
-                    ),
+                    "width:100%;height:100%;box-sizing:border-box;padding:9px 12px;\
+                     border-radius:8px;background:rgba(28,32,40,0.96);\
+                     box-shadow:0 6px 24px rgba(0,0,0,0.55)",
                 ),
+            );
+            Box::new(
+                overlay_rect::<_, ShellState, ()>(x0, y0, w, h, vec![inner])
+                    .attr("class", "object-card"),
             )
         }
     }

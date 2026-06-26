@@ -610,12 +610,19 @@ pub fn anchored_card_rect(
     }
     let cwf = (cw as f32).min(avail_w);
     let chf = (ch as f32).min(avail_h);
-    // Clearance from the node center so the card doesn't sit on the node.
+    // Anchor the card to the node's keep-out box (a `gap`-wide band straddling the node
+    // point), so `RightOf` / `LeftOf` land it `gap` clear of the node on either side — the
+    // same side+flip primitive the submenu drives, instead of a second hand-rolled copy.
+    // Flip to the node's left when a right-placed card would overflow the band's right edge.
+    use xilem_serval::{anchor_point, Placement};
     let gap = 28.0;
-    let mut x0 = nx + gap;
+    let keepout = (nx - gap, ny, 2.0 * gap, 0.0);
+    let popup = (cwf, chf);
+    let mut x0 = anchor_point(keepout, popup, Placement::RightOf).0;
     if x0 + cwf > bx1 - margin {
-        x0 = nx - gap - cwf; // flip to the left of the node
+        x0 = anchor_point(keepout, popup, Placement::LeftOf).0;
     }
+    // Card-specific: clamp into the band, and vertically center the card on the node.
     let x0 = x0.clamp(bx0 + margin, (bx1 - margin - cwf).max(bx0 + margin));
     let y0 = (ny - chf * 0.5).clamp(top, (by1 - margin - chf).max(top));
     Some((
