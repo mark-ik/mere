@@ -2,6 +2,11 @@
 
 **Date**: 2026-06-23
 **Status**: Planning (with Mark). Net-new delivery target; no code yet.
+**Node + delivery framing superseded 2026-06-24** by
+[orrery_browser_lane_plan](2026-06-24_orrery_browser_lane_plan.md) (capture-first,
+favicon-body nodes not "DOM cards", gloss sidebar + orrery discrete tab, baseline
+cross-browser, no-sync v1). The companion / smolweb / p2p / federation half below
+stands as the forward arc beyond that v1.
 **Scope**: Deliver Mere as a browser **extension / PWA** that reuses the portable
 orrery core and leans on the host browser for what it already does (HTML layout,
 text, tabs, navigation), while a paired **native companion node** carries what a
