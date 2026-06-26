@@ -159,3 +159,13 @@ illume's first non-editor consumer.
   `6d0a2ae`). illume now enriches the omnibar and comms, not just the editor; 32 tests
   green. Point 3(c), the `SyntaxKind` → `SyntaxRole` map, is the host's and lands with
   the point-5 bridge. Next: point 4 (unify serval's field body).
+- **2026-06-26, point 4 done (one field body).** Unified serval's field rendering: a
+  single `field_children(input, styles)` in `styled_field.rs` builds the field's
+  children (unstyled runs as text nodes, styled runs as `<span class>`) with the
+  caret / preedit / ghost splice; the plain `text_field` / `textarea` pass empty styles,
+  so there is one body, not a styled fork. `TextField` is now the Vec-children view type
+  and `field_body` shrank to a 3-line delegator (controls.rs lighter). Styled runs carry
+  a **class** (not inline CSS), baking in the #1 themeable decision. `StyledField`
+  dropped (it is `TextField` now). serval `3abaad8`; 75 tests pass, including the existing
+  `text_field` behaviour tests over the new body. Next: point 5 (the bridge: illume spans
+  → `SyntaxRole` → tinct colour → the styled field, editor first then omnibar).
