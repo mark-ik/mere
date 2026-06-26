@@ -325,6 +325,29 @@ editor edits raw text regardless of format; the format picks which engine render
 the preview and which exporter saves. A markdown or txt note saves back in its own
 format (`to_markdown` / `to_text`); converting to knot is an explicit user action.
 
+### Syntax harvest from carve (extensions over djot)
+
+[Carve](https://github.com/markup-carve/carve) is a post-Markdown markup whose
+charm is visual mnemonics (`/italic/` leans, `,sub,` sits low, `^super^` points
+up). We keep djot's delimiters; its `/` emphasis in particular fights real text
+(URLs, paths, dates), and djot's restraint reads better at length. Carve's
+*semantics* are the harvest, and they are what a graph notebook wants. They
+extend the grammar; knot already carries `[[wikilink]]` and `#hashtag` as inline
+rewrites (`crates/inker/engines/nematic/src/knot/expand.rs`).
+
+| Carve idea | Knot mapping | Status |
+| --- | --- | --- |
+| Cross-ref auto-fills its text from the target (`</#id>`) | A node link with empty display text resolves to the target node's current title and re-resolves when that title changes. djot's `[](#id)` is manual; this is the standout add. | Net-new: a title lookup over the graph, layered on the `[[ ]]` rewrite. |
+| `@mention` first-class | A third inline rewrite beside `[[ ]]` and `#`, asserting a mention edge to the named node. | Net-new: `#hashtag` exists, `@` is its missing sibling. |
+| Case-preserving IDs, case-insensitive resolution | Reference a node by title in any case; display keeps the author's case, resolution folds case. Fits title / URL identity. | Net-new resolver rule. |
+| Wiki auto-resolution (`[Page][]`) | The `[[node]]` model; the `[[` completion row is the authoring half. | Have it. |
+| `+` flush-left list continuation | Reference shape for the smart-list-continuation ergonomics row. | Have the goal. |
+| Tables with rowspan/colspan (`^` / `<`) | The one batteries gap in djot tables (flat today). | Later rung. |
+
+Discipline: take the semantics, leave the sigils. The syntax-resembles-output
+idea is a feel to aim for in the polyglot fences, not a license for a character
+zoo over djot's small rule set.
+
 ### Web-clip extraction to knot node
 
 Four moves, most primitives present.
@@ -893,3 +916,12 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   (new commands need no arm; only narrower selection/node/edge scopes are explicit).
   `cargo check -p meerkat` green, no new warnings. Committed my paths in two batches
   (textarea; command automation), leaving Mark's graphlet work untouched.
+- **2026-06-25, carve syntax harvest.** Mark flagged
+  [carve](https://github.com/markup-carve/carve), a post-Markdown markup with visual
+  mnemonics. Added a *Syntax harvest from carve* subsection under Knot/clips/storage:
+  keep djot's delimiters (carve's flagship `/italic/` fights URLs / paths / dates) and
+  lift the graph-native semantics instead. Net-new are cross-refs that auto-fill display
+  text from the target node's title, `@mention` as the missing sibling to the existing
+  `[[ ]]` / `#` rewrites, and case-insensitive title resolution; `[[ ]]` wiki links and
+  the `+` list continuation are already planned. Recorded the discipline: take the
+  semantics, leave the sigils. Plan-only, no code.
