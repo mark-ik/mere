@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::engine_profile_store::PERSONAS_DIR;
 use crate::manifest::PersonaId;
+use crate::memory_levels::EvictionPolicy;
 
 /// Subdirectory under a persona holding its UI / app settings.
 pub const PERSONA_SETTINGS_DIR: &str = "settings";
@@ -44,6 +45,10 @@ pub struct PersonaSettings {
     /// the first command runs.
     #[serde(default)]
     pub command_usage: std::collections::BTreeMap<String, u32>,
+    /// The short-term memory eviction policy (the Alembic Recent header's editable control,
+    /// B4). Absent / older file falls back to the host default (`KeepDays(30)`).
+    #[serde(default)]
+    pub eviction_policy: EvictionPolicy,
 }
 
 /// The `<data_root>/personas/<id>/settings/` directory for `persona`. Pure.
@@ -137,12 +142,14 @@ mod tests {
             command_usage: [("settings".to_string(), 4u32), ("back".to_string(), 9u32)]
                 .into_iter()
                 .collect(),
+            eviction_policy: EvictionPolicy::KeepDays(90),
         };
         save_persona_settings(&root, fixture_persona(), &original).unwrap();
         let restored = load_persona_settings(&root, fixture_persona())
             .unwrap()
             .expect("settings file should be present");
         assert_eq!(restored, original);
+        assert_eq!(restored.eviction_policy, EvictionPolicy::KeepDays(90), "the policy persists");
         let _ = fs::remove_dir_all(&root);
     }
 }

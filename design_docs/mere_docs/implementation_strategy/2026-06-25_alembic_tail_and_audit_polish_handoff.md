@@ -95,10 +95,14 @@ From the 2026-06-24 audit, verified against the code. One audit item was already
    flag on the node (a kernel schema add)? `is_pinned` is a physics position-pin, not a keep, so it is
    not the answer. Decide before wiring. **[chrome-hot]** (`pane_data` + `input` drain).
 
-4. **Editable eviction policy (slice C).** The policy is *visible* (`memory_levels::EvictionPolicy`,
-   default `KeepDays(30)`, shown in the Recent header) but not yet *editable*. Persist + edit it in
-   **persona settings** (`session-runtime/persona_settings_store`, **not** `settings_store` which has
-   been Mark's hot file). A cycle/control in the Recent header or the settings lane.
+4. **Editable eviction policy (slice C).** ✅ **DONE 2026-06-25.** `EvictionPolicy` gained serde +
+   `cycled()` (the `7d → 30d → 90d → forever` ladder); `PersonaSettings` carries an `eviction_policy`
+   field (serde-defaulted, so older `ui.json` still loads). The host loads it into `Presentation` at boot
+   (`main.rs`), the Alembic **Recent header** row is now a clickable button (`↻`) that cycles + persists
+   it (`pane_data.rs` row → `input.rs` `alembic:eviction:cycle` drain → `frame_ops::cycle_eviction_policy`),
+   and **`run_forgetting_pass` now reads the persisted policy** instead of the hardcoded default, so
+   editing actually changes what gets forgotten. Persisted in persona settings (not `settings_store`).
+   Tests: `eviction_policy_cycles_through_the_ladder` + the persona round-trip now covers the policy.
 
 5. **By-sessions eviction policy (slice C).** `EvictionPolicy` ships `KeepForever` + `KeepDays(n)`. The
    doc also wants "drop after N sessions", which needs a per-node last-session stamp the `GraphSnapshot`

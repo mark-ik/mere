@@ -187,6 +187,7 @@ impl WindowCtx<'_> {
         let settings = session_runtime::PersonaSettings {
             menu_actions: Some(self.shared.presentation.menu_actions.clone()),
             command_usage: self.shared.presentation.command_usage.clone(),
+            eviction_policy: self.shared.presentation.eviction_policy,
         };
         if let Err(err) = session_runtime::save_persona_settings(
             &self.shared.session.mere_root,
@@ -195,6 +196,16 @@ impl WindowCtx<'_> {
         ) {
             tracing::warn!(%err, "failed to persist persona menu settings");
         }
+    }
+
+    /// Cycle the short-term eviction policy to the next rung (the Alembic Recent header control)
+    /// and persist it; the next `run_forgetting_pass` uses the new policy. (Editable eviction
+    /// policy, B4.)
+    pub(super) fn cycle_eviction_policy(&mut self) {
+        self.shared.presentation.eviction_policy =
+            self.shared.presentation.eviction_policy.cycled();
+        self.persist_menu_actions();
+        self.view.request_redraw();
     }
 
     /// Record one invocation of registry command `id` — the frequency signal behind the context

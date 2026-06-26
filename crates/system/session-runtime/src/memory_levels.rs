@@ -51,7 +51,7 @@ pub fn level_of(node: &PersistedNode) -> MemoryLevel {
 /// The eviction policy for short-term memory. User-overridable and shown in the
 /// Alembic pane (never a silent default). Long-term (promoted) nodes are never
 /// evicted by any policy.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum EvictionPolicy {
     /// Never evict short-term memory (the explicit keep-everything choice).
     KeepForever,
@@ -75,6 +75,18 @@ impl EvictionPolicy {
         match self {
             EvictionPolicy::KeepForever => "keeping all recent memory".to_string(),
             EvictionPolicy::KeepDays(d) => format!("evicting recent memory after {d} day(s)"),
+        }
+    }
+
+    /// The next policy when the user cycles the control in the Recent header: a small
+    /// curated ladder `7d -> 30d -> 90d -> forever -> 7d`. An arbitrary `KeepDays(n)`
+    /// snaps to the next rung above it. (Editable eviction policy.)
+    pub fn cycled(self) -> EvictionPolicy {
+        match self {
+            EvictionPolicy::KeepDays(d) if d < 30 => EvictionPolicy::KeepDays(30),
+            EvictionPolicy::KeepDays(d) if d < 90 => EvictionPolicy::KeepDays(90),
+            EvictionPolicy::KeepDays(_) => EvictionPolicy::KeepForever,
+            EvictionPolicy::KeepForever => EvictionPolicy::KeepDays(7),
         }
     }
 
@@ -244,5 +256,16 @@ mod tests {
     fn default_policy_is_a_visible_thirty_days() {
         assert_eq!(EvictionPolicy::default(), EvictionPolicy::KeepDays(30));
         assert!(EvictionPolicy::default().describe().contains("30"));
+    }
+
+    #[test]
+    fn eviction_policy_cycles_through_the_ladder() {
+        use EvictionPolicy::*;
+        assert_eq!(KeepDays(7).cycled(), KeepDays(30));
+        assert_eq!(KeepDays(30).cycled(), KeepDays(90));
+        assert_eq!(KeepDays(90).cycled(), KeepForever);
+        assert_eq!(KeepForever.cycled(), KeepDays(7));
+        // The default (30d) advances to 90d.
+        assert_eq!(EvictionPolicy::default().cycled(), KeepDays(90));
     }
 }

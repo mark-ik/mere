@@ -728,6 +728,10 @@ struct Presentation {
     /// auto-suggestions (command registry S3). Keyed by registry id; loaded from / persisted to
     /// the persona settings store, incremented at the command-invocation hook.
     command_usage: std::collections::BTreeMap<String, u32>,
+    /// The short-term memory eviction policy (the Alembic Recent header). Loaded from the persona
+    /// settings store at boot, cycled by the header control, persisted on change; read by the
+    /// Recent-header display and `run_forgetting_pass`. (Editable eviction policy, B4.)
+    eviction_policy: session_runtime::memory_levels::EvictionPolicy,
 }
 
 impl Presentation {
@@ -1036,6 +1040,7 @@ impl Shell {
             .unwrap_or_default();
         let menu_actions = persona_ui.menu_actions.unwrap_or_else(default_menu_actions);
         let command_usage = persona_ui.command_usage;
+        let eviction_policy = persona_ui.eviction_policy;
         let mut chrome = Chrome::new("mere://welcome");
         chrome.settings.tab_cap = saved_settings.tab_cap;
         let runner = window_view::shell_runner(dom.clone(), chrome);
@@ -1395,6 +1400,7 @@ impl Shell {
                     document_sheet,
                     menu_actions,
                     command_usage,
+                    eviction_policy,
                 },
                 comms_handle,
                 sync_handle,

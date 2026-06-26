@@ -279,7 +279,10 @@ impl WindowCtx<'_> {
                     // A settings tile's body lives in the shell document too (it paints over
                     // the workbench composite at the tile rect), so a press there routes to the
                     // same shell hit-test + dispatch as the folded panes. (Settings lane P1.)
-                    if self.chrome_routed_leaf_at(x, y) || self.settings_pane_at(x, y) {
+                    if self.chrome_routed_leaf_at(x, y)
+                        || self.settings_pane_at(x, y)
+                        || self.knot_editor_pane_at(x, y)
+                    {
                         if button == MouseButton::Left {
                             // A press near a node swatch's hull vertex begins a vertex drag
                             // (the shape editor); otherwise it's a normal pane interaction.
@@ -906,6 +909,27 @@ impl WindowCtx<'_> {
             .any(|(_, r)| x >= r[0] && x < r[2] && y >= r[1] && y < r[3])
     }
 
+    /// Whether `(x, y)` is inside the open knot-editor pane — a press there routes to the shell
+    /// hit-test (its × close button + source field) rather than the orrery underneath. The pane
+    /// is `position: absolute`, so it sits outside `.chrome`'s normal-flow height; without this a
+    /// press below the toolbar fails the `y < chrome_h` band and falls through to the graph,
+    /// leaving the editor unclickable (no close, no focus). (Knot editor.)
+    fn knot_editor_pane_at(&self, x: f32, y: f32) -> bool {
+        if !self.view.chrome().knot_editor_open {
+            return false;
+        }
+        let dom = self.view.dom.borrow();
+        let Some(session) = self.view.chrome_session.as_ref() else { return false };
+        crate::first_with_class(&dom, dom.document(), "knot-editor-pane")
+            .and_then(|node| session.fragments().rect_of(node))
+            .is_some_and(|r| {
+                x >= r.location.x
+                    && x < r.location.x + r.size.width
+                    && y >= r.location.y
+                    && y < r.location.y + r.size.height
+            })
+    }
+
     /// Hit-test the chrome root at `(x, y)` and dispatch the click (buttons +
     /// suggestion / palette rows). A row / backdrop click that closes the palette
     /// restores focus so the caret doesn't dangle on the removed field.
@@ -1357,6 +1381,10 @@ impl WindowCtx<'_> {
                 // Runs in place (drops cached content only, no pool re-keying), so the
                 // WindowCtx method is called directly. (Slice C/D forgetting.)
                 self.run_forgetting_pass();
+            } else if key == "alembic:eviction:cycle" {
+                // Cycle the Recent header's eviction policy (persisted; the next forgetting pass
+                // uses it). (Editable eviction policy, B4.)
+                self.cycle_eviction_policy();
             }
         }
         // Steward: the focused-operation action buttons (retry / stop / background-pin)

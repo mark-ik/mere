@@ -45,7 +45,7 @@ impl WindowCtx<'_> {
     /// (Athanor's live passes surface in Steward) and redraws. The Alembic Recent section's
     /// "forget" affordance drives this. (Alembic slice C eviction / slice D forgetting.)
     pub(super) fn run_forgetting_pass(&mut self) {
-        use session_runtime::{athanor, memory_levels::EvictionPolicy};
+        use session_runtime::athanor;
 
         // Snapshot + per-node last-visit timing from the nav history. Both are owned, so the
         // immutable graph borrows end before the mutable store borrow below.
@@ -61,8 +61,10 @@ impl WindowCtx<'_> {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)
             .unwrap_or(0);
-        let proposal =
-            athanor::propose_forgetting(&snapshot, &timing, EvictionPolicy::default(), now_ms);
+        // The persisted, user-editable policy (the Alembic Recent header control), not a
+        // hardcoded default. (Editable eviction policy, B4.)
+        let policy = self.shared.presentation.eviction_policy;
+        let proposal = athanor::propose_forgetting(&snapshot, &timing, policy, now_ms);
 
         if proposal.is_empty() {
             self.shared.observability.record_diagnostic(

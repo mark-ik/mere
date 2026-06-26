@@ -237,11 +237,13 @@ impl WindowCtx<'_> {
         // eviction policy shown (the visible, never-silent policy). The untagged = short-term
         // rule mirrors `memory_levels::level_of`, the canonical model (decision #2: a tag is
         // the promotion act; `is_pinned` is a physics position-pin, not a memory-keep). Slice C.
-        use session_runtime::memory_levels::EvictionPolicy;
         let mut items = vec![PaneItem::text("utility-title", "Recent")];
-        items.push(PaneItem::text(
+        // The eviction policy is editable: this row cycles it (7d -> 30d -> 90d -> forever) and
+        // persists; the next forgetting pass uses the new policy. (Editable eviction policy, B4.)
+        items.push(PaneItem::button(
             "utility-row-muted",
-            EvictionPolicy::default().describe(),
+            format!("{} \u{21bb}", self.shared.presentation.eviction_policy.describe()),
+            "alembic:eviction:cycle",
         ));
         // A real "forget now" affordance: runs Athanor's forgetting pass, dropping stale
         // short-term cached content (the count surfaces in Steward). No placebo. (Slice C/D.)
