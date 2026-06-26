@@ -971,3 +971,15 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   a fence. Added the *Query blocks and agent nodes* subsection, two ergonomics rows
   (Phase 4 / 5), and a phasing block; cross-refs the borrowed-ideas brief, the gloss
   design, and the graph-signals plan. Plan-only.
+- **2026-06-26, highlight render + illume promotion (spun out).** Built serval's
+  `styled_textarea` (per-range styled `<span>` runs, the Phase-2 highlight render
+  surface; serval `6a3ceace`) and tinct's `syntax` palette (themed contrast-gated
+  colours; tincture `03661ce`). The highlight core's promotion to a standalone sibling
+  lexer crate (**illume**) and the full text-legibility architecture are spun out to
+  their own plan, [illume text lexer plan](2026-06-26_illume_text_lexer_plan.md): the
+  editor consumes illume (lexer: text → spans) + tinct (palette: role → colour) + the
+  serval styled field (renderer), with the host owning the `SyntaxKind` → `SyntaxRole`
+  seam. Three editor-architecture fixes resolved there: #1 colours derive from tinct
+  (never hardcoded), #2 one style-aware field body (not a styled fork), #3 `KnotEditor`
+  becomes a stateless deriver so the host's `TextInput` is the single buffer. The
+  remaining editor wiring (the bridge, the deriver) is tracked in the illume plan.
