@@ -1,0 +1,217 @@
+# Tracing Reach and Quality Plan
+
+**Date**: 2026-06-26
+**Status**: Planning. No code yet.
+**Spun out of**: [system diagnostics and accessibility plan](2026-06-08_system_diagnostics_and_accessibility_plan.md)
+(the observability spine, Apparatus, AccessKit, and the typed agent harness, D0-D8, are
+substantially landed). This plan is the follow-on: extend diagnostic/trace **reach** across the
+first-party components and lift trace **quality** (structure, correlation, verbosity).
+
+One line: **the spine is built but it is near-sighted and lossy.** The tracing-to-Apparatus bridge
+forwards only three target prefixes and flattens field names to a fixed whitelist, and the actor
+substrate, graph kernel, and web engines emit almost nothing. Widen the lens, sharpen the focus.
+
+---
+
+## Findings
+
+Grounded against the live code (2026-06-26).
+
+### The spine exists
+
+`crates/meerkat/src/observability.rs` (`HostObservability`) holds bounded rings for diagnostics,
+UX events, traces, probes, actors, and an a11y summary; the Apparatus pane renders them; the
+`register-diagnostics` registry classifies channels (descriptors, per-channel `payload_schema`,
+`sampling`, `retention`, invariants); `crates/meerkat/src/tracing_layer.rs` is the `tracing`
+subscriber layer that mirrors spans/events into the diagnostics ring.
+
+### The bridge is near-sighted
+
+`tracing_layer.rs::interesting_target` (line 113) forwards a span/event only if its target starts
+with `meerkat`, `frame`, or `uxtree`. Every other target is dropped before Apparatus sees it. So a
+trace emitted from `armillary`, `inker`, `graph`, or any engine never reaches the diagnostics ring
+even if the component does emit it.
+
+### The bridge is lossy
+
+`register_diagnostics::StructuredPayloadField.name` is `&'static str` (emit.rs:46). A runtime
+field name is not `&'static`, so the layer routes every field name through `static_field_name`,
+an 11-entry whitelist (`message`, `err`, `path`, `url`, `ticket`, `member`, `frame_id`,
+`node_count`, ...), and **collapses everything else to the literal `"field"`**. The value survives
+(formatted via `Debug`), but which field it was is lost. This is a type constraint, not an
+oversight: lossless names require changing that field to `String` / `Cow<'static, str>`.
+
+### The components are dark
+
+`tracing::` call counts in the first-party crates:
+
+| Crate | calls | | Crate | calls |
+|---|---|---|---|---|
+| `armillary` (actor substrate) | **0** | | `inker` | 10 |
+| `graph` (kernel) | **0** | | `murm` (comms) | 5 |
+| `intel` (embed/RAG) | **0** | | `persona` | 4 |
+| `mesh` | **0** | | `orrery` | 3 |
+| `moot` | **0** | | `forme` | 2 |
+| `verso-scry` / `verso-serval` (engines) | **0** | | `shell` | 1 |
+| `import`, `eidetic` | **0** | | | |
+
+The async actor substrate, the graph kernel, and the web engines, the exact places where faults
+hide and time is spent, emit nothing. Meerkat infers actor state from the kernel inbox drain, not
+from the actors themselves, so a fault inside an actor reaches Apparatus only as an after-the-fact
+inbox message with no causal detail.
+
+### The registry is rich but under-used for live channels
+
+`register-diagnostics` already supports structured payload schemas, per-channel sampling
+(`SamplingPolicy::SampleRate`), retention policies, and invariants. The structured schemas that
+ship today are the inherited graphshell catalog (protocol/viewer/action/identity/nostr/renderer);
+the live `meerkat.*` channels are mostly `FreeText`. The descriptor layer is the natural driver
+for "which targets/channels are interesting" and "at what verbosity," instead of the hardcoded
+prefix list in the bridge.
+
+### Where the actor spans go
+
+`crates/armillary/src/actor.rs`: `spawn<C, U, F>(wake, run)` / `spawn_on(pool, wake, run)` run a
+subsystem's `run(commands, emitter)` loop on its own thread / a pool worker. Lifecycle and
+per-command spans belong around that loop (in armillary, and at the call sites that build the
+content / fetch / sync / comms actors).
+
+---
+
+## Goals
+
+Two axes, weighted equally per the brief:
+
+- **Reach (coverage).** Every meaningful subsystem can emit a diagnostic/trace that actually
+  reaches Apparatus: the actor substrate, content/fetch/sync/comms actors, the graph kernel, the
+  web engines, inker, orrery.
+- **Quality.** Traces are structured, correlated, timed, and at the right verbosity, so Apparatus
+  (and a human, and the agent harness) can answer "what just happened, in what order, how long did
+  it take, and why did it fail" without tailing terminal logs.
+
+Non-goals: a second metrics system (the ring is the store); per-frame flood (sampling governs hot
+paths); changing app authority (the ring stays an observation cache, per the 06-08 plan).
+
+---
+
+## Trace quality (the dimension, called out)
+
+What "quality" means here, concretely:
+
+1. **Lossless structured fields.** Change `StructuredPayloadField.name` to an owned/`Cow` string so
+   a span's real field names survive. Retire the `static_field_name` whitelist.
+2. **Typed channels for the load-bearing events.** Map the high-value component spans to registered
+   channels with a `Structured` `payload_schema` (actor lifecycle, fetch, parse, layout), so
+   Apparatus renders fields as columns and the registry's invariants/sampling apply, instead of a
+   single generic `meerkat.tracing.event` free-text bucket.
+3. **Correlation.** Thread an op/origin id (and use `tracing`'s native span parent/child) so events
+   chain: `fetch(url) -> parse(url) -> render(url) failed` reads as one causal thread, not three
+   unrelated rows. Apparatus gains a "by op" grouping.
+4. **Timing.** Spans already carry enter/exit `duration_us`; extend to the phases that matter
+   (cascade vs layout vs paint; fetch vs decode) and surface latency on the record.
+5. **Level discipline + sampling.** `info` for lifecycle, `warn`/`error` for faults, `debug`/`trace`
+   for verbose interior; hot paths declare a sample rate via the registry so they never flood.
+6. **Error context.** Capture the full error chain (source/cause) on `failed` events, not just the
+   top-line message.
+7. **Ergonomics.** Adopt `#[tracing::instrument]` on actor/engine entry points (zero usages in the
+   first-party crates today) so spans + arg fields are one attribute, consistent and cheap.
+
+---
+
+## Phases
+
+### T1 - Bridge fix (small, unblocks everything)
+
+- Make `StructuredPayloadField.name` lossless (`String` / `Cow<'static, str>`); update the donor
+  call sites that pass `&'static str` (they still compile via `into`). Drop `static_field_name`.
+- Replace `interesting_target`'s hardcoded prefix list with a registry-driven / configured target
+  allowlist (env-overridable for dev), covering the first-party component targets.
+- Keep the `meerkat.tracing.event` generic channel as the catch-all; T2/T5 promote the hot ones to
+  schema'd channels.
+
+Done when a `tracing::info!(target: "armillary", field_x = 1)` shows up in Apparatus with
+`field_x` intact, and the field whitelist is gone.
+
+### T2 - Actor substrate instrumentation (highest value)
+
+- Instrument `armillary::actor` (spawn, run-loop entry, per-command handling) and the content /
+  fetch / sync / comms actor call sites with `started -> succeeded | failed` spans carrying an op
+  id and timing, per the 06-08 plan's own convention.
+- Register the matching `meerkat.actor.*` (or component-owned) channels with `Structured` schemas.
+
+Done when an actor fault shows in Apparatus with the op id, elapsed time, and error chain, sourced
+from the actor itself rather than inferred from an inbox message.
+
+### T3 - Engine + content passes
+
+- `verso-scry` / `verso-serval` / `inker`: cascade / layout / paint (and fetch / decode) spans with
+  timing. This doubles as the per-pass perf signal the parallelism work will want.
+- `graph` kernel: mutation / snapshot / query spans at `debug`, sampled.
+
+Done when Apparatus can show per-pass timing for a page load, and a slow pass is visible without a
+profiler.
+
+### T4 - Correlation
+
+- Thread the op/origin id through the actor + engine spans; rely on `tracing` span parentage for
+  hierarchy; add a "group by op" read to the Apparatus Tracing/Events sections.
+
+Done when a single page interaction reads as one ordered causal chain in Apparatus.
+
+### T5 - Quality polish + dev-loop
+
+- Per-channel sampling for the hot paths (engine passes, graph mutations) via the registry.
+- Error-chain capture on `failed` events.
+- A dev-loop escape hatch: dump the observability ring to stdout/file on demand (a key, a CLI flag,
+  or an agent-harness call), so adding a `tracing::info!` + rebuild stops being the only way to read
+  runtime state. (This pass kept hitting that loop.)
+
+Done when sustained browsing does not flood the ring, failures carry their cause, and the ring is
+dumpable without a rebuild.
+
+---
+
+## Risks / gotchas
+
+- **`StructuredPayloadField.name` is a public type in `register-diagnostics`**, consumed by the
+  donor channel schemas too (`descriptor/types.rs:24` has the same `&'static str` field on a
+  descriptor). Changing it ripples; do T1 with the whole-crate compile, not just meerkat.
+- **Chrome-hot concurrency.** Mark's shellbar / graph-signals / illume work has `views.rs`,
+  `render.rs`, `menus.rs`, `lib.rs`, `main.rs`, plus `graph-kernel` dirty. The instrumentation
+  touches some of these. Commit with explicit pathspec per the alembic-tail handoff's gotcha, and
+  prefer instrumenting the leaf crates (armillary, engines) that are not chrome-hot first.
+- **Over-instrumentation.** Spans on a per-frame or per-DOM-op hot path will flood the ring; T3/T5
+  gate those behind `debug`/`trace` + sampling from the start, not retroactively.
+- **Target vs channel.** A `tracing` target is a module path; a diagnostic channel is a registered
+  id. T1/T2 must settle the mapping (a small target -> channel table, or a convention) rather than
+  leave two vocabularies drifting.
+
+---
+
+## Open decisions
+
+1. **Target -> channel mapping.** A registered descriptor per component span (rich, typed,
+   sampled), or a generic per-target trace channel with structured fields (cheap, uniform)? Lean:
+   generic for T1 reach, promote the load-bearing ones to typed channels in T2/T5.
+2. **Correlation id source.** Per-actor, per-request/op, or per-origin? Lean: per-op id minted at
+   the actor command boundary, carried in span fields.
+3. **`Cow` vs `String`** for the payload field name. Lean: `Cow<'static, str>` so the donor's
+   `&'static` literals stay zero-alloc and runtime names own.
+
+---
+
+## First slice
+
+T1 (the bridge fix): lossless field names + registry/config-driven target allowlist. It is small,
+self-contained to `register-diagnostics` + `meerkat/tracing_layer.rs`, and it lights up every
+component the later slices instrument.
+
+---
+
+## Progress
+
+- 2026-06-26: Plan written. Grounded against `tracing_layer.rs` (narrow `interesting_target` +
+  `static_field_name` whitelist), `register-diagnostics` (rich descriptor/schema/sampling registry;
+  `StructuredPayloadField.name: &'static str`), `observability.rs` (the spine), `armillary::actor`
+  (spawn/run shape), and a first-party tracing-coverage survey (armillary/graph/intel/mesh/moot/
+  verso-* at zero). Spun out of the 06-08 diagnostics plan (D0-D8 landed). No code yet.
