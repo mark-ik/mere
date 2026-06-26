@@ -68,3 +68,19 @@ full CSS 2.1 Appendix E stacking + z-index (`paint_stacking.rs`).
   then P3 also lands comms-pane + shellbar. `anchored_card_rect` is host-side (called from render), and
   the shell view already rebuilds each frame, so there is no per-frame-rebuild regression in moving the
   card's position into the view.
+- 2026-06-25: **P3 serval + P2 done (committed).** serval `overlay_rect(x, y, w, h, content)` added +
+  tested (`edafb400`); the focus card adopts it (`2bd6336`) — `anchored_card_rect` routes its right/
+  flip-left through `anchor_point` + `Placement` (node as a gap-wide keep-out box), and the three card
+  kinds build via `overlay_rect` (geometry) with visuals on an inner fill div. 160 bin tests green.
+- 2026-06-25: **P3 comms/shellbar finding (needs a call).** Adopting `overlay_rect` at the *build* site
+  for the comms pane + shellbar is not a clean win: their geometry is a **layout output** (`comms_rect`
+  from the frame-tree leaves `render.rs:401`; the shellbar rect from window `w`/`h` + toolbar height,
+  post-layout), which is exactly why render patches it via `set_attribute` after layout. `overlay_rect`
+  is build-time, so owning that geometry would need the host to feed post-layout rects into `Chrome`
+  state and rebuild the chrome view — a layout → feed → rebuild cycle heavier than the current targeted
+  patch, risking two-pass layout per frame. The card was the right `overlay_rect` consumer (its rect is
+  build-time state); for comms/shellbar the render-time `set_attribute` reads as the *correct* pattern
+  for layout-dependent geometry, not a misuse. Options: (a) leave comms/shellbar render-patched and treat
+  P3 as served by `overlay_rect` + the card; (b) a small shared helper formatting the geometry string
+  render hand-writes (cosmetic dedup, no behaviour change); (c) the full state-threading refactor
+  (heaviest, questionable value). Recommend (a), optionally (b).
