@@ -8,7 +8,7 @@ use std::rc::Rc;
 use serval_scripted_dom::ScriptedDom;
 use xilem_serval::{
     AnyView, PointerClick, ServalAppRunner, ServalCtx, ServalElement, TextField, TextInput, el,
-    lens, memoize, on_click, text_field_typed,
+    lens, memoize, on_click, overlay_at, text_field_typed,
 };
 
 use comms::{Direction, ProtocolKind};
@@ -285,16 +285,12 @@ fn context_menu_view(menu: &ContextMenu) -> ChromeView {
     rows.extend(menu.items.iter().enumerate().map(|(i, item)| {
         menu_item_view(i, item, menu.selected == Some(i), open_parent == Some(i))
     }));
-    let root_panel = el::<_, Chrome, ()>("div", rows)
-        .attr("class", "context-menu")
-        .attr(
-            "style",
-            format!("position: absolute; left: {}px; top: {}px;", menu.x, menu.y),
-        );
+    // Point-anchored at the cursor via the overlay primitive (render adds the viewport clamp).
+    let root_panel = overlay_at::<_, Chrome, ()>(menu.x, menu.y, rows).attr("class", "context-menu");
 
     // Depth-1 submenu: a second panel of the open parent's children. The render pass anchors it
-    // off the parent row each frame (it starts at a rough beside-the-menu guess). Pushed after the
-    // root so serval's stacking paints it over the root panel. (Nested submenus.)
+    // off the parent row each frame (it starts at the overlay origin). Pushed after the root so
+    // serval's stacking paints it over the root panel. (Nested submenus.)
     let mut layer: Vec<ChromeView> = vec![Box::new(root_panel) as ChromeView];
     if let Some(sub) = &menu.submenu {
         if let Some(parent) = menu.items.get(sub.parent) {
@@ -319,12 +315,10 @@ fn context_menu_view(menu: &ContextMenu) -> ChromeView {
                     )) as ChromeView
                 })
                 .collect();
-            let sub_panel = el::<_, Chrome, ()>("div", child_rows)
-                .attr("class", "context-submenu")
-                .attr(
-                    "style",
-                    format!("position: absolute; left: {}px; top: {}px;", menu.x + 200.0, menu.y),
-                );
+            // Built at the overlay origin; the render pass anchors it off the parent row via
+            // `anchor_point` each frame (overwriting this placeholder before paint). (Submenus.)
+            let sub_panel =
+                overlay_at::<_, Chrome, ()>(0.0, 0.0, child_rows).attr("class", "context-submenu");
             layer.push(Box::new(sub_panel) as ChromeView);
         }
     }
