@@ -48,9 +48,14 @@ up a thread + snapshot hand-off for it. The actor's reason to exist is the conso
 
 ## The other passes (Athanor's remit, decision-recorded)
 
-- **Consolidation** — light, because graph engrams already dedup by content-addressing. The value is
-  **relating version chains** (link successive engrams/snapshots of the same material as a lineage), not
-  reclaiming space. A propose/apply pass like forgetting.
+- **Consolidation** — the dedup half is *already free* (content-addressing makes identical content one
+  blob). The value is **relating version chains** (link successive engrams of the same material as a
+  lineage). **Blocked until lineage exists, though:** the chain-relating reads
+  `ProvenanceRecord.upstream`, which is `Vec::new()` in every crate today (verified — nothing populates
+  it), and the content store is url-keyed (latest content, no retained version history). So there are *no
+  chains to relate* until something produces lineage. The first producer is
+  [engram compose/merge](2026-06-25_engram_compose_merge_plan.md) (B7, which sets `upstream = source ids`)
+  or an archive-on-refetch capture path. **Consolidation is downstream of B7**, not a standalone slice.
 - **Facet extraction** — heavier (it reads content, possibly runs a local model — ties to the
   [local-models harness](../research/2026-06-24_local_models_harness_brief.md)). This is the pass that
   justifies Path B's off-thread actor. Later.
@@ -61,16 +66,19 @@ up a thread + snapshot hand-off for it. The actor's reason to exist is the conso
   idle-detection); fires `run_forgetting_pass` steady-heat without a manual click. Done: with the app left
   idle past `PASS_INTERVAL`, a stale short-term node's cached content is evicted automatically and Steward's
   "Last forgetting" row (B2) updates; active use does not trigger a pass mid-interaction.
-- **P2 (consolidation pass).** `propose_consolidation`/`apply_consolidation` in `athanor.rs` relating
-  version chains; driven by the same cadence. Done: two engrams of the same material gain a lineage link.
+- **P2 (consolidation pass).** *Prereq: B7 (or an archive-on-refetch path) populates `upstream` so chains
+  exist.* `propose_consolidation`/`apply_consolidation` in `athanor.rs` relating version chains; driven by
+  the same cadence. Done: two engrams of the same material gain a lineage link.
 - **P3 (Path B, when facet extraction lands).** `spawn_athanor` actor owns the cadence + heavy passes
   off-thread; forgetting/consolidation move behind it. Done: a heavy pass runs without dropping a frame.
 
 ## Gotchas
 
 - **Chrome-hot.** P1 edits `app_handler.rs` + `main.rs` (the `Shell` struct) — both in Mark's concurrent
-  set (`main.rs` was dirty 2026-06-25). Land P1 when his chrome work commits, or coordinate. (P2 is
-  `session-runtime`-only and can go first if P1 is blocked.)
+  set (`main.rs` was dirty 2026-06-25). Land P1 when his chrome work commits, or coordinate. (P2
+  consolidation is `session-runtime`-only so it does *not* collide with the chrome-hot files — but it is
+  **data-blocked** per *The other passes* above, so it is not a viable "do this while P1 waits"; B7
+  unblocks it first.)
 - **Thresholds are settings, not constants.** `IDLE_GRACE` + `PASS_INTERVAL` should be tunable (persona
   settings, like the eviction policy), not hardcoded picks — expose them once P1 proves the shape.
 - **Which orrery.** Multi-window pools share orreries + the content store, so one pass on the primary ctx
