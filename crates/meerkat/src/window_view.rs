@@ -27,6 +27,7 @@ use orrery::Face;
 use platen::Workbench;
 use serval_scripted_dom::ScriptedDom;
 use serval_winit_host::WindowSurface;
+use session_runtime::settings_store::ScriptPermissionPrefs;
 use winit::window::CursorIcon;
 use xilem_serval::{
     AnyView, Modifiers, PointerClick, ServalAppRunner, ServalCtx, ServalElement, WheelEvent, el,
@@ -192,6 +193,13 @@ pub(crate) struct WindowView {
     /// the shell document (the settings pane's spine + controls), not the workbench surface
     /// underneath. Set by the per-frame settings snapshot. (Settings lane P1.)
     pub(crate) settings_rects: Vec<(GraphMemberId, [f32; 4])>,
+    /// The `pelt/scripts` page's capability opinion, cached while that page is open so its
+    /// per-frame rebuild reads it in memory instead of re-parsing `settings.json` each frame.
+    /// `Some` only while a scripts tile is open: loaded from disk when the page opens, updated
+    /// in place on an edit, cleared when it closes (so a reopen re-reads, picking up any
+    /// out-of-band change). The resolved bindings the page also lists come from the
+    /// constellation's in-memory set. (Settings perf — no per-frame disk read.)
+    pub(crate) script_caps: Option<ScriptPermissionPrefs>,
     /// Find-in-page match rects for `find_member`, computed host-side (no actor
     /// round-trip) against the focused page's cached body — full-document px
     /// (`[x0,y0,x1,y1]`), one inner `Vec` per match. The overlay maps these like the
@@ -342,6 +350,15 @@ pub(crate) struct WindowView {
     /// absent here is seeded from the orrery's current framing the first time this
     /// window shows it. (Camera on the view.)
     pub(crate) viewports: HashMap<GraphId, orrery::Viewport>,
+    /// This window's per-pane node **selection** (and thus focus), one member-uuid set
+    /// per graph it shows in an Orrery pane. Like `viewports`, the pooled `Orrery` holds
+    /// the live slot and the per-window state lives here: the ctx installs this window's
+    /// selection into the orrery on build and reads it back on drop, so two windows on
+    /// one graph select / focus independently over the shared positions (and a branch
+    /// window's lineage records *its own* focus, not the donor's). Member-keyed so it
+    /// survives an evict+reload. A graph absent here adopts the orrery's current
+    /// selection the first time this window shows it. (Per-window focus isolation.)
+    pub(crate) selections: HashMap<GraphId, Vec<uuid::Uuid>>,
 
     // ── Window + surface + size + input: the OS window itself, its present stack,
     //    its surface dimensions, and the pointer / modifier state of its focus.
@@ -1149,6 +1166,7 @@ impl WindowView {
             kind,
             focused_graph,
             viewports: HashMap::new(),
+            selections: HashMap::new(),
             dom,
             runner,
             chrome_session: None,
@@ -1163,6 +1181,7 @@ impl WindowView {
             tile_rects: Default::default(),
             content_rects: Default::default(),
             settings_rects: Default::default(),
+            script_caps: None,
             find_matches: Default::default(),
             find_member: None,
             find_gen: 0,

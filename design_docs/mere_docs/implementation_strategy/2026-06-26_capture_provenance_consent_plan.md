@@ -1,0 +1,280 @@
+# Capture, Provenance, and Consent Plan — one live record: where you went, what you chose among, where it came from, what may leave
+
+**Date**: 2026-06-26
+**Status**: Planning. No code yet. Created from the 2026-06-26 cross-cutting state
+audit (crawl / engram / knot / federation / models / graph / documentscript),
+which found that the left half of the browsing-data vision (browse, crawl,
+extract, local index) is largely **built**, the right half (distill, federate,
+tessera) is mostly **designed**, and the connective tissue between them, the live
+capture record, is owned by no plan and written by no running code.
+**Lane / conflict posture**: cross-cutting. The live recorder tap is **meerkat**
+(navigation + crawl path, Mark's hot files, land in clean files); the record
+shape extends **eidetic-core** engrams; the provenance writers are **graph-kernel**
+edges asserted by meerkat/inker gestures; consent/retention is a **settings** +
+eidetic concern. It does **not** re-derive the eidetic stack or the front-end.
+**Relationship to existing plans** (this plan composes and connects them):
+- [Eidetic Browsing Derivation](../../eidetic_docs/implementation_strategy/2026-06-12_eidetic_browsing_derivation_plan.md)
+  — **built** (E1-E4): `BrowsingTrace` / `BrowsingMemory`, the `project_lineage`
+  bridge, the `eidetic-search` tantivy index, hybrid recall. This plan supplies
+  the **live caller** that E1 left to a consumer, answers E1's open question on
+  trace granularity, and routes page text into E3's index (the parked
+  "serval-side text-extraction seam" trigger, now satisfied by `serval-extract`).
+- [Relational Browse Graphlet](2026-06-23_relational_browse_graphlet_plan.md)
+  — V1 (single-hop materializer) + V2 (crawl actor) are **built**. Its **V3**
+  (relational capture into eidetic) is **moved here** and generalized: V3 was the
+  candidate-set enrichment alone; this plan unifies it with the live recorder,
+  provenance, and consent so all four ride one record written from the first
+  traversal.
+- [Eidetic Deferred Phases](../../eidetic_docs/implementation_strategy/2026-06-09_eidetic_deferred_phases_plan.md)
+  — Phase 9 **consume half** (federated index merge) reads the federatability
+  class this plan's C4 sets.
+- [Graph Projections Research](../research/2026-06-22_graph_projections_research.md)
+  — the **Provenance-trail** projection consumes the edges C3 writes.
+- [petgraph / RDF](2026-06-18_petgraph_rdf_plan.md) — RDF-star edge provenance is
+  the *RDF projection* of the kernel provenance edges C3 writes; distinct work.
+- [Communal Compute Tiers](../research/2026-06-10_communal_compute_tiers_brief.md)
+  + [Geist Models Brief](../research/2026-05-10_geist_models_brief.md) — tessera
+  contribution-pricing and the flora (federated-LoRA) lane both consume the
+  provenance + federatability this plan produces.
+- Privacy axis source: [Eidetic Design Pass](../../eidetic_docs/research/2026-05-09_eidetic_design_pass.md)
+  (§8 privacy/quota, the three-axis classification).
+
+---
+
+## Thesis (why one record, and why now)
+
+The audit's sharpest finding: the architecture is being built at both ends of the
+pipe (relational browsing on the left, flora / tessera / constitution on the
+right) while the membrane both ends depend on has no crate and no plan. Pull on
+the loose threads and they are one layer:
+
+- **Capture** assumes you may record. There is no consent gate, no incognito
+  exclusion, no retention or forget path beyond `apply_quota`'s blunt keep-N.
+- **Federation** assumes contributions are attributable (provenance) and legally
+  shareable (a federatability policy). Neither exists.
+- **Tessera** assumes a contribution can be priced by origin. That needs
+  provenance.
+- **Governance / legality** assumes the corpus knows where each row came from and
+  whether it may leave. It does not.
+
+These are not separate gaps. They are one missing record: *where you went, what
+you chose among, where it came from, and what may leave this host.* And the audit
+verified the harder truth: **nothing in the running app writes any `BrowsingTrace`
+at all** (zero meerkat callers of `record_traversal` / `save_trace` /
+`BrowsingMemory` / `project_lineage`). The eidetic sink and schema are built; the
+live tap that feeds them is not. So even the plain chronological trail is not
+being captured today, let alone the candidate-set, provenance, and consent fields
+the right half of the vision depends on.
+
+The ordering consequence is the whole reason this plan exists: **every one of
+these fields is cheap at write time and unrecoverable in bulk afterward.** If the
+live recorder lands carrying only the chronological traversal, retrofitting
+candidate-context, provenance, and consent onto a year of accumulated traces is
+the same expensive-later trap the relational plan flagged for candidate-sets
+alone. So the record must carry all four from the first traversal, even where a
+field starts empty.
+
+This plan does **not** try to build distillation, the index-federation consume
+half, or governance. It builds the one record those all read, and the live tap
+that writes it.
+
+---
+
+## Phases (each independently landable; done conditions, not dates)
+
+### C1 — The live trail recorder (the foundational tap)
+
+Wire the meerkat-side recorder that persists a `BrowsingTrace` durably on every
+navigation (tab-to-tab, link follow, crawl visit). Today the live visit memory
+lives in `node-lineage` (in the graph) and `project_lineage`
+(`eidetic-core/src/browsing/lineage.rs`) can project a lineage snapshot into
+traces, but nothing in the running app calls it, so no durable trace is ever
+written. C1 is the live caller plus a direct recorder where lineage does not carry
+enough.
+
+- A recorder on the navigation path that calls `record_traversal` / `save_trace`
+  (`eidetic-core/src/browsing/mod.rs`), off the UI thread, never blocking
+  compositing or input.
+- **LocalOnly / SelfAsserted by default** (the existing three-axis classification),
+  and it **honors an exclusion flag from day one** (an incognito / do-not-record
+  session writes nothing). This is the cheap-now hook for C4.
+- The record carries the C2 / C3 / C4 fields as present-but-optional from the
+  start (candidate-context, provenance, consent-class), even before their
+  producers land, so the schema does not need a migration later.
+
+**Done when**: navigating in the running app produces durable `BrowsingTrace`
+engrams in the eidetic store; an excluded session writes none; the recall path
+(or a test) reads them back; the recorder runs off the render path. Files under
+the 600-LOC ceiling; land in clean meerkat files alongside Mark's churn.
+
+### C2 — Candidate-context (the relational enrichment, absorbed from V3)
+
+Capture the relational decision the bird's-eye view makes observable: the set of
+candidates a choice was made against, and the decision (expand / dismiss / pin /
+dwell). A non-clicked link emits no event in a tab funnel, which is exactly why
+this needs the V1 neighborhood view as its observation point: the materialized
+candidate set is the thing a dismiss is measured against.
+
+- Define the candidate-context record explicitly: what a candidate set contains
+  (the materialized neighborhood's link set with anchor + source context), and
+  which interaction emits which decision. This answers the eidetic plan's open
+  E1 question on trace granularity.
+- Tap the relational-browse interaction (the V1 materializer / neighborhood
+  gestures) to emit the candidate-context onto the C1 record.
+
+Illustrative shape only (not compile-ready):
+
+```rust
+// illustrative-signature-only — the fields, not the final type
+struct CandidateContext {
+    against: Vec<CandidateRef>,   // the set the decision ranged over
+    decision: Decision,           // Expand | Dismiss | Pin | Dwell(ms)
+    chosen: Vec<CandidateRef>,    // the followed subset (the positives)
+}
+```
+
+**Done when**: a relational-browse session over a materialized neighborhood
+produces traces carrying the candidate set and the decision; the listwise
+"real negatives in context" signal is present in the stored record, not
+reconstructed; the schema round-trips.
+
+### C3 — Provenance-family edge writers (one mechanism, three payoffs)
+
+The `Provenance` edge family (`ClippedFrom` / `ExcerptedFrom` / `SummarizedFrom`
+/ `GeneratedFrom`, `graph-kernel/.../edge_taxonomy.rs`) is defined and consumed by
+nothing live: the audit found only cross-graph `CopiedFrom` and snapshot replay
+assert it. Wire the live gestures to write it.
+
+- Crawl / materialize: record which page asserted which `Hyperlink` (the source
+  edge already exists; carry the asserting-page provenance).
+- Clip / excerpt / summarize / future agent-generate: each gesture asserts the
+  matching Provenance edge as it produces a node.
+- This is the single mechanism the relational plan's "provenance is one mechanism"
+  Finding names: it feeds tessera contribution-pricing, training-data legality,
+  and shared-index source legibility at once.
+
+Note the boundary: C3 writes **kernel edges**. Carrying who / when / graph-scope
+on the edge in the *RDF projection* (RDF-star) is the petgraph-RDF plan's Phase
+1-2, not this plan. C3 makes the provenance exist; that plan makes it survive
+RDF export.
+
+**Done when**: a clip / crawl / summarize gesture asserts a Provenance edge a
+test (or the Provenance-trail projection) can read; a crawled node can name the
+page that linked to it.
+
+### C4 — Consent, retention, and forget (the membrane proper)
+
+The privacy / legal layer the whole vision assumes and no plan owns.
+
+- **Consent gate**: a setting governs whether capture runs, at what granularity
+  (off / corridor-only / full). Default is Mark's product call (see Open
+  questions). The C1 exclusion flag is the enforcement point.
+- **Retention**: a configurable age-out beyond `apply_quota`'s keep-N; never
+  deletes anything pinned.
+- **Forget**: a redaction path that removes a page's traces, its derived
+  `eidetic-search` index entries, and its provenance edges together (a forget that
+  leaves the index or the edges behind is not a forget).
+- **Federatability class**: a per-record "may this leave the host" classification
+  riding the existing provenance/trust axes, so Phase 9 consume and the flora lane
+  read it rather than re-deciding. This is the hook for the legality policy (Open
+  questions), not the policy itself.
+
+**Done when**: a consent setting governs capture; a forget action removes a page's
+traces, index entries, and derived edges in one pass; retention ages out beyond N
+configurably with pinned records exempt; every record carries a federatability
+class defaulting to LocalOnly.
+
+### C5 — Page text into the index (the fired trigger)
+
+Close the hop both the eidetic plan and the relational plan describe as the
+*other's* trigger. `serval-extract::extract_text` / `main_text` (the producer)
+is built; `eidetic-search` indexes only titles / URLs / domains (the consumer);
+the connecting call lives in no crate. The trigger ("a serval-side text-extraction
+seam") has fired; the consuming work was never re-queued.
+
+- Route `extract_text` / reader-mode `main_text` from the browse / crawl path into
+  `eidetic-search` so the index carries page text.
+- Index respects the C4 consent + federatability class (do not index what consent
+  excludes; mark federatability on the indexed doc).
+
+**Done when**: a browsed or crawled page's main text is indexed and BM25-recallable
+through the existing recall path; an excluded page is not indexed; the index lane
+(the one the vision says "leads") federates rich text rather than bare titles.
+
+---
+
+## Boundary with existing plans (what this absorbs vs cross-links)
+
+- **Absorbs** relational-browse **V3** (candidate-set capture) and generalizes it
+  into C1-C4. The relational plan's V3 section now points here.
+- **Activates** the eidetic plan's parked **full-page-text capture** (C5) and its
+  **E1 trace-granularity open question** (C2).
+- **Cross-links, does not build**: distillation / LoRA (geist brief), the Phase 9
+  consume half, RDF-star edge provenance (petgraph-RDF), the constitution /
+  governance primitive (moot constitution brief), tessera pricing. Each reads this
+  plan's output; none is in scope here.
+
+---
+
+## Findings (audit-verified, 2026-06-26)
+
+- **No live trace writer exists.** Zero meerkat callers of `record_traversal` /
+  `save_trace` / `BrowsingMemory` / `project_lineage`. The sink and schema (E1)
+  are built; the running app writes no durable trace. This is C1.
+- **`TraceEvent` is chronological only** (`{from, to, transition, at_ms,
+  dwell_ms}`): no candidate-set, no decision field. This is C2.
+- **The `Provenance` edge family has no live writer.** It appears only in the
+  taxonomy enum, snapshot round-trip, and a label-formatting match arm; only
+  cross-graph copy and snapshot replay assert it. This is C3.
+- **No consent / incognito / retention / forget anywhere in eidetic.** Only
+  `PrivacyClass` routing and `apply_quota` keep-N exist. This is C4.
+- **The text-extraction seam fired.** `serval-extract::extract_text` / `main_text`
+  is built and render-free; `eidetic-search` still indexes only titles / URLs.
+  This is C5.
+- **`net.fetch` is no longer a stub** (relevant because the crawl recorder rides
+  the fetch path): `ContentNetFetcher` is a real backend over `fetch_page`,
+  origin-gated, SSRF-floored, rate-capped; `document-host` tests green. Earlier
+  "stub" framing in the relational and substrate plans was same-day-stale and is
+  superseded by the documentscript net-hardening plan.
+- **Naming hazard to disambiguate before federation work**: `flora` means two
+  live things. In code, `MootRoster.flora` is a list of accumulated engram CID
+  references (the 2026-05-04 lexicon). In docs (2026-06-23), `flora = federated
+  LoRA`. Both are current; a reader cannot tell which without dating it.
+  Recommend Mark pick one (rename the roster field, or scope the term) before the
+  flora lane gets code, so the federatability class (C4) and any adapter-engram
+  schema are not built against an ambiguous word.
+
+---
+
+## Open questions (Mark's calls)
+
+- **Consent default.** Off, corridor-only, or full capture by default? The vision
+  wants a rich corpus; the privacy posture wants opt-in. This is a product
+  decision the membrane must encode, not assume.
+- **Legality policy.** Provenance edges say *where a row came from*; they do not
+  say *whether you may federate a distillation of it.* C4 provides the
+  federatability hook; the policy that sets it (crawled third-party page text:
+  local-only, or federatable under what terms?) is unowned and is a product /
+  legal call, possibly its own later slice.
+- **Candidate-set observability.** A dismiss is only observable where the
+  candidate set is materialized (the V1 neighborhood). Is "saw in a normal page,
+  did not click" worth capturing too, or is candidate-context scoped to the
+  relational view only?
+- **Recorder granularity vs `node-lineage`.** C1 must not let the durable trace
+  drift from `node-lineage`'s live edge views or the eidetic `co_occurrence`
+  definition; decide what C1 records directly vs projects from lineage.
+
+---
+
+## Progress
+
+- **2026-06-26** — Plan created from the cross-cutting state audit. The audit
+  established (against code, not docs) that the live capture record is the keystone
+  the larger plan is missing: it sits under capture and under federation
+  simultaneously, must be threaded from the first traversal, and is written by no
+  running code today. Sequenced C1 (live recorder) first because it is the
+  foundation and the free-now / unrecoverable-later piece; C2-C4 ride the same
+  record; C5 closes the fired text-extraction trigger. Absorbs relational-browse
+  V3. Same session, corrected the stale `net.fetch` "stub" framing and the
+  resolved "one missing primitive" framing in the relational-browse plan (V1/V2
+  are built; `serval-extract::extract_links` is the primitive). No code yet.

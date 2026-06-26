@@ -1,7 +1,9 @@
 # Relational Browse Graphlet Plan — the bird's-eye neighborhood as corpus front-end
 
 **Date**: 2026-06-23
-**Status**: Planning. No code yet. Spun out of a design conversation (Mark) about
+**Status**: V1 + V2 **built** (2026-06-24/25, see Progress); V3 **moved to** the
+[Capture, Provenance, and Consent plan](2026-06-26_capture_provenance_consent_plan.md).
+Spun out of a design conversation (Mark) about
 visual graph crawlers (the egui-based [raydroplet/crawler-rs](https://github.com/raydroplet/crawler-rs)
 as a UX reference only; its egui_graphs / fdg-sim / petgraph stack does not
 transfer, and it ships no license so it is read-for-ideas, not lift-able).
@@ -237,6 +239,12 @@ cross-link *relations* fall out of the graph as the frontier revisits shared tar
 
 ### V3 — relational capture into eidetic (the LoRA-readiness lever)
 
+> **Moved + generalized (2026-06-26):** V3 is now owned by the
+> [Capture, Provenance, and Consent plan](2026-06-26_capture_provenance_consent_plan.md),
+> which unifies this candidate-set capture with the live recorder, provenance, and
+> consent so all four ride one record written from the first traversal. Kept here
+> for context; build it there.
+
 Whether a future personal adapter is rich or RAG-replaceable is decided here, by
 what the trace records. Enrich the eidetic capture so the relational decision is
 preserved, not flattened to a chronological trail.
@@ -285,8 +293,9 @@ recognized predicate IRI to a typed sub-kind (`linked-data/src/lib.rs:24-25`);
 (`content.rs:267-272`) and the constellation pairs+applies it
 (`constellation.rs:188,772`); the orrery reconciles a body per node and lays out
 semantic edges (`orrery/orrery/src/physics.rs:38`, `lib.rs:423`). The **one**
-missing primitive is a rect-free anchor enumerator: existing anchor harvest is
-layout-coupled because a `LinkHit` needs a hit rect (`card.rs:478`).
+missing primitive was a rect-free anchor enumerator (existing anchor harvest is
+layout-coupled because a `LinkHit` needs a hit rect, `card.rs:478`); **resolved
+2026-06-24** as `serval-extract::extract_links` (render-free).
 
 **SERP reality (drop "scrape a SERP, open all links").** Live SERP scraping is
 both broken and hostile as of mid-2026: Google's SearchGuard (Jan 2025) broke
@@ -348,9 +357,13 @@ from scratch.
 - **Where the materializer lives long-term.** V1 is host-side in the content
   actor's path; the V2 crawl actor is a new actor. The eventual sandboxed form
   is an origin-bound DocumentScript guest over `net.fetch` (auto-attach already
-  works), but `net.fetch` is a stub today (echoes the URL; `net` defaults Deny;
-  meerkat hardcodes `net: Deny`) and the per-actor sync fetch serializes I/O. So
-  DocumentScript is the right long-term home and the wrong starting point.
+  works). `net.fetch` now has a **real backend** (`ContentNetFetcher` over
+  `fetch_page`, origin-gated, SSRF-floored, rate-capped), superseding the earlier
+  "stub" framing; but it is **same-origin default-Deny**, so a guest crawler needs
+  a cross-origin fan-out capability profile that does not exist yet, and the
+  per-actor sync fetch still serializes I/O (net-hardening E2). So DocumentScript
+  is the right long-term home and still the wrong starting point. See the
+  documentscript net-hardening plan.
 - **Relational trace vs chronological trace.** The enriched relational capture
   must not drift into disagreeing with `node-lineage`'s edge views or the
   eidetic `co_occurrence` definition.
@@ -400,3 +413,17 @@ from scratch.
   named deferrals. The memory model from the design chat holds: crawled pages → graph
   nodes (short-term), V3 consolidates the article text into eidetic (long-term) for
   distillation.
+- **2026-06-26** — Cross-cutting state audit + doc reconciliation. The audit
+  confirmed (against code) that V1 + V2 are **built and host-wired** (crawl actor,
+  frontier, robots, sitemap, `>crawl`, 30 tests), the `serval-extract::extract_links`
+  primitive resolves the "one missing primitive", and **`net.fetch` is a real
+  backend, not a stub**. Corrected the stale Status line, the Findings
+  "missing primitive" note, and the `net.fetch` Open Question accordingly. **V3 is
+  moved** to the [Capture, Provenance, and Consent plan](2026-06-26_capture_provenance_consent_plan.md),
+  which generalizes the candidate-set capture into a single live record (traversal +
+  candidate-context + provenance + consent) plus the live recorder meerkat lacks
+  today (nothing writes a `BrowsingTrace` from the running app yet) and the
+  page-text-into-`eidetic-search` follow-through. One residual on V1 itself: the
+  `materialize_links` producer is built but **user-unreachable** (no command / menu /
+  omnibar verb invokes it; only the heavier `>crawl` reaches a neighborhood), so the
+  single-hop gesture still needs its host trigger.

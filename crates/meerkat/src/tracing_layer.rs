@@ -5,6 +5,7 @@
 //! Bridge selected `tracing` spans/events into the Apparatus diagnostics ring.
 
 use std::fmt;
+use std::sync::OnceLock;
 use std::sync::mpsc::Sender;
 use std::time::Instant;
 
@@ -101,32 +102,123 @@ struct FieldVisitor {
     fields: Vec<StructuredPayloadField>,
 }
 
-impl Visit for FieldVisitor {
-    fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
-        self.fields.push(StructuredPayloadField {
-            name: static_field_name(field.name()),
-            value: format!("{value:?}"),
-        });
+impl FieldVisitor {
+    fn push(&mut self, field: &Field, value: String) {
+        // `Field::name()` is `&'static str` (compile-time metadata), so the *real* field name
+        // survives losslessly — no whitelist normalization (which collapsed unknown names to the
+        // literal `"field"`). `StructuredPayloadField.name` is `&'static str`, which this satisfies.
+        self.fields.push(StructuredPayloadField { name: field.name(), value });
     }
 }
 
-fn interesting_target(target: &str) -> bool {
-    target.starts_with("meerkat") || target.starts_with("frame") || target.starts_with("uxtree")
+impl Visit for FieldVisitor {
+    // Typed records first, so a `str`/number/bool field keeps its natural value (`5`, `true`,
+    // `text`) instead of the `Debug`-quoted form (`"text"`); `record_debug` is the catch-all.
+    fn record_str(&mut self, field: &Field, value: &str) {
+        self.push(field, value.to_string());
+    }
+    fn record_i64(&mut self, field: &Field, value: i64) {
+        self.push(field, value.to_string());
+    }
+    fn record_u64(&mut self, field: &Field, value: u64) {
+        self.push(field, value.to_string());
+    }
+    fn record_bool(&mut self, field: &Field, value: bool) {
+        self.push(field, value.to_string());
+    }
+    fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
+        self.push(field, format!("{value:?}"));
+    }
 }
 
-fn static_field_name(name: &str) -> &'static str {
-    match name {
-        "message" => "message",
-        "err" => "err",
-        "error" => "error",
-        "path" => "path",
-        "url" => "url",
-        "ticket" => "ticket",
-        "member" => "member",
-        "background" => "background",
-        "frame_id" => "frame_id",
-        "node_count" => "node_count",
-        "root_path" => "root_path",
-        _ => "field",
+/// Whether a span/event `target` is mirrored into the diagnostics ring. The default set covers the
+/// first-party components (host, actor substrate, kernel, engines, content, comms, memory).
+/// `MEERKAT_TRACE_TARGETS` (comma-separated prefixes) replaces the default for a dev session, so a
+/// target can be narrowed to one component or widened to a custom one without a rebuild.
+fn interesting_target(target: &str) -> bool {
+    trace_target_prefixes()
+        .iter()
+        .any(|prefix| target.starts_with(prefix.as_str()))
+}
+
+/// The active target-prefix allowlist, parsed once. `MEERKAT_TRACE_TARGETS` overrides
+/// [`DEFAULT_TRACE_TARGETS`] when set and non-empty.
+fn trace_target_prefixes() -> &'static [String] {
+    static PREFIXES: OnceLock<Vec<String>> = OnceLock::new();
+    PREFIXES.get_or_init(|| {
+        std::env::var("MEERKAT_TRACE_TARGETS")
+            .ok()
+            .map(|raw| {
+                raw.split(',')
+                    .map(|t| t.trim().to_string())
+                    .filter(|t| !t.is_empty())
+                    .collect::<Vec<_>>()
+            })
+            .filter(|parsed| !parsed.is_empty())
+            .unwrap_or_else(|| DEFAULT_TRACE_TARGETS.iter().map(|s| s.to_string()).collect())
+    })
+}
+
+/// First-party component target prefixes captured into Apparatus by default. Broadened from the
+/// original `meerkat`/`frame`/`uxtree` so the actor substrate, kernel, and engines reach the ring.
+const DEFAULT_TRACE_TARGETS: &[&str] = &[
+    "meerkat",
+    "frame",
+    "uxtree",
+    "armillary",
+    "graph",
+    "inker",
+    "intel",
+    "orrery",
+    "mesh",
+    "moot",
+    "murm",
+    "persona",
+    "verso",
+    "serval",
+    "eidetic",
+    "import",
+    "forme",
+    "shell",
+    "platen",
+    "session_runtime",
+];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc;
+    use tracing_subscriber::layer::SubscriberExt;
+
+    #[test]
+    fn interesting_target_covers_first_party_components_not_vendored() {
+        for t in ["meerkat::input", "armillary::actor", "graph_kernel::graph", "verso_serval::flip"] {
+            assert!(interesting_target(t), "{t} should be captured");
+        }
+        for t in ["blitz_dom::layout", "tokio::runtime", "wgpu_hal::vulkan"] {
+            assert!(!interesting_target(t), "{t} should not be captured");
+        }
+    }
+
+    #[test]
+    fn event_fields_keep_their_real_names() {
+        let (tx, rx) = mpsc::channel();
+        let subscriber = tracing_subscriber::registry().with(ApparatusTracingLayer::new(tx));
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::info!(target: "armillary", custom_field = 7_i64, "hello");
+        });
+        let ev = rx.try_recv().expect("the event reaches the diagnostics ring (target broadened)");
+        let DiagnosticEvent::MessageReceivedStructured { fields, .. } = ev else {
+            panic!("an event becomes a structured diagnostic");
+        };
+        let custom = fields
+            .iter()
+            .find(|f| f.name == "custom_field")
+            .expect("the field survives by its real name, not the old `field` placeholder");
+        assert_eq!(custom.value, "7", "an i64 field keeps its natural value");
+        assert!(
+            fields.iter().all(|f| f.name != "field"),
+            "no field collapsed to the retired whitelist placeholder",
+        );
     }
 }

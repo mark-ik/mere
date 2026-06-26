@@ -75,6 +75,7 @@ mod card;
 mod doc_style;
 mod comms_host;
 mod constellation;
+mod browse_capture;
 mod content;
 mod crawl;
 mod fetch;
@@ -658,6 +659,11 @@ struct Content {
     /// seeds a bounded crawl whose harvested link + metadata contributions drain back
     /// each frame and apply to the focused graph. One crawl at a time.
     crawl: crawl::CrawlSession,
+    /// Whether the live trail recorder writes a `BrowsingTrace` per navigation
+    /// (C1). Default on; the consent layer (plan C4) drives this and a
+    /// per-session incognito exclusion. Recorded traces are always `LocalOnly` —
+    /// sharing is a separate, explicit act.
+    capture_enabled: bool,
 }
 
 /// The `session` subsystem: the session registry plus the active session's
@@ -1061,6 +1067,13 @@ impl Shell {
                 // Restore this persona's persisted HTTP session, so a login survives
                 // an app restart (native session store; durability thread).
                 fetch::load_cookies(&mut store, active_persona);
+                // Seed the browsing-trace schema so the live trail recorder can
+                // save (capture/provenance/consent plan, C1).
+                if let Err(err) =
+                    pollster::block_on(eidetic::browsing::bootstrap_browsing_schema(&mut store))
+                {
+                    tracing::warn!(?err, "browsing-trace schema bootstrap failed");
+                }
                 Some(store)
             }
             Err(err) => {
@@ -1388,6 +1401,7 @@ impl Shell {
                         saved_settings.disabled_engines.clone(),
                     ),
                     crawl,
+                    capture_enabled: true,
                 },
                 session: Session {
                     manifests,
@@ -1490,9 +1504,10 @@ impl Shell {
             commands: &mut self.commands,
             orrery_pool_count: pool_count,
         };
-        // Install this window's per-pane cameras into the shared orreries for the
-        // pass; the ctx's `Drop` reads them back. (Camera on the view.)
+        // Install this window's per-pane cameras + selection into the shared orreries
+        // for the pass; the ctx's `Drop` reads them back. (View state on the view.)
         wc.install_viewports();
+        wc.install_selections();
         wc
     }
 
@@ -1556,9 +1571,10 @@ impl Shell {
             commands: &mut self.commands,
             orrery_pool_count: pool_count,
         };
-        // Install this window's per-pane cameras for the pass; `Drop` reads them back.
-        // (Camera on the view.)
+        // Install this window's per-pane cameras + selection for the pass; `Drop` reads
+        // them back. (View state on the view.)
         wc.install_viewports();
+        wc.install_selections();
         Some(wc)
     }
 

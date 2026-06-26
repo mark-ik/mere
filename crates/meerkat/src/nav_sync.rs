@@ -9,6 +9,7 @@
 //! each input pass; the syncs run each render. Factored out of `frame_ops.rs` to
 //! keep files under the 600-LOC ceiling.
 
+use eidetic::browsing::TraceTransition;
 use forme::GraphMemberId;
 
 use super::WindowCtx;
@@ -78,6 +79,9 @@ impl WindowCtx<'_> {
             // live is the pelt path (double-click), not an in-orrery live card.
             // (Node-rep P4: live preview retired.)
             self.ensure_content(&loc);
+            // Record the navigation while `content_location` still holds the page
+            // we came from (live trail recorder, C1).
+            self.record_browse_nav(&loc, TraceTransition::UrlTyped);
             self.view.content_location = loc;
             // The freshly-opened node joins a branch window's lineage too (slice 2).
             self.record_branch_nav(new_member);
@@ -103,6 +107,9 @@ impl WindowCtx<'_> {
         // is the pelt path (double-click a node or its card), not an in-orrery live card.
         // (Node-rep P4: live preview retired.)
         self.ensure_content(&loc);
+        // Record the navigation while `content_location` still holds the page we
+        // came from (live trail recorder, C1).
+        self.record_browse_nav(&loc, TraceTransition::UrlTyped);
         self.view.content_location = loc;
         // A branch window's navigation grows its graphlet's lineage (Phase 2 slice 2).
         if let Some(member) = navigated {
@@ -150,6 +157,11 @@ impl WindowCtx<'_> {
             return;
         };
         self.view.chrome_update(|c| c.history_step = None);
+        // Map the step to a trace transition before `step` is consumed below (C1).
+        let transition = match &step {
+            meerkat::HistoryStep::Back => TraceTransition::Back,
+            meerkat::HistoryStep::Forward => TraceTransition::Forward,
+        };
         let Some(member) = self.nav_target_member() else {
             return;
         };
@@ -161,6 +173,9 @@ impl WindowCtx<'_> {
             return;
         };
         self.view.scroll.remove(&member); // the revealed page starts at the top
+        // Record the back/forward navigation while `content_location` still holds
+        // the page we came from (live trail recorder, C1).
+        self.record_browse_nav(&url, transition);
         self.view.content_location = url.clone();
         self.ensure_content(&url);
         self.view.chrome_update(|c| {

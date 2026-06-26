@@ -1,14 +1,15 @@
 # Graphlet Wiring Plan — give graphlets a live home in the shell
 
 **Date**: 2026-06-25
-**Status**: **Phase 1 + Phase 2 done + driven (2026-06-25).** Branch (Shift+drag) mints a
-persisted `Branched` graphlet (round-trips a restart), opens a window that **reads as a
-distinct branch** (an accent `⎇ <anchor>` chip), and **accumulates its own lineage** as you
-navigate in it (the roster grows + persists, diverging from the donor). Phase 2's
-done-condition is met (modulo a cartography-focus note in Slice 2). Next candidate: Phase 3
-(reconciliation + the richer model) or Phase 2 slice 3 (orrery scope + per-window focus).
-Spun out of the [tear-out gestures plan](2026-06-24_tearout_gestures_plan.md) (G3 / OQ-7
-deferral) when scouting the forme graphlet API showed the whole layer is built but unwired.
+**Status**: **Phases 1 + 2 done + driven; open item #1 (per-window focus/selection) done +
+driven (2026-06-25).** Branch (Shift+drag) mints a persisted `Branched` graphlet
+(round-trips a restart), reads as a distinct branch (an accent `⎇ <anchor>` chip), and
+accumulates its own lineage as you navigate in it. Per-window focus/selection isolation now
+makes two windows on one graph independent (driven), which resolved the Slice 2
+cartography-focus nuance and unblocks Slice 3. Next candidate: **Phase 3** (Linked /
+auto-derived graphlets — OQ-2 is yes) or **#3** (branch lifecycle on donor delete). Spun out
+of the [tear-out gestures plan](2026-06-24_tearout_gestures_plan.md) (G3 / OQ-7 deferral)
+when scouting the forme graphlet API showed the whole layer is built but unwired.
 **Lane / conflict posture**: meerkat session/state + a small forme surface (reusing its
 `GraphletRef` type). No kernel or orrery changes in Phase 1. Touches per-session
 persistence (a new sidecar) and the tear-out branch op.
@@ -146,15 +147,15 @@ the branch window to a fresh URL grew its graphlet roster from `[anchor]` to `[a
 new-node]` in the sidecar, while the donor's default graphlet stayed empty — the lineage
 diverges while the new node joins the shared graph.
 
-**Note (focus model):** lineage records the *navigated* node, which is the per-window
-`focused_tile` in workbench mode but the *shared* `Orrery::focused_member` in cartography
-mode. So lineage is cleanly branch-isolated when the branch works in its workbench, but a
-cartography-mode navigation records the shared focus. Tightening that (per-window orrery
-focus) rides with Slice 3 / the per-window-view work; v0 is honest as-is.
+**Note (focus model) — RESOLVED (2026-06-25) by open item #1.** Lineage records the
+*navigated* node = the focus. That was the per-window `focused_tile` in workbench mode but
+the *shared* `Orrery::focused_member` in cartography mode. Open item #1 (per-window
+focus/selection isolation) made cartography focus per-window too, so a branch's lineage now
+records *its own* focus in either mode.
 
 **Slice 3 (optional v0) — orrery scope.** Decide whether the branch window's orrery shows
-only the graphlet's members (a filtered cartography projection) + gets per-window focus.
-Hardest (the orrery is pooled + shared); deferrable.
+only the graphlet's members (a filtered cartography projection). Per-window focus is now
+done (#1), so this is just the *filtered view*; still optional / deferrable.
 
 **Done when:** a branch window shows a distinct grouping (Slice 1 ✓) that accumulates its
 own lineage (Slice 2 ✓) while node edits still propagate to the donor (✓ — the navigated
@@ -211,24 +212,23 @@ reads the same index — all without `GraphTree`.
 
 **Open, scoped:**
 
-- **#1 — Per-window focus/selection isolation (the keystone).** The pooled orrery's
-  `selected: HashSet<NodeKey>` is shared across windows; focus derives from it, so in
-  cartography mode a branch's lineage records the *shared* focus (the Slice 2 nuance), and
-  Slice 3 (a branch-scoped orrery) is blocked. **Seam:** mirror the camera. `WindowView`
-  already holds `viewports`, installed into the pooled orrery at ctx build
-  (`install_viewports`) and read back after the pass (`readback_viewports`). Add
-  `WindowView.selections: HashMap<GraphId, HashSet<NodeKey>>`, an `Orrery::selection()` /
-  `set_selection()` pair (twins of `viewport()` / `set_viewport()`), and
-  `install_selections` / `readback_selections` beside the viewport calls. Every selection
-  read happens inside the ctx (after install, before readback), so no read site changes;
-  isolation falls out of the bracket, and focus isolates for free. **Size:** moderate,
-  low-novelty (copies a shipped pattern); risk medium (selection is read widely, but the
-  bracket contains it). **Decisions:** hold selection as `NodeKey` (fine while pooled,
-  stale on evict+reload) vs by url (durable) — `NodeKey` suffices for live isolation,
-  per-window selection persistence is a smaller follow-on; leave transient drags (marquee /
-  drag / orbit) shared for v0. **Leverage:** makes *any* two windows on one graph
-  independent (not just branches), fixes the Slice 2 nuance, unblocks Slice 3. Highest-value
-  engineering item; do first.
+- **#1 — Per-window focus/selection isolation (the keystone) — DONE (2026-06-25), driven.**
+  Mirrored the camera exactly: `WindowView.selections: HashMap<GraphId, Vec<uuid::Uuid>>`
+  (member-keyed, so it survives an evict+reload), an `Orrery::set_selected_members` (the
+  inverse of the existing `selected_members()`, guarded to skip the reconcile when
+  unchanged since it runs every pass), and `install_selections` / `readback_selections`
+  beside the viewport calls in `viewport.rs`, with the `Drop` reading both back. Because the
+  install/readback brackets the ctx lifecycle, no selection read site changed and focus
+  isolates for free (it derives from `selected` via `focused_key`). **Drove headed:** two
+  windows on one graph — A selected "appearance" (`settings://pelt/scene`), B was spawned
+  (inheriting A's selection on first install), then B selected "a.com" (`https://a.com`); A
+  re-rendered on foreground and still showed appearance, B showed a.com. Independent
+  selection + focus confirmed. meerkat 89 lib / 167 bin + orrery 80 green. **Deferred:** edge
+  selection (`selected_edges`) and transient drags (marquee / orbit) stay shared for v0
+  (node selection is the focus + lineage driver); a session-switch ↔ per-window-selection
+  interaction is a smaller follow-on. **Payoff:** any two windows on one graph are now
+  independent (not just branches); the Slice 2 cartography-focus nuance is resolved; Slice 3
+  (a branch-scoped orrery) is unblocked.
 - **#3 — Branch lifecycle on donor delete (G6).** `close_session` already switches away and
   `move_to_trash`es the session dir, so `graphlets.json` trashes with it (no on-disk
   orphan). **Missing:** the in-memory `self.graphlets` + `self.orreries` pool entries for
@@ -241,9 +241,9 @@ reads the same index — all without `GraphTree`.
 - **OQ-D — does a branch window get a thin orrery?** Brief says workbench-only (§4.2); G2
   (leaf content) settles the workbench-pane mechanics this rides on. Ties into #1 / Slice 3.
 
-**Suggested order:** #1 (keystone) → #3 (with general multi-window session-delete) → Phase 3
-(now that OQ-2 is yes). The tear-out-gesture trailing items (toast, tile-tab leaf origin, G5
-move, G2 leaf content, fork restore-into-switcher) live in the
+**Suggested order:** ~~#1 (keystone)~~ **done** → #3 (with general multi-window
+session-delete) → Phase 3 (now that OQ-2 is yes). The tear-out-gesture trailing items (toast,
+tile-tab leaf origin, G5 move, G2 leaf content, fork restore-into-switcher) live in the
 [gestures plan](2026-06-24_tearout_gestures_plan.md), independent of this subsystem.
 
 ---
@@ -304,3 +304,16 @@ move, G2 leaf content, fork restore-into-switcher) live in the
   nuance, unblocks Slice 3) and **#3 branch lifecycle on donor delete** (drop pool entries +
   close windows on `close_session`; the dir already trashes the sidecar). Suggested order:
   #1 → #3 → Phase 3.
+- **2026-06-25** — **Open item #1 (per-window focus/selection isolation) done + driven.**
+  Mirrored the per-window camera: `WindowView.selections: HashMap<GraphId, Vec<uuid::Uuid>>`
+  (member-keyed for evict+reload durability), `Orrery::set_selected_members` (inverse of
+  `selected_members()`, guarded to skip the reconcile when unchanged — it runs every pass),
+  and `install_selections` / `readback_selections` in `viewport.rs` bracketing the ctx
+  lifecycle (the `Drop` reads both viewport + selection back). No selection read site
+  changed; focus isolates for free (derives from `selected`). Drove headed: two windows on
+  one graph, A on "appearance" (`settings://pelt/scene`) and B on "a.com" (`https://a.com`) —
+  clicking in B left A unchanged (A re-rendered on foreground and still showed appearance).
+  meerkat 89 lib / 167 bin + orrery 80 green. Resolved the Slice 2 cartography-focus nuance
+  (cartography focus is now per-window) and unblocked Slice 3. Edge selection + transient
+  drags stay shared for v0. Built against concurrent chrome edits (a `button()` refactor in
+  views.rs / lib.rs) without conflict — my work was the orrery + window-view + viewport seam.

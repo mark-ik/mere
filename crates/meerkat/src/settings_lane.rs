@@ -514,11 +514,10 @@ impl WindowCtx<'_> {
     /// trusted script. Reads the on-disk opinion (the host caches none), so the labels
     /// reflect exactly what an attach will resolve.
     fn script_settings_items(&self) -> Vec<PaneItem> {
-        let prefs = settings_store::load_settings(&self.shared.session.mere_root)
-            .ok()
-            .flatten()
-            .unwrap_or_default()
-            .script_permissions;
+        // The capability opinion comes from the cache `snapshot_settings_panes` refreshed on open
+        // (not a disk read), and the bindings list from the constellation's live set — so this
+        // per-frame rebuild touches no files. (Settings perf.)
+        let prefs = self.view.script_caps.unwrap_or_default();
         let label = |opt: Option<Permission>| match opt {
             None => "default",
             Some(Permission::Allow) => "Allow",
@@ -539,18 +538,15 @@ impl WindowCtx<'_> {
             "net = network egress (default Deny, same-origin only)",
         ));
 
-        // Read-only: the installed auto-attach bindings (user file + installed mods).
-        let bindings = {
-            let root = &self.shared.session.mere_root;
-            let mut b = crate::content::script::load_resolved_bindings(root, &prefs);
-            b.extend(crate::content::script::load_mod_bindings(root, &prefs));
-            b
-        };
+        // Read-only: the installed auto-attach bindings (user file + installed mods), read from
+        // the constellation's resolved set — the same list auto-attach matches against, already
+        // in memory, so no per-frame binding-file parse. (Settings perf.)
         items.push(PaneItem::text("app-title", "Installed bindings"));
+        let bindings = self.shared.content.constellation.script_bindings();
         if bindings.is_empty() {
             items.push(PaneItem::text("app-row-muted", "none"));
         } else {
-            for b in &bindings {
+            for b in bindings {
                 let net = if b.net.effective == Permission::Allow { " [net]" } else { "" };
                 items.push(PaneItem::text(
                     "app-row",
@@ -590,6 +586,9 @@ impl WindowCtx<'_> {
         let mut bindings = crate::content::script::load_resolved_bindings(&root, &prefs);
         bindings.extend(crate::content::script::load_mod_bindings(&root, &prefs));
         self.shared.content.constellation.set_script_bindings(bindings);
+        // Keep the open Scripts page's cache in step with the edit (it stays open across the
+        // click), so the labels refresh without re-reading disk. (Settings perf.)
+        self.view.script_caps = Some(prefs);
     }
 
     /// Snapshot the open settings tiles into the shell document each frame: resolve each
@@ -603,6 +602,25 @@ impl WindowCtx<'_> {
         // The body rects the input path routes presses against (to the shell document, not
         // the workbench surface). Set every frame, including empty. (Settings lane P1.)
         self.view.settings_rects = tiles.iter().map(|(m, _, rect)| (*m, *rect)).collect();
+        // Refresh the Scripts page's permission cache: read `settings.json` only when that page
+        // first opens (then keep it across frames), and drop it once no scripts tile is open, so
+        // a reopen re-reads and picks up any out-of-band change. This is what keeps the per-frame
+        // page rebuild free of disk I/O — the bindings it also lists come from the constellation's
+        // in-memory set. (Settings perf.)
+        let scripts_open = tiles.iter().any(|(_, reference, _)| reference == "pelt/scripts");
+        if scripts_open {
+            if self.view.script_caps.is_none() {
+                self.view.script_caps = Some(
+                    settings_store::load_settings(&self.shared.session.mere_root)
+                        .ok()
+                        .flatten()
+                        .unwrap_or_default()
+                        .script_permissions,
+                );
+            }
+        } else {
+            self.view.script_caps = None;
+        }
         if tiles.is_empty() {
             if self.view.settings_panes_open() {
                 self.view.set_settings_panes(Vec::new(), String::new());

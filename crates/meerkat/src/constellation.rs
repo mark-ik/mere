@@ -244,6 +244,13 @@ impl Constellation {
         self.script_bindings = bindings;
     }
 
+    /// The installed DocumentScript bindings currently in effect (what auto-attach matches
+    /// against). The settings lane's Scripts page lists these read-only, reading them from here
+    /// rather than re-parsing the binding files each frame. (Settings perf.)
+    pub fn script_bindings(&self) -> &[crate::content::script::ResolvedScriptBinding] {
+        &self.script_bindings
+    }
+
     /// Whether `member` currently has a live actor.
     pub fn is_active(&self, member: GraphMemberId) -> bool {
         self.active.contains_key(&member)

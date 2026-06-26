@@ -2164,6 +2164,27 @@ impl Orrery {
         self.selected.iter().filter_map(|&k| self.graph.get_node(k).map(|n| n.id)).collect()
     }
 
+    /// Replace the node selection with the nodes named by `members` (their UUIDs),
+    /// dropping any uuid no longer in the graph. The inverse of
+    /// [`selected_members`](Self::selected_members). The per-window selection
+    /// install/readback uses this so two windows on one graph hold **independent**
+    /// selection (and thus focus, derived via [`focused_key`](Self::focused_key)) over
+    /// the shared node positions, the way per-window viewports do for the camera.
+    /// Member-keyed (not `NodeKey`) so a window's selection survives an evict+reload.
+    /// No-ops (skipping the reconcile) when the selection is unchanged — it runs on
+    /// every ctx pass. (Per-window focus isolation.)
+    pub fn set_selected_members(&mut self, members: &[uuid::Uuid]) {
+        let new: HashSet<NodeKey> = members
+            .iter()
+            .filter_map(|id| self.graph.get_node_by_id(*id).map(|(k, _)| k))
+            .collect();
+        if new == self.selected {
+            return;
+        }
+        self.selected = new;
+        self.reconcile_derived();
+    }
+
     /// The members in `member`'s connected component — `member` plus every node
     /// reachable from it through relations (undirected), breadth-first from the
     /// queried node. Empty if `member` is not in the graph. This is the node's
