@@ -144,6 +144,15 @@ impl PaneSession {
         self.layout.element_scroll()
     }
 
+    /// The scrollable extent `(mx, my)` of container `node` — how far its content overflows
+    /// its scrollport. Delegates to [`IncrementalLayout::scroll_extent`]. The live wheel path
+    /// never needs this (`scroll_at` clamps to it internally); it is here for the test panes'
+    /// overflow assertions, so they read the engine's extent instead of re-deriving it.
+    #[cfg(test)]
+    pub(crate) fn scroll_extent(&self, dom: &ScriptedDom, node: NodeId) -> (f32, f32) {
+        self.layout.scroll_extent(dom, node)
+    }
+
     /// Hit-test scene point `(x, y)` against the session's **retained** chrome
     /// layout — the C4 path that lets a click / region probe reuse the render's
     /// cascade+layout instead of re-running it (`hit_test_node`'s fresh pipeline).

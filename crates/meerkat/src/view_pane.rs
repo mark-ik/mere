@@ -94,6 +94,16 @@ where
         self.session.as_ref().map(|s| s.fragments())
     }
 
+    /// The scrollable extent `(mx, my)` of container `node` from the engine's `scroll_extent`
+    /// — for the test panes' overflow assertions. `None` before the first frame.
+    #[cfg(test)]
+    pub fn scroll_extent(&self, node: NodeId) -> Option<(f32, f32)> {
+        let session = self.session.as_ref()?;
+        let dom = self.runner.dom();
+        let dom = dom.borrow();
+        Some(session.scroll_extent(&dom, node))
+    }
+
     /// The pane DOM handle (for bounds reads that need element attributes).
     pub fn dom(&self) -> Rc<RefCell<ScriptedDom>> {
         self.runner.dom()
