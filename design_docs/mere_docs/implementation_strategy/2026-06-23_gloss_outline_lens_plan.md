@@ -234,3 +234,14 @@ an ad-hoc list: the format *is* the editing + export path.
   on the live path, so reading them would yield a flat outline; the projection computes the host /
   path tree from node addresses directly instead, overlaying explicit containment where present.
   Relation-driven axes deferred to the P2 pluggable lens.
+- **2026-06-23 (P0 landed).** Rename half committed first (`mere-orrery` -> `glossary` at
+  `crates/graph/glossary/`, dead `project_graph` + tests retired, accesskit/uxtree deps dropped,
+  meerkat's dead dep removed; commits 8d55f96 + ffb1b5e). Then the functions: `outline_djot(&Graph)
+  -> String` (URL-trie nesting host -> path segments, structural intermediate bullets, non-URL nodes
+  flat at the end, deterministic via `BTreeMap`; no engine dep, djot is plain text) and
+  `graph_metrics(&Graph) -> GraphMetrics` (node / edge / relation counts, per-`EdgeFamily` histogram,
+  orphan + component counts; cheap kernel queries only, expensive centrality/community deferred to
+  `intel/signals`). 7 unit + integration tests pass (`parse_host_path`, `node_label`, outline
+  nesting / flat / empty, metrics counts / empty). **P0 done.** Next: P1, the gloss DOM section
+  (render the outline + metrics as the first DOM gloss section; rows route `SelectNodeByUrl`, carry
+  node color/selection).
