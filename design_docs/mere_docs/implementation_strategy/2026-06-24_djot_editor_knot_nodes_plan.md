@@ -375,6 +375,30 @@ Four moves, most primitives present.
    clips are semantic-tier plus an optional cropped texture. HTML render depth
    stays Serval's job, not nematic's.
 
+### Query blocks and agent nodes
+
+Two knot-node kinds beyond the plain note and the clip, harvested from the
+[borrowed-ideas brief](../research/2026-06-25_borrowed_ideas_brief.md) (Mark
+graduated both into near-term editor work).
+
+- **`=query` block.** A polyglot block (` ```=query `) whose body is a graph query,
+  rendered inline as a live result filtered by the active edge config (which edges
+  count). The in-note form of a Tinderbox agent. It rides an existing primitive: the
+  gloss design elevates the Navigator swatch to a view "usable in a node facet pane,
+  a menu, a djot script block, or an orrery card"
+  ([gloss_navigator_design](../design/2026-06-07_gloss_navigator_design.md) §2a), so
+  the `=query` block is a swatch embedded by a fence, its (scope, lens, filters) the
+  query. Edge-config filtering and the result set ride the
+  [graph signals layer](2026-06-22_graph_signals_layer_plan.md).
+- **Agent node.** Promote a `=query` to a whole knot node: its body is the query or
+  policy, its edges are the materialized, continuously-maintained result set (a
+  Tinderbox agent made spatial). The editor authors the body, the orrery materializes
+  the edges, so it lands just after the `=query` block.
+
+Trust carries over from the note rules: a query runs read-only over graph truth, an
+agent node's materialized edges assert provenance, and a received agent node renders
+inert until adopted.
+
 ### Storage and identity
 
 A knot node needs no new node type. **Decided: an inline mutable body on `Node`.**
@@ -407,6 +431,8 @@ its own round-trip test.
 | Fold sections | Collapse a heading's section to skim a long note. | 3 | Medium. Section tree from jotdown; net-new is the fold UI and line-hiding. |
 | Outline | Jump-to-heading list for long notes; ties into the gloss outline lens. | 2 (headings) / 3 (nested) | Cheap from jotdown headings; the gloss plan owns the surface. |
 | Inline web-clip block | A clipped element rendered inline mid-note with its on-site look. | 4 (semantic), 5 (rendered) | Medium. Rides the swatch layout; producer and edge already modeled. |
+| `=query` block | A fenced graph query rendered inline as a live, edge-config-filtered result (a Navigator swatch embedded by a fence). | 4 | Medium. Rides the embeddable swatch + graph-signals; net-new is the fence binding. |
+| Agent node | A knot node whose body is a query/policy and whose edges are its live result set (a Tinderbox agent, made spatial). | 5 | Medium-high. Editor authors the body; the orrery materializes + maintains the edges. |
 | Multi-cursor | Edit several spots at once. Power-user polish, lower value for prose. | 6 (deferred) | Medium-high. Needs the anchor layer plus a cursor set. |
 
 Cut as IDE gold-plating, not note-taking: language-server completion (the only
@@ -464,6 +490,16 @@ Done: the clip carries a cropped texture of the element's rect (from
 element as it appeared on the page alongside its editable semantic body. Validate
 the device-pixel-ratio and scroll-offset mapping between `getBoundingClientRect`
 and the captured surface at runtime.
+
+**Query blocks and agent nodes (node-kinds wave, beside the clips).**
+Done: a ` ```=query ` fence embeds a Navigator swatch by its (scope, lens, filters),
+rendered inline as a live, edge-config-filtered result over graph truth (the gloss
+swatch's djot-block consumer). An agent node promotes that query to a whole knot node
+whose body is the query/policy and whose edges are the materialized,
+continuously-maintained result set, asserted with provenance and rendered inert until
+adopted when received. Rides the embeddable swatch and the graph-signals layer: the
+editor authors the body, the orrery materializes the edges. Near-term (this
+node-kinds wave, the same as the clip phases), not the deferred Phase 6.
 
 **Phase 6 (deferred): fidelity, federation, power-editing.**
 Done: clips can render a sanitized HTML fragment with site context (the
@@ -925,3 +961,13 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   `[[ ]]` / `#` rewrites, and case-insensitive title resolution; `[[ ]]` wiki links and
   the `+` list continuation are already planned. Recorded the discipline: take the
   semantics, leave the sigils. Plan-only, no code.
+- **2026-06-26, query blocks + agent nodes graduated.** Per Mark, folded two
+  borrowed-ideas items into the editor plan's near-term node-kinds wave (beside the
+  clip phases, not the deferred Phase 6): a `=query` polyglot block (a graph query
+  rendered inline as a live, edge-config-filtered result) and an agent node (a knot
+  node whose body is the query/policy and whose edges are the materialized result
+  set). Grounded the `=query` block on an existing primitive: the gloss swatch is
+  already designed to embed in a djot script block, so the block is a swatch bound by
+  a fence. Added the *Query blocks and agent nodes* subsection, two ergonomics rows
+  (Phase 4 / 5), and a phasing block; cross-refs the borrowed-ideas brief, the gloss
+  design, and the graph-signals plan. Plan-only.
