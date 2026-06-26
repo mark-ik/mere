@@ -125,6 +125,22 @@ fn base64_encode(data: &[u8]) -> String {
     out
 }
 
+/// The inline `style` for a host-positioned overlay surface: an absolute box at
+/// `(x, y)` sized `w`×`h`, optionally with a `flex-direction`. Mirrors the
+/// `xilem_serval::overlay_rect` geometry for the surfaces whose rect is a **layout
+/// output** (the comms pane fills its frame leaf; the shellbar docks to a window
+/// edge) — render patches these post-layout rather than building them with the
+/// rect at view time, so this is the one spot that formats their geometry. (Overlay
+/// adoption P3.)
+fn overlay_geometry_style(x: f32, y: f32, w: f32, h: f32, flex_dir: Option<&str>) -> String {
+    let mut style =
+        format!("position: absolute; left: {x}px; top: {y}px; width: {w}px; height: {h}px;");
+    if let Some(dir) = flex_dir {
+        style.push_str(&format!(" flex-direction: {dir};"));
+    }
+    style
+}
+
 impl WindowCtx<'_> {
     /// The toolbar-band height (px), measuring + caching it on first use. The
     /// toolbar is a single flex row, so its border-box height is independent of
@@ -672,13 +688,12 @@ impl WindowCtx<'_> {
             let mut dom = self.view.dom.borrow_mut();
             let root = dom.document();
             if let Some(node) = first_with_class(&dom, root, "shellbar") {
-                let style = format!(
-                    "position: absolute; left: {}px; top: {}px; width: {}px; height: {}px; flex-direction: {};",
+                let style = overlay_geometry_style(
                     sr[0],
                     sr[1],
                     (sr[2] - sr[0]).max(0.0),
                     (sr[3] - sr[1]).max(0.0),
-                    flex_dir,
+                    Some(flex_dir),
                 );
                 let attr = QualName::new(None, Namespace::from(""), LocalName::from("style"));
                 dom.set_attribute(node, attr, &style);
@@ -691,12 +706,12 @@ impl WindowCtx<'_> {
             let mut dom = self.view.dom.borrow_mut();
             let root = dom.document();
             if let Some(node) = first_with_class(&dom, root, "comms-pane") {
-                let style = format!(
-                    "position: absolute; left: {}px; top: {}px; width: {}px; height: {}px;",
+                let style = overlay_geometry_style(
                     cr[0],
                     cr[1],
                     (cr[2] - cr[0]).max(0.0),
                     (cr[3] - cr[1]).max(0.0),
+                    None,
                 );
                 let attr = QualName::new(None, Namespace::from(""), LocalName::from("style"));
                 dom.set_attribute(node, attr, &style);
