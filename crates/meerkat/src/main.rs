@@ -1813,26 +1813,18 @@ fn class_bottom_in(dom: &ScriptedDom, frags: &FragmentPlane<NodeId>, class: &str
         .filter(|&measured| measured > 0)
 }
 
-/// The first element carrying CSS class `class` in pre-order under `id`.
+/// The first element carrying CSS class `class` in pre-order under `id` — the engine's
+/// [`LayoutDom::first_with_class`](layout_dom_api::LayoutDom::first_with_class), kept as a
+/// free-fn entry so the call sites read `first_with_class(&dom, id, class)`.
 fn first_with_class(dom: &ScriptedDom, id: NodeId, class: &str) -> Option<NodeId> {
-    if has_class(dom, id, class) {
-        return Some(id);
-    }
-    dom.dom_children(id)
-        .find_map(|c| first_with_class(dom, c, class))
+    dom.first_with_class(id, class)
 }
 
-/// Every element carrying CSS class `class` in pre-order under `id`. Used to find
+/// Every element carrying CSS class `class` in pre-order under `id` (the engine's
+/// [`LayoutDom::all_with_class`](layout_dom_api::LayoutDom::all_with_class)). Used to find
 /// the workbench root's content placeholders, one per tile.
 fn all_with_class(dom: &ScriptedDom, id: NodeId, class: &str) -> Vec<NodeId> {
-    let mut out = Vec::new();
-    if has_class(dom, id, class) {
-        out.push(id);
-    }
-    for child in dom.dom_children(id) {
-        out.extend(all_with_class(dom, child, class));
-    }
-    out
+    dom.all_with_class(id, class)
 }
 
 /// The `data-member` attribute of element `id`, parsed as a graph member id — the
@@ -1913,22 +1905,16 @@ fn chrome_to_wgpu(c: register_theme::theme::Color32) -> wgpu::Color {
     }
 }
 
-/// The first element with local tag `local` in pre-order under `id`.
+/// The first element with local tag `local` in pre-order under `id` — the engine's
+/// [`LayoutDom::first_tag`](layout_dom_api::LayoutDom::first_tag).
 fn first_tag(dom: &ScriptedDom, id: NodeId, local: &str) -> Option<NodeId> {
-    if dom
-        .element_name(id)
-        .is_some_and(|q| q.local.as_ref() == local)
-    {
-        return Some(id);
-    }
-    dom.dom_children(id).find_map(|c| first_tag(dom, c, local))
+    dom.first_tag(id, local)
 }
 
-/// Whether element `id` carries CSS class `class` (whitespace-split `class` attr).
+/// Whether element `id` carries CSS class `class` — the engine's
+/// [`LayoutDom::has_class`](layout_dom_api::LayoutDom::has_class).
 fn has_class(dom: &ScriptedDom, id: NodeId, class: &str) -> bool {
-    dom.attributes(id).any(|attr| {
-        attr.name.local.as_ref() == "class" && attr.value.split_whitespace().any(|c| c == class)
-    })
+    dom.has_class(id, class)
 }
 
 /// Map the orrery camera to a serialized [`CameraSnapshot`] — the kurbo `Affine`
