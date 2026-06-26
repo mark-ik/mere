@@ -1,13 +1,14 @@
 # Graphlet Wiring Plan — give graphlets a live home in the shell
 
 **Date**: 2026-06-25
-**Status**: **Phase 1 + Phase 2 slice 1 done + driven (2026-06-25).** Branch (Shift+drag)
-mints a persisted `Branched` graphlet (round-trips a restart) and opens a window that now
-**reads as a distinct branch** — an accent `⎇ <anchor>` chip in its toolbar. Next:
-Phase 2 slice 2 (lineage accumulation — the branch graphlet grows as you work in it; the
-trigger is an open design choice). Spun out of the
-[tear-out gestures plan](2026-06-24_tearout_gestures_plan.md) (G3 / OQ-7 deferral) when
-scouting the forme graphlet API showed the whole layer is built but unwired.
+**Status**: **Phase 1 + Phase 2 done + driven (2026-06-25).** Branch (Shift+drag) mints a
+persisted `Branched` graphlet (round-trips a restart), opens a window that **reads as a
+distinct branch** (an accent `⎇ <anchor>` chip), and **accumulates its own lineage** as you
+navigate in it (the roster grows + persists, diverging from the donor). Phase 2's
+done-condition is met (modulo a cartography-focus note in Slice 2). Next candidate: Phase 3
+(reconciliation + the richer model) or Phase 2 slice 3 (orrery scope + per-window focus).
+Spun out of the [tear-out gestures plan](2026-06-24_tearout_gestures_plan.md) (G3 / OQ-7
+deferral) when scouting the forme graphlet API showed the whole layer is built but unwired.
 **Lane / conflict posture**: meerkat session/state + a small forme surface (reusing its
 `GraphletRef` type). No kernel or orrery changes in Phase 1. Touches per-session
 persistence (a new sidecar) and the tear-out branch op.
@@ -71,13 +72,36 @@ Where do graphlets live?
   as-is — deferred to Phase 3, which decides whether to adapt them to the live model.
 - **(C) Resurrect `GraphTree` wholesale as the arrangement authority.** The full
   "composition spine" vision — forme `GraphTree` becomes truth, platen + orrery project
-  it. Pro: the architecturally "complete" model; reconciliation works out of the box.
-  Con: a large reframe that re-homes the live arrangement; far beyond what branch needs;
-  best justified by its own consumer wave, not by branch.
+  it. **CLOSED (2026-06-25).** See the derivation finding below: even in the richest
+  scenario (Linked, auto-deriving graphlets), `GraphTree` adds nothing, because the
+  valuable code that scenario needs (the per-kind derivation) does not exist in forme and
+  would not live in `GraphTree` if it did. C is dominated.
 
-**Recommendation: (B).** It unblocks branch with the least new surface and no duplication,
-and leaves (C) open as a Phase-3 decision if reconciliation / document-groups demand the
-full container. The stub reflects (B).
+**Decision: (B), and C is closed.** B unblocks branch with no duplication, and the
+derivation finding makes C dominated rather than merely deferred. forme stays a **type
+dependency only** (`GraphletRef` / `Spec` / `Kind` / `Binding`, plus the reconciliation
+*data types* if/when needed); `GraphTree` stays unused.
+
+### The derivation finding (2026-06-25) — why C is closed
+
+A grep of forme for any kind dispatch, BFS / neighborhood walk, shortest-path, or selector
+matching found **none**. The 9 `GraphletKind`s are enum tags; `selectors` are opaque
+strings (forme "does not own the relation-selector vocabulary"); nothing matches on the
+kind to compute members. The only `fn derive*` build `GraphTree`'s own topology, not graph
+shapes. So "the full forme model" is a taxonomy + a binding enum + reconciliation *data
+types* + a ~10-line set-diff (`compute_roster_delta`) + tree-bookkeeping over `GraphTree`'s
+own state. The one algorithmically valuable thing for auto-derived graphlets — computing an
+Ego / Component / Corridor from the graph — **is not in it.**
+
+Consequence: a consumer wanting Linked graphlets needs (a) **derivation** (Ego = BFS to
+radius N, Component = the `weakly_connected_components` that already powers fork, selector =
+edge-family filter — all kernel-graph work, where the primitives and the relation
+vocabulary live), (b) **storage** (`GraphletRef`, already reused), (c) **drift
+reconciliation** (the ~10-line diff + the plain `GraphletMemberDelta` / `ReconciliationProposal`
+/ `ReconciliationChoice` types). None of (a)/(b)/(c) needs `GraphTree`. So the full
+capability is reachable by harvesting forme's *types* and the diff logic and writing
+derivation on the kernel graph. The second consumer no longer chooses B vs C; it only
+chooses how much to harvest (open item OQ-2 below).
 
 ---
 
@@ -112,56 +136,115 @@ the anchor's `node_display_label`). `None` on leaves / the primary (hidden via a
 like the crawl chip). Drove headed: the branch window shows the chip + shares the donor's
 graph; a leaf shows none. Branch now reads as distinct from a leaf.
 
-**Slice 2 — lineage accumulation — remaining.** In-window actions populate the branch
-graphlet's roster, so it diverges from the donor while sharing kernel nodes (brief §4.2).
-Open design choice (the **trigger**): node *selection* (most direct "I'm grouping these",
-but transient + scattered across the gloss / orrery / omnibar select sites), node
-*navigation* (a more deliberate "I'm working with this", one focus-change choke point),
-or both. Mechanism: a `ShellCommand::RecordBranchMember { graph, graphlet, node }` pushed
-from the chosen hook when `view.branch_graphlet.is_some()`, handled on `Shell`
-(`SessionGraphlets::add_member` + persist) — the same command seam `BranchNode` uses, so
-no ctx threading.
+**Slice 2 — lineage accumulation — DONE (2026-06-25), driven.** Trigger (Mark's call):
+**navigation**. The nav choke point `sync_orrery` calls `record_branch_nav(member)` for the
+navigated node; on a branch window (`view.branch_graphlet.is_some()`) it pushes
+`ShellCommand::RecordBranchMember { graph, graphlet, node }`, handled on `Shell`
+(`SessionGraphlets::add_member` — dedup'd — + persist) via the same command seam `BranchNode`
+uses (no ctx threading). Unit-tested (`add_member` grows + dedups) and **driven**: navigating
+the branch window to a fresh URL grew its graphlet roster from `[anchor]` to `[anchor,
+new-node]` in the sidecar, while the donor's default graphlet stayed empty — the lineage
+diverges while the new node joins the shared graph.
+
+**Note (focus model):** lineage records the *navigated* node, which is the per-window
+`focused_tile` in workbench mode but the *shared* `Orrery::focused_member` in cartography
+mode. So lineage is cleanly branch-isolated when the branch works in its workbench, but a
+cartography-mode navigation records the shared focus. Tightening that (per-window orrery
+focus) rides with Slice 3 / the per-window-view work; v0 is honest as-is.
 
 **Slice 3 (optional v0) — orrery scope.** Decide whether the branch window's orrery shows
-only the graphlet's members (a filtered cartography projection). Hardest (the orrery is
-pooled + shared); deferrable.
+only the graphlet's members (a filtered cartography projection) + gets per-window focus.
+Hardest (the orrery is pooled + shared); deferrable.
 
 **Done when:** a branch window shows a distinct grouping (Slice 1 ✓) that accumulates its
-own lineage (Slice 2) while node edits still propagate to the donor.
+own lineage (Slice 2 ✓) while node edits still propagate to the donor (✓ — the navigated
+node joins the shared graph). **Met** (modulo the cartography-focus note above).
 
-### Phase 3 — Reconciliation + the richer model (the broader payoff)
+### Phase 3 — Linked / auto-derived graphlets + reconciliation (the richer model)
 
-The features the forme model already specs, brought to the live index — and the point
-where (C) gets re-decided.
+**Decision (Mark, 2026-06-25): yes — we want selectors that track drift.** So Phase 3 is
+in scope (not closed to "richer kinds as plain data"). Per the derivation finding, this is
+built by **harvesting forme's types + the diff and writing derivation on the kernel graph**;
+`GraphTree` is not used.
 
-- Reconciliation: deltas, proposals, the `SaveAsNewFork` choice — adapt forme's
-  `GraphTree`-shaped functions to `SessionGraphlets`, or adopt `GraphTree` if that proves
-  cleaner (the deferred (C) decision).
-- Projection-binding specs + the non-`Session` `GraphletKind`s (Ego, Corridor, Component,
-  Loop, Frontier, Facet, Bridge, WorkbenchCorrespondence).
-- Consumers beyond branch: document-groups, the relational-browse front-end.
-- Rename follow-on: forme's producing functions still carry the old word — `apply_fork`,
-  `detect_fork_on_manual_override`, `ReconciliationChoice::SaveAsNewFork` — rename to the
-  branch vocabulary once they are live (the `Forked` → `Branched` variant rename already
-  landed 2026-06-25).
+- **Derivation (kernel graph).** A `Linked { spec }` graphlet derives its member set from
+  the graph: Ego = BFS to radius N from the anchor; Component = `weakly_connected_components`
+  (the fork primitive); Corridor = a path query; selector match = filter kernel edges by
+  family / sub-kind (the kernel owns the relation vocabulary forme leaves opaque). New code,
+  but small and native to the kernel, which already has the primitives.
+- **Reconciliation.** A ~10-line roster diff (port of `compute_roster_delta`'s body) on
+  `SessionGraphlets`, fed graph-truth from the kernel; the plain `GraphletMemberDelta` /
+  `ReconciliationProposal` / `ReconciliationChoice` types reused from forme (no `GraphTree`).
+  On drift (the graph changed under a Linked graphlet) the host proposes add/remove and the
+  user picks (keep-linked / unlink / save-as-branch / cancel).
+- **Anchors vs members** (open item OQ-2-a): now live. Separate the seed `anchors` (what
+  the derivation runs from) from the derived/accumulated member set (held in our
+  `SessionGraphlets` wrapper, since `GraphletRef` has no members field).
+- **Naming** (open item OQ-2-b): now in scope. Rename forme's `apply_fork` /
+  `detect_fork_on_manual_override` / `ReconciliationChoice::SaveAsNewFork` to the branch
+  vocabulary when this path goes live (the `Forked` → `Branched` variant rename already
+  landed).
+- **Consumers:** branch (a hand-built `Branched` roster, already live) plus the first
+  *Linked* consumer — likely relational-browse, whose bird's-eye neighborhood is a derived
+  Ego/Component graphlet that should update as the crawl grows. Confirm against that plan.
 
-**Done when:** a diverged branch can be reconciled or consolidated, and a second consumer
-(document-groups or relational-browse) reads the same index.
+**Done when:** a `Linked` graphlet derives its members from the kernel graph, reconciles on
+drift through the harvested diff + data types, and relational-browse (or another consumer)
+reads the same index — all without `GraphTree`.
 
 ---
 
-## Open questions
+## Open items (scoped 2026-06-25)
 
-- **OQ-A — the (A)/(B)/(C) structural choice.** Recommend (B); ratify before Phase 1.
-- **OQ-B — where the `GraphletId` rides on a window. RESOLVED (Phase 1):** a
-  `WindowView::branch_graphlet: Option<GraphletId>` field. `None` = the whole-session
-  default graphlet (primary + plain leaves). Secondary windows are ephemeral, so this is
-  live-only; the graphlet itself persists in the sidecar.
-- **OQ-C — persistence format + migration.** A `graphlets.json` sidecar; `GraphletRef`
-  is already `Serialize`, so this is mostly plumbing. No migration (nothing persists
-  graphlets yet).
-- **OQ-D — does a branch window get a thin orrery?** The brief says workbench-only
-  (§4.2); G2 (leaf content) settles the workbench-pane mechanics this rides on.
+**Resolved:**
+
+- **OQ-A — structural choice.** RESOLVED: **(B)**, and **(C) closed** (the derivation
+  finding above). forme is a type dependency only.
+- **OQ-B — where the `GraphletId` rides.** RESOLVED (Phase 1): `WindowView::branch_graphlet:
+  Option<GraphletId>`. `None` = whole-session default. Live-only (secondary windows are
+  ephemeral); the graphlet persists in the sidecar.
+- **OQ-C — persistence format.** RESOLVED: a `graphlets.json` sidecar (`GraphletRef` is
+  `Serialize`). No migration.
+- **OQ-2 — Linked / auto-derived graphlets?** RESOLVED (Mark): **yes**, selectors that
+  track drift. Scoped under [Phase 3](#phase-3--linked--auto-derived-graphlets--reconciliation-the-richer-model);
+  makes the anchors-vs-members split and the forme naming rename live (also Phase 3).
+
+**Open, scoped:**
+
+- **#1 — Per-window focus/selection isolation (the keystone).** The pooled orrery's
+  `selected: HashSet<NodeKey>` is shared across windows; focus derives from it, so in
+  cartography mode a branch's lineage records the *shared* focus (the Slice 2 nuance), and
+  Slice 3 (a branch-scoped orrery) is blocked. **Seam:** mirror the camera. `WindowView`
+  already holds `viewports`, installed into the pooled orrery at ctx build
+  (`install_viewports`) and read back after the pass (`readback_viewports`). Add
+  `WindowView.selections: HashMap<GraphId, HashSet<NodeKey>>`, an `Orrery::selection()` /
+  `set_selection()` pair (twins of `viewport()` / `set_viewport()`), and
+  `install_selections` / `readback_selections` beside the viewport calls. Every selection
+  read happens inside the ctx (after install, before readback), so no read site changes;
+  isolation falls out of the bracket, and focus isolates for free. **Size:** moderate,
+  low-novelty (copies a shipped pattern); risk medium (selection is read widely, but the
+  bracket contains it). **Decisions:** hold selection as `NodeKey` (fine while pooled,
+  stale on evict+reload) vs by url (durable) — `NodeKey` suffices for live isolation,
+  per-window selection persistence is a smaller follow-on; leave transient drags (marquee /
+  drag / orbit) shared for v0. **Leverage:** makes *any* two windows on one graph
+  independent (not just branches), fixes the Slice 2 nuance, unblocks Slice 3. Highest-value
+  engineering item; do first.
+- **#3 — Branch lifecycle on donor delete (G6).** `close_session` already switches away and
+  `move_to_trash`es the session dir, so `graphlets.json` trashes with it (no on-disk
+  orphan). **Missing:** the in-memory `self.graphlets` + `self.orreries` pool entries for
+  the deleted graph are not dropped, and open windows whose `focused_graph` is the deleted
+  graph are not closed (brief §4.2: killing the donor kills the branch). **Seam:** in
+  `close_session`, `self.graphlets.remove(graph)` + orrery eviction + close secondary
+  windows on that graph. **Note:** closing windows on session-delete is a *general*
+  multi-window gap (deleting any session with open windows orphans them), not
+  graphlet-specific — do it with that general handling, not as a one-off.
+- **OQ-D — does a branch window get a thin orrery?** Brief says workbench-only (§4.2); G2
+  (leaf content) settles the workbench-pane mechanics this rides on. Ties into #1 / Slice 3.
+
+**Suggested order:** #1 (keystone) → #3 (with general multi-window session-delete) → Phase 3
+(now that OQ-2 is yes). The tear-out-gesture trailing items (toast, tile-tab leaf origin, G5
+move, G2 leaf content, fork restore-into-switcher) live in the
+[gestures plan](2026-06-24_tearout_gestures_plan.md), independent of this subsystem.
 
 ---
 
@@ -197,3 +280,27 @@ where (C) gets re-decided.
   grouping"). meerkat green. **Remaining for Phase 2:** slice 2, lineage accumulation —
   the branch graphlet grows as you work in the window; the trigger (selection vs
   navigation) is an open design choice recorded under Phase 2 above.
+- **2026-06-25** — **Phase 2 slice 2 (lineage accumulation) done + driven; Phase 2 met.**
+  Trigger = navigation (Mark's call). `sync_orrery` → `record_branch_nav` →
+  `ShellCommand::RecordBranchMember` → `Shell::record_branch_member` →
+  `SessionGraphlets::add_member` (dedup) + persist; factored a shared `graph_session_dir`
+  helper. Unit-tested `add_member` (grow + dedup). Drove headed: branched a node (roster
+  `[anchor]`), navigated the branch window's omnibar to a fresh URL, and the roster grew to
+  `[anchor, new-node]` in the sidecar while the donor's default graphlet stayed empty —
+  lineage diverges, the new node joins the shared graph. meerkat 87 lib / 159 bin green.
+  Surfaced a focus-model nuance (cartography focus is shared, workbench focus is per-window)
+  recorded in Slice 2; v0 is honest as-is. The fiddly multi-window drive needed a direct
+  omnibar click (not the `/` focus shortcut) to land the in-branch navigation.
+- **2026-06-25** — **Decisions + scoping pass (no code).** Read forme's derivation surface:
+  no kind-dispatch / BFS / selector matching exists — the kinds are tags, selectors are
+  opaque, derivation is unbuilt. So **(C) is closed** (the derivation finding above):
+  `GraphTree` adds nothing even for Linked graphlets, since the missing derivation belongs
+  on the kernel graph and forme's reusable value is types + a ~10-line diff. Mark decided
+  **OQ-2 = yes** (selectors that track drift), so Phase 3 is in scope via the harvest path
+  (derivation on the kernel graph + the diff + forme's plain reconciliation types), and the
+  anchors-vs-members split + the forme naming rename go live with it. Scoped the open items:
+  **#1 per-window focus/selection isolation** (the keystone — mirror the camera
+  install/readback pattern; makes any two windows on a graph independent, fixes the Slice 2
+  nuance, unblocks Slice 3) and **#3 branch lifecycle on donor delete** (drop pool entries +
+  close windows on `close_session`; the dir already trashes the sidecar). Suggested order:
+  #1 → #3 → Phase 3.

@@ -79,6 +79,8 @@ impl WindowCtx<'_> {
             // (Node-rep P4: live preview retired.)
             self.ensure_content(&loc);
             self.view.content_location = loc;
+            // The freshly-opened node joins a branch window's lineage too (slice 2).
+            self.record_branch_nav(new_member);
             self.save_session();
             self.view.request_redraw();
             return;
@@ -86,22 +88,44 @@ impl WindowCtx<'_> {
         if loc == self.view.content_location {
             return;
         }
-        match self.nav_target_member() {
+        let navigated = match self.nav_target_member() {
             Some(member) => {
                 self.orrery_mut().navigate_member(member, &loc);
                 self.view.scroll.remove(&member); // a new page starts at the top
+                Some(member)
             }
             None => {
-                self.orrery_mut().visit(&loc);
+                let key = self.orrery_mut().visit(&loc);
+                self.orrery().graph().get_node(key).map(|n| n.id)
             }
-        }
+        };
         // Navigating focuses the target; the orrery shows its snapshot. Opening it live
         // is the pelt path (double-click a node or its card), not an in-orrery live card.
         // (Node-rep P4: live preview retired.)
         self.ensure_content(&loc);
         self.view.content_location = loc;
+        // A branch window's navigation grows its graphlet's lineage (Phase 2 slice 2).
+        if let Some(member) = navigated {
+            self.record_branch_nav(member);
+        }
         self.save_session();
         self.view.request_redraw();
+    }
+
+    /// If this is a tear-out **branch** window, the just-navigated `member` joins the
+    /// branch graphlet's roster (its lineage diverges from the donor while kernel nodes
+    /// stay shared, brief §4.2). Queued as a [`ShellCommand`](super::ShellCommand) so the
+    /// Shell-side graphlet pool + persistence run after the ctx borrow ends; the Shell
+    /// dedups, so revisiting a node is a cheap no-op. A leaf / the primary carries no
+    /// `branch_graphlet`, so this is a no-op there. (Tear-out gestures G3.)
+    fn record_branch_nav(&mut self, member: forme::GraphMemberId) {
+        if let Some(graphlet) = self.view.branch_graphlet {
+            self.commands.push(super::ShellCommand::RecordBranchMember {
+                graph: self.view.focused_graph,
+                graphlet,
+                node: member,
+            });
+        }
     }
 
     /// The node per-node navigation acts on: the focused tile in Tree, the single

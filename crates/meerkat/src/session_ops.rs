@@ -438,19 +438,7 @@ impl super::Shell {
         node: uuid::Uuid,
         from: GraphId,
     ) -> Option<forme::GraphletId> {
-        // The donor session's storage dir (manifests are keyed by session, each carries
-        // its `root_graph_id`). Inlines `WindowCtx::session_for_graph` for the Shell side.
-        let session_dir = self.shared.session.manifests.iter().find_map(|(id, m)| {
-            (m.root_graph_id == from).then(|| {
-                m.storage_path.clone().unwrap_or_else(|| {
-                    self.shared
-                        .session
-                        .mere_root
-                        .join("sessions")
-                        .join(id.as_uuid().to_string())
-                })
-            })
-        })?;
+        let session_dir = self.graph_session_dir(from)?;
         // Load-or-default the donor's graphlet index into the pool, mint the branch,
         // persist. The window carries the returned id.
         let graphlets = self
@@ -467,6 +455,50 @@ impl super::Shell {
             format!("node={node} graphlet={id}"),
         );
         Some(id)
+    }
+
+    /// Grow a branch graphlet's roster (Phase 2 slice 2): the branch window navigated to
+    /// `node`, so it joins graphlet `graphlet`'s lineage in graph `graph`'s index.
+    /// Persists on a real change (dedup'd, so revisits are cheap no-ops). No-op if the
+    /// index or graphlet is gone. (Tear-out gestures G3.)
+    pub(super) fn record_branch_member(
+        &mut self,
+        graph: GraphId,
+        graphlet: forme::GraphletId,
+        node: uuid::Uuid,
+    ) {
+        let Some(session_dir) = self.graph_session_dir(graph) else {
+            return;
+        };
+        if let Some(graphlets) = self.graphlets.get_mut(&graph) {
+            if graphlets.add_member(graphlet, node) {
+                if let Err(err) = graphlets.save(&session_dir) {
+                    tracing::warn!(%err, dir = ?session_dir, "failed to persist the branch member");
+                }
+                self.shared.observability.record_probe(
+                    "tear_out",
+                    "branch-grow",
+                    format!("graphlet={graphlet} node={node}"),
+                );
+            }
+        }
+    }
+
+    /// The storage dir of the session graph `graph` belongs to (manifests are keyed by
+    /// session; each carries its `root_graph_id`). The Shell-side counterpart of
+    /// [`WindowCtx::session_for_graph`], for the graphlet pool ops that run on `Shell`.
+    fn graph_session_dir(&self, graph: GraphId) -> Option<std::path::PathBuf> {
+        self.shared.session.manifests.iter().find_map(|(id, m)| {
+            (m.root_graph_id == graph).then(|| {
+                m.storage_path.clone().unwrap_or_else(|| {
+                    self.shared
+                        .session
+                        .mere_root
+                        .join("sessions")
+                        .join(id.as_uuid().to_string())
+                })
+            })
+        })
     }
 
     /// Switch the active session to `target`: persist the current one, then load the

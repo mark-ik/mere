@@ -111,19 +111,21 @@ windows resolve the same pooled orrery; closing the leaf does not delete the nod
 Done when: a torn leaf window shows the dragged node's live tile, navigates on its own,
 propagates node edits to the donor, and instantiates no orrery of its own.
 
-### G3 — Branch (Shift+drag) — Phase 1 DONE + driven (2026-06-25); Phase 2 pending
+### G3 — Branch (Shift+drag) — Phase 1 + Phase 2 DONE + driven (2026-06-25)
 
 Mint a forme graphlet with `GraphletBinding::Branched { parent_spec, reason: "tearout-branch" }`
 in the donor's graph (brief §4.2); the torn window's leaf carries the donor `GraphId` + the new
 `GraphletId`. Branch + donor share kernel nodes, diverge in the graphlet's lineage facet.
 
-**Status (2026-06-25): Phase 1 of the [graphlet wiring plan](2026-06-25_graphlet_wiring_plan.md)
-landed + driven.** Shift+drag now dispatches `BranchNode` → `Shell::branch_graphlet_from`, which
-mints a persisted `Branched` graphlet anchored on the torn node (in the donor's `SessionGraphlets`
-sidecar) and opens a window on the donor's *same* graph carrying the new `GraphletId`. Verified the
-sidecar round-trips a restart. **Phase 1 caveat:** the branch window is visually a leaf (it shares
-the donor orrery); the graphlet is real + persisted but does not yet *scope* anything. The visible
-scope + lineage is the graphlet-wiring plan's Phase 2. The scouting that established the prerequisite
+**Status (2026-06-25): Phases 1 + 2 of the [graphlet wiring plan](2026-06-25_graphlet_wiring_plan.md)
+landed + driven.** Shift+drag dispatches `BranchNode` → `Shell::branch_graphlet_from`, which mints
+a persisted `Branched` graphlet anchored on the torn node (in the donor's `SessionGraphlets`
+sidecar, round-trips a restart) and opens a window on the donor's *same* graph carrying the new
+`GraphletId`. The branch window **reads as distinct** (an accent `⎇ <anchor>` chip) and
+**accumulates its own lineage**: navigating in it grows the graphlet's roster (via `sync_orrery` →
+`RecordBranchMember`), diverging from the donor while the new node joins the shared graph. Branch is
+no longer a leaf-stub or a bare graphlet. Remaining graphlet work (reconciliation, orrery scope +
+per-window focus) is Phase 3 / Slice 3 of that plan. The scouting that established the prerequisite
 is preserved below.
 
 **Substrate scouted (2026-06-25).** The prior "grep found neither" note was a wrong path — forme
@@ -214,6 +216,37 @@ lose their node** (the leaf window closes or shows a dismissible "donor deleted"
 the `session.cascaded_branch_delete` diagnostic.
 
 Done when: killing a donor with a live leaf + branch + fork applies the three outcomes.
+
+**Implementation seam (2026-06-25):** the branch-die half is scoped as **#3** in the
+[graphlet wiring plan](2026-06-25_graphlet_wiring_plan.md) — `close_session` already trashes
+the session dir (so `graphlets.json` trashes with it), so the work is dropping the in-memory
+`graphlets` / `orreries` pool entries and closing windows on the deleted graph. Closing
+windows on session-delete is a *general* multi-window gap (not branch-specific); do this with
+that general handling.
+
+### Trailing tear-out items — scope (2026-06-25)
+
+The remaining gesture work, with seams and rough size. Independent of the graphlet subsystem
+(whose own open items #1 focus-isolation and #3 donor-delete live in the graphlet plan).
+
+- **Ambiguous-drag toast (G1).** A no-modifier orrery-node drag pops a toast offering Branch /
+  Fork / Keep-as-leaf, escalating the leaf in place. New chrome element (same shape as the
+  branch chip + context menu already shipped). Also the discoverability path for the
+  modifiers. Moderate.
+- **Tile-tab no-modifier-leaf origin (G1).** The second drag origin: a workbench tile-tab
+  drag-out is a plain leaf. Hook platen's tile-tab drag into the tear path. Moderate.
+- **G2 leaf content.** A leaf opens a single-orrery frame today; the brief wants a `Workbench`
+  pane on the donor's pooled orrery with no orrery pane of its own. Moderate, and worth
+  pulling early: both leaf *and* branch want workbench-only windows, so it underpins the
+  graphlet plan's #1 payoff (per-window focus on a workbench window).
+- **G5 move-vs-copy.** The cross-graph drag always copies; add move (re-point the binding,
+  release the source). OQ-2 default copy, move on a modifier. Small-moderate.
+- **Fork session restore-into-switcher (G4 refinement).** Fork sessions persist but are not
+  re-listed in the switcher on restart. Small (add to the restore list).
+
+Rough order: **G2 leaf content** first (underpins the workbench-only window model), then the
+**toast** + **tile-tab origin** (the G1 discoverability + second origin), then **G5 move** and
+the **fork restore** polish. These are schedulable independently of the graphlet plan's #1/#3.
 
 ### Related — N-orrery-elements seam (rendering, not a gesture)
 
@@ -342,3 +375,10 @@ v0 (palette parent link suffices); auto-consolidation policy disabled by default
   seed, not the live layout); fixed with `Orrery::commit_positions_to_graph` (bake live positions
   before the clone). meerkat 81 lib / 153 bin + kernel green. Branch is a leaf stub pending its
   forme graphlet op (G3 / OQ-7); the toast + tile-tab leaf origin + G5 move variant remain.
+- **2026-06-25** — **G3 branch fully live (Phases 1+2 via the graphlet wiring plan); trailing
+  items scoped.** Branch now mints + persists a `Branched` graphlet, shows a `⎇ <anchor>` chip,
+  and accumulates lineage on navigation (driven). Added a scoped "Trailing tear-out items"
+  section (toast, tile-tab leaf origin, G2 leaf content, G5 move, fork restore-into-switcher)
+  with seams + a rough order, and pointed G6's branch-die half at the graphlet plan's #3. The
+  graphlet subsystem's own open items (#1 per-window focus isolation, #3 donor-delete) live in
+  the [graphlet wiring plan](2026-06-25_graphlet_wiring_plan.md).

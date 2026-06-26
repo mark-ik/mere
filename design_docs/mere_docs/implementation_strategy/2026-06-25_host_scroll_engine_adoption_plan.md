@@ -56,8 +56,30 @@ bookkeeping the engine now owns, and re-derives engine geometry in several place
   palette / context-menu / submenu lists.
 - Done: render no longer recomputes a scroll target for the popup lists; the engine centers the active row.
 
+**P4 — consolidate the scrollbar thumb on serval's painter (keep the gray rectangle).**
+- The scrollbar thumb (the "gray rectangle") is serval's *own* design: serval-render's `push_scrollbars`
+  ([serval/.../serval-render/src/render.rs:188](../../../../serval/components/serval-render/src/render.rs))
+  paints a translucent-grey, 8px-wide right-edge thumb (`SCROLLBAR_COLOR` / `SCROLLBAR_WIDTH`). meerkat
+  keeps a **copy** in its render glue ([serval_render.rs:258](../../../crates/meerkat/src/serval_render.rs)),
+  pulled from pelt-live by the glue-extraction plan. meerkat's copy is the *better* one: it places the
+  thumb at the **absolute** origin via `accumulate_origins`, fixing the nested-in-positioned-ancestor case
+  serval's own docstring explicitly defers ("nested scrollers would need origin accumulation").
+- serval: upstream meerkat's origin-accumulation into serval-render's `push_scrollbars` (reusing the P1
+  `absolute_rect` accessor), so serval's scrollbar is correct for nested scrollers.
+- meerkat: drop the host copy; serval's painter draws the thumb (meerkat already renders through that
+  path). The gray rectangle is preserved, now single-sourced and engine-owned.
+- Later: grow toward CSS scrollbar styling (`scrollbar-color` / `scrollbar-width`) and a horizontal
+  scrollbar, now that the thumb lives in the engine.
+- Done: one `push_scrollbars` (serval's, nested-correct); meerkat no longer paints scrollbars; the look is
+  unchanged.
+
 ## Findings
 
+- The "gray rectangle" scrollbar is **not** a host invention: serval-render already paints it
+  (`SCROLLBAR_COLOR` translucent grey, 8px, right edge). meerkat duplicated it in its glue and *improved*
+  it (absolute origin for nested scrollers). So adopting the engine's scroll **keeps** the look — it
+  consolidates the two copies onto serval's engine-owned painter (upstreaming meerkat's fix), rather than
+  deleting any visual. The host's version is not "worse than serval's"; it is serval's design with the fix.
 - The `chrome_scroll: ScrollOffsets` seam is the host's current way to feed offsets to the renderer; the
   engine's `element_scroll` retained map is the engine-side equivalent. P2 collapses the two.
 - Risk surfaced by the submenu review (deferred there, addressed here): the submenu anchor and the menu

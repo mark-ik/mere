@@ -932,6 +932,9 @@ impl Shell {
                         }
                     }
                 }
+                super::ShellCommand::RecordBranchMember { graph, graphlet, node } => {
+                    self.record_branch_member(graph, graphlet, node)
+                }
                 super::ShellCommand::CloseWindow(id) => self.close_window(id),
                 super::ShellCommand::CreateSession => {
                     self.create_session();

@@ -905,6 +905,15 @@ enum ShellCommand {
     /// graphlet pool + persistence) and the event loop (the window). The donor is
     /// untouched. (Tear-out gestures G3; graphlet wiring Phase 1.)
     BranchNode { node: uuid::Uuid, from: GraphId },
+    /// Grow a branch graphlet's roster (Phase 2 slice 2): the branch window navigated to
+    /// `node`, so it joins the branch's lineage, diverging from the donor while sharing
+    /// kernel nodes. Pushed from `sync_orrery` when the window carries a `branch_graphlet`;
+    /// handled on `Shell` (the graphlet pool + persistence). (Tear-out gestures G3.)
+    RecordBranchMember {
+        graph: GraphId,
+        graphlet: forme::GraphletId,
+        node: uuid::Uuid,
+    },
     /// Close window `id` and drop its view. The primary is exempt — its close saves
     /// the session and exits the app; a secondary just releases its surface. (MW3.)
     #[allow(dead_code)] // queued by the close fork once leaf windows can self-close (MW4)

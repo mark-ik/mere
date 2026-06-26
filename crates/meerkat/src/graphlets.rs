@@ -168,4 +168,18 @@ mod tests {
         // It is distinct from the default session graphlet.
         assert_eq!(g.graphlets().len(), 2);
     }
+
+    #[test]
+    fn add_member_grows_the_roster_and_dedups() {
+        let anchor = uuid::Uuid::from_u128(0x42);
+        let mut g = SessionGraphlets::new().with_default_session();
+        let id = g.record_branch(anchor, default_spec_for(anchor));
+        assert!(g.get(id).unwrap().anchors.contains(&anchor), "seeded with its anchor");
+
+        let visited = uuid::Uuid::from_u128(0x99);
+        assert!(g.add_member(id, visited), "a newly-navigated node is added");
+        assert!(!g.add_member(id, visited), "a revisit is a dedup'd no-op");
+        assert!(!g.add_member(id, anchor), "the anchor is already present");
+        assert_eq!(g.get(id).unwrap().anchors.len(), 2, "anchor + the one visited node");
+    }
 }
