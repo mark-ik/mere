@@ -229,6 +229,12 @@ pub(crate) struct WindowView {
     /// engine's retained `element_scroll` now, driven by `scroll_at`, so they carry no
     /// host-side offset field. This is the per-node *content* document scroll only.)
     pub(crate) scroll: HashMap<GraphMemberId, f32>,
+    /// Sticky goal column for soft-wrap ArrowUp/ArrowDown in the knot-editor textarea:
+    /// `(caret byte the last vertical move left the caret at, goal x in layout space)`.
+    /// Reused only while the caret is still at that byte — an uninterrupted run of
+    /// up/down presses — so any edit / click / horizontal move reseeds it. (Soft-wrap
+    /// caret nav; the per-buffer hard-line goal lives in `TextInput` instead.)
+    pub(crate) soft_wrap_goal: Option<(usize, f32)>,
     /// The last left-button release (time + window pos), for double-click detection.
     pub(crate) last_left_release: Option<(Instant, (f32, f32))>,
     /// Whether a left-button gesture inside the workbench pane is in flight (press →
@@ -1166,6 +1172,7 @@ impl WindowView {
             window_controls_tex: Default::default(),
             divider_tex: Default::default(),
             scroll: Default::default(),
+            soft_wrap_goal: None,
             last_left_release: Default::default(),
             workbench_gesture: false,
             frame_divider_drag: Default::default(),

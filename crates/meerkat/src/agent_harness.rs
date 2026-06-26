@@ -1069,6 +1069,21 @@ mod tests {
         assert_eq!(state.omnibar.selected_text(), "hello world");
     }
 
+    /// Soft-wrap ArrowUp/ArrowDown only claims the key for the focused knot-editor
+    /// textarea; with nothing or a single-line field (the omnibar) focused it declines,
+    /// so suggestion nav / other-field moves route normally. Guards the interception
+    /// against hijacking every field's Up/Down. (Soft-wrap caret nav.)
+    #[test]
+    fn soft_wrap_nav_declines_outside_the_knot_editor() {
+        let mut app = test_app();
+        let mut wc = app.ctx();
+        wc.view.runner.set_focus(None);
+        assert!(!wc.soft_wrap_nav(-1, false), "no focus: soft-wrap nav declines");
+        let omnibar = wc.input_under_class("toolbar").expect("the omnibar input exists");
+        wc.view.runner.set_focus(Some(omnibar));
+        assert!(!wc.soft_wrap_nav(1, false), "single-line omnibar: soft-wrap nav declines");
+    }
+
     #[test]
     fn omnibar_right_arrow_accepts_the_ghost_completion() {
         // The driven half of ghost autocomplete: with `>ros` typed and the omnibar

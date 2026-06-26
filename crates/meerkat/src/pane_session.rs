@@ -209,15 +209,18 @@ impl PaneSession {
 
     /// The caret byte one visual line up (`delta < 0`) or down (`delta > 0`) from
     /// `byte` within `node`'s retained text layout, honouring soft-wrap rows — for
-    /// ArrowUp / ArrowDown in a multi-line (textarea) field. `None` when the node
-    /// carries no laid-out text.
+    /// ArrowUp / ArrowDown in a multi-line (textarea) field, with a sticky goal column.
+    /// Pass `goal_x` `None` to seed it from the caret, or the previous call's returned
+    /// value to keep the column across a run; returns `(new_byte, goal_x)`. `None` when
+    /// the node carries no laid-out text.
     pub(crate) fn caret_byte_vertical(
         &self,
         node: NodeId,
         byte: usize,
         delta: isize,
-    ) -> Option<usize> {
-        self.layout.caret_byte_vertical::<ScriptedDom>(node, byte, delta)
+        goal_x: Option<f32>,
+    ) -> Option<(usize, f32)> {
+        self.layout.caret_byte_vertical::<ScriptedDom>(node, byte, delta, goal_x)
     }
 
     /// The accumulated CSS `translate` of `node` (its own plus its ancestors'), which the

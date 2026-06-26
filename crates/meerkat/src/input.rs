@@ -2023,6 +2023,23 @@ impl WindowCtx<'_> {
             self.on_find_key(key);
             return;
         }
+        // Soft-wrap visual-line nav for the focused knot-editor textarea: ArrowUp/ArrowDown
+        // move by parley's wrapped rows (with a sticky goal column) instead of the buffer
+        // handler's hard-`\n`-line move, before the field handlers route the key. A no-op for
+        // any other focus, so omnibar suggestion nav / comms field moves fall through. (Soft-
+        // wrap caret nav.)
+        if let WinitKey::Named(named) = key {
+            let delta = match named {
+                WinitNamedKey::ArrowUp => Some(-1),
+                WinitNamedKey::ArrowDown => Some(1),
+                _ => None,
+            };
+            if let Some(delta) = delta {
+                if self.soft_wrap_nav(delta, self.view.modifiers.shift) {
+                    return;
+                }
+            }
+        }
         // Route the key to whichever field owns the caret. Each focusable field has
         // its own handler, invoked only while it holds focus — so no field's logic
         // (the omnibar's suggestion refresh, its Enter-submits) leaks onto another.

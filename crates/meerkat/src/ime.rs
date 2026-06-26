@@ -107,6 +107,55 @@ impl WindowCtx<'_> {
         });
     }
 
+    /// Set the focused field's caret to char-boundary byte `byte` (clamped); `extend` grows
+    /// the selection. The write half of [`caret_field`](Self::caret_field), routed through the
+    /// same `chrome_update` mapping as [`set_focused_preedit`](Self::set_focused_preedit).
+    fn set_focused_caret_byte(&mut self, byte: usize, extend: bool) {
+        let Some(kind) = self.focused_field_kind() else { return };
+        self.view.chrome_update(move |c| {
+            let field = match kind {
+                FocusedField::Omnibar => &mut c.omnibar,
+                FocusedField::Palette => &mut c.palette_input,
+                FocusedField::CommsTo => &mut c.comms_new_to,
+                FocusedField::CommsBody => &mut c.comms_new_body,
+                FocusedField::CommsDraft => &mut c.comms_draft,
+                FocusedField::KnotEditor => &mut c.knot_source,
+            };
+            field.set_caret_byte(byte, extend);
+        });
+    }
+
+    /// Soft-wrap ArrowUp (`delta = -1`) / ArrowDown (`delta = +1`) for the focused knot-editor
+    /// textarea: move the caret one *visual* row (parley's wrapped rows) via the chrome session's
+    /// retained layout, keeping a sticky goal column — instead of the buffer handler's hard-`\n`
+    /// move (which jumps a whole wrapped paragraph). `extend` grows the selection. Returns whether
+    /// it handled the key: `false` (so the caller routes it normally) unless the knot editor holds
+    /// focus and its layout knows the caret's row.
+    ///
+    /// The goal x is reused only across an *uninterrupted run* — the caret still at the byte the
+    /// last vertical move left it. Any edit / click / horizontal move changes the byte, so the
+    /// goal reseeds from the caret's current x (no scattered resets needed). (Soft-wrap caret nav.)
+    pub(super) fn soft_wrap_nav(&mut self, delta: isize, extend: bool) -> bool {
+        if !matches!(self.focused_field_kind(), Some(FocusedField::KnotEditor)) {
+            return false;
+        }
+        let Some(node) = self.view.runner.focus() else { return false };
+        let caret_byte = self.caret_field(node).caret_byte_in_render();
+        let goal = match self.view.soft_wrap_goal {
+            Some((last_byte, gx)) if last_byte == caret_byte => Some(gx),
+            _ => None,
+        };
+        let moved = {
+            let Some(session) = self.view.chrome_session.as_ref() else { return false };
+            session.caret_byte_vertical(node, caret_byte, delta, goal)
+        };
+        let Some((new_byte, goal_x)) = moved else { return false };
+        self.view.soft_wrap_goal = Some((new_byte, goal_x));
+        self.set_focused_caret_byte(new_byte, extend);
+        self.view.request_redraw();
+        true
+    }
+
     /// Point the IME candidate window at the focused field's caret via the chrome
     /// session's [`caret_rect`](crate::pane_session::PaneSession::caret_rect) — the
     /// same rect the painted caret uses, so the popup sits exactly under it. No-op
