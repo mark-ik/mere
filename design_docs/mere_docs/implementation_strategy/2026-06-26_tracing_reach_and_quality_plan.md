@@ -140,13 +140,20 @@ concurrent-commit collision; the change is intact.)
 
 ### T2 - Actor substrate instrumentation (highest value)
 
-- Instrument `armillary::actor` (spawn, run-loop entry, per-command handling) and the content /
-  fetch / sync / comms actor call sites with `started -> succeeded | failed` spans carrying an op
-  id and timing, per the 06-08 plan's own convention.
-- Register the matching `meerkat.actor.*` (or component-owned) channels with `Structured` schemas.
+- **Substrate lifecycle span: DONE 2026-06-26** (`armillary` `61c1bf5`). `spawn` delegates to a new
+  `spawn_named` (+ `spawn_named_on`) that wraps the run loop in an `info` `armillary` lifecycle span
+  (`actor = name`) bracketed by `actor started` / `actor finished` (`lifetime_ms`). Every actor
+  (fetch/sync/comms/content/crawl/find_worker/community-lane) now reports its wall-clock lifetime
+  with **zero call-site changes** (generic name `"actor"` by default).
+- **Pending** (touches meerkat hot files; deferred until they settle): give each actor a specific
+  name at its `spawn`->`spawn_named` call site, and add per-operation `started -> succeeded | failed`
+  spans with an op id + the error chain inside the content/fetch/sync/comms `run` loops (the
+  per-command semantics armillary can't see). Register the matching `meerkat.actor.*` channels with
+  `Structured` schemas.
 
 Done when an actor fault shows in Apparatus with the op id, elapsed time, and error chain, sourced
-from the actor itself rather than inferred from an inbox message.
+from the actor itself rather than inferred from an inbox message. (Substrate half lands the lifetime;
+the call-site half lands the per-operation detail.)
 
 ### T3 - Engine + content passes
 
@@ -231,3 +238,13 @@ component the later slices instrument.
   fields once they emit. 2 tests; 167 bin + 89 lib green. The `&'static str -> Cow` ripple gotcha
   and open decision #3 are therefore moot. Landed inside `ac43edd` (a concurrent broad commit swept
   the staged file into Mark's browse-trace commit; the change is intact). Next: T2 (actor substrate).
+- 2026-06-26: **T2 substrate half landed** (`armillary` `61c1bf5`). `armillary::spawn`/`spawn_on`
+  delegate to span-wrapped `spawn_named`/`spawn_named_on`; every actor now emits an `info` lifecycle
+  span + `actor started`/`actor finished` (`lifetime_ms`) on target `armillary` (which T1's
+  broadened bridge captures), with no call-site change. `tracing` is armillary's first dep
+  (host-neutral facade). 1 new test; 8 armillary green. Committed cleanly via `--only` (no sweep).
+  The call-site half (specific names + per-operation `started->succeeded|failed` + op id + error
+  chain in the content/fetch/sync/comms loops) is deferred while meerkat is chrome-hot under Mark's
+  concurrent browse-trace work (meerkat is currently red on his mid-edit `TraceEvent.candidates`,
+  unrelated to this change). Next: the call-site half once meerkat settles, or T3 (engine passes) on
+  another leaf.
