@@ -1,0 +1,17 @@
+[package]
+name = "glossary"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Graph digest projections for the Mere browser — pure Graph -> human-facing view (djot outline, metrics)."
+documentation = "https://docs.rs/glossary"
+readme = "README.md"
+keywords = ["graph", "mere", "outline", "djot", "metrics"]
+categories = ["text-processing", "visualization"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+kernel.workspace = true

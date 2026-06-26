@@ -8,7 +8,8 @@
 //! tiling model into a subtree of AccessKit nodes for `uxtree`.
 //!
 //! See the crate README for the role / id scheme. The host pairs this subtree with
-//! a sibling `mere-orrery` subtree for graph content, `gloss` for peripheral strips,
+//! a sibling orrery a11y subtree for graph content (host-side `orrery_a11y_tree` now),
+//! `gloss` for peripheral strips,
 //! etc., merging them under a single application-root node.
 //!
 //! v1 projects **structure** only: a workbench root, a `Group` per slot, a `Tab`

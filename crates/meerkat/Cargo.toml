@@ -102,8 +102,6 @@ serval-winit-host = { git = "https://github.com/mark-ik/serval.git", branch = "m
 # content-root below the chrome band; the `orrery` bin is the same `Orrery` on
 # its own window. (Modular integration plan, S1.)
 orrery.workspace = true
-# Domain a11y projection for the graph/orrery content root.
-mere-orrery.workspace = true
 
 # The content-card pipeline: a focused node's media as a document. inker supplies
 # the portable EngineDocument model; document-canvas lays it out (parley) and,

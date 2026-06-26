@@ -38,8 +38,8 @@
 //!   goes). Platen sees canvases as opaque renderable units.
 //! - **Rendering** — that's the host's job: `platen-view` flex DOM through
 //!   serval's layout, presented by netrender.
-//! - **A11y projection** — that's mere-domain (`mere-orrery`,
-//!   `frame`, `gloss`, `apparatus`) → uxtree.
+//! - **A11y projection** — that's mere-domain (`frame`, `gloss`, `apparatus`)
+//!   → uxtree; the orrery's a11y is host-side now (meerkat `orrery_a11y_tree`).
 //!
 //! ## Status
 //!

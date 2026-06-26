@@ -9,10 +9,10 @@ members = [
     "crates/orrery/gyre",
     "crates/orrery/cartography",
     "crates/orrery/arrangements",
+    "crates/graph/glossary",
     "crates/graph/graph-kernel",
     "crates/graph/linked-data",
     "crates/graph/node-lineage",
-    "crates/orrery/mere-orrery",
     "crates/shell/chrome",
     "crates/shell/comms",
     "crates/shell/frame",
@@ -96,8 +96,8 @@ linked-data = { path = "crates/graph/linked-data" }
 kernel = { path = "crates/graph/graph-kernel" }
 # The orrery host content-root (was `orrery-host`); takes the bare `orrery` name.
 orrery = { path = "crates/orrery/orrery" }
-# The orrery a11y/uxtree projection (domain layer) — `mere-orrery`.
-mere-orrery = { path = "crates/orrery/mere-orrery" }
+# Graph digest projections (djot outline, metrics) — `glossary` (was `mere-orrery`).
+glossary = { path = "crates/graph/glossary" }
 
 # The actor-kernel runtime (host-neutral): the !Send host-kernel boundary + the
 # Send actor harness the constellation is built on.
