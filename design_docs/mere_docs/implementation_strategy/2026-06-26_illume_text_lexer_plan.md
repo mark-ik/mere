@@ -1,11 +1,13 @@
 # Illume: the text lexer / highlighter, its tinct + serval pairing, and the omnibar legibility goal
 
 **Date**: 2026-06-26
-**Status**: Points 1-6 done and headed-verified (highlighting renders in the editor and
-the omnibar at runtime); only point 7 (extract illume to a sibling repo, the tinct rename,
-publish) remains, held until the API settles. Captures the decisions and the build of the
-illume promotion across the 2026-06-26 session: the knot editor's highlight core promoted
-to a standalone sibling crate (**illume**), paired with tincture (publishing as **tinct**)
+**Status**: Points 1-6 done and headed-verified. Point 7 part-shipped 2026-06-27:
+**tinct 0.1.0 and illume 0.0.1 are live on crates.io**, the github repo renamed
+tincture → tinct, mere sourcing tinct from crates.io via a `package` alias. Only illume's
+extraction to its own sibling repo (and a stable release past the 0.0.1 name-reserve)
+remains, held until the API settles. Captures the decisions and the build of the illume
+promotion across the 2026-06-26 / 27 sessions: the knot editor's highlight core promoted
+to a standalone sibling crate (**illume**), paired with tincture (published as **tinct**)
 for themed colours and serval's styled field for rendering, aimed at making mere/meerkat
 operable and legible from the omnibar.
 
@@ -87,13 +89,15 @@ illume's first non-editor consumer.
 ## Naming
 
 - **illume**: the lexer/highlighter crate. Chosen 2026-06-26 (the poetic verb, to
-  illuminate). `illume` is **available** on crates.io (verified 2026-06-26), so the name is
-  claimable at publish. The `limn` and tincture "illuminated manuscript" pairing was the
-  runner-up (`limn` is held by a dead 2017 placeholder).
+  illuminate). **Published 0.0.1** on crates.io (2026-06-27, a name-reserve straight from
+  the workspace; the 0.0.x signals the API is still moving). The `limn` and tincture
+  "illuminated manuscript" pairing was the runner-up (`limn` is held by a dead 2017
+  placeholder).
 - **tinct**: tincture's published name. `tincture` is already taken on crates.io (a
-  different OKLCH colour crate, 1.0.0), so tinct is necessary, not just shorter. It is a
-  path dep today, so the rename (package name + Mere's `register-theme` + Woodshed's
-  `audio_widgets`) is a small coordinated pass deferred to publish-prep.
+  different OKLCH colour crate, 1.0.0), so tinct was necessary, not just shorter.
+  **Published 0.1.0** on crates.io (2026-06-27). The rename turned out mere-only (Woodshed
+  doesn't consume it after all); mere sources tinct from crates.io via a `package = "tinct"`
+  alias, so every `use tincture::` and `tincture.workspace` stayed unchanged.
 
 ## Build sequence (the point-by-point)
 
@@ -115,10 +119,11 @@ illume's first non-editor consumer.
 6. **#3 — DONE** (mere `e271adc`). `KnotEditor` → `KnotReadout`, a stateless deriver
    (registry + engine, methods over text; the host's buffer is the single source), so the
    model is not an orphaned second copy of the text.
-7. **Promotion (the only remaining point)**: extract illume to a sibling repo, do the
-   tinct rename and the consumer updates, publish. Both names are free on crates.io
-   (illume and tinct, verified 2026-06-26). Pressure-vessel graduation, held until the API
-   settles.
+7. **Promotion — PART-SHIPPED** (2026-06-27). tinct renamed + **published 0.1.0**; the
+   github repo renamed tincture → tinct; mere sources tinct from crates.io via the
+   `package = "tinct"` alias (no src churn — the Woodshed consumer turned out not to exist).
+   illume **published 0.0.1** as a name-reserve straight from the workspace. Remaining:
+   illume's extraction to its own sibling repo + a stable release once the API settles.
 
 ## Decisions
 
@@ -252,3 +257,16 @@ illume's first non-editor consumer.
   accent-blue focus ring for any focused node, so the missing feedback in the harness
   shots points to the simulated click not focusing the field rather than to invisible
   feedback; a real-mouse check distinguishes a harness limit from a click-to-focus bug.
+- **2026-06-27, tinct + illume published (point 7, partial).** Shipped the publish half of
+  point 7. tinct: renamed the package (tinct repo `cb33adc`), fixed the doctest / README
+  refs, **published tinct 0.1.0** to crates.io, renamed the github repo tincture → tinct,
+  and switched mere's dep to the crates.io crate via
+  `tincture = { package = "tinct", version = "0.1" }` (the alias keeps every `use tincture::`
+  working — register-theme build-verified against it, and the published crate shipped
+  `src/syntax.rs` so the `SyntaxRole` consumer still resolves). The rename was mere-only:
+  Woodshed carries no tincture dep despite the README note. illume: **published illume
+  0.0.1** as a name-reserve straight from the workspace (no extraction yet), claiming the
+  scarce name with a 0.0.x that signals the API is still moving. Deferred: illume's
+  extraction to its own sibling repo + a stable (0.1) release, both held until the API
+  settles. Cosmetic loose end: the local checkout is still `repos/tincture` (crate + remote
+  are tinct); rename the dir whenever convenient.
