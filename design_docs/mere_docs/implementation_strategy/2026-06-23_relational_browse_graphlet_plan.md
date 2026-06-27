@@ -349,6 +349,14 @@ from scratch.
 
 ## Open questions
 
+- **Graphlet integration (deferred).** This plan materializes a neighborhood as
+  **real kernel nodes** and does not use the forme graphlet mechanism (the "graphlet"
+  in the title is colloquial). Whether a browse should also **mint a Linked
+  Ego/Component graphlet** scoping those nodes (so the neighborhood is a navigable,
+  drift-tracking scope, re-readable by relation family, with the graphlet **Frontier
+  kind = this plan's candidate set / "real negatives in context"**) is an open
+  decision recorded as ruling 7 in the
+  [scope model reconciliation](../design/2026-06-27_scope_model_reconciliation.md).
 - **Trace granularity for LoRA-readiness.** Exactly which fields a curation event
   must carry (candidate set, decision, dwell, the relational edges) to be
   distillable later without an after-the-fact labeling pass. Re-deriving the

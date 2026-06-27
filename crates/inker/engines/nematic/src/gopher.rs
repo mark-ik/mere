@@ -35,6 +35,7 @@
 //! - RFC 1436 (The Internet Gopher Protocol)
 //! - RFC 4266 (gopher URI scheme)
 
+use errand::parse::gopher::{parse as parse_gopher, GopherKind};
 use inker::{
     DocumentBlock, DocumentProvenance, DocumentTrustState, Engine, EngineDocument, EngineError,
     EngineInput, InlineSpan,
@@ -64,27 +65,21 @@ impl Engine for GopherEngine {
     }
 
     fn render(&self, input: &EngineInput) -> Result<EngineDocument, EngineError> {
+        // errand parses the RFC 1436 menu into typed items (with synthesised URLs);
+        // nematic folds info/error runs into paragraphs and resources into links.
         let mut blocks: Vec<DocumentBlock> = Vec::new();
         let mut info_run: Vec<String> = Vec::new();
 
-        for line in input.body.lines() {
-            if line == "." {
-                // RFC 1436 terminator.
-                break;
-            }
-            if line.is_empty() {
-                continue;
-            }
-
-            let Some(item) = parse_line(line) else {
-                continue;
-            };
-
-            match item {
-                Item::Info(text) => info_run.push(text),
-                Item::Resource { display, url } => {
-                    flush_info(&mut info_run, &mut blocks);
-                    blocks.push(link_paragraph(display, url));
+        for item in parse_gopher(&input.body) {
+            match item.kind {
+                GopherKind::Info => info_run.push(item.display),
+                GopherKind::Error => info_run.push(format!("[error] {}", item.display)),
+                _ => {
+                    // Every non-info/error item carries a URL.
+                    if let Some(url) = item.url {
+                        flush_info(&mut info_run, &mut blocks);
+                        blocks.push(link_paragraph(item.display, url));
+                    }
                 }
             }
         }
@@ -104,60 +99,6 @@ impl Engine for GopherEngine {
             blocks,
         })
     }
-}
-
-enum Item {
-    Info(String),
-    Resource { display: String, url: String },
-}
-
-fn parse_line(line: &str) -> Option<Item> {
-    let mut chars = line.chars();
-    let type_char = chars.next()?;
-    let rest = chars.as_str();
-
-    let mut parts = rest.splitn(4, '\t');
-    let display = parts.next()?.to_string();
-    let selector = parts.next().unwrap_or("");
-    let host = parts.next().unwrap_or("");
-    let port = parts.next().unwrap_or("70");
-
-    match type_char {
-        'i' => Some(Item::Info(display)),
-        '3' => Some(Item::Info(format!("[error] {display}"))),
-        'h' => {
-            // URL items: selector is typically "URL:https://..." or
-            // "URL:gemini://...". Strip the prefix; if the selector doesn't
-            // carry a usable URL, skip the line.
-            let url = selector.strip_prefix("URL:").unwrap_or(selector).trim();
-            if url.is_empty() {
-                return None;
-            }
-            Some(Item::Resource {
-                display,
-                url: url.to_string(),
-            })
-        }
-        _ => {
-            if host.is_empty() {
-                return None;
-            }
-            let url = synthesise_gopher_url(type_char, host, port, selector);
-            Some(Item::Resource { display, url })
-        }
-    }
-}
-
-fn synthesise_gopher_url(type_char: char, host: &str, port: &str, selector: &str) -> String {
-    let port_part = if port.is_empty() || port == "70" {
-        String::new()
-    } else {
-        format!(":{port}")
-    };
-    // RFC 4266: gopher-path = <gophertype><selector>. The type character is
-    // the first path segment, immediately followed by the selector
-    // (selectors may already begin with `/`).
-    format!("gopher://{host}{port_part}/{type_char}{selector}")
 }
 
 fn flush_info(info_run: &mut Vec<String>, blocks: &mut Vec<DocumentBlock>) {

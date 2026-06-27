@@ -367,10 +367,13 @@ plain data types, and a consumer reads the same index — all without `GraphTree
 
 **Handed off (not this plan's to finish):**
 
-- **Relational-browse consumer** — the bird's-eye crawl neighborhood as a Linked Ego/Component
-  that grows with the crawl. Its own plan:
-  [relational-browse graphlet plan](2026-06-23_relational_browse_graphlet_plan.md). The index it
-  reads is now live, so it is unblocked.
+- **Relational-browse consumer (potential, not wired)** — the bird's-eye crawl neighborhood
+  *could* be a Linked Ego/Component that grows with the crawl, but the
+  [relational-browse plan](2026-06-23_relational_browse_graphlet_plan.md) as written
+  materializes **real nodes** and does not use the graphlet mechanism (its "graphlet" is
+  colloquial). Making a browse *mint* a Linked graphlet is an open decision (ruling 7 in the
+  [scope model reconciliation](../design/2026-06-27_scope_model_reconciliation.md)); the index
+  is live, so it is unblocked when chosen.
 - **OQ-D (thin orrery for a branch window)** — workbench-pane mechanics, couples to G2 (leaf
   content) in the [gestures plan](2026-06-24_tearout_gestures_plan.md).
 

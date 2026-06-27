@@ -268,11 +268,13 @@ The cards are the current arc; gloss is the next, and #5 staging feeds it.
 
 ## 8. Open questions
 
-- **Where latent graphlets live** — gloss-owned graphlet store vs `forme`
-  `GraphletRef` vs a `cartography` projection-spec list. (This is the card-plan
-  §8 / #5 open call, now centralized here. Lean: reuse `forme` graphlets +
-  cartography projection specs rather than a new store, so gloss reads existing
-  structure.)
+- **Where latent graphlets live** — **RESOLVED (2026-06-25): forme `GraphletRef`**,
+  in a per-session `SessionGraphlets` index over kernel uuids, per the
+  [graphlet wiring plan](../implementation_strategy/2026-06-25_graphlet_wiring_plan.md)
+  (decision B; the gloss-owned store and `GraphTree` paths are closed). The lean
+  here was right. See the
+  [scope model reconciliation](2026-06-27_scope_model_reconciliation.md) for the
+  cross-doc rulings this settled.
 - **Gloss ↔ orrery shared state** — do they share selection / focus, or is gloss
   a read-only summary? (Lean: shared selection, so picking in one reflects in the
   other.)

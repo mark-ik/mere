@@ -20,6 +20,7 @@
 //! [`InlineSpan::Link`] spans, with URLs synthesised relative to
 //! [`EngineInput::address`].
 
+use errand::parse::nex::{base_url, parse as parse_nex, NexEntry};
 use inker::{
     DocumentBlock, DocumentProvenance, DocumentTrustState, Engine, EngineDocument, EngineError,
     EngineInput, InlineSpan,
@@ -55,60 +56,36 @@ impl Engine for NexEngine {
     }
 
     fn render(&self, input: &EngineInput) -> Result<EngineDocument, EngineError> {
-        if looks_like_directory(&input.body) {
-            Ok(render_directory(&input.address, &input.body))
-        } else {
-            let mut doc = self.text.render(input)?;
-            doc.provenance = DocumentProvenance {
-                source_kind: Some(ENGINE_ID.to_string()),
-                canonical_uri: Some(input.address.clone()),
-                fetched_at: None,
-                source_label: Some("nematic.text".to_string()),
-            };
-            doc.trust = DocumentTrustState::Unknown;
-            Ok(doc)
+        // errand classifies the body: directory entries, or a content response the
+        // text engine renders. Directory URLs resolve against errand's `base_url`.
+        match parse_nex(&input.body) {
+            Some(entries) => Ok(render_directory(&input.address, &entries)),
+            None => {
+                let mut doc = self.text.render(input)?;
+                doc.provenance = DocumentProvenance {
+                    source_kind: Some(ENGINE_ID.to_string()),
+                    canonical_uri: Some(input.address.clone()),
+                    fetched_at: None,
+                    source_label: Some("nematic.text".to_string()),
+                };
+                doc.trust = DocumentTrustState::Unknown;
+                Ok(doc)
+            }
         }
     }
 }
 
-/// True when every non-empty line is a plausible directory entry: either
-/// ends with `/`, or is a single whitespace-free token of bounded length.
-fn looks_like_directory(body: &str) -> bool {
-    let lines: Vec<&str> = body.lines().filter(|l| !l.trim().is_empty()).collect();
-    if lines.is_empty() {
-        return false;
-    }
-    lines
-        .iter()
-        .all(|line| is_directory_entry_line(line.trim()))
-}
-
-fn is_directory_entry_line(line: &str) -> bool {
-    if line.is_empty() {
-        return false;
-    }
-    if line.len() > 200 {
-        return false;
-    }
-    if line.ends_with('/') {
-        return !line.contains(char::is_whitespace);
-    }
-    !line.contains(char::is_whitespace)
-}
-
-fn render_directory(address: &str, body: &str) -> EngineDocument {
+fn render_directory(address: &str, entries: &[NexEntry]) -> EngineDocument {
     let base = base_url(address);
-    let items: Vec<Vec<DocumentBlock>> = body
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .map(|line| {
-            let url = format!("{base}{line}");
+    let items: Vec<Vec<DocumentBlock>> = entries
+        .iter()
+        .map(|entry| {
+            let url = format!("{base}{}", entry.name);
             vec![DocumentBlock::Paragraph {
                 spans: vec![InlineSpan::Link {
                     url,
                     title: None,
-                    spans: vec![InlineSpan::Text(line.to_string())],
+                    spans: vec![InlineSpan::Text(entry.name.clone())],
                     predicate: None,
                 }],
             }]
@@ -134,27 +111,6 @@ fn render_directory(address: &str, body: &str) -> EngineDocument {
         diagnostics: Vec::new(),
         blocks,
     }
-}
-
-/// Compute the base URL that directory entries should resolve against.
-/// `nex://host/path/` → `nex://host/path/`. `nex://host/page` →
-/// `nex://host/`. Falls back to appending `/` if the address has no slash.
-fn base_url(address: &str) -> String {
-    if address.ends_with('/') {
-        return address.to_string();
-    }
-    if let Some(idx) = address.rfind('/') {
-        // Ensure the slash we keep is part of the path, not the `://` scheme
-        // separator. Find the start of the authority section and bail if we
-        // would land inside it.
-        if let Some(scheme_end) = address.find("://") {
-            if idx <= scheme_end + 2 {
-                return format!("{address}/");
-            }
-        }
-        return address[..=idx].to_string();
-    }
-    format!("{address}/")
 }
 
 #[cfg(test)]

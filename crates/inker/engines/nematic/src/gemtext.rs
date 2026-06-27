@@ -18,6 +18,7 @@
 //!
 //! References: <https://gemini.circumlunar.space/docs/specification.html>.
 
+use errand::parse::gemtext::{parse as parse_gemtext, GemLine};
 use inker::{
     DocumentBlock, DocumentProvenance, DocumentTrustState, Engine, EngineDocument, EngineError,
     EngineInput, InlineSpan,
@@ -47,15 +48,14 @@ impl Engine for GemtextEngine {
     }
 
     fn render(&self, input: &EngineInput) -> Result<EngineDocument, EngineError> {
-        let mut state = State::default();
-        for line in input.body.lines() {
-            state.handle(line);
-        }
-        state.flush_all();
+        // errand owns the gemtext grammar (line-level AST); nematic owns only the
+        // grouping into the `DocumentBlock` model (paragraph runs, list/quote merging).
+        let lines = parse_gemtext(&input.body);
+        let (blocks, title) = Lowering::run(&lines);
 
         Ok(EngineDocument {
             address: input.address.clone(),
-            title: state.title,
+            title,
             content_type: input
                 .content_type
                 .clone()
@@ -65,13 +65,16 @@ impl Engine for GemtextEngine {
             provenance: DocumentProvenance::for_engine(self.engine_id(), &input.address),
             trust: DocumentTrustState::Unknown,
             diagnostics: Vec::new(),
-            blocks: state.blocks,
+            blocks,
         })
     }
 }
 
+/// Lowers a gemtext [`GemLine`] stream into `DocumentBlock`s, grouping consecutive
+/// text lines into a paragraph, `* ` items into one list, and `> ` lines into one
+/// quote — the model decisions errand's line-level parser deliberately leaves open.
 #[derive(Default)]
-struct State {
+struct Lowering {
     blocks: Vec<DocumentBlock>,
     title: Option<String>,
     pending: Pending,
@@ -84,151 +87,105 @@ enum Pending {
     Paragraph(Vec<String>),
     List(Vec<Vec<DocumentBlock>>),
     Quote(Vec<String>),
-    Preformatted {
-        language: Option<String>,
-        text: String,
-    },
 }
 
-impl State {
-    fn handle(&mut self, line: &str) {
-        // Inside a preformatted block, only the closing fence ends it; every
-        // other line is captured verbatim.
-        if let Pending::Preformatted { text, .. } = &mut self.pending {
-            if line.starts_with("```") {
+impl Lowering {
+    fn run(lines: &[GemLine]) -> (Vec<DocumentBlock>, Option<String>) {
+        let mut state = Self::default();
+        for line in lines {
+            state.handle(line);
+        }
+        state.flush_pending();
+        (state.blocks, state.title)
+    }
+
+    fn handle(&mut self, line: &GemLine) {
+        match line {
+            GemLine::Heading { level, text } => {
                 self.flush_pending();
-                return;
+                self.push_heading(*level, text);
             }
-            text.push_str(line);
-            text.push('\n');
-            return;
-        }
-
-        if let Some(rest) = line.strip_prefix("```") {
-            self.flush_pending();
-            let language = trimmed_or_none(rest);
-            self.pending = Pending::Preformatted {
-                language,
-                text: String::new(),
-            };
-            return;
-        }
-
-        if let Some(text) = line.strip_prefix("### ") {
-            self.flush_pending();
-            self.push_heading(3, text);
-            return;
-        }
-        if let Some(text) = line.strip_prefix("## ") {
-            self.flush_pending();
-            self.push_heading(2, text);
-            return;
-        }
-        if let Some(text) = line.strip_prefix("# ") {
-            self.flush_pending();
-            self.push_heading(1, text);
-            return;
-        }
-
-        if let Some(rest) = line.strip_prefix("=>") {
-            self.flush_pending();
-            self.push_link_line(rest);
-            return;
-        }
-
-        if let Some(text) = line.strip_prefix("* ") {
-            if !matches!(self.pending, Pending::List(_)) {
+            GemLine::Link { url, label } => {
                 self.flush_pending();
-                self.pending = Pending::List(Vec::new());
+                self.push_link(url, label);
             }
-            if let Pending::List(items) = &mut self.pending {
-                items.push(vec![DocumentBlock::Paragraph {
-                    spans: vec![InlineSpan::Text(text.trim().to_string())],
-                }]);
-            }
-            return;
-        }
-
-        if let Some(text) = line.strip_prefix("> ") {
-            if !matches!(self.pending, Pending::Quote(_)) {
+            GemLine::Pre { alt, text } => {
                 self.flush_pending();
-                self.pending = Pending::Quote(Vec::new());
+                self.blocks.push(DocumentBlock::CodeBlock {
+                    language: alt.clone(),
+                    text: text.clone(),
+                });
             }
-            if let Pending::Quote(lines) = &mut self.pending {
-                lines.push(text.trim().to_string());
+            GemLine::Item(text) => {
+                if !matches!(self.pending, Pending::List(_)) {
+                    self.flush_pending();
+                    self.pending = Pending::List(Vec::new());
+                }
+                if let Pending::List(items) = &mut self.pending {
+                    items.push(vec![DocumentBlock::Paragraph {
+                        spans: vec![InlineSpan::Text(text.clone())],
+                    }]);
+                }
             }
-            return;
-        }
-
-        if line.is_empty() {
-            // Blank lines flush paragraphs but keep list/quote runs alive
-            // across single blank separators (gemtext readers commonly
-            // accept this).
-            if matches!(self.pending, Pending::Paragraph(_)) {
-                self.flush_pending();
+            GemLine::Quote(text) => {
+                if !matches!(self.pending, Pending::Quote(_)) {
+                    self.flush_pending();
+                    self.pending = Pending::Quote(Vec::new());
+                }
+                if let Pending::Quote(lines) = &mut self.pending {
+                    lines.push(text.clone());
+                }
             }
-            return;
-        }
-
-        // Plain text line — accumulate into current paragraph or start one.
-        if !matches!(self.pending, Pending::Paragraph(_)) {
-            self.flush_pending();
-            self.pending = Pending::Paragraph(Vec::new());
-        }
-        if let Pending::Paragraph(lines) = &mut self.pending {
-            lines.push(line.to_string());
+            GemLine::Text(text) => {
+                if !matches!(self.pending, Pending::Paragraph(_)) {
+                    self.flush_pending();
+                    self.pending = Pending::Paragraph(Vec::new());
+                }
+                if let Pending::Paragraph(lines) = &mut self.pending {
+                    lines.push(text.clone());
+                }
+            }
+            GemLine::Blank => {
+                // Blank lines flush paragraphs but keep list/quote runs alive across
+                // single blank separators (gemtext readers commonly accept this).
+                if matches!(self.pending, Pending::Paragraph(_)) {
+                    self.flush_pending();
+                }
+            }
         }
     }
 
     fn push_heading(&mut self, level: u8, text: &str) {
-        let trimmed = text.trim();
-        if level == 1 && self.title.is_none() && !trimmed.is_empty() {
-            self.title = Some(trimmed.to_string());
+        // The parser already trimmed the heading text.
+        if level == 1 && self.title.is_none() && !text.is_empty() {
+            self.title = Some(text.to_string());
         }
         self.blocks.push(DocumentBlock::Heading {
             level,
-            spans: vec![InlineSpan::Text(trimmed.to_string())],
+            spans: vec![InlineSpan::Text(text.to_string())],
         });
     }
 
-    fn push_link_line(&mut self, rest: &str) {
-        let rest = rest.trim_start();
-        if rest.is_empty() {
-            return;
-        }
-        let (url, label) = match rest.find(char::is_whitespace) {
-            Some(idx) => (rest[..idx].to_string(), rest[idx..].trim().to_string()),
-            None => (rest.to_string(), String::new()),
-        };
-        let display = if label.is_empty() { url.clone() } else { label };
+    fn push_link(&mut self, url: &str, label: &str) {
+        let display = if label.is_empty() { url } else { label };
         self.blocks.push(DocumentBlock::Paragraph {
             spans: vec![InlineSpan::Link {
-                url,
+                url: url.to_string(),
                 title: None,
-                spans: vec![InlineSpan::Text(display)],
+                spans: vec![InlineSpan::Text(display.to_string())],
                 predicate: None,
             }],
         });
     }
 
     fn flush_pending(&mut self) {
-        let pending = std::mem::take(&mut self.pending);
-        match pending {
+        match std::mem::take(&mut self.pending) {
             Pending::None => {}
             Pending::Paragraph(lines) => {
-                if lines.is_empty() {
-                    return;
+                if !lines.is_empty() {
+                    self.blocks
+                        .push(DocumentBlock::Paragraph { spans: join_soft(lines) });
                 }
-                let mut spans = Vec::with_capacity(lines.len() * 2);
-                let mut first = true;
-                for line in lines {
-                    if !first {
-                        spans.push(InlineSpan::SoftBreak);
-                    }
-                    spans.push(InlineSpan::Text(line));
-                    first = false;
-                }
-                self.blocks.push(DocumentBlock::Paragraph { spans });
             }
             Pending::List(items) => {
                 if !items.is_empty() {
@@ -239,41 +196,29 @@ impl State {
                 }
             }
             Pending::Quote(lines) => {
-                if lines.is_empty() {
-                    return;
+                if !lines.is_empty() {
+                    self.blocks.push(DocumentBlock::Quote {
+                        blocks: vec![DocumentBlock::Paragraph { spans: join_soft(lines) }],
+                    });
                 }
-                let mut spans = Vec::with_capacity(lines.len() * 2);
-                let mut first = true;
-                for line in lines {
-                    if !first {
-                        spans.push(InlineSpan::SoftBreak);
-                    }
-                    spans.push(InlineSpan::Text(line));
-                    first = false;
-                }
-                self.blocks.push(DocumentBlock::Quote {
-                    blocks: vec![DocumentBlock::Paragraph { spans }],
-                });
-            }
-            Pending::Preformatted { language, text } => {
-                self.blocks
-                    .push(DocumentBlock::CodeBlock { language, text });
             }
         }
     }
-
-    fn flush_all(&mut self) {
-        self.flush_pending();
-    }
 }
 
-fn trimmed_or_none(value: &str) -> Option<String> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed.to_string())
+/// Join lines into paragraph spans, separated by a soft break (matching gemtext's
+/// "wrapped text lines are one paragraph" reading).
+fn join_soft(lines: Vec<String>) -> Vec<InlineSpan> {
+    let mut spans = Vec::with_capacity(lines.len() * 2);
+    let mut first = true;
+    for line in lines {
+        if !first {
+            spans.push(InlineSpan::SoftBreak);
+        }
+        spans.push(InlineSpan::Text(line));
+        first = false;
     }
+    spans
 }
 
 #[cfg(test)]
