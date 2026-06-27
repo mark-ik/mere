@@ -1,18 +1,19 @@
 # Illume: the text lexer / highlighter, its tinct + serval pairing, and the omnibar legibility goal
 
 **Date**: 2026-06-26
-**Status**: Planning. Captures decisions made across the 2026-06-26 session: promote
-the knot editor's highlight core to a standalone sibling crate (**illume**), pair it
-with tincture (publishing as **tinct**) for themed colours and serval's styled field
-for rendering, and aim the whole thing at making mere/meerkat fully operable and
-legible from the omnibar. Two pieces already shipped (see Build sequence); the rest is
-to address point by point.
+**Status**: Points 1-6 done and headed-verified (highlighting renders in the editor and
+the omnibar at runtime); only point 7 (extract illume to a sibling repo, the tinct rename,
+publish) remains, held until the API settles. Captures the decisions and the build of the
+illume promotion across the 2026-06-26 session: the knot editor's highlight core promoted
+to a standalone sibling crate (**illume**), paired with tincture (publishing as **tinct**)
+for themed colours and serval's styled field for rendering, aimed at making mere/meerkat
+operable and legible from the omnibar.
 
 ## The idea
 
-The highlight core we built for the knot editor (`crates/inker/knot-editor`: jotdown
-djot structure + the pluggable `InjectionLexer` registry + the `logos` language pack)
-is not editor-specific. It is a general capability: take text, run a lexer, get
+The highlight core we built for the knot editor (`crates/inker/illume`, renamed from
+`knot-editor`: jotdown djot structure + the pluggable `InjectionLexer` registry + the
+`logos` language pack) is not editor-specific. It is a general capability: take text, run a lexer, get
 `(range, kind)` spans. **illume** is that core promoted to its own name and scope: a
 pure-Rust, wasm-safe lightweight text lexer and highlighter. It serves the knot editor,
 and equally the omnibar, comms, labels, and any other host text surface.
@@ -86,9 +87,9 @@ illume's first non-editor consumer.
 ## Naming
 
 - **illume**: the lexer/highlighter crate. Chosen 2026-06-26 (the poetic verb, to
-  illuminate). `illume` is taken on crates.io only by an abandoned non-entry; reclaim
-  or a near-name is a publish-prep concern. The `limn` + tincture "illuminated
-  manuscript" pairing was the runner-up.
+  illuminate). `illume` is **available** on crates.io (verified 2026-06-26), so the name is
+  claimable at publish. The `limn` and tincture "illuminated manuscript" pairing was the
+  runner-up (`limn` is held by a dead 2017 placeholder).
 - **tinct**: tincture's published name. `tincture` is already taken on crates.io (a
   different OKLCH colour crate, 1.0.0), so tinct is necessary, not just shorter. It is a
   path dep today, so the rename (package name + Mere's `register-theme` + Woodshed's
@@ -102,31 +103,36 @@ illume's first non-editor consumer.
    (colours derived, never hardcoded).
 2. **serval `styled_textarea` — DONE** (serval `6a3ceace`). Per-range styled `<span>`
    runs, innermost-wins flatten, caret/preedit/ghost intact, fully generic.
-3. **illume**: rename `knot-editor` → illume; add the prose-entity passes (URL /
-   mention / tag / email) and their `SyntaxKind`s; expose the `SyntaxKind` → `SyntaxRole`
-   map (or document it as the host's to own).
-4. **#2**: fold serval's `styled_body` into one style-aware field body (plain text =
-   the empty-styles case), so there are not two field bodies to keep in sync.
-5. **The bridge** (meerkat): illume spans → `SyntaxRole` → tinct colour → serval styled
-   field, as a themeable host stylesheet. Wire the **editor** first (the visible payoff),
-   then the **omnibar** (illume's first non-editor consumer).
-6. **#3**: fold `KnotEditor` into the stateless-deriver shape (registry + engine, methods
-   over text; the host's `TextInput` is the single buffer), so the model is not an
-   orphaned second copy of the text.
-7. **Promotion (later)**: extract illume to a sibling repo, do the tinct rename + the
-   consumer updates, publish. Pressure-vessel graduation, once the core is proven.
+3. **illume — DONE** (mere `bcaf834` rename + `6d0a2ae` entity pass). Renamed
+   `knot-editor` → illume; added the prose-entity passes (URL / mention / tag / email)
+   and their `SyntaxKind`s. The `SyntaxKind` → `SyntaxRole` map is the host's (point 5).
+4. **#2 — DONE** (serval `3abaad8`). Folded serval's `styled_body` into one style-aware
+   field body (plain text = the empty-styles case); 75 serval tests pass.
+5. **The bridge — DONE + headed-verified** (mere `81d0c86` editor + `8e32f38` omnibar,
+   serval `ea5fdf33`). illume spans → `SyntaxRole` → tinct colour → the serval styled
+   field, as a themeable host stylesheet; the editor and the omnibar both highlight, and a
+   headed run confirmed distinct perceptual colours at runtime.
+6. **#3 — DONE** (mere `e271adc`). `KnotEditor` → `KnotReadout`, a stateless deriver
+   (registry + engine, methods over text; the host's buffer is the single source), so the
+   model is not an orphaned second copy of the text.
+7. **Promotion (the only remaining point)**: extract illume to a sibling repo, do the
+   tinct rename and the consumer updates, publish. Both names are free on crates.io
+   (illume and tinct, verified 2026-06-26). Pressure-vessel graduation, held until the API
+   settles.
 
 ## Decisions
 
 1. **Colours are derived, not hardcoded** (#1). The host maps `SyntaxKind` → `SyntaxRole`
-   → `tinct::derive_syntax_palette`, wired through Mere's `register-theme` into the
-   stylesheet serval applies. No parallel palette; tracks light/dark and any reseed.
+   → `tinct::derive_syntax_palette` over the active theme's seeds (fetched directly via
+   `theme.theme_def(id).seeds`, no register-theme change needed), emitting the `syntax-*`
+   rules into the chrome stylesheet serval applies. No parallel palette; tracks the theme
+   and any reseed.
 2. **Highlight runs carry classes, not inline CSS.** Themeable through one sheet, the
    serval/stylo way, so user/mod themes override.
 3. **One style-aware field body** (#2), not a styled fork of the plain one.
-4. **`KnotEditor` is a stateless deriver** (#3), the host owns the buffer. The portable
-   derivations (highlight / outline / folds / render) take text; the registry is built
-   once and held, fixing the per-keystroke rebuild.
+4. **`KnotReadout` is a stateless deriver** (#3, renamed from `KnotEditor`), the host owns
+   the buffer. The portable derivations (highlight / outline / folds / render) take text;
+   the registry is built once and held, fixing the per-keystroke rebuild.
 5. **The `SyntaxKind` → `SyntaxRole` seam is the host's**, keeping illume and tinct
    independent of each other.
 
@@ -233,3 +239,16 @@ illume's first non-editor consumer.
   click-to-focus quirk for the floated panel worth a real-mouse check, not a highlighting
   gap, since the editor heading + the omnibar's distinct url / mention / tag colours
   already prove both paths. Remaining: point 7 (extraction + publish).
+- **2026-06-26, plan audit + corrections.** Re-read the plan against the codebase and
+  corrected drift: the Status header and the Build sequence still read "Planning / two
+  pieces shipped" though points 1-6 are done and headed-verified (each point now carries
+  its DONE marker + commit); `illume` is **available** on crates.io (verified), not "taken
+  by an abandoned non-entry" as written, so point 7 needs no reclaim; Decision #4's
+  `KnotEditor` is now `KnotReadout`; the `crates/inker/knot-editor` path is now `illume`;
+  and Decision #1's "wired through register-theme" was corrected to the path Tail A
+  actually took (`theme.theme_def(id).seeds` directly, no register-theme change). Commit
+  SHAs verify (the lone "missing" hit is a tincture commit, correctly scoped). Carried
+  forward, Tail B: the code paints both a caret (tracks the field's text colour) and an
+  accent-blue focus ring for any focused node, so the missing feedback in the harness
+  shots points to the simulated click not focusing the field rather than to invisible
+  feedback; a real-mouse check distinguishes a harness limit from a click-to-focus bug.
