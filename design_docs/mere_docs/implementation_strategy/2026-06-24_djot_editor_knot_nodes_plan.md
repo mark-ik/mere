@@ -1,10 +1,14 @@
 # Djot Editor + Knot Nodes + Web Clips Plan
 
-**Status: planning (with Mark), 2026-06-24.** Scoped and enriched via multi-agent
-code sweeps of the live workspace. Adds the *write* side to a knot/djot stack that
-is already read-complete, plus an element-pick clip path into the graph, with a
-modern editor surface that stays pure Rust (jotdown for the outer djot, a `logos`
-lexer pack for inner-language injection; tree-sitter an optional breadth hatch).
+**Status: building; editor surface reframed 2026-06-27** (see the Reframe section).
+The editor is no longer a chrome panel: a note is a locally-addressed knot document
+inker routes to a serval-document tile, created by typing a `knot://` address into
+the omnibar. The knot format, clips, polyglot vocabulary, and ergonomics below
+stand. Originally scoped 2026-06-24 via multi-agent code sweeps of the live
+workspace, adding the *write* side to a knot/djot stack that is already
+read-complete, plus an element-pick clip path into the graph, with an editor that
+stays pure Rust (jotdown for the outer djot, a `logos` lexer pack for
+inner-language injection; tree-sitter an optional breadth hatch).
 
 This plan owns the **editor surface** (a djot writing pane), the **editable knot
 node** (a node whose body is a knot you author in place), and the **web-clip
@@ -25,6 +29,72 @@ edit and render, keep knot the default note format while `sniff` keeps markdown,
 txt, and other plain formats opening, and reuse the scrape and capture stack to
 pick an element off a live page and land it as a web-clip knot node carrying a
 `ClippedFrom` edge back to the source.
+
+---
+
+## Reframe (2026-06-27): note as a routed serval-document tile
+
+Converged with Mark. The editor's home and render path change; the knot format,
+clips, polyglot vocabulary, and ergonomics below stand. This supersedes the
+chrome-panel editor surface (the 2026-06-25 expedient) and the render split that
+sent the preview through document-canvas (old Decision 3).
+
+**A note is a locally-addressed document inker routes, not a chrome feature.**
+inker already maps a content-type to a producer (`routing.rs`: `text/x-knot` →
+`DjotKnotEngine`, `text/html` → the web surface engine). A note is one more producer
+to route: a **local-knot producer** resolves a `knot://` address to a node's body,
+hands it to `DjotKnotEngine` for an `EngineDocument`, and that renders as a pelt
+tile, the same pipeline a page-node takes through the scrying/graft surface engine,
+locally addressed. So the note-node correspondence is literal: opening a note-node
+is opening a content tile, identical in kind to opening a page-node. The node is the
+document; the tile is its view.
+
+**Render through serval + netrender, via a block→view mapper.** The host already
+builds a serval `ScriptedDom` by hand: the whole chrome is one, laid out by
+serval-layout and painted by netrender through `scene_from_session`. A note is the
+same move on a different source tree, `EngineDocument` → xilem_serval views
+(headings, paragraphs, lists, code, blockquote, links) → `ScriptedDom` →
+serval-layout → netrender. The one new piece is the mapper, and it rides the
+view→DOM path the chrome proves every frame. The real web engine renders the note,
+so document-canvas leaves the note path (it stays on the node card for now).
+Building the view tree directly means no serialize-to-HTML round-trip.
+
+**Edit mode is the source, source-as-truth.** jotdown is read-only, so the buffer
+stays the source text. Edit mode is the illume-highlighted serval styled field over
+the same node body, re-rendered through the mapper on change. The rendered serval
+document is the view; the source field is the edit; both are serval DOM. This is not
+WYSIWYG over the rendered tree.
+
+**The omnibar is the new-note entry: address-to-create.** Typing `knot://field-notes`
+routes to the local-knot producer; finding nothing there, it creates a new node
+claiming that address with an empty body and opens it (wiki-style create-on-miss).
+Navigating the same address later opens the existing note. `knot://x` is an
+`AddressClaim` on a node: identity stays the Uuid, case folds on resolve, display
+keeps the author's case (the carve rule). This closes the "reachable new-note entry"
+gap the in-the-wings audit named as dominant, and makes the deferred `knot://`
+resolver worth wiring now (it rides `Address::Custom` until an `AddressKind::Knot`
+variant lands).
+
+**The welcome page teaches the address vocabulary.** Opening a new node lands on
+`mere://welcome`, which shows the sorts of nodes you make by scheme: `knot://` a
+note, `http://` a page, `gemini://` a capsule, and so on. The page can itself be a
+knot document rendered through the new mapper, so it dogfoods the renderer while it
+onboards.
+
+### Re-scoped slices
+
+1. **`EngineDocument` → serval-view mapper**, proven by rendering `mere://welcome`
+   as a serval document tile. Static knot, no kernel risk, self-demonstrating.
+2. **Omnibar `knot://` routing** to the local-knot producer, create-or-open, opening
+   the tile.
+3. **Persistence**: the inline `Node` body plus the `knot://` `AddressClaim`, so a
+   created note durably reopens (the kernel-schema change, isolated here with its
+   snapshot round-trip test).
+4. **Edit mode**: source editing (illume-highlighted) over the body, re-rendered
+   through the mapper on change.
+
+The clip phases, the query-block and agent-node wave, and the deferred power-editing
+below continue unchanged.
 
 ---
 
@@ -566,8 +636,10 @@ Resolved with Mark 2026-06-24:
 2. **Editor widget reach: extend `xilem_serval::TextInput`.** It already does
    multi-line, selection, and IME; the editor adds a style channel, not a new
    widget.
-3. **Render split: edit on the serval field, preview on document-canvas.** Both
-   already do per-range styled text; neither surface tries to do both jobs.
+3. **Render split** — *superseded by the 2026-06-27 Reframe.* Originally: edit on the
+   serval field, preview on document-canvas. The Reframe renders the note through
+   serval-views + netrender (the web engine) and keeps document-canvas off the note
+   path; edit mode stays the serval source field.
 4. **Outer-djot pipe: pure-Rust jotdown.** Highlight spans plus a container tree
    (folds, outline, structural selection) from one jotdown parse. No C, no wasm
    question for the editor floor. Inner-language injection is a separate registry
@@ -983,3 +1055,13 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   (never hardcoded), #2 one style-aware field body (not a styled fork), #3 `KnotEditor`
   becomes a stateless deriver so the host's `TextInput` is the single buffer. The
   remaining editor wiring (the bridge, the deriver) is tracked in the illume plan.
+- **2026-06-27, editor reframe: note as a routed serval-document tile.** Converged
+  with Mark across the session. The chrome-panel editor surface (the 2026-06-25
+  expedient) and the document-canvas preview split (Decision 3) are superseded: a note
+  is a locally-addressed knot document inker routes to a serval-document tile, rendered
+  through serval-views + netrender (the same `ScriptedDom` → serval-layout → netrender
+  path the chrome already uses), with the omnibar's `knot://` address-to-create as the
+  new-note entry and `mere://welcome` teaching the scheme vocabulary. Added the Reframe
+  section + the re-scoped slices (mapper → welcome tile; `knot://` routing; persistence;
+  edit mode). Context: tinct 0.1.0 + illume 0.0.1 were published earlier this session
+  (see the illume plan). Starting slice 1, the `EngineDocument` → serval-view mapper.
