@@ -1083,3 +1083,12 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   (the enum lacks it; both djot and markdown need it) lands as its own change — touching
   the mapper, the round-trip exporters, and every exhaustive `DocumentBlock` match —
   before the live djot/markdown tile.
+- **2026-06-27, Table prerequisite done** (mere `1b29cda`). Added `DocumentBlock::Table`
+  (header + rows of inline-span cells, per-column `TableAlignment`) and covered every
+  exhaustive `DocumentBlock` match across the workspace (inker render / statements /
+  document helpers, the djot round-trip writer, uxtree a11y, document-canvas card, the
+  meerkat inspector, and the `note_view` serval mapper → `<table>` / `<thead>` / `<tbody>`);
+  markdown + djot pipe-table exporters, with text / gemini / gopher fallbacks. `cargo check
+  --workspace` green; inker + note_view + note_surface tests pass. The parser side (jotdown /
+  pulldown table events → `Table`) lands with the live tiles. Clears the native-smolweb-plan
+  prerequisite; next is the live welcome tile (slice 1b).
