@@ -979,6 +979,7 @@ impl WindowCtx<'_> {
         self.drain_pending_connect();
         self.drain_pending_command();
         self.drain_comms_intent();
+        self.drain_session_intent();
         self.drain_palette_context_action();
         self.drain_pending_context();
         // A context-menu row can carry a `RunCommand`, which queues a pending command
@@ -1966,6 +1967,28 @@ impl WindowCtx<'_> {
         {
             self.toggle_palette();
             return;
+        }
+        // Ctrl +/- zoom the chrome, Ctrl+0 resets it to the baseline (browser
+        // convention). '=' and '+' both zoom in (so the unshifted key works); '-' and
+        // '_' both zoom out. The chrome sheet rebuilds at the new scale. (UI scale.)
+        if self.view.modifiers.ctrl {
+            if let WinitKey::Character(s) = key {
+                match s.as_str() {
+                    "=" | "+" => {
+                        self.adjust_user_zoom(0.1);
+                        return;
+                    }
+                    "-" | "_" => {
+                        self.adjust_user_zoom(-0.1);
+                        return;
+                    }
+                    "0" => {
+                        self.adjust_user_zoom(0.0);
+                        return;
+                    }
+                    _ => {}
+                }
+            }
         }
         // Ctrl+F opens / closes the find-in-page bar (HTML/serval lane).
         if self.view.modifiers.ctrl

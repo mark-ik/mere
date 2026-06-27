@@ -1,7 +1,7 @@
 # Chrome Bar Refinement Plan
 
 **Date**: 2026-06-26
-**Status**: Planning; no code yet.
+**Status**: P1–P3 landed + verified headed (2026-06-26); P4 (sessions into toolbar) and P5 (segmented add group) remain. Two follow-on asks also landed this session: context-menu edge-flip and UI scaling (baseline + Ctrl-zoom; auto-DPI deferred — see Progress).
 **Related**: [shellbar_plan (F2, in progress)](2026-06-09_shellbar_plan.md), [apparatus_pane_and_theme_switcher_plan](2026-06-08_apparatus_pane_and_theme_switcher_plan.md), [peripheral panes architecture](../technical_architecture/2026-06-06_peripheral_panes_architecture.md), `crates/meerkat/` (`views.rs`, `render.rs`, `pane_data.rs`, `apparatus.rs`, `main.rs`)
 
 A polish pass over the toolbar (omnibar band), the shellbar, and the Steward /
@@ -127,6 +127,29 @@ up the harness anyway. So P3's done-condition grows: confirm (1) P1 Steward/Appa
 sync rows, (2) P2 process list + per-row retry/stop/pin, (3) shellbar centering +
 glyph coverage — all in one driven session. (Decided 2026-06-26.)
 
+**2026-06-26 — P3 landed (+ batched P1/P2 headed confirmation).**
+- Shellbar centering: serval's flex does **not** centre a bare text child via
+  `justify-content` (confirmed at runtime — the prior `width: 44px` + `justify-content:
+  center` left every glyph hugging the button's left edge). Fix: content-width buttons
+  with *symmetric* `padding: 0 13px` (centres the glyph whatever its width) centred in
+  the strip via the container's `align-items: center`. Verified headed.
+- Glyph coverage: the host font (parley/fontique system fallback) covers only Math
+  Operators + Geometric Shapes + text-presentation Misc Symbols (⚙ U+2699, ⚒ U+2692).
+  It has **no** Arrows block and routes emoji-presentation symbols (⚗ ⚛ ⏹ ✉) to the
+  colour-emoji font (or tofu under VS15). Replaced the broken shellbar glyphs: trail
+  ⇝→◈ (U+25C8), alembic ⚗→▽ (U+25BD distillation funnel), comms ✉→@ (apt: misfin is
+  `mailbox@server`). Same fix for the Steward verb buttons — ↻/⏹/⚓ had no text glyph, so
+  they now use word labels (retry/stop/pin focused; per-row stop/pin/retry).
+- Batched headed confirmation (one driven session, shots in `scry-shots/p3-*.png`):
+  **P1** — Steward shows `Sync lane: tessera / Syncing now / Standing: +11 / Tessera
+  ticket: endpoint…`; Apparatus shows the at-rest `Sync` section (`Lane: tessera /
+  Caught-up ops: 0`). The omnibar chip is gone. **P2** — Steward's "Live operations"
+  section renders with the honest "No live operations" empty state (no live ops in a
+  fresh session). **P3** — all nine shellbar glyphs render as centred monochrome
+  line-art. (Per-row verbs firing against a *live* op still unverified — needs a loaded
+  tile; the wiring is unit-tested + the routing is straightforward.)
+- Tests: lib 89/89, steward bin 5/5 green after the CSS/glyph/label changes.
+
 ## Sequencing notes
 
 P1 → P2 are the pane half (P2 builds on P1's Steward). P3 is independent and
@@ -161,3 +184,101 @@ self-contained — good to land early for a clean render baseline. P4 is the lar
 
 Pre-existing (not P1): `views.rs` has unused-import warnings (`ShellbarEdge`,
 `textarea_typed`) untouched here; `views.rs` is chrome-hot, left for its owner.
+
+**2026-06-26 — P2 landed.**
+- Extracted the Steward pane into a new `steward.rs` module (moved `steward_rows`,
+  `steward_items`, `steward_sync_rows`, `fetch_state_count`, `short_member` out of
+  `pane_data.rs`). Driven by the 600-LOC ceiling — `pane_data.rs` was at 589 and P2
+  deepens Steward, the "split before adding when approaching the limit" case. Result:
+  `pane_data` 445, `steward` 263, `node_ops` 564 — all under 600.
+- Process list: `steward_items` now renders a "Live operations" section — one row per
+  `active_operations()` entry (short id · url · state) with per-row stop / pin / retry
+  buttons keyed `steward:<verb>:<uuid>`. Capped at `SHOWN_OPS` = 24 with a muted
+  "+N more" note (no silent cap). Honest empty-state row when nothing is live. Replaced
+  the old count + 6-row truncated dump.
+- Per-row verbs: extracted member-targeted `stop_operation` / `pin_operation` /
+  `retry_content_url` (relocated into `steward.rs` as the pane's action handlers); the
+  focused-op verbs now delegate to them, so focused and per-row share one path. The
+  drain (`input.rs`) parses `steward:<verb>:<uuid>` via `GraphMemberId::parse_str`
+  (member id is a `Uuid`); retry resolves the member's URL from `active_operations()`.
+  Kept the bare `steward:retry`/`stop`/`pin` focused keys (act on the focused op, which
+  may be dormant and absent from the live list).
+- Tests: `cargo check -p meerkat` clean; lib 89/89, steward/apparatus bin 6/6 incl. a
+  new `steward_shows_a_live_operations_section` (asserts the header + honest empty-state
+  without spawning actors). The per-row verb keys firing against live ops is part of the
+  batched P3 headed pass.
+
+**2026-06-26 — follow-on asks (context menu + UI scaling).**
+- Context-menu edge-flip: the root menu now opens *away* from the right / bottom edges
+  instead of clipping. It places down-right of the cursor by default and flips left /
+  up when the panel would overflow, in `render.rs`. Height is estimated from the item
+  count (one search row + items × ~35px) rather than the measured rect — the pre-existing
+  `max-height` cap shrinks the measured size to "fit", masking the overflow; width uses
+  the measured natural width or a 240px default. Verified headed (bottom-right → flips
+  up-left, fully on-screen; top-left → normal down-right).
+- UI scaling: a single `ui_scale` (= the user's `user_zoom`) multiplied through the
+  chrome via `scale_px`, which scales every `Npx` token in the built sheet (no 37
+  hand-edits; unitless numbers / `rgb()` untouched). Default 1.1 (the "point or two
+  larger" baseline), persisted as `PersistedSettings::ui_zoom`. Ctrl +/-/0 adjust /
+  reset (browser-style), clamped 0.6–3.0, rebuilding the sheet + re-measuring the
+  toolbar height + re-rasterising the window-control texture. Theme switch rebuilds at
+  scale too. Verified headed (baseline modest bump; Ctrl+= / Ctrl+- / Ctrl+0 all work).
+- **Auto-DPI deferred (finding):** wiring winit's `scale_factor` into `ui_scale` was
+  built then removed — winit reports **2.0 on this 96-DPI (100%) panel**, and meerkat
+  lays the chrome out in *physical* pixels with a physical-pixel-sized window, so
+  multiplying by it double-counts and oversizes/wraps the chrome. True DPI-awareness
+  needs a logical-pixel migration of the host (window sizing, layout, input) — a much
+  larger change. Until then the user's Ctrl-zoom *is* the manual DPI knob. `ui_scale`'s
+  doc-comment records this so it isn't naively re-added.
+- Tests: `scale_px` unit tests (px scales, unitless/colors untouched, 1.0 no-op);
+  session-runtime settings 10/10; meerkat lib 89/89.
+
+**2026-06-26 — P4 landed (sessions into the toolbar).**
+- Sessions moved from the host-drawn shellbar-bottom switcher into a DOM **session
+  strip** in the toolbar: a chip per open session (label activates, × closes), an
+  overflow `+N ⌄` past `SESSION_INLINE_CAP` = 4, and an add `+`. Chips carry the active
+  session's selection highlight (representation-identity); long labels (a session named
+  after a URL) clip to ~22 chars.
+- New `Chrome` state: `sessions: Vec<SessionChip>`, `sessions_overflow_open`,
+  `session_intent` (one-shot), with `pick_session` / `request_close_session` /
+  `request_create_session` / `toggle_sessions_overflow`. Host syncs the chip list each
+  frame (`render.rs`, ordered by id like `cycle_session`, active = focused pane's
+  session, rename buffer shown live in the chip) and drains `session_intent` into the
+  existing `ShellCommand`s (`drain_session_intent` — Activate→Switch, or OpenGraphBeside
+  on Shift; Close; Create), so behavior matches the old switcher.
+- Removed the host-drawn switcher block from `render.rs` (texture strip + `session_*_rect`
+  caches no longer populated; the input rects are now inert no-ops). Rename stays reachable
+  via F2 (the buffer renders in the chip); right-click-chip rename deferred.
+- Verified headed: chips render in the toolbar with the active highlight + clipped label,
+  the shellbar's bottom switcher is gone, the strip `+` mints a session. Tests: lib 89/89
+  (toolbar div-count updated 6→8 for the strip + add), bin session/rename/cycle 12/12.
+- Deferred to P5: two `+` buttons coexist (the strip's session-add + the toolbar add-pill);
+  P5 consolidates by dropping the pill's "Add session".
+
+**2026-06-26 — P5 landed (segmented add group). Chrome-bar plan COMPLETE.**
+- The single add-pill became a segmented `+node | +tile | +field` group in the toolbar
+  (`add_group` in `views.rs`), each button firing its verb directly via
+  `Chrome::pick_context(ContextAction::Add*)` — no menu. Collapses to a split-button
+  (primary `+` adds a node; a caret opens the add menu for tile/field) when the toolbar
+  is crowded (`sessions.len() > SESSION_INLINE_CAP`). "Add session" dropped from
+  `open_add_menu` (the P4 session strip owns session creation); the session-add `+` and
+  the add group are now distinct, non-redundant affordances.
+- Added `white-space: nowrap` so the `+word` labels stay single-line (they wrapped at
+  first, inflating the toolbar height). Verified headed.
+- Tests: lib 89/89 (toolbar asserts updated: button 13→15 for the 3 segmented buttons;
+  div 8→9 for the add-group container), bin add/menu/context green.
+- **Cleanup deferred:** P4 left the `switcher` *render* module (`switcher_scene` /
+  `switcher_height`) dead — but the thumbnail pipeline it fed (`session_ops`
+  `refresh_session_thumbnails`, `session_thumbnails`) is still alive because the P4 chip
+  list reads `session_thumbnails.keys()` as its session source. A proper cleanup switches
+  the session-list source to a canonical list (manifests/labels) and then removes the
+  whole thumbnail + switcher-scene pipeline. Tracked as a follow-on, not done here.
+
+**2026-06-26 — toolbar robustness (omnibar single-line).**
+- The omnibar was wrapping `mere://welcome` to two lines when squeezed (notably at 2×
+  DPI with a long session chip + the add group), inflating the toolbar height. Fixed:
+  `input` gets `min-width: 0; white-space: nowrap; overflow: hidden; text-overflow:
+  ellipsis` — it shrinks in the flex row and clips to one line ("mere://welco…").
+- `.toolbar` gets `flex-wrap: nowrap; align-items: center` so a tall child can't stretch
+  the buttons to odd proportions and the band stays one row (nothing pushes the shellbar
+  or session chip out of view). Verified headed at 2×.

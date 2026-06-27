@@ -236,6 +236,7 @@ impl WindowCtx<'_> {
             ResizeNode => ContextItem::new("Resize", ResizeNode),
             OpenNodeFacets => ContextItem::new("Node settings\u{2026}", OpenNodeFacets),
             IsolateSelection => ContextItem::new("Isolate", IsolateSelection),
+            OpenComponentGraphlet => ContextItem::new("Open component", OpenComponentGraphlet),
             ToggleSizeByDegree => {
                 let on = self.orrery().size_by_degree();
                 ContextItem::new(
@@ -572,6 +573,18 @@ impl WindowCtx<'_> {
             self.view.request_redraw();
             return;
         }
+        // Open the focused node's connected component as a persistent Linked graphlet in
+        // its own scoped window — the manual Linked-graphlet consumer. Shell-level (mint +
+        // open a window), so it queues a command. (Graphlet wiring Phase 3 slice 2.)
+        if let ContextAction::OpenComponentGraphlet = action {
+            if let Some(node) = self.orrery().focused_member() {
+                self.commands.push(super::ShellCommand::OpenLinkedGraphlet {
+                    node,
+                    from: self.view.focused_graph,
+                });
+            }
+            return;
+        }
         if let ContextAction::ShowAllNodes = action {
             self.view.mirror_tiles = false; // lift the live mirror too
             self.orrery_mut().clear_scope();
@@ -758,6 +771,7 @@ impl WindowCtx<'_> {
             | ContextAction::ToggleSizeByImportance
             | ContextAction::ResizeNode
             | ContextAction::IsolateSelection
+            | ContextAction::OpenComponentGraphlet
             | ContextAction::ShowAllNodes
             | ContextAction::MirrorTiles
             | ContextAction::OpenNodeFacets

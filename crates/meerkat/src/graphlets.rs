@@ -27,7 +27,7 @@ use forme::{
     GraphMemberId, GraphletBinding, GraphletId, GraphletKind, GraphletMemberDelta, GraphletRef,
     GraphletSpec,
 };
-use kernel::graph::Graph;
+use kernel::graph::{EdgeFamily, Graph, RelationSelector};
 use serde::{Deserialize, Serialize};
 
 /// Sidecar filename for a session's graphlet index, beside `graph.json`.
@@ -169,6 +169,34 @@ impl SessionGraphlets {
         Some(delta)
     }
 
+    /// Whether any graphlet is `Linked` (so worth reconciling against graph truth). The
+    /// host gates the per-save reconcile on this. (Graphlet wiring Phase 3 slice 2+.)
+    pub(crate) fn has_linked(&self) -> bool {
+        self.graphlets
+            .iter()
+            .any(|g| matches!(g.binding, GraphletBinding::Linked { .. }))
+    }
+
+    /// Reconcile every `Linked` graphlet against the current graph (re-derive + auto-apply
+    /// each), returning whether any roster changed (so the caller persists). Drift at the
+    /// data level: a Linked graphlet's persisted roster tracks the graph (the window
+    /// already tracks it live via re-derive). (Graphlet wiring Phase 3 slice 2+.)
+    pub(crate) fn reconcile_all(&mut self, graph: &Graph) -> bool {
+        let ids: Vec<GraphletId> = self
+            .graphlets
+            .iter()
+            .filter(|g| matches!(g.binding, GraphletBinding::Linked { .. }))
+            .map(|g| g.id)
+            .collect();
+        let mut changed = false;
+        for id in ids {
+            if self.reconcile(graph, id).is_some() {
+                changed = true;
+            }
+        }
+        changed
+    }
+
     /// Persist this index to `graphlets.json` in the session dir. Best-effort, like the
     /// other per-session sidecars (graph / workbench / cartography).
     pub(crate) fn save(&self, session_dir: &Path) -> std::io::Result<()> {
@@ -189,19 +217,48 @@ impl SessionGraphlets {
 }
 
 /// Derive a Linked graphlet's member set from the graph per its [`GraphletSpec`]
-/// (Phase 3). The kind selects the kernel-graph algorithm; the seed is `primary_anchor`.
-/// `GraphTree`-free — the derivation lives on the kernel graph (where the primitives + the
-/// relation vocabulary are), forme supplies only the spec type. Selector / Corridor /
-/// Loop kinds are later sub-slices; they fall back to the seed alone for now.
+/// (Phase 3). The kind selects the kernel-graph algorithm; the seed is `primary_anchor`;
+/// the spec's `selectors` are the **edge projection** (which relation families the walk
+/// follows — empty = all). `GraphTree`-free — the derivation lives on the kernel graph
+/// (where the primitives + the relation vocabulary are), forme supplies only the spec type.
+/// Corridor / Loop / Frontier / Facet kinds are later sub-slices; they fall back to the
+/// seed alone for now.
 pub(crate) fn derive_members(graph: &Graph, spec: &GraphletSpec) -> Vec<GraphMemberId> {
     let Some(seed) = spec.primary_anchor.as_deref().and_then(|s| s.parse().ok()) else {
         return Vec::new();
     };
+    let selectors = selectors_from_spec(spec);
     match spec.kind {
-        GraphletKind::Component => graph.component_members(seed),
-        GraphletKind::Ego { radius } => graph.ego_members(seed, radius),
+        GraphletKind::Component => graph.component_members(seed, &selectors),
+        GraphletKind::Ego { radius } => graph.ego_members(seed, radius, &selectors),
         _ => vec![seed],
     }
+}
+
+/// Map a spec's opaque `selectors` strings to kernel [`RelationSelector`]s (the edge
+/// projection). A family name (`Semantic` / `Traversal` / `Containment` / `Provenance` /
+/// `Imported` / `Arrangement`, case-insensitive) becomes a `Family` selector; unknown
+/// strings are skipped. Empty (or all-unknown) → no projection → the derivation follows
+/// every family. Sub-kind selectors (e.g. only `Cites`) are a later refinement. (Graphlet
+/// derivation — selectors.)
+fn selectors_from_spec(spec: &GraphletSpec) -> Vec<RelationSelector> {
+    spec.selectors
+        .iter()
+        .filter_map(|s| edge_family_from_str(s).map(RelationSelector::Family))
+        .collect()
+}
+
+/// Parse a relation-family name to an [`EdgeFamily`] (the projection-toggle vocabulary).
+fn edge_family_from_str(name: &str) -> Option<EdgeFamily> {
+    Some(match name.to_ascii_lowercase().as_str() {
+        "semantic" => EdgeFamily::Semantic,
+        "traversal" => EdgeFamily::Traversal,
+        "containment" => EdgeFamily::Containment,
+        "arrangement" => EdgeFamily::Arrangement,
+        "imported" => EdgeFamily::Imported,
+        "provenance" => EdgeFamily::Provenance,
+        _ => return None,
+    })
 }
 
 /// A minimal `GraphletSpec` for a branch whose donor carried no canonical spec: a
@@ -338,6 +395,48 @@ mod tests {
             idx.get(id).unwrap().anchors.len(),
             2,
             "ego radius 1 from A is A plus B; C is two hops away"
+        );
+    }
+
+    #[test]
+    fn reconcile_all_updates_linked_rosters_on_drift() {
+        use euclid::default::Point2D;
+        use kernel::graph::{EdgeAssertion, SemanticSubKind};
+        let mut graph = Graph::new();
+        let a = graph.add_node("https://a".to_string(), Point2D::new(0.0, 0.0));
+        let b = graph.add_node("https://b".to_string(), Point2D::new(1.0, 0.0));
+        let c = graph.add_node("https://c".to_string(), Point2D::new(2.0, 0.0));
+        let link = |g: &mut Graph, x, y| {
+            g.assert_relation(
+                x,
+                y,
+                EdgeAssertion::Semantic {
+                    sub_kind: SemanticSubKind::Hyperlink,
+                    label: None,
+                    decay_progress: None,
+                },
+            );
+        };
+        link(&mut graph, a, b); // A–B; C isolated
+        let a_id = graph.get_node(a).unwrap().id;
+
+        let mut idx = SessionGraphlets::new();
+        let spec = GraphletSpec {
+            kind: GraphletKind::Component,
+            anchors: vec![a_id.to_string()],
+            primary_anchor: Some(a_id.to_string()),
+            selectors: Vec::new(),
+        };
+        let id = idx.record_linked(&graph, spec);
+        assert!(idx.has_linked(), "the index has a Linked graphlet");
+        assert!(!idx.reconcile_all(&graph), "no drift yet → no change");
+
+        link(&mut graph, b, c); // C joins A's component
+        assert!(idx.reconcile_all(&graph), "reconcile_all reports the drift");
+        assert_eq!(
+            idx.get(id).unwrap().anchors.len(),
+            3,
+            "the Linked roster grew to A, B, C"
         );
     }
 }

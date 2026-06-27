@@ -176,8 +176,13 @@ fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
         // The toolbar reserves right padding the width of the window-control strip
         // (the borderless titlebar's min / max / close), so the omnibar + sync chip
         // stop short of it and the host composites the controls into that gap.
+        // `align-items: center` so a tall child (e.g. a long omnibar value) can't
+        // stretch the back/forward/add buttons to strange proportions; `flex-wrap:
+        // nowrap` keeps the band a single row so nothing pushes the shellbar / session
+        // chip out of view. (Chrome bar — toolbar robustness.)
         format!(
-            ".toolbar {{ display: flex; background-color: {}; padding: 8px {}px 8px 8px; }}",
+            ".toolbar {{ display: flex; flex-wrap: nowrap; align-items: center; \
+                background-color: {}; padding: 8px {}px 8px 8px; }}",
             rgb(c.toolbar_bg),
             titlebar::CONTROLS_W as u32
         ),
@@ -201,7 +206,11 @@ fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
             rgb(c.disabled_bg)
         ),
         format!(
-            "input {{ font-size: 22px; color: {}; background-color: {}; padding: 8px; margin: 4px; flex-grow: 1; }}",
+            // The omnibar: a single line that clips (with `min-width: 0` so it actually
+            // shrinks in the flex row) — never wrapping to a second line, which would
+            // inflate the toolbar. (Chrome bar — omnibar single-line.)
+            "input {{ font-size: 22px; color: {}; background-color: {}; padding: 8px; margin: 4px; \
+                flex-grow: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}",
             rgb(c.field_text),
             rgb(c.field_bg)
         ),
@@ -226,6 +235,30 @@ fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
             ".add-pill {{ font-size: 18px; color: {}; background-color: {}; padding: 6px 16px; margin: 4px; border-radius: 14px; }}",
             rgb(c.strong_text),
             rgb(c.active_bg)
+        ),
+        // The segmented create group (Chrome bar P5): `+node | +tile | +field` as one
+        // pill, each cell a button; the split-button (`add-split`) is its crowded form.
+        ".add-group { display: flex; align-items: center; margin: 4px 2px; }".to_string(),
+        ".add-split { display: flex; align-items: center; margin: 4px 2px; }".to_string(),
+        format!(
+            ".add-seg {{ font-size: 13px; white-space: nowrap; color: {}; background-color: {}; padding: 7px 9px; }}",
+            rgb(c.control_text),
+            rgb(c.control_bg)
+        ),
+        // Rounded outer corners so the three cells read as one pill.
+        ".add-seg-first { border-radius: 13px 0 0 13px; }".to_string(),
+        ".add-seg-last { border-radius: 0 13px 13px 0; }".to_string(),
+        format!(
+            ".add-split-primary {{ font-size: 16px; color: {}; background-color: {}; \
+                padding: 5px 11px; border-radius: 13px 0 0 13px; }}",
+            rgb(c.control_text),
+            rgb(c.control_bg)
+        ),
+        format!(
+            ".add-split-caret {{ font-size: 13px; color: {}; background-color: {}; \
+                padding: 7px 9px; border-radius: 0 13px 13px 0; }}",
+            rgb(c.muted_text),
+            rgb(c.control_bg)
         ),
         format!(
             ".suggestions {{ background-color: {}; padding-bottom: 6px; }}",
@@ -458,24 +491,160 @@ fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
                 align-items: center; justify-content: flex-start; }}",
             rgb(c.toolbar_bg)
         ),
-        // Uniform square buttons: every glyph occupies an identical 44x44 box (the
-        // strip is 48px thick) and is flex-centred within it, so differing glyph
-        // widths read even instead of ragged. The two rules differ only in colour.
+        // Centred glyphs: serval's flex does not centre a bare text child via
+        // `justify-content`, so a fixed-width button leaves the glyph hugging its left
+        // edge. Instead the button is content-width with *symmetric* horizontal
+        // padding — which centres the glyph inside it whatever its width — and the
+        // container's `align-items: center` then centres the whole button in the strip.
+        // The padding doubles as the ≥32px hit target. (Chrome bar P3.)
         format!(
             ".shellbar-btn {{ display: flex; align-items: center; justify-content: center; \
-                width: 44px; height: 44px; font-size: 17px; padding: 0; margin: 2px 0; \
+                height: 44px; padding: 0 13px; font-size: 17px; margin: 2px 0; \
                 color: {}; background-color: {}; }}",
             rgb(c.control_text),
             rgb(c.control_bg)
         ),
         format!(
             ".shellbar-btn-active {{ display: flex; align-items: center; justify-content: center; \
-                width: 44px; height: 44px; font-size: 17px; padding: 0; margin: 2px 0; \
+                height: 44px; padding: 0 13px; font-size: 17px; margin: 2px 0; \
                 color: {}; background-color: {}; }}",
             rgb(c.strong_text),
             rgb(c.active_bg)
         ),
+        // The toolbar session strip (Chrome bar P4): chips for the open sessions, the
+        // overflow `+N ⌄`, and the add `+`. The active chip takes the selection fill so
+        // the focused session reads at a glance (representation-identity).
+        ".session-strip { display: flex; align-items: center; }".to_string(),
+        format!(
+            ".session-chip {{ display: flex; align-items: center; background-color: {}; \
+                color: {}; border-radius: 13px; margin: 4px 2px; padding: 2px 2px 2px 4px; }}",
+            rgb(c.control_bg),
+            rgb(c.control_text)
+        ),
+        format!(
+            ".session-chip-active {{ background-color: {}; color: {}; }}",
+            rgb(c.active_bg),
+            rgb(c.strong_text)
+        ),
+        ".session-chip-label { font-size: 13px; padding: 6px 6px; }".to_string(),
+        format!(
+            ".session-chip-close {{ font-size: 13px; padding: 6px 8px; color: {}; }}",
+            rgb(c.muted_text)
+        ),
+        format!(
+            ".session-add {{ font-size: 16px; color: {}; background-color: {}; \
+                padding: 5px 13px; margin: 4px 2px; border-radius: 13px; }}",
+            rgb(c.control_text),
+            rgb(c.control_bg)
+        ),
+        format!(
+            ".session-overflow-btn {{ font-size: 13px; color: {}; background-color: {}; \
+                padding: 7px 11px; margin: 4px 2px; border-radius: 13px; }}",
+            rgb(c.control_text),
+            rgb(c.control_bg)
+        ),
+        format!(
+            ".session-overflow-btn-open {{ color: {}; background-color: {}; }}",
+            rgb(c.strong_text),
+            rgb(c.active_bg)
+        ),
+        // The overflow dropdown panel; the host sets its top/right inline each frame
+        // (it anchors under the strip), like the context menu. Floats over content.
+        format!(
+            ".session-overflow {{ position: absolute; background-color: {}; padding: 4px; \
+                border-radius: 8px; z-index: 30; }}",
+            rgb(c.menu_bg)
+        ),
+        format!(
+            ".session-overflow-row {{ font-size: 14px; color: {}; background-color: {}; \
+                padding: 8px 16px; margin: 1px 0; }}",
+            rgb(c.body_text),
+            rgb(c.surface_bg)
+        ),
     ]
+}
+
+/// Scale every `<number>px` length in a built CSS sheet by `scale`, so one
+/// `ui_scale` (display DPI × the user's zoom) resizes the whole chrome without
+/// threading a factor through each of the ~37 rules. A no-op at 1.0. Only a digit
+/// run immediately followed by `px` (and a non-alphanumeric boundary) is touched, so
+/// unitless numbers (`z-index`, `line-height`, `flex-grow`, `rgb(...)`, `opacity`)
+/// and `px` inside identifiers are left alone. (UI scale.)
+pub(crate) fn scale_px(sheet: Vec<String>, scale: f32) -> Vec<String> {
+    if (scale - 1.0).abs() < 1e-3 {
+        return sheet;
+    }
+    sheet.into_iter().map(|rule| scale_px_in(&rule, scale)).collect()
+}
+
+fn scale_px_in(rule: &str, scale: f32) -> String {
+    let b = rule.as_bytes();
+    let mut out = String::with_capacity(rule.len() + 8);
+    let mut i = 0;
+    while i < b.len() {
+        let c = b[i];
+        let starts_num =
+            c.is_ascii_digit() || (c == b'.' && i + 1 < b.len() && b[i + 1].is_ascii_digit());
+        if !starts_num {
+            out.push(c as char);
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < b.len() && (b[i].is_ascii_digit() || b[i] == b'.') {
+            i += 1;
+        }
+        let is_px = i + 1 < b.len()
+            && b[i] == b'p'
+            && b[i + 1] == b'x'
+            && (i + 2 >= b.len() || !b[i + 2].is_ascii_alphanumeric());
+        match (is_px, rule[start..i].parse::<f32>()) {
+            (true, Ok(n)) => {
+                let s = n * scale;
+                if (s.round() - s).abs() < 0.05 {
+                    out.push_str(&(s.round() as i64).to_string());
+                } else {
+                    out.push_str(&format!("{s:.1}"));
+                }
+                out.push_str("px");
+                i += 2;
+            }
+            _ => out.push_str(&rule[start..i]),
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod ui_scale_tests {
+    use super::scale_px;
+
+    #[test]
+    fn scales_px_lengths_but_not_unitless_or_colors() {
+        let sheet = vec![
+            ".a { font-size: 16px; padding: 8px 18px; z-index: 10; line-height: 1.3; }".to_string(),
+            ".b { width: 44px; color: rgb(12, 34, 56); flex-grow: 1; opacity: 0.45; }".to_string(),
+        ];
+        let scaled = scale_px(sheet, 2.0);
+        // px lengths double…
+        assert!(scaled[0].contains("font-size: 32px"));
+        assert!(scaled[0].contains("padding: 16px 36px"));
+        assert!(scaled[1].contains("width: 88px"));
+        // …while unitless numbers and rgb() channels are untouched.
+        assert!(scaled[0].contains("z-index: 10"));
+        assert!(scaled[0].contains("line-height: 1.3"));
+        assert!(scaled[1].contains("rgb(12, 34, 56)"));
+        assert!(scaled[1].contains("flex-grow: 1"));
+        assert!(scaled[1].contains("opacity: 0.45"));
+    }
+
+    #[test]
+    fn fractional_scale_keeps_one_decimal_and_is_noop_at_one() {
+        let sheet = vec![".x { font-size: 15px; }".to_string()];
+        assert!(scale_px(sheet.clone(), 1.1)[0].contains("font-size: 16.5px"));
+        // 1.0 is an identity (and the cheap early return).
+        assert_eq!(scale_px(sheet.clone(), 1.0), sheet);
+    }
 }
 
 /// Build the pelt tile-surface theme sheet from the resolved [`ChromeTheme`], so the
@@ -717,6 +886,16 @@ struct Presentation {
     /// adjusted in the apparatus pane and persisted. The host owns the value and
     /// pushes it to each orrery via `set_physics_damping`. (Physics settings.)
     physics_damping: f32,
+    /// The user's chrome zoom multiplier (Ctrl +/-/0), persisted. Composed with the
+    /// display's [`dpi_scale`](Self::dpi_scale) into the effective
+    /// [`ui_scale`](Self::ui_scale). Default 1.1, the baseline "a point or two larger"
+    /// bump. Shared across this session's windows. (UI scale.)
+    user_zoom: f32,
+    /// The display's DPI factor (winit `scale_factor()`), folded into `ui_scale` now
+    /// the window is sized in **logical** px so the chrome tracks the OS scale. 1.0 at
+    /// 100%. Shared today; goes per-window in the auto-DPI plan's D3 (multi-monitor).
+    /// (Auto-DPI D1.)
+    dpi_scale: f32,
     /// The active theme's document-lane palette (content cards: smolweb /
     /// markdown / feed text). Threaded into content actors so baked glyph colors
     /// follow the theme; also read by the host for rule / image colors at lower
@@ -750,6 +929,30 @@ impl Presentation {
     /// window's chrome renders from the same sheet. (MW2 (c).)
     fn chrome_sheet_refs(&self) -> Vec<&str> {
         self.chrome_sheet.iter().map(String::as_str).collect()
+    }
+
+    /// The effective chrome scale: the display's DPI factor times the user's zoom,
+    /// clamped to a sane band. Now that the window is sized in **logical** px (so a 2×
+    /// display gives a 2×-physical window), folding `scale_factor` in makes the chrome
+    /// fill it at the right density instead of overflowing a physically-small window
+    /// (the earlier-attempt bug). (Auto-DPI D1.)
+    fn ui_scale(&self) -> f32 {
+        (self.dpi_scale * self.user_zoom).clamp(0.5, 4.0)
+    }
+
+    /// Rebuild the chrome sheet from the active theme tokens at the current
+    /// [`ui_scale`](Self::ui_scale), re-adding the syntax-highlight rules. Called
+    /// after a zoom (Ctrl +/-/0) or a display DPI change; the theme switcher has its
+    /// own rebuild in `theme_edit`. (UI scale.)
+    fn rebuild_chrome_sheet(&mut self) {
+        let seeds = self
+            .theme
+            .theme_def(&self.active_theme_id)
+            .map(|d| d.seeds)
+            .unwrap_or_else(meerkat::knot_highlight::fallback_seeds);
+        let mut sheet = scale_px(chrome_sheet(&self.chrome_theme), self.ui_scale());
+        sheet.extend(meerkat::knot_highlight::syntax_css(&seeds));
+        self.chrome_sheet = sheet;
     }
 
     /// The composed document style sheet the content actors lay out with: the
@@ -870,6 +1073,10 @@ struct WindowCtx<'a> {
     /// specific `graph_id`. Was the single bundled `orrery: &mut Orrery` (P1).
     /// (Window composition P2.)
     orreries: &'a mut HashMap<GraphId, Orrery>,
+    /// The per-session graphlet pool (read-only here), so a **branch** window's render
+    /// can scope its orrery to its graphlet's live roster. (Graphlet wiring Phase 2
+    /// slice 3.)
+    graphlets: &'a HashMap<GraphId, graphlets::SessionGraphlets>,
     clipboard: &'a mut Option<arboard::Clipboard>,
     a11y_bridge: &'a mut a11y_bridge::AccessKitBridge,
     a11y_action_routes: &'a mut HashMap<AccessNodeId, A11yHostAction>,
@@ -885,6 +1092,11 @@ struct WindowCtx<'a> {
     /// borrow — resolved at ctx build). Surfaced in Steward as the tripwire for the
     /// pool's bound (live / cap). (Window composition P1, OQ2.)
     orrery_pool_count: usize,
+    /// While a **branch** window's pass has the orrery scoped to its graphlet, this holds
+    /// the orrery's prior scope, restored on ctx `Drop` so the override is transient and
+    /// never leaks to the next window's pass. `None` when this pass set no branch scope.
+    /// (Graphlet wiring Phase 2 slice 3.)
+    branch_scope_restore: Option<Option<Vec<uuid::Uuid>>>,
 }
 
 /// A deferred shell-level operation a per-window handler requests but cannot perform
@@ -932,6 +1144,18 @@ enum ShellCommand {
         graphlet: forme::GraphletId,
         node: uuid::Uuid,
     },
+    /// Open the focused node's connected component as a **Linked** graphlet in a scoped
+    /// window (Phase 3 slice 2, the manual Linked consumer): mint a `Linked { Component }`
+    /// graphlet derived from the graph, then open a window scoped to it (reusing the
+    /// branch-window scope path). Needs `&mut Shell` + the event loop, so it defers here.
+    /// (Graphlet wiring Phase 3.)
+    OpenLinkedGraphlet { node: uuid::Uuid, from: GraphId },
+    /// Reconcile graph `graph`'s **Linked** graphlets against the (just-changed) graph and
+    /// persist any that drifted (Phase 3 slice 2+ — data-level drift). Queued by
+    /// `save_session` after a graph mutation; runs on `Shell` (needs `&mut graphlets`).
+    /// Cheap + idempotent (a no-op when nothing drifted). The scoped windows already track
+    /// drift live via `install_scope`'s re-derive; this keeps the persisted roster current.
+    ReconcileGraphlets { graph: GraphId },
     /// Close window `id` and drop its view. The primary is exempt — its close saves
     /// the session and exits the app; a secondary just releases its surface. (MW3.)
     #[allow(dead_code)] // queued by the close fork once leaf windows can self-close (MW4)
@@ -1234,7 +1458,9 @@ impl Shell {
         let resolution = theme.set_active_theme(&active_theme_id);
         let active_theme_id = resolution.resolved_id;
         let chrome_theme = resolution.tokens.chrome;
-        let mut chrome_sheet = chrome_sheet(&chrome_theme);
+        // Build the chrome at the user's persisted zoom (the display DPI factor folds in
+        // once the window exists and `app_handler` rebuilds). (UI scale.)
+        let mut chrome_sheet = scale_px(chrome_sheet(&chrome_theme), saved_settings.ui_zoom);
         // The knot editor's syntax highlighting: colour the `syntax-*` classes the
         // styled field emits, derived perceptually from the active theme's seeds by
         // tinct (so they track a theme switch), falling back to a dark triad.
@@ -1421,6 +1647,10 @@ impl Shell {
                     shellbar_edge: saved_settings.shellbar_edge,
                     shellbar_hidden: saved_settings.shellbar_hidden,
                     physics_damping: saved_settings.physics_damping,
+                    user_zoom: saved_settings.ui_zoom,
+                    // 1.0 until the window exists; `create_window` reads the real
+                    // `scale_factor()` and rebuilds at the display's density. (Auto-DPI D1.)
+                    dpi_scale: 1.0,
                     document_palette,
                     document_sheet,
                     menu_actions,
@@ -1496,17 +1726,21 @@ impl Shell {
             view,
             shared: &mut self.shared,
             orreries: &mut self.orreries,
+            graphlets: &self.graphlets,
             clipboard: &mut self.clipboard,
             a11y_bridge: &mut self.a11y_bridge,
             a11y_action_routes: &mut self.a11y_action_routes,
             render_core: self.render_core.as_ref(),
             commands: &mut self.commands,
             orrery_pool_count: pool_count,
+            branch_scope_restore: None,
         };
         // Install this window's per-pane cameras + selection into the shared orreries
-        // for the pass; the ctx's `Drop` reads them back. (View state on the view.)
+        // for the pass, and a branch window's graphlet scope; the ctx's `Drop` reads them
+        // back. (View state on the view.)
         wc.install_viewports();
         wc.install_selections();
+        wc.install_scope();
         wc
     }
 
@@ -1563,17 +1797,20 @@ impl Shell {
             view,
             shared: &mut self.shared,
             orreries: &mut self.orreries,
+            graphlets: &self.graphlets,
             clipboard: &mut self.clipboard,
             a11y_bridge,
             a11y_action_routes: &mut self.a11y_action_routes,
             render_core: self.render_core.as_ref(),
             commands: &mut self.commands,
             orrery_pool_count: pool_count,
+            branch_scope_restore: None,
         };
-        // Install this window's per-pane cameras + selection for the pass; `Drop` reads
-        // them back. (View state on the view.)
+        // Install this window's per-pane cameras + selection + branch scope for the pass;
+        // `Drop` reads them back. (View state on the view.)
         wc.install_viewports();
         wc.install_selections();
+        wc.install_scope();
         Some(wc)
     }
 

@@ -175,6 +175,13 @@ pub struct Constellation {
     /// the page. The host resolves these (origin + component + permissions) from
     /// `script-bindings.json` and pushes them via [`set_script_bindings`](Self::set_script_bindings).
     script_bindings: Vec<crate::content::script::ResolvedScriptBinding>,
+    /// The display device-pixel-ratio the host pushes each frame (winit
+    /// `scale_factor`). Content actors lay out in **logical** (DIP) coordinates, so
+    /// the viewport / band requests sent to them are divided by this and the heights /
+    /// bands / link rects they report back are multiplied by it — the host's content
+    /// coordinate space stays physical. 1.0 = no scaling. The host rasterizes the
+    /// (logical) scene at physical res via `rasterize_scaled`. (Auto-DPI D2.)
+    dpr: f32,
 }
 
 /// What a [`Constellation::drain`] surfaced for the host to act on. Scenes are
@@ -208,7 +215,15 @@ impl Constellation {
             disabled_engines: HashSet::new(),
             auto_ingest_linked_data: false,
             script_bindings: Vec::new(),
+            dpr: 1.0,
         }
+    }
+
+    /// Set the display device-pixel-ratio (winit `scale_factor`); the host pushes it
+    /// each frame. Clamped to a sane floor so a stray 0 can't divide-by-zero the
+    /// logical viewport. (Auto-DPI D2.)
+    pub fn set_device_pixel_ratio(&mut self, dpr: f32) {
+        self.dpr = dpr.max(0.1);
     }
 
     /// Toggle whether new content actors auto-harvest embedded linked data on load.
@@ -382,10 +397,15 @@ impl Constellation {
             .shown
             .as_ref()
             .is_some_and(|(u, t, ..)| u == url && *t == tag);
+        // The actor lays out in logical (DIP) coords; the viewport it is told is the
+        // physical tile size divided by the device-pixel-ratio. The host rasterizes the
+        // resulting logical scene at physical res. (Auto-DPI D2.)
+        let lcw = ((cw as f32) / self.dpr).round().max(1.0) as u32;
+        let lch = ((ch as f32) / self.dpr).round().max(1.0) as u32;
         if same_doc {
             activation.gens.viewport.bump();
             activation.handle.command(ContentCommand::Resize {
-                viewport: (cw, ch),
+                viewport: (lcw, lch),
                 viewport_gen: activation.gens.viewport,
             });
         } else {
@@ -400,7 +420,7 @@ impl Constellation {
                 url: url.to_string(),
                 state,
                 engine: engine.to_string(),
-                viewport: (cw, ch),
+                viewport: (lcw, lch),
                 nav: activation.gens.nav,
                 viewport_gen: activation.gens.viewport,
                 sheet,
@@ -465,7 +485,11 @@ impl Constellation {
     /// height the host rasterizes and scrolls a window of. `0` if not active or
     /// not yet rendered.
     pub fn content_height(&self, member: GraphMemberId) -> u32 {
-        self.active.get(&member).map_or(0, |a| a.content_height)
+        // Actor heights are logical; report physical so the host's scroll math stays
+        // physical. (Auto-DPI D2.)
+        self.active
+            .get(&member)
+            .map_or(0, |a| ((a.content_height as f32) * self.dpr).round() as u32)
     }
 
     /// The vertical band `(band_y, band_h)` the member's latest HTML/serval scene
@@ -476,7 +500,15 @@ impl Constellation {
     /// its packet directly), an unrendered node, or before the first HTML scene.
     /// (HTML scroll.)
     pub fn scene_band(&self, member: GraphMemberId) -> (u32, u32) {
-        self.active.get(&member).map_or((0, 0), |a| a.band)
+        // The actor reports the band in logical coords; scale to physical so the host's
+        // compose offset + band texture height are physical. (Auto-DPI D2.)
+        let s = self.dpr;
+        self.active.get(&member).map_or((0, 0), |a| {
+            (
+                ((a.band.0 as f32) * s).round() as u32,
+                ((a.band.1 as f32) * s).round() as u32,
+            )
+        })
     }
 
     /// Ask `member`'s actor to re-emit the HTML/serval band covering
@@ -487,6 +519,10 @@ impl Constellation {
     /// the actor every frame. No-op for a node that is not active or is on the
     /// document lane (whose packet the host windows itself). (HTML scroll.)
     pub fn request_scroll(&mut self, member: GraphMemberId, band_y: u32, band_h: u32) {
+        // The host requests in physical coords; the actor works in logical. Convert in,
+        // and dedup in logical space. (Auto-DPI D2.)
+        let band_y = ((band_y as f32) / self.dpr).round() as u32;
+        let band_h = ((band_h as f32) / self.dpr).round().max(1.0) as u32;
         let Some(activation) = self.active.get_mut(&member) else {
             return;
         };
@@ -648,6 +684,9 @@ impl Constellation {
     /// so a link nested in an enclosing region resolves to the innermost. `None` when
     /// the point lands on no link (the caller keeps its normal click). (Inline-link nav.)
     pub fn link_at(&self, member: GraphMemberId, x: f32, y: f32) -> Option<&str> {
+        // The host passes physical document coords; link rects are in the actor's
+        // logical space. Convert the query point in. (Auto-DPI D2.)
+        let (x, y) = (x / self.dpr, y / self.dpr);
         let activation = self.active.get(&member)?;
         // Document lane: hit-test the retained packet's interactions directly (the
         // query API subsumes the old parallel link-rect table). HTML lane has no

@@ -96,6 +96,12 @@ pub enum Command {
     /// eidetic store (host action) — the Alembic memory spine's "Save as graph engram".
     /// Redacts private / heavy fields by default; `session_runtime::graph_engram`.
     SaveGraphEngram,
+    /// Materialize the focused page's outbound-link neighborhood onto the canvas (host
+    /// action, relational-browse V1, single-hop): parse the focused node's
+    /// already-fetched body render-free and place its links as `Semantic:Hyperlink`-edged
+    /// graph nodes around the seed — no target fetch, no new actor, no crawl. Distinct
+    /// from the multi-hop `CrawlFocused`. (Extraction lane, single-hop.)
+    MaterializeFocused,
     /// Crawl the focused page's link neighborhood into the graph (host action): seed
     /// the crawl actor from the focused node's URL, bounded by a conservative default
     /// policy (same-host, shallow). Each fetched page's links + metadata become graph
@@ -143,6 +149,7 @@ impl Command {
         Command::CloseGraphPane,
         Command::ExportGraph,
         Command::SaveGraphEngram,
+        Command::MaterializeFocused,
         Command::CrawlFocused,
         Command::StopCrawl,
         Command::ToggleShellbar,
@@ -177,6 +184,7 @@ impl Command {
                 | Command::CloseGraphPane
                 | Command::ExportGraph
                 | Command::SaveGraphEngram
+                | Command::MaterializeFocused
                 | Command::CrawlFocused
                 | Command::StopCrawl
                 | Command::ToggleShellbar
@@ -200,7 +208,8 @@ impl Command {
             // Per-node gestures on the single focused node: its facets, its content
             // operation, its background-keep flag, its compat-view engine override.
             OpenNodeSettings | BackgroundNode | RetryFocusedContent | StopFocusedOperation
-            | PinFocusedOperation | ToggleCompatView | CrawlFocused => MenuScope::SingleNode,
+            | PinFocusedOperation | ToggleCompatView | CrawlFocused
+            | MaterializeFocused => MenuScope::SingleNode,
             // Navigation, app-level pane toggles, graph / pane ops, export — available in any
             // context (they target the focused node or the whole graph, not the selection).
             Back | Forward | Home | ConnectPeer | ToggleWorkbench | ToggleRoster | ToggleGloss
@@ -254,6 +263,7 @@ impl Command {
             Command::CloseGraphPane => "close_pane",
             Command::ExportGraph => "export_graph",
             Command::SaveGraphEngram => "save_graph_engram",
+            Command::MaterializeFocused => "materialize",
             Command::CrawlFocused => "crawl",
             Command::StopCrawl => "crawl_stop",
             Command::ToggleShellbar => "shellbar",
@@ -303,6 +313,7 @@ impl Command {
             Command::CloseGraphPane => "Close graph view (focused pane)",
             Command::ExportGraph => "Export graph (JSON-LD)",
             Command::SaveGraphEngram => "Save graph as engram",
+            Command::MaterializeFocused => "Materialize focused page's link neighborhood",
             Command::CrawlFocused => "Crawl focused page's links into the graph",
             Command::StopCrawl => "Stop the running crawl",
             Command::ToggleShellbar => "Shellbar (toggle visibility)",
@@ -481,6 +492,7 @@ pub const PALETTE_CONTEXT_ACTIONS: &[(crate::ContextAction, &str, &str)] = {
         (ToggleSizeByDegree, "size_by_degree", "Toggle size by degree"),
         (ToggleSizeByImportance, "size_by_importance", "Toggle size by importance"),
         (IsolateSelection, "isolate", "Isolate selection"),
+        (OpenComponentGraphlet, "open_component", "Open component as graphlet"),
         (ShowAllNodes, "show_all", "Show all nodes"),
         (MirrorTiles, "mirror_tiles", "Mirror open tiles"),
         (OpenNodeFacets, "open_node_facets", "Node settings (selected node)"),

@@ -11,7 +11,7 @@ use netrender::NetrenderOptions;
 use orrery::WHEEL_PAN_SCALE;
 use serval_winit_host::{RenderCore, modifiers_from_winit};
 use winit::application::ApplicationHandler;
-use winit::dpi::{PhysicalPosition, PhysicalSize};
+use winit::dpi::{LogicalSize, PhysicalPosition, PhysicalSize};
 use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{CursorIcon, Window, WindowId};
@@ -556,6 +556,11 @@ impl ApplicationHandler for Shell {
         };
         match event {
             WindowEvent::Resized(size) => wc.resize(size.width, size.height),
+            // The window moved to a display with a different DPI (or the OS scale
+            // changed): refold it into the chrome scale. (Auto-DPI D1/D3.)
+            WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                wc.set_dpi_scale(scale_factor as f32)
+            }
             WindowEvent::Focused(focused) => wc.update_a11y_window_focus(focused),
             // A dropped image file textures the node under it (else the focused node) as a
             // custom sprite face. (Node representation P2 — sprite drop.)
@@ -822,8 +827,11 @@ impl Shell {
             .with_title("Meerkat — Mere chrome on serval")
             .with_decorations(false)
             .with_visible(false)
-            .with_min_inner_size(PhysicalSize::new(480u32, 320u32))
-            .with_inner_size(PhysicalSize::new(view.width, view.height));
+            // Logical sizing so the on-screen window is the same size at any DPI; winit
+            // makes the physical surface `logical × scale_factor`, and the chrome scales
+            // to match (Auto-DPI D1). `inner_size()` below then reports physical px.
+            .with_min_inner_size(LogicalSize::new(480u32, 320u32))
+            .with_inner_size(LogicalSize::new(view.width, view.height));
         let window = match event_loop.create_window(attributes) {
             Ok(window) => Arc::new(window),
             Err(err) => {
@@ -834,6 +842,13 @@ impl Shell {
         let size = window.inner_size();
         view.width = size.width.max(1);
         view.height = size.height.max(1);
+        // Fold the window's DPI factor into the chrome scale now it exists — the startup
+        // sheet was built at the user's zoom with dpi 1.0. (Auto-DPI D1.)
+        let dpi = window.scale_factor() as f32;
+        if (self.shared.presentation.dpi_scale - dpi).abs() > 1e-3 {
+            self.shared.presentation.dpi_scale = dpi;
+            self.shared.presentation.rebuild_chrome_sheet();
+        }
         let surface = match self
             .render_core
             .as_ref()
@@ -907,6 +922,30 @@ impl Shell {
                 }
                 super::ShellCommand::RecordBranchMember { graph, graphlet, node } => {
                     self.record_branch_member(graph, graphlet, node)
+                }
+                super::ShellCommand::ReconcileGraphlets { graph } => {
+                    self.reconcile_linked_graphlets(graph)
+                }
+                super::ShellCommand::OpenLinkedGraphlet { node, from } => {
+                    // Mint the Linked Component graphlet (Shell), then open a window scoped
+                    // to it (reusing the branch-window scope path). (Phase 3 slice 2.)
+                    if self.render_core.is_some() {
+                        if let Some(graphlet_id) = self.linked_component_graphlet(node, from) {
+                            let anchor_label = self.orreries.get(&from).and_then(|o| {
+                                let g = o.graph();
+                                g.get_node_by_id(node)
+                                    .map(|(key, _)| g.node_display_label(key))
+                            });
+                            let mut view = self.build_window_view_for(from);
+                            view.branch_graphlet = Some(graphlet_id);
+                            if let Some(label) = anchor_label {
+                                view.chrome_update(|c| {
+                                    c.branch_label = Some(format!("\u{25ce} {label}"))
+                                });
+                            }
+                            self.spawn_window_with_view(event_loop, view);
+                        }
+                    }
                 }
                 super::ShellCommand::CloseWindow(id) => self.close_window(id),
                 super::ShellCommand::CreateSession => {

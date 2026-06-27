@@ -163,10 +163,53 @@ impl WindowCtx<'_> {
                 let pages = self.shared.content.crawl.max_pages();
                 (pages != crate::crawl::CrawlPolicy::default().max_pages).then_some(pages)
             },
+            // The user's chrome zoom (Ctrl +/-/0); the display DPI factor is not persisted
+            // (it is read fresh from the window each launch). (UI scale.)
+            ui_zoom: self.shared.presentation.user_zoom,
         };
         if let Err(err) = settings_store::save_settings(&self.shared.session.mere_root, &settings) {
             tracing::warn!(%err, "failed to persist settings");
         }
+    }
+
+    /// Rebuild the chrome at the current `ui_scale`, invalidate the cached toolbar
+    /// height (it re-measures from the new sheet) and the host-drawn window-control
+    /// texture (re-rasterised at the new band height), then redraw. Shared by the
+    /// zoom (Ctrl +/-/0) and display-DPI change paths. (UI scale.)
+    pub(super) fn refresh_ui_scale(&mut self) {
+        self.shared.presentation.rebuild_chrome_sheet();
+        self.view.toolbar_h = 0;
+        self.view.window_controls_tex = None;
+        self.view.request_redraw();
+    }
+
+    /// Fold a new display DPI factor (winit `ScaleFactorChanged`, or the initial
+    /// `scale_factor()` at window creation) into the chrome scale. A no-op when
+    /// unchanged. (Auto-DPI D1; goes per-window in D3.)
+    pub(super) fn set_dpi_scale(&mut self, dpi: f32) {
+        if (self.shared.presentation.dpi_scale - dpi).abs() < 1e-3 {
+            return;
+        }
+        self.shared.presentation.dpi_scale = dpi;
+        self.refresh_ui_scale();
+    }
+
+    /// Step the user's chrome zoom (Ctrl +/-) or reset it (Ctrl 0 -> the 1.1
+    /// baseline). Clamped to a usable band, rebuilt, and persisted. (UI scale.)
+    pub(super) fn adjust_user_zoom(&mut self, delta: f32) {
+        let target = if delta == 0.0 {
+            1.1
+        } else {
+            self.shared.presentation.user_zoom + delta
+        };
+        let clamped = (target * 100.0).round() / 100.0;
+        let clamped = clamped.clamp(0.6, 3.0);
+        if (self.shared.presentation.user_zoom - clamped).abs() < 1e-3 {
+            return;
+        }
+        self.shared.presentation.user_zoom = clamped;
+        self.refresh_ui_scale();
+        self.persist_settings();
     }
 
     /// Toggle the shellbar's visibility on this window and persist the new state. The

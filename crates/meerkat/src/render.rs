@@ -20,7 +20,6 @@ use std::time::Instant;
 use super::fetch::{ContentState, Fetched};
 use super::resources::{ResourceLoader, ResourceStore};
 use frame::{PaneContent, SessionId};
-use session_runtime::SwitcherThumbnail;
 
 use super::{
     CARD_BG, FALLBACK_TOOLBAR_H, WindowCtx, first_with_class, frame_view, shellbar,
@@ -332,6 +331,11 @@ impl WindowCtx<'_> {
         let chrome_us: u128;
         let (w, h) = (self.view.width.max(1), self.view.height.max(1));
         let toolbar_h = self.toolbar_height().min(h);
+        // Push the display device-pixel-ratio to the content pool each frame: actors lay
+        // out logical, the host rasterizes their scenes at physical via `rasterize_scaled`
+        // below, so content text is crisp + correctly-sized on a HiDPI display. (Auto-DPI D2.)
+        let dpr = self.shared.presentation.dpi_scale;
+        self.shared.content.constellation.set_device_pixel_ratio(dpr);
 
         // Reserve / drop the Comms frame leaf to match the chrome's comms-open state
         // before laying the panes out, so the other panes make room for it. (Comms.)
@@ -361,6 +365,53 @@ impl WindowCtx<'_> {
                 c.shellbar_edge = sb_edge;
                 c.shellbar_hidden = sb_hidden;
             });
+        }
+
+        // Sync the open sessions into Chrome as toolbar chips (Chrome bar P4 — the
+        // switcher moved out of the shellbar). Ordered by id like `cycle_session`; the
+        // focused pane's session is the active chip. A slim (leaf) window shows none.
+        let chips: Vec<meerkat::SessionChip> = if self.view.kind.is_slim() {
+            Vec::new()
+        } else {
+            let focused = self.session_for_graph(self.view.focused_graph).map(|(id, _)| id);
+            // While a session is being renamed (F2 / context rename), show the live edit
+            // buffer in its chip — the chip is the rename surface now the switcher is gone.
+            let renaming = self.view.renaming.clone();
+            let mut ids: Vec<SessionId> =
+                self.shared.session.session_thumbnails.keys().copied().collect();
+            ids.sort_by_key(|id| *id.as_uuid());
+            ids.iter()
+                .map(|id| {
+                    let label = match &renaming {
+                        // The live rename buffer (with a caret bar) — shown unclipped.
+                        Some((rid, buf)) if rid == id => format!("{buf}\u{2502}"),
+                        _ => {
+                            let raw = self
+                                .shared
+                                .session
+                                .session_labels
+                                .get(id)
+                                .filter(|l| !l.is_empty())
+                                .cloned()
+                                .unwrap_or_else(|| {
+                                    let s = id.as_uuid().to_string();
+                                    format!("graph {}", &s[..s.len().min(4)])
+                                });
+                            // Clip long labels (a session named after a URL) so a chip
+                            // stays compact; the full name is one F2/rename away.
+                            if raw.chars().count() > 22 {
+                                format!("{}\u{2026}", raw.chars().take(21).collect::<String>())
+                            } else {
+                                raw
+                            }
+                        }
+                    };
+                    meerkat::SessionChip { id: *id, label, active: Some(*id) == focused }
+                })
+                .collect()
+        };
+        if self.view.chrome().sessions != chips {
+            self.view.chrome_update(move |c| c.sessions = chips);
         }
 
         // Sync the focused node's live find-match count into Chrome so the find bar
@@ -535,7 +586,37 @@ impl WindowCtx<'_> {
         // window so a tall menu (the layout submenu) can't spill past the bottom edge, and scroll
         // the highlighted row into view. (Context-menu keyboard nav.)
         if let Some((mx, my)) = self.view.chrome().context_menu.as_ref().map(|m| (m.x, m.y)) {
-            let max_h = (h as f32 - my - 16.0).max(120.0);
+            // Open away from whichever edge the panel would overflow: placed down-right of
+            // the cursor by default, it flips left / up when that would spill past the
+            // right / bottom edge, so the menu never goes offscreen. The panel size comes
+            // from the laid-out fragments (the retained prior frame); the first frame a
+            // menu opens it is unmeasured (0,0) and lands at the cursor, corrected next
+            // frame — the same one-frame settle the submenu anchor uses. (Context-menu
+            // edge-flip.)
+            // Estimate the panel height from its row count — the measured `size.height` is
+            // clamped by the `max-height` below (so it always "fits" and never signals
+            // overflow), and `content_size` proved unreliable for this scroll node. One
+            // search row + the items, at the context-item row height (~35px) plus the
+            // panel's 4px padding top+bottom. Width uses the measured natural width (not
+            // height-clamped) when available, else a sane default. (Context-menu edge-flip.)
+            let rows = self.view.chrome().context_menu.as_ref().map_or(0, |m| m.items.len()) + 1;
+            let menu_h = rows as f32 * 35.0 + 8.0;
+            let menu_w = {
+                let dom = self.view.dom.borrow();
+                let root = dom.document();
+                self.view
+                    .chrome_session
+                    .as_ref()
+                    .and_then(|s| {
+                        first_with_class(&dom, root, "context-menu")
+                            .and_then(|node| s.fragments().rect_of(node))
+                    })
+                    .map_or(0.0, |r| r.size.width)
+            };
+            let menu_w = if menu_w > 1.0 { menu_w } else { 240.0 };
+            let left = if mx + menu_w > w as f32 { (mx - menu_w).max(0.0) } else { mx };
+            let top = if my + menu_h > h as f32 { (my - menu_h).max(0.0) } else { my };
+            let max_h = (h as f32 - top - 16.0).max(120.0);
             {
                 let mut dom = self.view.dom.borrow_mut();
                 let root = dom.document();
@@ -545,7 +626,7 @@ impl WindowCtx<'_> {
                         node,
                         attr,
                         &format!(
-                            "position: absolute; left: {mx}px; top: {my}px; overflow: scroll; max-height: {max_h}px;"
+                            "position: absolute; left: {left}px; top: {top}px; overflow: scroll; max-height: {max_h}px;"
                         ),
                     );
                 }
@@ -790,6 +871,12 @@ impl WindowCtx<'_> {
                 .graph()
                 .nodes()
                 .filter_map(|(key, node)| {
+                    // Branch scope (Phase 2 slice 3): a scoped orrery — a branch window
+                    // scoped to its graphlet — shows only its scoped members as cards;
+                    // non-members are dropped, matching the scene's own scope filter.
+                    if !orrery.node_in_scope(key) {
+                        return None;
+                    }
                     // Settings nodes render as normal nodes addressing their page (Mark,
                     // 2026-06-22): a `settings://` node is a first-class, visible graph node you
                     // can see / open / relate, not an invisible tile-only member. Opening it
@@ -1496,17 +1583,26 @@ impl WindowCtx<'_> {
                         // own rasterize, so per-scene mask keys never collide across
                         // cards. (Box-shadow.)
                         for m in self.shared.content.constellation.scene_masks(*member) {
+                            // The mask is in the scene's logical coords; build it at
+                            // physical (×dpr) so it stays crisp under the scaled scene.
+                            // The key is unchanged, so the scene's shadow op still
+                            // resolves it. (Auto-DPI D2 tail.)
                             core.renderer().build_box_shadow_mask(
                                 m.key,
-                                m.dim,
-                                m.bounds,
-                                m.corner_radius,
-                                m.blur_radius_px,
+                                ((m.dim as f32) * dpr).round().max(1.0) as u32,
+                                [
+                                    m.bounds[0] * dpr,
+                                    m.bounds[1] * dpr,
+                                    m.bounds[2] * dpr,
+                                    m.bounds[3] * dpr,
+                                ],
+                                m.corner_radius * dpr,
+                                m.blur_radius_px * dpr,
                                 m.invert,
                             );
                         }
                         let (tex, view) =
-                            core.rasterize(scene, *cw, band_px, ColorLoad::Clear(card_bg));
+                            core.rasterize_scaled(scene, *cw, band_px, ColorLoad::Clear(card_bg), dpr);
                         self.view.tile_textures.insert(
                             *member,
                             super::CachedTile { version, size: (*cw, band_px), tex, view },
@@ -1532,17 +1628,26 @@ impl WindowCtx<'_> {
                 if !fresh {
                     let new_band_y = (scroll - (band_h - visible_h) * 0.5)
                         .clamp(0.0, (content_h - band_h).max(0.0));
+                    // The packet is in the actor's logical coords; window it with the band
+                    // converted to logical (÷dpr), then rasterize the logical scene at
+                    // physical via the scale. (Auto-DPI D2.)
                     let doc_scene = self
                         .shared
                         .content
                         .constellation
                         .packet(*member)
                         .map(|(packet, fonts)| {
-                            crate::card::lower_window(packet, fonts, new_band_y, band_h, doc_palette)
+                            crate::card::lower_window(
+                                packet,
+                                fonts,
+                                new_band_y / dpr,
+                                band_h / dpr,
+                                doc_palette,
+                            )
                         });
                     if let Some(scene) = doc_scene {
                         let (tex, view) =
-                            core.rasterize(&scene, *cw, band_px, ColorLoad::Clear(card_bg));
+                            core.rasterize_scaled(&scene, *cw, band_px, ColorLoad::Clear(card_bg), dpr);
                         self.view.tile_textures.insert(
                             *member,
                             super::CachedTile { version, size: (*cw, band_px), tex, view },
@@ -1678,14 +1783,18 @@ impl WindowCtx<'_> {
                     for (mi, rects) in self.find_matches_for(*member).iter().enumerate() {
                         let is_active = mi == active;
                         for r in rects {
-                            let wy0 = dest[1] + (r[1] - scroll) * s;
-                            let wy1 = dest[1] + (r[3] - scroll) * s;
+                            // Find rects come back in the actor's logical coords; scale to
+                            // physical (×dpr) to match the physical scroll + texture. (Auto-DPI D2.)
+                            let (r0, r1, r2, r3) =
+                                (r[0] * dpr, r[1] * dpr, r[2] * dpr, r[3] * dpr);
+                            let wy0 = dest[1] + (r1 - scroll) * s;
+                            let wy1 = dest[1] + (r3 - scroll) * s;
                             // Cull a match scrolled out of the card's visible band.
                             if wy1 <= dest[1] || wy0 >= dest[3] {
                                 continue;
                             }
-                            let wx0 = (dest[0] + r[0] * s).max(dest[0]);
-                            let wx1 = (dest[0] + r[2] * s).min(dest[2]);
+                            let wx0 = (dest[0] + r0 * s).max(dest[0]);
+                            let wx1 = (dest[0] + r2 * s).min(dest[2]);
                             let cy0 = wy0.max(dest[1]);
                             let cy1 = wy1.min(dest[3]);
                             if wx1 <= wx0 || cy1 <= cy0 {
@@ -2060,82 +2169,6 @@ impl WindowCtx<'_> {
                 h,
                 ExternalTexturePlacement::new([x0, 0.0, w as f32, band_h as f32]),
             );
-        }
-        // The F2.3 shellbar session switcher: a bottom-anchored strip of per-graph
-        // thumbnail tiles drawn over the shellbar chrome. Left/Right edges only for
-        // now — the Top/Bottom strips are too thin for the vertical tile stack.
-        // Mirrors the gloss host-draw + hit-rect pattern, so clicks route through the
-        // same shellbar region the input path already knows. (Multi-graph MG4.)
-        self.view.session_row_rects.clear();
-        self.view.session_close_rects.clear();
-        self.view.session_add_rect = None;
-        if !self.view.kind.is_slim()
-            && !self.shared.presentation.shellbar_hidden
-            && matches!(
-                self.shared.presentation.shellbar_edge,
-                session_runtime::ShellbarEdge::Left | session_runtime::ShellbarEdge::Right
-            )
-            && !self.shared.session.session_thumbnails.is_empty()
-        {
-            let strip =
-                shellbar::shellbar_rect(self.shared.presentation.shellbar_edge, w as f32, h as f32, toolbar_h as f32);
-            // Order tiles by session id, matching `cycle_session`'s row order.
-            let mut ids: Vec<SessionId> = self.shared.session.session_thumbnails.keys().copied().collect();
-            ids.sort_by_key(|id| *id.as_uuid());
-            // The highlighted tile is the *focused pane's* session (pane-as-unit),
-            // resolved from focused_graph — equal to the active session today.
-            let focused_session = self.session_for_graph(self.view.focused_graph).map(|(id, _)| id);
-            let entries: Vec<(SessionId, &SwitcherThumbnail, &str, bool)> = ids
-                .iter()
-                .filter_map(|id| {
-                    let thumb = self.shared.session.session_thumbnails.get(id)?;
-                    let label = self.shared.session.session_labels.get(id).map(String::as_str).unwrap_or("");
-                    Some((*id, thumb, label, Some(*id) == focused_session))
-                })
-                .collect();
-            let region_w = (strip[2] - strip[0]).round().max(1.0) as u32;
-            let region_h_f = super::switcher::switcher_height(entries.len()).min(strip[3] - strip[1]);
-            let region_h = region_h_f.round().max(1.0) as u32;
-            let origin_x = strip[0];
-            let origin_y = strip[3] - region_h_f; // anchored at the strip's bottom
-            let renaming = self.view.renaming.as_ref().map(|(id, buf)| (*id, buf.as_str()));
-            let (scene, hits) = super::switcher::switcher_scene(
-                &entries,
-                region_w,
-                region_h,
-                &self.shared.presentation.chrome_theme,
-                renaming,
-                &mut self.shared.session.host_text,
-            );
-            let (_t, view) = core.rasterize(
-                &scene,
-                region_w,
-                region_h,
-                ColorLoad::Clear(wgpu::Color::TRANSPARENT),
-            );
-            core.renderer().compose_external_texture(
-                &view,
-                &target_view,
-                format,
-                w,
-                h,
-                ExternalTexturePlacement::new([origin_x, origin_y, strip[2], strip[3]]),
-            );
-            let offset = |r: [f32; 4]| {
-                [
-                    origin_x + r[0],
-                    origin_y + r[1],
-                    origin_x + r[2],
-                    origin_y + r[3],
-                ]
-            };
-            for (id, r) in hits.rows {
-                self.view.session_row_rects.push((id, offset(r)));
-            }
-            for (id, r) in hits.closes {
-                self.view.session_close_rects.push((id, offset(r)));
-            }
-            self.view.session_add_rect = hits.add.map(offset);
         }
         // The add-tag prompt: a centered text-entry box over the content while the
         // host captures a tag for the selected node(s). Drawn last so it sits over

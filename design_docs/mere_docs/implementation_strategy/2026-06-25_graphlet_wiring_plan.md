@@ -8,9 +8,13 @@ accumulates its own lineage as you navigate in it. Per-window focus/selection is
 makes two windows on one graph independent (driven), which resolved the Slice 2
 cartography-focus nuance and unblocks Slice 3. **#3 (branch lifecycle on donor delete) is
 done + driven** — deleting a session closes its windows and drops its pooled state, while
-forks survive. **Phase 3 slice 1 (derivation + Linked path + reconcile) done + tested** —
-`Component` / `Ego` graphlets derive from the kernel graph and reconcile on drift. Next:
-Phase 3 slice 2 (a consumer that creates Linked graphlets, e.g. relational-browse). Spun out
+forks survive. **Phase 2 slice 3 (branch-scoped orrery) done + driven** — a branch window
+renders only its graphlet's members. **Phase 3 slice 1 (derivation + Linked path + reconcile)
+done + tested** — `Component` / `Ego` graphlets derive from the kernel graph and reconcile on
+drift. **Phase 3 slice 2 (manual Linked consumer) done + driven** — an "Open component" node
+action mints a `Linked { Component }` graphlet (12 derived members) + opens a scoped window.
+Next: Slice 2+ (relational-browse wiring, the reconcile proposal, richer kinds).
+Spun out
 of the [tear-out gestures plan](2026-06-24_tearout_gestures_plan.md) (G3 / OQ-7 deferral)
 when scouting the forme graphlet API showed the whole layer is built but unwired.
 **Lane / conflict posture**: meerkat session/state + a small forme surface (reusing its
@@ -156,9 +160,17 @@ the *shared* `Orrery::focused_member` in cartography mode. Open item #1 (per-win
 focus/selection isolation) made cartography focus per-window too, so a branch's lineage now
 records *its own* focus in either mode.
 
-**Slice 3 (optional v0) — orrery scope.** Decide whether the branch window's orrery shows
-only the graphlet's members (a filtered cartography projection). Per-window focus is now
-done (#1), so this is just the *filtered view*; still optional / deferrable.
+**Slice 3 — orrery scope — DONE (2026-06-25), driven.** A branch window's orrery renders
+only its graphlet's members (a filtered cartography view). Per-window via save/restore (only
+a branch window touches the scope; its ctx saves the orrery's prior scope, sets
+`scope_to_members(live roster)`, and `Drop` restores it, so the donor's own scope never
+leaks): `WindowCtx` gained a read-only `graphlets` ref + a `branch_scope_restore` slot, with
+`install_scope` / `restore_scope` in viewport.rs beside the camera/selection install/readback.
+Driving surfaced that the host's node-card builder (render.rs) iterated *all* nodes, ignoring
+the orrery's scope — fixed with an `Orrery::node_in_scope` filter so the cards match the
+scene's own scope filter. Drove headed: branched a node → its window showed **only** the
+anchor node, while the donor showed the whole graph (scope did not leak). meerkat 89 lib /
+172 bin + orrery 80 green.
 
 **Done when:** a branch window shows a distinct grouping (Slice 1 ✓) that accumulates its
 own lineage (Slice 2 ✓) while node edits still propagate to the donor (✓ — the navigated
@@ -184,7 +196,66 @@ harvested `compute_roster_delta` logic (reusing forme's plain `GraphletMemberDel
 auto-applies, returning the delta. Integration tests `linked_component_graphlet_derives_and_
 reconciles_on_drift` and `linked_ego_graphlet_is_radius_bounded` pass (kernel 255, meerkat 89
 lib / 169 bin green; a concurrent steward/eidetic refactor briefly broke the meerkat build mid-
-slice but settled). **Slice 2 (remaining):** a consumer that creates a Linked graphlet (relational-browse
+slice but settled). **Slice 2 — manual Linked consumer — DONE (2026-06-25), driven.** Mark's call: a manual
+command. A `ContextAction::OpenComponentGraphlet` (node context menu "Open component" +
+palette "Open component as graphlet") → `ShellCommand::OpenLinkedGraphlet` →
+`Shell::linked_component_graphlet` mints a `Linked { Component }` graphlet derived on the
+focused node, then opens a window scoped to it via the branch-window scope path (Slice 3),
+with a distinct `◎` chip. **Drove it (re-drive 2026-06-25):** focused a node, ran the
+palette command → `graphlets.json` got a `Linked { Component }` graphlet whose `spec.anchors`
+is the seed and whose `GraphletRef.anchors` is the **12 derived members** (the seed's whole
+connected component, from `component_members`) — the anchors-vs-members split working — and a
+new window opened scoped to that component. (The first attempt was harness focus friction;
+verifying the node stayed focused through the palette fixed it.) meerkat 89 lib / 172 bin +
+kernel 255 + orrery 80 green.
+
+**Slice 2+ — live drift for the Linked window — DONE (2026-06-25), tested.** `install_scope`
+now re-derives a `Linked` graphlet's roster from the live graph each pass (a `Branched` one
+keeps its accumulated roster), so the scoped window tracks graph drift — a node added
+elsewhere joins the component and appears live. `derive_members` is read-only, so this needs
+no `&mut`. Re-deriving every pass is fine at demo scale (a revision-cached derive is the
+refinement). meerkat 89 lib / 172 bin green. (Not separately drift-driven — a multi-window
+add-a-node drive is fiddly and the derivation is unit-tested; the visible-scope path is driven
+in Slice 2.)
+
+**Slice 2+ — auto-reconcile on drift (data level) — DONE (2026-06-25), tested.** `save_session`
+queues a `ReconcileGraphlets { graph }` when the focused graph has a Linked graphlet;
+`Shell::reconcile_linked_graphlets` runs `SessionGraphlets::reconcile_all` (re-derive + diff +
+auto-apply each Linked graphlet) and persists on a real change (idempotent — a no-op when
+nothing drifted). So a Linked graphlet's *persisted* roster tracks graph drift too, not just
+its window. Unit-tested (`reconcile_all_updates_linked_rosters_on_drift`: connect a node →
+`reconcile_all` reports the change and the roster grows). meerkat graphlets tests green (6/6);
+the lib toolbar test was red on a concurrent chrome button refactor (not ours).
+
+**Slice 2+ — selectors / edge projection — DONE (2026-06-26), tested.** `component_members`
+and `ego_members` now take a `&[RelationSelector]` edge projection: the BFS only follows an
+edge whose payload matches a selector (empty = all families), via the new `has_relation`-based
+`edge_matches_selectors`. So the *same* nodes derive a different shape under a different
+relation lens. `derive_members` maps a spec's opaque `selectors` strings (family names,
+case-insensitive) to `RelationSelector::Family`. Kernel test `the_selector_projection_changes_
+the_derived_shape` (A—Semantic→B—Containment→C: all = 3, Semantic-only = 2, Containment-only =
+1). Highest-leverage gap closed: the kinds are now *relational*, not just topological. Still
+seed-mapped: the **vocabulary control** that *sets* selectors (the projection toggle, see the
+Controls note), and sub-kind selectors (only `Cites`, not all Semantic).
+
+**Controls — where the projection lives (graphlet vs surface).** A graphlet is
+surface-independent: a member set plus a derivation rule (kind + selectors). The gloss strip,
+a cartography swatch, and the main canvas are *form factors* of a Navigator over a scope, so
+the controls split on a WHAT/HOW seam. **WHAT** (scope + shape = kind + selectors) is the
+*graphlet's*, shared by every surface showing it (change once → all re-derive) — this is the
+design doc's projection toggle / derivation strip. **HOW** (arrangement = layout strategy +
+which graphlet a surface binds) is the *surface's*: `gloss_strategy`, the swatch's cartography
+`projection_id`, the canvas's gyre physics, already per-surface. So do **not** duplicate the
+selector control per surface. forme's override precedence (`SelectionOverride` >
+`GraphViewOverride` > `GraphDefault`) leaves room for a per-surface projection *override* later
+(a swatch re-reading one graphlet under a different lens); the default is the baked projection.
+
+**Slice 2+ (still remaining):** wiring the consumer to **relational-browse** neighborhoods
+(the original Linked target); the **user-choice reconcile proposal** (keep-linked / unlink /
+save-as-branch via forme's `ReconciliationChoice`) — auto-apply is the v0; the projection
+vocabulary control (set selectors from the UI); and the remaining kinds (Corridor / Loop /
+Frontier / Facet — currently fall back to the seed). Older
+note: a consumer that creates a Linked graphlet (relational-browse
 neighborhoods), the user-choice reconcile proposal (keep-linked / unlink / save-as-branch via
 forme's `ReconciliationChoice`), and the remaining kinds (Corridor / Loop / Frontier /
 selector match — currently fall back to the seed). The naming rename (OQ-2-b) only bites if we
@@ -349,3 +420,65 @@ tile-tab leaf origin, G5 move, G2 leaf content, fork restore-into-switcher) live
   the active graph (2 windows), deleted that session via the switcher × → 1 window (leaf
   closed) + primary switched to the survivor, no crash. meerkat 89 lib / 167 bin green
   (after a transient red from a concurrent `unix_age` test edit that settled). Next: Phase 3.
+- **2026-06-25** — **Phase 3 slice 1 (derivation + Linked path + reconcile) done + tested.**
+  Kernel: `Graph::component_members` / `ego_members` (BFS, depth-bounded for ego) + a shared
+  `bfs_members`, with `derivation_tests` (component reaches the component / isolates stay
+  singletons / unknown seed empty; ego radius 0/1/2 bounded). meerkat `graphlets.rs`:
+  `derive_members(graph, spec)` (kind→kernel primitive, `GraphTree`-free), `record_linked`
+  (mint a `Linked` graphlet, live derived set in `anchors`, seed in `spec.primary_anchor`),
+  `reconcile` (re-derive, then the harvested `compute_roster_delta` over forme's
+  `GraphletMemberDelta`, then auto-apply). Tests `linked_component_*` (derive A+B, connect C,
+  reconcile so delta.added is C and the roster grows) + `linked_ego_*` (radius 1 is A+B, not
+  C). Added `euclid` as a meerkat
+  dev-dep for the graph fixtures. kernel 255 + meerkat 89 lib / 169 bin green (a concurrent
+  steward/eidetic refactor briefly broke the build mid-slice; verified not ours — `steward_rows`
+  dup in pane_data.rs/steward.rs + `TraceEvent.candidates` — waited, it settled). Slice 2:
+  a consumer (relational-browse Linked neighborhoods) + the user-choice reconcile proposal +
+  the remaining kinds (Corridor/Loop/Frontier/selector).
+- **2026-06-25** — **Phase 2 slice 3 (branch-scoped orrery) done + driven.** A branch window
+  renders only its graphlet's members. Per-window via save/restore (only a branch window
+  touches the scope; ctx saves the prior scope, sets `scope_to_members(roster)`, `Drop`
+  restores): `WindowCtx` gained a read-only `graphlets` ref + `branch_scope_restore`;
+  `install_scope` / `restore_scope` in viewport.rs. Driving caught that render.rs's host
+  card-builder ignored the orrery scope (iterated all nodes); fixed with `Orrery::node_in_scope`.
+  Drove headed: a branch window showed only its anchor node; the donor showed the whole graph
+  (no scope leak). meerkat 89 lib / 172 bin + orrery 80 green. The multi-window drive fought
+  concurrent chrome churn (a tab refactor) + window-handle flakiness; a temporary
+  `[scope]` stderr probe confirmed `install_scope` was scoping, isolating the bug to the host
+  card path.
+- **2026-06-25** — **Phase 3 slice 2 (manual Linked consumer) built + tested.**
+  `ContextAction::OpenComponentGraphlet` (node menu + palette entry) →
+  `ShellCommand::OpenLinkedGraphlet` → `Shell::linked_component_graphlet` (mint a
+  `Linked { Component }` graphlet on the focused node) → open a window scoped to it (Slice 3
+  path). meerkat 89 lib / 172 bin green. The Linked mechanism is unit-tested (Slice 1) and
+  the action surfaced correctly in the palette ("Open component as graphlet"); the full UI
+  click-through was not cleanly captured (the action keys off the focused node, and the drive
+  harness lost focus across the palette interaction — harness friction, not a code gap).
+  Slice 2+ remains: relational-browse wiring, the user-choice reconcile proposal,
+  auto-reconcile on drift, and the richer kinds.
+- **2026-06-25** — **Phase 3 slice 2 re-drive: confirmed.** With the node verified focused
+  through the palette, running "Open component as graphlet" wrote a `Linked { Component }`
+  graphlet (spec.anchors = the seed; GraphletRef.anchors = the 12-node derived component) and
+  opened a scoped window with the `◎` chip. The earlier partial capture was harness focus
+  friction, now closed. Slice 2 is driven.
+- **2026-06-25** — **Phase 3 slice 2+ (live drift) done + tested.** `install_scope` re-derives
+  a `Linked` graphlet's roster from the live graph each pass (read-only `derive_members`), so a
+  Linked window tracks graph drift live; a `Branched` graphlet keeps its accumulated roster.
+  meerkat 89 lib / 172 bin green. Remaining Slice 2+: relational-browse wiring, the user-choice
+  reconcile proposal + persisting the reconciled roster, and the richer kinds.
+- **2026-06-25** — **Phase 3 slice 2+ (data-level auto-reconcile) done + tested.** `save_session`
+  queues `ReconcileGraphlets { graph }` when the graph has a Linked graphlet →
+  `Shell::reconcile_linked_graphlets` → `SessionGraphlets::reconcile_all` (re-derive + diff +
+  auto-apply) + persist on change. The persisted Linked roster now tracks drift, closing the
+  stale-roster gap (the window already tracked it live). Unit-tested `reconcile_all_updates_
+  linked_rosters_on_drift`; graphlets bin tests 6/6. The lib toolbar test was red on a
+  concurrent chrome button refactor (verified not ours).
+- **2026-06-26** — **Phase 3 slice 2+ (selectors / edge projection) done + tested.**
+  `component_members` / `ego_members` take a `&[RelationSelector]` projection; the BFS follows
+  only edges matching a selector (empty = all), via `edge_matches_selectors` (reads the edge
+  payload between two nodes, `has_relation`). `derive_members` maps a spec's `selectors`
+  strings → `RelationSelector::Family`. Kernel test `the_selector_projection_changes_the_
+  derived_shape` (Semantic-only vs Containment-only vs all over A—Sem→B—Cont→C). kernel 256,
+  meerkat graphlets 6/6 green. Closes the highest-leverage gap: the kinds derive *relationally*
+  now. Added a **Controls** design note (graphlet owns kind+selectors; surface owns
+  layout+binding — do not duplicate the selector control per gloss/swatch/canvas).

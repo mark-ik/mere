@@ -75,7 +75,8 @@ impl WindowCtx<'_> {
         // Resolve everything owned first, so no borrow outlives the mutable
         // store borrow below.
         let from_url = self.view.content_location.clone();
-        let candidates = self.candidate_links(&from_url);
+        let candidates = self.candidate_links();
+        let candidate_count = candidates.len();
         let owner = format!("{}", self.shared.session.active_persona.0);
         let now = now_ms();
         let trace = build_nav_trace(&owner, &from_url, to, transition, candidates, now);
@@ -84,22 +85,26 @@ impl WindowCtx<'_> {
             return;
         };
         match pollster::block_on(save_trace(store, &trace, now)) {
-            Ok(_) => tracing::debug!(to = %to, "recorded a browsing trace"),
+            Ok(_) => {
+                tracing::debug!(to = %to, candidates = candidate_count, "recorded a browsing trace")
+            }
             Err(err) => tracing::warn!(?err, "failed to record a browsing trace"),
         }
     }
 
     /// The outbound links of the page being navigated *from* — the candidate set
-    /// the navigation was chosen against (capture plan C2). Read from the seed
-    /// node's out-neighbors in the session graph, so it is populated once a
-    /// page's neighborhood has been materialized or crawled (relational
-    /// browsing) and empty otherwise. `title` is left for the producer to fill.
-    fn candidate_links(&self, from_url: &str) -> Vec<PageRef> {
-        if from_url.is_empty() {
+    /// the navigation was chosen against (capture plan C2). Read from the
+    /// **focused node's** out-neighbors in the session graph (by member id, not by
+    /// URL: in-place navigation has already advanced the node's URL to the
+    /// destination by the time this runs, but the node and its links are the same).
+    /// Populated once a page's neighborhood has been materialized or crawled
+    /// (relational browsing) and empty otherwise. `title` is left for the producer.
+    fn candidate_links(&self) -> Vec<PageRef> {
+        let Some(member) = self.nav_target_member() else {
             return Vec::new();
-        }
+        };
         let graph = self.orrery().graph();
-        let Some((key, _)) = graph.get_node_by_url(from_url) else {
+        let Some((key, _)) = graph.get_node_by_id(member) else {
             return Vec::new();
         };
         graph

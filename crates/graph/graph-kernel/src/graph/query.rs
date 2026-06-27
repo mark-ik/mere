@@ -488,23 +488,42 @@ impl Graph {
     }
 
     /// The connected component of `seed` — it plus every node reachable through relations
-    /// (undirected), breadth-first. Empty if `seed` is not in the graph. The **Component**
-    /// graphlet's derivation. (Graphlet derivation, Phase 3.)
-    pub fn component_members(&self, seed: uuid::Uuid) -> Vec<uuid::Uuid> {
-        self.bfs_members(seed, None)
+    /// (undirected), breadth-first. Empty if `seed` is not in the graph. `selectors` is the
+    /// **edge projection**: only edges matching a selector are followed (an empty slice
+    /// follows every family). So the *same* nodes can be one Component under one projection
+    /// and a different one under another. The **Component** graphlet's derivation. (Graphlet
+    /// derivation, Phase 3 — selectors.)
+    pub fn component_members(
+        &self,
+        seed: uuid::Uuid,
+        selectors: &[super::RelationSelector],
+    ) -> Vec<uuid::Uuid> {
+        self.bfs_members(seed, None, selectors)
     }
 
     /// The **Ego** neighborhood of `seed`: itself plus every node within `radius`
-    /// undirected hops, breadth-first (`radius` 0 = just the seed). The Ego graphlet's
-    /// derivation. (Graphlet derivation, Phase 3.)
-    pub fn ego_members(&self, seed: uuid::Uuid, radius: u8) -> Vec<uuid::Uuid> {
-        self.bfs_members(seed, Some(radius))
+    /// undirected hops, breadth-first (`radius` 0 = just the seed), over the `selectors`
+    /// edge projection (empty = all families). The Ego graphlet's derivation. (Graphlet
+    /// derivation, Phase 3 — selectors.)
+    pub fn ego_members(
+        &self,
+        seed: uuid::Uuid,
+        radius: u8,
+        selectors: &[super::RelationSelector],
+    ) -> Vec<uuid::Uuid> {
+        self.bfs_members(seed, Some(radius), selectors)
     }
 
     /// Breadth-first member uuids from `seed` over undirected neighbors, bounded to
-    /// `max_depth` hops (`None` = unbounded = the whole component). Shared by
-    /// [`component_members`](Self::component_members) and [`ego_members`](Self::ego_members).
-    fn bfs_members(&self, seed: uuid::Uuid, max_depth: Option<u8>) -> Vec<uuid::Uuid> {
+    /// `max_depth` hops (`None` = unbounded = the whole component) and to the `selectors`
+    /// edge projection. Shared by [`component_members`](Self::component_members) and
+    /// [`ego_members`](Self::ego_members).
+    fn bfs_members(
+        &self,
+        seed: uuid::Uuid,
+        max_depth: Option<u8>,
+        selectors: &[super::RelationSelector],
+    ) -> Vec<uuid::Uuid> {
         let Some((start, _)) = self.get_node_by_id(seed) else {
             return Vec::new();
         };
@@ -521,12 +540,34 @@ impl Graph {
                 continue;
             }
             for neighbor in self.neighbors_undirected_sorted(key) {
+                // Edge projection: only follow an edge matching a selector (empty = all
+                // families). This is what makes the same nodes derive a different shape
+                // under a different relation projection. (Graphlet derivation — selectors.)
+                if !selectors.is_empty()
+                    && !self.edge_matches_selectors(key, neighbor, selectors)
+                {
+                    continue;
+                }
                 if seen.insert(neighbor) {
                     queue.push_back((neighbor, depth + 1));
                 }
             }
         }
         order
+    }
+
+    /// Whether the edge between `a` and `b` (either direction) matches any of `selectors`
+    /// (a relation family or sub-kind). Used by the selector-projected derivation walk.
+    fn edge_matches_selectors(
+        &self,
+        a: NodeKey,
+        b: NodeKey,
+        selectors: &[super::RelationSelector],
+    ) -> bool {
+        self.find_edge_key(a, b)
+            .or_else(|| self.find_edge_key(b, a))
+            .and_then(|k| self.inner.edge_weight(k))
+            .is_some_and(|payload| selectors.iter().any(|&s| payload.has_relation(s)))
     }
 
     /// Strongly connected components in the directed graph.
@@ -582,16 +623,58 @@ mod derivation_tests {
     #[test]
     fn component_members_is_the_whole_connected_component() {
         let (g, [a, _b, _c, d]) = chain_plus_isolate();
-        assert_eq!(g.component_members(a).len(), 3, "A reaches B and C");
-        assert_eq!(g.component_members(d).len(), 1, "D is isolated");
-        assert!(g.component_members(uuid::Uuid::nil()).is_empty(), "unknown seed: empty");
+        assert_eq!(g.component_members(a, &[]).len(), 3, "A reaches B and C");
+        assert_eq!(g.component_members(d, &[]).len(), 1, "D is isolated");
+        assert!(g.component_members(uuid::Uuid::nil(), &[]).is_empty(), "unknown seed: empty");
     }
 
     #[test]
     fn ego_members_is_radius_bounded() {
         let (g, [a, _b, _c, _d]) = chain_plus_isolate();
-        assert_eq!(g.ego_members(a, 0).len(), 1, "radius 0 is just the seed");
-        assert_eq!(g.ego_members(a, 1).len(), 2, "radius 1 reaches B, not C");
-        assert_eq!(g.ego_members(a, 2).len(), 3, "radius 2 reaches C");
+        assert_eq!(g.ego_members(a, 0, &[]).len(), 1, "radius 0 is just the seed");
+        assert_eq!(g.ego_members(a, 1, &[]).len(), 2, "radius 1 reaches B, not C");
+        assert_eq!(g.ego_members(a, 2, &[]).len(), 3, "radius 2 reaches C");
+    }
+
+    #[test]
+    fn the_selector_projection_changes_the_derived_shape() {
+        use crate::graph::{ContainmentSubKind, EdgeFamily, RelationSelector};
+        // A —Semantic→ B —Containment→ C. The same three nodes, two relation families.
+        let mut g = Graph::new();
+        let a = g.add_node("https://a".to_string(), Point2D::new(0.0, 0.0));
+        let b = g.add_node("https://b".to_string(), Point2D::new(1.0, 0.0));
+        let c = g.add_node("https://c".to_string(), Point2D::new(2.0, 0.0));
+        g.assert_relation(
+            a,
+            b,
+            EdgeAssertion::Semantic {
+                sub_kind: SemanticSubKind::Hyperlink,
+                label: None,
+                decay_progress: None,
+            },
+        );
+        g.assert_relation(
+            b,
+            c,
+            EdgeAssertion::Containment {
+                sub_kind: ContainmentSubKind::CollectionMember,
+            },
+        );
+        let a_id = g.get_node(a).unwrap().id;
+
+        let semantic = [RelationSelector::Family(EdgeFamily::Semantic)];
+        let containment = [RelationSelector::Family(EdgeFamily::Containment)];
+        // Whole graph under no projection; Semantic stops at B; Containment never leaves A.
+        assert_eq!(g.component_members(a_id, &[]).len(), 3, "all families: A, B, C");
+        assert_eq!(
+            g.component_members(a_id, &semantic).len(),
+            2,
+            "Semantic projection: A, B (B→C is Containment, not followed)"
+        );
+        assert_eq!(
+            g.component_members(a_id, &containment).len(),
+            1,
+            "Containment projection: just A (no Containment edge from A)"
+        );
     }
 }

@@ -88,6 +88,19 @@ impl WindowCtx<'_> {
         self.view.request_redraw();
     }
 
+    /// Materialize the focused page's outbound-link neighborhood onto the canvas
+    /// (relational-browse V1, single-hop): the focused node's already-fetched body is
+    /// parsed render-free and its links become `Semantic:Hyperlink`-edged graph nodes
+    /// around the seed, with no target fetch and no new actor. The contribution rides the
+    /// same frame drain content harvest uses. Returns a status note for the omnibar echo.
+    pub(super) fn materialize_focused(&mut self) -> Option<String> {
+        let Some(member) = self.focused_member() else {
+            return Some("Select a node to materialize".to_string());
+        };
+        self.shared.content.constellation.materialize_links(member);
+        Some("Materialized the page's link neighborhood".to_string())
+    }
+
     /// Crawl the focused page's outbound-link neighborhood into the focused graph
     /// (relational-browse V2): seed the crawl actor from the focused node's URL under a
     /// conservative default policy (same-host, shallow). The actor fetches off the
@@ -209,6 +222,9 @@ impl WindowCtx<'_> {
             Command::SaveGraphEngram => {
                 note = Some(self.save_graph_engram());
             }
+            // Materialize the focused page's link neighborhood (V1, single-hop): parse
+            // the already-fetched body and place its links as graph nodes — no fetch.
+            Command::MaterializeFocused => note = self.materialize_focused(),
             // Crawl the focused page's link neighborhood into the graph (V2). The crawl
             // actor fetches off the render path; this only seeds it + reports a note.
             Command::CrawlFocused => note = self.crawl_focused(),
@@ -427,6 +443,32 @@ impl WindowCtx<'_> {
             CommsIntent::ConnectCabal(ticket) => {
                 self.shared.comms_handle
                     .command(comms_host::CommsCommand::ConnectCabal(ticket));
+            }
+        }
+    }
+
+    /// Drain a session chip's captured gesture into the matching `ShellCommand` (the
+    /// chrome can't reach the session pool). `Activate` opens the session beside the
+    /// current one when Shift is held (the old switcher's Shift+click), else switches
+    /// to it. (Chrome bar P4 — sessions in the toolbar.)
+    pub(super) fn drain_session_intent(&mut self) {
+        let Some(intent) = self.view.chrome().session_intent else {
+            return;
+        };
+        self.view.chrome_update(|c| c.session_intent = None);
+        match intent {
+            meerkat::SessionIntent::Activate(id) => {
+                if self.view.modifiers.shift {
+                    self.commands.push(super::ShellCommand::OpenGraphBeside(id));
+                } else {
+                    self.commands.push(super::ShellCommand::SwitchSession(id));
+                }
+            }
+            meerkat::SessionIntent::Close(id) => {
+                self.commands.push(super::ShellCommand::CloseSession(id));
+            }
+            meerkat::SessionIntent::Create => {
+                self.commands.push(super::ShellCommand::CreateSession);
             }
         }
     }

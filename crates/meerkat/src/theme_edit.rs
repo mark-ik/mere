@@ -20,7 +20,9 @@ impl WindowCtx<'_> {
         let resolution = self.shared.presentation.theme.set_active_theme(theme_id);
         self.shared.presentation.active_theme_id = resolution.resolved_id;
         self.shared.presentation.chrome_theme = resolution.tokens.chrome;
-        self.shared.presentation.chrome_sheet = crate::chrome_sheet(&self.shared.presentation.chrome_theme);
+        // Rebuild at the current UI scale (and re-add syntax rules); shared with the
+        // zoom / DPI rebuild path. (UI scale.)
+        self.shared.presentation.rebuild_chrome_sheet();
         // Re-theme the orrery's backdrop + edges to match. (A2.)
         let (backdrop, edge) = crate::orrery_palette(&resolution.tokens);
         self.orrery_mut().set_palette(backdrop, edge);

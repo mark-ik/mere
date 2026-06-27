@@ -2640,6 +2640,26 @@ impl Orrery {
         self.scope = None;
     }
 
+    /// The current scope lens as member uuids, or `None` when unscoped. The inverse of
+    /// [`scope_to_members`](Self::scope_to_members) — a host saves this before a transient
+    /// per-window scope override (a branch window scoping to its graphlet) and restores it
+    /// after. (Per-window branch scope.)
+    pub fn scope_members(&self) -> Option<Vec<uuid::Uuid>> {
+        self.scope.as_ref().map(|keys| {
+            keys.iter()
+                .filter_map(|&k| self.graph.get_node(k).map(|n| n.id))
+                .collect()
+        })
+    }
+
+    /// Whether `key` is within the active scope lens (always true when unscoped). The
+    /// host's node-card builder filters on this so a scoped orrery (a branch window)
+    /// shows only its scoped members, matching the `frame()` scene's own scope filter.
+    /// (Curated orrery — host card path.)
+    pub fn node_in_scope(&self, key: NodeKey) -> bool {
+        self.scope.as_ref().is_none_or(|s| s.contains(&key))
+    }
+
     /// Zoom by `factor`, keeping the world point under `anchor` (screen px) fixed.
     fn zoom_at(&mut self, anchor: (f32, f32), factor: f32) {
         // Keep the world point currently under `anchor` fixed across the zoom: read it

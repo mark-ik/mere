@@ -184,6 +184,19 @@ impl WindowCtx<'_> {
             }
             Err(err) => tracing::warn!(%err, "failed to serialize the cartography positions"),
         }
+        // Auto-reconcile this graph's Linked graphlets after the save, so their persisted
+        // roster tracks graph drift (the scoped window already tracks it live via re-derive;
+        // this keeps the on-disk set + other readers current). Deferred to Shell (needs
+        // `&mut graphlets`); cheap + idempotent. (Graphlet wiring Phase 3 slice 2+.)
+        let focused = self.view.focused_graph;
+        if self
+            .graphlets
+            .get(&focused)
+            .is_some_and(|idx| idx.has_linked())
+        {
+            self.commands
+                .push(super::ShellCommand::ReconcileGraphlets { graph: focused });
+        }
         // Record the save in this session's manifest (advances `updated_at`, the
         // switcher's recency key) and flush the registry. (Multi-graph MG1.)
         self.shared.session.manifests.update(session_id, |_| {});
@@ -455,6 +468,63 @@ impl super::Shell {
             format!("node={node} graphlet={id}"),
         );
         Some(id)
+    }
+
+    /// Mint a **Linked** `Component` graphlet (Phase 3 slice 2) seeded on `node`, derived
+    /// from graph `from`, persisted, returning its id for a scoped window to carry. Unlike
+    /// a branch (a hand-built roster), its members are *derived* from the graph and
+    /// reconcile on drift. The caller opens a window scoped to it. `None` if the donor
+    /// graph or its session is gone. (Graphlet wiring Phase 3 — the manual Linked
+    /// consumer.)
+    pub(super) fn linked_component_graphlet(
+        &mut self,
+        node: uuid::Uuid,
+        from: GraphId,
+    ) -> Option<forme::GraphletId> {
+        let session_dir = self.graph_session_dir(from)?;
+        // Clone the graph as the derivation source (a borrow-split is a refinement; the
+        // component BFS is cheap).
+        let graph = self.orreries.get(&from)?.graph().clone();
+        let spec = forme::GraphletSpec {
+            kind: forme::GraphletKind::Component,
+            anchors: vec![node.to_string()],
+            primary_anchor: Some(node.to_string()),
+            selectors: Vec::new(),
+        };
+        let graphlets = self
+            .graphlets
+            .entry(from)
+            .or_insert_with(|| crate::graphlets::SessionGraphlets::load(&session_dir));
+        let id = graphlets.record_linked(&graph, spec);
+        if let Err(err) = graphlets.save(&session_dir) {
+            tracing::warn!(%err, dir = ?session_dir, "failed to persist the linked graphlet");
+        }
+        self.shared.observability.record_probe(
+            "graphlet",
+            "linked-component",
+            format!("node={node} graphlet={id}"),
+        );
+        Some(id)
+    }
+
+    /// Reconcile graph `graph`'s Linked graphlets against the current graph and persist any
+    /// that drifted (Phase 3 slice 2+ — data-level drift). Queued by `save_session` after a
+    /// mutation. A no-op when nothing drifted (the diff returns empty). (Graphlet wiring.)
+    pub(super) fn reconcile_linked_graphlets(&mut self, graph: GraphId) {
+        let Some(session_dir) = self.graph_session_dir(graph) else {
+            return;
+        };
+        let src = match self.orreries.get(&graph) {
+            Some(o) => o.graph().clone(),
+            None => return,
+        };
+        if let Some(idx) = self.graphlets.get_mut(&graph) {
+            if idx.reconcile_all(&src) {
+                if let Err(err) = idx.save(&session_dir) {
+                    tracing::warn!(%err, dir = ?session_dir, "failed to persist reconciled graphlets");
+                }
+            }
+        }
     }
 
     /// Grow a branch graphlet's roster (Phase 2 slice 2): the branch window navigated to

@@ -45,6 +45,7 @@ use chrome::command_palette::{CommandPaletteSession, SearchPaletteScope};
 use chrome::omnibar::OmnibarMatch;
 use chrome::toolbar::ToolbarState;
 use comms::{CommsPane, ConversationId, Draft, ProtocolKind};
+use frame::SessionId;
 pub use session_runtime::ShellbarEdge;
 use xilem_serval::TextInput;
 
@@ -210,6 +211,17 @@ pub struct Chrome {
     pub knot_source: TextInput,
     /// Whether the docked knot-editor panel is open.
     pub knot_editor_open: bool,
+    /// The open graph sessions, as toolbar chips (Chrome bar P4 — sessions moved out
+    /// of the shellbar). Host-synced each frame from the session pool, ordered like
+    /// `cycle_session`; the active one carries `active`. Rendered inline up to a cap,
+    /// the rest folding into the overflow dropdown.
+    pub sessions: Vec<SessionChip>,
+    /// Whether the session overflow dropdown (`+N ⌄`) is open. Toggled by its button;
+    /// closed when a session is picked. (Chrome bar P4.)
+    pub sessions_overflow_open: bool,
+    /// A one-shot session gesture a chip captured, for the host to drain into the
+    /// matching `ShellCommand` (the chrome can't reach the session pool). (Chrome bar P4.)
+    pub session_intent: Option<SessionIntent>,
 }
 
 /// Which panes are currently open in the frame tree. The host syncs this into
@@ -225,6 +237,26 @@ pub struct ShellbarPaneStates {
     pub inspector: bool,
     pub steward: bool,
     pub comms: bool,
+}
+
+/// One open graph session as a toolbar chip: its id (carried in the gesture the host
+/// drains), a short label, and whether it is the focused session (the active
+/// highlight). (Chrome bar P4 — sessions in the toolbar.)
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SessionChip {
+    pub id: SessionId,
+    pub label: String,
+    pub active: bool,
+}
+
+/// A session gesture a toolbar chip captured, drained by the host into the matching
+/// `ShellCommand`. `Activate` becomes a plain switch, or an open-beside when Shift is
+/// held at drain time (preserving the old switcher's Shift+click). (Chrome bar P4.)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SessionIntent {
+    Activate(SessionId),
+    Close(SessionId),
+    Create,
 }
 
 /// A comms action the host runs against the live `Comms` on the chrome's behalf:
@@ -470,6 +502,13 @@ pub enum ContextAction {
     /// Scope the focused orrery to the selection (plus its neighbors) — the "Isolate"
     /// lens. Drains like `ShellbarMove` without touching `context_set`. (Curated orrery.)
     IsolateSelection,
+    /// Open the focused node's connected component as a persistent **Linked** graphlet in
+    /// its own scoped window — the manual consumer for auto-derived graphlets (Phase 3
+    /// slice 2). Unlike `IsolateSelection` (a transient lens on the current orrery), this
+    /// mints a `Linked { Component }` graphlet that reconciles as the graph drifts, and
+    /// opens a window scoped to it. Pushes a `ShellCommand` (Shell-level open). (Graphlet
+    /// wiring Phase 3.)
+    OpenComponentGraphlet,
     /// Drop the orrery's scope lens — show the whole graph again ("Show all"). Drains
     /// like `ShellbarMove` without touching `context_set`. (Curated orrery.)
     ShowAllNodes,
@@ -544,7 +583,33 @@ impl Chrome {
             slim: false,
             knot_source: TextInput::new(""),
             knot_editor_open: false,
+            sessions: Vec::new(),
+            sessions_overflow_open: false,
+            session_intent: None,
         }
+    }
+
+    /// A session chip click: activate it (the host drains to a switch, or open-beside
+    /// when Shift is held). Closes the overflow dropdown. (Chrome bar P4.)
+    pub fn pick_session(&mut self, id: SessionId) {
+        self.session_intent = Some(SessionIntent::Activate(id));
+        self.sessions_overflow_open = false;
+    }
+
+    /// A chip's × : close that session. (Chrome bar P4.)
+    pub fn request_close_session(&mut self, id: SessionId) {
+        self.session_intent = Some(SessionIntent::Close(id));
+        self.sessions_overflow_open = false;
+    }
+
+    /// The session strip's `+` : mint a new session. (Chrome bar P4.)
+    pub fn request_create_session(&mut self) {
+        self.session_intent = Some(SessionIntent::Create);
+    }
+
+    /// Toggle the `+N ⌄` overflow dropdown of sessions past the inline cap. (Chrome bar P4.)
+    pub fn toggle_sessions_overflow(&mut self) {
+        self.sessions_overflow_open = !self.sessions_overflow_open;
     }
 
     /// The URL the content root should display. The host's `sync_orrery` reads
@@ -798,6 +863,7 @@ impl Chrome {
             | Command::CloseGraphPane
             | Command::ExportGraph
             | Command::SaveGraphEngram
+            | Command::MaterializeFocused
             | Command::CrawlFocused
             | Command::StopCrawl
             | Command::ToggleShellbar => {
@@ -980,10 +1046,11 @@ impl Chrome {
         self.open_context_menu(
             x,
             y,
+            // No "Add session" — the toolbar session strip owns session creation now
+            // (Chrome bar P5). This menu is the split-button's overflow (tile / field).
             vec![
                 ContextItem::new("Add node", ContextAction::AddNode),
                 ContextItem::new("Add tile", ContextAction::AddTile),
-                ContextItem::new("Add session", ContextAction::AddSession),
                 ContextItem::new("Add field", ContextAction::AddField),
             ],
         );

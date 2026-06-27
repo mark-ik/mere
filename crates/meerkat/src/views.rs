@@ -19,7 +19,7 @@ use session_runtime::ShellbarEdge;
 use super::command::Command;
 use super::nav;
 use super::suggest;
-use super::{Chrome, ContextItem, ContextMenu, HistoryStep, ShellbarPaneStates};
+use super::{Chrome, ContextAction, ContextItem, ContextMenu, HistoryStep, ShellbarPaneStates};
 
 /// The erased view type meerkat's logic produces, so the toolbar's concrete
 /// `El<…>` tuple need not be spelled (it grows as the chrome does).
@@ -134,19 +134,12 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     let crawl_summary = c.crawl.summary();
     let crawl_class = if crawl_summary.is_empty() { "crawl-chip crawl-chip-hidden" } else { "crawl-chip" };
     let crawl_chip = el::<_, Chrome, ()>("div", crawl_summary).attr("class", crawl_class);
-    // The add pill next to the omnibar: a "+" that opens a small menu — Add node /
-    // Add tile / Add session — the unified create affordance (the toolbar's old
-    // workbench toggle was redundant with the shellbar's, so the pill takes its
-    // slot). Static (icon + fixed handler) — memoize on `()` so it is built once.
-    // The menu anchors at the click point (`PointerClick::local`, window coords).
-    let add_pill = memoize((), |_: &()| {
-        button(
-            "\u{ff0b}",
-            "add-pill",
-            (|c: &mut Chrome, ev: PointerClick| c.open_add_menu(ev.local.0, ev.local.1))
-                as fn(&mut Chrome, PointerClick),
-        )
-    });
+    // The create affordance (Chrome bar P5): a segmented `+node | +tile | +field`
+    // group, each firing its add verb directly (no menu). When the toolbar is crowded
+    // by session chips it collapses to a split-button (primary +node + a caret that
+    // opens the full add menu), so the two toolbar additions don't fight for width.
+    // "Add session" is dropped — the session strip owns session creation.
+    let add_group = add_group(c);
     // The branch chip (graphlet wiring Phase 2): a tear-out **branch** window shows the
     // anchor it forked from, so it reads as a distinct grouping, not a plain leaf. Like
     // the crawl chip, it is always present and toggles a `branch-chip-hidden` class (a
@@ -159,9 +152,13 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
         "branch-chip"
     };
     let branch_chip = el::<_, Chrome, ()>("div", branch_summary).attr("class", branch_class);
+    // The session strip (Chrome bar P4): inline chips for the open graph sessions, an
+    // overflow `+N ⌄`, and an add `+`. Sits after the omnibar (which flex-grows, pushing
+    // the strip to the toolbar's right); the chips moved here out of the shellbar.
+    let session_strip = session_strip(c);
     let toolbar = el::<_, Chrome, ()>(
         "div",
-        (back, forward, pause, branch_chip, omnibar, add_pill, crawl_chip),
+        (back, forward, pause, branch_chip, omnibar, session_strip, add_group, crawl_chip),
     )
     .attr("class", "toolbar");
 
@@ -190,6 +187,9 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
 
     // The chrome tree is a Vec so the optional palette overlay can be appended.
     let mut children: Vec<ChromeView> = vec![Box::new(toolbar), Box::new(suggestions)];
+    if c.sessions_overflow_open && c.sessions.len() > SESSION_INLINE_CAP {
+        children.push(session_overflow(c));
+    }
     if c.palette_open {
         children.push(palette_overlay(c));
     }
@@ -697,6 +697,126 @@ pub fn submit_omnibar(c: &mut Chrome) {
     sync_chrome_from_history(c, true);
 }
 
+/// How many session chips show inline in the toolbar before the rest fold into the
+/// `+N ⌄` overflow dropdown. (Chrome bar P4.)
+pub(crate) const SESSION_INLINE_CAP: usize = 4;
+
+/// The toolbar create affordance (Chrome bar P5): a segmented `+node | +tile | +field`
+/// group whose buttons fire their add verb directly. When the toolbar is crowded by
+/// session chips (overflow active) it collapses to a split-button — a primary `+`
+/// (add node) plus a caret that opens the full add menu — so it stops fighting the
+/// session strip for width. "Add session" is gone (the strip owns it).
+fn add_group(c: &Chrome) -> ChromeView {
+    if c.sessions.len() > SESSION_INLINE_CAP {
+        let primary = button(
+            "\u{ff0b}",
+            "add-split-primary",
+            (|c: &mut Chrome, _: PointerClick| c.pick_context(ContextAction::AddNode))
+                as fn(&mut Chrome, PointerClick),
+        );
+        let caret = button(
+            "\u{2304}",
+            "add-split-caret",
+            (|c: &mut Chrome, ev: PointerClick| c.open_add_menu(ev.local.0, ev.local.1))
+                as fn(&mut Chrome, PointerClick),
+        );
+        return Box::new(
+            el::<_, Chrome, ()>(
+                "div",
+                vec![Box::new(primary) as ChromeView, Box::new(caret) as ChromeView],
+            )
+            .attr("class", "add-split"),
+        ) as ChromeView;
+    }
+    let seg = |label: &'static str, action: ContextAction, class: &'static str| -> ChromeView {
+        Box::new(button(
+            label,
+            class,
+            move |c: &mut Chrome, _: PointerClick| c.pick_context(action),
+        )) as ChromeView
+    };
+    Box::new(
+        el::<_, Chrome, ()>(
+            "div",
+            vec![
+                seg("\u{ff0b}node", ContextAction::AddNode, "add-seg add-seg-first"),
+                seg("\u{ff0b}tile", ContextAction::AddTile, "add-seg"),
+                seg("\u{ff0b}field", ContextAction::AddField, "add-seg add-seg-last"),
+            ],
+        )
+        .attr("class", "add-group"),
+    ) as ChromeView
+}
+
+/// The toolbar session strip: a chip per open session (up to [`SESSION_INLINE_CAP`]),
+/// an overflow `+N ⌄` button when there are more, and an add `+`. A chip's label
+/// activates its session (Shift = open beside, resolved host-side); its × closes it.
+/// Replaces the host-drawn shellbar switcher. (Chrome bar P4.)
+fn session_strip(c: &Chrome) -> ChromeView {
+    let mut children: Vec<ChromeView> = Vec::new();
+    for chip in c.sessions.iter().take(SESSION_INLINE_CAP) {
+        children.push(session_chip(chip));
+    }
+    let extra = c.sessions.len().saturating_sub(SESSION_INLINE_CAP);
+    if extra > 0 {
+        let class = if c.sessions_overflow_open {
+            "session-overflow-btn session-overflow-btn-open"
+        } else {
+            "session-overflow-btn"
+        };
+        children.push(Box::new(on_click(
+            el::<_, Chrome, ()>("div", format!("+{extra}\u{2002}\u{2304}")).attr("class", class),
+            |c: &mut Chrome, _: PointerClick| c.toggle_sessions_overflow(),
+        )) as ChromeView);
+    }
+    children.push(Box::new(on_click(
+        el::<_, Chrome, ()>("div", "\u{ff0b}").attr("class", "session-add"),
+        |c: &mut Chrome, _: PointerClick| c.request_create_session(),
+    )) as ChromeView);
+    Box::new(el::<_, Chrome, ()>("div", children).attr("class", "session-strip")) as ChromeView
+}
+
+/// One session chip: a label that activates the session and a × that closes it.
+fn session_chip(chip: &crate::SessionChip) -> ChromeView {
+    let class = if chip.active { "session-chip session-chip-active" } else { "session-chip" };
+    let id = chip.id;
+    let label = on_click(
+        el::<_, Chrome, ()>("div", chip.label.clone()).attr("class", "session-chip-label"),
+        move |c: &mut Chrome, _: PointerClick| c.pick_session(id),
+    );
+    let close = on_click(
+        el::<_, Chrome, ()>("div", "\u{00d7}").attr("class", "session-chip-close"),
+        move |c: &mut Chrome, _: PointerClick| c.request_close_session(id),
+    );
+    Box::new(
+        el::<_, Chrome, ()>(
+            "div",
+            vec![Box::new(label) as ChromeView, Box::new(close) as ChromeView],
+        )
+        .attr("class", class),
+    ) as ChromeView
+}
+
+/// The session overflow dropdown: the sessions past the inline cap, one clickable row
+/// each (activate). Anchored under the toolbar's right like the suggestions list; the
+/// host positions it inline. (Chrome bar P4.)
+fn session_overflow(c: &Chrome) -> ChromeView {
+    let rows: Vec<ChromeView> = c
+        .sessions
+        .iter()
+        .skip(SESSION_INLINE_CAP)
+        .map(|chip| {
+            let id = chip.id;
+            let class = if chip.active { "session-overflow-row session-chip-active" } else { "session-overflow-row" };
+            Box::new(on_click(
+                el::<_, Chrome, ()>("div", chip.label.clone()).attr("class", class),
+                move |c: &mut Chrome, _: PointerClick| c.pick_session(id),
+            )) as ChromeView
+        })
+        .collect();
+    Box::new(el::<_, Chrome, ()>("div", rows).attr("class", "session-overflow")) as ChromeView
+}
+
 /// The shellbar strip: one pane-toggle button per toggle-able pane, each active
 /// state mirroring the current frame layout. The host positions the div inline
 /// each frame via the `.shellbar` class node, following the comms-pane geometry
@@ -714,12 +834,12 @@ fn shellbar_view(panes: &ShellbarPaneStates) -> ChromeView {
         btn("\u{229e}", panes.workbench, Command::ToggleWorkbench), // ⊞
         btn("\u{2261}", panes.roster, Command::ToggleRoster),       // ≡
         btn("\u{25ce}", panes.gloss, Command::ToggleGloss),         // ◎
-        btn("\u{21dd}", panes.trail, Command::ToggleTrail),         // ⇝
-        btn("\u{2697}", panes.alembic, Command::ToggleAlembic),     // ⚗
+        btn("\u{25c8}", panes.trail, Command::ToggleTrail),         // ◈ (was ⇝, no glyph)
+        btn("\u{25bd}", panes.alembic, Command::ToggleAlembic),     // ▽ distillation funnel (⚗/⚛ are emoji-only)
         btn("\u{2699}", panes.apparatus, Command::ToggleApparatus), // ⚙
         btn("\u{25c9}", panes.inspector, Command::ToggleInspector), // ◉
         btn("\u{2692}", panes.steward, Command::ToggleSteward),     // ⚒
-        btn("\u{2709}", panes.comms, Command::ToggleComms),         // ✉
+        btn("@", panes.comms, Command::ToggleComms),                // @ (was ✉, no glyph)
     ];
     Box::new(el::<_, Chrome, ()>("div", buttons).attr("class", "shellbar"))
 }

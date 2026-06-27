@@ -24,11 +24,16 @@ fn toolbar_renders_from_reused_state() {
     let dom = runner.dom();
     let dom = dom.borrow();
     let root = runner.root();
-    assert_eq!(count_tag(&dom, root, "button"), 13, "back + forward + pause + add-pill toolbar buttons + 9 shellbar buttons");
+    // back + forward + pause + the 3 segmented add buttons (+node/+tile/+field) + 9 shellbar.
+    // The add-pill became the segmented group (Chrome bar P5); session chips/add are divs, not
+    // buttons.
+    assert_eq!(count_tag(&dom, root, "button"), 15, "back/forward/pause + 3 add-group + 9 shellbar");
     assert_eq!(count_tag(&dom, root, "input"), 1, "the omnibar input");
-    // chrome container + toolbar row + branch chip + crawl chip + (empty) suggestions + shellbar.
-    // The sync chip moved into the Steward / Apparatus panes (Chrome bar P1).
-    assert_eq!(count_tag(&dom, root, "div"), 6, "chrome + toolbar + branch-chip + crawl-chip + suggestions + shellbar");
+    // chrome container + toolbar row + branch chip + crawl chip + (empty) suggestions + shellbar
+    // + the session strip + its add `+` + the add-group container. The sync chip moved into the
+    // Steward / Apparatus panes (Chrome bar P1); sessions moved into the toolbar strip (P4); the
+    // add group replaced the pill (P5).
+    assert_eq!(count_tag(&dom, root, "div"), 9, "+ session-strip + session-add + add-group");
 }
 
 /// Ghost autocomplete in command mode: a partial `>ros` shows the dim `ter`

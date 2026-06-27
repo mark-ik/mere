@@ -97,6 +97,59 @@ impl WindowCtx<'_> {
             }
         }
     }
+
+    /// If this is a tear-out **branch** window, scope its focused-graph orrery to the
+    /// branch graphlet's live roster (so it shows only the branch, not the whole donor
+    /// graph), saving the orrery's prior scope into `branch_scope_restore` for
+    /// [`restore_scope`](Self::restore_scope) on drop. Only branch windows touch the
+    /// scope; a leaf / the primary leaves it untouched, so the donor's own scope (e.g. an
+    /// isolate-selection) survives the branch's transient override. Re-derived each pass,
+    /// so the scope tracks the graphlet as it grows. (Graphlet wiring Phase 2 slice 3.)
+    pub(super) fn install_scope(&mut self) {
+        let Some(graphlet_id) = self.view.branch_graphlet else {
+            return;
+        };
+        let graph = self.view.focused_graph;
+        // A **Linked** graphlet re-derives its roster from the live graph each pass, so its
+        // window tracks graph drift (a node added elsewhere joins the component live); a
+        // **Branched** graphlet uses its accumulated roster. Re-deriving every pass is fine
+        // at demo scale; a revision-cached derive is the refinement. (Phase 3 slice 2+ —
+        // live drift.) `derive_members` is read-only, so this needs no `&mut graphlets`.
+        let roster: Vec<uuid::Uuid> = {
+            let Some(graphlet) = self.graphlets.get(&graph).and_then(|idx| idx.get(graphlet_id))
+            else {
+                return;
+            };
+            match &graphlet.binding {
+                forme::GraphletBinding::Linked { spec } => match self.orreries.get(&graph) {
+                    Some(o) => crate::graphlets::derive_members(o.graph(), spec),
+                    None => return,
+                },
+                _ => graphlet.anchors.clone(),
+            }
+        };
+        if roster.is_empty() {
+            return; // nothing to scope to — leave the whole graph visible
+        }
+        if let Some(orrery) = self.orreries.get_mut(&graph) {
+            self.branch_scope_restore = Some(orrery.scope_members());
+            orrery.scope_to_members(roster);
+        }
+    }
+
+    /// Restore the orrery's pre-branch scope saved by [`install_scope`](Self::install_scope),
+    /// so a branch window's graphlet scope never leaks to the next window's pass.
+    fn restore_scope(&mut self) {
+        let Some(prior) = self.branch_scope_restore.take() else {
+            return;
+        };
+        if let Some(orrery) = self.orreries.get_mut(&self.view.focused_graph) {
+            match prior {
+                Some(members) => orrery.scope_to_members(members),
+                None => orrery.clear_scope(),
+            }
+        }
+    }
 }
 
 impl Drop for WindowCtx<'_> {
@@ -107,5 +160,6 @@ impl Drop for WindowCtx<'_> {
     fn drop(&mut self) {
         self.readback_viewports();
         self.readback_selections();
+        self.restore_scope();
     }
 }
