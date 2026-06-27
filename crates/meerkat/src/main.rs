@@ -427,6 +427,13 @@ mod shell_new;
 /// cache, and comms live directly here; per-session graph/frame/views live under
 /// `<mere_root>/sessions/<session_id>/`. (Multi-graph MG1.)
 fn default_mere_root() -> PathBuf {
+    // A `MERE_ROOT` override points the whole data root at a scratch profile, so a
+    // headed-verification run (or any throwaway session) can isolate from the real
+    // per-user data dir. The Windows `dirs` path uses the Known-Folder API, which
+    // ignores `%APPDATA%`, so an explicit env hook is the reliable way to redirect.
+    if let Some(root) = std::env::var_os("MERE_ROOT") {
+        return PathBuf::from(root);
+    }
     dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("mere")
