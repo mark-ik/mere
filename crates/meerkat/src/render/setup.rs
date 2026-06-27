@@ -1,0 +1,541 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+//! Setup, measurement, and per-frame sync helpers for [`render`](super). Split
+//! from `render.rs` to keep files under the workspace 600-LOC ceiling. The four
+//! free fns and the small `WindowCtx` measurement methods live here; the new
+//! frame-setup helpers (`setup_and_sync_chrome`, `compute_layout_rects`,
+//! `gather_chrome_css`) extracted from `render()` join them.
+
+use super::*;
+
+/// The per-frame frame-tree layout outputs: the laid-out leaves + dividers, the orrery
+/// pane's rect / graph / size, the optional pane rects (workbench / roster / comms / the
+/// five folded list panes), and the focused-field text cursor. Produced once at the top
+/// of `render()` by [`WindowCtx::compute_layout_rects`] and destructured at the call site.
+/// (Extracted from `render()` — frame layout.)
+pub(super) struct FrameRects {
+    pub leaves: Vec<frame_view::LaidLeaf>,
+    pub orrery_rect: [f32; 4],
+    pub orrery_gid: frame::GraphId,
+    pub workbench_rect: Option<[f32; 4]>,
+    pub roster_rect: Option<[f32; 4]>,
+    pub comms_rect: Option<[f32; 4]>,
+    pub list_pane_rects: [Option<[f32; 4]>; 5],
+    pub dividers: Vec<frame_view::LaidDivider>,
+    pub orrery_w: u32,
+    pub orrery_h: u32,
+    pub cursor: Option<TextCursor>,
+}
+
+/// The node's favicon RGBA (straight-alpha RGBA8) encoded as a `data:image/png;base64,`
+/// URI, or `None` if it can't be encoded. The orrery card carries it as a leading
+/// `<img>` that serval decodes. PNG (not BMP) keeps alpha and stays compact. (Phase 2.)
+/// Also the sprite-import encoder (a downscaled dropped image → the face). (P2 — sprite.)
+pub(crate) fn favicon_data_uri(rgba: &[u8], w: u32, h: u32) -> Option<String> {
+    if w == 0 || h == 0 || rgba.len() < (w as usize) * (h as usize) * 4 {
+        return None;
+    }
+    let mut png = Vec::new();
+    image::codecs::png::PngEncoder::new(&mut png)
+        .write_image(rgba, w, h, image::ExtendedColorType::Rgba8)
+        .ok()?;
+    Some(format!("data:image/png;base64,{}", base64_encode(&png)))
+}
+
+/// Read an `Rgba8Unorm` texture back to tightly-packed CPU RGBA bytes (width*height*4),
+/// stripping wgpu's per-row alignment padding. Blocks until the copy + map complete, so
+/// it is only used off the hot path — once per url for a snapshot card preview, then
+/// cached. Mirrors netrender_device's test-only `read_rgba8_texture`. (Layering fix.)
+pub(crate) fn read_texture_rgba(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    target: &wgpu::Texture,
+    width: u32,
+    height: u32,
+) -> Vec<u8> {
+    let row_bytes = width * 4;
+    let padded = row_bytes.next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
+    let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("snapshot readback"),
+        size: padded as u64 * height as u64,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    let mut encoder =
+        device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("snapshot readback") });
+    encoder.copy_texture_to_buffer(
+        wgpu::TexelCopyTextureInfo {
+            texture: target,
+            mip_level: 0,
+            origin: wgpu::Origin3d { x: 0, y: 0, z: 0 },
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::TexelCopyBufferInfo {
+            buffer: &buffer,
+            layout: wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(padded),
+                rows_per_image: Some(height),
+            },
+        },
+        wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+    );
+    queue.submit([encoder.finish()]);
+    let slice = buffer.slice(..);
+    let (tx, rx) = std::sync::mpsc::channel();
+    slice.map_async(wgpu::MapMode::Read, move |r| {
+        let _ = tx.send(r);
+    });
+    // A snapshot readback failing (GPU hang / lost device / OOM) must not crash the
+    // app: the caller treats an empty result as "skip the snapshot" (favicon_data_uri
+    // returns None on a short slice, then the plain stand-in card shows). (Layering fix.)
+    if device.poll(wgpu::PollType::wait_indefinitely()).is_err() {
+        tracing::warn!("snapshot readback poll failed; skipping snapshot");
+        return Vec::new();
+    }
+    if !matches!(rx.recv(), Ok(Ok(()))) {
+        tracing::warn!("snapshot readback map failed; skipping snapshot");
+        return Vec::new();
+    }
+    let mapped = slice.get_mapped_range();
+    let mut out = Vec::with_capacity((row_bytes * height) as usize);
+    for row in 0..height as usize {
+        let src = row * padded as usize;
+        out.extend_from_slice(&mapped[src..src + row_bytes as usize]);
+    }
+    out
+}
+
+/// Minimal standard base64 (no line breaks), for the favicon data URI. (Phase 2.)
+pub(crate) fn base64_encode(data: &[u8]) -> String {
+    const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for c in data.chunks(3) {
+        let n = ((c[0] as u32) << 16)
+            | ((c.get(1).copied().unwrap_or(0) as u32) << 8)
+            | (c.get(2).copied().unwrap_or(0) as u32);
+        out.push(A[((n >> 18) & 63) as usize] as char);
+        out.push(A[((n >> 12) & 63) as usize] as char);
+        out.push(if c.len() > 1 { A[((n >> 6) & 63) as usize] as char } else { '=' });
+        out.push(if c.len() > 2 { A[(n & 63) as usize] as char } else { '=' });
+    }
+    out
+}
+
+/// The inline `style` for a host-positioned overlay surface: an absolute box at
+/// `(x, y)` sized `w`×`h`, optionally with a `flex-direction`. Mirrors the
+/// `xilem_serval::overlay_rect` geometry for the surfaces whose rect is a **layout
+/// output** (the comms pane fills its frame leaf; the shellbar docks to a window
+/// edge) — render patches these post-layout rather than building them with the
+/// rect at view time, so this is the one spot that formats their geometry. (Overlay
+/// adoption P3.)
+pub(crate) fn overlay_geometry_style(x: f32, y: f32, w: f32, h: f32, flex_dir: Option<&str>) -> String {
+    let mut style =
+        format!("position: absolute; left: {x}px; top: {y}px; width: {w}px; height: {h}px;");
+    if let Some(dir) = flex_dir {
+        style.push_str(&format!(" flex-direction: {dir};"));
+    }
+    style
+}
+
+impl crate::WindowCtx<'_> {
+    /// The toolbar-band height (px), measuring + caching it on first use. The
+    /// toolbar is a single flex row, so its border-box height is independent of
+    /// the available width/height; measuring once suffices. Used to place the
+    /// content root directly below the toolbar.
+    pub(crate) fn toolbar_height(&mut self) -> u32 {
+        if self.view.toolbar_h == 0 {
+            let sheet = self.shared.presentation.chrome_sheet_refs();
+            let measured = measure_class_bottom(
+                &self.view.dom.borrow(),
+                &sheet,
+                self.view.width,
+                self.view.height,
+                "toolbar",
+            )
+            .unwrap_or(FALLBACK_TOOLBAR_H);
+            self.view.toolbar_h = measured;
+        }
+        self.view.toolbar_h
+    }
+
+    /// Reconfigure the surface for `(width, height)` and request a redraw.
+    pub(crate) fn resize(&mut self, width: u32, height: u32) {
+        self.view.width = width.max(1);
+        self.view.height = height.max(1);
+        if let (Some(surface), Some(core)) = (self.view.surface.as_mut(), self.render_core) {
+            surface.resize(core, self.view.width, self.view.height);
+        }
+        self.refresh_a11y_summary();
+        self.view.request_redraw();
+    }
+
+    /// Enumerate the chrome document's `<external-texture>` elements as `(key, [x0, y0, x1, y1])`
+    /// in viewport px, from the chrome session's retained layout. The host composites each
+    /// element's registered texture (resolved by `key`) at its laid-out rect, so an external
+    /// surface's placement comes from the document, not a hardcoded host rect. The
+    /// external-texture-element compose. (cond 5.)
+    pub(super) fn external_texture_placements(&self) -> Vec<(u64, [f32; 4])> {
+        let Some(session) = self.view.chrome_session.as_ref() else {
+            return Vec::new();
+        };
+        let dom = self.view.dom.borrow();
+        let fragments = session.fragments();
+        let origins = crate::serval_render::accumulate_origins(&dom, fragments);
+        let mut out = Vec::new();
+        let mut stack = vec![dom.document()];
+        while let Some(node) = stack.pop() {
+            if dom.element_name(node).map(|q| q.local.as_ref()) == Some("external-texture") {
+                if let (Some(&(x, y)), Some(rect)) = (origins.get(&node), fragments.rect_of(node)) {
+                    if let Some(key) = dom
+                        .attributes(node)
+                        .find(|a| a.name.local.as_ref() == "key")
+                        .and_then(|a| a.value.parse::<u64>().ok())
+                    {
+                        out.push((key, [x, y, x + rect.size.width, y + rect.size.height]));
+                    }
+                }
+            }
+            for child in dom.dom_children(node) {
+                stack.push(child);
+            }
+        }
+        out
+    }
+
+    /// Snapshot the four folded list panes into the shell document for this frame: build
+    /// each open pane's items and set its slot (closing a pane that just went away). The
+    /// per-frame call before the shell render, the ListPane analogue of `set_roster` —
+    /// each inner root takes a unique-id class (`apparatus`, `utility-pane steward`, …) so
+    /// the shared `.utility-pane` styling still applies while `has_class` finds each pane
+    /// distinctly for scroll + hit-test. (Phase 1, step 2.)
+    pub(super) fn snapshot_list_panes(&mut self, rects: [Option<[f32; 4]>; 5]) {
+        use crate::window_view::ShellListPane::{Alembic, Apparatus, Inspector, Steward, Trail};
+        // Apparatus: theme + engine + physics buttons over the host observability rows.
+        if let Some(rect) = rects[0] {
+            // The apparatus is read-only diagnostics now; its settings sections moved to the
+            // pelt settings lane (Settings lane P2).
+            let system_rows = self.apparatus_system_rows();
+            let sync_rows = self.apparatus_sync_rows();
+            let obs = self.apparatus_observability();
+            let items = crate::apparatus::apparatus_items(&system_rows, &sync_rows, &obs);
+            self.view.set_list_pane(Apparatus, "apparatus", items, Some(rect));
+        } else if self.view.list_pane_open(Apparatus) {
+            self.view.set_list_pane(Apparatus, "apparatus", Vec::new(), None);
+        }
+        // Steward + Inspector: display-only `label: value` rows under a unique utility root.
+        if let Some(rect) = rects[1] {
+            // Steward builds its own items (status rows + clickable action buttons),
+            // mirroring Alembic, so the focused-op verbs are reachable by click. (A2.)
+            let items = self.steward_items();
+            self.view.set_list_pane(Steward, "utility-pane steward", items, Some(rect));
+        } else if self.view.list_pane_open(Steward) {
+            self.view.set_list_pane(Steward, "utility-pane steward", Vec::new(), None);
+        }
+        if let Some(rect) = rects[2] {
+            let rows = self.utility_pane_rows(&PaneContent::Inspector);
+            let items = crate::utility_panes::utility_pane_items(&PaneContent::Inspector, &rows);
+            self.view.set_list_pane(Inspector, "utility-pane inspector", items, Some(rect));
+        } else if self.view.list_pane_open(Inspector) {
+            self.view.set_list_pane(Inspector, "utility-pane inspector", Vec::new(), None);
+        }
+        // Trail: its own sectioned items (history / recent / removed); a Removed row recovers.
+        if let Some(rect) = rects[3] {
+            let items = self.trail_items();
+            self.view.set_list_pane(Trail, "utility-pane trail", items, Some(rect));
+        } else if self.view.list_pane_open(Trail) {
+            self.view.set_list_pane(Trail, "utility-pane trail", Vec::new(), None);
+        }
+        // Alembic: memory — Recent / Saved / Engrams sections (the Engrams list reads eidetic).
+        if let Some(rect) = rects[4] {
+            let items = self.alembic_items();
+            self.view.set_list_pane(Alembic, "utility-pane alembic", items, Some(rect));
+        } else if self.view.list_pane_open(Alembic) {
+            self.view.set_list_pane(Alembic, "utility-pane alembic", Vec::new(), None);
+        }
+    }
+
+    /// The focused node's content-card descriptor for the shell document: its rect (local
+    /// to the orrery element) and kind. A visited node gets a snapshot preview (the host
+    /// fills its external-texture from the url-cached scene); an unvisited node gets a
+    /// dashed placeholder. `None` when no node is focused, or the focused node is an open
+    /// workbench tile (the tile is the view; a card would contend for its content actor).
+    /// The card is placed *after* the node cards in document order, so it paints over them
+    /// while the chrome overlays still paint over it. (Layering fix — card over nodes.)
+    pub(super) fn compute_focus_card(
+        &self,
+        orrery_rect: [f32; 4],
+        workbench_rect: Option<[f32; 4]>,
+    ) -> Option<crate::window_view::FocusCard> {
+        use crate::window_view::{FocusCard, FocusCardKind};
+        let member = self.focused_member().filter(|m| {
+            workbench_rect.is_none() || !self.view.workbench.open_members().contains(m)
+        })?;
+        // The node's pane-local screen position (same camera the node cards use).
+        let (nx, ny) = self.orrery().focused_node_screen()?;
+        let (pw, ph) = (orrery_rect[2] - orrery_rect[0], orrery_rect[3] - orrery_rect[1]);
+        let local = [0.0, 0.0, pw, ph];
+        let (kind, cw, ch) = if self.view.object_card == Some(member) {
+            // The object card replaces the preview when summoned (the context action set the
+            // card's member). The node preset (P1): the size-tier stepper + the representation
+            // toggle, resolved from the node's current settings. (Object card — P1.)
+            use crate::window_view::CardWidget;
+            let widgets = self
+                .orrery()
+                .focused_key()
+                .map(|k| {
+                    vec![
+                        CardWidget::SizeTier { tier: self.orrery().node_size_tier(k) },
+                        CardWidget::Face {
+                            is_favicon: self.orrery().node_face(k) == orrery::Face::Favicon,
+                        },
+                    ]
+                })
+                .unwrap_or_default();
+            let ch = crate::card::object_card_height(widgets.len());
+            (FocusCardKind::ObjectCard { widgets }, crate::card::OBJCARD_W, ch)
+        } else if self.orrery().member_visited(member) {
+            // Show only the *cached* snapshot image — no placeholder while it is still
+            // building. A fresh focus otherwise flashed an empty card (and claimed a hit-rect
+            // over the node, making the double-click-to-open flaky). `None` → no focus card
+            // this frame; the readback below still builds + caches it for the next focus.
+            // (Snapshot — no placeholder flash.)
+            let data_uri = self
+                .orrery()
+                .focused_url()
+                .and_then(|u| self.view.snapshot_data_uris.get(u).cloned())?;
+            (FocusCardKind::Snapshot { data_uri }, crate::card::SNAP_W, crate::card::SNAP_H)
+        } else {
+            (FocusCardKind::Unvisited, crate::card::UNVIS_W, crate::card::UNVIS_H)
+        };
+        let (x0, y0, x1, y1, _, _) = crate::card::anchored_card_rect(nx, ny, cw, ch, local)?;
+        Some(FocusCard { rect: [x0, y0, x1, y1], kind })
+    }
+
+    /// Start the frame clock and sync the always-present per-frame chrome state into the
+    /// shell view: the device-pixel-ratio push, the comms-pane reserve, the shellbar
+    /// pane/edge state, the session chips, and the find-match count. Returns the frame
+    /// start instant plus the frame geometry `(w, h, toolbar_h, dpr)` the rest of
+    /// `render()` is laid out against. (Extracted from `render()` — frame setup.)
+    pub(super) fn setup_and_sync_chrome(&mut self) -> (std::time::Instant, u32, u32, u32, f32) {
+        // C0 baseline (cheap-path plan): time the whole frame + the always-present
+        // chrome pipeline. Enable with `RUST_LOG=meerkat::profile=debug` and drive a
+        // representative interaction. Per-pane granularity (roster/apparatus/utility,
+        // each conditional) is the documented C0 refinement on top of this headline.
+        let frame_t = Instant::now();
+        let (w, h) = (self.view.width.max(1), self.view.height.max(1));
+        let toolbar_h = self.toolbar_height().min(h);
+        // Push the display device-pixel-ratio to the content pool each frame: actors lay
+        // out logical, the host rasterizes their scenes at physical via `rasterize_scaled`
+        // below, so content text is crisp + correctly-sized on a HiDPI display. (Auto-DPI D2.)
+        let dpr = self.shared.presentation.dpi_scale;
+        self.shared.content.constellation.set_device_pixel_ratio(dpr);
+
+        // Reserve / drop the Comms frame leaf to match the chrome's comms-open state
+        // before laying the panes out, so the other panes make room for it. (Comms.)
+        self.sync_comms_pane();
+
+        // Sync shellbar pane-open states + edge into Chrome before the runner so
+        // the view rebuilds with current active states. (Shellbar F2.1.)
+        let sb_panes = ShellbarPaneStates {
+            workbench: self.pane_of_content(&PaneContent::Workbench).is_some(),
+            roster: self.pane_of_content(&PaneContent::Roster).is_some(),
+            gloss: self.pane_of_content(&PaneContent::Gloss).is_some(),
+            trail: self.pane_of_content(&PaneContent::Trail).is_some(),
+            alembic: self.pane_of_content(&PaneContent::Alembic).is_some(),
+            apparatus: self.pane_of_content(&PaneContent::Apparatus).is_some(),
+            inspector: self.pane_of_content(&PaneContent::Inspector).is_some(),
+            steward: self.pane_of_content(&PaneContent::Steward).is_some(),
+            comms: self.pane_of_content(&PaneContent::Comms).is_some(),
+        };
+        let sb_edge = self.shared.presentation.shellbar_edge;
+        let sb_hidden = self.shared.presentation.shellbar_hidden;
+        if self.view.chrome().shellbar_panes != sb_panes
+            || self.view.chrome().shellbar_edge != sb_edge
+            || self.view.chrome().shellbar_hidden != sb_hidden
+        {
+            self.view.chrome_update(move |c| {
+                c.shellbar_panes = sb_panes;
+                c.shellbar_edge = sb_edge;
+                c.shellbar_hidden = sb_hidden;
+            });
+        }
+
+        // Sync the open sessions into Chrome as toolbar chips (Chrome bar P4 — the
+        // switcher moved out of the shellbar). Ordered by id like `cycle_session`; the
+        // focused pane's session is the active chip. A slim (leaf) window shows none.
+        let chips: Vec<meerkat::SessionChip> = if self.view.kind.is_slim() {
+            Vec::new()
+        } else {
+            let focused = self.session_for_graph(self.view.focused_graph).map(|(id, _)| id);
+            // While a session is being renamed (F2 / context rename), show the live edit
+            // buffer in its chip — the chip is the rename surface now the switcher is gone.
+            let renaming = self.view.renaming.clone();
+            let mut ids: Vec<SessionId> =
+                self.shared.session.session_thumbnails.keys().copied().collect();
+            ids.sort_by_key(|id| *id.as_uuid());
+            ids.iter()
+                .map(|id| {
+                    let label = match &renaming {
+                        // The live rename buffer (with a caret bar) — shown unclipped.
+                        Some((rid, buf)) if rid == id => format!("{buf}\u{2502}"),
+                        _ => {
+                            let raw = self
+                                .shared
+                                .session
+                                .session_labels
+                                .get(id)
+                                .filter(|l| !l.is_empty())
+                                .cloned()
+                                .unwrap_or_else(|| {
+                                    let s = id.as_uuid().to_string();
+                                    format!("graph {}", &s[..s.len().min(4)])
+                                });
+                            // Clip long labels (a session named after a URL) so a chip
+                            // stays compact; the full name is one F2/rename away.
+                            if raw.chars().count() > 22 {
+                                format!("{}\u{2026}", raw.chars().take(21).collect::<String>())
+                            } else {
+                                raw
+                            }
+                        }
+                    };
+                    meerkat::SessionChip { id: *id, label, active: Some(*id) == focused }
+                })
+                .collect()
+        };
+        if self.view.chrome().sessions != chips {
+            self.view.chrome_update(move |c| c.sessions = chips);
+        }
+
+        // Sync the focused node's live find-match count into Chrome so the find bar
+        // shows "active/total" before the chrome is rasterized this frame. (Find S2.)
+        if self.view.chrome().find_open {
+            let find_count = self
+                .focused_member()
+                .map(|m| self.find_matches_for(m).len())
+                .unwrap_or(0);
+            if self.view.chrome().find_count != find_count {
+                self.view.chrome_update(move |c| c.find_count = find_count);
+            }
+        }
+        (frame_t, w, h, toolbar_h, dpr)
+    }
+
+    /// Build the owned per-pane chrome stylesheets for this frame: the roster sheet plus
+    /// the folded list panes' (apparatus + utility) sheets, returned as
+    /// `(roster_css, apparatus_css, utility_css)`. They are owned so they outlive the
+    /// deferred `chrome_sheet` assembly below. (Extracted from `render()`.)
+    pub(super) fn gather_chrome_css(&self) -> (Vec<String>, Vec<String>, Vec<String>) {
+        let roster_css = crate::roster::roster_sheet(&self.shared.presentation.chrome_theme);
+        // The folded list panes' CSS rides the shell stylesheet too; rules are inert when
+        // no matching pane element is in the document, so they can be unconditional. The
+        // apparatus root is `.apparatus`, the others `.utility-pane`. (Phase 1, step 2.)
+        let apparatus_css = crate::apparatus::apparatus_sheet(&self.shared.presentation.chrome_theme);
+        let utility_css = crate::utility_panes::utility_pane_sheet(&self.shared.presentation.chrome_theme);
+        (roster_css, apparatus_css, utility_css)
+    }
+
+    /// Lay this frame's content band out into pane rects: carve the shellbar strip, lay
+    /// the frame tree's leaves + dividers, resolve the focused Orrery pane (rect, graph,
+    /// size), pick out the workbench / roster / comms / folded-list-pane rects, and build
+    /// the focused-field text cursor. Returns them bundled in [`FrameRects`]. (Extracted
+    /// from `render()` — frame layout.)
+    pub(super) fn compute_layout_rects(&self, w: u32, h: u32, toolbar_h: u32) -> FrameRects {
+        // Frame tree: the content band (below the toolbar) split into pane rects.
+        // The shellbar strip is carved out of the band first; the frame tree fills
+        // the remainder. A slim (leaf) window has no shellbar, and a hidden shellbar
+        // carves nothing either, so the band is the whole area below the toolbar.
+        // (Shellbar F2.1; MW3 step 4; hide-shellbar.)
+        let band = if self.view.kind.is_slim() || self.shared.presentation.shellbar_hidden {
+            [0.0, toolbar_h as f32, w as f32, h as f32]
+        } else {
+            shellbar::band_after_shellbar(
+                self.shared.presentation.shellbar_edge,
+                w as f32,
+                h as f32,
+                toolbar_h as f32,
+            )
+        };
+        let leaves = frame_view::leaf_rects(&self.view.frame_layout, band, self.view.maximized_pane);
+        // The orrery is the always-present graph pane; the tiled workbench is its
+        // summonable sibling. Each renders into its own leaf. (Workbench-as-pane.)
+        // The *focused* Orrery leaf (bound to focused_graph) is the primary one — it
+        // gets the full drive (node colouring, cards, centring); the rest render as
+        // secondaries. Falls back to the first Orrery leaf. (Pane-as-unit.)
+        let focused_gid = self.view.focused_graph;
+        let orrery_leaf = leaves
+            .iter()
+            .find(|l| matches!(l.content, PaneContent::Orrery) && l.graph_id == focused_gid)
+            .or_else(|| leaves.iter().find(|l| matches!(l.content, PaneContent::Orrery)));
+        let orrery_rect = orrery_leaf.map(|l| l.rect).unwrap_or(band);
+        // The graph this Orrery pane resolves to (its leaf's graph_id) — render
+        // drives *that* pooled orrery, not the window-global one, so a second
+        // Orrery pane of another graph would drive its own. (Window composition P2.)
+        let orrery_gid = orrery_leaf.map(|l| l.graph_id).unwrap_or(self.view.focused_graph);
+        let workbench_rect = leaves
+            .iter()
+            .find(|l| matches!(l.content, PaneContent::Workbench))
+            .map(|l| l.rect);
+        let roster_rect = leaves
+            .iter()
+            .find(|l| matches!(l.content, PaneContent::Roster))
+            .map(|l| l.rect);
+        let comms_rect = leaves
+            .iter()
+            .find(|l| matches!(l.content, PaneContent::Comms))
+            .map(|l| l.rect);
+        // The five folded list panes' rects, in `ShellListPane` order (apparatus, steward,
+        // inspector, trail, alembic), for the per-frame snapshot into the shell document. (Phase 1.)
+        let list_pane_rects: [Option<[f32; 4]>; 5] = [
+            leaves.iter().find(|l| matches!(l.content, PaneContent::Apparatus)).map(|l| l.rect),
+            leaves.iter().find(|l| matches!(l.content, PaneContent::Steward)).map(|l| l.rect),
+            leaves.iter().find(|l| matches!(l.content, PaneContent::Inspector)).map(|l| l.rect),
+            leaves.iter().find(|l| matches!(l.content, PaneContent::Trail)).map(|l| l.rect),
+            leaves.iter().find(|l| matches!(l.content, PaneContent::Alembic)).map(|l| l.rect),
+        ];
+        let dividers = frame_view::divider_rects(&self.view.frame_layout, band, self.view.maximized_pane);
+        let orrery_w = (orrery_rect[2] - orrery_rect[0]).round().max(1.0) as u32;
+        let orrery_h = (orrery_rect[3] - orrery_rect[1]).round().max(1.0) as u32;
+
+        // Chrome scene over the full window. Paint the caret / selection of the
+        // focused field — the palette query when open, else the omnibar (byte
+        // offsets from the field's char model).
+        let cursor = self.view.runner.focus().map(|node| {
+            let field = self.caret_field(node);
+            let byte_of = |i: usize| {
+                field
+                    .text()
+                    .char_indices()
+                    .nth(i)
+                    .map(|(b, _)| b)
+                    .unwrap_or(field.text().len())
+            };
+            let selection = field.has_selection().then(|| {
+                let (s, e) = field.selection();
+                (byte_of(s), byte_of(e))
+            });
+            TextCursor {
+                node,
+                caret: field.caret_byte_in_render(),
+                selection,
+                editable: self.is_text_input(node),
+            }
+        });
+        FrameRects {
+            leaves,
+            orrery_rect,
+            orrery_gid,
+            workbench_rect,
+            roster_rect,
+            comms_rect,
+            list_pane_rects,
+            dividers,
+            orrery_w,
+            orrery_h,
+            cursor,
+        }
+    }
+}
