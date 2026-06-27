@@ -1,0 +1,298 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+//! Layout strategy, community detection, bridges, and affinity clustering.
+
+use super::*;
+
+impl Orrery {
+    /// The pane's active layout-strategy id, or `None` for force-directed (gyre).
+    /// The host persists this as view-intent and checkmarks it in the layout picker.
+    pub fn layout_strategy(&self) -> Option<&str> {
+        self.active_strategy.as_deref()
+    }
+
+    /// Switch the orrery's layout strategy. `Some(id)` selects a cartography adapter
+    /// (the host then pushes its positions via [`apply_strategy_positions`]) and halts
+    /// gyre so the analytic layout holds still; `None` reverts to force-directed,
+    /// dropping the buffered positions and re-settling the physics. (Layout picker.)
+    pub fn set_layout_strategy(&mut self, id: Option<String>) {
+        let reverting = id.is_none() && self.active_strategy.is_some();
+        self.active_strategy = id;
+        // Any strategy (de)activation forces a fresh layout: the buffered positions are recomputed
+        // (or dropped on revert), so the inputs cache must not skip the first recompute of the new
+        // strategy. (Arrangements — the layout cache.)
+        self.last_strategy_inputs = None;
+        if self.active_strategy.is_some() {
+            self.physics.halt();
+        } else if reverting {
+            self.strategy_positions = None;
+            self.settle_physics(SETTLE_TICKS);
+        }
+    }
+
+    /// Whether a strategy's layout depends on the **focus** (the single selection). Only radial
+    /// centers on it; for every other strategy a selection change must not invalidate the cached
+    /// layout. (Arrangements — the layout cache.)
+    pub(crate) fn strategy_uses_focus(id: &str) -> bool {
+        id == "radial.default"
+    }
+
+    /// Whether the active analytic layout must be recomputed: `true` when its inputs — the strategy,
+    /// the kernel's structural [`Graph::revision`](kernel::graph::Graph::revision), the viewport, and
+    /// the focus (only for focus-driven strategies) — differ from the last computed layout. The host
+    /// gates its per-frame `project_orrery_strategy` call on this, so an unchanged analytic layout is
+    /// computed once per real change, not every frame. (Arrangements — the layout cache.)
+    pub fn needs_strategy_recompute(&self, id: &str, w: u32, h: u32, focus: Option<NodeKey>) -> bool {
+        // The by-site kanban groups by URL host — node *content* the structural revision does not
+        // track (a url edit is content, not structure). Its layout is cheap (host extraction +
+        // grouping), so recompute it every frame rather than risk a stale column. The structural
+        // strategies (grid, penrose, radial, timeline, community-kanban, ...) cache on the revision.
+        if id == "kanban.default" {
+            return true;
+        }
+        let focus = if Self::strategy_uses_focus(id) { focus } else { None };
+        match &self.last_strategy_inputs {
+            Some((sid, rev, sw, sh, sfocus)) => {
+                sid.as_str() != id
+                    || *rev != self.graph.revision()
+                    || *sw != w
+                    || *sh != h
+                    || *sfocus != focus
+            }
+            None => true,
+        }
+    }
+
+    /// Record the inputs the active layout was just computed for, so
+    /// [`needs_strategy_recompute`](Self::needs_strategy_recompute) returns `false` until one
+    /// changes. The host calls this right after it projects + applies. (Arrangements — the cache.)
+    pub fn note_strategy_computed(&mut self, id: &str, w: u32, h: u32, focus: Option<NodeKey>) {
+        let focus = if Self::strategy_uses_focus(id) { focus } else { None };
+        self.last_strategy_inputs = Some((id.to_string(), self.graph.revision(), w, h, focus));
+    }
+
+    /// Buffer the active strategy's node positions (host-computed through platen's
+    /// cartography dispatch). They are written into the read model each frame after
+    /// the physics snapshot, so they take effect regardless of the off-thread sim's
+    /// timing. A no-op unless a strategy is active. (Layout picker.)
+    pub fn apply_strategy_positions(&mut self, positions: &[(NodeKey, PortablePoint)]) {
+        if self.active_strategy.is_some() {
+            self.strategy_positions = Some(positions.to_vec());
+        }
+    }
+
+    /// Refresh the cached community partition if the active strategy needs it (cluster-kanban) and
+    /// the topology generation has advanced since it was last computed. The generation-gated cache:
+    /// Louvain runs once per structural change, not once per frame (the host calls this before
+    /// projecting, then reads [`community`](Self::community)). Computed inline here; the off-thread
+    /// armillary lane is a drop-in behind this method, exactly as physics offloads. (Graph signals — P3.)
+    pub fn refresh_community_cache(&mut self, strategy_id: &str) {
+        // Community is needed by the cluster-kanban layout and by the community-ring overlay.
+        if strategy_id == "kanban.community" || self.show_community_rings {
+            self.ensure_community_fresh();
+        }
+    }
+
+    /// Recompute the community partition if it is stale for the current graph revision — off-thread
+    /// when the host has offloaded (native), inline otherwise (wasm / tests). The caller decides
+    /// *whether* community is needed (cluster-kanban or the rings toggle); this only refreshes.
+    /// (Graph signals — P3.)
+    pub(crate) fn ensure_community_fresh(&mut self) {
+        let revision = self.graph.revision();
+        // Already fresh for this revision (cache or an in-flight request) — nothing to do.
+        if self.community_cache.is_some() && self.community_cache_revision == revision {
+            return;
+        }
+        let Some(wake) = self.offthread_wake.clone() else {
+            // Inline path (wasm / tests / physics not offloaded): compute synchronously.
+            self.community_cache = Some(signals::community_louvain(&self.graph));
+            self.community_cache_revision = revision;
+            return;
+        };
+        // Off-thread path: spin up the worker lazily on first need, then dispatch this revision.
+        // The result lands via `drain_community` on a later frame; until then the last-good
+        // partition (or the inline fallback in the kanban projection) holds. (Graph signals.)
+        if self.community_actor.is_none() {
+            self.community_actor = Some(community_lane::CommunityActor::spawn(wake));
+        }
+        let snapshot = signals::CommunitySnapshot::from_graph(&self.graph);
+        if let Some(actor) = self.community_actor.as_mut() {
+            actor.request(snapshot, revision);
+        }
+    }
+
+    /// Drain the off-thread community worker and accept its freshest result **only if it still
+    /// matches the live graph revision** (stale-rejection — a partition computed against a
+    /// since-mutated graph is dropped, and the next [`refresh_community_cache`] re-dispatches). A
+    /// no-op when computing inline (no worker). Called once per frame. (Graph signals — P3.)
+    pub(crate) fn drain_community(&mut self) {
+        let update = match self.community_actor.as_mut() {
+            Some(actor) => actor.drain(),
+            None => return,
+        };
+        let Some(update) = update else { return };
+        if update.revision == self.graph.revision() {
+            self.community_cache = Some(update.clusters);
+            self.community_cache_revision = update.revision;
+        }
+    }
+
+    /// The cached community partition, or `None` if none has been computed (no cluster strategy has
+    /// run this session, or the orrery was cleared). The host threads it into the cluster-kanban
+    /// projection so Louvain is not re-run per frame. (Graph signals — P3.)
+    pub fn community(&self) -> Option<&signals::ClusterSet> {
+        self.community_cache.as_ref()
+    }
+
+    /// Toggle the community-ring overlay: a halo per node in its community's colour, in any layout.
+    /// (Graph signals — community to a ring.)
+    pub fn set_show_community_rings(&mut self, on: bool) {
+        self.show_community_rings = on;
+    }
+
+    /// Whether the community-ring overlay is on. (Graph signals — community to a ring.)
+    pub fn show_community_rings(&self) -> bool {
+        self.show_community_rings
+    }
+
+    /// Toggle the bridge-ring overlay: a bold ring on the structural broker nodes, in any layout.
+    /// (Graph signals — bridges.)
+    pub fn set_show_bridge_rings(&mut self, on: bool) {
+        self.show_bridge_rings = on;
+    }
+
+    /// Whether the bridge-ring overlay is on. (Graph signals — bridges.)
+    pub fn show_bridge_rings(&self) -> bool {
+        self.show_bridge_rings
+    }
+
+    /// The bridge metric (betweenness brokers vs articulation / cut vertices). (Graph signals.)
+    pub fn bridge_metric(&self) -> signals::BridgeMetric {
+        self.bridge_metric
+    }
+
+    /// Choose the bridge metric. Invalidates the bridge cache so the next
+    /// [`ensure_bridges_fresh`](Self::ensure_bridges_fresh) recomputes under the new metric (the
+    /// graph revision may not have moved). (Graph signals — bridges / articulation points.)
+    pub fn set_bridge_metric(&mut self, metric: signals::BridgeMetric) {
+        if self.bridge_metric != metric {
+            self.bridge_metric = metric;
+            self.bridge_cache = None;
+        }
+    }
+
+    /// Recompute the bridge set if stale for the current graph revision, under the chosen metric
+    /// (betweenness brokers, thresholded; or articulation points). Both are cheap (O(V·E) /
+    /// O(V+E)), so this stays inline (no off-thread lane); the revision gate avoids the per-frame
+    /// redo, and [`set_bridge_metric`](Self::set_bridge_metric) clears the cache on a metric change.
+    /// (Graph signals — bridges.)
+    pub(crate) fn ensure_bridges_fresh(&mut self) {
+        let revision = self.graph.revision();
+        if self.bridge_cache.is_some() && self.bridge_cache_revision == revision {
+            return;
+        }
+        self.bridge_cache = Some(signals::bridges(&self.graph, self.bridge_metric, 0.5));
+        self.bridge_cache_revision = revision;
+    }
+
+    /// The cached bridge set, if computed. (Graph signals — bridges.)
+    pub fn bridges(&self) -> Option<&signals::BridgeNodes> {
+        self.bridge_cache.as_ref()
+    }
+
+    /// Refresh the revision-gated weighted-edge memo (cache generalization C): recompute the
+    /// collapsed multiplicity-weighted edge list only when the graph structure changed since it was
+    /// last built, so the per-frame gloss redraw reads it instead of re-deduping `relations()` every
+    /// frame. Called from [`frame`](Self::frame). (Graph signals — query memos.)
+    pub(crate) fn refresh_weighted_edges(&mut self) {
+        let revision = self.graph.revision();
+        if self.weighted_edges_cache.as_ref().is_none_or(|(r, _)| *r != revision) {
+            self.weighted_edges_cache = Some((revision, dedup_edges_weighted(&self.graph)));
+            self.weighted_edges_rebuilds += 1;
+        }
+    }
+
+    /// How many times the weighted-edge memo recomputed (test introspection: a static frame must not
+    /// bump it). (Graph signals — query memos, C.)
+    #[cfg(test)]
+    pub(crate) fn weighted_edges_rebuilds(&self) -> u64 {
+        self.weighted_edges_rebuilds
+    }
+
+    /// Toggle the **affinity force**: a weighted, attract-only gyre spring over structural-Jaccard
+    /// similarity, drawing structurally-similar nodes into clusters on top of the force-directed
+    /// layout ("cluster by affinity"). The force is (un)installed on the next [`frame`](Self::frame)
+    /// via [`sync_affinity_force`](Self::sync_affinity_force), with a settle so the change takes.
+    /// (Graph signals — P4.)
+    pub fn set_cluster_by_affinity(&mut self, on: bool) {
+        self.cluster_by_affinity = on;
+    }
+
+    /// Whether the affinity-clustering force is on. (Graph signals — P4.)
+    pub fn cluster_by_affinity(&self) -> bool {
+        self.cluster_by_affinity
+    }
+
+    /// The number of affinity pairs in the live affinity force (`0` when off). Test introspection
+    /// for the P4 wiring (inline backend). (Graph signals — P4.)
+    #[cfg(test)]
+    pub(crate) fn affinity_pair_count(&self) -> usize {
+        self.physics.affinity_pair_count()
+    }
+
+    /// Recompute the affinity signal if stale for the current graph revision. Jaccard is cheap (like
+    /// betweenness at current scale), so this stays inline; the revision gate avoids the per-frame
+    /// redo. (Graph signals — P4.)
+    pub(crate) fn ensure_affinity_fresh(&mut self) {
+        let revision = self.graph.revision();
+        if self.affinity_cache.is_some() && self.affinity_cache_revision == revision {
+            return;
+        }
+        self.affinity_cache =
+            Some(signals::structural_affinity(&self.graph, AFFINITY_MIN_SIMILARITY));
+        self.affinity_cache_revision = revision;
+    }
+
+    /// Install / refresh / clear the affinity force to match the toggle + the current signal, once
+    /// per real change (not per frame). Called from [`frame`](Self::frame). When on, recompute the
+    /// signal if stale and (re)install the force only when the graph revision moved since the live
+    /// force was built; when off, clear it once. Each install/clear is followed by a settle so the
+    /// new equilibrium takes. (Graph signals — P4.)
+    pub(crate) fn sync_affinity_force(&mut self) {
+        if self.cluster_by_affinity {
+            self.ensure_affinity_fresh();
+            let revision = self.graph.revision();
+            if self.installed_affinity_revision != Some(revision) {
+                let force = self
+                    .affinity_cache
+                    .as_ref()
+                    .map(build_affinity_spring)
+                    .filter(|f| !f.is_empty());
+                self.physics.set_affinity_force(force);
+                self.physics.settle(SETTLE_TICKS / 2);
+                self.installed_affinity_revision = Some(revision);
+            }
+        } else if self.installed_affinity_revision.is_some() {
+            self.physics.set_affinity_force(None);
+            self.physics.settle(SETTLE_TICKS / 2);
+            self.installed_affinity_revision = None;
+        }
+    }
+
+    /// Overlay the buffered strategy positions onto `view` — called by
+    /// [`frame`](Orrery::frame) right after the physics snapshot, so the underlay,
+    /// DOM nodes, cull, and edges (all reading `view`) stay consistent in one write.
+    /// A no-op under force-directed. (Layout picker.)
+    pub(crate) fn apply_strategy_to_view(&mut self) {
+        let Some(positions) = self.strategy_positions.take() else {
+            return;
+        };
+        for &(key, p) in &positions {
+            self.view.set_position(key, Point2D::new(p.x, p.y));
+        }
+        self.strategy_positions = Some(positions);
+    }
+
+}
