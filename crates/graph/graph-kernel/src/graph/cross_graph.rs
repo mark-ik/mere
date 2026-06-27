@@ -83,6 +83,7 @@ impl Graph {
             mime_hint: source.mime_hint.clone(),
             viewer_override: source.viewer_override.clone(),
             compat_mode: source.compat_mode,
+            body: source.body.clone(),
             thumbnail_png: source.thumbnail_png.clone(),
             thumbnail_width: source.thumbnail_width,
             thumbnail_height: source.thumbnail_height,

@@ -130,6 +130,14 @@ pub struct Node {
     /// lets verso's routing policy still apply.
     pub compat_mode: bool,
 
+    /// Inline authored content body — a knot note's djot source, for nodes whose
+    /// content is authored in place rather than fetched. `None` for fetched / remote
+    /// nodes (their content lives in the durable content cache). Mutable (the live note
+    /// editor writes it) and persisted with the node, so it travels on snapshot / sync /
+    /// fork, unlike the local content cache. (Djot editor reframe, slice 3 — the inline
+    /// `Node` body.)
+    pub body: Option<String>,
+
     /// Address claims attached to this node — Primary + zero-or-more Aliases.
     ///
     /// Per the [node identity + duplicates brief](https://github.com/mark-ik/mere/blob/main/design_docs/mere_docs/research/2026-05-18_node_identity_and_duplicates_brief.md):
@@ -221,6 +229,7 @@ impl Node {
             mime_hint: None,
             viewer_override: None,
             compat_mode: false,
+            body: None,
             addresses: vec![AddressClaim::primary(address_from_url(url))],
             frame_layout_hints: Vec::new(),
             frame_split_offer_suppressed: false,

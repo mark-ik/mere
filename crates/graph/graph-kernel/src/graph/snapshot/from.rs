@@ -73,6 +73,7 @@ impl Graph {
                 // address was already set by add_node_with_id from pnode.url; no re-derivation needed.
                 node.frame_layout_hints = pnode.frame_layout_hints.clone();
                 node.frame_split_offer_suppressed = pnode.frame_split_offer_suppressed;
+                node.body = pnode.body.clone();
                 if let Some(session) = &pnode.session_state {
                     node.session_scroll = session.scroll_x.zip(session.scroll_y);
                     node.session_form_draft = session.form_draft.clone();

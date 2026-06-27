@@ -47,7 +47,24 @@ fn persisted_node(node_id: Uuid, url: &str) -> crate::persistence::PersistedNode
         frame_split_offer_suppressed: false,
         properties: Vec::new(),
         derivations: Vec::new(),
+        body: None,
     }
+}
+
+#[test]
+fn node_body_round_trips() {
+    // The inline `Node` body (a knot note's source) survives the snapshot
+    // round-trip: PersistedNode.body -> Node.body -> PersistedNode.body. (Slice 3.)
+    let id = Uuid::new_v4();
+    let mut pnode = persisted_node(id, "knot://notes");
+    pnode.body = Some("# Notes\n\nbody".to_string());
+    let graph = Graph::from_snapshot(&snapshot_with(pnode, SharedNavigationMemory::empty()));
+    let node = graph.nodes().next().expect("node restored").1;
+    assert_eq!(node.body.as_deref(), Some("# Notes\n\nbody"));
+    assert_eq!(
+        graph.to_snapshot().nodes[0].body.as_deref(),
+        Some("# Notes\n\nbody"),
+    );
 }
 
 #[test]

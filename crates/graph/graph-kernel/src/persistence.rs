@@ -179,6 +179,11 @@ pub struct PersistedNode {
     /// Cross-graph derivation provenance (copied/forked from another graph).
     #[serde(default)]
     pub derivations: Vec<NodeDerivation>,
+    /// Inline authored content body — a knot note's djot source. `#[serde(default)]`
+    /// so snapshots written before the inline body load with `None`. (Djot editor
+    /// reframe, slice 3.)
+    #[serde(default)]
+    pub body: Option<String>,
 }
 
 /// Full graph snapshot for periodic saves.

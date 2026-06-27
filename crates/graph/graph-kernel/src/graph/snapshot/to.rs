@@ -66,6 +66,7 @@ impl Graph {
                 frame_split_offer_suppressed: node.frame_split_offer_suppressed,
                 properties: node.properties.clone(),
                 derivations: node.derivations.clone(),
+                body: node.body.clone(),
             })
             .collect();
 
