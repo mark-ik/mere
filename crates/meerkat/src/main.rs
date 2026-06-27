@@ -71,6 +71,7 @@ use tracing_subscriber::prelude::*;
 use winit::window::{ResizeDirection, WindowId};
 
 mod card;
+mod note_surface;
 mod doc_style;
 mod comms_host;
 mod constellation;
