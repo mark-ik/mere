@@ -1065,3 +1065,21 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   section + the re-scoped slices (mapper → welcome tile; `knot://` routing; persistence;
   edit mode). Context: tinct 0.1.0 + illume 0.0.1 were published earlier this session
   (see the illume plan). Starting slice 1, the `EngineDocument` → serval-view mapper.
+- **2026-06-27, slice 1 done + native-smolweb-plan alignment.** Built the
+  document-family block→view mapper (`meerkat/note_view.rs`: `DocumentBlock` /
+  `InlineSpan` → xilem_serval `el` / `text`, every block + inline-span variant, 3 tests;
+  mere `0ab66a7`) and the render surface (`meerkat/note_surface.rs`: `note_scene` builds
+  the views into a `ScriptedDom` via a `ServalAppRunner`, lays out, lowers to a
+  `netrender::Scene` through the chrome's `scene_from_session` path; a test renders
+  `mere://welcome` end to end; mere `3d7c7ea`). The
+  [native smolweb rendering plan](../../nematic_docs/implementation_strategy/2026-06-27_native_smolweb_rendering_plan.md)
+  (2026-06-27) frames this mapper as its **Phase D**, the document family: djot/knot,
+  markdown, and reader-mode HTML all ride this one mapper (so it is not note-specific —
+  its doc + eventual name should read "document-family"). The **smolweb family**
+  (gemtext / gopher / feed / scroll / misfin) instead gets per-format native views in a
+  new `serval/smolweb-views`, shareable with pelt because they avoid `DocumentBlock`; so
+  the slice-1b content integration routes only document-family content through
+  `note_scene`, never smolweb. Pending prerequisite from that plan: **`DocumentBlock::Table`**
+  (the enum lacks it; both djot and markdown need it) lands as its own change — touching
+  the mapper, the round-trip exporters, and every exhaustive `DocumentBlock` match —
+  before the live djot/markdown tile.

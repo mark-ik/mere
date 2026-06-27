@@ -2,19 +2,24 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! `EngineDocument` → serval views: the note render path.
+//! `EngineDocument` → serval views: the **document-family** block→view mapper.
 //!
 //! Maps the portable block model (`DocumentBlock` / `InlineSpan`, what
 //! `DjotKnotEngine` and every other engine produce) into xilem_serval element
-//! views, so a note renders through serval-layout + netrender like any web
-//! document — the same `ScriptedDom` path the chrome builds every frame. This is
-//! the block→view mapper of the note-as-routed-serval-document-tile reframe (djot
-//! editor plan, 2026-06-27): the real web engine renders the note, so
-//! document-canvas stays off the note path.
+//! views, so a document renders through serval-layout + netrender like any web
+//! page — the same `ScriptedDom` path the chrome builds every frame.
 //!
-//! Slice 1 of the reframe: pure mapping, no tile wiring yet. The render
-//! integration (a content surface over these views, proven on `mere://welcome`)
-//! is the next slice.
+//! This is the document family's one renderer (native smolweb rendering plan,
+//! 2026-06-27, Phase D): djot/knot, markdown, and reader-mode HTML all ride this
+//! mapper, because all three lower to `DocumentBlock`. The **smolweb family**
+//! (gemtext, gopher, feed, …) does not come here — each gets its own native serval
+//! view (`serval/smolweb-views`) so it stays shareable with pelt without
+//! `DocumentBlock`. `DocumentBlock` keeps capture + cards; focused viewing goes
+//! native.
+//!
+//! Slice 1 of the djot reframe: the mapper itself. `DocumentBlock::Table` is a
+//! pending prerequisite (the variant does not exist yet) that lands before the live
+//! djot/markdown tile. The render-to-`Scene` surface is `crate::note_surface`.
 
 use inker::{DocumentBlock, EngineDocument, InlineSpan};
 use xilem_serval::{el, text, AnyView, ServalCtx, ServalElement};
