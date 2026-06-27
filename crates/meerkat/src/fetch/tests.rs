@@ -4,7 +4,6 @@
 
 //! Fetch tests.
 
-mod tests {
 use super::*;
 
 #[test]
