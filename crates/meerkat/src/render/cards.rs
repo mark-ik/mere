@@ -176,17 +176,29 @@ impl crate::WindowCtx<'_> {
                         // A snapshot is a non-interactive peek (no actor, no
                         // content_rects entry), so its link map is dropped here —
                         // link nav rides the live actor cards. (Inline-link nav.)
-                        let (scene, content_height, _links) = crate::card::render_content_scene(
-                            &url,
-                            state.as_ref(),
-                            &self.shared.content.engine_registry,
-                            &self.shared.content.route_policy,
-                            &loader,
-                            RENDER_W,
-                            RENDER_H,
-                            &self.shared.presentation.document_sheet_composed(),
-                        );
-                        Some((scene, content_height))
+                        // Document-family built-ins (mere:// synthesized pages) render
+                        // the focused content *natively* through serval (note_view ->
+                        // ScriptedDom -> netrender), the reframe's path; web / engine
+                        // content stays on the document-canvas preview lane. knot://
+                        // notes join this branch once their routing lands. (Slice 1b-A.)
+                        if url.starts_with("mere://") {
+                            let doc = crate::card::content_document(&url, state.as_ref());
+                            let scene =
+                                crate::note_surface::note_scene(&doc, RENDER_W, RENDER_H, &[]);
+                            Some((scene, RENDER_H))
+                        } else {
+                            let (scene, content_height, _links) = crate::card::render_content_scene(
+                                &url,
+                                state.as_ref(),
+                                &self.shared.content.engine_registry,
+                                &self.shared.content.route_policy,
+                                &loader,
+                                RENDER_W,
+                                RENDER_H,
+                                &self.shared.presentation.document_sheet_composed(),
+                            );
+                            Some((scene, content_height))
+                        }
                     };
                     snapshot_card = Some((member, url, [x0, y0, x1, y1], built));
                 }
