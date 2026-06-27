@@ -136,11 +136,20 @@ impl Shell {
                 crate::ShellCommand::ReconcileGraphlets { graph } => {
                     self.reconcile_linked_graphlets(graph)
                 }
-                crate::ShellCommand::OpenLinkedGraphlet { node, from } => {
-                    // Mint the Linked Component graphlet (Shell), then open a window scoped
-                    // to it (reusing the branch-window scope path). (Phase 3 slice 2.)
+                crate::ShellCommand::OpenLinkedGraphlet {
+                    node,
+                    from,
+                    kind,
+                    selectors,
+                    chip,
+                } => {
+                    // Mint the Linked graphlet of `kind` under `selectors` (Shell), then open
+                    // a window scoped to it (reusing the branch-window scope path). (Phase 3
+                    // slice 2 / 2+.)
                     if self.render_core.is_some() {
-                        if let Some(graphlet_id) = self.linked_component_graphlet(node, from) {
+                        if let Some(graphlet_id) =
+                            self.linked_graphlet(node, from, kind, selectors)
+                        {
                             let anchor_label = self.orreries.get(&from).and_then(|o| {
                                 let g = o.graph();
                                 g.get_node_by_id(node)
@@ -150,7 +159,7 @@ impl Shell {
                             view.branch_graphlet = Some(graphlet_id);
                             if let Some(label) = anchor_label {
                                 view.chrome_update(|c| {
-                                    c.branch_label = Some(format!("\u{25ce} {label}"))
+                                    c.branch_label = Some(format!("\u{25ce} {chip}: {label}"))
                                 });
                             }
                             self.spawn_window_with_view(event_loop, view);

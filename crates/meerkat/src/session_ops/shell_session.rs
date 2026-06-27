@@ -123,26 +123,28 @@ impl crate::Shell {
         Some(id)
     }
 
-    /// Mint a **Linked** `Component` graphlet (Phase 3 slice 2) seeded on `node`, derived
-    /// from graph `from`, persisted, returning its id for a scoped window to carry. Unlike
-    /// a branch (a hand-built roster), its members are *derived* from the graph and
-    /// reconcile on drift. The caller opens a window scoped to it. `None` if the donor
-    /// graph or its session is gone. (Graphlet wiring Phase 3 — the manual Linked
-    /// consumer.)
-    pub(crate) fn linked_component_graphlet(
+    /// Mint a **Linked** graphlet (Phase 3 slice 2) of `kind` seeded on `node`, derived from
+    /// graph `from` under the `selectors` edge projection, persisted, returning its id for a
+    /// scoped window to carry. Unlike a branch (a hand-built roster), its members are
+    /// *derived* from the graph and reconcile on drift. The caller opens a window scoped to
+    /// it. `None` if the donor graph or its session is gone. (Graphlet wiring Phase 3 — the
+    /// manual Linked consumer; `kind` + `selectors` are the projection-vocabulary control.)
+    pub(crate) fn linked_graphlet(
         &mut self,
         node: uuid::Uuid,
         from: GraphId,
+        kind: forme::GraphletKind,
+        selectors: Vec<String>,
     ) -> Option<forme::GraphletId> {
         let session_dir = self.graph_session_dir(from)?;
         // Clone the graph as the derivation source (a borrow-split is a refinement; the
-        // component BFS is cheap).
+        // BFS derivation is cheap).
         let graph = self.orreries.get(&from)?.graph().clone();
         let spec = forme::GraphletSpec {
-            kind: forme::GraphletKind::Component,
+            kind,
             anchors: vec![node.to_string()],
             primary_anchor: Some(node.to_string()),
-            selectors: Vec::new(),
+            selectors,
         };
         let graphlets = self
             .graphlets
@@ -154,7 +156,7 @@ impl crate::Shell {
         }
         self.shared.observability.record_probe(
             "graphlet",
-            "linked-component",
+            "linked",
             format!("node={node} graphlet={id}"),
         );
         Some(id)

@@ -493,6 +493,8 @@ pub const PALETTE_CONTEXT_ACTIONS: &[(crate::ContextAction, &str, &str)] = {
         (ToggleSizeByImportance, "size_by_importance", "Toggle size by importance"),
         (IsolateSelection, "isolate", "Isolate selection"),
         (OpenComponentGraphlet, "open_component", "Open component as graphlet"),
+        (OpenNeighborhoodGraphlet, "open_neighborhood", "Open neighborhood as graphlet"),
+        (OpenLinkWebGraphlet, "open_link_web", "Open link web as graphlet"),
         (ShowAllNodes, "show_all", "Show all nodes"),
         (MirrorTiles, "mirror_tiles", "Mirror open tiles"),
         (OpenNodeFacets, "open_node_facets", "Node settings (selected node)"),

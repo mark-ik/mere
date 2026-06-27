@@ -305,14 +305,34 @@ impl WindowCtx<'_> {
             self.view.request_redraw();
             return;
         }
-        // Open the focused node's connected component as a persistent Linked graphlet in
-        // its own scoped window — the manual Linked-graphlet consumer. Shell-level (mint +
-        // open a window), so it queues a command. (Graphlet wiring Phase 3 slice 2.)
-        if let ContextAction::OpenComponentGraphlet = action {
+        // Open the focused node as a persistent Linked graphlet in its own scoped window —
+        // the manual Linked-graphlet consumers (component / neighborhood / link web). Each
+        // maps to a (kind, selectors, chip) edge-projection; Shell-level (mint + open a
+        // window), so it queues a command. (Graphlet wiring Phase 3 slice 2 / 2+.)
+        let projection = match action {
+            ContextAction::OpenComponentGraphlet => {
+                Some((forme::GraphletKind::Component, Vec::new(), "component"))
+            }
+            ContextAction::OpenNeighborhoodGraphlet => Some((
+                forme::GraphletKind::Ego { radius: 2 },
+                Vec::new(),
+                "neighborhood",
+            )),
+            ContextAction::OpenLinkWebGraphlet => Some((
+                forme::GraphletKind::Component,
+                vec!["Semantic".to_string()],
+                "link web",
+            )),
+            _ => None,
+        };
+        if let Some((kind, selectors, chip)) = projection {
             if let Some(node) = self.orrery().focused_member() {
                 self.commands.push(crate::ShellCommand::OpenLinkedGraphlet {
                     node,
                     from: self.view.focused_graph,
+                    kind,
+                    selectors,
+                    chip,
                 });
             }
             return;
@@ -504,6 +524,8 @@ impl WindowCtx<'_> {
             | ContextAction::ResizeNode
             | ContextAction::IsolateSelection
             | ContextAction::OpenComponentGraphlet
+            | ContextAction::OpenNeighborhoodGraphlet
+            | ContextAction::OpenLinkWebGraphlet
             | ContextAction::ShowAllNodes
             | ContextAction::MirrorTiles
             | ContextAction::OpenNodeFacets

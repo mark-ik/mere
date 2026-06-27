@@ -509,6 +509,16 @@ pub enum ContextAction {
     /// opens a window scoped to it. Pushes a `ShellCommand` (Shell-level open). (Graphlet
     /// wiring Phase 3.)
     OpenComponentGraphlet,
+    /// Open the focused node's **neighborhood** (an Ego graphlet, radius 2) as a Linked
+    /// graphlet in its own scoped window. Like `OpenComponentGraphlet` but radius-bounded,
+    /// so the scoped window shows a *subset* (the node plus two hops), not the whole
+    /// component — the second derived kind surfaced in the UI. (Graphlet wiring Phase 3.)
+    OpenNeighborhoodGraphlet,
+    /// Open the focused node's **link web** — its connected component under the Semantic
+    /// edge projection only (selectors = `["Semantic"]`), so the roster follows links /
+    /// citations, not containment or arrangement relations. Exercises the selector
+    /// (edge-projection) control end to end from the UI. (Graphlet wiring Phase 3.)
+    OpenLinkWebGraphlet,
     /// Drop the orrery's scope lens — show the whole graph again ("Show all"). Drains
     /// like `ShellbarMove` without touching `context_set`. (Curated orrery.)
     ShowAllNodes,

@@ -339,12 +339,19 @@ enum ShellCommand {
         graphlet: forme::GraphletId,
         node: uuid::Uuid,
     },
-    /// Open the focused node's connected component as a **Linked** graphlet in a scoped
-    /// window (Phase 3 slice 2, the manual Linked consumer): mint a `Linked { Component }`
-    /// graphlet derived from the graph, then open a window scoped to it (reusing the
-    /// branch-window scope path). Needs `&mut Shell` + the event loop, so it defers here.
-    /// (Graphlet wiring Phase 3.)
-    OpenLinkedGraphlet { node: uuid::Uuid, from: GraphId },
+    /// Open the focused node as a **Linked** graphlet of `kind` in a scoped window (Phase 3
+    /// slice 2 / 2+, the manual Linked consumers): mint a `Linked { kind }` graphlet derived
+    /// from the graph under the `selectors` edge projection, then open a window scoped to it
+    /// (reusing the branch-window scope path), tagged with the `chip` word. Needs `&mut Shell`
+    /// + the event loop, so it defers here. `kind` + `selectors` are the projection-vocabulary
+    /// control (component / neighborhood / link web). (Graphlet wiring Phase 3.)
+    OpenLinkedGraphlet {
+        node: uuid::Uuid,
+        from: GraphId,
+        kind: forme::GraphletKind,
+        selectors: Vec<String>,
+        chip: &'static str,
+    },
     /// Reconcile graph `graph`'s **Linked** graphlets against the (just-changed) graph and
     /// persist any that drifted (Phase 3 slice 2+ — data-level drift). Queued by
     /// `save_session` after a graph mutation; runs on `Shell` (needs `&mut graphlets`).

@@ -224,6 +224,10 @@ impl WindowCtx<'_> {
             OpenNodeFacets => ContextItem::new("Node settings\u{2026}", OpenNodeFacets),
             IsolateSelection => ContextItem::new("Isolate", IsolateSelection),
             OpenComponentGraphlet => ContextItem::new("Open component", OpenComponentGraphlet),
+            OpenNeighborhoodGraphlet => {
+                ContextItem::new("Open neighborhood", OpenNeighborhoodGraphlet)
+            }
+            OpenLinkWebGraphlet => ContextItem::new("Open link web", OpenLinkWebGraphlet),
             ToggleSizeByDegree => {
                 let on = self.orrery().size_by_degree();
                 ContextItem::new(
