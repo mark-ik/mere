@@ -54,7 +54,7 @@ pub fn mark_cookies_dirty() {
 /// `same_site` is the `cookie` crate's enum, not directly serde-friendly), encoded as
 /// JSON in its own per-cookie blob in the durable store.
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
-struct PersistedCookie {
+pub(crate) struct PersistedCookie {
     name: String,
     value: String,
     domain: String,
