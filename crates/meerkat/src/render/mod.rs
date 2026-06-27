@@ -34,6 +34,7 @@ mod overlays;
 mod orrery_scene;
 mod workbench;
 mod cards;
+mod compose;
 mod paint;
 use paint::PaintInputs;
 pub(crate) use setup::*;
