@@ -131,7 +131,7 @@ impl WindowCtx<'_> {
             // card's scroll), resolve the link URL (relative gemtext / markdown
             // links join the card's own URL), and navigate the focused node to
             // it — the omnibar's record-the-visit path. Consumes the release so
-            // it doesn't fall through to the card's live-preview toggle.
+            // it doesn't fall through to selecting the node or opening it.
             // (Inline-link nav; the document lane carries link regions today.)
             //
             // A workbench tab / divider gesture resolves through the pelt shell
@@ -199,9 +199,8 @@ impl WindowCtx<'_> {
             if button == MouseButton::Left {
                 self.view.frame_divider_drag = None;
             }
-            // Double-click routing (orrery pane): on the focused card it toggles
-            // the live preview (snapshot -> live actor, or back); on a node it
-            // summons the workbench pane with that node + its active neighbors
+            // Double-click routing (orrery pane): on a node or its snapshot card it
+            // opens the node in pelt (a workbench tile) with its active neighbors
             // (the contextual-staging gesture). Skip when the release is in the
             // workbench pane (tiles handle their own double-clicks).
             let released_in_workbench = self
@@ -217,8 +216,8 @@ impl WindowCtx<'_> {
                 if double {
                     self.view.last_left_release = None; // don't chain a triple-click
                     // Double-click opens the node in pelt (a workbench tile), on a node
-                    // or its snapshot card, replacing the retired promote-to-live-preview.
-                    // (Node-rep P4.) But the object card's − / + are tier steps, not a
+                    // or its snapshot card. (Node-rep P4.) But the object card's − / +
+                    // are tier steps, not a
                     // node-open: a double-tap on + must step twice, never launch pelt.
                     // (Object card P0.)
                     if !self.point_over_object_card(x, y)

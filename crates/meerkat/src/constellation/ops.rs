@@ -514,8 +514,8 @@ impl Constellation {
             .is_some_and(|a| a.respawns > 0 && a.scene.is_none() && a.packet.is_none())
     }
 
-    /// Deactivate `member` now — its actor winds down on drop. For when a tile /
-    /// live preview is closed, or the node is gone (deleted). The node's "last
+    /// Deactivate `member` now — its actor winds down on drop. For when a tile is
+    /// closed, or the node is gone (deleted). The node's "last
     /// visit" snapshot is re-derived host-side from the durable cache, so nothing
     /// needs retaining here.
     pub fn reap(&mut self, member: GraphMemberId) {

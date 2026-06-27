@@ -85,7 +85,7 @@ impl crate::WindowCtx<'_> {
             let dest_h = (dest[3] - dest[1]).max(1.0);
             // Document-px shown, sized so the vertical scale equals the horizontal one
             // (tex_w -> dest_w): a uniform downscale for snapshot thumbnails, 1:1 for
-            // live cards / tiles.
+            // tiles.
             let visible_h = dest_h * tex_w / dest_w;
             let content_h = (self.shared.content.constellation.content_height(*member) as f32)
                 .max(visible_h);
@@ -130,7 +130,7 @@ impl crate::WindowCtx<'_> {
                     let tex_w = cached.size.0 as f32;
                     let dest_w = (dest[2] - dest[0]).max(1.0);
                     let dest_h = (dest[3] - dest[1]).max(1.0);
-                    // Window px per document px (1.0 for a 1:1 live card / tile).
+                    // Window px per document px (1.0 for a 1:1 tile).
                     let s = dest_w / tex_w;
                     let visible_h = dest_h / s;
                     let content_h = (self.shared.content.constellation.content_height(*member)

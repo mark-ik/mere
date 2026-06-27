@@ -76,8 +76,7 @@ impl WindowCtx<'_> {
                 self.view.focused_tile = Some(new_member);
             }
             // Cartography: the new node is focused and shows its snapshot; opening it
-            // live is the pelt path (double-click), not an in-orrery live card.
-            // (Node-rep P4: live preview retired.)
+            // live is the pelt path (double-click). (Node-rep P4.)
             self.ensure_content(&loc);
             // Record the navigation while `content_location` still holds the page
             // we came from (live trail recorder, C1).
@@ -104,8 +103,7 @@ impl WindowCtx<'_> {
             }
         };
         // Navigating focuses the target; the orrery shows its snapshot. Opening it live
-        // is the pelt path (double-click a node or its card), not an in-orrery live card.
-        // (Node-rep P4: live preview retired.)
+        // is the pelt path (double-click a node or its card). (Node-rep P4.)
         self.ensure_content(&loc);
         // Record the navigation while `content_location` still holds the page we
         // came from (live trail recorder, C1).

@@ -4,8 +4,8 @@
 
 //! Focused-node and content operations for a window: deleting the focused node,
 //! toggling its background / compatibility-view flags, retry / stop / pin of its
-//! live operation, the live-preview toggle, the needed-members set the
-//! constellation reconciles to, the per-node activation state and content
+//! live operation, the needed-members set the constellation reconciles to, the
+//! per-node activation state and content
 //! silhouette the orrery colours / shapes from, resolving the focused member, and
 //! the durable content cache load / save. Factored out of `frame_ops.rs` to keep
 //! files under the 600-LOC ceiling.
@@ -280,8 +280,8 @@ impl WindowCtx<'_> {
         if let Some(url) = self.current_focus_url() {
             self.ensure_content(&url);
         }
-        // Open the node as a pelt tile so a real surface/actor exists to background-pin
-        // (the live-preview promotion is retired). (Node-rep P4.)
+        // Open the node as a pelt tile so a real surface/actor exists to background-pin.
+        // (Node-rep P4.)
         self.open_workbench();
         self.view.workbench.open_tile(member);
         self.view.focused_tile = Some(member);

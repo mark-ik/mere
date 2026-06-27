@@ -352,13 +352,12 @@ impl Shell {
 
     fn agent_request_content_preview(&mut self) -> (bool, String, String) {
         let action_id = "content.preview.request".to_string();
-        // The Stage-2 live-preview toggle was retired (d4375d0): a focused node's
-        // content now shows automatically as a snapshot card, and a pelt tile is the
-        // live view (double-click / compat toggle). There is no preview to toggle.
+        // No live preview to toggle (retired d4375d0): selecting a single node shows its
+        // snapshot card, and a pelt tile (double-click) is the live view.
         (
             false,
             action_id,
-            "live preview retired; focused content shows as a snapshot card".to_string(),
+            "no live preview to toggle; select a node for its snapshot card".to_string(),
         )
     }
 

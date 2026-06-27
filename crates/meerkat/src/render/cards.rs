@@ -122,8 +122,19 @@ impl crate::WindowCtx<'_> {
         // contend with the tile (last-writer-per-frame thrash, so opening the card
         // visibly reflows the tile). The proper fix is per-surface scenes; until then
         // the tile wins. (Card/tile contention fix.)
+        // Single-node selection summons the snapshot card; nothing else does. The card
+        // member is the focused node only when *exactly one* node is selected (and it is
+        // not already an open tile — the tile is the view).
+        //
+        // TODO(swatch agent): a multi-node selection (`selected_members().len() > 1`)
+        // should summon a *connections swatch* instead — the selected nodes plus the edges
+        // between them, rendered as DOM (swatch.rs generalized from its single-node shape
+        // form to a multi-node sub-graph, edges coloured by relation family). The selection
+        // set is `self.orrery().selected_members()`; see
+        // design_docs/mere_docs/design/2026-06-13_graphlet_derivation_from_selection.md.
         let card_member = self.focused_member().filter(|m| {
-            workbench_rect.is_none() || !self.view.workbench.open_members().contains(m)
+            self.orrery().selected_members().len() == 1
+                && (workbench_rect.is_none() || !self.view.workbench.open_members().contains(m))
         });
         if let (Some(member), Some(url)) = (
             card_member,
@@ -133,7 +144,7 @@ impl crate::WindowCtx<'_> {
             // fixed top-right rect when the node's screen pos is unknown): a visited
             // node shows its "last visit" snapshot (a short peek at the retained
             // scene, no actor), an un-visited node a "double-click to load"
-            // placeholder. The live-preview card is retired — content opens in pelt.
+            // placeholder. Double-clicking the node or its card opens it in pelt.
             // The orrery reports the node in its own (leaf-local) viewport; offset
             // by the orrery leaf's origin for window coords, and anchor the card
             // within the orrery leaf rect (so it stays in the orrery pane when split).
