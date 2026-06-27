@@ -49,6 +49,7 @@ fn block_tag(block: &DocumentBlock) -> &'static str {
         DocumentBlock::List { ordered: true, .. } => "ol",
         DocumentBlock::Image { .. } => "img",
         DocumentBlock::Rule => "hr",
+        DocumentBlock::Table { .. } => "table",
         DocumentBlock::FeedHeader { .. } => "header",
         DocumentBlock::FeedEntry { .. } => "article",
         DocumentBlock::MetadataRow { .. } | DocumentBlock::Badge { .. } => "p",
@@ -125,6 +126,30 @@ fn block_view(block: &DocumentBlock) -> NoteChild {
         }
         DocumentBlock::Badge { text: t } => {
             Box::new(el("p", text(t.clone())).attr("class", "badge"))
+        }
+        DocumentBlock::Table { header, rows, .. } => {
+            // `<table>` with an optional `<thead>` of `<th>` and a `<tbody>` of
+            // `<tr>`/`<td>`. Column alignment (the `..`) is a later CSS pass.
+            let mut sections: Vec<NoteChild> = Vec::new();
+            if !header.is_empty() {
+                let cells: Vec<NoteChild> = header
+                    .iter()
+                    .map(|cell| Box::new(el("th", span_views(cell))) as NoteChild)
+                    .collect();
+                sections.push(Box::new(el("thead", vec![Box::new(el("tr", cells)) as NoteChild])));
+            }
+            let body: Vec<NoteChild> = rows
+                .iter()
+                .map(|row| {
+                    let cells: Vec<NoteChild> = row
+                        .iter()
+                        .map(|cell| Box::new(el("td", span_views(cell))) as NoteChild)
+                        .collect();
+                    Box::new(el("tr", cells)) as NoteChild
+                })
+                .collect();
+            sections.push(Box::new(el("tbody", body)));
+            Box::new(el("table", sections))
         }
     }
 }
@@ -254,7 +279,18 @@ mod tests {
             },
             DocumentBlock::MetadataRow { label: "k".into(), value: "v".into() },
             DocumentBlock::Badge { text: "b".into() },
+            DocumentBlock::Table {
+                alignments: vec![inker::TableAlignment::Left, inker::TableAlignment::Right],
+                header: vec![
+                    vec![InlineSpan::Text("h1".into())],
+                    vec![InlineSpan::Text("h2".into())],
+                ],
+                rows: vec![vec![
+                    vec![InlineSpan::Text("a".into())],
+                    vec![InlineSpan::Text("b".into())],
+                ]],
+            },
         ]);
-        assert_eq!(document_views(&d).len(), 12);
+        assert_eq!(document_views(&d).len(), 13);
     }
 }

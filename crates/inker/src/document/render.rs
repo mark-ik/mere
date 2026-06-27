@@ -10,7 +10,7 @@
 //! and surfaces inline links as separate `=> url label` lines after the
 //! paragraph, matching gemtext's link-line model.
 
-use super::{DocumentBlock, DocumentTrustState, EngineDocument, InlineSpan, inline_text};
+use super::{DocumentBlock, DocumentTrustState, EngineDocument, InlineSpan, TableAlignment, inline_text};
 
 impl EngineDocument {
     /// Render the document as CommonMark.
@@ -113,6 +113,65 @@ impl EngineDocument {
         }
         out.push_str("---\n\n");
     }
+}
+
+/// Each table row (header first, if any) as a plain-text line, cells joined by
+/// " | ". For exporters whose target format has no table model (gemtext,
+/// gophermap, plain text); callers wrap or prefix the lines as fits.
+pub(super) fn table_lines(header: &[Vec<InlineSpan>], rows: &[Vec<Vec<InlineSpan>>]) -> Vec<String> {
+    let row_line = |cells: &[Vec<InlineSpan>]| {
+        cells.iter().map(|c| inline_text(c)).collect::<Vec<_>>().join(" | ")
+    };
+    let mut lines = Vec::new();
+    if !header.is_empty() {
+        lines.push(row_line(header));
+    }
+    lines.extend(rows.iter().map(|r| row_line(r)));
+    lines
+}
+
+/// A GitHub-style pipe table: header row, an alignment separator, then body rows.
+/// An empty header still emits a (blank) header row so the result stays valid
+/// markdown; cells render their inline markdown.
+fn write_markdown_table(
+    alignments: &[TableAlignment],
+    header: &[Vec<InlineSpan>],
+    rows: &[Vec<Vec<InlineSpan>>],
+    out: &mut String,
+    pad: &str,
+) {
+    let cols = header.len().max(rows.iter().map(Vec::len).max().unwrap_or(0));
+    if cols == 0 {
+        return;
+    }
+    let write_row = |cells: &[Vec<InlineSpan>], out: &mut String| {
+        out.push_str(pad);
+        out.push('|');
+        for i in 0..cols {
+            out.push(' ');
+            if let Some(cell) = cells.get(i) {
+                write_inline_markdown(cell, out);
+            }
+            out.push_str(" |");
+        }
+        out.push('\n');
+    };
+    write_row(header, out);
+    out.push_str(pad);
+    out.push('|');
+    for i in 0..cols {
+        out.push_str(match alignments.get(i).copied().unwrap_or_default() {
+            TableAlignment::None => " --- |",
+            TableAlignment::Left => " :--- |",
+            TableAlignment::Center => " :---: |",
+            TableAlignment::Right => " ---: |",
+        });
+    }
+    out.push('\n');
+    for row in rows {
+        write_row(row, out);
+    }
+    out.push('\n');
 }
 
 impl DocumentBlock {
@@ -245,11 +304,22 @@ impl DocumentBlock {
             Self::Badge { text } => {
                 out.push_str(&format!("> *{text}*\n\n"));
             }
+            Self::Table { alignments, header, rows } => {
+                write_markdown_table(alignments, header, rows, out, &pad);
+            }
         }
     }
 
     fn write_gemini(&self, out: &mut String) {
         match self {
+            Self::Table { header, rows, .. } => {
+                out.push_str("```\n");
+                for line in table_lines(header, rows) {
+                    out.push_str(&line);
+                    out.push('\n');
+                }
+                out.push_str("```\n");
+            }
             Self::Heading { level, spans } => {
                 let prefix = match level {
                     1 => "# ",

@@ -132,6 +132,10 @@ impl<'a> DocumentLayouter<'a> {
         indent_level: u32,
     ) -> Option<RenderedBlock> {
         match block {
+            // Tables render through the serval note path, not document-canvas
+            // (cards are uniform thumbnails); skipped here until a card
+            // table-preview lands, and unreachable until parsers emit Table.
+            DocumentBlock::Table { .. } => None,
             DocumentBlock::Heading { level, spans } => {
                 Some(self.render_heading(source_index, indent_level, *level, spans))
             }

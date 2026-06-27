@@ -188,11 +188,24 @@ fn write_gophermap_block(
             push_info(out, &format!("{prefix}{label}: {value}"));
         }
         DocumentBlock::Badge { text } => push_info(out, &format!("{prefix}[{text}]")),
+        DocumentBlock::Table { header, rows, .. } => {
+            for line in super::table_lines(header, rows) {
+                push_info(out, &format!("{prefix}{line}"));
+            }
+        }
     }
 }
 
 fn write_text_block(block: &DocumentBlock, out: &mut String, prefix: &str) {
     match block {
+        DocumentBlock::Table { header, rows, .. } => {
+            for line in super::table_lines(header, rows) {
+                out.push_str(prefix);
+                out.push_str(&line);
+                out.push('\n');
+            }
+            out.push('\n');
+        }
         DocumentBlock::Heading { spans, .. } => {
             out.push_str(prefix);
             out.push_str(&inline_text(spans));

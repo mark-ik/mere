@@ -75,6 +75,13 @@ fn collect_block(block: &DocumentBlock, out: &mut Vec<LinkStatement>) {
                 }
             }
         }
+        DocumentBlock::Table { header, rows, .. } => {
+            for cell in header.iter().chain(rows.iter().flatten()) {
+                for span in cell {
+                    collect_span(span, out);
+                }
+            }
+        }
         // Feed blocks carry navigation URLs (article / source), not `rel`
         // statements; the remaining variants hold no inline links.
         DocumentBlock::FeedHeader { .. }

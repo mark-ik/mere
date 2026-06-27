@@ -238,7 +238,8 @@ impl BlockSummary {
             DocumentBlock::MetadataRow { .. } => self.metadata_rows += 1,
             DocumentBlock::Rule
             | DocumentBlock::FeedHeader { .. }
-            | DocumentBlock::Badge { .. } => {}
+            | DocumentBlock::Badge { .. }
+            | DocumentBlock::Table { .. } => {}
         }
     }
 }

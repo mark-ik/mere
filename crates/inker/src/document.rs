@@ -236,6 +236,30 @@ pub enum DocumentBlock {
     /// Short status / annotation marker (trust state notice, "raw source"
     /// affordance). Visual hint for projection; not free-flowing text.
     Badge { text: String },
+    /// A table: an optional header row plus body rows, each a list of cells, each
+    /// cell inline spans, with per-column alignment. Flat — no rowspan / colspan
+    /// (the carve `^` / `<` span syntax is a later rung). AccessKit `Role::Table`.
+    Table {
+        /// Per-column alignment; `alignments[i]` applies to column `i`. May be
+        /// shorter than the widest row; missing columns default to
+        /// [`TableAlignment::None`].
+        alignments: Vec<TableAlignment>,
+        /// Header cells, one per column, or empty when the table has no header row.
+        header: Vec<Vec<InlineSpan>>,
+        /// Body rows; each row is a list of cells, each cell a list of inline spans.
+        rows: Vec<Vec<Vec<InlineSpan>>>,
+    },
+}
+
+/// A table column's text alignment (djot / markdown `:---`, `:---:`, `---:`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TableAlignment {
+    /// No explicit alignment marker; the renderer's default (typically left).
+    #[default]
+    None,
+    Left,
+    Center,
+    Right,
 }
 
 /// An inline-level span inside a [`DocumentBlock`].
@@ -313,6 +337,13 @@ fn collect_block_spans<'a>(block: &'a DocumentBlock, out: &mut Vec<&'a InlineSpa
                 }
             }
         }
+        DocumentBlock::Table { header, rows, .. } => {
+            for cell in header.iter().chain(rows.iter().flatten()) {
+                for span in cell {
+                    out.push(span);
+                }
+            }
+        }
         DocumentBlock::CodeBlock { .. }
         | DocumentBlock::Image { .. }
         | DocumentBlock::Preformatted { .. }
@@ -358,6 +389,13 @@ fn collect_block_link_urls<'a>(block: &'a DocumentBlock, out: &mut Vec<&'a str>)
             }
             if let Some(url) = source_url {
                 out.push(url.as_str());
+            }
+        }
+        DocumentBlock::Table { header, rows, .. } => {
+            for cell in header.iter().chain(rows.iter().flatten()) {
+                for span in cell {
+                    collect_link_urls(span, out);
+                }
             }
         }
         DocumentBlock::CodeBlock { .. }

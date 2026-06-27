@@ -47,7 +47,8 @@ pub use a11y::A11yCapability;
 pub use document::{
     BlockProvenance, BlockProvenanceMap, DocumentBlock, DocumentDiagnostic, DocumentProvenance,
     BlockEvaluator, BlockEvaluators, DocumentTrustState, EngineDocument, EvalOutcome, EvalOutput,
-    EvaluationPolicy, Fetched, GophermapContext, InlineSpan, ResolvedProvenance, TranscludeOutcome,
+    EvaluationPolicy, Fetched, GophermapContext, InlineSpan, ResolvedProvenance, TableAlignment,
+    TranscludeOutcome,
     TransclusionPolicy, evaluate_blocks, inline_text, parse_eval, parse_include,
     resolve_transclusions,
 };

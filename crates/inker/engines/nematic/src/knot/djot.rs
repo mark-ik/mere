@@ -380,6 +380,34 @@ pub fn blocks_to_djot(blocks: &[DocumentBlock]) -> String {
     out
 }
 
+/// Write a djot pipe table: header row, a `---` separator, then body rows. Cells
+/// flatten to inline text (the round-trip writer; the parser side that produces
+/// `Table` lands with the live tile).
+fn emit_djot_table(header: &[Vec<InlineSpan>], rows: &[Vec<Vec<InlineSpan>>], out: &mut String) {
+    let cols = header.len().max(rows.iter().map(Vec::len).max().unwrap_or(0));
+    if cols == 0 {
+        return;
+    }
+    let emit_row = |cells: &[Vec<InlineSpan>], out: &mut String| {
+        out.push('|');
+        for i in 0..cols {
+            out.push(' ');
+            out.push_str(&cells.get(i).map(|c| inline_text(c)).unwrap_or_default());
+            out.push_str(" |");
+        }
+        out.push('\n');
+    };
+    emit_row(header, out);
+    out.push('|');
+    for _ in 0..cols {
+        out.push_str(" --- |");
+    }
+    out.push('\n');
+    for r in rows {
+        emit_row(r, out);
+    }
+}
+
 fn emit_block(block: &DocumentBlock, out: &mut String) {
     match block {
         DocumentBlock::Heading { level, spans } => {
@@ -393,6 +421,9 @@ fn emit_block(block: &DocumentBlock, out: &mut String) {
         DocumentBlock::Paragraph { spans } => {
             out.push_str(&inline_text(spans));
             out.push('\n');
+        }
+        DocumentBlock::Table { header, rows, .. } => {
+            emit_djot_table(header, rows, out);
         }
         DocumentBlock::MetadataRow { label, value } => {
             out.push_str(": ");

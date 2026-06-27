@@ -181,6 +181,18 @@ fn project_block(block: &DocumentBlock, path: &str, nodes: &mut Vec<(NodeId, Nod
             attach_link_children(spans, path, "heading-link", nodes, &mut n);
             n
         }
+        DocumentBlock::Table { header, rows, .. } => {
+            // A flat accessible label until row / cell child projection lands;
+            // tables are unreachable until the parsers emit them.
+            let mut n = Node::new(Role::Table);
+            let cells: Vec<String> = header
+                .iter()
+                .chain(rows.iter().flatten())
+                .map(|c| inline_text(c))
+                .collect();
+            n.set_label(cells.join(" | "));
+            n
+        }
         DocumentBlock::Paragraph { spans } => {
             let mut n = Node::new(Role::Paragraph);
             n.set_label(inline_text(spans));
