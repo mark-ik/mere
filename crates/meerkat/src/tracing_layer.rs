@@ -237,6 +237,50 @@ mod tests {
     }
 
     #[test]
+    fn per_layer_split_feeds_the_ring_while_the_console_stays_quiet() {
+        use tracing_subscriber::EnvFilter;
+        use tracing_subscriber::Layer;
+        use tracing_subscriber::filter::LevelFilter;
+        let (console_tx, console_rx) = mpsc::channel();
+        let (ring_tx, ring_rx) = mpsc::channel();
+        // Mirror the fixed main.rs stack: a console-side layer carrying the RUST_LOG env filter
+        // (here `meerkat=info`), and the Apparatus ring with its own LevelFilter::INFO. A second
+        // bridge stands in for fmt so the console side is assertable. With per-layer filters there
+        // is no global gate, so the ring is no longer starved (contrast the gate test above).
+        let subscriber = tracing_subscriber::registry()
+            .with(ApparatusTracingLayer::new(console_tx).with_filter(EnvFilter::new("meerkat=info")))
+            .with(ApparatusTracingLayer::new(ring_tx).with_filter(LevelFilter::INFO));
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::info!(target: "armillary", "actor started");
+            tracing::info!(target: "meerkat", "host event");
+        });
+        let targets = |rx: mpsc::Receiver<DiagnosticEvent>| -> Vec<String> {
+            std::iter::from_fn(move || rx.try_recv().ok())
+                .filter_map(|ev| match ev {
+                    DiagnosticEvent::MessageReceivedStructured { fields, .. } => fields
+                        .iter()
+                        .find(|f| f.name == "target")
+                        .map(|f| f.value.clone()),
+                    _ => None,
+                })
+                .collect()
+        };
+        let console = targets(console_rx);
+        let ring = targets(ring_rx);
+        // The console (RUST_LOG=meerkat=info) still sees only meerkat; the ring now captures the
+        // first-party armillary event too, regardless of RUST_LOG. This is the reach fix.
+        assert!(
+            console.contains(&"meerkat".to_string())
+                && !console.iter().any(|t| t.starts_with("armillary")),
+            "console stays scoped by RUST_LOG: {console:?}",
+        );
+        assert!(
+            ring.iter().any(|t| t.starts_with("armillary")) && ring.contains(&"meerkat".to_string()),
+            "ring captures first-party regardless of RUST_LOG: {ring:?}",
+        );
+    }
+
+    #[test]
     fn event_fields_keep_their_real_names() {
         let (tx, rx) = mpsc::channel();
         let subscriber = tracing_subscriber::registry().with(ApparatusTracingLayer::new(tx));
