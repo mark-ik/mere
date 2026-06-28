@@ -33,6 +33,18 @@ impl WindowCtx<'_> {
                         .map(|(gid, _)| gid)
                         .filter(|&gid| gid != drag.source_graph);
                     let cmd = match dest {
+                        // Cross-graph drop (G5): MOVE it (release the source) when Alt is
+                        // held, else copy. Alt is the move modifier because Shift starts the
+                        // tear and Ctrl picks fork, and desktop convention already reads Ctrl
+                        // as copy, so reusing it for move would fight muscle memory. (OQ-2:
+                        // default copy, move on a modifier.)
+                        Some(to) if self.view.modifiers.alt => {
+                            crate::ShellCommand::MoveNodeAcross {
+                                node: drag.node,
+                                from: drag.source_graph,
+                                to,
+                            }
+                        }
                         // Cross-graph copy (G5): dropped on a different graph's pane.
                         Some(to) => crate::ShellCommand::CopyNodeAcross {
                             node: drag.node,

@@ -89,6 +89,117 @@ fn switch_session_restores_each_sessions_own_graph() {
 }
 
 #[test]
+fn fork_session_restores_on_restart() {
+    // A fork (G4) mints a session + graph without switching to it. It must survive a
+    // restart and re-appear in the switcher's session list. (Tear-out G4 refinement.)
+    let mere_root = temp_session_dir();
+    let fork_graph = {
+        let (_tx, rx) = std::sync::mpsc::channel();
+        let mut app = Shell::new_with_session_dir(test_proxy(), rx, mere_root.clone());
+        let graph = app.ctx().active_graph_id();
+        let node = app
+            .orrery()
+            .graph()
+            .nodes()
+            .next()
+            .map(|(_, n)| n.id)
+            .expect("the welcome node");
+        app.fork_session_from(node, graph)
+            .expect("fork mints a session + graph")
+    };
+    // Restart: a fresh Shell on the same root re-scans sessions/ (bootstrap_sessions →
+    // load_from_disk), so the fork's manifest must come back into the switcher list.
+    let (_tx, rx) = std::sync::mpsc::channel();
+    let app2 = Shell::new_with_session_dir(test_proxy(), rx, mere_root);
+    assert!(
+        app2.shared
+            .session
+            .manifests
+            .iter()
+            .any(|(_, m)| m.root_graph_id == fork_graph),
+        "the fork session is re-listed after restart"
+    );
+}
+
+#[test]
+fn move_node_across_relocates_releasing_the_source() {
+    // G5 move (Alt-drop across graphs): the node lands in the destination graph and is
+    // released from the source (a relocation, not a copy). (Tear-out G5.)
+    let mut app = test_app();
+    let from = app.ctx().active_graph_id();
+    app.orrery_mut().visit("https://movable.example");
+    let node = app
+        .orrery()
+        .focused_member()
+        .expect("the visited node is focused");
+    let from_before = app.orreries.get(&from).unwrap().graph().nodes().count();
+    // A fresh second graph; create_session switches active to it (the source stays pooled).
+    app.create_session();
+    let to = app.ctx().active_graph_id();
+    assert_ne!(from, to, "the second session is its own graph");
+    let to_before = app.orreries.get(&to).unwrap().graph().nodes().count();
+
+    app.move_node_across(node, from, to);
+
+    // Released from the source (the uuid is gone, the graph shrank by one).
+    assert!(
+        app.orreries
+            .get(&from)
+            .unwrap()
+            .graph()
+            .get_node_by_id(node)
+            .is_none(),
+        "the node was released from the source graph"
+    );
+    assert_eq!(
+        app.orreries.get(&from).unwrap().graph().nodes().count(),
+        from_before - 1
+    );
+    // Landed in the destination (the copy carries a fresh uuid + the same URL, so the
+    // destination grew by exactly the one node that left the source).
+    assert_eq!(
+        app.orreries.get(&to).unwrap().graph().nodes().count(),
+        to_before + 1,
+        "the node landed in the destination graph"
+    );
+}
+
+#[test]
+fn torn_leaf_is_a_workbench_pane_with_the_node_tile() {
+    // G2: a torn leaf is a workbench-only window on the donor graph, showing the torn
+    // node's tile (no orrery pane of its own). (Tear-out G2.)
+    let mut app = test_app();
+    let from = app.ctx().active_graph_id();
+    app.orrery_mut().visit("https://leaf.example");
+    let node = app
+        .orrery()
+        .focused_member()
+        .expect("the visited node is focused");
+
+    let view = app.build_leaf_view_for(from, node);
+
+    // Binds the donor graph (so the tile resolves to the shared pooled orrery).
+    assert_eq!(view.focused_graph, from);
+    // A single Workbench pane, not an orrery pane.
+    assert!(
+        matches!(
+            view.frame_layout.root,
+            frame::PaneNode::Leaf {
+                content: frame::PaneContent::Workbench,
+                ..
+            }
+        ),
+        "the leaf frame is a single Workbench pane"
+    );
+    // The torn node is its open, focused tile.
+    assert!(
+        view.workbench.open_members().contains(&node),
+        "the torn node is an open workbench tile"
+    );
+    assert_eq!(view.focused_tile, Some(node));
+}
+
+#[test]
 fn cycle_session_wraps_through_the_open_sessions() {
     let mut app = test_app();
     let a = app.shared.session.active_session_id;

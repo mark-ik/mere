@@ -15,12 +15,12 @@
 //! `data-subject`, and drives editing from the cursor (serval has no native DOM pointer-drag):
 //! drag a vertex to move it, click a hull edge to add a corner, right-click a vertex to remove
 //! it. A node with no sprite can seed a default hull and shape it from scratch. The view is
-//! concrete over `SettingsPanesView` for this first embedder; generalizing over the host state
-//! is the reuse step when the menu / djot embeddings land. (Node body & face — the shape editor.)
+//! now **host-generic** over the embedder state `S` (swatch-primitive plan P1): the facet pane
+//! mounts it as `SwatchView<SettingsPanesState>`, and the focus-card slot mounts the same view
+//! for the connections swatch (P2). Generalizing was a type-parameterization, since the swatch
+//! carries no state-bound view callbacks. (Node body & face — the shape editor; swatch template #1.)
 
-use xilem_serval::el;
-
-use crate::settings_pane_view::{SettingsPanesState, SettingsPanesView};
+use xilem_serval::{el, AnyView, ServalCtx, ServalElement};
 
 /// What a node swatch shows: the sprite face (a PNG data-URI) and its collider hull (the
 /// opaque-region convex polygon in face-normalized coords, `[-0.5, 0.5]`). A node without a
@@ -49,16 +49,22 @@ pub(crate) fn swatch_edge_px() -> f32 {
     SWATCH
 }
 
+/// A host-generic swatch view: the chrome-understood DOM subtree an embedder mounts, erased over
+/// the embedder state `S`. The swatch has no state-bound view callbacks (interaction routes through
+/// the host hit-test on `data-subject`), so it is generic over any `S: 'static` — the facet pane
+/// and the focus-card slot mount the same view. (Swatch primitive — P1 host-generic lift.)
+pub(crate) type SwatchView<S> = Box<dyn AnyView<S, (), ServalCtx, ServalElement>>;
+
 /// Build the node swatch as DOM: the sprite image, its collider hull as a translucent
 /// clip-path polygon over it, and a dot at each hull vertex. Read-only (Stage A). The hull
 /// is mapped from normalized `[-0.5, 0.5]` to the swatch's `0..100%` (clip-path) / `0..SWATCH`
-/// (dots). (Swatch — node shape editor.)
-pub(crate) fn swatch_view(spec: &SwatchSpec) -> SettingsPanesView {
-    let mut children: Vec<SettingsPanesView> = Vec::new();
+/// (dots). (Swatch — node shape editor; the first swatch template.)
+pub(crate) fn swatch_view<S: 'static>(spec: &SwatchSpec) -> SwatchView<S> {
+    let mut children: Vec<SwatchView<S>> = Vec::new();
 
     // The sprite fills the swatch (cover-fit) — the surface the hull is traced over.
     if let Some(uri) = &spec.sprite {
-        children.push(Box::new(el::<_, SettingsPanesState, ()>("img", ()).attr("src", uri.clone()).attr(
+        children.push(Box::new(el::<_, S, ()>("img", ()).attr("src", uri.clone()).attr(
             "style",
             format!(
                 "position:absolute;left:0;top:0;width:{SWATCH}px;height:{SWATCH}px;\
@@ -78,7 +84,7 @@ pub(crate) fn swatch_view(spec: &SwatchSpec) -> SettingsPanesView {
             .iter()
             .map(|&(nx, ny)| format!("{:.2}% {:.2}%", (nx + 0.5) * 100.0, (ny + 0.5) * 100.0))
             .collect();
-        children.push(Box::new(el::<_, SettingsPanesState, ()>("div", ()).attr(
+        children.push(Box::new(el::<_, S, ()>("div", ()).attr(
             "style",
             format!(
                 "position:absolute;left:0;top:0;width:{SWATCH}px;height:{SWATCH}px;\
@@ -92,7 +98,7 @@ pub(crate) fn swatch_view(spec: &SwatchSpec) -> SettingsPanesView {
         for &(nx, ny) in &spec.hull {
             let cx = norm_to_swatch_px(nx);
             let cy = norm_to_swatch_px(ny);
-            children.push(Box::new(el::<_, SettingsPanesState, ()>("div", ()).attr(
+            children.push(Box::new(el::<_, S, ()>("div", ()).attr(
                 "style",
                 format!(
                     "position:absolute;left:{cx:.1}px;top:{cy:.1}px;width:{HANDLE}px;height:{HANDLE}px;\
@@ -106,7 +112,7 @@ pub(crate) fn swatch_view(spec: &SwatchSpec) -> SettingsPanesView {
     // The swatch container: a positioned, sized box the children layer inside. The
     // `node-swatch` class + `data-subject` let the host hit-test walk up to it and learn
     // whose hull a vertex drag edits. (Swatch — Stage B.)
-    let mut container = el::<_, SettingsPanesState, ()>("div", children)
+    let mut container = el::<_, S, ()>("div", children)
         .attr("class", "node-swatch")
         .attr(
             "style",

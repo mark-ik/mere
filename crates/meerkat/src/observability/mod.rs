@@ -62,6 +62,21 @@ pub(super) struct DiagnosticRecord {
     pub at: Instant,
 }
 
+/// A user-facing **notification** (distinct from a dev-facing `DiagnosticRecord`): the
+/// Steward surfaces the log, and the chrome renders recent `transient` ones as toasts. The
+/// notification subsystem's record; actionable toasts (buttons → host verbs) are a later
+/// layer held in the chrome. (Notification subsystem; tear-out ambiguous-drag toast.)
+#[derive(Clone, Debug)]
+pub(super) struct NotificationRecord {
+    pub severity: Severity,
+    pub title: String,
+    pub body: String,
+    pub at: Instant,
+    /// Whether this also surfaces as a transient toast (the chrome drains these); `false`
+    /// = Steward-log only.
+    pub transient: bool,
+}
+
 #[derive(Clone, Debug)]
 pub(super) struct UxRecord {
     pub surface: String,
@@ -156,6 +171,9 @@ pub(super) struct HostObservability {
     capacity: usize,
     registry: DiagnosticsRegistry,
     diagnostics: VecDeque<DiagnosticRecord>,
+    /// User-facing notifications (the Steward-accounted subsystem; the chrome toasts the
+    /// `transient` ones). (Notification subsystem.)
+    notifications: VecDeque<NotificationRecord>,
     ux: VecDeque<UxRecord>,
     actors: VecDeque<ActorRecord>,
     probes: VecDeque<ProbeRecord>,

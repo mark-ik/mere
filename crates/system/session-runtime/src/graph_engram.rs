@@ -192,6 +192,59 @@ pub async fn list_graph_engrams(store: &mut dyn Store) -> Result<Vec<BlobManifes
     list_typed::<GraphEngram>(store).await
 }
 
+/// Compose several graph engrams into one by URL-identity merge (Alembic tail B7 /
+/// decision #1). Thaws each id's snapshot, folds them with
+/// [`merge_snapshots`](crate::snapshot_merge::merge_snapshots) (the first id is the
+/// canonical base), and saves the union as a new engram.
+///
+/// The new engram is `Derived` and its `ProvenanceRecord.upstream` records the source
+/// ids — the lineage `upstream` (empty on every freeze until now) finally populated,
+/// which is what the consolidation pass reads to relate version chains. `Ok(None)` if
+/// `ids` is empty or any id is missing (a partial compose would silently lose a source,
+/// so it aborts instead). Like a freeze, the result is `LocalOnly` + self-asserted.
+pub async fn compose_graph_engrams(
+    store: &mut dyn Store,
+    ids: &[ManifestId],
+    redaction: RedactionPolicy,
+    created_at: Timestamp,
+) -> Result<Option<ManifestId>> {
+    if ids.is_empty() {
+        return Ok(None);
+    }
+    let mut fetcher = NoFetcher;
+    let mut acc: Option<GraphSnapshot> = None;
+    for id in ids {
+        let Some(engram) = load_typed::<GraphEngram>(store, &mut fetcher, *id).await? else {
+            return Ok(None);
+        };
+        acc = Some(match acc {
+            None => engram.0,
+            Some(base) => crate::snapshot_merge::merge_snapshots(&base, &engram.0).0,
+        });
+    }
+    let mut snapshot = acc.expect("ids is non-empty, so acc is Some");
+    redaction.apply(&mut snapshot);
+    let provenance = ProvenanceRecord {
+        origin: ProvenanceOrigin::Derived,
+        upstream: ids.to_vec(),
+        tooling: Some(
+            concat!("session-runtime/graph-engram-compose@", env!("CARGO_PKG_VERSION")).to_string(),
+        ),
+        generated_at: created_at,
+    };
+    let id = save_typed(
+        store,
+        &GraphEngram(snapshot),
+        Vec::<BlobSource>::new(),
+        PrivacyClass::LocalOnly,
+        provenance,
+        TrustEnvelope::self_asserted(),
+        created_at,
+    )
+    .await?;
+    Ok(Some(id))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -380,6 +433,70 @@ mod tests {
                     .expect("load ok")
                     .is_none(),
                 "an unknown id thaws to None, not an error",
+            );
+        });
+    }
+
+    #[test]
+    fn compose_unions_two_engrams_and_records_the_upstream_lineage() {
+        pollster::block_on(async {
+            let mut store = InMemoryStore::default();
+            // Engram A: x, y. Engram B: y (shared url), z.
+            let mut ga = Graph::new();
+            ga.add_node("https://x.example".to_string(), Point2D::new(0.0, 0.0));
+            ga.add_node("https://y.example".to_string(), Point2D::new(1.0, 0.0));
+            let mut gb = Graph::new();
+            gb.add_node("https://y.example".to_string(), Point2D::new(0.0, 0.0));
+            gb.add_node("https://z.example".to_string(), Point2D::new(1.0, 0.0));
+
+            let id_a = save_graph_engram(&mut store, &ga, RedactionPolicy::default(), Timestamp(1))
+                .await
+                .expect("save a");
+            let id_b = save_graph_engram(&mut store, &gb, RedactionPolicy::default(), Timestamp(2))
+                .await
+                .expect("save b");
+
+            let composed =
+                compose_graph_engrams(&mut store, &[id_a, id_b], RedactionPolicy::default(), Timestamp(3))
+                    .await
+                    .expect("compose ok")
+                    .expect("a non-empty id list composes an engram");
+
+            // The thawed union carries x, y, z — the shared y is not doubled.
+            let graph = open_engram_as_session(&mut store, composed)
+                .await
+                .expect("load ok")
+                .expect("the composed engram is present");
+            assert_eq!(graph.nodes().count(), 3, "x, y, z union; shared y not doubled");
+            assert!(graph.get_node_by_url("https://x.example").is_some());
+            assert!(graph.get_node_by_url("https://z.example").is_some());
+
+            // The lineage: the composed engram is `Derived` and names both sources —
+            // the `upstream` Vec that is empty on every freeze, finally populated.
+            let manifests = list_graph_engrams(&mut store).await.expect("list");
+            let m = manifests
+                .iter()
+                .find(|m| m.id == composed)
+                .expect("the composed manifest is listed");
+            assert_eq!(m.provenance.origin, ProvenanceOrigin::Derived, "a composed engram is Derived");
+            assert_eq!(
+                m.provenance.upstream,
+                vec![id_a, id_b],
+                "upstream records the source engrams",
+            );
+        });
+    }
+
+    #[test]
+    fn compose_of_an_empty_id_list_is_none() {
+        pollster::block_on(async {
+            let mut store = InMemoryStore::default();
+            assert!(
+                compose_graph_engrams(&mut store, &[], RedactionPolicy::default(), Timestamp(1))
+                    .await
+                    .expect("ok")
+                    .is_none(),
+                "no sources -> nothing composed",
             );
         });
     }

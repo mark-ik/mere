@@ -47,6 +47,10 @@ pub mod engine_profile_store;
 // an eidetic Store (the Alembic memory spine; wasm-clean — store-agnostic, not
 // filesystem). Save redacts private fields by default; open thaws read-only.
 pub mod graph_engram;
+// Snapshot-level merge for engram compose (Alembic tail B7): union two graph
+// snapshots by URL identity, retaining per-member provenance. Pure; the engram
+// compose op (`graph_engram::compose_graph_engrams`) layers on top.
+pub mod snapshot_merge;
 // The three memory levels' read-model (Alembic slice C): classify a node as
 // short-term vs long-term (a tag/pin promotes), and compute which short-term nodes
 // an eviction policy would drop. Pure logic; the pane/settings wiring layers on top.

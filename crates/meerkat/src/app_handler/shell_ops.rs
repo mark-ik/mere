@@ -95,9 +95,14 @@ impl Shell {
         for command in std::mem::take(&mut self.commands) {
             match command {
                 crate::ShellCommand::SpawnWindow => self.spawn_window(event_loop),
-                crate::ShellCommand::TearOut { node } => self.spawn_torn_window(event_loop, node),
+                crate::ShellCommand::TearOut { node, from } => {
+                    self.spawn_torn_window(event_loop, node, from)
+                }
                 crate::ShellCommand::CopyNodeAcross { node, from, to } => {
                     self.copy_node_across(node, from, to)
+                }
+                crate::ShellCommand::MoveNodeAcross { node, from, to } => {
+                    self.move_node_across(node, from, to)
                 }
                 crate::ShellCommand::ForkNode { node, from } => {
                     // Mint the fork session + pooled graph (Shell), then open a window
@@ -179,16 +184,25 @@ impl Shell {
         }
     }
 
-    /// Tear a node out into a new leaf window (the tear-out drag, G1 v0). For now this
-    /// spawns a leaf over the shared graph, exactly like [`spawn_window`](Self::spawn_window),
-    /// and records the torn node; the leaf's *content* (resolving the node to its tile,
-    /// focused) is G2, and the operation split (leaf / branch / fork) is the next slice.
-    /// (Tear-out gestures.)
-    pub(crate) fn spawn_torn_window(&mut self, event_loop: &ActiveEventLoop, node: uuid::Uuid) {
+    /// Tear a node out into a new **leaf** window (G1/G2): a workbench-only window on the
+    /// donor graph `from` showing `node`'s tile, with no orrery pane of its own (built by
+    /// [`build_leaf_view_for`](Self::build_leaf_view_for)). The tile resolves to the shared
+    /// pooled orrery, so node edits propagate to the donor and closing the leaf does not
+    /// delete the node. (Tear-out gestures G1/G2.)
+    pub(crate) fn spawn_torn_window(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        node: uuid::Uuid,
+        from: crate::GraphId,
+    ) {
+        if self.render_core.is_none() {
+            return;
+        }
         self.shared
             .observability
-            .record_probe("tear_out", "leaf", format!("node={node}"));
-        self.spawn_window(event_loop);
+            .record_probe("tear_out", "leaf", format!("node={node} from={}", from.as_uuid()));
+        let view = self.build_leaf_view_for(from, node);
+        self.spawn_window_with_view(event_loop, view);
     }
 
     /// Cross-graph copy (G5): mint a copy of `node` (from graph `from`) in graph `to`,
@@ -222,6 +236,41 @@ impl Shell {
                 format!("node={node} to={}", to.as_uuid()),
             );
             // The destination graph changed; repaint every window showing it.
+            self.ctx().view.request_redraw();
+            self.redraw_secondary_windows();
+        }
+    }
+
+    /// Cross-graph move (G5): copy `node` into `to` (reusing [`copy_node_across`]), then
+    /// release it from the source graph `from`. Unlike `delete_focused_node` this is a
+    /// *relocation*, not a user delete, so it records no eidetic tombstone; it does reap the
+    /// node's source-side activation (it re-activates if focused in `to`). The release uses
+    /// the same `remove_node` + `reconcile_derived` path as `remove_focused`, targeted by
+    /// uuid. (Tear-out gestures G5 — move.)
+    pub(crate) fn move_node_across(
+        &mut self,
+        node: uuid::Uuid,
+        from: crate::GraphId,
+        to: crate::GraphId,
+    ) {
+        // Copy first (it reads the node out of `from`), then drop it from the source.
+        self.copy_node_across(node, from, to);
+        let released = if let Some(src) = self.orreries.get_mut(&from) {
+            src.ingest_graph(|g| match g.get_node_by_id(node) {
+                Some((key, _)) => g.remove_node(key),
+                None => false,
+            })
+        } else {
+            false
+        };
+        if released {
+            self.shared.content.constellation.reap(node);
+            self.shared.observability.record_probe(
+                "tear_out",
+                "move",
+                format!("node={node} to={}", to.as_uuid()),
+            );
+            // The source graph shrank; repaint every window showing it.
             self.ctx().view.request_redraw();
             self.redraw_secondary_windows();
         }

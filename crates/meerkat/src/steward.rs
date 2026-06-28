@@ -80,6 +80,9 @@ impl WindowCtx<'_> {
                 None => "none".to_string(),
             },
         ));
+        // The notification subsystem, accounted for here: a count + the most recent few.
+        // (The chrome toasts the transient ones; the Steward keeps the whole log.)
+        rows.extend(self.shared.observability.notification_rows(5));
         rows
     }
 

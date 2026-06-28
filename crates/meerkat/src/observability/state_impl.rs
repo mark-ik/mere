@@ -13,6 +13,7 @@ impl HostObservability {
             capacity: DEFAULT_CAPACITY,
             registry: initial_registry(),
             diagnostics: VecDeque::with_capacity(DEFAULT_CAPACITY),
+            notifications: VecDeque::with_capacity(DEFAULT_CAPACITY),
             ux: VecDeque::with_capacity(DEFAULT_CAPACITY),
             actors: VecDeque::with_capacity(DEFAULT_CAPACITY),
             probes: VecDeque::with_capacity(DEFAULT_CAPACITY),
@@ -58,6 +59,50 @@ impl HostObservability {
                 at: Instant::now(),
             },
         );
+    }
+
+    /// Record a user-facing **notification** (the Steward-accounted subsystem). `transient`
+    /// notifications also surface as chrome toasts (drained by the host); all are kept in the
+    /// log the Steward renders. Unlike `record_diagnostic` this is not registry-gated (a
+    /// notification is an intentional user-facing event, not a dev channel). (Notifications.)
+    pub(crate) fn record_notification(
+        &mut self,
+        severity: Severity,
+        title: impl Into<String>,
+        body: impl Into<String>,
+        transient: bool,
+    ) {
+        push_bounded(
+            &mut self.notifications,
+            self.capacity,
+            NotificationRecord {
+                severity,
+                title: title.into(),
+                body: body.into(),
+                at: Instant::now(),
+                transient,
+            },
+        );
+    }
+
+    /// Steward rows for the notification log (the Steward-accounted subsystem): a header with
+    /// the total count, then the most recent `limit` newest-first, each title →
+    /// "[body ·] severity · age". Formatting lives here because `Severity::label` is
+    /// module-private. (Notification subsystem.)
+    pub(crate) fn notification_rows(&self, limit: usize) -> Vec<(String, String)> {
+        let mut rows = vec![("Notifications".to_string(), self.notifications.len().to_string())];
+        for n in self.notifications.iter().rev().take(limit) {
+            let body = if n.body.is_empty() {
+                String::new()
+            } else {
+                format!("{} \u{b7} ", n.body)
+            };
+            rows.push((
+                format!("  {}", n.title),
+                format!("{}{} \u{b7} {}", body, n.severity.label(), age(n.at)),
+            ));
+        }
+        rows
     }
 
     /// Record a forgetting pass for Steward's live-ops view: the dropped count and
@@ -300,5 +345,28 @@ impl HostObservability {
                 },
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn notifications_log_and_surface_for_the_steward() {
+        let mut obs = HostObservability::new();
+        obs.record_notification(Severity::Info, "Torn out", "kept as leaf", true);
+        obs.record_notification(Severity::Warn, "Sync", String::new(), false);
+        let rows = obs.notification_rows(5);
+        // A header carrying the total count, then one row per recent notification.
+        assert!(rows.iter().any(|(k, v)| k == "Notifications" && v == "2"));
+        assert!(
+            rows.iter().any(|(k, v)| k.contains("Torn out") && v.contains("kept as leaf")),
+            "the leaf notification surfaces with its body"
+        );
+        assert!(
+            rows.iter().any(|(k, _)| k.contains("Sync")),
+            "the bodyless notification still surfaces"
+        );
     }
 }

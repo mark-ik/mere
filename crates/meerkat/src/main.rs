@@ -305,15 +305,24 @@ enum ShellCommand {
     /// Open a new OS window over the shared session — a second [`WindowView`].
     /// (Cmd/Ctrl+Shift+N; MW3 step 3. Step 4 differentiates its kind + chrome.)
     SpawnWindow,
-    /// Tear a node out into a new leaf window (the tear-out drag, G1). Carries the
-    /// torn node's stable id so the leaf can resolve it (G2 will show its tile). Runs
-    /// on `Shell` after the ctx borrow ends, like `SpawnWindow`. (Tear-out gestures G1.)
-    TearOut { node: uuid::Uuid },
+    /// Tear a node out into a new **leaf** window (the tear-out drag, G1/G2): a
+    /// workbench-only window on the donor graph `from` showing `node`'s tile (no orrery
+    /// pane). Carries the donor `from` so the leaf binds the shared pooled orrery (edits
+    /// propagate). Runs on `Shell` after the ctx borrow ends. (Tear-out gestures G1/G2.)
+    TearOut { node: uuid::Uuid, from: GraphId },
     /// Cross-graph copy (G5): a node dragged from graph `from`'s pane onto graph `to`'s
     /// pane mints a copy in `to` (via `Graph::copy_node_from`, with `CopiedFrom`
     /// provenance back to the source). A two-orrery pool op, so it runs on `Shell` after
     /// the ctx borrow ends. (Tear-out gestures G5.)
     CopyNodeAcross {
+        node: uuid::Uuid,
+        from: GraphId,
+        to: GraphId,
+    },
+    /// Cross-graph **move** (G5): like `CopyNodeAcross`, but also releases the node from the
+    /// source graph `from` (a relocation, so no eidetic delete-tombstone). The
+    /// Alt-modified cross-graph drop; plain drop copies. Runs on `Shell`. (Tear-out G5.)
+    MoveNodeAcross {
         node: uuid::Uuid,
         from: GraphId,
         to: GraphId,
@@ -463,6 +472,22 @@ fn default_content_frame(graph_id: GraphId) -> FrameLayout {
         root: PaneNode::Leaf {
             pane_id: GRAPH_PANE,
             content: PaneContent::Orrery,
+            graph_id,
+        },
+    }
+}
+
+/// A torn **leaf**'s frame (G2): a single Workbench pane over `graph_id`, with no orrery
+/// pane of its own (the leaf shows the torn node's tile, not the whole graph). The pane
+/// still binds the donor's `graph_id`, so its tile resolves to the shared pooled orrery.
+/// (Tear-out gestures G2.)
+fn leaf_workbench_frame(graph_id: GraphId) -> FrameLayout {
+    FrameLayout {
+        id: FrameId::new("content"),
+        label: "content".to_string(),
+        root: PaneNode::Leaf {
+            pane_id: GRAPH_PANE,
+            content: PaneContent::Workbench,
             graph_id,
         },
     }

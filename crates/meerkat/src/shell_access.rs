@@ -185,4 +185,25 @@ impl Shell {
         view.next_pane_id = 1;
         view
     }
+
+    /// Build a torn-out **leaf** view (G2): a workbench-only window on the donor's pooled
+    /// graph `bind_graph`, with `node` opened as its single tile and **no orrery pane of its
+    /// own**. The tile resolves to the same pooled orrery the donor shows, so node edits
+    /// propagate both ways and closing the leaf does not delete the node (brief §4.1).
+    /// (Tear-out gestures G2.)
+    pub(crate) fn build_leaf_view_for(
+        &self,
+        bind_graph: GraphId,
+        node: uuid::Uuid,
+    ) -> window_view::WindowView {
+        let mut view = self.build_window_view_for(bind_graph);
+        // Swap the default orrery frame for a single Workbench pane and open the torn node
+        // as its tile, focused.
+        view.frame_layout = leaf_workbench_frame(bind_graph);
+        view.workbench.ensure_tiled();
+        view.workbench.open_tile(node);
+        view.active_content = crate::ContentPane::Workbench;
+        view.focused_tile = Some(node);
+        view
+    }
 }

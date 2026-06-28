@@ -1,7 +1,25 @@
 # Tear-out gestures plan (leaf / branch / fork + cross-graph drag)
 
 **Date**: 2026-06-24
-**Status**: Planned. Spun out of the now-closed
+**Status**: **Trichotomy + cross-graph copy + cascade DONE + driven** (G1 plumbing, G3 branch,
+G4 fork, G5 copy, G6 cascade via graphlet #3; graphlet #1 per-window focus also landed).
+**Trailing items (2026-06-27):** **fork restore** (was already working, locked by a test),
+**G5 move**, and **G2 leaf content** are DONE + unit-tested. The leaf's two **triggers** turned
+into subsystems under Mark's reframes, and their *verifiable foundations* are now built while the
+*interactive* layers are sequenced for a headed session:
+
+- **Ambiguous-drag toast → notification subsystem.** Notifications are a **Steward-accounted
+  subsystem**; toasts are their transient view; the prompt is one actionable notification.
+  **Foundation DONE + tested** (`NotificationRecord` log + `record_notification` +
+  `notification_rows` surfaced by the Steward). Remaining (interactive, headed): the chrome toast
+  view, actionable notifications, and the no-modifier drag-out-vs-pin gesture.
+- **Tile-tab origin → orrery-as-desktop + configurable split.** The orrery is the persistent
+  *desktop* (already the summon anchor); make the workbench **dock side + ratio** a setting, and
+  add a `pelt_core` drag-*out* signal (`TileEvent::Dragged` resolves only `Stack`/`Edge` today).
+  The dock-side setting is verifiable; the drag-out + toggle UI are interactive/cross-crate.
+
+Both triggers queue the now-built `TearOut { node, from }`. Spun out of the
+now-closed
 [tearout_composability_plan](2026-06-19_tearout_composability_plan.md) (kept in place as the
 foundational record, like the unified-document-host plan), which finished the **foundation**
 (pooled-orrery authorities, per-pane focus, kernel cross-graph copy, camera-on-the-view,
@@ -101,15 +119,24 @@ OQ-7); the **toast** on the ambiguous drop (new chrome element, escalating the l
 Done when: a no-modifier tile-tab drag-out opens a leaf + shows the toast; Shift / Ctrl+Shift
 select branch / fork directly; the toast escalates a leaf to branch or fork in place.
 
-### G2 — Leaf content (the C3 remainder)
+### G2 — Leaf content (the C3 remainder) — content DONE (2026-06-27); trigger pending
 
-Today's leaf opens a single-orrery frame on the shared graph. The brief's leaf (§4.1) is a
-**`Workbench` pane** holding the dragged node's tile, resolving to the **donor's pooled
-orrery** (same `GraphId`), with **no `Orrery` pane of its own**. Edits propagate because both
-windows resolve the same pooled orrery; closing the leaf does not delete the node.
+The brief's leaf (§4.1) is a **`Workbench` pane** holding the dragged node's tile, resolving to
+the **donor's pooled orrery** (same `GraphId`), with **no `Orrery` pane of its own**. Edits
+propagate because both windows resolve the same pooled orrery; closing the leaf does not delete
+the node.
 
 Done when: a torn leaf window shows the dragged node's live tile, navigates on its own,
 propagates node edits to the donor, and instantiates no orrery of its own.
+
+**Status (2026-06-27): content built + tested.** `Shell::build_leaf_view_for(bind_graph, node)`
+builds the leaf as a single `leaf_workbench_frame` (`PaneContent::Workbench` over the donor
+graph, no orrery leaf) with the node opened as the focused tile
+(`Workbench::ensure_tiled` + `open_tile`); `spawn_torn_window` uses it, and `TearOut` now carries
+`{ node, from }` so the leaf binds the donor's pooled graph. Unit-tested
+`torn_leaf_is_a_workbench_pane_with_the_node_tile`. **Trigger still pending:** nothing queues
+`TearOut` yet — the leaf is reached through the **ambiguous-drag toast** ("Keep as leaf") and the
+**tile-tab origin** below, both of which queue `TearOut { node, from }`.
 
 ### G3 — Branch (Shift+drag) — Phase 1 + Phase 2 DONE + driven (2026-06-25)
 
@@ -187,9 +214,12 @@ manifest. Donor unchanged; the two are independent.
 Driven (2026-06-25): Ctrl+Shift+drag a node → a new window opens showing the full connected
 component as distinct, laid-out node-cards; the donor window is intact.
 
-**Refinements:** a borrow-split instead of the whole-donor clone (fine at demo scale); restoring
-the fork session on restart (the manifest + graph persist, but it is not yet wired into the
-switcher's restore list); the exact camera framing of the fork window.
+**Refinements:** a borrow-split instead of the whole-donor clone (fine at demo scale); the exact
+camera framing of the fork window. (**Restore-on-restart: DONE / was already working** —
+`fork_session_from` inserts + `flush_dirty`s the fork manifest and saves its graph, identical to
+`create_session`, so `bootstrap_sessions`' `load_from_disk` re-lists it in the switcher on
+restart. The earlier "not wired" note predated that code. Locked by
+`fork_session_restores_on_restart`.)
 
 ### G5 — Cross-graph single-node drag (C4 surface): copy or move
 
@@ -202,13 +232,20 @@ new *window* of the *same* graph); G5 is graph→graph within the existing panes
 queues `CopyNodeAcross { node, from, to }`, handled by `Shell::copy_node_across` (clone the source
 node out of the donor, `copy_node_from_xy` into the destination with provenance, repaint). Placed
 at the origin for v0 (a drop-point placement + multi-graph persistence of the copy are
-refinements). **Remaining:** the **move** variant (re-point the binding, release the source; OQ-2
-defaults to copy, move on a modifier), and a drive against a side-by-side second graph pane.
+refinements). **Move — DONE (2026-06-27).** An **Alt**-modified cross-graph drop queues
+`MoveNodeAcross`, handled by `Shell::move_node_across` (copy via `copy_node_across`, then release
+the source through the same `remove_node` + `reconcile_derived` path as `remove_focused`, targeted
+by uuid; a relocation, so no eidetic tombstone, but it reaps the source-side activation). Alt is
+the move modifier because Shift starts the tear and Ctrl picks fork, and desktop convention reads
+Ctrl as copy. v0 is copy+release (the destination node carries a fresh uuid + the same URL);
+identity-preserving move (re-point the same uuid) is a refinement. Unit-tested
+`move_node_across_relocates_releasing_the_source`. **Remaining:** a drive against a side-by-side
+second graph pane.
 
 Done when: a tile dragged from a graph-A pane into a graph-B pane produces a provenance-tracked
 node in B, source intact (copy) or released (move).
 
-### G6 — Cascade on donor delete (the brief's §8.3, carried OQ-C)
+### G6 — Cascade on donor delete — DONE (2026-06-25) via graphlet plan #3
 
 When a donor session with live tear-outs is killed: **branches die** with it (they live in the
 donor's graph), **forks survive** (independent; the weak `parent_session` dangles), **leaves
@@ -216,6 +253,15 @@ lose their node** (the leaf window closes or shows a dismissible "donor deleted"
 the `session.cascaded_branch_delete` diagnostic.
 
 Done when: killing a donor with a live leaf + branch + fork applies the three outcomes.
+
+**Status (2026-06-25): met.** Graphlet plan open-item **#3** landed + driven:
+`close_session` calls `Shell::close_windows_on_graph(graph)` (closes every secondary window
+whose `focused_graph` is the dead graph, so branches + leaves close) then drops the dead
+`graphlets` / `orreries` / `orrery_lru` pool entries; forks live on their own `GraphId` so they
+survive; the session dir trash carries `graphlets.json`. Drove a leaf on the active graph →
+deleting the session closed the leaf + switched to the survivor. The only unbuilt nuance is the
+"donor deleted" *dismissible* leaf state (today the leaf window just closes, which the done-when
+allows).
 
 **Implementation seam (2026-06-25):** the branch-die half is scoped as **#3** in the
 [graphlet wiring plan](2026-06-25_graphlet_wiring_plan.md) — `close_session` already trashes
@@ -229,24 +275,56 @@ that general handling.
 The remaining gesture work, with seams and rough size. Independent of the graphlet subsystem
 (whose own open items #1 focus-isolation and #3 donor-delete live in the graphlet plan).
 
-- **Ambiguous-drag toast (G1).** A no-modifier orrery-node drag pops a toast offering Branch /
-  Fork / Keep-as-leaf, escalating the leaf in place. New chrome element (same shape as the
-  branch chip + context menu already shipped). Also the discoverability path for the
-  modifiers. Moderate.
-- **Tile-tab no-modifier-leaf origin (G1).** The second drag origin: a workbench tile-tab
-  drag-out is a plain leaf. Hook platen's tile-tab drag into the tear path. Moderate.
-- **G2 leaf content.** A leaf opens a single-orrery frame today; the brief wants a `Workbench`
-  pane on the donor's pooled orrery with no orrery pane of its own. Moderate, and worth
-  pulling early: both leaf *and* branch want workbench-only windows, so it underpins the
-  graphlet plan's #1 payoff (per-window focus on a workbench window).
-- **G5 move-vs-copy.** The cross-graph drag always copies; add move (re-point the binding,
-  release the source). OQ-2 default copy, move on a modifier. Small-moderate.
-- **Fork session restore-into-switcher (G4 refinement).** Fork sessions persist but are not
-  re-listed in the switcher on restart. Small (add to the restore list).
+- **Ambiguous-drag toast (G1) — now a notification-subsystem consumer; foundation DONE
+  (2026-06-27).** Mark's reframe: notifications are a **Steward-accounted subsystem**, and toasts
+  are their *transient view* — the ambiguous-drag prompt is one **actionable** notification, not a
+  one-off chrome widget. **Foundation built + tested:** a `NotificationRecord` log in
+  `HostObservability` (beside `diagnostics`), `record_notification(severity, title, body,
+  transient)`, and `HostObservability::notification_rows` which the **Steward** now surfaces
+  (`steward_rows`); unit-tested `notifications_log_and_surface_for_the_steward`. **Remaining
+  (interactive, headed):** (a) the **chrome toast** = the transient view that drains recent
+  `transient` notifications + auto-dismisses (a `recent_notifications` accessor, a chrome toast
+  queue, and a render modelled on the branch chip / context menu); (b) **actionable** notifications
+  (buttons → host verbs, held in the chrome where commands are reachable); (c) the **no-modifier
+  drag-out gesture** that must disambiguate from the orrery **pin-drag** (a plain node drag pins;
+  the tear is a *drag-out* released outside the source orrery pane → snap back → toast). `tear_out_
+  drag` arms only on a Shift-press today, so the no-modifier path + snap-back are new. Keep-as-leaf
+  queues the built `TearOut { node, from }`; Branch/Fork queue `BranchNode`/`ForkNode`.
+- **Tile-tab no-modifier-leaf origin (G1) — remaining; reframed 2026-06-27 (orrery-as-desktop).**
+  A workbench tile-tab drag-out is a plain leaf. **Needs a `pelt_core` change first:**
+  `TileEvent::Dragged { tile, to }` resolves `to` only to `DropTarget::Stack` (merge) or
+  `DropTarget::Edge` (split) — there is **no "torn out of the workbench" target**, so the drag-out
+  is invisible to the host. Add a `DropTarget::Outside` (or a `TileEvent::TornOut`) emitted when a
+  tab is released outside any tile, then map it in `apply_tile_event` to
+  `TearOut { node: tile_member, from }`. Cross-crate + interactive.
+  - **Reframe (Mark, 2026-06-27): the orrery is the *desktop*, not a peer tile.** Today
+    `open_workbench` already summons the workbench *beside* the orrery (`GRAPH_PANE`) with a
+    hardcoded `InsertSide::Right` + ratio `0.6`, and closing a pane returns to the orrery — so the
+    orrery is already the persistent anchor. Make that explicit and **configurable**: a setting for
+    the workbench **dock side** (left / right / top / bottom → `InsertSide` + split axis) and ratio,
+    persisted, applied at every summon site (`open_workbench` + siblings). The data-model half (the
+    setting + applying it) is verifiable; the toggle UI rides the existing `pelt/*` settings-page
+    pattern. The deeper "orrery is the desktop, panes dock over/beside it" model also ties into the
+    unified-document-host orrery-as-scene-underlay direction and likely wants its own short design
+    pass before the frame model changes much. The tile-tab tear-out is "drag a tile off the desktop
+    → leaf," which is why it sits with this reframe.
+- **G2 leaf content — DONE (2026-06-27).** `build_leaf_view_for` / `leaf_workbench_frame`: the
+  leaf is a single `PaneContent::Workbench` pane over the donor graph with the torn node as its
+  focused tile, no orrery pane. `TearOut` carries `{ node, from }`. Unit-tested. (Trigger still
+  pending: the toast + tile-tab origin queue `TearOut`.)
+- **G5 move-vs-copy — DONE (2026-06-27).** Alt-modified cross-graph drop → `MoveNodeAcross` →
+  `move_node_across` (copy + release the source by uuid, no tombstone). v0 copy+release (fresh
+  dest uuid); identity-preserving move is a refinement. Unit-tested.
+- **Fork session restore-into-switcher (G4 refinement) — DONE (was already working).** Verified
+  the stale note: `fork_session_from` persists the fork manifest + graph the same way
+  `create_session` does, and `bootstrap_sessions` (`load_from_disk`) re-scans every session dir,
+  so a fork re-appears in the switcher after restart. Locked by `fork_session_restores_on_restart`.
 
-Rough order: **G2 leaf content** first (underpins the workbench-only window model), then the
-**toast** + **tile-tab origin** (the G1 discoverability + second origin), then **G5 move** and
-the **fork restore** polish. These are schedulable independently of the graphlet plan's #1/#3.
+Done order (2026-06-27): **fork restore** (already worked), **G5 move**, **G2 leaf content** —
+all unit-tested. Remaining as **one focused interactive session** (both need headed driving):
+the **ambiguous-drag toast** (new chrome + the no-modifier drag-out vs pin-drag) and the
+**tile-tab origin** (the `pelt_core` drag-out signal). The leaf content + `TearOut { node, from }`
+are built and waiting for these two triggers. Schedulable independently of the graphlet plan.
 
 ### Related — N-orrery-elements seam (rendering, not a gesture)
 
