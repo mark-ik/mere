@@ -12,6 +12,33 @@ impl WindowCtx<'_> {
     /// shown without re-fetching (so a reload need not hit the network), and a
     /// miss marks it `Loading` and spawns a fetch.
     pub(crate) fn ensure_content(&mut self, url: &str) {
+        // Local knot notes are authored, not fetched: the content is the node's own
+        // `Node.body` (slice 3), so produce a Ready `text/x-knot` state from it and let
+        // the normal render path (DjotKnotEngine) build the document — the same path a
+        // fetched page takes, no special-casing downstream. (Slice 2 — the local-knot
+        // producer.)
+        //
+        // TODO(co-op browsing): a `knot://` address authored by a *peer* resolves over
+        // the federation / sync layer, not the local graph — the later networked-notes
+        // problem. Local authorship is all this branch covers.
+        if url.starts_with("knot://") {
+            if !self.shared.content.pages.contains_key(url) {
+                let body = self
+                    .orrery()
+                    .graph()
+                    .get_node_by_url(url)
+                    .and_then(|(_, node)| node.body.clone())
+                    .unwrap_or_default();
+                self.shared.content.pages.insert(
+                    url.to_string(),
+                    fetch::ContentState::Ready(fetch::Fetched {
+                        content_type: Some("text/x-knot".to_string()),
+                        body,
+                    }),
+                );
+            }
+            return;
+        }
         if !fetch::is_fetchable(url) || self.shared.content.pages.contains_key(url) {
             return;
         }
