@@ -406,7 +406,11 @@ impl Shell {
                         saved_settings.disabled_engines.clone(),
                     ),
                     crawl,
-                    capture_enabled: true,
+                    capture_consent: saved_settings
+                        .capture_consent
+                        .as_deref()
+                        .and_then(crate::browse_capture::CaptureConsent::from_key)
+                        .unwrap_or_default(),
                 },
                 session: Session {
                     manifests,

@@ -188,6 +188,13 @@ impl WindowCtx<'_> {
                 let pages = self.shared.content.crawl.max_pages();
                 (pages != crate::crawl::CrawlPolicy::default().max_pages).then_some(pages)
             },
+            // Persist only a non-default consent level (None = the `full` default),
+            // matching the crawl-setting pattern so a pristine settings.json stays clean.
+            capture_consent: {
+                let consent = self.shared.content.capture_consent;
+                (consent != crate::browse_capture::CaptureConsent::Full)
+                    .then(|| consent.as_key().to_string())
+            },
             // The user's chrome zoom (Ctrl +/-/0); the display DPI factor is not persisted
             // (it is read fresh from the window each launch). (UI scale.)
             ui_zoom: self.shared.presentation.user_zoom,

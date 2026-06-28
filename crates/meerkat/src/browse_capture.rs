@@ -21,6 +21,54 @@ use eidetic::browsing::{save_trace, BrowsingTrace, PageRef, TraceEvent, TraceTra
 
 use super::WindowCtx;
 
+/// Browse-capture consent level (capture/provenance/consent plan C4): whether the
+/// live recorder writes traces, and at what granularity. The enforcement point the
+/// consent layer drives, persisted in `settings.json` and changed at runtime by
+/// `>capture off|corridor|full`. `Full` is the pre-consent default.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum CaptureConsent {
+    /// Record nothing — incognito.
+    Off,
+    /// Record the navigation corridor (from / to / transition) but not the
+    /// candidate set the choice was made against (C2).
+    CorridorOnly,
+    /// Record everything: corridor plus candidate context (and, downstream, text).
+    #[default]
+    Full,
+}
+
+impl CaptureConsent {
+    /// The stable settings key (`off` / `corridor` / `full`).
+    pub(crate) fn as_key(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::CorridorOnly => "corridor",
+            Self::Full => "full",
+        }
+    }
+
+    /// Parse a settings key or a user-typed `>capture` argument. Case-insensitive,
+    /// with a few friendly aliases; `None` for an unrecognized token.
+    pub(crate) fn from_key(key: &str) -> Option<Self> {
+        match key.trim().to_ascii_lowercase().as_str() {
+            "off" | "none" | "incognito" => Some(Self::Off),
+            "corridor" | "corridor-only" | "trail" => Some(Self::CorridorOnly),
+            "full" | "on" | "all" => Some(Self::Full),
+            _ => None,
+        }
+    }
+
+    /// Whether any trace is recorded (i.e. not `Off`).
+    pub(crate) fn records(self) -> bool {
+        !matches!(self, Self::Off)
+    }
+
+    /// Whether the candidate set (C2) is recorded — `Full` only.
+    pub(crate) fn records_candidates(self) -> bool {
+        matches!(self, Self::Full)
+    }
+}
+
 /// Milliseconds since the Unix epoch — the trace clock. Mirrors the timestamp
 /// the eidetic tombstone / forgetting passes use.
 fn now_ms() -> u64 {
@@ -69,13 +117,19 @@ impl WindowCtx<'_> {
     /// synchronously, so the `block_on` does not stall the UI thread (the same
     /// discipline as the deleted-node tombstone write).
     pub(super) fn record_browse_nav(&mut self, to: &str, transition: TraceTransition) {
-        if !self.shared.content.capture_enabled {
+        let consent = self.shared.content.capture_consent;
+        if !consent.records() {
             return;
         }
-        // Resolve everything owned first, so no borrow outlives the mutable
-        // store borrow below.
+        // Resolve everything owned first, so no borrow outlives the mutable store
+        // borrow below. `CorridorOnly` keeps the corridor but drops the candidate
+        // set (C2); `Full` records both.
         let from_url = self.view.content_location.clone();
-        let candidates = self.candidate_links();
+        let candidates = if consent.records_candidates() {
+            self.candidate_links()
+        } else {
+            Vec::new()
+        };
         let candidate_count = candidates.len();
         let owner = format!("{}", self.shared.session.active_persona.0);
         let now = now_ms();
@@ -160,5 +214,30 @@ mod tests {
         // listwise signal); `to` is the positive, `other.test/c` the negative.
         let urls: Vec<&str> = event.candidates.iter().map(|p| p.url.as_str()).collect();
         assert_eq!(urls, vec!["https://to.test/b", "https://other.test/c"]);
+    }
+
+    #[test]
+    fn consent_levels_round_trip_and_gate_granularity() {
+        // Default is the pre-consent behaviour: capture everything.
+        assert_eq!(CaptureConsent::default(), CaptureConsent::Full);
+        // Every level round-trips through its stable key.
+        for level in [
+            CaptureConsent::Off,
+            CaptureConsent::CorridorOnly,
+            CaptureConsent::Full,
+        ] {
+            assert_eq!(CaptureConsent::from_key(level.as_key()), Some(level));
+        }
+        // Friendly aliases + case-insensitivity; an unknown token is rejected.
+        assert_eq!(CaptureConsent::from_key("INCOGNITO"), Some(CaptureConsent::Off));
+        assert_eq!(CaptureConsent::from_key("on"), Some(CaptureConsent::Full));
+        assert_eq!(CaptureConsent::from_key("nonsense"), None);
+        // Granularity: Off records nothing; CorridorOnly keeps the corridor but
+        // drops the candidate set (C2); Full keeps both.
+        assert!(!CaptureConsent::Off.records());
+        assert!(CaptureConsent::CorridorOnly.records());
+        assert!(!CaptureConsent::CorridorOnly.records_candidates());
+        assert!(CaptureConsent::Full.records());
+        assert!(CaptureConsent::Full.records_candidates());
     }
 }

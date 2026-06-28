@@ -105,11 +105,12 @@ pub(crate) struct Content {
     /// seeds a bounded crawl whose harvested link + metadata contributions drain back
     /// each frame and apply to the focused graph. One crawl at a time.
     pub(crate) crawl: crawl::CrawlSession,
-    /// Whether the live trail recorder writes a `BrowsingTrace` per navigation
-    /// (C1). Default on; the consent layer (plan C4) drives this and a
-    /// per-session incognito exclusion. Recorded traces are always `LocalOnly` —
-    /// sharing is a separate, explicit act.
-    pub(crate) capture_enabled: bool,
+    /// The browse-capture consent level (C1 enforcement point; consent layer C4):
+    /// whether the live trail recorder writes a `BrowsingTrace` per navigation, and
+    /// at what granularity. Persisted in `settings.json` (`capture_consent`), changed
+    /// at runtime by `>capture off|corridor|full`. Recorded traces are always
+    /// `LocalOnly` — sharing is a separate, explicit act.
+    pub(crate) capture_consent: crate::browse_capture::CaptureConsent,
 }
 
 /// The `session` subsystem: the session registry plus the active session's

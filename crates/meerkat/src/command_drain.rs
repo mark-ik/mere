@@ -308,6 +308,11 @@ impl WindowCtx<'_> {
         if let Some(query) = &outcome.recall_query {
             note = Some(self.run_recall_query(query));
         }
+        // A `capture(…)` call sets + persists the browse-capture consent (plan C4);
+        // a bare `capture()` reports the current level.
+        if let Some(level) = &outcome.capture_consent {
+            note = Some(self.run_capture_consent(level));
+        }
         // DocumentScript triggers (P2.5): attach / deliver-event / detach on the
         // focused tile. `attach` resolves the script's capability permissions (App
         // default for now; the Session-scope override store is the follow-on); the
@@ -444,6 +449,25 @@ impl WindowCtx<'_> {
             }
             Err(err) => format!("recall: search failed: {err}"),
         }
+    }
+
+    /// Apply + persist a `>capture` consent change (plan C4). An empty `level`
+    /// reports the current setting; a recognized key (`off` / `corridor` / `full`)
+    /// sets it and writes settings.json; an unrecognized key echoes an error.
+    fn run_capture_consent(&mut self, level: &str) -> String {
+        use crate::browse_capture::CaptureConsent;
+        if level.trim().is_empty() {
+            return format!(
+                "capture: {} (off | corridor | full)",
+                self.shared.content.capture_consent.as_key()
+            );
+        }
+        let Some(consent) = CaptureConsent::from_key(level) else {
+            return format!("capture: unknown level \"{level}\" (off | corridor | full)");
+        };
+        self.shared.content.capture_consent = consent;
+        self.persist_settings();
+        format!("capture: {}", consent.as_key())
     }
 
     /// A read-only snapshot of host state the command shell may query: the

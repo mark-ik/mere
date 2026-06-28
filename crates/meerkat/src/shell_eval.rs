@@ -96,6 +96,11 @@ pub struct ShellOutcome {
     /// rebuilds the lexical trail index from the browsing corpus (titles, URLs,
     /// and page text) and echoes the top BM25 hits. `None` when not called. (C5.)
     pub recall_query: Option<String>,
+    /// A consent level passed to `capture("off"|"corridor"|"full")` (or the
+    /// `>capture …` sugar) — the host sets + persists the browse-capture consent
+    /// (plan C4). `Some("")` is a bare `>capture` (report the current level); `None`
+    /// when not called.
+    pub capture_consent: Option<String>,
     /// A wasm component path passed to `attach_script("path")` — the host attaches a
     /// DocumentScript at that path to the focused tile (P2.5). `None` when not called.
     pub attach_script: Option<String>,
@@ -136,6 +141,7 @@ impl CommandShell {
         let relation_kind: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
         let sparql_query: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
         let recall_query: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+        let capture_consent: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
         let attach_script: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
         let detach_script: Rc<RefCell<bool>> = Rc::new(RefCell::new(false));
         let script_event: Rc<RefCell<Option<(String, String)>>> = Rc::new(RefCell::new(None));
@@ -207,6 +213,19 @@ impl CommandShell {
             *rq.borrow_mut() = Some(query.to_string());
         });
 
+        // `capture("off"|"corridor"|"full")` (or the `>capture …` sugar) — record a
+        // consent-level change for the host to apply + persist; a bare `capture()`
+        // reports the current level. Like `recall`: recorded here, applied host-side.
+        // (Capture plan C4.)
+        let cc_set = capture_consent.clone();
+        engine.register_fn("capture", move |level: &str| {
+            *cc_set.borrow_mut() = Some(level.to_string());
+        });
+        let cc_get = capture_consent.clone();
+        engine.register_fn("capture", move || {
+            *cc_get.borrow_mut() = Some(String::new());
+        });
+
         // DocumentScript triggers (P2.5): `attach_script("path.wasm")` attaches a
         // wasm component to the focused tile, `script_event("kind", "payload")`
         // delivers one event to it, `detach_script()` removes it. Like `sparql` /
@@ -240,6 +259,7 @@ impl CommandShell {
         let relation_kind = relation_kind.borrow().clone();
         let sparql_query = sparql_query.borrow().clone();
         let recall_query = recall_query.borrow().clone();
+        let capture_consent = capture_consent.borrow().clone();
         let attach_script = attach_script.borrow().clone();
         let detach_script = *detach_script.borrow();
         let script_event = script_event.borrow().clone();
@@ -251,6 +271,7 @@ impl CommandShell {
                 relation_kind,
                 sparql_query,
                 recall_query,
+                capture_consent,
                 attach_script,
                 detach_script,
                 script_event,
@@ -263,6 +284,7 @@ impl CommandShell {
                 relation_kind,
                 sparql_query,
                 recall_query,
+                capture_consent,
                 attach_script,
                 detach_script,
                 script_event,
@@ -293,7 +315,7 @@ pub fn complete(prefix: &str) -> Option<&'static str> {
         .iter()
         .map(|c| c.verb())
         .chain(QUERIES.iter().copied())
-        .chain(["sparql", "recall", "attach_script", "detach_script", "script_event", "scene"])
+        .chain(["sparql", "recall", "capture", "attach_script", "detach_script", "script_event", "scene"])
         .find(|name| name.len() > prefix.len() && name.starts_with(prefix))
 }
 
@@ -322,6 +344,17 @@ fn desugar(source: &str) -> String {
         let arg = rest.trim().replace('"', "");
         if !arg.is_empty() {
             return format!("recall(\"{arg}\")");
+        }
+    }
+    // `capture <level>` sugar: `>capture off` → `capture("off")`; a bare `>capture`
+    // reports the current level. (Capture plan C4.)
+    if trimmed == "capture" {
+        return "capture()".to_string();
+    }
+    if let Some(rest) = trimmed.strip_prefix("capture ") {
+        let arg = rest.trim().replace('"', "");
+        if !arg.is_empty() {
+            return format!("capture(\"{arg}\")");
         }
     }
     source.to_string()
