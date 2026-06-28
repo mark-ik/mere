@@ -204,6 +204,39 @@ mod tests {
     }
 
     #[test]
+    fn the_env_filter_is_the_real_reach_gate() {
+        use tracing_subscriber::EnvFilter;
+        let (tx, rx) = mpsc::channel();
+        // The real subscriber stack (main.rs): the default env filter as a global layer, then the
+        // Apparatus bridge. `meerkat=info` is what ships when RUST_LOG is unset.
+        let subscriber = tracing_subscriber::registry()
+            .with(EnvFilter::new("meerkat=info"))
+            .with(ApparatusTracingLayer::new(tx));
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::info!(target: "armillary", "actor started"); // first-party, allowlisted by the bridge
+            tracing::info!(target: "meerkat", "host event");
+        });
+        let targets: Vec<String> = std::iter::from_fn(|| rx.try_recv().ok())
+            .filter_map(|ev| match ev {
+                DiagnosticEvent::MessageReceivedStructured { fields, .. } => fields
+                    .iter()
+                    .find(|f| f.name == "target")
+                    .map(|f| f.value.clone()),
+                _ => None,
+            })
+            .collect();
+        // The armillary event never reaches the bridge under `meerkat=info`: the env filter gates
+        // it globally, upstream of the layer's allowlist. So broadening `interesting_target` (T1)
+        // and instrumenting armillary (T2) do NOT reach Apparatus until the env-filter default
+        // widens. The env filter, not `interesting_target`, is the real reach gate.
+        assert!(targets.contains(&"meerkat".to_string()), "meerkat passes: {targets:?}");
+        assert!(
+            !targets.iter().any(|t| t.starts_with("armillary")),
+            "armillary is gated by meerkat=info despite the bridge allowlist: {targets:?}",
+        );
+    }
+
+    #[test]
     fn event_fields_keep_their_real_names() {
         let (tx, rx) = mpsc::channel();
         let subscriber = tracing_subscriber::registry().with(ApparatusTracingLayer::new(tx));
