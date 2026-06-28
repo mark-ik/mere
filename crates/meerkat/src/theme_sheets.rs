@@ -123,8 +123,13 @@ pub(crate) fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
             rgb(c.muted_text),
             rgb(c.control_bg)
         ),
+        // The omnibar dropdown is a transient pop-up that must float over the rest of the
+        // chrome. `position: relative` keeps it in flow (anchored below the toolbar, floating
+        // over the page) while making it a positioned box, and `z-index: 31` lifts it above
+        // the absolute `.shellbar` (which, being positioned, otherwise paints over this
+        // in-flow box and clips the dropdown's left edge) and the session overflow (30).
         format!(
-            ".suggestions {{ background-color: {}; padding-bottom: 6px; }}",
+            ".suggestions {{ position: relative; z-index: 31; background-color: {}; padding-bottom: 6px; }}",
             rgb(c.panel_bg)
         ),
         format!(
