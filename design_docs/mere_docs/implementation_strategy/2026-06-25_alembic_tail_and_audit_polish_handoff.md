@@ -117,9 +117,16 @@ From the 2026-06-24 audit, verified against the code. One audit item was already
    `GraphEngram` with rkyv (handle the read-alignment: copy store bytes into an `AlignedVec` before
    `access`). Measure the size win first; only worth it if engrams get large.
 
-7. **Engram compose / merge (decision #1).** Union two graph engrams retaining per-member provenance,
-   as an Athanor per-compose option (default: merge-by-identity, layer the context, since
-   `import_provenance` is a `Vec`). Post-A/D; the spine (`graph_engram`) + the schema support exist.
+7. **Engram compose / merge (decision #1).** ✅ **P1+P2 DONE 2026-06-27** (host gesture P3 deferred,
+   chrome-hot). Audited green and built snapshot-level (no kernel edit — `PersistedEdge` is `node_id`-keyed):
+   `snapshot_merge::merge_snapshots` unions two `GraphSnapshot`s by URL identity (A canonical: same-url
+   nodes layer tags/properties, B's id remapped; edges remapped + deduped by endpoints+kind; `import_records`
+   unioned; A's fields/couplings/navigation kept, B's dropped + reported). `graph_engram::compose_graph_engrams`
+   thaws + folds the sources and saves the union as a **`Derived`** engram whose `ProvenanceRecord.upstream`
+   records the source ids — the previously-always-empty lineage finally populated (which unblocks Athanor
+   consolidation, B1-P2). 6 tests (merge by url / tag layering / edge remap+dedup / compose round-trip +
+   upstream lineage / empty-list). See [engram_compose_merge_plan](2026-06-25_engram_compose_merge_plan.md).
+   **P3 (the host `>compose_engrams` verb + Alembic two-select gesture) waits** — it touches meerkat chrome.
 
 ---
 

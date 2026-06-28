@@ -1,9 +1,11 @@
 # Engram compose / merge
 
 **Date**: 2026-06-25
-**Status**: Planned. Spun out of the [Alembic tail handoff](2026-06-25_alembic_tail_and_audit_polish_handoff.md)
-B7; owns the "compose sub-feature" that [decision #1](2026-06-24_alembic_implementation_plan.md) defers
-to post-A/D. Architecture: [alembic memory + engrams](../technical_architecture/2026-06-09_alembic_memory_and_engrams.md).
+**Status**: **P1+P2 done 2026-06-27** (snapshot-level `merge_snapshots` + `compose_graph_engrams`, 6 tests
+green); **P3 host gesture deferred** (chrome-hot). Spun out of the
+[Alembic tail handoff](2026-06-25_alembic_tail_and_audit_polish_handoff.md) B7; owns the "compose
+sub-feature" that [decision #1](2026-06-24_alembic_implementation_plan.md) defers to post-A/D.
+Architecture: [alembic memory + engrams](../technical_architecture/2026-06-09_alembic_memory_and_engrams.md).
 
 ## Goal
 
@@ -103,3 +105,8 @@ primitive.
   (2) provenance is record-derived (`sync_node_import_provenance_from_records`), so union `import_records`,
   not just the node field; (3) edge dedup must respect the multi-family `PersistedEdge` container. Ready to
   implement.
+- 2026-06-27: **P1+P2 implemented** in `session-runtime` (the non-colliding snapshot-level path).
+  `snapshot_merge::merge_snapshots` (+ `MergeReport`) and `graph_engram::compose_graph_engrams` (`Derived`
+  origin, `upstream` = source ids). All three audit gaps handled. 6 tests green (94 in the crate). Landed
+  via a concurrent bare commit (`831bdcf`). **P3 (host `>compose_engrams` verb + Alembic two-select
+  gesture) deferred** — meerkat chrome, picked up when that lane is quiet.
