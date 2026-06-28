@@ -63,7 +63,7 @@ pub struct KeyMods {
 /// (Scrying X1; the per-window/shared split is MW2 (b2).)
 #[derive(Default)]
 pub struct ScryingHost {
-    #[cfg(target_os = "windows")]
+    #[cfg(all(target_os = "windows", feature = "engine-scry"))]
     pool: windows_pool::Pool,
 }
 
@@ -75,16 +75,16 @@ impl ScryingHost {
 
     /// Drop `member`'s WebView (if any). The shared pin is untouched.
     pub fn reap(&mut self, member: GraphMemberId) {
-        #[cfg(target_os = "windows")]
+        #[cfg(all(target_os = "windows", feature = "engine-scry"))]
         self.pool.reap(member);
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(not(all(target_os = "windows", feature = "engine-scry")))]
         let _ = member;
     }
 
     /// Drop every WebView in this window's pool (multi-graph switch, mirrors
     /// `Constellation::clear`). The shared pins are cleared by the caller.
     pub fn clear(&mut self) {
-        #[cfg(target_os = "windows")]
+        #[cfg(all(target_os = "windows", feature = "engine-scry"))]
         self.pool.clear();
     }
 
@@ -96,9 +96,9 @@ impl ScryingHost {
     /// just the "drop what's gone" pass. Called each frame before the shown surfaces
     /// are driven. (X2/X3 lifecycle; multi-tile.)
     pub fn retain(&mut self, keep: &std::collections::HashSet<GraphMemberId>) {
-        #[cfg(target_os = "windows")]
+        #[cfg(all(target_os = "windows", feature = "engine-scry"))]
         self.pool.retain(keep);
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(not(all(target_os = "windows", feature = "engine-scry")))]
         let _ = keep;
     }
 
@@ -119,10 +119,10 @@ impl ScryingHost {
         queue: &wgpu::Queue,
         session_dir: &std::path::Path,
     ) {
-        #[cfg(target_os = "windows")]
+        #[cfg(all(target_os = "windows", feature = "engine-scry"))]
         self.pool
             .drive(member, url, width, height, origin, window, device, queue, session_dir);
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(not(all(target_os = "windows", feature = "engine-scry")))]
         {
             let _ = (member, url, width, height, origin, window, device, queue, session_dir);
             tracing::warn!("compatibility view: scrying X1 is Windows-only (plan X4)");
@@ -131,9 +131,9 @@ impl ScryingHost {
 
     /// The tile's imported WebView texture, ready to composite.
     pub fn texture_view(&self, member: GraphMemberId) -> Option<&wgpu::TextureView> {
-        #[cfg(target_os = "windows")]
+        #[cfg(all(target_os = "windows", feature = "engine-scry"))]
         return self.pool.texture_view(member);
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(not(all(target_os = "windows", feature = "engine-scry")))]
         {
             let _ = member;
             None
@@ -144,9 +144,9 @@ impl ScryingHost {
     /// placeholder consumer lands with X2's chrome integration).
     #[allow(dead_code)]
     pub fn last_error(&self, member: GraphMemberId) -> Option<&str> {
-        #[cfg(target_os = "windows")]
+        #[cfg(all(target_os = "windows", feature = "engine-scry"))]
         return self.pool.last_error(member);
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(not(all(target_os = "windows", feature = "engine-scry")))]
         {
             let _ = member;
             Some("compatibility view is Windows-only for now")
@@ -156,18 +156,18 @@ impl ScryingHost {
     /// Forward a mouse move / press / release into `member`'s WebView at
     /// **tile-local** `(x, y)`. No-op off Windows or with no live tile. (X2.)
     pub fn forward_mouse(&mut self, member: GraphMemberId, x: i32, y: i32, press: MousePress) {
-        #[cfg(target_os = "windows")]
+        #[cfg(all(target_os = "windows", feature = "engine-scry"))]
         self.pool.forward_mouse(member, x, y, press);
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(not(all(target_os = "windows", feature = "engine-scry")))]
         let _ = (member, x, y, press);
     }
 
     /// Forward a vertical wheel delta (Win32 convention: 120 per notch) into
     /// `member`'s WebView at tile-local `(x, y)`. (X2.)
     pub fn forward_wheel(&mut self, member: GraphMemberId, x: i32, y: i32, delta_y: i32) {
-        #[cfg(target_os = "windows")]
+        #[cfg(all(target_os = "windows", feature = "engine-scry"))]
         self.pool.forward_wheel(member, x, y, delta_y);
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(not(all(target_os = "windows", feature = "engine-scry")))]
         let _ = (member, x, y, delta_y);
     }
 
@@ -181,17 +181,17 @@ impl ScryingHost {
         pressed: bool,
         mods: KeyMods,
     ) {
-        #[cfg(target_os = "windows")]
+        #[cfg(all(target_os = "windows", feature = "engine-scry"))]
         self.pool.forward_key(member, vk, text, pressed, mods);
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(not(all(target_os = "windows", feature = "engine-scry")))]
         let _ = (member, vk, text, pressed, mods);
     }
 
     /// Hand keyboard focus to `member`'s WebView (a click / Tab into the tile). (X2.)
     pub fn focus_tile(&mut self, member: GraphMemberId) {
-        #[cfg(target_os = "windows")]
+        #[cfg(all(target_os = "windows", feature = "engine-scry"))]
         self.pool.focus_tile(member);
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(not(all(target_os = "windows", feature = "engine-scry")))]
         let _ = member;
     }
 
@@ -201,12 +201,12 @@ impl ScryingHost {
     /// load), then restores scroll / forms once the load completes (`verso-scry`'s
     /// forward-inject). A no-op off Windows (no producer to drive). (Verso flip.)
     pub fn begin_flip(&mut self, member: GraphMemberId, state: verso_api::PortableViewState) {
-        #[cfg(target_os = "windows")]
+        #[cfg(all(target_os = "windows", feature = "engine-scry"))]
         self.pool.begin_flip(member, state);
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(not(all(target_os = "windows", feature = "engine-scry")))]
         let _ = (member, state);
     }
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", feature = "engine-scry"))]
 mod windows_pool;

@@ -21,11 +21,13 @@ agent-harness = []
 # driver drop out, and ScryingHost degrades to its no-op (off-platform) surface.
 engine-scry = ["dep:scrying", "dep:verso-scry", "dep:dpi"]
 # `engine-graft` (Servo via wgpu-graft) and `engine-weld` (Chromium/CEF via wgpu-weld)
-# are off by default: each pulls a multi-minute native engine build (SpiderMonkey /
-# CEF), so the base build carries neither. Each enables its concrete host pool
-# (GraftHost / WeldHost) and the engine's presence in routing.
-engine-graft = ["dep:servo-wgpu-interop-adapter", "dep:grafting"]
-engine-weld = ["dep:welding"]
+# are off by default. Each turns on its concrete host pool (GraftHost / WeldHost) and
+# the engine's presence in routing. Today these are no-op seams: enabling the real
+# producers pulls a multi-minute native engine build (SpiderMonkey via
+# `servo-wgpu-interop-adapter/servo`, CEF via `welding/cef-runtime`), wired in the
+# follow-on that fills the host pools and the render-drive path.
+engine-graft = []
+engine-weld = []
 # The serval *scripted* render rung (render ladder phase 2): a content node pinned to
 # `serval.scripted` runs its page JS through `pelt_desktop::ScriptedDocument` on Boa.
 # Off by default so the base build stays the static rung — no JS engine in its
@@ -292,8 +294,8 @@ accesskit_windows = { workspace = true }
 # **git dep** (not a path dep) so a bare clone builds without the `../../../wgpu-scry`
 # sibling layout; a local checkout is picked up via the gitignored
 # `.cargo/config.toml` `paths` override.
-scrying = { git = "https://github.com/mark-ik/wgpu-scry.git", branch = "main" }
-dpi = { workspace = true }
+scrying = { git = "https://github.com/mark-ik/wgpu-scry.git", branch = "main", optional = true }
+dpi = { workspace = true, optional = true }
 
 # The verso compatibility-view flip: when a node is pinned serval -> scrying.web,
 # the host captures the donor's place/session (verso-api's PortableViewState) and the
@@ -301,7 +303,7 @@ dpi = { workspace = true }
 # the WebView loads carried, not blank. verso-api is the engine-agnostic contract;
 # verso-scry is the black-box receiver (host implements its `ScrySurface` seam here).
 verso-api = { workspace = true }
-verso-scry = { workspace = true }
+verso-scry = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 accesskit_macos = { workspace = true }

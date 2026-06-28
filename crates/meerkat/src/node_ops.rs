@@ -411,8 +411,21 @@ impl WindowCtx<'_> {
         if id == inker::routing::ENGINE_SERVAL_SCRIPTED {
             return true;
         }
-        // The scrying surface engine is the system WebView pool — Windows only today.
-        cfg!(target_os = "windows") && id == ENGINE_SCRYING_WEB
+        // Graft (Servo) / weld (CEF) surface engines: present when their cargo feature
+        // is compiled in. The host pools (GraftHost / WeldHost) are no-op seams today —
+        // the producer deps and the real frame-drive land in the follow-on — so with a
+        // feature on, a node pinned to that engine renders a blank tile until then. Both
+        // are off by default, so the base build never routes to them.
+        #[cfg(feature = "engine-graft")]
+        if id == inker::routing::ENGINE_GRAFT_SERVO {
+            return true;
+        }
+        #[cfg(feature = "engine-weld")]
+        if id == inker::routing::ENGINE_WELD_CHROMIUM {
+            return true;
+        }
+        // The scrying surface engine is the system WebView pool — Windows + engine-scry.
+        cfg!(all(target_os = "windows", feature = "engine-scry")) && id == ENGINE_SCRYING_WEB
     }
 
     /// Whether engine `id` is **active** (not deactivated this session). The host
