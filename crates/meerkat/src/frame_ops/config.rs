@@ -28,7 +28,14 @@ impl WindowCtx<'_> {
                     .graph()
                     .get_node_by_url(url)
                     .and_then(|(_, node)| node.body.clone())
-                    .unwrap_or_default();
+                    .filter(|b| !b.is_empty())
+                    .unwrap_or_else(|| {
+                        // A fresh note opens with a starter so it is not blank; the
+                        // editor replaces it with the real body once it writes one
+                        // (slice 4). The title is the address path.
+                        let name = url.strip_prefix("knot://").unwrap_or("note");
+                        format!("# {name}\n\nA new knot note. Start writing.\n")
+                    });
                 self.shared.content.pages.insert(
                     url.to_string(),
                     fetch::ContentState::Ready(fetch::Fetched {
