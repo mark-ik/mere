@@ -16,17 +16,15 @@ path = "src/lib.rs"
 [dependencies]
 inker.workspace = true
 # Smolweb parsers: the portable per-format ASTs the engines below lower into
-# `DocumentBlock`. The parse layer lives in errand (transport + parse, one smolweb
-# crate); nematic owns only the AST -> block lowering. The dep-free parsers are
-# always available; the feed parser will add `features = ["parse-feed"]` here. Git
-# dep (the sibling-crate convention); a local `.cargo/config.toml` path override
-# speeds the cross-repo edit loop.
+# `DocumentBlock`. The parse layer (gemtext/gopher/nex/feed) lives in errand
+# (transport + parse, one smolweb crate); nematic owns only the AST -> block
+# lowering. Git dep (the sibling-crate convention); a local `.cargo/config.toml`
+# path override speeds the cross-repo edit loop.
 errand = { git = "https://github.com/mark-ik/errand.git" }
 pulldown-cmark = { version = "0.13", default-features = false }
 # Djot pull-parser for the knot djot-substrate proof-of-concept (knot/djot.rs;
 # design doc §10). Additive alongside pulldown-cmark during the migration.
 jotdown = "0.10"
-quick-xml = "0.39"
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = "0.1"
