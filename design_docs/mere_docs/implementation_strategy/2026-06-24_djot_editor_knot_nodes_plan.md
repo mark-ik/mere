@@ -1092,3 +1092,18 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   --workspace` green; inker + note_view + note_surface tests pass. The parser side (jotdown /
   pulldown table events → `Table`) lands with the live tiles. Clears the native-smolweb-plan
   prerequisite; next is the live welcome tile (slice 1b).
+- **2026-06-27, slices 2 + 3 + B — a serval-rendered knot note, end to end.** Slice 3: the
+  inline `Node` body + `PersistedNode` snapshot round-trip (kernel `4bf7a17`, 257 tests green);
+  the body lives on the node so it travels on snapshot / sync / fork. Slice 2: the local-knot
+  producer (`ensure_content` reads `Node.body` → a `text/x-knot` Ready state → the existing
+  `DjotKnotEngine` route renders it), a starter body for a fresh note, and open-the-note-as-a-tile
+  on `knot://` navigation; `knot://` already classifies as a URL (`is_verbatim_url`) and `visit()`
+  already creates-or-finds the node, so create-on-miss was free. B: the tile rasterizer gains a
+  knot lane that renders the note through serval (`note_scene`: `note_view` → `ScriptedDom` →
+  netrender) instead of document-canvas, the reframe's native web-engine path. Headed-confirmed
+  before/after (scry-shots `knotnote-BEFORE-document-canvas.png` / `-AFTER-serval.png`):
+  `knot://field-notes` opens a serval-rendered tile (serif `<h1>` / `<p>` on a light page) beside
+  an example.org document-canvas tile. Follow-ons: a themed note sheet + the illume syntax-palette
+  bridge (the serval note is UA-default serif on a placeholder light page for now); slice 4
+  (in-tile source editing); banding for tall notes; and the deferred networked / co-op `knot://`
+  resolution.
