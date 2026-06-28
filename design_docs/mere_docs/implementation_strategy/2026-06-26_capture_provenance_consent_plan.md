@@ -1,7 +1,11 @@
 # Capture, Provenance, and Consent Plan — one live record: where you went, what you chose among, where it came from, what may leave
 
 **Date**: 2026-06-26
-**Status**: Planning. No code yet. Created from the 2026-06-26 cross-cutting state
+**Status**: C1 (live recorder) + C2 (candidate-context) **built + runtime-verified**
+(2026-06-26); the relational-browse V1 **materializer trigger** (`>materialize`)
+that lights C2 up is shipped + verified. C3 (provenance writers), C4
+(consent / retention / forget), C5 (page text into the index) remain. Created from
+the 2026-06-26 cross-cutting state
 audit (crawl / engram / knot / federation / models / graph / documentscript),
 which found that the left half of the browsing-data vision (browse, crawl,
 extract, local index) is largely **built**, the right half (distill, federate,
@@ -107,6 +111,14 @@ engrams in the eidetic store; an excluded session writes none; the recall path
 (or a test) reads them back; the recorder runs off the render path. Files under
 the 600-LOC ceiling; land in clean meerkat files alongside Mark's churn.
 
+**Status: built + runtime-verified 2026-06-26** (commit `ac43edd`). `browse_capture.rs`
+writes a single-event `BrowsingTrace` per navigation via `eidetic::browsing::save_trace`,
+tapped in `nav_sync.rs` (`sync_orrery` forward navs + `drain_history_step` back/forward),
+gated by a `Content.capture_enabled` flag (the C4 hook, default on), schema bootstrapped
+at store open. 2 unit tests + a headed run (two navigations each logged "recorded a
+browsing trace", no failures). Per-nav trace today; batching into segments + quota is
+the C4 retention refinement.
+
 ### C2 — Candidate-context (the relational enrichment, absorbed from V3)
 
 Capture the relational decision the bird's-eye view makes observable: the set of
@@ -137,6 +149,20 @@ struct CandidateContext {
 produces traces carrying the candidate set and the decision; the listwise
 "real negatives in context" signal is present in the stored record, not
 reconstructed; the schema round-trips.
+
+**Status: built + verified 2026-06-26** (schema + capture `223ff4b`;
+candidate-source fix + the `>materialize` trigger `831bdcf`). `TraceEvent` gained a
+serde-default `candidates: Vec<PageRef>` (schema hash unchanged, old traces
+round-trip; eidetic 72 + 15 tests green). The recorder fills it from the **focused
+node's `Hyperlink` out-edges** (`candidate_links` by member id, not the stale
+from-URL — a navigation has already advanced the node's URL by record time). So it
+is populated once the page's neighborhood is **materialized or crawled** and empty
+in plain browsing (the honest sparse property). The `Decision` enum
+(dismiss / pin / dwell) is **not** built — the first slice records "followed `to`"
+against the set; richer decisions need the neighborhood interaction UI. The V1
+`>materialize` trigger (relational-browse V1's "thin remaining wire-up") was wired
+here so C2 lights up; headed-verified end to end: navigate → `>materialize` →
+navigate records candidates 0 → 1.
 
 ### C3 — Provenance-family edge writers (one mechanism, three payoffs)
 
@@ -218,11 +244,12 @@ through the existing recall path; an excluded page is not indexed; the index lan
 
 ## Findings (audit-verified, 2026-06-26)
 
-- **No live trace writer exists.** Zero meerkat callers of `record_traversal` /
-  `save_trace` / `BrowsingMemory` / `project_lineage`. The sink and schema (E1)
-  are built; the running app writes no durable trace. This is C1.
-- **`TraceEvent` is chronological only** (`{from, to, transition, at_ms,
-  dwell_ms}`): no candidate-set, no decision field. This is C2.
+- **RESOLVED (C1, `ac43edd`).** Was: no live trace writer (zero callers of
+  `save_trace` etc.). Now `browse_capture.rs` writes a `BrowsingTrace` per
+  navigation via `save_trace`, tapped in `nav_sync.rs`; runtime-verified.
+- **RESOLVED (C2, `223ff4b`).** Was: `TraceEvent` chronological only. Now it carries
+  a serde-default `candidates: Vec<PageRef>` (the listwise set), filled from the
+  focused node's out-edges.
 - **The `Provenance` edge family has no live writer.** It appears only in the
   taxonomy enum, snapshot round-trip, and a label-formatting match arm; only
   cross-graph copy and snapshot replay assert it. This is C3.
@@ -256,10 +283,13 @@ through the existing recall path; an excluded page is not indexed; the index lan
   federatability hook; the policy that sets it (crawled third-party page text:
   local-only, or federatable under what terms?) is unowned and is a product /
   legal call, possibly its own later slice.
-- **Candidate-set observability.** A dismiss is only observable where the
-  candidate set is materialized (the V1 neighborhood). Is "saw in a normal page,
-  did not click" worth capturing too, or is candidate-context scoped to the
-  relational view only?
+- **Candidate-set observability** (partly settled). C2 captures candidates from the
+  focused node's graph out-edges, so the signal is present once a page is
+  materialized/crawled and empty in plain browsing. Open: is "saw in a normal page,
+  did not click" worth capturing too (would need re-extracting the page's links at
+  nav time via `serval-extract`, not just reading graph out-edges)? And the richer
+  `Decision` (dismiss / pin / dwell, vs the current "followed `to`") needs the
+  neighborhood interaction UI.
 - **Recorder granularity vs `node-lineage`.** C1 must not let the durable trace
   drift from `node-lineage`'s live edge views or the eidetic `co_occurrence`
   definition; decide what C1 records directly vs projects from lineage.
@@ -278,3 +308,23 @@ through the existing recall path; an excluded page is not indexed; the index lan
   V3. Same session, corrected the stale `net.fetch` "stub" framing and the
   resolved "one missing primitive" framing in the relational-browse plan (V1/V2
   are built; `serval-extract::extract_links` is the primitive). No code yet.
+- **2026-06-26 (C1 built + verified, `ac43edd`).** The live recorder:
+  `browse_capture.rs` (per-nav `save_trace`, `capture_enabled` gate, schema
+  bootstrap at store open), tapped in `nav_sync.rs` (`sync_orrery` +
+  `drain_history_step`). 2 unit tests; headed run logged "recorded a browsing
+  trace" for two navigations, no failures. Reachable only through the live tap;
+  reads (recall/corridor) stay E5.
+- **2026-06-26 (C2 built, `223ff4b`).** Candidate-context: serde-default
+  `candidates` on the eidetic `TraceEvent` (no schema-hash change, old traces
+  round-trip), filled from the focused node's out-edges. eidetic 72 + 15 + meerkat
+  2 tests green. Found + noted the sparse property (empty until materialize/crawl).
+- **2026-06-26 (materializer trigger + C2 verified, `831bdcf`).** Wired
+  `Command::MaterializeFocused` / `>materialize` (relational-browse V1's trigger,
+  mirroring `>crawl`) and fixed `candidate_links` to read the focused node by member
+  id (the stale-from-URL bug). Headed run proved the loop: navigate → `>materialize`
+  → navigate records candidates 0 → 1. **Audit (this entry):** C1 + C2 done +
+  verified; relational-browse V1 is now fully reachable. Open lanes unchanged: **C5**
+  (route `serval-extract::extract_text` into `eidetic-search` — both ends built, the
+  connecting call is the smallest next win), **C3** (Provenance-family edge writers),
+  **C4** (consent / retention / forget + federatability), and a richer `Decision`
+  model when a neighborhood interaction UI exists.
