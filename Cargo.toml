@@ -35,6 +35,7 @@ members = [
     "crates/inker/engines/nematic",
     "crates/inker/engines/scrying-engine",
     "crates/inker/engines/graft-engine",
+    "crates/inker/engines/weld-engine",
     "crates/verso-api",
     "crates/verso-serval",
     "crates/verso-scry",
@@ -118,6 +119,7 @@ document-canvas = { path = "crates/inker/document-canvas" }
 nematic = { path = "crates/inker/engines/nematic" }
 scrying-engine = { path = "crates/inker/engines/scrying-engine" }
 graft-engine = { path = "crates/inker/engines/graft-engine" }
+weld-engine = { path = "crates/inker/engines/weld-engine" }
 verso-api = { path = "crates/verso-api" }
 verso-serval = { path = "crates/verso-serval" }
 verso-scry = { path = "crates/verso-scry" }

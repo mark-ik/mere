@@ -51,6 +51,13 @@ pub const ENGINE_SERVAL_FULLWEB: &str = "serval.fullweb";
 ///
 /// See `design_docs/mere_docs/research/2026-05-11_engine_peers_and_scrying_library_brief.md`.
 pub const ENGINE_SCRYING_WEB: &str = "scrying.web";
+/// Embedded Servo via the wgpu-graft producer (GL-FBO / DX12-shared / Vulkan
+/// external-memory / IOSurface interop). Tier-2 surface engine; opt-in per tile
+/// like [`ENGINE_SCRYING_WEB`], not in the default policy.
+pub const ENGINE_GRAFT_SERVO: &str = "graft.servo";
+/// Bundled Chromium via the wgpu-weld CEF accelerated-OSR producer. Tier-2
+/// surface engine; opt-in per tile like [`ENGINE_SCRYING_WEB`].
+pub const ENGINE_WELD_CHROMIUM: &str = "weld.chromium";
 pub const ENGINE_NEMATIC_FEED: &str = "nematic.feed";
 pub const ENGINE_NEMATIC_FILE: &str = "nematic.file";
 pub const ENGINE_NEMATIC_FINGER: &str = "nematic.finger";
@@ -92,7 +99,10 @@ pub fn is_graph_contribution_route(engine_id: &str) -> bool {
 /// engines go through the [`crate::EngineRegistry`]. A host branches on this to pick
 /// the lane.
 pub fn is_surface_engine(engine_id: &str) -> bool {
-    matches!(engine_id, ENGINE_SCRYING_WEB)
+    matches!(
+        engine_id,
+        ENGINE_SCRYING_WEB | ENGINE_GRAFT_SERVO | ENGINE_WELD_CHROMIUM
+    )
 }
 
 /// A rung of the serval HTML render ladder. serval is one engine that scales from a
