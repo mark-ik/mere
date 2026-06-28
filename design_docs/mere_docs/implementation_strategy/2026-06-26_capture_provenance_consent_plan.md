@@ -4,8 +4,9 @@
 **Status**: C1 (live recorder) + C2 (candidate-context) **built + runtime-verified**
 (2026-06-26); the relational-browse V1 **materializer trigger** (`>materialize`)
 that lights C2 up is shipped + verified. C5 (page text into the index)
-is **built + verified** (`>recall`, `8b8b039`); C3 (provenance writers) and C4
-(consent / retention / forget) remain. Created from the 2026-06-26 cross-cutting state
+is **built + verified** (`>recall`, `8b8b039`); C3's materialize / crawl half
+(harvested links record `ExtractedFrom` provenance) is **built** (`cdd2130`).
+C3's clip / summarize half and C4 (consent / retention / forget) remain. Created from the 2026-06-26 cross-cutting state
 audit (crawl / engram / knot / federation / models / graph / documentscript),
 which found that the left half of the browsing-data vision (browse, crawl,
 extract, local index) is largely **built**, the right half (distill, federate,
@@ -164,29 +165,49 @@ against the set; richer decisions need the neighborhood interaction UI. The V1
 here so C2 lights up; headed-verified end to end: navigate → `>materialize` →
 navigate records candidates 0 → 1.
 
-### C3 — Provenance-family edge writers (one mechanism, three payoffs)
+### C3 — Provenance-family writers (one mechanism, three payoffs)
 
-The `Provenance` edge family (`ClippedFrom` / `ExcerptedFrom` / `SummarizedFrom`
-/ `GeneratedFrom`, `graph-kernel/.../edge_taxonomy.rs`) is defined and consumed by
-nothing live: the audit found only cross-graph `CopiedFrom` and snapshot replay
-assert it. Wire the live gestures to write it.
+The `Provenance` family (`ClippedFrom` / `ExcerptedFrom` / `SummarizedFrom` /
+`ExtractedFrom` / `GeneratedFrom`, `graph-kernel/.../edge_taxonomy.rs`) was
+defined and consumed by nothing live: the audit found only cross-graph
+`CopiedFrom` (a node `derivation`) and snapshot replay assert it. Wire the live
+gestures to write it.
 
-- Crawl / materialize: record which page asserted which `Hyperlink` (the source
-  edge already exists; carry the asserting-page provenance).
+**Built — materialize / crawl half (`cdd2130`):** `apply_contribution` now
+records an `ExtractedFrom` `NodeDerivation` on the target of every harvested
+`Hyperlink`, naming the source page. So a materialized / crawled node names the
+page it was extracted from — the Provenance family's first live browse writer.
+Unit-tested (`a_harvested_hyperlink_records_extracted_from_provenance_on_the_target`)
+over the real `apply_contribution` path the materializer feeds.
+
+Implementation note — a deviation from the "writes kernel edges" framing below:
+for same-graph harvest we record a node **derivation** (the `CopiedFrom`
+mechanism), not a `target -> source` kernel *edge*. An edge would sit in the
+target's out-edges and pollute C2's `candidate_links` (a pure `Hyperlink` set); a
+derivation is node-local and avoids that. The Provenance-trail projection reads
+derivations anyway (it must, for `CopiedFrom`). A kernel *edge* representation is
+reserved for the content-derivation gestures below, where no `Hyperlink` doubles
+it.
+
+**Remaining:**
+
 - Clip / excerpt / summarize / future agent-generate: each gesture asserts the
-  matching Provenance edge as it produces a node.
-- This is the single mechanism the relational plan's "provenance is one mechanism"
-  Finding names: it feeds tessera contribution-pricing, training-data legality,
-  and shared-index source legibility at once.
+  matching Provenance relation (`ClippedFrom` etc.) as it produces a node. The
+  canonical case (clip -> `ClippedFrom`) waits on the web-clip gesture
+  (`build_clip_knot` exists; the picker UI is the djot-editor plan). These are
+  genuine content-derivation, so they warrant a kernel *edge* (nothing overlaps).
 
-Note the boundary: C3 writes **kernel edges**. Carrying who / when / graph-scope
-on the edge in the *RDF projection* (RDF-star) is the petgraph-RDF plan's Phase
-1-2, not this plan. C3 makes the provenance exist; that plan makes it survive
-RDF export.
+This is the single mechanism the relational plan's "provenance is one mechanism"
+Finding names: it feeds tessera contribution-pricing, training-data legality, and
+shared-index source legibility at once.
 
-**Done when**: a clip / crawl / summarize gesture asserts a Provenance edge a
-test (or the Provenance-trail projection) can read; a crawled node can name the
-page that linked to it.
+Boundary: carrying who / when / graph-scope on the provenance record in the *RDF
+projection* (RDF-star) is the petgraph-RDF plan's Phase 1-2, not this plan. C3
+makes the provenance exist; that plan makes it survive RDF export.
+
+**Done when**: a harvest / clip / summarize gesture asserts a Provenance record a
+test (or the Provenance-trail projection) can read; a harvested node can name the
+page it came from. **(Met for materialize / crawl; clip / summarize remain.)**
 
 ### C4 — Consent, retention, and forget (the membrane proper)
 
@@ -349,3 +370,14 @@ what is indexed is C4** — the "an excluded page is not indexed" clause lands t
   forget — also gates what `>recall` indexes), and index optimizations (incremental
   update, a results pane). The membrane's **left half** (capture → relational
   signal → page-text recall) is now live and proven; C3 + C4 are the right half.
+- **2026-06-28 (C3 materialize / crawl half built, `cdd2130`).** Harvested links
+  carry provenance: `apply_contribution` records an `ExtractedFrom`
+  `NodeDerivation` on the target of every `Hyperlink` it asserts, naming the
+  source page — the Provenance family's first live browse writer (only cross-graph
+  `CopiedFrom` wrote it before). Recorded as a node derivation, not a kernel edge,
+  so it stays out of C2's `candidate_links` (kept a pure `Hyperlink` set). New
+  `Graph::record_derivation`; unit-tested over the real `apply_contribution` path.
+  No headed run — derivations have no UI surface yet; the test covers the exact
+  function the materializer feeds, and the materialize → `Hyperlink` half was
+  already verified (`831bdcf`). Remaining: **C3** clip / summarize (kernel *edges*,
+  waiting on the web-clip gesture) and **C4** (consent / retention / forget).
