@@ -3,9 +3,9 @@
 **Date**: 2026-06-26
 **Status**: C1 (live recorder) + C2 (candidate-context) **built + runtime-verified**
 (2026-06-26); the relational-browse V1 **materializer trigger** (`>materialize`)
-that lights C2 up is shipped + verified. C3 (provenance writers), C4
-(consent / retention / forget), C5 (page text into the index) remain. Created from
-the 2026-06-26 cross-cutting state
+that lights C2 up is shipped + verified. C5 (page text into the index)
+is **built + verified** (`>recall`, `8b8b039`); C3 (provenance writers) and C4
+(consent / retention / forget) remain. Created from the 2026-06-26 cross-cutting state
 audit (crawl / engram / knot / federation / models / graph / documentscript),
 which found that the left half of the browsing-data vision (browse, crawl,
 extract, local index) is largely **built**, the right half (distill, federate,
@@ -227,6 +227,17 @@ seam") has fired; the consuming work was never re-queued.
 through the existing recall path; an excluded page is not indexed; the index lane
 (the one the vision says "leads") federates rich text rather than bare titles.
 
+**Status: built + verified 2026-06-28** (commit `8b8b039`). eidetic-search gained a
+`text` field (fields v2) + a `rebuild_with_text` variant; meerkat stands up the
+trail index live and answers a `>recall <terms>` omnibar verb — it loads the trace
+corpus, pulls each page's `main_text` from the durable content cache
+(`StaticDocument::parse` → `serval-extract`), re-mints the index with the text, and
+echoes the top BM25 hits. Stands up eidetic-search as a live in-app surface (it was
+dev-bin only). Headed-verified: `>recall documentation` (a term only in the page
+body, not the title or URL) returns the page. Caveats: the index rebuilds per query
+(incremental maintenance + a results pane are follow-ons), and **consent-gating of
+what is indexed is C4** — the "an excluded page is not indexed" clause lands there.
+
 ---
 
 ## Boundary with existing plans (what this absorbs vs cross-links)
@@ -328,3 +339,13 @@ through the existing recall path; an excluded page is not indexed; the index lan
   connecting call is the smallest next win), **C3** (Provenance-family edge writers),
   **C4** (consent / retention / forget + federatability), and a richer `Decision`
   model when a neighborhood interaction UI exists.
+- **2026-06-28 (C5 built + verified, `8b8b039`).** Page text into the index:
+  eidetic-search gained a `text` field + `rebuild_with_text` (fields v2; body-text
+  test), and meerkat a `>recall <terms>` omnibar verb that re-mints the trail index
+  from the trace corpus + each page's `main_text` (from the durable content cache)
+  and echoes BM25 hits — standing up eidetic-search as a live in-app surface (it
+  was dev-bin only). Headed-verified a body-only term ("documentation") recalls the
+  page. Remaining: **C3** (provenance writers), **C4** (consent / retention /
+  forget — also gates what `>recall` indexes), and index optimizations (incremental
+  update, a results pane). The membrane's **left half** (capture → relational
+  signal → page-text recall) is now live and proven; C3 + C4 are the right half.
