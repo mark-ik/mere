@@ -291,3 +291,8 @@ Fragments exist, each owned by a sibling plan; the unifying primitive does not.
   manipulation; whether the swatch edit layer subsumes it or wraps it is unsettled.
 - **Classifier ranking strength.** Carried from the 2026-06-13 and
   scope-reconciliation open questions; likely a setting, not a constant.
+- **Field as a scope** (Mark, 2026-06-28; deferred). A field region's spatial extent is a
+  candidate swatch scope: the nodes inside it become the scoped set, a convenient grab-bag that
+  need not be connected (so it reads as a Loose / Session shape, not a structural one). Extends the
+  scope axis (node / selection / graphlet / graph, plus **field**); cross-refs the
+  [scriptable field regions plan](../implementation_strategy/2026-06-13_scriptable_field_regions_plan.md).

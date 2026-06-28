@@ -98,6 +98,26 @@ second scope is their first real consumer (folded down from P1).
 focus-card slot showing the selected nodes and their inter-edges, family-coloured and
 hit-testable; a single-node selection still summons the snapshot card.
 
+**Status: built + headed-verified 2026-06-28.** `compute_focus_card` (setup.rs)
+routes `selected_members().len() > 1` to a new `compute_connections_card`
+(`render/connections.rs`), which reads the selected nodes' kernel positions + their inter-edges
+(`graph.relations()`, family-coloured) and normalizes them through the pure, unit-tested
+`swatch::connections_spec_from`. A new `FocusCardKind::Connections { spec }` renders via
+`swatch::connections_swatch_view::<ShellState>` (the P1 host-generic lift now paying off:
+the same DOM swatch mounts in the focus-card slot, not just the facet pane). Edges draw as
+transform-free dotted lines (serval CSS has no `transform`); nodes carry `data-element` tags
+for the P4 hit-test. Lands entirely in clean files (not the concurrently-edited `cards.rs`).
+Bin compiles, 2 `connections_spec` unit tests green. **Deferred to P2b**: the cartography
+*re-layout* (today it crops the live arrangement's positions, not a relation-driven layout),
+the `Scope` / `SwatchInstance` unification (two render fns for now: node + connections), and
+the actual hit-test *routing* (tags present, routing is P4). **Headed-verified 2026-06-28**: a
+marquee multi-select over a connected cluster summoned the connections swatch in the focus-card
+slot, a ~240x240 DOM card with the selected nodes as dots and a dotted-line family-coloured
+inter-edge (`scry-shots/conn-07-selected.png` + `conn-07-crop.png`). Multi-select gestures: the
+**marquee** (rect-select, replaces) and **Shift-click** (toggles a node in/out, additive) — both
+already built (orrery `pointer_up` input.rs:209, host `set_shift` handler_window.rs:132). The
+drive's Ctrl-click was the wrong modifier, not a missing feature.
+
 ### P3 — Shape classifier + the strip
 
 Build the **shape classifier**, the 2026-06-13 doc's named "one real gap": the nine
@@ -115,6 +135,18 @@ edit strategy (design §6).
 dominant pre-ranked, per 2026-06-13), re-derives it live as the projection toggles,
 ghosts the one-hop frontier, and crystallizes the selection to a Session or Linked
 graphlet through the existing index.
+
+**Status: P3a done 2026-06-28** (the classifier keystone + the shape chip). The classifier is
+`graphlet_classifier::classify(n, edges) -> ranked [ShapeRank]`, pure topology over the selection's
+induced subgraph: structural detectors for **Loop / Ego / Corridor / Component**, with **Loose /
+Session** the disconnected-grab-bag floor, ranked by fit (6 unit tests green). The connections
+swatch's `compute_connections_card` runs it on the selected subgraph and renders the dominant shape
+as a chip at the top of the card (`ConnectionsSpec.shape_label`). **Deferred to P3b/c** (the
+done-condition's remaining clauses): the full multi-chip strip, the live projection toggle (re-derive
+as families toggle), frontier ghosts, and **crystallize** (bind the selection to a Session/Linked
+graphlet through the `graphlets.rs` index), plus the contextual detectors (Bridge / Facet / Frontier
+/ WorkbenchCorrespondence). Bin compiles; the chip render is not yet headed-verified (a low-risk text
+div over the verified P2 swatch; the app's pre-existing sqlx/sync crash makes a drive flaky).
 
 ### P4 — Cells-as-edges (Mark, 2026-06-27)
 
@@ -271,3 +303,57 @@ template renders a purpose-built UI over its own subgraph.
   their first multi-scope consumer rather than landing as unused scaffolding now. Next:
   P2 (connections swatch) introduces them and mounts the same `swatch_view` in the
   focus-card slot.
+- **2026-06-28** — **P2 built (connections swatch), pending headed verify.** Multi-selection
+  (`len > 1`) now summons a DOM connections swatch in the focus-card slot: `compute_focus_card`
+  → `compute_connections_card` (new `render/connections.rs`) → `connections_spec_from` (pure,
+  normalizes the selected nodes' kernel positions + inter-edges into the card) →
+  `FocusCardKind::Connections` → `connections_swatch_view::<ShellState>` (the P1 lift mounting in
+  the slot). Edges are transform-free dotted lines (no serval CSS `transform`), family-coloured;
+  nodes tagged `data-element` for P4. Six clean files touched, **not** the concurrently-edited
+  `cards.rs` (whose `len == 1` snapshot gate already suppresses multi-select; its TODO updated to
+  point here). 2 unit tests green. **Verification lesson**: `swatch` / `render` / `window_view` /
+  `graphlets` are **bin** modules (declared in `main.rs`), so `cargo check -p meerkat --lib` does
+  **not** compile them — verify these with `cargo test -p meerkat --bin meerkat` (or
+  `cargo check -p meerkat`); the `--lib` greens on P1 + P2 were false-clean until the bin build
+  caught a `u32` arg type. P2b deferrals: cartography re-layout, the `Scope`/`SwatchInstance`
+  unification, hit-test routing. Next: a headed drive, then P3 (classifier + strip).
+- **2026-06-28** — **P2 headed-verified**. Drove `target/debug/meerkat.exe` (scry-shots harness):
+  paused the sim, panned to the static graph, marquee-selected a connected cluster — the
+  connections swatch appeared in the focus-card slot as a ~240x240 DOM card with the selected
+  nodes as dots and a dotted-line family-coloured inter-edge (`scry-shots/conn-07-selected.png`,
+  `conn-07-crop.png`). Multi-select gestures = **marquee** (replaces) + **Shift-click** (toggles,
+  additive) — both already built (orrery `pointer_up` shift-toggle + host `set_shift`); the drive's
+  Ctrl-click was the wrong modifier, not a missing feature. P2 done. Next: P3 (shape classifier +
+  strip).
+- **2026-06-28** — **P3a built (shape classifier + chip)**. New `graphlet_classifier.rs` (bin
+  module): pure `classify(n, edges) -> ranked [ShapeRank]` with structural detectors (Loop / Ego /
+  Corridor / Component) over a selection's induced subgraph, Loose / Session the disconnected floor,
+  ranked by fit. 6 unit tests green (path→Corridor, star→Ego, triangle→Loop, K4→Component,
+  disconnected→Session, 2-node→Corridor). Wired into the connections swatch: `compute_connections_card`
+  classifies the selected subgraph and sets `ConnectionsSpec.shape_label`, which `connections_swatch_view`
+  renders as a top-left chip. Net-new logic = the 2026-06-13 "one real gap"; the field-as-scope grab-bag
+  Mark raised falls out as the Loose case (recorded in the design doc). Also captured the field-as-scope
+  idea in the design doc open questions. Deferred to P3b/c: the multi-chip strip, projection toggle,
+  frontier ghosts, crystallize, and the contextual detectors. Bin compiles; chip not yet headed-verified.
+- **2026-06-28** — **P3b built (crystallize via context menu)**. The commit gesture: a multi-node
+  "Crystallize selection" context-menu item freezes the selection as a Session graphlet tagged with
+  the classifier's dominant shape and scopes the orrery to it in place (ruling 1, not a new window).
+  Primitives (clean files, unit-tested): `graphlet_classifier::classify_selection(graph, members)`
+  (graph-aware classifier, now also backs the swatch chip) + `SessionGraphlets::record_session(kind,
+  members)` (freeze-the-selection index method — works for any shape incl. the Loose grab-bag, unlike
+  Linked derivation). Host method `Shell::crystallize_selection(from)` (`session_ops/shell_session.rs`):
+  classify → record_session → persist → `scope_to_members`. Trigger mirrors "Open component": new
+  `ContextAction::CrystallizeSelection` + registry tuple + `DEFAULT_MENU_ACTIONS` + `MenuScope::MultiNode`
+  (command.rs) + menu row (build.rs) + dispatch pushing `ShellCommand::CrystallizeSelection` (actions.rs)
+  → drain (shell_ops.rs) → the Shell method. Threaded the two concurrently-edited hot files cleanly. Bin
+  compiles, 14 graphlet tests green. **Default = Session-freeze** (the 2026-06-13 default, any shape);
+  Linked-derivation crystallize (Component/Ego) + the Astroid option are P3c. Not headed-verified (the
+  app's pre-existing sqlx/sync crash makes a drive flaky). **P3 substantially done**; remaining P3c/P4:
+  the live projection toggle, frontier ghosts, the contextual detectors, and the swatch hit-test
+  (chip-click crystallize).
+- **2026-06-28** — **P3c slice: the chip strip**. `ConnectionsSpec.shape_label` (single dominant) →
+  `shape_chips: Vec<String>`: `compute_connections_card` now sets the classifier's top-3 fit-ranked
+  shapes (fit ≥ 0.4), and `connections_swatch_view` renders them as a chip strip across the top of the
+  card (dominant highlighted, runners-up dimmed). Completes the "strip" half of P3's name as a
+  read-only ranked display; the live projection toggle that re-derives it is still P4 (needs the swatch
+  hit-test). Bin compiles, 14 graphlet tests green.
