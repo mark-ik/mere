@@ -233,6 +233,41 @@ impl HostObservability {
                 Severity::Info,
                 format!("received latency={latency_us}us"),
             ),
+            // A `tracing` event mirrored in by ApparatusTracingLayer is *not* a channel
+            // message: recover its severity from the `level` field (so a warn/error fault reads
+            // as a fault instead of being flattened to Info) and present it as a clean
+            // "target: message (fields)" log line rather than the messaging-shaped
+            // "received latency=…us" frame.
+            DiagnosticEvent::MessageReceivedStructured {
+                channel_id,
+                fields,
+                ..
+            } if channel_id == crate::tracing_layer::TRACE_EVENT_CHANNEL => {
+                let find = |name: &str| {
+                    fields
+                        .iter()
+                        .find(|f| f.name == name)
+                        .map(|f| f.value.as_str())
+                };
+                let severity = match find("level") {
+                    Some("ERROR") | Some("error") => Severity::Error,
+                    Some("WARN") | Some("warn") => Severity::Warn,
+                    _ => Severity::Info,
+                };
+                let target = find("target").unwrap_or("trace");
+                let message = find("message").unwrap_or("");
+                let rest: Vec<_> = fields
+                    .iter()
+                    .filter(|f| !matches!(f.name, "target" | "level" | "message"))
+                    .cloned()
+                    .collect();
+                let detail = if rest.is_empty() {
+                    format!("{target}: {message}")
+                } else {
+                    format!("{target}: {message} ({})", format_fields(&rest))
+                };
+                self.record_diagnostic(channel_id, severity, detail);
+            }
             DiagnosticEvent::MessageReceivedStructured {
                 channel_id,
                 latency_us,
@@ -367,6 +402,49 @@ mod tests {
         assert!(
             rows.iter().any(|(k, _)| k.contains("Sync")),
             "the bodyless notification still surfaces"
+        );
+    }
+
+    #[test]
+    fn a_trace_fault_recovers_its_severity_and_reads_as_a_log_line() {
+        use register_diagnostics::StructuredPayloadField;
+        let mut obs = HostObservability::new();
+        // A warn-level `tracing` event mirrored in by the bridge: target/level/message carried as
+        // fields on the synthetic trace channel.
+        obs.record_portable_event(DiagnosticEvent::MessageReceivedStructured {
+            channel_id: crate::tracing_layer::TRACE_EVENT_CHANNEL,
+            latency_us: 0,
+            fields: vec![
+                StructuredPayloadField { name: "target", value: "netfetcher".to_string() },
+                StructuredPayloadField { name: "level", value: "WARN".to_string() },
+                StructuredPayloadField { name: "message", value: "fetch network error".to_string() },
+                StructuredPayloadField { name: "url", value: "https://x".to_string() },
+            ],
+        });
+        let snap = obs.snapshot();
+        let rec = snap
+            .diagnostics
+            .iter()
+            .find(|d| d.channel == crate::tracing_layer::TRACE_EVENT_CHANNEL)
+            .expect("the trace event was recorded as a diagnostic");
+        assert!(
+            matches!(rec.severity, Severity::Warn),
+            "a warn-level trace fault recovers Warn severity, not the old hardcoded Info",
+        );
+        assert!(
+            rec.message.starts_with("netfetcher: fetch network error"),
+            "presented as a clean `target: message` log line: {}",
+            rec.message,
+        );
+        assert!(
+            rec.message.contains("url=https://x"),
+            "the structured rest is appended: {}",
+            rec.message,
+        );
+        assert!(
+            !rec.message.contains("received latency"),
+            "no messaging frame leaks through: {}",
+            rec.message,
         );
     }
 }

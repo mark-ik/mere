@@ -16,7 +16,7 @@ use tracing_subscriber::Layer;
 use tracing_subscriber::layer::Context;
 use tracing_subscriber::registry::LookupSpan;
 
-const TRACE_EVENT_CHANNEL: &str = "meerkat.tracing.event";
+pub(crate) const TRACE_EVENT_CHANNEL: &str = "meerkat.tracing.event";
 
 pub(crate) struct ApparatusTracingLayer {
     tx: Sender<DiagnosticEvent>,
