@@ -125,6 +125,11 @@ pub struct PersistedSettings {
     /// at what granularity.
     #[serde(default)]
     pub capture_consent: Option<String>,
+    /// The browse-trace retention cap (capture/provenance/consent plan C4): the
+    /// number of most-recent traces kept; older ones age out on a per-launch quota
+    /// pass. `None` = the host default (generous; traces are tiny).
+    #[serde(default)]
+    pub retention_keep_n: Option<usize>,
     /// The user's chrome zoom multiplier (Ctrl +/-/0). Composed with the display's DPI
     /// factor into the effective UI scale the chrome sheet is built at. Defaults to 1.1
     /// — the baseline "a point or two larger" bump. (UI scale.)
@@ -160,6 +165,7 @@ impl Default for PersistedSettings {
             crawl_sitemap: None,
             crawl_max_pages: None,
             capture_consent: None,
+            retention_keep_n: None,
             ui_zoom: default_ui_zoom(),
         }
     }
@@ -224,7 +230,7 @@ mod tests {
     #[test]
     fn save_then_load_round_trips() {
         let dir = temp_session_dir("round-trip");
-        let original = PersistedSettings { tab_cap: 7, theme_id: None, shellbar_edge: ShellbarEdge::Left, shellbar_hidden: false, physics_damping: 2.5, disabled_engines: vec!["scrying.web".into()], document_typography: None, script_permissions: ScriptPermissionPrefs { log: None, document: Some(Permission::Deny), net: Some(Permission::Allow) }, crawl_scope: None, crawl_depth: None, crawl_sitemap: None, crawl_max_pages: None, capture_consent: None, ui_zoom: 1.1 };
+        let original = PersistedSettings { tab_cap: 7, theme_id: None, shellbar_edge: ShellbarEdge::Left, shellbar_hidden: false, physics_damping: 2.5, disabled_engines: vec!["scrying.web".into()], document_typography: None, script_permissions: ScriptPermissionPrefs { log: None, document: Some(Permission::Deny), net: Some(Permission::Allow) }, crawl_scope: None, crawl_depth: None, crawl_sitemap: None, crawl_max_pages: None, capture_consent: None, retention_keep_n: None, ui_zoom: 1.1 };
         save_settings(&dir, &original).unwrap();
         let restored = load_settings(&dir).unwrap().expect("settings file should be present");
         assert_eq!(restored, original);
@@ -252,8 +258,8 @@ mod tests {
     #[test]
     fn save_overwrites_atomically_with_no_tmp_left() {
         let dir = temp_session_dir("overwrite");
-        save_settings(&dir, &PersistedSettings { tab_cap: 3, theme_id: None, shellbar_edge: ShellbarEdge::Left, shellbar_hidden: false, physics_damping: 2.5, disabled_engines: Vec::new(), document_typography: None, script_permissions: ScriptPermissionPrefs::default(), crawl_scope: None, crawl_depth: None, crawl_sitemap: None, crawl_max_pages: None, capture_consent: None, ui_zoom: 1.1 }).unwrap();
-        save_settings(&dir, &PersistedSettings { tab_cap: 24, theme_id: None, shellbar_edge: ShellbarEdge::Right, shellbar_hidden: false, physics_damping: 2.5, disabled_engines: Vec::new(), document_typography: None, script_permissions: ScriptPermissionPrefs::default(), crawl_scope: None, crawl_depth: None, crawl_sitemap: None, crawl_max_pages: None, capture_consent: None, ui_zoom: 1.1 }).unwrap();
+        save_settings(&dir, &PersistedSettings { tab_cap: 3, theme_id: None, shellbar_edge: ShellbarEdge::Left, shellbar_hidden: false, physics_damping: 2.5, disabled_engines: Vec::new(), document_typography: None, script_permissions: ScriptPermissionPrefs::default(), crawl_scope: None, crawl_depth: None, crawl_sitemap: None, crawl_max_pages: None, capture_consent: None, retention_keep_n: None, ui_zoom: 1.1 }).unwrap();
+        save_settings(&dir, &PersistedSettings { tab_cap: 24, theme_id: None, shellbar_edge: ShellbarEdge::Right, shellbar_hidden: false, physics_damping: 2.5, disabled_engines: Vec::new(), document_typography: None, script_permissions: ScriptPermissionPrefs::default(), crawl_scope: None, crawl_depth: None, crawl_sitemap: None, crawl_max_pages: None, capture_consent: None, retention_keep_n: None, ui_zoom: 1.1 }).unwrap();
         let restored = load_settings(&dir).unwrap().unwrap();
         assert_eq!(restored.tab_cap, 24);
         let tmp = settings_path(&dir).with_extension("json.tmp");

@@ -6,8 +6,9 @@
 that lights C2 up is shipped + verified. C5 (page text into the index)
 is **built + verified** (`>recall`, `8b8b039`); C3's materialize / crawl half
 (harvested links record `ExtractedFrom` provenance) is **built** (`cdd2130`).
-C4's **consent gate** (`>capture off|corridor|full`) is **built + verified**.
-C3's clip / summarize half and C4's retention / forget / federatability remain. Created from the 2026-06-26 cross-cutting state
+C4's **consent gate** (`>capture off|corridor|full`) + **retention** are **built +
+verified**, and federatability is already met (the existing `PrivacyClass`). C3's
+clip / summarize half and C4's **forget** remain. Created from the 2026-06-26 cross-cutting state
 audit (crawl / engram / knot / federation / models / graph / documentscript),
 which found that the left half of the browsing-data vision (browse, crawl,
 extract, local index) is largely **built**, the right half (distill, federate,
@@ -224,21 +225,34 @@ The privacy / legal layer the whole vision assumes and no plan owns.
   opt-in-by-default posture is a one-line change to the default and remains Mark's
   product call (Open questions). Verified at runtime: under `off` a navigation is
   not recorded; under `full` it is, with its candidate set (`candidates=1`).
-- **Retention**: a configurable age-out beyond `apply_quota`'s keep-N; never
-  deletes anything pinned.
+- **Retention** — **built.** `BrowsingMemory::apply_quota` (keep the N most recent
+  traces, age out the rest; already unit-tested) now runs as a per-launch
+  housekeeping pass at store open, N configurable via `settings.json`
+  (`retention_keep_n`, default 10000). Pinning is a node concept, not a trace one,
+  so the "never deletes pinned" clause does not apply to traces. Bounding
+  intra-session growth (a periodic pass) is a follow-on. Verified: the pass fires at
+  startup over the live corpus.
 - **Forget**: a redaction path that removes a page's traces, its derived
   `eidetic-search` index entries, and its provenance edges together (a forget that
-  leaves the index or the edges behind is not a forget).
-- **Federatability class**: a per-record "may this leave the host" classification
-  riding the existing provenance/trust axes, so Phase 9 consume and the flora lane
-  read it rather than re-deciding. This is the hook for the legality policy (Open
-  questions), not the policy itself.
+  leaves the index or the edges behind is not a forget). The `deleted.rs` tombstone
+  is the primitive; this is the remaining C4 work.
+- **Federatability class** — **met by the existing `PrivacyClass`.** The three-axis
+  classification (`PrivacyClass` = who-may-see, `ProvenanceRecord`,
+  `TrustEnvelope`/`TrustLevel`) already rides every engram. `save_trace` stamps every
+  trace `PrivacyClass::LocalOnly` (+ `SelfAsserted`), asserted by a test
+  (`browsing/tests.rs`). `PrivacyClass` (LocalOnly / TrustedPeersOnly / MootScoped /
+  PublicPortable) is exactly the "may this leave the host, and to whom" axis the plan
+  called for ("riding the existing axes"). Remaining (Phase 9, no consumer yet): a
+  promotion path (LocalOnly -> wider) on an explicit share, and the flora lane
+  reading the class. This is the hook for the legality policy (Open questions), not
+  the policy itself.
 
 **Done when**: a consent setting governs capture **(met — `>capture`)**; a forget
 action removes a page's traces, index entries, and derived edges in one pass;
 retention ages out beyond N configurably with pinned records exempt; every record
-carries a federatability class defaulting to LocalOnly. **(Consent gate built +
-verified; retention, forget, and the federatability class remain.)**
+carries a federatability class defaulting to LocalOnly. **(Consent gate + retention
+built + verified; federatability met by the existing `PrivacyClass`; forget is the
+one remaining piece.)**
 
 ### C5 — Page text into the index (the fired trigger)
 
@@ -401,3 +415,14 @@ what is indexed is C4** — the "an excluded page is not indexed" clause lands t
   none for the `off` nav, `candidates=1`) and all three verb echoes. Default stays
   `Full` (no behaviour change); opt-in-by-default is a one-line product call.
   Remaining C4: retention, forget, federatability class.
+- **2026-06-28 (C4 retention built + verified; federatability already met).**
+  Retention: `BrowsingMemory::apply_quota` (keep-N, already unit-tested) now runs as
+  a per-launch pass at store open, N from `settings.json` (`retention_keep_n`,
+  default 10000); headed-confirmed the pass fires at startup (`nothing aged out
+  keep_n=10000` over the live corpus, a safe no-op below the cap). Pinning is a node
+  concept, N/A to traces. Federatability: found already satisfied — `save_trace`
+  stamps every trace `PrivacyClass::LocalOnly` (the existing three-axis
+  classification; `PrivacyClass` is the who-may-see / may-it-leave-the-host axis),
+  asserted by `browsing/tests.rs`. No new code; a promotion path + the flora-lane
+  read are Phase 9. Remaining C4: **forget** (traces + index + provenance in one
+  pass).

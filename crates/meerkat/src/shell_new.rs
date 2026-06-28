@@ -72,6 +72,26 @@ impl Shell {
                 {
                     tracing::warn!(?err, "browsing-trace schema bootstrap failed");
                 }
+                // Retention (plan C4): keep the N most recent traces and age out the
+                // rest, so the trail does not grow unbounded across sessions. A
+                // per-launch housekeeping pass; bounding intra-session growth is a
+                // follow-on. N is tuned in settings.json (`retention_keep_n`).
+                const RETENTION_KEEP_N_DEFAULT: usize = 10_000;
+                let keep_n = saved_settings
+                    .retention_keep_n
+                    .unwrap_or(RETENTION_KEEP_N_DEFAULT);
+                let pruned = pollster::block_on(async {
+                    let mut memory =
+                        eidetic::browsing::BrowsingMemory::load(&mut store, 64).await?;
+                    memory.apply_quota(&mut store, keep_n).await
+                });
+                match pruned {
+                    Ok(0) => {
+                        tracing::debug!(keep_n, "browsing-trace retention pass: nothing aged out")
+                    }
+                    Ok(aged) => tracing::info!(aged, keep_n, "browsing-trace retention pass"),
+                    Err(err) => tracing::warn!(?err, "browsing-trace retention pass failed"),
+                }
                 Some(store)
             }
             Err(err) => {

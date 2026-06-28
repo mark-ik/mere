@@ -154,11 +154,14 @@ impl WindowCtx<'_> {
         // caches it nowhere — it is read on demand at attach and edited via the
         // settings lane, not reconstructed from runtime state here — so this save
         // path must not clobber it back to the default. (Follow-on #1.)
-        let script_permissions = settings_store::load_settings(&self.shared.session.mere_root)
+        let preserved = settings_store::load_settings(&self.shared.session.mere_root)
             .ok()
             .flatten()
-            .unwrap_or_default()
-            .script_permissions;
+            .unwrap_or_default();
+        let script_permissions = preserved.script_permissions;
+        // The retention cap is read at launch + tuned in settings.json, not held in
+        // runtime state, so preserve it across saves (like script_permissions).
+        let retention_keep_n = preserved.retention_keep_n;
         let settings = PersistedSettings {
             tab_cap: self.shared.presentation.saved_tab_cap,
             theme_id: Some(self.shared.presentation.active_theme_id.clone()),
@@ -195,6 +198,7 @@ impl WindowCtx<'_> {
                 (consent != crate::browse_capture::CaptureConsent::Full)
                     .then(|| consent.as_key().to_string())
             },
+            retention_keep_n,
             // The user's chrome zoom (Ctrl +/-/0); the display DPI factor is not persisted
             // (it is read fresh from the window each launch). (UI scale.)
             ui_zoom: self.shared.presentation.user_zoom,
