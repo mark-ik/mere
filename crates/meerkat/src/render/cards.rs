@@ -293,7 +293,50 @@ impl crate::WindowCtx<'_> {
             // lane's lower_window below.
             let card_bg = crate::chrome_to_wgpu(self.shared.presentation.chrome_theme.surface_bg);
             let doc_palette = self.shared.presentation.document_palette;
-            if self.shared.content.constellation.scene(*member).is_some() {
+            // B: a knot note tile renders through serval (note_view -> ScriptedDom ->
+            // netrender), the reframe's native path — not document-canvas. Re-derive the
+            // EngineDocument from the node's body and lay it out with note_scene. (Slice B.)
+            let knot_url = self
+                .orrery()
+                .graph()
+                .get_node_by_id(*member)
+                .map(|(_, n)| n.url().to_string())
+                .filter(|u| u.starts_with("knot://"));
+            if let Some(url) = knot_url {
+                let band_px = (*ch).min(BAND_CAP).max(1);
+                let fresh = self
+                    .view
+                    .tile_textures
+                    .get(member)
+                    .is_some_and(|c| c.version == version && c.size == (*cw, band_px));
+                if !fresh {
+                    let state = self.shared.content.pages.get(&url).cloned();
+                    if let Some(doc) = crate::card::engine_document_for(
+                        &url,
+                        state.as_ref(),
+                        &self.shared.content.engine_registry,
+                        &self.shared.content.route_policy,
+                    ) {
+                        let scene = crate::note_surface::note_scene(&doc, *cw, band_px, &[]);
+                        // A light page so the note's default (dark) text reads; a themed
+                        // note sheet (light/dark + the illume syntax palette) replaces this
+                        // placeholder once the highlight bridge feeds note_view. (Slice B.)
+                        let note_bg = wgpu::Color { r: 0.96, g: 0.96, b: 0.95, a: 1.0 };
+                        let (tex, view) = core.rasterize_scaled(
+                            &scene,
+                            *cw,
+                            band_px,
+                            ColorLoad::Clear(note_bg),
+                            dpr,
+                        );
+                        self.view.tile_textures.insert(
+                            *member,
+                            crate::CachedTile { version, size: (*cw, band_px), tex, view },
+                        );
+                        self.view.tile_bands.insert(*member, 0.0);
+                    }
+                }
+            } else if self.shared.content.constellation.scene(*member).is_some() {
                 // HTML lane. Ask the actor for the band centred on the scroll — a
                 // culled re-emit, so only the band's ops are encoded (the whole dense
                 // page overflows vello). Keep the band near 2x the visible window so op

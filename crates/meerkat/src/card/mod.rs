@@ -444,6 +444,22 @@ fn dispatch_document(
     engine.render(&input).ok()
 }
 
+/// The [`EngineDocument`] a document-family node renders to: route the Ready content
+/// to its engine and dispatch. `None` for non-Ready / non-document content. The serval
+/// note-tile lane uses this to get the blocks for `note_view`. (Djot reframe slice B.)
+pub(crate) fn engine_document_for(
+    url: &str,
+    state: Option<&ContentState>,
+    registry: &EngineRegistry,
+    policy: &EngineRoutePolicy,
+) -> Option<EngineDocument> {
+    let ContentState::Ready(fetched) = state? else {
+        return None;
+    };
+    let id = route_document_engine(url, fetched.content_type.as_deref(), registry, policy);
+    dispatch_document(url, fetched, &id, registry)
+}
+
 /// Parse `body` as a full HTML document and render it through the shared content
 /// core ([`crate::serval_render::scene_from_layout_dom`]) — the same cascade → image-decode
 /// → layout → emit pipeline the static viewer uses. A full-document parse (not a
