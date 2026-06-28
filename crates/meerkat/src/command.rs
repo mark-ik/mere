@@ -444,7 +444,7 @@ pub fn context_action_scope(action: crate::ContextAction) -> MenuScope {
         OpenSplits | AddTag | IsolateSelection | ToggleSizeByDegree | ToggleSizeByImportance => {
             MenuScope::Selection
         }
-        Stack | Relate | RelateAs(_) => MenuScope::MultiNode,
+        Stack | Relate | RelateAs(_) | CrystallizeSelection => MenuScope::MultiNode,
         _ => MenuScope::Always,
     }
 }
@@ -492,6 +492,7 @@ pub const PALETTE_CONTEXT_ACTIONS: &[(crate::ContextAction, &str, &str)] = {
         (ToggleSizeByDegree, "size_by_degree", "Toggle size by degree"),
         (ToggleSizeByImportance, "size_by_importance", "Toggle size by importance"),
         (IsolateSelection, "isolate", "Isolate selection"),
+        (CrystallizeSelection, "crystallize", "Crystallize selection as graphlet"),
         (OpenComponentGraphlet, "open_component", "Open component as graphlet"),
         (OpenNeighborhoodGraphlet, "open_neighborhood", "Open neighborhood as graphlet"),
         (OpenLinkWebGraphlet, "open_link_web", "Open link web as graphlet"),
@@ -512,6 +513,7 @@ pub const DEFAULT_MENU_ACTIONS: &[&str] = &[
     "open_node_facets", // single — Node settings
     "open_stack",       // multi — Open in a stack
     "relate",           // multi — pairwise
+    "crystallize",      // multi — Crystallize selection as graphlet
     "resize_node",      // single — Resize (object card)
     "add_tag",          // selection
     "size_by_degree",   // selection — scene toggle

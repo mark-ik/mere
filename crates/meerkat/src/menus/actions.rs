@@ -16,7 +16,6 @@ impl WindowCtx<'_> {
         }
     }
 
-
     /// The layout-strategy rows for the focused orrery pane: "Force-directed" (the
     /// gyre default) plus each wired cartography strategy ([`platen::ORRERY_LAYOUT_STRATEGIES`]),
     /// with the pane's current choice ✓-marked. A pane-level choice, so it rides the
@@ -46,19 +45,8 @@ impl WindowCtx<'_> {
     /// The hand-reachable semantic relation kinds the two-node relate picker offers, each
     /// paired with its menu label. Mirrors the curated set `relation_kind_from_str` accepts by
     /// word (the `relate("cites")` vocabulary); the menu asserts the kind directly. (Audit A3.)
-    const RELATE_PICKER_KINDS: &'static [(SemanticSubKind, &'static str)] = &[
-        (SemanticSubKind::Cites, "Cites"),
-        (SemanticSubKind::Quotes, "Quotes"),
-        (SemanticSubKind::Summarizes, "Summarizes"),
-        (SemanticSubKind::Elaborates, "Elaborates"),
-        (SemanticSubKind::ExampleOf, "Example of"),
-        (SemanticSubKind::Supports, "Supports"),
-        (SemanticSubKind::Contradicts, "Contradicts"),
-        (SemanticSubKind::Questions, "Questions"),
-        (SemanticSubKind::SameEntityAs, "Same entity as"),
-        (SemanticSubKind::DuplicateOf, "Duplicate of"),
-        (SemanticSubKind::Hyperlink, "Hyperlink"),
-    ];
+    const RELATE_PICKER_KINDS: &'static [(SemanticSubKind, &'static str)] =
+        crate::roster::RELATE_PICKER_KINDS;
 
     /// The relation-kind rows for a two-node selection: one "Relate as <kind>" row per curated
     /// semantic relation, each asserting that kind on the pair. Gives the edge vocabulary a click
@@ -88,7 +76,8 @@ impl WindowCtx<'_> {
     /// per pane. Shared by the empty-canvas layout picker, the radial toggle, and the
     /// `pelt/orrery` settings page. (Settings lane P2b.)
     pub(crate) fn set_orrery_layout(&mut self, id: &str) {
-        self.orrery_mut().set_layout_strategy((!id.is_empty()).then(|| id.to_string()));
+        self.orrery_mut()
+            .set_layout_strategy((!id.is_empty()).then(|| id.to_string()));
         self.save_session();
         self.view.request_redraw();
     }
@@ -131,7 +120,9 @@ impl WindowCtx<'_> {
     /// not a tile (a card in Cartography, no tab context), it promotes to a focused new
     /// tile in the workbench. (Browser link flow.)
     pub(crate) fn open_link_in_new_tab(&mut self, origin: GraphMemberId, url: String) {
-        let new_member = self.orrery_mut().open_member_as_new_node(Some(origin), &url);
+        let new_member = self
+            .orrery_mut()
+            .open_member_as_new_node(Some(origin), &url);
         if self.view.workbench.open_in_slot_of(new_member, origin) {
             // Stacked into the source's slot (which activates it); re-activate the
             // source so the new tab sits in the background.
@@ -175,7 +166,8 @@ impl WindowCtx<'_> {
             // can't be right-clicked, so this row only ever hides. (Hide-shellbar.)
             ContextItem::new("Hide shellbar", ContextAction::ShellbarToggleVisibility),
         ];
-        self.view.chrome_update(move |c| c.open_context_menu(x, y, items));
+        self.view
+            .chrome_update(move |c| c.open_context_menu(x, y, items));
         self.view.request_redraw();
     }
 
@@ -193,7 +185,8 @@ impl WindowCtx<'_> {
         self.view.chrome_update(|c| c.pending_palette_action = None);
         self.view.context_set = self.selection_working_set();
         self.view.context_origin = None;
-        self.view.chrome_update(move |c| c.pending_context = Some(action));
+        self.view
+            .chrome_update(move |c| c.pending_context = Some(action));
     }
 
     pub(crate) fn drain_pending_context(&mut self) {
@@ -250,7 +243,7 @@ impl WindowCtx<'_> {
         if let ContextAction::ShellbarMove(edge) = action {
             self.shared.presentation.shellbar_edge = edge;
             self.view.centered = false; // orrery band changed; recenter once
-            self.view.toolbar_h = 0;   // re-measure (band height may change if Top/Bottom)
+            self.view.toolbar_h = 0; // re-measure (band height may change if Top/Bottom)
             self.persist_settings();
             self.view.request_redraw();
             return;
@@ -305,6 +298,16 @@ impl WindowCtx<'_> {
             self.view.request_redraw();
             return;
         }
+        // Crystallize the multi-selection into a Session graphlet tagged with its dominant shape,
+        // then scope the orrery to it. Shell-level (needs `&mut graphlets`), so it queues a
+        // ShellCommand. (Swatch primitive — P3b crystallize.)
+        if let ContextAction::CrystallizeSelection = action {
+            self.commands
+                .push(crate::ShellCommand::CrystallizeSelection {
+                    from: self.view.focused_graph,
+                });
+            return;
+        }
         // Open the focused node as a persistent Linked graphlet in its own scoped window —
         // the manual Linked-graphlet consumers (component / neighborhood / link web). Each
         // maps to a (kind, selectors, chip) edge-projection; Shell-level (mint + open a
@@ -354,7 +357,10 @@ impl WindowCtx<'_> {
         // Relate the two selected nodes — no tile / member-set logic, like the
         // shellbar move above.
         if let ContextAction::Relate = action {
-            if self.orrery_mut().assert_selected_relation(SemanticSubKind::UserGrouped) {
+            if self
+                .orrery_mut()
+                .assert_selected_relation(SemanticSubKind::UserGrouped)
+            {
                 self.save_session();
             }
             self.view.request_redraw();
@@ -438,7 +444,10 @@ impl WindowCtx<'_> {
         // `retain` reaps any now-unused scrying producer. (engine-picker Phase 3.)
         if let ContextAction::PinEngine(id) = action {
             for member in std::mem::take(&mut self.view.context_set) {
-                self.shared.content.engine_pins.insert(member, id.to_string());
+                self.shared
+                    .content
+                    .engine_pins
+                    .insert(member, id.to_string());
             }
             self.view.request_redraw();
             return;
@@ -523,6 +532,7 @@ impl WindowCtx<'_> {
             | ContextAction::ToggleSizeByImportance
             | ContextAction::ResizeNode
             | ContextAction::IsolateSelection
+            | ContextAction::CrystallizeSelection
             | ContextAction::OpenComponentGraphlet
             | ContextAction::OpenNeighborhoodGraphlet
             | ContextAction::OpenLinkWebGraphlet

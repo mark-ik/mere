@@ -55,7 +55,13 @@ pub(crate) fn shell_view(s: &ShellState) -> ShellView {
             ) as ShellView
         })
     };
-    let list_panes = (list_pane(0), list_pane(1), list_pane(2), list_pane(3), list_pane(4));
+    let list_panes = (
+        list_pane(0),
+        list_pane(1),
+        list_pane(2),
+        list_pane(3),
+        list_pane(4),
+    );
     // The settings tiles (variable count), folded in as one lensed subtree that emits one
     // absolutely positioned two-column pane (index spine + page body) per open `settings://`
     // tile. Absent when none are open, so the document is identical before any settings tile.
@@ -63,9 +69,11 @@ pub(crate) fn shell_view(s: &ShellState) -> ShellView {
     let settings = (!s.settings.panes.is_empty()).then(|| {
         let make: fn(&mut SettingsPanesState) -> SettingsPanesView =
             |s: &mut SettingsPanesState| settings_panes_view(s);
-        let to: fn(&mut ShellState) -> &mut SettingsPanesState = |s: &mut ShellState| &mut s.settings;
-        Box::new(el::<_, ShellState, ()>("div", lens(make, to)).attr("class", "settings-panes-host"))
-            as ShellView
+        let to: fn(&mut ShellState) -> &mut SettingsPanesState =
+            |s: &mut ShellState| &mut s.settings;
+        Box::new(
+            el::<_, ShellState, ()>("div", lens(make, to)).attr("class", "settings-panes-host"),
+        ) as ShellView
     });
     Box::new(
         el::<_, ShellState, ()>(
@@ -79,7 +87,13 @@ pub(crate) fn shell_view(s: &ShellState) -> ShellView {
             // unchanged by the reorder; only the z-order is. The settings panes sit with the
             // other folded content (before the chrome), painting over the workbench composite
             // at their tile rects while the chrome overlays still win above them.
-            (orrery_element(&s.orrery), roster, list_panes, settings, chrome),
+            (
+                orrery_element(&s.orrery),
+                roster,
+                list_panes,
+                settings,
+                chrome,
+            ),
         )
         .attr("style", "position:relative;width:100%;height:100%"),
     )
@@ -236,7 +250,10 @@ pub(crate) fn orrery_element(render: &OrreryRender) -> ShellView {
     let scene: ShellView = Box::new(
         external_texture::<ShellState, ()>(ORRERY_SCENE_KEY, pw as u32, ph as u32)
             .attr("class", "orrery-scene")
-            .attr("style", format!("position:absolute;left:0;top:0;width:{pw}px;height:{ph}px")),
+            .attr(
+                "style",
+                format!("position:absolute;left:0;top:0;width:{pw}px;height:{ph}px"),
+            ),
     );
     let mut children: Vec<ShellView> = vec![scene];
     children.extend(card_views);
@@ -285,21 +302,21 @@ pub(crate) fn focus_card_view(fc: &FocusCard) -> ShellView {
             // DOM after the node cards: document order paints it over them. Only the cached
             // image renders — there is no placeholder while it builds. (Layering fix.)
             let img: ShellView = Box::new(
-                el::<_, ShellState, ()>("img", ()).attr("src", data_uri.clone()).attr(
-                    "style",
-                    "width:100%;height:100%;border-radius:8px;display:block",
-                ),
+                el::<_, ShellState, ()>("img", ())
+                    .attr("src", data_uri.clone())
+                    .attr(
+                        "style",
+                        "width:100%;height:100%;border-radius:8px;display:block",
+                    ),
             );
             // `overlay_rect` owns the geometry (and the hit-test class); the card's visuals
             // (clip, radius, shadow) ride the inner div, which fills the positioned box —
             // adding a `style` to the overlay element would clobber its geometry. (Overlay P2.)
-            let card: ShellView = Box::new(
-                el::<_, ShellState, ()>("div", vec![img]).attr(
-                    "style",
-                    "width:100%;height:100%;box-sizing:border-box;overflow:hidden;\
+            let card: ShellView = Box::new(el::<_, ShellState, ()>("div", vec![img]).attr(
+                "style",
+                "width:100%;height:100%;box-sizing:border-box;overflow:hidden;\
                      border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,0.55)",
-                ),
-            );
+            ));
             Box::new(
                 overlay_rect::<_, ShellState, ()>(x0, y0, w, h, vec![card])
                     .attr("class", "snapshot-card"),
@@ -330,17 +347,24 @@ pub(crate) fn focus_card_view(fc: &FocusCard) -> ShellView {
                 children.push(caption);
                 children.push(control);
             }
-            let inner: ShellView = Box::new(
-                el::<_, ShellState, ()>("div", children).attr(
-                    "style",
-                    "width:100%;height:100%;box-sizing:border-box;padding:9px 12px;\
+            let inner: ShellView = Box::new(el::<_, ShellState, ()>("div", children).attr(
+                "style",
+                "width:100%;height:100%;box-sizing:border-box;padding:9px 12px;\
                      border-radius:8px;background:rgba(28,32,40,0.96);\
                      box-shadow:0 6px 24px rgba(0,0,0,0.55)",
-                ),
-            );
+            ));
             Box::new(
                 overlay_rect::<_, ShellState, ()>(x0, y0, w, h, vec![inner])
                     .attr("class", "object-card"),
+            )
+        }
+        FocusCardKind::Connections { spec } => {
+            // The connections swatch is host-generic DOM (the P1 lift), mounted directly over
+            // `ShellState`: no per-state callbacks, the hit-test routes on `data-element` (P4).
+            let inner: ShellView = crate::swatch::connections_swatch_view::<ShellState>(spec);
+            Box::new(
+                overlay_rect::<_, ShellState, ()>(x0, y0, w, h, vec![inner])
+                    .attr("class", "connections-card"),
             )
         }
     }
@@ -364,11 +388,15 @@ pub(crate) fn object_card_widget_row(widget: &CardWidget) -> (ShellView, ShellVi
                        cursor:pointer;user-select:none";
             let minus: ShellView = Box::new(on_click(
                 el::<_, ShellState, ()>("div", "\u{2212}".to_string()).attr("style", btn),
-                move |s: &mut ShellState, _: PointerClick| s.node_card_keys.push("size:down".to_string()),
+                move |s: &mut ShellState, _: PointerClick| {
+                    s.node_card_keys.push("size:down".to_string())
+                },
             ));
             let plus: ShellView = Box::new(on_click(
                 el::<_, ShellState, ()>("div", "+".to_string()).attr("style", btn),
-                move |s: &mut ShellState, _: PointerClick| s.node_card_keys.push("size:up".to_string()),
+                move |s: &mut ShellState, _: PointerClick| {
+                    s.node_card_keys.push("size:up".to_string())
+                },
             ));
             let notches: ShellView = Box::new(
                 el::<_, ShellState, ()>("span", dots)
@@ -388,22 +416,30 @@ pub(crate) fn object_card_widget_row(widget: &CardWidget) -> (ShellView, ShellVi
                     .attr("style", "color:#8b94a6;font-size:11px;margin-bottom:5px"),
             );
             let seg = |active: bool| -> String {
-                let (bg, fg) = if active { ("#3a4150", "#ffffff") } else { ("#2a2f3a", "#9aa4b8") };
+                let (bg, fg) = if active {
+                    ("#3a4150", "#ffffff")
+                } else {
+                    ("#2a2f3a", "#9aa4b8")
+                };
                 format!(
                     "flex:1;height:30px;display:flex;align-items:center;justify-content:center;\
                      background:{bg};color:{fg};font-size:13px;cursor:pointer;user-select:none"
                 )
             };
             let favicon_btn: ShellView = Box::new(on_click(
-                el::<_, ShellState, ()>("div", "Favicon".to_string())
-                    .attr("style", format!("{};border-radius:6px 0 0 6px", seg(*is_favicon))),
+                el::<_, ShellState, ()>("div", "Favicon".to_string()).attr(
+                    "style",
+                    format!("{};border-radius:6px 0 0 6px", seg(*is_favicon)),
+                ),
                 move |s: &mut ShellState, _: PointerClick| {
                     s.node_card_keys.push("face:favicon".to_string())
                 },
             ));
             let shape_btn: ShellView = Box::new(on_click(
-                el::<_, ShellState, ()>("div", "Plain".to_string())
-                    .attr("style", format!("{};border-radius:0 6px 6px 0", seg(!*is_favicon))),
+                el::<_, ShellState, ()>("div", "Plain".to_string()).attr(
+                    "style",
+                    format!("{};border-radius:0 6px 6px 0", seg(!*is_favicon)),
+                ),
                 move |s: &mut ShellState, _: PointerClick| {
                     s.node_card_keys.push("face:bare".to_string())
                 },
@@ -426,7 +462,11 @@ pub(crate) fn shell_runner(dom: Rc<RefCell<ScriptedDom>>, chrome: Chrome) -> She
         shell_view as ShellLogic,
         ShellState {
             chrome,
-            orrery: OrreryRender { rect: [0.0; 4], cards: Vec::new(), focus_card: None },
+            orrery: OrreryRender {
+                rect: [0.0; 4],
+                cards: Vec::new(),
+                focus_card: None,
+            },
             roster: RosterState::default(),
             roster_rect: None,
             panes: std::array::from_fn(|_| ListPaneState::default()),
@@ -437,4 +477,3 @@ pub(crate) fn shell_runner(dom: Rc<RefCell<ScriptedDom>>, chrome: Chrome) -> She
         },
     )
 }
-

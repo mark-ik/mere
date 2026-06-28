@@ -39,7 +39,8 @@ impl WindowView {
     /// dispatch to its member. (Object card — P1.)
     pub(crate) fn take_node_card_keys(&mut self) -> Vec<String> {
         let mut out = Vec::new();
-        self.runner.update(|s| out = std::mem::take(&mut s.node_card_keys));
+        self.runner
+            .update(|s| out = std::mem::take(&mut s.node_card_keys));
         out
     }
 
@@ -56,15 +57,29 @@ impl WindowView {
     /// shell DOM, so it lays out, hit-tests, and projects a11y with the chrome. (Phase 1.)
     pub(crate) fn set_roster(
         &mut self,
-        rows: Vec<crate::roster::RosterRow>,
-        field_rows: Vec<crate::roster::FieldRow>,
+        snapshot: crate::roster::RosterSnapshot,
         rect: Option<[f32; 4]>,
     ) {
         self.runner.update(|s| {
-            s.roster.rows = rows;
-            s.roster.field_rows = field_rows;
+            s.roster.node_rows = snapshot.node_rows;
+            s.roster.link_rows = snapshot.link_rows;
+            s.roster.graphlet_rows = snapshot.graphlet_rows;
+            s.roster.field_rows = snapshot.field_rows;
+            s.roster.detail = snapshot.detail;
             s.roster_rect = rect;
         });
+    }
+
+    pub(crate) fn roster_subject(&self) -> Option<crate::roster::RosterSubject> {
+        self.runner.state().roster.selected_subject.clone()
+    }
+
+    pub(crate) fn set_roster_subject(&mut self, subject: Option<crate::roster::RosterSubject>) {
+        self.runner.update(|s| s.roster.selected_subject = subject);
+    }
+
+    pub(crate) fn set_roster_tab(&mut self, tab: crate::roster::RosterTab) {
+        self.runner.update(|s| s.roster.active_tab = tab);
     }
 
     /// Whether the roster subtree is currently in the shell document (the pane is open),
@@ -77,7 +92,8 @@ impl WindowView {
     /// shell runner's dispatch, for the host to apply. (Phase 1.)
     pub(crate) fn take_roster_intents(&mut self) -> Vec<crate::roster_view::RosterIntent> {
         let mut out = Vec::new();
-        self.runner.update(|s| out = std::mem::take(&mut s.roster.pending));
+        self.runner
+            .update(|s| out = std::mem::take(&mut s.roster.pending));
         out
     }
 
@@ -113,7 +129,8 @@ impl WindowView {
     pub(crate) fn take_list_pane_activations(&mut self, which: ShellListPane) -> Vec<String> {
         let i = which.idx();
         let mut out = Vec::new();
-        self.runner.update(|s| out = std::mem::take(&mut s.panes[i].pending));
+        self.runner
+            .update(|s| out = std::mem::take(&mut s.panes[i].pending));
         out
     }
 
@@ -137,7 +154,8 @@ impl WindowView {
     /// host to apply like an apparatus activation (theme / engine / physics). (Settings lane P1.)
     pub(crate) fn take_settings_pane_keys(&mut self) -> Vec<(GraphMemberId, String)> {
         let mut out = Vec::new();
-        self.runner.update(|s| out = std::mem::take(&mut s.settings.pending_keys));
+        self.runner
+            .update(|s| out = std::mem::take(&mut s.settings.pending_keys));
         out
     }
 
@@ -145,7 +163,8 @@ impl WindowView {
     /// to retarget that settings tile's node to the chosen page. (Settings lane P1.)
     pub(crate) fn take_settings_pane_nav(&mut self) -> Vec<(GraphMemberId, String)> {
         let mut out = Vec::new();
-        self.runner.update(|s| out = std::mem::take(&mut s.settings.pending_nav));
+        self.runner
+            .update(|s| out = std::mem::take(&mut s.settings.pending_nav));
         out
     }
 

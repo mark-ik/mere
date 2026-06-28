@@ -35,11 +35,7 @@ impl crate::Shell {
     /// [`create_session`](Self::create_session) this does **not** switch the active
     /// session — the donor window is untouched; the fork is a new window. Returns the new
     /// graph id, or `None` if the donor graph or seed is already gone.
-    pub(crate) fn fork_session_from(
-        &mut self,
-        node: uuid::Uuid,
-        from: GraphId,
-    ) -> Option<GraphId> {
+    pub(crate) fn fork_session_from(&mut self, node: uuid::Uuid, from: GraphId) -> Option<GraphId> {
         // Commit the donor's live physics layout into its graph first, so the fork
         // preserves it (the graph's own node positions are only the spawn seed; the live
         // layout lives in the orrery's physics view — without this the fork opens with
@@ -162,6 +158,50 @@ impl crate::Shell {
         Some(id)
     }
 
+    /// Crystallize graph `from`'s current multi-selection into a **Session** graphlet (P3b): classify
+    /// the selection's induced subgraph, freeze the selected nodes as a graphlet tagged with the
+    /// dominant shape kind, persist, and scope that orrery to the frozen set in place (reconciliation
+    /// ruling 1 — scope the one Navigator, no new window). Returns `(kind, count)` for a note, or
+    /// `None` when fewer than two nodes are selected. (Swatch primitive — P3b crystallize.)
+    pub(crate) fn crystallize_selection(
+        &mut self,
+        from: GraphId,
+    ) -> Option<(forme::GraphletKind, usize)> {
+        let session_dir = self.graph_session_dir(from)?;
+        // Selection + dominant shape (a read-only borrow, dropped before the mutations below).
+        let (members, kind) = {
+            let orrery = self.orreries.get(&from)?;
+            let members = orrery.selected_members();
+            if members.len() < 2 {
+                return None;
+            }
+            let kind = crate::graphlet_classifier::classify_selection(orrery.graph(), &members)
+                .first()?
+                .kind
+                .clone();
+            (members, kind)
+        };
+        // Freeze the selection as a Session graphlet tagged with the kind, persist.
+        let graphlets = self
+            .graphlets
+            .entry(from)
+            .or_insert_with(|| crate::graphlets::SessionGraphlets::load(&session_dir));
+        let id = graphlets.record_session(kind.clone(), members.clone());
+        if let Err(err) = graphlets.save(&session_dir) {
+            tracing::warn!(%err, dir = ?session_dir, "failed to persist the crystallized graphlet");
+        }
+        // Scope the orrery to the frozen set, in place (ruling 1). The next frame shows the crop.
+        if let Some(orrery) = self.orreries.get_mut(&from) {
+            orrery.scope_to_members(members.iter().copied());
+        }
+        self.shared.observability.record_probe(
+            "graphlet",
+            "crystallize",
+            format!("kind={kind:?} count={} graphlet={id}", members.len()),
+        );
+        Some((kind, members.len()))
+    }
+
     /// Reconcile graph `graph`'s Linked graphlets against the current graph and persist any
     /// that drifted (Phase 3 slice 2+ — data-level drift). Queued by `save_session` after a
     /// mutation. A no-op when nothing drifted (the diff returns empty). (Graphlet wiring.)
@@ -180,6 +220,55 @@ impl crate::Shell {
                 }
             }
         }
+    }
+
+    pub(crate) fn reconcile_linked_graphlet(
+        &mut self,
+        graph: GraphId,
+        graphlet: forme::GraphletId,
+    ) {
+        let Some(session_dir) = self.graph_session_dir(graph) else {
+            return;
+        };
+        let src = match self.orreries.get(&graph) {
+            Some(o) => o.graph().clone(),
+            None => return,
+        };
+        if let Some(idx) = self.graphlets.get_mut(&graph)
+            && idx.reconcile(&src, graphlet).is_some()
+            && let Err(err) = idx.save(&session_dir)
+        {
+            tracing::warn!(%err, dir = ?session_dir, "failed to persist reconciled graphlet");
+        }
+    }
+
+    pub(crate) fn keep_graphlet_as_session(&mut self, graph: GraphId, graphlet: forme::GraphletId) {
+        let Some(session_dir) = self.graph_session_dir(graph) else {
+            return;
+        };
+        if let Some(idx) = self.graphlets.get_mut(&graph)
+            && idx.keep_as_session(graphlet)
+            && let Err(err) = idx.save(&session_dir)
+        {
+            tracing::warn!(%err, dir = ?session_dir, "failed to persist unlinked graphlet");
+        }
+    }
+
+    pub(crate) fn branch_existing_graphlet(
+        &mut self,
+        graph: GraphId,
+        graphlet: forme::GraphletId,
+    ) -> Option<forme::GraphletId> {
+        let session_dir = self.graph_session_dir(graph)?;
+        let idx = self
+            .graphlets
+            .entry(graph)
+            .or_insert_with(|| crate::graphlets::SessionGraphlets::load(&session_dir));
+        let id = idx.branch_from_graphlet(graphlet)?;
+        if let Err(err) = idx.save(&session_dir) {
+            tracing::warn!(%err, dir = ?session_dir, "failed to persist branched graphlet");
+        }
+        Some(id)
     }
 
     /// Grow a branch graphlet's roster (Phase 2 slice 2): the branch window navigated to
@@ -248,13 +337,20 @@ impl crate::Shell {
     /// Switch to the next (`forward`) or previous session in id order, wrapping.
     /// No-op with fewer than two sessions. (MG2.)
     pub(crate) fn cycle_session(&mut self, forward: bool) {
-        let mut ids: Vec<SessionId> =
-            self.shared.session.manifests.iter().map(|(id, _)| id).collect();
+        let mut ids: Vec<SessionId> = self
+            .shared
+            .session
+            .manifests
+            .iter()
+            .map(|(id, _)| id)
+            .collect();
         if ids.len() < 2 {
             return;
         }
         ids.sort_by_key(|id| *id.as_uuid());
-        let Some(pos) = ids.iter().position(|id| *id == self.shared.session.active_session_id)
+        let Some(pos) = ids
+            .iter()
+            .position(|id| *id == self.shared.session.active_session_id)
         else {
             return;
         };
@@ -313,5 +409,4 @@ impl crate::Shell {
         self.ctx().refresh_session_labels();
         self.focused_view_mut().request_redraw();
     }
-
 }

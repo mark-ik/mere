@@ -223,6 +223,9 @@ impl WindowCtx<'_> {
             ResizeNode => ContextItem::new("Resize", ResizeNode),
             OpenNodeFacets => ContextItem::new("Node settings\u{2026}", OpenNodeFacets),
             IsolateSelection => ContextItem::new("Isolate", IsolateSelection),
+            CrystallizeSelection => {
+                ContextItem::new("Crystallize selection", CrystallizeSelection)
+            }
             OpenComponentGraphlet => ContextItem::new("Open component", OpenComponentGraphlet),
             OpenNeighborhoodGraphlet => {
                 ContextItem::new("Open neighborhood", OpenNeighborhoodGraphlet)

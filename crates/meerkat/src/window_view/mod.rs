@@ -35,10 +35,12 @@ use xilem_serval::{
 };
 
 use super::{CachedTile, ContentPane, ResizeDrag};
-use crate::list_pane::{list_pane_view, ListPaneState, ListView, PaneItem};
+use crate::list_pane::{ListPaneState, ListView, PaneItem, list_pane_view};
 use crate::pane_session::PaneSession;
-use crate::roster_view::{roster_view, RosterState, RosterView};
-use crate::settings_pane_view::{settings_panes_view, SettingsPane, SettingsPanesState, SettingsPanesView};
+use crate::roster_view::{RosterState, RosterView, roster_view};
+use crate::settings_pane_view::{
+    SettingsPane, SettingsPanesState, SettingsPanesView, settings_panes_view,
+};
 
 /// What a window *is*, which selects its chrome template (and, from MW6, its camera
 /// ownership). The **primary** owns the orrery + the shellbar/switcher chrome and
@@ -172,7 +174,6 @@ pub(crate) struct WindowView {
     pub(crate) pelt_theme: Option<register_theme::chrome::ChromeTheme>,
     // The roster is folded into the shell runner now (ShellState.roster); no separate pane.
     // (Unified document host Phase 1.)
-
     /// Each switcher row's on-screen rect this frame: a click switches to it.
     pub(crate) session_row_rects: Vec<(SessionId, [f32; 4])>,
     /// Each switcher row's close (×) hit rect this frame: a click trashes it.
@@ -491,6 +492,12 @@ pub(crate) enum FocusCardKind {
     /// ordered list of setting widgets for the selected object's type. Each widget's controls
     /// queue a `node_card_keys` activation the host drains. (Object card — P1.)
     ObjectCard { widgets: Vec<CardWidget> },
+    /// The connections swatch: a multi-node selection's nodes plus their inter-edges, laid out as
+    /// DOM in the card (`swatch::connections_swatch_view`). Summoned in place of the single-node
+    /// preview when `selected_members().len() > 1`. (Swatch primitive — P2, scope=Selection.)
+    Connections {
+        spec: crate::swatch::ConnectionsSpec,
+    },
 }
 
 /// One setting widget on the object card: a control bound to one per-object setting. The
@@ -559,8 +566,13 @@ impl ShellListPane {
 
 /// The positioned-wrapper CSS class for each [`ShellListPane`], by array index — the
 /// outer `position:absolute` div that holds the lensed `list_pane_view`. (Phase 1.)
-const PANE_WRAPPER_CLASS: [&str; 5] =
-    ["apparatus-pane", "steward-pane", "inspector-pane", "trail-pane", "alembic-pane"];
+const PANE_WRAPPER_CLASS: [&str; 5] = [
+    "apparatus-pane",
+    "steward-pane",
+    "inspector-pane",
+    "trail-pane",
+    "alembic-pane",
+];
 
 /// Constant-index field accessors into [`ShellState::panes`], one per list pane, so each
 /// lensed subtree targets its own slot. Non-capturing, so they coerce to `fn`. (Phase 1.)

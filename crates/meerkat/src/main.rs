@@ -45,40 +45,38 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
 
+use crate::serval_render::fragments_from_scripted_dom;
 use accesskit::NodeId as AccessNodeId;
 use eidetic_fjall::FjallStore;
 use forme::GraphMemberId;
-use frame::{
-    FrameId, FrameLayout, GraphId, PaneContent, PaneId, PaneNode, SessionId,
-};
+use frame::{FrameId, FrameLayout, GraphId, PaneContent, PaneId, PaneNode, SessionId};
 use inker::EngineRegistry;
 use layout_dom_api::LayoutDom;
 use meerkat::{Chrome, ChromeLogic, chrome_view};
 use orrery::{CameraView, Orrery};
-use crate::serval_render::fragments_from_scripted_dom;
-use serval_layout::FragmentPlane;
 use platen::Workbench;
 use register_diagnostics::{DiagnosticEvent, install_global_sender};
 use register_theme::chrome::{ChromeTheme, Color32};
 use register_theme::theme::ThemeRegistry;
+use serval_layout::FragmentPlane;
 use serval_scripted_dom::{NodeId, ScriptedDom};
 use serval_winit_host::RenderCore;
 use session_runtime::{
-    ManifestStore, frame_layout_store, manifest::GraphSessionManifest,
-    session_graph_store, settings_store, view_intent_store,
+    ManifestStore, frame_layout_store, manifest::GraphSessionManifest, session_graph_store,
+    settings_store, view_intent_store,
 };
 use tracing_subscriber::prelude::*;
 use winit::window::{ResizeDirection, WindowId};
 
+mod browse_capture;
 mod card;
-mod note_surface;
-mod doc_style;
 mod comms_host;
 mod constellation;
-mod browse_capture;
 mod content;
 mod crawl;
+mod doc_style;
 mod fetch;
+mod note_surface;
 mod resources;
 mod sync;
 
@@ -96,34 +94,35 @@ mod frame_a11y;
 mod frame_a11y_panes;
 mod frame_ops;
 mod frame_view;
-mod viewport;
 mod gloss;
+mod graphlet_classifier;
 mod graphlets;
 mod ime;
 mod input;
+mod inspector;
+mod list_pane;
 mod menus;
 mod nav_sync;
 mod node_ops;
-mod inspector;
-mod list_pane;
 mod observability;
 mod pane_data;
 mod pane_geom;
 mod pane_session;
 mod render;
 mod roster;
+mod roster_data;
 mod roster_view;
+mod roster_view_parts;
 mod scene_settings;
 mod settings_lane;
 mod settings_node;
 mod settings_pane_view;
 mod sprite_import;
 mod swatch;
+mod viewport;
 // `ViewPane` is the shared base for the `RosterPane` / `ListPane` test harnesses only;
 // every product pane now folds into the shell document, so the module is test-gated.
 // (Phase 1, step 2.)
-#[cfg(test)]
-mod view_pane;
 mod scrying_host;
 mod serval_a11y;
 mod serval_render;
@@ -131,17 +130,18 @@ mod session_ops;
 mod shellbar;
 mod steward;
 mod tags;
+mod text;
 mod theme_edit;
 mod theme_store;
-mod text;
 mod titlebar;
 mod tracing_layer;
-mod window_view;
 mod utility_panes;
+#[cfg(test)]
+mod view_pane;
+mod window_view;
 
 use constellation::Constellation;
 use observability::HostObservability;
-
 
 mod theme_sheets;
 pub(crate) use theme_sheets::*;
@@ -157,7 +157,6 @@ const DEFAULT_PANE: u64 = 0;
 /// longer a projection toggle inside one leaf). Summoned sibling panes (roster,
 /// workbench, …) get fresh ids from `next_pane_id`. (Frame tree, F1 / W.)
 const GRAPH_PANE: PaneId = PaneId(0);
-
 
 mod app_state;
 pub(crate) use app_state::*;
@@ -360,12 +359,37 @@ enum ShellCommand {
         selectors: Vec<String>,
         chip: &'static str,
     },
+    /// Crystallize graph `from`'s current multi-selection into a Session graphlet tagged with its
+    /// dominant shape, then scope that orrery to it (ruling 1: scope the one Navigator, no new
+    /// window). Shell-level (needs `&mut graphlets` + the orrery). Queued by the context menu.
+    /// (Swatch primitive — P3b crystallize.)
+    CrystallizeSelection { from: GraphId },
     /// Reconcile graph `graph`'s **Linked** graphlets against the (just-changed) graph and
     /// persist any that drifted (Phase 3 slice 2+ — data-level drift). Queued by
     /// `save_session` after a graph mutation; runs on `Shell` (needs `&mut graphlets`).
     /// Cheap + idempotent (a no-op when nothing drifted). The scoped windows already track
     /// drift live via `install_scope`'s re-derive; this keeps the persisted roster current.
     ReconcileGraphlets { graph: GraphId },
+    /// Reconcile one Linked graphlet from the Roster Graphlet Card's dry-diff action.
+    ReconcileGraphlet {
+        graph: GraphId,
+        graphlet: forme::GraphletId,
+    },
+    /// Convert a graphlet to an unlinked session grouping, preserving its current roster.
+    KeepGraphletAsSession {
+        graph: GraphId,
+        graphlet: forme::GraphletId,
+    },
+    /// Branch an existing graphlet and open the branch in a scoped window.
+    BranchGraphlet {
+        graph: GraphId,
+        graphlet: forme::GraphletId,
+    },
+    /// Open an existing graphlet in a scoped window without minting a new graphlet.
+    OpenExistingGraphlet {
+        graph: GraphId,
+        graphlet: forme::GraphletId,
+    },
     /// Close window `id` and drop its view. The primary is exempt — its close saves
     /// the session and exits the app; a secondary just releases its surface. (MW3.)
     #[allow(dead_code)] // queued by the close fork once leaf windows can self-close (MW4)
@@ -436,7 +460,6 @@ struct KernelInbox {
     diagnostics: Receiver<DiagnosticEvent>,
 }
 
-
 mod shell_access;
 mod shell_new;
 /// The shared per-user data root (`<data_dir>/mere`). Settings, the content
@@ -458,7 +481,10 @@ fn default_mere_root() -> PathBuf {
 /// The registry default context menu as owned strings (the seed when no persona curation
 /// exists, and the target of "Reset to default"). (Command registry P4.)
 fn default_menu_actions() -> Vec<String> {
-    meerkat::command::DEFAULT_MENU_ACTIONS.iter().map(|s| s.to_string()).collect()
+    meerkat::command::DEFAULT_MENU_ACTIONS
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
 }
 
 /// The default content frame: a single orrery pane filling the band, bound to the
@@ -553,7 +579,6 @@ fn bootstrap_sessions(mere_root: &Path) -> (ManifestStore, SessionId) {
     (manifests, active)
 }
 
-
 #[cfg(test)]
 mod multi_graph_tests;
 
@@ -589,8 +614,9 @@ fn main() {
     // so the ring opts in here rather than forcing the libs up to info. `netrender` is deliberately
     // left at the info floor — its per-frame `frame rendered` debug would flood the ring, so only its
     // faults reach it. The layer's `interesting_target` still scopes all of this to first-party.
-    let ring_filter =
-        tracing_subscriber::EnvFilter::new("info,netfetcher=debug,errand=debug,serval_layout=debug");
+    let ring_filter = tracing_subscriber::EnvFilter::new(
+        "info,netfetcher=debug,errand=debug,serval_layout=debug",
+    );
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer().with_filter(env_filter))
         .with(tracing_layer::ApparatusTracingLayer::new(diagnostics_tx).with_filter(ring_filter))

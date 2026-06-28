@@ -9,7 +9,23 @@ rust-version = "1.92.0"
 description = "Mere's serval-as-host shell (the eventual replacement for the Xilem + Masonry mere-app host): chrome — toolbar / omnibar / command palette / frametree — built as xilem_serval views over the reused graphshell chrome domain, presented by serval. Holds the separate-roots discipline (chrome-root vs content-roots) from commit one."
 
 [features]
+default = ["engine-scry"]
 agent-harness = []
+# Surface-engine compile gates (engine-picker plan: each surface engine has its own
+# feature, "even scry", so a build carries only the engines it wants — `is_available`
+# = present (compiled in) && enabled (active this session)).
+#
+# `engine-scry` is the system-WebView2 compatibility tile (Windows). On by default:
+# it is the working compat view and a light dep, unlike the heavy graft (Servo) / weld
+# (CEF) engines below. Off => the scrying / verso-scry / dpi deps and the windows_pool
+# driver drop out, and ScryingHost degrades to its no-op (off-platform) surface.
+engine-scry = ["dep:scrying", "dep:verso-scry", "dep:dpi"]
+# `engine-graft` (Servo via wgpu-graft) and `engine-weld` (Chromium/CEF via wgpu-weld)
+# are off by default: each pulls a multi-minute native engine build (SpiderMonkey /
+# CEF), so the base build carries neither. Each enables its concrete host pool
+# (GraftHost / WeldHost) and the engine's presence in routing.
+engine-graft = ["dep:servo-wgpu-interop-adapter", "dep:grafting"]
+engine-weld = ["dep:welding"]
 # The serval *scripted* render rung (render ladder phase 2): a content node pinned to
 # `serval.scripted` runs its page JS through `pelt_desktop::ScriptedDocument` on Boa.
 # Off by default so the base build stays the static rung — no JS engine in its

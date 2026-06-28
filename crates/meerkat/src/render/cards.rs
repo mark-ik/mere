@@ -19,7 +19,12 @@ impl crate::WindowCtx<'_> {
         &mut self,
         cards: &[(GraphMemberId, [f32; 4], (u32, u32))],
         unvisited_card: Option<(GraphMemberId, [f32; 4])>,
-        snapshot_card: &Option<(GraphMemberId, String, [f32; 4], Option<(netrender::Scene, u32)>)>,
+        snapshot_card: &Option<(
+            GraphMemberId,
+            String,
+            [f32; 4],
+            Option<(netrender::Scene, u32)>,
+        )>,
         scrying_surfaces: &[(GraphMemberId, [f32; 4])],
     ) {
         // Record each card's on-screen content rect so a wheel over it scrolls the
@@ -106,7 +111,12 @@ impl crate::WindowCtx<'_> {
         workbench_rect: Option<[f32; 4]>,
         orrery_rect: [f32; 4],
     ) -> (
-        Option<(GraphMemberId, String, [f32; 4], Option<(netrender::Scene, u32)>)>,
+        Option<(
+            GraphMemberId,
+            String,
+            [f32; 4],
+            Option<(netrender::Scene, u32)>,
+        )>,
         Option<(GraphMemberId, [f32; 4])>,
     ) {
         let mut snapshot_card: Option<(
@@ -126,20 +136,19 @@ impl crate::WindowCtx<'_> {
         // member is the focused node only when *exactly one* node is selected (and it is
         // not already an open tile — the tile is the view).
         //
-        // TODO(swatch agent): a multi-node selection (`selected_members().len() > 1`)
-        // should summon a *connections swatch* instead — the selected nodes plus the edges
-        // between them, rendered as DOM (swatch.rs generalized from its single-node shape
-        // form to a multi-node sub-graph, edges coloured by relation family). The selection
-        // set is `self.orrery().selected_members()`; see
-        // design_docs/mere_docs/design/2026-06-13_graphlet_derivation_from_selection.md.
+        // A multi-node selection (`selected_members().len() > 1`) summons a *connections swatch*
+        // instead — built in `render/connections.rs` (`compute_connections_card`) and rendered as
+        // DOM by `swatch::connections_swatch_view`, off `compute_focus_card`, not this snapshot
+        // path (which the `len == 1` gate below correctly suppresses for a multi-selection). The
+        // cartography re-layout, the classifier strip, and per-cell hit-test are P2b/P3/P4.
+        // (Swatch primitive — P2 built; see 2026-06-27_swatch_primitive_plan.md.)
         let card_member = self.focused_member().filter(|m| {
             self.orrery().selected_members().len() == 1
                 && (workbench_rect.is_none() || !self.view.workbench.open_members().contains(m))
         });
-        if let (Some(member), Some(url)) = (
-            card_member,
-            self.orrery().focused_url().map(str::to_string),
-        ) {
+        if let (Some(member), Some(url)) =
+            (card_member, self.orrery().focused_url().map(str::to_string))
+        {
             // The orrery's static card next to the focused node (fall back to the
             // fixed top-right rect when the node's screen pos is unknown): a visited
             // node shows its "last visit" snapshot (a short peek at the retained
@@ -239,9 +248,11 @@ impl crate::WindowCtx<'_> {
         // is not re-rasterized every frame (the cost that scaled with tile count).
         // The cache (self.view.tile_textures) keeps the textures alive across frames; evict
         // closed tiles first so theirs free. `composite` is what to draw, in order.
-        self.view.tile_textures
+        self.view
+            .tile_textures
             .retain(|m, _| cards.iter().any(|(cm, _, _)| cm == m));
-        self.view.tile_bands
+        self.view
+            .tile_bands
             .retain(|m, _| cards.iter().any(|(cm, _, _)| cm == m));
         // Rasterize each card as a vertical BAND of its content, not one giant
         // texture: a tall document (a 166 KB gemtext capsule lays out to ~19000 px)
@@ -321,7 +332,12 @@ impl crate::WindowCtx<'_> {
                         // A light page so the note's default (dark) text reads; a themed
                         // note sheet (light/dark + the illume syntax palette) replaces this
                         // placeholder once the highlight bridge feeds note_view. (Slice B.)
-                        let note_bg = wgpu::Color { r: 0.96, g: 0.96, b: 0.95, a: 1.0 };
+                        let note_bg = wgpu::Color {
+                            r: 0.96,
+                            g: 0.96,
+                            b: 0.95,
+                            a: 1.0,
+                        };
                         let (tex, view) = core.rasterize_scaled(
                             &scene,
                             *cw,
@@ -331,7 +347,12 @@ impl crate::WindowCtx<'_> {
                         );
                         self.view.tile_textures.insert(
                             *member,
-                            crate::CachedTile { version, size: (*cw, band_px), tex, view },
+                            crate::CachedTile {
+                                version,
+                                size: (*cw, band_px),
+                                tex,
+                                view,
+                            },
                         );
                         self.view.tile_bands.insert(*member, 0.0);
                     }
@@ -391,11 +412,21 @@ impl crate::WindowCtx<'_> {
                                 m.invert,
                             );
                         }
-                        let (tex, view) =
-                            core.rasterize_scaled(scene, *cw, band_px, ColorLoad::Clear(card_bg), dpr);
+                        let (tex, view) = core.rasterize_scaled(
+                            scene,
+                            *cw,
+                            band_px,
+                            ColorLoad::Clear(card_bg),
+                            dpr,
+                        );
                         self.view.tile_textures.insert(
                             *member,
-                            crate::CachedTile { version, size: (*cw, band_px), tex, view },
+                            crate::CachedTile {
+                                version,
+                                size: (*cw, band_px),
+                                tex,
+                                view,
+                            },
                         );
                         self.view.tile_bands.insert(*member, actor_band_y as f32);
                     }
@@ -421,26 +452,36 @@ impl crate::WindowCtx<'_> {
                     // The packet is in the actor's logical coords; window it with the band
                     // converted to logical (÷dpr), then rasterize the logical scene at
                     // physical via the scale. (Auto-DPI D2.)
-                    let doc_scene = self
-                        .shared
-                        .content
-                        .constellation
-                        .packet(*member)
-                        .map(|(packet, fonts)| {
-                            crate::card::lower_window(
-                                packet,
-                                fonts,
-                                new_band_y / dpr,
-                                band_h / dpr,
-                                doc_palette,
-                            )
-                        });
+                    let doc_scene =
+                        self.shared
+                            .content
+                            .constellation
+                            .packet(*member)
+                            .map(|(packet, fonts)| {
+                                crate::card::lower_window(
+                                    packet,
+                                    fonts,
+                                    new_band_y / dpr,
+                                    band_h / dpr,
+                                    doc_palette,
+                                )
+                            });
                     if let Some(scene) = doc_scene {
-                        let (tex, view) =
-                            core.rasterize_scaled(&scene, *cw, band_px, ColorLoad::Clear(card_bg), dpr);
+                        let (tex, view) = core.rasterize_scaled(
+                            &scene,
+                            *cw,
+                            band_px,
+                            ColorLoad::Clear(card_bg),
+                            dpr,
+                        );
                         self.view.tile_textures.insert(
                             *member,
-                            crate::CachedTile { version, size: (*cw, band_px), tex, view },
+                            crate::CachedTile {
+                                version,
+                                size: (*cw, band_px),
+                                tex,
+                                view,
+                            },
                         );
                         self.view.tile_bands.insert(*member, new_band_y);
                     }

@@ -502,6 +502,11 @@ pub enum ContextAction {
     /// Scope the focused orrery to the selection (plus its neighbors) — the "Isolate"
     /// lens. Drains like `ShellbarMove` without touching `context_set`. (Curated orrery.)
     IsolateSelection,
+    /// Crystallize the current multi-selection into a **Session** graphlet tagged with its
+    /// dominant shape (the classifier's top kind), then scope the orrery to it — the commit that
+    /// makes the connections-swatch preview real (the 2026-06-13 crystallize / reconciliation
+    /// ruling 4). Multi-node; pushes a `ShellCommand` (Shell-level mint). (Swatch primitive — P3b.)
+    CrystallizeSelection,
     /// Open the focused node's connected component as a persistent **Linked** graphlet in
     /// its own scoped window — the manual consumer for auto-derived graphlets (Phase 3
     /// slice 2). Unlike `IsolateSelection` (a transient lens on the current orrery), this

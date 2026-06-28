@@ -132,17 +132,57 @@ impl Shell {
                             let mut view = self.build_window_view_for(from);
                             view.branch_graphlet = Some(graphlet_id);
                             if let Some(label) = anchor_label {
-                                view.chrome_update(|c| c.branch_label = Some(format!("\u{2387} {label}")));
+                                view.chrome_update(|c| {
+                                    c.branch_label = Some(format!("\u{2387} {label}"))
+                                });
                             }
                             self.spawn_window_with_view(event_loop, view);
                         }
                     }
                 }
-                crate::ShellCommand::RecordBranchMember { graph, graphlet, node } => {
-                    self.record_branch_member(graph, graphlet, node)
-                }
+                crate::ShellCommand::RecordBranchMember {
+                    graph,
+                    graphlet,
+                    node,
+                } => self.record_branch_member(graph, graphlet, node),
                 crate::ShellCommand::ReconcileGraphlets { graph } => {
                     self.reconcile_linked_graphlets(graph)
+                }
+                crate::ShellCommand::ReconcileGraphlet { graph, graphlet } => {
+                    self.reconcile_linked_graphlet(graph, graphlet)
+                }
+                crate::ShellCommand::KeepGraphletAsSession { graph, graphlet } => {
+                    self.keep_graphlet_as_session(graph, graphlet)
+                }
+                crate::ShellCommand::BranchGraphlet { graph, graphlet } => {
+                    if self.render_core.is_some() {
+                        if let Some(branch_id) = self.branch_existing_graphlet(graph, graphlet) {
+                            let label = self.graphlet_window_label(graph, branch_id, "branch");
+                            let mut view = self.build_window_view_for(graph);
+                            view.branch_graphlet = Some(branch_id);
+                            if let Some(label) = label {
+                                view.chrome_update(|c| c.branch_label = Some(label));
+                            }
+                            self.spawn_window_with_view(event_loop, view);
+                        }
+                    }
+                }
+                crate::ShellCommand::OpenExistingGraphlet { graph, graphlet } => {
+                    if self.render_core.is_some()
+                        && self
+                            .graphlets
+                            .get(&graph)
+                            .and_then(|idx| idx.get(graphlet))
+                            .is_some()
+                    {
+                        let label = self.graphlet_window_label(graph, graphlet, "graphlet");
+                        let mut view = self.build_window_view_for(graph);
+                        view.branch_graphlet = Some(graphlet);
+                        if let Some(label) = label {
+                            view.chrome_update(|c| c.branch_label = Some(label));
+                        }
+                        self.spawn_window_with_view(event_loop, view);
+                    }
                 }
                 crate::ShellCommand::OpenLinkedGraphlet {
                     node,
@@ -155,8 +195,7 @@ impl Shell {
                     // a window scoped to it (reusing the branch-window scope path). (Phase 3
                     // slice 2 / 2+.)
                     if self.render_core.is_some() {
-                        if let Some(graphlet_id) =
-                            self.linked_graphlet(node, from, kind, selectors)
+                        if let Some(graphlet_id) = self.linked_graphlet(node, from, kind, selectors)
                         {
                             let anchor_label = self.orreries.get(&from).and_then(|o| {
                                 let g = o.graph();
@@ -172,6 +211,13 @@ impl Shell {
                             }
                             self.spawn_window_with_view(event_loop, view);
                         }
+                    }
+                }
+                crate::ShellCommand::CrystallizeSelection { from } => {
+                    // Freeze the multi-selection into a Session graphlet + scope the orrery to it
+                    // in place (ruling 1 — not a new window). (Swatch primitive — P3b crystallize.)
+                    if let Some((kind, count)) = self.crystallize_selection(from) {
+                        tracing::info!(?kind, count, "crystallized the selection into a graphlet");
                     }
                 }
                 crate::ShellCommand::CloseWindow(id) => self.close_window(id),
@@ -201,9 +247,11 @@ impl Shell {
         if self.render_core.is_none() {
             return;
         }
-        self.shared
-            .observability
-            .record_probe("tear_out", "leaf", format!("node={node} from={}", from.as_uuid()));
+        self.shared.observability.record_probe(
+            "tear_out",
+            "leaf",
+            format!("node={node} from={}", from.as_uuid()),
+        );
         let view = self.build_leaf_view_for(from, node);
         self.spawn_window_with_view(event_loop, view);
     }
@@ -317,7 +365,7 @@ impl Shell {
             // `resumed`): build its a11y projection through its ctx, then install the
             // adapter against its window. `window_ctx` mints the per-window bridge on
             // first access. (MW3 step 6 — per-window a11y.)
-            if let Some(mut wc) = self.window_ctx(id) {
+            if let Some(wc) = self.window_ctx(id) {
                 let projection = wc.build_a11y_projection().tree_update();
                 match wc.a11y_bridge.install(&window, projection) {
                     Ok(()) => wc.shared.observability.record_probe(
@@ -364,6 +412,33 @@ impl Shell {
                 format!("windows={}", self.windows.len()),
             );
         }
+    }
+
+    fn graphlet_window_label(
+        &self,
+        graph: crate::GraphId,
+        graphlet: forme::GraphletId,
+        fallback: &str,
+    ) -> Option<String> {
+        let g = self.graphlets.get(&graph)?.get(graphlet)?;
+        let kind = g
+            .kind
+            .as_ref()
+            .map(|kind| format!("{kind:?}"))
+            .unwrap_or_else(|| fallback.to_string());
+        let anchor = g.primary_anchor.or_else(|| g.anchors.first().copied());
+        let anchor_label = anchor.and_then(|node| {
+            self.orreries.get(&graph).and_then(|o| {
+                let graph = o.graph();
+                graph
+                    .get_node_by_id(node)
+                    .map(|(key, _)| graph.node_display_label(key))
+            })
+        });
+        Some(match anchor_label {
+            Some(label) => format!("{kind}: {label}"),
+            None => format!("{kind} #{graphlet}"),
+        })
     }
 
     /// Close every *secondary* window whose focused graph is `graph`. The primary is

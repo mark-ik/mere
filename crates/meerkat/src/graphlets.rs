@@ -70,6 +70,17 @@ impl SessionGraphlets {
         self.graphlets.iter().find(|g| g.id == id)
     }
 
+    /// Preview a Linked graphlet's drift without mutating its roster. This powers
+    /// the Roster Graphlet Card's dry diff; [`reconcile`](Self::reconcile) uses
+    /// the same derivation and then applies the truth set.
+    pub(crate) fn preview_reconcile(
+        &self,
+        graph: &Graph,
+        id: GraphletId,
+    ) -> Option<GraphletMemberDelta<GraphMemberId>> {
+        self.reconcile_delta(graph, id).map(|(_, delta)| delta)
+    }
+
     fn mint_id(&mut self) -> GraphletId {
         let id = self.next_id;
         self.next_id += 1;
@@ -131,6 +142,24 @@ impl SessionGraphlets {
         id
     }
 
+    /// Freeze a multi-selection as a **Session** graphlet (the 2026-06-13 crystallize default): an
+    /// `UnlinkedSession` graphlet whose roster is exactly `members`, tagged with the classifier's
+    /// `kind` for display. Unlike a Linked graphlet it does not derive or drift — it is the frozen
+    /// selection, so it works for any shape (including the disconnected Loose / Session grab-bag the
+    /// kind-derivation cannot). Returns the new id. (Swatch primitive — P3b crystallize.)
+    pub(crate) fn record_session(
+        &mut self,
+        kind: GraphletKind,
+        members: Vec<GraphMemberId>,
+    ) -> GraphletId {
+        let id = self.mint_id();
+        let mut g = GraphletRef::new_session(id);
+        g.kind = Some(kind);
+        g.anchors = members;
+        self.graphlets.push(g);
+        id
+    }
+
     /// Re-derive a **Linked** graphlet `id` from the current graph and reconcile its live
     /// roster to graph truth, returning the delta (added / removed members) or `None` when
     /// the graphlet is not Linked or nothing drifted. v0 **auto-applies** (the live set
@@ -142,31 +171,70 @@ impl SessionGraphlets {
         graph: &Graph,
         id: GraphletId,
     ) -> Option<GraphletMemberDelta<GraphMemberId>> {
-        let g = self.graphlets.iter().find(|g| g.id == id)?;
-        let spec = match &g.binding {
-            GraphletBinding::Linked { spec } => spec.clone(),
-            _ => return None, // only Linked graphlets reconcile against graph truth
-        };
-        let current = g.anchors.clone();
-        let truth = derive_members(graph, &spec);
-        let truth_set: HashSet<&GraphMemberId> = truth.iter().collect();
-        let cur_set: HashSet<&GraphMemberId> = current.iter().collect();
-        let added: Vec<GraphMemberId> =
-            truth.iter().filter(|m| !cur_set.contains(m)).copied().collect();
-        let removed: Vec<GraphMemberId> =
-            current.iter().filter(|m| !truth_set.contains(m)).copied().collect();
-        let delta = GraphletMemberDelta {
-            added,
-            removed,
-            rebased_seeds: Vec::new(),
-        };
-        if delta.is_empty() {
-            return None;
-        }
+        let (truth, delta) = self.reconcile_delta(graph, id)?;
         if let Some(gm) = self.graphlets.iter_mut().find(|g| g.id == id) {
             gm.anchors = truth; // auto-apply: the live set tracks graph truth
         }
         Some(delta)
+    }
+
+    fn reconcile_delta(
+        &self,
+        graph: &Graph,
+        id: GraphletId,
+    ) -> Option<(Vec<GraphMemberId>, GraphletMemberDelta<GraphMemberId>)> {
+        let g = self.graphlets.iter().find(|g| g.id == id)?;
+        let spec = match &g.binding {
+            GraphletBinding::Linked { spec } => spec,
+            _ => return None,
+        };
+        let current = g.anchors.clone();
+        let truth = derive_members(graph, spec);
+        let truth_set: HashSet<&GraphMemberId> = truth.iter().collect();
+        let cur_set: HashSet<&GraphMemberId> = current.iter().collect();
+        let delta = GraphletMemberDelta {
+            added: truth
+                .iter()
+                .filter(|m| !cur_set.contains(m))
+                .copied()
+                .collect(),
+            removed: current
+                .iter()
+                .filter(|m| !truth_set.contains(m))
+                .copied()
+                .collect(),
+            rebased_seeds: Vec::new(),
+        };
+        (!delta.is_empty()).then_some((truth, delta))
+    }
+
+    /// Convert a linked/branched graphlet to an unlinked session grouping without
+    /// changing its current member roster.
+    pub(crate) fn keep_as_session(&mut self, id: GraphletId) -> bool {
+        let Some(g) = self.graphlets.iter_mut().find(|g| g.id == id) else {
+            return false;
+        };
+        if matches!(g.binding, GraphletBinding::UnlinkedSession) {
+            return false;
+        }
+        g.binding = GraphletBinding::UnlinkedSession;
+        true
+    }
+
+    /// Branch an existing graphlet's current seed/roster into a new local graphlet.
+    /// The parent spec is preserved when present; otherwise we derive a default spec
+    /// from the first available member.
+    pub(crate) fn branch_from_graphlet(&mut self, id: GraphletId) -> Option<GraphletId> {
+        let parent = self.graphlets.iter().find(|g| g.id == id)?.clone();
+        let anchor = parent
+            .primary_anchor
+            .or_else(|| parent.anchors.first().copied())?;
+        let parent_spec = match parent.binding {
+            GraphletBinding::Linked { spec } => spec,
+            GraphletBinding::Branched { parent_spec, .. } => parent_spec,
+            GraphletBinding::UnlinkedSession => default_spec_for(anchor),
+        };
+        Some(self.record_branch(anchor, parent_spec))
     }
 
     /// Whether any graphlet is `Linked` (so worth reconciling against graph truth). The
@@ -288,6 +356,29 @@ mod tests {
     }
 
     #[test]
+    fn record_session_freezes_the_selection_with_its_kind() {
+        let a = uuid::Uuid::from_u128(1);
+        let b = uuid::Uuid::from_u128(2);
+        let mut idx = SessionGraphlets::new();
+        let id = idx.record_session(GraphletKind::Corridor, vec![a, b]);
+        let g = idx.get(id).expect("the session graphlet exists");
+        assert_eq!(
+            g.anchors,
+            vec![a, b],
+            "the exact selection is frozen as the roster"
+        );
+        assert_eq!(
+            g.kind,
+            Some(GraphletKind::Corridor),
+            "tagged with the classified kind"
+        );
+        assert!(
+            matches!(g.binding, GraphletBinding::UnlinkedSession),
+            "a frozen Session graphlet, not a derived one"
+        );
+    }
+
+    #[test]
     fn record_branch_mints_a_branched_graphlet_anchored_on_the_node() {
         let anchor = uuid::Uuid::from_u128(0x42);
         let mut g = SessionGraphlets::new().with_default_session();
@@ -308,13 +399,20 @@ mod tests {
         let anchor = uuid::Uuid::from_u128(0x42);
         let mut g = SessionGraphlets::new().with_default_session();
         let id = g.record_branch(anchor, default_spec_for(anchor));
-        assert!(g.get(id).unwrap().anchors.contains(&anchor), "seeded with its anchor");
+        assert!(
+            g.get(id).unwrap().anchors.contains(&anchor),
+            "seeded with its anchor"
+        );
 
         let visited = uuid::Uuid::from_u128(0x99);
         assert!(g.add_member(id, visited), "a newly-navigated node is added");
         assert!(!g.add_member(id, visited), "a revisit is a dedup'd no-op");
         assert!(!g.add_member(id, anchor), "the anchor is already present");
-        assert_eq!(g.get(id).unwrap().anchors.len(), 2, "anchor + the one visited node");
+        assert_eq!(
+            g.get(id).unwrap().anchors.len(),
+            2,
+            "anchor + the one visited node"
+        );
     }
 
     #[test]
@@ -349,15 +447,26 @@ mod tests {
             selectors: Vec::new(),
         };
         let id = idx.record_linked(&graph, spec);
-        assert_eq!(idx.get(id).unwrap().anchors.len(), 2, "component of A is A plus B");
-        assert!(idx.reconcile(&graph, id).is_none(), "no drift yet, reconcile is a no-op");
+        assert_eq!(
+            idx.get(id).unwrap().anchors.len(),
+            2,
+            "component of A is A plus B"
+        );
+        assert!(
+            idx.reconcile(&graph, id).is_none(),
+            "no drift yet, reconcile is a no-op"
+        );
 
         // Connect C into the component; reconcile re-derives + auto-applies.
         link(&mut graph, b, c);
         let delta = idx.reconcile(&graph, id).expect("the component grew");
         assert_eq!(delta.added, vec![c_id], "C joined A's component");
         assert!(delta.removed.is_empty());
-        assert_eq!(idx.get(id).unwrap().anchors.len(), 3, "live roster is now A, B, C");
+        assert_eq!(
+            idx.get(id).unwrap().anchors.len(),
+            3,
+            "live roster is now A, B, C"
+        );
     }
 
     #[test]

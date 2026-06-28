@@ -63,8 +63,9 @@ pub(crate) fn read_texture_rgba(
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
         mapped_at_creation: false,
     });
-    let mut encoder =
-        device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("snapshot readback") });
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("snapshot readback"),
+    });
     encoder.copy_texture_to_buffer(
         wgpu::TexelCopyTextureInfo {
             texture: target,
@@ -80,7 +81,11 @@ pub(crate) fn read_texture_rgba(
                 rows_per_image: Some(height),
             },
         },
-        wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+        wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
     );
     queue.submit([encoder.finish()]);
     let slice = buffer.slice(..);
@@ -118,8 +123,16 @@ pub(crate) fn base64_encode(data: &[u8]) -> String {
             | (c.get(2).copied().unwrap_or(0) as u32);
         out.push(A[((n >> 18) & 63) as usize] as char);
         out.push(A[((n >> 12) & 63) as usize] as char);
-        out.push(if c.len() > 1 { A[((n >> 6) & 63) as usize] as char } else { '=' });
-        out.push(if c.len() > 2 { A[(n & 63) as usize] as char } else { '=' });
+        out.push(if c.len() > 1 {
+            A[((n >> 6) & 63) as usize] as char
+        } else {
+            '='
+        });
+        out.push(if c.len() > 2 {
+            A[(n & 63) as usize] as char
+        } else {
+            '='
+        });
     }
     out
 }
@@ -131,7 +144,13 @@ pub(crate) fn base64_encode(data: &[u8]) -> String {
 /// edge) — render patches these post-layout rather than building them with the
 /// rect at view time, so this is the one spot that formats their geometry. (Overlay
 /// adoption P3.)
-pub(crate) fn overlay_geometry_style(x: f32, y: f32, w: f32, h: f32, flex_dir: Option<&str>) -> String {
+pub(crate) fn overlay_geometry_style(
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    flex_dir: Option<&str>,
+) -> String {
     let mut style =
         format!("position: absolute; left: {x}px; top: {y}px; width: {w}px; height: {h}px;");
     if let Some(dir) = flex_dir {
@@ -221,39 +240,49 @@ impl crate::WindowCtx<'_> {
             let sync_rows = self.apparatus_sync_rows();
             let obs = self.apparatus_observability();
             let items = crate::apparatus::apparatus_items(&system_rows, &sync_rows, &obs);
-            self.view.set_list_pane(Apparatus, "apparatus", items, Some(rect));
+            self.view
+                .set_list_pane(Apparatus, "apparatus", items, Some(rect));
         } else if self.view.list_pane_open(Apparatus) {
-            self.view.set_list_pane(Apparatus, "apparatus", Vec::new(), None);
+            self.view
+                .set_list_pane(Apparatus, "apparatus", Vec::new(), None);
         }
         // Steward + Inspector: display-only `label: value` rows under a unique utility root.
         if let Some(rect) = rects[1] {
             // Steward builds its own items (status rows + clickable action buttons),
             // mirroring Alembic, so the focused-op verbs are reachable by click. (A2.)
             let items = self.steward_items();
-            self.view.set_list_pane(Steward, "utility-pane steward", items, Some(rect));
+            self.view
+                .set_list_pane(Steward, "utility-pane steward", items, Some(rect));
         } else if self.view.list_pane_open(Steward) {
-            self.view.set_list_pane(Steward, "utility-pane steward", Vec::new(), None);
+            self.view
+                .set_list_pane(Steward, "utility-pane steward", Vec::new(), None);
         }
         if let Some(rect) = rects[2] {
             let rows = self.utility_pane_rows(&PaneContent::Inspector);
             let items = crate::utility_panes::utility_pane_items(&PaneContent::Inspector, &rows);
-            self.view.set_list_pane(Inspector, "utility-pane inspector", items, Some(rect));
+            self.view
+                .set_list_pane(Inspector, "utility-pane inspector", items, Some(rect));
         } else if self.view.list_pane_open(Inspector) {
-            self.view.set_list_pane(Inspector, "utility-pane inspector", Vec::new(), None);
+            self.view
+                .set_list_pane(Inspector, "utility-pane inspector", Vec::new(), None);
         }
         // Trail: its own sectioned items (history / recent / removed); a Removed row recovers.
         if let Some(rect) = rects[3] {
             let items = self.trail_items();
-            self.view.set_list_pane(Trail, "utility-pane trail", items, Some(rect));
+            self.view
+                .set_list_pane(Trail, "utility-pane trail", items, Some(rect));
         } else if self.view.list_pane_open(Trail) {
-            self.view.set_list_pane(Trail, "utility-pane trail", Vec::new(), None);
+            self.view
+                .set_list_pane(Trail, "utility-pane trail", Vec::new(), None);
         }
         // Alembic: memory — Recent / Saved / Engrams sections (the Engrams list reads eidetic).
         if let Some(rect) = rects[4] {
             let items = self.alembic_items();
-            self.view.set_list_pane(Alembic, "utility-pane alembic", items, Some(rect));
+            self.view
+                .set_list_pane(Alembic, "utility-pane alembic", items, Some(rect));
         } else if self.view.list_pane_open(Alembic) {
-            self.view.set_list_pane(Alembic, "utility-pane alembic", Vec::new(), None);
+            self.view
+                .set_list_pane(Alembic, "utility-pane alembic", Vec::new(), None);
         }
     }
 
@@ -270,12 +299,20 @@ impl crate::WindowCtx<'_> {
         workbench_rect: Option<[f32; 4]>,
     ) -> Option<crate::window_view::FocusCard> {
         use crate::window_view::{FocusCard, FocusCardKind};
+        // A multi-node selection summons the connections swatch (the selected nodes + their
+        // inter-edges) in place of a single-node card. (Swatch primitive — P2, scope=Selection.)
+        if self.orrery().selected_members().len() > 1 {
+            return self.compute_connections_card(orrery_rect);
+        }
         let member = self.focused_member().filter(|m| {
             workbench_rect.is_none() || !self.view.workbench.open_members().contains(m)
         })?;
         // The node's pane-local screen position (same camera the node cards use).
         let (nx, ny) = self.orrery().focused_node_screen()?;
-        let (pw, ph) = (orrery_rect[2] - orrery_rect[0], orrery_rect[3] - orrery_rect[1]);
+        let (pw, ph) = (
+            orrery_rect[2] - orrery_rect[0],
+            orrery_rect[3] - orrery_rect[1],
+        );
         let local = [0.0, 0.0, pw, ph];
         let (kind, cw, ch) = if self.view.object_card == Some(member) {
             // The object card replaces the preview when summoned (the context action set the
@@ -287,7 +324,9 @@ impl crate::WindowCtx<'_> {
                 .focused_key()
                 .map(|k| {
                     vec![
-                        CardWidget::SizeTier { tier: self.orrery().node_size_tier(k) },
+                        CardWidget::SizeTier {
+                            tier: self.orrery().node_size_tier(k),
+                        },
                         CardWidget::Face {
                             is_favicon: self.orrery().node_face(k) == orrery::Face::Favicon,
                         },
@@ -295,7 +334,11 @@ impl crate::WindowCtx<'_> {
                 })
                 .unwrap_or_default();
             let ch = crate::card::object_card_height(widgets.len());
-            (FocusCardKind::ObjectCard { widgets }, crate::card::OBJCARD_W, ch)
+            (
+                FocusCardKind::ObjectCard { widgets },
+                crate::card::OBJCARD_W,
+                ch,
+            )
         } else if self.orrery().member_visited(member) {
             // Show only the *cached* snapshot image — no placeholder while it is still
             // building. A fresh focus otherwise flashed an empty card (and claimed a hit-rect
@@ -306,12 +349,23 @@ impl crate::WindowCtx<'_> {
                 .orrery()
                 .focused_url()
                 .and_then(|u| self.view.snapshot_data_uris.get(u).cloned())?;
-            (FocusCardKind::Snapshot { data_uri }, crate::card::SNAP_W, crate::card::SNAP_H)
+            (
+                FocusCardKind::Snapshot { data_uri },
+                crate::card::SNAP_W,
+                crate::card::SNAP_H,
+            )
         } else {
-            (FocusCardKind::Unvisited, crate::card::UNVIS_W, crate::card::UNVIS_H)
+            (
+                FocusCardKind::Unvisited,
+                crate::card::UNVIS_W,
+                crate::card::UNVIS_H,
+            )
         };
         let (x0, y0, x1, y1, _, _) = crate::card::anchored_card_rect(nx, ny, cw, ch, local)?;
-        Some(FocusCard { rect: [x0, y0, x1, y1], kind })
+        Some(FocusCard {
+            rect: [x0, y0, x1, y1],
+            kind,
+        })
     }
 
     /// Start the frame clock and sync the always-present per-frame chrome state into the
@@ -340,7 +394,10 @@ impl crate::WindowCtx<'_> {
         // Push this window's device-pixel-ratio to the content pool: actors lay out
         // logical, the host rasterizes their scenes at physical via `rasterize_scaled`
         // below, so content text is crisp + correctly-sized on a HiDPI display. (Auto-DPI D2/D3.)
-        self.shared.content.constellation.set_device_pixel_ratio(dpr);
+        self.shared
+            .content
+            .constellation
+            .set_device_pixel_ratio(dpr);
 
         // Reserve / drop the Comms frame leaf to match the chrome's comms-open state
         // before laying the panes out, so the other panes make room for it. (Comms.)
@@ -378,15 +435,22 @@ impl crate::WindowCtx<'_> {
         let chips: Vec<meerkat::SessionChip> = if self.view.kind.is_slim() {
             Vec::new()
         } else {
-            let focused = self.session_for_graph(self.view.focused_graph).map(|(id, _)| id);
+            let focused = self
+                .session_for_graph(self.view.focused_graph)
+                .map(|(id, _)| id);
             // While a session is being renamed (F2 / context rename), show the live edit
             // buffer in its chip — the chip is the rename surface now the switcher is gone.
             let renaming = self.view.renaming.clone();
             // Source the session list from the canonical manifest store (what
             // `cycle_session` enumerates), not the retired switcher-thumbnail map.
             // (Chrome bar P4 cleanup.)
-            let mut ids: Vec<SessionId> =
-                self.shared.session.manifests.iter().map(|(id, _)| id).collect();
+            let mut ids: Vec<SessionId> = self
+                .shared
+                .session
+                .manifests
+                .iter()
+                .map(|(id, _)| id)
+                .collect();
             ids.sort_by_key(|id| *id.as_uuid());
             ids.iter()
                 .map(|id| {
@@ -414,7 +478,11 @@ impl crate::WindowCtx<'_> {
                             }
                         }
                     };
-                    meerkat::SessionChip { id: *id, label, active: Some(*id) == focused }
+                    meerkat::SessionChip {
+                        id: *id,
+                        label,
+                        active: Some(*id) == focused,
+                    }
                 })
                 .collect()
         };
@@ -445,8 +513,10 @@ impl crate::WindowCtx<'_> {
         // The folded list panes' CSS rides the shell stylesheet too; rules are inert when
         // no matching pane element is in the document, so they can be unconditional. The
         // apparatus root is `.apparatus`, the others `.utility-pane`. (Phase 1, step 2.)
-        let apparatus_css = crate::apparatus::apparatus_sheet(&self.shared.presentation.chrome_theme);
-        let utility_css = crate::utility_panes::utility_pane_sheet(&self.shared.presentation.chrome_theme);
+        let apparatus_css =
+            crate::apparatus::apparatus_sheet(&self.shared.presentation.chrome_theme);
+        let utility_css =
+            crate::utility_panes::utility_pane_sheet(&self.shared.presentation.chrome_theme);
         (roster_css, apparatus_css, utility_css)
     }
 
@@ -472,7 +542,8 @@ impl crate::WindowCtx<'_> {
                 self.shared.presentation.ui_scale(),
             )
         };
-        let leaves = frame_view::leaf_rects(&self.view.frame_layout, band, self.view.maximized_pane);
+        let leaves =
+            frame_view::leaf_rects(&self.view.frame_layout, band, self.view.maximized_pane);
         // The orrery is the always-present graph pane; the tiled workbench is its
         // summonable sibling. Each renders into its own leaf. (Workbench-as-pane.)
         // The *focused* Orrery leaf (bound to focused_graph) is the primary one — it
@@ -482,12 +553,18 @@ impl crate::WindowCtx<'_> {
         let orrery_leaf = leaves
             .iter()
             .find(|l| matches!(l.content, PaneContent::Orrery) && l.graph_id == focused_gid)
-            .or_else(|| leaves.iter().find(|l| matches!(l.content, PaneContent::Orrery)));
+            .or_else(|| {
+                leaves
+                    .iter()
+                    .find(|l| matches!(l.content, PaneContent::Orrery))
+            });
         let orrery_rect = orrery_leaf.map(|l| l.rect).unwrap_or(band);
         // The graph this Orrery pane resolves to (its leaf's graph_id) — render
         // drives *that* pooled orrery, not the window-global one, so a second
         // Orrery pane of another graph would drive its own. (Window composition P2.)
-        let orrery_gid = orrery_leaf.map(|l| l.graph_id).unwrap_or(self.view.focused_graph);
+        let orrery_gid = orrery_leaf
+            .map(|l| l.graph_id)
+            .unwrap_or(self.view.focused_graph);
         let workbench_rect = leaves
             .iter()
             .find(|l| matches!(l.content, PaneContent::Workbench))
@@ -503,13 +580,29 @@ impl crate::WindowCtx<'_> {
         // The five folded list panes' rects, in `ShellListPane` order (apparatus, steward,
         // inspector, trail, alembic), for the per-frame snapshot into the shell document. (Phase 1.)
         let list_pane_rects: [Option<[f32; 4]>; 5] = [
-            leaves.iter().find(|l| matches!(l.content, PaneContent::Apparatus)).map(|l| l.rect),
-            leaves.iter().find(|l| matches!(l.content, PaneContent::Steward)).map(|l| l.rect),
-            leaves.iter().find(|l| matches!(l.content, PaneContent::Inspector)).map(|l| l.rect),
-            leaves.iter().find(|l| matches!(l.content, PaneContent::Trail)).map(|l| l.rect),
-            leaves.iter().find(|l| matches!(l.content, PaneContent::Alembic)).map(|l| l.rect),
+            leaves
+                .iter()
+                .find(|l| matches!(l.content, PaneContent::Apparatus))
+                .map(|l| l.rect),
+            leaves
+                .iter()
+                .find(|l| matches!(l.content, PaneContent::Steward))
+                .map(|l| l.rect),
+            leaves
+                .iter()
+                .find(|l| matches!(l.content, PaneContent::Inspector))
+                .map(|l| l.rect),
+            leaves
+                .iter()
+                .find(|l| matches!(l.content, PaneContent::Trail))
+                .map(|l| l.rect),
+            leaves
+                .iter()
+                .find(|l| matches!(l.content, PaneContent::Alembic))
+                .map(|l| l.rect),
         ];
-        let dividers = frame_view::divider_rects(&self.view.frame_layout, band, self.view.maximized_pane);
+        let dividers =
+            frame_view::divider_rects(&self.view.frame_layout, band, self.view.maximized_pane);
         let orrery_w = (orrery_rect[2] - orrery_rect[0]).round().max(1.0) as u32;
         let orrery_h = (orrery_rect[3] - orrery_rect[1]).round().max(1.0) as u32;
 

@@ -31,8 +31,11 @@ impl WindowCtx<'_> {
         };
         if let Some(node) = target {
             // The orrery element's handler reads only `delta`; `local` / `size` are unused here.
-            let event =
-                xilem_serval::WheelEvent { delta: (dx, dy), local: (0.0, 0.0), size: (0.0, 0.0) };
+            let event = xilem_serval::WheelEvent {
+                delta: (dx, dy),
+                local: (0.0, 0.0),
+                size: (0.0, 0.0),
+            };
             self.view.runner.dispatch_wheel(node, event);
         }
         match self.view.take_orrery_wheel() {
@@ -153,11 +156,13 @@ impl WindowCtx<'_> {
             "orrery:sizebydegree" => self.toggle_orrery_size_by_degree(),
             "orrery:sizebyimportance" => self.toggle_orrery_size_by_importance(),
             "orrery:importance:degree" => {
-                self.orrery_mut().set_importance_metric(orrery::ImportanceMetric::Degree);
+                self.orrery_mut()
+                    .set_importance_metric(orrery::ImportanceMetric::Degree);
                 self.view.request_redraw();
             }
             "orrery:importance:betweenness" => {
-                self.orrery_mut().set_importance_metric(orrery::ImportanceMetric::Betweenness);
+                self.orrery_mut()
+                    .set_importance_metric(orrery::ImportanceMetric::Betweenness);
                 self.view.request_redraw();
             }
             "orrery:communityrings" => {
@@ -171,11 +176,13 @@ impl WindowCtx<'_> {
                 self.view.request_redraw();
             }
             "orrery:bridge:betweenness" => {
-                self.orrery_mut().set_bridge_metric(orrery::BridgeMetric::Betweenness);
+                self.orrery_mut()
+                    .set_bridge_metric(orrery::BridgeMetric::Betweenness);
                 self.view.request_redraw();
             }
             "orrery:bridge:articulation" => {
-                self.orrery_mut().set_bridge_metric(orrery::BridgeMetric::Articulation);
+                self.orrery_mut()
+                    .set_bridge_metric(orrery::BridgeMetric::Articulation);
                 self.view.request_redraw();
             }
             "orrery:glossscope" => {
@@ -337,6 +344,14 @@ impl WindowCtx<'_> {
         let additive = self.view.modifiers.shift;
         for intent in intents {
             match intent {
+                crate::roster_view::RosterIntent::SetTab(tab) => {
+                    self.view.set_roster_tab(tab);
+                    self.view.request_redraw();
+                }
+                crate::roster_view::RosterIntent::OpenDetail(subject) => {
+                    self.view.set_roster_subject(Some(subject));
+                    self.view.request_redraw();
+                }
                 crate::roster_view::RosterIntent::Select(member) => {
                     if additive {
                         self.orrery_mut().toggle_select_member(member);
@@ -350,6 +365,55 @@ impl WindowCtx<'_> {
                         self.orrery_mut().select_by_url(&url);
                         self.view.request_redraw();
                     }
+                }
+                crate::roster_view::RosterIntent::RelateAs { from, to, kind } => {
+                    if self
+                        .orrery_mut()
+                        .assert_relation_between_members(from, to, kind)
+                    {
+                        self.save_session();
+                    }
+                    self.view.request_redraw();
+                }
+                crate::roster_view::RosterIntent::RetractRelation { from, to, selector } => {
+                    if self
+                        .orrery_mut()
+                        .retract_relation_between_members(from, to, selector)
+                        > 0
+                    {
+                        self.save_session();
+                    }
+                    self.view.request_redraw();
+                }
+                crate::roster_view::RosterIntent::ReconcileGraphlet(graphlet) => {
+                    self.commands.push(crate::ShellCommand::ReconcileGraphlet {
+                        graph: self.view.focused_graph,
+                        graphlet,
+                    });
+                    self.view.request_redraw();
+                }
+                crate::roster_view::RosterIntent::KeepGraphletAsSession(graphlet) => {
+                    self.commands
+                        .push(crate::ShellCommand::KeepGraphletAsSession {
+                            graph: self.view.focused_graph,
+                            graphlet,
+                        });
+                    self.view.request_redraw();
+                }
+                crate::roster_view::RosterIntent::BranchGraphlet(graphlet) => {
+                    self.commands.push(crate::ShellCommand::BranchGraphlet {
+                        graph: self.view.focused_graph,
+                        graphlet,
+                    });
+                    self.view.request_redraw();
+                }
+                crate::roster_view::RosterIntent::OpenGraphlet(graphlet) => {
+                    self.commands
+                        .push(crate::ShellCommand::OpenExistingGraphlet {
+                            graph: self.view.focused_graph,
+                            graphlet,
+                        });
+                    self.view.request_redraw();
                 }
                 crate::roster_view::RosterIntent::SelectField(id) => {
                     if self.orrery_mut().center_on_field(id) {
@@ -374,5 +438,4 @@ impl WindowCtx<'_> {
             }
         }
     }
-
 }

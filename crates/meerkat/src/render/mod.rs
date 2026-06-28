@@ -5,12 +5,12 @@
 //! Render, resize, and toolbar-measurement for [`Shell`](super::Shell). Factored
 //! from `main.rs` to keep files under the workspace 600-LOC ceiling.
 
+use crate::serval_render::TextCursor;
 use forme::GraphMemberId;
+use image::ImageEncoder;
 use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
 use netrender::ColorLoad;
 use netrender::external_texture::{ExternalTexturePlacement, SourceAlpha};
-use image::ImageEncoder;
-use crate::serval_render::TextCursor;
 use serval_layout::ScrollOffsets;
 use serval_scripted_dom::NodeId;
 
@@ -22,20 +22,21 @@ use super::resources::{ResourceLoader, ResourceStore};
 use frame::{PaneContent, SessionId};
 
 use super::{
-    CARD_BG, FALLBACK_TOOLBAR_H, WindowCtx, first_with_class, frame_view, shellbar,
-    measure_class_bottom,
+    CARD_BG, FALLBACK_TOOLBAR_H, WindowCtx, first_with_class, frame_view, measure_class_bottom,
+    shellbar,
 };
-use meerkat::ShellbarPaneStates;
 use crate::pane_session::PaneSession;
 use crate::window_view::{OrreryCard, OrreryRender};
+use meerkat::ShellbarPaneStates;
 
-mod setup;
-mod overlays;
-mod orrery_scene;
-mod workbench;
 mod cards;
 mod compose;
+mod connections;
+mod orrery_scene;
+mod overlays;
 mod paint;
+mod setup;
+mod workbench;
 use paint::PaintInputs;
 pub(crate) use setup::*;
 
@@ -72,11 +73,12 @@ impl WindowCtx<'_> {
         // hit-tests, and projects a11y through the shell runner (its CSS rides the shell
         // stylesheet below). Replaces the separate RosterPane frame + composite. (Phase 1.)
         if roster_rect.is_some() {
-            let rows = self.roster_rows();
-            let field_rows = self.roster_field_rows();
-            self.view.set_roster(rows, field_rows, roster_rect);
+            let subject = self.view.roster_subject();
+            let snapshot = self.roster_snapshot(subject.as_ref());
+            self.view.set_roster(snapshot, roster_rect);
         } else if self.view.roster_open() {
-            self.view.set_roster(Vec::new(), Vec::new(), None);
+            self.view
+                .set_roster(crate::roster::RosterSnapshot::default(), None);
         }
         // Fold the four list panes (apparatus / steward / inspector / trail) into the same
         // shell document: snapshot each open pane's items + rect into its slot before the
@@ -117,7 +119,11 @@ impl WindowCtx<'_> {
         // (Tree) or the focused node (Cartography). Needed-but-dormant nodes spawn
         // an actor; active nodes no longer shown are reaped, unless backgrounded.
         let gid = self.view.focused_graph;
-        let needed: Vec<_> = self.needed_members().into_iter().map(|m| (m, gid)).collect();
+        let needed: Vec<_> = self
+            .needed_members()
+            .into_iter()
+            .map(|m| (m, gid))
+            .collect();
         self.shared.content.constellation.reconcile(&needed);
 
         let (cards, scrying_surfaces) = self.collect_cards(workbench_rect, workbench_external);
@@ -185,5 +191,4 @@ impl WindowCtx<'_> {
             frame_t,
         });
     }
-
 }
