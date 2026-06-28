@@ -313,6 +313,10 @@ impl WindowCtx<'_> {
         if let Some(level) = &outcome.capture_consent {
             note = Some(self.run_capture_consent(level));
         }
+        // A `forget(…)` call deletes a page's browsing traces (plan C4).
+        if let Some(url) = &outcome.forget_url {
+            note = Some(self.run_forget(url));
+        }
         // DocumentScript triggers (P2.5): attach / deliver-event / detach on the
         // focused tile. `attach` resolves the script's capability permissions (App
         // default for now; the Session-scope override store is the follow-on); the
@@ -468,6 +472,40 @@ impl WindowCtx<'_> {
         self.shared.content.capture_consent = consent;
         self.persist_settings();
         format!("capture: {}", consent.as_key())
+    }
+
+    /// Forget a page's browsing traces (plan C4): delete every trace mentioning the
+    /// url; the `eidetic-search` index is rebuilt from the corpus, so it drops too.
+    /// An empty `arg` forgets the focused node's url. Provenance-edge cleanup (the
+    /// C3 derivations) is the remaining forget sub-step.
+    fn run_forget(&mut self, arg: &str) -> String {
+        let url = if !arg.trim().is_empty() {
+            arg.trim().to_string()
+        } else {
+            match self.focused_member().and_then(|m| {
+                self.orrery()
+                    .graph()
+                    .get_node_by_id(m)
+                    .map(|(_, n)| n.url().to_string())
+                    .filter(|u| !u.is_empty())
+            }) {
+                Some(u) => u,
+                None => return "forget: no focused page with a url".to_string(),
+            }
+        };
+        let Some(store) = self.shared.content.store.as_mut() else {
+            return "forget: no content store".to_string();
+        };
+        let mut memory =
+            match pollster::block_on(eidetic::browsing::BrowsingMemory::load(store, 64)) {
+                Ok(memory) => memory,
+                Err(err) => return format!("forget: load failed: {err}"),
+            };
+        match pollster::block_on(memory.forget_url(store, &url)) {
+            Ok(0) => format!("forget: no traces mentioned {url}"),
+            Ok(n) => format!("forget: removed {n} trace(s) for {url}"),
+            Err(err) => format!("forget: failed: {err}"),
+        }
     }
 
     /// A read-only snapshot of host state the command shell may query: the

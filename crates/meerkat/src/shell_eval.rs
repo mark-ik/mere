@@ -101,6 +101,11 @@ pub struct ShellOutcome {
     /// (plan C4). `Some("")` is a bare `>capture` (report the current level); `None`
     /// when not called.
     pub capture_consent: Option<String>,
+    /// A url passed to `forget("url")` (or the `>forget …` sugar; `Some("")` is a
+    /// bare `>forget` = the focused page) — the host deletes that page's browsing
+    /// traces, and since the index is rebuilt from the corpus its index entries too.
+    /// `None` when not called. (Capture plan C4.)
+    pub forget_url: Option<String>,
     /// A wasm component path passed to `attach_script("path")` — the host attaches a
     /// DocumentScript at that path to the focused tile (P2.5). `None` when not called.
     pub attach_script: Option<String>,
@@ -142,6 +147,7 @@ impl CommandShell {
         let sparql_query: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
         let recall_query: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
         let capture_consent: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+        let forget_url: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
         let attach_script: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
         let detach_script: Rc<RefCell<bool>> = Rc::new(RefCell::new(false));
         let script_event: Rc<RefCell<Option<(String, String)>>> = Rc::new(RefCell::new(None));
@@ -226,6 +232,18 @@ impl CommandShell {
             *cc_get.borrow_mut() = Some(String::new());
         });
 
+        // `forget("url")` (or the `>forget …` sugar) — record a page to forget; a
+        // bare `forget()` forgets the focused page. Recorded here, applied host-side
+        // (delete its browsing traces). (Capture plan C4.)
+        let fg_set = forget_url.clone();
+        engine.register_fn("forget", move |url: &str| {
+            *fg_set.borrow_mut() = Some(url.to_string());
+        });
+        let fg_get = forget_url.clone();
+        engine.register_fn("forget", move || {
+            *fg_get.borrow_mut() = Some(String::new());
+        });
+
         // DocumentScript triggers (P2.5): `attach_script("path.wasm")` attaches a
         // wasm component to the focused tile, `script_event("kind", "payload")`
         // delivers one event to it, `detach_script()` removes it. Like `sparql` /
@@ -260,6 +278,7 @@ impl CommandShell {
         let sparql_query = sparql_query.borrow().clone();
         let recall_query = recall_query.borrow().clone();
         let capture_consent = capture_consent.borrow().clone();
+        let forget_url = forget_url.borrow().clone();
         let attach_script = attach_script.borrow().clone();
         let detach_script = *detach_script.borrow();
         let script_event = script_event.borrow().clone();
@@ -272,6 +291,7 @@ impl CommandShell {
                 sparql_query,
                 recall_query,
                 capture_consent,
+                forget_url,
                 attach_script,
                 detach_script,
                 script_event,
@@ -285,6 +305,7 @@ impl CommandShell {
                 sparql_query,
                 recall_query,
                 capture_consent,
+                forget_url,
                 attach_script,
                 detach_script,
                 script_event,
@@ -315,7 +336,7 @@ pub fn complete(prefix: &str) -> Option<&'static str> {
         .iter()
         .map(|c| c.verb())
         .chain(QUERIES.iter().copied())
-        .chain(["sparql", "recall", "capture", "attach_script", "detach_script", "script_event", "scene"])
+        .chain(["sparql", "recall", "capture", "forget", "attach_script", "detach_script", "script_event", "scene"])
         .find(|name| name.len() > prefix.len() && name.starts_with(prefix))
 }
 
@@ -355,6 +376,17 @@ fn desugar(source: &str) -> String {
         let arg = rest.trim().replace('"', "");
         if !arg.is_empty() {
             return format!("capture(\"{arg}\")");
+        }
+    }
+    // `forget <url>` sugar: `>forget https://x` → `forget("https://x")`; a bare
+    // `>forget` forgets the focused page. (Capture plan C4.)
+    if trimmed == "forget" {
+        return "forget()".to_string();
+    }
+    if let Some(rest) = trimmed.strip_prefix("forget ") {
+        let arg = rest.trim().replace('"', "");
+        if !arg.is_empty() {
+            return format!("forget(\"{arg}\")");
         }
     }
     source.to_string()

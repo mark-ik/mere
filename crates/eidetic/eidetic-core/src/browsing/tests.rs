@@ -191,6 +191,52 @@ fn quota_ages_out_the_oldest_stored_traces() {
 }
 
 #[test]
+fn forget_url_removes_every_trace_mentioning_it() {
+    pollster::block_on(async {
+        let mut store = InMemoryStore::default();
+        let mut memory = BrowsingMemory::new(1);
+        // An origin visit to the page, a hop *from* it, and an unrelated trace.
+        memory.record_traversal("mark", event(None, "https://gone.example", 10));
+        memory.flush(&mut store, 100).await.unwrap();
+        memory.record_traversal(
+            "mark",
+            event(Some("https://gone.example"), "https://next.example", 11),
+        );
+        memory.flush(&mut store, 101).await.unwrap();
+        memory.record_traversal(
+            "mark",
+            event(Some("https://keep.example"), "https://stay.example", 12),
+        );
+        memory.flush(&mut store, 102).await.unwrap();
+        assert_eq!(list_typed::<BrowsingTrace>(&mut store).await.unwrap().len(), 3);
+
+        // Forget the page: both the origin visit and the hop from it go; the
+        // unrelated trace stays.
+        let forgotten = memory
+            .forget_url(&mut store, "https://gone.example")
+            .await
+            .unwrap();
+        assert_eq!(forgotten, 2);
+
+        let remaining = list_typed::<BrowsingTrace>(&mut store).await.unwrap();
+        assert_eq!(remaining.len(), 1);
+        assert!(memory.traces().all(|t| t.events.iter().all(|e| {
+            e.to.url != "https://gone.example"
+                && e.from.as_ref().is_none_or(|f| f.url != "https://gone.example")
+        })));
+
+        // Idempotent: forgetting an already-absent url removes nothing.
+        assert_eq!(
+            memory
+                .forget_url(&mut store, "https://gone.example")
+                .await
+                .unwrap(),
+            0
+        );
+    });
+}
+
+#[test]
 fn adopted_traces_join_reads_but_not_quota() {
     pollster::block_on(async {
         let mut store = InMemoryStore::default();

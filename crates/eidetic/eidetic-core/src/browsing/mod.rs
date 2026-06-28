@@ -354,6 +354,40 @@ impl BrowsingMemory {
             .retain(|(id, _)| id.is_none_or(|id| !overflow.contains(&id)));
         Ok(deleted)
     }
+
+    /// Forget every trace mentioning `url` (as either end of any event): delete its
+    /// stored manifest and drop it from the loaded corpus and any open segment.
+    /// Returns how many traces were forgotten. The `eidetic-search` index is rebuilt
+    /// from this corpus per query, so a forgotten trace also leaves the index — a
+    /// forget that left the index behind would not be a forget. (Capture plan C4.)
+    pub async fn forget_url(&mut self, store: &mut dyn Store, url: &str) -> Result<usize> {
+        let mentions = |trace: &BrowsingTrace| {
+            trace
+                .events
+                .iter()
+                .any(|e| e.to.url == url || e.from.as_ref().is_some_and(|f| f.url == url))
+        };
+        let mut forgotten = 0;
+        let mut remaining = Vec::with_capacity(self.traces.len());
+        for (id, trace) in std::mem::take(&mut self.traces) {
+            if mentions(&trace) {
+                if let Some(id) = id {
+                    delete_manifest(store, id).await?;
+                }
+                forgotten += 1;
+            } else {
+                remaining.push((id, trace));
+            }
+        }
+        self.traces = remaining;
+        // Drop matching events from any unflushed open segment too.
+        for events in self.open.values_mut() {
+            events.retain(|e| {
+                !(e.to.url == url || e.from.as_ref().is_some_and(|f| f.url == url))
+            });
+        }
+        Ok(forgotten)
+    }
 }
 
 #[cfg(test)]
