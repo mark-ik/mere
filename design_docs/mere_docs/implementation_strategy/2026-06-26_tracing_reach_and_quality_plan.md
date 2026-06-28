@@ -32,6 +32,21 @@ with `meerkat`, `frame`, or `uxtree`. Every other target is dropped before Appar
 trace emitted from `armillary`, `inker`, `graph`, or any engine never reaches the diagnostics ring
 even if the component does emit it.
 
+### The real gate is the env filter, not the bridge (2026-06-27)
+
+A correction to "near-sighted" above: the bridge allowlist is the *secondary* filter. `main.rs`
+installs one **global** `EnvFilter` (default `meerkat=info`) *above* the Apparatus layer, so every
+non-`meerkat` target is dropped before `interesting_target` ever runs. A unit test replicating the
+stack proves it (`the_env_filter_is_the_real_reach_gate`): an `armillary` event, fully allowlisted
+by the bridge, never arrives under `meerkat=info`. So T1's broadened allowlist and T2's armillary
+spans did not reach Apparatus at all until this was fixed. The fix is per-layer filters: the RUST_LOG
+env filter rides `fmt` (console only), and the Apparatus ring carries its own `LevelFilter::INFO`, so
+the two consumers (a quiet RUST_LOG-governed console vs a first-party-broad ring) decouple. Grounding
+for the leftover coverage question: first-party = the ~65 explicit workspace members; the vendored
+donors (`blitz`/`xilem`/`masonry`/`weave`) are *not* members, and at info+ the dependency noise above
+them is minimal. So a four-donor *exclusion* is now grounded, where the family-prefix *inclusion* list
+silently misses most first-party crates (`aether`/`gyre`/`identity`/`register_*`/the inker engines/...).
+
 ### The bridge is lossy
 
 `register_diagnostics::StructuredPayloadField.name` is `&'static str` (emit.rs:46). A runtime
@@ -210,7 +225,13 @@ dumpable without a rebuild.
 2. **Correlation id source.** Per-actor, per-request/op, or per-origin? Lean: per-op id minted at
    the actor command boundary, carried in span fields.
 3. **`Cow` vs `String`** for the payload field name. Lean: `Cow<'static, str>` so the donor's
-   `&'static` literals stay zero-alloc and runtime names own.
+   `&'static` literals stay zero-alloc and runtime names own. **Resolved in T1: moot (`Field::name()`
+   is `&'static str`).**
+4. **Ring scope: four-donor exclusion vs complete inclusion.** Now that per-layer filters put the
+   scope decision on the Apparatus layer (T1.5), should `interesting_target` *exclude* the four
+   vendored donors (`blitz`/`xilem`/`masonry`/`weave`, the only non-member crates emitting at info+)
+   or *include* a complete list of the ~65 workspace members? Lean: exclusion (small, grounded,
+   self-maintaining; the family-prefix inclusion list already silently drops most first-party crates).
 
 ---
 
@@ -248,3 +269,12 @@ component the later slices instrument.
   concurrent browse-trace work (meerkat is currently red on his mid-edit `TraceEvent.candidates`,
   unrelated to this change). Next: the call-site half once meerkat settles, or T3 (engine passes) on
   another leaf.
+- 2026-06-27: **Reach gate found and fixed (T1.5).** Examining the actual subscriber install (prompted
+  by Mark's "examine the crates before just excluding") showed the *global* `EnvFilter` default
+  `meerkat=info` was dropping every non-meerkat target before the bridge ran, so T1/T2 reached nothing
+  by default. Proven by `the_env_filter_is_the_real_reach_gate` (committed `3a3a5d0`). Fixed with
+  per-layer filters in `main.rs` (`fmt` carries the env filter; the Apparatus ring carries its own
+  `LevelFilter::INFO`); `cargo check` green; `per_layer_split_feeds_the_ring_while_the_console_stays_quiet`
+  proves an armillary event now reaches the ring while the console stays scoped (test committed
+  `c8c4f19`; the ~4-line `main.rs` hunk rides the concurrent switcher refactor in that file rather
+  than being carved out). This makes T1/T2/T3 actually observable. Leftover: open decision #4 below.
