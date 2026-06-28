@@ -137,7 +137,7 @@ impl crate::Shell {
         ctx.shared.session.active_session_id = id;
         ctx.view.content_location =
             ctx.orrery().focused_url().unwrap_or("mere://welcome").to_string();
-        ctx.refresh_session_thumbnails();
+        ctx.refresh_session_labels();
         ctx.view.request_redraw();
     }
 

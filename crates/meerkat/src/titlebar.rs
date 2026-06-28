@@ -52,16 +52,18 @@ fn rgba(c: Color32) -> [f32; 4] {
 
 /// The window-space rect `[x0, y0, x1, y1]` of control `idx` (0 = minimize …
 /// 2 = close): the strip is right-aligned in the toolbar band.
-pub fn control_rect(idx: usize, win_w: u32, band_h: u32) -> [f32; 4] {
-    let x0 = win_w as f32 - CONTROLS_W + CTL_W * idx as f32;
-    [x0, 0.0, x0 + CTL_W, band_h as f32]
+pub fn control_rect(idx: usize, win_w: u32, band_h: u32, scale: f32) -> [f32; 4] {
+    let ctl_w = CTL_W * scale;
+    let x0 = win_w as f32 - CONTROLS_W * scale + ctl_w * idx as f32;
+    [x0, 0.0, x0 + ctl_w, band_h as f32]
 }
 
 /// Which control, if any, window point `(x, y)` falls on (the toolbar band's
-/// top-right strip).
-pub fn control_at(x: f32, y: f32, win_w: u32, band_h: u32) -> Option<WindowControl> {
+/// top-right strip). `scale` is the chrome `ui_scale` — the controls grow with the
+/// chrome, so the hit-test must match. (Auto-DPI — controls scale with the chrome.)
+pub fn control_at(x: f32, y: f32, win_w: u32, band_h: u32, scale: f32) -> Option<WindowControl> {
     CONTROLS.iter().copied().enumerate().find_map(|(idx, ctl)| {
-        let r = control_rect(idx, win_w, band_h);
+        let r = control_rect(idx, win_w, band_h, scale);
         (x >= r[0] && x < r[2] && y >= r[1] && y < r[3]).then_some(ctl)
     })
 }
@@ -103,23 +105,24 @@ pub fn resize_cursor(dir: ResizeDirection) -> CursorIcon {
 /// through. Minimize / maximize take the chrome's body text; close tints red so
 /// it reads as the destructive control. The host rasterizes this once per size
 /// and composites it over the chrome at the toolbar's top-right.
-pub fn controls_scene(band_h: u32, theme: &ChromeTheme) -> Scene {
-    let w = CONTROLS_W.round().max(1.0) as u32;
+pub fn controls_scene(band_h: u32, theme: &ChromeTheme, scale: f32) -> Scene {
+    let ctl_w = CTL_W * scale;
+    let w = (CONTROLS_W * scale).round().max(1.0) as u32;
     let mut scene = Scene::new(w, band_h);
     let cy = band_h as f32 / 2.0;
     let glyph = rgba(theme.body_text);
     let close = [0.86, 0.34, 0.34, 1.0];
-    let stroke = 1.5;
-    let r = 6.5; // glyph half-extent
+    let stroke = 1.5 * scale;
+    let r = 6.5 * scale; // glyph half-extent
 
     // Minimize: a centered horizontal line.
-    let cx0 = CTL_W * 0.5;
+    let cx0 = ctl_w * 0.5;
     let mut min_path = netrender::ScenePath::new();
     min_path.move_to(cx0 - r, cy).line_to(cx0 + r, cy);
     scene.push_shape_stroked(min_path, glyph, stroke);
 
     // Maximize: a square outline.
-    let cx1 = CTL_W * 1.5;
+    let cx1 = ctl_w * 1.5;
     let mut max_path = netrender::ScenePath::new();
     max_path
         .move_to(cx1 - r, cy - r)
@@ -130,7 +133,7 @@ pub fn controls_scene(band_h: u32, theme: &ChromeTheme) -> Scene {
     scene.push_shape_stroked(max_path, glyph, stroke);
 
     // Close: an ×.
-    let cx2 = CTL_W * 2.5;
+    let cx2 = ctl_w * 2.5;
     let mut close_path = netrender::ScenePath::new();
     close_path.move_to(cx2 - r, cy - r).line_to(cx2 + r, cy + r);
     close_path.move_to(cx2 + r, cy - r).line_to(cx2 - r, cy + r);
@@ -147,17 +150,17 @@ mod tests {
     fn controls_strip_is_right_aligned_and_hit_tests() {
         let (w, band) = (1024u32, 64u32);
         // Close is the rightmost cell, flush to the window's right edge.
-        let close = control_rect(2, w, band);
+        let close = control_rect(2, w, band, 1.0);
         assert_eq!(close[2], w as f32);
         // A point in the close cell hits close; one left of the strip misses.
         assert_eq!(
-            control_at(w as f32 - 10.0, 20.0, w, band),
+            control_at(w as f32 - 10.0, 20.0, w, band, 1.0),
             Some(WindowControl::Close)
         );
-        assert_eq!(control_at(w as f32 - CONTROLS_W - 5.0, 20.0, w, band), None);
+        assert_eq!(control_at(w as f32 - CONTROLS_W - 5.0, 20.0, w, band, 1.0), None);
         // Below the band there are no controls.
         assert_eq!(
-            control_at(w as f32 - 10.0, band as f32 + 5.0, w, band),
+            control_at(w as f32 - 10.0, band as f32 + 5.0, w, band, 1.0),
             None
         );
     }

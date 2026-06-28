@@ -70,6 +70,18 @@ component with no behavior change; the component takes a `Scope` + a `SwatchInst
 config and emits the element model; the facet pane is one embedder of it; files
 under the 600-LOC ceiling.
 
+**Status: done 2026-06-27** (the host-generic lift). `swatch_view` is now
+`swatch_view<S: 'static>(spec) -> SwatchView<S>` (`SwatchView<S> = Box<dyn AnyView<S,
+(), ServalCtx, ServalElement>>`), generic over the embedder state because the swatch
+carries no state-bound callbacks (interaction routes through the host hit-test on
+`data-subject`). The facet pane mounts it as `SwatchView<SettingsPanesState>` with no
+call-site change (inference), behavior-preserved; `cargo check -p meerkat --lib`
+green, no new warnings. **Right-sized**: the `Scope` enum, the `SwatchInstance`
+config, and the explicit element-model layer move to **P2**, where the connections
+swatch is their first multi-scope consumer; landing them in P1 with only the
+node-editor consumer would be unused scaffolding. The keystone P1 ships is the
+host-generic component itself.
+
 ### P2 — Connections swatch (scope = Selection)
 
 Wire the focus-card slot's multi-selection branch (`render/cards.rs:129` TODO,
@@ -78,7 +90,9 @@ to cartography `project()`, take the `Projection` geometry (the selected nodes p
 their inter-edges), build the element model, render as DOM (nodes as glyphs, edges
 as family-coloured lines). It rides the focus-card slot socket (`compute_focus_cards`
 + the `FocusCardKind` dispatch in `render/setup.rs`) as a new `FocusCardKind` or a
-generalization of `ObjectCard`.
+generalization of `ObjectCard`. This phase also introduces the `Scope` enum, the
+`SwatchInstance` config (design §3), and the explicit element-model layer, since the
+second scope is their first real consumer (folded down from P1).
 
 **Done when**: selecting more than one node summons a DOM connections swatch in the
 focus-card slot showing the selected nodes and their inter-edges, family-coloured and
@@ -247,3 +261,13 @@ template renders a purpose-built UI over its own subgraph.
   recorded: this plan owns the spine; node-body-face B3, object-card, graphlet-wiring,
   petgraph-RDF, graph-signals, and field-regions own the fragments it coordinates. No
   code yet.
+- **2026-06-27** — **P1 done (host-generic lift)**. `swatch.rs`'s `swatch_view`
+  lifted off `SettingsPanesView` / `SettingsPanesState` to `swatch_view<S>(spec) ->
+  SwatchView<S>`, a single-file behavior-preserving change in a clean file (the
+  concurrent knot-note / observability work touched a different region of `cards.rs`,
+  ~line 293, no collision). `cargo check -p meerkat --lib` green, no new warnings; the
+  facet pane embeds it with zero call-site change (`S` inferred). Right-sized P1 to the
+  keystone: the `Scope` / `SwatchInstance` / element-model abstractions move to P2 with
+  their first multi-scope consumer rather than landing as unused scaffolding now. Next:
+  P2 (connections swatch) introduces them and mounts the same `swatch_view` in the
+  focus-card slot.

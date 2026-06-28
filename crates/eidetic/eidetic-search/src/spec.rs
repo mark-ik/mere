@@ -32,6 +32,10 @@ use crate::{Result, SearchError};
 /// The logical field set's version (bump when fields/columns change shape).
 pub const FIELDS_V1: u32 = 1;
 
+/// v2 added the `text` (page main-text) field for BM25 body recall (C5); an
+/// index written at v1 mismatches and re-mints from the corpus.
+pub const FIELDS_V2: u32 = 2;
+
 /// The spec sidecar's file name inside an index directory.
 pub const SPEC_SIDECAR: &str = "mere-search-spec.json";
 
@@ -96,7 +100,7 @@ impl SearchIndexSpec {
     pub fn current() -> Self {
         Self {
             tantivy_version: tantivy::version_string().to_string(),
-            fields_version: FIELDS_V1,
+            fields_version: FIELDS_V2,
             tokenizer: "default".to_string(),
         }
     }

@@ -310,7 +310,7 @@ impl crate::Shell {
             self.orrery_lru.retain(|g| *g != graph);
         }
         self.focused_view_mut().renaming = None;
-        self.ctx().refresh_session_thumbnails();
+        self.ctx().refresh_session_labels();
         self.focused_view_mut().request_redraw();
     }
 

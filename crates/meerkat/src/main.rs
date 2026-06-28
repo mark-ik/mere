@@ -64,7 +64,7 @@ use register_theme::theme::ThemeRegistry;
 use serval_scripted_dom::{NodeId, ScriptedDom};
 use serval_winit_host::RenderCore;
 use session_runtime::{
-    ManifestStore, SwitcherThumbnail, frame_layout_store, manifest::GraphSessionManifest,
+    ManifestStore, frame_layout_store, manifest::GraphSessionManifest,
     session_graph_store, settings_store, view_intent_store,
 };
 use tracing_subscriber::prelude::*;
@@ -130,7 +130,6 @@ mod serval_render;
 mod session_ops;
 mod shellbar;
 mod steward;
-mod switcher;
 mod tags;
 mod theme_edit;
 mod theme_store;
@@ -576,12 +575,20 @@ fn main() {
     }
     let (diagnostics_tx, diagnostics_rx) = mpsc::channel();
     install_global_sender(diagnostics_tx.clone());
+    // Two consumers with opposite needs share this subscriber: the terminal (fmt) stays quiet and
+    // RUST_LOG-controlled, while the Apparatus ring wants first-party traces regardless of RUST_LOG.
+    // A single *global* `.with(env_filter)` gated both, so the `meerkat=info` default starved the
+    // ring of every non-meerkat target before the bridge's allowlist ran. Per-layer filters decouple
+    // them: RUST_LOG governs only the console; the ring captures all info+ and the layer's own
+    // `interesting_target` scopes that to first-party.
     let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("meerkat=info"));
     tracing_subscriber::registry()
-        .with(env_filter)
-        .with(tracing_subscriber::fmt::layer())
-        .with(tracing_layer::ApparatusTracingLayer::new(diagnostics_tx))
+        .with(tracing_subscriber::fmt::layer().with_filter(env_filter))
+        .with(
+            tracing_layer::ApparatusTracingLayer::new(diagnostics_tx)
+                .with_filter(tracing_subscriber::filter::LevelFilter::INFO),
+        )
         .init();
     tracing::info!("meerkat-shell starting");
 

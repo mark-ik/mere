@@ -92,6 +92,10 @@ pub struct ShellOutcome {
     /// `sparql(…)` call was made. Recorded, not run here: the shell snapshot has
     /// only node URLs, not the full RDF graph.
     pub sparql_query: Option<String>,
+    /// A query passed to `recall("…")` (or the `>recall …` sugar) — the host
+    /// rebuilds the lexical trail index from the browsing corpus (titles, URLs,
+    /// and page text) and echoes the top BM25 hits. `None` when not called. (C5.)
+    pub recall_query: Option<String>,
     /// A wasm component path passed to `attach_script("path")` — the host attaches a
     /// DocumentScript at that path to the focused tile (P2.5). `None` when not called.
     pub attach_script: Option<String>,
@@ -131,6 +135,7 @@ impl CommandShell {
         let commands: Rc<RefCell<Vec<Command>>> = Rc::new(RefCell::new(Vec::new()));
         let relation_kind: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
         let sparql_query: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+        let recall_query: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
         let attach_script: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
         let detach_script: Rc<RefCell<bool>> = Rc::new(RefCell::new(false));
         let script_event: Rc<RefCell<Option<(String, String)>>> = Rc::new(RefCell::new(None));
@@ -194,6 +199,14 @@ impl CommandShell {
             *sq.borrow_mut() = Some(query.to_string());
         });
 
+        // `recall("…")` (or the `>recall …` sugar) — record a lexical-recall query
+        // for the host to run over the browsing corpus (titles + URLs + page text).
+        // Mirrors `sparql`: recorded here, run host-side. (Capture plan C5.)
+        let rq = recall_query.clone();
+        engine.register_fn("recall", move |query: &str| {
+            *rq.borrow_mut() = Some(query.to_string());
+        });
+
         // DocumentScript triggers (P2.5): `attach_script("path.wasm")` attaches a
         // wasm component to the focused tile, `script_event("kind", "payload")`
         // delivers one event to it, `detach_script()` removes it. Like `sparql` /
@@ -226,6 +239,7 @@ impl CommandShell {
         let commands = commands.borrow().clone();
         let relation_kind = relation_kind.borrow().clone();
         let sparql_query = sparql_query.borrow().clone();
+        let recall_query = recall_query.borrow().clone();
         let attach_script = attach_script.borrow().clone();
         let detach_script = *detach_script.borrow();
         let script_event = script_event.borrow().clone();
@@ -236,6 +250,7 @@ impl CommandShell {
                 commands,
                 relation_kind,
                 sparql_query,
+                recall_query,
                 attach_script,
                 detach_script,
                 script_event,
@@ -247,6 +262,7 @@ impl CommandShell {
                 commands,
                 relation_kind,
                 sparql_query,
+                recall_query,
                 attach_script,
                 detach_script,
                 script_event,
@@ -277,7 +293,7 @@ pub fn complete(prefix: &str) -> Option<&'static str> {
         .iter()
         .map(|c| c.verb())
         .chain(QUERIES.iter().copied())
-        .chain(["sparql", "attach_script", "detach_script", "script_event", "scene"])
+        .chain(["sparql", "recall", "attach_script", "detach_script", "script_event", "scene"])
         .find(|name| name.len() > prefix.len() && name.starts_with(prefix))
 }
 
@@ -298,6 +314,14 @@ fn desugar(source: &str) -> String {
         let arg = rest.trim();
         if !arg.is_empty() && arg.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
             return format!("scene(\"{arg}\")");
+        }
+    }
+    // `recall <terms>` sugar: the rest of the line is the query, so `>recall
+    // documentation` works without rhai quoting. (Capture plan C5.)
+    if let Some(rest) = trimmed.strip_prefix("recall ") {
+        let arg = rest.trim().replace('"', "");
+        if !arg.is_empty() {
+            return format!("recall(\"{arg}\")");
         }
     }
     source.to_string()

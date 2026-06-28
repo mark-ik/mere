@@ -222,6 +222,7 @@ impl WindowView {
             window: Default::default(),
             surface: Default::default(),
             toolbar_h: Default::default(),
+            dpi_scale: 1.0,
             width: 1024,
             height: 600,
             cursor: Default::default(),

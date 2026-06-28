@@ -130,11 +130,10 @@ pub(crate) struct Session {
     /// The shared per-user data root (`<data_dir>/mere`): settings, the content
     /// cache, and comms live here, above the per-session dirs. (Multi-graph MG1.)
     pub(crate) mere_root: PathBuf,
-    /// Cached switcher thumbnails per session (the F2.3 shellbar switcher rows);
-    /// rebuilt on session/graph change, the active one from the live orrery. (MG4.)
-    pub(crate) session_thumbnails: HashMap<SessionId, SwitcherThumbnail>,
-    /// Cached switcher label per session (display name, else derived from the
-    /// graph), refreshed in lockstep with `session_thumbnails`. (Host text path.)
+    /// Cached display label per session — the user's display name, else one derived
+    /// from the graph. Rebuilt on session/graph change by `refresh_session_labels`;
+    /// read by the toolbar session chips. (The switcher thumbnails this once sat beside
+    /// are retired — sessions are toolbar chips now. Chrome bar P4 cleanup.)
     pub(crate) session_labels: HashMap<SessionId, String>,
     /// Host text shaping for host-drawn labels (the switcher tile names). Holds the
     /// parley contexts so they aren't rebuilt per frame. (Host text path.)
@@ -174,10 +173,10 @@ pub(crate) struct Presentation {
     /// [`ui_scale`](Self::ui_scale). Default 1.1, the baseline "a point or two larger"
     /// bump. Shared across this session's windows. (UI scale.)
     pub(crate) user_zoom: f32,
-    /// The display's DPI factor (winit `scale_factor()`), folded into `ui_scale` now
-    /// the window is sized in **logical** px so the chrome tracks the OS scale. 1.0 at
-    /// 100%. Shared today; goes per-window in the auto-DPI plan's D3 (multi-monitor).
-    /// (Auto-DPI D1.)
+    /// The DPI factor the shared `chrome_sheet` is currently **baked at**. The
+    /// authoritative per-window dpi lives on `WindowView::dpi_scale` (D3, multi-monitor);
+    /// each window's render re-bakes this sheet to its own dpi when they differ. Folded
+    /// with `user_zoom` into `ui_scale`. 1.0 at 100%. (Auto-DPI D1 → D3.)
     pub(crate) dpi_scale: f32,
     /// The active theme's document-lane palette (content cards: smolweb /
     /// markdown / feed text). Threaded into content actors so baked glyph colors

@@ -33,7 +33,7 @@ impl WindowCtx<'_> {
             // press near a window edge starts an OS resize drag. Both take
             // priority over the chrome / content (and any open menu).
             if button == MouseButton::Left {
-                if let Some(ctl) = titlebar::control_at(x, y, self.view.width, th as u32) {
+                if let Some(ctl) = titlebar::control_at(x, y, self.view.width, th as u32, self.shared.presentation.ui_scale()) {
                     self.window_control(ctl);
                     return;
                 }
@@ -238,6 +238,7 @@ impl WindowCtx<'_> {
                     self.view.width as f32,
                     self.view.height as f32,
                     th,
+                    self.shared.presentation.ui_scale(),
                 );
                 if x >= sb[0] && x < sb[2] && y >= sb[1] && y < sb[3] {
                     let hit = |r: &[f32; 4]| x >= r[0] && x < r[2] && y >= r[1] && y < r[3];

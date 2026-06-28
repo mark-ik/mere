@@ -133,17 +133,6 @@ impl WindowCtx<'_> {
         if let Err(err) = self.shared.session.manifests.flush_dirty() {
             tracing::warn!(%err, "failed to flush the session registry");
         }
-        // Keep this session's switcher thumbnail live as its graph grows (cheap; no
-        // disk read, unlike the full refresh on a session change).
-        let opts = SwitcherThumbnailOptions {
-            width: SWITCHER_THUMB_W,
-            height: SWITCHER_THUMB_H,
-            ..SwitcherThumbnailOptions::default()
-        };
-        let orrery = self.orrery();
-        let thumb =
-            build_switcher_thumbnail_with(orrery.graph(), |k| orrery.node_position(k), opts);
-        self.shared.session.session_thumbnails.insert(session_id, thumb);
     }
 
     /// Restore the focused graph's persisted workbench tiling from its sidecar,
@@ -178,7 +167,7 @@ impl WindowCtx<'_> {
         if let Err(err) = self.shared.session.manifests.flush_dirty() {
             tracing::warn!(%err, "failed to flush the renamed session manifest");
         }
-        self.refresh_session_thumbnails();
+        self.refresh_session_labels();
         self.view.request_redraw();
     }
 
@@ -206,42 +195,34 @@ impl WindowCtx<'_> {
         }
     }
 
-    /// Rebuild the per-session switcher thumbnails **and labels**: the active
-    /// session from the **live** orrery graph, each inactive session from its cold
-    /// `graph.json`. The label is the user's display name, else one derived from the
-    /// graph. Drops entries for closed sessions. Called on every session or graph
-    /// change (cheap small-graph walks; no per-frame disk reads). (Multi-graph MG4 /
-    /// host text path.)
-    pub(crate) fn refresh_session_thumbnails(&mut self) {
-        let opts = SwitcherThumbnailOptions {
-            width: SWITCHER_THUMB_W,
-            height: SWITCHER_THUMB_H,
-            ..SwitcherThumbnailOptions::default()
-        };
+    /// Rebuild the per-session display **labels**: the active/pooled session from its
+    /// live orrery graph, each cold session from its `graph.json`. A user-set display
+    /// name wins; otherwise one derived from the graph. Drops entries for closed
+    /// sessions. Called on every session or graph change. (The switcher thumbnails this
+    /// once also rasterized are retired — sessions are toolbar chips now, so only the
+    /// label survives. Chrome bar P4 cleanup.)
+    pub(crate) fn refresh_session_labels(&mut self) {
         let ids: Vec<SessionId> = self.shared.session.manifests.iter().map(|(id, _)| id).collect();
         let live: std::collections::HashSet<SessionId> = ids.iter().copied().collect();
-        self.shared.session.session_thumbnails.retain(|id, _| live.contains(id));
         self.shared.session.session_labels.retain(|id, _| live.contains(id));
         for id in ids {
-            // A user-set display name wins; otherwise derive a short label.
+            // A user-set display name wins; otherwise derive a short label from the
+            // graph — live orrery if pooled, else a cold `graph.json` load.
             let display_name = self.shared.session.manifests
                 .get(id)
                 .and_then(|m| m.display_name.clone())
                 .filter(|n| !n.trim().is_empty());
-            // A session whose graph is *pooled* (live in any pane, not just the
-            // focused one) thumbnails off its live orrery; the rest cold-load from
-            // disk. (Pane-as-unit — was "the active session only".)
-            let pooled = self
+            let label = if let Some(name) = display_name {
+                name
+            } else if let Some(orrery) = self
                 .shared
                 .session
                 .manifests
                 .get(id)
                 .map(|m| m.root_graph_id)
-                .and_then(|gid| self.orreries.get(&gid));
-            let (thumb, label) = if let Some(orrery) = pooled {
-                let g = orrery.graph();
-                let label = display_name.unwrap_or_else(|| derive_session_label(g));
-                (build_switcher_thumbnail_with(g, |k| orrery.node_position(k), opts), label)
+                .and_then(|gid| self.orreries.get(&gid))
+            {
+                derive_session_label(orrery.graph())
             } else {
                 let dir = self.shared.session.mere_root
                     .join("sessions")
@@ -250,26 +231,8 @@ impl WindowCtx<'_> {
                     .ok()
                     .flatten()
                     .unwrap_or_else(Graph::new);
-                let label = display_name.unwrap_or_else(|| derive_session_label(&graph));
-                // Positions are no longer in graph.json; draw the cold thumbnail from
-                // the session's cartography sidecar (origin without one). (Position gut.)
-                let present: std::collections::HashSet<forme::GraphMemberId> =
-                    graph.nodes().map(|(_, n)| n.id).collect();
-                let positions: std::collections::HashMap<forme::GraphMemberId, (f32, f32)> =
-                    load_cartography(&dir, &present).map(|g| g.iter().collect()).unwrap_or_default();
-                let thumb = build_switcher_thumbnail_with(
-                    &graph,
-                    |k| {
-                        graph
-                            .get_node(k)
-                            .and_then(|n| positions.get(&n.id))
-                            .map(|&(x, y)| PortablePoint::new(x, y))
-                    },
-                    opts,
-                );
-                (thumb, label)
+                derive_session_label(&graph)
             };
-            self.shared.session.session_thumbnails.insert(id, thumb);
             self.shared.session.session_labels.insert(id, label);
         }
     }

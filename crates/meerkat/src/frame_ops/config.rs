@@ -202,6 +202,8 @@ impl WindowCtx<'_> {
     /// texture (re-rasterised at the new band height), then redraw. Shared by the
     /// zoom (Ctrl +/-/0) and display-DPI change paths. (UI scale.)
     pub(crate) fn refresh_ui_scale(&mut self) {
+        // Bake the shared sheet at this window's dpi (D3) × the shared user_zoom.
+        self.shared.presentation.dpi_scale = self.view.dpi_scale;
         self.shared.presentation.rebuild_chrome_sheet();
         self.view.toolbar_h = 0;
         self.view.window_controls_tex = None;
@@ -209,13 +211,14 @@ impl WindowCtx<'_> {
     }
 
     /// Fold a new display DPI factor (winit `ScaleFactorChanged`, or the initial
-    /// `scale_factor()` at window creation) into the chrome scale. A no-op when
-    /// unchanged. (Auto-DPI D1; goes per-window in D3.)
+    /// `scale_factor()` at window creation) into **this window's** chrome scale (D3 —
+    /// per-window). A no-op when unchanged. The shared sheet rebuilds to this window's
+    /// dpi here (and re-syncs at another window's render if it differs). (Auto-DPI D3.)
     pub(crate) fn set_dpi_scale(&mut self, dpi: f32) {
-        if (self.shared.presentation.dpi_scale - dpi).abs() < 1e-3 {
+        if (self.view.dpi_scale - dpi).abs() < 1e-3 {
             return;
         }
-        self.shared.presentation.dpi_scale = dpi;
+        self.view.dpi_scale = dpi;
         self.refresh_ui_scale();
     }
 

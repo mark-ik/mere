@@ -10,14 +10,12 @@
 //! Factored out of `frame_ops.rs` to keep files under the 600-LOC ceiling.
 
 use frame::{GraphId, SessionId};
-use kernel::geometry::PortablePoint;
 use kernel::graph::Graph;
 use session_runtime::{
-    SwitcherThumbnailOptions, ViewIntent, build_switcher_thumbnail_with, frame_layout_store,
-    manifest::GraphSessionManifest, session_graph_store, view_intent_store,
+    ViewIntent, frame_layout_store, manifest::GraphSessionManifest, session_graph_store,
+    view_intent_store,
 };
 
-use super::switcher::{SWITCHER_THUMB_H, SWITCHER_THUMB_W};
 use super::{DEFAULT_FRAME, DEFAULT_PANE, WindowCtx};
 
 /// Filename for the workbench tiling sidecar (beside `graph.json`): the platen

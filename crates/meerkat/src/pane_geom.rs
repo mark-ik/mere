@@ -53,6 +53,7 @@ impl WindowCtx<'_> {
             self.view.width as f32,
             self.view.height as f32,
             th,
+            self.shared.presentation.ui_scale(),
         )
     }
 

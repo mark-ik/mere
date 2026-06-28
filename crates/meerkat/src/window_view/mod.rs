@@ -371,6 +371,12 @@ pub(crate) struct WindowView {
     pub(crate) surface: Option<WindowSurface>,
     /// Cached measured height (px) of this window's chrome band; `0` until measured.
     pub(crate) toolbar_h: u32,
+    /// This window's display device-pixel-ratio (its monitor's winit `scale_factor`),
+    /// set at window creation + on `ScaleFactorChanged`. Per-window so two windows on
+    /// monitors of different density each scale correctly; `user_zoom` stays shared on
+    /// `Presentation`. The shared chrome sheet is rebuilt to this window's dpi at its
+    /// render when it differs from the sheet's current bake. 1.0 until set. (Auto-DPI D3.)
+    pub(crate) dpi_scale: f32,
     /// This window's surface width (physical px).
     pub(crate) width: u32,
     /// This window's surface height (physical px).

@@ -260,7 +260,7 @@ impl crate::WindowCtx<'_> {
         // follows the edge so buttons stack vertically (Left/Right) or
         // horizontally (Top/Bottom). (Shellbar F2.1.)
         {
-            let sr = shellbar::shellbar_rect(self.shared.presentation.shellbar_edge, w as f32, h as f32, toolbar_h as f32);
+            let sr = shellbar::shellbar_rect(self.shared.presentation.shellbar_edge, w as f32, h as f32, toolbar_h as f32, self.shared.presentation.ui_scale());
             let flex_dir = match self.shared.presentation.shellbar_edge {
                 session_runtime::ShellbarEdge::Left | session_runtime::ShellbarEdge::Right => {
                     "column"

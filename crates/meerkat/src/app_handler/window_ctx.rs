@@ -69,7 +69,7 @@ impl crate::WindowCtx<'_> {
     pub(crate) fn update_hover_cursor(&mut self) {
         let (x, y) = self.view.cursor;
         let band_h = self.toolbar_height();
-        let icon = if titlebar::control_at(x, y, self.view.width, band_h).is_some() {
+        let icon = if titlebar::control_at(x, y, self.view.width, band_h, self.shared.presentation.ui_scale()).is_some() {
             CursorIcon::Default
         } else if let Some(dir) = titlebar::resize_dir_at(x, y, self.view.width, self.view.height) {
             titlebar::resize_cursor(dir)

@@ -303,6 +303,11 @@ impl WindowCtx<'_> {
         if let Some(query) = &outcome.sparql_query {
             note = Some(self.run_sparql_query(query));
         }
+        // A `recall("…")` call rebuilds the lexical trail index from the browsing
+        // corpus (titles + URLs + page text) and echoes the top BM25 hits. (C5.)
+        if let Some(query) = &outcome.recall_query {
+            note = Some(self.run_recall_query(query));
+        }
         // DocumentScript triggers (P2.5): attach / deliver-event / detach on the
         // focused tile. `attach` resolves the script's capability permissions (App
         // default for now; the Session-scope override store is the follow-on); the
@@ -384,6 +389,60 @@ impl WindowCtx<'_> {
             Err(err) => format!("SPARQL error: {err}"),
             Ok(rows) if rows.rows.is_empty() => "0 results".to_string(),
             Ok(rows) => format_sparql_rows(&rows),
+        }
+    }
+
+    /// Run a `recall("…")` lexical query (capture plan C5): load the browsing-trace
+    /// corpus, pull each visited page's main text from the durable content cache,
+    /// re-mint the `eidetic-search` trail index with that text, and echo the top
+    /// BM25 hits. The index is derived state, rebuilt from the corpus each call (a
+    /// fresh, modest index; an incrementally-maintained one is the optimization).
+    fn run_recall_query(&mut self, query: &str) -> String {
+        let dir = self.shared.session.mere_root.join("search").join("trail");
+        let Some(store) = self.shared.content.store.as_mut() else {
+            return "recall: no content store".to_string();
+        };
+        let memory = match pollster::block_on(eidetic::browsing::BrowsingMemory::load(store, 64)) {
+            Ok(memory) => memory,
+            Err(err) => return format!("recall: load failed: {err}"),
+        };
+        let traces: Vec<_> = memory.traces().cloned().collect();
+        if traces.is_empty() {
+            return "recall: no trail captured yet".to_string();
+        }
+        // Pull each visited URL's main text from the durable content cache.
+        let urls: std::collections::HashSet<String> = traces
+            .iter()
+            .flat_map(|t| t.events.iter().map(|e| e.to.url.clone()))
+            .collect();
+        let mut texts: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+        for url in &urls {
+            if let Ok(Some(content)) =
+                pollster::block_on(session_runtime::content_store::load_content(store, url))
+            {
+                let body = String::from_utf8_lossy(&content.body);
+                let doc = serval_static_dom::StaticDocument::parse(&body);
+                if let Some(text) = serval_extract::extract_main_text(&doc) {
+                    texts.insert(url.clone(), text);
+                }
+            }
+        }
+        let index = match eidetic_search::TrailIndex::rebuild_with_text(&dir, &traces, |u| {
+            texts.get(u).cloned()
+        }) {
+            Ok(index) => index,
+            Err(err) => return format!("recall: index build failed: {err}"),
+        };
+        match index.search(query, 5) {
+            Ok(hits) if hits.is_empty() => format!("recall: no hits for \"{query}\""),
+            Ok(hits) => {
+                let shown: Vec<String> = hits
+                    .iter()
+                    .map(|h| h.title.clone().unwrap_or_else(|| h.url.clone()))
+                    .collect();
+                format!("recall \"{query}\": {}", shown.join(" | "))
+            }
+            Err(err) => format!("recall: search failed: {err}"),
         }
     }
 

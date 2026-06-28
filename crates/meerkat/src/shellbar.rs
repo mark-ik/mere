@@ -9,16 +9,20 @@
 
 use session_runtime::ShellbarEdge;
 
-/// Width (when Left/Right) or height (when Top/Bottom) of the shellbar strip in
-/// logical pixels.
+/// Base width (when Left/Right) or height (when Top/Bottom) of the shellbar strip at
+/// `ui_scale == 1.0`. The callers multiply by the chrome's `ui_scale` so the strip
+/// widens with its (CSS-scaled) buttons — otherwise the buttons overflow the fixed
+/// strip at higher zoom / DPI. (Auto-DPI — shellbar scales with the chrome.)
 pub const SHELLBAR_THICKNESS: f32 = 48.0;
 
-/// The shellbar strip rect `[x0, y0, x1, y1]` in window coordinates.
+/// The shellbar strip rect `[x0, y0, x1, y1]` in window coordinates, the strip
+/// `SHELLBAR_THICKNESS × scale` thick (`scale` = the chrome `ui_scale`, so the strip
+/// tracks its scaled buttons).
 ///
 /// The strip starts immediately below the toolbar (`toolbar_h`) — it shares the
 /// content band's vertical extent, so the toolbar chrome is never occluded.
-pub fn shellbar_rect(edge: ShellbarEdge, w: f32, h: f32, toolbar_h: f32) -> [f32; 4] {
-    let t = SHELLBAR_THICKNESS;
+pub fn shellbar_rect(edge: ShellbarEdge, w: f32, h: f32, toolbar_h: f32, scale: f32) -> [f32; 4] {
+    let t = SHELLBAR_THICKNESS * scale;
     match edge {
         ShellbarEdge::Left => [0.0, toolbar_h, t, h],
         ShellbarEdge::Right => [w - t, toolbar_h, w, h],
@@ -27,11 +31,11 @@ pub fn shellbar_rect(edge: ShellbarEdge, w: f32, h: f32, toolbar_h: f32) -> [f32
     }
 }
 
-/// The content band rect `[x0, y0, x1, y1]` after subtracting the shellbar
-/// strip. This rect is passed to [`frame_view::leaf_rects`] so the frame tree
-/// fills the remaining space.
-pub fn band_after_shellbar(edge: ShellbarEdge, w: f32, h: f32, toolbar_h: f32) -> [f32; 4] {
-    let t = SHELLBAR_THICKNESS;
+/// The content band rect `[x0, y0, x1, y1]` after subtracting the shellbar strip
+/// (`SHELLBAR_THICKNESS × scale` thick). This rect is passed to
+/// [`frame_view::leaf_rects`] so the frame tree fills the remaining space.
+pub fn band_after_shellbar(edge: ShellbarEdge, w: f32, h: f32, toolbar_h: f32, scale: f32) -> [f32; 4] {
+    let t = SHELLBAR_THICKNESS * scale;
     match edge {
         ShellbarEdge::Left => [t, toolbar_h, w, h],
         ShellbarEdge::Right => [0.0, toolbar_h, w - t, h],
@@ -46,33 +50,33 @@ mod tests {
 
     #[test]
     fn left_strip_starts_at_zero_x_below_toolbar() {
-        let r = shellbar_rect(ShellbarEdge::Left, 1000.0, 700.0, 48.0);
+        let r = shellbar_rect(ShellbarEdge::Left, 1000.0, 700.0, 48.0, 1.0);
         assert_eq!(r, [0.0, 48.0, SHELLBAR_THICKNESS, 700.0]);
-        let b = band_after_shellbar(ShellbarEdge::Left, 1000.0, 700.0, 48.0);
+        let b = band_after_shellbar(ShellbarEdge::Left, 1000.0, 700.0, 48.0, 1.0);
         assert_eq!(b, [SHELLBAR_THICKNESS, 48.0, 1000.0, 700.0]);
     }
 
     #[test]
     fn right_strip_abuts_right_edge() {
-        let r = shellbar_rect(ShellbarEdge::Right, 1000.0, 700.0, 48.0);
+        let r = shellbar_rect(ShellbarEdge::Right, 1000.0, 700.0, 48.0, 1.0);
         assert_eq!(r, [1000.0 - SHELLBAR_THICKNESS, 48.0, 1000.0, 700.0]);
-        let b = band_after_shellbar(ShellbarEdge::Right, 1000.0, 700.0, 48.0);
+        let b = band_after_shellbar(ShellbarEdge::Right, 1000.0, 700.0, 48.0, 1.0);
         assert_eq!(b, [0.0, 48.0, 1000.0 - SHELLBAR_THICKNESS, 700.0]);
     }
 
     #[test]
     fn top_strip_sits_just_below_toolbar() {
-        let r = shellbar_rect(ShellbarEdge::Top, 1000.0, 700.0, 48.0);
+        let r = shellbar_rect(ShellbarEdge::Top, 1000.0, 700.0, 48.0, 1.0);
         assert_eq!(r, [0.0, 48.0, 1000.0, 48.0 + SHELLBAR_THICKNESS]);
-        let b = band_after_shellbar(ShellbarEdge::Top, 1000.0, 700.0, 48.0);
+        let b = band_after_shellbar(ShellbarEdge::Top, 1000.0, 700.0, 48.0, 1.0);
         assert_eq!(b, [0.0, 48.0 + SHELLBAR_THICKNESS, 1000.0, 700.0]);
     }
 
     #[test]
     fn bottom_strip_abuts_bottom_edge() {
-        let r = shellbar_rect(ShellbarEdge::Bottom, 1000.0, 700.0, 48.0);
+        let r = shellbar_rect(ShellbarEdge::Bottom, 1000.0, 700.0, 48.0, 1.0);
         assert_eq!(r, [0.0, 700.0 - SHELLBAR_THICKNESS, 1000.0, 700.0]);
-        let b = band_after_shellbar(ShellbarEdge::Bottom, 1000.0, 700.0, 48.0);
+        let b = band_after_shellbar(ShellbarEdge::Bottom, 1000.0, 700.0, 48.0, 1.0);
         assert_eq!(b, [0.0, 48.0, 1000.0, 700.0 - SHELLBAR_THICKNESS]);
     }
 }

@@ -237,6 +237,9 @@ dirs = "6"
 # thread (the fjall backend's futures are ready, so this does not block on I/O).
 eidetic = { workspace = true }
 eidetic-fjall = { workspace = true }
+# The lexical trail index (tantivy): meerkat rebuilds it from the browsing-trace
+# corpus + page text to answer the `>recall` omnibar query. (Capture plan C5.)
+eidetic-search = { workspace = true }
 pollster = "0.4"
 
 # Windowing + present (mirrors pelt-live's bin deps; mere's pins align with

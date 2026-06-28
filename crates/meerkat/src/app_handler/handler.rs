@@ -62,7 +62,7 @@ impl ApplicationHandler for Shell {
         window.set_visible(true);
         window.request_redraw();
         wc.refresh_a11y_summary();
-        wc.refresh_session_thumbnails();
+        wc.refresh_session_labels();
 
         // Show the restored focused node's content from the durable cache (so a
         // reload re-opens its card without a navigation). A fresh `mere://welcome`

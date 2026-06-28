@@ -36,6 +36,7 @@ const WRITER_BUDGET_BYTES: usize = 15_000_000;
 struct Fields {
     url: Field,
     title: Field,
+    text: Field,
     domain: Field,
     owner: Field,
     at_ms: Field,
@@ -46,6 +47,9 @@ fn trail_schema() -> (Schema, Fields) {
     let mut builder = Schema::builder();
     let url = builder.add_text_field("url", STRING | STORED);
     let title = builder.add_text_field("title", TEXT | STORED);
+    // Page main text (reader-mode), tokenized for BM25 body recall; not stored —
+    // hits return url/title, not the body. (C5.)
+    let text = builder.add_text_field("text", TEXT);
     let domain = builder.add_text_field("domain", STRING | STORED | FAST);
     let owner = builder.add_text_field("owner", STRING | FAST);
     let at_ms = builder.add_u64_field("at_ms", INDEXED | STORED | FAST);
@@ -55,6 +59,7 @@ fn trail_schema() -> (Schema, Fields) {
         Fields {
             url,
             title,
+            text,
             domain,
             owner,
             at_ms,
@@ -124,6 +129,18 @@ impl TrailIndex {
         path: impl AsRef<Path>,
         traces: impl IntoIterator<Item = &'a BrowsingTrace>,
     ) -> Result<Self> {
+        Self::rebuild_with_text(path, traces, |_| None)
+    }
+
+    /// Re-mint like [`rebuild`](Self::rebuild) but enrich each event's document
+    /// with the page's main text, so BM25 recall reaches the body, not just the
+    /// title/URL. `text_for(url)` supplies the extracted text for a visited URL,
+    /// or `None` when no body is cached. (Capture plan C5.)
+    pub fn rebuild_with_text<'a>(
+        path: impl AsRef<Path>,
+        traces: impl IntoIterator<Item = &'a BrowsingTrace>,
+        text_for: impl Fn(&str) -> Option<String>,
+    ) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
         if path.exists() {
             std::fs::remove_dir_all(&path)?;
@@ -144,6 +161,9 @@ impl TrailIndex {
                 );
                 if let Some(title) = &event.to.title {
                     document.add_text(fields.title, title);
+                }
+                if let Some(text) = text_for(&event.to.url) {
+                    document.add_text(fields.text, &text);
                 }
                 writer.add_document(document)?;
             }
@@ -176,7 +196,12 @@ impl TrailIndex {
         let searcher = reader.searcher();
         let parser = QueryParser::for_index(
             &self.index,
-            vec![self.fields.title, self.fields.url, self.fields.domain],
+            vec![
+                self.fields.title,
+                self.fields.url,
+                self.fields.domain,
+                self.fields.text,
+            ],
         );
         let parsed = parser
             .parse_query(query)
@@ -311,6 +336,29 @@ mod tests {
         assert_eq!(hits[0].url, "https://docs.example/vello");
         assert_eq!(hits[0].at_ms, 1_000);
         assert!(hits[0].title.as_deref().unwrap_or("").contains("vello"));
+    }
+
+    #[test]
+    fn body_text_is_recallable_via_rebuild_with_text() {
+        let dir = tempfile::tempdir().unwrap();
+        let traces = vec![BrowsingTrace::from_events(
+            "m",
+            vec![event("https://a.test/page", "Plain Title", 1_000)],
+        )];
+        let texts: std::collections::HashMap<String, String> = [(
+            "https://a.test/page".to_string(),
+            "quantum entanglement field notes".to_string(),
+        )]
+        .into_iter()
+        .collect();
+        let index =
+            TrailIndex::rebuild_with_text(dir.path().join("idx"), &traces, |u| texts.get(u).cloned())
+                .unwrap();
+        // A term that appears only in the body — not the title or URL — still
+        // recalls the page (the C5 payoff).
+        let hits = index.search("entanglement", 5).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].url, "https://a.test/page");
     }
 
     #[test]

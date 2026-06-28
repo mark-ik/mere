@@ -1,7 +1,7 @@
 # Chrome Bar Refinement Plan
 
 **Date**: 2026-06-26
-**Status**: P1–P3 landed + verified headed (2026-06-26); P4 (sessions into toolbar) and P5 (segmented add group) remain. Two follow-on asks also landed this session: context-menu edge-flip and UI scaling (baseline + Ctrl-zoom; auto-DPI deferred — see Progress).
+**Status**: **COMPLETE — P1–P5 + follow-ons landed + verified headed (2026-06-26).** Follow-ons: context-menu edge-flip, UI scaling (now full auto-DPI — see [ui_dpi_scaling_plan](2026-06-26_ui_dpi_scaling_plan.md)), the omnibar single-line fix, the P4 switcher/thumbnail dead-code cleanup, and the even-shellbar fix.
 **Related**: [shellbar_plan (F2, in progress)](2026-06-09_shellbar_plan.md), [apparatus_pane_and_theme_switcher_plan](2026-06-08_apparatus_pane_and_theme_switcher_plan.md), [peripheral panes architecture](../technical_architecture/2026-06-06_peripheral_panes_architecture.md), `crates/meerkat/` (`views.rs`, `render.rs`, `pane_data.rs`, `apparatus.rs`, `main.rs`)
 
 A polish pass over the toolbar (omnibar band), the shellbar, and the Steward /
@@ -282,3 +282,23 @@ Pre-existing (not P1): `views.rs` has unused-import warnings (`ShellbarEdge`,
 - `.toolbar` gets `flex-wrap: nowrap; align-items: center` so a tall child can't stretch
   the buttons to odd proportions and the band stays one row (nothing pushes the shellbar
   or session chip out of view). Verified headed at 2×.
+
+**2026-06-26 — closeout: switcher cleanup + even shellbar + omnibar reconfirm.**
+- **Switcher/thumbnail dead-code removed** (the P4 deferred cleanup): the session-chip
+  list now sources from the canonical `manifests` (what `cycle_session` enumerates), not
+  the retired `session_thumbnails` map. `refresh_session_thumbnails` → `refresh_session_labels`
+  (builds only labels; the thumbnail rasterization on every session change + on every save
+  is gone). Deleted the `session_thumbnails` field, both `build_switcher_thumbnail_with`
+  call sites, the whole `switcher.rs` module (`switcher_scene`/`switcher_height` were dead
+  since P4), and the now-unused imports. Build clean; session/toolbar tests 13/13.
+- **Even shellbar** (reported uneven): the P3 buttons are content-width (symmetric padding
+  centres the glyph), so per-button *backgrounds* read as a ragged-width column at 2×.
+  Fix: inactive buttons now have **no** background — a clean centred glyph column — and only
+  the active button keeps a fill (a rounded accent pill marking the open pane). Verified
+  headed (crop `scry-shots/pc-shellbar.png`).
+- **Omnibar single-line reconfirmed** (reported toolbar-over-tile-tabs): a long URL
+  (`settings://node:44d9b7fb-…/info/longpath/segment`) clips to one line and the toolbar
+  stays a single row (`white-space: nowrap; overflow: hidden` on the omnibar + `flex-wrap:
+  nowrap; align-items: center` on the toolbar) — so it never balloons to crowd the pelt
+  tile-tab strip. The 3-line-wrap screenshots (`screenshots/...192229.png`) were a pre-fix
+  state. Verified headed (`scry-shots/pc-longurl-toolbar.png`).

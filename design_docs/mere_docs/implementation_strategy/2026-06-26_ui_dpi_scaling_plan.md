@@ -1,7 +1,7 @@
 # True Auto-DPI Scaling Plan
 
 **Date**: 2026-06-26
-**Status**: **D1 + D2 landed + verified headed (2026-06-26)** — chrome and content both render DPI-correct + crisp at 2×. Remaining: D2 tail (find-highlight + box-shadow logical→physical; live link-click/scroll check) and D3 (per-window DPI for multi-monitor). Spun out of the [chrome bar refinement plan](2026-06-26_chrome_bar_refinement_plan.md)'s deferred auto-DPI finding (which shipped the user-zoom half: Ctrl +/-/0, baseline 1.1).
+**Status**: **COMPLETE — D1 + D2 + D3 landed + verified (2026-06-26).** Chrome and content render DPI-correct + crisp at 2× (verified headed: chrome, the welcome card, a live example.org page, and a link-click landing); per-window DPI wired for multi-monitor (code-correct, not headed-verifiable on a single monitor set). Spun out of the [chrome bar refinement plan](2026-06-26_chrome_bar_refinement_plan.md)'s deferred auto-DPI finding (which shipped the user-zoom half: Ctrl +/-/0, baseline 1.1).
 **Open questions resolved (2026-06-26)**: window-size persistence = **logical**; DPI = **per-window**, user_zoom **shared**; supersample cost = **measure** before defaulting D2a on.
 **Related**: `crates/meerkat/` (`app_handler.rs`, `render.rs`, `main.rs`), `repos/serval` (`components/serval-layout`, `netrender`), the [host framework memory](../../) (xilem_serval).
 
@@ -154,3 +154,45 @@ per-window scaled sheets; reconcile with orrery Ctrl+wheel zoom).
 - **D2 is complete.** Remaining auto-DPI work is only **D3** (per-window dpi for
   multi-monitor — move `dpi_scale` per-window with per-window scaled sheets; reconcile
   with orrery Ctrl+wheel zoom).
+
+**2026-06-26 — D3 landed (per-window DPI). Auto-DPI plan COMPLETE.**
+- DPI is now **per-window**: `WindowView::dpi_scale` holds each window's monitor
+  `scale_factor` (set at `create_window` + on `ScaleFactorChanged`), while `user_zoom`
+  stays shared on `Presentation` (the resolved-2026-06-26 answer). `Presentation::dpi_scale`
+  is reinterpreted as "the dpi the shared sheet is currently baked at."
+- Mechanism (keeps the shared sheet, no per-window sheet storage): each window's render
+  re-bakes the shared chrome sheet to its own dpi **only when it differs** from the
+  current bake (`render/setup.rs`), and pushes its dpi to the content pool. Single
+  monitor (or co-density windows) = no rebuild after the first sync; a window dragged to
+  a different-density monitor rebuilds on its next frame. `set_dpi_scale` / `refresh_ui_scale`
+  now key off `self.view.dpi_scale`.
+- Parts 2–3 were already handled: the orrery is an independently-zoomed canvas (no display
+  dpr applied, so nothing to double-apply against its Ctrl+wheel zoom), and content
+  re-rasterizes on a scale change via the per-frame dpr (D2).
+- Verified: single-window unchanged at 2× (chrome + content + orrery crisp, restored
+  example.org tiles render correctly); lib 92/92, bin constellation/steward/toolbar green.
+  **Multi-monitor-different-dpi is code-correct but not headed-verifiable here** (one
+  monitor set). Known cost: if two different-density windows both redraw every frame, the
+  shared sheet rebuilds per-window-switch (sub-ms string work) — optimize to per-window
+  stored sheets only if that case ever matters.
+
+**2026-06-28 — host-geometry scaling (zoom/DPI fix).**
+Reported: increasing the zoom made the layout weird/clipped. Cause: the **host-drawn
+geometry** constants were never scaled by `ui_scale`, while the CSS chrome (buttons,
+toolbar) was — so they desynced at zoom/HiDPI:
+- **Shellbar strip**: `SHELLBAR_THICKNESS` (48px) was fixed, so the scaled buttons
+  overflowed the strip into the content (worse at higher zoom; actually already spilling
+  at the 2.2× default). Fixed: `shellbar_rect` / `band_after_shellbar` take a `scale`
+  (the chrome `ui_scale`); the strip is `48 × ui_scale` thick, holding its buttons. All
+  4 callers (render overlays + setup, input press, pane_geom) pass `ui_scale()`.
+- **Window controls**: the toolbar reserves a `ui_scale`-scaled right gap, but the
+  controls were drawn/placed/hit-tested at fixed `CONTROLS_W`/`CTL_W` with fixed-size
+  glyphs → a big empty gap + tiny controls. Fixed: `control_rect` / `control_at` /
+  `controls_scene` take `scale`; the strip is `CONTROLS_W × ui_scale` wide, placed at
+  `win_w − CONTROLS_W × ui_scale`, glyphs (`CTL_W`, stroke, half-extent) scaled. Callers
+  in render paint + input press + window_ctx hover pass `ui_scale()`.
+- Verified headed: at default 2.2× and at a 2.8× zoom the shellbar holds its buttons and
+  the controls are right-sized + flush. Residual: at *extreme* zoom the toolbar is simply
+  over-full (omnibar shrinks toward nothing, minimize crowds +field) — inherent to fitting
+  everything at high zoom, far milder than the original strip-into-content spill. Tests:
+  lib 92/92, shellbar+titlebar 7/7.

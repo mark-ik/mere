@@ -326,11 +326,20 @@ impl crate::WindowCtx<'_> {
         // each conditional) is the documented C0 refinement on top of this headline.
         let frame_t = Instant::now();
         let (w, h) = (self.view.width.max(1), self.view.height.max(1));
+        // This window's display dpi (D3 — per-window). Re-bake the shared chrome sheet to
+        // it when it differs from the current bake, so a window on a different-density
+        // monitor renders at its own scale. A no-op on a single monitor (or co-density
+        // windows): the sheet stays baked at this dpi after the first sync. (Auto-DPI D3.)
+        let dpr = self.view.dpi_scale;
+        if (self.shared.presentation.dpi_scale - dpr).abs() > 1e-3 {
+            self.shared.presentation.dpi_scale = dpr;
+            self.shared.presentation.rebuild_chrome_sheet();
+            self.view.toolbar_h = 0; // re-measure the band from the re-scaled sheet
+        }
         let toolbar_h = self.toolbar_height().min(h);
-        // Push the display device-pixel-ratio to the content pool each frame: actors lay
-        // out logical, the host rasterizes their scenes at physical via `rasterize_scaled`
-        // below, so content text is crisp + correctly-sized on a HiDPI display. (Auto-DPI D2.)
-        let dpr = self.shared.presentation.dpi_scale;
+        // Push this window's device-pixel-ratio to the content pool: actors lay out
+        // logical, the host rasterizes their scenes at physical via `rasterize_scaled`
+        // below, so content text is crisp + correctly-sized on a HiDPI display. (Auto-DPI D2/D3.)
         self.shared.content.constellation.set_device_pixel_ratio(dpr);
 
         // Reserve / drop the Comms frame leaf to match the chrome's comms-open state
@@ -373,8 +382,11 @@ impl crate::WindowCtx<'_> {
             // While a session is being renamed (F2 / context rename), show the live edit
             // buffer in its chip — the chip is the rename surface now the switcher is gone.
             let renaming = self.view.renaming.clone();
+            // Source the session list from the canonical manifest store (what
+            // `cycle_session` enumerates), not the retired switcher-thumbnail map.
+            // (Chrome bar P4 cleanup.)
             let mut ids: Vec<SessionId> =
-                self.shared.session.session_thumbnails.keys().copied().collect();
+                self.shared.session.manifests.iter().map(|(id, _)| id).collect();
             ids.sort_by_key(|id| *id.as_uuid());
             ids.iter()
                 .map(|id| {
@@ -457,6 +469,7 @@ impl crate::WindowCtx<'_> {
                 w as f32,
                 h as f32,
                 toolbar_h as f32,
+                self.shared.presentation.ui_scale(),
             )
         };
         let leaves = frame_view::leaf_rects(&self.view.frame_layout, band, self.view.maximized_pane);

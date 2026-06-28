@@ -52,9 +52,12 @@ impl Shell {
         let size = window.inner_size();
         view.width = size.width.max(1);
         view.height = size.height.max(1);
-        // Fold the window's DPI factor into the chrome scale now it exists — the startup
-        // sheet was built at the user's zoom with dpi 1.0. (Auto-DPI D1.)
+        // This window's display DPI (its monitor's scale_factor). Stored per-window
+        // (D3); the shared chrome sheet is (re)built to it now so this window's first
+        // frame is correct, and the render guard re-syncs the sheet if another window on
+        // a different-density monitor renders. (Auto-DPI D1 → D3.)
         let dpi = window.scale_factor() as f32;
+        view.dpi_scale = dpi;
         if (self.shared.presentation.dpi_scale - dpi).abs() > 1e-3 {
             self.shared.presentation.dpi_scale = dpi;
             self.shared.presentation.rebuild_chrome_sheet();

@@ -408,9 +408,13 @@ impl WindowCtx<'_> {
         // over the chrome at the toolbar's top-right. Cached by band size; the input
         // path hit-tests the same geometry, so nothing is recorded here.
         let band_h = toolbar_h.max(1);
-        let strip_w = crate::titlebar::CONTROLS_W.round().max(1.0) as u32;
+        // The controls scale with the chrome (the toolbar reserves a `ui_scale`-scaled
+        // right gap), so the strip is `CONTROLS_W × ui_scale` wide and its glyphs scale
+        // too — otherwise tiny controls sit in a big gap at zoom/HiDPI. (Auto-DPI.)
+        let ctl_scale = self.shared.presentation.ui_scale();
+        let strip_w = (crate::titlebar::CONTROLS_W * ctl_scale).round().max(1.0) as u32;
         if self.view.window_controls_tex.as_ref().map(|c| c.size) != Some((strip_w, band_h)) {
-            let scene = crate::titlebar::controls_scene(band_h, &self.shared.presentation.chrome_theme);
+            let scene = crate::titlebar::controls_scene(band_h, &self.shared.presentation.chrome_theme, ctl_scale);
             let (tex, view) = core.rasterize(
                 &scene,
                 strip_w,
@@ -425,7 +429,7 @@ impl WindowCtx<'_> {
             });
         }
         if let Some(cached) = &self.view.window_controls_tex {
-            let x0 = w as f32 - crate::titlebar::CONTROLS_W;
+            let x0 = w as f32 - crate::titlebar::CONTROLS_W * ctl_scale;
             core.renderer().compose_external_texture(
                 &cached.view,
                 &target_view,

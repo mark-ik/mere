@@ -414,7 +414,6 @@ impl Shell {
                     active_persona,
                     session_dir,
                     mere_root,
-                    session_thumbnails: HashMap::new(),
                     session_labels: HashMap::new(),
                     host_text: text::HostText::new(),
                 },

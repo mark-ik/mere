@@ -360,16 +360,19 @@ pub(crate) fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
         // padding — which centres the glyph inside it whatever its width — and the
         // container's `align-items: center` then centres the whole button in the strip.
         // The padding doubles as the ≥32px hit target. (Chrome bar P3.)
+        // Inactive buttons carry **no** background: content-width grounds would otherwise
+        // read as a ragged-width column (the glyphs differ in width). Only the active
+        // button gets a fill — a single accent pill marking the open pane, no raggedness.
+        // (Chrome bar — even shellbar.)
         format!(
             ".shellbar-btn {{ display: flex; align-items: center; justify-content: center; \
                 height: 44px; padding: 0 13px; font-size: 17px; margin: 2px 0; \
-                color: {}; background-color: {}; }}",
-            rgb(c.control_text),
-            rgb(c.control_bg)
+                color: {}; background-color: transparent; }}",
+            rgb(c.control_text)
         ),
         format!(
             ".shellbar-btn-active {{ display: flex; align-items: center; justify-content: center; \
-                height: 44px; padding: 0 13px; font-size: 17px; margin: 2px 0; \
+                height: 44px; padding: 0 13px; font-size: 17px; margin: 2px 0; border-radius: 10px; \
                 color: {}; background-color: {}; }}",
             rgb(c.strong_text),
             rgb(c.active_bg)
