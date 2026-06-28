@@ -116,6 +116,34 @@ impl Orrery {
         true
     }
 
+    /// Assert a semantic relation between two stable graph members. This is the
+    /// card/detail twin of [`assert_selected_relation`]: the roster Link Card has
+    /// explicit endpoints, so it should not need to perturb selection first.
+    pub fn assert_relation_between_members(
+        &mut self,
+        from_id: uuid::Uuid,
+        to_id: uuid::Uuid,
+        sub_kind: SemanticSubKind,
+    ) -> bool {
+        let Some(from) = self.graph.get_node_key_by_id(from_id) else {
+            return false;
+        };
+        let Some(to) = self.graph.get_node_key_by_id(to_id) else {
+            return false;
+        };
+        self.graph.assert_relation(
+            from,
+            to,
+            EdgeAssertion::Semantic {
+                sub_kind,
+                label: None,
+                decay_progress: None,
+            },
+        );
+        self.reconcile_derived();
+        true
+    }
+
     /// Insert `tag` on every selected node — the user-initiated tagging gesture
     /// (the context menu's "Add tag…"). Trims the tag; an empty tag or empty
     /// selection is a no-op. Returns how many nodes newly gained the tag (an
@@ -200,6 +228,28 @@ impl Orrery {
             removed += self
                 .graph
                 .retract_relations(a, b, RelationSelector::Semantic(sk));
+        }
+        removed
+    }
+
+    /// Retract a specific relation selector between two stable graph members.
+    /// Used by the roster Link Card; unlike `retract_selected_relation`, it can
+    /// target one semantic cell without first selecting an edge on the canvas.
+    pub fn retract_relation_between_members(
+        &mut self,
+        from_id: uuid::Uuid,
+        to_id: uuid::Uuid,
+        selector: RelationSelector,
+    ) -> usize {
+        let Some(from) = self.graph.get_node_key_by_id(from_id) else {
+            return 0;
+        };
+        let Some(to) = self.graph.get_node_key_by_id(to_id) else {
+            return 0;
+        };
+        let removed = self.graph.retract_relations(from, to, selector);
+        if removed > 0 {
+            self.reconcile_derived();
         }
         removed
     }
