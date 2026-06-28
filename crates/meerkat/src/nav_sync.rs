@@ -105,6 +105,17 @@ impl WindowCtx<'_> {
         // Navigating focuses the target; the orrery shows its snapshot. Opening it live
         // is the pelt path (double-click a node or its card). (Node-rep P4.)
         self.ensure_content(&loc);
+        // A knot note is a reading tile: open it as a workbench tile on navigate so
+        // its content actually shows (the reframe — a note is a content tile). Web
+        // content keeps its existing focus-card / tile flow; only the local note opens
+        // a tile on navigate. (Slice 2 — open the note's reading tile.)
+        if loc.starts_with("knot://") {
+            if let Some(member) = navigated {
+                self.open_workbench();
+                self.view.workbench.open_tile(member);
+                self.view.focused_tile = Some(member);
+            }
+        }
         // Record the navigation while `content_location` still holds the page we
         // came from (live trail recorder, C1).
         self.record_browse_nav(&loc, TraceTransition::UrlTyped);
