@@ -281,6 +281,53 @@ mod tests {
     }
 
     #[test]
+    fn the_ring_opts_into_library_completion_debug_but_not_per_frame() {
+        use tracing_subscriber::EnvFilter;
+        let (ring_tx, ring_rx) = mpsc::channel();
+        // Mirror the ring filter in main.rs: an `info` floor plus per-target `=debug` opt-ins for the
+        // sibling libraries' per-operation completion traces. `netrender` is left at the floor, so its
+        // per-frame `frame rendered` debug is dropped while its faults (warn+) still reach the ring.
+        let subscriber = tracing_subscriber::registry().with(
+            ApparatusTracingLayer::new(ring_tx)
+                .with_filter(EnvFilter::new("info,netfetcher=debug,errand=debug,serval_layout=debug")),
+        );
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::debug!(target: "netfetcher", "fetch complete"); // opted in -> ring
+            tracing::debug!(target: "serval_layout", "lay_out_content complete"); // opted in -> ring
+            tracing::debug!(target: "netrender", "frame rendered"); // per-frame, info floor -> dropped
+            tracing::warn!(target: "netrender", "render failed"); // fault, warn > info -> ring
+            tracing::info!(target: "meerkat", "omnibar submit"); // lifecycle -> ring
+        });
+        let targets: Vec<String> = std::iter::from_fn(|| ring_rx.try_recv().ok())
+            .filter_map(|ev| match ev {
+                DiagnosticEvent::MessageReceivedStructured { fields, .. } => fields
+                    .iter()
+                    .find(|f| f.name == "target")
+                    .map(|f| f.value.clone()),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            targets.contains(&"netfetcher".to_string()),
+            "a library's per-operation debug completion is opted into the ring: {targets:?}",
+        );
+        assert!(
+            targets.contains(&"serval_layout".to_string()),
+            "serval_layout's debug completion is opted in: {targets:?}",
+        );
+        assert!(
+            targets.contains(&"meerkat".to_string()),
+            "first-party info lifecycle reaches the ring: {targets:?}",
+        );
+        // netrender appears exactly once — its warn fault — not its per-frame debug (info floor drops it).
+        assert_eq!(
+            targets.iter().filter(|t| t.as_str() == "netrender").count(),
+            1,
+            "only netrender's fault reaches the ring, never its per-frame debug: {targets:?}",
+        );
+    }
+
+    #[test]
     fn event_fields_keep_their_real_names() {
         let (tx, rx) = mpsc::channel();
         let subscriber = tracing_subscriber::registry().with(ApparatusTracingLayer::new(tx));

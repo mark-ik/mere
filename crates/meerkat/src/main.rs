@@ -579,16 +579,21 @@ fn main() {
     // RUST_LOG-controlled, while the Apparatus ring wants first-party traces regardless of RUST_LOG.
     // A single *global* `.with(env_filter)` gated both, so the `meerkat=info` default starved the
     // ring of every non-meerkat target before the bridge's allowlist ran. Per-layer filters decouple
-    // them: RUST_LOG governs only the console; the ring captures all info+ and the layer's own
-    // `interesting_target` scopes that to first-party.
+    // them: RUST_LOG governs only the console; the ring runs its own filter below.
     let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("meerkat=info"));
+    // The ring's own filter, independent of RUST_LOG. The `info` floor captures the first-party
+    // lifecycle events (meerkat/armillary/… at info) and every `warn`/`error` fault. The per-target
+    // `=debug` opt-ins pull in the sibling libraries' per-operation *completion* traces (a fetch
+    // finished, a page laid out): those libs log them at `debug` per conventional library hygiene,
+    // so the ring opts in here rather than forcing the libs up to info. `netrender` is deliberately
+    // left at the info floor — its per-frame `frame rendered` debug would flood the ring, so only its
+    // faults reach it. The layer's `interesting_target` still scopes all of this to first-party.
+    let ring_filter =
+        tracing_subscriber::EnvFilter::new("info,netfetcher=debug,errand=debug,serval_layout=debug");
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer().with_filter(env_filter))
-        .with(
-            tracing_layer::ApparatusTracingLayer::new(diagnostics_tx)
-                .with_filter(tracing_subscriber::filter::LevelFilter::INFO),
-        )
+        .with(tracing_layer::ApparatusTracingLayer::new(diagnostics_tx).with_filter(ring_filter))
         .init();
     tracing::info!("meerkat-shell starting");
 
