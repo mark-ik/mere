@@ -333,6 +333,10 @@ impl Shell {
                 }
             }
             window.set_visible(true);
+            // Take keyboard focus on the freshly-spawned window too (same focus-on-launch
+            // reason as the primary): a torn-out window the user just created should be ready
+            // for input without a click.
+            window.focus_window();
             window.request_redraw();
             self.shared.observability.record_probe(
                 "multi_window",

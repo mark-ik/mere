@@ -60,6 +60,12 @@ impl ApplicationHandler for Shell {
         }
         // a11y is installed; safe to show the window now (the order Windows requires).
         window.set_visible(true);
+        // Explicitly take keyboard focus. The window was created hidden (so a11y installs
+        // before first paint), and on Windows showing a previously-hidden window does not
+        // reliably foreground/focus it: without this the freshly-launched window sometimes
+        // comes up unfocused and silently drops every keystroke until it is clicked.
+        // (focus-on-launch fix.)
+        window.focus_window();
         window.request_redraw();
         wc.refresh_a11y_summary();
         wc.refresh_session_labels();
