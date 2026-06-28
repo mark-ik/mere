@@ -23,7 +23,7 @@
 //!   indent with `> `, links render as `label <url>`, everything else is
 //!   its text.
 
-use super::super::{DocumentBlock, EngineDocument, InlineSpan, inline_text};
+use super::super::{Block, EngineDocument, InlineSpan, inline_text};
 
 /// Server context a gophermap is written against: the host/port columns
 /// RFC 1436 requires on every menu line.
@@ -119,17 +119,17 @@ fn collect_links(span: &InlineSpan, out: &mut Vec<(String, String)>) {
 }
 
 fn write_gophermap_block(
-    block: &DocumentBlock,
+    block: &Block,
     ctx: &GophermapContext,
     out: &mut String,
     prefix: &str,
 ) {
     match block {
-        DocumentBlock::Heading { spans, .. } => {
+        Block::Heading { spans, .. } => {
             push_info(out, &format!("{prefix}{}", inline_text(spans)));
             push_info(out, "");
         }
-        DocumentBlock::Paragraph { spans } => {
+        Block::Paragraph { spans } => {
             // A link-only paragraph IS its link line (same rule as the
             // gemtext writer) — no doubled info line.
             let text = inline_text(spans);
@@ -144,32 +144,32 @@ fn write_gophermap_block(
                 push_link(out, ctx, &url, &label);
             }
         }
-        DocumentBlock::CodeBlock { text, .. } | DocumentBlock::Preformatted { text } => {
+        Block::CodeBlock { text, .. } | Block::Preformatted { text } => {
             for line in text.lines() {
                 push_info(out, &format!("{prefix}{line}"));
             }
         }
-        DocumentBlock::Quote { blocks } => {
+        Block::Quote { blocks } => {
             for inner in blocks {
                 write_gophermap_block(inner, ctx, out, &format!("{prefix}> "));
             }
         }
-        DocumentBlock::List { items, .. } => {
+        Block::List { items, .. } => {
             for item in items {
                 for inner in item {
                     write_gophermap_block(inner, ctx, out, &format!("{prefix}* "));
                 }
             }
         }
-        DocumentBlock::Image { url, alt } => push_link(out, ctx, url, alt),
-        DocumentBlock::Rule => push_info(out, &format!("{prefix}---")),
-        DocumentBlock::FeedHeader { title, subtitle, .. } => {
+        Block::Image { url, alt } => push_link(out, ctx, url, alt),
+        Block::Rule => push_info(out, &format!("{prefix}---")),
+        Block::FeedHeader { title, subtitle, .. } => {
             push_info(out, &format!("{prefix}{title}"));
             if let Some(subtitle) = subtitle {
                 push_info(out, &format!("{prefix}{subtitle}"));
             }
         }
-        DocumentBlock::FeedEntry {
+        Block::FeedEntry {
             title,
             date,
             article_url,
@@ -184,11 +184,11 @@ fn write_gophermap_block(
                 None => push_info(out, &dated),
             }
         }
-        DocumentBlock::MetadataRow { label, value } => {
+        Block::MetadataRow { label, value } => {
             push_info(out, &format!("{prefix}{label}: {value}"));
         }
-        DocumentBlock::Badge { text } => push_info(out, &format!("{prefix}[{text}]")),
-        DocumentBlock::Table { header, rows, .. } => {
+        Block::Badge { text } => push_info(out, &format!("{prefix}[{text}]")),
+        Block::Table { header, rows, .. } => {
             for line in super::table_lines(header, rows) {
                 push_info(out, &format!("{prefix}{line}"));
             }
@@ -196,9 +196,9 @@ fn write_gophermap_block(
     }
 }
 
-fn write_text_block(block: &DocumentBlock, out: &mut String, prefix: &str) {
+fn write_text_block(block: &Block, out: &mut String, prefix: &str) {
     match block {
-        DocumentBlock::Table { header, rows, .. } => {
+        Block::Table { header, rows, .. } => {
             for line in super::table_lines(header, rows) {
                 out.push_str(prefix);
                 out.push_str(&line);
@@ -206,12 +206,12 @@ fn write_text_block(block: &DocumentBlock, out: &mut String, prefix: &str) {
             }
             out.push('\n');
         }
-        DocumentBlock::Heading { spans, .. } => {
+        Block::Heading { spans, .. } => {
             out.push_str(prefix);
             out.push_str(&inline_text(spans));
             out.push_str("\n\n");
         }
-        DocumentBlock::Paragraph { spans } => {
+        Block::Paragraph { spans } => {
             let text = text_with_links(spans);
             if !text.is_empty() {
                 out.push_str(prefix);
@@ -219,7 +219,7 @@ fn write_text_block(block: &DocumentBlock, out: &mut String, prefix: &str) {
                 out.push_str("\n\n");
             }
         }
-        DocumentBlock::CodeBlock { text, .. } | DocumentBlock::Preformatted { text } => {
+        Block::CodeBlock { text, .. } | Block::Preformatted { text } => {
             for line in text.lines() {
                 out.push_str(prefix);
                 out.push_str("    ");
@@ -228,12 +228,12 @@ fn write_text_block(block: &DocumentBlock, out: &mut String, prefix: &str) {
             }
             out.push('\n');
         }
-        DocumentBlock::Quote { blocks } => {
+        Block::Quote { blocks } => {
             for inner in blocks {
                 write_text_block(inner, out, &format!("{prefix}> "));
             }
         }
-        DocumentBlock::List { ordered, items } => {
+        Block::List { ordered, items } => {
             for (index, item) in items.iter().enumerate() {
                 let marker = if *ordered {
                     format!("{}. ", index + 1)
@@ -251,7 +251,7 @@ fn write_text_block(block: &DocumentBlock, out: &mut String, prefix: &str) {
             }
             out.push('\n');
         }
-        DocumentBlock::Image { url, alt } => {
+        Block::Image { url, alt } => {
             out.push_str(prefix);
             if alt.is_empty() {
                 out.push_str(url);
@@ -260,11 +260,11 @@ fn write_text_block(block: &DocumentBlock, out: &mut String, prefix: &str) {
             }
             out.push_str("\n\n");
         }
-        DocumentBlock::Rule => {
+        Block::Rule => {
             out.push_str(prefix);
             out.push_str("---\n\n");
         }
-        DocumentBlock::FeedHeader {
+        Block::FeedHeader {
             title, subtitle, ..
         } => {
             out.push_str(prefix);
@@ -277,7 +277,7 @@ fn write_text_block(block: &DocumentBlock, out: &mut String, prefix: &str) {
             }
             out.push('\n');
         }
-        DocumentBlock::FeedEntry {
+        Block::FeedEntry {
             title,
             date,
             summary,
@@ -305,11 +305,11 @@ fn write_text_block(block: &DocumentBlock, out: &mut String, prefix: &str) {
             }
             out.push('\n');
         }
-        DocumentBlock::MetadataRow { label, value } => {
+        Block::MetadataRow { label, value } => {
             out.push_str(prefix);
             out.push_str(&format!("{label}: {value}\n"));
         }
-        DocumentBlock::Badge { text } => {
+        Block::Badge { text } => {
             out.push_str(prefix);
             out.push_str(&format!("[{text}]\n"));
         }

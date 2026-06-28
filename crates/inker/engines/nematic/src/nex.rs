@@ -16,13 +16,13 @@
 //! either ends with `/` or contains no whitespace, treat the body as a
 //! directory listing. Otherwise delegate body parsing to the text engine.
 //!
-//! Directory entries are emitted as a [`DocumentBlock::List`] of
+//! Directory entries are emitted as a [`Block::List`] of
 //! [`InlineSpan::Link`] spans, with URLs synthesised relative to
 //! [`EngineInput::address`].
 
 use errand::parse::nex::{base_url, parse as parse_nex, NexEntry};
 use inker::{
-    DocumentBlock, DocumentProvenance, DocumentTrustState, Engine, EngineDocument, EngineError,
+    Block, DocumentProvenance, DocumentTrustState, Engine, EngineDocument, EngineError,
     EngineInput, InlineSpan,
 };
 
@@ -77,11 +77,11 @@ impl Engine for NexEngine {
 
 fn render_directory(address: &str, entries: &[NexEntry]) -> EngineDocument {
     let base = base_url(address);
-    let items: Vec<Vec<DocumentBlock>> = entries
+    let items: Vec<Vec<Block>> = entries
         .iter()
         .map(|entry| {
             let url = format!("{base}{}", entry.name);
-            vec![DocumentBlock::Paragraph {
+            vec![Block::Paragraph {
                 spans: vec![InlineSpan::Link {
                     url,
                     title: None,
@@ -95,7 +95,7 @@ fn render_directory(address: &str, entries: &[NexEntry]) -> EngineDocument {
     let blocks = if items.is_empty() {
         Vec::new()
     } else {
-        vec![DocumentBlock::List {
+        vec![Block::List {
             ordered: false,
             items,
         }]
@@ -134,7 +134,7 @@ mod tests {
         let doc = render("nex://example.test/", body);
         assert_eq!(doc.content_type, "application/x-nex-listing");
 
-        let DocumentBlock::List { items, .. } = &doc.blocks[0] else {
+        let Block::List { items, .. } = &doc.blocks[0] else {
             panic!("expected list");
         };
         assert_eq!(items.len(), 4);
@@ -178,7 +178,7 @@ mod tests {
         let body = "This is a content response.\n\nIt has multiple paragraphs of prose with spaces and punctuation.\n";
         let doc = render("nex://example.test/page", body);
         // Text engine produces paragraphs, not a List.
-        assert!(matches!(doc.blocks[0], DocumentBlock::Paragraph { .. }));
+        assert!(matches!(doc.blocks[0], Block::Paragraph { .. }));
         assert_eq!(doc.content_type, "text/plain");
         assert_eq!(doc.provenance.source_kind.as_deref(), Some("nematic.nex"));
         assert_eq!(doc.provenance.source_label.as_deref(), Some("nematic.text"));
@@ -197,7 +197,7 @@ mod tests {
         // First line is a valid entry, but second line has whitespace ("a b").
         let body = "ok\na b\n";
         let doc = render("nex://example.test/", body);
-        assert!(matches!(doc.blocks[0], DocumentBlock::Paragraph { .. }));
+        assert!(matches!(doc.blocks[0], Block::Paragraph { .. }));
     }
 
     #[test]

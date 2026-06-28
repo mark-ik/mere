@@ -45,7 +45,7 @@ pub fn note_scene(doc: &EngineDocument, w: u32, h: u32, sheets: &[String]) -> Sc
 #[cfg(test)]
 mod tests {
     use super::*;
-    use inker::{DocumentBlock, InlineSpan};
+    use inker::{Block, InlineSpan};
 
     fn welcome() -> EngineDocument {
         EngineDocument {
@@ -57,11 +57,11 @@ mod tests {
             trust: Default::default(),
             diagnostics: Vec::new(),
             blocks: vec![
-                DocumentBlock::Heading {
+                Block::Heading {
                     level: 1,
                     spans: vec![InlineSpan::Text("Mere".into())],
                 },
-                DocumentBlock::Paragraph {
+                Block::Paragraph {
                     spans: vec![InlineSpan::Text(
                         "A graph-shaped browser, hosted on serval.".into(),
                     )],

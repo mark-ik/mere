@@ -4,24 +4,24 @@
 
 //! `EngineDocument` → serval views: the **document-family** block→view mapper.
 //!
-//! Maps the portable block model (`DocumentBlock` / `InlineSpan`, what
+//! Maps the portable block model (`Block` / `InlineSpan`, what
 //! `DjotKnotEngine` and every other engine produce) into xilem_serval element
 //! views, so a document renders through serval-layout + netrender like any web
 //! page — the same `ScriptedDom` path the chrome builds every frame.
 //!
 //! This is the document family's one renderer (native smolweb rendering plan,
 //! 2026-06-27, Phase D): djot/knot, markdown, and reader-mode HTML all ride this
-//! mapper, because all three lower to `DocumentBlock`. The **smolweb family**
+//! mapper, because all three lower to `Block`. The **smolweb family**
 //! (gemtext, gopher, feed, …) does not come here — each gets its own native serval
 //! view (`serval/smolweb-views`) so it stays shareable with pelt without
-//! `DocumentBlock`. `DocumentBlock` keeps capture + cards; focused viewing goes
+//! `Block`. `Block` keeps capture + cards; focused viewing goes
 //! native.
 //!
-//! Slice 1 of the djot reframe: the mapper itself. `DocumentBlock::Table` is a
+//! Slice 1 of the djot reframe: the mapper itself. `Block::Table` is a
 //! pending prerequisite (the variant does not exist yet) that lands before the live
 //! djot/markdown tile. The render-to-`Scene` surface is `crate::note_surface`.
 
-use inker::{DocumentBlock, EngineDocument, InlineSpan};
+use inker::{Block, EngineDocument, InlineSpan};
 use xilem_serval::{el, text, AnyView, ServalCtx, ServalElement};
 
 /// A type-erased note view child: a serval element or text node.
@@ -39,20 +39,20 @@ pub fn document_views(doc: &EngineDocument) -> Vec<NoteChild> {
 
 /// The outer HTML element tag a block maps to. Split out so the tag decisions are
 /// unit-testable without driving the view tree.
-fn block_tag(block: &DocumentBlock) -> &'static str {
+fn block_tag(block: &Block) -> &'static str {
     match block {
-        DocumentBlock::Heading { level, .. } => heading_tag(*level),
-        DocumentBlock::Paragraph { .. } => "p",
-        DocumentBlock::CodeBlock { .. } | DocumentBlock::Preformatted { .. } => "pre",
-        DocumentBlock::Quote { .. } => "blockquote",
-        DocumentBlock::List { ordered: false, .. } => "ul",
-        DocumentBlock::List { ordered: true, .. } => "ol",
-        DocumentBlock::Image { .. } => "img",
-        DocumentBlock::Rule => "hr",
-        DocumentBlock::Table { .. } => "table",
-        DocumentBlock::FeedHeader { .. } => "header",
-        DocumentBlock::FeedEntry { .. } => "article",
-        DocumentBlock::MetadataRow { .. } | DocumentBlock::Badge { .. } => "p",
+        Block::Heading { level, .. } => heading_tag(*level),
+        Block::Paragraph { .. } => "p",
+        Block::CodeBlock { .. } | Block::Preformatted { .. } => "pre",
+        Block::Quote { .. } => "blockquote",
+        Block::List { ordered: false, .. } => "ul",
+        Block::List { ordered: true, .. } => "ol",
+        Block::Image { .. } => "img",
+        Block::Rule => "hr",
+        Block::Table { .. } => "table",
+        Block::FeedHeader { .. } => "header",
+        Block::FeedEntry { .. } => "article",
+        Block::MetadataRow { .. } | Block::Badge { .. } => "p",
     }
 }
 
@@ -68,13 +68,13 @@ fn heading_tag(level: u8) -> &'static str {
 }
 
 /// One block → one serval element view.
-fn block_view(block: &DocumentBlock) -> NoteChild {
+fn block_view(block: &Block) -> NoteChild {
     match block {
-        DocumentBlock::Heading { level, spans } => {
+        Block::Heading { level, spans } => {
             Box::new(el(heading_tag(*level), span_views(spans)))
         }
-        DocumentBlock::Paragraph { spans } => Box::new(el("p", span_views(spans))),
-        DocumentBlock::CodeBlock { language, text: code } => {
+        Block::Paragraph { spans } => Box::new(el("p", span_views(spans))),
+        Block::CodeBlock { language, text: code } => {
             let code_el: Vec<NoteChild> = vec![Box::new(el("code", text(code.clone())))];
             let mut pre = el("pre", code_el);
             if let Some(lang) = language {
@@ -82,11 +82,11 @@ fn block_view(block: &DocumentBlock) -> NoteChild {
             }
             Box::new(pre)
         }
-        DocumentBlock::Quote { blocks } => {
+        Block::Quote { blocks } => {
             let inner: Vec<NoteChild> = blocks.iter().map(block_view).collect();
             Box::new(el("blockquote", inner))
         }
-        DocumentBlock::List { ordered, items } => {
+        Block::List { ordered, items } => {
             let lis: Vec<NoteChild> = items
                 .iter()
                 .map(|item| {
@@ -96,38 +96,38 @@ fn block_view(block: &DocumentBlock) -> NoteChild {
                 .collect();
             Box::new(el(if *ordered { "ol" } else { "ul" }, lis))
         }
-        DocumentBlock::Image { url, alt } => {
+        Block::Image { url, alt } => {
             Box::new(el("img", ()).attr("src", url.clone()).attr("alt", alt.clone()))
         }
-        DocumentBlock::Preformatted { text: t } => Box::new(el("pre", text(t.clone()))),
-        DocumentBlock::Rule => Box::new(el("hr", ())),
+        Block::Preformatted { text: t } => Box::new(el("pre", text(t.clone()))),
+        Block::Rule => Box::new(el("hr", ())),
         // Semantic blocks (feed / protocol engines): a knot note rarely carries
         // these, but the mapper is total so any routed document renders legibly.
-        DocumentBlock::FeedHeader { title, subtitle, .. } => {
+        Block::FeedHeader { title, subtitle, .. } => {
             let mut kids: Vec<NoteChild> = vec![Box::new(el("h1", text(title.clone())))];
             if let Some(sub) = subtitle {
                 kids.push(Box::new(el("p", text(sub.clone()))));
             }
             Box::new(el("header", kids))
         }
-        DocumentBlock::FeedEntry { title, summary, .. } => {
+        Block::FeedEntry { title, summary, .. } => {
             let mut kids: Vec<NoteChild> = vec![Box::new(el("h2", text(title.clone())))];
             if let Some(s) = summary {
                 kids.push(Box::new(el("p", text(s.clone()))));
             }
             Box::new(el("article", kids))
         }
-        DocumentBlock::MetadataRow { label, value } => {
+        Block::MetadataRow { label, value } => {
             let kids: Vec<NoteChild> = vec![
                 Box::new(el("strong", text(format!("{label}: ")))),
                 Box::new(text(value.clone())),
             ];
             Box::new(el("p", kids))
         }
-        DocumentBlock::Badge { text: t } => {
+        Block::Badge { text: t } => {
             Box::new(el("p", text(t.clone())).attr("class", "badge"))
         }
-        DocumentBlock::Table { header, rows, .. } => {
+        Block::Table { header, rows, .. } => {
             // `<table>` with an optional `<thead>` of `<th>` and a `<tbody>` of
             // `<tr>`/`<td>`. Column alignment (the `..`) is a later CSS pass.
             let mut sections: Vec<NoteChild> = Vec::new();
@@ -181,7 +181,7 @@ fn span_view(span: &InlineSpan) -> NoteChild {
 mod tests {
     use super::*;
 
-    fn doc(blocks: Vec<DocumentBlock>) -> EngineDocument {
+    fn doc(blocks: Vec<Block>) -> EngineDocument {
         EngineDocument {
             address: "knot://test".into(),
             title: None,
@@ -196,21 +196,21 @@ mod tests {
 
     #[test]
     fn block_tags_map_to_html_elements() {
-        assert_eq!(block_tag(&DocumentBlock::Heading { level: 1, spans: vec![] }), "h1");
-        assert_eq!(block_tag(&DocumentBlock::Heading { level: 3, spans: vec![] }), "h3");
+        assert_eq!(block_tag(&Block::Heading { level: 1, spans: vec![] }), "h1");
+        assert_eq!(block_tag(&Block::Heading { level: 3, spans: vec![] }), "h3");
         // Levels past 6 clamp to h6 (HTML has no h7+).
-        assert_eq!(block_tag(&DocumentBlock::Heading { level: 9, spans: vec![] }), "h6");
-        assert_eq!(block_tag(&DocumentBlock::Paragraph { spans: vec![] }), "p");
+        assert_eq!(block_tag(&Block::Heading { level: 9, spans: vec![] }), "h6");
+        assert_eq!(block_tag(&Block::Paragraph { spans: vec![] }), "p");
         assert_eq!(
-            block_tag(&DocumentBlock::CodeBlock { language: None, text: String::new() }),
+            block_tag(&Block::CodeBlock { language: None, text: String::new() }),
             "pre"
         );
-        assert_eq!(block_tag(&DocumentBlock::Quote { blocks: vec![] }), "blockquote");
-        assert_eq!(block_tag(&DocumentBlock::List { ordered: false, items: vec![] }), "ul");
-        assert_eq!(block_tag(&DocumentBlock::List { ordered: true, items: vec![] }), "ol");
-        assert_eq!(block_tag(&DocumentBlock::Rule), "hr");
+        assert_eq!(block_tag(&Block::Quote { blocks: vec![] }), "blockquote");
+        assert_eq!(block_tag(&Block::List { ordered: false, items: vec![] }), "ul");
+        assert_eq!(block_tag(&Block::List { ordered: true, items: vec![] }), "ol");
+        assert_eq!(block_tag(&Block::Rule), "hr");
         assert_eq!(
-            block_tag(&DocumentBlock::Image { url: String::new(), alt: String::new() }),
+            block_tag(&Block::Image { url: String::new(), alt: String::new() }),
             "img"
         );
     }
@@ -218,8 +218,8 @@ mod tests {
     #[test]
     fn document_views_one_per_block() {
         let d = doc(vec![
-            DocumentBlock::Heading { level: 1, spans: vec![InlineSpan::Text("Mere".into())] },
-            DocumentBlock::Paragraph {
+            Block::Heading { level: 1, spans: vec![InlineSpan::Text("Mere".into())] },
+            Block::Paragraph {
                 spans: vec![InlineSpan::Text("A graph-shaped browser.".into())],
             },
         ]);
@@ -247,39 +247,39 @@ mod tests {
             InlineSpan::SoftBreak,
         ];
         let d = doc(vec![
-            DocumentBlock::Heading { level: 2, spans: spans.clone() },
-            DocumentBlock::Paragraph { spans: spans.clone() },
-            DocumentBlock::CodeBlock { language: Some("rust".into()), text: "fn x() {}".into() },
-            DocumentBlock::Quote {
-                blocks: vec![DocumentBlock::Paragraph {
+            Block::Heading { level: 2, spans: spans.clone() },
+            Block::Paragraph { spans: spans.clone() },
+            Block::CodeBlock { language: Some("rust".into()), text: "fn x() {}".into() },
+            Block::Quote {
+                blocks: vec![Block::Paragraph {
                     spans: vec![InlineSpan::Text("q".into())],
                 }],
             },
-            DocumentBlock::List {
+            Block::List {
                 ordered: false,
-                items: vec![vec![DocumentBlock::Paragraph {
+                items: vec![vec![Block::Paragraph {
                     spans: vec![InlineSpan::Text("i".into())],
                 }]],
             },
-            DocumentBlock::Image { url: "img".into(), alt: "a".into() },
-            DocumentBlock::Preformatted { text: "pre".into() },
-            DocumentBlock::Rule,
-            DocumentBlock::FeedHeader {
+            Block::Image { url: "img".into(), alt: "a".into() },
+            Block::Preformatted { text: "pre".into() },
+            Block::Rule,
+            Block::FeedHeader {
                 title: "f".into(),
                 subtitle: Some("s".into()),
                 summary: None,
                 source_url: None,
             },
-            DocumentBlock::FeedEntry {
+            Block::FeedEntry {
                 title: "e".into(),
                 date: None,
                 summary: Some("s".into()),
                 article_url: None,
                 source_url: None,
             },
-            DocumentBlock::MetadataRow { label: "k".into(), value: "v".into() },
-            DocumentBlock::Badge { text: "b".into() },
-            DocumentBlock::Table {
+            Block::MetadataRow { label: "k".into(), value: "v".into() },
+            Block::Badge { text: "b".into() },
+            Block::Table {
                 alignments: vec![inker::TableAlignment::Left, inker::TableAlignment::Right],
                 header: vec![
                     vec![InlineSpan::Text("h1".into())],

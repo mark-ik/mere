@@ -2,14 +2,14 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Top-level document layout — dispatches per [`DocumentBlock`] variant
+//! Top-level document layout — dispatches per [`Block`] variant
 //! and stacks the resulting blocks vertically inside the viewport.
 //!
 //! v1 is a simple top-down stack with no float / no inline-image flow /
 //! no scrolling. Width fills the available content width; height grows
 //! to fit content (may exceed `viewport.height`).
 
-use inker::{DocumentBlock, EngineDocument, InlineSpan};
+use inker::{Block, EngineDocument, InlineSpan};
 
 use crate::font_table::{FontInterner, FontTable};
 use crate::style_sheet::{BlockRole, ColorToken, DocumentStyleSheet, ResolvedBlockStyle};
@@ -116,7 +116,7 @@ impl<'a> DocumentLayouter<'a> {
         (self.viewport.width - used).max(0.0)
     }
 
-    fn lay_out_block(&mut self, block: &DocumentBlock, source_index: usize, indent_level: u32) {
+    fn lay_out_block(&mut self, block: &Block, source_index: usize, indent_level: u32) {
         let rendered = self.render_block(block, source_index, indent_level);
         if let Some(rendered) = rendered {
             self.cursor_y = rendered.bounds.max_y();
@@ -127,7 +127,7 @@ impl<'a> DocumentLayouter<'a> {
 
     fn render_block(
         &mut self,
-        block: &DocumentBlock,
+        block: &Block,
         source_index: usize,
         indent_level: u32,
     ) -> Option<RenderedBlock> {
@@ -135,11 +135,11 @@ impl<'a> DocumentLayouter<'a> {
             // Tables render through the serval note path, not document-canvas
             // (cards are uniform thumbnails); skipped here until a card
             // table-preview lands, and unreachable until parsers emit Table.
-            DocumentBlock::Table { .. } => None,
-            DocumentBlock::Heading { level, spans } => {
+            Block::Table { .. } => None,
+            Block::Heading { level, spans } => {
                 Some(self.render_heading(source_index, indent_level, *level, spans))
             }
-            DocumentBlock::Paragraph { spans } => {
+            Block::Paragraph { spans } => {
                 let resolved = self.style.resolve(BlockRole::Body);
                 Some(self.render_paragraph(
                     source_index,
@@ -149,23 +149,23 @@ impl<'a> DocumentLayouter<'a> {
                     resolved.spacing_below,
                 ))
             }
-            DocumentBlock::CodeBlock { text, .. } => {
+            Block::CodeBlock { text, .. } => {
                 Some(self.render_code_block(source_index, indent_level, text))
             }
-            DocumentBlock::Preformatted { text } => {
+            Block::Preformatted { text } => {
                 Some(self.render_code_block(source_index, indent_level, text))
             }
-            DocumentBlock::Quote { blocks } => {
+            Block::Quote { blocks } => {
                 Some(self.render_group(source_index, indent_level + 1, blocks))
             }
-            DocumentBlock::List { items, .. } => {
+            Block::List { items, .. } => {
                 Some(self.render_list(source_index, indent_level + 1, items))
             }
-            DocumentBlock::Image { url, alt } => {
+            Block::Image { url, alt } => {
                 Some(self.render_image(source_index, indent_level, url.clone(), alt.clone()))
             }
-            DocumentBlock::Rule => Some(self.render_rule(source_index, indent_level)),
-            DocumentBlock::FeedHeader {
+            Block::Rule => Some(self.render_rule(source_index, indent_level)),
+            Block::FeedHeader {
                 title,
                 subtitle,
                 summary,
@@ -178,7 +178,7 @@ impl<'a> DocumentLayouter<'a> {
                 summary.as_deref(),
                 source_url.as_deref(),
             )),
-            DocumentBlock::FeedEntry {
+            Block::FeedEntry {
                 title,
                 date,
                 summary,
@@ -193,10 +193,10 @@ impl<'a> DocumentLayouter<'a> {
                 article_url.as_deref(),
                 source_url.as_deref(),
             )),
-            DocumentBlock::MetadataRow { label, value } => {
+            Block::MetadataRow { label, value } => {
                 Some(self.render_metadata_row(source_index, indent_level, label, value))
             }
-            DocumentBlock::Badge { text } => {
+            Block::Badge { text } => {
                 Some(self.render_badge(source_index, indent_level, text))
             }
         }
@@ -334,7 +334,7 @@ impl<'a> DocumentLayouter<'a> {
         &mut self,
         source_index: usize,
         indent_level: u32,
-        children: &[DocumentBlock],
+        children: &[Block],
     ) -> RenderedBlock {
         let group_top = self.cursor_y;
         let mut child_blocks: Vec<RenderedBlock> = Vec::new();
@@ -371,7 +371,7 @@ impl<'a> DocumentLayouter<'a> {
         &mut self,
         source_index: usize,
         indent_level: u32,
-        items: &[Vec<DocumentBlock>],
+        items: &[Vec<Block>],
     ) -> RenderedBlock {
         let group_top = self.cursor_y;
         let mut child_blocks: Vec<RenderedBlock> = Vec::new();
@@ -454,24 +454,24 @@ impl<'a> DocumentLayouter<'a> {
         summary: Option<&str>,
         source_url: Option<&str>,
     ) -> RenderedBlock {
-        let mut composed: Vec<DocumentBlock> = Vec::new();
-        composed.push(DocumentBlock::Heading {
+        let mut composed: Vec<Block> = Vec::new();
+        composed.push(Block::Heading {
             level: 1,
             spans: vec![InlineSpan::Text(title.to_string())],
         });
         if let Some(s) = subtitle {
-            composed.push(DocumentBlock::Heading {
+            composed.push(Block::Heading {
                 level: 2,
                 spans: vec![InlineSpan::Text(s.to_string())],
             });
         }
         if let Some(s) = summary {
-            composed.push(DocumentBlock::Paragraph {
+            composed.push(Block::Paragraph {
                 spans: vec![InlineSpan::Text(s.to_string())],
             });
         }
         if let Some(url) = source_url {
-            composed.push(DocumentBlock::Paragraph {
+            composed.push(Block::Paragraph {
                 spans: vec![InlineSpan::Link {
                     url: url.to_string(),
                     title: None,
@@ -493,23 +493,23 @@ impl<'a> DocumentLayouter<'a> {
         article_url: Option<&str>,
         source_url: Option<&str>,
     ) -> RenderedBlock {
-        let mut composed: Vec<DocumentBlock> = Vec::new();
-        composed.push(DocumentBlock::Heading {
+        let mut composed: Vec<Block> = Vec::new();
+        composed.push(Block::Heading {
             level: 2,
             spans: vec![InlineSpan::Text(title.to_string())],
         });
         if let Some(d) = date {
-            composed.push(DocumentBlock::Paragraph {
+            composed.push(Block::Paragraph {
                 spans: vec![InlineSpan::Emphasis(vec![InlineSpan::Text(d.to_string())])],
             });
         }
         if let Some(s) = summary {
-            composed.push(DocumentBlock::Paragraph {
+            composed.push(Block::Paragraph {
                 spans: vec![InlineSpan::Text(s.to_string())],
             });
         }
         if let Some(url) = article_url {
-            composed.push(DocumentBlock::Paragraph {
+            composed.push(Block::Paragraph {
                 spans: vec![InlineSpan::Link {
                     url: url.to_string(),
                     title: None,
@@ -519,7 +519,7 @@ impl<'a> DocumentLayouter<'a> {
             });
         }
         if let Some(url) = source_url {
-            composed.push(DocumentBlock::Paragraph {
+            composed.push(Block::Paragraph {
                 spans: vec![InlineSpan::Link {
                     url: url.to_string(),
                     title: None,

@@ -5,10 +5,10 @@
 use super::*;
 use crate::types::InteractionKind;
 use inker::{
-    DocumentBlock, DocumentProvenance, DocumentTrustState, EngineDocument, InlineSpan,
+    Block, DocumentProvenance, DocumentTrustState, EngineDocument, InlineSpan,
 };
 
-fn doc(blocks: Vec<DocumentBlock>) -> EngineDocument {
+fn doc(blocks: Vec<Block>) -> EngineDocument {
     EngineDocument {
         address: "doc:test".into(),
         title: None,
@@ -36,7 +36,7 @@ fn empty_document_lays_out_to_empty_block_list() {
 #[test]
 fn single_paragraph_produces_one_text_block() {
     let packet = layout_document(
-        &doc(vec![DocumentBlock::Paragraph {
+        &doc(vec![Block::Paragraph {
             spans: vec![InlineSpan::Text("Hello, world.".into())],
         }]),
         viewport(),
@@ -57,11 +57,11 @@ fn heading_is_taller_than_paragraph() {
     let style = DocumentStyleSheet::default();
     let packet = layout_document(
         &doc(vec![
-            DocumentBlock::Heading {
+            Block::Heading {
                 level: 1,
                 spans: vec![InlineSpan::Text("Title".into())],
             },
-            DocumentBlock::Paragraph {
+            Block::Paragraph {
                 spans: vec![InlineSpan::Text("Body.".into())],
             },
         ]),
@@ -83,7 +83,7 @@ fn heading_is_taller_than_paragraph() {
 #[test]
 fn paragraph_with_link_emits_interaction_region() {
     let packet = layout_document(
-        &doc(vec![DocumentBlock::Paragraph {
+        &doc(vec![Block::Paragraph {
             spans: vec![
                 InlineSpan::Text("see ".into()),
                 InlineSpan::Link {
@@ -111,13 +111,13 @@ fn paragraph_with_link_emits_interaction_region() {
 #[test]
 fn list_emits_group_block_with_children() {
     let packet = layout_document(
-        &doc(vec![DocumentBlock::List {
+        &doc(vec![Block::List {
             ordered: false,
             items: vec![
-                vec![DocumentBlock::Paragraph {
+                vec![Block::Paragraph {
                     spans: vec![InlineSpan::Text("first".into())],
                 }],
-                vec![DocumentBlock::Paragraph {
+                vec![Block::Paragraph {
                     spans: vec![InlineSpan::Text("second".into())],
                 }],
             ],
@@ -136,8 +136,8 @@ fn list_emits_group_block_with_children() {
 fn quote_emits_group_block_with_indented_children() {
     let style = DocumentStyleSheet::default();
     let packet = layout_document(
-        &doc(vec![DocumentBlock::Quote {
-            blocks: vec![DocumentBlock::Paragraph {
+        &doc(vec![Block::Quote {
+            blocks: vec![Block::Paragraph {
                 spans: vec![InlineSpan::Text("quoted text".into())],
             }],
         }]),
@@ -160,7 +160,7 @@ fn quote_emits_group_block_with_indented_children() {
 #[test]
 fn rule_emits_rule_block() {
     let packet = layout_document(
-        &doc(vec![DocumentBlock::Rule]),
+        &doc(vec![Block::Rule]),
         viewport(),
         &DocumentStyleSheet::default(),
     )
@@ -171,7 +171,7 @@ fn rule_emits_rule_block() {
 #[test]
 fn image_emits_image_block_with_url_and_alt() {
     let packet = layout_document(
-        &doc(vec![DocumentBlock::Image {
+        &doc(vec![Block::Image {
             url: "https://x.test/pic.png".into(),
             alt: "a picture".into(),
         }]),
@@ -189,7 +189,7 @@ fn image_emits_image_block_with_url_and_alt() {
 #[test]
 fn feed_entry_composes_into_group_with_h2_summary_link() {
     let packet = layout_document(
-        &doc(vec![DocumentBlock::FeedEntry {
+        &doc(vec![Block::FeedEntry {
             title: "Article".into(),
             date: Some("2026-05-09".into()),
             summary: Some("Summary text.".into()),
@@ -215,7 +215,7 @@ fn feed_entry_composes_into_group_with_h2_summary_link() {
 #[test]
 fn metadata_row_lays_out_label_and_value() {
     let packet = layout_document(
-        &doc(vec![DocumentBlock::MetadataRow {
+        &doc(vec![Block::MetadataRow {
             label: "Login".into(),
             value: "alice".into(),
         }]),
@@ -234,7 +234,7 @@ fn metadata_row_lays_out_label_and_value() {
 fn content_bounds_grow_with_blocks() {
     let style = DocumentStyleSheet::default();
     let single = layout_document(
-        &doc(vec![DocumentBlock::Paragraph {
+        &doc(vec![Block::Paragraph {
             spans: vec![InlineSpan::Text("one".into())],
         }]),
         viewport(),
@@ -243,13 +243,13 @@ fn content_bounds_grow_with_blocks() {
     .packet;
     let several = layout_document(
         &doc(vec![
-            DocumentBlock::Paragraph {
+            Block::Paragraph {
                 spans: vec![InlineSpan::Text("one".into())],
             },
-            DocumentBlock::Paragraph {
+            Block::Paragraph {
                 spans: vec![InlineSpan::Text("two".into())],
             },
-            DocumentBlock::Paragraph {
+            Block::Paragraph {
                 spans: vec![InlineSpan::Text("three".into())],
             },
         ]),
@@ -267,10 +267,10 @@ fn document_dedups_shared_face() {
     // sidecar, and both runs carry the same FontFaceId.
     let laid = layout_document(
         &doc(vec![
-            DocumentBlock::Paragraph {
+            Block::Paragraph {
                 spans: vec![InlineSpan::Text("first".into())],
             },
-            DocumentBlock::Paragraph {
+            Block::Paragraph {
                 spans: vec![InlineSpan::Text("second".into())],
             },
         ]),
@@ -298,7 +298,7 @@ fn text_populates_font_sidecar() {
     // text yields a non-empty sidecar, every run's face resolves in
     // it, and the resolved face carries real bytes.
     let laid = layout_document(
-        &doc(vec![DocumentBlock::Paragraph {
+        &doc(vec![Block::Paragraph {
             spans: vec![InlineSpan::Text("hello".into())],
         }]),
         viewport(),
@@ -322,7 +322,7 @@ fn text_populates_font_sidecar() {
 fn nowrap_role_overflows_instead_of_wrapping() {
     let long = "a long single line of body text that would otherwise wrap across many lines";
     let make = || {
-        doc(vec![DocumentBlock::Paragraph {
+        doc(vec![Block::Paragraph {
             spans: vec![InlineSpan::Text(long.into())],
         }])
     };
@@ -365,11 +365,11 @@ fn glyph_runs_carry_per_role_colors() {
     let palette = DocumentStyleSheet::default().colors;
     let packet = layout_document(
         &doc(vec![
-            DocumentBlock::Heading {
+            Block::Heading {
                 level: 1,
                 spans: vec![InlineSpan::Text("Title".into())],
             },
-            DocumentBlock::Paragraph {
+            Block::Paragraph {
                 spans: vec![
                     InlineSpan::Text("see ".into()),
                     InlineSpan::Link {

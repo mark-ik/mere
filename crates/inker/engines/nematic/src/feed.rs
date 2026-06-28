@@ -10,14 +10,14 @@
 //! errand's [`Feed`] shape, so they share [`build_document_blocks`].
 //!
 //! The output layout: the feed title becomes [`EngineDocument::title`]; the feed
-//! emits one [`DocumentBlock::FeedHeader`] (when it carries channel metadata) then
-//! one [`DocumentBlock::FeedEntry`] per item. Summaries are de-tagged to plain
+//! emits one [`Block::FeedHeader`] (when it carries channel metadata) then
+//! one [`Block::FeedEntry`] per item. Summaries are de-tagged to plain
 //! text (lossy v1), and the count of stripped entries surfaces as a
 //! `DegradedRendering` diagnostic.
 
 use errand::parse::feed::{parse as parse_feed_xml, strip_html_tags, Feed, FeedEntry};
 use inker::{
-    DocumentBlock, DocumentDiagnostic, DocumentProvenance, DocumentTrustState, Engine,
+    Block, DocumentDiagnostic, DocumentProvenance, DocumentTrustState, Engine,
     EngineDocument, EngineError, EngineInput,
 };
 use serde::Deserialize;
@@ -171,17 +171,17 @@ fn trimmed_some(value: Option<String>) -> Option<String> {
 
 /// Build the block list and any diagnostics from a parsed [`Feed`].
 ///
-/// Emits one [`DocumentBlock::FeedHeader`] when the feed carries channel-level
-/// metadata, then one [`DocumentBlock::FeedEntry`] per item. These semantic blocks
+/// Emits one [`Block::FeedHeader`] when the feed carries channel-level
+/// metadata, then one [`Block::FeedEntry`] per item. These semantic blocks
 /// preserve RSS / Atom intent (a feed entry is distinct from "a paragraph with a
 /// link in it") so downstream intelligence can match on type, not just text.
-fn build_document_blocks(feed: Feed) -> (Vec<DocumentBlock>, Vec<DocumentDiagnostic>) {
+fn build_document_blocks(feed: Feed) -> (Vec<Block>, Vec<DocumentDiagnostic>) {
     let mut blocks = Vec::with_capacity(feed.entries.len() + 1);
 
     let header_has_content =
         feed.title.is_some() || feed.subtitle.is_some() || feed.link.is_some();
     if header_has_content {
-        blocks.push(DocumentBlock::FeedHeader {
+        blocks.push(Block::FeedHeader {
             title: feed.title.clone().unwrap_or_default(),
             subtitle: feed.subtitle,
             summary: None,
@@ -190,7 +190,7 @@ fn build_document_blocks(feed: Feed) -> (Vec<DocumentBlock>, Vec<DocumentDiagnos
     }
 
     for entry in feed.entries {
-        blocks.push(DocumentBlock::FeedEntry {
+        blocks.push(Block::FeedEntry {
             title: entry.title.unwrap_or_default(),
             date: entry.date,
             summary: entry.summary,

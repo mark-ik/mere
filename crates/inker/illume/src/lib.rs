@@ -9,7 +9,7 @@
 //! plus the inner-language injection registry. This is the *editor* pipe in the
 //! plan's two-parser split: it colors and (later) navigates the source. It is
 //! separate from the *meaning* pipe (nematic's `DjotKnotEngine`: text →
-//! `DocumentBlock`), and both read the same bytes. The source text is always the
+//! `Block`), and both read the same bytes. The source text is always the
 //! single source of truth; nothing here mutates it.
 //!
 //! Pure Rust and wasm-clean by construction (jotdown plus, later, `logos` inner

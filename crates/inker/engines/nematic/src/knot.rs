@@ -46,7 +46,7 @@
 use std::collections::HashMap;
 
 use inker::{
-    DocumentBlock, DocumentProvenance, DocumentTrustState, Engine, EngineDocument, EngineError,
+    Block, DocumentProvenance, DocumentTrustState, Engine, EngineDocument, EngineError,
     EngineInput,
 };
 
@@ -54,7 +54,7 @@ use crate::MarkdownEngine;
 
 mod expand;
 /// Djot-substrate proof-of-concept (design doc §10, Phase 1). Additive and not
-/// yet wired into the engine; parses a djot knot body into `DocumentBlock`s.
+/// yet wired into the engine; parses a djot knot body into `Block`s.
 pub mod djot;
 #[cfg(test)]
 mod tests;
@@ -101,7 +101,7 @@ impl Engine for KnotEngine {
         // Polyglot expansion: walk the markdown engine's blocks and expand
         // any fenced code blocks whose language tag matches a known
         // protocol (gemtext / gopher / nex / feed-entry / feed-header /
-        // metadata-row / badge) into real `DocumentBlock`s. Unknown
+        // metadata-row / badge) into real `Block`s. Unknown
         // languages stay as code blocks.
         expand::expand_fenced_blocks(&mut doc.blocks);
 
@@ -159,9 +159,9 @@ fn apply_frontmatter(
         .map(|s| s.to_string())
         .unwrap_or_else(|| "text/x-knot".to_string());
 
-    let mut prefix: Vec<DocumentBlock> = Vec::new();
+    let mut prefix: Vec<Block> = Vec::new();
     if let Some(FrontmatterValue::Scalar(kind)) = frontmatter.get("note_kind") {
-        prefix.push(DocumentBlock::MetadataRow {
+        prefix.push(Block::MetadataRow {
             label: "kind".to_string(),
             value: kind.clone(),
         });
@@ -172,7 +172,7 @@ fn apply_frontmatter(
             FrontmatterValue::List(items) => items.join(", "),
         };
         if !joined.is_empty() {
-            prefix.push(DocumentBlock::MetadataRow {
+            prefix.push(Block::MetadataRow {
                 label: "tags".to_string(),
                 value: joined,
             });

@@ -5,7 +5,7 @@
 //! Focused-content inspection rows for the D8 Inspector pane.
 
 use inker::{
-    DocumentBlock, DocumentDiagnostic, DocumentTrustState, EngineDocument, EngineInput,
+    Block, DocumentDiagnostic, DocumentTrustState, EngineDocument, EngineInput,
     EngineRegistry,
 };
 use kernel::graph::Node;
@@ -181,7 +181,7 @@ fn parsed_document_rows(engine_id: &str, document: &EngineDocument) -> Vec<(Stri
     ]
 }
 
-fn summarize_blocks(blocks: &[DocumentBlock]) -> String {
+fn summarize_blocks(blocks: &[Block]) -> String {
     let mut summary = BlockSummary::default();
     for block in blocks {
         summary.visit(block);
@@ -212,20 +212,20 @@ struct BlockSummary {
 }
 
 impl BlockSummary {
-    fn visit(&mut self, block: &DocumentBlock) {
+    fn visit(&mut self, block: &Block) {
         self.blocks += 1;
         match block {
-            DocumentBlock::Heading { .. } => self.headings += 1,
-            DocumentBlock::Paragraph { .. } => self.paragraphs += 1,
-            DocumentBlock::CodeBlock { .. } | DocumentBlock::Preformatted { .. } => {
+            Block::Heading { .. } => self.headings += 1,
+            Block::Paragraph { .. } => self.paragraphs += 1,
+            Block::CodeBlock { .. } | Block::Preformatted { .. } => {
                 self.code_blocks += 1
             }
-            DocumentBlock::Quote { blocks } => {
+            Block::Quote { blocks } => {
                 for child in blocks {
                     self.visit(child);
                 }
             }
-            DocumentBlock::List { items, .. } => {
+            Block::List { items, .. } => {
                 self.lists += 1;
                 for item in items {
                     for child in item {
@@ -233,13 +233,13 @@ impl BlockSummary {
                     }
                 }
             }
-            DocumentBlock::Image { .. } => self.images += 1,
-            DocumentBlock::FeedEntry { .. } => self.feed_entries += 1,
-            DocumentBlock::MetadataRow { .. } => self.metadata_rows += 1,
-            DocumentBlock::Rule
-            | DocumentBlock::FeedHeader { .. }
-            | DocumentBlock::Badge { .. }
-            | DocumentBlock::Table { .. } => {}
+            Block::Image { .. } => self.images += 1,
+            Block::FeedEntry { .. } => self.feed_entries += 1,
+            Block::MetadataRow { .. } => self.metadata_rows += 1,
+            Block::Rule
+            | Block::FeedHeader { .. }
+            | Block::Badge { .. }
+            | Block::Table { .. } => {}
         }
     }
 }

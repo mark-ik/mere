@@ -7,7 +7,7 @@
 //! This module defines the universal semantic shape every engine renders
 //! into. The model carries:
 //!
-//! - **Structure**: `DocumentBlock` / `InlineSpan` (headings, paragraphs,
+//! - **Structure**: `Block` / `InlineSpan` (headings, paragraphs,
 //!   lists, links, etc.) — what content there is.
 //! - **Semantic intent**: `FeedHeader`, `FeedEntry`, `MetadataRow`, `Badge`
 //!   — when a source format has block-level meaning beyond "this is a
@@ -86,7 +86,7 @@ pub struct EngineDocument {
     /// overlay. Defaults to empty.
     #[serde(default)]
     pub diagnostics: Vec<DocumentDiagnostic>,
-    pub blocks: Vec<DocumentBlock>,
+    pub blocks: Vec<Block>,
 }
 
 impl EngineDocument {
@@ -189,7 +189,7 @@ pub enum DocumentDiagnostic {
 /// Each variant maps to an AccessKit role; the projection layer lifts these
 /// into an a11y / automation tree without any host-specific information.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum DocumentBlock {
+pub enum Block {
     /// AccessKit `Role::Heading` with the heading level set on the node.
     Heading { level: u8, spans: Vec<InlineSpan> },
     /// AccessKit `Role::Paragraph`.
@@ -200,11 +200,11 @@ pub enum DocumentBlock {
         text: String,
     },
     /// AccessKit `Role::Blockquote`.
-    Quote { blocks: Vec<DocumentBlock> },
+    Quote { blocks: Vec<Block> },
     /// AccessKit `Role::List`.
     List {
         ordered: bool,
-        items: Vec<Vec<DocumentBlock>>,
+        items: Vec<Vec<Block>>,
     },
     /// AccessKit `Role::Image`.
     Image { url: String, alt: String },
@@ -262,7 +262,7 @@ pub enum TableAlignment {
     Right,
 }
 
-/// An inline-level span inside a [`DocumentBlock`].
+/// An inline-level span inside a [`Block`].
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InlineSpan {
     Text(String),
@@ -318,68 +318,68 @@ fn append_inline_text(span: &InlineSpan, out: &mut String) {
     }
 }
 
-fn collect_block_spans<'a>(block: &'a DocumentBlock, out: &mut Vec<&'a InlineSpan>) {
+fn collect_block_spans<'a>(block: &'a Block, out: &mut Vec<&'a InlineSpan>) {
     match block {
-        DocumentBlock::Heading { spans, .. } | DocumentBlock::Paragraph { spans } => {
+        Block::Heading { spans, .. } | Block::Paragraph { spans } => {
             for span in spans {
                 out.push(span);
             }
         }
-        DocumentBlock::Quote { blocks } => {
+        Block::Quote { blocks } => {
             for inner in blocks {
                 collect_block_spans(inner, out);
             }
         }
-        DocumentBlock::List { items, .. } => {
+        Block::List { items, .. } => {
             for item in items {
                 for inner in item {
                     collect_block_spans(inner, out);
                 }
             }
         }
-        DocumentBlock::Table { header, rows, .. } => {
+        Block::Table { header, rows, .. } => {
             for cell in header.iter().chain(rows.iter().flatten()) {
                 for span in cell {
                     out.push(span);
                 }
             }
         }
-        DocumentBlock::CodeBlock { .. }
-        | DocumentBlock::Image { .. }
-        | DocumentBlock::Preformatted { .. }
-        | DocumentBlock::Rule
-        | DocumentBlock::FeedHeader { .. }
-        | DocumentBlock::FeedEntry { .. }
-        | DocumentBlock::MetadataRow { .. }
-        | DocumentBlock::Badge { .. } => {}
+        Block::CodeBlock { .. }
+        | Block::Image { .. }
+        | Block::Preformatted { .. }
+        | Block::Rule
+        | Block::FeedHeader { .. }
+        | Block::FeedEntry { .. }
+        | Block::MetadataRow { .. }
+        | Block::Badge { .. } => {}
     }
 }
 
-fn collect_block_link_urls<'a>(block: &'a DocumentBlock, out: &mut Vec<&'a str>) {
+fn collect_block_link_urls<'a>(block: &'a Block, out: &mut Vec<&'a str>) {
     match block {
-        DocumentBlock::Heading { spans, .. } | DocumentBlock::Paragraph { spans } => {
+        Block::Heading { spans, .. } | Block::Paragraph { spans } => {
             for span in spans {
                 collect_link_urls(span, out);
             }
         }
-        DocumentBlock::Quote { blocks } => {
+        Block::Quote { blocks } => {
             for inner in blocks {
                 collect_block_link_urls(inner, out);
             }
         }
-        DocumentBlock::List { items, .. } => {
+        Block::List { items, .. } => {
             for item in items {
                 for inner in item {
                     collect_block_link_urls(inner, out);
                 }
             }
         }
-        DocumentBlock::FeedHeader { source_url, .. } => {
+        Block::FeedHeader { source_url, .. } => {
             if let Some(url) = source_url {
                 out.push(url.as_str());
             }
         }
-        DocumentBlock::FeedEntry {
+        Block::FeedEntry {
             article_url,
             source_url,
             ..
@@ -391,19 +391,19 @@ fn collect_block_link_urls<'a>(block: &'a DocumentBlock, out: &mut Vec<&'a str>)
                 out.push(url.as_str());
             }
         }
-        DocumentBlock::Table { header, rows, .. } => {
+        Block::Table { header, rows, .. } => {
             for cell in header.iter().chain(rows.iter().flatten()) {
                 for span in cell {
                     collect_link_urls(span, out);
                 }
             }
         }
-        DocumentBlock::CodeBlock { .. }
-        | DocumentBlock::Image { .. }
-        | DocumentBlock::Preformatted { .. }
-        | DocumentBlock::Rule
-        | DocumentBlock::MetadataRow { .. }
-        | DocumentBlock::Badge { .. } => {}
+        Block::CodeBlock { .. }
+        | Block::Image { .. }
+        | Block::Preformatted { .. }
+        | Block::Rule
+        | Block::MetadataRow { .. }
+        | Block::Badge { .. } => {}
     }
 }
 
@@ -431,7 +431,7 @@ fn collect_link_urls<'a>(span: &'a InlineSpan, out: &mut Vec<&'a str>) {
 mod tests {
     use super::*;
 
-    fn doc(blocks: Vec<DocumentBlock>) -> EngineDocument {
+    fn doc(blocks: Vec<Block>) -> EngineDocument {
         EngineDocument {
             address: "doc:1".into(),
             title: None,
@@ -461,13 +461,13 @@ mod tests {
     #[test]
     fn outgoing_links_walks_feed_entry_urls() {
         let document = doc(vec![
-            DocumentBlock::FeedHeader {
+            Block::FeedHeader {
                 title: "Feed".into(),
                 subtitle: None,
                 summary: None,
                 source_url: Some("https://feed.test/".into()),
             },
-            DocumentBlock::FeedEntry {
+            Block::FeedEntry {
                 title: "Entry".into(),
                 date: None,
                 summary: None,

@@ -37,7 +37,7 @@
 
 use errand::parse::gopher::{parse as parse_gopher, GopherKind};
 use inker::{
-    DocumentBlock, DocumentProvenance, DocumentTrustState, Engine, EngineDocument, EngineError,
+    Block, DocumentProvenance, DocumentTrustState, Engine, EngineDocument, EngineError,
     EngineInput, InlineSpan,
 };
 
@@ -67,7 +67,7 @@ impl Engine for GopherEngine {
     fn render(&self, input: &EngineInput) -> Result<EngineDocument, EngineError> {
         // errand parses the RFC 1436 menu into typed items (with synthesised URLs);
         // nematic folds info/error runs into paragraphs and resources into links.
-        let mut blocks: Vec<DocumentBlock> = Vec::new();
+        let mut blocks: Vec<Block> = Vec::new();
         let mut info_run: Vec<String> = Vec::new();
 
         for item in parse_gopher(&input.body) {
@@ -101,7 +101,7 @@ impl Engine for GopherEngine {
     }
 }
 
-fn flush_info(info_run: &mut Vec<String>, blocks: &mut Vec<DocumentBlock>) {
+fn flush_info(info_run: &mut Vec<String>, blocks: &mut Vec<Block>) {
     if info_run.is_empty() {
         return;
     }
@@ -114,11 +114,11 @@ fn flush_info(info_run: &mut Vec<String>, blocks: &mut Vec<DocumentBlock>) {
         spans.push(InlineSpan::Text(line));
         first = false;
     }
-    blocks.push(DocumentBlock::Paragraph { spans });
+    blocks.push(Block::Paragraph { spans });
 }
 
-fn link_paragraph(display: String, url: String) -> DocumentBlock {
-    DocumentBlock::Paragraph {
+fn link_paragraph(display: String, url: String) -> Block {
+    Block::Paragraph {
         spans: vec![InlineSpan::Link {
             url,
             title: None,
@@ -151,7 +151,7 @@ mod tests {
     fn standard_text_item_synthesises_gopher_url() {
         let body = line('0', "Welcome text", "/welcome.txt", "example.test", "70");
         let doc = render(&body);
-        let DocumentBlock::Paragraph { spans } = &doc.blocks[0] else {
+        let Block::Paragraph { spans } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
         let InlineSpan::Link { url, .. } = &spans[0] else {
@@ -164,7 +164,7 @@ mod tests {
     fn non_default_port_appears_in_url() {
         let body = line('1', "Sub", "/sub", "example.test", "7070");
         let doc = render(&body);
-        let DocumentBlock::Paragraph { spans } = &doc.blocks[0] else {
+        let Block::Paragraph { spans } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
         let InlineSpan::Link { url, .. } = &spans[0] else {
@@ -177,7 +177,7 @@ mod tests {
     fn url_item_extracts_url_prefix() {
         let body = line('h', "External", "URL:https://example.test/", ".", "70");
         let doc = render(&body);
-        let DocumentBlock::Paragraph { spans } = &doc.blocks[0] else {
+        let Block::Paragraph { spans } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
         let InlineSpan::Link { url, .. } = &spans[0] else {
@@ -196,7 +196,7 @@ mod tests {
         );
         let doc = render(&body);
         assert_eq!(doc.blocks.len(), 1);
-        let DocumentBlock::Paragraph { spans } = &doc.blocks[0] else {
+        let Block::Paragraph { spans } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
         let breaks = spans
@@ -234,7 +234,7 @@ mod tests {
     fn error_lines_become_info_with_prefix() {
         let body = line('3', "host unreachable", "", "example.test", "70");
         let doc = render(&body);
-        let DocumentBlock::Paragraph { spans } = &doc.blocks[0] else {
+        let Block::Paragraph { spans } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
         let InlineSpan::Text(text) = &spans[0] else {

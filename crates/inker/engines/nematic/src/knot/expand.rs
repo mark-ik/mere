@@ -15,7 +15,7 @@
 use std::mem;
 
 use inker::{
-    BlockProvenanceMap, DocumentBlock, DocumentProvenance, DocumentTrustState, Engine, EngineInput,
+    BlockProvenanceMap, Block, DocumentProvenance, DocumentTrustState, Engine, EngineInput,
     InlineSpan,
 };
 
@@ -24,25 +24,25 @@ use crate::{GemtextEngine, GopherEngine, NexEngine};
 /// Walk `blocks`, expanding any fenced code block whose language tag is a
 /// known protocol into real semantic blocks. Unknown languages pass
 /// through unchanged.
-pub(super) fn expand_fenced_blocks(blocks: &mut Vec<DocumentBlock>) {
-    let mut out: Vec<DocumentBlock> = Vec::with_capacity(blocks.len());
+pub(super) fn expand_fenced_blocks(blocks: &mut Vec<Block>) {
+    let mut out: Vec<Block> = Vec::with_capacity(blocks.len());
     for block in mem::take(blocks) {
         match block {
-            DocumentBlock::CodeBlock {
+            Block::CodeBlock {
                 language: Some(lang),
                 text,
             } => match expand_fenced(&lang, &text) {
                 Some(expanded) => out.extend(expanded),
-                None => out.push(DocumentBlock::CodeBlock {
+                None => out.push(Block::CodeBlock {
                     language: Some(lang),
                     text,
                 }),
             },
-            DocumentBlock::Quote { mut blocks } => {
+            Block::Quote { mut blocks } => {
                 expand_fenced_blocks(&mut blocks);
-                out.push(DocumentBlock::Quote { blocks });
+                out.push(Block::Quote { blocks });
             }
-            DocumentBlock::List { ordered, items } => {
+            Block::List { ordered, items } => {
                 let expanded_items = items
                     .into_iter()
                     .map(|mut item| {
@@ -50,7 +50,7 @@ pub(super) fn expand_fenced_blocks(blocks: &mut Vec<DocumentBlock>) {
                         item
                     })
                     .collect();
-                out.push(DocumentBlock::List {
+                out.push(Block::List {
                     ordered,
                     items: expanded_items,
                 });
@@ -64,7 +64,7 @@ pub(super) fn expand_fenced_blocks(blocks: &mut Vec<DocumentBlock>) {
 /// Dispatch a single fence (`language`, `text`) to the right parser.
 /// Returns `None` for languages this knot module doesn't recognise; the
 /// caller keeps the original code block in that case.
-fn expand_fenced(language: &str, text: &str) -> Option<Vec<DocumentBlock>> {
+fn expand_fenced(language: &str, text: &str) -> Option<Vec<Block>> {
     let lang = language.trim().to_ascii_lowercase();
     match lang.as_str() {
         "gemtext" => Some(parse_via_engine(&GemtextEngine::new(), text)),
@@ -78,7 +78,7 @@ fn expand_fenced(language: &str, text: &str) -> Option<Vec<DocumentBlock>> {
     }
 }
 
-fn parse_via_engine(engine: &dyn Engine, text: &str) -> Vec<DocumentBlock> {
+fn parse_via_engine(engine: &dyn Engine, text: &str) -> Vec<Block> {
     // The fence content has no canonical address of its own; pass an
     // opaque placeholder so the inner engine has something for its
     // provenance.canonical_uri.
@@ -89,14 +89,14 @@ fn parse_via_engine(engine: &dyn Engine, text: &str) -> Vec<DocumentBlock> {
     }
 }
 
-fn parse_feed_entry(text: &str) -> DocumentBlock {
+fn parse_feed_entry(text: &str) -> Block {
     let pairs = parse_kv_lines(text);
     let mut title = String::new();
     let mut date = None;
     let mut summary = None;
     let mut article_url = None;
     let mut source_url = None;
-    let mut extras: Vec<DocumentBlock> = Vec::new();
+    let mut extras: Vec<Block> = Vec::new();
 
     for (key, value) in &pairs {
         match key.to_ascii_lowercase().as_str() {
@@ -105,14 +105,14 @@ fn parse_feed_entry(text: &str) -> DocumentBlock {
             "summary" | "description" | "content" => summary = Some(value.clone()),
             "url" | "article" | "link" => article_url = Some(value.clone()),
             "source" | "source_url" => source_url = Some(value.clone()),
-            _ => extras.push(DocumentBlock::MetadataRow {
+            _ => extras.push(Block::MetadataRow {
                 label: key.clone(),
                 value: value.clone(),
             }),
         }
     }
 
-    let entry = DocumentBlock::FeedEntry {
+    let entry = Block::FeedEntry {
         title,
         date,
         summary,
@@ -131,17 +131,17 @@ fn parse_feed_entry(text: &str) -> DocumentBlock {
         // into a Quote that wraps the entry + extras.
         let mut grouped = vec![entry];
         grouped.extend(extras);
-        DocumentBlock::Quote { blocks: grouped }
+        Block::Quote { blocks: grouped }
     }
 }
 
-fn parse_feed_header(text: &str) -> DocumentBlock {
+fn parse_feed_header(text: &str) -> Block {
     let pairs = parse_kv_lines(text);
     let mut title = String::new();
     let mut subtitle = None;
     let mut summary = None;
     let mut source_url = None;
-    let mut extras: Vec<DocumentBlock> = Vec::new();
+    let mut extras: Vec<Block> = Vec::new();
 
     for (key, value) in &pairs {
         match key.to_ascii_lowercase().as_str() {
@@ -149,14 +149,14 @@ fn parse_feed_header(text: &str) -> DocumentBlock {
             "subtitle" => subtitle = Some(value.clone()),
             "summary" | "description" => summary = Some(value.clone()),
             "source" | "source_url" | "link" | "url" => source_url = Some(value.clone()),
-            _ => extras.push(DocumentBlock::MetadataRow {
+            _ => extras.push(Block::MetadataRow {
                 label: key.clone(),
                 value: value.clone(),
             }),
         }
     }
 
-    let header = DocumentBlock::FeedHeader {
+    let header = Block::FeedHeader {
         title,
         subtitle,
         summary,
@@ -167,22 +167,22 @@ fn parse_feed_header(text: &str) -> DocumentBlock {
     } else {
         let mut grouped = vec![header];
         grouped.extend(extras);
-        DocumentBlock::Quote { blocks: grouped }
+        Block::Quote { blocks: grouped }
     }
 }
 
-fn parse_metadata_rows(text: &str) -> Vec<DocumentBlock> {
+fn parse_metadata_rows(text: &str) -> Vec<Block> {
     parse_kv_lines(text)
         .into_iter()
-        .map(|(label, value)| DocumentBlock::MetadataRow { label, value })
+        .map(|(label, value)| Block::MetadataRow { label, value })
         .collect()
 }
 
-fn parse_badges(text: &str) -> Vec<DocumentBlock> {
+fn parse_badges(text: &str) -> Vec<Block> {
     text.lines()
         .map(str::trim)
         .filter(|line| !line.is_empty())
-        .map(|line| DocumentBlock::Badge {
+        .map(|line| Block::Badge {
             text: line.to_string(),
         })
         .collect()
@@ -213,34 +213,34 @@ fn parse_kv_lines(text: &str) -> Vec<(String, String)> {
 ///   The link's display text stays the original `node-name` so the surface
 ///   form is preserved.
 /// - `#tag` → consumed from the text and emitted as a sibling
-///   `DocumentBlock::Badge { text: "#tag" }` appended after the
+///   `Block::Badge { text: "#tag" }` appended after the
 ///   containing paragraph. Hashtags are extracted (not preserved inline)
 ///   so search / intelligence layers see them as semantic blocks.
-pub(super) fn rewrite_inline_extensions(blocks: &mut Vec<DocumentBlock>) {
-    let mut out: Vec<DocumentBlock> = Vec::with_capacity(blocks.len());
+pub(super) fn rewrite_inline_extensions(blocks: &mut Vec<Block>) {
+    let mut out: Vec<Block> = Vec::with_capacity(blocks.len());
     for block in mem::take(blocks) {
         match block {
-            DocumentBlock::Paragraph { spans } => {
+            Block::Paragraph { spans } => {
                 let (rewritten, hashtags) = rewrite_spans(spans);
-                out.push(DocumentBlock::Paragraph { spans: rewritten });
+                out.push(Block::Paragraph { spans: rewritten });
                 for tag in hashtags {
-                    out.push(DocumentBlock::Badge { text: tag });
+                    out.push(Block::Badge { text: tag });
                 }
             }
-            DocumentBlock::Heading { level, spans } => {
+            Block::Heading { level, spans } => {
                 // Hashtags inside headings aren't usually intended as tags;
                 // leave wikilinks rewritten but don't extract hashtags.
                 let (rewritten, _) = rewrite_spans_no_hashtags(spans);
-                out.push(DocumentBlock::Heading {
+                out.push(Block::Heading {
                     level,
                     spans: rewritten,
                 });
             }
-            DocumentBlock::Quote { mut blocks } => {
+            Block::Quote { mut blocks } => {
                 rewrite_inline_extensions(&mut blocks);
-                out.push(DocumentBlock::Quote { blocks });
+                out.push(Block::Quote { blocks });
             }
-            DocumentBlock::List { ordered, items } => {
+            Block::List { ordered, items } => {
                 let rewritten_items = items
                     .into_iter()
                     .map(|mut item| {
@@ -248,7 +248,7 @@ pub(super) fn rewrite_inline_extensions(blocks: &mut Vec<DocumentBlock>) {
                         item
                     })
                     .collect();
-                out.push(DocumentBlock::List {
+                out.push(Block::List {
                     ordered,
                     items: rewritten_items,
                 });

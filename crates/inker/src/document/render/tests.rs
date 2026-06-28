@@ -3,10 +3,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use super::super::{
-    DocumentBlock, DocumentProvenance, DocumentTrustState, EngineDocument, InlineSpan,
+    Block, DocumentProvenance, DocumentTrustState, EngineDocument, InlineSpan,
 };
 
-fn doc(blocks: Vec<DocumentBlock>) -> EngineDocument {
+fn doc(blocks: Vec<Block>) -> EngineDocument {
     EngineDocument {
         address: "doc:1".into(),
         title: None,
@@ -22,11 +22,11 @@ fn doc(blocks: Vec<DocumentBlock>) -> EngineDocument {
 #[test]
 fn to_markdown_renders_heading_paragraph_and_link() {
     let document = doc(vec![
-        DocumentBlock::Heading {
+        Block::Heading {
             level: 1,
             spans: vec![InlineSpan::Text("Hello".into())],
         },
-        DocumentBlock::Paragraph {
+        Block::Paragraph {
             spans: vec![
                 InlineSpan::Text("see ".into()),
                 InlineSpan::Link {
@@ -45,7 +45,7 @@ fn to_markdown_renders_heading_paragraph_and_link() {
 
 #[test]
 fn to_gemini_renders_paragraph_with_link_lines() {
-    let document = doc(vec![DocumentBlock::Paragraph {
+    let document = doc(vec![Block::Paragraph {
         spans: vec![
             InlineSpan::Text("see ".into()),
             InlineSpan::Link {
@@ -64,7 +64,7 @@ fn to_gemini_renders_paragraph_with_link_lines() {
 
 #[test]
 fn to_markdown_renders_feed_entry_as_h2_block() {
-    let document = doc(vec![DocumentBlock::FeedEntry {
+    let document = doc(vec![Block::FeedEntry {
         title: "Title".into(),
         date: Some("2026-05-08".into()),
         summary: Some("Summary text.".into()),
@@ -80,7 +80,7 @@ fn to_markdown_renders_feed_entry_as_h2_block() {
 
 #[test]
 fn to_gemini_renders_metadata_row_as_label_value() {
-    let document = doc(vec![DocumentBlock::MetadataRow {
+    let document = doc(vec![Block::MetadataRow {
         label: "Login".into(),
         value: "alice".into(),
     }]);
@@ -104,7 +104,7 @@ fn doc_with_metadata(
         provenance,
         trust,
         diagnostics: Vec::new(),
-        blocks: vec![DocumentBlock::Paragraph {
+        blocks: vec![Block::Paragraph {
             spans: vec![InlineSpan::Text("Body.".into())],
         }],
     }
@@ -112,7 +112,7 @@ fn doc_with_metadata(
 
 #[test]
 fn to_knot_omits_frontmatter_when_no_metadata() {
-    let document = doc(vec![DocumentBlock::Paragraph {
+    let document = doc(vec![Block::Paragraph {
         spans: vec![InlineSpan::Text("Just body.".into())],
     }]);
     let knot = document.to_knot();
@@ -189,11 +189,11 @@ fn ctx() -> GophermapContext {
 #[test]
 fn to_gophermap_renders_info_lines_links_and_terminator() {
     let document = doc(vec![
-        DocumentBlock::Heading {
+        Block::Heading {
             level: 1,
             spans: vec![InlineSpan::Text("Notes".into())],
         },
-        DocumentBlock::Paragraph {
+        Block::Paragraph {
             spans: vec![
                 InlineSpan::Text("see ".into()),
                 InlineSpan::Link {
@@ -217,7 +217,7 @@ fn to_gophermap_renders_info_lines_links_and_terminator() {
 
 #[test]
 fn to_gophermap_decomposes_native_gopher_links() {
-    let document = doc(vec![DocumentBlock::Paragraph {
+    let document = doc(vec![Block::Paragraph {
         spans: vec![InlineSpan::Link {
             url: "gopher://floodgap.com/1/gopher".into(),
             title: None,
@@ -235,11 +235,11 @@ fn to_gophermap_decomposes_native_gopher_links() {
 #[test]
 fn to_text_flattens_structure_readably() {
     let document = doc(vec![
-        DocumentBlock::Heading {
+        Block::Heading {
             level: 2,
             spans: vec![InlineSpan::Text("Reading".into())],
         },
-        DocumentBlock::Paragraph {
+        Block::Paragraph {
             spans: vec![
                 InlineSpan::Text("see ".into()),
                 InlineSpan::Link {
@@ -250,19 +250,19 @@ fn to_text_flattens_structure_readably() {
                 },
             ],
         },
-        DocumentBlock::List {
+        Block::List {
             ordered: true,
             items: vec![
-                vec![DocumentBlock::Paragraph {
+                vec![Block::Paragraph {
                     spans: vec![InlineSpan::Text("first".into())],
                 }],
-                vec![DocumentBlock::Paragraph {
+                vec![Block::Paragraph {
                     spans: vec![InlineSpan::Text("second".into())],
                 }],
             ],
         },
-        DocumentBlock::Quote {
-            blocks: vec![DocumentBlock::Paragraph {
+        Block::Quote {
+            blocks: vec![Block::Paragraph {
                 spans: vec![InlineSpan::Text("quoted".into())],
             }],
         },

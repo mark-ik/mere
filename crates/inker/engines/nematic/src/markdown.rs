@@ -10,7 +10,7 @@
 //! a pure transform from markdown bytes to a host-neutral document model.
 
 use inker::{
-    DocumentBlock, DocumentProvenance, DocumentTrustState, Engine, EngineDocument, EngineError,
+    Block, DocumentProvenance, DocumentTrustState, Engine, EngineDocument, EngineError,
     EngineInput, InlineSpan, inline_text,
 };
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Parser, Tag, TagEnd};
@@ -82,7 +82,7 @@ struct Converter {
     /// Top-level blocks in document order. When a container block (Quote,
     /// List, Item) is open, completed leaf blocks accumulate into the
     /// container's frame instead.
-    root_blocks: Vec<DocumentBlock>,
+    root_blocks: Vec<Block>,
     /// Stack of currently-open block containers and the children they have
     /// accumulated so far.
     block_stack: Vec<BlockFrame>,
@@ -112,14 +112,14 @@ enum BlockFrame {
     Paragraph,
     /// Container blocks: hold completed children.
     Quote {
-        children: Vec<DocumentBlock>,
+        children: Vec<Block>,
     },
     List {
         ordered: bool,
-        items: Vec<Vec<DocumentBlock>>,
+        items: Vec<Vec<Block>>,
     },
     Item {
-        children: Vec<DocumentBlock>,
+        children: Vec<Block>,
     },
     CodeBlock {
         language: Option<String>,
@@ -136,7 +136,7 @@ impl Converter {
             Event::Code(code) => self.push_inline(InlineSpan::Code(code.into_string())),
             Event::SoftBreak => self.push_inline(InlineSpan::SoftBreak),
             Event::HardBreak => self.push_inline(InlineSpan::LineBreak),
-            Event::Rule => self.attach_block(DocumentBlock::Rule),
+            Event::Rule => self.attach_block(Block::Rule),
             // HTML, footnotes, tables, task-list markers, math, definition
             // lists, and metadata blocks are dropped in v1. They emit no
             // text and produce no portable block.
@@ -246,7 +246,7 @@ impl Converter {
             TagEnd::Paragraph => {
                 let spans = self.inline_stack.pop().unwrap_or_default();
                 self.block_stack.pop();
-                self.attach_block(DocumentBlock::Paragraph { spans });
+                self.attach_block(Block::Paragraph { spans });
             }
             TagEnd::Heading(_) => {
                 let spans = self.inline_stack.pop().unwrap_or_default();
@@ -254,21 +254,21 @@ impl Converter {
                     Some(BlockFrame::Heading { level }) => level,
                     _ => 1,
                 };
-                self.attach_block(DocumentBlock::Heading { level, spans });
+                self.attach_block(Block::Heading { level, spans });
             }
             TagEnd::BlockQuote(_) => {
                 if let Some(BlockFrame::Quote { children }) = self.block_stack.pop() {
-                    self.attach_block(DocumentBlock::Quote { blocks: children });
+                    self.attach_block(Block::Quote { blocks: children });
                 }
             }
             TagEnd::CodeBlock => {
                 if let Some(BlockFrame::CodeBlock { language, text }) = self.block_stack.pop() {
-                    self.attach_block(DocumentBlock::CodeBlock { language, text });
+                    self.attach_block(Block::CodeBlock { language, text });
                 }
             }
             TagEnd::List(_) => {
                 if let Some(BlockFrame::List { ordered, items }) = self.block_stack.pop() {
-                    self.attach_block(DocumentBlock::List { ordered, items });
+                    self.attach_block(Block::List { ordered, items });
                 }
             }
             TagEnd::Item => {
@@ -278,7 +278,7 @@ impl Converter {
                     // i.e. tight-list items where pulldown-cmark emitted
                     // inline content with no Paragraph tag wrapping it.
                     if !item_spans.is_empty() {
-                        children.push(DocumentBlock::Paragraph { spans: item_spans });
+                        children.push(Block::Paragraph { spans: item_spans });
                     }
                     if let Some(BlockFrame::List { items, .. }) = self.block_stack.last_mut() {
                         items.push(children);
@@ -362,7 +362,7 @@ impl Converter {
         );
     }
 
-    fn attach_block(&mut self, block: DocumentBlock) {
+    fn attach_block(&mut self, block: Block) {
         for frame in self.block_stack.iter_mut().rev() {
             match frame {
                 BlockFrame::Quote { children } | BlockFrame::Item { children } => {
@@ -382,7 +382,7 @@ impl Converter {
         self.root_blocks.push(block);
     }
 
-    fn finish(self) -> Vec<DocumentBlock> {
+    fn finish(self) -> Vec<Block> {
         self.root_blocks
     }
 }
@@ -402,9 +402,9 @@ fn optional(value: String) -> Option<String> {
     if value.is_empty() { None } else { Some(value) }
 }
 
-fn first_h1_text(blocks: &[DocumentBlock]) -> Option<String> {
+fn first_h1_text(blocks: &[Block]) -> Option<String> {
     blocks.iter().find_map(|block| match block {
-        DocumentBlock::Heading { level: 1, spans } => {
+        Block::Heading { level: 1, spans } => {
             let text = inline_text(spans);
             if text.is_empty() { None } else { Some(text) }
         }
@@ -438,7 +438,7 @@ mod tests {
     fn paragraph_with_emphasis_and_link() {
         let doc = render("see *the* [docs](https://mere.test/) please");
         let para = doc.blocks.first().expect("one block");
-        let DocumentBlock::Paragraph { spans } = para else {
+        let Block::Paragraph { spans } = para else {
             panic!("expected paragraph, got {para:?}");
         };
         // see + emphasis(the) + " " + link("docs") + " please"
@@ -463,7 +463,7 @@ mod tests {
     #[test]
     fn fenced_code_block_preserves_language_and_text() {
         let doc = render("```rust\nfn main() {}\n```\n");
-        let DocumentBlock::CodeBlock { language, text } = &doc.blocks[0] else {
+        let Block::CodeBlock { language, text } = &doc.blocks[0] else {
             panic!("expected code block, got {:?}", doc.blocks[0]);
         };
         assert_eq!(language.as_deref(), Some("rust"));
@@ -473,7 +473,7 @@ mod tests {
     #[test]
     fn unordered_list_with_two_items() {
         let doc = render("- one\n- two\n");
-        let DocumentBlock::List { ordered, items } = &doc.blocks[0] else {
+        let Block::List { ordered, items } = &doc.blocks[0] else {
             panic!("expected list, got {:?}", doc.blocks[0]);
         };
         assert!(!ordered);
@@ -483,7 +483,7 @@ mod tests {
     #[test]
     fn ordered_list_marks_ordered() {
         let doc = render("1. first\n2. second\n");
-        let DocumentBlock::List { ordered, items } = &doc.blocks[0] else {
+        let Block::List { ordered, items } = &doc.blocks[0] else {
             panic!("expected list, got {:?}", doc.blocks[0]);
         };
         assert!(ordered);
@@ -495,17 +495,17 @@ mod tests {
         // pulldown-cmark emits Text events directly under Item (no enclosing
         // Tag::Paragraph) for tight lists; the converter must capture them.
         let doc = render("- one\n- two with `code`\n");
-        let DocumentBlock::List { items, .. } = &doc.blocks[0] else {
+        let Block::List { items, .. } = &doc.blocks[0] else {
             panic!("expected list, got {:?}", doc.blocks[0]);
         };
-        let DocumentBlock::Paragraph { spans } = &items[0][0] else {
+        let Block::Paragraph { spans } = &items[0][0] else {
             panic!(
                 "expected first item to wrap a Paragraph, got {:?}",
                 items[0]
             );
         };
         assert_eq!(inline_text(spans), "one");
-        let DocumentBlock::Paragraph { spans } = &items[1][0] else {
+        let Block::Paragraph { spans } = &items[1][0] else {
             panic!(
                 "expected second item to wrap a Paragraph, got {:?}",
                 items[1]
@@ -521,14 +521,14 @@ mod tests {
     #[test]
     fn loose_list_items_preserve_paragraph_blocks() {
         let doc = render("- one\n\n- two\n");
-        let DocumentBlock::List { items, .. } = &doc.blocks[0] else {
+        let Block::List { items, .. } = &doc.blocks[0] else {
             panic!("expected list, got {:?}", doc.blocks[0]);
         };
         assert_eq!(items.len(), 2);
         for (i, item) in items.iter().enumerate() {
             assert_eq!(item.len(), 1, "item {i} should carry exactly one block");
             assert!(
-                matches!(item[0], DocumentBlock::Paragraph { .. }),
+                matches!(item[0], Block::Paragraph { .. }),
                 "item {i} should wrap a Paragraph"
             );
         }
@@ -537,26 +537,26 @@ mod tests {
     #[test]
     fn nested_quote_preserves_inner_paragraph() {
         let doc = render("> outer\n>\n> > nested\n");
-        let DocumentBlock::Quote { blocks } = &doc.blocks[0] else {
+        let Block::Quote { blocks } = &doc.blocks[0] else {
             panic!("expected quote, got {:?}", doc.blocks[0]);
         };
         assert!(
             blocks
                 .iter()
-                .any(|b| matches!(b, DocumentBlock::Quote { .. }))
+                .any(|b| matches!(b, Block::Quote { .. }))
         );
     }
 
     #[test]
     fn rule_emits_block() {
         let doc = render("hello\n\n---\n\nworld\n");
-        assert!(doc.blocks.iter().any(|b| matches!(b, DocumentBlock::Rule)));
+        assert!(doc.blocks.iter().any(|b| matches!(b, Block::Rule)));
     }
 
     #[test]
     fn image_alt_text_preserved_as_plain_text() {
         let doc = render("see ![an example](https://mere.test/x.png) here\n");
-        let DocumentBlock::Paragraph { spans } = &doc.blocks[0] else {
+        let Block::Paragraph { spans } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
         let combined = inline_text(spans);

@@ -14,7 +14,7 @@
 //!
 //! ## What it owns
 //!
-//! - Layout of every [`inker::DocumentBlock`] variant into a portable
+//! - Layout of every [`inker::Block`] variant into a portable
 //!   [`DocumentRenderPacket`].
 //! - Text shaping via [`parley`] (CPU-only, wasm32-portable; renders happen
 //!   downstream).

@@ -7,7 +7,7 @@
 //! Demonstrates that djot's *native* constructs replace the CommonMark knot's
 //! fenced-code-as-data hacks (§2.2):
 //!
-//! - a **definition list** (`Term` / `: value`) becomes a [`DocumentBlock::MetadataRow`]
+//! - a **definition list** (`Term` / `: value`) becomes a [`Block::MetadataRow`]
 //!   — no `metadata-row` fence;
 //! - a **div with a class** (`::: feed-entry`, `::: badge`) becomes the matching
 //!   semantic block, reading typed attributes via `Attributes::get_value` — no
@@ -24,7 +24,7 @@
 //! recognized block vocabulary. Parser: `jotdown` (the Rust djot pull-parser).
 
 use inker::{
-    DocumentBlock, DocumentDiagnostic, DocumentProvenance, DocumentTrustState, Engine,
+    Block, DocumentDiagnostic, DocumentProvenance, DocumentTrustState, Engine,
     EngineDocument, EngineError, EngineInput, InlineSpan, inline_text,
 };
 use jotdown::{Container, Event, Parser};
@@ -32,9 +32,9 @@ use jotdown::{Container, Event, Parser};
 #[cfg(test)]
 mod tests;
 
-/// Parse a djot knot body into [`DocumentBlock`]s (blocks only). See
+/// Parse a djot knot body into [`Block`]s (blocks only). See
 /// [`parse_djot_knot_body_validated`] for the schema diagnostics.
-pub fn parse_djot_knot_body(body: &str) -> Vec<DocumentBlock> {
+pub fn parse_djot_knot_body(body: &str) -> Vec<Block> {
     parse_djot_knot_body_validated(body).0
 }
 
@@ -44,7 +44,7 @@ pub fn parse_djot_knot_body(body: &str) -> Vec<DocumentBlock> {
 /// (§10.4): validate against a schema, render the unrecognized generically.
 pub fn parse_djot_knot_body_validated(
     body: &str,
-) -> (Vec<DocumentBlock>, Vec<DocumentDiagnostic>) {
+) -> (Vec<Block>, Vec<DocumentDiagnostic>) {
     let mut out = Vec::new();
     let mut diagnostics = Vec::new();
     let mut inline = Inline::default();
@@ -73,7 +73,7 @@ pub fn parse_djot_knot_body_validated(
             }
             Event::End(Container::Heading { .. }) => {
                 if let Some(level) = heading_level.take() {
-                    out.push(DocumentBlock::Heading {
+                    out.push(Block::Heading {
                         level,
                         spans: inline.take_spans(),
                     });
@@ -107,7 +107,7 @@ pub fn parse_djot_knot_body_validated(
             Event::Start(Container::DescriptionDetails, _) => inline.clear(),
             Event::End(Container::DescriptionDetails) => {
                 if let Some(d) = dl.as_mut() {
-                    out.push(DocumentBlock::MetadataRow {
+                    out.push(Block::MetadataRow {
                         label: d.term.clone(),
                         value: inline.take_text().trim().to_string(),
                     });
@@ -118,7 +118,7 @@ pub fn parse_djot_knot_body_validated(
                 inline.clear();
             }
             Event::End(Container::CodeBlock { .. }) => {
-                out.push(DocumentBlock::CodeBlock {
+                out.push(Block::CodeBlock {
                     language: code_language.take().filter(|s| !s.is_empty()),
                     text: inline.take_text(),
                 });
@@ -142,7 +142,7 @@ pub fn parse_djot_knot_body_validated(
                 if div.is_none() && dl.is_none() && heading_level.is_none() {
                     let spans = inline.take_spans();
                     if !inline_text(&spans).trim().is_empty() {
-                        out.push(DocumentBlock::Paragraph { spans });
+                        out.push(Block::Paragraph { spans });
                     }
                 }
             }
@@ -271,32 +271,32 @@ struct DivCtx {
 }
 
 impl DivCtx {
-    fn into_block(self, content: String) -> DocumentBlock {
+    fn into_block(self, content: String) -> Block {
         let summary = {
             let trimmed = content.trim();
             (!trimmed.is_empty()).then(|| trimmed.to_string())
         };
         match self.class.as_str() {
-            "feed-entry" => DocumentBlock::FeedEntry {
+            "feed-entry" => Block::FeedEntry {
                 title: self.title.unwrap_or_default(),
                 date: self.date,
                 summary,
                 article_url: self.url,
                 source_url: None,
             },
-            "feed-header" => DocumentBlock::FeedHeader {
+            "feed-header" => Block::FeedHeader {
                 title: self.title.unwrap_or_default(),
                 subtitle: None,
                 summary,
                 source_url: self.url,
             },
-            "badge" => DocumentBlock::Badge {
+            "badge" => Block::Badge {
                 text: content.trim().to_string(),
             },
             // Unknown div classes degrade to a stored quote rather than being
             // dropped — the open-tail discipline (recognized core, stored tail).
-            _ => DocumentBlock::Quote {
-                blocks: vec![DocumentBlock::Paragraph {
+            _ => Block::Quote {
+                blocks: vec![Block::Paragraph {
                     spans: text_spans(content),
                 }],
             },
@@ -369,7 +369,7 @@ fn validate_div(ctx: &DivCtx) -> Option<DocumentDiagnostic> {
 /// list, `FeedEntry` / `FeedHeader` / `Badge` → an attributed div. Round-trips
 /// on the recognized subset (see `round_trip_preserves_semantic_blocks`);
 /// byte-faithful protocol-fence preservation is a later phase.
-pub fn blocks_to_djot(blocks: &[DocumentBlock]) -> String {
+pub fn blocks_to_djot(blocks: &[Block]) -> String {
     let mut out = String::new();
     for block in blocks {
         if !out.is_empty() {
@@ -408,9 +408,9 @@ fn emit_djot_table(header: &[Vec<InlineSpan>], rows: &[Vec<Vec<InlineSpan>>], ou
     }
 }
 
-fn emit_block(block: &DocumentBlock, out: &mut String) {
+fn emit_block(block: &Block, out: &mut String) {
     match block {
-        DocumentBlock::Heading { level, spans } => {
+        Block::Heading { level, spans } => {
             for _ in 0..(*level).max(1) {
                 out.push('#');
             }
@@ -418,26 +418,26 @@ fn emit_block(block: &DocumentBlock, out: &mut String) {
             out.push_str(&inline_text(spans));
             out.push('\n');
         }
-        DocumentBlock::Paragraph { spans } => {
+        Block::Paragraph { spans } => {
             out.push_str(&inline_text(spans));
             out.push('\n');
         }
-        DocumentBlock::Table { header, rows, .. } => {
+        Block::Table { header, rows, .. } => {
             emit_djot_table(header, rows, out);
         }
-        DocumentBlock::MetadataRow { label, value } => {
+        Block::MetadataRow { label, value } => {
             out.push_str(": ");
             out.push_str(label);
             out.push_str("\n\n  ");
             out.push_str(value);
             out.push('\n');
         }
-        DocumentBlock::Badge { text } => {
+        Block::Badge { text } => {
             out.push_str("::: badge\n");
             out.push_str(text);
             out.push_str("\n:::\n");
         }
-        DocumentBlock::FeedEntry {
+        Block::FeedEntry {
             title,
             date,
             summary,
@@ -452,7 +452,7 @@ fn emit_block(block: &DocumentBlock, out: &mut String) {
             }
             out.push_str(":::\n");
         }
-        DocumentBlock::FeedHeader {
+        Block::FeedHeader {
             title,
             summary,
             source_url,
@@ -466,7 +466,7 @@ fn emit_block(block: &DocumentBlock, out: &mut String) {
             }
             out.push_str(":::\n");
         }
-        DocumentBlock::CodeBlock { language, text } => {
+        Block::CodeBlock { language, text } => {
             out.push_str("```");
             if let Some(lang) = language {
                 out.push_str(lang);
@@ -478,7 +478,7 @@ fn emit_block(block: &DocumentBlock, out: &mut String) {
             }
             out.push_str("```\n");
         }
-        DocumentBlock::Preformatted { text } => {
+        Block::Preformatted { text } => {
             out.push_str("```\n");
             out.push_str(text);
             if !text.ends_with('\n') {
@@ -486,7 +486,7 @@ fn emit_block(block: &DocumentBlock, out: &mut String) {
             }
             out.push_str("```\n");
         }
-        DocumentBlock::Quote { blocks } => {
+        Block::Quote { blocks } => {
             let mut inner = String::new();
             for (i, b) in blocks.iter().enumerate() {
                 if i > 0 {
@@ -500,7 +500,7 @@ fn emit_block(block: &DocumentBlock, out: &mut String) {
                 out.push('\n');
             }
         }
-        DocumentBlock::List { ordered, items } => {
+        Block::List { ordered, items } => {
             for item in items {
                 let mut inner = String::new();
                 for (i, b) in item.iter().enumerate() {
@@ -514,14 +514,14 @@ fn emit_block(block: &DocumentBlock, out: &mut String) {
                 out.push('\n');
             }
         }
-        DocumentBlock::Image { url, alt } => {
+        Block::Image { url, alt } => {
             out.push_str("![");
             out.push_str(alt);
             out.push_str("](");
             out.push_str(url);
             out.push_str(")\n");
         }
-        DocumentBlock::Rule => out.push_str("----\n"),
+        Block::Rule => out.push_str("----\n"),
     }
 }
 
@@ -576,7 +576,7 @@ impl Engine for DjotKnotEngine {
         // Parity with the CommonMark knot: expand protocol-tagged code fences
         // (gemtext / gopher / nex / feed-entry / …) into real blocks, then
         // rewrite `[[wikilinks]]` and `#hashtags`. Both passes are engine-agnostic
-        // (they walk `DocumentBlock`s), so the djot body gains the same semantics
+        // (they walk `Block`s), so the djot body gains the same semantics
         // and CommonMark-style fenced knots still work under the djot default.
         super::expand::expand_fenced_blocks(&mut blocks);
         super::expand::rewrite_inline_extensions(&mut blocks);

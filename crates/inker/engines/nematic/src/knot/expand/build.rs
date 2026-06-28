@@ -1,4 +1,4 @@
-use inker::{BlockProvenanceMap, DocumentBlock, DocumentProvenance, DocumentTrustState, EngineDocument};
+use inker::{BlockProvenanceMap, Block, DocumentProvenance, DocumentTrustState, EngineDocument};
 
 
 /// Build a knot file (frontmatter + body) from a sequence of blocks plus
@@ -10,7 +10,7 @@ use inker::{BlockProvenanceMap, DocumentBlock, DocumentProvenance, DocumentTrust
 /// gets back a string ready to be saved as `.knot`. Round-tripping that
 /// string through the knot engine reproduces the document.
 pub fn build_clip_knot(
-    blocks: &[DocumentBlock],
+    blocks: &[Block],
     source: &DocumentProvenance,
     trust: DocumentTrustState,
     note_kind: Option<&str>,
@@ -41,7 +41,7 @@ pub fn build_clip_knot(
 /// citation overlays). The producer side documents the shape so
 /// downstream consumers can read it directly.
 pub fn build_clip_knot_with_block_provenance(
-    blocks: &[DocumentBlock],
+    blocks: &[Block],
     source: &DocumentProvenance,
     trust: DocumentTrustState,
     note_kind: Option<&str>,
@@ -51,7 +51,7 @@ pub fn build_clip_knot_with_block_provenance(
 }
 
 fn build_clip_knot_inner(
-    blocks: &[DocumentBlock],
+    blocks: &[Block],
     source: &DocumentProvenance,
     trust: DocumentTrustState,
     note_kind: Option<&str>,

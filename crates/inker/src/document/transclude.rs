@@ -31,7 +31,7 @@
 //! top-level blocks; lifting the limit comes with anchor-based provenance.
 
 use super::block_provenance::{BlockProvenance, BlockProvenanceMap};
-use super::{DocumentBlock, EngineDocument};
+use super::{Block, EngineDocument};
 use crate::engine::EngineInput;
 use std::collections::HashSet;
 
@@ -128,7 +128,7 @@ pub fn resolve_transclusions(
         let old_blocks = std::mem::take(&mut document.blocks);
         let old_provenance =
             std::mem::replace(&mut outcome.provenance, BlockProvenanceMap::new());
-        let mut blocks: Vec<DocumentBlock> = Vec::with_capacity(old_blocks.len());
+        let mut blocks: Vec<Block> = Vec::with_capacity(old_blocks.len());
 
         for (old_index, block) in old_blocks.into_iter().enumerate() {
             let new_index = blocks.len();
@@ -137,7 +137,7 @@ pub fn resolve_transclusions(
             let carried = old_provenance.get(old_index).cloned();
 
             let include_url = match &block {
-                DocumentBlock::CodeBlock {
+                Block::CodeBlock {
                     language: Some(language),
                     ..
                 } => parse_include(language).map(str::to_string),
@@ -146,8 +146,8 @@ pub fn resolve_transclusions(
 
             // Every path that keeps the original block also keeps its
             // carried provenance.
-            let keep = |block: DocumentBlock,
-                            blocks: &mut Vec<DocumentBlock>,
+            let keep = |block: Block,
+                            blocks: &mut Vec<Block>,
                             outcome: &mut TranscludeOutcome| {
                 if let Some(p) = carried.clone() {
                     outcome.provenance.insert(new_index, p);
@@ -227,7 +227,7 @@ mod tests {
     use super::*;
     use crate::document::{DocumentProvenance, DocumentTrustState, InlineSpan};
 
-    fn doc_with(blocks: Vec<DocumentBlock>) -> EngineDocument {
+    fn doc_with(blocks: Vec<Block>) -> EngineDocument {
         EngineDocument {
             address: "test.knot".into(),
             title: None,
@@ -240,8 +240,8 @@ mod tests {
         }
     }
 
-    fn include_fence(url: &str, fallback: &str) -> DocumentBlock {
-        DocumentBlock::CodeBlock {
+    fn include_fence(url: &str, fallback: &str) -> Block {
+        Block::CodeBlock {
             language: Some(format!("include {url}")),
             text: fallback.to_string(),
         }
@@ -250,7 +250,7 @@ mod tests {
     /// A render stub: every fetched body becomes one paragraph, and the
     /// child document's provenance carries the input address.
     fn stub_render(input: &EngineInput) -> Result<EngineDocument, String> {
-        let mut child = doc_with(vec![DocumentBlock::Paragraph {
+        let mut child = doc_with(vec![Block::Paragraph {
             spans: vec![InlineSpan::Text(input.body.clone())],
         }]);
         child.provenance.canonical_uri = Some(input.address.clone());
@@ -267,7 +267,7 @@ mod tests {
     #[test]
     fn an_allowed_include_splices_with_provenance() {
         let mut document = doc_with(vec![
-            DocumentBlock::Paragraph {
+            Block::Paragraph {
                 spans: vec![InlineSpan::Text("before".into())],
             },
             include_fence("gemini://x.test/page.gmi", "fallback"),
@@ -291,7 +291,7 @@ mod tests {
         assert_eq!(document.blocks.len(), 2);
         assert!(matches!(
             &document.blocks[1],
-            DocumentBlock::Paragraph { spans } if spans == &vec![InlineSpan::Text("from the capsule".into())]
+            Block::Paragraph { spans } if spans == &vec![InlineSpan::Text("from the capsule".into())]
         ));
         let provenance = outcome.provenance.get(1).expect("spliced block has provenance");
         assert_eq!(
@@ -315,7 +315,7 @@ mod tests {
             &TransclusionPolicy::deny_all(),
         );
         assert_eq!(outcome.resolved, 0);
-        assert!(matches!(&document.blocks[0], DocumentBlock::CodeBlock { .. }));
+        assert!(matches!(&document.blocks[0], Block::CodeBlock { .. }));
 
         // Enabled but scheme not allowed.
         let outcome = resolve_transclusions(
@@ -326,7 +326,7 @@ mod tests {
         );
         assert_eq!(outcome.denied.len(), 1);
         assert!(outcome.denied[0].1.contains("allowlist"));
-        assert!(matches!(&document.blocks[0], DocumentBlock::CodeBlock { .. }));
+        assert!(matches!(&document.blocks[0], Block::CodeBlock { .. }));
     }
 
     #[test]
@@ -375,7 +375,7 @@ mod tests {
         );
         assert_eq!(outcome.resolved, 1);
         assert!(
-            matches!(&document.blocks[0], DocumentBlock::CodeBlock { .. }),
+            matches!(&document.blocks[0], Block::CodeBlock { .. }),
             "the nested fence stays inert at depth 1"
         );
     }
@@ -392,7 +392,7 @@ mod tests {
             &policy(&["gemini"], 2),
         );
         assert_eq!(outcome.failed.len(), 1);
-        assert!(matches!(&document.blocks[0], DocumentBlock::CodeBlock { .. }));
+        assert!(matches!(&document.blocks[0], Block::CodeBlock { .. }));
     }
 
     #[test]

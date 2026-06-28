@@ -195,7 +195,7 @@ mod tests {
     #[test]
     fn a_rhai_fence_evaluates_through_the_inker_pass() {
         use inker::{
-            evaluate_blocks, BlockEvaluators, DocumentBlock, DocumentProvenance,
+            evaluate_blocks, BlockEvaluators, Block, DocumentProvenance,
             DocumentTrustState, EngineDocument, EngineInput, EvaluationPolicy, InlineSpan,
         };
 
@@ -211,7 +211,7 @@ mod tests {
             provenance: DocumentProvenance::default(),
             trust: DocumentTrustState::Unknown,
             diagnostics: Vec::new(),
-            blocks: vec![DocumentBlock::CodeBlock {
+            blocks: vec![Block::CodeBlock {
                 language: Some("rhai eval".into()),
                 text: "let s = 0; for i in 1..=10 { s += i } \"sum is \" + s".into(),
             }],
@@ -227,7 +227,7 @@ mod tests {
         assert_eq!(outcome.evaluated, 1);
         assert!(matches!(
             &document.blocks[0],
-            DocumentBlock::Paragraph { spans }
+            Block::Paragraph { spans }
                 if spans == &vec![InlineSpan::Text("sum is 55".into())]
         ));
     }

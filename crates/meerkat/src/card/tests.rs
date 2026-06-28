@@ -11,7 +11,7 @@ use super::*;
 fn heads_with(doc: &EngineDocument, text: &str) -> bool {
     matches!(
         doc.blocks.first(),
-        Some(DocumentBlock::Heading { spans, .. })
+        Some(Block::Heading { spans, .. })
             if matches!(spans.first(), Some(InlineSpan::Text(t)) if t == text)
     )
 }
@@ -20,7 +20,7 @@ fn body_text(doc: &EngineDocument) -> String {
     doc.blocks
         .iter()
         .filter_map(|b| match b {
-            DocumentBlock::Paragraph { spans } | DocumentBlock::Heading { spans, .. } => {
+            Block::Paragraph { spans } | Block::Heading { spans, .. } => {
                 Some(spans.iter().filter_map(|s| match s {
                     InlineSpan::Text(t) => Some(t.as_str()),
                     _ => None,
@@ -39,7 +39,7 @@ fn welcome_document_leads_with_a_heading() {
     assert_eq!(doc.address, "mere://welcome");
     assert!(matches!(
         doc.blocks.first(),
-        Some(DocumentBlock::Heading { level: 1, .. })
+        Some(Block::Heading { level: 1, .. })
     ));
 }
 

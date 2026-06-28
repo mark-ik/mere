@@ -268,10 +268,10 @@ mod tests {
     use crate::style_sheet::DocumentStyleSheet;
     use crate::types::Viewport;
     use inker::{
-        DocumentBlock, DocumentProvenance, DocumentTrustState, EngineDocument, InlineSpan,
+        Block, DocumentProvenance, DocumentTrustState, EngineDocument, InlineSpan,
     };
 
-    fn doc(blocks: Vec<DocumentBlock>) -> EngineDocument {
+    fn doc(blocks: Vec<Block>) -> EngineDocument {
         EngineDocument {
             address: "doc:paint-list-test".into(),
             title: None,
@@ -286,7 +286,7 @@ mod tests {
 
     /// Lay out + build the paint list, returning both the list and the
     /// font sidecar (so tests can assert shipped faces came from parley).
-    fn list_for(blocks: Vec<DocumentBlock>) -> (InkerPaintList, FontTable) {
+    fn list_for(blocks: Vec<Block>) -> (InkerPaintList, FontTable) {
         let laid =
             layout_document(&doc(blocks), Viewport::new(640.0, 480.0), &DocumentStyleSheet::default());
         let list = paint_list_from_packet(&laid.packet, &laid.fonts, &ColorVocabulary::default());
@@ -310,7 +310,7 @@ mod tests {
         // With parley's real face threaded through, a paragraph renders as
         // real text (DrawText) with zero host font wiring — no placeholder
         // rect, no resolver.
-        let (list, _) = list_for(vec![DocumentBlock::Paragraph {
+        let (list, _) = list_for(vec![Block::Paragraph {
             spans: vec![InlineSpan::Text("hello".into())],
         }]);
         assert!(count(&list, |c| matches!(c, PaintCmd::DrawText(_))) >= 1);
@@ -325,10 +325,10 @@ mod tests {
         // from a (family, weight, style) label. Body + monospace exercises
         // more than one face.
         let (list, fonts) = list_for(vec![
-            DocumentBlock::Paragraph {
+            Block::Paragraph {
                 spans: vec![InlineSpan::Text("body text".into())],
             },
-            DocumentBlock::CodeBlock {
+            Block::CodeBlock {
                 language: None,
                 text: "fn main() {}".into(),
             },
@@ -356,10 +356,10 @@ mod tests {
         // label-re-resolved face that could differ on fallback).
         let laid = layout_document(
             &doc(vec![
-                DocumentBlock::Paragraph {
+                Block::Paragraph {
                     spans: vec![InlineSpan::Text("alpha".into())],
                 },
-                DocumentBlock::CodeBlock {
+                Block::CodeBlock {
                     language: None,
                     text: "beta()".into(),
                 },
@@ -412,7 +412,7 @@ mod tests {
         let mut colors = ColorVocabulary::default();
         colors.rule = [1.0, 0.0, 0.0, 1.0];
         let laid = layout_document(
-            &doc(vec![DocumentBlock::Rule]),
+            &doc(vec![Block::Rule]),
             Viewport::new(640.0, 480.0),
             &DocumentStyleSheet::default(),
         );
@@ -436,11 +436,11 @@ mod tests {
         let palette = DocumentStyleSheet::default().colors;
         let laid = layout_document(
             &doc(vec![
-                DocumentBlock::Heading {
+                Block::Heading {
                     level: 1,
                     spans: vec![InlineSpan::Text("Title".into())],
                 },
-                DocumentBlock::Paragraph {
+                Block::Paragraph {
                     spans: vec![InlineSpan::Text("body".into())],
                 },
             ]),
@@ -471,13 +471,13 @@ mod tests {
     fn group_recurses_into_children() {
         // Each list item is a paragraph → real text now (not a placeholder
         // rect), so at least two DrawText commands.
-        let (list, _) = list_for(vec![DocumentBlock::List {
+        let (list, _) = list_for(vec![Block::List {
             ordered: false,
             items: vec![
-                vec![DocumentBlock::Paragraph {
+                vec![Block::Paragraph {
                     spans: vec![InlineSpan::Text("first".into())],
                 }],
-                vec![DocumentBlock::Paragraph {
+                vec![Block::Paragraph {
                     spans: vec![InlineSpan::Text("second".into())],
                 }],
             ],
@@ -490,10 +490,10 @@ mod tests {
         // Two body paragraphs share one parley face → interned once; both
         // DrawText runs reference the same FontInstanceKey.
         let (list, _) = list_for(vec![
-            DocumentBlock::Paragraph {
+            Block::Paragraph {
                 spans: vec![InlineSpan::Text("first".into())],
             },
-            DocumentBlock::Paragraph {
+            Block::Paragraph {
                 spans: vec![InlineSpan::Text("second".into())],
             },
         ]);

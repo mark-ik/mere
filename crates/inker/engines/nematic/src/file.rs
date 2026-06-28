@@ -114,7 +114,7 @@ fn extension(address: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use inker::DocumentBlock;
+    use inker::Block;
 
     fn render(address: &str, body: &str) -> EngineDocument {
         FileEngine::new()
@@ -214,7 +214,7 @@ mod tests {
         // markdown engine ran (not the text fallback).
         assert!(matches!(
             doc.blocks.first(),
-            Some(DocumentBlock::Heading { level: 1, .. })
+            Some(Block::Heading { level: 1, .. })
         ));
     }
 

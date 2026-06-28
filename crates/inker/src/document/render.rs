@@ -10,7 +10,7 @@
 //! and surfaces inline links as separate `=> url label` lines after the
 //! paragraph, matching gemtext's link-line model.
 
-use super::{DocumentBlock, DocumentTrustState, EngineDocument, InlineSpan, TableAlignment, inline_text};
+use super::{Block, DocumentTrustState, EngineDocument, InlineSpan, TableAlignment, inline_text};
 
 impl EngineDocument {
     /// Render the document as CommonMark.
@@ -174,7 +174,7 @@ fn write_markdown_table(
     out.push('\n');
 }
 
-impl DocumentBlock {
+impl Block {
     fn write_markdown(&self, out: &mut String, indent: usize) {
         let pad = "  ".repeat(indent);
         match self {
@@ -458,7 +458,7 @@ impl DocumentBlock {
     }
 }
 
-impl DocumentBlock {
+impl Block {
     /// Knot-format renderer. Reuses `write_markdown` for structural blocks;
     /// emits fenced code blocks with protocol language tags for the four
     /// semantic block variants so they round-trip through

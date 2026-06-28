@@ -20,7 +20,7 @@
 
 use errand::parse::gemtext::{parse as parse_gemtext, GemLine};
 use inker::{
-    DocumentBlock, DocumentProvenance, DocumentTrustState, Engine, EngineDocument, EngineError,
+    Block, DocumentProvenance, DocumentTrustState, Engine, EngineDocument, EngineError,
     EngineInput, InlineSpan,
 };
 
@@ -49,7 +49,7 @@ impl Engine for GemtextEngine {
 
     fn render(&self, input: &EngineInput) -> Result<EngineDocument, EngineError> {
         // errand owns the gemtext grammar (line-level AST); nematic owns only the
-        // grouping into the `DocumentBlock` model (paragraph runs, list/quote merging).
+        // grouping into the `Block` model (paragraph runs, list/quote merging).
         let lines = parse_gemtext(&input.body);
         let (blocks, title) = Lowering::run(&lines);
 
@@ -70,12 +70,12 @@ impl Engine for GemtextEngine {
     }
 }
 
-/// Lowers a gemtext [`GemLine`] stream into `DocumentBlock`s, grouping consecutive
+/// Lowers a gemtext [`GemLine`] stream into `Block`s, grouping consecutive
 /// text lines into a paragraph, `* ` items into one list, and `> ` lines into one
 /// quote — the model decisions errand's line-level parser deliberately leaves open.
 #[derive(Default)]
 struct Lowering {
-    blocks: Vec<DocumentBlock>,
+    blocks: Vec<Block>,
     title: Option<String>,
     pending: Pending,
 }
@@ -85,12 +85,12 @@ enum Pending {
     #[default]
     None,
     Paragraph(Vec<String>),
-    List(Vec<Vec<DocumentBlock>>),
+    List(Vec<Vec<Block>>),
     Quote(Vec<String>),
 }
 
 impl Lowering {
-    fn run(lines: &[GemLine]) -> (Vec<DocumentBlock>, Option<String>) {
+    fn run(lines: &[GemLine]) -> (Vec<Block>, Option<String>) {
         let mut state = Self::default();
         for line in lines {
             state.handle(line);
@@ -111,7 +111,7 @@ impl Lowering {
             }
             GemLine::Pre { alt, text } => {
                 self.flush_pending();
-                self.blocks.push(DocumentBlock::CodeBlock {
+                self.blocks.push(Block::CodeBlock {
                     language: alt.clone(),
                     text: text.clone(),
                 });
@@ -122,7 +122,7 @@ impl Lowering {
                     self.pending = Pending::List(Vec::new());
                 }
                 if let Pending::List(items) = &mut self.pending {
-                    items.push(vec![DocumentBlock::Paragraph {
+                    items.push(vec![Block::Paragraph {
                         spans: vec![InlineSpan::Text(text.clone())],
                     }]);
                 }
@@ -160,7 +160,7 @@ impl Lowering {
         if level == 1 && self.title.is_none() && !text.is_empty() {
             self.title = Some(text.to_string());
         }
-        self.blocks.push(DocumentBlock::Heading {
+        self.blocks.push(Block::Heading {
             level,
             spans: vec![InlineSpan::Text(text.to_string())],
         });
@@ -168,7 +168,7 @@ impl Lowering {
 
     fn push_link(&mut self, url: &str, label: &str) {
         let display = if label.is_empty() { url } else { label };
-        self.blocks.push(DocumentBlock::Paragraph {
+        self.blocks.push(Block::Paragraph {
             spans: vec![InlineSpan::Link {
                 url: url.to_string(),
                 title: None,
@@ -184,12 +184,12 @@ impl Lowering {
             Pending::Paragraph(lines) => {
                 if !lines.is_empty() {
                     self.blocks
-                        .push(DocumentBlock::Paragraph { spans: join_soft(lines) });
+                        .push(Block::Paragraph { spans: join_soft(lines) });
                 }
             }
             Pending::List(items) => {
                 if !items.is_empty() {
-                    self.blocks.push(DocumentBlock::List {
+                    self.blocks.push(Block::List {
                         ordered: false,
                         items,
                     });
@@ -197,8 +197,8 @@ impl Lowering {
             }
             Pending::Quote(lines) => {
                 if !lines.is_empty() {
-                    self.blocks.push(DocumentBlock::Quote {
-                        blocks: vec![DocumentBlock::Paragraph { spans: join_soft(lines) }],
+                    self.blocks.push(Block::Quote {
+                        blocks: vec![Block::Paragraph { spans: join_soft(lines) }],
                     });
                 }
             }
@@ -250,7 +250,7 @@ mod tests {
             .blocks
             .iter()
             .filter_map(|b| match b {
-                DocumentBlock::Heading { level, .. } => Some(*level),
+                Block::Heading { level, .. } => Some(*level),
                 _ => None,
             })
             .collect();
@@ -260,7 +260,7 @@ mod tests {
     #[test]
     fn link_line_with_label() {
         let doc = render("=> gemini://example.test/  Example capsule\n");
-        let DocumentBlock::Paragraph { spans } = &doc.blocks[0] else {
+        let Block::Paragraph { spans } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
         let InlineSpan::Link {
@@ -283,7 +283,7 @@ mod tests {
     #[test]
     fn consecutive_list_items_merge_into_one_list() {
         let doc = render("* one\n* two\n* three\n");
-        let DocumentBlock::List { items, ordered } = &doc.blocks[0] else {
+        let Block::List { items, ordered } = &doc.blocks[0] else {
             panic!("expected list");
         };
         assert!(!ordered);
@@ -293,7 +293,7 @@ mod tests {
     #[test]
     fn consecutive_quote_lines_merge_into_one_quote() {
         let doc = render("> first quoted line\n> second quoted line\n");
-        let DocumentBlock::Quote { blocks } = &doc.blocks[0] else {
+        let Block::Quote { blocks } = &doc.blocks[0] else {
             panic!("expected quote");
         };
         assert_eq!(blocks.len(), 1);
@@ -302,7 +302,7 @@ mod tests {
     #[test]
     fn preformatted_block_with_alt_text() {
         let doc = render("```rust\nfn main() {}\n```\n");
-        let DocumentBlock::CodeBlock { language, text } = &doc.blocks[0] else {
+        let Block::CodeBlock { language, text } = &doc.blocks[0] else {
             panic!("expected code block");
         };
         assert_eq!(language.as_deref(), Some("rust"));
@@ -312,7 +312,7 @@ mod tests {
     #[test]
     fn preformatted_swallows_other_prefixes() {
         let doc = render("```\n=> not-a-link\n# not-a-heading\n```\n");
-        let DocumentBlock::CodeBlock { text, .. } = &doc.blocks[0] else {
+        let Block::CodeBlock { text, .. } = &doc.blocks[0] else {
             panic!("expected code block");
         };
         assert!(text.contains("=> not-a-link"));
@@ -323,7 +323,7 @@ mod tests {
     fn unprefixed_lines_accumulate_into_paragraph() {
         let doc = render("first line\nsecond line\n\nnext paragraph\n");
         assert_eq!(doc.blocks.len(), 2);
-        let DocumentBlock::Paragraph { spans } = &doc.blocks[0] else {
+        let Block::Paragraph { spans } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
         assert_eq!(

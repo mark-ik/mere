@@ -34,7 +34,7 @@
 use std::hash::{Hash, Hasher};
 
 use accesskit::{Node, NodeId, Role, Tree, TreeId, TreeUpdate};
-use inker::{DocumentBlock, EngineDocument, InlineSpan, inline_text};
+use inker::{Block, EngineDocument, InlineSpan, inline_text};
 
 /// Crate version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -171,17 +171,17 @@ fn engine_root_path(address: &str) -> String {
     format!("engine:{address}")
 }
 
-fn project_block(block: &DocumentBlock, path: &str, nodes: &mut Vec<(NodeId, Node)>) -> NodeId {
+fn project_block(block: &Block, path: &str, nodes: &mut Vec<(NodeId, Node)>) -> NodeId {
     let id = node_id_for_path(path);
     let node = match block {
-        DocumentBlock::Heading { level, spans } => {
+        Block::Heading { level, spans } => {
             let mut n = Node::new(Role::Heading);
             n.set_label(inline_text(spans));
             n.set_level(*level as usize);
             attach_link_children(spans, path, "heading-link", nodes, &mut n);
             n
         }
-        DocumentBlock::Table { header, rows, .. } => {
+        Block::Table { header, rows, .. } => {
             // A flat accessible label until row / cell child projection lands;
             // tables are unreachable until the parsers emit them.
             let mut n = Node::new(Role::Table);
@@ -193,13 +193,13 @@ fn project_block(block: &DocumentBlock, path: &str, nodes: &mut Vec<(NodeId, Nod
             n.set_label(cells.join(" | "));
             n
         }
-        DocumentBlock::Paragraph { spans } => {
+        Block::Paragraph { spans } => {
             let mut n = Node::new(Role::Paragraph);
             n.set_label(inline_text(spans));
             attach_link_children(spans, path, "paragraph-link", nodes, &mut n);
             n
         }
-        DocumentBlock::CodeBlock { language, text } => {
+        Block::CodeBlock { language, text } => {
             // AccessKit 0.24 uses one Role::Code for both inline and block
             // code; block context is implicit from the parent.
             let mut n = Node::new(Role::Code);
@@ -212,7 +212,7 @@ fn project_block(block: &DocumentBlock, path: &str, nodes: &mut Vec<(NodeId, Nod
             }
             n
         }
-        DocumentBlock::Quote { blocks } => {
+        Block::Quote { blocks } => {
             let mut n = Node::new(Role::Blockquote);
             let mut child_ids = Vec::with_capacity(blocks.len());
             for (i, inner) in blocks.iter().enumerate() {
@@ -222,7 +222,7 @@ fn project_block(block: &DocumentBlock, path: &str, nodes: &mut Vec<(NodeId, Nod
             n.set_children(child_ids);
             n
         }
-        DocumentBlock::List { ordered, items } => {
+        Block::List { ordered, items } => {
             let mut n = Node::new(Role::List);
             if *ordered {
                 n.set_description("ordered");
@@ -244,13 +244,13 @@ fn project_block(block: &DocumentBlock, path: &str, nodes: &mut Vec<(NodeId, Nod
             n.set_children(item_ids);
             n
         }
-        DocumentBlock::Image { url, alt } => {
+        Block::Image { url, alt } => {
             let mut n = Node::new(Role::Image);
             n.set_label(alt.clone());
             n.set_value(url.clone());
             n
         }
-        DocumentBlock::Preformatted { text } => {
+        Block::Preformatted { text } => {
             // No dedicated Role::Pre in AccessKit 0.24; reuse Role::Code
             // since the semantic ("verbatim text, preserve whitespace") is
             // the same for screen readers.
@@ -258,8 +258,8 @@ fn project_block(block: &DocumentBlock, path: &str, nodes: &mut Vec<(NodeId, Nod
             n.set_value(text.clone());
             n
         }
-        DocumentBlock::Rule => Node::new(Role::Splitter),
-        DocumentBlock::FeedHeader {
+        Block::Rule => Node::new(Role::Splitter),
+        Block::FeedHeader {
             title,
             subtitle,
             summary,
@@ -285,7 +285,7 @@ fn project_block(block: &DocumentBlock, path: &str, nodes: &mut Vec<(NodeId, Nod
             }
             n
         }
-        DocumentBlock::FeedEntry {
+        Block::FeedEntry {
             title,
             date,
             summary,
@@ -312,7 +312,7 @@ fn project_block(block: &DocumentBlock, path: &str, nodes: &mut Vec<(NodeId, Nod
             }
             n
         }
-        DocumentBlock::MetadataRow { label, value } => {
+        Block::MetadataRow { label, value } => {
             // No definition-list role pair in AccessKit 0.24's stable
             // surface; project as a Group whose label is the term and
             // value is the value, so screen readers can announce both.
@@ -321,7 +321,7 @@ fn project_block(block: &DocumentBlock, path: &str, nodes: &mut Vec<(NodeId, Nod
             n.set_value(value.clone());
             n
         }
-        DocumentBlock::Badge { text } => {
+        Block::Badge { text } => {
             let mut n = Node::new(Role::Note);
             n.set_label(text.clone());
             n
@@ -390,10 +390,10 @@ where
 mod tests {
     use super::*;
     use inker::{
-        DocumentBlock, DocumentProvenance, DocumentTrustState, EngineDocument, InlineSpan,
+        Block, DocumentProvenance, DocumentTrustState, EngineDocument, InlineSpan,
     };
 
-    fn doc_with(blocks: Vec<DocumentBlock>) -> EngineDocument {
+    fn doc_with(blocks: Vec<Block>) -> EngineDocument {
         EngineDocument {
             address: "doc:test".to_string(),
             title: Some("Test Doc".to_string()),
@@ -418,7 +418,7 @@ mod tests {
 
     #[test]
     fn ids_are_deterministic() {
-        let doc = doc_with(vec![DocumentBlock::Paragraph {
+        let doc = doc_with(vec![Block::Paragraph {
             spans: vec![InlineSpan::Text("hi".to_string())],
         }]);
         let a = project_document(&doc);
@@ -432,7 +432,7 @@ mod tests {
 
     #[test]
     fn heading_carries_level_and_label() {
-        let doc = doc_with(vec![DocumentBlock::Heading {
+        let doc = doc_with(vec![Block::Heading {
             level: 2,
             spans: vec![InlineSpan::Text("Section".to_string())],
         }]);
@@ -449,13 +449,13 @@ mod tests {
 
     #[test]
     fn list_projects_with_listitem_children() {
-        let doc = doc_with(vec![DocumentBlock::List {
+        let doc = doc_with(vec![Block::List {
             ordered: false,
             items: vec![
-                vec![DocumentBlock::Paragraph {
+                vec![Block::Paragraph {
                     spans: vec![InlineSpan::Text("first".to_string())],
                 }],
-                vec![DocumentBlock::Paragraph {
+                vec![Block::Paragraph {
                     spans: vec![InlineSpan::Text("second".to_string())],
                 }],
             ],
@@ -526,7 +526,7 @@ mod tests {
 
     #[test]
     fn link_in_paragraph_projects_as_addressable_child() {
-        let doc = doc_with(vec![DocumentBlock::Paragraph {
+        let doc = doc_with(vec![Block::Paragraph {
             spans: vec![
                 InlineSpan::Text("see ".to_string()),
                 InlineSpan::Link {

@@ -12,7 +12,7 @@
 #![doc(html_root_url = "https://docs.rs/gloss/0.0.1")]
 
 use accesskit::{Node, Role};
-use inker::{DocumentBlock, EngineDocument, inline_text};
+use inker::{Block, EngineDocument, inline_text};
 use uxtree::{UxTree, node_id_for_path};
 
 /// Crate version.
@@ -30,7 +30,7 @@ pub fn project_outline(doc: &EngineDocument) -> UxTree {
 
     let mut child_ids = Vec::new();
     for (idx, block) in doc.blocks.iter().enumerate() {
-        if let DocumentBlock::Heading { level, spans } = block {
+        if let Block::Heading { level, spans } = block {
             let path = format!("{root_path}/heading/{idx}");
             let acc_id = node_id_for_path(&path);
             let mut acc_node = Node::new(Role::Heading);
@@ -61,7 +61,7 @@ pub fn project_outline(doc: &EngineDocument) -> UxTree {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use inker::{DocumentBlock, EngineDocument, InlineSpan};
+    use inker::{Block, EngineDocument, InlineSpan};
 
     fn doc_with_headings() -> EngineDocument {
         EngineDocument {
@@ -73,18 +73,18 @@ mod tests {
             provenance: Default::default(),
             trust: Default::default(),
             blocks: vec![
-                DocumentBlock::Heading {
+                Block::Heading {
                     level: 1,
                     spans: vec![InlineSpan::Text("Introduction".to_string())],
                 },
-                DocumentBlock::Paragraph {
+                Block::Paragraph {
                     spans: vec![InlineSpan::Text("body".to_string())],
                 },
-                DocumentBlock::Heading {
+                Block::Heading {
                     level: 2,
                     spans: vec![InlineSpan::Text("Background".to_string())],
                 },
-                DocumentBlock::Heading {
+                Block::Heading {
                     level: 1,
                     spans: vec![InlineSpan::Text("Architecture".to_string())],
                 },

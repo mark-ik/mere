@@ -150,7 +150,7 @@ impl EngineRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::document::{DocumentBlock, DocumentProvenance, DocumentTrustState, InlineSpan};
+    use crate::document::{Block, DocumentProvenance, DocumentTrustState, InlineSpan};
     use crate::routing::{SurfaceContract, SurfaceContractMode, SurfaceTargetId};
 
     struct EchoEngine;
@@ -169,7 +169,7 @@ mod tests {
                 provenance: DocumentProvenance::for_engine(self.engine_id(), &input.address),
                 trust: DocumentTrustState::Unknown,
                 diagnostics: Vec::new(),
-                blocks: vec![DocumentBlock::Paragraph {
+                blocks: vec![Block::Paragraph {
                     spans: vec![InlineSpan::Text(input.body.clone())],
                 }],
             })

@@ -31,7 +31,7 @@
 //!   [`StatementOutcome::unrecognized`], never dropped (statements-over-schema:
 //!   never lose a predicate).
 
-use crate::{DocumentBlock, EngineDocument, InlineSpan};
+use crate::{Block, EngineDocument, InlineSpan};
 use kernel::graph::{
     EdgeAssertion, Graph, NodeKey, REL_VOCAB, SemanticSubKind, predicate_iri, sub_kind_from_iri,
 };
@@ -56,26 +56,26 @@ pub fn link_statements(doc: &EngineDocument) -> Vec<LinkStatement> {
     out
 }
 
-fn collect_block(block: &DocumentBlock, out: &mut Vec<LinkStatement>) {
+fn collect_block(block: &Block, out: &mut Vec<LinkStatement>) {
     match block {
-        DocumentBlock::Heading { spans, .. } | DocumentBlock::Paragraph { spans } => {
+        Block::Heading { spans, .. } | Block::Paragraph { spans } => {
             for span in spans {
                 collect_span(span, out);
             }
         }
-        DocumentBlock::Quote { blocks } => {
+        Block::Quote { blocks } => {
             for inner in blocks {
                 collect_block(inner, out);
             }
         }
-        DocumentBlock::List { items, .. } => {
+        Block::List { items, .. } => {
             for item in items {
                 for inner in item {
                     collect_block(inner, out);
                 }
             }
         }
-        DocumentBlock::Table { header, rows, .. } => {
+        Block::Table { header, rows, .. } => {
             for cell in header.iter().chain(rows.iter().flatten()) {
                 for span in cell {
                     collect_span(span, out);
@@ -84,14 +84,14 @@ fn collect_block(block: &DocumentBlock, out: &mut Vec<LinkStatement>) {
         }
         // Feed blocks carry navigation URLs (article / source), not `rel`
         // statements; the remaining variants hold no inline links.
-        DocumentBlock::FeedHeader { .. }
-        | DocumentBlock::FeedEntry { .. }
-        | DocumentBlock::CodeBlock { .. }
-        | DocumentBlock::Image { .. }
-        | DocumentBlock::Preformatted { .. }
-        | DocumentBlock::Rule
-        | DocumentBlock::MetadataRow { .. }
-        | DocumentBlock::Badge { .. } => {}
+        Block::FeedHeader { .. }
+        | Block::FeedEntry { .. }
+        | Block::CodeBlock { .. }
+        | Block::Image { .. }
+        | Block::Preformatted { .. }
+        | Block::Rule
+        | Block::MetadataRow { .. }
+        | Block::Badge { .. } => {}
     }
 }
 
@@ -201,7 +201,7 @@ mod tests {
     use crate::{DocumentProvenance, DocumentTrustState};
     use kernel::graph::RelationSelector;
 
-    fn doc(blocks: Vec<DocumentBlock>) -> EngineDocument {
+    fn doc(blocks: Vec<Block>) -> EngineDocument {
         EngineDocument {
             address: "knot:test".to_string(),
             title: None,
@@ -216,7 +216,7 @@ mod tests {
 
     /// A one-paragraph document with a single link carrying `rel`.
     fn link_doc(url: &str, rel: Option<&str>) -> EngineDocument {
-        doc(vec![DocumentBlock::Paragraph {
+        doc(vec![Block::Paragraph {
             spans: vec![InlineSpan::Link {
                 url: url.to_string(),
                 title: None,
@@ -228,7 +228,7 @@ mod tests {
 
     #[test]
     fn link_statements_extracts_predicate_links_only() {
-        let document = doc(vec![DocumentBlock::Paragraph {
+        let document = doc(vec![Block::Paragraph {
             spans: vec![
                 InlineSpan::Link {
                     url: "https://plain.test/".to_string(),

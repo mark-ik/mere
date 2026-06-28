@@ -8,7 +8,7 @@
 //! paragraphs are preserved so the reader sees the original line shape.
 
 use inker::{
-    DocumentBlock, DocumentProvenance, DocumentTrustState, Engine, EngineDocument, EngineError,
+    Block, DocumentProvenance, DocumentTrustState, Engine, EngineDocument, EngineError,
     EngineInput, InlineSpan,
 };
 
@@ -36,8 +36,8 @@ impl Engine for TextEngine {
     }
 
     fn render(&self, input: &EngineInput) -> Result<EngineDocument, EngineError> {
-        let blocks: Vec<DocumentBlock> = paragraphs(&input.body)
-            .map(|para| DocumentBlock::Paragraph {
+        let blocks: Vec<Block> = paragraphs(&input.body)
+            .map(|para| Block::Paragraph {
                 spans: paragraph_spans(para),
             })
             .collect();
@@ -96,14 +96,14 @@ mod tests {
     fn blank_lines_separate_paragraphs() {
         let doc = render("hello\n\nworld\n");
         assert_eq!(doc.blocks.len(), 2);
-        assert!(matches!(doc.blocks[0], DocumentBlock::Paragraph { .. }));
-        assert!(matches!(doc.blocks[1], DocumentBlock::Paragraph { .. }));
+        assert!(matches!(doc.blocks[0], Block::Paragraph { .. }));
+        assert!(matches!(doc.blocks[1], Block::Paragraph { .. }));
     }
 
     #[test]
     fn soft_breaks_preserved_within_paragraph() {
         let doc = render("alpha\nbeta\ngamma\n");
-        let DocumentBlock::Paragraph { spans } = &doc.blocks[0] else {
+        let Block::Paragraph { spans } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
         let breaks = spans

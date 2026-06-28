@@ -22,7 +22,7 @@ use document_canvas::{
 #[cfg(test)]
 use document_canvas::{InteractionKind, InteractionRegion};
 use inker::{
-    DocumentBlock, DocumentProvenance, DocumentTrustState, EngineDocument, EngineInput,
+    Block, DocumentProvenance, DocumentTrustState, EngineDocument, EngineInput,
     EngineRegistry, EngineRoutePolicy, EngineRouteRequest, InlineSpan, WorkspaceRouteId,
 };
 use netrender::Scene;
@@ -89,7 +89,7 @@ pub fn content_document(url: &str, state: Option<&ContentState>) -> EngineDocume
 }
 
 /// The built-in `mere://welcome` page.
-fn welcome_blocks() -> Vec<DocumentBlock> {
+fn welcome_blocks() -> Vec<Block> {
     vec![
         heading(1, "Mere"),
         paragraph("A graph-shaped browser, hosted on serval."),
@@ -105,7 +105,7 @@ fn welcome_blocks() -> Vec<DocumentBlock> {
 /// then the decoded body split into paragraphs on blank lines. Bounded so a large
 /// page can't make an unbounded card. Content-type-aware engines (markdown, HTML
 /// via serval, …) replace this plain split in S2.2b-ii.
-fn ready_blocks(url: &str, fetched: &Fetched) -> Vec<DocumentBlock> {
+fn ready_blocks(url: &str, fetched: &Fetched) -> Vec<Block> {
     let mut blocks = vec![heading(1, url)];
     if let Some(ct) = &fetched.content_type {
         blocks.push(paragraph(&format!("({ct})")));
@@ -126,7 +126,7 @@ fn ready_blocks(url: &str, fetched: &Fetched) -> Vec<DocumentBlock> {
 }
 
 /// Assemble an [`EngineDocument`] over `blocks`, addressed at `url`.
-fn document(url: &str, blocks: Vec<DocumentBlock>) -> EngineDocument {
+fn document(url: &str, blocks: Vec<Block>) -> EngineDocument {
     EngineDocument {
         address: url.to_string(),
         title: None,
@@ -524,15 +524,15 @@ pub fn build_html_layout(
     (doc, layout)
 }
 
-fn heading(level: u8, text: &str) -> DocumentBlock {
-    DocumentBlock::Heading {
+fn heading(level: u8, text: &str) -> Block {
+    Block::Heading {
         level,
         spans: vec![InlineSpan::Text(text.to_string())],
     }
 }
 
-fn paragraph(text: &str) -> DocumentBlock {
-    DocumentBlock::Paragraph {
+fn paragraph(text: &str) -> Block {
+    Block::Paragraph {
         spans: vec![InlineSpan::Text(text.to_string())],
     }
 }

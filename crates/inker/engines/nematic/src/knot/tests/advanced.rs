@@ -6,7 +6,7 @@ use inker::InlineSpan;
 #[test]
 fn wikilink_rewrites_to_mere_node_url() {
     let doc = render("See [[my note]] for context.\n");
-    let DocumentBlock::Paragraph { spans } = &doc.blocks[0] else {
+    let Block::Paragraph { spans } = &doc.blocks[0] else {
         panic!("expected paragraph");
     };
     let link = spans.iter().find_map(|s| match s {
@@ -37,7 +37,7 @@ fn wikilinks_inside_existing_links_are_not_rewritten() {
     let doc = render("Read [the [[note]] here](https://x.test/).\n");
     // The outer markdown link should win; the [[note]] inside its display
     // text stays as plain text, not a nested wikilink.
-    let DocumentBlock::Paragraph { spans } = &doc.blocks[0] else {
+    let Block::Paragraph { spans } = &doc.blocks[0] else {
         panic!("expected paragraph");
     };
     let links: Vec<&str> = spans
@@ -55,7 +55,7 @@ fn unterminated_wikilink_stays_as_text() {
     let doc = render("This is [[unclosed and continues...\n");
     // No wikilink should have been emitted.
     let any_link = doc.blocks.iter().any(|b| match b {
-        DocumentBlock::Paragraph { spans } => {
+        Block::Paragraph { spans } => {
             spans.iter().any(|s| matches!(s, InlineSpan::Link { .. }))
         }
         _ => false,
@@ -70,7 +70,7 @@ fn hashtag_extracts_to_badge_after_paragraph() {
         .blocks
         .iter()
         .filter_map(|b| match b {
-            DocumentBlock::Badge { text } => Some(text.as_str()),
+            Block::Badge { text } => Some(text.as_str()),
             _ => None,
         })
         .collect();
@@ -81,7 +81,7 @@ fn hashtag_extracts_to_badge_after_paragraph() {
 #[test]
 fn hashtag_is_removed_from_paragraph_text() {
     let doc = render("Note tagged #foo at end.\n");
-    let DocumentBlock::Paragraph { spans } = &doc.blocks[0] else {
+    let Block::Paragraph { spans } = &doc.blocks[0] else {
         panic!("expected paragraph");
     };
     let combined: String = spans
@@ -100,7 +100,7 @@ fn hashtag_is_removed_from_paragraph_text() {
 #[test]
 fn hash_in_middle_of_word_is_not_a_hashtag() {
     let doc = render("CSS color #abc123 example.\n");
-    let DocumentBlock::Paragraph { spans } = &doc.blocks[0] else {
+    let Block::Paragraph { spans } = &doc.blocks[0] else {
         panic!("expected paragraph");
     };
     let combined: String = spans
@@ -113,7 +113,7 @@ fn hash_in_middle_of_word_is_not_a_hashtag() {
     // Hash *was* preceded by a space, so it's parsed as a hashtag — this
     // is a known limitation. The test pins current behavior so we're aware.
     let has_badge = doc.blocks.iter().any(|b| match b {
-        DocumentBlock::Badge { text } => text == "#abc123",
+        Block::Badge { text } => text == "#abc123",
         _ => false,
     });
     assert!(
@@ -127,7 +127,7 @@ fn hash_in_middle_of_word_is_not_a_hashtag() {
 fn hashtags_in_headings_stay_as_text() {
     // Headings preserve hashtags inline; only paragraphs extract them.
     let doc = render("# Topic about #research\n\nBody.\n");
-    let DocumentBlock::Heading { spans, .. } = &doc.blocks[0] else {
+    let Block::Heading { spans, .. } = &doc.blocks[0] else {
         panic!("expected heading");
     };
     let combined: String = spans
@@ -150,7 +150,7 @@ fn polyglot_knot_with_wikilinks_and_hashtags() {
     assert!(urls.iter().any(|u| *u == "https://x.test/"));
 
     let has_badge = doc.blocks.iter().any(|b| match b {
-        DocumentBlock::Badge { text } => text == "#research",
+        Block::Badge { text } => text == "#research",
         _ => false,
     });
     assert!(has_badge);
@@ -166,7 +166,7 @@ fn build_clip_knot_assembles_frontmatter_plus_blocks() {
     prov.canonical_uri = Some("https://blog.test/article".to_string());
     prov.source_kind = Some("nematic.markdown".to_string());
 
-    let blocks = vec![DocumentBlock::Paragraph {
+    let blocks = vec![Block::Paragraph {
         spans: vec![InlineSpan::Text("A clipped paragraph.".to_string())],
     }];
 
@@ -196,7 +196,7 @@ fn build_clip_knot_does_not_double_emit_frontmatter() {
     // duplicated.
     let mut prov = DocumentProvenance::default();
     prov.canonical_uri = Some("https://x.test/".to_string());
-    let blocks = vec![DocumentBlock::Paragraph {
+    let blocks = vec![Block::Paragraph {
         spans: vec![InlineSpan::Text("Body".to_string())],
     }];
     let knot = build_clip_knot(&blocks, &prov, DocumentTrustState::Tofu, None);
@@ -231,10 +231,10 @@ fn build_clip_knot_with_block_provenance_emits_block_sources_list() {
     );
 
     let blocks = vec![
-        DocumentBlock::Paragraph {
+        Block::Paragraph {
             spans: vec![InlineSpan::Text("From the composite source.".into())],
         },
-        DocumentBlock::Paragraph {
+        Block::Paragraph {
             spans: vec![InlineSpan::Text("From the gopher source.".into())],
         },
     ];
@@ -268,7 +268,7 @@ fn build_clip_knot_with_block_provenance_emits_no_list_when_all_match_document()
     map.insert(0, BlockProvenance::from_document(doc_prov.clone()));
     map.insert(2, BlockProvenance::from_document(doc_prov.clone()));
 
-    let blocks = vec![DocumentBlock::Paragraph {
+    let blocks = vec![Block::Paragraph {
         spans: vec![InlineSpan::Text("body".into())],
     }];
     let knot = build_clip_knot_with_block_provenance(
@@ -302,7 +302,7 @@ fn build_clip_knot_with_block_provenance_sorts_entries_by_index() {
     map.insert(1, BlockProvenance::from_document(a));
     map.insert(3, BlockProvenance::from_document(b));
 
-    let blocks = vec![DocumentBlock::Paragraph {
+    let blocks = vec![Block::Paragraph {
         spans: vec![InlineSpan::Text("x".into())],
     }];
     let knot = build_clip_knot_with_block_provenance(

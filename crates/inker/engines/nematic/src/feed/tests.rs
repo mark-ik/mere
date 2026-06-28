@@ -95,7 +95,7 @@ fn json_feed_extracts_title_lang_and_entries() {
         .blocks
         .iter()
         .filter_map(|b| match b {
-            DocumentBlock::FeedEntry { title, .. } => Some(title.as_str()),
+            Block::FeedEntry { title, .. } => Some(title.as_str()),
             _ => None,
         })
         .collect();
@@ -109,7 +109,7 @@ fn json_feed_emits_header_with_subtitle() {
         .blocks
         .iter()
         .find_map(|b| match b {
-            DocumentBlock::FeedHeader {
+            Block::FeedHeader {
                 title,
                 subtitle,
                 source_url,
@@ -130,7 +130,7 @@ fn json_feed_content_html_is_stripped_and_flagged() {
         .blocks
         .iter()
         .find_map(|b| match b {
-            DocumentBlock::FeedEntry { title, summary, .. } if title == "First post" => {
+            Block::FeedEntry { title, summary, .. } if title == "First post" => {
                 summary.as_deref()
             }
             _ => None,
@@ -151,7 +151,7 @@ fn json_feed_content_text_is_kept_verbatim() {
         .blocks
         .iter()
         .find_map(|b| match b {
-            DocumentBlock::FeedEntry { title, summary, .. } if title == "Second post" => {
+            Block::FeedEntry { title, summary, .. } if title == "Second post" => {
                 summary.as_deref()
             }
             _ => None,
@@ -206,7 +206,7 @@ fn rss_feed_extracts_title_and_entries() {
         .blocks
         .iter()
         .filter_map(|b| match b {
-            DocumentBlock::FeedEntry { title, .. } => Some(title.as_str()),
+            Block::FeedEntry { title, .. } => Some(title.as_str()),
             _ => None,
         })
         .collect();
@@ -220,7 +220,7 @@ fn rss_emits_feed_header_with_subtitle() {
         .blocks
         .iter()
         .find_map(|b| match b {
-            DocumentBlock::FeedHeader {
+            Block::FeedHeader {
                 title,
                 subtitle,
                 source_url,
@@ -241,7 +241,7 @@ fn rss_summary_strips_html_tags_into_feed_entry_summary() {
         .blocks
         .iter()
         .find_map(|b| match b {
-            DocumentBlock::FeedEntry { title, summary, .. } if title == "First post" => {
+            Block::FeedEntry { title, summary, .. } if title == "First post" => {
                 summary.as_deref()
             }
             _ => None,
@@ -283,7 +283,7 @@ fn atom_content_html_is_stripped_into_entry_summary() {
         .blocks
         .iter()
         .find_map(|b| match b {
-            DocumentBlock::FeedEntry { title, summary, .. } if title == "Atom two" => {
+            Block::FeedEntry { title, summary, .. } if title == "Atom two" => {
                 summary.as_deref()
             }
             _ => None,
@@ -301,7 +301,7 @@ fn empty_feed_emits_only_a_header_block() {
     );
     assert_eq!(doc.title.as_deref(), Some("Empty"));
     assert_eq!(doc.blocks.len(), 1);
-    assert!(matches!(doc.blocks[0], DocumentBlock::FeedHeader { .. }));
+    assert!(matches!(doc.blocks[0], Block::FeedHeader { .. }));
 }
 
 #[test]

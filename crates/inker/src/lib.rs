@@ -45,7 +45,7 @@ pub mod statements;
 
 pub use a11y::A11yCapability;
 pub use document::{
-    BlockProvenance, BlockProvenanceMap, DocumentBlock, DocumentDiagnostic, DocumentProvenance,
+    BlockProvenance, BlockProvenanceMap, Block, DocumentDiagnostic, DocumentProvenance,
     BlockEvaluator, BlockEvaluators, DocumentTrustState, EngineDocument, EvalOutcome, EvalOutput,
     EvaluationPolicy, Fetched, GophermapContext, InlineSpan, ResolvedProvenance, TableAlignment,
     TranscludeOutcome,

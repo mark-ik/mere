@@ -13,7 +13,7 @@ fn first_link(body: &str) -> (String, Option<String>, String) {
     let spans = blocks
         .iter()
         .find_map(|b| match b {
-            DocumentBlock::Paragraph { spans } => Some(spans.clone()),
+            Block::Paragraph { spans } => Some(spans.clone()),
             _ => None,
         })
         .expect("expected a paragraph");
@@ -51,7 +51,7 @@ fn plain_inline_link_has_no_predicate() {
 #[test]
 fn inline_link_sits_between_text_runs() {
     let blocks = parse_djot_knot_body("see [docs](https://x.test/){rel=\"schema:cites\"} now\n");
-    let DocumentBlock::Paragraph { spans } = blocks.first().expect("paragraph") else {
+    let Block::Paragraph { spans } = blocks.first().expect("paragraph") else {
         panic!("expected paragraph, got {blocks:?}");
     };
     // Text-before, the link span, text-after.
@@ -67,7 +67,7 @@ fn inline_link_sits_between_text_runs() {
 #[test]
 fn unknown_div_class_renders_generically_with_a_diagnostic() {
     let (blocks, diagnostics) = parse_djot_knot_body_validated("::: mystery\nx\n:::\n");
-    assert!(matches!(blocks.first(), Some(DocumentBlock::Quote { .. })));
+    assert!(matches!(blocks.first(), Some(Block::Quote { .. })));
     assert!(matches!(
         diagnostics.first(),
         Some(DocumentDiagnostic::UnsupportedConstruct(m)) if m.contains("mystery")
@@ -77,7 +77,7 @@ fn unknown_div_class_renders_generically_with_a_diagnostic() {
 #[test]
 fn feed_entry_missing_required_title_warns() {
     let (blocks, diagnostics) = parse_djot_knot_body_validated("::: feed-entry\nbody\n:::\n");
-    assert!(matches!(blocks.first(), Some(DocumentBlock::FeedEntry { .. })));
+    assert!(matches!(blocks.first(), Some(Block::FeedEntry { .. })));
     assert!(matches!(
         diagnostics.first(),
         Some(DocumentDiagnostic::ParseWarning(m)) if m.contains("title")
@@ -103,7 +103,7 @@ fn djot_engine_expands_protocol_fences_for_parity() {
     // raw gemtext code block remains — parity with the CommonMark knot.
     assert!(!doc.blocks.iter().any(|b| matches!(
         b,
-        DocumentBlock::CodeBlock { language, .. } if language.as_deref() == Some("gemtext")
+        Block::CodeBlock { language, .. } if language.as_deref() == Some("gemtext")
     )));
     assert!(doc.outgoing_links().iter().any(|u| u.contains("gemini://x/")));
 }
@@ -139,12 +139,12 @@ fn djot_engine_renders_frontmatter_and_body() {
     // `note_kind` prefixes a MetadataRow; the djot body follows.
     assert!(matches!(
         doc.blocks.first(),
-        Some(DocumentBlock::MetadataRow { label, value }) if label == "kind" && value == "clip"
+        Some(Block::MetadataRow { label, value }) if label == "kind" && value == "clip"
     ));
     assert!(
         doc.blocks
             .iter()
-            .any(|b| matches!(b, DocumentBlock::Heading { .. }))
+            .any(|b| matches!(b, Block::Heading { .. }))
     );
 }
 
@@ -155,11 +155,11 @@ fn description_list_becomes_metadata_rows() {
     assert_eq!(
         blocks,
         vec![
-            DocumentBlock::MetadataRow {
+            Block::MetadataRow {
                 label: "Trust".into(),
                 value: "tofu".into(),
             },
-            DocumentBlock::MetadataRow {
+            Block::MetadataRow {
                 label: "Login".into(),
                 value: "alice".into(),
             },
@@ -173,11 +173,11 @@ fn heading_and_paragraph_map_structurally() {
     assert_eq!(
         blocks,
         vec![
-            DocumentBlock::Heading {
+            Block::Heading {
                 level: 1,
                 spans: vec![InlineSpan::Text("My research".into())],
             },
-            DocumentBlock::Paragraph {
+            Block::Paragraph {
                 spans: vec![InlineSpan::Text("A note about things.".into())],
             },
         ]
@@ -189,7 +189,7 @@ fn badge_div_becomes_badge() {
     let blocks = parse_djot_knot_body("::: badge\nresearch\n:::\n");
     assert_eq!(
         blocks,
-        vec![DocumentBlock::Badge {
+        vec![Block::Badge {
             text: "research".into()
         }]
     );
@@ -201,7 +201,7 @@ fn feed_entry_div_reads_attributes() {
     let blocks = parse_djot_knot_body(body);
     assert_eq!(
         blocks,
-        vec![DocumentBlock::FeedEntry {
+        vec![Block::FeedEntry {
             title: "Article".into(),
             date: Some("2026-05-08".into()),
             summary: Some("A summary.".into()),

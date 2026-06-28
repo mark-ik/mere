@@ -69,7 +69,7 @@ fn trust_field_parses_known_states() {
 fn tags_array_emits_metadata_row() {
     let doc = render("---\ntags: [research, semantics, mere]\n---\n\nBody.\n");
     let tags_row = doc.blocks.iter().find_map(|b| match b {
-        DocumentBlock::MetadataRow { label, value } if label == "tags" => Some(value.as_str()),
+        Block::MetadataRow { label, value } if label == "tags" => Some(value.as_str()),
         _ => None,
     });
     assert_eq!(tags_row, Some("research, semantics, mere"));
@@ -79,7 +79,7 @@ fn tags_array_emits_metadata_row() {
 fn note_kind_emits_metadata_row() {
     let doc = render("---\nnote_kind: clip\n---\n\nBody.\n");
     let kind_row = doc.blocks.iter().find_map(|b| match b {
-        DocumentBlock::MetadataRow { label, value } if label == "kind" => Some(value.as_str()),
+        Block::MetadataRow { label, value } if label == "kind" => Some(value.as_str()),
         _ => None,
     });
     assert_eq!(kind_row, Some("clip"));
@@ -90,21 +90,21 @@ fn metadata_blocks_appear_before_body_blocks() {
     let doc = render("---\nnote_kind: clip\ntags: [a, b]\n---\n\n# Body Heading\n\ntext\n");
     // The first two blocks should be MetadataRows; then the body's
     // markdown blocks follow.
-    assert!(matches!(doc.blocks[0], DocumentBlock::MetadataRow { .. }));
-    assert!(matches!(doc.blocks[1], DocumentBlock::MetadataRow { .. }));
-    assert!(matches!(doc.blocks[2], DocumentBlock::Heading { .. }));
+    assert!(matches!(doc.blocks[0], Block::MetadataRow { .. }));
+    assert!(matches!(doc.blocks[1], Block::MetadataRow { .. }));
+    assert!(matches!(doc.blocks[2], Block::Heading { .. }));
 }
 
 #[test]
 fn no_frontmatter_parses_as_plain_markdown() {
     let doc = render("# Plain markdown\n\ntext.\n");
     assert_eq!(doc.title.as_deref(), Some("Plain markdown"));
-    assert!(matches!(doc.blocks[0], DocumentBlock::Heading { .. }));
+    assert!(matches!(doc.blocks[0], Block::Heading { .. }));
     // No metadata rows should be added when there's no frontmatter.
     assert!(
         !doc.blocks
             .iter()
-            .any(|b| matches!(b, DocumentBlock::MetadataRow { .. }))
+            .any(|b| matches!(b, Block::MetadataRow { .. }))
     );
 }
 
@@ -124,7 +124,7 @@ fn quoted_strings_have_quotes_stripped() {
     let doc = render("---\ntitle: \"Quoted Title\"\nnote_kind: 'clip'\n---\n\nBody.\n");
     assert_eq!(doc.title.as_deref(), Some("Quoted Title"));
     let kind_row = doc.blocks.iter().find_map(|b| match b {
-        DocumentBlock::MetadataRow { label, value } if label == "kind" => Some(value.as_str()),
+        Block::MetadataRow { label, value } if label == "kind" => Some(value.as_str()),
         _ => None,
     });
     assert_eq!(kind_row, Some("clip"));
@@ -188,7 +188,7 @@ fn gemtext_fence_expands_to_real_blocks() {
     let has_gemtext_heading = doc.blocks.iter().any(|b| {
         matches!(
             b,
-            DocumentBlock::Heading { spans, .. }
+            Block::Heading { spans, .. }
                 if spans.iter().any(|s|
                     matches!(s, InlineSpan::Text(t) if t == "Capsule")
                 )
@@ -211,7 +211,7 @@ fn unknown_fence_languages_pass_through_as_code_blocks() {
     let has_code_block = doc.blocks.iter().any(|b| {
         matches!(
             b,
-            DocumentBlock::CodeBlock { language: Some(l), .. } if l == "python"
+            Block::CodeBlock { language: Some(l), .. } if l == "python"
         )
     });
     assert!(has_code_block, "python fence should stay a code block");
@@ -225,7 +225,7 @@ fn feed_entry_fence_expands_to_feed_entry_block() {
         .blocks
         .iter()
         .find_map(|b| match b {
-            DocumentBlock::FeedEntry {
+            Block::FeedEntry {
                 title,
                 date,
                 summary,
@@ -256,7 +256,7 @@ fn metadata_row_fence_emits_one_row_per_line() {
         .blocks
         .iter()
         .filter_map(|b| match b {
-            DocumentBlock::MetadataRow { label, value } => Some((label.as_str(), value.as_str())),
+            Block::MetadataRow { label, value } => Some((label.as_str(), value.as_str())),
             _ => None,
         })
         .collect();
@@ -273,7 +273,7 @@ fn badge_fence_emits_one_badge_per_line() {
         .blocks
         .iter()
         .filter_map(|b| match b {
-            DocumentBlock::Badge { text } => Some(text.as_str()),
+            Block::Badge { text } => Some(text.as_str()),
             _ => None,
         })
         .collect();
@@ -347,7 +347,7 @@ fn full_round_trip_preserves_feed_entry_information() {
         .blocks
         .iter()
         .filter_map(|b| match b {
-            DocumentBlock::FeedEntry {
+            Block::FeedEntry {
                 title,
                 date,
                 summary,

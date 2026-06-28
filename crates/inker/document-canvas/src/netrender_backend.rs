@@ -41,10 +41,10 @@ mod tests {
     use crate::style_sheet::DocumentStyleSheet;
     use crate::types::Viewport;
     use inker::{
-        DocumentBlock, DocumentProvenance, DocumentTrustState, EngineDocument, InlineSpan,
+        Block, DocumentProvenance, DocumentTrustState, EngineDocument, InlineSpan,
     };
 
-    fn doc(blocks: Vec<DocumentBlock>) -> EngineDocument {
+    fn doc(blocks: Vec<Block>) -> EngineDocument {
         EngineDocument {
             address: "doc:netrender-test".into(),
             title: None,
@@ -57,7 +57,7 @@ mod tests {
         }
     }
 
-    fn scene_for(blocks: Vec<DocumentBlock>) -> Scene {
+    fn scene_for(blocks: Vec<Block>) -> Scene {
         let laid =
             layout_document(&doc(blocks), Viewport::new(640.0, 480.0), &DocumentStyleSheet::default());
         scene_from_packet(&laid.packet, &laid.fonts, &ColorVocabulary::default())
@@ -73,7 +73,7 @@ mod tests {
     fn text_lowers_to_glyph_run() {
         // Parley's real face threads through to the side-table, so text
         // lowers to a SceneOp::GlyphRun — no resolver, no placeholder rect.
-        let scene = scene_for(vec![DocumentBlock::Paragraph {
+        let scene = scene_for(vec![Block::Paragraph {
             spans: vec![InlineSpan::Text("hello".into())],
         }]);
         let glyph_runs = scene

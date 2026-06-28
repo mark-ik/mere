@@ -39,9 +39,9 @@ pub fn build_document_scene(
 mod tests {
     use super::*;
     use document_canvas::RenderedBlockKind;
-    use inker::{DocumentBlock, DocumentProvenance, DocumentTrustState, InlineSpan};
+    use inker::{Block, DocumentProvenance, DocumentTrustState, InlineSpan};
 
-    fn doc(blocks: Vec<DocumentBlock>) -> EngineDocument {
+    fn doc(blocks: Vec<Block>) -> EngineDocument {
         EngineDocument {
             address: "doc:platen-test".into(),
             title: None,
@@ -69,7 +69,7 @@ mod tests {
     #[test]
     fn single_paragraph_emits_one_text_block() {
         let packet = build_document_scene(
-            &doc(vec![DocumentBlock::Paragraph {
+            &doc(vec![Block::Paragraph {
                 spans: vec![InlineSpan::Text("Hello, platen.".into())],
             }]),
             Viewport::new(640.0, 480.0),
@@ -86,7 +86,7 @@ mod tests {
     #[test]
     fn document_scene_threads_links_through_to_interactions() {
         let packet = build_document_scene(
-            &doc(vec![DocumentBlock::Paragraph {
+            &doc(vec![Block::Paragraph {
                 spans: vec![InlineSpan::Link {
                     url: "mere://node/notes".into(),
                     title: None,
@@ -105,7 +105,7 @@ mod tests {
     fn viewport_width_constrains_content_bounds() {
         let style = DocumentStyleSheet::default();
         let narrow = build_document_scene(
-            &doc(vec![DocumentBlock::Paragraph {
+            &doc(vec![Block::Paragraph {
                 spans: vec![InlineSpan::Text(
                     "A long paragraph that should wrap across multiple lines when given little horizontal room."
                         .into(),
@@ -116,7 +116,7 @@ mod tests {
         )
         .packet;
         let wide = build_document_scene(
-            &doc(vec![DocumentBlock::Paragraph {
+            &doc(vec![Block::Paragraph {
                 spans: vec![InlineSpan::Text(
                     "A long paragraph that should wrap across multiple lines when given little horizontal room."
                         .into(),

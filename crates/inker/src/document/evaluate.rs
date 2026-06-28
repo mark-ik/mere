@@ -25,7 +25,7 @@
 //! re-scanned for further eval fences (a script cannot fan out evaluation).
 
 use super::block_provenance::{BlockProvenance, BlockProvenanceMap};
-use super::{DocumentBlock, DocumentProvenance, EngineDocument};
+use super::{Block, DocumentProvenance, EngineDocument};
 use crate::engine::EngineInput;
 
 /// What an evaluator returns: a format tag and the text it produced. `plain`
@@ -198,13 +198,13 @@ fn content_type_for(format: &str) -> &str {
 
 /// Turn a plain-text eval result into a block: a multi-line result keeps its
 /// shape as `Preformatted`; a single line is a `Paragraph`.
-fn plain_block(text: &str) -> DocumentBlock {
+fn plain_block(text: &str) -> Block {
     if text.contains('\n') {
-        DocumentBlock::Preformatted {
+        Block::Preformatted {
             text: text.to_string(),
         }
     } else {
-        DocumentBlock::Paragraph {
+        Block::Paragraph {
             spans: vec![super::InlineSpan::Text(text.to_string())],
         }
     }
@@ -219,11 +219,11 @@ pub fn evaluate_blocks(
     policy: &EvaluationPolicy,
 ) -> EvalOutcome {
     let mut outcome = EvalOutcome::default();
-    let mut blocks: Vec<DocumentBlock> = Vec::with_capacity(document.blocks.len());
+    let mut blocks: Vec<Block> = Vec::with_capacity(document.blocks.len());
 
     for block in std::mem::take(&mut document.blocks) {
         let fence = match &block {
-            DocumentBlock::CodeBlock {
+            Block::CodeBlock {
                 language: Some(language),
                 text,
             } => parse_eval(language).map(|lang| (lang.to_string(), text.clone())),
@@ -296,7 +296,7 @@ mod tests {
     use super::*;
     use crate::document::{DocumentTrustState, InlineSpan};
 
-    fn doc_with(blocks: Vec<DocumentBlock>) -> EngineDocument {
+    fn doc_with(blocks: Vec<Block>) -> EngineDocument {
         EngineDocument {
             address: "test.knot".into(),
             title: None,
@@ -309,8 +309,8 @@ mod tests {
         }
     }
 
-    fn eval_fence(lang_tag: &str, source: &str) -> DocumentBlock {
-        DocumentBlock::CodeBlock {
+    fn eval_fence(lang_tag: &str, source: &str) -> Block {
+        Block::CodeBlock {
             language: Some(lang_tag.to_string()),
             text: source.to_string(),
         }
@@ -318,7 +318,7 @@ mod tests {
 
     /// A render stub: one paragraph carrying the body, tagged by content type.
     fn stub_render(input: &EngineInput) -> Result<EngineDocument, String> {
-        Ok(doc_with(vec![DocumentBlock::Paragraph {
+        Ok(doc_with(vec![Block::Paragraph {
             spans: vec![InlineSpan::Text(format!(
                 "[{}] {}",
                 input.content_type.as_deref().unwrap_or("?"),
@@ -350,7 +350,7 @@ mod tests {
         assert_eq!(outcome.evaluated, 1);
         assert!(matches!(
             &document.blocks[0],
-            DocumentBlock::Paragraph { spans } if spans == &vec![InlineSpan::Text("2".into())]
+            Block::Paragraph { spans } if spans == &vec![InlineSpan::Text("2".into())]
         ));
         assert!(outcome.provenance.get(0).is_some(), "spliced block is marked generated");
     }
@@ -360,7 +360,7 @@ mod tests {
         let mut document = doc_with(vec![eval_fence("lua eval", "x")]);
         let mut evaluate = |_: &str, _: &str| Ok(EvalOutput::plain("line1\nline2"));
         evaluate_blocks(&mut document, &mut evaluate, &mut stub_render, &allow_lua());
-        assert!(matches!(&document.blocks[0], DocumentBlock::Preformatted { .. }));
+        assert!(matches!(&document.blocks[0], Block::Preformatted { .. }));
     }
 
     #[test]
@@ -376,7 +376,7 @@ mod tests {
         // The stub render tagged it with the routed content type.
         assert!(matches!(
             &document.blocks[0],
-            DocumentBlock::Paragraph { spans }
+            Block::Paragraph { spans }
                 if spans == &vec![InlineSpan::Text("[text/gemini] ## generated".into())]
         ));
     }
@@ -395,7 +395,7 @@ mod tests {
         );
         assert_eq!(outcome.evaluated, 0);
         assert_eq!(outcome.denied.len(), 1);
-        assert!(matches!(&document.blocks[0], DocumentBlock::CodeBlock { .. }));
+        assert!(matches!(&document.blocks[0], Block::CodeBlock { .. }));
 
         // Enabled, but the language is not allowed.
         let mut document = doc_with(vec![eval_fence("python eval", "print(1)")]);
@@ -403,7 +403,7 @@ mod tests {
             evaluate_blocks(&mut document, &mut evaluate, &mut stub_render, &allow_lua());
         assert_eq!(outcome.denied.len(), 1);
         assert!(outcome.denied[0].1.contains("allowlist"));
-        assert!(matches!(&document.blocks[0], DocumentBlock::CodeBlock { .. }));
+        assert!(matches!(&document.blocks[0], Block::CodeBlock { .. }));
     }
 
     #[test]
@@ -413,7 +413,7 @@ mod tests {
             |_: &str, _: &str| -> Result<EvalOutput, String> { Err("runtime error: boom".into()) };
         let outcome = evaluate_blocks(&mut document, &mut evaluate, &mut stub_render, &allow_lua());
         assert_eq!(outcome.failed.len(), 1);
-        assert!(matches!(&document.blocks[0], DocumentBlock::CodeBlock { .. }));
+        assert!(matches!(&document.blocks[0], Block::CodeBlock { .. }));
     }
 
     #[test]
@@ -424,6 +424,6 @@ mod tests {
         let outcome = evaluate_blocks(&mut document, &mut evaluate, &mut stub_render, &allow_lua());
         assert_eq!(outcome.evaluated, 0);
         assert!(outcome.denied.is_empty());
-        assert!(matches!(&document.blocks[0], DocumentBlock::CodeBlock { .. }));
+        assert!(matches!(&document.blocks[0], Block::CodeBlock { .. }));
     }
 }
