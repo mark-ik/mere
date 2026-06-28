@@ -267,6 +267,27 @@ impl Graph {
         true
     }
 
+    /// Append a [`NodeDerivation`](crate::types::NodeDerivation) to `key`'s
+    /// provenance record — e.g. a harvested link node that was `ExtractedFrom`
+    /// its source page (capture plan C3). Idempotent: a duplicate (same sub-kind
+    /// + source) is not re-added. Returns whether it was added. Same-graph
+    /// derivations are recorded after the fact here; cross-graph ones ride node
+    /// creation via `copy_node_from`.
+    pub fn record_derivation(
+        &mut self,
+        key: NodeKey,
+        derivation: crate::types::NodeDerivation,
+    ) -> bool {
+        let Some(node) = self.inner.node_weight_mut(key) else {
+            return false;
+        };
+        if node.derivations.contains(&derivation) {
+            return false;
+        }
+        node.derivations.push(derivation);
+        true
+    }
+
     /// Remove all classification records matching `(scheme, value)`.
     ///
     /// Returns `true` if at least one record was removed.

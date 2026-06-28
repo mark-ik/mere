@@ -3,11 +3,14 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 #[cfg(not(target_arch = "wasm32"))]
-use kernel::graph::{EdgeAssertion, Graph, NodeKey, predicate_iri, sub_kind_from_iri};
+use kernel::graph::{
+    EdgeAssertion, Graph, NodeKey, ProvenanceSubKind, SemanticSubKind, predicate_iri,
+    sub_kind_from_iri,
+};
 #[cfg(not(target_arch = "wasm32"))]
 use kernel::types::{
     ClassificationProvenance, ClassificationScheme, ClassificationStatus, NodeClassification,
-    NodeProperty,
+    NodeDerivation, NodeProperty,
 };
 
 use super::GraphContribution;
@@ -103,7 +106,7 @@ pub fn apply_contribution(graph: &mut Graph, contribution: &GraphContribution) -
         };
         let asserted = if let Some(sub_kind) = sub_kind_from_iri(&edge.predicate) {
             // Recognized: typed Semantic edge + its canonical predicate IRI.
-            graph
+            let semantic_ok = graph
                 .assert_relation(
                     from,
                     to,
@@ -118,7 +121,25 @@ pub fn apply_contribution(graph: &mut Graph, contribution: &GraphContribution) -
                         payload.set_semantic_predicate(Some(predicate_iri(sub_kind).to_string()));
                     }
                 })
-                .is_some()
+                .is_some();
+            // A harvested hyperlink also records derivation provenance on the
+            // target: it was `ExtractedFrom` the source page (capture plan C3).
+            // Recorded as a node derivation (like cross-graph `CopiedFrom`), so it
+            // feeds the provenance trail without polluting the link graph's
+            // out-edges — a channel distinct from the `Hyperlink` semantic edge.
+            if sub_kind == SemanticSubKind::Hyperlink {
+                if let Some(source_node) = graph.get_node(from).map(|n| n.id.to_string()) {
+                    graph.record_derivation(
+                        to,
+                        NodeDerivation {
+                            sub_kind: ProvenanceSubKind::ExtractedFrom,
+                            source_node,
+                            source_graph: None,
+                        },
+                    );
+                }
+            }
+            semantic_ok
         } else {
             // Unrecognized: an open-predicate Semantic edge (raw IRI).
             graph

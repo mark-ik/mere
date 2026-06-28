@@ -130,6 +130,42 @@ fn apply_materializes_recognized_and_raw_edges() {
     );
 }
 
+#[test]
+fn a_harvested_hyperlink_records_extracted_from_provenance_on_the_target() {
+    use kernel::graph::{Graph, ProvenanceSubKind};
+
+    // The shape a materialize / crawl contribution carries: a source page
+    // linking to a target (capture plan C3).
+    let contribution = GraphContribution {
+        nodes: vec![
+            NodeContribution::new("https://src.test/"),
+            NodeContribution::new("https://dst.test/"),
+        ],
+        edges: vec![EdgeContribution {
+            subject: "https://src.test/".to_string(),
+            predicate: "https://mere.computer/ns/rel#hyperlink".to_string(),
+            object: "https://dst.test/".to_string(),
+        }],
+    };
+    let mut graph = Graph::new();
+    apply_contribution(&mut graph, &contribution);
+
+    let (_, src) = graph.get_node_by_url("https://src.test/").expect("source node");
+    let (_, dst) = graph.get_node_by_url("https://dst.test/").expect("target node");
+
+    // The target names the page it was extracted from; the source carries none.
+    assert!(src.derivations.is_empty(), "the source page is not derived");
+    assert_eq!(dst.derivations.len(), 1, "the target carries one derivation");
+    let d = &dst.derivations[0];
+    assert_eq!(d.sub_kind, ProvenanceSubKind::ExtractedFrom);
+    assert_eq!(
+        d.source_node,
+        src.id.to_string(),
+        "the derivation names the source node"
+    );
+    assert_eq!(d.source_graph, None, "same-graph derivation");
+}
+
 const REMOTE_DOC: &[u8] = br#"{
   "@context": "https://ctx.test/v1",
   "@id": "https://a.test/",

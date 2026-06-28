@@ -416,11 +416,13 @@ fn route_document_engine(
         content_type: content_type.map(str::to_string),
         pinned_engine: None,
     };
-    policy
+    let engine_id = policy
         .route_filtered(&request, |id| {
             registry.contains(id) || id == inker::routing::ENGINE_SERVAL_WEB
         })
-        .engine_id
+        .engine_id;
+    tracing::info!(target: "meerkat", %url, content_type = ?content_type, %engine_id, "route_document_engine TEMP probe");
+    engine_id
 }
 
 /// Dispatch Ready content to the document engine `id` (a registered nematic
