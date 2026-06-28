@@ -173,6 +173,7 @@ mod tests {
             url: format!("https://{id}.example"),
             cached_host: None,
             title: id.to_string(),
+            body: None,
             tags: Vec::new(),
             tag_presentation: Default::default(),
             import_provenance: Vec::new(),
