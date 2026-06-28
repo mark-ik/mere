@@ -285,7 +285,6 @@ impl WindowCtx<'_> {
         // (the omnibar's suggestion refresh, its Enter-submits) leaks onto another.
         // A key with no focused field is ignored: the chrome owns the keyboard; the
         // orrery / workbench are pointer-driven.
-        tracing::info!(target: "meerkat", key = ?key, omnibar_focused = self.omnibar_focused(), focus = ?self.view.runner.focus(), toolbar = ?self.input_under_class("toolbar"), suggest_open = !self.view.chrome().suggest.is_empty(), "KEY DISPATCH probe");
         if self.comms_input_focused() {
             self.on_comms_key(key);
         } else if self.omnibar_focused() {
