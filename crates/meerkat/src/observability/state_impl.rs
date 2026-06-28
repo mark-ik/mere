@@ -315,14 +315,20 @@ impl HostObservability {
             return;
         }
         self.a11y = snapshot;
-        self.record_diagnostic(
-            "meerkat.a11y.tree_built",
-            Severity::Info,
-            format!(
-                "surfaces={};degraded={}",
-                self.a11y.surfaces, self.a11y.degraded
-            ),
-        );
+        // The a11y *state* has its own Accessibility section in the apparatus, so a healthy
+        // per-interaction rebuild (focus move, pane toggle, nav) needn't also land in the general
+        // diagnostics stream — it only crowds out the browsing pulse (fetch / layout / faults) in
+        // the recent window. Only a *degraded* tree is a fault worth a diagnostic, logged at Warn.
+        if self.a11y.degraded > 0 {
+            self.record_diagnostic(
+                "meerkat.a11y.tree_built",
+                Severity::Warn,
+                format!(
+                    "surfaces={};degraded={}",
+                    self.a11y.surfaces, self.a11y.degraded
+                ),
+            );
+        }
     }
 
     pub(crate) fn snapshot(&self) -> ObservabilitySnapshot {
@@ -446,5 +452,29 @@ mod tests {
             "no messaging frame leaks through: {}",
             rec.message,
         );
+    }
+
+    #[test]
+    fn a11y_snapshot_logs_a_diagnostic_only_when_degraded() {
+        let mut obs = HostObservability::new();
+        // A healthy rebuild updates the Accessibility state but stays out of the diagnostics
+        // stream, so it can't crowd out the browsing pulse.
+        obs.set_a11y_snapshot(A11ySnapshot { surfaces: 4, degraded: 0, ..Default::default() });
+        assert!(
+            obs.snapshot()
+                .diagnostics
+                .iter()
+                .all(|d| d.channel != "meerkat.a11y.tree_built"),
+            "a healthy a11y rebuild logs no diagnostic",
+        );
+        // A degraded tree is a real fault and surfaces, at Warn.
+        obs.set_a11y_snapshot(A11ySnapshot { surfaces: 4, degraded: 2, ..Default::default() });
+        let rec = obs
+            .snapshot()
+            .diagnostics
+            .into_iter()
+            .find(|d| d.channel == "meerkat.a11y.tree_built")
+            .expect("a degraded a11y tree logs a diagnostic");
+        assert!(matches!(rec.severity, Severity::Warn), "degraded a11y logs at Warn");
     }
 }
