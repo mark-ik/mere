@@ -105,9 +105,16 @@ launch, and both subsystems that depend on it fail downstream:
 - `meerkat::comms_host` (warn): `murm cabal unavailable; misfin only` (same root error)
 
 So p2p sync is off and comms degrades to misfin-only on every launch, silently, until you read the
-ring. Root cause TBD (a DB migration on a worker thread that panics or exits). This is exactly the
-class of fault the reach + quality work exists to make visible; the fix is its own task, out of scope
-for this plan (likely the address-book / peer-store migration path). Recorded here so it is not lost.
+ring. This is exactly the class of fault the reach + quality work exists to make visible; the fix is
+its own task, out of scope for this plan. Recorded here so it is not lost.
+
+**Located (2026-06-29):** `murm/transport/p2panda_transport.rs:258`, where
+`AddressBook::builder()...build()` (p2panda's redb-backed node address book) fails. The inner
+"while executing migrations: attempted to communicate with a crashed background worker" is redb's:
+its background worker panicked during an AddressBook schema migration. Most likely a stale on-disk
+AddressBook from an older p2panda / redb, or a version skew. Both `meerkat::comms_host` (`:410`) and
+`meerkat::sync` (`:125`) wrap it as "transport bind", and both p2p sync and the murm cabal share this
+one AddressBook, which is why they fail together.
 
 ---
 
