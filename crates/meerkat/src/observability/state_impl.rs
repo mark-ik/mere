@@ -373,6 +373,78 @@ impl HostObservability {
             );
         }
     }
+
+    /// A full text dump of the diagnostics ring: every buffer up to capacity, oldest first,
+    /// each line tagged with how long ago it was recorded. The dev-loop escape hatch writes
+    /// this to a file so the captured pulse + faults can be read or shared outside the
+    /// Apparatus pane (which only shows a small recent window).
+    pub(crate) fn dump_report(&self) -> String {
+        use std::fmt::Write as _;
+        let mut out = String::new();
+        let ago = |at: &Instant| at.elapsed().as_millis();
+        let _ = writeln!(
+            out,
+            "# meerkat diagnostics ring: {} diagnostics, {} traces, {} actors, {} probes, {} notifications",
+            self.diagnostics.len(),
+            self.traces.len(),
+            self.actors.len(),
+            self.probes.len(),
+            self.notifications.len(),
+        );
+        let _ = writeln!(out, "\n## Diagnostics ({})", self.diagnostics.len());
+        for d in &self.diagnostics {
+            let _ = writeln!(
+                out,
+                "  [{}] {}: {}  ({}ms ago)",
+                d.severity.label(), d.channel, d.message, ago(&d.at),
+            );
+        }
+        let _ = writeln!(out, "\n## Traces ({})", self.traces.len());
+        for t in &self.traces {
+            let _ = writeln!(
+                out,
+                "  {} {} {}  ({}ms ago)",
+                t.name, t.event, t.detail.as_deref().unwrap_or(""), ago(&t.at),
+            );
+        }
+        let _ = writeln!(out, "\n## Actors ({})", self.actors.len());
+        for a in &self.actors {
+            let _ = writeln!(
+                out,
+                "  {} {} {}  ({}ms ago)",
+                a.actor, a.event, a.detail.as_deref().unwrap_or(""), ago(&a.at),
+            );
+        }
+        let _ = writeln!(out, "\n## Probes ({})", self.probes.len());
+        for p in &self.probes {
+            let _ = writeln!(out, "  {} [{}] {}  ({}ms ago)", p.name, p.status, p.detail, ago(&p.at));
+        }
+        let _ = writeln!(out, "\n## Notifications ({})", self.notifications.len());
+        for n in &self.notifications {
+            let _ = writeln!(
+                out,
+                "  [{}] {}: {}  ({}ms ago)",
+                n.severity.label(), n.title, n.body, ago(&n.at),
+            );
+        }
+        if !self.invariant_violations.is_empty() {
+            let _ = writeln!(out, "\n## Invariant violations ({})", self.invariant_violations.len());
+            for v in &self.invariant_violations {
+                let _ = writeln!(out, "  {v}");
+            }
+        }
+        let _ = writeln!(
+            out,
+            "\n## Accessibility: surfaces={} nodes={} degraded={} missing_labels={} missing_bounds={} duplicate_ids={}",
+            self.a11y.surfaces,
+            self.a11y.nodes,
+            self.a11y.degraded,
+            self.a11y.missing_labels,
+            self.a11y.missing_bounds,
+            self.a11y.duplicate_ids,
+        );
+        out
+    }
 }
 
 #[cfg(test)]

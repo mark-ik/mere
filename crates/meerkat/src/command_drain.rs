@@ -68,6 +68,31 @@ fn format_sparql_rows(rows: &linked_data::query::QueryRows) -> String {
 }
 
 impl WindowCtx<'_> {
+    /// Dev-loop ring-dump escape hatch (Ctrl+Shift+D): write the full diagnostics ring to
+    /// `<mere_root>/diagnostics-dump.txt` and surface the path as a toast. The Apparatus pane
+    /// only shows a small recent window; this is the captured pulse + faults in full, readable
+    /// or shareable outside the UI (and visible on stderr for a terminal dev loop).
+    pub(super) fn dump_diagnostics(&mut self) {
+        let report = self.shared.observability.dump_report();
+        let path = self.shared.session.mere_root.join("diagnostics-dump.txt");
+        match std::fs::write(&path, report.as_bytes()) {
+            Ok(()) => {
+                let where_ = path.display().to_string();
+                eprintln!("[meerkat] diagnostics ring dumped to {where_}");
+                self.shared
+                    .observability
+                    .record_notification(Severity::Info, "Diagnostics dumped", where_, true);
+            }
+            Err(err) => self.shared.observability.record_notification(
+                Severity::Warn,
+                "Diagnostics dump failed",
+                err.to_string(),
+                true,
+            ),
+        }
+        self.view.request_redraw();
+    }
+
     /// Execute a pending "connect to peer" request the chrome queued (S5.1): take
     /// the ticket the verb captured from the address bar and drive the sync actor.
     /// The chrome records the intent; this is the host executing it.

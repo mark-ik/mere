@@ -193,6 +193,15 @@ impl WindowCtx<'_> {
             self.toggle_pane(PaneContent::Apparatus);
             return;
         }
+        // Ctrl+Shift+D dumps the full diagnostics ring to `<mere_root>/diagnostics-dump.txt`
+        // (dev-loop escape hatch); the Apparatus pane only shows a small recent window.
+        if self.view.modifiers.ctrl
+            && self.view.modifiers.shift
+            && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("d"))
+        {
+            self.dump_diagnostics();
+            return;
+        }
         if self.view.modifiers.ctrl
             && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("g"))
         {
