@@ -1,7 +1,10 @@
 # Tracing Reach and Quality Plan
 
 **Date**: 2026-06-26
-**Status**: Planning. No code yet.
+**Status**: Active. T1 + T1.5 (reach gate) landed; T2 substrate-half landed; T3 leaf-library passes
+(netfetcher / netrender / errand / serval-layout) + T5 dev-loop ring-dump + trace-event-quality
+landed. Remaining: T2 call-site half, T3 in-tree engines + graph kernel (+ the larger scry / weld /
+graft pass), T4 correlation, T5 sampling + error-chain capture.
 **Spun out of**: [system diagnostics and accessibility plan](2026-06-08_system_diagnostics_and_accessibility_plan.md)
 (the observability spine, Apparatus, AccessKit, and the typed agent harness, D0-D8, are
 substantially landed). This plan is the follow-on: extend diagnostic/trace **reach** across the
@@ -91,6 +94,21 @@ subsystem's `run(commands, emitter)` loop on its own thread / a pool worker. Lif
 per-command spans belong around that loop (in armillary, and at the call sites that build the
 content / fetch / sync / comms actors).
 
+### Startup fault surfaced by the ring-dump (2026-06-29)
+
+The first real use of the ring-dump (T5) immediately surfaced a startup fault that was previously
+invisible. The **address-book store crashes a background worker while executing migrations** at
+launch, and both subsystems that depend on it fail downstream:
+
+- `meerkat::sync` (warn): `p2p sync disabled: transport bind: backend error: address book: while
+  executing migrations: attempted to communicate with a crashed background worker`
+- `meerkat::comms_host` (warn): `murm cabal unavailable; misfin only` (same root error)
+
+So p2p sync is off and comms degrades to misfin-only on every launch, silently, until you read the
+ring. Root cause TBD (a DB migration on a worker thread that panics or exits). This is exactly the
+class of fault the reach + quality work exists to make visible; the fix is its own task, out of scope
+for this plan (likely the address-book / peer-store migration path). Recorded here so it is not lost.
+
 ---
 
 ## Goals
@@ -172,6 +190,21 @@ the call-site half lands the per-operation detail.)
 
 ### T3 - Engine + content passes
 
+**Leaf libraries DONE (2026-06-28).** The four sibling libraries on the load path now emit a per-op
+`debug` completion + `warn` fault, runtime-verified end-to-end (headed) and committed in their own
+repos: `netfetcher` fetch (`url`/`status`/`elapsed_ms`, `65721fd`), `netrender` paint
+(`op_count`/`viewport`/`scale`, per-frame, `6820eed95`), `errand` smolweb fetch
+(`scheme`/`status`/`byte_len`, `4c82b5f`), `serval-layout` `lay_out_content`
+(`fragment_count`/`image_count`/`elapsed_ms`, `868abf3`). The bridge allowlist gained
+`netfetcher`/`netrender`/`errand`, and the Apparatus ring filter became an `EnvFilter`
+(`info,netfetcher=debug,errand=debug,serval_layout=debug`, `f4af6d8`) so per-op completions reach the
+ring while `netrender`'s per-frame `debug` stays out (only its faults pass). This is the
+level/sampling discipline T5 calls for, applied at the ring rather than per-crate.
+
+Remaining: the in-tree engines (`verso-scry` / `verso-serval` / `inker`) and `graph` kernel spans
+below; the external web engines `scry` / `weld` / `graft` are the larger follow-on (same per-op +
+fault shape, plus the engine-neutral `SurfaceFrame` seam).
+
 - `verso-scry` / `verso-serval` / `inker`: cascade / layout / paint (and fetch / decode) spans with
   timing. This doubles as the per-pass perf signal the parallelism work will want.
 - `graph` kernel: mutation / snapshot / query spans at `debug`, sampled.
@@ -188,14 +221,26 @@ Done when a single page interaction reads as one ordered causal chain in Apparat
 
 ### T5 - Quality polish + dev-loop
 
-- Per-channel sampling for the hot paths (engine passes, graph mutations) via the registry.
-- Error-chain capture on `failed` events.
-- A dev-loop escape hatch: dump the observability ring to stdout/file on demand (a key, a CLI flag,
-  or an agent-harness call), so adding a `tracing::info!` + rebuild stops being the only way to read
-  runtime state. (This pass kept hitting that loop.)
+- **Dev-loop escape hatch: DONE (2026-06-28, `0e03c91`).** Ctrl+Shift+D writes the full ring (every
+  buffer up to capacity, far past the pane's recent window) to `<mere_root>/diagnostics-dump.txt`,
+  toasts the path, and echoes it to stderr. `HostObservability::dump_report` formats
+  diagnostics / traces / actors / probes / notifications / invariants + the a11y summary. This is what
+  surfaced the startup fault in Findings.
+- **Trace events modeled as log lines, not message-receipts: DONE (2026-06-29, `633dc8a`).**
+  `register-diagnostics` gained `DiagnosticEvent::Event { target, level, message, fields }`; the
+  bridge emits it instead of overloading `MessageReceivedStructured` (which had forced a synthetic
+  channel + fake `latency_us: 0`). The consumer maps `level -> severity` (so a `warn`/`error` fault
+  reads as a fault, not flattened to `info`) and renders `target: message (fields)`. A step toward
+  quality #2 (typed channels) short of per-channel schemas.
+- **Level discipline (partial): DONE.** a11y tree rebuilds log a diagnostic only when *degraded* (the
+  healthy per-interaction rebuild was crowding the recent window; `d17619b`); the ring's per-target
+  `=debug` opt-in (T3) keeps per-frame paint out of the ring.
+- Remaining: per-channel sampling via the registry for the hot paths; full error-chain capture on
+  `failed` events (today only the top-line message).
 
 Done when sustained browsing does not flood the ring, failures carry their cause, and the ring is
-dumpable without a rebuild.
+dumpable without a rebuild. (Dumpable plus level-discipline for current sources: done; registry
+sampling and error-chain capture: open.)
 
 ---
 
@@ -278,3 +323,16 @@ component the later slices instrument.
   proves an armillary event now reaches the ring while the console stays scoped (test committed
   `c8c4f19`; the ~4-line `main.rs` hunk rides the concurrent switcher refactor in that file rather
   than being carved out). This makes T1/T2/T3 actually observable. Leftover: open decision #4 below.
+- 2026-06-28/29: **T3 leaf libraries + T5 dev-loop + trace-event quality landed.** Instrumented the
+  four load-path sibling libraries (netfetcher / netrender / errand / serval-layout) with a per-op
+  `debug` completion + `warn` fault, runtime-verified headed (example.com fetch then layout pulse,
+  plus a bad-URL fault, all in the Apparatus pane under default RUST_LOG); committed in their own
+  repos (`65721fd` / `6820eed95` / `4c82b5f` / `868abf3`). Made the Apparatus ring an `EnvFilter` so
+  per-op `debug` completions reach it without per-frame flood (`f4af6d8`). Added
+  `DiagnosticEvent::Event` so trace events carry real severity and read as `target: message (fields)`
+  rather than fake message-receipts (`633dc8a`), de-noised a11y to degraded-only (`d17619b`), and
+  shipped the Ctrl+Shift+D ring-dump (`0e03c91`). Headed verification of all this also surfaced (and
+  fixed, separately) two unrelated chrome bugs: window keyboard-focus-on-show (`7f984ff`) and the
+  omnibar dropdown stacking over the shellbar (`19fd35d`); plus the address-book startup fault now in
+  Findings. Next: T2 call-site half, or T3 in-tree engines + graph kernel, or the scry / weld / graft
+  pass.
