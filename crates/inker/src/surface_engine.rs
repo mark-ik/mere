@@ -100,12 +100,26 @@ pub enum SurfaceSyncHandle {
 }
 
 /// A composited frame from a surface producer.
+///
+/// `texture` is a raw platform handle, not a `wgpu::Texture` — the host imports it
+/// on its own device, which is what keeps inker wgpu-free. Because importing a
+/// shared handle every frame is wasteful (and some producers, e.g. WebView2, reuse
+/// one allocation and overwrite it in place), [`resource_epoch`](Self::resource_epoch)
+/// lets the host import once and re-sample.
 #[derive(Debug)]
 pub struct SurfaceFrame {
     pub texture: NativeTextureHandle,
     pub sync: SurfaceSyncHandle,
     pub width: u32,
     pub height: u32,
+    /// Monotonic generation of the underlying GPU allocation. Bumps when the
+    /// producer (re)allocates the shared resource (first frame, resize, realloc);
+    /// stays constant while it overwrites the same allocation in place. The host's
+    /// import cache keys on this: re-import (releasing the previous handle) when it
+    /// changes, re-sample the already-imported texture when it doesn't. This is the
+    /// import-once signal a type-erased producer would otherwise lose (the reason
+    /// scrying once held its concrete producer outside the registry).
+    pub resource_epoch: u64,
 }
 
 // ── Input vocabulary ───────────────────────────────────────────────────────

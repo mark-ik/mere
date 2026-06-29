@@ -73,6 +73,7 @@ fn map_native_frame(frame: ScryingNativeFrame) -> Option<SurfaceFrame> {
                 sync: SurfaceSyncHandle::None,
                 width: tex.size.width,
                 height: tex.size.height,
+                resource_epoch: tex.generation,
             })
         }
         ScryingNativeFrame::MetalTextureRef(tex) => {
@@ -85,6 +86,7 @@ fn map_native_frame(frame: ScryingNativeFrame) -> Option<SurfaceFrame> {
                 sync: SurfaceSyncHandle::None,
                 width: tex.size.width,
                 height: tex.size.height,
+                resource_epoch: tex.generation,
             })
         }
         ScryingNativeFrame::DmaBufImage(img) => {
@@ -94,6 +96,7 @@ fn map_native_frame(frame: ScryingNativeFrame) -> Option<SurfaceFrame> {
                 sync: SurfaceSyncHandle::None,
                 width: img.size.width,
                 height: img.size.height,
+                resource_epoch: img.generation,
             })
         }
         // `NativeFrame` is `#[non_exhaustive]`; future variants drop until mapped.

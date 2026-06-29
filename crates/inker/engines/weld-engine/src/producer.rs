@@ -23,12 +23,12 @@ pub struct WeldFrame {
     pub sync: SurfaceSyncHandle,
     pub width: u32,
     pub height: u32,
-    /// `true` when weld (re)allocated the owned shared texture (first frame /
-    /// resize) and the host must (re)import it; `false` when it overwrote the same
-    /// allocation. The handle-handoff metadata `inker::SurfaceFrame` drops,
-    /// preserved here for the host's surface pool. Reach it via
-    /// [`WeldProducer::inner_mut`].
-    pub is_new: bool,
+    /// Monotonic generation of the owned shared allocation (from welding's
+    /// `NativeFrame::generation`): bumps when weld (re)allocates (first frame /
+    /// resize), constant while it overwrites the same allocation. Maps straight to
+    /// `inker::SurfaceFrame::resource_epoch`, so the host's import cache re-imports
+    /// only when it changes.
+    pub resource_epoch: u64,
 }
 
 /// The host-implemented CEF composite: a `welding::CefRuntime` + a
@@ -91,14 +91,6 @@ impl WeldProducer {
     pub fn new(inner: Box<dyn WeldSurface>) -> Self {
         Self { inner }
     }
-
-    /// Borrow the underlying CEF surface for the typed [`WeldFrame`] (with
-    /// `is_new`) that `SurfaceProducer::acquire_frame` flattens away. The host's
-    /// surface pool uses this for the import-once / resample protocol. Mirrors
-    /// `ScryingProducer::inner_mut`.
-    pub fn inner_mut(&mut self) -> &mut dyn WeldSurface {
-        self.inner.as_mut()
-    }
 }
 
 impl SurfaceProducer for WeldProducer {
@@ -113,13 +105,14 @@ impl SurfaceProducer for WeldProducer {
     }
 
     fn acquire_frame(&mut self) -> Result<Option<SurfaceFrame>, SurfaceError> {
-        // Flattens WeldFrame -> SurfaceFrame, dropping `is_new`; the host pool
-        // reads it via `inner_mut`.
+        // WeldFrame maps 1:1 onto SurfaceFrame now that the contract carries
+        // `resource_epoch` (the host's import cache reads it directly).
         Ok(self.inner.acquire_frame()?.map(|f| SurfaceFrame {
             texture: f.texture,
             sync: f.sync,
             width: f.width,
             height: f.height,
+            resource_epoch: f.resource_epoch,
         }))
     }
 

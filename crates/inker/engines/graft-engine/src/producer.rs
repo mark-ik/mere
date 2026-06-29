@@ -12,8 +12,8 @@ use inker::{
     WebMessage,
 };
 
-/// A frame produced by a [`GraftSurface`]: the shared GPU texture handle the
-/// host imports, plus the import-once metadata that `inker::SurfaceFrame` omits.
+/// A frame produced by a [`GraftSurface`]: the shared GPU texture handle the host
+/// imports, plus the `resource_epoch` it maps straight onto `inker::SurfaceFrame`.
 pub struct GraftFrame {
     /// The platform shared-texture handle (Windows: a DX12 shared HANDLE from the
     /// adapter's `current_dx12_shared_texture()`; Linux: a DMA-BUF fd; macOS: an
@@ -22,14 +22,12 @@ pub struct GraftFrame {
     pub sync: SurfaceSyncHandle,
     pub width: u32,
     pub height: u32,
-    /// `true` when graft (re)allocated the shared texture (first frame / resize /
-    /// context restart) and the host must (re)import it; `false` when it
-    /// overwrote the same allocation and the host should keep sampling its
-    /// existing import. This is the handle-handoff metadata `inker::SurfaceFrame`
-    /// drops; it is preserved here for the host's surface pool (see the
-    /// engine-picker plan's frame-transport option (a)). Reach it via
-    /// [`GraftProducer::inner_mut`].
-    pub is_new: bool,
+    /// Monotonic generation of the underlying shared allocation (from grafting's
+    /// `ImportedTexture::generation`): bumps on (re)allocation (first frame / resize
+    /// / context restart), constant while graft overwrites the same allocation in
+    /// place. Maps straight to `inker::SurfaceFrame::resource_epoch`, so the host's
+    /// import cache re-imports only when it changes — no escape hatch needed.
+    pub resource_epoch: u64,
 }
 
 /// The host-implemented graft composite: a `servo::Servo` instance + `WebView` +
@@ -88,14 +86,6 @@ impl GraftProducer {
     pub fn new(inner: Box<dyn GraftSurface>) -> Self {
         Self { inner }
     }
-
-    /// Borrow the underlying graft surface for the typed [`GraftFrame`] (with
-    /// `is_new`) that `SurfaceProducer::acquire_frame` flattens to a bare
-    /// `SurfaceFrame`. The host's surface pool uses this for the import-once /
-    /// resample protocol. Mirrors `ScryingProducer::inner_mut`.
-    pub fn inner_mut(&mut self) -> &mut dyn GraftSurface {
-        self.inner.as_mut()
-    }
 }
 
 impl SurfaceProducer for GraftProducer {
@@ -111,13 +101,14 @@ impl SurfaceProducer for GraftProducer {
     }
 
     fn acquire_frame(&mut self) -> Result<Option<SurfaceFrame>, SurfaceError> {
-        // Flattens GraftFrame -> SurfaceFrame, dropping `is_new` (the inker
-        // contract has no slot for it); the host pool reads it via `inner_mut`.
+        // GraftFrame maps 1:1 onto SurfaceFrame now that the contract carries
+        // `resource_epoch` (the host's import cache reads it directly).
         Ok(self.inner.acquire_frame()?.map(|f| SurfaceFrame {
             texture: f.texture,
             sync: f.sync,
             width: f.width,
             height: f.height,
+            resource_epoch: f.resource_epoch,
         }))
     }
 
