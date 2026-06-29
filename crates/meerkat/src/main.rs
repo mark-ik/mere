@@ -611,9 +611,10 @@ fn main() {
     // lifecycle events (meerkat/armillary/… at info) and every `warn`/`error` fault. The per-target
     // `=debug` opt-ins pull in the sibling libraries' per-operation *completion* traces (a fetch
     // finished, a page laid out): those libs log them at `debug` per conventional library hygiene,
-    // so the ring opts in here rather than forcing the libs up to info. `netrender` is deliberately
-    // left at the info floor — its per-frame `frame rendered` debug would flood the ring, so only its
-    // faults reach it. The layer's `interesting_target` still scopes all of this to first-party.
+    // so the ring opts in here rather than forcing the libs up to info. `netrender` stays at the info
+    // floor so its per-frame `frame rendered` debug does not flood the ring (only its faults pass).
+    // The layer's `interesting_target` scopes which targets it actually mirrors into the ring, and
+    // its `on_enter` records span starts idempotently (a re-entrant span must not double-insert).
     let ring_filter = tracing_subscriber::EnvFilter::new(
         "info,netfetcher=debug,errand=debug,serval_layout=debug",
     );

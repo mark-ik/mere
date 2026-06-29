@@ -44,7 +44,18 @@ where
         if !interesting_target(metadata.target()) {
             return;
         }
-        span.extensions_mut().insert(SpanStart(Instant::now()));
+        // A span can be *re-entered* (a future polled repeatedly, a re-entrant guard), so `on_enter`
+        // fires more than once for the same span. Record the start on the first enter only:
+        // `ExtensionsMut::insert` **panics** on a duplicate, and that panic poisons the registry's
+        // per-span RwLock and cascades into a process-wide crash on busy re-entrant spans. It took
+        // down the p2panda address-book SQLite migration (entered/exited per statement on sqlx's
+        // worker threads), silently disabling p2p sync + the murm cabal.
+        {
+            let mut extensions = span.extensions_mut();
+            if extensions.get_mut::<SpanStart>().is_none() {
+                extensions.insert(SpanStart(Instant::now()));
+            }
+        }
         self.emit(DiagnosticEvent::Span {
             name: metadata.name(),
             phase: SpanPhase::Enter,
@@ -354,5 +365,21 @@ mod tests {
             fields.iter().all(|f| f.name != "field"),
             "no field collapsed to the retired whitelist placeholder",
         );
+    }
+
+    #[test]
+    fn re_entering_a_span_does_not_double_insert_and_panic() {
+        let (tx, _rx) = mpsc::channel();
+        let subscriber = tracing_subscriber::registry().with(ApparatusTracingLayer::new(tx));
+        tracing::subscriber::with_default(subscriber, || {
+            let span = tracing::info_span!(target: "meerkat", "reentrant");
+            // Hold two enter guards on the SAME span (a future polled within its own span, a
+            // re-entrant guard): `on_enter` fires twice with no exit between. Without the idempotent
+            // `SpanStart` insert this panicked on the duplicate extension, poisoning the registry
+            // RwLock and crashing the process (it took down sync + cabal via sqlx's worker threads).
+            let _enter_once = span.enter();
+            let _enter_twice = span.enter();
+            // Reaching here without a panic is the assertion.
+        });
     }
 }
