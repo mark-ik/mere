@@ -231,6 +231,59 @@ pub struct WebMessage {
     pub payload: String,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SameSite {
+    Strict,
+    Lax,
+    None,
+}
+
+/// HTTP cookie payload used at the generic web-surface boundary.
+///
+/// This mirrors the engine-agnostic verso cookie shape so a compatibility flip
+/// does not lose cookie metadata before it reaches a concrete web backend.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Cookie {
+    pub name: String,
+    pub value: String,
+    pub domain: String,
+    pub path: String,
+    pub secure: bool,
+    pub http_only: bool,
+    pub same_site: Option<SameSite>,
+    pub expires: Option<f64>,
+    pub partitioned: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WebFeatureStatus {
+    Supported,
+    Unsupported,
+}
+
+/// Runtime feature descriptor for web-surface capabilities that vary by
+/// backend instance rather than by the Rust type alone.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WebSurfaceCapabilities {
+    pub find_in_page: WebFeatureStatus,
+    pub pdf: WebFeatureStatus,
+    pub downloads: WebFeatureStatus,
+    pub drag_drop: WebFeatureStatus,
+    pub ime_observability: WebFeatureStatus,
+}
+
+impl Default for WebSurfaceCapabilities {
+    fn default() -> Self {
+        Self {
+            find_in_page: WebFeatureStatus::Unsupported,
+            pdf: WebFeatureStatus::Unsupported,
+            downloads: WebFeatureStatus::Unsupported,
+            drag_drop: WebFeatureStatus::Unsupported,
+            ime_observability: WebFeatureStatus::Unsupported,
+        }
+    }
+}
+
 // ── Settings ───────────────────────────────────────────────────────────────
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -296,6 +349,36 @@ pub trait SurfaceProducer {
     // ── Frame acquisition ────────────────────────────────────────────────────
     fn acquire_frame(&mut self) -> Result<Option<SurfaceFrame>, SurfaceError>;
 
+    // ── Input ────────────────────────────────────────────────────────────────
+    fn send_mouse_input(&mut self, ev: MouseEvent) -> Result<(), SurfaceError>;
+    fn send_pointer_input(&mut self, ev: PointerEvent) -> Result<(), SurfaceError>;
+    fn send_keyboard_input(&mut self, ev: KeyboardEvent) -> Result<(), SurfaceError>;
+    fn move_focus(&mut self, reason: FocusReason) -> Result<(), SurfaceError>;
+
+    // ── Events ───────────────────────────────────────────────────────────────
+    fn poll_cursor_shape(&mut self) -> Option<CursorShape>;
+
+    // ── Settings ─────────────────────────────────────────────────────────────
+    fn apply_settings(&mut self, settings: &SurfaceSettings) -> Result<(), SurfaceError>;
+
+    // ── Snapshot ─────────────────────────────────────────────────────────────
+    fn capture_snapshot_png(&mut self) -> Result<Vec<u8>, SurfaceError>;
+
+    // ── Optional web control plane ───────────────────────────────────────────
+    fn as_web_surface(&mut self) -> Option<&mut dyn WebSurface> {
+        None
+    }
+}
+
+/// Web-specific control plane layered over the raw surface transport.
+///
+/// Navigation methods start work and return promptly. Completion is observed by
+/// polling navigation events from the driving frame loop.
+pub trait WebSurface: SurfaceProducer {
+    fn capabilities(&self) -> WebSurfaceCapabilities {
+        WebSurfaceCapabilities::default()
+    }
+
     // ── Navigation ───────────────────────────────────────────────────────────
     fn navigate_to_url(&mut self, url: &str) -> Result<(), SurfaceError>;
     fn navigate_to_string(&mut self, html: &str) -> Result<(), SurfaceError>;
@@ -306,22 +389,11 @@ pub trait SurfaceProducer {
     fn can_go_back(&self) -> bool;
     fn can_go_forward(&self) -> bool;
 
-    // ── Input ────────────────────────────────────────────────────────────────
-    fn send_mouse_input(&mut self, ev: MouseEvent) -> Result<(), SurfaceError>;
-    fn send_pointer_input(&mut self, ev: PointerEvent) -> Result<(), SurfaceError>;
-    fn send_keyboard_input(&mut self, ev: KeyboardEvent) -> Result<(), SurfaceError>;
-    fn move_focus(&mut self, reason: FocusReason) -> Result<(), SurfaceError>;
-
-    // ── Events ───────────────────────────────────────────────────────────────
+    // ── Session/script/events ────────────────────────────────────────────────
+    fn set_cookie(&mut self, cookie: &Cookie) -> Result<(), SurfaceError>;
+    fn execute_script_with_result(&mut self, script: &str) -> Result<String, SurfaceError>;
     fn poll_navigation_event(&mut self) -> Option<NavigationEvent>;
-    fn poll_cursor_shape(&mut self) -> Option<CursorShape>;
     fn poll_web_message(&mut self) -> Option<WebMessage>;
-
-    // ── Settings ─────────────────────────────────────────────────────────────
-    fn apply_settings(&mut self, settings: &SurfaceSettings) -> Result<(), SurfaceError>;
-
-    // ── Snapshot ─────────────────────────────────────────────────────────────
-    fn capture_snapshot_png(&mut self) -> Result<Vec<u8>, SurfaceError>;
 }
 
 // ── Registry ───────────────────────────────────────────────────────────────
@@ -396,30 +468,6 @@ mod tests {
         fn acquire_frame(&mut self) -> Result<Option<SurfaceFrame>, SurfaceError> {
             Ok(None)
         }
-        fn navigate_to_url(&mut self, _: &str) -> Result<(), SurfaceError> {
-            Ok(())
-        }
-        fn navigate_to_string(&mut self, _: &str) -> Result<(), SurfaceError> {
-            Ok(())
-        }
-        fn reload(&mut self) -> Result<(), SurfaceError> {
-            Ok(())
-        }
-        fn stop(&mut self) -> Result<(), SurfaceError> {
-            Ok(())
-        }
-        fn go_back(&mut self) -> Result<(), SurfaceError> {
-            Ok(())
-        }
-        fn go_forward(&mut self) -> Result<(), SurfaceError> {
-            Ok(())
-        }
-        fn can_go_back(&self) -> bool {
-            false
-        }
-        fn can_go_forward(&self) -> bool {
-            false
-        }
         fn send_mouse_input(&mut self, _: MouseEvent) -> Result<(), SurfaceError> {
             Ok(())
         }
@@ -432,13 +480,7 @@ mod tests {
         fn move_focus(&mut self, _: FocusReason) -> Result<(), SurfaceError> {
             Ok(())
         }
-        fn poll_navigation_event(&mut self) -> Option<NavigationEvent> {
-            None
-        }
         fn poll_cursor_shape(&mut self) -> Option<CursorShape> {
-            None
-        }
-        fn poll_web_message(&mut self) -> Option<WebMessage> {
             None
         }
         fn apply_settings(&mut self, _: &SurfaceSettings) -> Result<(), SurfaceError> {

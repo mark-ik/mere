@@ -62,10 +62,11 @@ pub use statements::{
     LinkStatement, StatementOutcome, apply_link_statements, link_statements, resolve_rel,
 };
 pub use surface_engine::{
-    CursorShape, EngineProfileBinding, FocusReason, KeyboardEvent, KeyboardModifiers, MouseButton,
-    MouseEvent, MouseEventKind, NativeTextureHandle, NavigationEvent, PhysicalPosition,
-    PointerEvent, SurfaceEngine, SurfaceEngineRegistry, SurfaceError, SurfaceFrame,
-    SurfaceProducer, SurfaceSettings, SurfaceSpawnRequest, SurfaceSyncHandle, WebMessage,
+    Cookie, CursorShape, EngineProfileBinding, FocusReason, KeyboardEvent, KeyboardModifiers,
+    MouseButton, MouseEvent, MouseEventKind, NativeTextureHandle, NavigationEvent,
+    PhysicalPosition, PointerEvent, SameSite, SurfaceEngine, SurfaceEngineRegistry, SurfaceError,
+    SurfaceFrame, SurfaceProducer, SurfaceSettings, SurfaceSpawnRequest, SurfaceSyncHandle,
+    WebFeatureStatus, WebMessage, WebSurface, WebSurfaceCapabilities,
 };
 
 /// Crate version.
