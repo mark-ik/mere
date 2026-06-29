@@ -260,8 +260,13 @@ Fragments exist, each owned by a sibling plan; the unifying primitive does not.
   P6.
 - **The object card** is `FocusCardKind::ObjectCard { widgets }`, DOM, in the
   orrery's single focus-card slot (`window_view/mod.rs`). The slot also holds
-  `Snapshot` and `Unvisited`. The live-preview card was retired (`d4375d0`); going
-  live is opening a workbench tile now. Owned by
+  `Snapshot` and `Unvisited`. As of 2026-06-27 the snapshot / unvisited card summons
+  **only on single-node selection** (`selected_members().len() == 1`), so the summon
+  split is explicit: a single selected node → its snapshot card; a multi-node
+  selection → the connections swatch (next bullet). The live-preview card was retired
+  (`d4375d0`) and its remaining vestiges (the snapshot↔live toggle, the
+  promote-to-live paths, the stale "live card" comments) were stripped 2026-06-27;
+  going live is opening a workbench tile now. Owned by
   [object card plan](../implementation_strategy/2026-06-21_object_card_plan.md).
 - **The connections swatch** is unbuilt, marked `TODO(swatch agent)` at
   `render/cards.rs:129`: a multi-node selection (`selected_members().len() > 1`)
