@@ -59,6 +59,14 @@ edge families, tags, and arrangement rules.
   choice, not a hardcode).
 - Whether commit clears `staged` or keeps it for re-commit.
 - The tile-button glyph + staged-state affordance on the card.
+- **Known issue (2026-06-27): the chrome toolbar clips the workbench tile-tab row.**
+  The content band / workbench leaf starts at the measured `toolbar_h`
+  (`pane_geom::content_band`), and the pelt tile-tab strip renders right at that top
+  edge, so it gets pinched between the chrome's bottom and the tile body — the tabs
+  show as a thin sliver in the single-tile case (they read fine with two tiles side by
+  side). Either `toolbar_h` measures short (chrome overlapping the band) or the platen
+  tab strip doesn't reserve its own height; a layout pass over the two is the fix.
+  (Surfaced when knot notes started opening reading tiles.)
 
 ---
 
