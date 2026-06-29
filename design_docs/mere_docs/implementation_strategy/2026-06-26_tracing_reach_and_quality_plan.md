@@ -104,17 +104,28 @@ launch, and both subsystems that depend on it fail downstream:
   executing migrations: attempted to communicate with a crashed background worker`
 - `meerkat::comms_host` (warn): `murm cabal unavailable; misfin only` (same root error)
 
-So p2p sync is off and comms degrades to misfin-only on every launch, silently, until you read the
-ring. This is exactly the class of fault the reach + quality work exists to make visible; the fix is
-its own task, out of scope for this plan. Recorded here so it is not lost.
+So p2p sync was off and comms degraded to misfin-only on every launch, silently, until the ring-dump
+showed it. The twist: this reach + quality work both *revealed* the fault and, it turned out,
+*caused* it.
 
-**Located (2026-06-29):** `murm/transport/p2panda_transport.rs:258`, where
-`AddressBook::builder()...build()` (p2panda's redb-backed node address book) fails. The inner
-"while executing migrations: attempted to communicate with a crashed background worker" is redb's:
-its background worker panicked during an AddressBook schema migration. Most likely a stale on-disk
-AddressBook from an older p2panda / redb, or a version skew. Both `meerkat::comms_host` (`:410`) and
-`meerkat::sync` (`:125`) wrap it as "transport bind", and both p2p sync and the murm cabal share this
-one AddressBook, which is why they fail together.
+**Root cause + FIX (2026-06-29, `6df8fb2`).** Not redb, and not stale data (an earlier note here
+guessed both; both were wrong). The address book is p2panda-net's **in-memory SQLite** store
+(`SqliteStoreBuilder::new().build()` via sqlx-sqlite), so a *fresh* migration crashed every launch.
+The captured stderr backtrace pinned it: sqlx-sqlite's connection worker thread panicked inside
+`tracing-subscriber`'s registry (`extensions.rs:88: assertion failed: self.replace(val).is_none()`,
+then a poisoned RwLock). The culprit is ours: `ApparatusTracingLayer::on_enter` inserted a
+`SpanStart` extension unconditionally, but a span can be **re-entered** (an async future polled
+repeatedly) and `ExtensionsMut::insert` panics on a duplicate. The migration enters/exits a span per
+statement on the sqlx workers; the second enter double-inserts, panics, poisons the shared registry,
+and the cascade kills the migration, the address-book spawn, and with it both p2p sync and the murm
+cabal (they share the one AddressBook). Fixed by recording the start idempotently (insert only if
+absent); headed-verified zero panics with p2p sync + murm cabal up (`cabal=true`). Exposed by this
+plan's own reach work: the broadened first-party allowlist (T1) plus the per-layer ring that captures
+regardless of RUST_LOG (T1.5) first brought re-entrant spans through `on_enter` by default.
+
+**Lesson (feedback loop).** Instrumentation must never be able to panic the app it observes. Span
+enter/exit fire multiple times per span, so any per-span extension write in a layer has to be
+idempotent (`insert` asserts uniqueness; use a presence check or `replace`).
 
 ---
 
@@ -343,3 +354,12 @@ component the later slices instrument.
   omnibar dropdown stacking over the shellbar (`19fd35d`); plus the address-book startup fault now in
   Findings. Next: T2 call-site half, or T3 in-tree engines + graph kernel, or the scry / weld / graft
   pass.
+- 2026-06-29: **Fixed the startup crash the ring-dump surfaced (`6df8fb2`).** Traced it from the
+  captured stderr backtrace to our own `ApparatusTracingLayer::on_enter`: it inserted `SpanStart`
+  non-idempotently, so a re-entered span double-inserted, `ExtensionsMut::insert` panicked, and the
+  poisoned registry RwLock cascaded into a crash that killed the p2panda in-memory-SQLite
+  address-book migration on sqlx's worker threads, disabling p2p sync + the murm cabal. A regression
+  exposed by this plan's reach work (T1 allowlist + T1.5 per-layer ring). Recorded the start
+  idempotently; headed-verified zero panics with sync + cabal up (`cabal=true`) and the first-party
+  pulse intact; new re-entry test. See the corrected Findings entry. Lesson: a tracing layer must
+  never panic, and per-span extension writes must be idempotent (enter/exit fire repeatedly).
