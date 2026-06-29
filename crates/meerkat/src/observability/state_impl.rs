@@ -233,40 +233,26 @@ impl HostObservability {
                 Severity::Info,
                 format!("received latency={latency_us}us"),
             ),
-            // A `tracing` event mirrored in by ApparatusTracingLayer is *not* a channel
-            // message: recover its severity from the `level` field (so a warn/error fault reads
-            // as a fault instead of being flattened to Info) and present it as a clean
-            // "target: message (fields)" log line rather than the messaging-shaped
-            // "received latency=…us" frame.
-            DiagnosticEvent::MessageReceivedStructured {
-                channel_id,
+            // A `tracing` event mirrored in by ApparatusTracingLayer is a log line, not a channel
+            // message: map its `level` to a severity (so a warn/error fault reads as a fault, not
+            // Info) and present it as a clean "target: message (fields)" line on the trace channel.
+            DiagnosticEvent::Event {
+                target,
+                level,
+                message,
                 fields,
-                ..
-            } if channel_id == crate::tracing_layer::TRACE_EVENT_CHANNEL => {
-                let find = |name: &str| {
-                    fields
-                        .iter()
-                        .find(|f| f.name == name)
-                        .map(|f| f.value.as_str())
-                };
-                let severity = match find("level") {
-                    Some("ERROR") | Some("error") => Severity::Error,
-                    Some("WARN") | Some("warn") => Severity::Warn,
+            } => {
+                let severity = match level {
+                    "ERROR" => Severity::Error,
+                    "WARN" => Severity::Warn,
                     _ => Severity::Info,
                 };
-                let target = find("target").unwrap_or("trace");
-                let message = find("message").unwrap_or("");
-                let rest: Vec<_> = fields
-                    .iter()
-                    .filter(|f| !matches!(f.name, "target" | "level" | "message"))
-                    .cloned()
-                    .collect();
-                let detail = if rest.is_empty() {
+                let detail = if fields.is_empty() {
                     format!("{target}: {message}")
                 } else {
-                    format!("{target}: {message} ({})", format_fields(&rest))
+                    format!("{target}: {message} ({})", format_fields(&fields))
                 };
-                self.record_diagnostic(channel_id, severity, detail);
+                self.record_diagnostic(crate::tracing_layer::TRACE_EVENT_CHANNEL, severity, detail);
             }
             DiagnosticEvent::MessageReceivedStructured {
                 channel_id,
@@ -415,17 +401,13 @@ mod tests {
     fn a_trace_fault_recovers_its_severity_and_reads_as_a_log_line() {
         use register_diagnostics::StructuredPayloadField;
         let mut obs = HostObservability::new();
-        // A warn-level `tracing` event mirrored in by the bridge: target/level/message carried as
-        // fields on the synthetic trace channel.
-        obs.record_portable_event(DiagnosticEvent::MessageReceivedStructured {
-            channel_id: crate::tracing_layer::TRACE_EVENT_CHANNEL,
-            latency_us: 0,
-            fields: vec![
-                StructuredPayloadField { name: "target", value: "netfetcher".to_string() },
-                StructuredPayloadField { name: "level", value: "WARN".to_string() },
-                StructuredPayloadField { name: "message", value: "fetch network error".to_string() },
-                StructuredPayloadField { name: "url", value: "https://x".to_string() },
-            ],
+        // A warn-level `tracing` event mirrored in by the bridge: target/level/message are
+        // first-class on the Event variant, the structured remainder rides in `fields`.
+        obs.record_portable_event(DiagnosticEvent::Event {
+            target: "netfetcher",
+            level: "WARN",
+            message: "fetch network error".to_string(),
+            fields: vec![StructuredPayloadField { name: "url", value: "https://x".to_string() }],
         });
         let snap = obs.snapshot();
         let rec = snap

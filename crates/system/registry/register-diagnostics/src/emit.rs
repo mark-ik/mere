@@ -75,6 +75,18 @@ pub enum DiagnosticEvent {
         latency_us: u64,
         fields: Vec<StructuredPayloadField>,
     },
+    /// A structured log / trace event (a `tracing` event mirrored into diagnostics), as
+    /// opposed to channel messaging. `target` is the emitting component and `level` the
+    /// tracing level name (`"ERROR"`/`"WARN"`/`"INFO"`/`"DEBUG"`/`"TRACE"`); the host maps
+    /// `level` to its own severity and may group by `target`. `message` is the event's human
+    /// text, `fields` the structured remainder. Distinct from the `Message*` variants so a
+    /// log line is never framed as a message receipt.
+    Event {
+        target: &'static str,
+        level: &'static str,
+        message: String,
+        fields: Vec<StructuredPayloadField>,
+    },
 }
 
 static GLOBAL_DIAGNOSTICS_TX: OnceLock<Sender<DiagnosticEvent>> = OnceLock::new();

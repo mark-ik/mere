@@ -78,19 +78,35 @@ where
         }
         let mut visitor = FieldVisitor::default();
         event.record(&mut visitor);
-        visitor.fields.push(StructuredPayloadField {
-            name: "target",
-            value: metadata.target().to_string(),
+        // The tracing message is recorded under the `message` field; lift it out as the event's
+        // message and keep the rest as the structured payload. `target` / `level` are first-class
+        // on the `Event` variant, so they are not duplicated into the fields.
+        let mut message = String::new();
+        let mut fields = Vec::with_capacity(visitor.fields.len());
+        for field in visitor.fields {
+            if field.name == "message" {
+                message = field.value;
+            } else {
+                fields.push(field);
+            }
+        }
+        self.emit(DiagnosticEvent::Event {
+            target: metadata.target(),
+            level: level_name(metadata.level()),
+            message,
+            fields,
         });
-        visitor.fields.push(StructuredPayloadField {
-            name: "level",
-            value: metadata.level().to_string(),
-        });
-        self.emit(DiagnosticEvent::MessageReceivedStructured {
-            channel_id: TRACE_EVENT_CHANNEL,
-            latency_us: 0,
-            fields: visitor.fields,
-        });
+    }
+}
+
+/// The tracing level's static name, for the portable [`DiagnosticEvent::Event`] variant.
+fn level_name(level: &tracing::Level) -> &'static str {
+    match *level {
+        tracing::Level::ERROR => "ERROR",
+        tracing::Level::WARN => "WARN",
+        tracing::Level::INFO => "INFO",
+        tracing::Level::DEBUG => "DEBUG",
+        tracing::Level::TRACE => "TRACE",
     }
 }
 
@@ -218,10 +234,7 @@ mod tests {
         });
         let targets: Vec<String> = std::iter::from_fn(|| rx.try_recv().ok())
             .filter_map(|ev| match ev {
-                DiagnosticEvent::MessageReceivedStructured { fields, .. } => fields
-                    .iter()
-                    .find(|f| f.name == "target")
-                    .map(|f| f.value.clone()),
+                DiagnosticEvent::Event { target, .. } => Some(target.to_string()),
                 _ => None,
             })
             .collect();
@@ -257,10 +270,7 @@ mod tests {
         let targets = |rx: mpsc::Receiver<DiagnosticEvent>| -> Vec<String> {
             std::iter::from_fn(move || rx.try_recv().ok())
                 .filter_map(|ev| match ev {
-                    DiagnosticEvent::MessageReceivedStructured { fields, .. } => fields
-                        .iter()
-                        .find(|f| f.name == "target")
-                        .map(|f| f.value.clone()),
+                    DiagnosticEvent::Event { target, .. } => Some(target.to_string()),
                     _ => None,
                 })
                 .collect()
@@ -300,10 +310,7 @@ mod tests {
         });
         let targets: Vec<String> = std::iter::from_fn(|| ring_rx.try_recv().ok())
             .filter_map(|ev| match ev {
-                DiagnosticEvent::MessageReceivedStructured { fields, .. } => fields
-                    .iter()
-                    .find(|f| f.name == "target")
-                    .map(|f| f.value.clone()),
+                DiagnosticEvent::Event { target, .. } => Some(target.to_string()),
                 _ => None,
             })
             .collect();
@@ -335,7 +342,7 @@ mod tests {
             tracing::info!(target: "armillary", custom_field = 7_i64, "hello");
         });
         let ev = rx.try_recv().expect("the event reaches the diagnostics ring (target broadened)");
-        let DiagnosticEvent::MessageReceivedStructured { fields, .. } = ev else {
+        let DiagnosticEvent::Event { fields, .. } = ev else {
             panic!("an event becomes a structured diagnostic");
         };
         let custom = fields
