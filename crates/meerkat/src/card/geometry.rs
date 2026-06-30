@@ -112,7 +112,7 @@ pub fn anchored_card_rect(
     // placed `RightOf` and flipped `LeftOf` + clamped into the band's horizontal margins by the
     // shared `anchor_point_clamped` — the same side+flip+clamp the submenu drives, instead of a
     // hand-rolled copy. Only the x is taken; the y is the card-specific node-centred clamp below.
-    use xilem_serval::{anchor_point_clamped, Placement};
+    use xilem_serval::{Placement, anchor_point_clamped};
     let gap = 28.0;
     let keepout = (nx - gap, ny, 2.0 * gap, 0.0);
     let (x0, _) = anchor_point_clamped(
@@ -141,11 +141,7 @@ pub fn anchored_card_rect(
 /// pelt surface path.)
 pub fn recovering_card_scene(w: u32, h: u32, colors: ColorVocabulary) -> Scene {
     let doc = document("mere://recovering", vec![paragraph("Reloading\u{2026}")]);
-    let mut laid = layout_document(
-        &doc,
-        Viewport::new(w as f32, h as f32),
-        &card_sheet(colors),
-    );
+    let mut laid = layout_document(&doc, Viewport::new(w as f32, h as f32), &card_sheet(colors));
     laid.packet.viewport = Viewport::new(w as f32, h as f32);
     scene_from_packet(&laid.packet, &laid.fonts, &colors)
 }

@@ -22,7 +22,7 @@ use forme::GraphMemberId;
 use xilem_serval::{AnyView, PointerClick, ServalCtx, ServalElement, clickable, el, on_click};
 
 use crate::list_pane::{PaneItem, ReorderSpec, SliderSpec};
-use crate::swatch::{swatch_view, SwatchSpec};
+use crate::swatch::{SwatchSpec, swatch_view};
 
 /// The erased view the settings-panes logic produces (mirrors `RosterView`).
 pub type SettingsPanesView = Box<dyn AnyView<SettingsPanesState, (), ServalCtx, ServalElement>>;
@@ -74,8 +74,11 @@ pub struct SettingsPanesState {
 /// Build the settings panes subtree: a passthrough container holding one absolutely
 /// positioned two-column pane per open settings tile.
 pub fn settings_panes_view(state: &SettingsPanesState) -> SettingsPanesView {
-    let children: Vec<SettingsPanesView> =
-        state.panes.iter().map(|pane| pane_view(pane, &state.panel_bg)).collect();
+    let children: Vec<SettingsPanesView> = state
+        .panes
+        .iter()
+        .map(|pane| pane_view(pane, &state.panel_bg))
+        .collect();
     Box::new(el::<_, SettingsPanesState, ()>("div", children).attr("class", "settings-panes"))
 }
 
@@ -92,12 +95,20 @@ fn pane_view(pane: &SettingsPane, panel_bg: &str) -> SettingsPanesView {
         .spine
         .iter()
         .map(|entry| {
-            let class = if entry.active { "app-btn-active" } else { "app-btn" };
+            let class = if entry.active {
+                "app-btn-active"
+            } else {
+                "app-btn"
+            };
             let nav = format!("settings://{}/{}", pane.namespace, entry.id);
-            let div = el::<_, SettingsPanesState, ()>("div", entry.title.clone()).attr("class", class);
-            Box::new(clickable(div, move |s: &mut SettingsPanesState, _: PointerClick| {
-                s.pending_nav.push((member, nav.clone()))
-            })) as SettingsPanesView
+            let div =
+                el::<_, SettingsPanesState, ()>("div", entry.title.clone()).attr("class", class);
+            Box::new(clickable(
+                div,
+                move |s: &mut SettingsPanesState, _: PointerClick| {
+                    s.pending_nav.push((member, nav.clone()))
+                },
+            )) as SettingsPanesView
         })
         .collect();
     let spine = el::<_, SettingsPanesState, ()>("div", spine_children)
@@ -156,7 +167,8 @@ fn item_view(member: GraphMemberId, item: &PaneItem) -> SettingsPanesView {
     if let Some(spec) = &item.reorder {
         return reorder_view(member, &item.class, &item.text, item.key.as_deref(), spec);
     }
-    let mut div = el::<_, SettingsPanesState, ()>("div", item.text.clone()).attr("class", item.class.clone());
+    let mut div =
+        el::<_, SettingsPanesState, ()>("div", item.text.clone()).attr("class", item.class.clone());
     if let Some(aria) = item.aria {
         let (role, checked) = aria.role_and_checked();
         div = div.attr("role", role).attr("aria-checked", checked);
@@ -164,9 +176,12 @@ fn item_view(member: GraphMemberId, item: &PaneItem) -> SettingsPanesView {
     match &item.key {
         Some(key) => {
             let key = key.clone();
-            Box::new(clickable(div, move |s: &mut SettingsPanesState, _: PointerClick| {
-                s.pending_keys.push((member, key.clone()))
-            }))
+            Box::new(clickable(
+                div,
+                move |s: &mut SettingsPanesState, _: PointerClick| {
+                    s.pending_keys.push((member, key.clone()))
+                },
+            ))
         }
         None => Box::new(div),
     }
@@ -197,9 +212,12 @@ fn reorder_view(
     let label_el: SettingsPanesView = match key {
         Some(k) => {
             let k = k.to_string();
-            Box::new(clickable(label_div, move |s: &mut SettingsPanesState, _: PointerClick| {
-                s.pending_keys.push((member, k.clone()))
-            }))
+            Box::new(clickable(
+                label_div,
+                move |s: &mut SettingsPanesState, _: PointerClick| {
+                    s.pending_keys.push((member, k.clone()))
+                },
+            ))
         }
         None => Box::new(label_div),
     };
@@ -207,9 +225,12 @@ fn reorder_view(
         let btn = el::<_, SettingsPanesState, ()>("div", glyph.to_string())
             .attr("class", "app-btn")
             .attr("style", "flex-shrink:0;padding:8px 10px;");
-        Box::new(clickable(btn, move |s: &mut SettingsPanesState, _: PointerClick| {
-            s.pending_keys.push((member, move_key.clone()))
-        }))
+        Box::new(clickable(
+            btn,
+            move |s: &mut SettingsPanesState, _: PointerClick| {
+                s.pending_keys.push((member, move_key.clone()))
+            },
+        ))
     };
     let up = mk("\u{25B2}", spec.up_key.clone());
     let down = mk("\u{25BC}", spec.down_key.clone());
@@ -221,10 +242,13 @@ fn reorder_view(
         row_class.push_str(" reorder-drop");
     }
     Box::new(
-        el::<_, SettingsPanesState, ()>("div", vec![Box::new(grip) as SettingsPanesView, label_el, up, down])
-            .attr("class", row_class)
-            .attr("data-reorder-id", spec.id.clone())
-            .attr("style", "display:flex;gap:4px;align-items:stretch;"),
+        el::<_, SettingsPanesState, ()>(
+            "div",
+            vec![Box::new(grip) as SettingsPanesView, label_el, up, down],
+        )
+        .attr("class", row_class)
+        .attr("data-reorder-id", spec.id.clone())
+        .attr("style", "display:flex;gap:4px;align-items:stretch;"),
     )
 }
 
@@ -233,7 +257,8 @@ fn reorder_view(
 /// `i/count`). A hue track colours each cell by its hue (a rainbow picker) and
 /// outlines the selected one; a magnitude track fills cells up to `value`.
 fn slider_view(member: GraphMemberId, label: &str, spec: &SliderSpec) -> SettingsPanesView {
-    let label_div = el::<_, SettingsPanesState, ()>("div", label.to_string()).attr("class", "app-slider-label");
+    let label_div =
+        el::<_, SettingsPanesState, ()>("div", label.to_string()).attr("class", "app-slider-label");
     let count = spec.count.max(1);
     let selected = ((spec.value * count as f32).round() as usize).min(count - 1);
     let cells: Vec<SettingsPanesView> = (0..count)
@@ -241,26 +266,47 @@ fn slider_view(member: GraphMemberId, label: &str, spec: &SliderSpec) -> Setting
             let key = format!("{}:{}:{}", spec.key_prefix, i, count);
             let style = if spec.hue_track {
                 let c = tincture::color_from_hsl(i as f64 / count as f64 * 360.0, 0.7, 0.5);
-                let sel = if i == selected { "outline:2px solid #ffffff;outline-offset:-2px;" } else { "" };
-                format!("flex:1;background-color:#{:02X}{:02X}{:02X};{sel}", c.r, c.g, c.b)
+                let sel = if i == selected {
+                    "outline:2px solid #ffffff;outline-offset:-2px;"
+                } else {
+                    ""
+                };
+                format!(
+                    "flex:1;background-color:#{:02X}{:02X}{:02X};{sel}",
+                    c.r, c.g, c.b
+                )
             } else {
-                let fill = if i <= selected { "rgba(255,255,255,0.55)" } else { "rgba(255,255,255,0.12)" };
-                let sel = if i == selected { "outline:2px solid #ffffff;outline-offset:-2px;" } else { "" };
+                let fill = if i <= selected {
+                    "rgba(255,255,255,0.55)"
+                } else {
+                    "rgba(255,255,255,0.12)"
+                };
+                let sel = if i == selected {
+                    "outline:2px solid #ffffff;outline-offset:-2px;"
+                } else {
+                    ""
+                };
                 format!("flex:1;background-color:{fill};{sel}")
             };
             let cell = el::<_, SettingsPanesState, ()>("div", String::new())
                 .attr("class", "app-seg")
                 .attr("style", style);
-            Box::new(on_click(cell, move |s: &mut SettingsPanesState, _: PointerClick| {
-                s.pending_keys.push((member, key.clone()))
-            })) as SettingsPanesView
+            Box::new(on_click(
+                cell,
+                move |s: &mut SettingsPanesState, _: PointerClick| {
+                    s.pending_keys.push((member, key.clone()))
+                },
+            )) as SettingsPanesView
         })
         .collect();
     let track = el::<_, SettingsPanesState, ()>("div", cells).attr("class", "app-slider-track");
     Box::new(
         el::<_, SettingsPanesState, ()>(
             "div",
-            vec![Box::new(label_div) as SettingsPanesView, Box::new(track) as SettingsPanesView],
+            vec![
+                Box::new(label_div) as SettingsPanesView,
+                Box::new(track) as SettingsPanesView,
+            ],
         )
         .attr("class", "app-slider-row"),
     )
@@ -275,8 +321,11 @@ mod tests {
     use serval_scripted_dom::NodeId;
     use xilem_serval::PointerClick;
 
-    type Pane =
-        ViewPane<SettingsPanesState, fn(&SettingsPanesState) -> SettingsPanesView, SettingsPanesView>;
+    type Pane = ViewPane<
+        SettingsPanesState,
+        fn(&SettingsPanesState) -> SettingsPanesView,
+        SettingsPanesView,
+    >;
 
     /// A sheet sizing the reused apparatus classes so the headless pane has hit-testable
     /// boxes (the column geometry is inline on the view).
@@ -324,8 +373,16 @@ mod tests {
                 namespace: "pelt".into(),
                 page_title: "Appearance".into(),
                 spine: vec![
-                    SettingsSpineEntry { id: "appearance".into(), title: "Appearance".into(), active: true },
-                    SettingsSpineEntry { id: "engines".into(), title: "Engines".into(), active: false },
+                    SettingsSpineEntry {
+                        id: "appearance".into(),
+                        title: "Appearance".into(),
+                        active: true,
+                    },
+                    SettingsSpineEntry {
+                        id: "engines".into(),
+                        title: "Engines".into(),
+                        active: false,
+                    },
                 ],
                 items: Vec::new(),
                 swatch: None,
@@ -337,7 +394,9 @@ mod tests {
         let scroll = ScrollOffsets::<NodeId>::default();
         let _ = pane.frame(420, 300, &scroll);
         let (x, y) = center_of(&pane, "app-btn");
-        let node = pane.hit_test(x, y, &scroll).expect("a node under the entry");
+        let node = pane
+            .hit_test(x, y, &scroll)
+            .expect("a node under the entry");
         pane.dispatch_click(node, PointerClick::at((x, y)));
         let mut nav = Vec::new();
         pane.update(|s| nav = std::mem::take(&mut s.pending_nav));
@@ -366,7 +425,9 @@ mod tests {
         let scroll = ScrollOffsets::<NodeId>::default();
         let _ = pane.frame(420, 300, &scroll);
         let (x, y) = center_of(&pane, "app-btn");
-        let node = pane.hit_test(x, y, &scroll).expect("a node under the control");
+        let node = pane
+            .hit_test(x, y, &scroll)
+            .expect("a node under the control");
         pane.dispatch_click(node, PointerClick::at((x, y)));
         let mut keys = Vec::new();
         pane.update(|s| keys = std::mem::take(&mut s.pending_keys));
@@ -463,7 +524,10 @@ mod tests {
     /// A `settings://` url reads as a friendly page title; a non-settings url is left alone.
     #[test]
     fn tab_title_reads_settings_pages() {
-        assert_eq!(crate::settings_lane::settings_tab_title("https://example.com"), None);
+        assert_eq!(
+            crate::settings_lane::settings_tab_title("https://example.com"),
+            None
+        );
         assert_eq!(
             crate::settings_lane::settings_tab_title("settings://pelt/appearance").as_deref(),
             Some("Settings: Appearance"),

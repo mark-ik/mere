@@ -151,7 +151,13 @@ pub fn recent_scene(
     scene.push_shape_stroked(path, rgba(theme.muted_text, 0.4), 1.0);
 
     let mut y = 5.0;
-    text.push_line(&mut scene, "Recent", RECENT_HEADER_FONT, rgba(theme.muted_text, 0.9), [PAD, y]);
+    text.push_line(
+        &mut scene,
+        "Recent",
+        RECENT_HEADER_FONT,
+        rgba(theme.muted_text, 0.9),
+        [PAD, y],
+    );
     y += RECENT_HEADER_FONT + 5.0;
 
     if recent.is_empty() {

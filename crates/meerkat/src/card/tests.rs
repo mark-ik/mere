@@ -50,9 +50,7 @@ fn fetch_states_render_distinctly() {
         &content_document(url, Some(&ContentState::Loading)),
         url
     ));
-    assert!(
-        body_text(&content_document(url, Some(&ContentState::Loading))).contains("Fetching")
-    );
+    assert!(body_text(&content_document(url, Some(&ContentState::Loading))).contains("Fetching"));
 
     let ready = ContentState::Ready(Fetched {
         content_type: Some("text/plain".into()),
@@ -110,14 +108,35 @@ fn route_document_engine_maps_known_types() {
     // for these; pass an https url to exercise the scheme fallback in the last case.
     let route =
         |ct: Option<&str>| route_document_engine("https://example.test/x", ct, &reg, &policy);
-    assert_eq!(route(Some("text/markdown")).as_str(), nematic::ENGINE_MARKDOWN);
-    assert_eq!(route(Some("text/plain; charset=utf-8")).as_str(), nematic::ENGINE_TEXT);
+    assert_eq!(
+        route(Some("text/markdown")).as_str(),
+        nematic::ENGINE_MARKDOWN
+    );
+    assert_eq!(
+        route(Some("text/plain; charset=utf-8")).as_str(),
+        nematic::ENGINE_TEXT
+    );
     assert_eq!(route(Some("text/gemini")).as_str(), nematic::ENGINE_GEMTEXT);
-    assert_eq!(route(Some("application/x-nex")).as_str(), nematic::ENGINE_NEX);
-    assert_eq!(route(Some("application/x-guppy")).as_str(), nematic::ENGINE_GUPPY);
-    assert_eq!(route(Some("application/x-titan")).as_str(), nematic::ENGINE_TITAN);
-    assert_eq!(route(Some("message/x-misfin")).as_str(), nematic::ENGINE_MISFIN);
-    assert_eq!(route(Some("application/gopher-menu")).as_str(), nematic::ENGINE_GOPHER);
+    assert_eq!(
+        route(Some("application/x-nex")).as_str(),
+        nematic::ENGINE_NEX
+    );
+    assert_eq!(
+        route(Some("application/x-guppy")).as_str(),
+        nematic::ENGINE_GUPPY
+    );
+    assert_eq!(
+        route(Some("application/x-titan")).as_str(),
+        nematic::ENGINE_TITAN
+    );
+    assert_eq!(
+        route(Some("message/x-misfin")).as_str(),
+        nematic::ENGINE_MISFIN
+    );
+    assert_eq!(
+        route(Some("application/gopher-menu")).as_str(),
+        nematic::ENGINE_GOPHER
+    );
     // HTML routes to the serval web lane by content-type, regardless of scheme.
     assert_eq!(
         route(Some("text/html")).as_str(),
@@ -284,10 +303,16 @@ fn document_lane_surfaces_link_hit_regions() {
         .find(|r| matches!(&r.kind, InteractionKind::Link { url } if url == "https://example.test/spec"))
         .expect("the markdown link is laid out as an interaction region");
     let b = region.bounds;
-    assert!(b.size.width > 0.0 && b.size.height > 0.0, "positive-area link bounds: {b:?}");
+    assert!(
+        b.size.width > 0.0 && b.size.height > 0.0,
+        "positive-area link bounds: {b:?}"
+    );
     // ...and link_at at its center resolves to the URL.
     assert_eq!(
-        packet.link_at(b.origin.x + b.size.width * 0.5, b.origin.y + b.size.height * 0.5),
+        packet.link_at(
+            b.origin.x + b.size.width * 0.5,
+            b.origin.y + b.size.height * 0.5
+        ),
         Some("https://example.test/spec"),
         "link_at resolves the link at its center"
     );
@@ -348,7 +373,11 @@ fn html_lane_harvests_link_hit_regions() {
         .find(|l| l.url == "https://example.test/spec")
         .expect("the inline <a href> is harvested into a LinkHit");
     let [x0, y0, x1, y1] = hit.rect;
-    assert!(x1 > x0 && y1 > y0, "positive-area link rect: {:?}", hit.rect);
+    assert!(
+        x1 > x0 && y1 > y0,
+        "positive-area link rect: {:?}",
+        hit.rect
+    );
     // The link follows "see ", so it starts a little right of the content origin
     // (document-px, pre-scroll — the space the host adds the card's scroll into).
     assert!(x0 > 0.0, "link starts after the leading text, got x0={x0}");

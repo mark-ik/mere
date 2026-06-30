@@ -53,6 +53,14 @@ pub enum RosterIntent {
         to: GraphMemberId,
         selector: RelationSelector,
     },
+    HideLinkBundle {
+        from: GraphMemberId,
+        to: GraphMemberId,
+    },
+    ShowLinkBundle {
+        from: GraphMemberId,
+        to: GraphMemberId,
+    },
     ReconcileGraphlet(GraphletId),
     KeepGraphletAsSession(GraphletId),
     BranchGraphlet(GraphletId),
@@ -63,6 +71,7 @@ pub enum RosterIntent {
 pub struct RosterState {
     pub active_tab: RosterTab,
     pub selected_subject: Option<RosterSubject>,
+    pub relate_picker: Option<(GraphMemberId, GraphMemberId)>,
     pub node_rows: Vec<RosterRow>,
     pub link_rows: Vec<LinkRow>,
     pub graphlet_rows: Vec<GraphletRow>,
@@ -71,14 +80,31 @@ pub struct RosterState {
     pub pending: Vec<RosterIntent>,
 }
 
+impl RosterState {
+    pub fn open_subject(&mut self, subject: RosterSubject) {
+        self.active_tab = subject.natural_tab();
+        self.relate_picker = None;
+        self.selected_subject = Some(subject.clone());
+        self.pending.push(RosterIntent::OpenDetail(subject));
+    }
+
+    pub fn toggle_relate_picker(&mut self, from: GraphMemberId, to: GraphMemberId) {
+        let bundle = (from, to);
+        self.relate_picker = (self.relate_picker != Some(bundle)).then_some(bundle);
+    }
+}
+
 pub fn roster_view(state: &RosterState) -> RosterView {
-    let mut children: Vec<RosterView> = vec![
+    let mut body: Vec<RosterView> = vec![
         crate::roster_view_parts::tab_strip(state),
         crate::roster_view_parts::active_table(state),
     ];
     if let Some(detail) = &state.detail {
-        children.push(crate::roster_view_parts::detail_card(detail));
+        body.push(crate::roster_view_parts::detail_card(state, detail));
     }
+    let children: Vec<RosterView> = vec![Box::new(
+        el::<_, RosterState, ()>("div", body).attr("class", "roster-scroll"),
+    )];
     Box::new(el::<_, RosterState, ()>("div", children).attr("class", "roster"))
 }
 
@@ -119,7 +145,7 @@ impl RosterPane {
         let node = {
             let dom = self.pane.dom();
             let dom = dom.borrow();
-            crate::first_with_class(&dom, dom.document(), "roster")
+            crate::first_with_class(&dom, dom.document(), "roster-scroll")
         };
         node.and_then(|n| self.pane.scroll_extent(n))
             .map_or(0.0, |(_, my)| my)
@@ -149,7 +175,7 @@ impl RosterPane {
         let mut offsets = ScrollOffsets::default();
         let dom = self.pane.dom();
         let dom = dom.borrow();
-        if let Some(node) = crate::first_with_class(&dom, dom.document(), "roster") {
+        if let Some(node) = crate::first_with_class(&dom, dom.document(), "roster-scroll") {
             offsets.insert(node, (0.0, scroll));
         }
         offsets
@@ -164,6 +190,10 @@ impl Default for RosterPane {
 }
 
 #[cfg(test)]
+#[path = "roster_view_action_tests.rs"]
+mod action_tests;
+
+#[cfg(test)]
 mod tests {
     use forme::GraphMemberId;
     use kernel::graph::{EdgeFamily, RelationSelector, SemanticSubKind};
@@ -173,7 +203,10 @@ mod tests {
     use xilem_serval::PointerClick;
 
     use super::*;
-    use crate::roster::{GraphletCard, LinkCard, LinkRelationRow, RosterSnapshot};
+    use crate::roster::{
+        FacetAction, FacetActionIntent, FacetCard, FacetEntry, FacetInfoRow, FacetSubject,
+        GraphletCard, LinkCard, LinkRelationRow, NodeDetail, RosterSnapshot,
+    };
 
     fn node_row(n: u128, url: &str) -> RosterRow {
         RosterRow {
@@ -232,6 +265,17 @@ mod tests {
             .find_map(|child| first_by_class(dom, child, class))
     }
 
+    fn all_by_class(dom: &ScriptedDom, id: NodeId, class: &str, out: &mut Vec<NodeId>) {
+        if dom.attributes(id).any(|attr| {
+            attr.name.local.as_ref() == "class" && attr.value.split_whitespace().any(|c| c == class)
+        }) {
+            out.push(id);
+        }
+        for child in dom.dom_children(id) {
+            all_by_class(dom, child, class, out);
+        }
+    }
+
     fn count_by_class(dom: &ScriptedDom, id: NodeId, class: &str) -> usize {
         let here = usize::from(dom.attributes(id).any(|attr| {
             attr.name.local.as_ref() == "class" && attr.value.split_whitespace().any(|c| c == class)
@@ -251,10 +295,17 @@ mod tests {
             },
             RosterTab::Nodes,
             |dom, root| {
-                assert_eq!(count_by_class(dom, root, "roster-tab"), 3);
-                assert_eq!(count_by_class(dom, root, "roster-tab-active"), 1);
+                assert_eq!(count_by_class(dom, root, "roster-tab"), 4);
             },
         );
+    }
+
+    #[test]
+    fn roster_marks_the_active_tab() {
+        with_rendered(RosterSnapshot::default(), RosterTab::Links, |dom, root| {
+            assert_eq!(count_by_class(dom, root, "roster-tab"), 4);
+            assert_eq!(count_by_class(dom, root, "roster-tab-active"), 1);
+        });
     }
 
     #[test]
@@ -271,7 +322,9 @@ mod tests {
         let tab_node = {
             let dom = pane.dom();
             let dom = dom.borrow();
-            first_by_class(&dom, dom.document(), "roster-tab").expect("an inactive tab")
+            let mut tabs = Vec::new();
+            all_by_class(&dom, dom.document(), "roster-tab", &mut tabs);
+            tabs[1]
         };
         pane.dispatch_click(tab_node, PointerClick::at((50.0, 10.0)));
         assert!(matches!(
@@ -297,6 +350,31 @@ mod tests {
                 assert_eq!(count_by_class(dom, root, "roster-section"), 3);
             },
         );
+    }
+
+    #[test]
+    fn clicking_link_bundle_opens_endpoint_subject() {
+        let mut pane = RosterPane::new();
+        pane.set_snapshot(
+            &ChromeTheme::default(),
+            RosterSnapshot {
+                link_rows: vec![link_row("Cites", EdgeFamily::Semantic)],
+                ..Default::default()
+            },
+        );
+        pane.set_active_tab(RosterTab::Links);
+        let _ = pane.frame(280, 240, 0.0);
+        let bundle_node = {
+            let dom = pane.dom();
+            let dom = dom.borrow();
+            first_by_class(&dom, dom.document(), "roster-link-bundle").expect("a link bundle")
+        };
+        pane.dispatch_click(bundle_node, PointerClick::at((40.0, 44.0)));
+        assert!(matches!(
+            pane.take_intents().first(),
+            Some(RosterIntent::OpenDetail(RosterSubject::LinkBundle { from, to }))
+                if *from == GraphMemberId::from_u128(1) && *to == GraphMemberId::from_u128(2)
+        ));
     }
 
     #[test]
@@ -332,6 +410,7 @@ mod tests {
             source_url: "https://a.example".to_string(),
             target_title: "B".to_string(),
             target_url: "https://b.example".to_string(),
+            hidden: false,
             relations: vec![
                 LinkRelationRow {
                     from: GraphMemberId::from_u128(1),
@@ -356,6 +435,7 @@ mod tests {
                     selected: false,
                 },
             ],
+            facets: Vec::new(),
         };
         with_rendered(
             RosterSnapshot {
@@ -371,6 +451,78 @@ mod tests {
     }
 
     #[test]
+    fn node_card_facet_row_opens_facet_detail() {
+        let subject = RosterSubject::Facet(FacetSubject::NodeTags(GraphMemberId::from_u128(1)));
+        let mut pane = RosterPane::new();
+        pane.set_snapshot(
+            &ChromeTheme::default(),
+            RosterSnapshot {
+                detail: Some(RosterDetail::Node(NodeDetail {
+                    member: GraphMemberId::from_u128(1),
+                    title: "A".to_string(),
+                    url: "https://a.example".to_string(),
+                    content_type: Some("text/html".to_string()),
+                    tags: vec!["research".to_string()],
+                    relation_count: 0,
+                    open: false,
+                    facets: vec![FacetEntry {
+                        label: "Tags".to_string(),
+                        value: "1".to_string(),
+                        subject: subject.clone(),
+                    }],
+                })),
+                ..Default::default()
+            },
+        );
+        let _ = pane.frame(280, 240, 0.0);
+        let row_node = {
+            let dom = pane.dom();
+            let dom = dom.borrow();
+            first_by_class(&dom, dom.document(), "roster-facet-row").expect("a facet row")
+        };
+        pane.dispatch_click(row_node, PointerClick::at((40.0, 120.0)));
+        assert_eq!(
+            pane.take_intents().first(),
+            Some(&RosterIntent::OpenDetail(subject))
+        );
+    }
+
+    #[test]
+    fn facet_card_action_queues_host_intent() {
+        let field = kernel::graph::FieldId::new();
+        let mut pane = RosterPane::new();
+        pane.set_snapshot(
+            &ChromeTheme::default(),
+            RosterSnapshot {
+                detail: Some(RosterDetail::Facet(FacetCard {
+                    title: "Field strength".to_string(),
+                    subtitle: "Gravity".to_string(),
+                    rows: vec![FacetInfoRow {
+                        label: "strength".to_string(),
+                        value: "8".to_string(),
+                    }],
+                    actions: vec![FacetAction {
+                        label: "stronger".to_string(),
+                        intent: FacetActionIntent::AdjustFieldStrength(field, 1000.0),
+                    }],
+                })),
+                ..Default::default()
+            },
+        );
+        let _ = pane.frame(280, 240, 0.0);
+        let action_node = {
+            let dom = pane.dom();
+            let dom = dom.borrow();
+            first_by_class(&dom, dom.document(), "roster-card-action").expect("a facet action")
+        };
+        pane.dispatch_click(action_node, PointerClick::at((40.0, 160.0)));
+        assert!(matches!(
+            pane.take_intents().first(),
+            Some(RosterIntent::AdjustFieldStrength(id, 1000.0)) if *id == field
+        ));
+    }
+
+    #[test]
     fn graphlet_card_shows_drift_preview_without_applying() {
         with_rendered(
             RosterSnapshot {
@@ -381,6 +533,7 @@ mod tests {
                     members: vec!["A".to_string()],
                     selectors_label: "Semantic".to_string(),
                     drift_tracking: true,
+                    drift_summary: "drift proposal: +1 -1".to_string(),
                     added: vec!["B".to_string()],
                     removed: vec!["C".to_string()],
                 })),

@@ -15,18 +15,18 @@
 
 use document_canvas::netrender_backend::scene_from_packet;
 use document_canvas::{
-    ColorVocabulary, DocumentRenderPacket, FontTable, DocumentStyleSheet, Viewport, layout_document,
+    ColorVocabulary, DocumentRenderPacket, DocumentStyleSheet, FontTable, Viewport, layout_document,
 };
 // Used only by the `#[cfg(test)]` link-lowering helper + tests; the live path queries
 // `DocumentRenderPacket::link_at` directly. (Phase 2 query API.)
+use crate::serval_render::scene_from_layout_dom;
 #[cfg(test)]
 use document_canvas::{InteractionKind, InteractionRegion};
 use inker::{
-    Block, DocumentProvenance, DocumentTrustState, EngineDocument, EngineInput,
-    EngineRegistry, EngineRoutePolicy, EngineRouteRequest, InlineSpan, WorkspaceRouteId,
+    Block, DocumentProvenance, DocumentTrustState, EngineDocument, EngineInput, EngineRegistry,
+    EngineRoutePolicy, EngineRouteRequest, InlineSpan, WorkspaceRouteId,
 };
 use netrender::Scene;
-use crate::serval_render::scene_from_layout_dom;
 use serval_layout::{
     ImageLoader, ScrollOffsets, inline_stylesheets, linked_stylesheets_with_loader,
 };
@@ -272,11 +272,17 @@ pub fn render_content(
     sheet: &DocumentStyleSheet,
 ) -> RenderedContent {
     if let Some(ContentState::Ready(fetched)) = state {
-        let engine_id = route_document_engine(url, fetched.content_type.as_deref(), registry, policy);
+        let engine_id =
+            route_document_engine(url, fetched.content_type.as_deref(), registry, policy);
         if engine_id == inker::routing::ENGINE_SERVAL_WEB {
             let (scene, content_height, links, masks) =
                 html_scene(&fetched.body, loader, w, h, band_y, band_h);
-            return RenderedContent::Html { scene, content_height, links, masks };
+            return RenderedContent::Html {
+                scene,
+                content_height,
+                links,
+                masks,
+            };
         }
         if let Some(doc) = dispatch_document(url, fetched, &engine_id, registry) {
             return layout_document_content(&doc, w, h, sheet);
@@ -392,7 +398,11 @@ pub fn render_content_scene(
             content_height,
         } => {
             let band = content_height.min(PREVIEW_BAND_PX) as f32;
-            (lower_window(&packet, &fonts, 0.0, band, sheet.colors), content_height, Vec::new())
+            (
+                lower_window(&packet, &fonts, 0.0, band, sheet.colors),
+                content_height,
+                Vec::new(),
+            )
         }
     }
 }
@@ -477,7 +487,12 @@ fn html_scene(
     h: u32,
     band_y: u32,
     band_h: u32,
-) -> (Scene, u32, Vec<LinkHit>, Vec<paint_list_render::BoxShadowMaskRequest>) {
+) -> (
+    Scene,
+    u32,
+    Vec<LinkHit>,
+    Vec<paint_list_render::BoxShadowMaskRequest>,
+) {
     let doc = StaticDocument::parse(body);
     let inline = inline_stylesheets(&doc);
     let linked = linked_stylesheets_with_loader(&doc, loader);
@@ -496,7 +511,10 @@ fn html_scene(
     // box-shadow; inline-link nav.)
     let (scene, masks, content_height, link_rects) =
         scene_from_layout_dom(&doc, &sheets, loader, w, h, band_y, band_h, &scroll);
-    let links = link_rects.into_iter().map(|(url, rect)| LinkHit { rect, url }).collect();
+    let links = link_rects
+        .into_iter()
+        .map(|(url, rect)| LinkHit { rect, url })
+        .collect();
     (scene, content_height, links, masks)
 }
 

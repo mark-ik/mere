@@ -14,6 +14,7 @@ use orrery::NodeShape;
 
 use super::node_ops::content_shape;
 use super::{WindowCtx, fetch, roster};
+use crate::roster_facet_data::{field_facets, link_facets, node_facets};
 
 impl WindowCtx<'_> {
     pub(super) fn roster_snapshot(
@@ -94,6 +95,15 @@ impl WindowCtx<'_> {
                     subject,
                     Some(roster::RosterSubject::RelationCell { from, to, selector: s })
                         if *from == source.id && *to == target.id && *s == selector
+                ) || matches!(
+                    subject,
+                    Some(roster::RosterSubject::Facet(roster::FacetSubject::LinkFamily {
+                        from,
+                        to,
+                        family,
+                    })) if *from == source.id
+                        && *to == target.id
+                        && *family == relation.kind.family()
                 );
                 Some(roster::LinkRow {
                     from: source.id,
@@ -167,6 +177,7 @@ impl WindowCtx<'_> {
 
     fn roster_field_rows(&self, subject: Option<&roster::RosterSubject>) -> Vec<roster::FieldRow> {
         let mut out = Vec::new();
+        let selected_field = selected_field_id(subject);
         for field in self.orrery().graph().fields() {
             if !field.is_active() {
                 continue;
@@ -182,6 +193,7 @@ impl WindowCtx<'_> {
                 rule_label: field_definition_label(&field.definition).to_string(),
                 extent_label: field_extent_label(&field.extent),
                 hidden: !self.orrery().field_visible(id),
+                selected: selected_field == Some(id),
                 strength: self.orrery().field_strength(id).unwrap_or(0.0),
             });
         }
@@ -191,8 +203,8 @@ impl WindowCtx<'_> {
                 .cmp(&b.name.to_lowercase())
                 .then_with(|| a.id.as_uuid().cmp(&b.id.as_uuid()))
         });
-        if let Some(roster::RosterSubject::Field(selected)) = subject {
-            out.sort_by_key(|row| row.id != *selected);
+        if let Some(selected) = selected_field {
+            out.sort_by_key(|row| row.id != selected);
         }
         out
     }
@@ -214,10 +226,13 @@ impl WindowCtx<'_> {
             roster::RosterSubject::Field(id) => {
                 self.field_detail(*id).map(roster::RosterDetail::Field)
             }
+            roster::RosterSubject::Facet(facet) => {
+                self.facet_card(facet).map(roster::RosterDetail::Facet)
+            }
         }
     }
 
-    fn node_detail(&self, member: GraphMemberId) -> Option<roster::NodeDetail> {
+    pub(super) fn node_detail(&self, member: GraphMemberId) -> Option<roster::NodeDetail> {
         let graph = self.orrery().graph();
         let (key, node) = graph.get_node_by_id(member)?;
         let url = node.url().to_string();
@@ -227,21 +242,31 @@ impl WindowCtx<'_> {
         };
         let mut tags: Vec<String> = node.tags.iter().cloned().collect();
         tags.sort();
+        let tag_count = tags.len();
+        let relation_count = graph
+            .relations()
+            .filter(|r| r.from == key || r.to == key)
+            .count();
+        let field_count = self.attached_field_names(member).len();
         Some(roster::NodeDetail {
             member,
             title: graph.node_display_label(key),
             url,
-            content_type,
+            content_type: content_type.clone(),
             tags,
-            relation_count: graph
-                .relations()
-                .filter(|r| r.from == key || r.to == key)
-                .count(),
+            relation_count,
             open: self.view.workbench.open_members().contains(&member),
+            facets: node_facets(
+                member,
+                content_type.as_deref(),
+                tag_count,
+                relation_count,
+                field_count,
+            ),
         })
     }
 
-    fn link_card(
+    pub(super) fn link_card(
         &self,
         from: GraphMemberId,
         to: GraphMemberId,
@@ -273,6 +298,7 @@ impl WindowCtx<'_> {
                 .cmp(&b.family)
                 .then_with(|| a.kind_label.cmp(&b.kind_label))
         });
+        let facets = link_facets(from, to, &relations);
         Some(roster::LinkCard {
             from,
             to,
@@ -280,7 +306,9 @@ impl WindowCtx<'_> {
             source_url: source.url().to_string(),
             target_title: graph.node_display_label(to_key),
             target_url: target.url().to_string(),
+            hidden: self.orrery().edge_between_members_hidden(from, to),
             relations,
+            facets,
         })
     }
 
@@ -289,13 +317,24 @@ impl WindowCtx<'_> {
         let index = self.graphlets.get(&self.view.focused_graph)?;
         let graphlet = index.get(id)?;
         let delta = index.preview_reconcile(graph, id);
+        let drift_tracking = matches!(graphlet.binding, GraphletBinding::Linked { .. });
+        let drift_summary = match delta.as_ref() {
+            Some(delta) => format!(
+                "drift proposal: +{} -{}",
+                delta.added.len(),
+                delta.removed.len()
+            ),
+            None if drift_tracking => "drift proposal: clean".to_string(),
+            None => "drift proposal: not tracked".to_string(),
+        };
         Some(roster::GraphletCard {
             id,
             kind_label: graphlet_kind_label(graphlet.kind.as_ref()),
             binding_label: graphlet_binding_label(&graphlet.binding).to_string(),
             members: member_labels(graph, &graphlet.anchors),
             selectors_label: graphlet_selectors_label(graphlet),
-            drift_tracking: matches!(graphlet.binding, GraphletBinding::Linked { .. }),
+            drift_tracking,
+            drift_summary,
             added: delta
                 .as_ref()
                 .map(|d| member_labels(graph, &d.added))
@@ -307,7 +346,7 @@ impl WindowCtx<'_> {
         })
     }
 
-    fn field_detail(&self, id: kernel::graph::FieldId) -> Option<roster::FieldDetail> {
+    pub(super) fn field_detail(&self, id: kernel::graph::FieldId) -> Option<roster::FieldDetail> {
         let field = self
             .orrery()
             .graph()
@@ -324,11 +363,25 @@ impl WindowCtx<'_> {
             extent_label: field_extent_label(&field.extent),
             hidden: !self.orrery().field_visible(id),
             strength: self.orrery().field_strength(id).unwrap_or(0.0),
+            facets: field_facets(id),
         })
     }
 }
 
-fn content_bucket(content_type: Option<&str>) -> (u8, &'static str) {
+fn selected_field_id(subject: Option<&roster::RosterSubject>) -> Option<kernel::graph::FieldId> {
+    match subject {
+        Some(roster::RosterSubject::Field(id)) => Some(*id),
+        Some(roster::RosterSubject::Facet(
+            roster::FacetSubject::FieldRule(id)
+            | roster::FacetSubject::FieldExtent(id)
+            | roster::FacetSubject::FieldVisibility(id)
+            | roster::FacetSubject::FieldStrength(id),
+        )) => Some(*id),
+        _ => None,
+    }
+}
+
+pub(super) fn content_bucket(content_type: Option<&str>) -> (u8, &'static str) {
     match content_type {
         None => (3, "Unknown"),
         Some(ct) => match content_shape(Some(ct)) {
@@ -361,7 +414,7 @@ fn relation_selector(kind: RelationKind) -> RelationSelector {
     }
 }
 
-fn edge_family_label(family: EdgeFamily) -> &'static str {
+pub(super) fn edge_family_label(family: EdgeFamily) -> &'static str {
     match family {
         EdgeFamily::Semantic => "Semantic",
         EdgeFamily::Traversal => "Traversal",

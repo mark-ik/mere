@@ -5,8 +5,7 @@
 //! Focused-content inspection rows for the D8 Inspector pane.
 
 use inker::{
-    Block, DocumentDiagnostic, DocumentTrustState, EngineDocument, EngineInput,
-    EngineRegistry,
+    Block, DocumentDiagnostic, DocumentTrustState, EngineDocument, EngineInput, EngineRegistry,
 };
 use kernel::graph::Node;
 
@@ -90,16 +89,26 @@ fn content_rows(url: Option<&str>, state: Option<&ContentState>) -> Vec<(String,
 
 fn document_rows(url: &str, fetched: &Fetched) -> Vec<(String, String)> {
     if is_html(fetched.content_type.as_deref()) {
+        let extract =
+            serval_extract::extract(&serval_static_dom::StaticDocument::parse(&fetched.body));
         return vec![
             ("Parser lane".to_string(), "serval.html".to_string()),
+            (
+                "Document title".to_string(),
+                extract.title.as_deref().unwrap_or("none").to_string(),
+            ),
             ("Trust".to_string(), inferred_transport_trust(url)),
             (
                 "Document structure".to_string(),
-                summarize_html_structure(&fetched.body),
+                summarize_page_extract(&extract),
+            ),
+            (
+                "Outgoing links".to_string(),
+                extract.links.len().to_string(),
             ),
             (
                 "Parse diagnostics".to_string(),
-                "HTML rendered through Serval; no EngineDocument diagnostics".to_string(),
+                "serval-extract PageExtract".to_string(),
             ),
         ];
     }
@@ -199,6 +208,23 @@ fn summarize_blocks(blocks: &[Block]) -> String {
     )
 }
 
+fn summarize_page_extract(extract: &serval_extract::PageExtract) -> String {
+    format!(
+        "headings={} text={} reader_text={} metadata={}",
+        extract.headings.len(),
+        extract.text.chars().count(),
+        extract
+            .main_text
+            .as_deref()
+            .map(str::chars)
+            .map(Iterator::count)
+            .unwrap_or(0),
+        extract.metadata.open_graph.len()
+            + usize::from(extract.metadata.description.is_some())
+            + usize::from(extract.metadata.canonical.is_some())
+    )
+}
+
 #[derive(Default)]
 struct BlockSummary {
     blocks: usize,
@@ -217,9 +243,7 @@ impl BlockSummary {
         match block {
             Block::Heading { .. } => self.headings += 1,
             Block::Paragraph { .. } => self.paragraphs += 1,
-            Block::CodeBlock { .. } | Block::Preformatted { .. } => {
-                self.code_blocks += 1
-            }
+            Block::CodeBlock { .. } | Block::Preformatted { .. } => self.code_blocks += 1,
             Block::Quote { blocks } => {
                 for child in blocks {
                     self.visit(child);
@@ -236,10 +260,7 @@ impl BlockSummary {
             Block::Image { .. } => self.images += 1,
             Block::FeedEntry { .. } => self.feed_entries += 1,
             Block::MetadataRow { .. } => self.metadata_rows += 1,
-            Block::Rule
-            | Block::FeedHeader { .. }
-            | Block::Badge { .. }
-            | Block::Table { .. } => {}
+            Block::Rule | Block::FeedHeader { .. } | Block::Badge { .. } | Block::Table { .. } => {}
         }
     }
 }
@@ -426,14 +447,31 @@ mod tests {
             body: "# Title\n\nBody with [link](https://example.test).".to_string(),
         };
         let rows = document_rows("https://example.test", &fetched);
-        assert!(
-            rows.iter()
-                .any(|(k, v)| k == "Parser lane" && v == nematic::ENGINE_MARKDOWN)
-        );
-        assert!(
-            rows.iter()
-                .any(|(k, v)| k == "Document structure" && v.contains("headings=1"))
-        );
+        assert!(rows
+            .iter()
+            .any(|(k, v)| k == "Parser lane" && v == nematic::ENGINE_MARKDOWN));
+        assert!(rows
+            .iter()
+            .any(|(k, v)| k == "Document structure" && v.contains("headings=1")));
         assert!(rows.iter().any(|(k, v)| k == "Outgoing links" && v == "1"));
+    }
+
+    #[test]
+    fn inspector_reports_serval_extract_for_html() {
+        let fetched = Fetched {
+            content_type: Some("text/html".to_string()),
+            body: "<html><head><title>The Page</title><meta name='description' content='Desc'></head><body><main><h1>Title</h1><p>Body text.</p><a href='/next'>Next</a></main></body></html>".to_string(),
+        };
+        let rows = document_rows("https://example.test", &fetched);
+        assert!(rows
+            .iter()
+            .any(|(k, v)| k == "Document title" && v == "The Page"));
+        assert!(rows
+            .iter()
+            .any(|(k, v)| k == "Document structure" && v.contains("headings=1")));
+        assert!(rows.iter().any(|(k, v)| k == "Outgoing links" && v == "1"));
+        assert!(rows
+            .iter()
+            .any(|(k, v)| k == "Parse diagnostics" && v == "serval-extract PageExtract"));
     }
 }

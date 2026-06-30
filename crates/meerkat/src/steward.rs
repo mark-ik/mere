@@ -34,10 +34,17 @@ impl WindowCtx<'_> {
                 "Active operations".to_string(),
                 operations.len().to_string(),
             ),
-            ("Tab cap".to_string(), self.shared.presentation.saved_tab_cap.to_string()),
+            (
+                "Tab cap".to_string(),
+                self.shared.presentation.saved_tab_cap.to_string(),
+            ),
             (
                 "Live graphs".to_string(),
-                format!("{} / {}", self.orrery_pool_count, super::MAX_POOLED_ORRERIES),
+                format!(
+                    "{} / {}",
+                    self.orrery_pool_count,
+                    super::MAX_POOLED_ORRERIES
+                ),
             ),
             (
                 "Loading fetches".to_string(),
@@ -109,8 +116,16 @@ impl WindowCtx<'_> {
         // Word labels (no leading glyph): the refresh / stop / pin icons (↻ ⏹ ⚓) have
         // no text-presentation glyph in the host font and rendered as tofu / emoji, so
         // the words carry the affordance. (Chrome bar P3.)
-        items.push(PaneItem::button("utility-row", "retry focused", "steward:retry"));
-        items.push(PaneItem::button("utility-row", "stop focused", "steward:stop"));
+        items.push(PaneItem::button(
+            "utility-row",
+            "retry focused",
+            "steward:retry",
+        ));
+        items.push(PaneItem::button(
+            "utility-row",
+            "stop focused",
+            "steward:stop",
+        ));
         items.push(PaneItem::button(
             "utility-row",
             "pin focused (background)",
@@ -135,7 +150,12 @@ impl WindowCtx<'_> {
             let url = op.url.as_deref().unwrap_or("not shown yet");
             items.push(PaneItem::text(
                 "utility-row",
-                format!("{} \u{b7} {} \u{b7} {}", short_member(op.member), url, state),
+                format!(
+                    "{} \u{b7} {} \u{b7} {}",
+                    short_member(op.member),
+                    url,
+                    state
+                ),
             ));
             let member = op.member;
             items.push(PaneItem::button(
@@ -157,7 +177,10 @@ impl WindowCtx<'_> {
         if operations.len() > SHOWN_OPS {
             items.push(PaneItem::text(
                 "utility-row-muted",
-                format!("+{} more (showing {SHOWN_OPS})", operations.len() - SHOWN_OPS),
+                format!(
+                    "+{} more (showing {SHOWN_OPS})",
+                    operations.len() - SHOWN_OPS
+                ),
             ));
         }
 
@@ -181,11 +204,16 @@ impl WindowCtx<'_> {
             );
             return;
         }
-        self.shared.content.pages
+        self.shared
+            .content
+            .pages
             .insert(url.to_string(), fetch::ContentState::Loading);
-        self.shared.observability
+        self.shared
+            .observability
             .record_actor("fetch", "started", Some(url.to_string()));
-        self.shared.content.fetch_handle
+        self.shared
+            .content
+            .fetch_handle
             .command(fetch::FetchCommand::Page(url.to_string()));
         self.view.request_redraw();
     }
@@ -203,7 +231,8 @@ impl WindowCtx<'_> {
             }
         }
         self.shared.content.constellation.reap(member);
-        self.shared.observability
+        self.shared
+            .observability
             .record_actor("content", "stopped", Some(member.to_string()));
         self.view.request_redraw();
     }
@@ -214,15 +243,23 @@ impl WindowCtx<'_> {
     /// focused-op pin promotes a possibly-dormant node into a tile first, then calls
     /// this. (Chrome bar P2.)
     pub(super) fn pin_operation(&mut self, member: GraphMemberId) {
-        if self.shared.content.constellation.set_background(member, true) {
-            self.shared.observability
+        if self
+            .shared
+            .content
+            .constellation
+            .set_background(member, true)
+        {
+            self.shared
+                .observability
                 .record_actor("content", "pinned", Some(member.to_string()));
         }
         self.view.request_redraw();
     }
 
     fn fetch_state_count(&self, tag: u8) -> usize {
-        self.shared.content.pages
+        self.shared
+            .content
+            .pages
             .values()
             .filter(|state| fetch::ContentState::tag(Some(*state)) == tag)
             .count()

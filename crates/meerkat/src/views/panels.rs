@@ -10,8 +10,17 @@ use super::*;
 /// (label + pin toggle), or a plain leaf (runs its action). `active` marks the keyboard
 /// highlight; `open_parent` marks the parent whose submenu is currently expanded (so the render
 /// pass can anchor the child panel off this row's rect). (Nested submenus.)
-pub(crate) fn menu_item_view(i: usize, item: &ContextItem, active: bool, open_parent: bool) -> ChromeView {
-    let base = if active { "context-item-active" } else { "context-item" };
+pub(crate) fn menu_item_view(
+    i: usize,
+    item: &ContextItem,
+    active: bool,
+    open_parent: bool,
+) -> ChromeView {
+    let base = if active {
+        "context-item-active"
+    } else {
+        "context-item"
+    };
     if item.has_submenu() {
         // Parent row: mouse opens it via the press-gate intercept; this `on_click` serves the
         // keyboard / a11y synthetic-dispatch path. `data-submenu=<i>` + the anchor class let the
@@ -40,15 +49,21 @@ pub(crate) fn menu_item_view(i: usize, item: &ContextItem, active: bool, open_pa
                 move |c: &mut Chrome, _: PointerClick| c.pick_context(action),
             );
             let id = pin.id;
-            let (glyph, pin_class) =
-                if pin.pinned { ("\u{2713}", "context-pin-on") } else { ("\u{002b}", "context-pin") };
+            let (glyph, pin_class) = if pin.pinned {
+                ("\u{2713}", "context-pin-on")
+            } else {
+                ("\u{002b}", "context-pin")
+            };
             let pin_btn = on_click(
                 el::<_, Chrome, ()>("div", glyph).attr("class", pin_class),
                 move |c: &mut Chrome, _: PointerClick| c.pin_from_menu(id),
             );
             let row = el::<_, Chrome, ()>(
                 "div",
-                vec![Box::new(label) as ChromeView, Box::new(pin_btn) as ChromeView],
+                vec![
+                    Box::new(label) as ChromeView,
+                    Box::new(pin_btn) as ChromeView,
+                ],
             )
             .attr("class", "context-search-row")
             .attr("style", "display: flex; gap: 4px; align-items: stretch;");
@@ -68,7 +83,10 @@ pub(crate) fn context_menu_view(menu: &ContextMenu) -> ChromeView {
     // The search field (the cursor palette): shows the typed query, or a placeholder when empty.
     // Display-only — the open menu owns the keyboard, so `on_context_menu_key` edits the query.
     let (search_text, search_class) = if menu.query.is_empty() {
-        ("Search commands\u{2026}".to_string(), "context-search-empty")
+        (
+            "Search commands\u{2026}".to_string(),
+            "context-search-empty",
+        )
     } else {
         (menu.query.clone(), "context-search")
     };
@@ -80,7 +98,8 @@ pub(crate) fn context_menu_view(menu: &ContextMenu) -> ChromeView {
         menu_item_view(i, item, menu.selected == Some(i), open_parent == Some(i))
     }));
     // Point-anchored at the cursor via the overlay primitive (render adds the viewport clamp).
-    let root_panel = overlay_at::<_, Chrome, ()>(menu.x, menu.y, rows).attr("class", "context-menu");
+    let root_panel =
+        overlay_at::<_, Chrome, ()>(menu.x, menu.y, rows).attr("class", "context-menu");
 
     // Depth-1 submenu: a second panel of the open parent's children. The render pass anchors it
     // off the parent row each frame (it starts at the overlay origin). Pushed after the root so
@@ -172,7 +191,11 @@ pub(crate) fn find_bar(c: &Chrome) -> ChromeView {
     } else if c.find_count == 0 {
         "0/0".to_string()
     } else {
-        format!("{}/{}", c.find_active.min(c.find_count - 1) + 1, c.find_count)
+        format!(
+            "{}/{}",
+            c.find_active.min(c.find_count - 1) + 1,
+            c.find_count
+        )
     };
     let count = el::<_, Chrome, ()>("div", count_text).attr("class", "find-count");
     let panel = el::<_, Chrome, ()>("div", (label, input, count)).attr("class", "find-bar");
@@ -182,16 +205,26 @@ pub(crate) fn find_bar(c: &Chrome) -> ChromeView {
 /// The docked knot editor: a source field (a `text_field` over the knot buffer) in
 /// a panel, mirroring the comms pane's structure. Highlighting and the rendered
 /// preview layer on in later slices.
-pub(crate) fn knot_editor_pane(_c: &Chrome) -> ChromeView {
-    let title_text =
-        el::<_, Chrome, ()>("div", "Editor").attr("class", "knot-editor-title-text");
+pub(crate) fn knot_editor_pane(c: &Chrome) -> ChromeView {
+    let title = if c.knot_editor_label.is_empty() {
+        "Editor".to_string()
+    } else {
+        c.knot_editor_label.clone()
+    };
+    let title_text = el::<_, Chrome, ()>("div", title).attr("class", "knot-editor-title-text");
+    let save = button(
+        "Save",
+        "knot-editor-btn knot-editor-save",
+        |c: &mut Chrome, _: PointerClick| c.request_knot_editor_save(),
+    );
     let close_x = button(
         "\u{00d7}",
-        "knot-editor-btn",
+        "knot-editor-btn knot-editor-close",
         |c: &mut Chrome, _: PointerClick| c.close_knot_editor(),
     );
+    let actions = el::<_, Chrome, ()>("div", (save, close_x)).attr("class", "knot-editor-actions");
     let header =
-        el::<_, Chrome, ()>("div", (title_text, close_x)).attr("class", "knot-editor-title");
+        el::<_, Chrome, ()>("div", (title_text, actions)).attr("class", "knot-editor-title");
 
     // The source field: a `text_field` lensed onto the knot buffer, exactly the
     // comms-draft pattern. Its class is the focus key (see ime.rs / input.rs).
@@ -208,16 +241,27 @@ pub(crate) fn knot_editor_pane(_c: &Chrome) -> ChromeView {
             "style",
             "display: block; min-height: 360px; font-family: monospace; white-space: pre-wrap;",
         );
+    let style = if let Some([x0, y0, x1, y1]) = c.knot_editor_rect {
+        let w = (x1 - x0).max(1.0);
+        let h = (y1 - y0).max(1.0);
+        format!(
+            "position: absolute; left: {x0}px; top: {y0}px; width: {w}px; height: {h}px; \
+             box-sizing: border-box; background: #1b1b1f; color: #e6e6e6; \
+             border: 1px solid #3a3a42; border-radius: 6px; padding: 12px; \
+             overflow: auto; z-index: 90;"
+        )
+    } else {
+        "position: absolute; left: 160px; top: 72px; width: 640px; height: 520px; \
+         box-sizing: border-box; background: #1b1b1f; color: #e6e6e6; \
+         border: 1px solid #3a3a42; border-radius: 6px; padding: 12px; \
+         overflow: auto; z-index: 90;"
+            .to_string()
+    };
 
     Box::new(
         el::<_, Chrome, ()>("div", (header, source))
             .attr("class", "knot-editor-pane")
-            .attr(
-                "style",
-                "position: absolute; left: 160px; top: 72px; width: 640px; height: 520px; \
-                 background: #1b1b1f; color: #e6e6e6; border: 1px solid #3a3a42; \
-                 border-radius: 6px; padding: 12px; overflow: auto; z-index: 90;",
-            ),
+            .attr("style", style),
     )
 }
 
@@ -296,11 +340,9 @@ pub(crate) fn comms_pane(c: &Chrome) -> ChromeView {
         let make: fn(&mut TextInput) -> TextField = |t: &mut TextInput| text_field_typed(t);
         let to_draft: fn(&mut Chrome) -> &mut TextInput = |c: &mut Chrome| &mut c.comms_draft;
         let field = lens(make, to_draft);
-        let send = button(
-            "Send",
-            "comms-send",
-            |c: &mut Chrome, _: PointerClick| c.send_comms(),
-        );
+        let send = button("Send", "comms-send", |c: &mut Chrome, _: PointerClick| {
+            c.send_comms()
+        });
         children.push(Box::new(
             el::<_, Chrome, ()>("div", (field, send)).attr("class", "comms-compose"),
         ));
@@ -382,11 +424,9 @@ pub(crate) fn new_message_form(form: &comms::NewMessageForm) -> ChromeView {
 
     // Title + cancel.
     let title = el::<_, Chrome, ()>("div", "New message").attr("class", "comms-thread-title");
-    let cancel = button(
-        "Cancel",
-        "comms-btn",
-        |c: &mut Chrome, _: PointerClick| c.close_new_message(),
-    );
+    let cancel = button("Cancel", "comms-btn", |c: &mut Chrome, _: PointerClick| {
+        c.close_new_message()
+    });
     rows.push(Box::new(
         el::<_, Chrome, ()>("div", (title, cancel)).attr("class", "comms-title"),
     ));
@@ -437,15 +477,12 @@ pub(crate) fn new_message_form(form: &comms::NewMessageForm) -> ChromeView {
     ));
     let make: fn(&mut TextInput) -> TextField = |t: &mut TextInput| text_field_typed(t);
     let body_lens: fn(&mut Chrome) -> &mut TextInput = |c: &mut Chrome| &mut c.comms_new_body;
-    let send = button(
-        "Send",
-        "comms-send",
-        |c: &mut Chrome, _: PointerClick| c.send_new_message(),
-    );
+    let send = button("Send", "comms-send", |c: &mut Chrome, _: PointerClick| {
+        c.send_new_message()
+    });
     rows.push(Box::new(
         el::<_, Chrome, ()>("div", (lens(make, body_lens), send)).attr("class", "comms-new-body"),
     ));
 
     Box::new(el::<_, Chrome, ()>("div", rows).attr("class", "comms-new"))
 }
-

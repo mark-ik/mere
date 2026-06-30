@@ -162,7 +162,12 @@ impl WindowCtx<'_> {
             return;
         };
         let next = !self.shared.content.constellation.is_background(member);
-        if self.shared.content.constellation.set_background(member, next) {
+        if self
+            .shared
+            .content
+            .constellation
+            .set_background(member, next)
+        {
             tracing::info!(%member, background = next, "toggled node background");
             self.view.request_redraw();
         }
@@ -187,14 +192,22 @@ impl WindowCtx<'_> {
         // window's per-view pool. Toggle this node's `scrying.web` pin specifically
         // (a different engine pin from the picker is left alone), reap the local tile.
         let scrying = inker::routing::ENGINE_SCRYING_WEB;
-        let on = if self.shared.content.engine_pins.get(&member).map(String::as_str)
+        let on = if self
+            .shared
+            .content
+            .engine_pins
+            .get(&member)
+            .map(String::as_str)
             == Some(scrying)
         {
             self.shared.content.engine_pins.remove(&member);
             self.view.scrying.reap(member);
             false
         } else {
-            self.shared.content.engine_pins.insert(member, scrying.to_string());
+            self.shared
+                .content
+                .engine_pins
+                .insert(member, scrying.to_string());
             true
         };
         if on {
@@ -286,7 +299,11 @@ impl WindowCtx<'_> {
         self.view.workbench.open_tile(member);
         self.view.focused_tile = Some(member);
         let gid = self.view.focused_graph;
-        let needed: Vec<_> = self.needed_members().into_iter().map(|m| (m, gid)).collect();
+        let needed: Vec<_> = self
+            .needed_members()
+            .into_iter()
+            .map(|m| (m, gid))
+            .collect();
         self.shared.content.constellation.reconcile(&needed);
         self.pin_operation(member);
     }
@@ -342,12 +359,14 @@ impl WindowCtx<'_> {
         self.orrery()
             .graph()
             .nodes()
-            .filter_map(|(_key, node)| match self.shared.content.pages.get(node.url()) {
-                Some(fetch::ContentState::Ready(fetched)) => {
-                    Some((node.id, content_shape(fetched.content_type.as_deref())))
-                }
-                _ => None,
-            })
+            .filter_map(
+                |(_key, node)| match self.shared.content.pages.get(node.url()) {
+                    Some(fetch::ContentState::Ready(fetched)) => {
+                        Some((node.id, content_shape(fetched.content_type.as_deref())))
+                    }
+                    _ => None,
+                },
+            )
             .collect()
     }
 
@@ -495,7 +514,10 @@ impl WindowCtx<'_> {
     /// registry is fixed at spawn time). (engine-picker Phase 2.)
     pub(super) fn toggle_engine(&mut self, id: &str) {
         let now_active = self.shared.content.engine_activation.is_enabled(id);
-        self.shared.content.engine_activation.set_global(id, !now_active);
+        self.shared
+            .content
+            .engine_activation
+            .set_global(id, !now_active);
         let disabled = self
             .shared
             .content
@@ -503,7 +525,10 @@ impl WindowCtx<'_> {
             .global_disabled_vec()
             .into_iter()
             .collect();
-        self.shared.content.constellation.set_disabled_engines(disabled);
+        self.shared
+            .content
+            .constellation
+            .set_disabled_engines(disabled);
         self.persist_settings();
         self.view.request_redraw();
     }

@@ -109,7 +109,13 @@ pub(super) fn tag_prompt_scene(
     let label = "Add tag:";
     let (label_w, label_h) = text.measure(label, PROMPT_FONT);
     let label_y = (hf - label_h) * 0.5;
-    text.push_line(&mut scene, label, PROMPT_FONT, rgba(theme.muted_text, 1.0), [pad, label_y]);
+    text.push_line(
+        &mut scene,
+        label,
+        PROMPT_FONT,
+        rgba(theme.muted_text, 1.0),
+        [pad, label_y],
+    );
 
     let bx = pad + label_w + 8.0;
     let max_w = (wf - bx - pad).max(1.0);
@@ -118,10 +124,24 @@ pub(super) fn tag_prompt_scene(
     if !shown.is_empty() {
         let (bw, bh) = text.measure(&shown, PROMPT_FONT);
         let by = (hf - bh) * 0.5;
-        text.push_line(&mut scene, &shown, PROMPT_FONT, rgba(theme.strong_text, 1.0), [bx, by]);
+        text.push_line(
+            &mut scene,
+            &shown,
+            PROMPT_FONT,
+            rgba(theme.strong_text, 1.0),
+            [bx, by],
+        );
         caret_x = bx + bw + 1.0;
     }
-    stroke(&mut scene, caret_x, hf * 0.28, caret_x, hf * 0.72, rgba(theme.strong_text, 1.0), 1.2);
+    stroke(
+        &mut scene,
+        caret_x,
+        hf * 0.28,
+        caret_x,
+        hf * 0.72,
+        rgba(theme.strong_text, 1.0),
+        1.2,
+    );
     scene
 }
 

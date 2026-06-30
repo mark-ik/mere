@@ -79,9 +79,15 @@ pub fn apparatus_sheet(c: &ChromeTheme) -> Vec<String> {
         ".app-seg { height: 18px; }".to_string(),
         // Drag-reorder (the configurable menu list, B2): a dimmed grip glyph; the dragged row
         // fades; the drop target draws an accent line at its top edge ("drop before here").
-        format!(".app-reorder-grip {{ font-size: 15px; color: {}; }}", rgb(c.muted_text)),
+        format!(
+            ".app-reorder-grip {{ font-size: 15px; color: {}; }}",
+            rgb(c.muted_text)
+        ),
         ".reorder-dragging { opacity: 0.45; }".to_string(),
-        format!(".reorder-drop {{ border-top: 2px solid {}; }}", rgb(c.active_bg)),
+        format!(
+            ".reorder-drop {{ border-top: 2px solid {}; }}",
+            rgb(c.active_bg)
+        ),
     ]
 }
 
@@ -106,7 +112,11 @@ pub fn engine_section_items(engines: &[EngineRow]) -> Vec<PaneItem> {
         .iter()
         .map(|engine| {
             // Each engine is an independent on / off toggle, not a single-selection group.
-            let label = format!("{}  —  {}", engine.name, if engine.active { "active" } else { "off" });
+            let label = format!(
+                "{}  —  {}",
+                engine.name,
+                if engine.active { "active" } else { "off" }
+            );
             PaneItem::switch(engine.active, label, format!("engine:toggle:{}", engine.id))
         })
         .collect()
@@ -117,7 +127,10 @@ pub fn engine_section_items(engines: &[EngineRow]) -> Vec<PaneItem> {
 /// `pelt/physics` page. (Settings lane.)
 pub fn physics_section_items(physics_damping: f32) -> Vec<PaneItem> {
     vec![
-        PaneItem::text("app-row", format!("Node damping (inertia): {physics_damping:.1}")),
+        PaneItem::text(
+            "app-row",
+            format!("Node damping (inertia): {physics_damping:.1}"),
+        ),
         PaneItem::button(
             "app-btn",
             "− less damping (more drift)".to_string(),
@@ -163,7 +176,13 @@ pub fn apparatus_items(
             let detail = event.detail.as_deref().unwrap_or("");
             items.push(PaneItem::text(
                 "app-row",
-                format!("{} {} {} {}", event.surface, event.event, detail, age(event.at)),
+                format!(
+                    "{} {} {} {}",
+                    event.surface,
+                    event.event,
+                    detail,
+                    age(event.at)
+                ),
             ));
         }
     }
@@ -176,7 +195,13 @@ pub fn apparatus_items(
             let detail = actor.detail.as_deref().unwrap_or("");
             items.push(PaneItem::text(
                 "app-row",
-                format!("{} {} {} {}", actor.actor, actor.event, detail, age(actor.at)),
+                format!(
+                    "{} {} {} {}",
+                    actor.actor,
+                    actor.event,
+                    detail,
+                    age(actor.at)
+                ),
             ));
         }
     }
@@ -228,13 +253,22 @@ pub fn apparatus_items(
 
     items.push(PaneItem::text("app-title", "Tracing"));
     if obs.traces.is_empty() {
-        items.push(PaneItem::text("app-row-muted", "No portable trace events yet"));
+        items.push(PaneItem::text(
+            "app-row-muted",
+            "No portable trace events yet",
+        ));
     } else {
         for trace in &obs.traces {
             let detail = trace.detail.as_deref().unwrap_or("");
             items.push(PaneItem::text(
                 "app-row",
-                format!("{} {} {} {}", trace.name, trace.event, detail, age(trace.at)),
+                format!(
+                    "{} {} {} {}",
+                    trace.name,
+                    trace.event,
+                    detail,
+                    age(trace.at)
+                ),
             ));
         }
     }
@@ -248,7 +282,10 @@ pub fn apparatus_items(
         items.push(PaneItem::text("app-row-muted", "No orphan channels"));
     } else {
         for (channel, count) in &obs.registry.orphan_channels {
-            items.push(PaneItem::text("app-row", format!("orphan {channel}: {count}")));
+            items.push(PaneItem::text(
+                "app-row",
+                format!("orphan {channel}: {count}"),
+            ));
         }
     }
     for violation in &obs.registry.invariant_violations {
@@ -262,7 +299,13 @@ pub fn apparatus_items(
         for probe in &obs.probes {
             items.push(PaneItem::text(
                 "app-row",
-                format!("{} {}: {} {}", probe.name, probe.status, probe.detail, age(probe.at)),
+                format!(
+                    "{} {}: {} {}",
+                    probe.name,
+                    probe.status,
+                    probe.detail,
+                    age(probe.at)
+                ),
             ));
         }
     }

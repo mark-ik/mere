@@ -18,15 +18,16 @@ pub(crate) fn tab_strip(state: &RosterState) -> RosterView {
     let tabs: Vec<RosterView> = RosterTab::ALL
         .iter()
         .map(|&tab| {
-            let class = if tab == state.active_tab {
-                "roster-tab-active"
+            let class = if state.active_tab == tab {
+                "roster-tab roster-tab-active"
             } else {
                 "roster-tab"
             };
             Box::new(clickable(
-                el::<_, RosterState, ()>("span", tab.label()).attr("class", class),
+                el::<_, RosterState, ()>("div", tab.label()).attr("class", class),
                 move |st: &mut RosterState, _: PointerClick| {
                     st.active_tab = tab;
+                    st.relate_picker = None;
                     st.pending.push(RosterIntent::SetTab(tab));
                 },
             )) as RosterView
@@ -51,12 +52,13 @@ pub(crate) fn active_table(state: &RosterState) -> RosterView {
     Box::new(el::<_, RosterState, ()>("div", rows).attr("class", "roster-table"))
 }
 
-pub(crate) fn detail_card(detail: &RosterDetail) -> RosterView {
+pub(crate) fn detail_card(state: &RosterState, detail: &RosterDetail) -> RosterView {
     match detail {
         RosterDetail::Node(card) => node_card(card),
-        RosterDetail::Link(card) => link_card(card),
+        RosterDetail::Link(card) => link_card(state, card),
         RosterDetail::Graphlet(card) => graphlet_card(card),
         RosterDetail::Field(card) => field_card(card),
+        RosterDetail::Facet(card) => crate::roster_facet_view::facet_card(card),
     }
 }
 
@@ -102,8 +104,7 @@ fn node_table(rows: &[RosterRow]) -> Vec<RosterView> {
                 .attr("class", class)
                 .attr("data-member", member.to_string()),
             move |st: &mut RosterState, _: PointerClick| {
-                st.selected_subject = Some(subject.clone());
-                st.pending.push(RosterIntent::OpenDetail(subject.clone()));
+                st.open_subject(subject.clone());
                 st.pending.push(RosterIntent::Select(member));
             },
         )));
@@ -160,8 +161,7 @@ fn link_table(rows: &[LinkRow]) -> Vec<RosterView> {
             el::<_, RosterState, ()>("div", cells)
                 .attr("class", format!("{class} roster-link-grid")),
             move |st: &mut RosterState, _: PointerClick| {
-                st.selected_subject = Some(subject.clone());
-                st.pending.push(RosterIntent::OpenDetail(subject.clone()));
+                st.open_subject(subject.clone());
             },
         )));
     }
@@ -196,8 +196,7 @@ fn graphlet_table(rows: &[GraphletRow]) -> Vec<RosterView> {
         children.push(Box::new(clickable(
             el::<_, RosterState, ()>("div", entry).attr("class", class),
             move |st: &mut RosterState, _: PointerClick| {
-                st.selected_subject = Some(subject.clone());
-                st.pending.push(RosterIntent::OpenDetail(subject.clone()));
+                st.open_subject(subject.clone());
             },
         )));
     }
@@ -205,20 +204,10 @@ fn graphlet_table(rows: &[GraphletRow]) -> Vec<RosterView> {
 }
 
 fn field_table(rows: &[FieldRow]) -> Vec<RosterView> {
-    let mut children: Vec<RosterView> = Vec::new();
+    let mut children: Vec<RosterView> = vec![field_header()];
     for fr in rows {
         let id = fr.id;
         let subject = RosterSubject::Field(id);
-        let toggle_label = if fr.hidden { "show" } else { "hide" };
-        let toggle = on_click(
-            el::<_, RosterState, ()>("span", toggle_label).attr("class", "roster-field-toggle"),
-            move |st: &mut RosterState, ev: PointerClick| {
-                ev.stop_propagation();
-                st.pending.push(RosterIntent::ToggleFieldVisibility(id));
-            },
-        );
-        let weaker = field_step(id, "-", -1000.0);
-        let stronger = field_step(id, "+", 1000.0);
         let entry: Vec<RosterView> = vec![
             Box::new(
                 el::<_, RosterState, ()>("span", fr.name.clone())
@@ -226,21 +215,18 @@ fn field_table(rows: &[FieldRow]) -> Vec<RosterView> {
             ),
             Box::new(
                 el::<_, RosterState, ()>("span", fr.rule_label.clone())
-                    .attr("class", "roster-chip"),
+                    .attr("class", "roster-field-meta roster-field-rule"),
             ),
             Box::new(
                 el::<_, RosterState, ()>("span", fr.extent_label.clone())
-                    .attr("class", "roster-chip"),
+                    .attr("class", "roster-field-meta roster-field-extent"),
             ),
-            Box::new(weaker),
-            Box::new(
-                el::<_, RosterState, ()>("span", format!("{:.0}", fr.strength / 1000.0))
-                    .attr("class", "roster-field-strength"),
-            ),
-            Box::new(stronger),
-            Box::new(toggle),
+            field_visibility_cell(id, fr.hidden),
+            field_strength_cell(id, fr.strength),
         ];
-        let class = if fr.hidden {
+        let class = if fr.selected {
+            "roster-field roster-field-selected"
+        } else if fr.hidden {
             "roster-field roster-field-hidden"
         } else {
             "roster-field"
@@ -248,13 +234,47 @@ fn field_table(rows: &[FieldRow]) -> Vec<RosterView> {
         children.push(Box::new(clickable(
             el::<_, RosterState, ()>("div", entry).attr("class", class),
             move |st: &mut RosterState, _: PointerClick| {
-                st.selected_subject = Some(subject.clone());
-                st.pending.push(RosterIntent::OpenDetail(subject.clone()));
+                st.open_subject(subject.clone());
                 st.pending.push(RosterIntent::SelectField(id));
             },
         )));
     }
     children
+}
+
+fn field_header() -> RosterView {
+    Box::new(
+        el::<_, RosterState, ()>("div", "Field | Rule | Extent | Visibility | Strength")
+            .attr("class", "roster-field-header"),
+    )
+}
+
+fn field_visibility_cell(id: kernel::graph::FieldId, hidden: bool) -> RosterView {
+    let status = if hidden { "hidden" } else { "visible" };
+    let toggle_label = if hidden { "show" } else { "hide" };
+    let cells: Vec<RosterView> = vec![
+        Box::new(el::<_, RosterState, ()>("span", status).attr("class", "roster-field-meta")),
+        Box::new(on_click(
+            el::<_, RosterState, ()>("span", toggle_label).attr("class", "roster-field-toggle"),
+            move |st: &mut RosterState, ev: PointerClick| {
+                ev.stop_propagation();
+                st.pending.push(RosterIntent::ToggleFieldVisibility(id));
+            },
+        )),
+    ];
+    Box::new(el::<_, RosterState, ()>("span", cells).attr("class", "roster-field-visibility"))
+}
+
+fn field_strength_cell(id: kernel::graph::FieldId, strength: f32) -> RosterView {
+    let cells: Vec<RosterView> = vec![
+        Box::new(field_step(id, "-", -1000.0)),
+        Box::new(
+            el::<_, RosterState, ()>("span", format!("{:.0}", strength / 1000.0))
+                .attr("class", "roster-field-strength"),
+        ),
+        Box::new(field_step(id, "+", 1000.0)),
+    ];
+    Box::new(el::<_, RosterState, ()>("span", cells).attr("class", "roster-field-strength-cell"))
 }
 
 fn node_card(card: &NodeDetail) -> RosterView {
@@ -270,6 +290,7 @@ fn node_card(card: &NodeDetail) -> RosterView {
     if !card.tags.is_empty() {
         rows.push(card_row(format!("tags: {}", card.tags.join(", "))));
     }
+    rows.extend(crate::roster_facet_view::facet_links(&card.facets));
     let member = card.member;
     rows.push(action_bar(vec![action("select node", move |st, ev| {
         ev.stop_propagation();
@@ -291,18 +312,22 @@ fn bundle_section(row: &LinkRow) -> RosterView {
         .attr("class", "roster-section roster-link-bundle")
         .attr("title", format!("{} -> {}", row.source_url, row.target_url)),
         move |st: &mut RosterState, _: PointerClick| {
-            st.selected_subject = Some(subject.clone());
-            st.pending.push(RosterIntent::OpenDetail(subject.clone()));
+            st.open_subject(subject.clone());
         },
     ))
 }
 
-fn link_card(card: &LinkCard) -> RosterView {
+fn link_card(state: &RosterState, card: &LinkCard) -> RosterView {
     let mut rows = card_shell(
         &format!("{} -> {}", card.source_title, card.target_title),
         &format!("{} -> {}", card.source_url, card.target_url),
     );
+    rows.extend(crate::roster_facet_view::facet_links(&card.facets));
+    let picker_open = state.relate_picker == Some((card.from, card.to));
     rows.push(action_bar(link_card_actions(card)));
+    if picker_open {
+        rows.push(relate_picker_choices(card));
+    }
     rows.extend(link_relation_groups(card));
     Box::new(el::<_, RosterState, ()>("div", rows).attr("class", "roster-detail"))
 }
@@ -313,13 +338,39 @@ fn link_card_actions(card: &LinkCard) -> Vec<RosterView> {
     let to = card.to;
     actions.push(endpoint_action("select source", from));
     actions.push(endpoint_action("select target", to));
-    for &(kind, label) in RELATE_PICKER_KINDS {
-        actions.push(action(format!("relate as {label}"), move |st, ev| {
+    actions.push(action("relate as...", move |st, ev| {
+        ev.stop_propagation();
+        st.toggle_relate_picker(from, to);
+    }));
+    if card.hidden {
+        actions.push(action("show bundle", move |st, ev| {
             ev.stop_propagation();
-            st.pending.push(RosterIntent::RelateAs { from, to, kind });
+            st.pending.push(RosterIntent::ShowLinkBundle { from, to });
+        }));
+    } else {
+        actions.push(action("hide bundle", move |st, ev| {
+            ev.stop_propagation();
+            st.pending.push(RosterIntent::HideLinkBundle { from, to });
         }));
     }
     actions
+}
+
+fn relate_picker_choices(card: &LinkCard) -> RosterView {
+    let from = card.from;
+    let to = card.to;
+    let mut choices = Vec::new();
+    for &(kind, label) in RELATE_PICKER_KINDS {
+        choices.push(action(label, move |st, ev| {
+            ev.stop_propagation();
+            st.relate_picker = None;
+            st.pending.push(RosterIntent::RelateAs { from, to, kind });
+        }));
+    }
+    Box::new(
+        el::<_, RosterState, ()>("div", vec![action_bar(choices)])
+            .attr("class", "roster-relate-picker"),
+    )
 }
 
 fn link_relation_groups(card: &LinkCard) -> Vec<RosterView> {
@@ -328,9 +379,17 @@ fn link_relation_groups(card: &LinkCard) -> Vec<RosterView> {
     for rel in &card.relations {
         if last != Some(rel.family) {
             last = Some(rel.family);
+            let class = if card
+                .relations
+                .iter()
+                .any(|candidate| candidate.family == rel.family && candidate.selected)
+            {
+                "roster-card-group-title-selected"
+            } else {
+                "roster-card-group-title"
+            };
             out.push(Box::new(
-                el::<_, RosterState, ()>("div", rel.family_label.clone())
-                    .attr("class", "roster-card-group-title"),
+                el::<_, RosterState, ()>("div", rel.family_label.clone()).attr("class", class),
             ));
         }
         out.push(link_relation_row(rel));
@@ -372,8 +431,7 @@ fn link_relation_row(rel: &LinkRelationRow) -> RosterView {
     Box::new(clickable(
         el::<_, RosterState, ()>("div", cells).attr("class", class),
         move |st: &mut RosterState, _: PointerClick| {
-            st.selected_subject = Some(subject.clone());
-            st.pending.push(RosterIntent::OpenDetail(subject.clone()));
+            st.open_subject(subject.clone());
         },
     ))
 }
@@ -393,6 +451,7 @@ fn graphlet_card(card: &GraphletCard) -> RosterView {
     } else {
         "drift tracking: off".to_string()
     }));
+    rows.push(card_row(card.drift_summary.clone()));
     rows.extend(graphlet_drift_rows(card));
     let id = card.id;
     rows.push(action_bar(vec![
@@ -406,7 +465,7 @@ fn graphlet_card(card: &GraphletCard) -> RosterView {
 
 fn graphlet_drift_rows(card: &GraphletCard) -> Vec<RosterView> {
     if card.added.is_empty() && card.removed.is_empty() {
-        return vec![card_row("drift preview: clean")];
+        return Vec::new();
     }
     let mut rows = Vec::new();
     if !card.added.is_empty() {
@@ -430,6 +489,7 @@ fn field_card(card: &FieldDetail) -> RosterView {
         if card.hidden { "hidden" } else { "visible" }
     )));
     rows.push(card_row(format!("strength: {:.0}", card.strength / 1000.0)));
+    rows.extend(crate::roster_facet_view::facet_links(&card.facets));
     let id = card.id;
     rows.push(action_bar(vec![
         action(if card.hidden { "show" } else { "hide" }, move |st, ev| {

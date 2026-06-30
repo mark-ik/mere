@@ -25,9 +25,18 @@ use crate::settings_lane::{SettingsPage, SettingsPageRef};
 /// The pages the `node:<id>` provider serves, in spine order. (Settings lane P3.)
 pub(crate) fn node_settings_index() -> Vec<SettingsPageRef> {
     vec![
-        SettingsPageRef { id: "info", title: "Info" },
-        SettingsPageRef { id: "appearance", title: "Appearance" },
-        SettingsPageRef { id: "engine", title: "Engine" },
+        SettingsPageRef {
+            id: "info",
+            title: "Info",
+        },
+        SettingsPageRef {
+            id: "appearance",
+            title: "Appearance",
+        },
+        SettingsPageRef {
+            id: "engine",
+            title: "Engine",
+        },
     ]
 }
 
@@ -69,10 +78,20 @@ impl WindowCtx<'_> {
         }
         items.push(PaneItem::text("app-row", format!("URL: {}", node.url())));
         items.push(PaneItem::text("app-title", "Presentation"));
-        items.push(PaneItem::text("app-row", format!("Face: {:?}", orrery.node_face(key))));
-        let body = if orrery.node_sprite_hull(key).is_some() { "custom shape" } else { "standard" };
+        items.push(PaneItem::text(
+            "app-row",
+            format!("Face: {:?}", orrery.node_face(key)),
+        ));
+        let body = if orrery.node_sprite_hull(key).is_some() {
+            "custom shape"
+        } else {
+            "standard"
+        };
         items.push(PaneItem::text("app-row", format!("Body: {body}")));
-        items.push(PaneItem::text("app-row", format!("Size: {:.0} px", orrery.node_size(key))));
+        items.push(PaneItem::text(
+            "app-row",
+            format!("Size: {:.0} px", orrery.node_size(key)),
+        ));
         items
     }
 
@@ -98,7 +117,11 @@ impl WindowCtx<'_> {
         ));
         items.push(PaneItem::radio(
             face == Face::Sprite,
-            if has_sprite { "Sprite".to_string() } else { "Sprite (none)".to_string() },
+            if has_sprite {
+                "Sprite".to_string()
+            } else {
+                "Sprite (none)".to_string()
+            },
             format!("nodefacet:{member}:face:sprite"),
         ));
         items.push(PaneItem::radio(
@@ -128,7 +151,11 @@ impl WindowCtx<'_> {
         items.push(PaneItem::text("app-title", "Size"));
         items.push(PaneItem::text(
             "app-row",
-            format!("{:.0} px (tier {})", orrery.node_size(key), orrery.node_size_tier(key)),
+            format!(
+                "{:.0} px (tier {})",
+                orrery.node_size(key),
+                orrery.node_size_tier(key)
+            ),
         ));
         items.push(PaneItem::button(
             "app-btn",
@@ -148,7 +175,10 @@ impl WindowCtx<'_> {
         items.push(PaneItem::text("app-title", "Material"));
         items.push(PaneItem::text(
             "app-row",
-            format!("Bounce {:.1} · Grip {:.1} · Weight {weight:.1}\u{00d7}", mat.restitution, mat.friction),
+            format!(
+                "Bounce {:.1} · Grip {:.1} · Weight {weight:.1}\u{00d7}",
+                mat.restitution, mat.friction
+            ),
         ));
         for (label, knob) in [("Bounce", "bounce"), ("Grip", "grip"), ("Weight", "mass")] {
             items.push(PaneItem::button(
@@ -182,7 +212,12 @@ impl WindowCtx<'_> {
         // The scripted serval rung is pickable only in the `scripted` build. (Ladder.)
         #[cfg(feature = "scripted")]
         pickable.push((inker::routing::ENGINE_SERVAL_SCRIPTED, "Serval (scripted)"));
-        let pin = self.shared.content.engine_pins.get(&member).map(String::as_str);
+        let pin = self
+            .shared
+            .content
+            .engine_pins
+            .get(&member)
+            .map(String::as_str);
         let is_web = self
             .orrery()
             .graph()
@@ -222,15 +257,22 @@ impl WindowCtx<'_> {
     /// underlying writes the context-menu pickers use, but targeting the facets tile's node.
     /// (Settings lane P3; node body & face.)
     pub(crate) fn apply_node_facet_key(&mut self, key: &str) {
-        let Some((id_str, action)) = key.split_once(':') else { return };
-        let Ok(member) = id_str.parse::<GraphMemberId>() else { return };
+        let Some((id_str, action)) = key.split_once(':') else {
+            return;
+        };
+        let Ok(member) = id_str.parse::<GraphMemberId>() else {
+            return;
+        };
         match action {
             "engine:auto" => {
                 self.shared.content.engine_pins.remove(&member);
             }
             a if a.starts_with("engine:pin:") => {
                 let engine = &a["engine:pin:".len()..];
-                self.shared.content.engine_pins.insert(member, engine.to_string());
+                self.shared
+                    .content
+                    .engine_pins
+                    .insert(member, engine.to_string());
             }
             "face:favicon" => self.orrery_mut().set_node_face(member, Face::Favicon),
             "face:sprite" => self.orrery_mut().set_node_face(member, Face::Sprite),
@@ -244,7 +286,9 @@ impl WindowCtx<'_> {
                 self.orrery_mut().step_node_size_tier(member, -1);
             }
             "material:reset" => self.orrery_mut().clear_node_material(member),
-            a if a.starts_with("material:") => self.step_node_material(member, &a["material:".len()..]),
+            a if a.starts_with("material:") => {
+                self.step_node_material(member, &a["material:".len()..])
+            }
             _ => return,
         }
         // Body + face edits (hull shape, material, face) persist in the cartography sidecar:
@@ -263,7 +307,9 @@ impl WindowCtx<'_> {
     /// bounce / grip by ±0.1 (clamped), weight by ×/÷1.5 (clamped to 0.25..8× the default
     /// density). Reads the current material, adjusts, and pushes it live. (Node body & face.)
     fn step_node_material(&mut self, member: GraphMemberId, knob: &str) {
-        let Some((key, _)) = self.orrery().graph().get_node_by_id(member) else { return };
+        let Some((key, _)) = self.orrery().graph().get_node_by_id(member) else {
+            return;
+        };
         let mut mat = self.orrery().node_material(key);
         let round1 = |x: f32| (x * 10.0).round() / 10.0;
         match knob {

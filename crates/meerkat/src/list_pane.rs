@@ -12,10 +12,12 @@
 //!
 //! (Window composition P2 companion — list-pane view-ification.)
 
-use xilem_serval::{el, clickable, AnyView, PointerClick, ServalCtx, ServalElement};
+use xilem_serval::{AnyView, PointerClick, ServalCtx, ServalElement, clickable, el};
 
 // The `ListPane` bundle is a #[cfg(test)] harness now that the four list panes fold into
 // the shell document; its DOM / layout imports come along under the gate. (Phase 1, step 2.)
+#[cfg(test)]
+use crate::view_pane::ViewPane;
 #[cfg(test)]
 use layout_dom_api::LayoutDom;
 #[cfg(test)]
@@ -24,8 +26,6 @@ use netrender::Scene;
 use serval_layout::ScrollOffsets;
 #[cfg(test)]
 use serval_scripted_dom::NodeId;
-#[cfg(test)]
-use crate::view_pane::ViewPane;
 
 /// A segmented slider control: a horizontal strip of `count` clickable cells.
 /// Clicking cell `i` queues `"<key_prefix>:<i>:<count>"`, which the host maps to
@@ -101,11 +101,22 @@ pub struct PaneItem {
 impl PaneItem {
     /// A non-interactive classed text row (a title or a display row).
     pub fn text(class: impl Into<String>, text: impl Into<String>) -> Self {
-        Self { class: class.into(), text: text.into(), key: None, slider: None, reorder: None, aria: None }
+        Self {
+            class: class.into(),
+            text: text.into(),
+            key: None,
+            slider: None,
+            reorder: None,
+            aria: None,
+        }
     }
 
     /// A clickable button row whose click queues `key`.
-    pub fn button(class: impl Into<String>, text: impl Into<String>, key: impl Into<String>) -> Self {
+    pub fn button(
+        class: impl Into<String>,
+        text: impl Into<String>,
+        key: impl Into<String>,
+    ) -> Self {
         Self {
             class: class.into(),
             text: text.into(),
@@ -121,7 +132,11 @@ impl PaneItem {
     /// active / inactive `app-btn` class, both driven by `selected`. The host
     /// drains `key` on click, exactly as for a plain button.
     pub fn radio(selected: bool, text: impl Into<String>, key: impl Into<String>) -> Self {
-        let class = if selected { "app-btn-active" } else { "app-btn" };
+        let class = if selected {
+            "app-btn-active"
+        } else {
+            "app-btn"
+        };
         Self {
             class: class.to_string(),
             text: text.into(),
@@ -244,7 +259,8 @@ pub fn list_pane_view(state: &ListPaneState) -> ListView {
         .items
         .iter()
         .map(|item| {
-            let mut div = el::<_, ListPaneState, ()>("div", item.text.clone()).attr("class", item.class.clone());
+            let mut div = el::<_, ListPaneState, ()>("div", item.text.clone())
+                .attr("class", item.class.clone());
             if let Some(aria) = item.aria {
                 let (role, checked) = aria.role_and_checked();
                 div = div.attr("role", role).attr("aria-checked", checked);
@@ -255,9 +271,10 @@ pub fn list_pane_view(state: &ListPaneState) -> ListView {
                     // `focusable` puts the button in the Tab order; the runner activates it on
                     // Enter/Space by synthesizing a click that fires this `on_click`, queuing
                     // the activation like a pointer click. (Phase 1, step 3c.)
-                    Box::new(clickable(div, move |s: &mut ListPaneState, _: PointerClick| {
-                        s.pending.push(key.clone())
-                    })) as ListView
+                    Box::new(clickable(
+                        div,
+                        move |s: &mut ListPaneState, _: PointerClick| s.pending.push(key.clone()),
+                    )) as ListView
                 }
                 None => Box::new(div) as ListView,
             }
@@ -409,7 +426,9 @@ mod tests {
         // Lay the pane out so the hit-test has a cached layout to probe.
         let _ = pane.frame(240, 160, 0.0);
         // A point inside the button (below the inert title row, within its padding).
-        let node = pane.hit_test(30.0, 40.0, 0.0).expect("a node under the button");
+        let node = pane
+            .hit_test(30.0, 40.0, 0.0)
+            .expect("a node under the button");
         pane.dispatch_click(node, PointerClick::at((30.0, 40.0)));
         let keys = pane.take_activations();
         assert_eq!(

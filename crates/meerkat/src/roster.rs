@@ -71,6 +71,56 @@ pub enum RosterSubject {
     },
     Graphlet(GraphletId),
     Field(FieldId),
+    Facet(FacetSubject),
+}
+
+/// A card-addressable facet of a graph object. Facets are not a new graph
+/// element; they are a roster navigation layer over node/link/field metadata.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FacetSubject {
+    NodeContent(GraphMemberId),
+    NodeTags(GraphMemberId),
+    NodeRelations(GraphMemberId),
+    NodeFields(GraphMemberId),
+    LinkFamily {
+        from: GraphMemberId,
+        to: GraphMemberId,
+        family: EdgeFamily,
+    },
+    FieldRule(FieldId),
+    FieldExtent(FieldId),
+    FieldVisibility(FieldId),
+    FieldStrength(FieldId),
+}
+
+impl RosterSubject {
+    pub fn natural_tab(&self) -> RosterTab {
+        match self {
+            RosterSubject::Node(_) => RosterTab::Nodes,
+            RosterSubject::LinkBundle { .. } | RosterSubject::RelationCell { .. } => {
+                RosterTab::Links
+            }
+            RosterSubject::Graphlet(_) => RosterTab::Graphlets,
+            RosterSubject::Field(_) => RosterTab::Fields,
+            RosterSubject::Facet(facet) => facet.natural_tab(),
+        }
+    }
+}
+
+impl FacetSubject {
+    pub fn natural_tab(&self) -> RosterTab {
+        match self {
+            FacetSubject::NodeContent(_)
+            | FacetSubject::NodeTags(_)
+            | FacetSubject::NodeRelations(_)
+            | FacetSubject::NodeFields(_) => RosterTab::Nodes,
+            FacetSubject::LinkFamily { .. } => RosterTab::Links,
+            FacetSubject::FieldRule(_)
+            | FacetSubject::FieldExtent(_)
+            | FacetSubject::FieldVisibility(_)
+            | FacetSubject::FieldStrength(_) => RosterTab::Fields,
+        }
+    }
 }
 
 /// The curated semantic relation picker shared by context menus and the Link Card.
@@ -152,6 +202,7 @@ pub struct FieldRow {
     pub extent_label: String,
     /// Whether the field is currently hidden from the canvas.
     pub hidden: bool,
+    pub selected: bool,
     /// The field's coupling strength (the per-field force-well), shown + tuned in
     /// the row. (Field regions — strength tuning.)
     pub strength: f32,
@@ -166,6 +217,7 @@ pub struct NodeDetail {
     pub tags: Vec<String>,
     pub relation_count: usize,
     pub open: bool,
+    pub facets: Vec<FacetEntry>,
 }
 
 #[derive(Clone)]
@@ -189,7 +241,11 @@ pub struct LinkCard {
     pub source_url: String,
     pub target_title: String,
     pub target_url: String,
+    /// Display-only endpoint bundle visibility in the current orrery session.
+    /// This is not per-family or per-cell relation storage.
+    pub hidden: bool,
     pub relations: Vec<LinkRelationRow>,
+    pub facets: Vec<FacetEntry>,
 }
 
 #[derive(Clone)]
@@ -200,6 +256,7 @@ pub struct GraphletCard {
     pub members: Vec<String>,
     pub selectors_label: String,
     pub drift_tracking: bool,
+    pub drift_summary: String,
     pub added: Vec<String>,
     pub removed: Vec<String>,
 }
@@ -212,6 +269,46 @@ pub struct FieldDetail {
     pub extent_label: String,
     pub hidden: bool,
     pub strength: f32,
+    pub facets: Vec<FacetEntry>,
+}
+
+#[derive(Clone)]
+pub struct FacetEntry {
+    pub label: String,
+    pub value: String,
+    pub subject: RosterSubject,
+}
+
+#[derive(Clone)]
+pub struct FacetInfoRow {
+    pub label: String,
+    pub value: String,
+}
+
+#[derive(Clone)]
+pub struct FacetAction {
+    pub label: String,
+    pub intent: FacetActionIntent,
+}
+
+#[derive(Clone)]
+pub enum FacetActionIntent {
+    SelectNode(GraphMemberId),
+    SelectField(FieldId),
+    ToggleFieldVisibility(FieldId),
+    AdjustFieldStrength(FieldId, f32),
+    OpenLinkBundle {
+        from: GraphMemberId,
+        to: GraphMemberId,
+    },
+}
+
+#[derive(Clone)]
+pub struct FacetCard {
+    pub title: String,
+    pub subtitle: String,
+    pub rows: Vec<FacetInfoRow>,
+    pub actions: Vec<FacetAction>,
 }
 
 #[derive(Clone)]
@@ -220,6 +317,7 @@ pub enum RosterDetail {
     Link(LinkCard),
     Graphlet(GraphletCard),
     Field(FieldDetail),
+    Facet(FacetCard),
 }
 
 /// The host-built roster projection for one frame. View state owns the active
@@ -243,18 +341,19 @@ pub fn roster_sheet(c: &ChromeTheme) -> Vec<String> {
         "div { display: block; }".to_string(),
         "span { display: inline-block; }".to_string(),
         format!(
-            ".roster {{ overflow: scroll; height: 100%; background-color: {}; padding: 6px; }}",
+            ".roster {{ position: relative; overflow: hidden; height: 100%; box-sizing: border-box; background-color: {}; padding: 6px; }}",
             rgb(c.panel_bg)
         ),
-        ".roster-tabs { display: flex; gap: 4px; margin-bottom: 6px; }".to_string(),
+        ".roster-tabs { display: block; margin-bottom: 6px; }".to_string(),
+        ".roster-scroll { overflow: scroll; height: 100%; box-sizing: border-box; padding-bottom: 8px; }".to_string(),
         format!(
-            ".roster-tab {{ font-size: 12px; color: {}; background-color: {}; padding: 3px 8px; border-radius: 3px; }}",
+            ".roster-tab {{ display: block; font-size: 12px; color: {}; background-color: {}; padding: 3px 8px; margin: 0 0 3px 0; border-radius: 3px; border: 0; }}",
             rgb(c.muted_text),
             rgb(c.control_bg)
         ),
         format!(
-            ".roster-tab-active {{ font-size: 12px; color: {}; background-color: {}; padding: 3px 8px; border-radius: 3px; }}",
-            rgb(c.strong_text),
+            ".roster-tab-active {{ display: block; font-size: 12px; color: {}; background-color: {}; padding: 3px 8px; margin: 0 0 3px 0; border-radius: 3px; border: 0; }}",
+            rgb(c.control_text),
             rgb(c.active_bg)
         ),
         ".roster-table { display: block; }".to_string(),
@@ -346,29 +445,62 @@ pub fn roster_sheet(c: &ChromeTheme) -> Vec<String> {
             rgb(c.control_text),
             rgb(c.control_bg)
         ),
+        ".roster-facet-row { display: flex; justify-content: space-between; gap: 8px; padding: 5px 0; }"
+            .to_string(),
+        format!(
+            ".roster-facet-label {{ font-size: 12px; color: {}; }}",
+            rgb(c.body_text)
+        ),
+        format!(
+            ".roster-facet-value {{ font-size: 12px; color: {}; text-align: right; }}",
+            rgb(c.muted_text)
+        ),
         ".roster-card-group { margin-top: 6px; }".to_string(),
         format!(
             ".roster-card-group-title {{ font-size: 10px; color: {}; padding-top: 4px; }}",
             rgb(c.muted_text)
         ),
-        // Field rows: a name + a hide/show toggle, muted when hidden.
         format!(
-            ".roster-field {{ display: flex; justify-content: space-between; align-items: center; background-color: {}; padding: 8px 10px; margin: 2px 0; }}",
+            ".roster-card-group-title-selected {{ font-size: 10px; color: {}; background-color: {}; padding: 4px 5px 0px; }}",
+            rgb(c.strong_text),
+            rgb(c.active_bg)
+        ),
+        ".roster-relate-picker { margin-top: 2px; padding-left: 4px; }".to_string(),
+        // Field rows: a compact table over rule, extent, visibility, and strength.
+        format!(
+            ".roster-field-header {{ display: block; padding: 2px 10px 4px; font-size: 10px; color: {}; }}",
+            rgb(c.muted_text)
+        ),
+        format!(
+            ".roster-field {{ display: block; background-color: {}; padding: 8px 10px; margin: 2px 0; }}",
             rgb(c.surface_bg)
+        ),
+        format!(
+            ".roster-field-selected {{ background-color: {}; }}",
+            rgb(c.active_bg)
         ),
         format!(".roster-field-hidden {{ opacity: 0.5; }}"),
         format!(
-            ".roster-field-name {{ font-size: 14px; color: {}; flex: 1 1 auto; }}",
+            ".roster-field-name {{ display: inline-block; width: 28%; font-size: 14px; color: {}; vertical-align: middle; }}",
             rgb(c.body_text)
         ),
         format!(
-            ".roster-field-toggle {{ font-size: 11px; color: {}; background-color: {}; padding: 1px 7px; border-radius: 3px; margin-left: 6px; }}",
+            ".roster-field-meta {{ font-size: 11px; color: {}; background-color: {}; padding: 1px 6px; border-radius: 3px; }}",
+            rgb(c.muted_text),
+            rgb(c.control_bg)
+        ),
+        ".roster-field-rule { display: inline-block; width: 14%; vertical-align: middle; }".to_string(),
+        ".roster-field-extent { display: inline-block; width: 20%; vertical-align: middle; }".to_string(),
+        ".roster-field-visibility { display: inline-block; width: 19%; vertical-align: middle; }".to_string(),
+        ".roster-field-strength-cell { display: inline-block; width: 17%; vertical-align: middle; }".to_string(),
+        format!(
+            ".roster-field-toggle {{ font-size: 11px; color: {}; background-color: {}; padding: 1px 7px; border-radius: 3px; }}",
             rgb(c.muted_text),
             rgb(c.control_bg)
         ),
         // The − / + strength steppers and the value between them. (Field regions.)
         format!(
-            ".roster-field-step {{ font-size: 13px; color: {}; background-color: {}; padding: 1px 7px; border-radius: 3px; margin-left: 4px; }}",
+            ".roster-field-step {{ font-size: 13px; color: {}; background-color: {}; padding: 1px 7px; border-radius: 3px; }}",
             rgb(c.body_text),
             rgb(c.control_bg)
         ),
@@ -384,9 +516,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn roster_sheet_marks_root_as_scroll_container() {
+    fn roster_sheet_marks_body_as_scroll_container() {
         let css = roster_sheet(&ChromeTheme::default()).join("\n");
         assert!(css.contains(".roster"));
+        assert!(css.contains(".roster-scroll"));
         assert!(css.contains("overflow: scroll"));
         assert!(css.contains("height: 100%"));
     }
