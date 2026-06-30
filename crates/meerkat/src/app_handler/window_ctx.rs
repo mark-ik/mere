@@ -14,7 +14,9 @@ impl crate::WindowCtx<'_> {
     /// right/bottom only grow it. The follow-up `Resized` event reconfigures the
     /// surface.
     pub(crate) fn apply_resize(&self) {
-        let Some(drag) = self.view.resize_drag else { return };
+        let Some(drag) = self.view.resize_drag else {
+            return;
+        };
         let Some(window) = self.view.window.as_ref() else {
             return;
         };
@@ -68,8 +70,16 @@ impl crate::WindowCtx<'_> {
     /// the interior keep the default arrow. Only re-sets the cursor on a change.
     pub(crate) fn update_hover_cursor(&mut self) {
         let (x, y) = self.view.cursor;
-        let band_h = self.toolbar_height();
-        let icon = if titlebar::control_at(x, y, self.view.width, band_h, self.shared.presentation.ui_scale()).is_some() {
+        let band_h = self.current_toolbar_height();
+        let icon = if titlebar::control_at(
+            x,
+            y,
+            self.view.width,
+            band_h,
+            self.shared.presentation.ui_scale(),
+        )
+        .is_some()
+        {
             CursorIcon::Default
         } else if let Some(dir) = titlebar::resize_dir_at(x, y, self.view.width, self.view.height) {
             titlebar::resize_cursor(dir)

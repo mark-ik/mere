@@ -109,7 +109,6 @@ fn apply_comms_to_chrome(
     }
 }
 
-
 mod handler;
 mod handler_user;
 mod handler_window;

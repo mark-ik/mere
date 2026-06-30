@@ -57,6 +57,10 @@ impl Chrome {
             slim: false,
             knot_source: TextInput::new(""),
             knot_editor_open: false,
+            knot_target: None,
+            knot_editor_label: String::new(),
+            knot_editor_rect: None,
+            knot_save_requested: false,
             sessions: Vec::new(),
             sessions_overflow_open: false,
             session_intent: None,
@@ -309,7 +313,6 @@ impl Chrome {
             }
             // Chrome-level: toggle the docked comms pane in place.
             Command::ToggleComms => self.toggle_comms(),
-            Command::ToggleKnotEditor => self.toggle_knot_editor(),
             // Settings now opens as a workbench tile (the pelt settings lane), so it is a
             // host action like the other pane toggles, not the chrome overlay it was in P0.
             // (Settings lane P1.)
@@ -338,6 +341,8 @@ impl Chrome {
             | Command::ExportGraph
             | Command::SaveGraphEngram
             | Command::MaterializeFocused
+            | Command::ToggleKnotEditor
+            | Command::ClipFocused
             | Command::CrawlFocused
             | Command::StopCrawl
             | Command::ToggleShellbar => {

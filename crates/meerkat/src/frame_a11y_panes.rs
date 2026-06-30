@@ -98,8 +98,11 @@ impl WindowCtx<'_> {
                 // overlay uses), not the bare `location`. (Phase 1.)
                 // Painted origins fold the roster pane's retained `element_scroll`, so a row's
                 // bounds already account for the wheel scroll. (Host-scroll P2.)
-                let origins =
-                    serval_layout::accumulate_painted_origins(&*dom, frags, session.element_scroll());
+                let origins = serval_layout::accumulate_painted_origins(
+                    &*dom,
+                    frags,
+                    session.element_scroll(),
+                );
                 let mut rows = crate::all_with_class(&dom, root, "roster-row");
                 rows.extend(crate::all_with_class(&dom, root, "roster-row-selected"));
                 for node in rows {
@@ -240,14 +243,18 @@ impl WindowCtx<'_> {
                 let droot = dom.document();
                 // Painted origins fold the pane's retained `element_scroll`, so a row's bounds
                 // already account for the wheel scroll — no host offset to subtract. (P2.)
-                let origins =
-                    serval_layout::accumulate_painted_origins(&*dom, frags, session.element_scroll());
+                let origins = serval_layout::accumulate_painted_origins(
+                    &*dom,
+                    frags,
+                    session.element_scroll(),
+                );
                 if let Some(inner) = crate::first_with_class(&dom, droot, inner_class) {
                     for child in dom.dom_children(inner) {
                         if dom.kind(child) == NodeKind::Element {
-                            let bounds = frags.rect_of(child).zip(origins.get(&child)).map(
-                                |(l, p)| [p.x, p.y, p.x + l.size.width, p.y + l.size.height],
-                            );
+                            let bounds = frags
+                                .rect_of(child)
+                                .zip(origins.get(&child))
+                                .map(|(l, p)| [p.x, p.y, p.x + l.size.width, p.y + l.size.height]);
                             out.push((child, bounds));
                         }
                     }

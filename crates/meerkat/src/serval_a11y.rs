@@ -99,7 +99,10 @@ const FOLDED_PANE_WRAPPERS: &[&str] = &[
 fn is_folded_pane(dom: &ScriptedDom, node: NodeId) -> bool {
     dom.attributes(node).any(|attr| {
         attr.name.local.as_ref() == "class"
-            && attr.value.split_whitespace().any(|c| FOLDED_PANE_WRAPPERS.contains(&c))
+            && attr
+                .value
+                .split_whitespace()
+                .any(|c| FOLDED_PANE_WRAPPERS.contains(&c))
     })
 }
 
@@ -182,7 +185,14 @@ pub(crate) fn chrome_a11y_tree(
     let root = dom.document();
     let mut nodes = Vec::new();
     let mut actionable = Vec::new();
-    build(dom, fragments, root, (0.0, 0.0), &mut nodes, &mut actionable);
+    build(
+        dom,
+        fragments,
+        root,
+        (0.0, 0.0),
+        &mut nodes,
+        &mut actionable,
+    );
     (
         UxTree {
             root: chrome_a11y_id(root),
@@ -223,8 +233,12 @@ mod tests {
         let label = dom.create_text("Go");
         dom.append_child(button, label);
 
-        let frags =
-            serval_layout::render(&dom, &["div, input, button { display: block; }"], 400.0, 60.0);
+        let frags = serval_layout::render(
+            &dom,
+            &["div, input, button { display: block; }"],
+            400.0,
+            60.0,
+        );
         let (tree, actionable) = chrome_a11y_tree(&dom, &frags);
 
         let node = |n: NodeId| {
@@ -243,24 +257,45 @@ mod tests {
         assert_eq!(node(input).role(), Role::TextInput);
         assert_eq!(node(button).role(), Role::Button);
         assert_eq!(node(button).label(), Some("Go"));
-        assert!(node(button).bounds().is_some(), "a laid-out node has bounds");
+        assert!(
+            node(button).bounds().is_some(),
+            "a laid-out node has bounds"
+        );
 
         // Controls declare the host action a screen reader invokes. (G2.4.)
-        assert!(node(button).supports_action(Action::Click), "the button advertises Click");
-        assert!(node(input).supports_action(Action::Focus), "the input advertises Focus");
+        assert!(
+            node(button).supports_action(Action::Click),
+            "the button advertises Click"
+        );
+        assert!(
+            node(input).supports_action(Action::Focus),
+            "the input advertises Focus"
+        );
 
         // The actionable controls are handed back for host routing — exactly the
         // button + input, never the container or document. The host keys each into
         // an `A11yHostAction::ChromeNode` route by its `chrome_a11y_id`. (G2.4.)
-        assert_eq!(actionable.len(), 2, "only the button + input are actionable");
+        assert_eq!(
+            actionable.len(),
+            2,
+            "only the button + input are actionable"
+        );
         assert!(actionable.contains(&button), "the button is routed");
         assert!(actionable.contains(&input), "the input is routed");
-        assert!(!actionable.contains(&root), "the document is not actionable");
-        assert!(!actionable.contains(&bar), "the container is not actionable");
+        assert!(
+            !actionable.contains(&root),
+            "the document is not actionable"
+        );
+        assert!(
+            !actionable.contains(&bar),
+            "the container is not actionable"
+        );
 
         // Every id sits in the salted chrome range, disjoint from path hashes.
         assert!(
-            tree.nodes.iter().all(|(id, _)| id.0 & CHROME_A11Y_SALT == CHROME_A11Y_SALT),
+            tree.nodes
+                .iter()
+                .all(|(id, _)| id.0 & CHROME_A11Y_SALT == CHROME_A11Y_SALT),
             "chrome a11y ids are salted out of the path-hash space",
         );
     }

@@ -69,7 +69,9 @@ impl WindowCtx<'_> {
             return false;
         }
         let dom = self.view.dom.borrow();
-        let Some(session) = self.view.chrome_session.as_ref() else { return false };
+        let Some(session) = self.view.chrome_session.as_ref() else {
+            return false;
+        };
         crate::first_with_class(&dom, dom.document(), "knot-editor-pane")
             .and_then(|node| session.fragments().rect_of(node))
             .is_some_and(|r| {
@@ -96,7 +98,15 @@ impl WindowCtx<'_> {
             // session); fall back to a stateless probe only before the first render.
             match &self.view.chrome_session {
                 Some(s) => s.hit_test(&dom, x, y, &scroll),
-                None => hit_test_node(&dom, &sheet, self.view.width, self.view.height, x, y, &scroll),
+                None => hit_test_node(
+                    &dom,
+                    &sheet,
+                    self.view.width,
+                    self.view.height,
+                    x,
+                    y,
+                    &scroll,
+                ),
             }
         };
         if let Some(node) = hit {
@@ -128,6 +138,7 @@ impl WindowCtx<'_> {
     pub(crate) fn drain_chrome_intents(&mut self) {
         self.drain_pending_connect();
         self.drain_pending_command();
+        self.drain_knot_editor_save();
         self.drain_comms_intent();
         self.drain_session_intent();
         self.drain_palette_context_action();
@@ -138,6 +149,7 @@ impl WindowCtx<'_> {
         // crawl_stop) fires this interaction rather than lagging to the next. No-op when
         // nothing was queued. (The keyboard menu path already orders context before command.)
         self.drain_pending_command();
+        self.drain_knot_editor_save();
         self.drain_history_step();
         self.drain_physics_toggle();
         self.drain_roster_intents();
@@ -146,5 +158,4 @@ impl WindowCtx<'_> {
         self.sync_settings();
         self.sync_orrery();
     }
-
 }

@@ -58,9 +58,7 @@ impl WindowCtx<'_> {
             // end (otherwise it is an ordinary caret move); Tab whenever a ghost is
             // present. Either splices `>ros` + "ter" → `>roster`; Enter still
             // evaluates only what is in the buffer, never the ghost.
-            WinitKey::Named(WinitNamedKey::ArrowRight)
-                if self.omnibar_ghost_acceptable(true) =>
-            {
+            WinitKey::Named(WinitNamedKey::ArrowRight) if self.omnibar_ghost_acceptable(true) => {
                 self.accept_omnibar_ghost();
             }
             WinitKey::Named(WinitNamedKey::Tab) if self.omnibar_ghost_acceptable(false) => {
@@ -274,7 +272,13 @@ impl WindowCtx<'_> {
                 // the full WindowCtx cleanup); this arm mirrors it exactly as a fallback so the two
                 // paths can't diverge: collapse one submenu level if open, else close the whole
                 // menu via the cleanup-clearing wrapper. (Nested submenus.)
-                if self.view.chrome().context_menu.as_ref().is_some_and(|m| m.submenu.is_some()) {
+                if self
+                    .view
+                    .chrome()
+                    .context_menu
+                    .as_ref()
+                    .is_some_and(|m| m.submenu.is_some())
+                {
                     self.view.chrome_update(Chrome::close_submenu);
                     self.view.request_redraw();
                 } else {
@@ -489,8 +493,7 @@ impl WindowCtx<'_> {
             let scroll = self.view.scroll.get(&member).copied().unwrap_or(0.0);
             let out_of_view = match_top < scroll || match_bot > scroll + vis_h;
             if out_of_view && match_top.is_finite() {
-                let target =
-                    (match_top - vis_h * 0.2).clamp(0.0, (content_h - vis_h).max(0.0));
+                let target = (match_top - vis_h * 0.2).clamp(0.0, (content_h - vis_h).max(0.0));
                 self.view.scroll.insert(member, target);
             }
         }
@@ -509,8 +512,7 @@ impl WindowCtx<'_> {
             .find(|(m, _)| *m == member)
             .map(|(_, r)| *r)?;
         let vis_h = (rect[3] - rect[1]).max(1.0);
-        let content_h =
-            (self.shared.content.constellation.content_height(member) as f32).max(vis_h);
+        let content_h = self.member_content_height(member, vis_h);
         Some((vis_h, content_h))
     }
 

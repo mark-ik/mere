@@ -15,10 +15,14 @@ impl WindowCtx<'_> {
     /// already resolved earlier (`tile_link_at`). Re-projection is on the next render
     /// (`Workbench::to_tile_tree`), so the shell stays a driven view. (Drag via TileEvents.)
     pub(crate) fn workbench_pointer_down(&mut self, x: f32, y: f32) {
-        let Some(wr) = self.workbench_leaf_rect() else { return };
+        let Some(wr) = self.workbench_leaf_rect() else {
+            return;
+        };
         let (lx, ly) = (x - wr[0], y - wr[1]);
         let events = {
-            let Some(shell) = self.view.pelt_shell.as_mut() else { return };
+            let Some(shell) = self.view.pelt_shell.as_mut() else {
+                return;
+            };
             shell.pointer_move(lx, ly);
             shell.pointer_down();
             shell.take_events()
@@ -33,10 +37,14 @@ impl WindowCtx<'_> {
     /// Feed a pointer move to the shell while a workbench gesture is in flight (advances
     /// a divider resize / tab drag), applying any emitted gesture. (Drag via TileEvents.)
     pub(crate) fn workbench_pointer_move(&mut self, x: f32, y: f32) {
-        let Some(wr) = self.workbench_leaf_rect() else { return };
+        let Some(wr) = self.workbench_leaf_rect() else {
+            return;
+        };
         let (lx, ly) = (x - wr[0], y - wr[1]);
         let events = {
-            let Some(shell) = self.view.pelt_shell.as_mut() else { return };
+            let Some(shell) = self.view.pelt_shell.as_mut() else {
+                return;
+            };
             shell.pointer_move(lx, ly);
             shell.take_events()
         };
@@ -53,10 +61,14 @@ impl WindowCtx<'_> {
     /// TileEvents.)
     pub(crate) fn workbench_pointer_up(&mut self, x: f32, y: f32) -> bool {
         self.view.workbench_gesture = false;
-        let Some(wr) = self.workbench_leaf_rect() else { return false };
+        let Some(wr) = self.workbench_leaf_rect() else {
+            return false;
+        };
         let (lx, ly) = (x - wr[0], y - wr[1]);
         let events = {
-            let Some(shell) = self.view.pelt_shell.as_mut() else { return false };
+            let Some(shell) = self.view.pelt_shell.as_mut() else {
+                return false;
+            };
             shell.pointer_move(lx, ly);
             shell.pointer_up();
             shell.take_events()
@@ -72,10 +84,7 @@ impl WindowCtx<'_> {
     /// The workbench member a pelt [`TileId`](pelt_core::tile::TileId) addresses, keyed
     /// by the UUID's low 64 bits (the encoding `Workbench::to_tile_tree` mints in
     /// `render.rs`). `None` if no open member matches.
-    pub(crate) fn tile_member(
-        &self,
-        id: pelt_core::tile::TileId,
-    ) -> Option<GraphMemberId> {
+    pub(crate) fn tile_member(&self, id: pelt_core::tile::TileId) -> Option<GraphMemberId> {
         self.view
             .workbench
             .open_members()
@@ -140,7 +149,10 @@ impl WindowCtx<'_> {
                             }
                         }
                     }
-                    DropTarget::Edge { tile: target_id, edge } => {
+                    DropTarget::Edge {
+                        tile: target_id,
+                        edge,
+                    } => {
                         let Some(target) = self.tile_member(target_id) else {
                             return;
                         };
@@ -153,7 +165,9 @@ impl WindowCtx<'_> {
                         let moved = if target == dragged {
                             self.view.workbench.split_out(dragged, axis, after)
                         } else {
-                            self.view.workbench.split_beside_axis(dragged, target, axis, after)
+                            self.view
+                                .workbench
+                                .split_beside_axis(dragged, target, axis, after)
                         };
                         if moved {
                             self.view.focused_tile = Some(dragged);
@@ -164,9 +178,10 @@ impl WindowCtx<'_> {
             // A divider drag: reweight the addressed split. Path-addressed, so nested
             // splits resize too (the host divider path only reached the top level).
             TileEvent::DividerMoved { split, fractions } => {
-                self.view.workbench.set_split_fractions(&split.0, &fractions);
+                self.view
+                    .workbench
+                    .set_split_fractions(&split.0, &fractions);
             }
         }
     }
-
 }

@@ -84,10 +84,16 @@ impl Shell {
                 // by URL, not by which node wanted it; each actor dedups via its own
                 // resource store and only the one that wanted it re-renders.
                 fetch::FetchUpdate::Subresource(sub) => {
-                    wc.shared.observability
-                        .record_actor("fetch", "subresource", Some(sub.url.clone()));
+                    wc.shared.observability.record_actor(
+                        "fetch",
+                        "subresource",
+                        Some(sub.url.clone()),
+                    );
                     wc.save_cached(&sub.url, None, &sub.bytes);
-                    wc.shared.content.constellation.broadcast_resource(&sub.url, &sub.bytes);
+                    wc.shared
+                        .content
+                        .constellation
+                        .broadcast_resource(&sub.url, &sub.bytes);
                 }
                 // A page's favicon arrived: decode it to RGBA and stamp it on the
                 // node currently at the owner url, so the orrery paints it on that
@@ -143,9 +149,14 @@ impl Shell {
             // a miss spawns a network fetch whose bytes broadcast back on arrival.
             for url in urls {
                 if let Some(stored) = wc.load_cached(&url) {
-                    wc.shared.content.constellation.send_resource(member, url, stored.body);
+                    wc.shared
+                        .content
+                        .constellation
+                        .send_resource(member, url, stored.body);
                 } else {
-                    wc.shared.content.fetch_handle
+                    wc.shared
+                        .content
+                        .fetch_handle
                         .command(fetch::FetchCommand::Subresource(url));
                 }
             }
@@ -274,14 +285,20 @@ impl Shell {
                 }
                 comms_host::CommsUpdate::Sent(_id) => {
                     wc.shared.observability.record_actor("comms", "sent", None);
-                    wc.shared.observability
-                        .record_actor("comms", "succeeded", Some("sent".to_string()));
+                    wc.shared.observability.record_actor(
+                        "comms",
+                        "succeeded",
+                        Some("sent".to_string()),
+                    );
                     wc.view.chrome_update(|c| c.clear_comms_draft());
                     comms_changed = true;
                 }
                 comms_host::CommsUpdate::SendOutcome(line) => {
-                    wc.shared.observability
-                        .record_actor("comms", "send_outcome", Some(line.clone()));
+                    wc.shared.observability.record_actor(
+                        "comms",
+                        "send_outcome",
+                        Some(line.clone()),
+                    );
                     wc.shared.observability.record_actor(
                         "comms",
                         "succeeded",

@@ -7,11 +7,11 @@
 
 use std::time::{Duration, Instant};
 
+use crate::serval_render::hit_test_node;
 use forme::GraphMemberId;
 use layout_dom_api::LayoutDom;
 use meerkat::{Chrome, ContextAction, ContextItem, HistoryStep, nav, submit_omnibar};
 use orrery::PointerButton;
-use crate::serval_render::hit_test_node;
 use serval_layout::ScrollOffsets;
 use serval_scripted_dom::NodeId;
 use serval_winit_host::key_event_from_winit;
@@ -23,8 +23,7 @@ use frame::PaneContent;
 
 use super::titlebar::{self, WindowControl};
 use super::{
-    FALLBACK_TOOLBAR_H, WindowCtx, class_bottom_in, first_tag, first_with_class,
-    measure_class_bottom, scrying_host,
+    WindowCtx, class_bottom_in, first_tag, first_with_class, measure_class_bottom, scrying_host,
 };
 
 /// Map a winit mouse button to the scrying host's button vocabulary. (Scrying X2.)
@@ -46,9 +45,11 @@ fn member_at_path(
 ) -> Option<pelt_core::tile::TileId> {
     use pelt_core::tile::TileTree;
     match (tree, path.split_first()) {
-        (TileTree::Stack(s), _) => {
-            s.tabs.get(s.active).or_else(|| s.tabs.first()).map(|t| t.id)
-        }
+        (TileTree::Stack(s), _) => s
+            .tabs
+            .get(s.active)
+            .or_else(|| s.tabs.first())
+            .map(|t| t.id),
         (TileTree::Split { children, .. }, Some((i, rest))) => {
             member_at_path(&children.get(*i)?.tree, rest)
         }
@@ -93,7 +94,6 @@ fn point_segment_dist(px: f32, py: f32, ax: f32, ay: f32, bx: f32, by: f32) -> f
     let (cx, cy) = (ax + t * dx, ay + t * dy);
     ((px - cx).powi(2) + (py - cy).powi(2)).sqrt()
 }
-
 
 mod chrome;
 mod editing;

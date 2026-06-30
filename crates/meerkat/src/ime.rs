@@ -56,7 +56,9 @@ impl WindowCtx<'_> {
             Ime::Commit(text) => {
                 self.set_focused_preedit(String::new());
                 if !text.is_empty() {
-                    self.view.runner.dispatch_key(KeyEvent::new(Key::Character(text)));
+                    self.view
+                        .runner
+                        .dispatch_key(KeyEvent::new(Key::Character(text)));
                 }
                 self.update_ime_cursor_area();
                 self.view.request_redraw();
@@ -93,7 +95,9 @@ impl WindowCtx<'_> {
     /// Set (or clear, with an empty string) the IME preedit on the focused field.
     /// A no-op when nothing is focused.
     fn set_focused_preedit(&mut self, text: String) {
-        let Some(kind) = self.focused_field_kind() else { return };
+        let Some(kind) = self.focused_field_kind() else {
+            return;
+        };
         self.view.chrome_update(move |c| {
             let field = match kind {
                 FocusedField::Omnibar => &mut c.omnibar,
@@ -111,7 +115,9 @@ impl WindowCtx<'_> {
     /// the selection. The write half of [`caret_field`](Self::caret_field), routed through the
     /// same `chrome_update` mapping as [`set_focused_preedit`](Self::set_focused_preedit).
     fn set_focused_caret_byte(&mut self, byte: usize, extend: bool) {
-        let Some(kind) = self.focused_field_kind() else { return };
+        let Some(kind) = self.focused_field_kind() else {
+            return;
+        };
         self.view.chrome_update(move |c| {
             let field = match kind {
                 FocusedField::Omnibar => &mut c.omnibar,
@@ -139,17 +145,23 @@ impl WindowCtx<'_> {
         if !matches!(self.focused_field_kind(), Some(FocusedField::KnotEditor)) {
             return false;
         }
-        let Some(node) = self.view.runner.focus() else { return false };
+        let Some(node) = self.view.runner.focus() else {
+            return false;
+        };
         let caret_byte = self.caret_field(node).caret_byte_in_render();
         let goal = match self.view.soft_wrap_goal {
             Some((last_byte, gx)) if last_byte == caret_byte => Some(gx),
             _ => None,
         };
         let moved = {
-            let Some(session) = self.view.chrome_session.as_ref() else { return false };
+            let Some(session) = self.view.chrome_session.as_ref() else {
+                return false;
+            };
             session.caret_byte_vertical(node, caret_byte, delta, goal)
         };
-        let Some((new_byte, goal_x)) = moved else { return false };
+        let Some((new_byte, goal_x)) = moved else {
+            return false;
+        };
         self.view.soft_wrap_goal = Some((new_byte, goal_x));
         self.set_focused_caret_byte(new_byte, extend);
         self.view.request_redraw();

@@ -19,6 +19,5 @@ use session_runtime::ShellbarEdge;
 use super::WindowCtx;
 use super::observability::Severity;
 
-
 mod actions;
 mod build;

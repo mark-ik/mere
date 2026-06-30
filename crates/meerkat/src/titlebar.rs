@@ -157,7 +157,10 @@ mod tests {
             control_at(w as f32 - 10.0, 20.0, w, band, 1.0),
             Some(WindowControl::Close)
         );
-        assert_eq!(control_at(w as f32 - CONTROLS_W - 5.0, 20.0, w, band, 1.0), None);
+        assert_eq!(
+            control_at(w as f32 - CONTROLS_W - 5.0, 20.0, w, band, 1.0),
+            None
+        );
         // Below the band there are no controls.
         assert_eq!(
             control_at(w as f32 - 10.0, band as f32 + 5.0, w, band, 1.0),

@@ -11,7 +11,8 @@ impl WindowCtx<'_> {
     /// from the last frame). Clicks / scroll over the card route to the card, not
     /// the orrery beneath it.
     pub(crate) fn point_over_card(&self, x: f32, y: f32) -> bool {
-        self.view.content_rects
+        self.view
+            .content_rects
             .iter()
             .any(|(_, r)| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3])
     }
@@ -85,7 +86,10 @@ impl WindowCtx<'_> {
                 && y <= r[3]
                 && self.shared.content.constellation.is_scripted(*member)
             {
-                self.shared.content.constellation.click_scripted(*member, x - r[0], y - r[1]);
+                self.shared
+                    .content
+                    .constellation
+                    .click_scripted(*member, x - r[0], y - r[1]);
                 return true;
             }
         }
@@ -110,7 +114,10 @@ impl WindowCtx<'_> {
         };
         self.view.workbench.activate(member);
         self.view.focused_tile = Some(member);
-        self.shared.content.constellation.click_scripted(member, lx, ly);
+        self.shared
+            .content
+            .constellation
+            .click_scripted(member, lx, ly);
         self.view.request_redraw();
         true
     }
@@ -134,7 +141,8 @@ impl WindowCtx<'_> {
             ContextItem::new("Open link in new tab", ContextAction::OpenLinkNewTab),
             ContextItem::new("Copy link address", ContextAction::CopyLink),
         ];
-        self.view.chrome_update(move |c| c.open_context_menu(x, y, items));
+        self.view
+            .chrome_update(move |c| c.open_context_menu(x, y, items));
         self.view.request_redraw();
         true
     }
@@ -158,5 +166,4 @@ impl WindowCtx<'_> {
             false
         }
     }
-
 }

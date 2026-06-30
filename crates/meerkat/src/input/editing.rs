@@ -28,7 +28,8 @@ impl WindowCtx<'_> {
                             self.orrery_mut().step_node_size_tier(member, -1);
                         }
                         "face:favicon" => {
-                            self.orrery_mut().set_node_face(member, orrery::Face::Favicon);
+                            self.orrery_mut()
+                                .set_node_face(member, orrery::Face::Favicon);
                             face_changed = true;
                         }
                         "face:bare" => {
@@ -51,10 +52,14 @@ impl WindowCtx<'_> {
     /// double-click-to-open-in-pelt gesture can skip it — its − / + are tier steps, and a
     /// double-tap on + must step twice, never launch the node in pelt. (Object card P0.)
     pub(crate) fn point_over_object_card(&self, x: f32, y: f32) -> bool {
-        let Some(session) = self.view.chrome_session.as_ref() else { return false };
+        let Some(session) = self.view.chrome_session.as_ref() else {
+            return false;
+        };
         let dom = self.view.dom.borrow();
         let offsets = ScrollOffsets::<NodeId>::default();
-        let Some(mut node) = session.hit_test(&dom, x, y, &offsets) else { return false };
+        let Some(mut node) = session.hit_test(&dom, x, y, &offsets) else {
+            return false;
+        };
         loop {
             if crate::has_class(&dom, node, "object-card") {
                 return true;
@@ -63,6 +68,43 @@ impl WindowCtx<'_> {
                 Some(parent) => node = parent,
                 None => return false,
             }
+        }
+    }
+
+    /// Open the Roster Link Card for a relation-cell dot in the connections focus card.
+    pub(crate) fn try_open_connection_relation_card(&mut self, x: f32, y: f32) -> bool {
+        let Some((from, to, selector)) = self.connection_relation_at(x, y) else {
+            return false;
+        };
+        self.view.set_roster_tab(crate::roster::RosterTab::Links);
+        self.view
+            .set_roster_subject(Some(crate::roster::RosterSubject::RelationCell {
+                from,
+                to,
+                selector,
+            }));
+        self.view.request_redraw();
+        true
+    }
+
+    fn connection_relation_at(
+        &self,
+        x: f32,
+        y: f32,
+    ) -> Option<(uuid::Uuid, uuid::Uuid, kernel::graph::RelationSelector)> {
+        let session = self.view.chrome_session.as_ref()?;
+        let dom = self.view.dom.borrow();
+        let offsets = ScrollOffsets::<NodeId>::default();
+        let mut node = session.hit_test(&dom, x, y, &offsets)?;
+        loop {
+            if attr_value(&dom, node, "data-element").as_deref() == Some("relation-cell") {
+                let from = attr_value(&dom, node, "data-from")?.parse().ok()?;
+                let to = attr_value(&dom, node, "data-to")?.parse().ok()?;
+                let tag = attr_value(&dom, node, "data-relation-tag")?.parse().ok()?;
+                let kind = kernel::graph::RelationKind::from_tag(tag)?;
+                return Some((from, to, selector_for_relation_kind(kind)));
+            }
+            node = dom.parent(node)?;
         }
     }
 
@@ -86,8 +128,12 @@ impl WindowCtx<'_> {
             .expect("hull has >= 3 vertices");
         // On a vertex: drag it.
         if vdist2 <= grab * grab {
-            self.view.swatch_drag =
-                Some(crate::window_view::SwatchDrag { subject, vertex: vi, origin, edge });
+            self.view.swatch_drag = Some(crate::window_view::SwatchDrag {
+                subject,
+                vertex: vi,
+                origin,
+                edge,
+            });
             self.view.request_redraw();
             return true;
         }
@@ -195,7 +241,11 @@ impl WindowCtx<'_> {
             .attributes(container)
             .find(|a| a.name.local.as_ref() == "data-subject")
             .and_then(|a| a.value.parse().ok())?;
-        let key = self.orrery().graph().get_node_by_id(subject).map(|(k, _)| k)?;
+        let key = self
+            .orrery()
+            .graph()
+            .get_node_by_id(subject)
+            .map(|(k, _)| k)?;
         let hull = self.orrery().node_sprite_hull(key)?.to_vec();
         if hull.len() < 3 {
             return None;
@@ -222,7 +272,9 @@ impl WindowCtx<'_> {
     /// face space and rewrite the dragged hull vertex, which rebuilds the node's collider live
     /// (`set_node_sprite_hull` pushes geometry). (Swatch — Stage B.)
     pub(crate) fn drag_swatch_vertex(&mut self, x: f32, y: f32) {
-        let Some(drag) = self.view.swatch_drag else { return };
+        let Some(drag) = self.view.swatch_drag else {
+            return;
+        };
         let nx = ((x - drag.origin.0) / drag.edge - 0.5).clamp(-0.5, 0.5);
         let ny = ((y - drag.origin.1) / drag.edge - 0.5).clamp(-0.5, 0.5);
         // Resolve the drag's target, requiring the vertex index to still be in range. If the
@@ -233,7 +285,11 @@ impl WindowCtx<'_> {
             .graph()
             .get_node_by_id(drag.subject)
             .map(|(k, _)| k)
-            .and_then(|key| self.orrery().node_sprite_hull(key).map(<[(f32, f32)]>::to_vec))
+            .and_then(|key| {
+                self.orrery()
+                    .node_sprite_hull(key)
+                    .map(<[(f32, f32)]>::to_vec)
+            })
             .filter(|hull| drag.vertex < hull.len());
         let Some(mut hull) = target else {
             self.view.swatch_drag = None;
@@ -330,5 +386,35 @@ impl WindowCtx<'_> {
         drag.target = target;
         self.view.request_redraw();
     }
+}
 
+fn attr_value(dom: &serval_scripted_dom::ScriptedDom, node: NodeId, name: &str) -> Option<String> {
+    dom.attributes(node)
+        .find(|a| a.name.local.as_ref() == name)
+        .map(|a| a.value.to_string())
+}
+
+fn selector_for_relation_kind(
+    kind: kernel::graph::RelationKind,
+) -> kernel::graph::RelationSelector {
+    match kind {
+        kernel::graph::RelationKind::Semantic(sub) => {
+            kernel::graph::RelationSelector::Semantic(sub)
+        }
+        kernel::graph::RelationKind::Traversal => {
+            kernel::graph::RelationSelector::Family(kernel::graph::EdgeFamily::Traversal)
+        }
+        kernel::graph::RelationKind::Containment(sub) => {
+            kernel::graph::RelationSelector::Containment(sub)
+        }
+        kernel::graph::RelationKind::Arrangement(sub) => {
+            kernel::graph::RelationSelector::Arrangement(sub)
+        }
+        kernel::graph::RelationKind::Imported(sub) => {
+            kernel::graph::RelationSelector::Imported(sub)
+        }
+        kernel::graph::RelationKind::Provenance(sub) => {
+            kernel::graph::RelationSelector::Provenance(sub)
+        }
+    }
 }

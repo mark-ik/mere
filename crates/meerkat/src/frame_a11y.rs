@@ -185,15 +185,19 @@ impl WindowCtx<'_> {
         ));
         let mut tree = uxtree::stitch("meerkat/window", host, vec![chrome_tree, frame_tree]);
         attach_link_actions(&mut tree, &mut action_routes);
-        let focus = match self.view.runner.focus() {
+        let (requested_focus, fallback_focus) = match self.view.runner.focus() {
             // The focused chrome DOM node (the omnibar field) when the DOM-derived
             // subtree is in use; the chrome subtree root in the placeholder fallback.
             Some(focused) if self.view.chrome_session.is_some() => {
-                crate::serval_a11y::chrome_a11y_id(focused)
+                (crate::serval_a11y::chrome_a11y_id(focused), chrome_root)
             }
-            Some(_) => chrome_root,
-            None => self.active_frame_focus_node().unwrap_or(frame_root),
+            Some(_) => (chrome_root, chrome_root),
+            None => (
+                self.active_frame_focus_node().unwrap_or(frame_root),
+                frame_root,
+            ),
         };
+        let focus = valid_focus(&tree, requested_focus, fallback_focus);
         let audit = audit_a11y_tree(&tree, focus);
         let degraded = match self.a11y_bridge.status() {
             super::a11y_bridge::BridgeStatus::Installed => 0,
@@ -293,6 +297,20 @@ fn audit_a11y_tree(tree: &UxTree, focus: AccessNodeId) -> A11yAudit {
         duplicate_ids,
         findings,
     }
+}
+
+fn valid_focus(tree: &UxTree, requested: AccessNodeId, fallback: AccessNodeId) -> AccessNodeId {
+    if tree_has_node(tree, requested) {
+        requested
+    } else if tree_has_node(tree, fallback) {
+        fallback
+    } else {
+        tree.root
+    }
+}
+
+fn tree_has_node(tree: &UxTree, node: AccessNodeId) -> bool {
+    tree.nodes.iter().any(|(id, _)| *id == node)
 }
 
 fn attach_link_actions(
@@ -478,5 +496,23 @@ mod a11y_tests {
                 .iter()
                 .any(|finding| finding.contains("focused node"))
         );
+    }
+
+    #[test]
+    fn valid_focus_never_returns_a_missing_node() {
+        let root = node_id_for_path("app-root");
+        let child = node_id_for_path("app-root/child");
+        let missing = node_id_for_path("missing-focus");
+        let mut root_node = Node::new(Role::Window);
+        root_node.set_children(vec![child]);
+        let child_node = Node::new(Role::Button);
+        let tree = UxTree {
+            root,
+            nodes: vec![(root, root_node), (child, child_node)],
+        };
+
+        assert_eq!(valid_focus(&tree, child, root), child);
+        assert_eq!(valid_focus(&tree, missing, child), child);
+        assert_eq!(valid_focus(&tree, missing, missing), root);
     }
 }

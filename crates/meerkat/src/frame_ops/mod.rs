@@ -15,6 +15,5 @@ use session_runtime::{PersistedSettings, settings_store};
 use super::observability::ObservabilitySnapshot;
 use super::{GRAPH_PANE, WindowCtx, fetch, frame_view};
 
-
 mod config;
 mod panes;

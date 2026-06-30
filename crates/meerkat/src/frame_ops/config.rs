@@ -61,21 +61,31 @@ impl WindowCtx<'_> {
                 .is_none_or(|(_, node)| node.favicon_rgba.is_none());
             if needs_favicon {
                 if let Some(icon_url) = crate::app_handler::favicon_url_for(url, &fetched.body) {
-                    self.shared.content.fetch_handle.command(fetch::FetchCommand::Favicon {
-                        owner_url: url.to_string(),
-                        url: icon_url,
-                    });
+                    self.shared
+                        .content
+                        .fetch_handle
+                        .command(fetch::FetchCommand::Favicon {
+                            owner_url: url.to_string(),
+                            url: icon_url,
+                        });
                 }
             }
-            self.shared.content.pages
+            self.shared
+                .content
+                .pages
                 .insert(url.to_string(), fetch::ContentState::Ready(fetched));
             return;
         }
-        self.shared.content.pages
+        self.shared
+            .content
+            .pages
             .insert(url.to_string(), fetch::ContentState::Loading);
-        self.shared.observability
+        self.shared
+            .observability
             .record_actor("fetch", "started", Some(url.to_string()));
-        self.shared.content.fetch_handle
+        self.shared
+            .content
+            .fetch_handle
             .command(fetch::FetchCommand::Page(url.to_string()));
     }
 
@@ -297,7 +307,12 @@ impl WindowCtx<'_> {
     /// v1 persists on every invocation (the file is tiny); a debounce / write-on-idle is the
     /// refinement if the write rate ever matters.
     pub(crate) fn record_command_usage(&mut self, id: &str) {
-        *self.shared.presentation.command_usage.entry(id.to_string()).or_insert(0) += 1;
+        *self
+            .shared
+            .presentation
+            .command_usage
+            .entry(id.to_string())
+            .or_insert(0) += 1;
         self.persist_menu_actions();
     }
 
@@ -353,8 +368,10 @@ impl WindowCtx<'_> {
 
     /// Restore the context menu to the registry default order (command registry P4) and persist.
     pub(crate) fn reset_menu_actions(&mut self) {
-        self.shared.presentation.menu_actions =
-            meerkat::command::DEFAULT_MENU_ACTIONS.iter().map(|s| s.to_string()).collect();
+        self.shared.presentation.menu_actions = meerkat::command::DEFAULT_MENU_ACTIONS
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         self.persist_menu_actions();
         self.view.request_redraw();
     }
@@ -383,5 +400,4 @@ impl WindowCtx<'_> {
         self.persist_settings();
         self.view.request_redraw();
     }
-
 }

@@ -27,7 +27,8 @@ impl WindowCtx<'_> {
         // resolve against it. The menu opens with an empty query (curated rows; typing searches).
         self.view.context_set = set;
         let items = self.build_curated_menu_items();
-        self.view.chrome_update(move |c| c.open_context_menu(x, y, items));
+        self.view
+            .chrome_update(move |c| c.open_context_menu(x, y, items));
         self.view.request_redraw();
     }
 
@@ -58,13 +59,20 @@ impl WindowCtx<'_> {
             }
             // The 10 layout strategies fold under one "Layout" submenu instead of a flat tail on
             // the empty-canvas menu (the active one is ✓-marked inside). (Submenus.)
-            items.push(ContextItem::with_children("Layout", self.layout_picker_items()));
+            items.push(ContextItem::with_children(
+                "Layout",
+                self.layout_picker_items(),
+            ));
         } else if self.orrery().focused_key().is_some() {
             // Radial centers the orrery on the focused node (BFS rings) and re-centers live; a
             // focus-driven toggle (✓ when active), so it rides the selection menu. (Layout — radial.)
             let radial_on = self.orrery().layout_strategy() == Some("radial.default");
             items.push(ContextItem::new(
-                if radial_on { "Radial layout  \u{2713}" } else { "Radial layout" },
+                if radial_on {
+                    "Radial layout  \u{2713}"
+                } else {
+                    "Radial layout"
+                },
                 if radial_on {
                     ContextAction::SetLayoutStrategy("")
                 } else {
@@ -82,7 +90,10 @@ impl WindowCtx<'_> {
             ));
         }
         if self.has_multiple_graph_panes() {
-            items.push(ContextItem::new("Close graph view", ContextAction::CloseGraphPane));
+            items.push(ContextItem::new(
+                "Close graph view",
+                ContextAction::CloseGraphPane,
+            ));
         }
         items
     }
@@ -93,7 +104,13 @@ impl WindowCtx<'_> {
     /// no-op if it does not apply). (Searchable context menu S1.)
     pub(crate) fn search_menu_items(&self, query: &str) -> Vec<ContextItem> {
         use meerkat::command::{PaletteItem, context_action_id, context_action_palette_label};
-        let pinned = |id: &str| self.shared.presentation.menu_actions.iter().any(|a| a == id);
+        let pinned = |id: &str| {
+            self.shared
+                .presentation
+                .menu_actions
+                .iter()
+                .any(|a| a == id)
+        };
         meerkat::command::palette_items(query)
             .into_iter()
             .filter_map(|item| match item {
@@ -121,7 +138,13 @@ impl WindowCtx<'_> {
     /// can be promoted to a pin). Empty until commands have been run a few times.
     pub(crate) fn suggested_menu_items(&self, len: usize) -> Vec<ContextItem> {
         let usage = &self.shared.presentation.command_usage;
-        let pinned = |id: &str| self.shared.presentation.menu_actions.iter().any(|a| a == id);
+        let pinned = |id: &str| {
+            self.shared
+                .presentation
+                .menu_actions
+                .iter()
+                .any(|a| a == id)
+        };
         let mut ranked: Vec<(&str, u32)> = usage.iter().map(|(id, n)| (id.as_str(), *n)).collect();
         // Most-used first; ties broken by id so the order is stable frame to frame.
         ranked.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
@@ -142,7 +165,12 @@ impl WindowCtx<'_> {
         use meerkat::command::{
             Command, context_action_from_id, context_action_id, context_action_palette_label,
         };
-        let pinned = self.shared.presentation.menu_actions.iter().any(|a| a == id);
+        let pinned = self
+            .shared
+            .presentation
+            .menu_actions
+            .iter()
+            .any(|a| a == id);
         if let Some(cmd) = Command::from_id(id) {
             Some(ContextItem::searchable(
                 cmd.label(),
@@ -166,7 +194,13 @@ impl WindowCtx<'_> {
     /// results otherwise. Resets the highlight (the list changed). Called on each query edit.
     /// (Searchable context menu S1.)
     pub(crate) fn rebuild_context_menu(&mut self) {
-        let Some(query) = self.view.chrome().context_menu.as_ref().map(|m| m.query.clone()) else {
+        let Some(query) = self
+            .view
+            .chrome()
+            .context_menu
+            .as_ref()
+            .map(|m| m.query.clone())
+        else {
             return;
         };
         let items = if query.trim().is_empty() {
@@ -206,26 +240,36 @@ impl WindowCtx<'_> {
         }
         // A global command added to the menu: run it by verb.
         let cmd = meerkat::command::Command::from_id(id)?;
-        Some(ContextItem::new(cmd.label(), ContextAction::RunCommand(cmd.verb())))
+        Some(ContextItem::new(
+            cmd.label(),
+            ContextAction::RunCommand(cmd.verb()),
+        ))
     }
 
     /// Build the row for a native context action at this selection: its count-adapted, ✓-marked
     /// label, or `None` when a dynamic condition isn't met (Relate needs exactly two, Show all a
     /// scope lens, Mirror tiles open). (Command registry P4.)
-    pub(crate) fn resolve_context_action_item(&self, action: ContextAction, len: usize) -> Option<ContextItem> {
+    pub(crate) fn resolve_context_action_item(
+        &self,
+        action: ContextAction,
+        len: usize,
+    ) -> Option<ContextItem> {
         use ContextAction::*;
         let item = match action {
-            OpenSplits => {
-                ContextItem::new(if len == 1 { "Open tile" } else { "Open in splits" }, OpenSplits)
-            }
+            OpenSplits => ContextItem::new(
+                if len == 1 {
+                    "Open tile"
+                } else {
+                    "Open in splits"
+                },
+                OpenSplits,
+            ),
             Stack => ContextItem::new("Open in a stack", Stack),
             AddTag => ContextItem::new("Add tag\u{2026}", AddTag),
             ResizeNode => ContextItem::new("Resize", ResizeNode),
             OpenNodeFacets => ContextItem::new("Node settings\u{2026}", OpenNodeFacets),
             IsolateSelection => ContextItem::new("Isolate", IsolateSelection),
-            CrystallizeSelection => {
-                ContextItem::new("Crystallize selection", CrystallizeSelection)
-            }
+            CrystallizeSelection => ContextItem::new("Crystallize selection", CrystallizeSelection),
             OpenComponentGraphlet => ContextItem::new("Open component", OpenComponentGraphlet),
             OpenNeighborhoodGraphlet => {
                 ContextItem::new("Open neighborhood", OpenNeighborhoodGraphlet)
@@ -234,14 +278,22 @@ impl WindowCtx<'_> {
             ToggleSizeByDegree => {
                 let on = self.orrery().size_by_degree();
                 ContextItem::new(
-                    if on { "Size by degree  \u{2713}" } else { "Size by degree" },
+                    if on {
+                        "Size by degree  \u{2713}"
+                    } else {
+                        "Size by degree"
+                    },
                     ToggleSizeByDegree,
                 )
             }
             ToggleSizeByImportance => {
                 let on = self.orrery().size_by_importance();
                 ContextItem::new(
-                    if on { "Size by importance  \u{2713}" } else { "Size by importance" },
+                    if on {
+                        "Size by importance  \u{2713}"
+                    } else {
+                        "Size by importance"
+                    },
                     ToggleSizeByImportance,
                 )
             }
@@ -260,7 +312,11 @@ impl WindowCtx<'_> {
                     return None; // only with tiles open (or already mirroring, to turn off)
                 }
                 ContextItem::new(
-                    if self.view.mirror_tiles { "Mirror tiles  \u{2713}" } else { "Mirror tiles" },
+                    if self.view.mirror_tiles {
+                        "Mirror tiles  \u{2713}"
+                    } else {
+                        "Mirror tiles"
+                    },
                     MirrorTiles,
                 )
             }
@@ -268,5 +324,4 @@ impl WindowCtx<'_> {
         };
         Some(item)
     }
-
 }

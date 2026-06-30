@@ -55,7 +55,13 @@ impl WindowCtx<'_> {
         if self.view.chrome().context_menu.is_some()
             && matches!(key, WinitKey::Named(WinitNamedKey::Escape))
         {
-            if self.view.chrome().context_menu.as_ref().is_some_and(|m| m.submenu.is_some()) {
+            if self
+                .view
+                .chrome()
+                .context_menu
+                .as_ref()
+                .is_some_and(|m| m.submenu.is_some())
+            {
                 self.view.chrome_update(Chrome::close_submenu);
                 self.view.request_redraw();
             } else {
@@ -66,8 +72,7 @@ impl WindowCtx<'_> {
         // Escape closes an open object card (after a menu, which eats Escape first). A
         // click-away already closes it: an empty-canvas click clears the selection, and the
         // card drops once focus leaves its member. (Object card — explicit close.)
-        if self.view.object_card.is_some()
-            && matches!(key, WinitKey::Named(WinitNamedKey::Escape))
+        if self.view.object_card.is_some() && matches!(key, WinitKey::Named(WinitNamedKey::Escape))
         {
             self.view.object_card = None;
             self.view.request_redraw();
@@ -103,17 +108,15 @@ impl WindowCtx<'_> {
         // back/forward). Mirror the toolbar buttons: record the intent on the chrome,
         // then drain it this pass so the revealed page loads at once. A no-op when
         // nothing is focused or the node is at a history end.
-        if self.view.modifiers.alt
-            && matches!(key, WinitKey::Named(WinitNamedKey::ArrowLeft))
-        {
-            self.view.chrome_update(|c| c.history_step = Some(HistoryStep::Back));
+        if self.view.modifiers.alt && matches!(key, WinitKey::Named(WinitNamedKey::ArrowLeft)) {
+            self.view
+                .chrome_update(|c| c.history_step = Some(HistoryStep::Back));
             self.drain_history_step();
             return;
         }
-        if self.view.modifiers.alt
-            && matches!(key, WinitKey::Named(WinitNamedKey::ArrowRight))
-        {
-            self.view.chrome_update(|c| c.history_step = Some(HistoryStep::Forward));
+        if self.view.modifiers.alt && matches!(key, WinitKey::Named(WinitNamedKey::ArrowRight)) {
+            self.view
+                .chrome_update(|c| c.history_step = Some(HistoryStep::Forward));
             self.drain_history_step();
             return;
         }
@@ -345,5 +348,4 @@ impl WindowCtx<'_> {
             self.view.request_redraw();
         }
     }
-
 }

@@ -92,7 +92,8 @@ impl Shell {
                     // pelt TileEvents.)
                     let (cx, cy) = wc.view.cursor;
                     wc.workbench_pointer_move(cx, cy);
-                } else if let Some((member, lx, ly)) = wc.scrying_at(wc.view.cursor.0, wc.view.cursor.1)
+                } else if let Some((member, lx, ly)) =
+                    wc.scrying_at(wc.view.cursor.0, wc.view.cursor.1)
                 {
                     // Hover / drag over the compatibility-view tile feeds the WebView;
                     // the orrery is not panned underneath. (Scrying X2.)
@@ -126,8 +127,11 @@ impl Shell {
             }
             WindowEvent::ModifiersChanged(mods) => {
                 wc.view.modifiers = modifiers_from_winit(mods.state());
-                let (ctrl, shift, alt) =
-                    (wc.view.modifiers.ctrl, wc.view.modifiers.shift, wc.view.modifiers.alt);
+                let (ctrl, shift, alt) = (
+                    wc.view.modifiers.ctrl,
+                    wc.view.modifiers.shift,
+                    wc.view.modifiers.alt,
+                );
                 wc.orrery_mut().set_ctrl(ctrl);
                 wc.orrery_mut().set_shift(shift);
                 // Alt gates the camera orbit drag (Alt+left-drag over the orrery). (Iso orbit.)
@@ -184,8 +188,7 @@ impl Shell {
                     .find(|(_, r)| cx >= r[0] && cx < r[2] && cy >= r[1] && cy < r[3])
                     .map(|(member, r)| (*member, r[3] - r[1]));
                 if let Some((member, visible_h)) = over_card {
-                    let max =
-                        (wc.shared.content.constellation.content_height(member) as f32 - visible_h).max(0.0);
+                    let max = (wc.member_content_height(member, visible_h) - visible_h).max(0.0);
                     let offset = wc.view.scroll.entry(member).or_insert(0.0);
                     // Wheel up (dy > 0) scrolls toward the top; down toward the bottom.
                     *offset = (*offset - dy).clamp(0.0, max);
@@ -196,7 +199,7 @@ impl Shell {
                     // delta), then drains into gyre. A cursor over the workbench / a utility pane
                     // resolves to no Orrery leaf, so the wheel does nothing there. (cond 5 input
                     // bridge; per-pane: a second graph-pane navigates independently.)
-                    let th = wc.toolbar_height() as f32;
+                    let th = wc.current_toolbar_height() as f32;
                     if cy >= th && wc.orrery_wheel_through_document(gid, cx, cy, dx, dy) {
                         wc.view.request_redraw();
                     }
@@ -251,11 +254,7 @@ impl Shell {
         // the same way as `CloseRequested`, forked by role. The ctx borrow has ended,
         // so the registry op is reachable. Queued `SpawnWindow`s drain in
         // `about_to_wait`. (MW3: per-window close.)
-        if self
-            .windows
-            .get(&window_id)
-            .is_some_and(|v| v.pending_exit)
-        {
+        if self.windows.get(&window_id).is_some_and(|v| v.pending_exit) {
             self.request_close(event_loop, window_id);
         }
     }

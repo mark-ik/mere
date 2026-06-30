@@ -12,9 +12,6 @@ impl WindowCtx<'_> {
     /// other press in the content band, and every release, goes to the orrery in
     /// content-band coordinates (its viewport top sits at the toolbar bottom).
     pub(crate) fn on_mouse_input(&mut self, state: ElementState, button: MouseButton) {
-        // Warm the memoized toolbar height for both branches (the pre-split code
-        // computed it once up front; the press path recomputes off this warm cache).
-        self.toolbar_height();
         match state {
             ElementState::Pressed => self.on_mouse_press(button),
             ElementState::Released => self.on_mouse_release(button),

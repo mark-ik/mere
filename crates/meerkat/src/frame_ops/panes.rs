@@ -12,7 +12,9 @@ impl WindowCtx<'_> {
     /// The active session's root graph id (the `GraphId` graph-bound leaves carry).
     /// Falls back to a fresh id if the active manifest is somehow missing. (MG5.)
     pub(crate) fn active_graph_id(&self) -> GraphId {
-        self.shared.session.manifests
+        self.shared
+            .session
+            .manifests
             .get(self.shared.session.active_session_id)
             .map(|m| m.root_graph_id)
             .unwrap_or_default()
@@ -95,8 +97,8 @@ impl WindowCtx<'_> {
                 content: PaneContent::Workbench,
                 graph_id,
             };
-            let anchor =
-                frame_view::pane_path(&self.view.frame_layout, crate::GRAPH_PANE).unwrap_or_default();
+            let anchor = frame_view::pane_path(&self.view.frame_layout, crate::GRAPH_PANE)
+                .unwrap_or_default();
             if self
                 .view
                 .frame_layout
@@ -105,9 +107,11 @@ impl WindowCtx<'_> {
                 self.view.frame_layout.set_split_ratio(&anchor, 0.6);
             }
             self.view.maximized_pane = None;
-            self.shared.observability
+            self.shared
+                .observability
                 .record_pane_toggle(&PaneContent::Workbench, true);
-            self.shared.observability
+            self.shared
+                .observability
                 .record_frame_layout_changed("workbench opened");
         }
         self.view.active_content = crate::ContentPane::Workbench;
@@ -128,9 +132,11 @@ impl WindowCtx<'_> {
         self.view.focused_tile = None;
         self.view.active_content = crate::ContentPane::Orrery;
         self.view.maximized_pane = None;
-        self.shared.observability
+        self.shared
+            .observability
             .record_pane_toggle(&PaneContent::Workbench, false);
-        self.shared.observability
+        self.shared
+            .observability
             .record_frame_layout_changed("workbench closed");
     }
 
@@ -161,9 +167,11 @@ impl WindowCtx<'_> {
                     self.view.frame_layout.set_split_ratio(&anchor, 0.66);
                 }
                 self.view.maximized_pane = None;
-                self.shared.observability
+                self.shared
+                    .observability
                     .record_pane_toggle(&PaneContent::Comms, true);
-                self.shared.observability
+                self.shared
+                    .observability
                     .record_frame_layout_changed("comms opened");
             }
             (false, Some(id)) => {
@@ -171,9 +179,11 @@ impl WindowCtx<'_> {
                     self.view.frame_layout.close_leaf(&path);
                 }
                 self.view.maximized_pane = None;
-                self.shared.observability
+                self.shared
+                    .observability
                     .record_pane_toggle(&PaneContent::Comms, false);
-                self.shared.observability
+                self.shared
+                    .observability
                     .record_frame_layout_changed("comms closed");
             }
             _ => {}
@@ -201,7 +211,8 @@ impl WindowCtx<'_> {
                 content,
                 graph_id,
             };
-            let anchor = frame_view::pane_path(&self.view.frame_layout, GRAPH_PANE).unwrap_or_default();
+            let anchor =
+                frame_view::pane_path(&self.view.frame_layout, GRAPH_PANE).unwrap_or_default();
             if self
                 .view
                 .frame_layout
@@ -212,13 +223,16 @@ impl WindowCtx<'_> {
             opened = true;
         }
         self.view.maximized_pane = None;
-        self.shared.observability
+        self.shared
+            .observability
             .record_pane_toggle(&recorded_content, opened);
-        self.shared.observability.record_frame_layout_changed(format!(
-            "{} {}",
-            recorded_content.tag(),
-            if opened { "opened" } else { "closed" }
-        ));
+        self.shared
+            .observability
+            .record_frame_layout_changed(format!(
+                "{} {}",
+                recorded_content.tag(),
+                if opened { "opened" } else { "closed" }
+            ));
         self.view.request_redraw();
     }
 
@@ -233,9 +247,18 @@ impl WindowCtx<'_> {
                 "Active actors".to_string(),
                 self.shared.content.constellation.active_count().to_string(),
             ),
-            ("Tab cap".to_string(), self.shared.presentation.saved_tab_cap.to_string()),
-            ("Theme".to_string(), self.shared.presentation.active_theme_id.clone()),
-            ("Uptime".to_string(), self.shared.observability.snapshot().uptime),
+            (
+                "Tab cap".to_string(),
+                self.shared.presentation.saved_tab_cap.to_string(),
+            ),
+            (
+                "Theme".to_string(),
+                self.shared.presentation.active_theme_id.clone(),
+            ),
+            (
+                "Uptime".to_string(),
+                self.shared.observability.snapshot().uptime,
+            ),
         ]
     }
 

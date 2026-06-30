@@ -84,7 +84,10 @@ impl Chrome {
     pub fn open_submenu(&mut self, parent: usize) {
         if let Some(menu) = &mut self.context_menu {
             if menu.items.get(parent).is_some_and(ContextItem::has_submenu) {
-                menu.submenu = Some(SubmenuState { parent, selected: None });
+                menu.submenu = Some(SubmenuState {
+                    parent,
+                    selected: None,
+                });
             }
         }
     }
@@ -117,7 +120,11 @@ impl Chrome {
     /// `Escape` (and the early key intercept): collapse the open submenu first, else close the
     /// whole menu — one level at a time. (Nested submenus.)
     pub fn escape_context_menu(&mut self) {
-        if self.context_menu.as_ref().is_some_and(|m| m.submenu.is_some()) {
+        if self
+            .context_menu
+            .as_ref()
+            .is_some_and(|m| m.submenu.is_some())
+        {
             self.close_submenu();
         } else {
             self.close_context_menu();

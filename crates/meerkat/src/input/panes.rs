@@ -31,11 +31,7 @@ impl WindowCtx<'_> {
         };
         if let Some(node) = target {
             // The orrery element's handler reads only `delta`; `local` / `size` are unused here.
-            let event = xilem_serval::WheelEvent {
-                delta: (dx, dy),
-                local: (0.0, 0.0),
-                size: (0.0, 0.0),
-            };
+            let event = xilem_serval::WheelEvent::new((dx, dy), (0.0, 0.0), (0.0, 0.0));
             self.view.runner.dispatch_wheel(node, event);
         }
         match self.view.take_orrery_wheel() {
@@ -349,6 +345,7 @@ impl WindowCtx<'_> {
                     self.view.request_redraw();
                 }
                 crate::roster_view::RosterIntent::OpenDetail(subject) => {
+                    self.view.set_roster_tab(subject.natural_tab());
                     self.view.set_roster_subject(Some(subject));
                     self.view.request_redraw();
                 }
@@ -373,6 +370,14 @@ impl WindowCtx<'_> {
                     {
                         self.save_session();
                     }
+                    self.view.set_roster_tab(crate::roster::RosterTab::Links);
+                    self.view.set_roster_subject(Some(
+                        crate::roster::RosterSubject::RelationCell {
+                            from,
+                            to,
+                            selector: kernel::graph::RelationSelector::Semantic(kind),
+                        },
+                    ));
                     self.view.request_redraw();
                 }
                 crate::roster_view::RosterIntent::RetractRelation { from, to, selector } => {
@@ -382,8 +387,21 @@ impl WindowCtx<'_> {
                         > 0
                     {
                         self.save_session();
+                        self.retarget_roster_after_relation_retract(from, to, selector);
                     }
                     self.view.request_redraw();
+                }
+                crate::roster_view::RosterIntent::HideLinkBundle { from, to } => {
+                    if self.orrery_mut().hide_edge_between_members(from, to) {
+                        self.save_session();
+                        self.view.request_redraw();
+                    }
+                }
+                crate::roster_view::RosterIntent::ShowLinkBundle { from, to } => {
+                    if self.orrery_mut().show_edge_between_members(from, to) {
+                        self.save_session();
+                        self.view.request_redraw();
+                    }
                 }
                 crate::roster_view::RosterIntent::ReconcileGraphlet(graphlet) => {
                     self.commands.push(crate::ShellCommand::ReconcileGraphlet {
@@ -437,5 +455,54 @@ impl WindowCtx<'_> {
                 }
             }
         }
+    }
+
+    fn retarget_roster_after_relation_retract(
+        &mut self,
+        from: forme::GraphMemberId,
+        to: forme::GraphMemberId,
+        selector: kernel::graph::RelationSelector,
+    ) {
+        let Some(subject) = self.view.roster_subject() else {
+            return;
+        };
+        let selected_retracted = matches!(
+            subject,
+            crate::roster::RosterSubject::RelationCell {
+                from: selected_from,
+                to: selected_to,
+                selector: selected_selector,
+            } if selected_from == from && selected_to == to && selected_selector == selector
+        );
+        let selected_bundle = matches!(
+            subject,
+            crate::roster::RosterSubject::LinkBundle {
+                from: selected_from,
+                to: selected_to,
+            } if selected_from == from && selected_to == to
+        );
+        if !selected_retracted && !selected_bundle {
+            return;
+        }
+        if self.relation_bundle_exists(from, to) {
+            self.view
+                .set_roster_subject(Some(crate::roster::RosterSubject::LinkBundle { from, to }));
+        } else {
+            self.view.set_roster_subject(None);
+        }
+        self.view.set_roster_tab(crate::roster::RosterTab::Links);
+    }
+
+    fn relation_bundle_exists(&self, from: forme::GraphMemberId, to: forme::GraphMemberId) -> bool {
+        let graph = self.orrery().graph();
+        let Some(from_key) = graph.get_node_key_by_id(from) else {
+            return false;
+        };
+        let Some(to_key) = graph.get_node_key_by_id(to) else {
+            return false;
+        };
+        graph
+            .relations()
+            .any(|relation| relation.from == from_key && relation.to == to_key)
     }
 }
