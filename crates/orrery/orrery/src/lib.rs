@@ -62,12 +62,12 @@ fn build_affinity_spring(scores: &signals::AffinityScores) -> AffinitySpring {
 }
 
 mod types;
-pub use types::{CameraView, Face, NodeShape, NodeState, PointerButton, Viewport};
 pub use signals::{BridgeMetric, ImportanceMetric};
+pub use types::{CameraView, Face, NodeShape, NodeState, PointerButton, Viewport};
 
-mod input;
-mod frame;
 mod fields;
+mod frame;
+mod input;
 
 /// Ambient-sim backdrops (non-rapier liveliness painted behind the graph): Conway's
 /// [`GameOfLife`] is the first. (Physics scenes P5.)
@@ -124,7 +124,6 @@ const EDGE_PICK_TOL: f32 = 6.0;
 /// Node box half-extent (px) — matches the underlay's default node rect, so each
 /// DOM child sits centered on the same world position.
 const NODE_HALF: f32 = 18.0;
-
 
 /// An in-progress left-button interaction on a node: a click until the pointer
 /// passes [`CLICK_SLOP`], then a drag that pins the node to the cursor.
@@ -347,8 +346,16 @@ pub struct Orrery {
     /// ring toggle changes which overlays the lens carries, so it must re-fetch (rare, so paying a
     /// spectral recompute on a ring toggle is fine). (Graph signals — P6.)
     gloss_positions: Option<HashMap<NodeKey, PortablePoint>>,
-    gloss_cache_inputs:
-        Option<(String, u64, u32, u32, bool, bool, Option<Vec<NodeKey>>, Option<NodeKey>)>,
+    gloss_cache_inputs: Option<(
+        String,
+        u64,
+        u32,
+        u32,
+        bool,
+        bool,
+        Option<Vec<NodeKey>>,
+        Option<NodeKey>,
+    )>,
     /// The gloss lens's signal overlays (community halos + bridge emphasis), captured from the same
     /// `project_orrery_lens` projection as [`gloss_positions`](Self::gloss_positions) — the overlay
     /// pipe's first consumer. [`gloss_geometry`](Self::gloss_geometry) resolves them into rings at
@@ -420,7 +427,6 @@ impl Default for Orrery {
         Self::new()
     }
 }
-
 
 mod cartography;
 mod gloss;

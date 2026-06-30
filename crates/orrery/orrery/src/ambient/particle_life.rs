@@ -62,7 +62,12 @@ impl ParticleLife {
             vel.push((0.0, 0.0));
             species.push(xorshift(&mut rng) as usize % PL_SPECIES);
         }
-        Self { pos, vel, species, attract }
+        Self {
+            pos,
+            vel,
+            species,
+            attract,
+        }
     }
 
     pub fn particle_count(&self) -> usize {
@@ -112,7 +117,10 @@ impl AmbientSim for ParticleLife {
                     continue;
                 }
                 let d = d2.sqrt();
-                let f = pl_force(d / PL_RADIUS, self.attract[self.species[i]][self.species[j]]);
+                let f = pl_force(
+                    d / PL_RADIUS,
+                    self.attract[self.species[i]][self.species[j]],
+                );
                 acc[i].0 += (dx / d) * f;
                 acc[i].1 += (dy / d) * f;
             }
@@ -172,9 +180,18 @@ mod tests {
         }
         assert_eq!(pl.particle_count(), 120);
         for &(x, y) in pl.pos.iter() {
-            assert!(x.is_finite() && y.is_finite(), "positions stay finite ({x}, {y})");
-            assert!((0.0..=PL_SPAN).contains(&x), "wrapped x in bounds (was {x})");
-            assert!((0.0..=PL_SPAN).contains(&y), "wrapped y in bounds (was {y})");
+            assert!(
+                x.is_finite() && y.is_finite(),
+                "positions stay finite ({x}, {y})"
+            );
+            assert!(
+                (0.0..=PL_SPAN).contains(&x),
+                "wrapped x in bounds (was {x})"
+            );
+            assert!(
+                (0.0..=PL_SPAN).contains(&y),
+                "wrapped y in bounds (was {y})"
+            );
         }
     }
 }

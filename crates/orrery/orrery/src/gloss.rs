@@ -15,7 +15,10 @@ impl Orrery {
     #[allow(clippy::type_complexity)]
     pub fn minimap_geometry(
         &self,
-    ) -> (Vec<(uuid::Uuid, (f32, f32), bool, f32)>, Vec<((f32, f32), (f32, f32), f32)>) {
+    ) -> (
+        Vec<(uuid::Uuid, (f32, f32), bool, f32)>,
+        Vec<((f32, f32), (f32, f32), f32)>,
+    ) {
         // The mirror minimap draws uniform-size nodes (size factor 1.0) and uniform edges (weight
         // 1.0); the gloss lens ([`gloss_geometry`](Self::gloss_geometry)) is the path that varies
         // size by importance and edge thickness by multiplicity.
@@ -79,7 +82,12 @@ impl Orrery {
             .filter(|(key, _)| in_scope(key))
             .filter_map(|(&key, p)| {
                 self.graph.get_node(key).map(|node| {
-                    (node.id, (p.x, p.y), self.selected.contains(&key), size_factor(&key))
+                    (
+                        node.id,
+                        (p.x, p.y),
+                        self.selected.contains(&key),
+                        size_factor(&key),
+                    )
                 })
             })
             .collect();
@@ -181,7 +189,9 @@ impl Orrery {
         }
         // Focus only matters for a focus-driven lens (radial); for every other strategy a selection
         // change must not invalidate the cached lens. Mirrors the main-view cache.
-        let focus = Self::strategy_uses_focus(id).then(|| self.focused_key()).flatten();
+        let focus = Self::strategy_uses_focus(id)
+            .then(|| self.focused_key())
+            .flatten();
         match &self.gloss_cache_inputs {
             Some((sid, rev, sw, sh, rings, bridges, scope, sfocus)) => {
                 sid != id
@@ -226,7 +236,9 @@ impl Orrery {
         self.gloss_positions = Some(positions.into_iter().collect());
         self.gloss_overlays = overlays;
         if let Some(id) = self.gloss_strategy.clone() {
-            let focus = Self::strategy_uses_focus(&id).then(|| self.focused_key()).flatten();
+            let focus = Self::strategy_uses_focus(&id)
+                .then(|| self.focused_key())
+                .flatten();
             self.gloss_cache_inputs = Some((
                 id,
                 self.graph.revision(),
@@ -278,5 +290,4 @@ impl Orrery {
     pub fn gloss_size_by_importance(&self) -> bool {
         self.gloss_size_by_importance
     }
-
 }

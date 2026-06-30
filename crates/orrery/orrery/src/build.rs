@@ -72,8 +72,11 @@ pub(crate) fn sample_graph() -> Graph {
     for i in 0..count {
         let theta = (i as f32) / (count as f32) * std::f32::consts::TAU;
         let pos = PortablePoint::new(radius * theta.cos(), radius * theta.sin());
-        let key =
-            graph.add_node_with_id(uuid::Uuid::from_u128(i as u128 + 1), format!("mere://node/{i}"), pos);
+        let key = graph.add_node_with_id(
+            uuid::Uuid::from_u128(i as u128 + 1),
+            format!("mere://node/{i}"),
+            pos,
+        );
         graph.set_node_position(key, pos);
         keys.push(key);
     }
@@ -107,7 +110,11 @@ pub(crate) fn dedup_edges(graph: &Graph) -> Vec<(NodeKey, NodeKey)> {
     graph
         .relations()
         .filter_map(|r| {
-            let pair = if r.from <= r.to { (r.from, r.to) } else { (r.to, r.from) };
+            let pair = if r.from <= r.to {
+                (r.from, r.to)
+            } else {
+                (r.to, r.from)
+            };
             seen.insert(pair).then_some((r.from, r.to))
         })
         .collect()
@@ -124,7 +131,11 @@ pub(crate) fn dedup_edges_weighted(graph: &Graph) -> Vec<(NodeKey, NodeKey, u32)
     let mut index: HashMap<(NodeKey, NodeKey), usize> = HashMap::new();
     let mut edges: Vec<(NodeKey, NodeKey, u32)> = Vec::new();
     for r in graph.relations() {
-        let pair = if r.from <= r.to { (r.from, r.to) } else { (r.to, r.from) };
+        let pair = if r.from <= r.to {
+            (r.from, r.to)
+        } else {
+            (r.to, r.from)
+        };
         let is_statement = !matches!(r.kind, RelationKind::Traversal);
         match index.get(&pair) {
             Some(&i) => {
@@ -194,13 +205,19 @@ pub(crate) fn seed_cluster(graph: &Graph) -> Vec<(NodeKey, Point2D<f32>)> {
 /// updates are value→value changes — paint-tier — not the first none→value one
 /// that can relayout). Returns the DOM, the node→gnode map, and the stage id; the
 /// frame loop mutates these elements' attributes and never rebuilds them.
-pub(crate) fn build_pool_dom(graph: &Graph) -> (ScriptedDom, HashMap<NodeKey, DomNodeId>, DomNodeId) {
+pub(crate) fn build_pool_dom(
+    graph: &Graph,
+) -> (ScriptedDom, HashMap<NodeKey, DomNodeId>, DomNodeId) {
     let mut dom = ScriptedDom::new();
     let root = dom.document();
 
     let stage = dom.create_element(qual("div"));
     dom.set_attribute(stage, qual("class"), "stage");
-    dom.set_attribute(stage, qual("style"), "transform: translate(0px, 0px) scale(1);");
+    dom.set_attribute(
+        stage,
+        qual("style"),
+        "transform: translate(0px, 0px) scale(1);",
+    );
     dom.append_child(root, stage);
 
     let mut gnode_of = HashMap::new();
@@ -280,7 +297,10 @@ pub(crate) fn dark_scene_style() -> ScenePaintStyle {
 /// camera transform) — the orrery's bottom composite layer.
 pub(crate) fn background_cmds(w: u32, h: u32, color: ColorF) -> Vec<PaintCmd> {
     let rect = LayoutRect::new(LayoutPoint::zero(), LayoutPoint::new(w as f32, h as f32));
-    vec![PaintCmd::DrawRect(RectItem { placement: CommonPlacement::new(rect), color })]
+    vec![PaintCmd::DrawRect(RectItem {
+        placement: CommonPlacement::new(rect),
+        color,
+    })]
 }
 
 /// Highlight strokes for the selected edges, in **world space** (no transform) —
@@ -304,7 +324,9 @@ pub(crate) fn selected_edge_overlay(
         );
         cmds.push(PaintCmd::DrawStroke(StrokeItem {
             placement: CommonPlacement::new(bounds),
-            path: PathData { commands: vec![PathCommand::MoveTo(p0), PathCommand::LineTo(p1)] },
+            path: PathData {
+                commands: vec![PathCommand::MoveTo(p0), PathCommand::LineTo(p1)],
+            },
             color: ColorF::new(0.91, 0.59, 0.16, 1.0),
             width: 3.5,
             cap: StrokeCap::Round,
@@ -338,9 +360,15 @@ fn circle_path(center: LayoutPoint, radius: f32, segments: usize) -> PathData {
     let mut commands = Vec::with_capacity(segments + 1);
     for i in 0..=segments {
         let theta = (i as f32 / segments as f32) * std::f32::consts::TAU;
-        let pt =
-            LayoutPoint::new(center.x + radius * theta.cos(), center.y + radius * theta.sin());
-        commands.push(if i == 0 { PathCommand::MoveTo(pt) } else { PathCommand::LineTo(pt) });
+        let pt = LayoutPoint::new(
+            center.x + radius * theta.cos(),
+            center.y + radius * theta.sin(),
+        );
+        commands.push(if i == 0 {
+            PathCommand::MoveTo(pt)
+        } else {
+            PathCommand::LineTo(pt)
+        });
     }
     PathData { commands }
 }
@@ -432,14 +460,23 @@ pub(crate) fn field_overlay(
         if !field.is_active() || hidden.contains(&field.id) {
             continue;
         }
-        let FieldExtent::Region { min_x, min_y, max_x, max_y } = field.extent else {
+        let FieldExtent::Region {
+            min_x,
+            min_y,
+            max_x,
+            max_y,
+        } = field.extent
+        else {
             continue;
         };
         let (w, h) = (max_x - min_x, max_y - min_y);
         if w <= 0.0 || h <= 0.0 {
             continue;
         }
-        let rect = LayoutRect::new(LayoutPoint::new(min_x, min_y), LayoutPoint::new(max_x, max_y));
+        let rect = LayoutRect::new(
+            LayoutPoint::new(min_x, min_y),
+            LayoutPoint::new(max_x, max_y),
+        );
         let (cx, cy) = ((min_x + max_x) / 2.0, (min_y + max_y) / 2.0);
         let radius = w.min(h) / 2.0;
         // The soft falloff well: a translucent tint at the center fading to clear at
@@ -451,8 +488,14 @@ pub(crate) fn field_overlay(
                 radius: LayoutSize::new(radius, radius),
                 extend_mode: ExtendMode::Clamp,
                 stops: vec![
-                    GradientStop { offset: 0.0, color: ColorF::new(0.42, 0.62, 0.98, 0.20) },
-                    GradientStop { offset: 1.0, color: ColorF::new(0.42, 0.62, 0.98, 0.0) },
+                    GradientStop {
+                        offset: 0.0,
+                        color: ColorF::new(0.42, 0.62, 0.98, 0.20),
+                    },
+                    GradientStop {
+                        offset: 1.0,
+                        color: ColorF::new(0.42, 0.62, 0.98, 0.0),
+                    },
                 ],
             },
             tile_size: LayoutSize::new(w, h),
@@ -477,7 +520,10 @@ pub(crate) fn field_overlay(
                 width: 1.5,
                 cap: StrokeCap::Round,
                 join: StrokeJoin::Round,
-                dash: Some(DashPattern { intervals: vec![7.0, 5.0], offset: 0.0 }),
+                dash: Some(DashPattern {
+                    intervals: vec![7.0, 5.0],
+                    offset: 0.0,
+                }),
             }));
         }
     }
@@ -511,7 +557,10 @@ mod tests {
         let g = sample_graph();
         let sim = build_simulation(&g);
         assert_eq!(sim.body_count(), 12, "one physics body per node");
-        assert!(sim.edge_count() >= 12, "the spring topology carries the edges");
+        assert!(
+            sim.edge_count() >= 12,
+            "the spring topology carries the edges"
+        );
     }
 
     #[test]
@@ -523,9 +572,11 @@ mod tests {
             sim.tick(crate::TICK_DT);
         }
         let after: HashMap<NodeKey, Point2D<f32>> = sim.positions().collect();
-        let moved = before
-            .iter()
-            .any(|(k, p0)| after.get(k).is_some_and(|p1| (p1.x - p0.x).hypot(p1.y - p0.y) > 1.0));
+        let moved = before.iter().any(|(k, p0)| {
+            after
+                .get(k)
+                .is_some_and(|p1| (p1.x - p0.x).hypot(p1.y - p0.y) > 1.0)
+        });
         assert!(moved, "the force-directed settle moves nodes off the seed");
     }
 }

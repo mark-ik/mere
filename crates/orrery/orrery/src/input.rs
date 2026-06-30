@@ -10,12 +10,12 @@ use euclid::default::{Box2D, Point2D};
 use kernel::geometry::PortablePoint;
 use kernel::graph::{
     Coupling, CouplingId, CouplingResponse, Falloff, Field, FieldDefinition, FieldExtent, FieldId,
-    NodeSelector, NodeKey, ScalarField,
+    NodeKey, NodeSelector, ScalarField,
 };
 
 use super::build::{hyperlink, seed_cluster};
 use super::{
-    Drag, Orrery, PointerButton, CLICK_SLOP, EDGE_PICK_TOL, ORBIT_TILT_PER_PX, ORBIT_YAW_PER_PX,
+    CLICK_SLOP, Drag, EDGE_PICK_TOL, ORBIT_TILT_PER_PX, ORBIT_YAW_PER_PX, Orrery, PointerButton,
     SETTLE_TICKS, WHEEL_PAN_SCALE, ZOOM_STEP,
 };
 
@@ -159,22 +159,26 @@ impl Orrery {
             PointerButton::Middle => {
                 self.middle_drag = Some(self.cursor);
                 self.pan_velocity = (0.0, 0.0);
-            },
+            }
             PointerButton::Left => {
                 if self.alt {
                     // Alt+left begins an orbit drag (yaw + tilt the camera); it owns the gesture,
                     // so no node pick / field grab / marquee starts. (Isometric camera — orbit.)
                     self.orbit_drag = Some(self.cursor);
                 } else if let Some(node) = self.pick_at(self.cursor) {
-                    self.drag = Some(Drag { node, press: self.cursor, moved: false });
+                    self.drag = Some(Drag {
+                        node,
+                        press: self.cursor,
+                        moved: false,
+                    });
                 } else if self.begin_field_drag(self.screen_to_world(self.cursor)) {
                     // Grabbed a field's box edge (move) or corner (resize) — the deep
                     // interior fell through, so no marquee starts. (Field regions.)
                 } else {
                     self.marquee = Some(self.cursor);
                 }
-            },
-            PointerButton::Right => {},
+            }
+            PointerButton::Right => {}
         }
         false
     }
@@ -189,7 +193,7 @@ impl Orrery {
             PointerButton::Middle => {
                 self.middle_drag = None;
                 false
-            },
+            }
             PointerButton::Left => {
                 // End an orbit drag: the camera already moved live, nothing to settle. (P2.)
                 if self.orbit_drag.take().is_some() {
@@ -243,7 +247,7 @@ impl Orrery {
                 } else {
                     false
                 }
-            },
+            }
             PointerButton::Right => false,
         }
     }
@@ -286,9 +290,14 @@ impl Orrery {
     /// node/tile" gesture (Ctrl/Cmd-Enter, middle-click, context menu) — P2 of the
     /// node-navigation-lineage plan.
     pub fn open_member_as_new_node(&mut self, origin: Option<uuid::Uuid>, url: &str) -> uuid::Uuid {
-        let origin_key = origin.and_then(|m| self.graph.get_node_by_id(m)).map(|(k, _)| k);
+        let origin_key = origin
+            .and_then(|m| self.graph.get_node_by_id(m))
+            .map(|(k, _)| k);
         let key = self.mint_node(origin_key, url);
-        self.graph.get_node(key).map(|n| n.id).expect("a freshly minted node has an id")
+        self.graph
+            .get_node(key)
+            .map(|n| n.id)
+            .expect("a freshly minted node has an id")
     }
 
     /// The node under a screen point (orrery-leaf-local px), if any — the host's hit-test
@@ -296,7 +305,8 @@ impl Orrery {
     /// node's sprite face). Mirrors the left-press hit-test; returns the member id.
     /// (Node representation P2 — sprite drop.)
     pub fn node_at_screen(&self, sx: f32, sy: f32) -> Option<uuid::Uuid> {
-        self.pick_at((sx, sy)).and_then(|key| self.graph.get_node(key).map(|n| n.id))
+        self.pick_at((sx, sy))
+            .and_then(|key| self.graph.get_node(key).map(|n| n.id))
     }
 
     /// Re-mint a deleted node from its tombstone: open a fresh unlinked node on
@@ -310,7 +320,10 @@ impl Orrery {
         for tag in tags {
             self.graph.insert_node_tag(key, tag.clone());
         }
-        self.graph.get_node(key).map(|n| n.id).expect("a freshly minted node has an id")
+        self.graph
+            .get_node(key)
+            .map(|n| n.id)
+            .expect("a freshly minted node has an id")
     }
 
     /// Mint a fresh unlinked node at the cursor's world position — the empty-space
@@ -321,7 +334,10 @@ impl Orrery {
     pub fn add_node_at(&mut self, content_band_xy: (f32, f32), url: &str) -> uuid::Uuid {
         let world = self.screen_to_world(content_band_xy);
         let key = self.mint_node_at(world, url);
-        self.graph.get_node(key).map(|n| n.id).expect("a freshly minted node has an id")
+        self.graph
+            .get_node(key)
+            .map(|n| n.id)
+            .expect("a freshly minted node has an id")
     }
 
     /// Place a fresh disk field region at the cursor's world position — the empty-space
@@ -336,7 +352,10 @@ impl Orrery {
         let uuid = uuid::Uuid::new_v4();
         let id = FieldId::from_uuid(uuid);
         let definition = FieldDefinition::Scalar(ScalarField::disk_at(
-            world.x, world.y, radius, Falloff::Smoothstep,
+            world.x,
+            world.y,
+            radius,
+            Falloff::Smoothstep,
         ));
         let extent = FieldExtent::Region {
             min_x: world.x - radius,
@@ -344,7 +363,8 @@ impl Orrery {
             max_x: world.x + radius,
             max_y: world.y + radius,
         };
-        self.graph.add_field(Field::new(id, definition).with_extent(extent));
+        self.graph
+            .add_field(Field::new(id, definition).with_extent(extent));
         // The no-placebo gesture: a default coupling so the placed field immediately
         // *does* something — its nodes gather toward the disk's center. The disk is a
         // peak (1 at center → 0 at the radius), so `RepelFromMax` (force along +grad,

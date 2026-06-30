@@ -31,9 +31,11 @@ impl Orrery {
         .with_importance_metric(self.importance_metric.as_code())
         // Persist the custom sprite faces (the imported image as a data-URI) so a node textured
         // with one re-opens textured, not reverted to its default face. (Node-rep — sprite persistence.)
-        .with_sprites(self.node_sprites.iter().filter_map(|(&key, uri)| {
-            self.graph.get_node(key).map(|node| (node.id, uri.clone()))
-        }))
+        .with_sprites(
+            self.node_sprites.iter().filter_map(|(&key, uri)| {
+                self.graph.get_node(key).map(|node| (node.id, uri.clone()))
+            }),
+        )
         // Persist each sprite's collider hull alongside it, so the traced-to-image collider
         // survives a reload without re-decoding the image. (Node-rep — sprite hull persistence.)
         .with_sprite_hulls(self.node_sprite_hulls.iter().filter_map(|(&key, hull)| {
@@ -49,7 +51,9 @@ impl Orrery {
         // Persist the per-node face overrides (favicon / sprite / bare), so a node's chosen
         // texture re-opens that way (the body persists separately). (Node body & face — face.)
         .with_faces(self.node_faces.iter().filter_map(|(&key, &face)| {
-            self.graph.get_node(key).map(|node| (node.id, face.as_code().to_string()))
+            self.graph
+                .get_node(key)
+                .map(|node| (node.id, face.as_code().to_string()))
         }))
     }
 
@@ -57,7 +61,9 @@ impl Orrery {
     /// draw a switcher thumbnail from the orrery rather than the now position-free
     /// graph. `None` for a node the view has not placed. (Position gut.)
     pub fn node_position(&self, key: NodeKey) -> Option<PortablePoint> {
-        self.view.position_of(key).map(|p| PortablePoint::new(p.x, p.y))
+        self.view
+            .position_of(key)
+            .map(|p| PortablePoint::new(p.x, p.y))
     }
 
     /// Write the live physics positions back into the graph's node records (their
@@ -138,11 +144,16 @@ impl Orrery {
     /// re-scrambling. Members absent from the sidecar keep their existing seed (a node
     /// added since the last save still shows); physics halts so the restored layout
     /// holds until the user nudges it. (Position sidecar.)
-    pub fn seed_cartography(&mut self, positions: impl IntoIterator<Item = (uuid::Uuid, (f32, f32))>) {
+    pub fn seed_cartography(
+        &mut self,
+        positions: impl IntoIterator<Item = (uuid::Uuid, (f32, f32))>,
+    ) {
         let resolved: Vec<(NodeKey, Point2D<f32>)> = positions
             .into_iter()
             .filter_map(|(id, (x, y))| {
-                self.graph.get_node_by_id(id).map(|(key, _)| (key, Point2D::new(x, y)))
+                self.graph
+                    .get_node_by_id(id)
+                    .map(|(key, _)| (key, Point2D::new(x, y)))
             })
             .collect();
         if resolved.is_empty() {
@@ -220,7 +231,14 @@ impl Orrery {
         materials: impl IntoIterator<Item = (uuid::Uuid, (f32, f32, f32))>,
     ) {
         for (id, (restitution, friction, density)) in materials {
-            self.set_node_material(id, gyre::NodeMaterial { restitution, friction, density });
+            self.set_node_material(
+                id,
+                gyre::NodeMaterial {
+                    restitution,
+                    friction,
+                    density,
+                },
+            );
         }
     }
 
@@ -387,7 +405,8 @@ impl Orrery {
     pub fn clear_node_material(&mut self, id: uuid::Uuid) {
         if let Some((key, _)) = self.graph.get_node_by_id(id) {
             if self.node_materials.remove(&key).is_some() {
-                self.physics.set_node_materials(vec![(key, gyre::NodeMaterial::default())]);
+                self.physics
+                    .set_node_materials(vec![(key, gyre::NodeMaterial::default())]);
             }
         }
     }
@@ -509,8 +528,10 @@ impl Orrery {
         if !self.importance_dirty {
             return;
         }
-        self.node_importance =
-            signals::importance(&self.graph, self.importance_metric).weights.into_iter().collect();
+        self.node_importance = signals::importance(&self.graph, self.importance_metric)
+            .weights
+            .into_iter()
+            .collect();
         self.importance_dirty = false;
     }
 
@@ -538,5 +559,4 @@ impl Orrery {
     pub fn height_by_degree(&self) -> bool {
         self.height_by_degree
     }
-
 }

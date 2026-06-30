@@ -44,7 +44,13 @@ impl Orrery {
     /// the focus (only for focus-driven strategies) — differ from the last computed layout. The host
     /// gates its per-frame `project_orrery_strategy` call on this, so an unchanged analytic layout is
     /// computed once per real change, not every frame. (Arrangements — the layout cache.)
-    pub fn needs_strategy_recompute(&self, id: &str, w: u32, h: u32, focus: Option<NodeKey>) -> bool {
+    pub fn needs_strategy_recompute(
+        &self,
+        id: &str,
+        w: u32,
+        h: u32,
+        focus: Option<NodeKey>,
+    ) -> bool {
         // The by-site kanban groups by URL host — node *content* the structural revision does not
         // track (a url edit is content, not structure). Its layout is cheap (host extraction +
         // grouping), so recompute it every frame rather than risk a stale column. The structural
@@ -52,7 +58,11 @@ impl Orrery {
         if id == "kanban.default" {
             return true;
         }
-        let focus = if Self::strategy_uses_focus(id) { focus } else { None };
+        let focus = if Self::strategy_uses_focus(id) {
+            focus
+        } else {
+            None
+        };
         match &self.last_strategy_inputs {
             Some((sid, rev, sw, sh, sfocus)) => {
                 sid.as_str() != id
@@ -69,7 +79,11 @@ impl Orrery {
     /// [`needs_strategy_recompute`](Self::needs_strategy_recompute) returns `false` until one
     /// changes. The host calls this right after it projects + applies. (Arrangements — the cache.)
     pub fn note_strategy_computed(&mut self, id: &str, w: u32, h: u32, focus: Option<NodeKey>) {
-        let focus = if Self::strategy_uses_focus(id) { focus } else { None };
+        let focus = if Self::strategy_uses_focus(id) {
+            focus
+        } else {
+            None
+        };
         self.last_strategy_inputs = Some((id.to_string(), self.graph.revision(), w, h, focus));
     }
 
@@ -208,7 +222,11 @@ impl Orrery {
     /// frame. Called from [`frame`](Self::frame). (Graph signals — query memos.)
     pub(crate) fn refresh_weighted_edges(&mut self) {
         let revision = self.graph.revision();
-        if self.weighted_edges_cache.as_ref().is_none_or(|(r, _)| *r != revision) {
+        if self
+            .weighted_edges_cache
+            .as_ref()
+            .is_none_or(|(r, _)| *r != revision)
+        {
             self.weighted_edges_cache = Some((revision, dedup_edges_weighted(&self.graph)));
             self.weighted_edges_rebuilds += 1;
         }
@@ -250,8 +268,10 @@ impl Orrery {
         if self.affinity_cache.is_some() && self.affinity_cache_revision == revision {
             return;
         }
-        self.affinity_cache =
-            Some(signals::structural_affinity(&self.graph, AFFINITY_MIN_SIMILARITY));
+        self.affinity_cache = Some(signals::structural_affinity(
+            &self.graph,
+            AFFINITY_MIN_SIMILARITY,
+        ));
         self.affinity_cache_revision = revision;
     }
 
@@ -294,5 +314,4 @@ impl Orrery {
         }
         self.strategy_positions = Some(positions);
     }
-
 }

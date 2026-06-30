@@ -131,9 +131,18 @@ mod tests {
         }
         assert_eq!(nb.body_count(), 80);
         for &(x, y) in nb.pos.iter() {
-            assert!(x.is_finite() && y.is_finite(), "positions stay finite ({x}, {y})");
-            assert!(x > -600.0 && x < NBODY_SPAN + 600.0, "x stays near the well (was {x})");
-            assert!(y > -600.0 && y < NBODY_SPAN + 600.0, "y stays near the well (was {y})");
+            assert!(
+                x.is_finite() && y.is_finite(),
+                "positions stay finite ({x}, {y})"
+            );
+            assert!(
+                x > -600.0 && x < NBODY_SPAN + 600.0,
+                "x stays near the well (was {x})"
+            );
+            assert!(
+                y > -600.0 && y < NBODY_SPAN + 600.0,
+                "y stays near the well (was {y})"
+            );
         }
     }
 }

@@ -14,7 +14,10 @@ impl Orrery {
 
     /// The current camera (pan + zoom), for the host to persist as view-intent.
     pub fn camera(&self) -> CameraView {
-        CameraView { offset: self.camera.offset, zoom: self.camera.zoom }
+        CameraView {
+            offset: self.camera.offset,
+            zoom: self.camera.zoom,
+        }
     }
 
     /// Restore the camera from persisted view-intent. A non-finite or

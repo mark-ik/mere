@@ -40,7 +40,8 @@ impl Orrery {
         width: u32,
         height: u32,
     ) {
-        self.scene_sprite_textures.insert(handle.into(), (rgba, width, height));
+        self.scene_sprite_textures
+            .insert(handle.into(), (rgba, width, height));
     }
 
     /// Load Conway's Game of Life as the ambient backdrop: a wrapped grid of cells, seeded with a
@@ -114,7 +115,11 @@ impl Orrery {
     /// Load a demo liquid pool: a block of PBF particles dropped into a basin behind the graph; the
     /// physics actor keeps ticking while it flows. Clear with [`clear_fluid`]. (Physics scenes P4c.)
     pub fn load_demo_fluid(&mut self) {
-        let basin = gyre::Basin { min_x: -250.0, max_x: 250.0, floor_y: 250.0 };
+        let basin = gyre::Basin {
+            min_x: -250.0,
+            max_x: 250.0,
+            floor_y: 250.0,
+        };
         self.physics.load_fluid(
             gyre::FluidParams::default(),
             basin,
@@ -211,7 +216,10 @@ impl Orrery {
         }
         let key = *self.selected.iter().next()?;
         let world = self.view.position_of(key)?;
-        Some(self.camera.to_screen(kernel::geometry::PortablePoint::new(world.x, world.y)))
+        Some(
+            self.camera
+                .to_screen(kernel::geometry::PortablePoint::new(world.x, world.y)),
+        )
     }
 
     /// The member id (node UUID) of the single focused node, if exactly one is
@@ -280,7 +288,10 @@ impl Orrery {
     /// reads this for a selection-driven open: a single selection opens that
     /// node's graphlet, a multi-selection opens the selected nodes.
     pub fn selected_members(&self) -> Vec<uuid::Uuid> {
-        self.selected.iter().filter_map(|&k| self.graph.get_node(k).map(|n| n.id)).collect()
+        self.selected
+            .iter()
+            .filter_map(|&k| self.graph.get_node(k).map(|n| n.id))
+            .collect()
     }
 
     /// Replace the node selection with the nodes named by `members` (their UUIDs),
@@ -330,5 +341,4 @@ impl Orrery {
         }
         order
     }
-
 }

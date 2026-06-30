@@ -108,7 +108,13 @@ impl Orrery {
             if !field.is_active() || self.hidden_fields.contains(&field.id) {
                 continue;
             }
-            let FieldExtent::Region { min_x, min_y, max_x, max_y } = field.extent else {
+            let FieldExtent::Region {
+                min_x,
+                min_y,
+                max_x,
+                max_y,
+            } = field.extent
+            else {
                 continue;
             };
             if world.x >= min_x && world.x <= max_x && world.y >= min_y && world.y <= max_y {
@@ -166,7 +172,13 @@ impl Orrery {
         let Some(field) = self.graph.field(id) else {
             return false;
         };
-        let FieldExtent::Region { min_x, min_y, max_x, max_y } = field.extent else {
+        let FieldExtent::Region {
+            min_x,
+            min_y,
+            max_x,
+            max_y,
+        } = field.extent
+        else {
             return false;
         };
         let (cx, cy) = ((min_x + max_x) / 2.0, (min_y + max_y) / 2.0);
@@ -194,7 +206,13 @@ impl Orrery {
             if !field.is_active() || self.hidden_fields.contains(&field.id) {
                 continue;
             }
-            let FieldExtent::Region { min_x, min_y, max_x, max_y } = field.extent else {
+            let FieldExtent::Region {
+                min_x,
+                min_y,
+                max_x,
+                max_y,
+            } = field.extent
+            else {
                 continue;
             };
             if world.x < min_x || world.x > max_x || world.y < min_y || world.y > max_y {
@@ -211,7 +229,10 @@ impl Orrery {
                 continue;
             }
             let handle = if (near_left || near_right) && (near_top || near_bottom) {
-                FieldHandle::Resize { left: near_left, top: near_top }
+                FieldHandle::Resize {
+                    left: near_left,
+                    top: near_top,
+                }
             } else {
                 FieldHandle::Move
             };
@@ -230,7 +251,13 @@ impl Orrery {
         let Some(field) = self.graph.field(id) else {
             return false;
         };
-        let FieldExtent::Region { min_x, min_y, max_x, max_y } = field.extent else {
+        let FieldExtent::Region {
+            min_x,
+            min_y,
+            max_x,
+            max_y,
+        } = field.extent
+        else {
             return false;
         };
         self.active_field = Some(id);
@@ -319,7 +346,12 @@ impl Orrery {
         let (cx, cy) = ((min_x + max_x) / 2.0, (min_y + max_y) / 2.0);
         let radius = ((max_x - min_x).min(max_y - min_y) / 2.0).max(1.0);
         let definition = FieldDefinition::Scalar(ScalarField::disk_at(cx, cy, radius, falloff));
-        let extent = FieldExtent::Region { min_x, min_y, max_x, max_y };
+        let extent = FieldExtent::Region {
+            min_x,
+            min_y,
+            max_x,
+            max_y,
+        };
         let mut field = Field::new(id, definition).with_extent(extent);
         if let Some(name) = name {
             field = field.with_name(name);

@@ -211,7 +211,12 @@ impl Orrery {
     /// with [`recenter`](Self::recenter).
     pub fn graph_visible(&self) -> bool {
         self.graph.nodes().next().is_none()
-            || self.view.cull_aabb(self.world_viewport()).into_iter().next().is_some()
+            || self
+                .view
+                .cull_aabb(self.world_viewport())
+                .into_iter()
+                .next()
+                .is_some()
     }
 
     /// Whether the graph currently holds any nodes. The host gates its one-shot
@@ -281,8 +286,11 @@ impl Orrery {
         // The physics collider matches the *shape*, not just the size: a square node collides
         // square, a circle round (Decision 1 — the face is the collider). The view keeps the
         // bounding radius above for the pick + edge-trim. (Node-rep — collider matches shape.)
-        let colliders: Vec<(NodeKey, gyre::NodeCollider)> =
-            self.graph.nodes().map(|(key, _)| (key, self.node_collider(key))).collect();
+        let colliders: Vec<(NodeKey, gyre::NodeCollider)> = self
+            .graph
+            .nodes()
+            .map(|(key, _)| (key, self.node_collider(key)))
+            .collect();
         self.physics.set_node_colliders(colliders);
     }
 
@@ -299,13 +307,22 @@ impl Orrery {
         // A custom hull (sprite-traced or hand-authored) collides at that hull, scaled to the
         // face. Independent of the face texture — the body is its own axis.
         if let Some(hull) = self.node_sprite_hulls.get(&key).filter(|h| h.len() >= 3) {
-            let points = hull.iter().map(|&(nx, ny)| (nx * size, ny * size)).collect();
-            return gyre::NodeCollider::Hull { points, fallback: half };
+            let points = hull
+                .iter()
+                .map(|&(nx, ny)| (nx * size, ny * size))
+                .collect();
+            return gyre::NodeCollider::Hull {
+                points,
+                fallback: half,
+            };
         }
         match self.node_shape(key) {
             NodeShape::Circle => gyre::NodeCollider::Ball { radius: half },
             NodeShape::Square => gyre::NodeCollider::Square { half },
-            NodeShape::Rounded => gyre::NodeCollider::RoundedSquare { half, border: half * 0.3 },
+            NodeShape::Rounded => gyre::NodeCollider::RoundedSquare {
+                half,
+                border: half * 0.3,
+            },
         }
     }
 
@@ -411,7 +428,10 @@ impl Orrery {
             .map(|(i, k)| {
                 let col = (i % 6) as f32;
                 let row = (i / 6) as f32;
-                (k, Point2D::new(anchor.x + 12.0 + col * 16.0, anchor.y + 12.0 + row * 16.0))
+                (
+                    k,
+                    Point2D::new(anchor.x + 12.0 + col * 16.0, anchor.y + 12.0 + row * 16.0),
+                )
             })
             .collect();
         for &(key, pos) in &seeds {

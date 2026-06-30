@@ -221,11 +221,19 @@ mod tests {
         assert_eq!(gol.alive_count(), 3);
 
         gol.step();
-        assert_eq!(live_set(&gol), vec![(2, 1), (2, 2), (2, 3)], "blinker turned vertical");
+        assert_eq!(
+            live_set(&gol),
+            vec![(2, 1), (2, 2), (2, 3)],
+            "blinker turned vertical"
+        );
         assert_eq!(gol.alive_count(), 3, "a blinker keeps three cells");
 
         gol.step();
-        assert_eq!(live_set(&gol), start, "two steps return the blinker to its start");
+        assert_eq!(
+            live_set(&gol),
+            start,
+            "two steps return the blinker to its start"
+        );
     }
 
     #[test]
@@ -244,11 +252,18 @@ mod tests {
         let mut empty = GameOfLife::empty(8, 8);
         assert_eq!(empty.alive_count(), 0);
         empty.step();
-        assert_eq!(empty.alive_count(), 0, "nothing is born from an empty field");
+        assert_eq!(
+            empty.alive_count(),
+            0,
+            "nothing is born from an empty field"
+        );
 
         let gol = GameOfLife::seeded(40, 40, 0x1234_5678);
         let alive = gol.alive_count();
-        assert!(alive > 0 && alive < 40 * 40, "a random soup is partly alive (was {alive})");
+        assert!(
+            alive > 0 && alive < 40 * 40,
+            "a random soup is partly alive (was {alive})"
+        );
     }
 
     #[test]
@@ -256,7 +271,10 @@ mod tests {
         // A dead field revives once `advance` accumulates a generation's worth of time.
         let mut gol = GameOfLife::empty(20, 20);
         gol.advance(0.2); // > one 1/8s generation interval
-        assert!(gol.alive_count() > 0, "advance steps a generation and revives a dead field");
+        assert!(
+            gol.alive_count() > 0,
+            "advance steps a generation and revives a dead field"
+        );
 
         // A short dt under the interval accumulates without stepping (no panic, still empty pattern
         // semantics): start from a known blinker and confirm a tiny advance does not yet flip it.
@@ -266,6 +284,10 @@ mod tests {
         blink.set_cell(3, 2, true);
         let before = live_set(&blink);
         blink.advance(0.01);
-        assert_eq!(live_set(&blink), before, "a sub-interval advance does not step a generation");
+        assert_eq!(
+            live_set(&blink),
+            before,
+            "a sub-interval advance does not step a generation"
+        );
     }
 }

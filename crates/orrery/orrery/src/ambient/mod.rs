@@ -104,6 +104,9 @@ mod tests {
     fn hsv_round_trips_the_hue() {
         // A pure-green tincture should rotate cleanly: hue 1/3, recoverable from the built colour.
         let green = hsv_to_rgb(1.0 / 3.0, 0.8, 0.9, 1.0);
-        assert!((rgb_to_hue(green) - 1.0 / 3.0).abs() < 0.02, "hue round-trips");
+        assert!(
+            (rgb_to_hue(green) - 1.0 / 3.0).abs() < 0.02,
+            "hue round-trips"
+        );
     }
 }

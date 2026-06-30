@@ -75,7 +75,9 @@ impl App {
         let host = self.host.as_ref().unwrap();
         let (_tex, view) = host.rasterize(&scene, w, h, ColorLoad::Clear(wgpu::Color::WHITE));
         let Some(frame) = host.acquire() else { return };
-        let target = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let target = frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
         host.renderer().compose_external_texture(
             &view,
             &target,
@@ -117,15 +119,18 @@ impl ApplicationHandler for App {
         self.orrery.resize(self.width, self.height);
         self.orrery.recenter();
 
-        let options =
-            NetrenderOptions { tile_cache_size: Some(64), enable_vello: true, ..Default::default() };
+        let options = NetrenderOptions {
+            tile_cache_size: Some(64),
+            enable_vello: true,
+            ..Default::default()
+        };
         match SurfaceHost::boot(window.clone(), self.width, self.height, options) {
             Ok(host) => self.host = Some(host),
             Err(err) => {
                 eprintln!("[orrery-host] {err}");
                 event_loop.exit();
                 return;
-            },
+            }
         }
         // Always-offload physics (P6): move the simulation onto an armillary actor
         // thread, waking this loop through the proxy when a layout snapshot lands.
@@ -134,10 +139,14 @@ impl ApplicationHandler for App {
         // A small living backdrop: a few drifting, intangible scene bodies behind the
         // graph. Added before offload so they ride onto the physics actor with the rest
         // of the world; they drift while the layout settles. (Physics scenes P1.)
-        self.orrery.add_scene_body((-320.0, -140.0), 46.0, (16.0, 10.0));
-        self.orrery.add_scene_body((280.0, 130.0), 64.0, (-13.0, 15.0));
-        self.orrery.add_scene_body((-140.0, 220.0), 30.0, (11.0, -17.0));
-        self.orrery.add_scene_body((200.0, -210.0), 38.0, (-9.0, -12.0));
+        self.orrery
+            .add_scene_body((-320.0, -140.0), 46.0, (16.0, 10.0));
+        self.orrery
+            .add_scene_body((280.0, 130.0), 64.0, (-13.0, 15.0));
+        self.orrery
+            .add_scene_body((-140.0, 220.0), 30.0, (11.0, -17.0));
+        self.orrery
+            .add_scene_body((200.0, -210.0), 38.0, (-9.0, -12.0));
 
         let proxy = self.proxy.clone();
         let physics_wake: armillary::Wake = Arc::new(move || {
@@ -155,7 +164,12 @@ impl ApplicationHandler for App {
         self.request_redraw();
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
+    fn window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        window_id: WindowId,
+        event: WindowEvent,
+    ) {
         if self.window.as_ref().map(|w| w.id()) != Some(window_id) {
             return;
         }
@@ -169,18 +183,18 @@ impl ApplicationHandler for App {
                 }
                 self.orrery.resize(self.width, self.height);
                 self.request_redraw();
-            },
+            }
             WindowEvent::ModifiersChanged(mods) => {
                 self.orrery.set_ctrl(mods.state().control_key());
                 // Alt gates the orbit drag (Alt+left-drag yaws/tilts the camera). (Iso orbit.)
                 self.orrery.set_alt(mods.state().alt_key());
-            },
+            }
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor = (position.x as f32, position.y as f32);
                 if self.orrery.cursor_moved(self.cursor.0, self.cursor.1) {
                     self.request_redraw();
                 }
-            },
+            }
             WindowEvent::MouseWheel { delta, .. } => {
                 let (dx, dy) = match delta {
                     MouseScrollDelta::LineDelta(x, y) => (x * WHEEL_PAN_SCALE, y * WHEEL_PAN_SCALE),
@@ -189,7 +203,7 @@ impl ApplicationHandler for App {
                 if self.orrery.wheel(dx, dy) {
                     self.request_redraw();
                 }
-            },
+            }
             WindowEvent::MouseInput { state, button, .. } => {
                 let button = match button {
                     MouseButton::Left => Some(PointerButton::Left),
@@ -207,7 +221,7 @@ impl ApplicationHandler for App {
                         self.request_redraw();
                     }
                 }
-            },
+            }
             WindowEvent::KeyboardInput { event, .. } => {
                 if event.state == ElementState::Pressed {
                     match &event.logical_key {
@@ -216,44 +230,44 @@ impl ApplicationHandler for App {
                             if self.orrery.reseed() {
                                 self.request_redraw();
                             }
-                        },
+                        }
                         // `i` toggles the isometric (2.5D foreshortened-ground) view.
                         WinitKey::Character(s) if s.as_str() == "i" => {
                             let on = !self.orrery.is_isometric();
                             self.orrery.set_isometric(on);
                             self.request_redraw();
-                        },
+                        }
                         // `q` / `e` orbit the view (yaw); pair with `i` for the 2.5D orbit.
                         WinitKey::Character(s) if s.as_str() == "q" => {
                             self.orrery.orbit_by(-0.15);
                             self.request_redraw();
-                        },
+                        }
                         WinitKey::Character(s) if s.as_str() == "e" => {
                             self.orrery.orbit_by(0.15);
                             self.request_redraw();
-                        },
+                        }
                         // `[` / `]` sweep the vertical foreshorten (tilt).
                         WinitKey::Character(s) if s.as_str() == "[" => {
                             self.orrery.set_tilt(self.orrery.tilt() - 0.05);
                             self.request_redraw();
-                        },
+                        }
                         WinitKey::Character(s) if s.as_str() == "]" => {
                             self.orrery.set_tilt(self.orrery.tilt() + 0.05);
                             self.request_redraw();
-                        },
+                        }
                         // `h` toggles height-by-degree: hubs float above the ground (P3).
                         WinitKey::Character(s) if s.as_str() == "h" => {
                             let on = !self.orrery.height_by_degree();
                             self.orrery.set_height_by_degree(on);
                             self.request_redraw();
-                        },
+                        }
                         // `t` toggles scene tangibility: the graph collides with the
                         // backdrop bodies vs passing through them (Physics scenes P2).
                         WinitKey::Character(s) if s.as_str() == "t" => {
                             self.nodes_tangible = !self.nodes_tangible;
                             self.orrery.set_nodes_tangible(self.nodes_tangible);
                             self.request_redraw();
-                        },
+                        }
                         // `1`-`7` load the declarative scene catalog (drop bowl, pyramid, dominoes,
                         // Galton board, funnel, drift, rope chain); `8` the liquid pool; `9` the
                         // whirlpool force-field; `f` the fountain emitter; `0` clears back to bare
@@ -262,66 +276,66 @@ impl ApplicationHandler for App {
                         WinitKey::Character(s) if s.as_str() == "1" => {
                             self.orrery.load_demo_scene();
                             self.request_redraw();
-                        },
+                        }
                         WinitKey::Character(s) if s.as_str() == "2" => {
                             self.orrery.load_scene(orrery::pyramid_scene());
                             self.request_redraw();
-                        },
+                        }
                         WinitKey::Character(s) if s.as_str() == "3" => {
                             self.orrery.load_scene(orrery::domino_scene());
                             self.request_redraw();
-                        },
+                        }
                         WinitKey::Character(s) if s.as_str() == "4" => {
                             self.orrery.load_scene(orrery::galton_scene());
                             self.request_redraw();
-                        },
+                        }
                         WinitKey::Character(s) if s.as_str() == "5" => {
                             self.orrery.load_scene(orrery::funnel_scene());
                             self.request_redraw();
-                        },
+                        }
                         WinitKey::Character(s) if s.as_str() == "6" => {
                             self.orrery.load_scene(orrery::drift_scene());
                             self.request_redraw();
-                        },
+                        }
                         WinitKey::Character(s) if s.as_str() == "7" => {
                             self.orrery.load_scene(orrery::chain_scene());
                             self.request_redraw();
-                        },
+                        }
                         // `8` loads the demo liquid pool (PBF fluid). (Physics scenes P4c.)
                         WinitKey::Character(s) if s.as_str() == "8" => {
                             self.orrery.load_demo_fluid();
                             self.request_redraw();
-                        },
+                        }
                         // `9` loads the whirlpool: a vortex force-field swirling loose balls. (Fields.)
                         WinitKey::Character(s) if s.as_str() == "9" => {
                             self.orrery.load_whirlpool();
                             self.request_redraw();
-                        },
+                        }
                         // `f` loads the fountain: an emitter spraying droplets up into a basin. (Emitters.)
                         WinitKey::Character(s) if s.as_str() == "f" => {
                             self.orrery.load_fountain();
                             self.request_redraw();
-                        },
+                        }
                         // `c` loads Newton's cradle: elastic revolute pendulums clicking momentum across. (P4b.)
                         WinitKey::Character(s) if s.as_str() == "c" => {
                             self.orrery.load_scene(orrery::cradle_scene());
                             self.request_redraw();
-                        },
+                        }
                         // `b` loads the plank bridge: a revolute-hinge span sagging under dropped weights. (P4b.)
                         WinitKey::Character(s) if s.as_str() == "b" => {
                             self.orrery.load_scene(orrery::bridge_scene());
                             self.request_redraw();
-                        },
+                        }
                         // `k` loads the wrecking ball: a heavy rope chain swinging through a block tower. (P4b.)
                         WinitKey::Character(s) if s.as_str() == "k" => {
                             self.orrery.load_scene(orrery::ball_and_chain_scene());
                             self.request_redraw();
-                        },
+                        }
                         // `m` loads the mixer: a motorised revolute paddle stirring loose balls. (P4b.)
                         WinitKey::Character(s) if s.as_str() == "m" => {
                             self.orrery.load_scene(orrery::mixer_scene());
                             self.request_redraw();
-                        },
+                        }
                         // `x` demos textured scene props: register a procedural crate texture, then
                         // drop a stack of crates wearing it. (Scene-prop sprites.)
                         WinitKey::Character(s) if s.as_str() == "x" => {
@@ -329,40 +343,40 @@ impl ApplicationHandler for App {
                             self.orrery.register_scene_sprite("crate", rgba, cw, ch);
                             self.orrery.load_scene(crate_drop_scene());
                             self.request_redraw();
-                        },
+                        }
                         // `g` loads the Game of Life ambient backdrop (a non-rapier sim behind the
                         // graph). (Physics scenes P5.)
                         WinitKey::Character(s) if s.as_str() == "g" => {
                             self.orrery.load_game_of_life();
                             self.request_redraw();
-                        },
+                        }
                         // `n` loads the n-body drift ambient backdrop (an orbiting, clumping cloud). (P5.)
                         WinitKey::Character(s) if s.as_str() == "n" => {
                             self.orrery.load_nbody();
                             self.request_redraw();
-                        },
+                        }
                         // `p` loads the particle-life ambient backdrop (species self-organising). (P5.)
                         WinitKey::Character(s) if s.as_str() == "p" => {
                             self.orrery.load_particle_life();
                             self.request_redraw();
-                        },
+                        }
                         // `s` loads the falling-sand ambient backdrop (grains pour + pile + drain). (P5.)
                         WinitKey::Character(s) if s.as_str() == "s" => {
                             self.orrery.load_sand();
                             self.request_redraw();
-                        },
+                        }
                         WinitKey::Character(s) if s.as_str() == "0" => {
                             self.orrery.clear_scene();
                             self.orrery.clear_fluid();
                             self.orrery.clear_ambient();
                             self.request_redraw();
-                        },
-                        _ => {},
+                        }
+                        _ => {}
                     }
                 }
-            },
+            }
             WindowEvent::RedrawRequested => self.render(),
-            _ => {},
+            _ => {}
         }
     }
 }
@@ -392,8 +406,9 @@ fn crate_texture() -> (Vec<u8>, u32, u32) {
 /// wearing the registered `crate` sprite) dropped onto it. (Scene-prop sprites.)
 fn crate_drop_scene() -> gyre::SceneSpec {
     use gyre::{NodeCollider, SceneBodySpec, SceneSpec};
-    let mut bodies =
-        vec![SceneBodySpec::fixed(NodeCollider::Square { half: 300.0 }, (0.0, 360.0)).restitution(0.0)];
+    let mut bodies = vec![
+        SceneBodySpec::fixed(NodeCollider::Square { half: 300.0 }, (0.0, 360.0)).restitution(0.0),
+    ];
     for row in 0..3 {
         for col in 0..5 {
             // Stagger x + start each crate at a varied tilt so they topple into a messy pile - the
@@ -409,7 +424,13 @@ fn crate_drop_scene() -> gyre::SceneSpec {
             );
         }
     }
-    SceneSpec { bodies, gravity: (0.0, 520.0), default_tangible: false, perpetual: false, joints: Vec::new() }
+    SceneSpec {
+        bodies,
+        gravity: (0.0, 520.0),
+        default_tangible: false,
+        perpetual: false,
+        joints: Vec::new(),
+    }
 }
 
 fn main() {

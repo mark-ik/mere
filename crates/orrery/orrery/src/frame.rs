@@ -7,27 +7,28 @@
 
 use std::collections::{HashMap, HashSet};
 
-use kernel::geometry::PortablePoint;
-use layout_dom_api::LayoutDomMut;
-use kernel::graph::NodeKey;
 use gyre::NodeCollider;
+use kernel::geometry::PortablePoint;
+use kernel::graph::NodeKey;
+use layout_dom_api::LayoutDomMut;
 use netrender::Scene;
 use paint_list_api::{
     AlphaType, ColorF, CommonPlacement, DeviceIntSize, ExtendMode, GradientStop, IdNamespace,
     ImageItem, ImageKey, ImageRendering, ImageResource, LayoutPoint, LayoutRect, LayoutSize,
     LayoutTransform, PaintCmd, PaintList, PathCommand, PathData, PathItem, RadialGradientItem,
-    RadialGradientPayload, RectItem, StrokeCap, StrokeJoin, StrokeStyle, TransformKind, TransformSpec,
+    RadialGradientPayload, RectItem, StrokeCap, StrokeJoin, StrokeStyle, TransformKind,
+    TransformSpec,
 };
-use paint_list_render::{composite_paint_layers, CompositeLayer};
+use paint_list_render::{CompositeLayer, composite_paint_layers};
 use platen::orrery::{identity_arrangement, orrery_paint_list_demoted_from_arrangement};
 use serval_layout::{Applied, IncrementalLayout, ScrollOffsets};
 use serval_scripted_dom::NodeId as DomNodeId;
 
 use super::build::{
-    background_cmds, bridge_ring_overlay, community_ring_overlay, field_overlay, marquee_rect_cmds,
-    selected_edge_overlay, set_class, set_style, NODE_SHEET,
+    NODE_SHEET, background_cmds, bridge_ring_overlay, community_ring_overlay, field_overlay,
+    marquee_rect_cmds, selected_edge_overlay, set_class, set_style,
 };
-use super::{NodeShape, NodeState, Orrery, NODE_HALF, PAN_DECAY};
+use super::{NODE_HALF, NodeShape, NodeState, Orrery, PAN_DECAY};
 
 impl Orrery {
     /// Advance one frame at viewport `(w, h)` and return the composited content
@@ -82,7 +83,8 @@ impl Orrery {
         let dragging = self.drag.is_some_and(|d| d.moved);
         if let Some(d) = self.drag {
             if d.moved {
-                self.view.set_position(d.node, self.screen_to_world(self.cursor));
+                self.view
+                    .set_position(d.node, self.screen_to_world(self.cursor));
             }
         }
         // Pan inertia: glide + decay when not actively middle-dragging.
@@ -107,8 +109,11 @@ impl Orrery {
             .collect();
         // On-screen nodes (cull against the world-space viewport) become DOM
         // children; the rest demote to underlay rects, so no node double-draws.
-        let mut on_screen: HashSet<NodeKey> =
-            self.view.cull_aabb(self.world_viewport()).into_iter().collect();
+        let mut on_screen: HashSet<NodeKey> = self
+            .view
+            .cull_aabb(self.world_viewport())
+            .into_iter()
+            .collect();
         // The scope lens (curated orrery): when set, render only the scoped nodes —
         // filter the on-screen DOM set here, project the underlay through a curated
         // arrangement of just the scope (below), and hide non-scoped DOM nodes (the
@@ -135,8 +140,11 @@ impl Orrery {
             |k| !on_screen.contains(&k),
             // Skip relations whose undirected pair the user has hidden.
             |rel| {
-                let pair =
-                    if rel.from <= rel.to { (rel.from, rel.to) } else { (rel.to, rel.from) };
+                let pair = if rel.from <= rel.to {
+                    (rel.from, rel.to)
+                } else {
+                    (rel.to, rel.from)
+                };
                 !self.hidden_edges.contains(&pair)
             },
             // Each node's face radius (node_size / 2) so straight edges trim to the
@@ -167,8 +175,7 @@ impl Orrery {
         if self.show_community_rings
             && let Some(community) = self.community_cache.as_ref()
         {
-            let rings =
-                community_ring_overlay(&self.view, community, |k| self.node_size(k) / 2.0);
+            let rings = community_ring_overlay(&self.view, community, |k| self.node_size(k) / 2.0);
             underlay.splice_world_overlays(rings);
         }
         // Bridge rings: a bold ring on the high-betweenness brokers, over the community rings so the
@@ -188,8 +195,12 @@ impl Orrery {
         if self.node_layout.is_none() || self.pool_w != w || self.pool_h != h {
             let mut discard = Vec::new();
             self.node_dom.drain_mutations(&mut discard);
-            self.node_layout =
-                Some(IncrementalLayout::new(&self.node_dom, NODE_SHEET, w as f32, h as f32));
+            self.node_layout = Some(IncrementalLayout::new(
+                &self.node_dom,
+                NODE_SHEET,
+                w as f32,
+                h as f32,
+            ));
             self.pool_w = w;
             self.pool_h = h;
         }
@@ -265,17 +276,31 @@ impl Orrery {
                 Some(NodeShape::Circle) => " gnode-circle",
                 _ => "",
             };
-            set_class(&mut self.node_dom, gnode, &format!("{state_class}{shape_class}"));
+            set_class(
+                &mut self.node_dom,
+                gnode,
+                &format!("{state_class}{shape_class}"),
+            );
         }
         let mut muts = Vec::new();
         self.node_dom.drain_mutations(&mut muts);
-        let applied = self.node_layout.as_mut().unwrap().apply(&self.node_dom, NODE_SHEET, &muts);
+        let applied = self
+            .node_layout
+            .as_mut()
+            .unwrap()
+            .apply(&self.node_dom, NODE_SHEET, &muts);
         if !matches!(applied, Applied::RepaintOnly | Applied::Unchanged) {
-            tracing::warn!(?applied, "orrery pool: node layout left the RepaintOnly path");
+            tracing::warn!(
+                ?applied,
+                "orrery pool: node layout left the RepaintOnly path"
+            );
         }
         let scroll = ScrollOffsets::<DomNodeId>::default();
         let nodes_plist =
-            self.node_layout.as_ref().unwrap().emit_paint_list(&self.node_dom, &scroll, viewport);
+            self.node_layout
+                .as_ref()
+                .unwrap()
+                .emit_paint_list(&self.node_dom, &scroll, viewport);
 
         // Favicon layer: a textured quad over each on-screen tile that carries a
         // favicon. This layer is NOT under the `.stage` camera transform (it is a
@@ -288,9 +313,15 @@ impl Orrery {
         let mut favicon_cmds: Vec<PaintCmd> = Vec::new();
         let mut favicon_images: Vec<ImageResource> = Vec::new();
         for &key in &on_screen {
-            let Some(pos) = positions.get(&key) else { continue };
-            let Some(node) = self.graph.get_node(key) else { continue };
-            let Some(rgba) = node.favicon_rgba.as_ref() else { continue };
+            let Some(pos) = positions.get(&key) else {
+                continue;
+            };
+            let Some(node) = self.graph.get_node(key) else {
+                continue;
+            };
+            let Some(rgba) = node.favicon_rgba.as_ref() else {
+                continue;
+            };
             if rgba.is_empty() || node.favicon_width == 0 || node.favicon_height == 0 {
                 continue;
             }
@@ -315,7 +346,12 @@ impl Orrery {
                 image_key: img_key,
                 image_rendering: ImageRendering::Auto,
                 alpha_type: AlphaType::Alpha,
-                color: ColorF { r: 1.0, g: 1.0, b: 1.0, a: 1.0 },
+                color: ColorF {
+                    r: 1.0,
+                    g: 1.0,
+                    b: 1.0,
+                    a: 1.0,
+                },
             }));
         }
 
@@ -325,7 +361,9 @@ impl Orrery {
         // nothing, so this is empty until height-by-degree is on. (Isometric camera P3.)
         let mut stem_cmds: Vec<PaintCmd> = Vec::new();
         for &key in &on_screen {
-            let Some(pos) = positions.get(&key) else { continue };
+            let Some(pos) = positions.get(&key) else {
+                continue;
+            };
             let lift = self.node_height(key) * self.camera.zoom;
             if lift < 0.5 {
                 continue;
@@ -336,12 +374,19 @@ impl Orrery {
                     LayoutPoint::new(gx - 1.0, gy - lift),
                     LayoutPoint::new(gx + 1.0, gy),
                 )),
-                color: ColorF { r: 0.5, g: 0.55, b: 0.66, a: 0.5 },
+                color: ColorF {
+                    r: 0.5,
+                    g: 0.55,
+                    b: 0.66,
+                    a: 0.5,
+                },
             }));
         }
 
         // A screen-space layer for the marquee rubber-band, when active.
-        let marquee_cmds = self.marquee.map(|origin| marquee_rect_cmds(origin, self.cursor));
+        let marquee_cmds = self
+            .marquee
+            .map(|origin| marquee_rect_cmds(origin, self.cursor));
         // The orrery's own opaque backdrop is the bottom layer (so the surface is
         // dark without depending on the host clear color); then the living-backdrop
         // scene orbs, then the underlay edges + demoted rects, then the on-screen node
@@ -373,10 +418,12 @@ impl Orrery {
             if let Some(handle) = &body.sprite {
                 if let Some((rgba, iw, ih)) = self.scene_sprite_textures.get(handle) {
                     if !rgba.is_empty() && *iw > 0 && *ih > 0 {
-                        let (cx, cy) =
-                            self.camera.to_screen(PortablePoint::new(body.position.x, body.position.y));
+                        let (cx, cy) = self
+                            .camera
+                            .to_screen(PortablePoint::new(body.position.x, body.position.y));
                         let r = (scene_body_half(&body.collider) * self.camera.zoom).max(1.0);
-                        let img_key = ImageKey::new(IdNamespace(2), scene_sprite_images.len() as u32);
+                        let img_key =
+                            ImageKey::new(IdNamespace(2), scene_sprite_images.len() as u32);
                         scene_sprite_images.push(ImageResource {
                             key: img_key,
                             width: *iw,
@@ -403,7 +450,12 @@ impl Orrery {
                             image_key: img_key,
                             image_rendering: ImageRendering::Auto,
                             alpha_type: AlphaType::Alpha,
-                            color: ColorF { r: 1.0, g: 1.0, b: 1.0, a: 1.0 },
+                            color: ColorF {
+                                r: 1.0,
+                                g: 1.0,
+                                b: 1.0,
+                                a: 1.0,
+                            },
                         }));
                         scene_sprite_cmds.push(PaintCmd::PopTransform);
                         continue;
@@ -417,7 +469,12 @@ impl Orrery {
             let polygon: Option<Vec<(f32, f32)>> = match &body.collider {
                 NodeCollider::Ball { .. } => None,
                 NodeCollider::Square { half } | NodeCollider::RoundedSquare { half, .. } => {
-                    Some(vec![(-half, -half), (*half, -half), (*half, *half), (-half, *half)])
+                    Some(vec![
+                        (-half, -half),
+                        (*half, -half),
+                        (*half, *half),
+                        (-half, *half),
+                    ])
                 }
                 NodeCollider::Hull { points, .. } if points.len() >= 3 => Some(points.clone()),
                 NodeCollider::Hull { .. } => None,
@@ -437,7 +494,11 @@ impl Orrery {
                         max_x = max_x.max(sx);
                         max_y = max_y.max(sy);
                         let p = LayoutPoint::new(sx, sy);
-                        commands.push(if i == 0 { PathCommand::MoveTo(p) } else { PathCommand::LineTo(p) });
+                        commands.push(if i == 0 {
+                            PathCommand::MoveTo(p)
+                        } else {
+                            PathCommand::LineTo(p)
+                        });
                     }
                     commands.push(PathCommand::Close);
                     scene_cmds.push(PaintCmd::DrawPath(PathItem {
@@ -465,7 +526,9 @@ impl Orrery {
                         NodeCollider::Hull { fallback, .. } => *fallback,
                         _ => continue,
                     };
-                    let (cx, cy) = self.camera.to_screen(PortablePoint::new(body.position.x, body.position.y));
+                    let (cx, cy) = self
+                        .camera
+                        .to_screen(PortablePoint::new(body.position.x, body.position.y));
                     let r = (radius * self.camera.zoom).max(1.0);
                     let rect = LayoutRect::new(
                         LayoutPoint::new(cx - r, cy - r),
@@ -480,9 +543,18 @@ impl Orrery {
                             // A brighter core fading through a mid-stop to transparent, so a ball reads
                             // as a rounder, more present orb than a flat low-alpha disc. (Scene polish.)
                             stops: vec![
-                                GradientStop { offset: 0.0, color: ColorF::new(0.54, 0.66, 0.94, 0.32) },
-                                GradientStop { offset: 0.55, color: ColorF::new(0.44, 0.57, 0.87, 0.18) },
-                                GradientStop { offset: 1.0, color: ColorF::new(0.42, 0.55, 0.85, 0.0) },
+                                GradientStop {
+                                    offset: 0.0,
+                                    color: ColorF::new(0.54, 0.66, 0.94, 0.32),
+                                },
+                                GradientStop {
+                                    offset: 0.55,
+                                    color: ColorF::new(0.44, 0.57, 0.87, 0.18),
+                                },
+                                GradientStop {
+                                    offset: 1.0,
+                                    color: ColorF::new(0.42, 0.55, 0.85, 0.0),
+                                },
                             ],
                         },
                         tile_size: LayoutSize::new(2.0 * r, 2.0 * r),
@@ -501,8 +573,10 @@ impl Orrery {
         for p in self.view.fluid_particles() {
             let (cx, cy) = self.camera.to_screen(PortablePoint::new(p.x, p.y));
             let r = (fr * 2.2 * self.camera.zoom).max(1.5);
-            let rect =
-                LayoutRect::new(LayoutPoint::new(cx - r, cy - r), LayoutPoint::new(cx + r, cy + r));
+            let rect = LayoutRect::new(
+                LayoutPoint::new(cx - r, cy - r),
+                LayoutPoint::new(cx + r, cy + r),
+            );
             fluid_cmds.push(PaintCmd::DrawRadialGradient(RadialGradientItem {
                 placement: CommonPlacement::new(rect),
                 gradient: RadialGradientPayload {
@@ -510,8 +584,14 @@ impl Orrery {
                     radius: LayoutSize::new(r, r),
                     extend_mode: ExtendMode::Clamp,
                     stops: vec![
-                        GradientStop { offset: 0.0, color: ColorF::new(0.30, 0.62, 0.95, 0.5) },
-                        GradientStop { offset: 1.0, color: ColorF::new(0.30, 0.62, 0.95, 0.0) },
+                        GradientStop {
+                            offset: 0.0,
+                            color: ColorF::new(0.30, 0.62, 0.95, 0.5),
+                        },
+                        GradientStop {
+                            offset: 1.0,
+                            color: ColorF::new(0.30, 0.62, 0.95, 0.0),
+                        },
                     ],
                 },
                 tile_size: LayoutSize::new(2.0 * r, 2.0 * r),
@@ -589,13 +669,20 @@ mod tests {
 
     fn graph_with_one_node(url: &str) -> (Graph, kernel::graph::NodeKey) {
         let mut graph = Graph::new();
-        let key =
-            graph.add_node_with_id(Graph::node_namespace_id(url), url.to_string(), Point2D::zero());
+        let key = graph.add_node_with_id(
+            Graph::node_namespace_id(url),
+            url.to_string(),
+            Point2D::zero(),
+        );
         (graph, key)
     }
 
     fn image_op_count(scene: &netrender::Scene) -> usize {
-        scene.ops.iter().filter(|op| matches!(op, netrender::SceneOp::Image(_))).count()
+        scene
+            .ops
+            .iter()
+            .filter(|op| matches!(op, netrender::SceneOp::Image(_)))
+            .count()
     }
 
     /// A node carrying favicon RGBA emits an image op over its on-screen tile, so the
@@ -607,7 +694,10 @@ mod tests {
         assert!(graph.set_node_favicon(key, vec![255u8; 2 * 2 * 4], 2, 2));
         let mut orrery = Orrery::with_graph(graph);
         let (scene, _) = orrery.frame(800, 600);
-        assert!(image_op_count(&scene) >= 1, "a favicon node emits at least one image op");
+        assert!(
+            image_op_count(&scene) >= 1,
+            "a favicon node emits at least one image op"
+        );
     }
 
     /// Without a favicon, no image op is emitted (the tile is just a colored square).
@@ -638,7 +728,10 @@ mod tests {
         };
         orrery.load_scene(spec);
         let (scene, _) = orrery.frame(800, 600);
-        assert!(image_op_count(&scene) >= 1, "a registered sprite prop emits an image op");
+        assert!(
+            image_op_count(&scene) >= 1,
+            "a registered sprite prop emits an image op"
+        );
     }
 
     /// A scene prop whose sprite handle is *not* registered falls back to the abstract polygon, so
@@ -659,7 +752,11 @@ mod tests {
         };
         orrery.load_scene(spec);
         let (scene, _) = orrery.frame(800, 600);
-        assert_eq!(image_op_count(&scene), 0, "an unregistered handle falls back, no image op");
+        assert_eq!(
+            image_op_count(&scene),
+            0,
+            "an unregistered handle falls back, no image op"
+        );
     }
 
     /// The Game of Life ambient backdrop keeps the orrery redrawing (so it animates) while loaded,
@@ -684,6 +781,9 @@ mod tests {
             let _ = orrery.frame(800, 600);
         }
         let (_, after_clear) = orrery.frame(800, 600);
-        assert!(!after_clear, "clearing the ambient backdrop lets the orrery park again");
+        assert!(
+            !after_clear,
+            "clearing the ambient backdrop lets the orrery park again"
+        );
     }
 }

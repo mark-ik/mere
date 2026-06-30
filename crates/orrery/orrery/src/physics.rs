@@ -24,7 +24,7 @@
 use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::Duration;
 
-use armillary::{spawn, ActorHandle, Emitter, Wake};
+use armillary::{ActorHandle, Emitter, Wake, spawn};
 use euclid::default::Point2D;
 use gyre::{
     AffinitySpring, Basin, CouplingForce, FluidParams, LayoutSnapshot, LayoutView, NodeCollider,
@@ -157,7 +157,11 @@ impl Physics {
         let (handle, updates) = spawn(wake, move |commands, out| {
             run(sim, initial_settle, dragging, commands, out);
         });
-        *self = Physics::Actor(ActorPhysics { handle, updates, settling: initial_settle > 0 });
+        *self = Physics::Actor(ActorPhysics {
+            handle,
+            updates,
+            settling: initial_settle > 0,
+        });
     }
 
     /// Reconcile the body set (see [`PhysicsCommand::SyncNodes`]).
@@ -166,7 +170,7 @@ impl Physics {
             Physics::Inline(p) => p.sim.sync_nodes(nodes),
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::SyncNodes(nodes));
-            },
+            }
         }
     }
 
@@ -176,7 +180,7 @@ impl Physics {
             Physics::Inline(p) => p.sim.sync_edges(edges),
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::SyncEdges(edges));
-            },
+            }
         }
     }
 
@@ -186,7 +190,7 @@ impl Physics {
             Physics::Inline(p) => p.sim.seed_positions(positions),
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::Seed(positions));
-            },
+            }
         }
     }
 
@@ -199,7 +203,7 @@ impl Physics {
             Physics::Inline(p) => p.sim.set_coupling_forces(forces),
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::SetCouplingForces(forces));
-            },
+            }
         }
     }
 
@@ -243,7 +247,8 @@ impl Physics {
         match self {
             Physics::Inline(p) => p.sim.set_node_colliders(colliders),
             Physics::Actor(p) => {
-                p.handle.command(PhysicsCommand::SetNodeColliders(colliders));
+                p.handle
+                    .command(PhysicsCommand::SetNodeColliders(colliders));
             }
         }
     }
@@ -254,7 +259,8 @@ impl Physics {
         match self {
             Physics::Inline(p) => p.sim.set_node_materials(materials),
             Physics::Actor(p) => {
-                p.handle.command(PhysicsCommand::SetNodeMaterials(materials));
+                p.handle
+                    .command(PhysicsCommand::SetNodeMaterials(materials));
             }
         }
     }
@@ -273,7 +279,8 @@ impl Physics {
                 p.sim.add_scene_body(collider, position, velocity);
             }
             Physics::Actor(p) => {
-                p.handle.command(PhysicsCommand::AddSceneBody(collider, position, velocity));
+                p.handle
+                    .command(PhysicsCommand::AddSceneBody(collider, position, velocity));
             }
         }
     }
@@ -321,7 +328,14 @@ impl Physics {
         match self {
             Physics::Inline(p) => p.sim.load_fluid(params, basin, origin, cols, rows, spacing),
             Physics::Actor(p) => {
-                p.handle.command(PhysicsCommand::LoadFluid { params, basin, origin, cols, rows, spacing });
+                p.handle.command(PhysicsCommand::LoadFluid {
+                    params,
+                    basin,
+                    origin,
+                    cols,
+                    rows,
+                    spacing,
+                });
             }
         }
     }
@@ -372,7 +386,7 @@ impl Physics {
             Physics::Inline(p) => p.sim.pin(node, position),
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::Pin(node, position));
-            },
+            }
         }
     }
 
@@ -382,7 +396,7 @@ impl Physics {
             Physics::Inline(p) => p.sim.unpin(node),
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::Unpin(node));
-            },
+            }
         }
     }
 
@@ -393,7 +407,7 @@ impl Physics {
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::Settle(ticks));
                 p.settling = true;
-            },
+            }
         }
     }
 
@@ -404,7 +418,7 @@ impl Physics {
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::Halt);
                 p.settling = false;
-            },
+            }
         }
     }
 
@@ -415,7 +429,7 @@ impl Physics {
             Physics::Inline(p) => p.dragging = dragging,
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::SetDragging(dragging));
-            },
+            }
         }
     }
 
@@ -424,7 +438,7 @@ impl Physics {
         match self {
             Physics::Inline(p) => {
                 p.ticks_remaining > 0 || p.dragging || p.sim.wants_continuous_tick()
-            },
+            }
             Physics::Actor(p) => p.settling,
         }
     }
@@ -447,7 +461,7 @@ impl Physics {
                 p.generation = p.generation.wrapping_add(1);
                 view.apply_snapshot(&p.sim.snapshot(p.generation));
                 p.ticks_remaining > 0 || p.dragging || p.sim.wants_continuous_tick()
-            },
+            }
             Physics::Actor(p) => {
                 let mut latest = None;
                 loop {
@@ -461,7 +475,7 @@ impl Physics {
                     p.settling = update.settling;
                 }
                 p.settling
-            },
+            }
         }
     }
 }
@@ -505,7 +519,7 @@ fn run(
                 Err(TryRecvError::Disconnected) => {
                     disconnected = true;
                     break;
-                },
+                }
             }
         }
         // Step while there is work (a settle, a drag, or a perpetual scene); emit the new
@@ -517,7 +531,10 @@ fn run(
             }
             generation = generation.wrapping_add(1);
             let settling = ticks_remaining > 0 || dragging || sim.wants_continuous_tick();
-            out.emit(PhysicsUpdate { snapshot: sim.snapshot(generation), settling });
+            out.emit(PhysicsUpdate {
+                snapshot: sim.snapshot(generation),
+                settling,
+            });
             std::thread::sleep(pacing);
         }
         // Host gone and the settle budget spent: wind down.
@@ -554,9 +571,14 @@ fn apply(
         PhysicsCommand::SetNodesTangible(tangible) => sim.set_nodes_tangible(tangible),
         PhysicsCommand::LoadScene(spec) => sim.load_scene(&spec),
         PhysicsCommand::ClearScene => sim.clear_scene(),
-        PhysicsCommand::LoadFluid { params, basin, origin, cols, rows, spacing } => {
-            sim.load_fluid(params, basin, origin, cols, rows, spacing)
-        }
+        PhysicsCommand::LoadFluid {
+            params,
+            basin,
+            origin,
+            cols,
+            rows,
+            spacing,
+        } => sim.load_fluid(params, basin, origin, cols, rows, spacing),
         PhysicsCommand::ClearFluid => sim.clear_fluid(),
         PhysicsCommand::SetSceneField(field) => sim.set_scene_field(field),
         PhysicsCommand::AddEmitter(spec) => sim.add_emitter(spec),
@@ -579,8 +601,16 @@ mod tests {
     #[test]
     fn actor_syncs_settles_and_emits_snapshots() {
         let mut graph = Graph::new();
-        let a = graph.add_node_with_id(uuid::Uuid::from_u128(1), "mere://a".into(), Default::default());
-        let b = graph.add_node_with_id(uuid::Uuid::from_u128(2), "mere://b".into(), Default::default());
+        let a = graph.add_node_with_id(
+            uuid::Uuid::from_u128(1),
+            "mere://a".into(),
+            Default::default(),
+        );
+        let b = graph.add_node_with_id(
+            uuid::Uuid::from_u128(2),
+            "mere://b".into(),
+            Default::default(),
+        );
 
         let mut sim = Simulation::new();
         sim.add_force(gyre::NodeExclusion::default());
@@ -598,8 +628,15 @@ mod tests {
         drop(handle);
 
         let emitted: Vec<PhysicsUpdate> = updates.iter().collect();
-        assert!(!emitted.is_empty(), "the actor emitted at least one layout snapshot");
+        assert!(
+            !emitted.is_empty(),
+            "the actor emitted at least one layout snapshot"
+        );
         let last = emitted.last().unwrap();
-        assert_eq!(last.snapshot.positions.len(), 2, "both bodies are in the snapshot");
+        assert_eq!(
+            last.snapshot.positions.len(),
+            2,
+            "both bodies are in the snapshot"
+        );
     }
 }

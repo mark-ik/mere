@@ -15,8 +15,8 @@
 
 use std::sync::mpsc::Receiver;
 
-use armillary::{spawn, ActorHandle, Emitter, Wake};
-use signals::{community_louvain_on_snapshot, ClusterSet, CommunitySnapshot};
+use armillary::{ActorHandle, Emitter, Wake, spawn};
+use signals::{ClusterSet, CommunitySnapshot, community_louvain_on_snapshot};
 
 /// A recompute request: the structure to partition, stamped with the graph revision it was taken at.
 pub(crate) struct CommunityRequest {
@@ -50,7 +50,11 @@ impl CommunityActor {
                 out.emit(CommunityUpdate { clusters, revision });
             }
         });
-        Self { handle, updates, inflight: None }
+        Self {
+            handle,
+            updates,
+            inflight: None,
+        }
     }
 
     /// Dispatch a recompute for `revision`, unless one is already in flight for that same revision
@@ -94,7 +98,12 @@ mod tests {
         // Two triangles {0,1,2} and {3,4,5} joined by a bridge => two communities.
         let mut graph = Graph::new();
         let n: Vec<_> = (0..6)
-            .map(|i| graph.add_node(format!("https://{i}.example"), PortablePoint::new(i as f32, 0.0)))
+            .map(|i| {
+                graph.add_node(
+                    format!("https://{i}.example"),
+                    PortablePoint::new(i as f32, 0.0),
+                )
+            })
             .collect();
         for &(a, b) in &[(0, 1), (1, 2), (2, 0), (3, 4), (4, 5), (5, 3), (2, 3)] {
             graph.assert_semantic_predicate(n[a], n[b], "links".to_string());
@@ -115,7 +124,14 @@ mod tests {
             std::thread::yield_now();
         }
         let update = update.expect("the worker emitted a partition");
-        assert_eq!(update.revision, 42, "the result carries its request revision");
-        assert_eq!(update.clusters.clusters.len(), 2, "two triangles => two communities");
+        assert_eq!(
+            update.revision, 42,
+            "the result carries its request revision"
+        );
+        assert_eq!(
+            update.clusters.clusters.len(),
+            2,
+            "two triangles => two communities"
+        );
     }
 }

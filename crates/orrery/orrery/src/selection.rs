@@ -273,6 +273,42 @@ impl Orrery {
         count
     }
 
+    /// Whether the display-only endpoint bundle between two graph members is hidden.
+    pub fn edge_between_members_hidden(&self, from_id: uuid::Uuid, to_id: uuid::Uuid) -> bool {
+        self.edge_pair_between_members(from_id, to_id)
+            .is_some_and(|pair| self.hidden_edges.contains(&pair))
+    }
+
+    /// Hide the display-only endpoint bundle between two graph members.
+    pub fn hide_edge_between_members(&mut self, from_id: uuid::Uuid, to_id: uuid::Uuid) -> bool {
+        self.edge_pair_between_members(from_id, to_id)
+            .is_some_and(|pair| self.hidden_edges.insert(pair))
+    }
+
+    /// Reveal the display-only endpoint bundle between two graph members.
+    pub fn show_edge_between_members(&mut self, from_id: uuid::Uuid, to_id: uuid::Uuid) -> bool {
+        self.edge_pair_between_members(from_id, to_id)
+            .is_some_and(|pair| self.hidden_edges.remove(&pair))
+    }
+
+    /// Hidden display-only endpoint bundles as stable graph member ids.
+    pub fn hidden_edge_member_pairs(&self) -> Vec<(uuid::Uuid, uuid::Uuid)> {
+        self.hidden_edges
+            .iter()
+            .filter_map(|&(a, b)| Some((self.graph.get_node(a)?.id, self.graph.get_node(b)?.id)))
+            .collect()
+    }
+
+    fn edge_pair_between_members(
+        &self,
+        from_id: uuid::Uuid,
+        to_id: uuid::Uuid,
+    ) -> Option<(NodeKey, NodeKey)> {
+        let from = self.graph.get_node_key_by_id(from_id)?;
+        let to = self.graph.get_node_key_by_id(to_id)?;
+        Some(if from <= to { (from, to) } else { (to, from) })
+    }
+
     /// Reveal every hidden edge. Returns how many were shown.
     pub fn show_all_edges(&mut self) -> usize {
         let count = self.hidden_edges.len();

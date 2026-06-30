@@ -128,7 +128,11 @@ impl SandFall {
 
     /// The two horizontal directions, the first chosen at random (so neither side gets a lean).
     fn rand_dirs(&mut self) -> [i32; 2] {
-        if xorshift(&mut self.rng) & 1 == 0 { [-1, 1] } else { [1, -1] }
+        if xorshift(&mut self.rng) & 1 == 0 {
+            [-1, 1]
+        } else {
+            [1, -1]
+        }
     }
 
     /// Move the material at `src` to `dst` (which must be empty), leaving `src` empty; marks `dst`
@@ -265,14 +269,23 @@ mod tests {
         // A grain mid-grid drops exactly one row per step.
         sand.set_cell(5, 5, true);
         sand.step();
-        assert!(!sand.cell(5, 5) && sand.cell(5, 6), "the grain fell one row");
+        assert!(
+            !sand.cell(5, 5) && sand.cell(5, 6),
+            "the grain fell one row"
+        );
         // Running the sources + reset a while keeps cells flowing and the count bounded.
         for _ in 0..200 {
             sand.step();
         }
         let count = sand.grain_count();
-        assert!(count > 0, "the sources keep material on the grid (was {count})");
-        assert!(count <= 20 * 20, "the count stays within the grid (was {count})");
+        assert!(
+            count > 0,
+            "the sources keep material on the grid (was {count})"
+        );
+        assert!(
+            count <= 20 * 20,
+            "the count stays within the grid (was {count})"
+        );
     }
 
     #[test]
@@ -290,7 +303,10 @@ mod tests {
         g.set_material(5, floor, SAND);
         g.set_material(20, floor, WATER);
         g.step();
-        assert!(g.cell(5, floor), "blocked sand stays put (no sideways flow)");
+        assert!(
+            g.cell(5, floor),
+            "blocked sand stays put (no sideways flow)"
+        );
         assert!(!g.cell(20, floor), "blocked water flowed off to a side");
         assert!(
             g.cell(19, floor) || g.cell(21, floor),
