@@ -9,16 +9,18 @@ use accesskit::Action;
 use register_theme::theme::{THEME_ID_DARK, THEME_ID_LIGHT};
 use winit::event_loop::EventLoopProxy;
 
-fn test_app() -> Shell {
+fn test_app() -> crate::test_support::TestShell {
     let (_tx, rx) = std::sync::mpsc::channel();
-    Shell::new_with_session_dir(test_proxy(), rx, temp_session_dir())
+    let temp = temp_session_dir();
+    let shell = Shell::new_with_session_dir(test_proxy(), rx, temp.path().to_path_buf());
+    crate::test_support::TestShell::new(shell, temp)
 }
 
 fn test_proxy() -> EventLoopProxy<()> {
     crate::test_support::event_loop_proxy()
 }
 
-fn temp_session_dir() -> std::path::PathBuf {
+fn temp_session_dir() -> crate::test_support::TempSessionDir {
     crate::test_support::temp_session_dir("mere-agent-harness-tests")
 }
 
@@ -78,7 +80,7 @@ fn fork_session_restores_on_restart() {
     let mere_root = temp_session_dir();
     let fork_graph = {
         let (_tx, rx) = std::sync::mpsc::channel();
-        let mut app = Shell::new_with_session_dir(test_proxy(), rx, mere_root.clone());
+        let mut app = Shell::new_with_session_dir(test_proxy(), rx, mere_root.path().to_path_buf());
         let graph = app.ctx().active_graph_id();
         let node = app
             .orrery()
@@ -93,7 +95,7 @@ fn fork_session_restores_on_restart() {
     // Restart: a fresh Shell on the same root re-scans sessions/ (bootstrap_sessions →
     // load_from_disk), so the fork's manifest must come back into the switcher list.
     let (_tx, rx) = std::sync::mpsc::channel();
-    let app2 = Shell::new_with_session_dir(test_proxy(), rx, mere_root);
+    let app2 = Shell::new_with_session_dir(test_proxy(), rx, mere_root.path().to_path_buf());
     assert!(
         app2.shared
             .session
@@ -659,18 +661,14 @@ fn rename_sets_then_clears_the_session_display_name() {
 fn observation_exposes_surfaces_actions_and_a11y() {
     let mut app = test_app();
     let observation = app.agent_observation();
-    assert!(
-        observation
-            .surfaces
-            .iter()
-            .any(|s| s.pane == AgentPane::Orrery)
-    );
-    assert!(
-        observation
-            .enabled_actions
-            .iter()
-            .any(|a| a.id == "pane.open.apparatus")
-    );
+    assert!(observation
+        .surfaces
+        .iter()
+        .any(|s| s.pane == AgentPane::Orrery));
+    assert!(observation
+        .enabled_actions
+        .iter()
+        .any(|a| a.id == "pane.open.apparatus"));
     assert!(observation.a11y.nodes > 0);
     assert_eq!(observation.focused_node.as_deref(), Some("mere://welcome"));
 }
@@ -680,12 +678,11 @@ fn agent_can_open_apparatus_switch_theme_and_open_roster() {
     let mut app = test_app();
     let step = app.apply_agent_action(AgentAction::OpenPane(AgentPane::Apparatus));
     assert!(step.result.applied);
-    assert!(
-        step.observation
-            .surfaces
-            .iter()
-            .any(|s| s.pane == AgentPane::Apparatus)
-    );
+    assert!(step
+        .observation
+        .surfaces
+        .iter()
+        .any(|s| s.pane == AgentPane::Apparatus));
 
     let step = app.apply_agent_action(AgentAction::SetTheme(THEME_ID_LIGHT.to_string()));
     assert!(step.result.applied);
@@ -693,12 +690,11 @@ fn agent_can_open_apparatus_switch_theme_and_open_roster() {
 
     let step = app.apply_agent_action(AgentAction::OpenPane(AgentPane::Roster));
     assert!(step.result.applied);
-    assert!(
-        step.observation
-            .surfaces
-            .iter()
-            .any(|s| s.pane == AgentPane::Roster)
-    );
+    assert!(step
+        .observation
+        .surfaces
+        .iter()
+        .any(|s| s.pane == AgentPane::Roster));
 }
 
 #[test]
@@ -706,39 +702,34 @@ fn agent_can_open_inspector_and_steward_as_d8_panes() {
     let mut app = test_app();
     let step = app.apply_agent_action(AgentAction::OpenPane(AgentPane::Inspector));
     assert!(step.result.applied);
-    assert!(
-        step.observation
-            .surfaces
-            .iter()
-            .any(|s| s.pane == AgentPane::Inspector)
-    );
+    assert!(step
+        .observation
+        .surfaces
+        .iter()
+        .any(|s| s.pane == AgentPane::Inspector));
 
     let step = app.apply_agent_action(AgentAction::OpenPane(AgentPane::Steward));
     assert!(step.result.applied);
-    assert!(
-        step.observation
-            .surfaces
-            .iter()
-            .any(|s| s.pane == AgentPane::Steward)
-    );
-    assert!(
-        step.observation
-            .enabled_actions
-            .iter()
-            .any(|action| action.id == "pane.open.inspector")
-    );
-    assert!(
-        step.observation
-            .enabled_actions
-            .iter()
-            .any(|action| action.id == "pane.open.steward")
-    );
-    assert!(
-        step.observation
-            .enabled_actions
-            .iter()
-            .any(|action| action.id == "operation.pin.focused")
-    );
+    assert!(step
+        .observation
+        .surfaces
+        .iter()
+        .any(|s| s.pane == AgentPane::Steward));
+    assert!(step
+        .observation
+        .enabled_actions
+        .iter()
+        .any(|action| action.id == "pane.open.inspector"));
+    assert!(step
+        .observation
+        .enabled_actions
+        .iter()
+        .any(|action| action.id == "pane.open.steward"));
+    assert!(step
+        .observation
+        .enabled_actions
+        .iter()
+        .any(|action| action.id == "operation.pin.focused"));
 }
 
 #[test]
@@ -781,12 +772,11 @@ fn agent_can_select_node_and_report_blocked_actions() {
         "https://missing.example".to_string(),
     ));
     assert!(!step.result.applied);
-    assert!(
-        step.observation
-            .diagnostics
-            .iter()
-            .any(|d| d.channel == "meerkat.agent.intent_dropped")
-    );
+    assert!(step
+        .observation
+        .diagnostics
+        .iter()
+        .any(|d| d.channel == "meerkat.agent.intent_dropped"));
 }
 
 #[test]
@@ -794,12 +784,11 @@ fn agent_can_invoke_command_without_coordinate_scripting() {
     let mut app = test_app();
     let step = app.apply_agent_action(AgentAction::InvokeCommand(Command::ToggleComms));
     assert!(step.result.applied);
-    assert!(
-        step.observation
-            .surfaces
-            .iter()
-            .any(|s| s.pane == AgentPane::Comms)
-    );
+    assert!(step
+        .observation
+        .surfaces
+        .iter()
+        .any(|s| s.pane == AgentPane::Comms));
 
     let step = app.apply_agent_action(AgentAction::SetTheme(THEME_ID_DARK.to_string()));
     assert_eq!(step.observation.active_theme_id, THEME_ID_DARK);
@@ -1484,12 +1473,10 @@ fn accesskit_actions_route_to_semantic_node_selection() {
 
     assert_eq!(app.orrery().focused_url(), Some("https://example.test"));
     let observation = app.agent_observation();
-    assert!(
-        observation
-            .diagnostics
-            .iter()
-            .any(|record| record.channel == "meerkat.agent.action_applied")
-    );
+    assert!(observation
+        .diagnostics
+        .iter()
+        .any(|record| record.channel == "meerkat.agent.action_applied"));
 }
 
 #[test]
