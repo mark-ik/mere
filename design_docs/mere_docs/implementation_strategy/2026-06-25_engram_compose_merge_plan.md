@@ -94,6 +94,14 @@ primitive.
 - The merge is at the **snapshot** level, not the event-log level; it composes *states*, not histories.
   (History composition is slice E / C1's territory, not this.)
 
+## Deferred follow-on (not this plan, parked here — touches the same file)
+
+- **rkyv compaction of graph engrams** (Alembic tail handoff B6). `save_graph_snapshot_engram` uses
+  serde_json today (consistent with the live `graph.json`; sidesteps the rkyv-from-store alignment
+  gotcha). The architecture doc prefers rkyv for compactness: override `TypedPayload::serialize_to_bytes`
+  for `GraphEngram` with rkyv (handle the read-alignment — copy store bytes into an `AlignedVec` before
+  `access`). Measure the size win first; only worth it once engrams get large. Untouched by P1–P3.
+
 ## Progress
 
 - 2026-06-25: Drafted from the handoff B7 + decision #1, verified against `graph_engram.rs`,

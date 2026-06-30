@@ -1,9 +1,14 @@
 # Handoff: Alembic tail + chrome/audit polish
 
 **Date**: 2026-06-25
-**Status**: Handoff backlog for another agent. Each item is scoped with its files, the change, and any
-gotcha or blocker. Grouped by readiness. The Alembic core (slices A, B, C, and D-forgetting) shipped
-2026-06-24; this is the deferred tail plus the pane/omnibar audit items.
+**Status**: **Archived 2026-06-30 — every quick item done.** Section A (all 4) and section B (all 7,
+counting Athanor P1 and engram-compose P1-P3 as done) are complete. The two items that don't fold into
+"done": B6 (rkyv compaction) is parked in
+[engram_compose_merge_plan §Deferred follow-on](../../mere_docs/implementation_strategy/2026-06-25_engram_compose_merge_plan.md#deferred-follow-on-not-this-plan-parked-here--touches-the-same-file);
+section C (event log/Timeline, local-models harness) was already correctly deferred to its own future
+plans and needed no spin-out — both bullets already point at the docs that actually scope them
+([alembic_implementation_plan](../../mere_docs/implementation_strategy/2026-06-24_alembic_implementation_plan.md) §E,
+[local_models_harness_brief](../../mere_docs/research/2026-06-24_local_models_harness_brief.md)).
 
 **Cross-cutting gotcha (read first).** Many chrome items below touch files Mark is editing concurrently
 (his shellbar + graph-signals work has `views.rs`, `render.rs`, `menus.rs`, `pane_data.rs`,
@@ -12,8 +17,8 @@ Commit with explicit pathspec or per-hunk `git apply --cached` so a bare commit 
 uncommitted work in. Verify the tree builds before starting (it has been building on his stable state).
 The items marked **[chrome-hot]** should wait until his chrome work commits, or be done with care.
 
-**Related:** [Alembic implementation plan](2026-06-24_alembic_implementation_plan.md) (slices + the full
-decision table), [local_models_harness_brief](../research/2026-06-24_local_models_harness_brief.md) (the #4 lane).
+**Related:** [Alembic implementation plan](../../mere_docs/implementation_strategy/2026-06-24_alembic_implementation_plan.md) (slices + the full
+decision table), [local_models_harness_brief](../../mere_docs/research/2026-06-24_local_models_harness_brief.md) (the #4 lane).
 
 ---
 
@@ -72,13 +77,11 @@ From the 2026-06-24 audit, verified against the code. One audit item was already
 
 ## B. Alembic tail (deferred from the shipped slices)
 
-1. **Athanor's steady-heat actor (slice D's remainder).** Forgetting *logic* shipped
-   (`session-runtime/athanor.rs` propose/apply, run from the Alembic "forget stale recent now" row via
-   `node_ops::run_forgetting_pass`). What remains is the background **armillary actor** that schedules it
-   steady-heat (throttled at idle, yields to foreground), vs today's manual trigger. Model it on the
-   fetch/sync actor shape (`crates/armillary` + the constellation). Add **consolidation / facet** passes
-   (consolidation is light: graph engrams already dedup by content-addressing; the value is relating
-   version chains). Stays inside R0 (proposes; host applies).
+1. **Athanor's steady-heat actor (slice D's remainder).** ✅ **P1 DONE 2026-06-30** (host-side idle
+   cadence, no actor thread — forgetting is light enough to ride the existing `about_to_wait` tick).
+   P2 (consolidation) and P3 (the off-thread armillary actor for heavier passes) remain, gated as
+   documented in the spun-out plan. See
+   [athanor_steady_heat_actor_plan](../../mere_docs/implementation_strategy/2026-06-25_athanor_steady_heat_actor_plan.md).
 
 2. **Surface the forget result in Steward.** ✅ **DONE 2026-06-25.** `HostObservability` now keeps a
    structured `ForgettingPass { dropped, at }` (the last pass), set by `record_forgetting_pass` which
@@ -106,27 +109,28 @@ From the 2026-06-24 audit, verified against the code. One audit item was already
    editing actually changes what gets forgotten. Persisted in persona settings (not `settings_store`).
    Tests: `eviction_policy_cycles_through_the_ladder` + the persona round-trip now covers the policy.
 
-5. **By-sessions eviction policy (slice C).** `EvictionPolicy` ships `KeepForever` + `KeepDays(n)`. The
-   doc also wants "drop after N sessions", which needs a per-node last-session stamp the `GraphSnapshot`
-   does not carry yet. Add the session counter + per-node stamp, then a `KeepSessions(n)` arm in
-   `memory_levels`. Tracked, not a no-op stub.
+5. **By-sessions eviction policy (slice C).** ✅ **DONE 2026-06-30.** `PersonaSettings.session_count`
+   increments once at boot; `Graph::navigate_node` stamps each in-place-navigated node's new
+   `last_session_visited` field from it (`0` = never stamped, never evicted). `EvictionPolicy::KeepSessions(n)`
+   added, with `is_stale` branching by axis (time vs session) instead of a single cutoff dispatch. Not
+   wired into the Alembic Recent header's cycle button yet (a chrome decision left for whoever picks up
+   that surface). New tests in `memory_levels.rs` / `athanor.rs` / `persona_settings_store.rs`.
 
-6. **rkyv compaction of graph engrams (slice A optimization).** `save_graph_engram` uses serde_json
-   (consistent with the live `graph.json`, and it sidesteps the rkyv-from-store alignment gotcha). The
-   architecture doc prefers rkyv for compactness. Override `TypedPayload::serialize_to_bytes` for
-   `GraphEngram` with rkyv (handle the read-alignment: copy store bytes into an `AlignedVec` before
-   `access`). Measure the size win first; only worth it if engrams get large.
+6. **rkyv compaction of graph engrams (slice A optimization).** Still open; tracked in
+   [engram_compose_merge_plan §Deferred follow-on](../../mere_docs/implementation_strategy/2026-06-25_engram_compose_merge_plan.md#deferred-follow-on-not-this-plan-parked-here--touches-the-same-file)
+   now that this handoff is archived.
 
-7. **Engram compose / merge (decision #1).** ✅ **P1+P2 DONE 2026-06-27** (host gesture P3 deferred,
-   chrome-hot). Audited green and built snapshot-level (no kernel edit — `PersistedEdge` is `node_id`-keyed):
-   `snapshot_merge::merge_snapshots` unions two `GraphSnapshot`s by URL identity (A canonical: same-url
-   nodes layer tags/properties, B's id remapped; edges remapped + deduped by endpoints+kind; `import_records`
-   unioned; A's fields/couplings/navigation kept, B's dropped + reported). `graph_engram::compose_graph_engrams`
-   thaws + folds the sources and saves the union as a **`Derived`** engram whose `ProvenanceRecord.upstream`
-   records the source ids — the previously-always-empty lineage finally populated (which unblocks Athanor
-   consolidation, B1-P2). 6 tests (merge by url / tag layering / edge remap+dedup / compose round-trip +
-   upstream lineage / empty-list). See [engram_compose_merge_plan](2026-06-25_engram_compose_merge_plan.md).
-   **P3 (the host `>compose_engrams` verb + Alembic two-select gesture) waits** — it touches meerkat chrome.
+7. **Engram compose / merge (decision #1).** ✅ **P1+P2+P3 DONE 2026-06-30.** Audited green and built
+   snapshot-level (no kernel edit — `PersistedEdge` is `node_id`-keyed): `snapshot_merge::merge_snapshots`
+   unions two `GraphSnapshot`s by URL identity (A canonical: same-url nodes layer tags/properties, B's id
+   remapped; edges remapped + deduped by endpoints+kind; `import_records` unioned; A's
+   fields/couplings/navigation kept, B's dropped + reported). `graph_engram::compose_graph_engrams` thaws +
+   folds the sources and saves the union as a **`Derived`** engram whose `ProvenanceRecord.upstream` records
+   the source ids — the previously-always-empty lineage finally populated (which unblocks Athanor
+   consolidation, B1-P2). P3 shipped as a direct host action (no `ShellCommand`, no Athanor propose/apply —
+   compose only touches the store, and the user already names both ids, so neither indirection earns its
+   keep): the `>compose_engrams("<id-a>", "<id-b>")` omnibar verb and an Alembic Engrams two-select gesture.
+   See [engram_compose_merge_plan](../../mere_docs/implementation_strategy/2026-06-25_engram_compose_merge_plan.md).
 
 ---
 
@@ -137,7 +141,7 @@ From the 2026-06-24 audit, verified against the code. One audit item was already
    `LogStore`, checkpoint-interleaved replay, undo/redo, the orrery scrubber). Large; likely its own
    plan when picked up.
 
-2. **Local-models inference/training harness (#4).** The [local_models_harness_brief](../research/2026-06-24_local_models_harness_brief.md)
+2. **Local-models inference/training harness (#4).** The [local_models_harness_brief](../../mere_docs/research/2026-06-24_local_models_harness_brief.md)
    scopes it: an `InferenceProvider` + `AdapterLoader` seam beside `intel/embed`'s `EmbeddingProvider`,
    Burn-wgpu wasm-reachable, native runtimes behind the seam, the armillary harness, a no-training first
    slice (seam + stub → RAG shim → `ModelAdapterManifest` save/load). Its own build effort.
@@ -149,3 +153,8 @@ From the 2026-06-24 audit, verified against the code. One audit item was already
 - 2026-06-25: Handoff drafted to surface the Alembic tail + the chrome/audit polish for another agent,
   after the A–D core landed. Verified the audit items against the code (recover-deleted is already wired;
   the shellbar gap now includes the new Alembic pane). Flagged the chrome-hot collision set.
+- 2026-06-30: **Closed out and archived.** B1 (Athanor idle cadence, P1), B5 (by-sessions eviction), and
+  B7 (engram compose, P3) landed — each in its own worktree, tested, merged to main with a clean rebuild
+  verification after each merge. B6 parked in engram_compose_merge_plan rather than left orphaned here.
+  Moved to `archive_docs/` per `DOC_POLICY.md` §4/§8 (every item is either done or already anchored in
+  its own scoping doc).
