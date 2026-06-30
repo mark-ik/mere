@@ -88,6 +88,7 @@ fn link_card_actions_queue_endpoint_relate_and_retract_intents() {
                     selector,
                     editable: true,
                     selected: false,
+                    hidden: false,
                 }],
                 facets: Vec::new(),
             })),
@@ -98,8 +99,8 @@ fn link_card_actions_queue_endpoint_relate_and_retract_intents() {
     let actions = card_actions(&pane);
     assert_eq!(
         actions.len(),
-        4 + 1,
-        "the relation picker starts collapsed, plus endpoint and retract actions"
+        4 + 2,
+        "the relation picker starts collapsed, plus endpoint and relation-row actions"
     );
 
     pane.dispatch_click(actions[0], PointerClick::at((24.0, 80.0)));
@@ -115,13 +116,21 @@ fn link_card_actions_queue_endpoint_relate_and_retract_intents() {
 
     let _ = pane.frame(320, 320, 0.0);
     let actions = card_actions(&pane);
+    pane.dispatch_click(actions[4], PointerClick::at((24.0, 116.0)));
+    assert_eq!(
+        pane.take_intents(),
+        vec![RosterIntent::HideRelation { from, to, selector }]
+    );
+
+    let _ = pane.frame(320, 320, 0.0);
+    let actions = card_actions(&pane);
     pane.dispatch_click(actions[2], PointerClick::at((24.0, 104.0)));
     assert_eq!(pane.take_intents(), Vec::<RosterIntent>::new());
     let _ = pane.frame(320, 320, 0.0);
     let actions = card_actions(&pane);
     assert_eq!(
         actions.len(),
-        4 + crate::roster::RELATE_PICKER_KINDS.len() + 1
+        4 + crate::roster::RELATE_PICKER_KINDS.len() + 2
     );
 
     pane.dispatch_click(actions[4], PointerClick::at((24.0, 112.0)));

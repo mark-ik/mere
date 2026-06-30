@@ -12,14 +12,62 @@ fn m(n: u128) -> GraphMemberId {
     Uuid::from_u128(n)
 }
 
+fn graph(n: u128) -> GraphId {
+    GraphId(Uuid::from_u128(n))
+}
+
 /// A fixed graph id for the reconcile tests — they exercise spawn / warmth /
 /// LRU eviction, all graph-agnostic, so one stamp serves.
 fn g() -> GraphId {
-    GraphId(Uuid::from_u128(0))
+    graph(0)
 }
 
 fn noop_wake() -> Wake {
     std::sync::Arc::new(|| {})
+}
+
+fn fake_activation(rx: std::sync::mpsc::Receiver<ContentUpdate>, graph_id: GraphId) -> Activation {
+    let (handle, _updates) = armillary::spawn(
+        noop_wake(),
+        |commands: std::sync::mpsc::Receiver<ContentCommand>,
+         _out: armillary::Emitter<ContentUpdate>| { while commands.recv().is_ok() {} },
+    );
+    Activation {
+        handle,
+        rx: ContentUpdateStream::Native(rx),
+        gens: Generations::default(),
+        shown: None,
+        engine: String::new(),
+        scene: None,
+        packet: None,
+        fonts: FontTable::default(),
+        masks: Vec::new(),
+        content_height: 0,
+        band: (0, 0),
+        requested_band: (0, 0),
+        links: Vec::new(),
+        find_matches: Vec::new(),
+        find_query: String::new(),
+        scene_version: 0,
+        background: false,
+        last_touched: 0,
+        respawns: 0,
+        graph_id,
+    }
+}
+
+fn scene_update(content_height: u32) -> ContentUpdate {
+    let gens = Generations::default();
+    ContentUpdate::Scene {
+        nav: gens.nav,
+        viewport_gen: gens.viewport,
+        scene: Scene::new(1, 1),
+        content_height,
+        band_y: 0,
+        band_h: 1,
+        links: Vec::new(),
+        masks: Vec::new(),
+    }
 }
 
 #[test]
@@ -66,6 +114,35 @@ fn a_background_tab_is_exempt_from_eviction() {
         !c.set_background(m(3), true),
         "flagging a dormant node reports false"
     );
+}
+
+#[test]
+fn teardown_before_batch_drain_does_not_strand_sibling_update() {
+    let mut c = Constellation::new(noop_wake());
+    let (removed_tx, removed_rx) = std::sync::mpsc::channel();
+    let (survivor_tx, survivor_rx) = std::sync::mpsc::channel();
+
+    c.active.insert(m(1), fake_activation(removed_rx, graph(1)));
+    c.active
+        .insert(m(2), fake_activation(survivor_rx, graph(2)));
+
+    removed_tx.send(scene_update(10)).unwrap();
+    survivor_tx.send(scene_update(20)).unwrap();
+
+    c.reap_graph(graph(1));
+    let drained = c.drain();
+
+    assert!(
+        drained.any_scene,
+        "the surviving owner's scene was accepted"
+    );
+    assert!(!c.is_active(m(1)), "the torn-down owner stays reaped");
+    assert_eq!(
+        c.scene_version(m(2)),
+        1,
+        "sibling update is not stranded behind a cross-owner batch"
+    );
+    assert_eq!(c.content_height(m(2)), 20);
 }
 
 #[test]

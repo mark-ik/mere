@@ -21,10 +21,6 @@
 //! compute). Reaping is dropping the [`Activation`]; the graph datum is untouched,
 //! so the node simply returns to dormant.
 
-use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
-use std::sync::mpsc::{Receiver, TryRecvError};
-
 use armillary::{ActorHandle, Generations, Pool, Wake};
 use document_canvas::{DocumentRenderPacket, DocumentStyleSheet, FontTable};
 use forme::GraphMemberId;
@@ -32,9 +28,14 @@ use frame::GraphId;
 use kernel::permissions::ResolvedPermission;
 use linked_data::GraphContribution;
 use netrender::Scene;
+use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 
 use crate::card::LinkHit;
-use crate::content::{ContentCommand, ContentUpdate, spawn_content};
+use crate::content::{
+    ContentCommand, ContentUpdate, ContentUpdatePoll, ContentUpdateStream, ContentUpdateTransport,
+    spawn_content_with_transport,
+};
 use crate::fetch::ContentState;
 
 /// Public host-facing summary of one live content operation.
@@ -55,7 +56,7 @@ pub struct ActiveOperation {
 /// it.
 struct Activation {
     handle: ActorHandle<ContentCommand>,
-    rx: Receiver<ContentUpdate>,
+    rx: ContentUpdateStream,
     /// The generation pair stamped on `Show` / `Resize`, so a scene built for a
     /// document or size this node has left is dropped on arrival.
     gens: Generations,
@@ -136,6 +137,16 @@ struct Activation {
 /// leaves the tab on its last scene). Guards against a respawn storm from content
 /// that panics on every load.
 const MAX_RESPAWNS: u32 = 3;
+
+#[cfg(target_arch = "wasm32")]
+fn content_update_transport() -> ContentUpdateTransport {
+    ContentUpdateTransport::Transfer
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn content_update_transport() -> ContentUpdateTransport {
+    ContentUpdateTransport::Native
+}
 
 /// Default cap on warm tabs (active actors) before LRU eviction kicks in. A
 /// configurable setting later; the per-tab resource cost keeps real tab counts

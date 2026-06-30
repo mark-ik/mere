@@ -61,6 +61,16 @@ pub enum RosterIntent {
         from: GraphMemberId,
         to: GraphMemberId,
     },
+    HideRelation {
+        from: GraphMemberId,
+        to: GraphMemberId,
+        selector: RelationSelector,
+    },
+    ShowRelation {
+        from: GraphMemberId,
+        to: GraphMemberId,
+        selector: RelationSelector,
+    },
     ReconcileGraphlet(GraphletId),
     KeepGraphletAsSession(GraphletId),
     BranchGraphlet(GraphletId),
@@ -422,6 +432,7 @@ mod tests {
                     selector: RelationSelector::Semantic(SemanticSubKind::Cites),
                     editable: true,
                     selected: false,
+                    hidden: false,
                 },
                 LinkRelationRow {
                     from: GraphMemberId::from_u128(1),
@@ -433,6 +444,7 @@ mod tests {
                     selector: RelationSelector::Family(EdgeFamily::Traversal),
                     editable: false,
                     selected: false,
+                    hidden: false,
                 },
             ],
             facets: Vec::new(),

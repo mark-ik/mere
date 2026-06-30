@@ -13,6 +13,11 @@ impl Constellation {
     /// means its content actor's thread died (a panic mid-render, isolated to that
     /// thread); the pool respawns it (self-healing, P4) up to [`MAX_RESPAWNS`],
     /// keeping the tab's last scene until the fresh actor renders.
+    ///
+    /// The harvest is deliberately scoped per owner: snapshot the member ids,
+    /// drain one live activation at a time, and skip owners that were reaped
+    /// before their pending updates were applied. That preserves the E2 event-loop
+    /// invariant that tearing down one owner cannot strand a sibling's batch.
     pub fn drain(&mut self) -> Drained {
         let mut out = Drained::default();
         let members: Vec<GraphMemberId> = self.active.keys().copied().collect();
@@ -22,18 +27,27 @@ impl Constellation {
             // re-borrow the activation to apply scenes. A `Disconnected` means the
             // actor thread is gone.
             let mut updates: Vec<ContentUpdate> = Vec::new();
-            match self.active.get(&member) {
+            let mut disconnected = false;
+            match self.active.get_mut(&member) {
                 Some(activation) => loop {
-                    match activation.rx.try_recv() {
-                        Ok(update) => updates.push(update),
-                        Err(TryRecvError::Empty) => break,
-                        Err(TryRecvError::Disconnected) => {
-                            dead.push(member);
+                    match activation.rx.try_recv_update() {
+                        Ok(ContentUpdatePoll::Update(update)) => updates.push(update),
+                        Ok(ContentUpdatePoll::Empty) => break,
+                        Ok(ContentUpdatePoll::Disconnected) => {
+                            disconnected = true;
+                            break;
+                        }
+                        Err(err) => {
+                            tracing::warn!(%err, "content update transfer decode failed");
+                            disconnected = true;
                             break;
                         }
                     }
                 },
                 None => continue,
+            }
+            if disconnected {
+                dead.push(member);
             }
             for update in updates {
                 match update {
@@ -137,6 +151,9 @@ impl Constellation {
                             tracing::debug!(outcome = %outcome, "document script outcome");
                         }
                     }
+                    ContentUpdate::TransportError { reason } => {
+                        tracing::warn!(%reason, "content transport error");
+                    }
                 }
             }
         }
@@ -160,11 +177,12 @@ impl Constellation {
         if activation.respawns >= MAX_RESPAWNS {
             return false;
         }
-        let (handle, rx) = spawn_content(
+        let (handle, rx) = spawn_content_with_transport(
             &self.pool,
             self.wake.clone(),
             self.disabled_engines.clone(),
             self.auto_ingest_linked_data,
+            content_update_transport(),
         );
         activation.handle = handle;
         activation.rx = rx;

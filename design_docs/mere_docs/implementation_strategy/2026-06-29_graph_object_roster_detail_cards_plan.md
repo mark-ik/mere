@@ -2,14 +2,16 @@
 
 **Date**: 2026-06-29
 **Status**: In progress. The roster table and in-roster card slice landed on
-2026-06-29. The open tail now has active-tab styling, high-zoom roster
-box-sizing, endpoint-bundle visibility persistence, and connections-swatch
-relation-cell routing. True canvas edge reification, per-cell visibility, and
-deeper graphlet selector/family editing remain.
+2026-06-29. Active-tab styling, high-zoom roster box-sizing, endpoint-bundle
+visibility persistence, connections-swatch relation-cell routing, Graphlet Card
+member wording, canvas relation-cell overlay/picking, and relation-cell visibility
+persistence have landed. Deeper graphlet selector/family editing and true
+parallel edge instances remain.
 **Code**: `crates/meerkat/src/roster.rs`, `roster_data.rs`, `roster_view.rs`,
 `roster_view_parts.rs`, `swatch.rs`, `render/connections.rs`, `input/panes.rs`,
 `input/editing.rs`, `input/mouse_dispatch/press.rs`, `session_ops/view_intent.rs`;
-`crates/orrery/orrery/src/selection.rs` for endpoint-bundle visibility helpers.
+`crates/orrery/orrery/src/edge_cells.rs`, `frame.rs`, `input.rs`, and
+`selection.rs` for canvas relation-cell display, picking, and visibility helpers.
 
 This plan turns the Roster into the first stateful control layer for graph
 objects. The canvas still owns spatial selection, snapshots, object cards, and
@@ -78,8 +80,9 @@ Done when the Links tab can open a card for an endpoint bundle, show semantic,
 traversal, and provenance cells distinctly, add a semantic relation, retract an
 editable relation, and leave both endpoint nodes intact.
 
-**Status**: Done 2026-06-29 for the roster/card path. Canvas per-cell hit-testing
-is still swatch P4/P5.
+**Status**: Done 2026-06-29 for the roster/card path. Canvas relation-cell
+overlay/picking landed 2026-06-30; gyre topology and physics springs remain
+endpoint-pair scoped.
 
 ### R4 - Graphlet Card
 
@@ -88,7 +91,7 @@ substructure.
 
 V0 contents:
 
-- Kind, binding, anchors, members, selectors, and drift-tracking status.
+- Kind, binding, members, selectors, and drift-tracking status.
 - For `Linked` graphlets, a dry drift preview from re-derivation.
 - Actions for the graphlet control grammar: reconcile/apply, keep as session,
   fork/branch, and open scoped window, using existing graphlet APIs where present.
@@ -121,15 +124,16 @@ edge-depth story is not finished.
 
 Open:
 
-- True canvas edge reification and gyre hit proxies still collapse to endpoint
-  pairs.
-- Visibility is persistent for the current endpoint bundle, not yet per-family
-  or per-cell.
-- Connections swatch P4 now emits one fanned DOM relation cell per
-  `(source, target, RelationKind)` and routes clicks to the same `RelationCell`
-  card; the full orrery underlay remains pair-level.
-- Keep kernel storage untouched in this slice. Edge reification and true parallel
-  edge instances stay out of scope.
+- Gyre topology and physics springs still collapse relations to endpoint pairs.
+  Orrery now overlays and picks fanned relation cells without changing that
+  topology.
+- Relation-cell visibility is display/session scoped and keyed by current
+  `(source, target, RelationKind)` cells. Bundle hide/show is still a wrapper
+  over the current cells between two endpoints.
+- Connections swatch P4 emits one fanned DOM relation cell per relation kind,
+  filters hidden cells, and routes clicks to the same `RelationCell` card.
+- Keep kernel storage untouched in this slice. True parallel edge instances stay
+  out of scope.
 - Deeper graphlet selector/family editing remains with graphlet/swatch follow-up
   work.
 
@@ -162,6 +166,112 @@ Open:
 - **The target path is not the app name.** Current headed builds land under
   `C:\t\graphshell-target` because the local environment sets `CARGO_TARGET_DIR`;
   the crate package, bin target, and native window title are still `meerkat`.
+
+---
+
+## Working Map - 2026-06-30
+
+### Current state
+
+- **Roster is now the durable graph-object control surface.** Nodes, links,
+  graphlets, fields, and facets have table rows, selected subjects, and in-roster
+  cards. Canvas focus cards remain transient spatial cards.
+- **Link depth is display-real for current relation cells.** Roster rows, Link
+  Card rows, canvas overlay/picking, selected-cell redraw, connections swatch
+  routing, and session visibility all address `(source, target, RelationKind)`.
+- **The underlying graph is still not a true multigraph at the UI boundary.** A
+  relation cell cannot distinguish two independent `Cites` facts between the same
+  pair. That remains a storage/model lane, not a roster-card lane.
+- **Visibility is current-cell view state.** Hidden cells persist through the
+  view-intent sidecar and filter display paths. There is not yet a graph-default
+  visibility layer, per-instance override stack, or spring relaxation.
+- **Graphlet Card is readable but not yet editable.** It shows binding, members,
+  selectors, drift state, and actions. Selector/family editing still needs a
+  shared graphlet/swatch control rather than a card-only picker.
+- **The Swatch P4/P5 plan is now partly advanced by this work.** P4/P5 are still
+  not complete by their own done conditions, but "unstarted" is stale.
+
+### Next moves
+
+1. **Keep the swatch P4/P5 status honest as future slices land.** The current
+   code closes useful P4/P5 slices, not the full swatch primitive architecture.
+2. **Add a small relation-cell visibility setting surface.** Show the effective
+   hidden state in Link Card rows and one canvas/context action path, then keep
+   the action routed through `RosterIntent` / command drains.
+3. **Decide the next graphlet selector UI owner.** The likely home is the
+   graphlet/swatch strip because changing selectors re-derives the graphlet for
+   every surface that binds it. The Roster Card can display and invoke it.
+4. **Split `roster_view_parts.rs` before adding richer controls.** It is close
+   to the 600-line ceiling and now owns too many repeated row/card fragments.
+5. **Headed-verify the combined route.** The test stack covers behavior. A short
+   drive should confirm: select a relation cell, hide it from Link Card, see the
+   canvas/swatch drop only that lane, restart, and confirm it stays hidden.
+
+### Sidequests
+
+- **Doc hygiene.** `swatch_primitive_plan` now has a dated note saying P4/P5 are
+  partially advanced by roster/orrery work while the full done conditions remain
+  open.
+- **Terminology cleanup.** Product text should keep saying `members` for graphlet
+  rosters. `anchors` remains a forme/internal field name unless the UI is
+  specifically discussing seeds.
+- **Session sidecar naming.** `HiddenRelationRecord` now records relation cells,
+  not just endpoint bundles. The name still works, but the comments should keep
+  the cell scope explicit.
+- **Context menu parity.** Link Card row hide/show now exists. The context menu
+  can reuse the same intent path once the selected-cell subject is present.
+- **Target-path friction.** Headed checks still need the active
+  `CARGO_TARGET_DIR` binary, commonly `C:\t\graphshell-target\debug\meerkat.exe`,
+  not a stale repo-local binary.
+
+### Synergies
+
+- **Roster and swatch now meet on relation cells.** The roster table/card can
+  describe the thing the canvas and connections swatch can pick.
+- **Graphlet controls can reuse the same selector vocabulary.** `RelationKind`,
+  `RelationSelector`, and `EdgeFamily` already bridge link cards, graphlet
+  derivation, and connections rendering.
+- **The command-drain boundary held.** Roster UI queues intents; host code mutates
+  Orrery/graphlet/session state. That keeps view rendering free of graph writes.
+- **View-intent persistence is the right temporary home.** It lets relation-cell
+  visibility ship without touching kernel truth or forcing the full P5 override
+  stack early.
+- **The Link Card is now the testbed for edge-family UI.** It can prove hide,
+  show, relate, retract, and selector vocabulary before the swatch strip becomes
+  more interactive.
+
+### Contradictions
+
+- **Swatch P4/P5 wording lagged the code.** The swatch plan still described P4-P7
+  as unstarted after roster work landed partial cells-as-edges and visibility
+  behavior. Treat the swatch done conditions as authoritative, but not the old
+  status line.
+- **Relation-cell UI is deeper than the physics model.** Display and hit-testing
+  now see cells; gyre topology and springs still see endpoint pairs.
+- **Visibility looks per-cell but behaves per-session.** Users can hide one
+  visible relation cell, but there is not yet a graph-level default or
+  per-instance inheritance stack.
+- **Graphlet selectors are in the data but not yet in the controls.** Linked
+  graphlets can derive through selectors; the Roster Card mostly reports that
+  state instead of editing it.
+- **"Card" names three surfaces.** Roster detail cards, canvas focus cards, and
+  swatch cards have different lifetimes and owners. Reviews need to name which
+  card is being changed.
+
+### Pitfalls
+
+- **Do not turn hidden cells into graph truth.** Hide/show is view curation;
+  assert/retract/delete are graph mutations.
+- **Do not claim true parallel edges.** Current `EdgeCell` identity is
+  `(from, to, selector)`. It cannot represent two separate same-kind assertions.
+- **Do not add selector editing only to the Roster Card.** Selector changes are a
+  graphlet derivation rule, so every bound surface needs to see the same result.
+- **Do not rely on `cargo check -p meerkat --lib` here.** `swatch`, `render`,
+  `window_view`, and `graphlets` are bin modules. Use targeted bin tests.
+- **Do not grow `roster_view_parts.rs` much further.** It is near the local file
+  ceiling and should be split before the next control-heavy pass.
+- **Do not conflate swatch P5 with this visibility bridge.** P5 needs
+  `GraphDefault < GraphViewOverride < SelectionOverride` plus spring effects.
 
 ---
 
@@ -211,9 +321,6 @@ Headed/runtime notes:
 
 Open after this pass:
 
-- Active-tab visual styling that does not interfere with selected-row rendering.
-- More compact high-zoom roster layout.
-- Per-cell edge selection from the canvas, owned by swatch P4/P5.
 - Persistent relation visibility stack.
 - Deeper graphlet selector/family editing.
 
@@ -268,11 +375,72 @@ Verification:
   `meerkat-roster-open-2026-06-29.png`, and
   `meerkat-roster-tab-switch-2026-06-29.png`.
 
-Still open:
+Still open after the 2026-06-29 pass:
 
 - Pair-level canvas underlay and gyre hit-testing are unchanged. The swatch can
   address relation cells; the orrery edge pass still draws/hits endpoint bundles.
-- Visibility persistence is endpoint-bundle scoped. Per-family/per-cell
-  visibility needs the swatch P5 visibility stack rather than this bridge.
+- Visibility persistence was endpoint-bundle scoped at this point. The
+  relation-cell visibility pass below closes the current display/session path.
 - Graphlet Card controls still use the current action set; deeper
   selector/family editing remains deferred.
+
+### 2026-06-30 - Canvas relation-cell pass
+
+Landed:
+
+- Orrery has a relation-cell geometry helper that fans parallel relation cells
+  around the pair segment while leaving gyre topology pair-based.
+- Canvas edge hit-testing now picks the nearest visible relation cell instead
+  of falling back to the first relation on the endpoint pair.
+- Marquee edge selection now collects visible relation cells, and selected-cell
+  overlay redraws the exact selected cell lane.
+- Graphlet Card wording now says `members` for the member roster rather than
+  leaking forme's internal seed-field name.
+
+Verification:
+
+- `cargo test -p orrery --lib` - passed, 83 tests.
+- `cargo test -p meerkat --bin meerkat graphlet_card -- --nocapture` - passed,
+  3 tests.
+
+Still open:
+
+- Gyre topology and physics springs are still endpoint-pair scoped.
+- Visibility persistence was still endpoint-bundle scoped at this point. The
+  relation-cell visibility pass below closes the current display/session path.
+- Graphlet selector/family editing remains deferred.
+
+### 2026-06-30 - Relation-cell visibility pass
+
+Landed:
+
+- Orrery visibility now keys hidden edges by `EdgeCell` instead of endpoint pair.
+- Link Card relation rows can hide/show one current relation cell while bundle
+  hide/show still covers all live cells between the endpoints.
+- Session `HiddenRelationRecord` save/restore now round-trips exact
+  `(source, target, RelationKind)` hidden cells.
+- Connections swatch and gloss/minimap filtering respect hidden relation cells
+  while keeping the endpoint pair visible when another relation cell remains.
+- `HideSelectedEdge` and `ShowAllEdges` now save visibility changes through the
+  existing session path.
+
+Verification:
+
+- `cargo test -p orrery hide_selected_edge_cell_hides_only_that_relation -- --nocapture`
+  - passed, 1 test.
+- `cargo test -p meerkat --bin meerkat roster_action_hides_and_shows_one_relation_cell -- --nocapture`
+  - passed, 1 test.
+- `cargo test -p meerkat --bin meerkat link_card_actions_queue_endpoint_relate_and_retract_intents -- --nocapture`
+  - passed, 1 test.
+- `cargo test -p meerkat --bin meerkat hidden_relation_records_round_trip_relation_cell_visibility -- --nocapture`
+  - passed, 1 test.
+- `cargo test -p meerkat --bin meerkat roster_action -- --nocapture` - passed,
+  11 tests.
+- `cargo test -p orrery --lib` - passed, 84 tests.
+
+Still open:
+
+- Gyre topology and physics springs are still endpoint-pair scoped.
+- Relation-cell visibility is keyed to current `(source, target, RelationKind)`
+  cells. True parallel edge instances remain out of scope.
+- Graphlet selector/family editing remains deferred.

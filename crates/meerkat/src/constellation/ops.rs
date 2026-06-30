@@ -114,11 +114,12 @@ impl Constellation {
             if !self.active.contains_key(&member) {
                 self.touch_clock += 1;
                 let touch = self.touch_clock;
-                let (handle, rx) = spawn_content(
+                let (handle, rx) = spawn_content_with_transport(
                     &self.pool,
                     self.wake.clone(),
                     self.disabled_engines.clone(),
                     self.auto_ingest_linked_data,
+                    content_update_transport(),
                 );
                 self.active.insert(
                     member,

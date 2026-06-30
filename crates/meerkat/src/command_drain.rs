@@ -301,11 +301,13 @@ impl WindowCtx<'_> {
             Command::BackgroundNode => self.toggle_focus_background(),
             Command::HideSelectedEdge => {
                 if self.orrery_mut().hide_selected_edges() > 0 {
+                    self.save_session();
                     self.view.request_redraw();
                 }
             }
             Command::ShowAllEdges => {
                 if self.orrery_mut().show_all_edges() > 0 {
+                    self.save_session();
                     self.view.request_redraw();
                 }
             }

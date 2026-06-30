@@ -290,6 +290,9 @@ impl WindowCtx<'_> {
                     selector,
                     editable: matches!(selector, RelationSelector::Semantic(_)),
                     selected: selected_selector == Some(selector),
+                    hidden: self
+                        .orrery()
+                        .relation_between_members_hidden(from, to, selector),
                 }
             })
             .collect();

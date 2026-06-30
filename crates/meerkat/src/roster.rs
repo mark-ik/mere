@@ -231,6 +231,8 @@ pub struct LinkRelationRow {
     pub selector: RelationSelector,
     pub editable: bool,
     pub selected: bool,
+    /// Display-only relation-cell visibility in the current orrery session.
+    pub hidden: bool,
 }
 
 #[derive(Clone)]
@@ -241,8 +243,8 @@ pub struct LinkCard {
     pub source_url: String,
     pub target_title: String,
     pub target_url: String,
-    /// Display-only endpoint bundle visibility in the current orrery session.
-    /// This is not per-family or per-cell relation storage.
+    /// Display-only endpoint bundle visibility in the current orrery session. True when every live
+    /// relation cell in the bundle is hidden.
     pub hidden: bool,
     pub relations: Vec<LinkRelationRow>,
     pub facets: Vec<FacetEntry>,

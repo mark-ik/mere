@@ -403,20 +403,36 @@ fn link_relation_row(rel: &LinkRelationRow) -> RosterView {
         to: rel.to,
         selector: rel.selector,
     };
+    let label = rel
+        .label
+        .as_ref()
+        .map(|label| format!("{} · {label}", rel.kind_label))
+        .unwrap_or_else(|| rel.kind_label.clone());
+    let label = if rel.hidden {
+        format!("{label} (hidden)")
+    } else {
+        label
+    };
     let mut cells: Vec<RosterView> = vec![Box::new(
-        el::<_, RosterState, ()>(
-            "span",
-            rel.label
-                .as_ref()
-                .map(|label| format!("{} · {label}", rel.kind_label))
-                .unwrap_or_else(|| rel.kind_label.clone()),
-        )
-        .attr("class", "roster-link-cell"),
+        el::<_, RosterState, ()>("span", label).attr("class", "roster-link-cell"),
     )];
+    let from = rel.from;
+    let to = rel.to;
+    let selector = rel.selector;
+    if rel.hidden {
+        cells.push(action("show", move |st, ev| {
+            ev.stop_propagation();
+            st.pending
+                .push(RosterIntent::ShowRelation { from, to, selector });
+        }));
+    } else {
+        cells.push(action("hide", move |st, ev| {
+            ev.stop_propagation();
+            st.pending
+                .push(RosterIntent::HideRelation { from, to, selector });
+        }));
+    }
     if rel.editable {
-        let from = rel.from;
-        let to = rel.to;
-        let selector = rel.selector;
         cells.push(action("retract", move |st, ev| {
             ev.stop_propagation();
             st.pending
@@ -443,7 +459,7 @@ fn graphlet_card(card: &GraphletCard) -> RosterView {
     );
     rows.push(card_row(format!("members: {}", card.members.len())));
     if !card.members.is_empty() {
-        rows.push(card_row(format!("anchors: {}", card.members.join(", "))));
+        rows.push(card_row(format!("members: {}", card.members.join(", "))));
     }
     rows.push(card_row(format!("selectors: {}", card.selectors_label)));
     rows.push(card_row(if card.drift_tracking {

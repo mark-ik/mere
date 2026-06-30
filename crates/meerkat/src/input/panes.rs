@@ -403,6 +403,24 @@ impl WindowCtx<'_> {
                         self.view.request_redraw();
                     }
                 }
+                crate::roster_view::RosterIntent::HideRelation { from, to, selector } => {
+                    if self
+                        .orrery_mut()
+                        .hide_relation_between_members(from, to, selector)
+                    {
+                        self.save_session();
+                        self.view.request_redraw();
+                    }
+                }
+                crate::roster_view::RosterIntent::ShowRelation { from, to, selector } => {
+                    if self
+                        .orrery_mut()
+                        .show_relation_between_members(from, to, selector)
+                    {
+                        self.save_session();
+                        self.view.request_redraw();
+                    }
+                }
                 crate::roster_view::RosterIntent::ReconcileGraphlet(graphlet) => {
                     self.commands.push(crate::ShellCommand::ReconcileGraphlet {
                         graph: self.view.focused_graph,

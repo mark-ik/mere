@@ -10,13 +10,15 @@ use kernel::graph::{FieldId, RelationKind, RelationSelector, SemanticSubKind};
 
 use crate::roster::{RosterDetail, RosterSubject};
 
-fn test_app() -> Shell {
+fn test_app() -> crate::test_support::TestShell {
     let (_tx, rx) = std::sync::mpsc::channel();
-    Shell::new_with_session_dir(
+    let temp = crate::test_support::temp_session_dir("mere-roster-action-tests");
+    let shell = Shell::new_with_session_dir(
         crate::test_support::event_loop_proxy(),
         rx,
-        crate::test_support::temp_session_dir("mere-roster-action-tests"),
-    )
+        temp.path().to_path_buf(),
+    );
+    crate::test_support::TestShell::new(shell, temp)
 }
 
 fn push_roster_intent(app: &mut Shell, intent: crate::roster_view::RosterIntent) {
@@ -103,14 +105,12 @@ fn roster_action_retract_relation_targets_one_relation_cell() {
     let mut app = test_app();
     let from = add_member(&mut app, "https://roster-retract-a.test");
     let to = add_member(&mut app, "https://roster-retract-b.test");
-    assert!(
-        app.orrery_mut()
-            .assert_relation_between_members(from, to, SemanticSubKind::Cites)
-    );
-    assert!(
-        app.orrery_mut()
-            .assert_relation_between_members(from, to, SemanticSubKind::Quotes)
-    );
+    assert!(app
+        .orrery_mut()
+        .assert_relation_between_members(from, to, SemanticSubKind::Cites));
+    assert!(app
+        .orrery_mut()
+        .assert_relation_between_members(from, to, SemanticSubKind::Quotes));
     app.ctx()
         .view
         .set_roster_subject(Some(RosterSubject::RelationCell {
@@ -156,10 +156,9 @@ fn roster_action_retract_last_relation_clears_link_subject() {
     let mut app = test_app();
     let from = add_member(&mut app, "https://roster-retract-last-a.test");
     let to = add_member(&mut app, "https://roster-retract-last-b.test");
-    assert!(
-        app.orrery_mut()
-            .assert_relation_between_members(from, to, SemanticSubKind::Cites)
-    );
+    assert!(app
+        .orrery_mut()
+        .assert_relation_between_members(from, to, SemanticSubKind::Cites));
     app.ctx()
         .view
         .set_roster_subject(Some(RosterSubject::RelationCell {
@@ -209,14 +208,12 @@ fn roster_snapshot_relation_cell_marks_link_card_selection() {
     let mut app = test_app();
     let from = add_member(&mut app, "https://roster-card-a.test");
     let to = add_member(&mut app, "https://roster-card-b.test");
-    assert!(
-        app.orrery_mut()
-            .assert_relation_between_members(from, to, SemanticSubKind::Cites)
-    );
-    assert!(
-        app.orrery_mut()
-            .assert_relation_between_members(from, to, SemanticSubKind::Quotes)
-    );
+    assert!(app
+        .orrery_mut()
+        .assert_relation_between_members(from, to, SemanticSubKind::Cites));
+    assert!(app
+        .orrery_mut()
+        .assert_relation_between_members(from, to, SemanticSubKind::Quotes));
     let selector = RelationSelector::Semantic(SemanticSubKind::Cites);
     let snapshot = {
         let wc = app.ctx();
@@ -244,10 +241,9 @@ fn roster_action_hides_and_shows_link_bundle_without_deleting_relations() {
     let mut app = test_app();
     let from = add_member(&mut app, "https://roster-hide-link-a.test");
     let to = add_member(&mut app, "https://roster-hide-link-b.test");
-    assert!(
-        app.orrery_mut()
-            .assert_relation_between_members(from, to, SemanticSubKind::Cites)
-    );
+    assert!(app
+        .orrery_mut()
+        .assert_relation_between_members(from, to, SemanticSubKind::Cites));
 
     push_roster_intent(
         &mut app,
@@ -281,25 +277,93 @@ fn roster_action_hides_and_shows_link_bundle_without_deleting_relations() {
 }
 
 #[test]
+fn roster_action_hides_and_shows_one_relation_cell() {
+    let mut app = test_app();
+    let from = add_member(&mut app, "https://roster-hide-cell-a.test");
+    let to = add_member(&mut app, "https://roster-hide-cell-b.test");
+    assert!(app
+        .orrery_mut()
+        .assert_relation_between_members(from, to, SemanticSubKind::Cites));
+    assert!(app
+        .orrery_mut()
+        .assert_relation_between_members(from, to, SemanticSubKind::Quotes));
+    let cites = RelationSelector::Semantic(SemanticSubKind::Cites);
+    let quotes = RelationSelector::Semantic(SemanticSubKind::Quotes);
+
+    push_roster_intent(
+        &mut app,
+        crate::roster_view::RosterIntent::HideRelation {
+            from,
+            to,
+            selector: cites,
+        },
+    );
+
+    assert!(app
+        .orrery()
+        .relation_between_members_hidden(from, to, cites));
+    assert!(!app
+        .orrery()
+        .relation_between_members_hidden(from, to, quotes));
+    assert!(
+        !app.orrery().edge_between_members_hidden(from, to),
+        "the bundle stays partially visible while Quotes remains visible"
+    );
+    let hidden_card = {
+        let wc = app.ctx();
+        wc.roster_snapshot(Some(&RosterSubject::RelationCell {
+            from,
+            to,
+            selector: cites,
+        }))
+    };
+    let Some(RosterDetail::Link(card)) = hidden_card.detail else {
+        panic!("expected a Link Card detail");
+    };
+    assert!(
+        card.relations
+            .iter()
+            .any(|row| row.selector == cites && row.hidden),
+        "the selected relation row reports hidden"
+    );
+    assert!(
+        card.relations
+            .iter()
+            .any(|row| row.selector == quotes && !row.hidden),
+        "the sibling relation row remains visible"
+    );
+
+    push_roster_intent(
+        &mut app,
+        crate::roster_view::RosterIntent::ShowRelation {
+            from,
+            to,
+            selector: cites,
+        },
+    );
+    assert!(!app
+        .orrery()
+        .relation_between_members_hidden(from, to, cites));
+}
+
+#[test]
 fn roster_action_graphlet_intents_queue_and_apply_host_commands() {
     let mut app = test_app();
     let graph = active_graph(&mut app);
     let a = add_member(&mut app, "https://roster-graphlet-a.test");
     let b = add_member(&mut app, "https://roster-graphlet-b.test");
     let c = add_member(&mut app, "https://roster-graphlet-c.test");
-    assert!(
-        app.orrery_mut()
-            .assert_relation_between_members(a, b, SemanticSubKind::Hyperlink)
-    );
+    assert!(app
+        .orrery_mut()
+        .assert_relation_between_members(a, b, SemanticSubKind::Hyperlink));
     let graphlet = app
         .linked_graphlet(a, graph, forme::GraphletKind::Component, Vec::new())
         .expect("linked graphlet");
     assert_eq!(linked_anchor_count(&app, graph, graphlet), 2);
 
-    assert!(
-        app.orrery_mut()
-            .assert_relation_between_members(b, c, SemanticSubKind::Hyperlink)
-    );
+    assert!(app
+        .orrery_mut()
+        .assert_relation_between_members(b, c, SemanticSubKind::Hyperlink));
     let delta = app
         .graphlets
         .get(&graph)
@@ -374,18 +438,16 @@ fn roster_snapshot_graphlet_card_surfaces_drift_without_applying() {
     let a = add_member(&mut app, "https://roster-drift-a.test");
     let b = add_member(&mut app, "https://roster-drift-b.test");
     let c = add_member(&mut app, "https://roster-drift-c.test");
-    assert!(
-        app.orrery_mut()
-            .assert_relation_between_members(a, b, SemanticSubKind::Hyperlink)
-    );
+    assert!(app
+        .orrery_mut()
+        .assert_relation_between_members(a, b, SemanticSubKind::Hyperlink));
     let graphlet = app
         .linked_graphlet(a, graph, forme::GraphletKind::Component, Vec::new())
         .expect("linked graphlet");
     assert_eq!(linked_anchor_count(&app, graph, graphlet), 2);
-    assert!(
-        app.orrery_mut()
-            .assert_relation_between_members(b, c, SemanticSubKind::Hyperlink)
-    );
+    assert!(app
+        .orrery_mut()
+        .assert_relation_between_members(b, c, SemanticSubKind::Hyperlink));
 
     let snapshot = {
         let wc = app.ctx();
