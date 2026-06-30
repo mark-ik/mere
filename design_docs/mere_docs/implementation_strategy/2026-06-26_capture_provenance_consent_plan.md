@@ -5,11 +5,13 @@
 (2026-06-26); the relational-browse V1 **materializer trigger** (`>materialize`)
 that lights C2 up is shipped + verified. C5 (page text into the index)
 is **built + verified** (`>recall`, `8b8b039`); C3's materialize / crawl half
-(harvested links record `ExtractedFrom` provenance) is **built** (`cdd2130`).
+(harvested links record `ExtractedFrom` provenance) is **built** (`cdd2130`),
+and the web-clip case now writes `ClippedFrom` provenance from `>clip`.
 C4's membrane is **live**: the **consent gate** (`>capture`), **retention**
 (`390d74a`), **forget** (`>forget`, traces + index, `00a5331`), and
 federatability (the existing `PrivacyClass`) are built + verified. Remaining:
-forget's provenance-edge cleanup, C3's clip / summarize half, and Phase 9
+forget's provenance-edge cleanup, C3's excerpt / summarize / generated-node
+provenance cases, and Phase 9
 federation promotion/consumption. Created from the 2026-06-26 cross-cutting state
 audit (crawl / engram / knot / federation / models / graph / documentscript),
 which found that the left half of the browsing-data vision (browse, crawl,
@@ -193,13 +195,22 @@ derivations anyway (it must, for `CopiedFrom`). A kernel *edge* representation i
 reserved for the content-derivation gestures below, where no `Hyperlink` doubles
 it.
 
+**Built — web clip (`>clip`, 2026-06-29):** the djot/web-clip gesture now writes a
+local `knot://clip/<uuid>` node, fills `Node.body` from `build_clip_knot(...)`,
+opens the clip as a note tile, and asserts a kernel `ClippedFrom` provenance
+relation from the clip node back to the source. Scriptable live surfaces arm a
+click picker; non-surface nodes use the loaded/cached document body through the
+same fragment -> knot path. The clip fragment can also carry a cropped visual,
+stored as the clip node thumbnail/sprite. Unit coverage exercises fragment
+parsing, fallback body parsing, cropped visual sizing, clip-node relation +
+thumbnail writing, and knot provenance.
+
 **Remaining:**
 
-- Clip / excerpt / summarize / future agent-generate: each gesture asserts the
-  matching Provenance relation (`ClippedFrom` etc.) as it produces a node. The
-  canonical case (clip -> `ClippedFrom`) waits on the web-clip gesture
-  (`build_clip_knot` exists; the picker UI is the djot-editor plan). These are
-  genuine content-derivation, so they warrant a kernel *edge* (nothing overlaps).
+- Excerpt / summarize / future agent-generate: each gesture asserts the matching
+  Provenance relation (`ExcerptedFrom`, `SummarizedFrom`, `GeneratedFrom`, etc.)
+  as it produces a node. These are genuine content-derivation, so they warrant a
+  kernel *edge* (nothing overlaps).
 
 This is the single mechanism the relational plan's "provenance is one mechanism"
 Finding names: it feeds tessera contribution-pricing, training-data legality, and
@@ -211,7 +222,8 @@ makes the provenance exist; that plan makes it survive RDF export.
 
 **Done when**: a harvest / clip / summarize gesture asserts a Provenance record a
 test (or the Provenance-trail projection) can read; a harvested node can name the
-page it came from. **(Met for materialize / crawl; clip / summarize remain.)**
+page it came from. **(Met for materialize / crawl and clip; summarize / excerpt /
+future generated nodes remain.)**
 
 ### C4 — Consent, retention, and forget (the membrane proper)
 
@@ -453,5 +465,12 @@ what is indexed is C4** — the "an excluded page is not indexed" clause lands t
   per launch from `settings.json`; forget (`00a5331`) removes traces and drops the
   page from `>recall`. Across the plan, C1, C2, the materializer trigger, C5, C3's
   `ExtractedFrom` harvest provenance, and C4 are live. Remaining: forget's
-  provenance-edge cleanup, C3 clip / summarize (waiting on the web-clip gesture),
-  and Phase 9 federation (promotion plus the flora consumer).
+  provenance-edge cleanup, C3 clip / summarize (the web-clip gesture was the next
+  C3 slice), and Phase 9 federation (promotion plus the flora consumer).
+- **2026-06-29 (C3 web clip built).** `>clip` now creates a local
+  `knot://clip/<uuid>` node from a semantic live-surface pick or from a focused
+  non-surface document body, writes `Node.body` with `build_clip_knot(...)`, and
+  asserts `ProvenanceSubKind::ClippedFrom` from the clip node back to the source.
+  Cropped visual clips are stored as thumbnail/sprite data on the clip node. This
+  closes the C3 canonical clip case; remaining C3 cases are excerpt / summarize /
+  future agent-generated nodes.

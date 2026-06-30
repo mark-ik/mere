@@ -57,12 +57,51 @@ pub(crate) struct TransferBuffer {
 }
 
 impl TransferBuffer {
+    pub(crate) fn from_transport_error(reason: impl Into<String>) -> Result<Self, TransferError> {
+        ContentUpdateWire::TransportError {
+            reason: reason.into(),
+        }
+        .into_transfer_buffer()
+    }
+
     pub(crate) fn into_bytes(self) -> Vec<u8> {
         self.bytes
     }
 
     pub(crate) fn as_bytes(&self) -> &[u8] {
         &self.bytes
+    }
+
+    /// Move the encoded envelope into a JavaScript-owned `ArrayBuffer`. This
+    /// performs the required wasm-memory -> JS-buffer copy; posting with the
+    /// transfer list below then moves that JS buffer between browser agents.
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn into_array_buffer(self) -> js_sys::ArrayBuffer {
+        js_sys::Uint8Array::from(self.bytes.as_slice()).buffer()
+    }
+
+    /// Worker-side update send: `postMessage(buffer, [buffer])`.
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn post_to_worker_scope(
+        self,
+        scope: &web_sys::DedicatedWorkerGlobalScope,
+    ) -> Result<(), wasm_bindgen::JsValue> {
+        let buffer = self.into_array_buffer();
+        let transfer = js_sys::Array::new();
+        transfer.push(&buffer);
+        scope.post_message_with_transfer(&buffer, &transfer)
+    }
+
+    /// Main-thread command/send side for the same transferable envelope shape.
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn post_to_worker(
+        self,
+        worker: &web_sys::Worker,
+    ) -> Result<(), wasm_bindgen::JsValue> {
+        let buffer = self.into_array_buffer();
+        let transfer = js_sys::Array::new();
+        transfer.push(&buffer);
+        worker.post_message_with_transfer(&buffer, &transfer)
     }
 }
 
@@ -144,6 +183,9 @@ enum ContentUpdateWire {
         nav: u64,
         outcome: String,
     },
+    TransportError {
+        reason: String,
+    },
 }
 
 impl ContentUpdateWire {
@@ -204,6 +246,7 @@ impl ContentUpdateWire {
                 nav: nav.0,
                 outcome,
             },
+            ContentUpdate::TransportError { reason } => Self::TransportError { reason },
         }
     }
 
@@ -270,6 +313,7 @@ impl ContentUpdateWire {
                 nav: armillary::NavGeneration(nav),
                 outcome,
             },
+            Self::TransportError { reason } => ContentUpdate::TransportError { reason },
         })
     }
 
@@ -637,6 +681,20 @@ mod tests {
             ImageData::from_bytes(1, 1, image_bytes),
         );
         scene
+    }
+
+    #[test]
+    fn transport_error_transfer_round_trips() {
+        let buffer =
+            TransferBuffer::from_transport_error("encode failed").expect("encode error update");
+        let mut decoder = SceneTransferDecoder::default();
+        let decoded = ContentUpdate::from_transfer_buffer(buffer.as_bytes(), &mut decoder)
+            .expect("decode error update");
+
+        let ContentUpdate::TransportError { reason } = decoded else {
+            panic!("expected transport error");
+        };
+        assert_eq!(reason, "encode failed");
     }
 
     #[test]

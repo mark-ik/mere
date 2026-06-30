@@ -214,6 +214,10 @@ pub enum ContentUpdate {
     /// (diagnostics / a script console). The re-render rides the `Scene` update; this
     /// is the textual outcome alongside it. (P2.5c, DocumentScript.)
     ScriptOutcome { nav: NavGeneration, outcome: String },
+    /// The transfer transport could not encode or deliver a normal content update.
+    /// This is emitted as a best-effort explicit diagnostic instead of silently
+    /// dropping the failed update. Native transport normally never emits it.
+    TransportError { reason: String },
 }
 
 pub(crate) trait ContentUpdateSink {
@@ -243,18 +247,26 @@ pub(crate) enum ContentUpdateStream {
 }
 
 #[allow(dead_code)]
+pub(crate) enum ContentUpdatePoll {
+    Update(ContentUpdate),
+    Empty,
+    Disconnected,
+}
+
+#[allow(dead_code)]
 impl ContentUpdateStream {
-    pub(crate) fn try_recv_update(&mut self) -> Result<Option<ContentUpdate>, TransferError> {
+    pub(crate) fn try_recv_update(&mut self) -> Result<ContentUpdatePoll, TransferError> {
         match self {
             Self::Native(updates) => match updates.try_recv() {
-                Ok(update) => Ok(Some(update)),
-                Err(TryRecvError::Empty | TryRecvError::Disconnected) => Ok(None),
+                Ok(update) => Ok(ContentUpdatePoll::Update(update)),
+                Err(TryRecvError::Empty) => Ok(ContentUpdatePoll::Empty),
+                Err(TryRecvError::Disconnected) => Ok(ContentUpdatePoll::Disconnected),
             },
             Self::Transfer { updates, decoder } => match updates.try_recv() {
-                Ok(update) => {
-                    ContentUpdate::from_transfer_buffer(update.as_bytes(), decoder).map(Some)
-                }
-                Err(TryRecvError::Empty | TryRecvError::Disconnected) => Ok(None),
+                Ok(update) => ContentUpdate::from_transfer_buffer(update.as_bytes(), decoder)
+                    .map(ContentUpdatePoll::Update),
+                Err(TryRecvError::Empty) => Ok(ContentUpdatePoll::Empty),
+                Err(TryRecvError::Disconnected) => Ok(ContentUpdatePoll::Disconnected),
             },
         }
     }

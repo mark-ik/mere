@@ -121,7 +121,16 @@ impl ContentUpdateSink for TransferContentUpdateSink {
     fn emit_update(&self, update: ContentUpdate) {
         match update.into_transfer_buffer(&mut self.encoder.borrow_mut()) {
             Ok(buffer) => self.out.emit(buffer),
-            Err(err) => tracing::warn!(%err, "content update transfer encode failed"),
+            Err(err) => {
+                let reason = err.to_string();
+                tracing::warn!(%reason, "content update transfer encode failed");
+                match TransferBuffer::from_transport_error(reason) {
+                    Ok(buffer) => self.out.emit(buffer),
+                    Err(fallback) => {
+                        tracing::warn!(%fallback, "content transport error encode failed");
+                    }
+                }
+            }
         }
     }
 }
