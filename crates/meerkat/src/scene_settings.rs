@@ -46,26 +46,58 @@ pub(crate) fn scene_section_items() -> Vec<PaneItem> {
     }
 
     items.push(PaneItem::text("app-title", "Effects"));
-    items.push(PaneItem::button("app-btn", "Whirlpool (vortex)", "scene:whirlpool"));
-    items.push(PaneItem::button("app-btn", "Fountain (emitter)", "scene:fountain"));
+    items.push(PaneItem::button(
+        "app-btn",
+        "Whirlpool (vortex)",
+        "scene:whirlpool",
+    ));
+    items.push(PaneItem::button(
+        "app-btn",
+        "Fountain (emitter)",
+        "scene:fountain",
+    ));
     items.push(PaneItem::button("app-btn", "Liquid pool", "scene:fluid"));
-    items.push(PaneItem::button("app-btn", "Clear liquid", "scene:fluidclear"));
+    items.push(PaneItem::button(
+        "app-btn",
+        "Clear liquid",
+        "scene:fluidclear",
+    ));
 
     items.push(PaneItem::text("app-title", "Graph tangibility"));
-    items.push(PaneItem::button("app-btn", "Collide with the scene", "scene:tangible"));
-    items.push(PaneItem::button("app-btn", "Pass through (default)", "scene:intangible"));
+    items.push(PaneItem::button(
+        "app-btn",
+        "Collide with the scene",
+        "scene:tangible",
+    ));
+    items.push(PaneItem::button(
+        "app-btn",
+        "Pass through (default)",
+        "scene:intangible",
+    ));
 
     // Ambient backdrops are non-rapier sims painted behind the graph (independent of the scene
     // above), so they get their own section. (Physics scenes P5.)
     items.push(PaneItem::text("app-title", "Ambient backdrop"));
     items.push(PaneItem::button("app-btn", "Game of Life", "scene:gol"));
     items.push(PaneItem::button("app-btn", "N-body drift", "scene:nbody"));
-    items.push(PaneItem::button("app-btn", "Particle-life", "scene:particles"));
+    items.push(PaneItem::button(
+        "app-btn",
+        "Particle-life",
+        "scene:particles",
+    ));
     items.push(PaneItem::button("app-btn", "Falling sand", "scene:sand"));
-    items.push(PaneItem::button("app-btn", "Clear ambient", "scene:ambientclear"));
+    items.push(PaneItem::button(
+        "app-btn",
+        "Clear ambient",
+        "scene:ambientclear",
+    ));
 
     items.push(PaneItem::text("app-title", "Clear"));
-    items.push(PaneItem::button("app-btn", "Clear everything", "scene:clear"));
+    items.push(PaneItem::button(
+        "app-btn",
+        "Clear everything",
+        "scene:clear",
+    ));
     items
 }
 
@@ -189,7 +221,10 @@ mod tests {
     fn scene_page_is_listed_and_its_controls_carry_scene_keys() {
         // The Scene page joins the `pelt` settings index, so it shows in the lane.
         let pelt = crate::settings_lane::settings_index("pelt");
-        assert!(pelt.iter().any(|p| p.id == "scene"), "the pelt index lists the Scene page");
+        assert!(
+            pelt.iter().any(|p| p.id == "scene"),
+            "the pelt index lists the Scene page"
+        );
 
         // Every actionable control is a button keyed `scene:<name>` (the prefix `input.rs` strips
         // before handing the name to `load_named_scene`), and the catalog + effects + levers + clear
@@ -197,9 +232,15 @@ mod tests {
         let items = scene_section_items();
         let keys: Vec<&str> = items.iter().filter_map(|i| i.key.as_deref()).collect();
         assert!(!keys.is_empty(), "the page has actionable buttons");
-        assert!(keys.iter().all(|k| k.starts_with("scene:")), "every button key is scene-prefixed");
+        assert!(
+            keys.iter().all(|k| k.starts_with("scene:")),
+            "every button key is scene-prefixed"
+        );
         for &(id, _) in SCENE_CATALOG {
-            assert!(keys.contains(&format!("scene:{id}").as_str()), "catalog button for {id}");
+            assert!(
+                keys.contains(&format!("scene:{id}").as_str()),
+                "catalog button for {id}"
+            );
         }
         for expected in [
             "scene:whirlpool",

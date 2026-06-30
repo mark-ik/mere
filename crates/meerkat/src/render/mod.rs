@@ -7,7 +7,6 @@
 
 use crate::serval_render::TextCursor;
 use forme::GraphMemberId;
-use image::ImageEncoder;
 use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
 use netrender::ColorLoad;
 use netrender::external_texture::{ExternalTexturePlacement, SourceAlpha};
@@ -36,9 +35,11 @@ mod orrery_scene;
 mod overlays;
 mod paint;
 mod setup;
+mod textures;
 mod workbench;
 use paint::PaintInputs;
 pub(crate) use setup::*;
+pub(crate) use textures::*;
 
 impl WindowCtx<'_> {
     /// Render the two authorities and present them. The orrery content root fills
@@ -127,6 +128,7 @@ impl WindowCtx<'_> {
         self.shared.content.constellation.reconcile(&needed);
 
         let (cards, scrying_surfaces) = self.collect_cards(workbench_rect, workbench_external);
+        self.sync_knot_editor_rect(&cards);
         // An open settings tile scrolls its `.settings-pane-body` via the engine's retained
         // `element_scroll` (the wheel drives `scroll_at`); `emit_paint_list` folds it in, so the
         // host no longer mirrors the offset into `chrome_scroll`. (Host-scroll P2.)

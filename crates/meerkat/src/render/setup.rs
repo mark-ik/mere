@@ -29,114 +29,6 @@ pub(super) struct FrameRects {
     pub cursor: Option<TextCursor>,
 }
 
-/// The node's favicon RGBA (straight-alpha RGBA8) encoded as a `data:image/png;base64,`
-/// URI, or `None` if it can't be encoded. The orrery card carries it as a leading
-/// `<img>` that serval decodes. PNG (not BMP) keeps alpha and stays compact. (Phase 2.)
-/// Also the sprite-import encoder (a downscaled dropped image → the face). (P2 — sprite.)
-pub(crate) fn favicon_data_uri(rgba: &[u8], w: u32, h: u32) -> Option<String> {
-    if w == 0 || h == 0 || rgba.len() < (w as usize) * (h as usize) * 4 {
-        return None;
-    }
-    let mut png = Vec::new();
-    image::codecs::png::PngEncoder::new(&mut png)
-        .write_image(rgba, w, h, image::ExtendedColorType::Rgba8)
-        .ok()?;
-    Some(format!("data:image/png;base64,{}", base64_encode(&png)))
-}
-
-/// Read an `Rgba8Unorm` texture back to tightly-packed CPU RGBA bytes (width*height*4),
-/// stripping wgpu's per-row alignment padding. Blocks until the copy + map complete, so
-/// it is only used off the hot path — once per url for a snapshot card preview, then
-/// cached. Mirrors netrender_device's test-only `read_rgba8_texture`. (Layering fix.)
-pub(crate) fn read_texture_rgba(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    target: &wgpu::Texture,
-    width: u32,
-    height: u32,
-) -> Vec<u8> {
-    let row_bytes = width * 4;
-    let padded = row_bytes.next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
-    let buffer = device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("snapshot readback"),
-        size: padded as u64 * height as u64,
-        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-        mapped_at_creation: false,
-    });
-    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("snapshot readback"),
-    });
-    encoder.copy_texture_to_buffer(
-        wgpu::TexelCopyTextureInfo {
-            texture: target,
-            mip_level: 0,
-            origin: wgpu::Origin3d { x: 0, y: 0, z: 0 },
-            aspect: wgpu::TextureAspect::All,
-        },
-        wgpu::TexelCopyBufferInfo {
-            buffer: &buffer,
-            layout: wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(padded),
-                rows_per_image: Some(height),
-            },
-        },
-        wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
-    );
-    queue.submit([encoder.finish()]);
-    let slice = buffer.slice(..);
-    let (tx, rx) = std::sync::mpsc::channel();
-    slice.map_async(wgpu::MapMode::Read, move |r| {
-        let _ = tx.send(r);
-    });
-    // A snapshot readback failing (GPU hang / lost device / OOM) must not crash the
-    // app: the caller treats an empty result as "skip the snapshot" (favicon_data_uri
-    // returns None on a short slice, then the plain stand-in card shows). (Layering fix.)
-    if device.poll(wgpu::PollType::wait_indefinitely()).is_err() {
-        tracing::warn!("snapshot readback poll failed; skipping snapshot");
-        return Vec::new();
-    }
-    if !matches!(rx.recv(), Ok(Ok(()))) {
-        tracing::warn!("snapshot readback map failed; skipping snapshot");
-        return Vec::new();
-    }
-    let mapped = slice.get_mapped_range();
-    let mut out = Vec::with_capacity((row_bytes * height) as usize);
-    for row in 0..height as usize {
-        let src = row * padded as usize;
-        out.extend_from_slice(&mapped[src..src + row_bytes as usize]);
-    }
-    out
-}
-
-/// Minimal standard base64 (no line breaks), for the favicon data URI. (Phase 2.)
-pub(crate) fn base64_encode(data: &[u8]) -> String {
-    const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
-    for c in data.chunks(3) {
-        let n = ((c[0] as u32) << 16)
-            | ((c.get(1).copied().unwrap_or(0) as u32) << 8)
-            | (c.get(2).copied().unwrap_or(0) as u32);
-        out.push(A[((n >> 18) & 63) as usize] as char);
-        out.push(A[((n >> 12) & 63) as usize] as char);
-        out.push(if c.len() > 1 {
-            A[((n >> 6) & 63) as usize] as char
-        } else {
-            '='
-        });
-        out.push(if c.len() > 2 {
-            A[(n & 63) as usize] as char
-        } else {
-            '='
-        });
-    }
-    out
-}
-
 /// The inline `style` for a host-positioned overlay surface: an absolute box at
 /// `(x, y)` sized `w`×`h`, optionally with a `flex-direction`. Mirrors the
 /// `xilem_serval::overlay_rect` geometry for the surfaces whose rect is a **layout
@@ -160,30 +52,49 @@ pub(crate) fn overlay_geometry_style(
 }
 
 impl crate::WindowCtx<'_> {
-    /// The toolbar-band height (px), measuring + caching it on first use. The
-    /// toolbar is a single flex row, so its border-box height is independent of
-    /// the available width/height; measuring once suffices. Used to place the
-    /// content root directly below the toolbar.
-    pub(crate) fn toolbar_height(&mut self) -> u32 {
+    pub(crate) fn toolbar_fallback_height(&self) -> u32 {
+        let scaled = FALLBACK_TOOLBAR_H as f32 * self.shared.presentation.ui_scale();
+        scaled.ceil().max(1.0) as u32
+    }
+
+    pub(crate) fn current_toolbar_height(&self) -> u32 {
         if self.view.toolbar_h == 0 {
-            let sheet = self.shared.presentation.chrome_sheet_refs();
-            let measured = measure_class_bottom(
-                &self.view.dom.borrow(),
-                &sheet,
-                self.view.width,
-                self.view.height,
-                "toolbar",
-            )
-            .unwrap_or(FALLBACK_TOOLBAR_H);
-            self.view.toolbar_h = measured;
+            self.toolbar_fallback_height()
+        } else {
+            self.view.toolbar_h
         }
+    }
+
+    /// The toolbar-band height (px), measured against the current chrome sheet,
+    /// window width, and chrome DOM state. High zoom and crowded chips make the
+    /// toolbar effectively width-sensitive, so this refreshes the stored inset
+    /// instead of treating it as a once-per-window constant.
+    pub(crate) fn toolbar_height(&mut self) -> u32 {
+        let fallback = self.toolbar_fallback_height();
+        let sheet = self.shared.presentation.chrome_sheet_refs();
+        let measured = measure_class_bottom(
+            &self.view.dom.borrow(),
+            &sheet,
+            self.view.width,
+            self.view.height,
+            "toolbar",
+        )
+        .unwrap_or(fallback);
+        self.view.toolbar_h = measured.max(1);
         self.view.toolbar_h
     }
 
     /// Reconfigure the surface for `(width, height)` and request a redraw.
     pub(crate) fn resize(&mut self, width: u32, height: u32) {
-        self.view.width = width.max(1);
-        self.view.height = height.max(1);
+        let next_w = width.max(1);
+        let next_h = height.max(1);
+        let resized = self.view.width != next_w || self.view.height != next_h;
+        self.view.width = next_w;
+        self.view.height = next_h;
+        if resized {
+            self.view.toolbar_h = 0;
+            self.view.window_controls_tex = None;
+        }
         if let (Some(surface), Some(core)) = (self.view.surface.as_mut(), self.render_core) {
             surface.resize(core, self.view.width, self.view.height);
         }
@@ -390,7 +301,6 @@ impl crate::WindowCtx<'_> {
             self.shared.presentation.rebuild_chrome_sheet();
             self.view.toolbar_h = 0; // re-measure the band from the re-scaled sheet
         }
-        let toolbar_h = self.toolbar_height().min(h);
         // Push this window's device-pixel-ratio to the content pool: actors lay out
         // logical, the host rasterizes their scenes at physical via `rasterize_scaled`
         // below, so content text is crisp + correctly-sized on a HiDPI display. (Auto-DPI D2/D3.)
@@ -501,6 +411,7 @@ impl crate::WindowCtx<'_> {
                 self.view.chrome_update(move |c| c.find_count = find_count);
             }
         }
+        let toolbar_h = self.toolbar_height().min(h);
         (frame_t, w, h, toolbar_h, dpr)
     }
 

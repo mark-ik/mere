@@ -37,7 +37,9 @@ impl HostText {
     /// premultiplied `color`. No wrapping (a single visual line); the caller clips
     /// by the surface it pushes into.
     fn line(&mut self, text: &str, size_px: f32, color: [f32; 4]) -> parley::Layout<[f32; 4]> {
-        let mut builder = self.layout_cx.ranged_builder(&mut self.font_cx, text, 1.0, true);
+        let mut builder = self
+            .layout_cx
+            .ranged_builder(&mut self.font_cx, text, 1.0, true);
         builder.push_default(FontFamily::from(GenericFamily::SystemUi));
         builder.push_default(StyleProperty::FontSize(size_px));
         builder.push_default(StyleProperty::Brush(color));

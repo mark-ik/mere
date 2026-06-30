@@ -87,8 +87,7 @@ impl crate::WindowCtx<'_> {
             // (tex_w -> dest_w): a uniform downscale for snapshot thumbnails, 1:1 for
             // tiles.
             let visible_h = dest_h * tex_w / dest_w;
-            let content_h = (self.shared.content.constellation.content_height(*member) as f32)
-                .max(visible_h);
+            let content_h = self.member_content_height(*member, visible_h);
             let scroll = self
                 .view
                 .scroll
@@ -133,9 +132,7 @@ impl crate::WindowCtx<'_> {
                     // Window px per document px (1.0 for a 1:1 tile).
                     let s = dest_w / tex_w;
                     let visible_h = dest_h / s;
-                    let content_h = (self.shared.content.constellation.content_height(*member)
-                        as f32)
-                        .max(visible_h);
+                    let content_h = self.member_content_height(*member, visible_h);
                     let scroll = self
                         .view
                         .scroll
@@ -148,8 +145,7 @@ impl crate::WindowCtx<'_> {
                         for r in rects {
                             // Find rects come back in the actor's logical coords; scale to
                             // physical (×dpr) to match the physical scroll + texture. (Auto-DPI D2.)
-                            let (r0, r1, r2, r3) =
-                                (r[0] * dpr, r[1] * dpr, r[2] * dpr, r[3] * dpr);
+                            let (r0, r1, r2, r3) = (r[0] * dpr, r[1] * dpr, r[2] * dpr, r[3] * dpr);
                             let wy0 = dest[1] + (r1 - scroll) * s;
                             let wy1 = dest[1] + (r3 - scroll) * s;
                             // Cull a match scrolled out of the card's visible band.
@@ -180,7 +176,11 @@ impl crate::WindowCtx<'_> {
                     let (_a, active_view) =
                         core.rasterize(&act, 1, 1, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
                     for (rect, is_active) in &overlays {
-                        let view = if *is_active { &active_view } else { &normal_view };
+                        let view = if *is_active {
+                            &active_view
+                        } else {
+                            &normal_view
+                        };
                         core.renderer().compose_external_texture(
                             view,
                             target_view,

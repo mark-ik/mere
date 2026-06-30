@@ -20,7 +20,7 @@
 //! for the connections swatch (P2). Generalizing was a type-parameterization, since the swatch
 //! carries no state-bound view callbacks. (Node body & face — the shape editor; swatch template #1.)
 
-use kernel::graph::EdgeFamily;
+use kernel::graph::{EdgeFamily, RelationKind};
 use xilem_serval::{AnyView, ServalCtx, ServalElement, el};
 
 /// What a node swatch shows: the sprite face (a PNG data-URI) and its collider hull (the
@@ -142,14 +142,17 @@ pub(crate) struct ConnNode {
     pub subject: uuid::Uuid,
 }
 
-/// One placed edge in a connections swatch: the two endpoints (normalized `[0, 1]`) and the relation
-/// family that colours it. One line per selected pair for now; per-cell fanning is P4.
+/// One placed relation cell in a connections swatch: the two endpoints (normalized `[0, 1]`),
+/// stable endpoint ids, and relation kind. Multiple cells on the same pair fan apart.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ConnEdge {
     pub x0: f32,
     pub y0: f32,
     pub x1: f32,
     pub y1: f32,
+    pub from: uuid::Uuid,
+    pub to: uuid::Uuid,
+    pub kind: RelationKind,
     pub family: EdgeFamily,
 }
 
@@ -171,7 +174,7 @@ pub(crate) struct ConnectionsSpec {
 /// unit-tested); a single or all-coincident axis centers at `0.5`. (Swatch primitive — P2.)
 pub(crate) fn connections_spec_from(
     nodes: Vec<(uuid::Uuid, f32, f32)>,
-    edges: Vec<(uuid::Uuid, uuid::Uuid, EdgeFamily)>,
+    edges: Vec<(uuid::Uuid, uuid::Uuid, RelationKind)>,
 ) -> ConnectionsSpec {
     const MARGIN: f32 = 0.12;
     let (mut min_x, mut min_y, mut max_x, mut max_y) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
@@ -203,17 +206,31 @@ pub(crate) fn connections_spec_from(
             }
         })
         .collect();
+    let mut counts: std::collections::HashMap<(uuid::Uuid, uuid::Uuid), usize> =
+        std::collections::HashMap::new();
+    for &(a, b, _) in &edges {
+        *counts.entry(edge_pair_key(a, b)).or_insert(0) += 1;
+    }
+    let mut seen: std::collections::HashMap<(uuid::Uuid, uuid::Uuid), usize> =
+        std::collections::HashMap::new();
     let conn_edges: Vec<ConnEdge> = edges
         .iter()
-        .filter_map(|&(a, b, family)| {
+        .filter_map(|&(a, b, kind)| {
             let &(x0, y0) = pos.get(&a)?;
             let &(x1, y1) = pos.get(&b)?;
+            let key = edge_pair_key(a, b);
+            let ordinal = *seen.entry(key).and_modify(|n| *n += 1).or_insert(0);
+            let total = counts.get(&key).copied().unwrap_or(1);
+            let (x0, y0, x1, y1) = fan_edge(x0, y0, x1, y1, ordinal, total);
             Some(ConnEdge {
                 x0,
                 y0,
                 x1,
                 y1,
-                family,
+                from: a,
+                to: b,
+                kind,
+                family: kind.family(),
             })
         })
         .collect();
@@ -222,6 +239,39 @@ pub(crate) fn connections_spec_from(
         edges: conn_edges,
         shape_chips: Vec::new(),
     }
+}
+
+fn edge_pair_key(a: uuid::Uuid, b: uuid::Uuid) -> (uuid::Uuid, uuid::Uuid) {
+    if a <= b { (a, b) } else { (b, a) }
+}
+
+fn fan_edge(
+    x0: f32,
+    y0: f32,
+    x1: f32,
+    y1: f32,
+    ordinal: usize,
+    total: usize,
+) -> (f32, f32, f32, f32) {
+    if total <= 1 {
+        return (x0, y0, x1, y1);
+    }
+    let dx = x1 - x0;
+    let dy = y1 - y0;
+    let len = (dx * dx + dy * dy).sqrt();
+    let (px, py) = if len <= f32::EPSILON {
+        (1.0, 0.0)
+    } else {
+        (-dy / len, dx / len)
+    };
+    let center = (total as f32 - 1.0) * 0.5;
+    let offset = (ordinal as f32 - center) * 0.026;
+    (
+        (x0 + px * offset).clamp(0.04, 0.96),
+        (y0 + py * offset).clamp(0.04, 0.96),
+        (x1 + px * offset).clamp(0.04, 0.96),
+        (y1 + py * offset).clamp(0.04, 0.96),
+    )
 }
 
 /// Render a connections swatch as host-generic DOM: the selected nodes as dots, the edges among them
@@ -238,13 +288,20 @@ pub(crate) fn connections_swatch_view<S: 'static>(spec: &ConnectionsSpec) -> Swa
             let t = i as f32 / SEG as f32;
             let x = (e.x0 + (e.x1 - e.x0) * t) * 100.0;
             let y = (e.y0 + (e.y1 - e.y0) * t) * 100.0;
-            children.push(Box::new(el::<_, S, ()>("div", ()).attr(
-                "style",
-                format!(
-                    "position:absolute;left:{x:.2}%;top:{y:.2}%;width:3px;height:3px;\
-                     margin-left:-1.5px;margin-top:-1.5px;border-radius:50%;background-color:{color}"
-                ),
-            )));
+            children.push(Box::new(
+                el::<_, S, ()>("div", ())
+                    .attr("data-element", "relation-cell")
+                    .attr("data-from", e.from.to_string())
+                    .attr("data-to", e.to.to_string())
+                    .attr("data-relation-tag", e.kind.tag().to_string())
+                    .attr(
+                        "style",
+                        format!(
+                            "position:absolute;left:{x:.2}%;top:{y:.2}%;width:4px;height:4px;\
+                             margin-left:-2px;margin-top:-2px;border-radius:50%;background-color:{color}"
+                        ),
+                    ),
+            ));
         }
     }
     for n in &spec.nodes {
@@ -272,7 +329,11 @@ pub(crate) fn connections_swatch_view<S: 'static>(spec: &ConnectionsSpec) -> Swa
             .iter()
             .enumerate()
             .map(|(i, label)| {
-                let bg = if i == 0 { "rgba(137,180,250,0.32)" } else { "rgba(0,0,0,0.45)" };
+                let bg = if i == 0 {
+                    "rgba(137,180,250,0.32)"
+                } else {
+                    "rgba(0,0,0,0.45)"
+                };
                 Box::new(el::<_, S, ()>("div", label.clone()).attr(
                     "style",
                     format!(
@@ -321,7 +382,11 @@ mod tests {
         let b = uuid::Uuid::from_u128(2);
         let spec = connections_spec_from(
             vec![(a, 0.0, 0.0), (b, 10.0, 10.0)],
-            vec![(a, b, EdgeFamily::Semantic)],
+            vec![(
+                a,
+                b,
+                RelationKind::Semantic(kernel::graph::SemanticSubKind::Cites),
+            )],
         );
         assert_eq!(spec.nodes.len(), 2, "both selected nodes are placed");
         assert_eq!(spec.edges.len(), 1, "the one inter-edge is carried");
@@ -338,6 +403,7 @@ mod tests {
             EdgeFamily::Semantic,
             "the edge keeps its family"
         );
+        assert_eq!(spec.edges[0].from, a, "the edge keeps its source");
     }
 
     #[test]
@@ -349,5 +415,27 @@ mod tests {
         for n in &spec.nodes {
             assert!((n.x - 0.5).abs() < 1e-6, "a coincident x axis centers");
         }
+    }
+
+    #[test]
+    fn connections_spec_fans_multiple_relation_cells() {
+        let a = uuid::Uuid::from_u128(1);
+        let b = uuid::Uuid::from_u128(2);
+        let spec = connections_spec_from(
+            vec![(a, 0.0, 0.0), (b, 10.0, 0.0)],
+            vec![
+                (
+                    a,
+                    b,
+                    RelationKind::Semantic(kernel::graph::SemanticSubKind::Cites),
+                ),
+                (a, b, RelationKind::Traversal),
+            ],
+        );
+        assert_eq!(spec.edges.len(), 2);
+        assert_ne!(
+            spec.edges[0].y0, spec.edges[1].y0,
+            "parallel relation cells are visually fanned"
+        );
     }
 }

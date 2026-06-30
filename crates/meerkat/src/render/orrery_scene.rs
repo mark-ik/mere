@@ -67,7 +67,11 @@ impl crate::WindowCtx<'_> {
         // Drive the pane's active layout strategy (if any): compute its node positions
         // through platen's cartography dispatch and push them in; the orrery overlays
         // them on the physics snapshot each frame. No-op under force-directed. (Layout picker.)
-        if let Some(id) = self.pane_orrery(orrery_gid).layout_strategy().map(str::to_string) {
+        if let Some(id) = self
+            .pane_orrery(orrery_gid)
+            .layout_strategy()
+            .map(str::to_string)
+        {
             // Focus-driven strategies (radial) center on the pane's single selection;
             // passing it each frame lets radial re-center live as the selection moves.
             // The graph-only strategies ignore it. (Layout picker.)
@@ -76,8 +80,12 @@ impl crate::WindowCtx<'_> {
             // recompute, refresh the community cache first (the revision moved), then project against
             // it so Louvain is not re-run per frame either. (Arrangements cache + graph signals.)
             let focus = self.pane_orrery(orrery_gid).focused_key();
-            if self.pane_orrery(orrery_gid).needs_strategy_recompute(&id, orrery_w, orrery_h, focus) {
-                self.pane_orrery_mut(orrery_gid).refresh_community_cache(&id);
+            if self
+                .pane_orrery(orrery_gid)
+                .needs_strategy_recompute(&id, orrery_w, orrery_h, focus)
+            {
+                self.pane_orrery_mut(orrery_gid)
+                    .refresh_community_cache(&id);
                 let pane = self.pane_orrery(orrery_gid);
                 let positions = platen::project_orrery_strategy(
                     &id,
@@ -87,11 +95,14 @@ impl crate::WindowCtx<'_> {
                     orrery_h,
                     pane.community(),
                 );
-                self.pane_orrery_mut(orrery_gid).apply_strategy_positions(&positions);
-                self.pane_orrery_mut(orrery_gid).note_strategy_computed(&id, orrery_w, orrery_h, focus);
+                self.pane_orrery_mut(orrery_gid)
+                    .apply_strategy_positions(&positions);
+                self.pane_orrery_mut(orrery_gid)
+                    .note_strategy_computed(&id, orrery_w, orrery_h, focus);
             }
         }
-        let (orrery_scene, orrery_redraw) = self.pane_orrery_mut(orrery_gid).frame(orrery_w, orrery_h);
+        let (orrery_scene, orrery_redraw) =
+            self.pane_orrery_mut(orrery_gid).frame(orrery_w, orrery_h);
 
         // Orrery-as-element (i-2): snapshot the focused orrery's nodes through its
         // camera into the shell state, so the orrery element renders a DOM card per
@@ -106,7 +117,10 @@ impl crate::WindowCtx<'_> {
             // The focused pane box, for culling cards to it: serval does not clip
             // transformed overflow, so an off-screen node would otherwise escape the
             // orrery element up into the chrome (the toolbar-escape we saw).
-            let (pw, ph) = (orrery_rect[2] - orrery_rect[0], orrery_rect[3] - orrery_rect[1]);
+            let (pw, ph) = (
+                orrery_rect[2] - orrery_rect[0],
+                orrery_rect[3] - orrery_rect[1],
+            );
             let cards = orrery
                 .graph()
                 .nodes()
@@ -147,7 +161,10 @@ impl crate::WindowCtx<'_> {
                     let label = if base.chars().count() <= CARD_LABEL_CAP {
                         base.to_string()
                     } else {
-                        base.chars().take(CARD_LABEL_CAP - 1).chain(['\u{2026}']).collect()
+                        base.chars()
+                            .take(CARD_LABEL_CAP - 1)
+                            .chain(['\u{2026}'])
+                            .collect()
                     };
                     // The node's footprint (per-node override / size-by-degree / default),
                     // used both as the card's face size and as the hover hit-box half. (P0.)
@@ -193,7 +210,11 @@ impl crate::WindowCtx<'_> {
         // The focused node's content card (snapshot / unvisited placeholder), placed after
         // the node cards in document order so it paints over them. (Layering fix.)
         let focus_card = self.compute_focus_card(orrery_rect, workbench_rect);
-        let orrery_render = OrreryRender { rect: orrery_rect, cards: orrery_cards, focus_card };
+        let orrery_render = OrreryRender {
+            rect: orrery_rect,
+            cards: orrery_cards,
+            focus_card,
+        };
         // Only rebuild the shell view when the snapshot actually changed: a settled
         // orrery (no motion, selection, or camera change) produces an identical snapshot
         // each frame, so this skips the per-frame view re-run + diff entirely. (Perf.)

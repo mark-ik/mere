@@ -40,7 +40,8 @@ impl WindowCtx<'_> {
         self.view.window_controls_tex = None;
         self.view.divider_tex = None;
         self.persist_settings();
-        self.shared.observability
+        self.shared
+            .observability
             .record_theme_activated(&self.shared.presentation.active_theme_id);
         self.view.request_redraw();
     }
@@ -48,7 +49,11 @@ impl WindowCtx<'_> {
     /// The registered themes as apparatus options (id + display name + active),
     /// listed from the registry — built-ins first, then user / mod themes.
     pub(super) fn theme_options(&self) -> Vec<apparatus::ThemeOption> {
-        let active = self.shared.presentation.active_theme_id.to_ascii_lowercase();
+        let active = self
+            .shared
+            .presentation
+            .active_theme_id
+            .to_ascii_lowercase();
         self.shared
             .presentation
             .theme
@@ -82,7 +87,9 @@ impl WindowCtx<'_> {
             .theme
             .fork(&active, &new_id, &new_name)
         {
-            if let Err(err) = crate::theme_store::save_user_theme(&self.shared.session.mere_root, &def) {
+            if let Err(err) =
+                crate::theme_store::save_user_theme(&self.shared.session.mere_root, &def)
+            {
                 tracing::warn!(%err, "failed to save forked theme");
             }
             self.set_theme(&new_id);
@@ -161,17 +168,33 @@ impl WindowCtx<'_> {
             return;
         }
         let base_h = Oklch::from_srgb(def.seeds.primary).h;
-        let gap = |c| (Oklch::from_srgb(c).h - base_h).to_degrees().rem_euclid(360.0) as f32;
+        let gap = |c| {
+            (Oklch::from_srgb(c).h - base_h)
+                .to_degrees()
+                .rem_euclid(360.0) as f32
+        };
         def.harmony = match key {
             "custom" => Harmony::Custom,
             "lock" => Harmony::Locked {
                 secondary_deg: gap(def.seeds.secondary),
                 tertiary_deg: gap(def.seeds.tertiary),
             },
-            "triadic" => Harmony::Locked { secondary_deg: 120.0, tertiary_deg: 240.0 },
-            "analogous" => Harmony::Locked { secondary_deg: 30.0, tertiary_deg: -30.0 },
-            "complementary" => Harmony::Locked { secondary_deg: 180.0, tertiary_deg: 150.0 },
-            "mono" => Harmony::Locked { secondary_deg: 0.0, tertiary_deg: 0.0 },
+            "triadic" => Harmony::Locked {
+                secondary_deg: 120.0,
+                tertiary_deg: 240.0,
+            },
+            "analogous" => Harmony::Locked {
+                secondary_deg: 30.0,
+                tertiary_deg: -30.0,
+            },
+            "complementary" => Harmony::Locked {
+                secondary_deg: 180.0,
+                tertiary_deg: 150.0,
+            },
+            "mono" => Harmony::Locked {
+                secondary_deg: 0.0,
+                tertiary_deg: 0.0,
+            },
             _ => return,
         };
         self.apply_edited_theme(&active, def);
@@ -185,7 +208,8 @@ impl WindowCtx<'_> {
             tracing::warn!(%err, "edited theme failed validation; keeping the prior theme");
             return;
         }
-        if let Err(err) = crate::theme_store::save_user_theme(&self.shared.session.mere_root, &def) {
+        if let Err(err) = crate::theme_store::save_user_theme(&self.shared.session.mere_root, &def)
+        {
             tracing::warn!(%err, "failed to persist edited theme");
         }
         self.set_theme(id);

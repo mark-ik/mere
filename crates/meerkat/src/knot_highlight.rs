@@ -10,8 +10,8 @@
 //! as a host stylesheet; this module owns only the kind → role → class half, which
 //! is the seam that keeps illume and tinct independent of each other.
 
-use illume::{default_pack, entities, highlight, Span, SyntaxKind};
-use tincture::{derive_syntax_palette, Seeds, Srgb, SyntaxRole};
+use illume::{Span, SyntaxKind, default_pack, entities, highlight};
+use tincture::{Seeds, Srgb, SyntaxRole, derive_syntax_palette};
 use xilem_serval::StyleRange;
 
 /// Map an illume lexer kind onto a tinct highlight role. `None` for kinds that
@@ -163,7 +163,10 @@ mod tests {
     fn every_role_has_a_distinct_class() {
         let mut seen = std::collections::HashSet::new();
         for role in SyntaxRole::ALL {
-            assert!(seen.insert(role_class(role)), "duplicate class for {role:?}");
+            assert!(
+                seen.insert(role_class(role)),
+                "duplicate class for {role:?}"
+            );
         }
     }
 }

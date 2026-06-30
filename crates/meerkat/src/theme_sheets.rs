@@ -45,12 +45,12 @@ pub(crate) fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
         // chip out of view. (Chrome bar — toolbar robustness.)
         format!(
             ".toolbar {{ display: flex; flex-wrap: nowrap; align-items: center; \
-                background-color: {}; padding: 8px {}px 8px 8px; }}",
+                background-color: {}; padding: 4px {}px 4px 6px; }}",
             rgb(c.toolbar_bg),
             titlebar::CONTROLS_W as u32
         ),
         format!(
-            "button {{ font-size: 22px; color: {}; background-color: {}; padding: 8px 14px; margin: 4px; }}",
+            "button {{ font-size: 16px; color: {}; background-color: {}; padding: 4px 8px; margin: 2px; }}",
             rgb(c.control_text),
             rgb(c.control_bg)
         ),
@@ -59,6 +59,8 @@ pub(crate) fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
         // the full-width bar `button { display: block }` would otherwise make it. (Flex, like the
         // toolbar, rather than absolute `right:` which the rest of the chrome doesn't rely on.)
         ".knot-editor-title { display: flex; justify-content: space-between; align-items: center; }"
+            .to_string(),
+        ".knot-editor-actions { display: flex; gap: 6px; align-items: center; }"
             .to_string(),
         ".knot-editor-btn { padding: 1px 9px; margin: 0; font-size: 18px; line-height: 1.3; \
          border-radius: 4px; }"
@@ -72,7 +74,7 @@ pub(crate) fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
             // The omnibar: a single line that clips (with `min-width: 0` so it actually
             // shrinks in the flex row) — never wrapping to a second line, which would
             // inflate the toolbar. (Chrome bar — omnibar single-line.)
-            "input {{ font-size: 22px; color: {}; background-color: {}; padding: 8px; margin: 4px; \
+            "input {{ font-size: 16px; color: {}; background-color: {}; padding: 5px 7px; margin: 2px; \
                 flex-grow: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}",
             rgb(c.field_text),
             rgb(c.field_bg)
@@ -80,7 +82,7 @@ pub(crate) fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
         // The crawl-progress chip (relational-browse V2), a small muted pill;
         // hidden when empty (no crawl has run) via `:empty`.
         format!(
-            ".crawl-chip {{ font-size: 14px; color: {}; background-color: {}; padding: 8px 12px; margin: 4px; border-radius: 14px; }} .crawl-chip-hidden {{ display: none; }}",
+            ".crawl-chip {{ font-size: 12px; color: {}; background-color: {}; padding: 5px 8px; margin: 2px; border-radius: 10px; }} .crawl-chip-hidden {{ display: none; }}",
             rgb(c.muted_text),
             rgb(c.menu_bg)
         ),
@@ -88,38 +90,38 @@ pub(crate) fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
         // marked look) naming the anchor a tear-out branch window forked from, so the
         // branch reads as a distinct grouping. Hidden on leaves / the primary.
         format!(
-            ".branch-chip {{ font-size: 13px; color: {}; background-color: {}; padding: 6px 12px; margin: 4px; border-radius: 14px; }} .branch-chip-hidden {{ display: none; }}",
+            ".branch-chip {{ font-size: 12px; color: {}; background-color: {}; padding: 4px 8px; margin: 2px; border-radius: 10px; }} .branch-chip-hidden {{ display: none; }}",
             rgb(c.strong_text),
             rgb(c.active_bg)
         ),
         // The add pill — the primary create affordance, an accent pill (matching the
         // sync-chip's pill shape) with a "+" that opens the Add node/tile/session menu.
         format!(
-            ".add-pill {{ font-size: 18px; color: {}; background-color: {}; padding: 6px 16px; margin: 4px; border-radius: 14px; }}",
+            ".add-pill {{ font-size: 14px; color: {}; background-color: {}; padding: 4px 10px; margin: 2px; border-radius: 10px; }}",
             rgb(c.strong_text),
             rgb(c.active_bg)
         ),
         // The segmented create group (Chrome bar P5): `+node | +tile | +field` as one
         // pill, each cell a button; the split-button (`add-split`) is its crowded form.
-        ".add-group { display: flex; align-items: center; margin: 4px 2px; }".to_string(),
-        ".add-split { display: flex; align-items: center; margin: 4px 2px; }".to_string(),
+        ".add-group { display: flex; align-items: center; margin: 2px; }".to_string(),
+        ".add-split { display: flex; align-items: center; margin: 2px; }".to_string(),
         format!(
-            ".add-seg {{ font-size: 13px; white-space: nowrap; color: {}; background-color: {}; padding: 7px 9px; }}",
+            ".add-seg {{ font-size: 12px; white-space: nowrap; color: {}; background-color: {}; padding: 5px 7px; }}",
             rgb(c.control_text),
             rgb(c.control_bg)
         ),
         // Rounded outer corners so the three cells read as one pill.
-        ".add-seg-first { border-radius: 13px 0 0 13px; }".to_string(),
-        ".add-seg-last { border-radius: 0 13px 13px 0; }".to_string(),
+        ".add-seg-first { border-radius: 10px 0 0 10px; }".to_string(),
+        ".add-seg-last { border-radius: 0 10px 10px 0; }".to_string(),
         format!(
-            ".add-split-primary {{ font-size: 16px; color: {}; background-color: {}; \
-                padding: 5px 11px; border-radius: 13px 0 0 13px; }}",
+            ".add-split-primary {{ font-size: 13px; color: {}; background-color: {}; \
+                padding: 4px 8px; border-radius: 10px 0 0 10px; }}",
             rgb(c.control_text),
             rgb(c.control_bg)
         ),
         format!(
-            ".add-split-caret {{ font-size: 13px; color: {}; background-color: {}; \
-                padding: 7px 9px; border-radius: 0 13px 13px 0; }}",
+            ".add-split-caret {{ font-size: 12px; color: {}; background-color: {}; \
+                padding: 5px 7px; border-radius: 0 10px 10px 0; }}",
             rgb(c.muted_text),
             rgb(c.control_bg)
         ),
@@ -356,7 +358,7 @@ pub(crate) fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
         // buttons for each pane (F2.1).
         format!(
             ".shellbar {{ position: absolute; background-color: {}; display: flex; \
-                align-items: center; justify-content: flex-start; }}",
+                align-items: center; justify-content: flex-start; padding: 2px 4px; box-sizing: border-box; }}",
             rgb(c.toolbar_bg)
         ),
         // Centred glyphs: serval's flex does not centre a bare text child via
@@ -371,13 +373,13 @@ pub(crate) fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
         // (Chrome bar — even shellbar.)
         format!(
             ".shellbar-btn {{ display: flex; align-items: center; justify-content: center; \
-                height: 44px; padding: 0 13px; font-size: 17px; margin: 2px 0; \
+                height: 36px; padding: 0 10px; font-size: 16px; margin: 2px 0; \
                 color: {}; background-color: transparent; }}",
             rgb(c.control_text)
         ),
         format!(
             ".shellbar-btn-active {{ display: flex; align-items: center; justify-content: center; \
-                height: 44px; padding: 0 13px; font-size: 17px; margin: 2px 0; border-radius: 10px; \
+                height: 36px; padding: 0 10px; font-size: 16px; margin: 2px 0; border-radius: 7px; \
                 color: {}; background-color: {}; }}",
             rgb(c.strong_text),
             rgb(c.active_bg)
@@ -397,20 +399,20 @@ pub(crate) fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
             rgb(c.active_bg),
             rgb(c.strong_text)
         ),
-        ".session-chip-label { font-size: 13px; padding: 6px 6px; }".to_string(),
+        ".session-chip-label { font-size: 12px; padding: 4px 5px; }".to_string(),
         format!(
-            ".session-chip-close {{ font-size: 13px; padding: 6px 8px; color: {}; }}",
+            ".session-chip-close {{ font-size: 12px; padding: 4px 6px; color: {}; }}",
             rgb(c.muted_text)
         ),
         format!(
-            ".session-add {{ font-size: 16px; color: {}; background-color: {}; \
-                padding: 5px 13px; margin: 4px 2px; border-radius: 13px; }}",
+            ".session-add {{ font-size: 13px; color: {}; background-color: {}; \
+                padding: 4px 10px; margin: 2px; border-radius: 10px; }}",
             rgb(c.control_text),
             rgb(c.control_bg)
         ),
         format!(
-            ".session-overflow-btn {{ font-size: 13px; color: {}; background-color: {}; \
-                padding: 7px 11px; margin: 4px 2px; border-radius: 13px; }}",
+            ".session-overflow-btn {{ font-size: 12px; color: {}; background-color: {}; \
+                padding: 5px 8px; margin: 2px; border-radius: 10px; }}",
             rgb(c.control_text),
             rgb(c.control_bg)
         ),
@@ -445,7 +447,10 @@ pub(crate) fn scale_px(sheet: Vec<String>, scale: f32) -> Vec<String> {
     if (scale - 1.0).abs() < 1e-3 {
         return sheet;
     }
-    sheet.into_iter().map(|rule| scale_px_in(&rule, scale)).collect()
+    sheet
+        .into_iter()
+        .map(|rule| scale_px_in(&rule, scale))
+        .collect()
 }
 
 pub(crate) fn scale_px_in(rule: &str, scale: f32) -> String {
@@ -518,60 +523,8 @@ mod ui_scale_tests {
     }
 }
 
-/// Build the pelt tile-surface theme sheet from the resolved [`ChromeTheme`], so the
-/// workbench tiles read as the same shell as the chrome. The surface layers this over
-/// its structural default CSS (`TileSurface::set_theme`), so it only restates colors,
-/// not layout. Roles mirror [`chrome_sheet`] and the Strophos shared-palette model
-/// (woodshed's `audio-widgets::theme` — surface ladder + selection fill + text
-/// weights): the tab bar is the toolbar band, an inactive tab a control surface, the
-/// active tab the selection fill, the content area the band tone (matching [`CARD_BG`]
-/// so the gap below a short card is seamless, replacing pelt's white page default),
-/// and the gutter a darkened seam.
-pub(crate) fn tile_sheet(c: &ChromeTheme) -> String {
-    let rgb = |color: Color32| {
-        let [r, g, b, _] = color.to_array();
-        format!("rgb({r}, {g}, {b})")
-    };
-    // A darker step off a token, for the slot gutter (no "darkest" theme token; the
-    // chrome's frame dividers use a near-black seam, so halve the band tone here).
-    let darken = |color: Color32, f: f32| {
-        let [r, g, b, _] = color.to_array();
-        let s = |v: u8| (v as f32 * f).round().clamp(0.0, 255.0) as u8;
-        format!("rgb({}, {}, {})", s(r), s(g), s(b))
-    };
-    // A glyph/text resting on a fill picks near-white or near-black by WCAG
-    // contrast, so it stays legible whatever hue the fill becomes. The active
-    // tab's close × sits on the (theme-accented) active-tab background, so it is
-    // contrast-picked rather than a fixed muted tone. (Readable-on-accent.)
-    let on = |bg: Color32| {
-        let [r, g, b, _] = bg.to_array();
-        let o = tincture::best_on(tincture::Srgb::rgb(r, g, b));
-        format!("rgb({}, {}, {})", o.r, o.g, o.b)
-    };
-    format!(
-        ".tile-tabbar {{ background: {tabbar}; }} \
-         .tile-tab {{ color: {tab_text}; background: {tab_bg}; }} \
-         .tile-tab.active {{ color: {active_text}; background: {active_bg}; }} \
-         .tile-close {{ color: {close}; }} \
-         .tile-tab.active .tile-close {{ color: {active_close}; }} \
-         .tile-content {{ background: {content}; }} \
-         .tile-divider {{ background: {divider}; }} \
-         .tile-ghost {{ color: {active_text}; background: {active_bg}; border: 1px solid {ghost_border}; }}",
-        tabbar = rgb(c.toolbar_bg),
-        tab_text = rgb(c.muted_text),
-        tab_bg = rgb(c.control_bg),
-        active_text = rgb(c.strong_text),
-        active_bg = rgb(c.active_bg),
-        close = rgb(c.muted_text),
-        active_close = on(c.active_bg),
-        content = rgb(c.toolbar_bg),
-        divider = darken(c.toolbar_bg, 0.5),
-        ghost_border = rgb(c.muted_text),
-    )
-}
-
 /// Fallback chrome-band height (px) if the toolbar can't be measured.
-pub(crate) const FALLBACK_TOOLBAR_H: u32 = 64;
+pub(crate) const FALLBACK_TOOLBAR_H: u32 = 42;
 
 /// Background of the floating content card — a panel a step above the orrery
 /// backdrop, so the card reads as a raised surface over the dark orrery band.

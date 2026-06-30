@@ -12,7 +12,7 @@
 use forme::GraphMemberId;
 use frame::{GraphId, PaneContent, PaneId, SplitAxis, SplitChoice};
 
-use super::{FALLBACK_TOOLBAR_H, WindowCtx, frame_view};
+use super::{WindowCtx, frame_view};
 
 impl WindowCtx<'_> {
     /// The graph + screen rect of the Orrery pane under window point `(x, y)`, if the
@@ -41,7 +41,7 @@ impl WindowCtx<'_> {
     /// band's left edge, so a band starting at x=0 would offset clicks by the strip
     /// width). (Shellbar F2.1.)
     pub(super) fn content_band(&self) -> [f32; 4] {
-        let th = self.view.toolbar_h.max(FALLBACK_TOOLBAR_H) as f32;
+        let th = self.current_toolbar_height() as f32;
         // A slim (leaf) window, or a hidden shellbar, carves nothing, so the band is the
         // whole area below the toolbar; the carve must match render's band exactly.
         // (MW3 step 4; hide-shellbar.)
@@ -69,7 +69,11 @@ impl WindowCtx<'_> {
 
     /// The laid-out content panes (leaf rects) for the current frame layout.
     pub(super) fn laid_leaves(&self) -> Vec<frame_view::LaidLeaf> {
-        frame_view::leaf_rects(&self.view.frame_layout, self.content_band(), self.view.maximized_pane)
+        frame_view::leaf_rects(
+            &self.view.frame_layout,
+            self.content_band(),
+            self.view.maximized_pane,
+        )
     }
 
     /// The *focused* orrery pane's screen rect: the Orrery leaf bound to
@@ -84,7 +88,11 @@ impl WindowCtx<'_> {
         leaves
             .iter()
             .find(|l| matches!(l.content, PaneContent::Orrery) && l.graph_id == gid)
-            .or_else(|| leaves.iter().find(|l| matches!(l.content, PaneContent::Orrery)))
+            .or_else(|| {
+                leaves
+                    .iter()
+                    .find(|l| matches!(l.content, PaneContent::Orrery))
+            })
             .map(|l| l.rect)
             .unwrap_or(band)
     }
@@ -128,7 +136,8 @@ impl WindowCtx<'_> {
 
     /// The node whose gloss minimap square contains window point `(x, y)`, if any.
     pub(super) fn gloss_node_at(&self, x: f32, y: f32) -> Option<GraphMemberId> {
-        self.view.gloss_node_rects
+        self.view
+            .gloss_node_rects
             .iter()
             .find(|(_, r)| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3])
             .map(|(member, _)| *member)
@@ -136,7 +145,8 @@ impl WindowCtx<'_> {
 
     /// The node whose gloss "recent" row contains window point `(x, y)`, if any.
     pub(super) fn gloss_recent_at(&self, x: f32, y: f32) -> Option<GraphMemberId> {
-        self.view.gloss_recent_rects
+        self.view
+            .gloss_recent_rects
             .iter()
             .find(|(_, r)| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3])
             .map(|(member, _)| *member)
@@ -152,7 +162,8 @@ impl WindowCtx<'_> {
 
     /// The id of the open leaf whose content equals `content`, if any.
     pub(super) fn pane_of_content(&self, content: &PaneContent) -> Option<PaneId> {
-        self.view.frame_layout
+        self.view
+            .frame_layout
             .iter_leaves()
             .find(|(_, c, _)| **c == *content)
             .map(|(id, _, _)| id)

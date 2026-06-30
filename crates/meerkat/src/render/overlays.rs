@@ -38,7 +38,11 @@ impl crate::WindowCtx<'_> {
                 let root = dom.document();
                 if let Some(node) = first_with_class(&dom, root, "cmd-list") {
                     let attr = QualName::new(None, Namespace::from(""), LocalName::from("style"));
-                    dom.set_attribute(node, attr, &format!("overflow: scroll; max-height: {max_h}px;"));
+                    dom.set_attribute(
+                        node,
+                        attr,
+                        &format!("overflow: scroll; max-height: {max_h}px;"),
+                    );
                 }
                 // Centre the palette over the orrery area, not the full window, so it does
                 // not overlap the side panes: the overlay's flex centring is shifted by the
@@ -116,7 +120,13 @@ impl crate::WindowCtx<'_> {
             // search row + the items, at the context-item row height (~35px) plus the
             // panel's 4px padding top+bottom. Width uses the measured natural width (not
             // height-clamped) when available, else a sane default. (Context-menu edge-flip.)
-            let rows = self.view.chrome().context_menu.as_ref().map_or(0, |m| m.items.len()) + 1;
+            let rows = self
+                .view
+                .chrome()
+                .context_menu
+                .as_ref()
+                .map_or(0, |m| m.items.len())
+                + 1;
             let menu_h = rows as f32 * 35.0 + 8.0;
             let menu_w = {
                 let dom = self.view.dom.borrow();
@@ -131,8 +141,16 @@ impl crate::WindowCtx<'_> {
                     .map_or(0.0, |r| r.size.width)
             };
             let menu_w = if menu_w > 1.0 { menu_w } else { 240.0 };
-            let left = if mx + menu_w > w as f32 { (mx - menu_w).max(0.0) } else { mx };
-            let top = if my + menu_h > h as f32 { (my - menu_h).max(0.0) } else { my };
+            let left = if mx + menu_w > w as f32 {
+                (mx - menu_w).max(0.0)
+            } else {
+                mx
+            };
+            let top = if my + menu_h > h as f32 {
+                (my - menu_h).max(0.0)
+            } else {
+                my
+            };
             let max_h = (h as f32 - top - 16.0).max(120.0);
             {
                 let mut dom = self.view.dom.borrow_mut();
@@ -237,7 +255,13 @@ impl crate::WindowCtx<'_> {
         // list scroll). The child carries `context-subitem-active`, distinct from the root rows'
         // `context-item-active`, so this targets the submenu and the root block targets the root.
         // (Nested submenus.)
-        if self.view.chrome().context_menu.as_ref().is_some_and(|m| m.submenu.is_some()) {
+        if self
+            .view
+            .chrome()
+            .context_menu
+            .as_ref()
+            .is_some_and(|m| m.submenu.is_some())
+        {
             if let Some(session) = &self.view.chrome_session {
                 let frags = session.fragments();
                 let dom = self.view.dom.borrow();
@@ -260,14 +284,18 @@ impl crate::WindowCtx<'_> {
         // follows the edge so buttons stack vertically (Left/Right) or
         // horizontally (Top/Bottom). (Shellbar F2.1.)
         {
-            let sr = shellbar::shellbar_rect(self.shared.presentation.shellbar_edge, w as f32, h as f32, toolbar_h as f32, self.shared.presentation.ui_scale());
+            let sr = shellbar::shellbar_rect(
+                self.shared.presentation.shellbar_edge,
+                w as f32,
+                h as f32,
+                toolbar_h as f32,
+                self.shared.presentation.ui_scale(),
+            );
             let flex_dir = match self.shared.presentation.shellbar_edge {
                 session_runtime::ShellbarEdge::Left | session_runtime::ShellbarEdge::Right => {
                     "column"
                 }
-                session_runtime::ShellbarEdge::Top | session_runtime::ShellbarEdge::Bottom => {
-                    "row"
-                }
+                session_runtime::ShellbarEdge::Top | session_runtime::ShellbarEdge::Bottom => "row",
             };
             let mut dom = self.view.dom.borrow_mut();
             let root = dom.document();

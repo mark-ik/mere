@@ -34,8 +34,10 @@ impl WindowCtx<'_> {
         // just-clicked node, which is also the focused one, so the two agree in practice.
         let (cx, cy) = self.view.cursor;
         let (ox, oy) = self.orrery_point(cx, cy);
-        let target =
-            self.orrery().node_at_screen(ox, oy).or_else(|| self.orrery().focused_member());
+        let target = self
+            .orrery()
+            .node_at_screen(ox, oy)
+            .or_else(|| self.orrery().focused_member());
         let Some(target) = target else {
             tracing::info!("sprite import: no node under the drop and none focused; ignoring");
             return;
@@ -53,7 +55,10 @@ impl WindowCtx<'_> {
 /// face-sized thumbnail, encode a PNG data-URI for the face, and trace the opaque region to a
 /// convex hull for the collider. `None` if the file can't be decoded. (Node rep P2 — sprite.)
 fn decode_sprite(path: &Path) -> Option<(String, Vec<(f32, f32)>)> {
-    let rgba = image::open(path).ok()?.thumbnail(SPRITE_MAX, SPRITE_MAX).to_rgba8();
+    let rgba = image::open(path)
+        .ok()?
+        .thumbnail(SPRITE_MAX, SPRITE_MAX)
+        .to_rgba8();
     let (w, h) = rgba.dimensions();
     let data_uri = favicon_data_uri(rgba.as_raw(), w, h)?;
     let hull = sprite_hull(rgba.as_raw(), w, h);
@@ -159,7 +164,8 @@ fn convex_hull(points: &[(f32, f32)]) -> Vec<(f32, f32)> {
     // Upper hull (right to left), not re-adding the rightmost point.
     let lower_len = hull.len() + 1;
     for &p in pts.iter().rev().skip(1) {
-        while hull.len() >= lower_len && cross(hull[hull.len() - 2], hull[hull.len() - 1], p) <= 0.0 {
+        while hull.len() >= lower_len && cross(hull[hull.len() - 2], hull[hull.len() - 1], p) <= 0.0
+        {
             hull.pop();
         }
         hull.push(p);
@@ -187,7 +193,11 @@ mod tests {
             (-0.5, 0.5),
             (-0.49, 0.0),
         ];
-        assert_eq!(simplify_hull(hull, 0.05).len(), 4, "near-collinear edge midpoints collapse");
+        assert_eq!(
+            simplify_hull(hull, 0.05).len(),
+            4,
+            "near-collinear edge midpoints collapse"
+        );
     }
 
     #[test]
@@ -207,7 +217,11 @@ mod tests {
                 pts.push((i as f32, j as f32));
             }
         }
-        assert_eq!(convex_hull(&pts).len(), 4, "a filled square hulls to 4 corners");
+        assert_eq!(
+            convex_hull(&pts).len(),
+            4,
+            "a filled square hulls to 4 corners"
+        );
     }
 
     #[test]

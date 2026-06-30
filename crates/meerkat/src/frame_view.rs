@@ -14,6 +14,11 @@ use frame::{FrameLayout, GraphId, PaneContent, PaneId, PaneNode, SplitAxis, Spli
 /// Width (px) of the gutter reserved between split siblings — the draggable
 /// frame divider (distinct from the workbench tile tree's slot dividers).
 pub const DIVIDER: f32 = 6.0;
+const GRAPH_MIN_W: f32 = 260.0;
+const CONTROL_MIN_W: f32 = 280.0;
+const TILE_MIN_W: f32 = 260.0;
+const DEFAULT_MIN_W: f32 = 220.0;
+const DEFAULT_MIN_H: f32 = 180.0;
 
 /// A laid-out leaf: its pane id, content, the `graph_id` it resolves to, and its
 /// screen rect `[x0, y0, x1, y1]`. The `graph_id` is what render / input resolve
@@ -93,7 +98,7 @@ fn walk_leaves(node: &PaneNode, rect: [f32; 4], out: &mut Vec<LaidLeaf>) {
             first,
             second,
         } => {
-            let (r1, r2) = split_rect(rect, *axis, *ratio);
+            let (r1, r2) = split_rect_for_children(rect, *axis, *ratio, first, second);
             walk_leaves(first, r1, out);
             walk_leaves(second, r2, out);
         }
@@ -113,13 +118,13 @@ fn walk_dividers(
         second,
     } = node
     {
+        let (r1, r2) = split_rect_for_children(rect, *axis, *ratio, first, second);
         out.push(LaidDivider {
             path: path.clone(),
-            rect: gutter_rect(rect, *axis, *ratio),
+            rect: gutter_between(r1, r2, *axis),
             parent: rect,
             axis: *axis,
         });
-        let (r1, r2) = split_rect(rect, *axis, *ratio);
         path.push(SplitChoice::First);
         walk_dividers(first, r1, path, out);
         path.pop();
@@ -129,38 +134,95 @@ fn walk_dividers(
     }
 }
 
-/// Split `rect` by `axis` + `ratio`, reserving the [`DIVIDER`] gutter between the
-/// two child rects. `first` takes `ratio` of the usable extent.
-fn split_rect(rect: [f32; 4], axis: SplitAxis, ratio: f32) -> ([f32; 4], [f32; 4]) {
+/// Split `rect` by `axis` + `ratio`, reserving the [`DIVIDER`] gutter and clamping
+/// the split so control panes do not collapse below their useful width.
+fn split_rect_for_children(
+    rect: [f32; 4],
+    axis: SplitAxis,
+    ratio: f32,
+    first: &PaneNode,
+    second: &PaneNode,
+) -> ([f32; 4], [f32; 4]) {
     let [x0, y0, x1, y1] = rect;
+    let ratio = ratio.clamp(0.0, 1.0);
     match axis {
         SplitAxis::Horizontal => {
             let usable = (x1 - x0 - DIVIDER).max(0.0);
-            let cut = x0 + usable * ratio;
+            let cut = x0
+                + clamped_offset(
+                    usable,
+                    usable * ratio,
+                    min_extent(first, axis),
+                    min_extent(second, axis),
+                );
             ([x0, y0, cut, y1], [cut + DIVIDER, y0, x1, y1])
         }
         SplitAxis::Vertical => {
             let usable = (y1 - y0 - DIVIDER).max(0.0);
-            let cut = y0 + usable * ratio;
+            let cut = y0
+                + clamped_offset(
+                    usable,
+                    usable * ratio,
+                    min_extent(first, axis),
+                    min_extent(second, axis),
+                );
             ([x0, y0, x1, cut], [x0, cut + DIVIDER, x1, y1])
         }
     }
 }
 
-/// The gutter rect between this split's two children.
-fn gutter_rect(rect: [f32; 4], axis: SplitAxis, ratio: f32) -> [f32; 4] {
-    let [x0, y0, x1, y1] = rect;
+fn gutter_between(first: [f32; 4], second: [f32; 4], axis: SplitAxis) -> [f32; 4] {
     match axis {
-        SplitAxis::Horizontal => {
-            let usable = (x1 - x0 - DIVIDER).max(0.0);
-            let cut = x0 + usable * ratio;
-            [cut, y0, cut + DIVIDER, y1]
+        SplitAxis::Horizontal => [first[2], first[1], second[0], first[3]],
+        SplitAxis::Vertical => [first[0], first[3], first[2], second[1]],
+    }
+}
+
+fn clamped_offset(usable: f32, raw: f32, min_first: f32, min_second: f32) -> f32 {
+    if usable <= 0.0 {
+        return 0.0;
+    }
+    let total_min = min_first + min_second;
+    if total_min <= usable {
+        raw.clamp(min_first, usable - min_second)
+    } else if total_min > 0.0 {
+        usable * (min_first / total_min)
+    } else {
+        raw.clamp(0.0, usable)
+    }
+}
+
+fn min_extent(node: &PaneNode, axis: SplitAxis) -> f32 {
+    match node {
+        PaneNode::Leaf { content, .. } => leaf_min_extent(content, axis),
+        PaneNode::Split {
+            axis: split_axis,
+            first,
+            second,
+            ..
+        } if *split_axis == axis => min_extent(first, axis) + DIVIDER + min_extent(second, axis),
+        PaneNode::Split { first, second, .. } => {
+            min_extent(first, axis).max(min_extent(second, axis))
         }
-        SplitAxis::Vertical => {
-            let usable = (y1 - y0 - DIVIDER).max(0.0);
-            let cut = y0 + usable * ratio;
-            [x0, cut, x1, cut + DIVIDER]
-        }
+    }
+}
+
+fn leaf_min_extent(content: &PaneContent, axis: SplitAxis) -> f32 {
+    if matches!(axis, SplitAxis::Vertical) {
+        return DEFAULT_MIN_H;
+    }
+    match content {
+        PaneContent::Orrery | PaneContent::Gloss => GRAPH_MIN_W,
+        PaneContent::Workbench | PaneContent::Tile(_) => TILE_MIN_W,
+        PaneContent::Roster
+        | PaneContent::Inspector
+        | PaneContent::Trail
+        | PaneContent::Steward
+        | PaneContent::Comms
+        | PaneContent::Alembic
+        | PaneContent::Apparatus
+        | PaneContent::System => CONTROL_MIN_W,
+        PaneContent::Custom(_) => DEFAULT_MIN_W,
     }
 }
 
@@ -245,6 +307,42 @@ mod tests {
         let dividers = divider_rects(&l, [0.0, 0.0, 806.0, 600.0], None);
         assert_eq!(dividers.len(), 1);
         assert_eq!(dividers[0].rect, [400.0, 0.0, 406.0, 600.0]);
+    }
+
+    #[test]
+    fn horizontal_split_keeps_control_panes_usable() {
+        let l = layout(PaneNode::Split {
+            axis: SplitAxis::Horizontal,
+            ratio: 0.9,
+            first: Box::new(leaf(0, PaneContent::Orrery)),
+            second: Box::new(leaf(1, PaneContent::Roster)),
+        });
+        let leaves = leaf_rects(&l, [0.0, 0.0, 700.0, 500.0], None);
+        assert_eq!(leaves[0].rect, [0.0, 0.0, 414.0, 500.0]);
+        assert_eq!(leaves[1].rect, [420.0, 0.0, 700.0, 500.0]);
+        let dividers = divider_rects(&l, [0.0, 0.0, 700.0, 500.0], None);
+        assert_eq!(dividers[0].rect, [414.0, 0.0, 420.0, 500.0]);
+    }
+
+    #[test]
+    fn nested_roster_split_stays_readable_beside_workbench() {
+        let l = layout(PaneNode::Split {
+            axis: SplitAxis::Horizontal,
+            ratio: 0.6,
+            first: Box::new(PaneNode::Split {
+                axis: SplitAxis::Horizontal,
+                ratio: 0.7,
+                first: Box::new(leaf(0, PaneContent::Orrery)),
+                second: Box::new(leaf(2, PaneContent::Roster)),
+            }),
+            second: Box::new(leaf(1, PaneContent::Workbench)),
+        });
+        let leaves = leaf_rects(&l, [0.0, 0.0, 980.0, 558.0], None);
+        let roster = leaves
+            .iter()
+            .find(|leaf| matches!(leaf.content, PaneContent::Roster))
+            .expect("roster leaf");
+        assert!((roster.rect[2] - roster.rect[0]) >= CONTROL_MIN_W - 0.1);
     }
 
     #[test]

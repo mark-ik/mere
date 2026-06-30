@@ -70,16 +70,24 @@ impl crate::WindowCtx<'_> {
             let tree = self.view.workbench.to_tile_tree(|m| {
                 let key = m.as_u128() as u64;
                 let accent = if selected.contains(&m) {
-                    pelt_core::tile::TabAccent { background: [232, 150, 40], foreground: [28, 22, 10] }
+                    pelt_core::tile::TabAccent {
+                        background: [232, 150, 40],
+                        foreground: [28, 22, 10],
+                    }
                 } else {
                     match states.get(&m) {
-                        Some(orrery::NodeState::Open) => {
-                            pelt_core::tile::TabAccent { background: [58, 140, 94], foreground: [238, 250, 243] }
-                        }
-                        Some(orrery::NodeState::Closed) => {
-                            pelt_core::tile::TabAccent { background: [166, 72, 72], foreground: [250, 240, 240] }
-                        }
-                        _ => pelt_core::tile::TabAccent { background: [54, 92, 156], foreground: [245, 247, 252] },
+                        Some(orrery::NodeState::Open) => pelt_core::tile::TabAccent {
+                            background: [58, 140, 94],
+                            foreground: [238, 250, 243],
+                        },
+                        Some(orrery::NodeState::Closed) => pelt_core::tile::TabAccent {
+                            background: [166, 72, 72],
+                            foreground: [250, 240, 240],
+                        },
+                        _ => pelt_core::tile::TabAccent {
+                            background: [54, 92, 156],
+                            foreground: [245, 247, 252],
+                        },
                     }
                 };
                 pelt_core::tile::Tile {
@@ -174,8 +182,16 @@ impl crate::WindowCtx<'_> {
                 workbench_external
                     .iter()
                     .filter_map(|(_tile, rect, key)| {
-                        let member = members.iter().copied().find(|m| m.as_u128() as u64 == key.0)?;
-                        let r = [ox + rect.0, oy + rect.1, ox + rect.0 + rect.2, oy + rect.1 + rect.3];
+                        let member = members
+                            .iter()
+                            .copied()
+                            .find(|m| m.as_u128() as u64 == key.0)?;
+                        let r = [
+                            ox + rect.0,
+                            oy + rect.1,
+                            ox + rect.0 + rect.2,
+                            oy + rect.1 + rect.3,
+                        ];
                         // The surface gives one content rect per tile (below the tab
                         // bar); use it as both the content rect (actor composite) and
                         // the slot rect (drag target).
@@ -261,5 +277,24 @@ impl crate::WindowCtx<'_> {
             self.snapshot_settings_panes(Vec::new()); // no settings tiles with the pane closed
         }
         (cards, scrying_surfaces)
+    }
+
+    /// Keep the bound knot editor visually attached to its focused workbench tile.
+    /// The editor is still chrome DOM, but it sits over the note tile's content rect
+    /// once that rect is known for the frame.
+    pub(super) fn sync_knot_editor_rect(
+        &mut self,
+        cards: &[(GraphMemberId, [f32; 4], (u32, u32))],
+    ) {
+        let target = self.view.chrome().knot_target;
+        let rect = target.and_then(|member| {
+            cards
+                .iter()
+                .find_map(|(m, rect, _)| (*m == member).then_some(*rect))
+        });
+        if self.view.chrome().knot_editor_rect != rect {
+            self.view
+                .chrome_update(move |c| c.set_knot_editor_rect(rect));
+        }
     }
 }

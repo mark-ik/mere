@@ -28,7 +28,8 @@ impl WindowCtx<'_> {
     /// Set the base body text size to `fraction` (0..1) of [`SIZE_MIN`]..[`SIZE_MAX`].
     pub(super) fn set_doc_text_size(&mut self, fraction: f64) {
         let f = fraction.clamp(0.0, 1.0) as f32;
-        self.shared.presentation.document_sheet.body_font_size = SIZE_MIN + f * (SIZE_MAX - SIZE_MIN);
+        self.shared.presentation.document_sheet.body_font_size =
+            SIZE_MIN + f * (SIZE_MAX - SIZE_MIN);
         self.apply_doc_style();
     }
 

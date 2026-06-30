@@ -26,7 +26,11 @@ pub(crate) fn measure_class_bottom(
 /// holds a session's retained fragments (`ChromeSession::fragments`) measure the
 /// chrome-region gate off the rendered layout instead of re-laying-out (C4).
 /// `None` if no such element is laid out, or its bottom is non-positive.
-pub(crate) fn class_bottom_in(dom: &ScriptedDom, frags: &FragmentPlane<NodeId>, class: &str) -> Option<u32> {
+pub(crate) fn class_bottom_in(
+    dom: &ScriptedDom,
+    frags: &FragmentPlane<NodeId>,
+    class: &str,
+) -> Option<u32> {
     first_with_class(dom, dom.document(), class)
         .and_then(|node| frags.rect_of(node))
         .map(|layout| (layout.location.y + layout.size.height).ceil() as u32)
@@ -58,7 +62,9 @@ pub(crate) fn member_attr(dom: &ScriptedDom, id: NodeId) -> Option<GraphMemberId
 /// The orrery's themed palette — `(backdrop, edge)` as straight `[r, g, b, a]`
 /// (0..1) — from a resolved theme: the backdrop is the theme background, the edge
 /// a translucent default stroke that contrasts with it per theme. (Theming A2.)
-pub(crate) fn orrery_palette(tokens: &register_theme::theme::ThemeTokenSet) -> ([f32; 4], [f32; 4]) {
+pub(crate) fn orrery_palette(
+    tokens: &register_theme::theme::ThemeTokenSet,
+) -> ([f32; 4], [f32; 4]) {
     let (br, bg, bb) = tokens.theme_data.background_rgb;
     let backdrop = [br as f32 / 255.0, bg as f32 / 255.0, bb as f32 / 255.0, 1.0];
     let [er, eg, eb, _] = tokens.graph_node_chrome.default_stroke.to_array();
@@ -143,7 +149,11 @@ pub(crate) fn has_class(dom: &ScriptedDom, id: NodeId, class: &str) -> bool {
 /// `tilt*zoom`) . translate(`offset`), which the six coefficients carry exactly; a
 /// top-down camera (`yaw 0`, `tilt 1`) reduces to `a = d = zoom, b = c = 0` (the prior
 /// form), so old snapshots load unchanged. (Isometric camera — persist yaw/tilt.)
-pub(crate) fn camera_to_snapshot(camera: CameraView, yaw: f32, tilt: f32) -> session_runtime::CameraSnapshot {
+pub(crate) fn camera_to_snapshot(
+    camera: CameraView,
+    yaw: f32,
+    tilt: f32,
+) -> session_runtime::CameraSnapshot {
     let (sn, cs) = (yaw.sin() as f64, yaw.cos() as f64);
     let z = camera.zoom as f64;
     let tz = (tilt * camera.zoom) as f64;
@@ -186,7 +196,9 @@ pub(crate) fn snapshot_yaw_tilt(snapshot: &session_runtime::CameraSnapshot) -> (
 /// A durably-cached entry as a [`fetch::Fetched`], decoding the stored body as
 /// text (lossily). Binary subresources are served from the resource cache as
 /// bytes; this text view is for the page-document lane.
-pub(crate) fn fetched_from(stored: session_runtime::content_store::StoredContent) -> fetch::Fetched {
+pub(crate) fn fetched_from(
+    stored: session_runtime::content_store::StoredContent,
+) -> fetch::Fetched {
     fetch::Fetched {
         content_type: stored.content_type,
         body: String::from_utf8_lossy(&stored.body).into_owned(),

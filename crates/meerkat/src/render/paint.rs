@@ -23,7 +23,12 @@ pub(super) struct PaintInputs {
     pub workbench_rect: Option<[f32; 4]>,
     pub cards: Vec<(GraphMemberId, [f32; 4], (u32, u32))>,
     pub scrying_surfaces: Vec<(GraphMemberId, [f32; 4])>,
-    pub snapshot_card: Option<(GraphMemberId, String, [f32; 4], Option<(netrender::Scene, u32)>)>,
+    pub snapshot_card: Option<(
+        GraphMemberId,
+        String,
+        [f32; 4],
+        Option<(netrender::Scene, u32)>,
+    )>,
     pub external_texture_placements: Vec<(u64, [f32; 4])>,
     pub dividers: Vec<frame_view::LaidDivider>,
     pub w: u32,
@@ -102,7 +107,9 @@ impl WindowCtx<'_> {
         let composite = self.rasterize_cards(core, dpr, &cards);
 
         let surface = self.view.surface.as_ref().expect("window surface present");
-        let Some(frame) = surface.acquire(core) else { return };
+        let Some(frame) = surface.acquire(core) else {
+            return;
+        };
         let target_view = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
@@ -110,8 +117,18 @@ impl WindowCtx<'_> {
         // Composite the graph + content surfaces (orrery / secondary / workbench /
         // content cards / find / scrying) onto the frame. See render::compose.
         self.compose_surfaces(
-            core, &target_view, format, w, h, dpr, orrery_view, secondary_textures,
-            workbench_view, workbench_rect, composite, external_texture_placements,
+            core,
+            &target_view,
+            format,
+            w,
+            h,
+            dpr,
+            orrery_view,
+            secondary_textures,
+            workbench_view,
+            workbench_rect,
+            composite,
+            external_texture_placements,
             &scrying_surfaces,
         );
         self.view.scrying_rects = scrying_surfaces;
@@ -128,7 +145,8 @@ impl WindowCtx<'_> {
                 // the overlays — the layering an external-texture could not give. (Layering fix.)
                 const PEEK_W: u32 = 300;
                 const PEEK_H: u32 = 390;
-                let (tex, _view) = core.rasterize(&scene, PEEK_W, PEEK_H, ColorLoad::Clear(CARD_BG));
+                let (tex, _view) =
+                    core.rasterize(&scene, PEEK_W, PEEK_H, ColorLoad::Clear(CARD_BG));
                 let rgba = read_texture_rgba(core.device(), core.queue(), &tex, PEEK_W, PEEK_H);
                 if let Some(uri) = favicon_data_uri(&rgba, PEEK_W, PEEK_H) {
                     // Bound the per-url snapshot cache: each entry is a base64 PNG peek
@@ -165,9 +183,13 @@ impl WindowCtx<'_> {
             if *recovering {
                 let rw = (rect[2] - rect[0]).round().max(1.0) as u32;
                 let rh = (rect[3] - rect[1]).round().max(1.0) as u32;
-                let card_bg = crate::chrome_to_wgpu(self.shared.presentation.chrome_theme.surface_bg);
-                let scene =
-                    crate::card::recovering_card_scene(rw, rh, self.shared.presentation.document_palette);
+                let card_bg =
+                    crate::chrome_to_wgpu(self.shared.presentation.chrome_theme.surface_bg);
+                let scene = crate::card::recovering_card_scene(
+                    rw,
+                    rh,
+                    self.shared.presentation.document_palette,
+                );
                 let (_t, view) = core.rasterize(&scene, rw, rh, ColorLoad::Clear(card_bg));
                 core.renderer().compose_external_texture(
                     &view,
@@ -237,8 +259,12 @@ impl WindowCtx<'_> {
         {
             let gw_px = gw.round().max(1.0) as u32;
             let gh_px = gh.round().max(1.0) as u32;
-            let (_t, view) =
-                core.rasterize(scene, gw_px, gh_px, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
+            let (_t, view) = core.rasterize(
+                scene,
+                gw_px,
+                gh_px,
+                ColorLoad::Clear(wgpu::Color::TRANSPARENT),
+            );
             let (x0, y0) = (wr[0] + gx, wr[1] + gy);
             core.renderer().compose_external_texture(
                 &view,
@@ -288,7 +314,10 @@ impl WindowCtx<'_> {
                         // gloss shows community / bridge rings exactly when those toggles are on. The
                         // overlays ride the projection (the overlay pipe), placed at the lens's own
                         // positions by `gloss_geometry`. (Graph signals — P6b.)
-                        let clusters = pane.show_community_rings().then(|| pane.community()).flatten();
+                        let clusters = pane
+                            .show_community_rings()
+                            .then(|| pane.community())
+                            .flatten();
                         let bridges = pane.show_bridge_rings().then(|| pane.bridges()).flatten();
                         // Positions come from the whole graph or, when the gloss is scoped to the
                         // selection, the *induced subgraph* of those nodes — so the lens reflects the
@@ -317,12 +346,16 @@ impl WindowCtx<'_> {
                                     clusters,
                                     bridges,
                                 );
-                                let pos =
-                                    projection.nodes.iter().map(|n| (n.node, n.position)).collect();
+                                let pos = projection
+                                    .nodes
+                                    .iter()
+                                    .map(|n| (n.node, n.position))
+                                    .collect();
                                 (pos, projection.overlays)
                             }
                         };
-                        self.orrery_mut().set_gloss_positions(positions, overlays, mw, mh);
+                        self.orrery_mut()
+                            .set_gloss_positions(positions, overlays, mw, mh);
                     }
                     self.orrery().gloss_geometry_cached()
                 } else {
@@ -414,7 +447,11 @@ impl WindowCtx<'_> {
         let ctl_scale = self.shared.presentation.ui_scale();
         let strip_w = (crate::titlebar::CONTROLS_W * ctl_scale).round().max(1.0) as u32;
         if self.view.window_controls_tex.as_ref().map(|c| c.size) != Some((strip_w, band_h)) {
-            let scene = crate::titlebar::controls_scene(band_h, &self.shared.presentation.chrome_theme, ctl_scale);
+            let scene = crate::titlebar::controls_scene(
+                band_h,
+                &self.shared.presentation.chrome_theme,
+                ctl_scale,
+            );
             let (tex, view) = core.rasterize(
                 &scene,
                 strip_w,

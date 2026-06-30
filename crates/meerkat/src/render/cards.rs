@@ -11,6 +11,20 @@ use super::*;
 use serval_winit_host::RenderCore;
 
 impl crate::WindowCtx<'_> {
+    /// Full scrollable height for a composited member in document px. The content
+    /// actor reports this for web/document lanes; note tiles are host-rendered, so
+    /// they read the height measured by `note_surface`.
+    pub(crate) fn member_content_height(&self, member: GraphMemberId, visible_h: f32) -> f32 {
+        let actor_h = self.shared.content.constellation.content_height(member) as f32;
+        let note_h = self
+            .view
+            .note_content_heights
+            .get(&member)
+            .copied()
+            .unwrap_or(0) as f32;
+        actor_h.max(note_h).max(visible_h)
+    }
+
     /// Record each card's on-screen content rect into `self.view.content_rects` for this
     /// frame, so a wheel over a card scrolls the card rather than panning the orrery: the
     /// live tiles, the unvisited placeholder, the (cached-and-shown) snapshot card, and
@@ -254,6 +268,9 @@ impl crate::WindowCtx<'_> {
         self.view
             .tile_bands
             .retain(|m, _| cards.iter().any(|(cm, _, _)| cm == m));
+        self.view
+            .note_content_heights
+            .retain(|m, _| cards.iter().any(|(cm, _, _)| cm == m));
         // Rasterize each card as a vertical BAND of its content, not one giant
         // texture: a tall document (a 166 KB gemtext capsule lays out to ~19000 px)
         // overflows the GPU texture limits and fails to rasterize whole. The host
@@ -285,8 +302,8 @@ impl crate::WindowCtx<'_> {
             // Document-px shown in the dest rect (= ch for a 1:1 live card; less for a
             // downscaled snapshot thumbnail).
             let visible_h = dest_h * (*cw as f32) / dest_w;
-            let content_h = (self.shared.content.constellation.content_height(*member) as f32)
-                .max(visible_h)
+            let content_h = self
+                .member_content_height(*member, visible_h)
                 .max(*ch as f32);
             let scroll = self
                 .view
@@ -314,13 +331,20 @@ impl crate::WindowCtx<'_> {
                 .map(|(_, n)| n.url().to_string())
                 .filter(|u| u.starts_with("knot://"));
             if let Some(url) = knot_url {
-                let band_px = (*ch).min(BAND_CAP).max(1);
+                let max_h_for_width = (MAX_CARD_TEX_AREA / (*cw).max(1)) as f32;
+                let band_h = content_h.min(BAND_CAP as f32).min(max_h_for_width).max(1.0);
+                let band_px = band_h.ceil() as u32;
+                let band_y = self.view.tile_bands.get(member).copied().unwrap_or(0.0);
+                let covers = band_y <= scroll && scroll + visible_h <= band_y + band_h + 0.5;
                 let fresh = self
                     .view
                     .tile_textures
                     .get(member)
-                    .is_some_and(|c| c.version == version && c.size == (*cw, band_px));
+                    .is_some_and(|c| c.version == version && c.size == (*cw, band_px))
+                    && covers;
                 if !fresh {
+                    let new_band_y = (scroll - (band_h - visible_h) * 0.5)
+                        .clamp(0.0, (content_h - band_h).max(0.0));
                     let state = self.shared.content.pages.get(&url).cloned();
                     if let Some(doc) = crate::card::engine_document_for(
                         &url,
@@ -328,18 +352,22 @@ impl crate::WindowCtx<'_> {
                         &self.shared.content.engine_registry,
                         &self.shared.content.route_policy,
                     ) {
-                        let scene = crate::note_surface::note_scene(&doc, *cw, band_px, &[]);
-                        // A light page so the note's default (dark) text reads; a themed
-                        // note sheet (light/dark + the illume syntax palette) replaces this
-                        // placeholder once the highlight bridge feeds note_view. (Slice B.)
-                        let note_bg = wgpu::Color {
-                            r: 0.96,
-                            g: 0.96,
-                            b: 0.95,
-                            a: 1.0,
-                        };
+                        let sheet = crate::note_sheet(&self.shared.presentation.chrome_theme);
+                        let band = crate::note_surface::note_scene_band(
+                            &doc,
+                            *cw,
+                            visible_h.ceil().max(1.0) as u32,
+                            new_band_y.floor().max(0.0) as u32,
+                            band_px,
+                            &sheet,
+                        );
+                        self.view
+                            .note_content_heights
+                            .insert(*member, band.content_height);
+                        let note_bg =
+                            crate::chrome_to_wgpu(self.shared.presentation.chrome_theme.surface_bg);
                         let (tex, view) = core.rasterize_scaled(
-                            &scene,
+                            &band.scene,
                             *cw,
                             band_px,
                             ColorLoad::Clear(note_bg),
@@ -354,7 +382,7 @@ impl crate::WindowCtx<'_> {
                                 view,
                             },
                         );
-                        self.view.tile_bands.insert(*member, 0.0);
+                        self.view.tile_bands.insert(*member, new_band_y);
                     }
                 }
             } else if self.shared.content.constellation.scene(*member).is_some() {

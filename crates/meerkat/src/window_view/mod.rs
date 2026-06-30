@@ -222,6 +222,11 @@ pub(crate) struct WindowView {
     /// its band). The composite UV-windows within `[band_y, band_y + tex_h]`; absent
     /// (or 0) for HTML-lane / full textures. (Retained-text / tiled render.)
     pub(crate) tile_bands: HashMap<GraphMemberId, f32>,
+    /// Full laid-out heights for note tiles rendered host-side through
+    /// `note_surface`. The content actor owns this for web/document lanes; local
+    /// notes have no actor, so the window caches the measured height from the
+    /// latest note band render.
+    pub(crate) note_content_heights: HashMap<GraphMemberId, u32>,
     /// The focused node's "last visit" snapshot preview as a PNG data-URI, keyed by URL.
     /// Built once per url by a blocking readback + encode, then rendered as a chrome `<img>`
     /// in the snapshot card (over the node cards). (Layering fix — card over nodes.)
@@ -269,6 +274,9 @@ pub(crate) struct WindowView {
     /// An in-progress tear-out drag (G1): `Some` from a modified left-press on an orrery
     /// node until release, which spawns a leaf carrying the node. (Tear-out gestures.)
     pub(crate) tear_out_drag: Option<TearOutDrag>,
+    /// An armed web-clip picker: the surface member whose next left press should capture
+    /// an element instead of forwarding the click into the surface.
+    pub(crate) clip_picker: Option<GraphMemberId>,
     /// The cursor icon currently set on the window (tracked to set only on change).
     pub(crate) cursor_icon: CursorIcon,
     /// Set by the custom close control; the event handler exits the loop after the

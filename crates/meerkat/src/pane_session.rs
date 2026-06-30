@@ -111,7 +111,9 @@ impl PaneSession {
             // Attribute-only batch → incremental restyle: RepaintOnly (layout
             // skipped) unless an inline geometry write actually moved a box
             // (Restyled re-lays-out). Either way the paint side stays valid.
-            let s = slot.as_mut().expect("not rebuilding implies an existing session");
+            let s = slot
+                .as_mut()
+                .expect("not rebuilding implies an existing session");
             let applied = s.layout.apply(&*dom_ref, sheet, &muts);
             debug_assert!(
                 matches!(
@@ -132,7 +134,14 @@ impl PaneSession {
     /// walks to the scroll container, clamps, and chains). The next [`scene`](Self::scene)
     /// paints + [`hit_test`](Self::hit_test)s at the new offset. Returns whether anything
     /// scrolled (a pane, or the document fallback). (Host-scroll P2.)
-    pub(crate) fn scroll_at(&mut self, dom: &ScriptedDom, x: f32, y: f32, dx: f32, dy: f32) -> bool {
+    pub(crate) fn scroll_at(
+        &mut self,
+        dom: &ScriptedDom,
+        x: f32,
+        y: f32,
+        dx: f32,
+        dy: f32,
+    ) -> bool {
         self.layout.scroll_at(dom, x, y, dx, dy)
     }
 
@@ -220,7 +229,8 @@ impl PaneSession {
         delta: isize,
         goal_x: Option<f32>,
     ) -> Option<(usize, f32)> {
-        self.layout.caret_byte_vertical::<ScriptedDom>(node, byte, delta, goal_x)
+        self.layout
+            .caret_byte_vertical::<ScriptedDom>(node, byte, delta, goal_x)
     }
 
     /// The accumulated CSS `translate` of `node` (its own plus its ancestors'), which the

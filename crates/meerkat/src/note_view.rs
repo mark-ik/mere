@@ -22,7 +22,7 @@
 //! djot/markdown tile. The render-to-`Scene` surface is `crate::note_surface`.
 
 use inker::{Block, EngineDocument, InlineSpan};
-use xilem_serval::{el, text, AnyView, ServalCtx, ServalElement};
+use xilem_serval::{AnyView, ServalCtx, ServalElement, el, text};
 
 /// A type-erased note view child: a serval element or text node.
 ///
@@ -70,11 +70,12 @@ fn heading_tag(level: u8) -> &'static str {
 /// One block → one serval element view.
 fn block_view(block: &Block) -> NoteChild {
     match block {
-        Block::Heading { level, spans } => {
-            Box::new(el(heading_tag(*level), span_views(spans)))
-        }
+        Block::Heading { level, spans } => Box::new(el(heading_tag(*level), span_views(spans))),
         Block::Paragraph { spans } => Box::new(el("p", span_views(spans))),
-        Block::CodeBlock { language, text: code } => {
+        Block::CodeBlock {
+            language,
+            text: code,
+        } => {
             let code_el: Vec<NoteChild> = vec![Box::new(el("code", text(code.clone())))];
             let mut pre = el("pre", code_el);
             if let Some(lang) = language {
@@ -96,14 +97,18 @@ fn block_view(block: &Block) -> NoteChild {
                 .collect();
             Box::new(el(if *ordered { "ol" } else { "ul" }, lis))
         }
-        Block::Image { url, alt } => {
-            Box::new(el("img", ()).attr("src", url.clone()).attr("alt", alt.clone()))
-        }
+        Block::Image { url, alt } => Box::new(
+            el("img", ())
+                .attr("src", url.clone())
+                .attr("alt", alt.clone()),
+        ),
         Block::Preformatted { text: t } => Box::new(el("pre", text(t.clone()))),
         Block::Rule => Box::new(el("hr", ())),
         // Semantic blocks (feed / protocol engines): a knot note rarely carries
         // these, but the mapper is total so any routed document renders legibly.
-        Block::FeedHeader { title, subtitle, .. } => {
+        Block::FeedHeader {
+            title, subtitle, ..
+        } => {
             let mut kids: Vec<NoteChild> = vec![Box::new(el("h1", text(title.clone())))];
             if let Some(sub) = subtitle {
                 kids.push(Box::new(el("p", text(sub.clone()))));
@@ -124,9 +129,7 @@ fn block_view(block: &Block) -> NoteChild {
             ];
             Box::new(el("p", kids))
         }
-        Block::Badge { text: t } => {
-            Box::new(el("p", text(t.clone())).attr("class", "badge"))
-        }
+        Block::Badge { text: t } => Box::new(el("p", text(t.clone())).attr("class", "badge")),
         Block::Table { header, rows, .. } => {
             // `<table>` with an optional `<thead>` of `<th>` and a `<tbody>` of
             // `<tr>`/`<td>`. Column alignment (the `..`) is a later CSS pass.
@@ -136,7 +139,10 @@ fn block_view(block: &Block) -> NoteChild {
                     .iter()
                     .map(|cell| Box::new(el("th", span_views(cell))) as NoteChild)
                     .collect();
-                sections.push(Box::new(el("thead", vec![Box::new(el("tr", cells)) as NoteChild])));
+                sections.push(Box::new(el(
+                    "thead",
+                    vec![Box::new(el("tr", cells)) as NoteChild],
+                )));
             }
             let body: Vec<NoteChild> = rows
                 .iter()
@@ -165,7 +171,9 @@ fn span_view(span: &InlineSpan) -> NoteChild {
         InlineSpan::Code(t) => Box::new(el("code", text(t.clone()))),
         InlineSpan::Emphasis(inner) => Box::new(el("em", span_views(inner))),
         InlineSpan::Strong(inner) => Box::new(el("strong", span_views(inner))),
-        InlineSpan::Link { url, title, spans, .. } => {
+        InlineSpan::Link {
+            url, title, spans, ..
+        } => {
             let mut a = el("a", span_views(spans)).attr("href", url.clone());
             if let Some(t) = title {
                 a = a.attr("title", t.clone());
@@ -196,21 +204,57 @@ mod tests {
 
     #[test]
     fn block_tags_map_to_html_elements() {
-        assert_eq!(block_tag(&Block::Heading { level: 1, spans: vec![] }), "h1");
-        assert_eq!(block_tag(&Block::Heading { level: 3, spans: vec![] }), "h3");
+        assert_eq!(
+            block_tag(&Block::Heading {
+                level: 1,
+                spans: vec![]
+            }),
+            "h1"
+        );
+        assert_eq!(
+            block_tag(&Block::Heading {
+                level: 3,
+                spans: vec![]
+            }),
+            "h3"
+        );
         // Levels past 6 clamp to h6 (HTML has no h7+).
-        assert_eq!(block_tag(&Block::Heading { level: 9, spans: vec![] }), "h6");
+        assert_eq!(
+            block_tag(&Block::Heading {
+                level: 9,
+                spans: vec![]
+            }),
+            "h6"
+        );
         assert_eq!(block_tag(&Block::Paragraph { spans: vec![] }), "p");
         assert_eq!(
-            block_tag(&Block::CodeBlock { language: None, text: String::new() }),
+            block_tag(&Block::CodeBlock {
+                language: None,
+                text: String::new()
+            }),
             "pre"
         );
         assert_eq!(block_tag(&Block::Quote { blocks: vec![] }), "blockquote");
-        assert_eq!(block_tag(&Block::List { ordered: false, items: vec![] }), "ul");
-        assert_eq!(block_tag(&Block::List { ordered: true, items: vec![] }), "ol");
+        assert_eq!(
+            block_tag(&Block::List {
+                ordered: false,
+                items: vec![]
+            }),
+            "ul"
+        );
+        assert_eq!(
+            block_tag(&Block::List {
+                ordered: true,
+                items: vec![]
+            }),
+            "ol"
+        );
         assert_eq!(block_tag(&Block::Rule), "hr");
         assert_eq!(
-            block_tag(&Block::Image { url: String::new(), alt: String::new() }),
+            block_tag(&Block::Image {
+                url: String::new(),
+                alt: String::new()
+            }),
             "img"
         );
     }
@@ -218,7 +262,10 @@ mod tests {
     #[test]
     fn document_views_one_per_block() {
         let d = doc(vec![
-            Block::Heading { level: 1, spans: vec![InlineSpan::Text("Mere".into())] },
+            Block::Heading {
+                level: 1,
+                spans: vec![InlineSpan::Text("Mere".into())],
+            },
             Block::Paragraph {
                 spans: vec![InlineSpan::Text("A graph-shaped browser.".into())],
             },
@@ -247,9 +294,17 @@ mod tests {
             InlineSpan::SoftBreak,
         ];
         let d = doc(vec![
-            Block::Heading { level: 2, spans: spans.clone() },
-            Block::Paragraph { spans: spans.clone() },
-            Block::CodeBlock { language: Some("rust".into()), text: "fn x() {}".into() },
+            Block::Heading {
+                level: 2,
+                spans: spans.clone(),
+            },
+            Block::Paragraph {
+                spans: spans.clone(),
+            },
+            Block::CodeBlock {
+                language: Some("rust".into()),
+                text: "fn x() {}".into(),
+            },
             Block::Quote {
                 blocks: vec![Block::Paragraph {
                     spans: vec![InlineSpan::Text("q".into())],
@@ -261,7 +316,10 @@ mod tests {
                     spans: vec![InlineSpan::Text("i".into())],
                 }]],
             },
-            Block::Image { url: "img".into(), alt: "a".into() },
+            Block::Image {
+                url: "img".into(),
+                alt: "a".into(),
+            },
             Block::Preformatted { text: "pre".into() },
             Block::Rule,
             Block::FeedHeader {
@@ -277,7 +335,10 @@ mod tests {
                 article_url: None,
                 source_url: None,
             },
-            Block::MetadataRow { label: "k".into(), value: "v".into() },
+            Block::MetadataRow {
+                label: "k".into(),
+                value: "v".into(),
+            },
             Block::Badge { text: "b".into() },
             Block::Table {
                 alignments: vec![inker::TableAlignment::Left, inker::TableAlignment::Right],

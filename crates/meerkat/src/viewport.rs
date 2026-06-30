@@ -93,7 +93,9 @@ impl WindowCtx<'_> {
     fn readback_selections(&mut self) {
         for graph_id in self.shown_orrery_graphs() {
             if let Some(orrery) = self.orreries.get(&graph_id) {
-                self.view.selections.insert(graph_id, orrery.selected_members());
+                self.view
+                    .selections
+                    .insert(graph_id, orrery.selected_members());
             }
         }
     }
@@ -116,7 +118,10 @@ impl WindowCtx<'_> {
         // at demo scale; a revision-cached derive is the refinement. (Phase 3 slice 2+ —
         // live drift.) `derive_members` is read-only, so this needs no `&mut graphlets`.
         let roster: Vec<uuid::Uuid> = {
-            let Some(graphlet) = self.graphlets.get(&graph).and_then(|idx| idx.get(graphlet_id))
+            let Some(graphlet) = self
+                .graphlets
+                .get(&graph)
+                .and_then(|idx| idx.get(graphlet_id))
             else {
                 return;
             };

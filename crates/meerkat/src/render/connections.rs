@@ -42,10 +42,10 @@ impl crate::WindowCtx<'_> {
         if positions.len() < 2 {
             return None;
         }
-        // Inter-edges: one entry per selected pair sharing any relation, coloured by the first
-        // family seen (per-cell fanning is P4). Unordered pairs dedup by uuid.
-        let mut seen = std::collections::HashSet::new();
-        let mut edges: Vec<(uuid::Uuid, uuid::Uuid, kernel::graph::EdgeFamily)> = Vec::new();
+        // Inter-edges: one entry per selected relation cell. The swatch fans cells that share the
+        // same endpoints, and its DOM carries the relation kind for Link Card routing. Hidden
+        // endpoint bundles stay hidden here too, matching the canvas edge pass.
+        let mut edges: Vec<(uuid::Uuid, uuid::Uuid, kernel::graph::RelationKind)> = Vec::new();
         for r in graph.relations() {
             let (Some(&a), Some(&b)) = (keys_to_id.get(&r.from), keys_to_id.get(&r.to)) else {
                 continue;
@@ -53,19 +53,19 @@ impl crate::WindowCtx<'_> {
             if a == b {
                 continue;
             }
-            let pair = if a <= b { (a, b) } else { (b, a) };
-            if seen.insert(pair) {
-                edges.push((pair.0, pair.1, r.kind.family()));
+            if !self.orrery().edge_between_members_hidden(a, b) {
+                edges.push((a, b, r.kind));
             }
         }
         // Classify the selection's induced subgraph for the chip strip: the dominant shape plus its
         // best runners-up (fit-ranked, top 3). (Swatch primitive — P3, the strip.)
-        let shape_chips: Vec<String> = crate::graphlet_classifier::classify_selection(graph, &members)
-            .iter()
-            .take(3)
-            .filter(|s| s.fit >= 0.4)
-            .map(|s| s.label.clone())
-            .collect();
+        let shape_chips: Vec<String> =
+            crate::graphlet_classifier::classify_selection(graph, &members)
+                .iter()
+                .take(3)
+                .filter(|s| s.fit >= 0.4)
+                .map(|s| s.label.clone())
+                .collect();
         let mut spec = connections_spec_from(positions, edges);
         spec.shape_chips = shape_chips;
         // Anchor at the focused node (one of the selection); the pane centre is the fallback.
