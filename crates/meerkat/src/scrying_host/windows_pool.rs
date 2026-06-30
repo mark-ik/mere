@@ -12,7 +12,7 @@ use forme::GraphMemberId;
 use grafting::{Dx12FenceSynchronizer, EpochCachedImporter, HostWgpuContext};
 use inker::{
     FocusReason, KeyboardEvent, KeyboardModifiers, MouseButton, MouseEvent, MouseEventKind,
-    SurfaceEngineRegistry, SurfaceProducer,
+    SurfaceEngineRegistry, SurfaceProducer, WebFeatureStatus, WebSurfaceEvent,
 };
 use scrying::PlatformCompositionRoot;
 use verso_scry::ScryForward;
@@ -47,6 +47,10 @@ pub(super) struct Tile {
     pub(super) shown_url: Option<String>,
     pub(super) size: (u32, u32),
     pub(super) last_error: Option<String>,
+    pub(super) last_title: Option<String>,
+    pub(super) last_url: Option<String>,
+    pub(super) capabilities_logged: bool,
+    pub(super) last_browser_event: Option<String>,
     /// A live compatibility-view flip driving this tile.
     pub(super) flip: Option<ScryForward>,
 }
@@ -253,6 +257,7 @@ impl Pool {
         {
             let tile = self.tiles.get_mut(&member).expect("inserted above");
             drive_navigation(member, tile, url, width, height, pending_flip);
+            drain_web_events(member, tile);
         }
 
         let tile = self.tiles.get_mut(&member).expect("inserted above");
@@ -291,6 +296,160 @@ impl Pool {
         };
         self.registry = Some(registry_for_root(root));
         Ok(())
+    }
+}
+
+fn drain_web_events(member: GraphMemberId, tile: &mut Tile) {
+    let Some(web) = tile.producer.as_web_surface() else {
+        return;
+    };
+    if !tile.capabilities_logged {
+        let caps = web.capabilities();
+        tracing::info!(
+            target: "meerkat.surface.capabilities",
+            %member,
+            backend = %caps.backend_name,
+            transport = ?caps.frame_transport,
+            script = %feature_label(&caps.script.result),
+            cookies = %feature_label(&caps.cookie.write),
+            snapshot = %feature_label(&caps.snapshot),
+            degradations = %caps.degradation_reasons.join(" | "),
+            "web surface capabilities"
+        );
+        tile.capabilities_logged = true;
+    }
+
+    let mut events = Vec::new();
+    while let Some(event) = web.poll_web_event() {
+        events.push(event);
+    }
+    let _ = web;
+    for event in events {
+        record_web_event(member, tile, event);
+    }
+}
+
+fn record_web_event(member: GraphMemberId, tile: &mut Tile, event: WebSurfaceEvent) {
+    match event {
+        WebSurfaceEvent::Navigation(event) => {
+            let detail = format!("{event:?}");
+            let url = match &event {
+                inker::NavigationEvent::Started { url }
+                | inker::NavigationEvent::Committed { url }
+                | inker::NavigationEvent::Finished { url, .. }
+                | inker::NavigationEvent::Failed { url, .. } => url,
+            };
+            if !url.is_empty() {
+                tile.last_url = Some(url.clone());
+            }
+            tile.last_browser_event = Some(detail.clone());
+            tracing::info!(
+                target: "meerkat.surface.event",
+                %member,
+                event = %detail,
+                "web navigation event"
+            );
+        }
+        WebSurfaceEvent::TitleChanged { title } => {
+            tile.last_title = Some(title.clone());
+            tile.last_browser_event = Some(format!("title={title}"));
+            tracing::info!(
+                target: "meerkat.surface.event",
+                %member,
+                title = %title,
+                "web title changed"
+            );
+        }
+        WebSurfaceEvent::AddressChanged { url } => {
+            tile.last_url = Some(url.clone());
+            tile.last_browser_event = Some(format!("url={url}"));
+            tracing::info!(
+                target: "meerkat.surface.event",
+                %member,
+                url = %url,
+                "web address changed"
+            );
+        }
+        WebSurfaceEvent::ConsoleMessage {
+            level,
+            text,
+            source,
+            line,
+        } => {
+            let detail = format!("console {level}: {text}");
+            tile.last_browser_event = Some(detail.clone());
+            tracing::warn!(
+                target: "meerkat.surface.event",
+                %member,
+                level = %level,
+                text = %text,
+                source = ?source,
+                line = ?line,
+                "web console message"
+            );
+        }
+        WebSurfaceEvent::ScriptException { text, source, line } => {
+            tile.last_browser_event = Some(format!("script exception: {text}"));
+            tracing::warn!(
+                target: "meerkat.surface.event",
+                %member,
+                text = %text,
+                source = ?source,
+                line = ?line,
+                "web script exception"
+            );
+        }
+        WebSurfaceEvent::ProcessCrashed { reason } => {
+            tile.last_error = Some(format!("web process crashed: {reason}"));
+            tile.last_browser_event = Some(format!("process crashed: {reason}"));
+            tracing::error!(
+                target: "meerkat.surface.event",
+                %member,
+                reason = %reason,
+                "web process crashed"
+            );
+        }
+        WebSurfaceEvent::BackendDiagnostic { severity, message } => {
+            tile.last_browser_event = Some(message.clone());
+            match severity.as_str() {
+                "error" => tracing::error!(
+                    target: "meerkat.surface.event",
+                    %member,
+                    message = %message,
+                    "web backend diagnostic"
+                ),
+                "warn" => tracing::warn!(
+                    target: "meerkat.surface.event",
+                    %member,
+                    message = %message,
+                    "web backend diagnostic"
+                ),
+                _ => tracing::info!(
+                    target: "meerkat.surface.event",
+                    %member,
+                    message = %message,
+                    "web backend diagnostic"
+                ),
+            }
+        }
+        other => {
+            let detail = format!("{other:?}");
+            tile.last_browser_event = Some(detail.clone());
+            tracing::info!(
+                target: "meerkat.surface.event",
+                %member,
+                event = %detail,
+                "web browser event"
+            );
+        }
+    }
+}
+
+fn feature_label(status: &WebFeatureStatus) -> String {
+    match status {
+        WebFeatureStatus::Supported => "supported".into(),
+        WebFeatureStatus::Unsupported { reason } => format!("unsupported: {reason}"),
+        WebFeatureStatus::Partial { detail } => format!("partial: {detail}"),
     }
 }
 

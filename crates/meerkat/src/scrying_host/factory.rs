@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use forme::GraphMemberId;
 use inker::routing::{
-    ENGINE_SCRYING_WEB, EngineRouteDecision, SurfaceContract, SurfaceContractMode, SurfaceTargetId,
+    EngineRouteDecision, SurfaceContract, SurfaceContractMode, SurfaceTargetId, ENGINE_SCRYING_WEB,
 };
 use inker::{EngineProfileBinding, SurfaceEngineRegistry, SurfaceError, SurfaceSpawnRequest};
 use scrying::{PlatformCompositionRoot, PlatformWebSurfaceConfig, PlatformWebSurfaceProducer};
@@ -75,6 +75,10 @@ pub(super) fn spawn(
         shown_url: None,
         size: (width, height),
         last_error: None,
+        last_title: None,
+        last_url: None,
+        capabilities_logged: false,
+        last_browser_event: None,
         flip: None,
     };
     if navigate_on_spawn {

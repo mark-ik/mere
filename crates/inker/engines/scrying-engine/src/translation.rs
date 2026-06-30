@@ -15,22 +15,26 @@
 //! producer for the full event stream.
 
 use inker::{
-    Cookie as InkerCookie, CursorShape as InkerCursorShape, FocusReason as InkerFocusReason,
+    Cookie as InkerCookie, CookieAttributeCapabilities, CookieCapabilities,
+    CursorShape as InkerCursorShape, FocusReason as InkerFocusReason,
     KeyboardEvent as InkerKeyboardEvent, KeyboardModifiers as InkerKeyboardModifiers,
     MouseButton as InkerMouseButton, MouseEvent as InkerMouseEvent,
     MouseEventKind as InkerMouseEventKind, NativeTextureHandle, NavigationEvent as InkerNavEvent,
-    PointerEvent as InkerPointerEvent, SameSite as InkerSameSite, SurfaceError, SurfaceFrame,
-    SurfaceSettings, SurfaceSyncHandle, WebMessage,
+    PointerEvent as InkerPointerEvent, SameSite as InkerSameSite, ScriptCapabilities, SurfaceError,
+    SurfaceFrame, SurfaceSettings, SurfaceSyncHandle, WebFeatureStatus, WebFrameTransportMode,
+    WebMessage, WebSurfaceCapabilities as InkerWebSurfaceCapabilities, WebSurfaceEvent,
 };
 use scrying::{
-    CursorShape as ScryingCursorShape, FocusReason as ScryingFocusReason,
-    KeyEventKind as ScryingKeyEventKind, KeyModifierFlags as ScryingKeyModifierFlags,
-    KeyboardInput as ScryingKeyboardInput, MouseEventKind as ScryingMouseEventKind,
-    MouseInput as ScryingMouseInput, MouseVirtualKeys as ScryingMouseVirtualKeys,
-    NavigationEvent as ScryingNavEvent, PointerDevice as ScryingPointerDevice,
-    PointerEventKind as ScryingPointerEventKind, PointerInput as ScryingPointerInput,
-    SameSite as ScryingSameSite, WebSurfaceError, WebSurfaceFrame, WebSurfaceSettings,
     native_frame::NativeFrame as ScryingNativeFrame, native_frame::SyncMechanism,
+    CapabilityStatus as ScryingCapabilityStatus, CursorShape as ScryingCursorShape,
+    FocusReason as ScryingFocusReason, KeyEventKind as ScryingKeyEventKind,
+    KeyModifierFlags as ScryingKeyModifierFlags, KeyboardInput as ScryingKeyboardInput,
+    MouseEventKind as ScryingMouseEventKind, MouseInput as ScryingMouseInput,
+    MouseVirtualKeys as ScryingMouseVirtualKeys, NavigationEvent as ScryingNavEvent,
+    PointerDevice as ScryingPointerDevice, PointerEventKind as ScryingPointerEventKind,
+    PointerInput as ScryingPointerInput, SameSite as ScryingSameSite,
+    SystemWebviewBackend as ScryingBackend, WebSurfaceCapabilities as ScryingCapabilities,
+    WebSurfaceError, WebSurfaceFrame, WebSurfaceMode as ScryingSurfaceMode, WebSurfaceSettings,
 };
 
 // ── Errors ────────────────────────────────────────────────────────────
@@ -248,6 +252,107 @@ pub fn map_settings(s: &SurfaceSettings) -> WebSurfaceSettings {
     }
 }
 
+// ── Capabilities ──────────────────────────────────────────────────────
+
+pub fn map_capabilities(caps: ScryingCapabilities) -> InkerWebSurfaceCapabilities {
+    let transport_supported = capability_status(caps.imported_texture);
+    let overlay_supported = capability_status(caps.native_child_overlay);
+    let snapshot_supported = capability_status(caps.cpu_snapshot);
+    let basic_cookie_attrs = CookieAttributeCapabilities {
+        same_site: WebFeatureStatus::Supported,
+        partitioned: WebFeatureStatus::Partial {
+            detail: "supported only on backends exposing partitioned-cookie setters".into(),
+        },
+        http_only: WebFeatureStatus::Supported,
+        secure: WebFeatureStatus::Supported,
+        expires: WebFeatureStatus::Supported,
+    };
+    InkerWebSurfaceCapabilities {
+        backend_name: backend_name(caps.backend).into(),
+        backend_version: None,
+        frame_transport: map_surface_mode(caps.preferred_mode),
+        cookie: CookieCapabilities {
+            read: WebFeatureStatus::Partial {
+                detail: "cookie reads are backend-specific and URL-scoped where exposed".into(),
+            },
+            write: WebFeatureStatus::Supported,
+            delete: WebFeatureStatus::Partial {
+                detail: "cookie delete support exists on platform stores but is not in inker's v1 WebSurface trait".into(),
+            },
+            change_events: WebFeatureStatus::Partial {
+                detail: "cookie change observation is wired on supported platform producers".into(),
+            },
+            attributes: basic_cookie_attrs,
+        },
+        script: ScriptCapabilities {
+            execute: WebFeatureStatus::Supported,
+            result: WebFeatureStatus::Supported,
+            exceptions: WebFeatureStatus::Partial {
+                detail: "script exceptions are returned through the serialized engine result where available".into(),
+            },
+        },
+        find_in_page: WebFeatureStatus::Partial {
+            detail: "find support depends on the concrete system webview backend".into(),
+        },
+        pdf: WebFeatureStatus::Partial {
+            detail: "PDF handling depends on the concrete system webview backend".into(),
+        },
+        downloads: WebFeatureStatus::Partial {
+            detail: "download events are exposed by backends that surface native download callbacks".into(),
+        },
+        devtools: WebFeatureStatus::Partial {
+            detail: "devtools can be enabled/opened where the platform webview exposes it".into(),
+        },
+        popups: WebFeatureStatus::Supported,
+        permissions: WebFeatureStatus::Partial {
+            detail: "permission prompts are backend-specific".into(),
+        },
+        auth: WebFeatureStatus::Supported,
+        context_menus: WebFeatureStatus::Supported,
+        drag_drop: WebFeatureStatus::Supported,
+        ime_observability: WebFeatureStatus::Supported,
+        accessibility: WebFeatureStatus::Partial {
+            detail: "system-webview accessibility remains owned by the platform view".into(),
+        },
+        snapshot: snapshot_supported.clone(),
+        degradation_reasons: vec![
+            caps.reason.into(),
+            format!("imported_texture={transport_supported:?}"),
+            format!("native_child_overlay={overlay_supported:?}"),
+        ],
+    }
+}
+
+fn capability_status(status: ScryingCapabilityStatus) -> WebFeatureStatus {
+    match status {
+        ScryingCapabilityStatus::Supported => WebFeatureStatus::Supported,
+        ScryingCapabilityStatus::Unsupported(reason) => WebFeatureStatus::Unsupported {
+            reason: format!("{reason:?}"),
+        },
+    }
+}
+
+fn map_surface_mode(mode: ScryingSurfaceMode) -> WebFrameTransportMode {
+    match mode {
+        ScryingSurfaceMode::ImportedTexture => WebFrameTransportMode::ImportedTexture,
+        ScryingSurfaceMode::NativeChildOverlay => WebFrameTransportMode::NativeChildOverlay,
+        ScryingSurfaceMode::CpuSnapshot => WebFrameTransportMode::CpuSnapshot,
+        ScryingSurfaceMode::Unsupported => WebFrameTransportMode::Unsupported,
+        _ => WebFrameTransportMode::Unsupported,
+    }
+}
+
+fn backend_name(backend: ScryingBackend) -> &'static str {
+    match backend {
+        ScryingBackend::WebView2 => "scrying.webview2",
+        ScryingBackend::WkWebView => "scrying.wkwebview",
+        ScryingBackend::Wpe => "scrying.wpe",
+        ScryingBackend::WebKitGtk => "scrying.webkitgtk",
+        ScryingBackend::Unknown => "scrying.unknown",
+        _ => "scrying.unknown",
+    }
+}
+
 // ── Events ────────────────────────────────────────────────────────────
 
 /// Lossy map scrying's rich event vocabulary to inker's portable subset.
@@ -270,6 +375,107 @@ pub fn map_navigation_event(ev: ScryingNavEvent) -> Option<InkerNavEvent> {
         ScryingNavEvent::TitleChanged { title } => Some(InkerNavEvent::Finished {
             url: String::new(),
             title: Some(title),
+        }),
+        _ => None,
+    }
+}
+
+pub fn map_web_event(ev: ScryingNavEvent) -> Option<WebSurfaceEvent> {
+    match ev {
+        ScryingNavEvent::Starting { url } => {
+            Some(WebSurfaceEvent::Navigation(InkerNavEvent::Started { url }))
+        }
+        ScryingNavEvent::SourceChanged { url } => {
+            Some(WebSurfaceEvent::AddressChanged { url: url.clone() }).or(Some(
+                WebSurfaceEvent::Navigation(InkerNavEvent::Committed { url }),
+            ))
+        }
+        ScryingNavEvent::Completed { url, success } => {
+            let nav = if success {
+                InkerNavEvent::Finished { url, title: None }
+            } else {
+                InkerNavEvent::Failed {
+                    url,
+                    reason: "navigation failed".into(),
+                }
+            };
+            Some(WebSurfaceEvent::Navigation(nav))
+        }
+        ScryingNavEvent::TitleChanged { title } => Some(WebSurfaceEvent::TitleChanged { title }),
+        ScryingNavEvent::NewWindowRequested { url } => {
+            Some(WebSurfaceEvent::NewWindowRequested { url })
+        }
+        ScryingNavEvent::ContentProcessTerminated => Some(WebSurfaceEvent::ProcessCrashed {
+            reason: "web content process terminated".into(),
+        }),
+        ScryingNavEvent::AuthChallenged { url, host, .. } => Some(WebSurfaceEvent::AuthRequested {
+            origin: if host.is_empty() { url } else { host },
+            realm: None,
+        }),
+        ScryingNavEvent::DownloadStarted {
+            url,
+            suggested_filename,
+            ..
+        } => Some(WebSurfaceEvent::DownloadRequested {
+            url,
+            suggested_name: Some(suggested_filename),
+        }),
+        ScryingNavEvent::DownloadProgress { .. } => Some(WebSurfaceEvent::BackendDiagnostic {
+            severity: "info".into(),
+            message: "download progressed".into(),
+        }),
+        ScryingNavEvent::DownloadFinished { error, .. } => {
+            Some(WebSurfaceEvent::BackendDiagnostic {
+                severity: if error.is_some() { "warn" } else { "info" }.into(),
+                message: error.unwrap_or_else(|| "download finished".into()),
+            })
+        }
+        ScryingNavEvent::DownloadCancelled { .. } => Some(WebSurfaceEvent::BackendDiagnostic {
+            severity: "warn".into(),
+            message: "download cancelled".into(),
+        }),
+        ScryingNavEvent::DropDetected {
+            x, y, primary_url, ..
+        } => Some(WebSurfaceEvent::BackendDiagnostic {
+            severity: "info".into(),
+            message: format!("drop detected at {x},{y}; url={primary_url:?}"),
+        }),
+        ScryingNavEvent::MediaCaptureStateChanged {
+            audio_active_tracks,
+            video_active_tracks,
+        } => Some(WebSurfaceEvent::BackendDiagnostic {
+            severity: "info".into(),
+            message: format!(
+                "media capture changed: audio={audio_active_tracks}; video={video_active_tracks}"
+            ),
+        }),
+        ScryingNavEvent::ContextMenuRequested {
+            x,
+            y,
+            link_url,
+            image_url,
+            ..
+        } => Some(WebSurfaceEvent::ContextMenuRequested {
+            x,
+            y,
+            link_url,
+            image_url,
+        }),
+        ScryingNavEvent::AcceleratorKeyPressed { .. } => Some(WebSurfaceEvent::BackendDiagnostic {
+            severity: "info".into(),
+            message: "browser accelerator key pressed".into(),
+        }),
+        ScryingNavEvent::TextInputFocused { .. } => Some(WebSurfaceEvent::BackendDiagnostic {
+            severity: "info".into(),
+            message: "text input focused".into(),
+        }),
+        ScryingNavEvent::TextInputChanged { .. } => Some(WebSurfaceEvent::BackendDiagnostic {
+            severity: "info".into(),
+            message: "text input changed".into(),
+        }),
+        ScryingNavEvent::TextInputBlurred => Some(WebSurfaceEvent::BackendDiagnostic {
+            severity: "info".into(),
+            message: "text input blurred".into(),
         }),
         _ => None,
     }

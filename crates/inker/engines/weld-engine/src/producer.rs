@@ -8,7 +8,8 @@
 use inker::{
     Cookie, CursorShape, FocusReason, KeyboardEvent, MouseEvent, NativeTextureHandle,
     NavigationEvent, PointerEvent, SurfaceError, SurfaceFrame, SurfaceProducer, SurfaceSettings,
-    SurfaceSyncHandle, WebMessage, WebSurface, WebSurfaceCapabilities,
+    SurfaceSyncHandle, WebFeatureStatus, WebFrameTransportMode, WebMessage, WebSurface,
+    WebSurfaceCapabilities, WebSurfaceEvent,
 };
 
 /// A frame produced by a [`WeldSurface`]: the shared GPU texture handle the host
@@ -79,12 +80,49 @@ pub trait WeldSurface {
     fn poll_web_message(&mut self) -> Option<WebMessage>;
 
     fn web_capabilities(&self) -> WebSurfaceCapabilities {
-        WebSurfaceCapabilities::default()
+        let mut caps = WebSurfaceCapabilities {
+            backend_name: "weld.cef".into(),
+            frame_transport: WebFrameTransportMode::ImportedTexture,
+            ..WebSurfaceCapabilities::default()
+        };
+        caps.script.execute = WebFeatureStatus::Supported;
+        caps.script.result = WebFeatureStatus::Partial {
+            detail: "result-bearing script requires the host WeldSurface to wire CEF eval response plumbing".into(),
+        };
+        caps.devtools = WebFeatureStatus::Supported;
+        caps.popups = WebFeatureStatus::Supported;
+        caps.context_menus = WebFeatureStatus::Partial {
+            detail: "CEF context-menu events require host-side client callback wiring".into(),
+        };
+        caps.auth = WebFeatureStatus::Partial {
+            detail: "CEF auth events require host-side request callback wiring".into(),
+        };
+        caps.downloads = WebFeatureStatus::Partial {
+            detail: "CEF download events require host-side download callback wiring".into(),
+        };
+        caps.snapshot = WebFeatureStatus::Partial {
+            detail: "snapshots are available when the host WeldSurface implements capture".into(),
+        };
+        caps.degradation_reasons
+            .push("weld-engine defaults to unsupported cookie/script-result controls until the host overrides them".into());
+        caps
     }
 
     fn set_cookie(&mut self, _cookie: &Cookie) -> Result<(), SurfaceError> {
         Err(SurfaceError::Unsupported(
             "weld-engine cookie control is not wired yet".into(),
+        ))
+    }
+
+    fn get_cookies_for_url(&mut self, _url: &str) -> Result<Vec<Cookie>, SurfaceError> {
+        Err(SurfaceError::Unsupported(
+            "weld-engine cookie reads are not wired yet".into(),
+        ))
+    }
+
+    fn delete_cookie(&mut self, _cookie: &Cookie) -> Result<(), SurfaceError> {
+        Err(SurfaceError::Unsupported(
+            "weld-engine cookie delete is not wired yet".into(),
         ))
     }
 
@@ -206,8 +244,25 @@ impl WebSurface for WeldProducer {
         self.inner.set_cookie(cookie)
     }
 
+    fn get_cookies_for_url(&mut self, url: &str) -> Result<Vec<Cookie>, SurfaceError> {
+        self.inner.get_cookies_for_url(url)
+    }
+
+    fn delete_cookie(&mut self, cookie: &Cookie) -> Result<(), SurfaceError> {
+        self.inner.delete_cookie(cookie)
+    }
+
     fn execute_script_with_result(&mut self, script: &str) -> Result<String, SurfaceError> {
         self.inner.execute_script_with_result(script)
+    }
+
+    fn poll_web_event(&mut self) -> Option<WebSurfaceEvent> {
+        if let Some(event) = self.inner.poll_navigation_event().map(nav_to_web_event) {
+            return Some(event);
+        }
+        self.inner
+            .poll_web_message()
+            .map(WebSurfaceEvent::WebMessage)
     }
 
     fn poll_navigation_event(&mut self) -> Option<NavigationEvent> {
@@ -216,5 +271,14 @@ impl WebSurface for WeldProducer {
 
     fn poll_web_message(&mut self) -> Option<WebMessage> {
         self.inner.poll_web_message()
+    }
+}
+
+fn nav_to_web_event(event: NavigationEvent) -> WebSurfaceEvent {
+    match event {
+        NavigationEvent::Started { .. }
+        | NavigationEvent::Committed { .. }
+        | NavigationEvent::Finished { .. }
+        | NavigationEvent::Failed { .. } => WebSurfaceEvent::Navigation(event),
     }
 }

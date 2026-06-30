@@ -45,11 +45,11 @@ pub mod statements;
 
 pub use a11y::A11yCapability;
 pub use document::{
-    Block, BlockEvaluator, BlockEvaluators, BlockProvenance, BlockProvenanceMap,
-    DocumentDiagnostic, DocumentProvenance, DocumentTrustState, EngineDocument, EvalOutcome,
-    EvalOutput, EvaluationPolicy, Fetched, GophermapContext, InlineSpan, ResolvedProvenance,
-    TableAlignment, TranscludeOutcome, TransclusionPolicy, evaluate_blocks, inline_text,
-    parse_eval, parse_include, resolve_transclusions,
+    evaluate_blocks, inline_text, parse_eval, parse_include, resolve_transclusions, Block,
+    BlockEvaluator, BlockEvaluators, BlockProvenance, BlockProvenanceMap, DocumentDiagnostic,
+    DocumentProvenance, DocumentTrustState, EngineDocument, EvalOutcome, EvalOutput,
+    EvaluationPolicy, Fetched, GophermapContext, InlineSpan, ResolvedProvenance, TableAlignment,
+    TranscludeOutcome, TransclusionPolicy,
 };
 pub use engine::{Engine, EngineError, EngineInput, EngineRegistry};
 pub use routing::{
@@ -58,14 +58,15 @@ pub use routing::{
 };
 pub use sniff::sniff_content_type;
 pub use statements::{
-    LinkStatement, StatementOutcome, apply_link_statements, link_statements, resolve_rel,
+    apply_link_statements, link_statements, resolve_rel, LinkStatement, StatementOutcome,
 };
 pub use surface_engine::{
-    Cookie, CursorShape, EngineProfileBinding, FocusReason, KeyboardEvent, KeyboardModifiers,
-    MouseButton, MouseEvent, MouseEventKind, NativeTextureHandle, NavigationEvent,
-    PhysicalPosition, PointerEvent, SameSite, SurfaceEngine, SurfaceEngineRegistry, SurfaceError,
-    SurfaceFrame, SurfaceProducer, SurfaceSettings, SurfaceSpawnRequest, SurfaceSyncHandle,
-    WebFeatureStatus, WebMessage, WebSurface, WebSurfaceCapabilities,
+    Cookie, CookieAttributeCapabilities, CookieCapabilities, CursorShape, EngineProfileBinding,
+    FocusReason, KeyboardEvent, KeyboardModifiers, MouseButton, MouseEvent, MouseEventKind,
+    NativeTextureHandle, NavigationEvent, PhysicalPosition, PointerEvent, SameSite,
+    ScriptCapabilities, SurfaceEngine, SurfaceEngineRegistry, SurfaceError, SurfaceFrame,
+    SurfaceProducer, SurfaceSettings, SurfaceSpawnRequest, SurfaceSyncHandle, WebFeatureStatus,
+    WebFrameTransportMode, WebMessage, WebSurface, WebSurfaceCapabilities, WebSurfaceEvent,
 };
 
 /// Crate version.

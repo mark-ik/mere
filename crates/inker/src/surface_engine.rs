@@ -255,33 +255,186 @@ pub struct Cookie {
     pub partitioned: bool,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum WebFeatureStatus {
     Supported,
+    Unsupported { reason: String },
+    Partial { detail: String },
+}
+
+impl WebFeatureStatus {
+    pub fn unsupported(reason: impl Into<String>) -> Self {
+        Self::Unsupported {
+            reason: reason.into(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WebFrameTransportMode {
+    ImportedTexture,
+    NativeChildOverlay,
+    CpuSnapshot,
     Unsupported,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CookieAttributeCapabilities {
+    pub same_site: WebFeatureStatus,
+    pub partitioned: WebFeatureStatus,
+    pub http_only: WebFeatureStatus,
+    pub secure: WebFeatureStatus,
+    pub expires: WebFeatureStatus,
+}
+
+impl Default for CookieAttributeCapabilities {
+    fn default() -> Self {
+        Self {
+            same_site: WebFeatureStatus::unsupported("cookie SameSite support is unknown"),
+            partitioned: WebFeatureStatus::unsupported("partitioned cookie support is unknown"),
+            http_only: WebFeatureStatus::unsupported("HttpOnly cookie support is unknown"),
+            secure: WebFeatureStatus::unsupported("secure cookie support is unknown"),
+            expires: WebFeatureStatus::unsupported("cookie expiry support is unknown"),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CookieCapabilities {
+    pub read: WebFeatureStatus,
+    pub write: WebFeatureStatus,
+    pub delete: WebFeatureStatus,
+    pub change_events: WebFeatureStatus,
+    pub attributes: CookieAttributeCapabilities,
+}
+
+impl Default for CookieCapabilities {
+    fn default() -> Self {
+        Self {
+            read: WebFeatureStatus::unsupported("cookie reads are not wired"),
+            write: WebFeatureStatus::unsupported("cookie writes are not wired"),
+            delete: WebFeatureStatus::unsupported("cookie deletes are not wired"),
+            change_events: WebFeatureStatus::unsupported("cookie change events are not wired"),
+            attributes: CookieAttributeCapabilities::default(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScriptCapabilities {
+    pub execute: WebFeatureStatus,
+    pub result: WebFeatureStatus,
+    pub exceptions: WebFeatureStatus,
 }
 
 /// Runtime feature descriptor for web-surface capabilities that vary by
 /// backend instance rather than by the Rust type alone.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WebSurfaceCapabilities {
+    pub backend_name: String,
+    pub backend_version: Option<String>,
+    pub frame_transport: WebFrameTransportMode,
+    pub cookie: CookieCapabilities,
+    pub script: ScriptCapabilities,
     pub find_in_page: WebFeatureStatus,
     pub pdf: WebFeatureStatus,
     pub downloads: WebFeatureStatus,
+    pub devtools: WebFeatureStatus,
+    pub popups: WebFeatureStatus,
+    pub permissions: WebFeatureStatus,
+    pub auth: WebFeatureStatus,
+    pub context_menus: WebFeatureStatus,
     pub drag_drop: WebFeatureStatus,
     pub ime_observability: WebFeatureStatus,
+    pub accessibility: WebFeatureStatus,
+    pub snapshot: WebFeatureStatus,
+    pub degradation_reasons: Vec<String>,
 }
 
 impl Default for WebSurfaceCapabilities {
     fn default() -> Self {
         Self {
-            find_in_page: WebFeatureStatus::Unsupported,
-            pdf: WebFeatureStatus::Unsupported,
-            downloads: WebFeatureStatus::Unsupported,
-            drag_drop: WebFeatureStatus::Unsupported,
-            ime_observability: WebFeatureStatus::Unsupported,
+            backend_name: "unknown".into(),
+            backend_version: None,
+            frame_transport: WebFrameTransportMode::Unsupported,
+            cookie: CookieCapabilities::default(),
+            script: ScriptCapabilities {
+                execute: WebFeatureStatus::unsupported("script execution is not wired"),
+                result: WebFeatureStatus::unsupported("script results are not wired"),
+                exceptions: WebFeatureStatus::unsupported(
+                    "script exception reporting is not wired",
+                ),
+            },
+            find_in_page: WebFeatureStatus::unsupported("find in page is not wired"),
+            pdf: WebFeatureStatus::unsupported("PDF handling is not wired"),
+            downloads: WebFeatureStatus::unsupported("download handling is not wired"),
+            devtools: WebFeatureStatus::unsupported("devtools are not wired"),
+            popups: WebFeatureStatus::unsupported("popup routing is not wired"),
+            permissions: WebFeatureStatus::unsupported("permission prompts are not wired"),
+            auth: WebFeatureStatus::unsupported("auth prompts are not wired"),
+            context_menus: WebFeatureStatus::unsupported("context menu events are not wired"),
+            drag_drop: WebFeatureStatus::unsupported("drag/drop is not wired"),
+            ime_observability: WebFeatureStatus::unsupported("IME observability is not wired"),
+            accessibility: WebFeatureStatus::unsupported("surface accessibility is opaque"),
+            snapshot: WebFeatureStatus::unsupported("snapshots are not wired"),
+            degradation_reasons: Vec::new(),
         }
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum WebSurfaceEvent {
+    Navigation(NavigationEvent),
+    TitleChanged {
+        title: String,
+    },
+    AddressChanged {
+        url: String,
+    },
+    LoadProgress {
+        value: f32,
+    },
+    ConsoleMessage {
+        level: String,
+        text: String,
+        source: Option<String>,
+        line: Option<u32>,
+    },
+    ScriptException {
+        text: String,
+        source: Option<String>,
+        line: Option<u32>,
+    },
+    PermissionRequested {
+        kind: String,
+        origin: String,
+    },
+    AuthRequested {
+        origin: String,
+        realm: Option<String>,
+    },
+    DownloadRequested {
+        url: String,
+        suggested_name: Option<String>,
+    },
+    NewWindowRequested {
+        url: String,
+    },
+    ContextMenuRequested {
+        x: f64,
+        y: f64,
+        link_url: Option<String>,
+        image_url: Option<String>,
+    },
+    CookieStoreChanged,
+    ProcessCrashed {
+        reason: String,
+    },
+    BackendDiagnostic {
+        severity: String,
+        message: String,
+    },
+    WebMessage(WebMessage),
 }
 
 // ── Settings ───────────────────────────────────────────────────────────────
@@ -391,9 +544,38 @@ pub trait WebSurface: SurfaceProducer {
 
     // ── Session/script/events ────────────────────────────────────────────────
     fn set_cookie(&mut self, cookie: &Cookie) -> Result<(), SurfaceError>;
+    fn get_cookies_for_url(&mut self, url: &str) -> Result<Vec<Cookie>, SurfaceError> {
+        let _ = url;
+        Err(SurfaceError::Unsupported(
+            "cookie reads are not wired for this web surface".into(),
+        ))
+    }
+    fn delete_cookie(&mut self, cookie: &Cookie) -> Result<(), SurfaceError> {
+        let _ = cookie;
+        Err(SurfaceError::Unsupported(
+            "cookie delete is not wired for this web surface".into(),
+        ))
+    }
     fn execute_script_with_result(&mut self, script: &str) -> Result<String, SurfaceError>;
-    fn poll_navigation_event(&mut self) -> Option<NavigationEvent>;
-    fn poll_web_message(&mut self) -> Option<WebMessage>;
+    fn poll_web_event(&mut self) -> Option<WebSurfaceEvent> {
+        None
+    }
+    fn poll_navigation_event(&mut self) -> Option<NavigationEvent> {
+        while let Some(event) = self.poll_web_event() {
+            if let WebSurfaceEvent::Navigation(event) = event {
+                return Some(event);
+            }
+        }
+        None
+    }
+    fn poll_web_message(&mut self) -> Option<WebMessage> {
+        while let Some(event) = self.poll_web_event() {
+            if let WebSurfaceEvent::WebMessage(message) = event {
+                return Some(message);
+            }
+        }
+        None
+    }
 }
 
 // ── Registry ───────────────────────────────────────────────────────────────
@@ -537,10 +719,9 @@ mod tests {
         let mut reg = SurfaceEngineRegistry::new();
         reg.register(Box::new(StubSurfaceEngine));
         // `Box<dyn SurfaceProducer>` doesn't implement Debug, so avoid .expect()
-        assert!(
-            reg.spawn(&decision("test.surface"), &stub_request())
-                .is_ok()
-        );
+        assert!(reg
+            .spawn(&decision("test.surface"), &stub_request())
+            .is_ok());
     }
 
     #[test]
