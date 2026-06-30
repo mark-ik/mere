@@ -1,14 +1,21 @@
 # Djot Editor + Knot Nodes + Web Clips Plan
 
-**Status: building; editor surface reframed 2026-06-27** (see the Reframe section).
-The editor is no longer a chrome panel: a note is a locally-addressed knot document
-inker routes to a serval-document tile, created by typing a `knot://` address into
-the omnibar. The knot format, clips, polyglot vocabulary, and ergonomics below
-stand. Originally scoped 2026-06-24 via multi-agent code sweeps of the live
-workspace, adding the *write* side to a knot/djot stack that is already
-read-complete, plus an element-pick clip path into the graph, with an editor that
-stays pure Rust (jotdown for the outer djot, a `logos` lexer pack for
-inner-language injection; tree-sitter an optional breadth hatch).
+**Status: building; routed note tile, web-clip command, tall-note banding, and
+focused source writeback live.** The editor surface was reframed 2026-06-27: a
+note is a locally-addressed knot document inker routes to a serval-document tile,
+created by typing a `knot://` address into the omnibar. The mapper, local-knot
+producer, inline `Node.body` persistence, table prerequisite, serval-rendered knot
+tile, themed note sheet, `>clip` semantic plus cropped-visual clip writer, and
+focused `>knot_editor` save path are built. Note tiles now report their laid-out
+height and render cached scroll bands instead of only the top viewport. The bound
+source editor now sits over the focused tile content rect when that tile is
+visible. Remaining near-term UI work: richer source highlighting, live-on-change
+render refresh, autosave/history, and stable anchors for inline clip decorations.
+Originally scoped 2026-06-24 via multi-agent code sweeps of the live workspace,
+adding the *write* side to a knot/djot stack that is already read-complete, plus an
+element-pick clip path into the graph, with an editor that stays pure Rust (jotdown
+for the outer djot, a `logos` lexer pack for inner-language injection; tree-sitter
+an optional breadth hatch).
 
 This plan owns the **editor surface** (a djot writing pane), the **editable knot
 node** (a node whose body is a knot you author in place), and the **web-clip
@@ -83,18 +90,23 @@ onboards.
 
 ### Re-scoped slices
 
-1. **`EngineDocument` → serval-view mapper**, proven by rendering `mere://welcome`
-   as a serval document tile. Static knot, no kernel risk, self-demonstrating.
-2. **Omnibar `knot://` routing** to the local-knot producer, create-or-open, opening
-   the tile.
-3. **Persistence**: the inline `Node` body plus the `knot://` `AddressClaim`, so a
-   created note durably reopens (the kernel-schema change, isolated here with its
-   snapshot round-trip test).
-4. **Edit mode**: source editing (illume-highlighted) over the body, re-rendered
-   through the mapper on change.
+1. **`EngineDocument` → serval-view mapper — landed (`0ab66a7` / `3d7c7ea`).**
+   Proven by rendering a document-family scene through serval views, layout, and
+   netrender. Static knot, no kernel risk, self-demonstrating.
+2. **Omnibar `knot://` routing — landed.** The local-knot producer resolves
+   `Node.body` to `text/x-knot`; `knot://` navigation creates/focuses a node and
+   opens it as a workbench tile.
+3. **Persistence — landed (`4bf7a17`).** The inline `Node.body` plus the `knot://`
+   `AddressClaim` let a created note durably reopen, with the kernel snapshot
+   round-trip covered.
+4. **Edit writeback — first slice landed.** `>knot_editor` now binds to the focused
+   `knot://` node, seeds from `Node.body`, saves back to that body, refreshes the
+   live `text/x-knot` content state, invalidates note tile caches, and sits over
+   the focused tile content rect when visible. Remaining: richer highlight,
+   autosave/history, and live re-render-on-change behavior.
 
-The clip phases, the query-block and agent-node wave, and the deferred power-editing
-below continue unchanged.
+The semantic clip writer is now the first capture/provenance slice. Query blocks,
+agent nodes, cropped clip textures, and deferred power-editing continue unchanged.
 
 ---
 
@@ -132,8 +144,9 @@ reusable.
 - **Format sniff.** Detects `text/x-knot` (closing `---` frontmatter) versus
   `text/markdown`. File: `crates/inker/src/sniff.rs`.
 - **Clip producer.** `build_clip_knot(blocks, source, trust, note_kind)` and a
-  `_with_block_provenance` variant assemble a `.knot` from selected blocks.
-  Nothing calls either from a user action yet.
+  `_with_block_provenance` variant assemble a `.knot` from selected blocks. `>clip`
+  now calls the producer for selected web-surface fragments and whole-document
+  fallback clips.
   File: `crates/inker/engines/nematic/src/knot/expand/build.rs`.
 - **Page-to-graph pipe.** Whole-page fetch to `GraphContribution` to
   `apply_contribution` to `Orrery::ingest_graph`.
@@ -173,36 +186,42 @@ reusable.
   with inline-block and replaced-box layout. Today it is the node face and shape
   surface; it is the natural carrier for an inline web-clip block.
   File: `crates/meerkat/src/swatch.rs`.
-- **Node model is content-agnostic.** `Node` = `id: Uuid` plus
-  `addresses: Vec<AddressClaim>` plus title and metadata. There is no body field.
-  A knot node needs no new node *type*.
+- **Node model is content-agnostic but now has local body storage.** `Node` =
+  `id: Uuid` plus `addresses: Vec<AddressClaim>` plus title, metadata, and optional
+  `body`. A knot node needs no new node *type*; the body is the source text for
+  local note/clip nodes.
   Files: `crates/graph/graph-kernel/src/graph/node.rs`, `address.rs`.
-- **`ClippedFrom` edge already modeled.** `ProvenanceSubKind::ClippedFrom` exists
+- **`ClippedFrom` edge already modeled and now written by `>clip`.** `ProvenanceSubKind::ClippedFrom` exists
   in the edge taxonomy (edge_taxonomy.rs:186) and round-trips through the snapshot
-  (snapshot/from.rs, to.rs). It has zero writers on the live path.
+  (snapshot/from.rs, to.rs). The first live writer is the semantic clip command.
 
 ---
 
 ## What is net-new
 
-- **The edit-in side.** Every mutator today is a host pass that rebuilds the block
-  `Vec`. The editor pane is net-new, though it extends `TextInput`. The concrete
-  net-new pieces are a per-range style channel on the field, the click-to-place
-  wiring, and the highlight/ergonomics/structural layers below.
-- **A reachable new-note entry.** Both engines are registered, but no user action
-  creates a knot or opens one for editing. The in-the-wings audit names this one
-  wire as the biggest gap.
-- **Editable-note persistence.** Eidetic engrams are immutable (an edit makes a
-  new hash) and the graph snapshot has no body slot. **Decided: an inline body on
-  `Node`** (see Decisions).
-- **Element picker.** No hover-to-select UI exists. Today the path is whole-page
-  fetch plus tag and role extraction.
-- **Selector to fragment clip.** Nothing captures a chosen element's HTML subtree
-  as a stored clip body.
-- **Element-rect visual clip.** `acquire_frame` / `capture_snapshot_png` are
-  whole-surface; nothing crops to a selected element's box.
-- **Web-clip to node spawn plus provenance writer.** `build_clip_knot` produces
-  knot text, not a node; nothing spawns a node from it or asserts `ClippedFrom`.
+- **The edit-in side.** The first write path is live: the focused `knot://` node's
+  source opens in the bound tile-positioned editor and saves to `Node.body`.
+  Remaining editor work is a per-range style channel on the field,
+  click-to-place polish, autosave/history, and the highlight/ergonomics/structural
+  layers below.
+- **A reachable new-note entry.** `knot://` navigation creates/focuses a local note
+  node, opens it as a workbench tile, and `>knot_editor` opens that focused note's
+  source.
+- **Editable-note persistence.** Inline `Node.body` persistence is live, and the
+  editor save path now writes through it and refreshes the live `text/x-knot`
+  content cache. Eidetic publish snapshots remain immutable (an edit makes a new
+  hash). Remaining persistence polish is autosave/history rather than the basic
+  write seam.
+- **Element picker.** `>clip` arms a click picker on live web/scrying tiles via
+  `document.elementFromPoint`. Hover outlining remains polish, not the capture seam.
+- **Selector to fragment clip.** Live web surfaces now capture the chosen element's
+  title, text, links, selector, and sanitized HTML subtree into the clip fragment.
+- **Element-rect visual clip.** `capture_snapshot_png()` now supplies the whole
+  surface and `>clip` crops it to the selected element rect, capped before storage.
+- **Rendered/cropped clip tier.** `>clip` now spawns knot clip nodes, asserts
+  `ClippedFrom`, embeds the cropped PNG as an image block, stores it as the node
+  thumbnail, and applies it as the clip node's sprite face. Remaining clip polish is
+  inline decoration/anchor behavior inside edited notes.
 - **The editor pipe.** Highlight, folds, outline, structural motion, and injection,
   all pure Rust from jotdown plus curated inner lexers. Phase 3 (see Editor
   architecture).
@@ -422,23 +441,26 @@ zoo over djot's small rule set.
 
 Four moves, most primitives present.
 
-1. **Pick.** A hover-to-select picker on the live scrying tile. Run
+1. **Pick — live.** `>clip` arms a click picker on the live scrying tile and runs
    `execute_script_with_result` with a `document.elementFromPoint` probe to resolve
-   the element under the pointer and read its tag, id, class, and bounding rect.
-   The serval selector engine is the matcher for selector-driven picks.
-2. **Capture.** For the chosen element, pull its HTML subtree (plus
-   `serval-extract` scoped to that subtree) for the **semantic tier**, and read
-   its bounding rect to crop a region from `capture_snapshot_png()` for the
-   **rendered tier**.
-3. **Store.** Feed the captured blocks plus provenance to `build_clip_knot` to
-   assemble a `.knot`. The structured side can also ride `ingest.rs` to
-   `apply_contribution` to `Orrery::ingest_graph`.
-4. **Render and node.** A clip becomes a **node**, not a card. Spawn a node whose
-   body is the clip knot, render it as a new swatch kind, and assert a
-   `ProvenanceSubKind::ClippedFrom` edge to the source node. Inline in a note, the
-   clip renders as a block decoration (swatch sibling, not styled text), pinned by
-   a stable anchor so it survives edits around it. The rendered-texture tier
-   carries the on-site look; the semantic tier carries editable,
+   the element under the pointer and read its selector, links, text, HTML subtree,
+   and bounding rect. Hover outlining can layer on later.
+2. **Capture — live for web surfaces.** For the chosen element, pull its HTML
+   subtree and extracted text/links for the **semantic tier**, and crop the
+   selected rect from `capture_snapshot_png()` for the **rendered tier**. Non-web
+   fallbacks now route loaded/cached documents through the nematic registry so
+   markdown, knot, gemtext, feeds, and plain text preserve block/link structure
+   when possible.
+3. **Store — live.** Feed the captured blocks plus provenance to `build_clip_knot`
+   to assemble a `.knot`; store the cropped PNG as an image block, node thumbnail,
+   and sprite face when the surface supplies one.
+4. **Render and node — live as a node, inline editing later.** A clip becomes a
+   **node**, not a card. Spawn a node whose body is the clip knot, open it as a
+   routed note tile, and assert a `ProvenanceSubKind::ClippedFrom` edge to the
+   source node. Inline in a note, the clip should render as a block decoration
+   (swatch sibling, not styled text), pinned by a stable anchor so it survives edits
+   around it. The rendered-texture tier carries the on-site look; the semantic tier
+   carries editable,
    statements-bearing content. Register the pick-and-clip action as a command id
    with a consent gate. The faithful HTML fragment tier (sanitized html5ever with
    site context) is the later fidelity rung, owned by the knot-evaluation plan; v1
@@ -514,26 +536,23 @@ gutter and blame, and a minimap (notes are short and have an outline).
 
 ## Phasing (done-conditions)
 
-**Phase 1: editable knot, round-trips in memory, mouse-placeable.**
-Done: an editor pane opens a `.knot` source string and edits it with caret,
-selection, and IME on the extended `TextInput` (multi-line `textarea` handler).
-Click-to-place and drag-select work: `caret_byte_at_point` is wired through the
-`IncrementalLayout` session to `set_caret_byte` with a meerkat call site. On save,
-`Engine::render(text/x-knot)` shows the rendered blocks in the document-canvas
-preview pane beside the source. No highlighting, no persistence yet.
+**Phase 1: editable knot, round-trips in memory, mouse-placeable — landed for the bound editor.**
+Live: the bound editor opens the focused `.knot` source, edits through the existing
+multi-line `TextInput`, and saves back to `Node.body`; the routed note tile refreshes
+from the updated `text/x-knot` content state. It is positioned over the focused
+tile content rect when that rect exists, with fixed overlay fallback otherwise.
+Remaining Phase 1 polish is any click/drag behavior that only fails in the
+tile-positioned placement.
 
 **Phase 2: highlight, ergonomics, new-note entry, persistence, other formats.**
-Done: jotdown `into_offset_iter` spans drive syntax highlight on the edit surface
-via a new per-range style channel (zero new dependency, browser-clean). Sticky
-soft-wrap goal column. Undo/redo as grouped transactions. A new-note command id
-creates a knot node; the editor saves its body to the inline `Node` body store and
-reopen restores it. Opening `.md` or `.txt` routes through `sniff` to the right
-engine for preview while editing raw text; each saves back in its own format.
-Carries the `Node` body plus `PersistedNode` schema change and its snapshot
-round-trip test (highest blast radius, isolated here).
+Partly live: `knot://` creates/focuses the note node, inline `Node.body` plus
+snapshot round-trip are built, and the editor saves/reopens through that body.
+Remaining: jotdown `into_offset_iter` spans driving a per-range style channel,
+undo/redo grouping, embedded-tile ergonomics, and `.md` / `.txt` raw-edit saveback
+through `sniff`.
 
 **Phase 3: editor pipe, injection, live authoring affordances.**
-Done: a container tree built from jotdown's nested events drives fold sections, the
+Done when: a container tree built from jotdown's nested events drives fold sections, the
 heading outline (ties into the gloss outline lens plan), and expand/shrink
 structural selection. Injection highlights the inner language of a polyglot block:
 a per-language lexer dispatch reads the fence or `lang` label and runs that
@@ -546,23 +565,27 @@ auto-pairs, `/` slash menu, `[[` node-link completion, all registered as command
 ids. All pure Rust, native and PWA identical, no wasm or C toolchain. Eval depends
 on a host evaluator being registered.
 
-**Phase 4: semantic web clip to node (inline block decoration).**
-Done: a picker selects an element on a live scrying tile, captures its HTML subtree
-plus extracted text and links via `execute_script_with_result`, builds a clip knot
-with `build_clip_knot`, spawns a knot node, and asserts a `ClippedFrom` edge to the
-source. The clip renders as a block decoration pinned by a stable anchor. Consent
-UI present, command-registered. First live writer of `ClippedFrom`, so it gets its
-own assert plus snapshot test.
+**Phase 4: semantic web clip to node — landed, inline block polish remains.**
+Done: `>clip` selects an element on a live surface, captures its semantic body plus
+extracted text and links via `execute_script_with_result`, builds a clip knot with
+`build_clip_knot`, spawns a knot node, and asserts a `ClippedFrom` edge to the
+source. The writer has focused graph-level regression coverage. The remaining
+Phase 4 work is note-editor integration: rendering a clip inline as a block
+decoration pinned by a stable anchor. First implementation is web-backed because
+web surfaces can answer element queries; non-web fallback now routes loaded/cached
+documents through nematic, and later producers can still provide their own selected
+fragment without redoing node/provenance creation.
 
-**Phase 5: on-site rendered tier.**
-Done: the clip carries a cropped texture of the element's rect (from
-`capture_snapshot_png`) rendered as a swatch kind, so the clip node shows the
-element as it appeared on the page alongside its editable semantic body. Validate
-the device-pixel-ratio and scroll-offset mapping between `getBoundingClientRect`
-and the captured surface at runtime.
+**Phase 5: on-site rendered tier — first slice landed, runtime validation remains.**
+Done: the clip carries a cropped texture of the element's rect from
+`capture_snapshot_png`, embeds it into the knot as an image block, stores it as the
+node thumbnail, and uses it as the clip node's sprite face. Remaining: headed
+runtime validation of device-pixel-ratio and scroll-offset mapping between
+`getBoundingClientRect` and the captured surface, plus richer inline swatch
+presentation once the note editor owns block decoration anchors.
 
 **Query blocks and agent nodes (node-kinds wave, beside the clips).**
-Done: a ` ```=query ` fence embeds a Navigator swatch by its (scope, lens, filters),
+Done when: a ` ```=query ` fence embeds a Navigator swatch by its (scope, lens, filters),
 rendered inline as a live, edge-config-filtered result over graph truth (the gloss
 swatch's djot-block consumer). An agent node promotes that query to a whole knot node
 whose body is the query/policy and whose edges are the materialized,
@@ -572,7 +595,7 @@ editor authors the body, the orrery materializes the edges. Near-term (this
 node-kinds wave, the same as the clip phases), not the deferred Phase 6.
 
 **Phase 6 (deferred): fidelity, federation, power-editing.**
-Done: clips can render a sanitized HTML fragment with site context (the
+Done when: clips can render a sanitized HTML fragment with site context (the
 knot-evaluation HTML tier); shared notes publish to a `knot://` addressable or
 engram path (the `AddressKind` variant added here); emphasis, strong, and nested
 links survive the parse round-trip. Multi-cursor lands here over the anchor layer
@@ -698,8 +721,12 @@ Open:
   and maintained rather than free-ridden from a grammar community. Bounded for a note
   vocabulary; weigh again only if breadth grows, when the tree-sitter hatch amortizes
   better.
-- `ClippedFrom` is modeled and persists but has zero live writers. Phase 4 is its
-  first writer, so the assert path and its snapshot round-trip need their own test.
+- `ClippedFrom` now has a first live writer through `>clip`, with graph-level
+  regression coverage around clip-node creation, edge assertion, and thumbnail
+  storage. Fragment selection and clip-node creation remain separate: web surfaces
+  provide the first selected fragment through scripting; other producers can later
+  provide a semantic fragment through the same host command without pretending they
+  are web pages.
 - The element-rect crop assumes the JS bounding rect maps cleanly onto the captured
   surface's pixel space. Device-pixel-ratio and scroll-offset mismatches between
   `getBoundingClientRect` and `capture_snapshot_png` are a runtime failure mode to
@@ -1107,3 +1134,47 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   bridge (the serval note is UA-default serif on a placeholder light page for now); slice 4
   (in-tile source editing); banding for tall notes; and the deferred networked / co-op `knot://`
   resolution.
+- **2026-06-29, status refresh before web-clip implementation.** Re-read the plan
+  against the live seams after the capture/provenance membrane closed C4. Landed:
+  the document-family mapper, `DocumentBlock::Table`, inline `Node.body`, local
+  `knot://` producer, open-as-tile navigation, and serval-rendered knot note. Still
+  live but superseded: the `>knot_editor` chrome panel, useful only as a scratch
+  prototype until in-tile source editing replaces it. Next implementation target:
+  Phase 4's semantic web-clip command/picker — create the clip node from a selected
+  surface fragment and assert `ProvenanceSubKind::ClippedFrom`; cropped texture,
+  query blocks, agent nodes, and networked `knot://` remain later work.
+- **2026-06-29, semantic web clip landed.** `Command::ClipFocused` / `>clip` now
+  clips the focused node into a local `knot://clip/<uuid>` node with `Node.body`
+  set to `build_clip_knot(...)`, opens that note as a workbench tile, and asserts
+  `ProvenanceSubKind::ClippedFrom` from the clip node back to the source. Live web
+  surfaces arm a click picker and capture title/text/links via
+  `execute_script_with_result`; non-surface nodes clip the loaded or cached document
+  body through the same fragment-to-knot path. Remaining Phase 4 polish: graph-level
+  regression around the edge writer and richer producer-provided selected fragments
+  for non-web surfaces. Phase 5 cropped texture remains separate.
+- **2026-06-29, open clip threads closed.** The clip fragment now carries an optional
+  cropped visual generated from `capture_snapshot_png()` and the selected element
+  rect; the writer embeds it as an image block, stores it as the clip node thumbnail,
+  and sets the clip node's sprite face. Non-web fallback now routes loaded/cached
+  document bodies through the nematic registry so markdown, knot, gemtext, feeds,
+  and plain text preserve parsed blocks and links when possible. Focused `web_clip`
+  tests now cover WebView2 payload parsing, script coordinates, markdown fallback,
+  crop sizing, clip-node graph relation/thumbnail writing, and knot provenance.
+  The routed note tile now uses a themed note sheet. Remaining djot-surface threads:
+  focused source editing and tall-note banding/scroll-windowing.
+- **2026-06-29, tall-note banding landed.** `note_surface` now has a band render
+  path that lays out the note at the visible viewport, emits a cached vertical band,
+  and reports the full scrollable note height. The window caches that measured
+  height per note tile and feeds it into wheel clamping, UV composition, and find
+  auto-scroll, so long `knot://` notes can scroll through the existing card/tile
+  band machinery. Remaining djot-surface thread: focused source editing.
+- **2026-06-29, focused source editing landed.** `Command::ToggleKnotEditor` /
+  `>knot_editor` moved from chrome-only scratch behavior to the host command drain:
+  it targets the focused `knot://` graph member, loads source from `Node.body` or
+  the local-knot starter, and the editor's Save button writes back to `Node.body`,
+  stamps `text/x-knot`, refreshes `shared.content.pages`, invalidates note tile
+  band/texture/height caches, and sits over the focused tile content rect when
+  visible. Regression coverage: `knot_editor_saves_the_focused_note_body` and
+  `knot_editor_uses_bound_tile_rect_when_available`. Remaining: richer highlight,
+  live-on-change render refresh, inline clip decoration anchors, and
+  autosave/history polish.

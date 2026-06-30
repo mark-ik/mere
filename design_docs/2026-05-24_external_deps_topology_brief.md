@@ -57,6 +57,22 @@ fast lib suites, `-KeepGoing` collects all failures; logs land in
 `target/smoke/` (gitignored). Run it after pulling or landing cross-repo
 work. First run 2026-06-12: green across the lattice, ~3 minutes warm.
 
+## Local Cargo config and Meerkat CLI (added 2026-06-29)
+
+Local overrides are repo-scoped. Do not put `paths = [...]` overrides in
+`Code/.cargo/config.toml`; Cargo inherits that parent config into every repo
+under `Code/`, so a package-name match can affect unrelated workspaces. Mere's
+ignored `repos/mere/.cargo/config.toml` owns its local edit loop with
+source-specific `[patch."https://github.com/mark-ik/<repo>.git"]` entries for
+serval, netrender, netfetcher, errand, wgpu-scry, and wgpu-graft, plus
+`build.target-dir = "C:/t/meerkat-target"`.
+
+The blessed Meerkat local runner is
+[`repos/mere/scripts/meerkat.ps1`](../scripts/meerkat.ps1). Short wrappers cover
+the common commands: `check-meerkat.ps1`, `test-roster.ps1`, and
+`drive-meerkat.ps1`. Use these instead of assuming `target/debug/meerkat.exe` or
+following a stale `graphshell-target` cache path.
+
 ## Path-dep convention (`repos/` → `crates/`)
 
 Because `crates/` and `repos/` are siblings, a path-dep from a repo into a

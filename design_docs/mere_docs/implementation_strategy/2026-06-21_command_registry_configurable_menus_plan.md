@@ -51,6 +51,14 @@ realized today. Separately, web-content scripting is the JS / Nova-Boa lane. The
 engine-agnostic — it must not bake in a specific engine — but "rhai" is correct for the omnibar
 automation lane, which is the existing proof-of-concept consumer of the catalog.)
 
+Runtime command mods are a follow-on to this registry, not a separate command
+bus. The shape is documented in
+[`2026-06-30_runtime_mod_authoring_loop_plan.md`](2026-06-30_runtime_mod_authoring_loop_plan.md):
+a Rhai command pack contributes dynamic registry entries, receives a read-only
+context snapshot, returns action requests, and lets the host validate them
+through the same command registry path. Rhai stays the local command language;
+the portable untrusted mod boundary stays Wasm/WIT.
+
 One **command registry**: every user action — and every setting — is a registry entry with
 
 - a stable **id** (`orrery.layout.set:<id>`, `node.open-tile`, `graph.add-node`,

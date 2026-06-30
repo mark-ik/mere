@@ -1,12 +1,12 @@
 # Communal Compute Across the Tiers (volunteer computing, time banks, and the moot ladder)
 
 **Date**: 2026-06-10
-**Status**: Research brief. The social and tier-scale layer over the
-[resource coordination brief](2026-06-04_resource_coordination_brief.md), which
-owns the mechanics (trust rings, bounty grammar, two ledgers, verification
-tiers, storage durability, inference rungs, namespace isolation; note its
-2026-06-10 scripting correction: Rhai/Rune dropped for Rust + JS + declarative
-policy). This
+**Status**: Research brief. As of the 2026-06-30 resource-coordination split,
+this is the authority for the communal-compute and model-hosting lane. It sits
+over the [resource coordination map](2026-06-04_resource_coordination_brief.md)
+and its child plans, which own the mechanics (mesh substrate, leases,
+capability grants, bounty verification, storage durability, namespace
+isolation, and inference rungs). This
 brief answers the question the mechanics left implicit: how do moots actually
 harness people's personal devices, share that power outward through kith and
 community, and scale to mootholds and coalitions with big ideas and big
@@ -21,14 +21,17 @@ computation budgets?
 
 ## 1. How fleshed out is the existing model? (honest assessment)
 
-More than remembered. The resource coordination brief carries five
+More than remembered. The resource-coordination work carries several
 adversarially-verified research passes and a complete mechanics design:
-trust-graduated rings, the bounty as the one primitive, reciprocity credits
-with the tessera valve, the T0-T3 verification ladder, erasure-coded audited
-storage, the route-first-shard-last inference ladder, the communal-big-model
-verdict (hosting reachable now for async work; WAN training demonstrated to
-32B but only on curated nodes), the Plan-9 namespace + Rhai isolation story,
-and nine staged milestones. On paper, the *mechanics* are largely designed.
+trust-graduated rings, the bounty as the outer-ring primitive, reciprocity
+credits with the tessera valve, the T0-T3 verification ladder, erasure-coded
+audited storage, the route-first-shard-last inference ladder, the
+communal-big-model verdict (hosting reachable now for async work; WAN training
+demonstrated to 32B but only on curated nodes), the Plan-9 namespace model, and
+the current isolation split: declarative policy and trusted browser
+orchestration in-browser, trusted worker kernels over namespace-bounded data,
+and fuel-metered Wasmtime only for native arbitrary-compute helpers. On paper,
+the *mechanics* are largely designed.
 
 What is thin, and what this brief supplies:
 
@@ -209,6 +212,11 @@ The timebanking literature's failure modes, read against compute:
   carries real money. No design change now.
 
 ## 5. What this adds to the plans (nothing replaced)
+
+As of 2026-06-30, this brief owns lane 5 from the resource-coordination split:
+communal compute, tier-scale hosting, model-hosting caveats, time-bank policy,
+and volunteer-computing lessons. It does not own the mesh substrate, lease
+scheduler, kith capability grants, or bounty settlement grammar.
 
 - **The moot-geist loop is the first communal-compute product story**: after
   the mechanics brief's milestone 3 (data-parallel batch queue), the LCZero

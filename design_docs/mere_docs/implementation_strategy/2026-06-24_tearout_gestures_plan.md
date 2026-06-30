@@ -278,7 +278,10 @@ The remaining gesture work, with seams and rough size. Independent of the graphl
 - **Ambiguous-drag toast (G1) — now a notification-subsystem consumer; foundation DONE
   (2026-06-27).** Mark's reframe: notifications are a **Steward-accounted subsystem**, and toasts
   are their *transient view* — the ambiguous-drag prompt is one **actionable** notification, not a
-  one-off chrome widget. **Foundation built + tested:** a `NotificationRecord` log in
+  one-off chrome widget. The subsystem has its own plan now —
+  [notification subsystem plan](2026-06-27_notification_subsystem_plan.md) (this item is its P2
+  actionable consumer); the tear-out side here is just the no-modifier drag-out-vs-pin gesture.
+  **Foundation built + tested:** a `NotificationRecord` log in
   `HostObservability` (beside `diagnostics`), `record_notification(severity, title, body,
   transient)`, and `HostObservability::notification_rows` which the **Steward** now surfaces
   (`steward_rows`); unit-tested `notifications_log_and_surface_for_the_steward`. **Remaining
@@ -460,3 +463,24 @@ v0 (palette parent link suffices); auto-consolidation policy disabled by default
   with seams + a rough order, and pointed G6's branch-die half at the graphlet plan's #3. The
   graphlet subsystem's own open items (#1 per-window focus isolation, #3 donor-delete) live in
   the [graphlet wiring plan](2026-06-25_graphlet_wiring_plan.md).
+- **2026-06-27** — **Trailing items pass: G6 + fork-restore + G5 move + G2 content done; toast +
+  tile-tab reframed.** Verified **G6 cascade** is met via the graphlet plan's #3 (close-windows +
+  pool-drop; marked done). **Fork restore** turned out to be already working — `fork_session_from`
+  persists the manifest+graph like `create_session`, so `bootstrap_sessions`' `load_from_disk`
+  re-lists it; the "not wired" note predated the code. Locked by `fork_session_restores_on_restart`.
+  **G5 move:** an **Alt**-modified cross-graph drop → `MoveNodeAcross` → `move_node_across` (copy +
+  release the source by uuid, no eidetic tombstone; Alt because Shift/Ctrl are the tear modifiers
+  and Ctrl reads as copy). v0 copy+release (fresh dest uuid); identity-preserving move is a
+  refinement. Unit-tested. **G2 leaf content:** `build_leaf_view_for` / `leaf_workbench_frame` —
+  the torn leaf is a single `PaneContent::Workbench` pane over the donor graph with the node as its
+  focused tile, no orrery pane; `TearOut` now carries `{ node, from }`. Unit-tested. **Reframes
+  (Mark):** the **toast** becomes a **notification subsystem accounted for by the Steward** + toasts
+  as its transient view — foundation built + tested (`NotificationRecord` log in
+  `HostObservability`, `record_notification`, `notification_rows` surfaced by the Steward;
+  `notifications_log_and_surface_for_the_steward`); the **tile-tab origin** rides an
+  **orrery-as-desktop** reframe (the orrery is the persistent dock anchor; make the workbench dock
+  side + ratio a setting; add a `pelt_core` drag-*out* signal). The interactive remainder (the
+  chrome toast view, actionable notifications, the no-modifier drag-out-vs-pin gesture, the
+  dock-side setting + toggle UI, and the `pelt_core` `DropTarget::Outside`) is sequenced for a
+  headed session. Full suite green: forme 114, kernel 257, meerkat 92 lib / 178 bin, orrery 80.
+  Nothing committed.

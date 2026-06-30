@@ -118,17 +118,67 @@ correction:
   scripting does not worsen it. Cure it independently: encode the Scene as a flat,
   pointer-free buffer and *transfer* the `ArrayBuffer` (zero-copy ownership move)
   instead of structured-cloning it; ship incremental damage (band-scroll +
-  per-tile generation cache already exist host-side); use SAB in the PWA lane.
+  per-tile generation cache already exist host-side); use SAB in the PWA lane. The
+  flat encoder already exists and the per-frame cost is measured small (see §5a).
 - **One wire discipline serves both seams.** Both want a flat, position-independent
   representation (the component ABI forbids object graphs anyway). A single
   flat-buffer format makes the Scene transferable *and* the component copy a single
-  contiguous memcpy, and it unifies P-doc's missing `ContentUpdate`-`Serialize`
-  pass with D-doc's canonical-ABI shape rather than maintaining two regimes.
+  contiguous memcpy, and it unifies the (mere-side) missing `ContentUpdate`-`Serialize`
+  pass with D-doc's canonical-ABI shape rather than maintaining two regimes. Shared
+  serialization *technique* (flat buffers), separate *channels*: the Scene payload
+  (paths / glyphs / clips) and the component-ABI payload (DOM mutations / events) are
+  unrelated, so they share the toolchain, never the schema.
 
 Do **not** fuse the two seams into one hop. They serve different purposes (one is
 the isolation boundary, one is the thread boundary). Make each cheap in its own
 idiom: co-locate so the isolation hop is a memcpy, transfer so the thread hop is
 zero-copy.
+
+---
+
+## 5a. Measured: the Scene encoder already exists, and per-frame cost is small (2026-06-29)
+
+Grounding the §5 bet against the code. `netrender::Scene` is a flat op list
+(`Vec<SceneOp>` + a font / transform / image palette) and **already derives serde**,
+shipping `snapshot_postcard` / `replay_postcard` (a position-independent binary) plus
+JSON, behind netrender's `serde` feature. It was built for Roadmap A2 capture/replay,
+but it is exactly the flat buffer the transfer path wants. So §5's "encode the Scene as
+a flat buffer" is not greenfield work. Two gaps remain on the mere side: the `serde`
+feature is **off** in mere's netrender dep ([meerkat Cargo.toml](../../crates/meerkat/Cargo.toml)),
+and `ContentUpdate` (the band wrapper, [content.rs](../../crates/meerkat/src/content.rs))
+is not `Serialize`. This is "enable + wrap," not "build."
+
+Measured on representative page bands (release, opt-level 3; the `serialize_cost`
+test in `netrender/netrender/src/scene/mod.rs`, run with
+`cargo test -p netrender --features serde --lib serialize_cost -- --nocapture`):
+
+| scene | ops | clone | pc encode | pc decode | postcard | json |
+| --- | --- | --- | --- | --- | --- | --- |
+| text band, ops only | 81 | 5µs | 41µs | 68µs | 40 KB | 146 KB |
+| text band + 40KB font + 4 img | 85 | 7µs | 82µs | 129µs | 97 KB | 371 KB |
+| heavy band, ops only | 401 | 29µs | 195µs | 313µs | 202 KB | 727 KB |
+| heavy band + 40KB font + 4 img | 405 | 24µs | 227µs | 402µs | 258 KB | 952 KB |
+
+Reading:
+
+- **Per-frame encode is affordable.** A normal text band encodes in ~40µs / 40 KB; a
+  heavy band in ~200µs / 200 KB. The transfer itself (ArrayBuffer ownership move) is
+  zero-copy, so the encode *is* the whole web tax, a small fraction of a 16ms frame
+  even on the heavy band (encode + decode ~0.5ms).
+- **The asset palette, not the op list, drives size, and it re-ships every frame in a
+  naive encode.** A 40 KB font roughly doubles the band's wire size. Fonts and images
+  are amortizable (registered once, keyed by `Blob::id` / `ImageKey`); the op list
+  (glyphs) is the genuine per-frame delta. The transfer path should send blob bytes
+  only on first use and reference them by id after. The Scene already carries that id
+  machinery ("subsequent frames may omit data for already-cached keys"). This, not
+  faster encoding, is the real per-frame refinement.
+- **postcard is ~3.6x smaller than JSON**, confirming postcard as the wire format.
+- **Native pays none of this.** Clone is ~8x cheaper than encode, and on native the
+  content actor and the kernel share an address space, so there is no serialize hop at
+  all. Serialization is purely the cross-Worker (web) cost.
+
+So §5 holds and sharpens: the encoder exists and is cheap; the open work is
+asset-palette dedup-by-id on the wire, plus making `ContentUpdate` itself `Serialize`.
 
 ---
 
@@ -166,10 +216,12 @@ What remains:
 
 ## 7. What to measure / decide next
 
-- **The flat transferable Scene** (cost #1): add `Serialize`/flat-encode to the
-  `ContentUpdate` DTOs and measure per-frame transfer vs structured-clone of a
-  representative Scene. This is the P-doc de-risking step, now also the thing that
-  makes scripted pages cheap on web.
+- **The flat transferable Scene** (cost #1): **measured, §5a.** The `Scene` encoder
+  already exists (netrender postcard) and is cheap per frame. The remaining work is
+  mere-side plumbing, not de-risking: enable netrender's `serde` feature in mere, make
+  `ContentUpdate` `Serialize` (wrap the band metadata), dedup the asset palette by id
+  on the wire (send blob bytes once, reference by id after), then wire the Worker
+  `postMessage` transfer of the `ArrayBuffer`.
 - **Cost #2 per turn** on native and web (jco): memcpy of a representative
   mutation batch through the canonical ABI. Confirm the per-turn batched contract
   keeps it negligible next to relayout.
