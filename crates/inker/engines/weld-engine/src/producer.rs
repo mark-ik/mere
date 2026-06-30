@@ -6,9 +6,9 @@
 //! and [`WeldProducer`], the adapter satisfying `inker::SurfaceProducer`.
 
 use inker::{
-    CursorShape, FocusReason, KeyboardEvent, MouseEvent, NativeTextureHandle, NavigationEvent,
-    PointerEvent, SurfaceError, SurfaceFrame, SurfaceProducer, SurfaceSettings, SurfaceSyncHandle,
-    WebMessage,
+    Cookie, CursorShape, FocusReason, KeyboardEvent, MouseEvent, NativeTextureHandle,
+    NavigationEvent, PointerEvent, SurfaceError, SurfaceFrame, SurfaceProducer, SurfaceSettings,
+    SurfaceSyncHandle, WebMessage, WebSurface, WebSurfaceCapabilities,
 };
 
 /// A frame produced by a [`WeldSurface`]: the shared GPU texture handle the host
@@ -78,6 +78,22 @@ pub trait WeldSurface {
     fn poll_cursor_shape(&mut self) -> Option<CursorShape>;
     fn poll_web_message(&mut self) -> Option<WebMessage>;
 
+    fn web_capabilities(&self) -> WebSurfaceCapabilities {
+        WebSurfaceCapabilities::default()
+    }
+
+    fn set_cookie(&mut self, _cookie: &Cookie) -> Result<(), SurfaceError> {
+        Err(SurfaceError::Unsupported(
+            "weld-engine cookie control is not wired yet".into(),
+        ))
+    }
+
+    fn execute_script_with_result(&mut self, _script: &str) -> Result<String, SurfaceError> {
+        Err(SurfaceError::Unsupported(
+            "weld-engine script result control is not wired yet".into(),
+        ))
+    }
+
     fn apply_settings(&mut self, settings: &SurfaceSettings) -> Result<(), SurfaceError>;
     fn capture_snapshot_png(&mut self) -> Result<Vec<u8>, SurfaceError>;
 }
@@ -116,6 +132,44 @@ impl SurfaceProducer for WeldProducer {
         }))
     }
 
+    fn send_mouse_input(&mut self, ev: MouseEvent) -> Result<(), SurfaceError> {
+        self.inner.notify_mouse(ev)
+    }
+
+    fn send_pointer_input(&mut self, ev: PointerEvent) -> Result<(), SurfaceError> {
+        self.inner.notify_pointer(ev)
+    }
+
+    fn send_keyboard_input(&mut self, ev: KeyboardEvent) -> Result<(), SurfaceError> {
+        self.inner.notify_keyboard(ev)
+    }
+
+    fn move_focus(&mut self, reason: FocusReason) -> Result<(), SurfaceError> {
+        self.inner.focus(reason)
+    }
+
+    fn poll_cursor_shape(&mut self) -> Option<CursorShape> {
+        self.inner.poll_cursor_shape()
+    }
+
+    fn apply_settings(&mut self, settings: &SurfaceSettings) -> Result<(), SurfaceError> {
+        self.inner.apply_settings(settings)
+    }
+
+    fn capture_snapshot_png(&mut self) -> Result<Vec<u8>, SurfaceError> {
+        self.inner.capture_snapshot_png()
+    }
+
+    fn as_web_surface(&mut self) -> Option<&mut dyn WebSurface> {
+        Some(self)
+    }
+}
+
+impl WebSurface for WeldProducer {
+    fn capabilities(&self) -> WebSurfaceCapabilities {
+        self.inner.web_capabilities()
+    }
+
     fn navigate_to_url(&mut self, url: &str) -> Result<(), SurfaceError> {
         self.inner.load_url(url)
     }
@@ -148,39 +202,19 @@ impl SurfaceProducer for WeldProducer {
         self.inner.can_go_forward()
     }
 
-    fn send_mouse_input(&mut self, ev: MouseEvent) -> Result<(), SurfaceError> {
-        self.inner.notify_mouse(ev)
+    fn set_cookie(&mut self, cookie: &Cookie) -> Result<(), SurfaceError> {
+        self.inner.set_cookie(cookie)
     }
 
-    fn send_pointer_input(&mut self, ev: PointerEvent) -> Result<(), SurfaceError> {
-        self.inner.notify_pointer(ev)
-    }
-
-    fn send_keyboard_input(&mut self, ev: KeyboardEvent) -> Result<(), SurfaceError> {
-        self.inner.notify_keyboard(ev)
-    }
-
-    fn move_focus(&mut self, reason: FocusReason) -> Result<(), SurfaceError> {
-        self.inner.focus(reason)
+    fn execute_script_with_result(&mut self, script: &str) -> Result<String, SurfaceError> {
+        self.inner.execute_script_with_result(script)
     }
 
     fn poll_navigation_event(&mut self) -> Option<NavigationEvent> {
         self.inner.poll_navigation_event()
     }
 
-    fn poll_cursor_shape(&mut self) -> Option<CursorShape> {
-        self.inner.poll_cursor_shape()
-    }
-
     fn poll_web_message(&mut self) -> Option<WebMessage> {
         self.inner.poll_web_message()
-    }
-
-    fn apply_settings(&mut self, settings: &SurfaceSettings) -> Result<(), SurfaceError> {
-        self.inner.apply_settings(settings)
-    }
-
-    fn capture_snapshot_png(&mut self) -> Result<Vec<u8>, SurfaceError> {
-        self.inner.capture_snapshot_png()
     }
 }

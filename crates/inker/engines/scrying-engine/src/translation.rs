@@ -15,12 +15,12 @@
 //! producer for the full event stream.
 
 use inker::{
-    CursorShape as InkerCursorShape, FocusReason as InkerFocusReason,
+    Cookie as InkerCookie, CursorShape as InkerCursorShape, FocusReason as InkerFocusReason,
     KeyboardEvent as InkerKeyboardEvent, KeyboardModifiers as InkerKeyboardModifiers,
     MouseButton as InkerMouseButton, MouseEvent as InkerMouseEvent,
     MouseEventKind as InkerMouseEventKind, NativeTextureHandle, NavigationEvent as InkerNavEvent,
-    PointerEvent as InkerPointerEvent, SurfaceError, SurfaceFrame, SurfaceSettings,
-    SurfaceSyncHandle, WebMessage,
+    PointerEvent as InkerPointerEvent, SameSite as InkerSameSite, SurfaceError, SurfaceFrame,
+    SurfaceSettings, SurfaceSyncHandle, WebMessage,
 };
 use scrying::{
     CursorShape as ScryingCursorShape, FocusReason as ScryingFocusReason,
@@ -29,8 +29,8 @@ use scrying::{
     MouseInput as ScryingMouseInput, MouseVirtualKeys as ScryingMouseVirtualKeys,
     NavigationEvent as ScryingNavEvent, PointerDevice as ScryingPointerDevice,
     PointerEventKind as ScryingPointerEventKind, PointerInput as ScryingPointerInput,
-    WebSurfaceError, WebSurfaceFrame, WebSurfaceSettings,
-    native_frame::NativeFrame as ScryingNativeFrame,
+    SameSite as ScryingSameSite, WebSurfaceError, WebSurfaceFrame, WebSurfaceSettings,
+    native_frame::NativeFrame as ScryingNativeFrame, native_frame::SyncMechanism,
 };
 
 // ── Errors ────────────────────────────────────────────────────────────
@@ -49,9 +49,9 @@ pub fn map_error(err: WebSurfaceError) -> SurfaceError {
 /// Map scrying's frame enum to inker's. Only native-texture variants produce
 /// a `Some(SurfaceFrame)`; CPU snapshots and overlay-only frames return
 /// `None` (the host has no inker-shaped path for them in v1).
-pub fn map_frame(frame: WebSurfaceFrame) -> Option<SurfaceFrame> {
+pub fn map_frame(frame: WebSurfaceFrame, fence_handle: Option<u64>) -> Option<SurfaceFrame> {
     match frame {
-        WebSurfaceFrame::Native(native) => map_native_frame(native),
+        WebSurfaceFrame::Native(native) => map_native_frame(native, fence_handle),
         WebSurfaceFrame::CpuRgba { .. }
         | WebSurfaceFrame::PngSnapshot { .. }
         | WebSurfaceFrame::OverlayOnly => None,
@@ -61,16 +61,22 @@ pub fn map_frame(frame: WebSurfaceFrame) -> Option<SurfaceFrame> {
     }
 }
 
-fn map_native_frame(frame: ScryingNativeFrame) -> Option<SurfaceFrame> {
+fn map_native_frame(frame: ScryingNativeFrame, fence_handle: Option<u64>) -> Option<SurfaceFrame> {
     match frame {
         ScryingNativeFrame::Dx12SharedTexture(tex) => {
             #[cfg(target_os = "windows")]
             let handle = tex.handle as u64;
             #[cfg(not(target_os = "windows"))]
             let handle = 0_u64;
+            let sync = match (tex.producer_sync, tex.fence_value, fence_handle) {
+                (SyncMechanism::ExplicitFence, value, Some(handle)) if value > 0 => {
+                    SurfaceSyncHandle::D3d12Fence { handle, value }
+                }
+                _ => SurfaceSyncHandle::None,
+            };
             Some(SurfaceFrame {
                 texture: NativeTextureHandle::D3d12Shared(handle),
-                sync: SurfaceSyncHandle::None,
+                sync,
                 width: tex.size.width,
                 height: tex.size.height,
                 resource_epoch: tex.generation,
@@ -101,6 +107,30 @@ fn map_native_frame(frame: ScryingNativeFrame) -> Option<SurfaceFrame> {
         }
         // `NativeFrame` is `#[non_exhaustive]`; future variants drop until mapped.
         _ => None,
+    }
+}
+
+// ── Cookies ───────────────────────────────────────────────────────────
+
+pub fn map_cookie(cookie: &InkerCookie) -> scrying::Cookie {
+    scrying::Cookie {
+        name: cookie.name.clone(),
+        value: cookie.value.clone(),
+        domain: cookie.domain.clone(),
+        path: cookie.path.clone(),
+        expires_at: cookie.expires,
+        is_secure: cookie.secure,
+        is_http_only: cookie.http_only,
+        same_site: cookie.same_site.map(map_same_site),
+        partitioned: cookie.partitioned,
+    }
+}
+
+fn map_same_site(same_site: InkerSameSite) -> ScryingSameSite {
+    match same_site {
+        InkerSameSite::Strict => ScryingSameSite::Strict,
+        InkerSameSite::Lax => ScryingSameSite::Lax,
+        InkerSameSite::None => ScryingSameSite::None,
     }
 }
 

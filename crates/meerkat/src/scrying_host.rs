@@ -120,11 +120,30 @@ impl ScryingHost {
         session_dir: &std::path::Path,
     ) {
         #[cfg(all(target_os = "windows", feature = "engine-scry"))]
-        self.pool
-            .drive(member, url, width, height, origin, window, device, queue, session_dir);
+        self.pool.drive(
+            member,
+            url,
+            width,
+            height,
+            origin,
+            window,
+            device,
+            queue,
+            session_dir,
+        );
         #[cfg(not(all(target_os = "windows", feature = "engine-scry")))]
         {
-            let _ = (member, url, width, height, origin, window, device, queue, session_dir);
+            let _ = (
+                member,
+                url,
+                width,
+                height,
+                origin,
+                window,
+                device,
+                queue,
+                session_dir,
+            );
             tracing::warn!("compatibility view: scrying X1 is Windows-only (plan X4)");
         }
     }
@@ -195,6 +214,24 @@ impl ScryingHost {
         let _ = member;
     }
 
+    /// Capture a semantic clip fragment from a scriptable live surface at tile-local
+    /// coordinates. Non-surface/off-platform builds report a normal command error.
+    pub fn capture_clip(
+        &mut self,
+        member: GraphMemberId,
+        x: i32,
+        y: i32,
+        source_url: &str,
+    ) -> Result<crate::web_clip::ClipFragment, String> {
+        #[cfg(all(target_os = "windows", feature = "engine-scry"))]
+        return self.pool.capture_clip(member, x, y, source_url);
+        #[cfg(not(all(target_os = "windows", feature = "engine-scry")))]
+        {
+            let _ = (member, x, y, source_url);
+            Err("no scriptable live surface on this platform".to_string())
+        }
+    }
+
     /// Stage a compatibility-view flip for `member`: the place/session captured from
     /// the serval side at the serval -> `scrying.web` pin. When this member's tile next
     /// spawns, the pool sets the carried cookies and navigates (instead of a blank
@@ -208,5 +245,11 @@ impl ScryingHost {
     }
 }
 
+#[cfg(all(target_os = "windows", feature = "engine-scry"))]
+mod factory;
+#[cfg(all(target_os = "windows", feature = "engine-scry"))]
+mod frame_import;
+#[cfg(all(target_os = "windows", feature = "engine-scry"))]
+mod scry_surface;
 #[cfg(all(target_os = "windows", feature = "engine-scry"))]
 mod windows_pool;

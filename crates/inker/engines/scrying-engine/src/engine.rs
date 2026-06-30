@@ -63,7 +63,7 @@ impl SurfaceEngine for ScryingTileEngine {
             tracing::warn!(?err, "scrying producer factory failed");
             err
         })?;
-        Ok(Box::new(ScryingProducer::new(inner)))
+        Ok(Box::new(ScryingProducer::new(inner, request.fence_handle)))
     }
 }
 
