@@ -13,6 +13,10 @@ impl Shell {
         window_id: WindowId,
         event: WindowEvent,
     ) {
+        // Any real window input defers the idle-cadence forgetting pass (B1) —
+        // independent of the match below so it covers every event uniformly,
+        // including the close path that returns early.
+        self.note_activity();
         // A close request needs no ctx and forks by role: the primary saves the
         // session and exits the app; a secondary just drops its view, leaving the
         // graph and the other windows intact. (MW3.)

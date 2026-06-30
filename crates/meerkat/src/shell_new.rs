@@ -516,6 +516,10 @@ impl Shell {
             a11y_action_routes: HashMap::new(),
             commands: Vec::new(),
             physics_wake,
+            // A fresh launch starts "active" (no idle pass before the user has done
+            // anything) with no recorded pass yet. (Alembic B1.)
+            last_activity: std::time::Instant::now(),
+            last_forgetting: None,
             _kernel: armillary::KernelThread::new(),
         };
         let pane_count = app

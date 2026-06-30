@@ -1,7 +1,7 @@
 # Athanor's steady-heat actor
 
 **Date**: 2026-06-25
-**Status**: Planned. Spun out of the [Alembic tail handoff](2026-06-25_alembic_tail_and_audit_polish_handoff.md)
+**Status**: P1 done (2026-06-30). Spun out of the [Alembic tail handoff](2026-06-25_alembic_tail_and_audit_polish_handoff.md)
 B1 (slice D's remainder). Architecture: [alembic memory + engrams](../technical_architecture/2026-06-09_alembic_memory_and_engrams.md).
 
 ## Goal
@@ -90,3 +90,16 @@ up a thread + snapshot hand-off for it. The actor's reason to exist is the conso
 - 2026-06-25: Drafted from the handoff B1, verified against `athanor.rs` (the pure pass logic + its
   "separate actor" note), `run_forgetting_pass`, `about_to_wait`, and the `spawn_fetcher` actor shape.
   Not started; P1 waits on the chrome-hot `main.rs`/`app_handler.rs` set clearing.
+- 2026-06-30: **P1 shipped.** `main.rs`/`app_handler.rs` were clear at landing time, so this went in
+  without a coordination wait. New `app_handler/idle_forgetting.rs`: `Shell` gained `last_activity: Instant`
+  (bumped by `note_activity`, called from `on_window_event` — any real input, not actor wakes) and
+  `last_forgetting: Option<Instant>`; `about_to_wait` calls `maybe_run_idle_forgetting_pass` after `apply`,
+  which fires `run_forgetting_pass` against the **primary** window's ctx once idle past `IDLE_GRACE`
+  (120s), throttled to `PASS_INTERVAL` (900s). Constants, not settings yet, per the plan's own gotcha.
+  **Deviation from the plan's literal text:** the plan suggested `ControlFlow::WaitUntil` so the loop
+  "wakes to re-check with no input pending" — verified against the live code that nothing in the app sets
+  `ControlFlow` anywhere (grepped clean), so winit's default `Poll` is already active and `about_to_wait`
+  already ticks continuously; adding `WaitUntil` scheduling here would be a wider event-loop-cadence change
+  outside this slice's scope, so P1 reads `Instant::now()` each tick instead (two comparisons, cheap) and
+  leaves `ControlFlow` untouched. P2 (consolidation) stays blocked on B7's lineage per the plan; P3 (Path B
+  actor) stays blocked on facet extraction landing.

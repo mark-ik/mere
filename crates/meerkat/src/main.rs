@@ -44,6 +44,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
+use std::time::Instant;
 
 use crate::serval_render::fragments_from_scripted_dom;
 use accesskit::NodeId as AccessNodeId;
@@ -251,6 +252,17 @@ struct Shell {
     /// its own offloaded physics, like the seed orrery did at boot. (Window
     /// composition P1, multi-graph.)
     physics_wake: armillary::Wake,
+    /// When the last real window input arrived — bumped by `note_activity` on every
+    /// `on_window_event`. The idle-cadence forgetting pass (Alembic B1) reads this to
+    /// stay off mid-interaction; an actor wake (`user_event`) does not bump it, so a
+    /// settling physics actor cannot itself suppress the pass forever.
+    last_activity: Instant,
+    /// When the idle-cadence forgetting pass last ran, or `None` before the first one
+    /// (steady-heat, throttled to at most every `PASS_INTERVAL`). `node_ops::run_forgetting_pass`'s
+    /// own manual-trigger path (the Alembic pane's click) does not touch this — the
+    /// idle cadence and the manual click are independent triggers of the same verb.
+    /// (Alembic B1.)
+    last_forgetting: Option<Instant>,
     /// Marks this struct as the kernel-thread context: `!Send` by construction
     /// (armillary's typed boundary), so kernel authority cannot be moved onto an
     /// actor thread — the attempt is a compile error, not a review catch.
