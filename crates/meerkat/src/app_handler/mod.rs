@@ -112,5 +112,6 @@ fn apply_comms_to_chrome(
 mod handler;
 mod handler_user;
 mod handler_window;
+mod idle_forgetting;
 mod shell_ops;
 mod window_ctx;
