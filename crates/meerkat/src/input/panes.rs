@@ -77,6 +77,11 @@ impl WindowCtx<'_> {
             } else if let Some(url) = key.strip_prefix("alembic:release:") {
                 // One-click demote: remove the `saved` tag. (B3.)
                 self.release_node(url);
+            } else if let Some(id) = key.strip_prefix("engram:compose:") {
+                // The two-select compose gesture: first click marks pending, a second
+                // (different) click composes, the same id again deselects. Runs in place (no
+                // pool re-keying — it writes a new engram to the store). (B7-P3.)
+                self.toggle_compose_selection(id);
             }
         }
         // Steward: the focused-operation action buttons (retry / stop / background-pin)

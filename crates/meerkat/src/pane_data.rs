@@ -221,15 +221,26 @@ impl WindowCtx<'_> {
                 "save a graph as an engram (>save_graph_engram)",
             ));
         } else {
+            let pending_compose = self.shared.presentation.pending_compose_engram.clone();
             for manifest in engrams.iter().take(20) {
                 // A clickable row: the key carries the full manifest id; a click queues
                 // `engram:open:<id>`, which the host thaws into an Orrery pane beside. The
                 // label shows a short id + size. (Alembic — open an engram, B2.)
                 let id_short: String = manifest.id.to_string().chars().take(20).collect();
+                let id_str = manifest.id.to_string();
                 items.push(PaneItem::button(
                     "utility-row",
                     format!("{id_short} · {} B", manifest.byte_size),
                     format!("engram:open:{}", manifest.id),
+                ));
+                // The two-select compose gesture: ⊗ marks this row as the pending first pick
+                // (click again to deselect), ⊕ on every other row composes it with the pending
+                // one. (Alembic B7-P3.)
+                let is_pending = pending_compose.as_deref() == Some(id_str.as_str());
+                items.push(PaneItem::button(
+                    "utility-row",
+                    if is_pending { "⊗ selected for compose" } else { "⊕ compose" },
+                    format!("engram:compose:{id_str}"),
                 ));
             }
         }

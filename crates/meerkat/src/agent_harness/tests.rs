@@ -402,6 +402,71 @@ fn keep_and_release_toggle_the_saved_tag() {
     );
 }
 
+/// Every saved graph engram's id, newest-last (store order). A small helper so the
+/// compose-gesture tests below don't repeat the store-listing dance.
+fn engram_ids(app: &mut Shell) -> Vec<String> {
+    let store = app.shared.content.store.as_mut().expect("content store open in tests");
+    pollster::block_on(session_runtime::graph_engram::list_graph_engrams(store))
+        .unwrap_or_default()
+        .into_iter()
+        .map(|m| m.id.to_string())
+        .collect()
+}
+
+#[test]
+fn compose_engrams_two_select_gesture_merges_on_the_second_distinct_click() {
+    // The Engrams two-select gesture: first click marks pending (no compose yet), a second
+    // (different) click composes the pair into a new engram and clears pending. (B7-P3.)
+    let mut app = test_app();
+    app.create_session();
+    app.orrery_mut().visit("https://a.example");
+    app.ctx().save_graph_engram();
+    // A second, disjoint session/graph (not a second visit on the same one): the content
+    // store is content-addressed, so two overlapping snapshots of one evolving graph could
+    // hash to the same engram a peer already has, masking whether compose actually ran.
+    app.create_session();
+    app.orrery_mut().visit("https://b.example");
+    app.ctx().save_graph_engram();
+    let ids = engram_ids(&mut app);
+    assert_eq!(ids.len(), 2, "two disjoint engrams saved");
+
+    app.ctx().toggle_compose_selection(&ids[0]);
+    assert_eq!(
+        app.shared.presentation.pending_compose_engram.as_deref(),
+        Some(ids[0].as_str()),
+        "the first click marks it pending",
+    );
+    assert_eq!(engram_ids(&mut app).len(), 2, "no compose yet on the first click");
+
+    app.ctx().toggle_compose_selection(&ids[1]);
+    assert!(
+        app.shared.presentation.pending_compose_engram.is_none(),
+        "composing clears the pending slot",
+    );
+    assert_eq!(
+        engram_ids(&mut app).len(),
+        3,
+        "compose adds a new engram; the two sources remain",
+    );
+}
+
+#[test]
+fn compose_engrams_clicking_the_same_row_twice_deselects() {
+    let mut app = test_app();
+    app.create_session();
+    app.orrery_mut().visit("https://a.example");
+    app.ctx().save_graph_engram();
+    let id = engram_ids(&mut app).remove(0);
+
+    app.ctx().toggle_compose_selection(&id);
+    assert!(app.shared.presentation.pending_compose_engram.is_some());
+    app.ctx().toggle_compose_selection(&id);
+    assert!(
+        app.shared.presentation.pending_compose_engram.is_none(),
+        "clicking the same row again deselects rather than composing with itself",
+    );
+    assert_eq!(engram_ids(&mut app).len(), 1, "no self-compose happened");
+}
 #[test]
 fn ctrl_shift_n_queues_a_spawn_window_command() {
     // The new-window verb can't create a window from a per-window handler (no
