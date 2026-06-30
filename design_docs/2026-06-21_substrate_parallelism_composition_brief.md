@@ -123,8 +123,9 @@ correction:
 - **One wire discipline serves both seams.** Both want a flat, position-independent
   representation (the component ABI forbids object graphs anyway). A single
   flat-buffer format makes the Scene transferable *and* the component copy a single
-  contiguous memcpy, and it unifies the (mere-side) missing `ContentUpdate`-`Serialize`
-  pass with D-doc's canonical-ABI shape rather than maintaining two regimes. Shared
+  contiguous memcpy. The mere-side `ContentUpdate` byte envelope is now in that
+  family: same flat-buffer discipline, still a separate schema from D-doc's
+  canonical-ABI payload. Shared
   serialization *technique* (flat buffers), separate *channels*: the Scene payload
   (paths / glyphs / clips) and the component-ABI payload (DOM mutations / events) are
   unrelated, so they share the toolchain, never the schema.
@@ -143,10 +144,14 @@ Grounding the §5 bet against the code. `netrender::Scene` is a flat op list
 shipping `snapshot_postcard` / `replay_postcard` (a position-independent binary) plus
 JSON, behind netrender's `serde` feature. It was built for Roadmap A2 capture/replay,
 but it is exactly the flat buffer the transfer path wants. So §5's "encode the Scene as
-a flat buffer" is not greenfield work. Two gaps remain on the mere side: the `serde`
-feature is **off** in mere's netrender dep ([meerkat Cargo.toml](../../crates/meerkat/Cargo.toml)),
-and `ContentUpdate` (the band wrapper, [content.rs](../../crates/meerkat/src/content.rs))
-is not `Serialize`. This is "enable + wrap," not "build."
+a flat buffer" is not greenfield work. The mere-side Rust transport is now landed:
+meerkat enables netrender's `serde` feature, wraps `ContentUpdate` in a postcard
+byte envelope, dedups Scene font/image bytes by id across frames, and selects the
+transfer stream for `wasm32` builds
+([transfer.rs](../crates/meerkat/src/content/transfer.rs),
+[actor.rs](../crates/meerkat/src/content/actor.rs),
+[constellation/mod.rs](../crates/meerkat/src/constellation/mod.rs)). The remaining
+web gap is the real browser Worker backend around that envelope.
 
 Measured on representative page bands (release, opt-level 3; the `serialize_cost`
 test in `netrender/netrender/src/scene/mod.rs`, run with
@@ -177,8 +182,10 @@ Reading:
   content actor and the kernel share an address space, so there is no serialize hop at
   all. Serialization is purely the cross-Worker (web) cost.
 
-So §5 holds and sharpens: the encoder exists and is cheap; the open work is
-asset-palette dedup-by-id on the wire, plus making `ContentUpdate` itself `Serialize`.
+So §5 holds and sharpens: the encoder exists and is cheap; the Rust-side wire format
+and asset-palette dedup are plumbing now, not research. The next measurement belongs
+at the browser boundary: Worker startup/channel overhead and real
+`postMessage(buffer, [buffer])` transfer behavior.
 
 ---
 
@@ -216,12 +223,11 @@ What remains:
 
 ## 7. What to measure / decide next
 
-- **The flat transferable Scene** (cost #1): **measured, §5a.** The `Scene` encoder
-  already exists (netrender postcard) and is cheap per frame. The remaining work is
-  mere-side plumbing, not de-risking: enable netrender's `serde` feature in mere, make
-  `ContentUpdate` `Serialize` (wrap the band metadata), dedup the asset palette by id
-  on the wire (send blob bytes once, reference by id after), then wire the Worker
-  `postMessage` transfer of the `ArrayBuffer`.
+- **The flat transferable Scene** (cost #1): **Rust-side transport landed.** The
+  `Scene` encoder exists (netrender postcard), meerkat enables it, `ContentUpdate`
+  has a postcard byte envelope, Scene asset bytes are sent once by id, and the host
+  selects the transfer stream for `wasm32`. Remaining work: the actual browser Worker
+  actor backend around `postMessage(buffer, [buffer])`, plus measuring that boundary.
 - **Cost #2 per turn** on native and web (jco): memcpy of a representative
   mutation batch through the canonical ABI. Confirm the per-turn batched contract
   keeps it negligible next to relayout.

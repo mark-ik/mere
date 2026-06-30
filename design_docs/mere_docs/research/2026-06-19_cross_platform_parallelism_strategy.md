@@ -193,10 +193,12 @@ move kernel authority onto an actor thread; actors carry only `Send
 ActorHandle<C>`; pinned state (Stylo, Nova, a DOM) stays on its thread because
 `spawn()` *builds* it on the actor thread (`armillary/src/actor.rs:96-141`,
 `lib.rs:5-32`). The content actor already renders the serval cascade off the UI
-thread and ships back `Send ContentUpdate::Scene` (`content.rs:74-129,150`). The
+thread and ships back `Send ContentUpdate::Scene`
+(`meerkat/src/content/mod.rs`, `meerkat/src/content/actor.rs`). The
 **`Scene` is the serialization seam** between worker-side layout and main-thread
 present — exactly what a browser build needs. (Confidence: high on native; the
-web caveat is the missing `Serialize`, §3 meerkat.)
+web caveat is the missing browser Worker backend around the landed byte envelope,
+§3 meerkat.)
 
 ---
 
@@ -317,16 +319,15 @@ web caveat is the missing `Serialize`, §3 meerkat.)
 - **Off-main-thread is ~90% there *on native only*.** On web the move is real but
   **not header-free in cost**: Web Workers have **separate linear memory** (absent
   SAB), so a worker content actor must **serialize the DOM + sheets in and the
-  Scene out via `postMessage`** (structured clone / transfer). The
-  `ContentUpdate::Scene` enum (`content.rs:95`) carries `Scene`, `Vec<LinkHit>`,
-  `Vec<BoxShadowMaskRequest>` — **none declared `Serialize` today** (armillary
-  requires only `Send`). So the Web-Worker actor backend requires (a) a
-  **`Serialize + Deserialize` pass over the whole message DTO set** that does not
-  exist, and (b) a **per-frame structured-clone cost of a full scene** across the
-  boundary. Native mpsc moves a pointer; Worker `postMessage` copies the scene.
+  Scene out via `postMessage`**. The outgoing scene side now has a postcard byte
+  envelope in `meerkat/src/content/transfer.rs`: `ContentUpdate::Scene` is wrapped
+  through a wire DTO, and Scene font/image bytes are deduped by id across frames.
+  The remaining Web-Worker actor backend still has to wire actual
+  `postMessage(buffer, [buffer])` delivery and quantify browser boundary cost.
+  Native mpsc moves a pointer; Worker transfer moves a copied `ArrayBuffer`.
   **Quantify or flag this — it is a real, unquantified per-frame web tax the
-  "header-free / 90% there" framing hides.** (Confidence: high that the cost and
-  the missing `Serialize` are real; the magnitude is unmeasured.)
+  "header-free / 90% there" framing hides.** (Confidence: high that the boundary
+  cost is real; the magnitude is unmeasured.)
 - **Two distinct browser-parallel levers — do not conflate:**
   - **Inter-actor / inter-page** (Web Worker actors via `postMessage`): N pages
     render concurrently, each cold cost paid off-main-thread. **Header-free** (no
@@ -352,7 +353,7 @@ web caveat is the missing `Serialize`, §3 meerkat.)
   scrying tile → cross-origin iframe; AccessKit → ARIA; custom Win32 titlebar →
   n/a. (Confidence: high — these are documented swaps.)
 - **Incremental seams already exist host-side** to make the cold cost survivable:
-  band-scroll (one vertical band per Scroll, `content.rs:60-71`), find-in-page
+  band-scroll (one vertical band per Scroll, `meerkat/src/content/mod.rs`), find-in-page
   offloaded to a worker (full layout ~1-2 s, can't run per keystroke,
   `main.rs:919-926`), per-tile texture cache keyed by scene generation
   (`main.rs:775`).
@@ -493,7 +494,7 @@ the **app lane**, not the browser lane.
 |---|---|---|
 | **Cold-cost phase breakdown** (cascade vs box-tree vs shaping) | **Measured 2026-06-21, synthetic + real (§0 result)** — real page: cascade ~32%, shaping ~48%, build ~9% of cold paint | **Done** (`examples/phase_timing.rs`). Both cascade and shaping are first-order; shaping is largest (already parallel native), cascade ~32% (still serial — lever (c) is worthwhile). Shaping parallel-vs-serial measured at 1.32x (~15 ms, web-without-SAB penalty), below the borrowed 2-3.5x. Cascade drilled: traverse_dom is ~80% of cascade (the Stylo-parallelizable slice), ~6.5 ms serial floor — lever (c) well-targeted, magnitude pending a Stylo-parallel measurement on Fedora. |
 | **Stylo parallel cascade actually *running* in wasm** | Low — compiles (servo/stylo work landed) but **no one has tested it runs**; Blitz (closest sibling: stylo+taffy+parley+vello) ships Stylo **single-threaded on web** | (1) Land `Cell`→atomic, prove parallel cascade **native** on Fedora + ThreadSanitizer. (2) Only then a minimal `wasm-bindgen-rayon` harness driving `traverse_dom(Some(&pool))` in a Worker, and measure. Research-grade. |
-| **Off-main-thread scene-serialization cost on web** | Medium — real, unquantified | Add `Serialize/Deserialize` to the `ContentUpdate` DTOs; measure per-frame structured-clone of a representative `Scene` across `postMessage`. Decides whether off-main-thread is "free" on web. |
+| **Off-main-thread scene transfer on web** | Medium — Rust-side envelope landed; browser boundary unmeasured | `ContentUpdate` now has a postcard byte envelope, Scene asset bytes are deduped by id, and `wasm32` selects the transfer stream. Next: wire the actual Web Worker actor backend with `postMessage(buffer, [buffer])` and measure the browser boundary. |
 | **`max_inter_stage_shader_variables: 28` vs baseline 16** | High it's a real blocker | Probe `request_device` on a baseline WebGPU adapter (Chrome/Firefox/Safari-26); **determine whether 28 is vello's requirement** (if so it travels through `with_external` too); add a downlevel path or gate the limit. |
 | **vello 0.9 on a WebGPU browser backend with wgpu 29** | Medium — upstream **unverified** | Verify vello 0.9 compute over WebGPU in-browser before assuming the render half is free; scope Vello Hybrid/sparse-strips for the WebGL2 tier (accept beta + wgpu coupling). |
 | **Clock panics** (`Instant`/`SystemTime`) in the host path | High | Route all host timing (animation, debounce, gyre tick) through `web_time`/`performance.now()`. Pervasive porting tax. |
@@ -567,7 +568,7 @@ the **app lane**, not the browser lane.
   `netrender/netrender_device/src/adapter.rs:52`, `netrender/Cargo.toml`
   (+ `netrender_device/Cargo.toml`)
 - `mere/crates/armillary/src/{actor.rs:96-141,116,139, lib.rs:5-32, pool.rs}`,
-  `mere/crates/meerkat/src/content.rs:{60-71,74-129,95,150}`,
+  `mere/crates/meerkat/src/content/{mod.rs,actor.rs,transfer.rs}`,
   `mere/crates/meerkat/src/main.rs:{775,919-926}`,
   `mere/crates/orrery/orrery/src/physics.rs:{11,25}`
 - `mere/design_docs/mere_docs/implementation_strategy/2026-06-03_actor_constellation_plan.md`

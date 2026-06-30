@@ -6,6 +6,7 @@
 [`../../mere_docs/research/2026-06-04_resource_coordination_brief.md`](../../mere_docs/research/2026-06-04_resource_coordination_brief.md),
 [`../../mere_docs/implementation_strategy/2026-05-07_moot_tiers_and_voluntary_hosting_brief.md`](../../mere_docs/implementation_strategy/2026-05-07_moot_tiers_and_voluntary_hosting_brief.md),
 [`../../mere_docs/implementation_strategy/2026-06-06_moot_constitution_brief.md`](../../mere_docs/implementation_strategy/2026-06-06_moot_constitution_brief.md),
+[`../../mere_docs/implementation_strategy/2026-06-30_commitment_proof_interface_plan.md`](../../mere_docs/implementation_strategy/2026-06-30_commitment_proof_interface_plan.md),
 [`../../archive_docs/2026-06-09_completed_plans/2026-06-02_tessera_plan.md`](../../archive_docs/2026-06-09_completed_plans/2026-06-02_tessera_plan.md)
 
 The bounty economy is not the mesh. It is the verification and settlement layer
@@ -109,40 +110,52 @@ Minimum epoch header:
 ```rust
 pub struct MootEpochHeader {
     pub moot_id: MootId,
-    pub constitution_hash: Hash,
-    pub policy_hash: Hash,
+    pub constitution: Digest,
+    pub policy: Digest,
     pub epoch_number: u64,
-    pub admin_root: Hash,
-    pub mod_root: Hash,
-    pub stakeholder_root: Hash,
-    pub member_root: Hash,
+    pub admin_commitment: Commitment,
+    pub mod_commitment: Commitment,
+    pub stakeholder_commitment: Commitment,
+    pub member_commitment: Commitment,
 }
 ```
 
-The roots are not plain roster hashes if later proof is needed. Use Merkle roots,
-vector commitments, or an accumulator shape so a receipt can carry an inclusion
-proof without publishing the whole membership list.
+The commitments are not plain roster hashes. They are typed by scheme and
+domain, per the
+[`commitment_proof_interface_plan`](../../mere_docs/implementation_strategy/2026-06-30_commitment_proof_interface_plan.md).
+The first build should use sparse Merkle commitments for role rosters. Later
+vector commitments, accumulators, or private-set-cardinality proofs can replace
+that backend without changing the receipt shape.
 
 Receipt shape:
 
 ```rust
 pub struct WorkReceipt {
     pub bounty: BountyId,
-    pub result_hash: Hash,
+    pub result: Digest,
     pub executor: PersonaKey,
     pub verifier: Option<PersonaKey>,
     pub moot_epoch: MootEpochHeader,
-    pub role_proof: InclusionProof,
+    pub role_witness: RoleWitness,
     pub capability_proof: Option<DelegationProof>,
     pub signed_at_ms: u64,
 }
+
+pub struct RoleWitness {
+    pub role: MootRole,
+    pub proof: InclusionProof,
+}
 ```
 
-Tessera then records "this persona helped under this moot epoch, role root,
-capability proof, and result hash." Later value is a projection: current moot
-policy can ask how many old members remain, whether the constitution changed, or
-whether the signer belonged to admin, mods, stakeholders, or general members.
-The historical receipt does not get rewritten.
+Tessera then records "this persona helped under this moot epoch, role
+commitment, capability proof, and result digest." Later value is a projection:
+current moot policy can ask how many old members remain, whether the
+constitution changed, or whether the signer belonged to admin, mods,
+stakeholders, or general members. The historical receipt does not get rewritten.
+
+The p2panda operation proves authorship, per-author log order, and replication.
+The commitment proof proves the role or membership claim inside the receipt.
+Those layers must stay separate.
 
 ---
 
@@ -161,5 +174,8 @@ The historical receipt does not get rewritten.
 - **2026-06-30** - Split out of the merged resource-coordination brief and moved
   under `moothold_docs`, where the outer-ring economy belongs.
 - **2026-06-30** - Added moot epoch receipts: tessera facts bind result,
-  executor, role/capability proof, and epoch roots instead of relying on mutable
-  membership labels.
+  executor, role/capability proof, and epoch commitments instead of relying on
+  mutable membership labels.
+- **2026-06-30** - Replaced raw `*_root: Hash` sketches with typed commitments
+  and witnesses, keeping p2panda operation identity separate from application
+  proof roots.

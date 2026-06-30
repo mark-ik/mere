@@ -1,10 +1,15 @@
 # Swatch Primitive Plan — one configurable, embeddable projection of the graph
 
 **Date**: 2026-06-27
-**Status**: Planning, no code yet. Sequence: **primitive-first** (Mark, 2026-06-27):
-P1 extract the generic component, P2 the connections swatch, P3 the classifier +
-strip, then the edge enrichment (P4/P5), the gloss migration (P6), and templates
-(P7).
+**Status (2026-06-30)**: P1, P2, and P3a/b/c landed — see Progress below. P2b
+(cartography re-layout, `Scope`/`SwatchInstance` unification) and the rest of P3's
+done condition (live projection toggle, frontier ghosts, contextual detectors,
+Linked/Astroid crystallize, chip-click crystallize) are deferred slices, still open.
+P4/P5 now have partial downstream slices through the roster/orrery relation-cell
+work, but their full done conditions remain open. P6/P7 remain unstarted. Sequence:
+**primitive-first** (Mark, 2026-06-27): P1 extract the
+generic component, P2 the connections swatch, P3 the classifier + strip, then the
+edge enrichment (P4/P5), the gloss migration (P6), and templates (P7).
 **The model is canonical, do not re-derive it.** This plan builds
 [the swatch primitive design](../design/2026-06-27_swatch_primitive_design.md): the
 swatch as the fourth (canvas) graph primitive, the orrery as its root instance, two
@@ -136,17 +141,22 @@ dominant pre-ranked, per 2026-06-13), re-derives it live as the projection toggl
 ghosts the one-hop frontier, and crystallizes the selection to a Session or Linked
 graphlet through the existing index.
 
-**Status: P3a done 2026-06-28** (the classifier keystone + the shape chip). The classifier is
-`graphlet_classifier::classify(n, edges) -> ranked [ShapeRank]`, pure topology over the selection's
-induced subgraph: structural detectors for **Loop / Ego / Corridor / Component**, with **Loose /
-Session** the disconnected-grab-bag floor, ranked by fit (6 unit tests green). The connections
-swatch's `compute_connections_card` runs it on the selected subgraph and renders the dominant shape
-as a chip at the top of the card (`ConnectionsSpec.shape_label`). **Deferred to P3b/c** (the
-done-condition's remaining clauses): the full multi-chip strip, the live projection toggle (re-derive
-as families toggle), frontier ghosts, and **crystallize** (bind the selection to a Session/Linked
-graphlet through the `graphlets.rs` index), plus the contextual detectors (Bridge / Facet / Frontier
-/ WorkbenchCorrespondence). Bin compiles; the chip render is not yet headed-verified (a low-risk text
-div over the verified P2 swatch; the app's pre-existing sqlx/sync crash makes a drive flaky).
+**Status (2026-06-30): P3a/b/c done**, full done condition still open. P3a (2026-06-28, the
+classifier keystone + the shape chip): `graphlet_classifier::classify(n, edges) -> ranked
+[ShapeRank]`, pure topology over the selection's induced subgraph: structural detectors for
+**Loop / Ego / Corridor / Component**, with **Loose / Session** the disconnected-grab-bag floor,
+ranked by fit (6 unit tests green). P3b (2026-06-28, crystallize via context menu):
+`Shell::crystallize_selection` freezes the selection as a Session graphlet tagged with the
+classifier's dominant shape (`session_ops/shell_session.rs`, `graphlets.rs` `record_session`).
+P3c (2026-06-28, the chip strip): `compute_connections_card` sets the classifier's top-3
+fit-ranked shapes (fit ≥ 0.4) as `ConnectionsSpec.shape_chips`, rendered as a ranked chip strip
+(dominant highlighted, runners-up dimmed) by `connections_swatch_view`. **Still open** (the
+done-condition's remaining clauses): the live projection toggle (re-derive as families toggle,
+needs the swatch hit-test), frontier ghosts, **Linked-derivation crystallize** (Component/Ego)
+and the Astroid option, chip-click crystallize, and the contextual detectors (Bridge / Facet /
+Frontier / WorkbenchCorrespondence). Bin compiles; the chip render is not yet headed-verified (a
+low-risk text div over the verified P2 swatch; the app's pre-existing sqlx/sync crash makes a
+drive flaky).
 
 ### P4 — Cells-as-edges (Mark, 2026-06-27)
 
@@ -357,3 +367,13 @@ template renders a purpose-built UI over its own subgraph.
   card (dominant highlighted, runners-up dimmed). Completes the "strip" half of P3's name as a
   read-only ranked display; the live projection toggle that re-derives it is still P4 (needs the swatch
   hit-test). Bin compiles, 14 graphlet tests green.
+- **2026-06-30 - P4/P5 partial via roster/orrery relation-cell work.** The
+  [graph object roster detail-cards plan](2026-06-29_graph_object_roster_detail_cards_plan.md)
+  landed fanned canvas relation-cell overlay/picking, selected-cell redraw, Link
+  Card relation-row hide/show, per-cell session visibility keyed by `(source,
+  target, RelationKind)`, and connections-swatch filtering/routing for visible
+  cells. This advances P4/P5 but does not complete them: gyre topology and
+  springs remain endpoint-pair scoped, edge thickness is not yet fully
+  per-cell, the orrery and connections swatch do not yet share one element-model
+  edge renderer, and the P5 `GraphDefault < GraphViewOverride <
+  SelectionOverride` stack is still unbuilt.

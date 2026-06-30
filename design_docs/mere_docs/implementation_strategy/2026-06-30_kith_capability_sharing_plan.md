@@ -6,6 +6,7 @@
 [`../research/2026-06-04_resource_coordination_brief.md`](../research/2026-06-04_resource_coordination_brief.md),
 [`2026-06-30_personal_mesh_substrate_m2_plan.md`](2026-06-30_personal_mesh_substrate_m2_plan.md),
 [`2026-06-30_mesh_lease_scheduler_plan.md`](2026-06-30_mesh_lease_scheduler_plan.md),
+[`2026-06-30_commitment_proof_interface_plan.md`](2026-06-30_commitment_proof_interface_plan.md),
 [`2026-06-26_federation_interop_plan.md`](2026-06-26_federation_interop_plan.md),
 [`2026-05-10_graph_cluster_namespaces_brief.md`](2026-05-10_graph_cluster_namespaces_brief.md)
 
@@ -70,7 +71,7 @@ pub struct MeshGrant {
     pub not_before_ms: u64,
     pub expires_at_ms: u64,
     pub epoch: u64,
-    pub delegation_root: Option<Hash>,
+    pub delegation_commitment: Option<Commitment>,
 }
 ```
 
@@ -78,6 +79,10 @@ This may later map to Meadowcap-shaped path caps, UCAN-like tokens, zcap-shaped
 delegations, OCapN-like live references, or p2panda-auth group facts. The
 mesh-side requirement is simpler: the board must be able to decide whether a
 claim was authorized at the time it was made.
+
+The commitment is application payload. P2panda signs and replicates the grant
+event; the commitment/proof layer explains delegated authority inside that
+event.
 
 ---
 
@@ -130,3 +135,6 @@ Key rotation can come later. M1/M2 only need event-level revocation and expiry.
   narrowed to kith grants and deterministic claim validation.
 - **2026-06-30** - Added the authority split: live capability references for
   connected interaction, signed grants/proofs for offline board folding.
+- **2026-06-30** - Replaced the raw delegation root sketch with a typed
+  commitment so grant proofs can start as Merkle-backed and later move to
+  accumulator or vector-commitment backends.

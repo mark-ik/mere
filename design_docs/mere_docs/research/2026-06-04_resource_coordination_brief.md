@@ -36,6 +36,14 @@ and offline signed receipts are different tools.
 - Spritely/OCapN-shaped work is useful prior art for this split, but this map
   does not adopt it as a stack choice.
 
+**Commitment correction folded in 2026-06-30**: do not bake Merkle trees into
+the social model. The shared interface is
+[`../implementation_strategy/2026-06-30_commitment_proof_interface_plan.md`](../implementation_strategy/2026-06-30_commitment_proof_interface_plan.md).
+It treats Merkle, sparse Merkle, MMR, accumulators, vector commitments, and
+private set-cardinality proofs as backends behind typed commitments and typed
+proofs. P2panda still owns operation identity, signatures, per-author log order,
+topics, and LogSync. Commitment roots live inside event bodies and projections.
+
 ---
 
 ## 1. Personal Mesh Substrate
@@ -136,6 +144,8 @@ research frontier, not a near-term milestone.
   p2p substrate; every device enforces them locally.
 - Live capability references govern connected actors and runtime mod/job handles;
   signed receipts govern replay, audit, tessera, and disconnected replicas.
+- P2panda operation hashes and app-level commitment digests are distinct. Do not
+  use a Merkle/MMR root as a p2panda log head or operation id.
 - Syncthing is the product feel for owned devices, not the architecture.
 - BOINC is the batch-validation reference, not the personal-device UX.
 - Kubernetes, Ray, Golem, Akash, and Bacalhau are outer references. Their
@@ -164,3 +174,5 @@ research frontier, not a near-term milestone.
   work rather than owning every mechanic.
 - **2026-06-30** - Added the live-capability/offline-receipt distinction and
   routed tessera-style epoch evidence to the moothold economy lane.
+- **2026-06-30** - Added the typed commitment/proof interface and clarified that
+  p2panda operation identity remains below application proof roots.
