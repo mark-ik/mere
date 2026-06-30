@@ -69,7 +69,8 @@ impl WindowCtx<'_> {
             // focused), and focus it so the next navigation targets it. Otherwise
             // the orrery has selected it, so it shows as the focused-node card.
             if self.workbench_active() {
-                let stacked = origin.is_some_and(|o| self.view.workbench.open_in_slot_of(new_member, o));
+                let stacked =
+                    origin.is_some_and(|o| self.view.workbench.open_in_slot_of(new_member, o));
                 if !stacked {
                     self.view.workbench.open_tile(new_member);
                 }
@@ -209,7 +210,11 @@ impl WindowCtx<'_> {
         let paused = self.orrery().physics_paused();
         let (cur_back, cur_forward, cur_paused) = {
             let c = self.view.chrome();
-            (c.toolbar.can_go_back, c.toolbar.can_go_forward, c.physics_paused)
+            (
+                c.toolbar.can_go_back,
+                c.toolbar.can_go_forward,
+                c.physics_paused,
+            )
         };
         if cur_back == can_back && cur_forward == can_forward && cur_paused == paused {
             return;
@@ -226,7 +231,8 @@ impl WindowCtx<'_> {
     /// reach the orrery). Mirrors `drain_history_step`'s shape. (Physics pause.)
     pub(super) fn drain_physics_toggle(&mut self) {
         let mut toggled = false;
-        self.view.chrome_update(|c| toggled = c.take_physics_toggle());
+        self.view
+            .chrome_update(|c| toggled = c.take_physics_toggle());
         if toggled {
             self.orrery_mut().toggle_physics_paused();
             self.sync_nav_buttons();

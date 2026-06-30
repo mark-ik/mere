@@ -104,13 +104,18 @@ mod list_pane;
 mod menus;
 mod nav_sync;
 mod node_ops;
+mod note_sheet;
 mod observability;
 mod pane_data;
 mod pane_geom;
 mod pane_session;
 mod render;
 mod roster;
+#[cfg(test)]
+mod roster_action_tests;
 mod roster_data;
+mod roster_facet_data;
+mod roster_facet_view;
 mod roster_view;
 mod roster_view_parts;
 mod scene_settings;
@@ -120,6 +125,7 @@ mod settings_pane_view;
 mod sprite_import;
 mod swatch;
 mod viewport;
+mod web_clip;
 // `ViewPane` is the shared base for the `RosterPane` / `ListPane` test harnesses only;
 // every product pane now folds into the shell document, so the module is test-gated.
 // (Phase 1, step 2.)
@@ -127,12 +133,16 @@ mod scrying_host;
 mod serval_a11y;
 mod serval_render;
 mod session_ops;
+mod shell_command;
 mod shellbar;
 mod steward;
 mod tags;
+#[cfg(test)]
+mod test_support;
 mod text;
 mod theme_edit;
 mod theme_store;
+mod tile_theme;
 mod titlebar;
 mod tracing_layer;
 mod utility_panes;
@@ -142,9 +152,12 @@ mod window_view;
 
 use constellation::Constellation;
 use observability::HostObservability;
+pub(crate) use shell_command::ShellCommand;
 
 mod theme_sheets;
+pub(crate) use note_sheet::*;
 pub(crate) use theme_sheets::*;
+pub(crate) use tile_theme::*;
 
 /// Single-pane view-intent identity for the default session (one frame, one
 /// pane). Per-frame / per-pane ids arrive with the tiled workbench (S4) and
@@ -290,129 +303,6 @@ struct WindowCtx<'a> {
     /// never leaks to the next window's pass. `None` when this pass set no branch scope.
     /// (Graphlet wiring Phase 2 slice 3.)
     branch_scope_restore: Option<Option<Vec<uuid::Uuid>>>,
-}
-
-/// A deferred shell-level operation a per-window handler requests but cannot perform
-/// itself: it needs full `&mut Shell` (to mutate the window registry) or the
-/// `ActiveEventLoop` (to create an OS window), neither reachable from a [`WindowCtx`]
-/// (which borrows exactly one window + the shared state). Handlers push onto
-/// `Shell.commands`; the event loop drains them through `Shell::apply` after the ctx
-/// borrow ends. This is the cross-window seam — spawning or closing a window is a
-/// registry op no single-view ctx can express. (Multi-window MW3, the deferred MW2 (e).)
-enum ShellCommand {
-    /// Open a new OS window over the shared session — a second [`WindowView`].
-    /// (Cmd/Ctrl+Shift+N; MW3 step 3. Step 4 differentiates its kind + chrome.)
-    SpawnWindow,
-    /// Tear a node out into a new **leaf** window (the tear-out drag, G1/G2): a
-    /// workbench-only window on the donor graph `from` showing `node`'s tile (no orrery
-    /// pane). Carries the donor `from` so the leaf binds the shared pooled orrery (edits
-    /// propagate). Runs on `Shell` after the ctx borrow ends. (Tear-out gestures G1/G2.)
-    TearOut { node: uuid::Uuid, from: GraphId },
-    /// Cross-graph copy (G5): a node dragged from graph `from`'s pane onto graph `to`'s
-    /// pane mints a copy in `to` (via `Graph::copy_node_from`, with `CopiedFrom`
-    /// provenance back to the source). A two-orrery pool op, so it runs on `Shell` after
-    /// the ctx borrow ends. (Tear-out gestures G5.)
-    CopyNodeAcross {
-        node: uuid::Uuid,
-        from: GraphId,
-        to: GraphId,
-    },
-    /// Cross-graph **move** (G5): like `CopyNodeAcross`, but also releases the node from the
-    /// source graph `from` (a relocation, so no eidetic delete-tombstone). The
-    /// Alt-modified cross-graph drop; plain drop copies. Runs on `Shell`. (Tear-out G5.)
-    MoveNodeAcross {
-        node: uuid::Uuid,
-        from: GraphId,
-        to: GraphId,
-    },
-    /// Fork (Ctrl+Shift tear, G4): mint an independent session + graph holding a copy of
-    /// the dragged node's connected component (with a weak parent ref to the donor), then
-    /// open a new window onto it. Needs both `&mut Shell` (mint + pool) and the event
-    /// loop (the window), so it defers here. The donor session is untouched. (Tear-out
-    /// gestures G4.)
-    ForkNode { node: uuid::Uuid, from: GraphId },
-    /// Branch (Shift tear, G3): mint a `Branched` graphlet anchored on the dragged node
-    /// in the donor's session graphlet index (sharing the donor's `GraphId` + kernel
-    /// nodes — no copy), then open a new window scoped to it. Needs `&mut Shell` (the
-    /// graphlet pool + persistence) and the event loop (the window). The donor is
-    /// untouched. (Tear-out gestures G3; graphlet wiring Phase 1.)
-    BranchNode { node: uuid::Uuid, from: GraphId },
-    /// Grow a branch graphlet's roster (Phase 2 slice 2): the branch window navigated to
-    /// `node`, so it joins the branch's lineage, diverging from the donor while sharing
-    /// kernel nodes. Pushed from `sync_orrery` when the window carries a `branch_graphlet`;
-    /// handled on `Shell` (the graphlet pool + persistence). (Tear-out gestures G3.)
-    RecordBranchMember {
-        graph: GraphId,
-        graphlet: forme::GraphletId,
-        node: uuid::Uuid,
-    },
-    /// Open the focused node as a **Linked** graphlet of `kind` in a scoped window (Phase 3
-    /// slice 2 / 2+, the manual Linked consumers): mint a `Linked { kind }` graphlet derived
-    /// from the graph under the `selectors` edge projection, then open a window scoped to it
-    /// (reusing the branch-window scope path), tagged with the `chip` word. Needs `&mut Shell`
-    /// + the event loop, so it defers here. `kind` + `selectors` are the projection-vocabulary
-    /// control (component / neighborhood / link web). (Graphlet wiring Phase 3.)
-    OpenLinkedGraphlet {
-        node: uuid::Uuid,
-        from: GraphId,
-        kind: forme::GraphletKind,
-        selectors: Vec<String>,
-        chip: &'static str,
-    },
-    /// Crystallize graph `from`'s current multi-selection into a Session graphlet tagged with its
-    /// dominant shape, then scope that orrery to it (ruling 1: scope the one Navigator, no new
-    /// window). Shell-level (needs `&mut graphlets` + the orrery). Queued by the context menu.
-    /// (Swatch primitive — P3b crystallize.)
-    CrystallizeSelection { from: GraphId },
-    /// Reconcile graph `graph`'s **Linked** graphlets against the (just-changed) graph and
-    /// persist any that drifted (Phase 3 slice 2+ — data-level drift). Queued by
-    /// `save_session` after a graph mutation; runs on `Shell` (needs `&mut graphlets`).
-    /// Cheap + idempotent (a no-op when nothing drifted). The scoped windows already track
-    /// drift live via `install_scope`'s re-derive; this keeps the persisted roster current.
-    ReconcileGraphlets { graph: GraphId },
-    /// Reconcile one Linked graphlet from the Roster Graphlet Card's dry-diff action.
-    ReconcileGraphlet {
-        graph: GraphId,
-        graphlet: forme::GraphletId,
-    },
-    /// Convert a graphlet to an unlinked session grouping, preserving its current roster.
-    KeepGraphletAsSession {
-        graph: GraphId,
-        graphlet: forme::GraphletId,
-    },
-    /// Branch an existing graphlet and open the branch in a scoped window.
-    BranchGraphlet {
-        graph: GraphId,
-        graphlet: forme::GraphletId,
-    },
-    /// Open an existing graphlet in a scoped window without minting a new graphlet.
-    OpenExistingGraphlet {
-        graph: GraphId,
-        graphlet: forme::GraphletId,
-    },
-    /// Close window `id` and drop its view. The primary is exempt — its close saves
-    /// the session and exits the app; a secondary just releases its surface. (MW3.)
-    #[allow(dead_code)] // queued by the close fork once leaf windows can self-close (MW4)
-    CloseWindow(WindowId),
-    /// Mint a fresh session + graph and make it active. (Cmd-N.) A session op
-    /// re-keys the orrery pool, which a per-window `WindowCtx` cannot do (it holds
-    /// one orrery borrowed out of the pool), so it runs on `Shell` after the ctx
-    /// borrow ends — like spawn/close. (Window composition P1, multi-graph.)
-    CreateSession,
-    /// Switch the active session to `id` (load its graph into the pool, focus it).
-    SwitchSession(SessionId),
-    /// Cycle to the next (`true`) / previous session in id order, wrapping.
-    CycleSession(bool),
-    /// Close (trash) session `id`, switching to a survivor first if it was active.
-    CloseSession(SessionId),
-    /// Open session `id`'s graph in a second Orrery pane beside the current one,
-    /// without switching focus (the per-pane render path shows two graphs at
-    /// once). (Window composition P2 — second graph-pane.)
-    OpenGraphBeside(SessionId),
-    /// Thaw the graph engram with this manifest-id string into a fresh ephemeral Orrery
-    /// pane beside the current one, read-only. The Alembic Engrams row queues this; `Shell`
-    /// thaws it off the private store after the `WindowCtx` borrow ends. (Alembic B2.)
-    OpenEngramBeside(String),
 }
 
 /// A tile's cached rasterized texture: the scene version + size it was rasterized

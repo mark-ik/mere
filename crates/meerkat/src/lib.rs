@@ -45,6 +45,7 @@ use chrome::command_palette::{CommandPaletteSession, SearchPaletteScope};
 use chrome::omnibar::OmnibarMatch;
 use chrome::toolbar::ToolbarState;
 use comms::{CommsPane, ConversationId, Draft, ProtocolKind};
+use forme::GraphMemberId;
 use frame::SessionId;
 pub use session_runtime::ShellbarEdge;
 use xilem_serval::TextInput;
@@ -58,8 +59,8 @@ pub mod suggest;
 pub mod sync_indicator;
 
 use command::{Command, PaletteItem};
-use nav::History;
 pub use crawl_indicator::CrawlIndicator;
+use nav::History;
 pub use sync_indicator::SyncIndicator;
 
 /// Meerkat's chrome app state.
@@ -211,6 +212,14 @@ pub struct Chrome {
     pub knot_source: TextInput,
     /// Whether the docked knot-editor panel is open.
     pub knot_editor_open: bool,
+    /// The graph member this editor is currently writing, if it is bound to a note tile.
+    pub knot_target: Option<GraphMemberId>,
+    /// Header label for the editor, usually the bound `knot://` URL.
+    pub knot_editor_label: String,
+    /// Window-space content rect of the bound tile, when the editor can sit over it.
+    pub knot_editor_rect: Option<[f32; 4]>,
+    /// One-shot save request captured by the editor's chrome button.
+    pub knot_save_requested: bool,
     /// The open graph sessions, as toolbar chips (Chrome bar P4 — sessions moved out
     /// of the shellbar). Host-synced each frame from the session pool, ordered like
     /// `cycle_session`; the active one carries `active`. Rendered inline up to a cap,
@@ -546,7 +555,6 @@ pub enum ContextAction {
     /// rebuilds the open menu. (Searchable context menu S2.)
     PinToMenu(&'static str),
 }
-
 
 mod chrome_comms;
 mod chrome_menu;

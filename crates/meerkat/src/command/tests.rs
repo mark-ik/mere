@@ -29,6 +29,7 @@ fn host_action_commands_filter_and_flag() {
     assert!(Command::RetryFocusedContent.is_host_action());
     assert!(Command::StopFocusedOperation.is_host_action());
     assert!(Command::PinFocusedOperation.is_host_action());
+    assert!(Command::ToggleKnotEditor.is_host_action());
     assert!(
         !Command::Back.is_host_action(),
         "history verbs are not host actions"
@@ -58,7 +59,11 @@ fn from_id_round_trips_every_verb() {
     // resolves to nothing. This is what lets a script / agent / a11y route name a
     // command by id and get the typed command back.
     for cmd in Command::ALL {
-        assert_eq!(Command::from_id(cmd.verb()), Some(cmd), "{cmd:?} must round-trip");
+        assert_eq!(
+            Command::from_id(cmd.verb()),
+            Some(cmd),
+            "{cmd:?} must round-trip"
+        );
     }
     assert_eq!(Command::from_id("not_a_command"), None);
     assert_eq!(Command::from_id(""), None);
@@ -67,7 +72,11 @@ fn from_id_round_trips_every_verb() {
 #[test]
 fn command_entries_catalog_covers_all_with_unique_ids() {
     let entries = command_entries();
-    assert_eq!(entries.len(), Command::ALL.len(), "the catalog lists every command");
+    assert_eq!(
+        entries.len(),
+        Command::ALL.len(),
+        "the catalog lists every command"
+    );
     // ids are the verbs (already proven unique + identifier-safe), in ALL order.
     for (entry, cmd) in entries.iter().zip(Command::ALL) {
         assert_eq!(entry.id, cmd.verb());
@@ -82,21 +91,26 @@ fn command_entries_catalog_covers_all_with_unique_ids() {
 fn palette_items_unify_commands_and_context_actions() {
     let all = palette_items("");
     assert_eq!(
-        all.iter().filter(|i| matches!(i, PaletteItem::Command(_))).count(),
+        all.iter()
+            .filter(|i| matches!(i, PaletteItem::Command(_)))
+            .count(),
         Command::ALL.len(),
         "every command is a palette item",
     );
     assert_eq!(
-        all.iter().filter(|i| matches!(i, PaletteItem::Context(_))).count(),
+        all.iter()
+            .filter(|i| matches!(i, PaletteItem::Context(_)))
+            .count(),
         PALETTE_CONTEXT_ACTIONS.len(),
         "every palette-exposed context action is a palette item",
     );
     // A query filters context-action labels too, and every returned item matches it.
     let isolate = palette_items("isolate");
     assert!(
-        isolate
-            .iter()
-            .any(|i| matches!(i, PaletteItem::Context(crate::ContextAction::IsolateSelection))),
+        isolate.iter().any(|i| matches!(
+            i,
+            PaletteItem::Context(crate::ContextAction::IsolateSelection)
+        )),
         "the Isolate context action filters in",
     );
     assert!(isolate.iter().all(|i| label_matches(i.label(), "isolate")));
@@ -105,7 +119,10 @@ fn palette_items_unify_commands_and_context_actions() {
         context_action_palette_label(crate::ContextAction::ShowAllNodes),
         Some("Show all nodes"),
     );
-    assert_eq!(context_action_palette_label(crate::ContextAction::CloseGraphPane), None);
+    assert_eq!(
+        context_action_palette_label(crate::ContextAction::CloseGraphPane),
+        None
+    );
 }
 
 #[test]
@@ -115,11 +132,22 @@ fn registry_ids_are_unique_across_commands_and_context_actions() {
     // menu config name any action by one id namespace. (Command registry P3.)
     let mut seen = std::collections::HashSet::new();
     for cmd in Command::ALL {
-        assert!(seen.insert(cmd.verb()), "duplicate registry id: {}", cmd.verb());
+        assert!(
+            seen.insert(cmd.verb()),
+            "duplicate registry id: {}",
+            cmd.verb()
+        );
     }
     for &(action, id, _) in PALETTE_CONTEXT_ACTIONS {
-        assert!(seen.insert(id), "context-action id collides with the registry: {id}");
-        assert_eq!(context_action_from_id(id), Some(action), "{id} must round-trip");
+        assert!(
+            seen.insert(id),
+            "context-action id collides with the registry: {id}"
+        );
+        assert_eq!(
+            context_action_from_id(id),
+            Some(action),
+            "{id} must round-trip"
+        );
         assert_eq!(context_action_id(action), Some(id));
     }
     assert_eq!(context_action_from_id("not_an_action"), None);
@@ -130,8 +158,14 @@ fn default_menu_actions_are_all_known_registry_ids() {
     // Every default-menu id resolves to a scope + a label (no dead ids), so the config-driven
     // menu builder never silently drops a default row. (Command registry P4.)
     for &id in DEFAULT_MENU_ACTIONS {
-        assert!(registry_scope(id).is_some(), "default menu id has no scope: {id}");
-        assert!(registry_label(id).is_some(), "default menu id has no label: {id}");
+        assert!(
+            registry_scope(id).is_some(),
+            "default menu id has no scope: {id}"
+        );
+        assert!(
+            registry_label(id).is_some(),
+            "default menu id has no label: {id}"
+        );
     }
 }
 
@@ -173,7 +207,8 @@ fn every_verb_is_a_unique_valid_identifier() {
             "{cmd:?} verb starts with a digit: {v}"
         );
         assert!(
-            v.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_'),
+            v.chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_'),
             "{cmd:?} verb is not identifier-safe: {v}"
         );
         assert!(seen.insert(v), "duplicate verb: {v}");

@@ -67,6 +67,7 @@ impl WindowCtx<'_> {
             tracing::warn!(%err, path = ?graph_file, "failed to persist the session graph");
         }
         let intent = ViewIntent {
+            hidden_relations: super::hidden_relation_records(self.orrery()),
             camera: Some(crate::camera_to_snapshot(
                 self.orrery().camera(),
                 self.orrery().yaw(),
@@ -86,8 +87,10 @@ impl WindowCtx<'_> {
         // **window-scoped** (Model B, MG5): it persists at the shared root and stays
         // put across session switches, so a graph swap re-sources the panes without
         // rearranging them.
-        if let Err(err) = frame_layout_store::save_frame_layout(&self.shared.session.mere_root, &self.view.frame_layout)
-        {
+        if let Err(err) = frame_layout_store::save_frame_layout(
+            &self.shared.session.mere_root,
+            &self.view.frame_layout,
+        ) {
             tracing::warn!(%err, dir = ?self.shared.session.mere_root, "failed to persist the frame layout");
         }
         // The workbench tiling is the focused graph's, so it persists per-session
@@ -139,7 +142,12 @@ impl WindowCtx<'_> {
     /// pruned to the live graph's members. Thin wrapper over [`load_workbench`] for
     /// the session-switch path (which has a live `ctx`). (A3 persistence.)
     pub(crate) fn restore_workbench(&self, session_dir: &std::path::Path) -> platen::Workbench {
-        let present = self.orrery().graph().nodes().map(|(_, node)| node.id).collect();
+        let present = self
+            .orrery()
+            .graph()
+            .nodes()
+            .map(|(_, node)| node.id)
+            .collect();
         load_workbench(session_dir, &present)
     }
 
@@ -149,7 +157,13 @@ impl WindowCtx<'_> {
         if self.shared.session.manifests.get(id).is_none() {
             return;
         }
-        let seed = self.shared.session.session_labels.get(&id).cloned().unwrap_or_default();
+        let seed = self
+            .shared
+            .session
+            .session_labels
+            .get(&id)
+            .cloned()
+            .unwrap_or_default();
         self.view.renaming = Some((id, seed));
         self.view.request_redraw();
     }
@@ -163,7 +177,10 @@ impl WindowCtx<'_> {
         };
         let trimmed = name.trim().to_string();
         let display = (!trimmed.is_empty()).then_some(trimmed);
-        self.shared.session.manifests.update(id, |m| m.display_name = display);
+        self.shared
+            .session
+            .manifests
+            .update(id, |m| m.display_name = display);
         if let Err(err) = self.shared.session.manifests.flush_dirty() {
             tracing::warn!(%err, "failed to flush the renamed session manifest");
         }
@@ -202,13 +219,25 @@ impl WindowCtx<'_> {
     /// once also rasterized are retired — sessions are toolbar chips now, so only the
     /// label survives. Chrome bar P4 cleanup.)
     pub(crate) fn refresh_session_labels(&mut self) {
-        let ids: Vec<SessionId> = self.shared.session.manifests.iter().map(|(id, _)| id).collect();
+        let ids: Vec<SessionId> = self
+            .shared
+            .session
+            .manifests
+            .iter()
+            .map(|(id, _)| id)
+            .collect();
         let live: std::collections::HashSet<SessionId> = ids.iter().copied().collect();
-        self.shared.session.session_labels.retain(|id, _| live.contains(id));
+        self.shared
+            .session
+            .session_labels
+            .retain(|id, _| live.contains(id));
         for id in ids {
             // A user-set display name wins; otherwise derive a short label from the
             // graph — live orrery if pooled, else a cold `graph.json` load.
-            let display_name = self.shared.session.manifests
+            let display_name = self
+                .shared
+                .session
+                .manifests
                 .get(id)
                 .and_then(|m| m.display_name.clone())
                 .filter(|n| !n.trim().is_empty());
@@ -224,7 +253,10 @@ impl WindowCtx<'_> {
             {
                 derive_session_label(orrery.graph())
             } else {
-                let dir = self.shared.session.mere_root
+                let dir = self
+                    .shared
+                    .session
+                    .mere_root
                     .join("sessions")
                     .join(id.as_uuid().to_string());
                 let graph = session_graph_store::load(&dir.join(session_graph_store::GRAPH_FILE))

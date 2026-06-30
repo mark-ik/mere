@@ -17,6 +17,8 @@ use meerkat::command::Command;
 use meerkat::shell_eval::{CommandShell, ShellContext};
 use session_runtime::settings_store;
 
+use crate::fetch::{ContentState, Fetched};
+
 use super::observability::Severity;
 use super::{WindowCtx, comms_host, sync};
 
@@ -58,7 +60,11 @@ fn format_sparql_rows(rows: &linked_data::query::QueryRows) -> String {
                 .join(", ")
         })
         .collect();
-    let more = if rows.rows.len() > MAX_ROWS { " …" } else { "" };
+    let more = if rows.rows.len() > MAX_ROWS {
+        " …"
+    } else {
+        ""
+    };
     format!(
         "{} result(s): {}{}",
         rows.rows.len(),
@@ -79,9 +85,12 @@ impl WindowCtx<'_> {
             Ok(()) => {
                 let where_ = path.display().to_string();
                 eprintln!("[meerkat] diagnostics ring dumped to {where_}");
-                self.shared
-                    .observability
-                    .record_notification(Severity::Info, "Diagnostics dumped", where_, true);
+                self.shared.observability.record_notification(
+                    Severity::Info,
+                    "Diagnostics dumped",
+                    where_,
+                    true,
+                );
             }
             Err(err) => self.shared.observability.record_notification(
                 Severity::Warn,
@@ -109,7 +118,9 @@ impl WindowCtx<'_> {
         }
         // Route the verb to the sync actor; it runs the dial on its runtime and logs
         // the outcome (the actor boundary, so no synchronous result here).
-        self.shared.sync_handle.command(sync::SyncCommand::Connect(ticket));
+        self.shared
+            .sync_handle
+            .command(sync::SyncCommand::Connect(ticket));
         self.view.request_redraw();
     }
 
@@ -149,7 +160,11 @@ impl WindowCtx<'_> {
         let policy = self.shared.content.crawl.policy();
         let scope = policy.scope.label().to_lowercase();
         let depth = policy.max_depth;
-        let mode = if policy.seed_sitemap { "whole site, " } else { "" };
+        let mode = if policy.seed_sitemap {
+            "whole site, "
+        } else {
+            ""
+        };
         self.shared.content.crawl.start(&url, policy, graph);
         Some(format!("Crawling {url} ({mode}{scope}, depth {depth})…"))
     }
@@ -163,6 +178,101 @@ impl WindowCtx<'_> {
         } else {
             Some("No crawl is running".to_string())
         }
+    }
+
+    fn starter_knot_body(url: &str) -> String {
+        let name = url.strip_prefix("knot://").unwrap_or("note");
+        format!("# {name}\n\nA new knot note. Start writing.\n")
+    }
+
+    /// Toggle the source editor for the focused local knot note. The editor stays in
+    /// chrome, but the command is host-drained because the target is a graph member.
+    pub(super) fn toggle_focused_knot_editor(&mut self) -> Option<String> {
+        if self.view.chrome().knot_editor_open {
+            self.view.chrome_update(|c| c.close_knot_editor());
+            self.view.request_redraw();
+            return None;
+        }
+        let Some(member) = self.nav_target_member() else {
+            return Some("Select a knot:// note to edit".to_string());
+        };
+        let Some((_, node)) = self.orrery().graph().get_node_by_id(member) else {
+            return Some("Select a knot:// note to edit".to_string());
+        };
+        let url = node.url().to_string();
+        if !url.starts_with("knot://") {
+            return Some("Focused node is not a knot:// note".to_string());
+        }
+        let source = node
+            .body
+            .clone()
+            .filter(|body| !body.is_empty())
+            .or_else(|| match self.shared.content.pages.get(&url) {
+                Some(ContentState::Ready(fetched))
+                    if fetched.content_type.as_deref() == Some("text/x-knot") =>
+                {
+                    Some(fetched.body.clone())
+                }
+                _ => None,
+            })
+            .unwrap_or_else(|| Self::starter_knot_body(&url));
+        let note = format!("Editing {url}");
+        self.view
+            .chrome_update(move |c| c.open_knot_editor_for(member, url, source));
+        self.view.request_redraw();
+        Some(note)
+    }
+
+    /// Apply the editor's one-shot Save request to the focused graph member's
+    /// authored body and refresh the live note-rendering cache.
+    pub(super) fn drain_knot_editor_save(&mut self) -> Option<String> {
+        let mut request = None;
+        self.view
+            .chrome_update(|c| request = c.take_knot_editor_save());
+        let Some((member, body)) = request else {
+            return None;
+        };
+        let Some((_, node)) = self.orrery().graph().get_node_by_id(member) else {
+            return Some("The edited note no longer exists".to_string());
+        };
+        let url = node.url().to_string();
+        if !url.starts_with("knot://") {
+            return Some("The edited node is not a knot:// note".to_string());
+        }
+        let body_for_graph = body.clone();
+        let changed = self.orrery_mut().ingest_graph(|graph| {
+            let Some((key, _)) = graph.get_node_by_id(member) else {
+                return false;
+            };
+            let Some(node) = graph.get_node_mut(key) else {
+                return false;
+            };
+            let mut changed = false;
+            if node.body.as_deref() != Some(body_for_graph.as_str()) {
+                node.body = Some(body_for_graph.clone());
+                changed = true;
+            }
+            if node.mime_hint.as_deref() != Some("text/x-knot") {
+                node.mime_hint = Some("text/x-knot".to_string());
+                changed = true;
+            }
+            changed
+        });
+        self.shared.content.pages.insert(
+            url.clone(),
+            ContentState::Ready(Fetched {
+                content_type: Some("text/x-knot".to_string()),
+                body,
+            }),
+        );
+        self.view.tile_textures.remove(&member);
+        self.view.tile_bands.remove(&member);
+        self.view.note_content_heights.remove(&member);
+        if changed {
+            self.save_session();
+        }
+        self.view.request_redraw();
+        Some(format!("Saved {url}"))
     }
 
     /// Execute a pending host action the palette queued: take it from the chrome
@@ -217,7 +327,10 @@ impl WindowCtx<'_> {
             Command::PinFocusedOperation => self.pin_focused_operation(),
             Command::ToggleCompatView => self.toggle_focus_compat(),
             Command::AssertEdge => {
-                if self.orrery_mut().assert_selected_relation(SemanticSubKind::UserGrouped) {
+                if self
+                    .orrery_mut()
+                    .assert_selected_relation(SemanticSubKind::UserGrouped)
+                {
                     self.save_session();
                     self.view.request_redraw();
                 } else {
@@ -250,6 +363,11 @@ impl WindowCtx<'_> {
             // Materialize the focused page's link neighborhood (V1, single-hop): parse
             // the already-fetched body and place its links as graph nodes — no fetch.
             Command::MaterializeFocused => note = self.materialize_focused(),
+            // Clip the focused surface/document into a graph-native knot note. A live
+            // scriptable surface arms the picker; document lanes clip the cached body.
+            Command::ClipFocused => note = self.start_clip_picker(),
+            // Edit the focused local knot note's source, writing back to `Node.body`.
+            Command::ToggleKnotEditor => note = self.toggle_focused_knot_editor(),
             // Crawl the focused page's link neighborhood into the graph (V2). The crawl
             // actor fetches off the render path; this only seeds it + reports a note.
             Command::CrawlFocused => note = self.crawl_focused(),
@@ -269,8 +387,7 @@ impl WindowCtx<'_> {
             | Command::Forward
             | Command::Home
             | Command::ConnectPeer
-            | Command::ToggleComms
-            | Command::ToggleKnotEditor => {}
+            | Command::ToggleComms => {}
         }
         note
     }
@@ -291,7 +408,8 @@ impl WindowCtx<'_> {
         // `chrome_activate` runs.
         let mut note: Option<String> = None;
         for &cmd in &outcome.commands {
-            self.view.chrome_update(move |c| c.run_command_and_close(cmd));
+            self.view
+                .chrome_update(move |c| c.run_command_and_close(cmd));
             self.drain_pending_connect();
             if let Some(n) = self.drain_pending_command() {
                 note = Some(n);
@@ -306,7 +424,10 @@ impl WindowCtx<'_> {
         // selected pair directly (the 0-arg `relate()` rode the AssertEdge path
         // above with the default kind).
         if let Some(kind) = &outcome.relation_kind {
-            if self.orrery_mut().assert_selected_relation(relation_kind_from_str(kind)) {
+            if self
+                .orrery_mut()
+                .assert_selected_relation(relation_kind_from_str(kind))
+            {
                 self.save_session();
                 self.view.request_redraw();
             } else {
@@ -572,22 +693,28 @@ impl WindowCtx<'_> {
             return;
         };
         self.view.chrome_update(|c| c.comms_intent = None);
-        self.shared.observability
+        self.shared
+            .observability
             .record_actor("comms", "started", Some(format!("{intent:?}")));
         match intent {
             CommsIntent::Refresh => {
-                self.shared.comms_handle.command(comms_host::CommsCommand::Refresh);
+                self.shared
+                    .comms_handle
+                    .command(comms_host::CommsCommand::Refresh);
             }
             CommsIntent::Open(id) => {
-                self.shared.comms_handle
+                self.shared
+                    .comms_handle
                     .command(comms_host::CommsCommand::Open(id));
             }
             CommsIntent::Send(draft) => {
-                self.shared.comms_handle
+                self.shared
+                    .comms_handle
                     .command(comms_host::CommsCommand::Send(draft));
             }
             CommsIntent::ConnectCabal(ticket) => {
-                self.shared.comms_handle
+                self.shared
+                    .comms_handle
                     .command(comms_host::CommsCommand::ConnectCabal(ticket));
             }
         }

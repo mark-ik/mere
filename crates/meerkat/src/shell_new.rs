@@ -143,6 +143,7 @@ impl Shell {
         // Restore the orrery pane's layout strategy at boot (None = force-directed),
         // recomputed on the first frame from the node set. (Layout picker.)
         orrery.set_layout_strategy(restored_view.as_ref().and_then(|v| v.strategy.clone()));
+        session_ops::restore_hidden_relations(&mut orrery, restored_view.as_ref());
         // Always-offload physics (P6): move the orrery's gyre simulation onto its
         // own armillary actor thread, so a heavy settle never blocks compositing or
         // input. It wakes the loop through the same winit proxy as the other
@@ -180,8 +181,10 @@ impl Shell {
         // drain that picks up content-actor updates. (Relational-browse V2.)
         let mut crawl = crawl::CrawlSession::new(content_wake.clone());
         // Restore the crawl scope / depth the settings lane last persisted.
-        if let Some(scope) =
-            saved_settings.crawl_scope.as_deref().and_then(crawl::HostScope::from_key)
+        if let Some(scope) = saved_settings
+            .crawl_scope
+            .as_deref()
+            .and_then(crawl::HostScope::from_key)
         {
             crawl.set_scope(scope);
         }
@@ -198,7 +201,8 @@ impl Shell {
         constellation.set_cap(saved_settings.tab_cap);
         // Seed the actor pool's deactivated-engine set so a globally-disabled
         // document engine renders the fallback off-thread too. (engine-picker Phase 1b.)
-        constellation.set_disabled_engines(saved_settings.disabled_engines.iter().cloned().collect());
+        constellation
+            .set_disabled_engines(saved_settings.disabled_engines.iter().cloned().collect());
         // Seed the installed DocumentScript origin bindings (§11.4 follow-on #2):
         // resolved from `script-bindings.json` (user form) + installed mod manifests
         // under `<mere_root>/mods/` ("installed extension" form), both against the
@@ -206,8 +210,10 @@ impl Shell {
         // auto-attaches its script (the App-default Allow narrowed by any
         // session-scope opinion). User bindings take precedence on origin overlap
         // (first match wins in `binding_for`), so they lead the merged list.
-        let mut script_bindings =
-            crate::content::script::load_resolved_bindings(&mere_root, &saved_settings.script_permissions);
+        let mut script_bindings = crate::content::script::load_resolved_bindings(
+            &mere_root,
+            &saved_settings.script_permissions,
+        );
         script_bindings.extend(crate::content::script::load_mod_bindings(
             &mere_root,
             &saved_settings.script_permissions,
@@ -388,11 +394,14 @@ impl Shell {
             .map(|(_, _, gid)| gid)
             .collect();
         for gid in extra_graphs {
-            let dir = manifests.iter().find(|(_, m)| m.root_graph_id == gid).map(|(id, m)| {
-                m.storage_path
-                    .clone()
-                    .unwrap_or_else(|| mere_root.join("sessions").join(id.as_uuid().to_string()))
-            });
+            let dir = manifests
+                .iter()
+                .find(|(_, m)| m.root_graph_id == gid)
+                .map(|(id, m)| {
+                    m.storage_path.clone().unwrap_or_else(|| {
+                        mere_root.join("sessions").join(id.as_uuid().to_string())
+                    })
+                });
             let graph = dir.and_then(|d| {
                 session_graph_store::load(&d.join(session_graph_store::GRAPH_FILE))
                     .ok()

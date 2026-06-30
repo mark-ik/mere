@@ -102,6 +102,9 @@ pub enum Command {
     /// graph nodes around the seed — no target fetch, no new actor, no crawl. Distinct
     /// from the multi-hop `CrawlFocused`. (Extraction lane, single-hop.)
     MaterializeFocused,
+    /// Clip the focused surface/document into a local knot note with provenance. Scriptable
+    /// surfaces arm an element picker; non-surface nodes clip the loaded document body.
+    ClipFocused,
     /// Crawl the focused page's link neighborhood into the graph (host action): seed
     /// the crawl actor from the focused node's URL, bounded by a conservative default
     /// policy (same-host, shallow). Each fetched page's links + metadata become graph
@@ -150,6 +153,7 @@ impl Command {
         Command::ExportGraph,
         Command::SaveGraphEngram,
         Command::MaterializeFocused,
+        Command::ClipFocused,
         Command::CrawlFocused,
         Command::StopCrawl,
         Command::ToggleShellbar,
@@ -185,6 +189,8 @@ impl Command {
                 | Command::ExportGraph
                 | Command::SaveGraphEngram
                 | Command::MaterializeFocused
+                | Command::ToggleKnotEditor
+                | Command::ClipFocused
                 | Command::CrawlFocused
                 | Command::StopCrawl
                 | Command::ToggleShellbar
@@ -206,21 +212,17 @@ impl Command {
             // selected edge(s).
             DeleteNode | HideSelectedEdge => MenuScope::Selection,
             // Per-node gestures on the single focused node: its facets, its content
-            // operation, its background-keep flag, its compat-view engine override.
+            // operation, its background-keep flag, its compat-view engine override, its
+            // local note source.
             OpenNodeSettings | BackgroundNode | RetryFocusedContent | StopFocusedOperation
-            | PinFocusedOperation | ToggleCompatView | CrawlFocused
-            | MaterializeFocused => MenuScope::SingleNode,
+            | PinFocusedOperation | ToggleCompatView | CrawlFocused | MaterializeFocused
+            | ClipFocused | ToggleKnotEditor => MenuScope::SingleNode,
             // Navigation, app-level pane toggles, graph / pane ops, export — available in any
             // context (they target the focused node or the whole graph, not the selection).
             Back | Forward | Home | ConnectPeer | ToggleWorkbench | ToggleRoster | ToggleGloss
             | ToggleApparatus | ToggleComms | ToggleInspector | ToggleTrail | ToggleSteward
             | ToggleAlembic | ShowAllEdges | ToggleProjection | OpenSettings | CloseGraphPane
-            | ExportGraph | SaveGraphEngram | ToggleShellbar | StopCrawl => {
-                MenuScope::Always
-            }
-            // Any other command defaults to Always; narrow the scope above only for
-            // selection / node / edge gestures. New commands need no arm here.
-            _ => MenuScope::Always,
+            | ExportGraph | SaveGraphEngram | ToggleShellbar | StopCrawl => MenuScope::Always,
         }
     }
 
@@ -264,6 +266,7 @@ impl Command {
             Command::ExportGraph => "export_graph",
             Command::SaveGraphEngram => "save_graph_engram",
             Command::MaterializeFocused => "materialize",
+            Command::ClipFocused => "clip",
             Command::CrawlFocused => "crawl",
             Command::StopCrawl => "crawl_stop",
             Command::ToggleShellbar => "shellbar",
@@ -314,6 +317,7 @@ impl Command {
             Command::ExportGraph => "Export graph (JSON-LD)",
             Command::SaveGraphEngram => "Save graph as engram",
             Command::MaterializeFocused => "Materialize focused page's link neighborhood",
+            Command::ClipFocused => "Clip focused surface/document",
             Command::CrawlFocused => "Crawl focused page's links into the graph",
             Command::StopCrawl => "Stop the running crawl",
             Command::ToggleShellbar => "Shellbar (toggle visibility)",
@@ -489,16 +493,44 @@ pub const PALETTE_CONTEXT_ACTIONS: &[(crate::ContextAction, &str, &str)] = {
         (Stack, "open_stack", "Open selection in a stack"),
         (AddTag, "add_tag", "Add tag to selection"),
         (ResizeNode, "resize_node", "Resize node (object card)"),
-        (ToggleSizeByDegree, "size_by_degree", "Toggle size by degree"),
-        (ToggleSizeByImportance, "size_by_importance", "Toggle size by importance"),
+        (
+            ToggleSizeByDegree,
+            "size_by_degree",
+            "Toggle size by degree",
+        ),
+        (
+            ToggleSizeByImportance,
+            "size_by_importance",
+            "Toggle size by importance",
+        ),
         (IsolateSelection, "isolate", "Isolate selection"),
-        (CrystallizeSelection, "crystallize", "Crystallize selection as graphlet"),
-        (OpenComponentGraphlet, "open_component", "Open component as graphlet"),
-        (OpenNeighborhoodGraphlet, "open_neighborhood", "Open neighborhood as graphlet"),
-        (OpenLinkWebGraphlet, "open_link_web", "Open link web as graphlet"),
+        (
+            CrystallizeSelection,
+            "crystallize",
+            "Crystallize selection as graphlet",
+        ),
+        (
+            OpenComponentGraphlet,
+            "open_component",
+            "Open component as graphlet",
+        ),
+        (
+            OpenNeighborhoodGraphlet,
+            "open_neighborhood",
+            "Open neighborhood as graphlet",
+        ),
+        (
+            OpenLinkWebGraphlet,
+            "open_link_web",
+            "Open link web as graphlet",
+        ),
         (ShowAllNodes, "show_all", "Show all nodes"),
         (MirrorTiles, "mirror_tiles", "Mirror open tiles"),
-        (OpenNodeFacets, "open_node_facets", "Node settings (selected node)"),
+        (
+            OpenNodeFacets,
+            "open_node_facets",
+            "Node settings (selected node)",
+        ),
     ]
 };
 
@@ -507,20 +539,20 @@ pub const PALETTE_CONTEXT_ACTIONS: &[(crate::ContextAction, &str, &str)] = {
 /// at render, so this one ordered list reproduces the canvas / single-node / multi-node menus.
 /// The user's curated list (persona-scoped) replaces this; resetting restores it.
 pub const DEFAULT_MENU_ACTIONS: &[&str] = &[
-    "add_node",         // canvas
-    "add_field",        // canvas
-    "open_splits",      // selection — "Open tile" (1) / "Open in splits" (2+)
-    "open_node_facets", // single — Node settings
-    "open_stack",       // multi — Open in a stack
-    "relate",           // multi — pairwise
-    "crystallize",      // multi — Crystallize selection as graphlet
-    "resize_node",      // single — Resize (object card)
-    "add_tag",          // selection
-    "size_by_degree",   // selection — scene toggle
+    "add_node",           // canvas
+    "add_field",          // canvas
+    "open_splits",        // selection — "Open tile" (1) / "Open in splits" (2+)
+    "open_node_facets",   // single — Node settings
+    "open_stack",         // multi — Open in a stack
+    "relate",             // multi — pairwise
+    "crystallize",        // multi — Crystallize selection as graphlet
+    "resize_node",        // single — Resize (object card)
+    "add_tag",            // selection
+    "size_by_degree",     // selection — scene toggle
     "size_by_importance", // selection — scene toggle (graph-signals importance)
-    "isolate",          // selection
-    "show_all",         // canvas — when a scope lens is active
-    "mirror_tiles",     // canvas — when tiles are open
+    "isolate",            // selection
+    "show_all",           // canvas — when a scope lens is active
+    "mirror_tiles",       // canvas — when tiles are open
 ];
 
 /// The palette label for a context action, or `None` if it is not palette-exposed. (P2.)
@@ -555,8 +587,10 @@ pub fn context_action_from_id(id: &str) -> Option<crate::ContextAction> {
 /// followed by the matching palette context actions. The single registry-driven source
 /// the palette renders, steps, and runs. (Command registry P2.)
 pub fn palette_items(query: &str) -> Vec<PaletteItem> {
-    let mut items: Vec<PaletteItem> =
-        filter(query).into_iter().map(PaletteItem::Command).collect();
+    let mut items: Vec<PaletteItem> = filter(query)
+        .into_iter()
+        .map(PaletteItem::Command)
+        .collect();
     for &(action, _id, label) in PALETTE_CONTEXT_ACTIONS {
         if label_matches(label, query) {
             items.push(PaletteItem::Context(action));
@@ -564,7 +598,6 @@ pub fn palette_items(query: &str) -> Vec<PaletteItem> {
     }
     items
 }
-
 
 #[cfg(test)]
 mod tests;

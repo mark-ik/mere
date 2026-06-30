@@ -2,16 +2,22 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use super::*;
 use super::command::Command;
+use super::*;
 use layout_dom_api::LayoutDom;
 use serval_scripted_dom::{NodeId, ScriptedDom};
 use xilem_serval::{Key, KeyEvent, NamedKey, PointerClick, ServalAppRunner, TextInput};
 
 /// Count elements with local tag `tag` in the subtree rooted at `id`.
 fn count_tag(dom: &ScriptedDom, id: NodeId, tag: &str) -> usize {
-    let here = usize::from(dom.element_name(id).is_some_and(|q| q.local.as_ref() == tag));
-    here + dom.dom_children(id).map(|c| count_tag(dom, c, tag)).sum::<usize>()
+    let here = usize::from(
+        dom.element_name(id)
+            .is_some_and(|q| q.local.as_ref() == tag),
+    );
+    here + dom
+        .dom_children(id)
+        .map(|c| count_tag(dom, c, tag))
+        .sum::<usize>()
 }
 
 /// The toolbar view diffs into the ScriptedDom from a reused `ToolbarState`:
@@ -27,13 +33,21 @@ fn toolbar_renders_from_reused_state() {
     // back + forward + pause + the 3 segmented add buttons (+node/+tile/+field) + 9 shellbar.
     // The add-pill became the segmented group (Chrome bar P5); session chips/add are divs, not
     // buttons.
-    assert_eq!(count_tag(&dom, root, "button"), 15, "back/forward/pause + 3 add-group + 9 shellbar");
+    assert_eq!(
+        count_tag(&dom, root, "button"),
+        15,
+        "back/forward/pause + 3 add-group + 9 shellbar"
+    );
     assert_eq!(count_tag(&dom, root, "input"), 1, "the omnibar input");
     // chrome container + toolbar row + branch chip + crawl chip + (empty) suggestions + shellbar
     // + the session strip + its add `+` + the add-group container. The sync chip moved into the
     // Steward / Apparatus panes (Chrome bar P1); sessions moved into the toolbar strip (P4); the
     // add group replaced the pill (P5).
-    assert_eq!(count_tag(&dom, root, "div"), 9, "+ session-strip + session-add + add-group");
+    assert_eq!(
+        count_tag(&dom, root, "div"),
+        9,
+        "+ session-strip + session-add + add-group"
+    );
 }
 
 /// Ghost autocomplete in command mode: a partial `>ros` shows the dim `ter`
@@ -47,21 +61,37 @@ fn omnibar_ghost_completes_command_mode() {
         c.omnibar = TextInput::new(">ros");
         c.refresh_suggestions();
     });
-    assert_eq!(runner.state().omnibar.ghost(), "ter", "completes >ros -> >roster");
-    assert_eq!(runner.state().omnibar.text(), ">ros", "the ghost stays out of the buffer");
+    assert_eq!(
+        runner.state().omnibar.ghost(),
+        "ter",
+        "completes >ros -> >roster"
+    );
+    assert_eq!(
+        runner.state().omnibar.text(),
+        ">ros",
+        "the ghost stays out of the buffer"
+    );
 
     runner.update(|c| {
         c.omnibar.accept_ghost();
         c.refresh_suggestions();
     });
     assert_eq!(runner.state().omnibar.text(), ">roster");
-    assert_eq!(runner.state().omnibar.ghost(), "", "a complete verb has no further ghost");
+    assert_eq!(
+        runner.state().omnibar.ghost(),
+        "",
+        "a complete verb has no further ghost"
+    );
 
     runner.update(|c| {
         c.omnibar = TextInput::new("example.com");
         c.refresh_suggestions();
     });
-    assert_eq!(runner.state().omnibar.ghost(), "", "navigation text is not completed");
+    assert_eq!(
+        runner.state().omnibar.ghost(),
+        "",
+        "navigation text is not completed"
+    );
 }
 
 /// A back-button click records a one-shot history step for the host to apply to
@@ -103,7 +133,10 @@ fn submit_syncs_omnibar_into_toolbar_state() {
         c.omnibar = TextInput::new("https://example.test");
         submit_omnibar(c);
     });
-    assert_eq!(runner.state().toolbar.editable.location, "https://example.test");
+    assert_eq!(
+        runner.state().toolbar.editable.location,
+        "https://example.test"
+    );
     assert!(runner.state().toolbar.editable.location_submitted);
     assert_eq!(runner.state().content_location(), "https://example.test");
 }
@@ -119,7 +152,10 @@ fn plain_submit_does_not_open_a_new_node() {
         submit_omnibar(c);
     });
     assert_eq!(runner.state().content_location(), "https://example.com");
-    assert!(!runner.state().open_as_new_node, "plain Enter navigates in place, not a new node");
+    assert!(
+        !runner.state().open_as_new_node,
+        "plain Enter navigates in place, not a new node"
+    );
 }
 
 /// An empty submission is a no-op: it neither grows the history nor raises
@@ -167,11 +203,19 @@ fn step_suggestion_wraps_and_refresh_resets() {
     });
     let count = runner.state().suggest.len();
     runner.update(|c| c.step_suggestion(-1));
-    assert_eq!(runner.state().suggest_active, Some(count - 1), "up from none → last");
+    assert_eq!(
+        runner.state().suggest_active,
+        Some(count - 1),
+        "up from none → last"
+    );
     runner.update(|c| c.step_suggestion(1));
     assert_eq!(runner.state().suggest_active, Some(0), "wrap to first");
     runner.update(Chrome::refresh_suggestions);
-    assert_eq!(runner.state().suggest_active, None, "refresh clears the highlight");
+    assert_eq!(
+        runner.state().suggest_active,
+        None,
+        "refresh clears the highlight"
+    );
 }
 
 /// Enter on a highlighted suggestion navigates *that* row and closes the
@@ -189,7 +233,10 @@ fn enter_navigates_highlighted_suggestion() {
         submit_omnibar(c);
     });
     assert_eq!(runner.state().content_location(), "https://example.com");
-    assert!(runner.state().suggest.is_empty(), "navigation closes the dropdown");
+    assert!(
+        runner.state().suggest.is_empty(),
+        "navigation closes the dropdown"
+    );
 }
 
 /// The command palette lists context actions alongside commands (registry P2), and
@@ -212,7 +259,10 @@ fn palette_runs_a_context_action_into_the_pending_slot() {
         Some(ContextAction::ShowAllNodes),
         "the palette records the context action for the host to apply",
     );
-    assert!(!runner.state().palette_open, "running the item closes the palette");
+    assert!(
+        !runner.state().palette_open,
+        "running the item closes the palette"
+    );
 }
 
 /// Toggling opens then closes the palette (the Ctrl+K path).
@@ -279,9 +329,17 @@ fn palette_step_wraps() {
     runner.update(Chrome::open_palette);
     let count = runner.state().palette_items().len();
     runner.update(|c| c.step_palette(-1));
-    assert_eq!(runner.state().palette.selected_index, Some(count - 1), "up from none → last");
+    assert_eq!(
+        runner.state().palette.selected_index,
+        Some(count - 1),
+        "up from none → last"
+    );
     runner.update(|c| c.step_palette(1));
-    assert_eq!(runner.state().palette.selected_index, Some(0), "wrap to first");
+    assert_eq!(
+        runner.state().palette.selected_index,
+        Some(0),
+        "wrap to first"
+    );
 }
 
 /// Context-menu keyboard nav wraps like the palette, and Enter runs the highlighted row,
@@ -302,12 +360,23 @@ fn context_menu_keyboard_nav_wraps_and_runs() {
     });
     // None → last on a step up, then wrap forward to first.
     runner.update(|c| c.step_context_menu(-1));
-    assert_eq!(runner.state().context_menu.as_ref().unwrap().selected, Some(1), "up from none → last");
+    assert_eq!(
+        runner.state().context_menu.as_ref().unwrap().selected,
+        Some(1),
+        "up from none → last"
+    );
     runner.update(|c| c.step_context_menu(1));
-    assert_eq!(runner.state().context_menu.as_ref().unwrap().selected, Some(0), "wrap to first");
+    assert_eq!(
+        runner.state().context_menu.as_ref().unwrap().selected,
+        Some(0),
+        "wrap to first"
+    );
     // Enter runs the highlighted row: its action becomes pending and the menu closes.
     runner.update(Chrome::run_context_selection);
-    assert!(runner.state().context_menu.is_none(), "running closes the menu");
+    assert!(
+        runner.state().context_menu.is_none(),
+        "running closes the menu"
+    );
     assert_eq!(runner.state().pending_context, Some(ContextAction::AddNode));
 }
 
@@ -319,7 +388,11 @@ fn tab_cap_edits_within_bounds() {
     let mut runner = runner("mere://welcome");
     let before = runner.state().settings.tab_cap;
     runner.update(Chrome::inc_tab_cap);
-    assert_eq!(runner.state().settings.tab_cap, before + 1, "+ raises the cap");
+    assert_eq!(
+        runner.state().settings.tab_cap,
+        before + 1,
+        "+ raises the cap"
+    );
     runner.update(Chrome::dec_tab_cap);
     runner.update(Chrome::dec_tab_cap);
     assert_eq!(runner.state().settings.tab_cap, before - 1, "- lowers it");
@@ -354,13 +427,24 @@ fn context_menu_renders_and_captures_an_action() {
     {
         let dom = runner.dom();
         let dom = dom.borrow();
-        assert_eq!(count_class(&dom, runner.root(), "context-menu"), 1, "the panel renders");
-        assert_eq!(count_class(&dom, runner.root(), "context-item"), 2, "a row per item");
+        assert_eq!(
+            count_class(&dom, runner.root(), "context-menu"),
+            1,
+            "the panel renders"
+        );
+        assert_eq!(
+            count_class(&dom, runner.root(), "context-item"),
+            2,
+            "a row per item"
+        );
     }
     // Picking a row captures its action and closes the menu.
     runner.update(|c| c.pick_context(ContextAction::Stack));
     assert_eq!(runner.state().pending_context, Some(ContextAction::Stack));
-    assert!(runner.state().context_menu.is_none(), "the menu closes on pick");
+    assert!(
+        runner.state().context_menu.is_none(),
+        "the menu closes on pick"
+    );
 }
 
 /// A submenu-parent row expands a second panel of its children; keyboard `ArrowRight` focuses
@@ -380,7 +464,10 @@ fn submenu_renders_expands_and_picks() {
                     "Relate as\u{2026}",
                     vec![
                         ContextItem::new("Cites", ContextAction::RelateAs(SemanticSubKind::Cites)),
-                        ContextItem::new("Quotes", ContextAction::RelateAs(SemanticSubKind::Quotes)),
+                        ContextItem::new(
+                            "Quotes",
+                            ContextAction::RelateAs(SemanticSubKind::Quotes),
+                        ),
                     ],
                 ),
             ],
@@ -390,7 +477,11 @@ fn submenu_renders_expands_and_picks() {
     {
         let dom = runner.dom();
         let dom = dom.borrow();
-        assert_eq!(count_class(&dom, runner.root(), "context-submenu"), 0, "no submenu yet");
+        assert_eq!(
+            count_class(&dom, runner.root(), "context-submenu"),
+            0,
+            "no submenu yet"
+        );
     }
     // Highlight the parent (index 1) and ArrowRight: the child panel renders, focused on child 0.
     runner.update(|c| {
@@ -399,12 +490,30 @@ fn submenu_renders_expands_and_picks() {
     });
     runner.update(Chrome::enter_submenu);
     {
-        let sub = runner.state().context_menu.as_ref().unwrap().submenu.clone();
-        assert_eq!(sub.as_ref().map(|s| s.parent), Some(1), "the parent expanded");
-        assert_eq!(sub.unwrap().selected, Some(0), "ArrowRight focuses the first child");
+        let sub = runner
+            .state()
+            .context_menu
+            .as_ref()
+            .unwrap()
+            .submenu
+            .clone();
+        assert_eq!(
+            sub.as_ref().map(|s| s.parent),
+            Some(1),
+            "the parent expanded"
+        );
+        assert_eq!(
+            sub.unwrap().selected,
+            Some(0),
+            "ArrowRight focuses the first child"
+        );
         let dom = runner.dom();
         let dom = dom.borrow();
-        assert_eq!(count_class(&dom, runner.root(), "context-submenu"), 1, "the child panel renders");
+        assert_eq!(
+            count_class(&dom, runner.root(), "context-submenu"),
+            1,
+            "the child panel renders"
+        );
     }
     // Step to the second child and pick it: the kind drains, the whole menu closes.
     runner.update(|c| c.step_context_menu(1));
@@ -414,7 +523,10 @@ fn submenu_renders_expands_and_picks() {
         Some(ContextAction::RelateAs(SemanticSubKind::Quotes)),
         "Enter picks the highlighted child"
     );
-    assert!(runner.state().context_menu.is_none(), "picking a child closes the whole menu");
+    assert!(
+        runner.state().context_menu.is_none(),
+        "picking a child closes the whole menu"
+    );
 }
 
 /// `ArrowLeft` / `Escape` collapse the open submenu one level, keeping the root menu up.
@@ -428,19 +540,45 @@ fn submenu_collapses_one_level() {
             40.0,
             vec![ContextItem::with_children(
                 "Layout",
-                vec![ContextItem::new("Grid", ContextAction::SetLayoutStrategy("grid"))],
+                vec![ContextItem::new(
+                    "Grid",
+                    ContextAction::SetLayoutStrategy("grid"),
+                )],
             )],
         );
         c.open_submenu(0);
     });
-    assert!(runner.state().context_menu.as_ref().unwrap().submenu.is_some());
+    assert!(
+        runner
+            .state()
+            .context_menu
+            .as_ref()
+            .unwrap()
+            .submenu
+            .is_some()
+    );
     // Collapse one level: the submenu closes but the root menu stays open.
     runner.update(Chrome::escape_context_menu);
-    assert!(runner.state().context_menu.as_ref().unwrap().submenu.is_none(), "submenu collapsed");
-    assert!(runner.state().context_menu.is_some(), "root menu still open");
+    assert!(
+        runner
+            .state()
+            .context_menu
+            .as_ref()
+            .unwrap()
+            .submenu
+            .is_none(),
+        "submenu collapsed"
+    );
+    assert!(
+        runner.state().context_menu.is_some(),
+        "root menu still open"
+    );
     // A second collapse closes the whole menu.
     runner.update(Chrome::escape_context_menu);
-    assert!(runner.state().context_menu.is_none(), "second Escape closes the menu");
+    assert!(
+        runner.state().context_menu.is_none(),
+        "second Escape closes the menu"
+    );
 }
 
 /// Count elements carrying exactly class `class` in the subtree at `id`.
@@ -449,7 +587,10 @@ fn count_class(dom: &ScriptedDom, id: NodeId, class: &str) -> usize {
         dom.attributes(id)
             .any(|a| a.name.local.as_ref() == "class" && a.value == class),
     );
-    here + dom.dom_children(id).map(|c| count_class(dom, c, class)).sum::<usize>()
+    here + dom
+        .dom_children(id)
+        .map(|c| count_class(dom, c, class))
+        .sum::<usize>()
 }
 
 /// The painted omnibar caret tracks byte offsets correctly in the live
@@ -471,18 +612,17 @@ fn omnibar_caret_tracks_bytes() {
         let d = d.borrow();
         first_tag(&d, root, "input").expect("input")
     };
-    let caret_x = |runner: &ServalAppRunner<Chrome, ChromeLogic, ChromeView>,
-                   node: NodeId,
-                   byte: usize| {
-        let dom = runner.dom();
-        let dom = dom.borrow();
-        // The production caret primitive (a fresh session's retained layout), the
-        // same `IncrementalLayout::caret_rect` the chrome's session overlay uses.
-        IncrementalLayout::new(&*dom, TEST_SHEET, 1024.0, 600.0)
-            .caret_rect(&*dom, node, byte, 2.0)
-            .map(|r| r.x)
-            .expect("caret rect")
-    };
+    let caret_x =
+        |runner: &ServalAppRunner<Chrome, ChromeLogic, ChromeView>, node: NodeId, byte: usize| {
+            let dom = runner.dom();
+            let dom = dom.borrow();
+            // The production caret primitive (a fresh session's retained layout), the
+            // same `IncrementalLayout::caret_rect` the chrome's session overlay uses.
+            IncrementalLayout::new(&*dom, TEST_SHEET, 1024.0, 600.0)
+                .caret_rect(&*dom, node, byte, 2.0)
+                .map(|r| r.x)
+                .expect("caret rect")
+        };
 
     let mut runner = runner("");
     let input = input_of(&runner);
@@ -494,7 +634,11 @@ fn omnibar_caret_tracks_bytes() {
 
     // End structure (before = full "abXcd"): byte 0 at the start, monotonic.
     let xs: Vec<f32> = (0..=5).map(|b| caret_x(&runner, input, b)).collect();
-    assert!(xs[0].abs() < 0.1, "caret at byte 0 is the text start, got {}", xs[0]);
+    assert!(
+        xs[0].abs() < 0.1,
+        "caret at byte 0 is the text start, got {}",
+        xs[0]
+    );
     for w in xs.windows(2) {
         assert!(w[1] > w[0], "caret x advances per char: {:?}", xs);
     }
@@ -507,7 +651,10 @@ fn omnibar_caret_tracks_bytes() {
         runner.dispatch_key(KeyEvent::new(Key::Named(NamedKey::ArrowLeft)));
     }
     let byte = runner.state().omnibar.caret_byte_in_render();
-    assert_eq!(byte, 2, "three lefts from end of \"abXcd\" lands the caret at byte 2");
+    assert_eq!(
+        byte, 2,
+        "three lefts from end of \"abXcd\" lands the caret at byte 2"
+    );
     let split_x = caret_x(&runner, input, byte);
     assert!(
         (split_x - reference_byte_2).abs() < 0.1,
@@ -517,7 +664,10 @@ fn omnibar_caret_tracks_bytes() {
 
 /// The first element with local tag `tag` in pre-order, if any.
 fn first_tag(dom: &ScriptedDom, id: NodeId, tag: &str) -> Option<NodeId> {
-    if dom.element_name(id).is_some_and(|q| q.local.as_ref() == tag) {
+    if dom
+        .element_name(id)
+        .is_some_and(|q| q.local.as_ref() == tag)
+    {
         return Some(id);
     }
     for c in dom.dom_children(id) {
@@ -539,7 +689,7 @@ fn first_tag(dom: &ScriptedDom, id: NodeId, tag: &str) -> Option<NodeId> {
 fn shell_container_hosts_chrome_and_pane_under_one_runner() {
     use std::cell::RefCell;
     use std::rc::Rc;
-    use xilem_serval::{el, lens, on_click, AnyView, ServalCtx, ServalElement};
+    use xilem_serval::{AnyView, ServalCtx, ServalElement, el, lens, on_click};
 
     struct DemoPane {
         clicks: u32,
@@ -599,7 +749,8 @@ fn shell_container_hosts_chrome_and_pane_under_one_runner() {
     // Input dispatched through the single runner reaches the pane's own lensed sub-state.
     runner.dispatch_click(pane_node, PointerClick::at((0.0, 0.0)));
     assert_eq!(
-        runner.state().pane.clicks, 1,
+        runner.state().pane.clicks,
+        1,
         "a click on the pane child mutated its own lensed sub-state, through one runner"
     );
 }

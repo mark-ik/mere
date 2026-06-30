@@ -19,7 +19,6 @@ use register_diagnostics::{
 use ux_events::ux_diagnostics::{DiagnosticsSeverity, event_channel};
 use ux_events::ux_observability::{DismissReason, SurfaceId, UxEvent};
 
-
 mod registry;
 mod state_impl;
 
@@ -183,7 +182,6 @@ pub(super) struct HostObservability {
     /// The last forgetting pass, for Steward's live-ops view. (Alembic B2.)
     last_forgetting: Option<ForgettingPass>,
 }
-
 
 fn push_bounded<T>(buf: &mut VecDeque<T>, capacity: usize, value: T) {
     if capacity == 0 {

@@ -15,7 +15,7 @@ use meerkat::ContextAction;
 use meerkat::command::{Command, context_action_from_id, context_action_palette_label};
 
 use super::observability::{A11ySnapshot, ObservabilitySnapshot, Severity};
-use super::{Shell, ContentPane};
+use super::{ContentPane, Shell};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct AgentObservation {
@@ -152,7 +152,10 @@ impl Shell {
         }
     }
 
-    fn agent_observation_from_snapshot(&mut self, snapshot: ObservabilitySnapshot) -> AgentObservation {
+    fn agent_observation_from_snapshot(
+        &mut self,
+        snapshot: ObservabilitySnapshot,
+    ) -> AgentObservation {
         // Compute each self-derived value into a local first: the struct literal would
         // otherwise hold several borrows of `self` (ctx, orrery, agent_surfaces) at once.
         let active_theme_id = self.shared.presentation.active_theme_id.clone();
@@ -289,7 +292,11 @@ impl Shell {
         } else if let Some(action) = context_action_from_id(id) {
             self.agent_invoke_context(action)
         } else {
-            (false, format!("invoke.{id}"), format!("unknown registry id: {id}"))
+            (
+                false,
+                format!("invoke.{id}"),
+                format!("unknown registry id: {id}"),
+            )
         }
     }
 
@@ -298,11 +305,15 @@ impl Shell {
     /// run the existing context drain (the same applier the menu uses). (Registry P3.)
     fn agent_invoke_context(&mut self, action: ContextAction) -> (bool, String, String) {
         let action_id = format!("context.{action:?}").to_ascii_lowercase();
-        let detail = context_action_palette_label(action).unwrap_or_default().to_string();
+        let detail = context_action_palette_label(action)
+            .unwrap_or_default()
+            .to_string();
         let set = self.ctx().selection_working_set();
         self.ctx().view.context_set = set;
         self.ctx().view.context_origin = None;
-        self.ctx().view.chrome_update(move |c| c.pick_context(action));
+        self.ctx()
+            .view
+            .chrome_update(move |c| c.pick_context(action));
         self.ctx().drain_pending_context();
         (true, action_id, detail)
     }
@@ -321,13 +332,19 @@ impl Shell {
     fn agent_set_theme(&mut self, theme_id: &str) -> (bool, String, String) {
         let action_id = "theme.set".to_string();
         self.ctx().set_theme(theme_id);
-        (true, action_id, self.shared.presentation.active_theme_id.clone())
+        (
+            true,
+            action_id,
+            self.shared.presentation.active_theme_id.clone(),
+        )
     }
 
     fn agent_activate_focused_action(&mut self) -> (bool, String, String) {
         let action_id = "focus.activate".to_string();
         if self.ctx().view.chrome().palette_open {
-            self.ctx().view.chrome_update(meerkat::Chrome::run_palette_selection);
+            self.ctx()
+                .view
+                .chrome_update(meerkat::Chrome::run_palette_selection);
             self.ctx().drain_pending_command();
             return (true, action_id, "palette selection activated".to_string());
         }
@@ -448,7 +465,6 @@ fn action(id: impl Into<String>, label: impl Into<String>) -> AgentActionDescrip
         label: label.into(),
     }
 }
-
 
 #[cfg(test)]
 mod tests;

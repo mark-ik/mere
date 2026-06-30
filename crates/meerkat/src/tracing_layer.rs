@@ -134,7 +134,10 @@ impl FieldVisitor {
         // `Field::name()` is `&'static str` (compile-time metadata), so the *real* field name
         // survives losslessly — no whitelist normalization (which collapsed unknown names to the
         // literal `"field"`). `StructuredPayloadField.name` is `&'static str`, which this satisfies.
-        self.fields.push(StructuredPayloadField { name: field.name(), value });
+        self.fields.push(StructuredPayloadField {
+            name: field.name(),
+            value,
+        });
     }
 }
 
@@ -182,7 +185,12 @@ fn trace_target_prefixes() -> &'static [String] {
                     .collect::<Vec<_>>()
             })
             .filter(|parsed| !parsed.is_empty())
-            .unwrap_or_else(|| DEFAULT_TRACE_TARGETS.iter().map(|s| s.to_string()).collect())
+            .unwrap_or_else(|| {
+                DEFAULT_TRACE_TARGETS
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect()
+            })
     })
 }
 
@@ -222,7 +230,12 @@ mod tests {
 
     #[test]
     fn interesting_target_covers_first_party_components_not_vendored() {
-        for t in ["meerkat::input", "armillary::actor", "graph_kernel::graph", "verso_serval::flip"] {
+        for t in [
+            "meerkat::input",
+            "armillary::actor",
+            "graph_kernel::graph",
+            "verso_serval::flip",
+        ] {
             assert!(interesting_target(t), "{t} should be captured");
         }
         for t in ["blitz_dom::layout", "tokio::runtime", "wgpu_hal::vulkan"] {
@@ -253,7 +266,10 @@ mod tests {
         // it globally, upstream of the layer's allowlist. So broadening `interesting_target` (T1)
         // and instrumenting armillary (T2) do NOT reach Apparatus until the env-filter default
         // widens. The env filter, not `interesting_target`, is the real reach gate.
-        assert!(targets.contains(&"meerkat".to_string()), "meerkat passes: {targets:?}");
+        assert!(
+            targets.contains(&"meerkat".to_string()),
+            "meerkat passes: {targets:?}"
+        );
         assert!(
             !targets.iter().any(|t| t.starts_with("armillary")),
             "armillary is gated by meerkat=info despite the bridge allowlist: {targets:?}",
@@ -272,7 +288,9 @@ mod tests {
         // bridge stands in for fmt so the console side is assertable. With per-layer filters there
         // is no global gate, so the ring is no longer starved (contrast the gate test above).
         let subscriber = tracing_subscriber::registry()
-            .with(ApparatusTracingLayer::new(console_tx).with_filter(EnvFilter::new("meerkat=info")))
+            .with(
+                ApparatusTracingLayer::new(console_tx).with_filter(EnvFilter::new("meerkat=info")),
+            )
             .with(ApparatusTracingLayer::new(ring_tx).with_filter(LevelFilter::INFO));
         tracing::subscriber::with_default(subscriber, || {
             tracing::info!(target: "armillary", "actor started");
@@ -296,7 +314,8 @@ mod tests {
             "console stays scoped by RUST_LOG: {console:?}",
         );
         assert!(
-            ring.iter().any(|t| t.starts_with("armillary")) && ring.contains(&"meerkat".to_string()),
+            ring.iter().any(|t| t.starts_with("armillary"))
+                && ring.contains(&"meerkat".to_string()),
             "ring captures first-party regardless of RUST_LOG: {ring:?}",
         );
     }
@@ -308,10 +327,10 @@ mod tests {
         // Mirror the ring filter in main.rs: an `info` floor plus per-target `=debug` opt-ins for the
         // sibling libraries' per-operation completion traces. `netrender` is left at the floor, so its
         // per-frame `frame rendered` debug is dropped while its faults (warn+) still reach the ring.
-        let subscriber = tracing_subscriber::registry().with(
-            ApparatusTracingLayer::new(ring_tx)
-                .with_filter(EnvFilter::new("info,netfetcher=debug,errand=debug,serval_layout=debug")),
-        );
+        let subscriber =
+            tracing_subscriber::registry().with(ApparatusTracingLayer::new(ring_tx).with_filter(
+                EnvFilter::new("info,netfetcher=debug,errand=debug,serval_layout=debug"),
+            ));
         tracing::subscriber::with_default(subscriber, || {
             tracing::debug!(target: "netfetcher", "fetch complete"); // opted in -> ring
             tracing::debug!(target: "serval_layout", "lay_out_content complete"); // opted in -> ring
@@ -352,7 +371,9 @@ mod tests {
         tracing::subscriber::with_default(subscriber, || {
             tracing::info!(target: "armillary", custom_field = 7_i64, "hello");
         });
-        let ev = rx.try_recv().expect("the event reaches the diagnostics ring (target broadened)");
+        let ev = rx
+            .try_recv()
+            .expect("the event reaches the diagnostics ring (target broadened)");
         let DiagnosticEvent::Event { fields, .. } = ev else {
             panic!("an event becomes a structured diagnostic");
         };

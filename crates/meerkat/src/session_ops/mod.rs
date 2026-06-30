@@ -74,7 +74,6 @@ pub(crate) fn load_cartography(
         .and_then(|json| platen::CartographyGeometry::from_persisted_json(json.as_str(), present))
 }
 
-
 // Session ops live on `Shell`, not `WindowCtx`: switching a session re-keys the
 // orrery pool, and a `WindowCtx` holds exactly one orrery borrowed *out* of the
 // pool, so it cannot insert or re-key entries. Per-window input handlers request
@@ -86,7 +85,10 @@ pub(crate) fn load_cartography(
 
 mod shell_load;
 mod shell_session;
+mod view_intent;
 mod windowctx;
+
+pub(crate) use view_intent::{hidden_relation_records, restore_hidden_relations};
 
 /// A short switcher label for a session with no user-set display name: the first
 /// non-intro node's cached host (else its title), or "New" for an empty /

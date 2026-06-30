@@ -12,7 +12,10 @@ impl WindowCtx<'_> {
     /// auto-attach bindings so the change takes effect on the next attach. (Tail 3.)
     pub(crate) fn set_script_cap(&mut self, cap: &str) {
         let root = self.shared.session.mere_root.clone();
-        let mut settings = settings_store::load_settings(&root).ok().flatten().unwrap_or_default();
+        let mut settings = settings_store::load_settings(&root)
+            .ok()
+            .flatten()
+            .unwrap_or_default();
         let next = |cur: Option<Permission>| match cur {
             None => Some(Permission::Allow),
             Some(Permission::Allow) => Some(Permission::Prompt),
@@ -35,7 +38,10 @@ impl WindowCtx<'_> {
         let prefs = settings.script_permissions;
         let mut bindings = crate::content::script::load_resolved_bindings(&root, &prefs);
         bindings.extend(crate::content::script::load_mod_bindings(&root, &prefs));
-        self.shared.content.constellation.set_script_bindings(bindings);
+        self.shared
+            .content
+            .constellation
+            .set_script_bindings(bindings);
         // Keep the open Scripts page's cache in step with the edit (it stays open across the
         // click), so the labels refresh without re-reading disk. (Settings perf.)
         self.view.script_caps = Some(prefs);
@@ -57,7 +63,9 @@ impl WindowCtx<'_> {
         // a reopen re-reads and picks up any out-of-band change. This is what keeps the per-frame
         // page rebuild free of disk I/O — the bindings it also lists come from the constellation's
         // in-memory set. (Settings perf.)
-        let scripts_open = tiles.iter().any(|(_, reference, _)| reference == "pelt/scripts");
+        let scripts_open = tiles
+            .iter()
+            .any(|(_, reference, _)| reference == "pelt/scripts");
         if scripts_open {
             if self.view.script_caps.is_none() {
                 self.view.script_caps = Some(
@@ -82,8 +90,9 @@ impl WindowCtx<'_> {
             .filter_map(|(member, reference, rect)| {
                 let page = self.settings_page(&reference)?;
                 // `pelt/appearance` → namespace `pelt`, active page `appearance`.
-                let (namespace, active) =
-                    reference.split_once('/').unwrap_or((reference.as_str(), ""));
+                let (namespace, active) = reference
+                    .split_once('/')
+                    .unwrap_or((reference.as_str(), ""));
                 let spine = settings_index(namespace)
                     .into_iter()
                     .map(|p| SettingsSpineEntry {
@@ -119,17 +128,28 @@ impl WindowCtx<'_> {
             return None;
         }
         let subject: GraphMemberId = namespace.strip_prefix("node:")?.parse().ok()?;
-        let key = self.orrery().graph().get_node_by_id(subject).map(|(k, _)| k)?;
+        let key = self
+            .orrery()
+            .graph()
+            .get_node_by_id(subject)
+            .map(|(k, _)| k)?;
         let sprite = self.orrery().node_sprite(key).map(str::to_string);
-        let hull =
-            self.orrery().node_sprite_hull(key).map(<[(f32, f32)]>::to_vec).unwrap_or_default();
+        let hull = self
+            .orrery()
+            .node_sprite_hull(key)
+            .map(<[(f32, f32)]>::to_vec)
+            .unwrap_or_default();
         // Nothing to edit yet if the node has neither a sprite nor a body hull (authoring a hull
         // from scratch is a later editor step).
         if sprite.is_none() && hull.len() < 3 {
             return None;
         }
         // Carry the subject so the swatch's vertex drag knows whose hull to edit. (Stage B.)
-        Some(SwatchSpec { sprite, hull, subject: Some(subject) })
+        Some(SwatchSpec {
+            sprite,
+            hull,
+            subject: Some(subject),
+        })
     }
 
     /// Open a settings page as a workbench tile: mint (or reuse) its ephemeral `settings://`
@@ -147,7 +167,11 @@ impl WindowCtx<'_> {
         // Reuse the node for this exact page if it is already in the graph, so repeated
         // `>settings` does not mint duplicate ephemeral nodes; else mint one (linked to its
         // subject for a facet page).
-        let existing = self.orrery().graph().get_node_by_url(&url).map(|(_, n)| n.id);
+        let existing = self
+            .orrery()
+            .graph()
+            .get_node_by_url(&url)
+            .map(|(_, n)| n.id);
         let member =
             existing.unwrap_or_else(|| self.orrery_mut().open_member_as_new_node(subject, &url));
         self.open_workbench();
@@ -188,7 +212,15 @@ pub(crate) fn panel_bg_rgb(theme: &ChromeTheme) -> String {
 pub(crate) fn tab_cap_items(cap: usize) -> Vec<PaneItem> {
     vec![
         PaneItem::text("app-row", format!("Active tab cap: {cap}")),
-        PaneItem::button("app-btn", "\u{2212} fewer active tabs".to_string(), "tiles:cap:down".to_string()),
-        PaneItem::button("app-btn", "+ more active tabs".to_string(), "tiles:cap:up".to_string()),
+        PaneItem::button(
+            "app-btn",
+            "\u{2212} fewer active tabs".to_string(),
+            "tiles:cap:down".to_string(),
+        ),
+        PaneItem::button(
+            "app-btn",
+            "+ more active tabs".to_string(),
+            "tiles:cap:up".to_string(),
+        ),
     ]
 }

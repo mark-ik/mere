@@ -25,11 +25,33 @@ impl Chrome {
     pub fn open_knot_editor(&mut self, source: impl Into<String>) {
         self.knot_source = TextInput::new(source);
         self.knot_editor_open = true;
+        self.knot_target = None;
+        self.knot_editor_label = "Editor".to_string();
+        self.knot_editor_rect = None;
+        self.knot_save_requested = false;
+    }
+
+    /// Open the docked knot editor against a graph member's authored body.
+    pub fn open_knot_editor_for(
+        &mut self,
+        target: GraphMemberId,
+        label: impl Into<String>,
+        source: impl Into<String>,
+    ) {
+        self.knot_source = TextInput::new(source);
+        self.knot_editor_open = true;
+        self.knot_target = Some(target);
+        self.knot_editor_label = label.into();
+        self.knot_editor_rect = None;
+        self.knot_save_requested = false;
     }
 
     /// Close the knot editor.
     pub fn close_knot_editor(&mut self) {
         self.knot_editor_open = false;
+        self.knot_target = None;
+        self.knot_editor_rect = None;
+        self.knot_save_requested = false;
     }
 
     /// Toggle the knot editor: open a fresh note, or close it.
@@ -39,6 +61,28 @@ impl Chrome {
         } else {
             self.open_knot_editor("# New note\n\nStart typing.\n");
         }
+    }
+
+    /// Queue a save of the current knot source for the host to apply to the graph.
+    pub fn request_knot_editor_save(&mut self) {
+        if self.knot_editor_open {
+            self.knot_save_requested = true;
+        }
+    }
+
+    /// Update the editor's window-space tile rect, or clear to the fixed fallback.
+    pub fn set_knot_editor_rect(&mut self, rect: Option<[f32; 4]>) {
+        self.knot_editor_rect = rect;
+    }
+
+    /// Take the pending knot-editor save request, if it is bound to a graph member.
+    pub fn take_knot_editor_save(&mut self) -> Option<(GraphMemberId, String)> {
+        if !self.knot_save_requested {
+            return None;
+        }
+        self.knot_save_requested = false;
+        self.knot_target
+            .map(|target| (target, self.knot_source.text().to_string()))
     }
 
     /// Open conversation `id`: select it (clearing the prior thread) and record an

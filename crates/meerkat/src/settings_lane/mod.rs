@@ -22,8 +22,8 @@ use session_runtime::settings_store;
 
 use crate::WindowCtx;
 use crate::apparatus::{engine_section_items, physics_section_items, theme_section_items};
-use crate::scene_settings::scene_section_items;
 use crate::list_pane::PaneItem;
+use crate::scene_settings::scene_section_items;
 use crate::settings_pane_view::{SettingsPane, SettingsSpineEntry};
 use crate::swatch::SwatchSpec;
 
@@ -45,22 +45,48 @@ pub(crate) struct SettingsPage {
 pub(crate) fn settings_index(namespace: &str) -> Vec<SettingsPageRef> {
     match namespace {
         "pelt" => vec![
-            SettingsPageRef { id: "appearance", title: "Appearance" },
-            SettingsPageRef { id: "reading", title: "Reading" },
-            SettingsPageRef { id: "engines", title: "Engines" },
-            SettingsPageRef { id: "physics", title: "Physics" },
-            SettingsPageRef { id: "orrery", title: "Orrery" },
-            SettingsPageRef { id: "scene", title: "Scene" },
-            SettingsPageRef { id: "crawl", title: "Crawl" },
-            SettingsPageRef { id: "scripts", title: "Scripts" },
-            SettingsPageRef { id: "menu", title: "Menu" },
+            SettingsPageRef {
+                id: "appearance",
+                title: "Appearance",
+            },
+            SettingsPageRef {
+                id: "reading",
+                title: "Reading",
+            },
+            SettingsPageRef {
+                id: "engines",
+                title: "Engines",
+            },
+            SettingsPageRef {
+                id: "physics",
+                title: "Physics",
+            },
+            SettingsPageRef {
+                id: "orrery",
+                title: "Orrery",
+            },
+            SettingsPageRef {
+                id: "scene",
+                title: "Scene",
+            },
+            SettingsPageRef {
+                id: "crawl",
+                title: "Crawl",
+            },
+            SettingsPageRef {
+                id: "scripts",
+                title: "Scripts",
+            },
+            SettingsPageRef {
+                id: "menu",
+                title: "Menu",
+            },
         ],
         // The `node:<id>` facets provider lists its own pages. (Settings lane P3.)
         ns if ns.starts_with("node:") => crate::settings_node::node_settings_index(),
         _ => Vec::new(),
     }
 }
-
 
 mod ops;
 mod pages;

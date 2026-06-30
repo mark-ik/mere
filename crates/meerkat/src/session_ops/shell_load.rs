@@ -12,7 +12,12 @@ impl crate::Shell {
     /// just-minted empty session. Re-keys the focused orrery to the target graph in
     /// the pool (the Shell-only step a WindowCtx cannot do); the rest runs on the
     /// re-entered ctx, which now resolves that re-keyed orrery. (MG2.)
-    pub(crate) fn load_active_session(&mut self, id: SessionId, session_dir: std::path::PathBuf, fresh: bool) {
+    pub(crate) fn load_active_session(
+        &mut self,
+        id: SessionId,
+        session_dir: std::path::PathBuf,
+        fresh: bool,
+    ) {
         // The target graph (empty for a fresh session, or a missing/corrupt file).
         let graph = if fresh {
             Graph::new()
@@ -70,7 +75,8 @@ impl crate::Shell {
         let mut ctx = self.ctx();
         match restored_view.as_ref().and_then(|v| v.camera.as_ref()) {
             Some(snapshot) => {
-                ctx.orrery_mut().set_camera(crate::snapshot_to_camera(snapshot));
+                ctx.orrery_mut()
+                    .set_camera(crate::snapshot_to_camera(snapshot));
                 let (yaw, tilt) = crate::snapshot_yaw_tilt(snapshot);
                 ctx.orrery_mut().set_yaw(yaw);
                 ctx.orrery_mut().set_tilt(tilt);
@@ -82,13 +88,17 @@ impl crate::Shell {
             ctx.orrery_mut().select_by_url(url);
         }
         // Restore the pane's layout strategy (None = force-directed). (Layout picker.)
-        ctx.orrery_mut().set_layout_strategy(restored_view.as_ref().and_then(|v| v.strategy.clone()));
+        ctx.orrery_mut()
+            .set_layout_strategy(restored_view.as_ref().and_then(|v| v.strategy.clone()));
+        restore_hidden_relations(ctx.orrery_mut(), restored_view.as_ref());
         // Restore live workbench-mirror mode; its scope re-derives from the open tiles
         // through the render loop, so the flag is all that needs to come back. (Mirror.)
         ctx.view.mirror_tiles = restored_view.as_ref().is_some_and(|v| v.mirror_tiles);
         // Re-point only the panes that were on the outgoing graph, so a second
         // graph-pane pinned to a different graph survives the switch. (Pane-as-unit.)
-        ctx.view.frame_layout.retag_graph_bound_from(old_gid, target_graph);
+        ctx.view
+            .frame_layout
+            .retag_graph_bound_from(old_gid, target_graph);
         // Switching toward a graph already shown beside would leave two panes on it;
         // collapse the duplicate so it doesn't render blank. (Pane-as-unit.)
         ctx.view.frame_layout.dedupe_graph_panes();
@@ -110,12 +120,17 @@ impl crate::Shell {
         // Restore the orrery's settled layout from the cartography sidecar, overriding
         // the graph's load-time seed so the spatial view comes back as it was left
         // rather than re-scrambling. (Position sidecar.)
-        let present: std::collections::HashSet<forme::GraphMemberId> =
-            ctx.orrery().graph().nodes().map(|(_, node)| node.id).collect();
+        let present: std::collections::HashSet<forme::GraphMemberId> = ctx
+            .orrery()
+            .graph()
+            .nodes()
+            .map(|(_, node)| node.id)
+            .collect();
         if let Some(geom) = load_cartography(&session_dir, &present) {
             ctx.orrery_mut().seed_cartography(geom.iter());
             // Restore the importance metric first, so the sizing restore recomputes with it.
-            ctx.orrery_mut().apply_cartography_importance_metric(geom.importance_metric());
+            ctx.orrery_mut()
+                .apply_cartography_importance_metric(geom.importance_metric());
             // Restore the per-node sizes + the size-by-degree / size-by-importance flags. (Graph signals.)
             ctx.orrery_mut().apply_cartography_sizing(
                 geom.size_iter(),
@@ -123,11 +138,14 @@ impl crate::Shell {
                 geom.size_by_importance(),
             );
             // Restore the custom sprite faces, so a textured node re-opens textured. (Node-rep.)
-            ctx.orrery_mut().apply_cartography_sprites(geom.sprite_iter());
+            ctx.orrery_mut()
+                .apply_cartography_sprites(geom.sprite_iter());
             // ...and their collider hulls, so the traced-to-image collider survives too. (Node-rep.)
-            ctx.orrery_mut().apply_cartography_sprite_hulls(geom.sprite_hull_iter());
+            ctx.orrery_mut()
+                .apply_cartography_sprite_hulls(geom.sprite_hull_iter());
             // ...and the per-node physical materials, so a tuned node re-opens tuned. (Body & face.)
-            ctx.orrery_mut().apply_cartography_materials(geom.material_iter());
+            ctx.orrery_mut()
+                .apply_cartography_materials(geom.material_iter());
             // ...and the face overrides LAST (after sprites), so the chosen face wins. (Body & face.)
             ctx.orrery_mut().apply_cartography_faces(geom.face_iter());
         }
@@ -135,8 +153,11 @@ impl crate::Shell {
         ctx.view.active_content = crate::ContentPane::Orrery;
         ctx.shared.session.session_dir = session_dir;
         ctx.shared.session.active_session_id = id;
-        ctx.view.content_location =
-            ctx.orrery().focused_url().unwrap_or("mere://welcome").to_string();
+        ctx.view.content_location = ctx
+            .orrery()
+            .focused_url()
+            .unwrap_or("mere://welcome")
+            .to_string();
         ctx.refresh_session_labels();
         ctx.view.request_redraw();
     }
@@ -198,7 +219,13 @@ impl crate::Shell {
     /// session is unknown or its graph already shows in this window. (Window
     /// composition P2 — second graph-pane.)
     pub(crate) fn open_graph_beside(&mut self, id: SessionId) {
-        let Some(graph_id) = self.shared.session.manifests.get(id).map(|m| m.root_graph_id) else {
+        let Some(graph_id) = self
+            .shared
+            .session
+            .manifests
+            .get(id)
+            .map(|m| m.root_graph_id)
+        else {
             return;
         };
         // Already shown beside in the focused window? Don't double-summon.
@@ -265,11 +292,11 @@ impl crate::Shell {
         let Some(store) = self.shared.content.store.as_mut() else {
             return;
         };
-        let Some(graph) =
-            pollster::block_on(session_runtime::graph_engram::open_engram_as_session(store, id))
-                .ok()
-                .flatten()
-        else {
+        let Some(graph) = pollster::block_on(
+            session_runtime::graph_engram::open_engram_as_session(store, id),
+        )
+        .ok()
+        .flatten() else {
             return;
         };
         // An engram is not a session, so it pools under a fresh, ephemeral graph id.

@@ -43,7 +43,10 @@ impl WindowCtx<'_> {
             "menu" => ("Menu", self.menu_settings_items()),
             _ => return None,
         };
-        Some(SettingsPage { title: title.to_string(), items })
+        Some(SettingsPage {
+            title: title.to_string(),
+            items,
+        })
     }
 
     /// The `pelt/menu` page: the persona-configurable context menu editor (command registry P4).
@@ -81,8 +84,9 @@ impl WindowCtx<'_> {
             );
             if let Some(spec) = row.reorder.as_mut() {
                 spec.dragging = drag.is_some_and(|d| d.id == *id);
-                spec.drop_target = drag
-                    .is_some_and(|d| d.moved && d.id != *id && d.target.as_deref() == Some(id.as_str()));
+                spec.drop_target = drag.is_some_and(|d| {
+                    d.moved && d.id != *id && d.target.as_deref() == Some(id.as_str())
+                });
             }
             items.push(row);
         }
@@ -93,7 +97,11 @@ impl WindowCtx<'_> {
                 continue;
             }
             let label = meerkat::command::registry_label(id).unwrap_or(id);
-            items.push(PaneItem::button("app-btn", label.to_string(), format!("menu:toggle:{id}")));
+            items.push(PaneItem::button(
+                "app-btn",
+                label.to_string(),
+                format!("menu:toggle:{id}"),
+            ));
         }
         items.push(PaneItem::text("app-title", "Reset"));
         items.push(PaneItem::button(
@@ -145,7 +153,10 @@ impl WindowCtx<'_> {
         let near = |a: f32, b: f32| (a - b).abs() < 0.5;
         let active = |want: &str| match def.harmony {
             Harmony::Custom => want == "custom",
-            Harmony::Locked { secondary_deg: s, tertiary_deg: t } => match want {
+            Harmony::Locked {
+                secondary_deg: s,
+                tertiary_deg: t,
+            } => match want {
                 "triadic" => near(s, 120.0) && near(t, 240.0),
                 "analogous" => near(s, 30.0) && near(t, -30.0),
                 "complementary" => near(s, 180.0) && near(t, 150.0),
@@ -166,7 +177,11 @@ impl WindowCtx<'_> {
             ("mono", "Monochrome"),
         ] {
             // Harmony is a single-selection picker (one active relation).
-            items.push(PaneItem::radio(active(key), lbl.to_string(), format!("theme:harmony:{key}")));
+            items.push(PaneItem::radio(
+                active(key),
+                lbl.to_string(),
+                format!("theme:harmony:{key}"),
+            ));
         }
 
         // The hex label shows the *effective* (harmony-applied) colour so it
@@ -196,12 +211,33 @@ impl WindowCtx<'_> {
             // lightness stay per-accent. (Seed-palette harmony.)
             let accent = seed == "secondary" || seed == "tertiary";
             if locked && accent {
-                items.push(PaneItem::text("app-row-muted", "Hue follows primary".to_string()));
+                items.push(PaneItem::text(
+                    "app-row-muted",
+                    "Hue follows primary".to_string(),
+                ));
             } else {
-                items.push(PaneItem::slider("Hue", format!("theme:seed:{seed}:h"), (h / 360.0) as f32, 24, true));
+                items.push(PaneItem::slider(
+                    "Hue",
+                    format!("theme:seed:{seed}:h"),
+                    (h / 360.0) as f32,
+                    24,
+                    true,
+                ));
             }
-            items.push(PaneItem::slider("Saturation", format!("theme:seed:{seed}:s"), s as f32, 16, false));
-            items.push(PaneItem::slider("Lightness", format!("theme:seed:{seed}:l"), l as f32, 16, false));
+            items.push(PaneItem::slider(
+                "Saturation",
+                format!("theme:seed:{seed}:s"),
+                s as f32,
+                16,
+                false,
+            ));
+            items.push(PaneItem::slider(
+                "Lightness",
+                format!("theme:seed:{seed}:l"),
+                l as f32,
+                16,
+                false,
+            ));
         }
 
         items.push(PaneItem::button(
@@ -222,17 +258,35 @@ impl WindowCtx<'_> {
         let s = &self.shared.presentation.document_sheet;
         let mut items = vec![PaneItem::text("app-title", "Document text".to_string())];
 
-        items.push(PaneItem::text("app-row", format!("Text size: {:.0} px", s.body_font_size)));
+        items.push(PaneItem::text(
+            "app-row",
+            format!("Text size: {:.0} px", s.body_font_size),
+        ));
         let size_frac = ((s.body_font_size - 10.0) / (24.0 - 10.0)).clamp(0.0, 1.0);
-        items.push(PaneItem::slider("Size", "doc:size".to_string(), size_frac, 14, false));
+        items.push(PaneItem::slider(
+            "Size",
+            "doc:size".to_string(),
+            size_frac,
+            14,
+            false,
+        ));
         items.push(PaneItem::text(
             "app-row",
             format!("Line spacing: {:.0}%", s.line_height_ratio * 100.0),
         ));
         let spacing_frac = ((s.line_height_ratio - 1.0) / (2.0 - 1.0)).clamp(0.0, 1.0);
-        items.push(PaneItem::slider("Spacing", "doc:linespacing".to_string(), spacing_frac, 10, false));
+        items.push(PaneItem::slider(
+            "Spacing",
+            "doc:linespacing".to_string(),
+            spacing_frac,
+            10,
+            false,
+        ));
 
-        let arrows_on = matches!(s.link_adornment, document_canvas::LinkAdornment::SchemeArrow);
+        let arrows_on = matches!(
+            s.link_adornment,
+            document_canvas::LinkAdornment::SchemeArrow
+        );
         // Link arrows is an independent on / off switch.
         items.push(PaneItem::switch(
             arrows_on,
@@ -258,7 +312,11 @@ impl WindowCtx<'_> {
             ));
         }
 
-        items.push(PaneItem::button("app-btn", "Reset to defaults".to_string(), "doc:reset".to_string()));
+        items.push(PaneItem::button(
+            "app-btn",
+            "Reset to defaults".to_string(),
+            "doc:reset".to_string(),
+        ));
         items
     }
 
@@ -275,17 +333,33 @@ impl WindowCtx<'_> {
         let flip = |label: String, on: bool, key: String| PaneItem::switch(on, label, key);
         let mut items = vec![PaneItem::text("app-title", "Layout")];
         let active = self.orrery().layout_strategy();
-        items.push(pick("Force-directed".to_string(), active.is_none(), "orrery:layout:".to_string()));
+        items.push(pick(
+            "Force-directed".to_string(),
+            active.is_none(),
+            "orrery:layout:".to_string(),
+        ));
         for &(id, label) in platen::ORRERY_LAYOUT_STRATEGIES {
-            items.push(pick(label.to_string(), active == Some(id), format!("orrery:layout:{id}")));
+            items.push(pick(
+                label.to_string(),
+                active == Some(id),
+                format!("orrery:layout:{id}"),
+            ));
         }
 
         items.push(PaneItem::text("app-title", "Map"));
         let sbd = self.orrery().size_by_degree();
         let check = |label: &str, on: bool| {
-            if on { format!("{label}  \u{2713}") } else { label.to_string() }
+            if on {
+                format!("{label}  \u{2713}")
+            } else {
+                label.to_string()
+            }
         };
-        items.push(flip(check("Size by degree", sbd), sbd, "orrery:sizebydegree".to_string()));
+        items.push(flip(
+            check("Size by degree", sbd),
+            sbd,
+            "orrery:sizebydegree".to_string(),
+        ));
         let sbi = self.orrery().size_by_importance();
         items.push(flip(
             check("Size by importance", sbi),
@@ -349,7 +423,11 @@ impl WindowCtx<'_> {
             "orrery:gloss:".to_string(),
         ));
         for &(id, label) in platen::ORRERY_LAYOUT_STRATEGIES {
-            items.push(pick(label.to_string(), gloss == Some(id), format!("orrery:gloss:{id}")));
+            items.push(pick(
+                label.to_string(),
+                gloss == Some(id),
+                format!("orrery:gloss:{id}"),
+            ));
         }
         // The lens's own scope + encoding (independent of the main view): crop to the selection,
         // and size nodes by the importance signal. (Graph signals — P6c.)
@@ -374,7 +452,11 @@ impl WindowCtx<'_> {
             "orrery:affinity".to_string(),
         ));
         let mirror = self.view.mirror_tiles;
-        items.push(flip(check("Mirror open tiles", mirror), mirror, "orrery:mirror".to_string()));
+        items.push(flip(
+            check("Mirror open tiles", mirror),
+            mirror,
+            "orrery:mirror".to_string(),
+        ));
         items
     }
 
@@ -389,14 +471,27 @@ impl WindowCtx<'_> {
         // Page cap). `flip`: an independent on / off switch (role=switch — sitemap).
         let pick = |label: String, on: bool, key: String| PaneItem::radio(on, label, key);
         let flip = |label: String, on: bool, key: String| PaneItem::switch(on, label, key);
-        let check =
-            |label: &str, on: bool| if on { format!("{label}  \u{2713}") } else { label.to_string() };
+        let check = |label: &str, on: bool| {
+            if on {
+                format!("{label}  \u{2713}")
+            } else {
+                label.to_string()
+            }
+        };
 
         let current_scope = self.shared.content.crawl.scope();
         let mut items = vec![PaneItem::text("app-title", "Scope")];
-        for scope in [HostScope::SameHost, HostScope::SameDomain, HostScope::AnyHost] {
+        for scope in [
+            HostScope::SameHost,
+            HostScope::SameDomain,
+            HostScope::AnyHost,
+        ] {
             let on = scope == current_scope;
-            items.push(pick(check(scope.label(), on), on, format!("crawl:scope:{}", scope.as_key())));
+            items.push(pick(
+                check(scope.label(), on),
+                on,
+                format!("crawl:scope:{}", scope.as_key()),
+            ));
         }
 
         // Depth presets, plus the active value as a "Custom" row when it is not one of
@@ -471,7 +566,11 @@ impl WindowCtx<'_> {
             Some(Permission::Inherit) => "inherit",
         };
         let mut items = vec![PaneItem::text("app-title", "Capabilities")];
-        for (name, cur) in [("log", prefs.log), ("document", prefs.document), ("net", prefs.net)] {
+        for (name, cur) in [
+            ("log", prefs.log),
+            ("document", prefs.document),
+            ("net", prefs.net),
+        ] {
             items.push(PaneItem::button(
                 "app-btn",
                 format!("{name}: {}", label(cur)),
@@ -492,7 +591,11 @@ impl WindowCtx<'_> {
             items.push(PaneItem::text("app-row-muted", "none"));
         } else {
             for b in bindings {
-                let net = if b.net.effective == Permission::Allow { " [net]" } else { "" };
+                let net = if b.net.effective == Permission::Allow {
+                    " [net]"
+                } else {
+                    ""
+                };
                 items.push(PaneItem::text(
                     "app-row",
                     format!("{}  →  {}{net}", b.origin, b.component_path.display()),

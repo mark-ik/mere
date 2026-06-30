@@ -90,7 +90,10 @@ impl HostObservability {
     /// "[body ·] severity · age". Formatting lives here because `Severity::label` is
     /// module-private. (Notification subsystem.)
     pub(crate) fn notification_rows(&self, limit: usize) -> Vec<(String, String)> {
-        let mut rows = vec![("Notifications".to_string(), self.notifications.len().to_string())];
+        let mut rows = vec![(
+            "Notifications".to_string(),
+            self.notifications.len().to_string(),
+        )];
         for n in self.notifications.iter().rev().take(limit) {
             let body = if n.body.is_empty() {
                 String::new()
@@ -396,7 +399,10 @@ impl HostObservability {
             let _ = writeln!(
                 out,
                 "  [{}] {}: {}  ({}ms ago)",
-                d.severity.label(), d.channel, d.message, ago(&d.at),
+                d.severity.label(),
+                d.channel,
+                d.message,
+                ago(&d.at),
             );
         }
         let _ = writeln!(out, "\n## Traces ({})", self.traces.len());
@@ -404,7 +410,10 @@ impl HostObservability {
             let _ = writeln!(
                 out,
                 "  {} {} {}  ({}ms ago)",
-                t.name, t.event, t.detail.as_deref().unwrap_or(""), ago(&t.at),
+                t.name,
+                t.event,
+                t.detail.as_deref().unwrap_or(""),
+                ago(&t.at),
             );
         }
         let _ = writeln!(out, "\n## Actors ({})", self.actors.len());
@@ -412,23 +421,40 @@ impl HostObservability {
             let _ = writeln!(
                 out,
                 "  {} {} {}  ({}ms ago)",
-                a.actor, a.event, a.detail.as_deref().unwrap_or(""), ago(&a.at),
+                a.actor,
+                a.event,
+                a.detail.as_deref().unwrap_or(""),
+                ago(&a.at),
             );
         }
         let _ = writeln!(out, "\n## Probes ({})", self.probes.len());
         for p in &self.probes {
-            let _ = writeln!(out, "  {} [{}] {}  ({}ms ago)", p.name, p.status, p.detail, ago(&p.at));
+            let _ = writeln!(
+                out,
+                "  {} [{}] {}  ({}ms ago)",
+                p.name,
+                p.status,
+                p.detail,
+                ago(&p.at)
+            );
         }
         let _ = writeln!(out, "\n## Notifications ({})", self.notifications.len());
         for n in &self.notifications {
             let _ = writeln!(
                 out,
                 "  [{}] {}: {}  ({}ms ago)",
-                n.severity.label(), n.title, n.body, ago(&n.at),
+                n.severity.label(),
+                n.title,
+                n.body,
+                ago(&n.at),
             );
         }
         if !self.invariant_violations.is_empty() {
-            let _ = writeln!(out, "\n## Invariant violations ({})", self.invariant_violations.len());
+            let _ = writeln!(
+                out,
+                "\n## Invariant violations ({})",
+                self.invariant_violations.len()
+            );
             for v in &self.invariant_violations {
                 let _ = writeln!(out, "  {v}");
             }
@@ -460,7 +486,8 @@ mod tests {
         // A header carrying the total count, then one row per recent notification.
         assert!(rows.iter().any(|(k, v)| k == "Notifications" && v == "2"));
         assert!(
-            rows.iter().any(|(k, v)| k.contains("Torn out") && v.contains("kept as leaf")),
+            rows.iter()
+                .any(|(k, v)| k.contains("Torn out") && v.contains("kept as leaf")),
             "the leaf notification surfaces with its body"
         );
         assert!(
@@ -479,7 +506,10 @@ mod tests {
             target: "netfetcher",
             level: "WARN",
             message: "fetch network error".to_string(),
-            fields: vec![StructuredPayloadField { name: "url", value: "https://x".to_string() }],
+            fields: vec![StructuredPayloadField {
+                name: "url",
+                value: "https://x".to_string(),
+            }],
         });
         let snap = obs.snapshot();
         let rec = snap
@@ -513,7 +543,11 @@ mod tests {
         let mut obs = HostObservability::new();
         // A healthy rebuild updates the Accessibility state but stays out of the diagnostics
         // stream, so it can't crowd out the browsing pulse.
-        obs.set_a11y_snapshot(A11ySnapshot { surfaces: 4, degraded: 0, ..Default::default() });
+        obs.set_a11y_snapshot(A11ySnapshot {
+            surfaces: 4,
+            degraded: 0,
+            ..Default::default()
+        });
         assert!(
             obs.snapshot()
                 .diagnostics
@@ -522,13 +556,20 @@ mod tests {
             "a healthy a11y rebuild logs no diagnostic",
         );
         // A degraded tree is a real fault and surfaces, at Warn.
-        obs.set_a11y_snapshot(A11ySnapshot { surfaces: 4, degraded: 2, ..Default::default() });
+        obs.set_a11y_snapshot(A11ySnapshot {
+            surfaces: 4,
+            degraded: 2,
+            ..Default::default()
+        });
         let rec = obs
             .snapshot()
             .diagnostics
             .into_iter()
             .find(|d| d.channel == "meerkat.a11y.tree_built")
             .expect("a degraded a11y tree logs a diagnostic");
-        assert!(matches!(rec.severity, Severity::Warn), "degraded a11y logs at Warn");
+        assert!(
+            matches!(rec.severity, Severity::Warn),
+            "degraded a11y logs at Warn"
+        );
     }
 }

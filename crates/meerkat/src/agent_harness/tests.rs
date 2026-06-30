@@ -7,7 +7,6 @@
 use super::*;
 use accesskit::Action;
 use register_theme::theme::{THEME_ID_DARK, THEME_ID_LIGHT};
-use std::sync::OnceLock;
 use winit::event_loop::EventLoopProxy;
 
 fn test_app() -> Shell {
@@ -16,33 +15,11 @@ fn test_app() -> Shell {
 }
 
 fn test_proxy() -> EventLoopProxy<()> {
-    static PROXY: OnceLock<EventLoopProxy<()>> = OnceLock::new();
-    PROXY
-        .get_or_init(|| {
-            let mut builder = winit::event_loop::EventLoop::builder();
-            #[cfg(target_os = "windows")]
-            {
-                use winit::platform::windows::EventLoopBuilderExtWindows;
-                builder.with_any_thread(true);
-            }
-            let event_loop = builder.build().expect("event loop");
-            let proxy = event_loop.create_proxy();
-            Box::leak(Box::new(event_loop));
-            proxy
-        })
-        .clone()
+    crate::test_support::event_loop_proxy()
 }
 
 fn temp_session_dir() -> std::path::PathBuf {
-    let dir = std::env::temp_dir()
-        .join("mere-agent-harness-tests")
-        .join(format!(
-            "{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-    let _ = std::fs::remove_dir_all(&dir);
-    dir
+    crate::test_support::temp_session_dir("mere-agent-harness-tests")
 }
 
 #[test]
@@ -52,9 +29,15 @@ fn create_session_mints_and_activates_a_new_session() {
     assert_eq!(app.shared.session.manifests.len(), 1);
     let second = app.create_session();
     assert_ne!(second, first, "a fresh session id is minted");
-    assert_eq!(app.shared.session.active_session_id, second, "the new session is active");
+    assert_eq!(
+        app.shared.session.active_session_id, second,
+        "the new session is active"
+    );
     assert_eq!(app.shared.session.manifests.len(), 2);
-    let dir = app.shared.session.mere_root
+    let dir = app
+        .shared
+        .session
+        .mere_root
         .join("sessions")
         .join(second.as_uuid().to_string());
     assert!(
@@ -205,9 +188,15 @@ fn cycle_session_wraps_through_the_open_sessions() {
     let a = app.shared.session.active_session_id;
     let b = app.create_session(); // active = b, two sessions
     app.cycle_session(true);
-    assert_eq!(app.shared.session.active_session_id, a, "wrapped forward to the other session");
+    assert_eq!(
+        app.shared.session.active_session_id, a,
+        "wrapped forward to the other session"
+    );
     app.cycle_session(true);
-    assert_eq!(app.shared.session.active_session_id, b, "wrapped forward back to the first");
+    assert_eq!(
+        app.shared.session.active_session_id, b,
+        "wrapped forward back to the first"
+    );
 }
 
 #[test]
@@ -249,7 +238,11 @@ fn focus_pane_graph_moves_focus_without_a_switch_or_clobber() {
     // Focus the first graph's pane — the lightweight focus-follows-click path.
     app.ctx().focus_pane_graph(a_graph);
 
-    assert_eq!(app.view().focused_graph, a_graph, "focus moved to the clicked pane's graph");
+    assert_eq!(
+        app.view().focused_graph,
+        a_graph,
+        "focus moved to the clicked pane's graph"
+    );
     assert_eq!(
         app.shared.session.active_session_id, a_session,
         "active session re-keyed to the focused pane, so nav + save target it"
@@ -284,9 +277,18 @@ fn steward_exposes_clickable_action_verbs() {
     app.create_session();
     let items = app.ctx().steward_items();
     let keys: Vec<&str> = items.iter().filter_map(|i| i.key.as_deref()).collect();
-    assert!(keys.contains(&"steward:retry"), "retry is a clickable row: {keys:?}");
-    assert!(keys.contains(&"steward:stop"), "stop is a clickable row: {keys:?}");
-    assert!(keys.contains(&"steward:pin"), "pin is a clickable row: {keys:?}");
+    assert!(
+        keys.contains(&"steward:retry"),
+        "retry is a clickable row: {keys:?}"
+    );
+    assert!(
+        keys.contains(&"steward:stop"),
+        "stop is a clickable row: {keys:?}"
+    );
+    assert!(
+        keys.contains(&"steward:pin"),
+        "pin is a clickable row: {keys:?}"
+    );
 }
 
 #[test]
@@ -345,7 +347,7 @@ fn relate_picker_offers_the_semantic_kinds_as_actions() {
 fn steward_surfaces_a_recorded_forgetting_pass() {
     let mut app = test_app();
     app.create_session();
-    let mut wc = app.ctx();
+    let wc = app.ctx();
     // Before any pass, Steward shows the row as not-yet-run.
     let rows = wc.steward_rows();
     assert_eq!(
@@ -433,12 +435,19 @@ fn ime_preedit_and_commit_route_to_the_focused_field() {
     let mut app = test_app();
     let mut wc = app.ctx();
     let omnibar = wc.input_under_class("toolbar");
-    assert!(omnibar.is_some(), "the omnibar input exists in the chrome DOM");
+    assert!(
+        omnibar.is_some(),
+        "the omnibar input exists in the chrome DOM"
+    );
     wc.view.runner.set_focus(omnibar);
 
     let committed = wc.view.chrome().omnibar.text().to_string();
     wc.handle_ime(Ime::Preedit("ni".to_string(), None));
-    assert_eq!(wc.view.chrome().omnibar.preedit(), "ni", "preedit routed to the omnibar");
+    assert_eq!(
+        wc.view.chrome().omnibar.preedit(),
+        "ni",
+        "preedit routed to the omnibar"
+    );
     assert_eq!(
         wc.view.chrome().omnibar.text().to_string(),
         committed,
@@ -447,7 +456,11 @@ fn ime_preedit_and_commit_route_to_the_focused_field() {
 
     // 你好 — commit clears the preedit and inserts the composed text.
     wc.handle_ime(Ime::Commit("\u{4f60}\u{597d}".to_string()));
-    assert_eq!(wc.view.chrome().omnibar.preedit(), "", "commit clears the preedit");
+    assert_eq!(
+        wc.view.chrome().omnibar.preedit(),
+        "",
+        "commit clears the preedit"
+    );
     assert!(
         wc.view.chrome().omnibar.text().contains("\u{4f60}\u{597d}"),
         "commit inserts the composed text into the omnibar, got {:?}",
@@ -464,7 +477,10 @@ fn a_spawned_window_is_a_slim_leaf() {
     assert_eq!(leaf.kind, crate::window_view::WindowKind::Leaf);
     assert!(leaf.runner.state().chrome.slim, "a leaf's chrome is slim");
     assert_eq!(app.view().kind, crate::window_view::WindowKind::Primary);
-    assert!(!app.view().runner.state().chrome.slim, "the primary's chrome is full");
+    assert!(
+        !app.view().runner.state().chrome.slim,
+        "the primary's chrome is full"
+    );
 }
 
 #[test]
@@ -497,7 +513,12 @@ fn a_pane_camera_lives_on_the_view_and_round_trips_through_the_ctx() {
         pan_velocity: (7.0, -3.0),
     };
     app.ctx().orrery_mut().set_viewport(moved);
-    let stored = app.view().viewports.get(&gid).copied().expect("viewport stored");
+    let stored = app
+        .view()
+        .viewports
+        .get(&gid)
+        .copied()
+        .expect("viewport stored");
     assert_eq!(stored.offset, (123.0, 45.0), "pan read back onto the view");
     assert_eq!(stored.zoom, 2.0, "zoom read back onto the view");
     assert_eq!(stored.pan_velocity, (7.0, -3.0), "inertia is per-view too");
@@ -517,7 +538,10 @@ fn ctrl_n_without_shift_makes_a_session_not_a_window() {
         wc.on_key_pressed(&winit::keyboard::Key::Character("n".into()));
     }
     assert!(
-        matches!(app.commands.first(), Some(crate::ShellCommand::CreateSession)),
+        matches!(
+            app.commands.first(),
+            Some(crate::ShellCommand::CreateSession)
+        ),
         "a new-session command was queued, not a window spawn"
     );
     assert_eq!(app.commands.len(), 1, "exactly the one session command");
@@ -531,26 +555,35 @@ fn switching_keeps_the_window_panes_and_resources_graph_bound_leaves() {
     // Open a second pane: the window now holds an orrery + a roster.
     app.ctx().toggle_pane(frame::PaneContent::Roster);
     let has_roster = |app: &Shell| {
-        app.view().frame_layout
+        app.view()
+            .frame_layout
             .iter_leaves()
             .any(|(_, c, _)| matches!(c, frame::PaneContent::Roster))
     };
     let orrery_graph = |app: &Shell| {
-        app.view().frame_layout
+        app.view()
+            .frame_layout
             .iter_leaves()
             .find(|(_, c, _)| matches!(c, frame::PaneContent::Orrery))
             .map(|(_, _, g)| g)
             .expect("the orrery pane is always present")
     };
     assert!(has_roster(&app), "roster pane opened");
-    assert_eq!(orrery_graph(&app), first_graph, "orrery bound to the first graph");
+    assert_eq!(
+        orrery_graph(&app),
+        first_graph,
+        "orrery bound to the first graph"
+    );
 
     // Switch to a fresh session: the pane arrangement persists (the frame is
     // window-scoped) and the graph-bound orrery leaf re-sources to the new graph.
     // (Model B, MG5.)
     app.create_session();
     let second_graph = app.ctx().active_graph_id();
-    assert_ne!(second_graph, first_graph, "the new session has its own graph");
+    assert_ne!(
+        second_graph, first_graph,
+        "the new session has its own graph"
+    );
     assert!(
         has_roster(&app),
         "the roster pane survived the switch (frame is window-scoped, not swapped)"
@@ -572,7 +605,9 @@ fn rename_sets_then_clears_the_session_display_name() {
     let mut app = test_app();
     let id = app.shared.session.active_session_id;
     let name_of = |app: &Shell, id| {
-        app.shared.session.manifests
+        app.shared
+            .session
+            .manifests
             .get(id)
             .and_then(|m| m.display_name.clone())
     };
@@ -589,7 +624,14 @@ fn rename_sets_then_clears_the_session_display_name() {
     app.ctx().commit_rename();
     assert!(app.ctx().view.renaming.is_none());
     assert_eq!(name_of(&app, id).as_deref(), Some("Wor"));
-    assert_eq!(app.shared.session.session_labels.get(&id).map(String::as_str), Some("Wor"));
+    assert_eq!(
+        app.shared
+            .session
+            .session_labels
+            .get(&id)
+            .map(String::as_str),
+        Some("Wor")
+    );
 
     // Emptying the buffer clears the display name (the label reverts to derived).
     app.ctx().start_rename(id);
@@ -597,14 +639,20 @@ fn rename_sets_then_clears_the_session_display_name() {
         app.ctx().rename_backspace();
     }
     app.ctx().commit_rename();
-    assert!(name_of(&app, id).is_none(), "an empty rename clears the name");
+    assert!(
+        name_of(&app, id).is_none(),
+        "an empty rename clears the name"
+    );
 
     // Escape (cancel) leaves the name untouched.
     app.ctx().start_rename(id);
     app.ctx().rename_push("X");
     app.ctx().cancel_rename();
     assert!(app.ctx().view.renaming.is_none());
-    assert!(name_of(&app, id).is_none(), "cancel did not persist the edit");
+    assert!(
+        name_of(&app, id).is_none(),
+        "cancel did not persist the edit"
+    );
 }
 
 #[test]
@@ -722,8 +770,7 @@ fn agent_can_pin_stop_and_report_blocked_retry_for_focused_operation() {
 fn agent_can_select_node_and_report_blocked_actions() {
     let mut app = test_app();
     app.orrery_mut().visit("https://example.test");
-    let step =
-        app.apply_agent_action(AgentAction::SelectNodeByUrl("mere://welcome".to_string()));
+    let step = app.apply_agent_action(AgentAction::SelectNodeByUrl("mere://welcome".to_string()));
     assert!(step.result.applied);
     assert_eq!(
         step.observation.focused_node.as_deref(),
@@ -776,7 +823,10 @@ fn omnibar_ctrl_a_selects_all() {
         wc.on_key_pressed(&winit::keyboard::Key::Character("a".into()));
     }
     let state = &app.view().runner.state().chrome;
-    assert!(state.omnibar.has_selection(), "Ctrl+A selected the omnibar text");
+    assert!(
+        state.omnibar.has_selection(),
+        "Ctrl+A selected the omnibar text"
+    );
     assert_eq!(state.omnibar.selected_text(), "hello world");
 }
 
@@ -789,10 +839,18 @@ fn soft_wrap_nav_declines_outside_the_knot_editor() {
     let mut app = test_app();
     let mut wc = app.ctx();
     wc.view.runner.set_focus(None);
-    assert!(!wc.soft_wrap_nav(-1, false), "no focus: soft-wrap nav declines");
-    let omnibar = wc.input_under_class("toolbar").expect("the omnibar input exists");
+    assert!(
+        !wc.soft_wrap_nav(-1, false),
+        "no focus: soft-wrap nav declines"
+    );
+    let omnibar = wc
+        .input_under_class("toolbar")
+        .expect("the omnibar input exists");
     wc.view.runner.set_focus(Some(omnibar));
-    assert!(!wc.soft_wrap_nav(1, false), "single-line omnibar: soft-wrap nav declines");
+    assert!(
+        !wc.soft_wrap_nav(1, false),
+        "single-line omnibar: soft-wrap nav declines"
+    );
 }
 
 /// The knot editor's close × lays out as a small button on the right of the header row
@@ -804,7 +862,7 @@ fn knot_editor_close_button_is_small_and_right_of_the_title() {
     use layout_dom_api::LayoutDom;
     use serval_layout::ScrollOffsets;
     let mut app = test_app();
-    let mut wc = app.ctx();
+    let wc = app.ctx();
     wc.view.chrome_update(|c| c.open_knot_editor("a note"));
 
     let sheet = wc.shared.presentation.chrome_sheet_refs();
@@ -820,12 +878,19 @@ fn knot_editor_close_button_is_small_and_right_of_the_title() {
     );
 
     let dom = wc.view.dom.borrow();
-    let session = wc.view.chrome_session.as_ref().expect("chrome session built");
-    let btn = crate::first_with_class(&dom, dom.document(), "knot-editor-btn")
+    let session = wc
+        .view
+        .chrome_session
+        .as_ref()
+        .expect("chrome session built");
+    let btn = crate::first_with_class(&dom, dom.document(), "knot-editor-close")
         .expect("the close button exists when the editor is open");
     let title = crate::first_with_class(&dom, dom.document(), "knot-editor-title-text")
         .expect("the title text exists");
-    let btn_r = session.fragments().rect_of(btn).expect("close button laid out");
+    let btn_r = session
+        .fragments()
+        .rect_of(btn)
+        .expect("close button laid out");
     let title_r = session.fragments().rect_of(title).expect("title laid out");
 
     // Small (a flex item sized to the × glyph), not the ~600px full-width block bar.
@@ -844,6 +909,110 @@ fn knot_editor_close_button_is_small_and_right_of_the_title() {
 }
 
 #[test]
+fn knot_editor_uses_bound_tile_rect_when_available() {
+    use layout_dom_api::LayoutDom;
+    use serval_layout::ScrollOffsets;
+    let mut app = test_app();
+    let wc = app.ctx();
+    wc.view.chrome_update(|c| {
+        c.open_knot_editor("a note");
+        c.set_knot_editor_rect(Some([40.0, 90.0, 360.0, 290.0]));
+    });
+
+    let sheet = wc.shared.presentation.chrome_sheet_refs();
+    let scroll = ScrollOffsets::default();
+    crate::pane_session::PaneSession::scene(
+        &mut wc.view.chrome_session,
+        &wc.view.dom,
+        &sheet,
+        1024,
+        600,
+        None,
+        &scroll,
+    );
+
+    let dom = wc.view.dom.borrow();
+    let session = wc
+        .view
+        .chrome_session
+        .as_ref()
+        .expect("chrome session built");
+    let pane = crate::first_with_class(&dom, dom.document(), "knot-editor-pane")
+        .expect("the editor pane exists");
+    let rect = session.fragments().rect_of(pane).expect("pane laid out");
+
+    assert!(
+        (rect.location.x - 40.0).abs() < 1.0,
+        "editor x follows the tile rect: {}",
+        rect.location.x
+    );
+    assert!(
+        (rect.location.y - 90.0).abs() < 1.0,
+        "editor y follows the tile rect: {}",
+        rect.location.y
+    );
+    assert!(
+        (rect.size.width - 320.0).abs() < 1.0,
+        "editor width follows the tile rect: {}",
+        rect.size.width
+    );
+    assert!(
+        (rect.size.height - 200.0).abs() < 1.0,
+        "editor height follows the tile rect: {}",
+        rect.size.height
+    );
+}
+
+#[test]
+fn knot_editor_saves_the_focused_note_body() {
+    let mut app = test_app();
+    let url = "knot://saved-note";
+    let key = app.orrery_mut().visit(url);
+    let member = app
+        .orrery()
+        .graph()
+        .get_node(key)
+        .expect("note node exists")
+        .id;
+    app.orrery_mut().ingest_graph(|graph| {
+        let node = graph.get_node_mut(key).expect("note node exists");
+        node.body = Some("# Original\n\nbody".to_string());
+        node.mime_hint = Some("text/x-knot".to_string());
+        true
+    });
+
+    let step = app.apply_agent_action(AgentAction::InvokeCommand(Command::ToggleKnotEditor));
+    assert!(step.result.applied);
+    let chrome = &app.view().runner.state().chrome;
+    assert!(chrome.knot_editor_open, "the editor opens");
+    assert_eq!(chrome.knot_target, Some(member));
+    assert_eq!(chrome.knot_source.text(), "# Original\n\nbody");
+
+    let updated = "# Updated\n\nSaved.";
+    {
+        let mut wc = app.ctx();
+        wc.view.chrome_update(|c| {
+            c.knot_source = xilem_serval::TextInput::new(updated);
+            c.request_knot_editor_save();
+        });
+        wc.drain_chrome_intents();
+    }
+
+    let node = app
+        .orrery()
+        .graph()
+        .get_node(key)
+        .expect("note node still exists");
+    assert_eq!(node.body.as_deref(), Some(updated));
+    assert_eq!(node.mime_hint.as_deref(), Some("text/x-knot"));
+    let Some(crate::fetch::ContentState::Ready(fetched)) = app.shared.content.pages.get(url) else {
+        panic!("saved note updates the live content cache");
+    };
+    assert_eq!(fetched.content_type.as_deref(), Some("text/x-knot"));
+    assert_eq!(fetched.body, updated);
+}
+
+#[test]
 fn omnibar_right_arrow_accepts_the_ghost_completion() {
     // The driven half of ghost autocomplete: with `>ros` typed and the omnibar
     // focused, Right arrow at the buffer end splices the ghost in, giving
@@ -859,7 +1028,11 @@ fn omnibar_right_arrow_accepts_the_ghost_completion() {
             c.omnibar = xilem_serval::TextInput::new(">ros");
             c.refresh_suggestions();
         });
-        assert_eq!(wc.view.chrome().omnibar.ghost(), "ter", "the ghost is shown");
+        assert_eq!(
+            wc.view.chrome().omnibar.ghost(),
+            "ter",
+            "the ghost is shown"
+        );
         wc.on_key_pressed(&winit::keyboard::Key::Named(
             winit::keyboard::NamedKey::ArrowRight,
         ));
@@ -922,7 +1095,10 @@ fn ctrl_l_focuses_and_selects_the_omnibar() {
         "Ctrl+L focused the omnibar"
     );
     let state = wc.view.chrome();
-    assert!(state.omnibar.has_selection(), "Ctrl+L selected the omnibar text");
+    assert!(
+        state.omnibar.has_selection(),
+        "Ctrl+L selected the omnibar text"
+    );
     assert_eq!(
         state.omnibar.selected_text(),
         "gemini://shown.example/",
@@ -942,9 +1118,16 @@ fn alt_arrows_step_the_focused_nodes_history() {
         .focused_member()
         .expect("the visited node is focused");
     // Navigate the same node in place a -> b, growing its within-node history.
-    app.orrery_mut().navigate_member(member, "gemini://b.example/");
-    assert!(app.orrery().member_can_back(member), "a -> b leaves a back step");
-    assert!(!app.orrery().member_can_forward(member), "and no forward step yet");
+    app.orrery_mut()
+        .navigate_member(member, "gemini://b.example/");
+    assert!(
+        app.orrery().member_can_back(member),
+        "a -> b leaves a back step"
+    );
+    assert!(
+        !app.orrery().member_can_forward(member),
+        "and no forward step yet"
+    );
 
     let press = |app: &mut Shell, named: winit::keyboard::NamedKey| {
         let mut wc = app.ctx();
@@ -954,8 +1137,14 @@ fn alt_arrows_step_the_focused_nodes_history() {
 
     // Alt+Left steps back to the root (a).
     press(&mut app, winit::keyboard::NamedKey::ArrowLeft);
-    assert!(!app.orrery().member_can_back(member), "back from b lands at the root a");
-    assert!(app.orrery().member_can_forward(member), "and forward to b is available");
+    assert!(
+        !app.orrery().member_can_back(member),
+        "back from b lands at the root a"
+    );
+    assert!(
+        app.orrery().member_can_forward(member),
+        "and forward to b is available"
+    );
 
     // Alt+Right steps forward to the tip (b) again.
     press(&mut app, winit::keyboard::NamedKey::ArrowRight);
@@ -974,8 +1163,12 @@ fn mouse_thumb_buttons_step_the_focused_nodes_history() {
         .orrery()
         .focused_member()
         .expect("the visited node is focused");
-    app.orrery_mut().navigate_member(member, "gemini://b.example/");
-    assert!(app.orrery().member_can_back(member), "a -> b leaves a back step");
+    app.orrery_mut()
+        .navigate_member(member, "gemini://b.example/");
+    assert!(
+        app.orrery().member_can_back(member),
+        "a -> b leaves a back step"
+    );
 
     {
         let mut wc = app.ctx();
@@ -984,8 +1177,14 @@ fn mouse_thumb_buttons_step_the_focused_nodes_history() {
             winit::event::MouseButton::Back,
         );
     }
-    assert!(!app.orrery().member_can_back(member), "thumb-back lands at the root a");
-    assert!(app.orrery().member_can_forward(member), "and forward to b is available");
+    assert!(
+        !app.orrery().member_can_back(member),
+        "thumb-back lands at the root a"
+    );
+    assert!(
+        app.orrery().member_can_forward(member),
+        "and forward to b is available"
+    );
 
     {
         let mut wc = app.ctx();
@@ -994,7 +1193,10 @@ fn mouse_thumb_buttons_step_the_focused_nodes_history() {
             winit::event::MouseButton::Forward,
         );
     }
-    assert!(app.orrery().member_can_back(member), "thumb-forward returns to the tip b");
+    assert!(
+        app.orrery().member_can_back(member),
+        "thumb-forward returns to the tip b"
+    );
 }
 
 #[test]
@@ -1004,7 +1206,8 @@ fn shellbar_roster_button_toggles_the_roster() {
     // routing that reaches this — the inert-shellbar fix — is verified on-screen;
     // this guards the button→command→toggle chain it unblocks.)
     let has_roster = |app: &Shell| {
-        app.view().frame_layout
+        app.view()
+            .frame_layout
             .iter_leaves()
             .any(|(_, c, _)| matches!(c, frame::PaneContent::Roster))
     };
@@ -1015,11 +1218,17 @@ fn shellbar_roster_button_toggles_the_roster() {
         let dom = app.view().runner.dom();
         let dom = dom.borrow();
         let buttons = crate::all_with_class(&dom, dom.document(), "shellbar-btn");
-        assert!(buttons.len() >= 7, "the shellbar carries a button per toggle-able pane");
+        assert!(
+            buttons.len() >= 7,
+            "the shellbar carries a button per toggle-able pane"
+        );
         buttons[1] // workbench, ROSTER, gloss, apparatus, inspector, steward, comms
     };
     app.ctx().chrome_activate(roster_btn, (0.0, 0.0));
-    assert!(has_roster(&app), "the shellbar roster button toggled the roster pane");
+    assert!(
+        has_roster(&app),
+        "the shellbar roster button toggled the roster pane"
+    );
 }
 
 #[test]
@@ -1032,13 +1241,27 @@ fn empty_space_right_click_adds_a_node() {
     {
         let mut wc = app.ctx();
         wc.open_context_menu_at(200.0, 300.0);
-        assert!(wc.view.context_origin.is_some(), "the empty-space menu captured a cursor anchor");
-        wc.view.chrome_update(|c| c.pick_context(meerkat::ContextAction::AddNode));
+        assert!(
+            wc.view.context_origin.is_some(),
+            "the empty-space menu captured a cursor anchor"
+        );
+        wc.view
+            .chrome_update(|c| c.pick_context(meerkat::ContextAction::AddNode));
         wc.drain_pending_context();
     }
-    assert_eq!(app.orrery().graph().nodes().count(), before + 1, "AddNode minted a node");
-    assert!(app.orrery().focused_url().is_some(), "the new node is selected");
-    assert!(app.view().context_origin.is_none(), "the anchor was consumed");
+    assert_eq!(
+        app.orrery().graph().nodes().count(),
+        before + 1,
+        "AddNode minted a node"
+    );
+    assert!(
+        app.orrery().focused_url().is_some(),
+        "the new node is selected"
+    );
+    assert!(
+        app.view().context_origin.is_none(),
+        "the anchor was consumed"
+    );
 }
 
 #[test]
@@ -1050,10 +1273,15 @@ fn workbench_new_tile_mints_and_opens_a_tile() {
     let tiles_before = app.view().workbench.open_members().len();
     {
         let mut wc = app.ctx();
-        wc.view.chrome_update(|c| c.pick_context(meerkat::ContextAction::AddTile));
+        wc.view
+            .chrome_update(|c| c.pick_context(meerkat::ContextAction::AddTile));
         wc.drain_pending_context();
     }
-    assert_eq!(app.orrery().graph().nodes().count(), nodes_before + 1, "NewTile minted a node");
+    assert_eq!(
+        app.orrery().graph().nodes().count(),
+        nodes_before + 1,
+        "NewTile minted a node"
+    );
     assert_eq!(
         app.view().workbench.open_members().len(),
         tiles_before + 1,
@@ -1062,7 +1290,10 @@ fn workbench_new_tile_mints_and_opens_a_tile() {
     // The pane is actually shown (not just a model row): NewTile summons + tiles
     // the workbench and focuses the new tile.
     assert!(app.ctx().workbench_open(), "the workbench pane is open");
-    assert!(app.view().workbench.is_tiled(), "in the tiled (Tree) projection");
+    assert!(
+        app.view().workbench.is_tiled(),
+        "in the tiled (Tree) projection"
+    );
     assert!(app.view().focused_tile.is_some(), "the new tile is focused");
 }
 
@@ -1077,7 +1308,10 @@ fn agent_invoke_by_id_runs_commands_and_context_actions() {
     // A context-action id applies to the graph: `add_node` mints a node by id.
     let before = app.orrery().graph().nodes().count();
     let step = app.apply_agent_action(AgentAction::Invoke("add_node".into()));
-    assert!(step.result.applied, "a context-action id (add_node) invokes");
+    assert!(
+        step.result.applied,
+        "a context-action id (add_node) invokes"
+    );
     assert_eq!(
         app.orrery().graph().nodes().count(),
         before + 1,
@@ -1086,14 +1320,18 @@ fn agent_invoke_by_id_runs_commands_and_context_actions() {
     // The invoke is audited through the one observability spine (P3): a
     // `meerkat.command.invoked` diagnostic carrying the registry id.
     assert!(
-        step.observation.diagnostics.iter().any(|d| {
-            d.channel == "meerkat.command.invoked" && d.message.contains("add_node")
-        }),
+        step.observation
+            .diagnostics
+            .iter()
+            .any(|d| { d.channel == "meerkat.command.invoked" && d.message.contains("add_node") }),
         "the invoke is audited by its registry id through the observability spine",
     );
     // An unknown id is reported, not applied (no panic, no silent success).
     let step = app.apply_agent_action(AgentAction::Invoke("not_a_real_id".into()));
-    assert!(!step.result.applied, "an unknown registry id is not applied");
+    assert!(
+        !step.result.applied,
+        "an unknown registry id is not applied"
+    );
 }
 
 #[test]
@@ -1125,7 +1363,9 @@ fn delete_key_removes_the_focused_node() {
     {
         let mut wc = app.ctx();
         wc.view.runner.set_focus(None); // graph has the keyboard
-        wc.on_key_pressed(&winit::keyboard::Key::Named(winit::keyboard::NamedKey::Delete));
+        wc.on_key_pressed(&winit::keyboard::Key::Named(
+            winit::keyboard::NamedKey::Delete,
+        ));
     }
     assert_eq!(
         app.orrery().graph().nodes().count(),
@@ -1154,7 +1394,13 @@ fn omnibar_relate_without_a_pair_reports_a_note() {
         ));
     }
     assert!(
-        app.view().runner.state().chrome.omnibar.text().contains("two nodes"),
+        app.view()
+            .runner
+            .state()
+            .chrome
+            .omnibar
+            .text()
+            .contains("two nodes"),
         "the bar reports the no-op, got {:?}",
         app.view().runner.state().chrome.omnibar.text()
     );
@@ -1167,7 +1413,8 @@ fn omnibar_command_expression_drives_the_command_spine() {
     // press Enter, and the host runs `ToggleRoster` through the full drain — a
     // Roster frame leaf appears, with no navigation. (Omnibar command shell, S3.)
     let has_roster = |app: &Shell| {
-        app.view().frame_layout
+        app.view()
+            .frame_layout
             .iter_leaves()
             .any(|(_, c, _)| matches!(c, frame::PaneContent::Roster))
     };
@@ -1200,7 +1447,13 @@ fn omnibar_command_expression_drives_the_command_spine() {
     // pure action restores the location), never stranded behind a command that
     // already ran.
     assert!(
-        !app.view().runner.state().chrome.omnibar.text().starts_with('>'),
+        !app.view()
+            .runner
+            .state()
+            .chrome
+            .omnibar
+            .text()
+            .starts_with('>'),
         "the omnibar no longer shows the run command, got {:?}",
         app.view().runner.state().chrome.omnibar.text()
     );
@@ -1223,10 +1476,11 @@ fn accesskit_actions_route_to_semantic_node_selection() {
         })
         .expect("example node has an AccessKit route");
 
-    app.ctx().apply_a11y_request(crate::a11y_bridge::A11yActionRequest {
-        action: Action::Focus,
-        target_node: target,
-    });
+    app.ctx()
+        .apply_a11y_request(crate::a11y_bridge::A11yActionRequest {
+            action: Action::Focus,
+            target_node: target,
+        });
 
     assert_eq!(app.orrery().focused_url(), Some("https://example.test"));
     let observation = app.agent_observation();

@@ -54,7 +54,10 @@ impl Shell {
     pub(crate) fn view(&self) -> &window_view::WindowView {
         match self.primary {
             Some(id) => &self.windows[&id],
-            None => self.pending_view.as_ref().expect("a primary or pending view"),
+            None => self
+                .pending_view
+                .as_ref()
+                .expect("a primary or pending view"),
         }
     }
 
@@ -70,7 +73,9 @@ impl Shell {
     #[cfg(any(test, feature = "agent-harness"))]
     pub(crate) fn orrery_mut(&mut self) -> &mut Orrery {
         let gid = self.view().focused_graph;
-        self.orreries.get_mut(&gid).expect("focused orrery is pooled")
+        self.orreries
+            .get_mut(&gid)
+            .expect("focused orrery is pooled")
     }
 
     /// Borrow window `id` as a handling context: its view from the registry plus the
@@ -124,8 +129,14 @@ impl Shell {
     /// P1, multi-graph.)
     pub(crate) fn focused_view_mut(&mut self) -> &mut window_view::WindowView {
         match self.primary {
-            Some(id) => self.windows.get_mut(&id).expect("primary window missing from registry"),
-            None => self.pending_view.as_mut().expect("a primary or pending view"),
+            Some(id) => self
+                .windows
+                .get_mut(&id)
+                .expect("primary window missing from registry"),
+            None => self
+                .pending_view
+                .as_mut()
+                .expect("a primary or pending view"),
         }
     }
 
@@ -134,7 +145,10 @@ impl Shell {
     pub(crate) fn focused_view(&self) -> &window_view::WindowView {
         match self.primary {
             Some(id) => &self.windows[&id],
-            None => self.pending_view.as_ref().expect("a primary or pending view"),
+            None => self
+                .pending_view
+                .as_ref()
+                .expect("a primary or pending view"),
         }
     }
 

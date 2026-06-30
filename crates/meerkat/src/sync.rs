@@ -114,41 +114,43 @@ pub fn spawn_sync(
         // persistent seed-file identity (created on first launch, reused after)
         // makes this install a stable, distinct peer across restarts (S5.2).
         let dir = data_dir();
-        let setup: Result<(P2pandaTransport, SyncedMoot, Option<ChainRoot>), String> = runtime.block_on(async {
-            let provider =
-                InMemoryProvider::from_seed(load_or_create_seed(&dir.join("node_identity.seed")));
-            let keypair = provider.master_keypair().clone();
-            let transport = P2pandaTransport::builder(&keypair)
-                .gossip()
-                .bind()
-                .await
-                .map_err(|e| format!("transport bind: {e}"))?;
-            let (endpoint, gossip) = transport
-                .sync_parts()
-                .ok_or_else(|| "transport has no gossip overlay".to_string())?;
-            // The tessera log lives on disk, one redb file per moot under the
-            // session dir, so it survives restart (S5.2).
-            let moots = dir.join("moots");
-            let _ = std::fs::create_dir_all(&moots);
-            let store = TesseraStore::open(moots.join(format!("{}.redb", hex32(&moot_id))))
-                .map_err(|e| format!("tessera store: {e}"))?;
-            // Seed a small tessera log (commit -> fulfil -> govern) on first launch
-            // only (an empty store), so a connecting peer has something to catch up;
-            // on restart the persisted log is already present.
-            if store.is_empty().unwrap_or(true) {
-                author_starter_log(&provider, moot_id, &store);
-            }
-            // This host's own persona chain root (the `tessera-host-author` keypair), so
-            // the poll loop can read its standing out of the folded ledger. (Tessera fold.)
-            let host_root = provider
-                .derive_keypair(b"tessera-host-author")
-                .ok()
-                .map(|kp| ChainRoot(kp.public_key().to_bytes()));
-            let moot = SyncedMoot::join(endpoint, gossip, store, moot_id)
-                .await
-                .map_err(|e| format!("join moot: {e}"))?;
-            Ok((transport, moot, host_root))
-        });
+        let setup: Result<(P2pandaTransport, SyncedMoot, Option<ChainRoot>), String> = runtime
+            .block_on(async {
+                let provider = InMemoryProvider::from_seed(load_or_create_seed(
+                    &dir.join("node_identity.seed"),
+                ));
+                let keypair = provider.master_keypair().clone();
+                let transport = P2pandaTransport::builder(&keypair)
+                    .gossip()
+                    .bind()
+                    .await
+                    .map_err(|e| format!("transport bind: {e}"))?;
+                let (endpoint, gossip) = transport
+                    .sync_parts()
+                    .ok_or_else(|| "transport has no gossip overlay".to_string())?;
+                // The tessera log lives on disk, one redb file per moot under the
+                // session dir, so it survives restart (S5.2).
+                let moots = dir.join("moots");
+                let _ = std::fs::create_dir_all(&moots);
+                let store = TesseraStore::open(moots.join(format!("{}.redb", hex32(&moot_id))))
+                    .map_err(|e| format!("tessera store: {e}"))?;
+                // Seed a small tessera log (commit -> fulfil -> govern) on first launch
+                // only (an empty store), so a connecting peer has something to catch up;
+                // on restart the persisted log is already present.
+                if store.is_empty().unwrap_or(true) {
+                    author_starter_log(&provider, moot_id, &store);
+                }
+                // This host's own persona chain root (the `tessera-host-author` keypair), so
+                // the poll loop can read its standing out of the folded ledger. (Tessera fold.)
+                let host_root = provider
+                    .derive_keypair(b"tessera-host-author")
+                    .ok()
+                    .map(|kp| ChainRoot(kp.public_key().to_bytes()));
+                let moot = SyncedMoot::join(endpoint, gossip, store, moot_id)
+                    .await
+                    .map_err(|e| format!("join moot: {e}"))?;
+                Ok((transport, moot, host_root))
+            });
 
         let transport = match setup {
             Ok((transport, moot, host_root)) => {
@@ -336,8 +338,16 @@ mod tests {
         assert!(indicator.syncing);
         assert_eq!(indicator.ops, 3);
         assert_eq!(indicator.last_activity_ms, Some(1_000));
-        assert_eq!(indicator.standing, Some(4), "the folded standing projects through");
-        assert_eq!(indicator.ticket(), Some("dial:xyz"), "the ticket projects through");
+        assert_eq!(
+            indicator.standing,
+            Some(4),
+            "the folded standing projects through"
+        );
+        assert_eq!(
+            indicator.ticket(),
+            Some("dial:xyz"),
+            "the ticket projects through"
+        );
         // A round in progress still wins the headline over standing.
         assert_eq!(indicator.summary(), "tessera: syncing");
     }

@@ -336,7 +336,16 @@ pub fn complete(prefix: &str) -> Option<&'static str> {
         .iter()
         .map(|c| c.verb())
         .chain(QUERIES.iter().copied())
-        .chain(["sparql", "recall", "capture", "forget", "attach_script", "detach_script", "script_event", "scene"])
+        .chain([
+            "sparql",
+            "recall",
+            "capture",
+            "forget",
+            "attach_script",
+            "detach_script",
+            "script_event",
+            "scene",
+        ])
         .find(|name| name.len() > prefix.len() && name.starts_with(prefix))
 }
 
@@ -346,8 +355,7 @@ pub fn complete(prefix: &str) -> Option<&'static str> {
 /// evaluated as ordinary rhai.
 fn desugar(source: &str) -> String {
     let trimmed = source.trim();
-    let is_bare =
-        Command::ALL.iter().any(|c| c.verb() == trimmed) || QUERIES.contains(&trimmed);
+    let is_bare = Command::ALL.iter().any(|c| c.verb() == trimmed) || QUERIES.contains(&trimmed);
     if is_bare {
         return format!("{trimmed}()");
     }
@@ -533,7 +541,11 @@ mod tests {
         assert!(call.error.is_none());
         // `scene <name>` sugar: the bare two-token form becomes `scene("<name>")`.
         let bare = CommandShell::new().eval("scene fountain", &ctx());
-        assert_eq!(bare.scene_request.as_deref(), Some("fountain"), "the bare form is sugared");
+        assert_eq!(
+            bare.scene_request.as_deref(),
+            Some("fountain"),
+            "the bare form is sugared"
+        );
         assert!(bare.error.is_none());
         // `complete` ghosts the verb so a user discovers it.
         assert_eq!(complete("sce"), Some("scene"));
@@ -567,7 +579,10 @@ mod tests {
 
         // script_event("kind", "payload") records the pair.
         let out = CommandShell::new().eval(r#"script_event("click", "btn-1")"#, &ctx());
-        assert_eq!(out.script_event, Some(("click".to_string(), "btn-1".to_string())));
+        assert_eq!(
+            out.script_event,
+            Some(("click".to_string(), "btn-1".to_string()))
+        );
         assert!(out.error.is_none());
 
         // The verbs ghost-complete so a user discovers them.

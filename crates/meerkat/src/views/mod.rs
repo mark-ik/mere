@@ -8,11 +8,11 @@ use std::rc::Rc;
 use serval_scripted_dom::ScriptedDom;
 use xilem_serval::{
     AnyView, El, OnClick, OptionalAction, PointerClick, ServalAppRunner, ServalCtx, ServalElement,
-    TextField, TextInput, el, lens, memoize, on_click, overlay_at, styled_text_field, styled_textarea, text_field_typed,
+    TextField, TextInput, el, lens, memoize, on_click, overlay_at, styled_text_field,
+    styled_textarea, text_field_typed,
 };
 
 use comms::{Direction, ProtocolKind};
-
 
 use super::command::Command;
 use super::nav;
@@ -98,7 +98,11 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     });
     let forward = memoize(c.toolbar.can_go_forward, |&can_forward: &bool| {
         let class = if can_forward { "nav" } else { "nav disabled" };
-        button("forward", class, go_forward as fn(&mut Chrome, PointerClick))
+        button(
+            "forward",
+            class,
+            go_forward as fn(&mut Chrome, PointerClick),
+        )
     });
     // The layout-physics pause/play button: ⏸ while running, ▶ while paused, the
     // same toggle as Space. Memoized on the synced `physics_paused` so the glyph
@@ -109,7 +113,8 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
         button(
             glyph,
             "nav",
-            (|c: &mut Chrome, _: PointerClick| c.physics_toggle = true) as fn(&mut Chrome, PointerClick),
+            (|c: &mut Chrome, _: PointerClick| c.physics_toggle = true)
+                as fn(&mut Chrome, PointerClick),
         )
     });
     // The omnibar, lensed onto `Chrome::omnibar`. A styled single-line field, so
@@ -130,7 +135,11 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     // empty text node child, so `:empty` never matches and the chip would paint as a
     // bare pill while idle.
     let crawl_summary = c.crawl.summary();
-    let crawl_class = if crawl_summary.is_empty() { "crawl-chip crawl-chip-hidden" } else { "crawl-chip" };
+    let crawl_class = if crawl_summary.is_empty() {
+        "crawl-chip crawl-chip-hidden"
+    } else {
+        "crawl-chip"
+    };
     let crawl_chip = el::<_, Chrome, ()>("div", crawl_summary).attr("class", crawl_class);
     // The create affordance (Chrome bar P5): a segmented `+node | +tile | +field`
     // group, each firing its add verb directly (no menu). When the toolbar is crowded
@@ -156,7 +165,16 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     let session_strip = session_strip(c);
     let toolbar = el::<_, Chrome, ()>(
         "div",
-        (back, forward, pause, branch_chip, omnibar, session_strip, add_group, crawl_chip),
+        (
+            back,
+            forward,
+            pause,
+            branch_chip,
+            omnibar,
+            session_strip,
+            add_group,
+            crawl_chip,
+        ),
     )
     .attr("class", "toolbar");
 
@@ -207,9 +225,11 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     if !c.slim && !c.shellbar_hidden {
         // The shellbar depends only on the pane-open states, so memoize on them:
         // an omnibar keystroke (panes unchanged) skips rebuilding the whole strip.
-        children.push(Box::new(memoize(c.shellbar_panes, |panes: &ShellbarPaneStates| {
-            shellbar_view(panes)
-        })) as ChromeView);
+        children.push(
+            Box::new(memoize(c.shellbar_panes, |panes: &ShellbarPaneStates| {
+                shellbar_view(panes)
+            })) as ChromeView,
+        );
     }
     // The context menu floats over everything (it is a transient cursor pop-up).
     if let Some(menu) = &c.context_menu {
@@ -232,7 +252,6 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
 
 /// The right-click context menu: a small panel of action rows floated at the
 /// cursor (abs-positioned in window coords). Each row captures its
-
 mod panels;
 use panels::*;
 
@@ -280,7 +299,10 @@ fn add_group(c: &Chrome) -> ChromeView {
         return Box::new(
             el::<_, Chrome, ()>(
                 "div",
-                vec![Box::new(primary) as ChromeView, Box::new(caret) as ChromeView],
+                vec![
+                    Box::new(primary) as ChromeView,
+                    Box::new(caret) as ChromeView,
+                ],
             )
             .attr("class", "add-split"),
         ) as ChromeView;
@@ -296,9 +318,17 @@ fn add_group(c: &Chrome) -> ChromeView {
         el::<_, Chrome, ()>(
             "div",
             vec![
-                seg("\u{ff0b}node", ContextAction::AddNode, "add-seg add-seg-first"),
+                seg(
+                    "\u{ff0b}node",
+                    ContextAction::AddNode,
+                    "add-seg add-seg-first",
+                ),
                 seg("\u{ff0b}tile", ContextAction::AddTile, "add-seg"),
-                seg("\u{ff0b}field", ContextAction::AddField, "add-seg add-seg-last"),
+                seg(
+                    "\u{ff0b}field",
+                    ContextAction::AddField,
+                    "add-seg add-seg-last",
+                ),
             ],
         )
         .attr("class", "add-group"),
@@ -335,7 +365,11 @@ fn session_strip(c: &Chrome) -> ChromeView {
 
 /// One session chip: a label that activates the session and a × that closes it.
 fn session_chip(chip: &crate::SessionChip) -> ChromeView {
-    let class = if chip.active { "session-chip session-chip-active" } else { "session-chip" };
+    let class = if chip.active {
+        "session-chip session-chip-active"
+    } else {
+        "session-chip"
+    };
     let id = chip.id;
     let label = on_click(
         el::<_, Chrome, ()>("div", chip.label.clone()).attr("class", "session-chip-label"),
@@ -364,7 +398,11 @@ fn session_overflow(c: &Chrome) -> ChromeView {
         .skip(SESSION_INLINE_CAP)
         .map(|chip| {
             let id = chip.id;
-            let class = if chip.active { "session-overflow-row session-chip-active" } else { "session-overflow-row" };
+            let class = if chip.active {
+                "session-overflow-row session-chip-active"
+            } else {
+                "session-overflow-row"
+            };
             Box::new(on_click(
                 el::<_, Chrome, ()>("div", chip.label.clone()).attr("class", class),
                 move |c: &mut Chrome, _: PointerClick| c.pick_session(id),
@@ -380,7 +418,11 @@ fn session_overflow(c: &Chrome) -> ChromeView {
 /// pattern (F2.1).
 fn shellbar_view(panes: &ShellbarPaneStates) -> ChromeView {
     fn btn(label: &'static str, active: bool, cmd: Command) -> ChromeView {
-        let class = if active { "shellbar-btn-active" } else { "shellbar-btn" };
+        let class = if active {
+            "shellbar-btn-active"
+        } else {
+            "shellbar-btn"
+        };
         Box::new(button(
             label,
             class,
@@ -392,11 +434,11 @@ fn shellbar_view(panes: &ShellbarPaneStates) -> ChromeView {
         btn("\u{2261}", panes.roster, Command::ToggleRoster),       // ≡
         btn("\u{25ce}", panes.gloss, Command::ToggleGloss),         // ◎
         btn("\u{25c8}", panes.trail, Command::ToggleTrail),         // ◈ (was ⇝, no glyph)
-        btn("\u{25bd}", panes.alembic, Command::ToggleAlembic),     // ▽ distillation funnel (⚗/⚛ are emoji-only)
+        btn("\u{25bd}", panes.alembic, Command::ToggleAlembic), // ▽ distillation funnel (⚗/⚛ are emoji-only)
         btn("\u{2699}", panes.apparatus, Command::ToggleApparatus), // ⚙
         btn("\u{25c9}", panes.inspector, Command::ToggleInspector), // ◉
-        btn("\u{2692}", panes.steward, Command::ToggleSteward),     // ⚒
-        btn("@", panes.comms, Command::ToggleComms),                // @ (was ✉, no glyph)
+        btn("\u{2692}", panes.steward, Command::ToggleSteward), // ⚒
+        btn("@", panes.comms, Command::ToggleComms),            // @ (was ✉, no glyph)
     ];
     Box::new(el::<_, Chrome, ()>("div", buttons).attr("class", "shellbar"))
 }

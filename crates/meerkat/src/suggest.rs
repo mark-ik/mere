@@ -132,7 +132,11 @@ fn ranked_history(needle: &str, history: &History) -> Vec<String> {
     ranked.sort_by(|a, b| {
         b.tier
             .cmp(&a.tier)
-            .then_with(|| b.frecency.partial_cmp(&a.frecency).unwrap_or(Ordering::Equal))
+            .then_with(|| {
+                b.frecency
+                    .partial_cmp(&a.frecency)
+                    .unwrap_or(Ordering::Equal)
+            })
             .then_with(|| a.url.cmp(&b.url))
     });
     ranked.into_iter().map(|r| r.url).collect()
@@ -271,12 +275,18 @@ mod tests {
         h.visit("https://example.com".into()); // host-prefix match (older)
         h.visit("https://news.test/about-example".into()); // path-only match (newer)
         let found = urls(&suggestions("example", &h));
-        let host = found.iter().position(|u| u == "https://example.com").unwrap();
+        let host = found
+            .iter()
+            .position(|u| u == "https://example.com")
+            .unwrap();
         let path = found
             .iter()
             .position(|u| u == "https://news.test/about-example")
             .unwrap();
-        assert!(host < path, "a host match leads despite being older: {found:?}");
+        assert!(
+            host < path,
+            "a host match leads despite being older: {found:?}"
+        );
     }
 
     #[test]
@@ -293,7 +303,10 @@ mod tests {
             .iter()
             .position(|u| u == "https://docs.test/intro-to-servo")
             .unwrap();
-        assert!(host < path, "www.servo.org ranks as a host match: {found:?}");
+        assert!(
+            host < path,
+            "www.servo.org ranks as a host match: {found:?}"
+        );
     }
 
     #[test]
