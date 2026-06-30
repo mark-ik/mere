@@ -1,14 +1,19 @@
 [package]
 name = "transport"
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Peer transport layer for the Mere browser — iroh-based authenticated encrypted QUIC streams between known peers."
 documentation = "https://docs.rs/transport"
-readme = "README.md"
 keywords = ["transport", "iroh", "p2p", "quic", "browser"]
 categories = ["network-programming"]
+
+[features]
+# Optional Reticulum transport backend for off-grid / mesh links. Disabled by
+# default; enable to build and test `ReticulumTransport`.
+reticulum = ["dep:reticulum", "dep:x25519-dalek", "dep:hkdf", "dep:sha2", "dep:rand_core"]
 
 [lib]
 path = "src/lib.rs"
@@ -35,6 +40,12 @@ bytes = "1"
 # pins iroh 0.98, unifying with the iroh/iroh-blobs deps above.
 p2panda-net = "0.6.1"
 p2panda-core = "0.6.1"
+# Reticulum mesh-networking backend (optional, see [features]).
+reticulum = { workspace = true, optional = true }
+x25519-dalek = { workspace = true, optional = true }
+hkdf = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
+rand_core = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["io-util", "sync", "macros", "rt", "rt-multi-thread", "time"] }
