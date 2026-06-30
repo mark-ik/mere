@@ -67,6 +67,7 @@ impl Graph {
                 properties: node.properties.clone(),
                 derivations: node.derivations.clone(),
                 body: node.body.clone(),
+                last_session_visited: node.last_session_visited,
             })
             .collect();
 

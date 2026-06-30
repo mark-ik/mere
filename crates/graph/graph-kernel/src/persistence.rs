@@ -184,6 +184,12 @@ pub struct PersistedNode {
     /// reframe, slice 3.)
     #[serde(default)]
     pub body: Option<String>,
+    /// The app-launch session number this node was last navigated in. `0` (the
+    /// `#[serde(default)]` for snapshots written before this field existed) means
+    /// "never stamped" — by-sessions eviction treats that as undated, never evicted.
+    /// (Alembic B5.)
+    #[serde(default)]
+    pub last_session_visited: u64,
 }
 
 /// Full graph snapshot for periodic saves.

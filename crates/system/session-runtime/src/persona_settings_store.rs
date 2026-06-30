@@ -49,6 +49,14 @@ pub struct PersonaSettings {
     /// B4). Absent / older file falls back to the host default (`KeepDays(30)`).
     #[serde(default)]
     pub eviction_policy: EvictionPolicy,
+    /// The number of times this persona's app has launched, incremented once at boot and
+    /// saved back immediately (not on a debounce — a crash between increment and save
+    /// just under-counts by one launch, never duplicates a count). The host stamps each
+    /// navigated node's [`PersistedNode::last_session_visited`](kernel::persistence::PersistedNode::last_session_visited)
+    /// with this value, so `0` is reserved for "never stamped" and the first real launch
+    /// is `1`. (Alembic B5 — by-sessions eviction.)
+    #[serde(default)]
+    pub session_count: u64,
 }
 
 /// The `<data_root>/personas/<id>/settings/` directory for `persona`. Pure.
@@ -143,6 +151,7 @@ mod tests {
                 .into_iter()
                 .collect(),
             eviction_policy: EvictionPolicy::KeepDays(90),
+            session_count: 7,
         };
         save_persona_settings(&root, fixture_persona(), &original).unwrap();
         let restored = load_persona_settings(&root, fixture_persona())
@@ -150,6 +159,7 @@ mod tests {
             .expect("settings file should be present");
         assert_eq!(restored, original);
         assert_eq!(restored.eviction_policy, EvictionPolicy::KeepDays(90), "the policy persists");
+        assert_eq!(restored.session_count, 7, "the launch counter persists");
         let _ = fs::remove_dir_all(&root);
     }
 }

@@ -177,6 +177,15 @@ impl Orrery {
         }
     }
 
+    /// Set the current app-launch session number (Alembic B5). The host calls this
+    /// once per pooled orrery, right after construction, with its persisted-and-
+    /// incremented persona session counter; every in-place navigation afterwards
+    /// stamps the visited node's `last_session_visited` for
+    /// `EvictionPolicy::KeepSessions`.
+    pub fn set_current_session(&mut self, session: u64) {
+        self.graph.set_current_session(session);
+    }
+
     /// Set the viewport the orrery culls + centers against. The host calls this on
     /// a surface resize; the next [`frame`](Orrery::frame) rebuilds the node-pool
     /// layout at the new size.

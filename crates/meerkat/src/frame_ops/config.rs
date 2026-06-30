@@ -280,6 +280,9 @@ impl WindowCtx<'_> {
             menu_actions: Some(self.shared.presentation.menu_actions.clone()),
             command_usage: self.shared.presentation.command_usage.clone(),
             eviction_policy: self.shared.presentation.eviction_policy,
+            // Carried through, not reset: this save rewrites the whole settings file, and
+            // the launch counter is bumped once at boot (shell_new.rs), not here. (B5.)
+            session_count: self.shared.session.current_session_count,
         };
         if let Err(err) = session_runtime::save_persona_settings(
             &self.shared.session.mere_root,

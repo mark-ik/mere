@@ -48,8 +48,10 @@ impl ForgetProposal {
 }
 
 /// Propose forgetting: the urls of the short-term nodes `policy` would evict as of
-/// `now_ms`, given per-node last-visit timing (`last_visit_ms`, keyed by `node_id`,
-/// supplied by the host from the graph's navigation history).
+/// `now_ms` / `current_session`, given per-node last-visit timing (`last_visit_ms`,
+/// keyed by `node_id`, supplied by the host from the graph's navigation history) for
+/// the by-time policies, or each node's own `last_session_visited` stamp for
+/// [`KeepSessions`](EvictionPolicy::KeepSessions).
 ///
 /// Pure: it reads `snapshot` and mutates nothing (R0). The eviction decision is
 /// [`evictable_short_term`](crate::memory_levels::evictable_short_term) (short-term
@@ -60,9 +62,10 @@ pub fn propose_forgetting(
     last_visit_ms: &HashMap<String, u64>,
     policy: EvictionPolicy,
     now_ms: u64,
+    current_session: u64,
 ) -> ForgetProposal {
     let evictable: HashSet<String> =
-        evictable_short_term(&snapshot.nodes, last_visit_ms, policy, now_ms)
+        evictable_short_term(&snapshot.nodes, last_visit_ms, policy, now_ms, current_session)
             .into_iter()
             .collect();
     let urls = snapshot
@@ -135,7 +138,35 @@ mod tests {
         times.insert(id_of(&snapshot, "fresh"), now - 2 * DAY_MS); // fresh -> keep
         times.insert(id_of(&snapshot, "kept"), now - 90 * DAY_MS); // stale but tagged -> exempt
 
-        let proposal = propose_forgetting(&snapshot, &times, EvictionPolicy::KeepDays(30), now);
+        let proposal = propose_forgetting(&snapshot, &times, EvictionPolicy::KeepDays(30), now, 0);
+        assert_eq!(proposal.len(), 1, "only the stale short-term node");
+        assert!(proposal.urls[0].contains("stale"));
+    }
+
+    #[test]
+    fn proposes_only_stale_short_term_urls_by_session() {
+        let snapshot = sample_snapshot();
+        let stale_id = id_of(&snapshot, "stale");
+        let fresh_id = id_of(&snapshot, "fresh");
+        let kept_id = id_of(&snapshot, "kept");
+        let mut snapshot = snapshot;
+        for node in &mut snapshot.nodes {
+            if node.node_id == stale_id {
+                node.last_session_visited = 2; // 8 sessions ago -> propose
+            } else if node.node_id == fresh_id {
+                node.last_session_visited = 9; // 1 session ago -> keep
+            } else if node.node_id == kept_id {
+                node.last_session_visited = 1; // stale but tagged -> exempt
+            }
+        }
+
+        let proposal = propose_forgetting(
+            &snapshot,
+            &HashMap::new(),
+            EvictionPolicy::KeepSessions(3),
+            0,
+            10,
+        );
         assert_eq!(proposal.len(), 1, "only the stale short-term node");
         assert!(proposal.urls[0].contains("stale"));
     }

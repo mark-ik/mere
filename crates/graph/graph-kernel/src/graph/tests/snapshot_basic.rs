@@ -290,6 +290,7 @@ fn test_snapshot_edge_with_missing_url_is_dropped() {
             frame_split_offer_suppressed: false,
             properties: Vec::new(),
             derivations: Vec::new(),
+            last_session_visited: 0,
         }],
         edges: vec![PersistedEdge {
             from_node_id: Uuid::new_v4().to_string(),
@@ -351,6 +352,7 @@ fn test_snapshot_duplicate_urls_last_wins() {
                 frame_split_offer_suppressed: false,
                 properties: Vec::new(),
                 derivations: Vec::new(),
+                last_session_visited: 0,
             },
             PersistedNode {
                 node_id: Uuid::new_v4().to_string(),
@@ -376,6 +378,7 @@ fn test_snapshot_duplicate_urls_last_wins() {
                 frame_split_offer_suppressed: false,
                 properties: Vec::new(),
                 derivations: Vec::new(),
+                last_session_visited: 0,
             },
         ],
         edges: vec![],

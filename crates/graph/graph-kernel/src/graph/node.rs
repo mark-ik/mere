@@ -81,6 +81,13 @@ pub struct Node {
     #[rkyv(with = rkyv::with::AsUnixTime)]
     pub last_visited: std::time::SystemTime,
 
+    /// The app-launch session number this node was last navigated in, stamped by
+    /// [`super::Graph::navigate_node`] from [`super::Graph::current_session`]. `0`
+    /// means "never stamped" (a node from before this field existed, or never
+    /// re-visited since boot) — by-sessions eviction treats that as undated, never
+    /// evicted (mirrors the by-time policy's "never drop what we cannot date").
+    /// (Alembic B5.)
+    pub last_session_visited: u64,
 
     /// Optional thumbnail bytes (PNG), persisted in snapshots.
     pub thumbnail_png: Option<Vec<u8>>,
@@ -218,6 +225,7 @@ impl Node {
             properties: Vec::new(),
             is_pinned: false,
             last_visited: std::time::SystemTime::now(),
+            last_session_visited: 0,
             thumbnail_png: None,
             thumbnail_width: 0,
             thumbnail_height: 0,

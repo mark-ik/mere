@@ -51,9 +51,23 @@ impl Shell {
             .ok()
             .flatten()
             .unwrap_or_default();
-        let menu_actions = persona_ui.menu_actions.unwrap_or_else(default_menu_actions);
-        let command_usage = persona_ui.command_usage;
+        let menu_actions = persona_ui.menu_actions.clone().unwrap_or_else(default_menu_actions);
+        let command_usage = persona_ui.command_usage.clone();
         let eviction_policy = persona_ui.eviction_policy;
+        // This launch's session number (Alembic B5 — by-sessions eviction). `0` is reserved
+        // for "never stamped" by a node, so the first-ever launch is `1`. Saved back
+        // immediately, not on a debounce: a crash before the next interactive settings-save
+        // just under-counts by one launch, never duplicates a count.
+        let current_session_count = persona_ui.session_count.saturating_add(1);
+        let mut persisted_persona_ui = persona_ui;
+        persisted_persona_ui.session_count = current_session_count;
+        if let Err(err) = session_runtime::save_persona_settings(
+            &mere_root,
+            active_persona,
+            &persisted_persona_ui,
+        ) {
+            tracing::warn!(%err, "session-count persist failed; the launch counter will under-count");
+        }
         let mut chrome = Chrome::new("mere://welcome");
         chrome.settings.tab_cap = saved_settings.tab_cap;
         let runner = window_view::shell_runner(dom.clone(), chrome);
@@ -415,10 +429,12 @@ impl Shell {
             orreries.insert(gid, extra);
             orrery_lru.push(gid);
         }
-        // Apply the persisted "inertia" (linear damping) to every pooled orrery, so a
-        // restart honors the saved physics setting. (Physics settings.)
+        // Apply the persisted "inertia" (linear damping) and this launch's session number to
+        // every pooled orrery, so a restart honors the saved physics setting and in-place
+        // navigation stamps the right session from the first click. (Physics settings; B5.)
         for orrery in orreries.values_mut() {
             orrery.set_physics_damping(saved_settings.physics_damping);
+            orrery.set_current_session(current_session_count);
         }
         let mut app = Self {
             shared: SharedState {
@@ -449,6 +465,7 @@ impl Shell {
                     mere_root,
                     session_labels: HashMap::new(),
                     host_text: text::HostText::new(),
+                    current_session_count,
                 },
                 presentation: Presentation {
                     theme,

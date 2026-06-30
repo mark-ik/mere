@@ -57,9 +57,11 @@ pub enum EvictionPolicy {
     KeepForever,
     /// Evict short-term nodes whose last visit is older than `days` days.
     KeepDays(u32),
-    // A by-sessions policy (drop after N sessions) is part of the design space but
-    // needs a per-node last-session stamp the snapshot does not carry yet; it is
-    // tracked for a later increment rather than shipped as a no-op here.
+    /// Evict short-term nodes not visited in the last `sessions` app launches, per
+    /// [`PersistedNode::last_session_visited`](kernel::persistence::PersistedNode::last_session_visited).
+    /// A node never stamped (`last_session_visited == 0`, e.g. never re-visited since
+    /// this field shipped) is left alone — undated, like an unset `last_visit_ms`.
+    KeepSessions(u32),
 }
 
 impl Default for EvictionPolicy {
@@ -75,58 +77,77 @@ impl EvictionPolicy {
         match self {
             EvictionPolicy::KeepForever => "keeping all recent memory".to_string(),
             EvictionPolicy::KeepDays(d) => format!("evicting recent memory after {d} day(s)"),
+            EvictionPolicy::KeepSessions(n) => {
+                format!("evicting recent memory after {n} session(s)")
+            }
         }
     }
 
     /// The next policy when the user cycles the control in the Recent header: a small
     /// curated ladder `7d -> 30d -> 90d -> forever -> 7d`. An arbitrary `KeepDays(n)`
-    /// snaps to the next rung above it. (Editable eviction policy.)
+    /// snaps to the next rung above it. [`KeepSessions`](Self::KeepSessions) is not on
+    /// this ladder yet (no UI sets it), so cycling away from it returns to the ladder's
+    /// start rather than looping in place. (Editable eviction policy.)
     pub fn cycled(self) -> EvictionPolicy {
         match self {
             EvictionPolicy::KeepDays(d) if d < 30 => EvictionPolicy::KeepDays(30),
             EvictionPolicy::KeepDays(d) if d < 90 => EvictionPolicy::KeepDays(90),
             EvictionPolicy::KeepDays(_) => EvictionPolicy::KeepForever,
             EvictionPolicy::KeepForever => EvictionPolicy::KeepDays(7),
+            EvictionPolicy::KeepSessions(_) => EvictionPolicy::KeepDays(7),
         }
     }
 
-    /// The cutoff time: short-term nodes last visited before this are evictable.
-    /// `None` for [`KeepForever`](Self::KeepForever) (nothing is evictable).
-    fn cutoff_ms(&self, now_ms: u64) -> Option<u64> {
+    /// Whether `node` is stale under this policy: by-time against `last_visit_ms` +
+    /// `now_ms`, or by-session against `node.last_session_visited` + `current_session`.
+    /// Both axes share the same rule — a node with no recorded timing (no visit entry,
+    /// or `last_session_visited == 0`) is never stale; we don't drop what we can't date.
+    fn is_stale(
+        &self,
+        node: &PersistedNode,
+        last_visit_ms: &HashMap<String, u64>,
+        now_ms: u64,
+        current_session: u64,
+    ) -> bool {
         match self {
-            EvictionPolicy::KeepForever => None,
+            EvictionPolicy::KeepForever => false,
             EvictionPolicy::KeepDays(days) => {
-                Some(now_ms.saturating_sub(u64::from(*days) * 86_400_000))
+                let cutoff = now_ms.saturating_sub(u64::from(*days) * 86_400_000);
+                last_visit_ms
+                    .get(&node.node_id)
+                    .is_some_and(|&visited| visited < cutoff)
+            }
+            EvictionPolicy::KeepSessions(sessions) => {
+                node.last_session_visited != 0
+                    && current_session.saturating_sub(node.last_session_visited)
+                        >= u64::from(*sessions)
             }
         }
     }
 }
 
-/// The node ids of the short-term nodes `policy` would evict as of `now_ms`, given
-/// each node's last-visit time (`last_visit_ms`, keyed by `node_id`, supplied by the
-/// host from the graph's navigation history).
+/// The node ids of the short-term nodes `policy` would evict as of `now_ms` /
+/// `current_session`, given each node's last-visit time (`last_visit_ms`, keyed by
+/// `node_id`, supplied by the host from the graph's navigation history) for the
+/// by-time policies, or the node's own `last_session_visited` stamp for
+/// [`KeepSessions`](EvictionPolicy::KeepSessions).
 ///
-/// A node is evictable only if it is short-term **and** has a recorded last visit
-/// before the policy cutoff. A node with no visit record is left alone (we never drop
-/// what we cannot date), and promoted nodes are never returned. The result is the set
-/// the host passes to an eviction pass; this function decides *what*, never performs it.
+/// A node is evictable only if it is short-term **and** stale under the policy (see
+/// [`EvictionPolicy::is_stale`]) — a node with no recorded timing on the relevant axis
+/// is left alone (we never drop what we cannot date), and promoted nodes are never
+/// returned. The result is the set the host passes to an eviction pass; this function
+/// decides *what*, never performs it.
 pub fn evictable_short_term(
     nodes: &[PersistedNode],
     last_visit_ms: &HashMap<String, u64>,
     policy: EvictionPolicy,
     now_ms: u64,
+    current_session: u64,
 ) -> Vec<String> {
-    let Some(cutoff) = policy.cutoff_ms(now_ms) else {
-        return Vec::new();
-    };
     nodes
         .iter()
         .filter(|node| level_of(node) == MemoryLevel::ShortTerm)
-        .filter(|node| {
-            last_visit_ms
-                .get(&node.node_id)
-                .is_some_and(|&visited| visited < cutoff)
-        })
+        .filter(|node| policy.is_stale(node, last_visit_ms, now_ms, current_session))
         .map(|node| node.node_id.clone())
         .collect()
 }
@@ -149,12 +170,14 @@ pub fn census(
     last_visit_ms: &HashMap<String, u64>,
     policy: EvictionPolicy,
     now_ms: u64,
+    current_session: u64,
 ) -> MemoryCensus {
     let long_term = nodes.iter().filter(|n| is_promoted(n)).count();
     MemoryCensus {
         short_term: nodes.len() - long_term,
         long_term,
-        evictable: evictable_short_term(nodes, last_visit_ms, policy, now_ms).len(),
+        evictable: evictable_short_term(nodes, last_visit_ms, policy, now_ms, current_session)
+            .len(),
     }
 }
 
@@ -191,6 +214,7 @@ mod tests {
             frame_split_offer_suppressed: false,
             properties: Vec::new(),
             derivations: Vec::new(),
+            last_session_visited: 0,
         }
     }
 
@@ -217,7 +241,8 @@ mod tests {
         let nodes = vec![node("a"), node("b")];
         let mut times = HashMap::new();
         times.insert("a".to_string(), 0u64); // ancient, but policy keeps all
-        let out = evictable_short_term(&nodes, &times, EvictionPolicy::KeepForever, 100 * DAY_MS);
+        let out =
+            evictable_short_term(&nodes, &times, EvictionPolicy::KeepForever, 100 * DAY_MS, 0);
         assert!(out.is_empty(), "KeepForever never evicts");
     }
 
@@ -233,7 +258,27 @@ mod tests {
         times.insert("promoted".to_string(), now - 90 * DAY_MS); // stale but promoted -> keep
         // "undated" has no visit record -> never dropped (we don't drop what we can't date)
 
-        let out = evictable_short_term(&nodes, &times, EvictionPolicy::KeepDays(30), now);
+        let out = evictable_short_term(&nodes, &times, EvictionPolicy::KeepDays(30), now, 0);
+        assert_eq!(out, vec!["stale".to_string()], "only the dated, stale, un-promoted node");
+    }
+
+    #[test]
+    fn keep_sessions_evicts_only_stale_unstamped_safe_and_promoted_exempt() {
+        let current_session = 10u64;
+        let mut nodes = vec![node("stale"), node("fresh"), node("unstamped"), node("promoted")];
+        nodes[0].last_session_visited = 2; // 8 sessions ago, older than 3 -> evict
+        nodes[1].last_session_visited = 9; // 1 session ago -> keep
+        // "unstamped" keeps last_session_visited == 0 (never stamped) -> never dropped
+        nodes[3].last_session_visited = 1; // stale but promoted -> keep
+        nodes[3].tags.push("keep".to_string());
+
+        let out = evictable_short_term(
+            &nodes,
+            &HashMap::new(),
+            EvictionPolicy::KeepSessions(3),
+            0,
+            current_session,
+        );
         assert_eq!(out, vec!["stale".to_string()], "only the dated, stale, un-promoted node");
     }
 
@@ -247,7 +292,7 @@ mod tests {
         times.insert("s1".to_string(), now - 60 * DAY_MS); // evictable
         times.insert("s2".to_string(), now - 2 * DAY_MS); // fresh
 
-        let c = census(&nodes, &times, EvictionPolicy::KeepDays(30), now);
+        let c = census(&nodes, &times, EvictionPolicy::KeepDays(30), now, 0);
         assert_eq!(c.short_term, 2);
         assert_eq!(c.long_term, 1);
         assert_eq!(c.evictable, 1, "only s1 is stale enough");

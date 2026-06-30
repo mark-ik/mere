@@ -100,6 +100,7 @@ impl Graph {
             // --- identity / runtime / session / arrangement: reset ---
             is_pinned: false,
             last_visited: std::time::SystemTime::now(),
+            last_session_visited: 0,
             session_scroll: None,
             session_form_draft: None,
             frame_layout_hints: Vec::new(),

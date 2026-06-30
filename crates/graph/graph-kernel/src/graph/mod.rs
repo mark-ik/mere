@@ -279,6 +279,14 @@ pub struct Graph {
     /// arrangements, importance — so a recompute happens once per real change, not per frame.
     /// (Graph signals — the universal cache key.)
     revision: u64,
+
+    /// The current app-launch session number, set once by the host via
+    /// [`set_current_session`](Self::set_current_session) right after construction/
+    /// restore. `0` (the default) means "not wired" — [`navigate_node`](Self::navigate_node)
+    /// then stamps nothing, so by-sessions eviction sees every node as undated until the
+    /// host opts in. Not part of the persisted snapshot: it is per-launch host state, not
+    /// graph truth. (Alembic B5 — by-sessions eviction.)
+    current_session: u64,
 }
 
 impl Graph {
@@ -293,7 +301,16 @@ impl Graph {
             couplings: HashMap::new(),
             nav: SharedNavigationMemory::empty(),
             revision: 0,
+            current_session: 0,
         }
+    }
+
+    /// Set the current app-launch session number (Alembic B5). The host calls this once,
+    /// right after construction or snapshot-restore, with its persisted-and-incremented
+    /// session counter; every [`navigate_node`](Self::navigate_node) call afterwards stamps
+    /// the visited node's [`Node::last_session_visited`] with this value.
+    pub fn set_current_session(&mut self, session: u64) {
+        self.current_session = session;
     }
 
     /// The current structural revision (see [`revision`](Self::revision)). A consumer captures it
@@ -357,6 +374,7 @@ impl Graph {
             properties: Vec::new(),
             is_pinned: false,
             last_visited: now,
+            last_session_visited: 0,
             thumbnail_png: None,
             thumbnail_width: 0,
             thumbnail_height: 0,
@@ -450,6 +468,9 @@ impl Graph {
         let at_ms = Self::epoch_ms();
         if let Some(id) = self.inner.node_weight(key).map(|n| n.id) {
             self.nav.record_visit(id, url, node_lineage::TransitionKind::UrlTyped, at_ms);
+        }
+        if let Some(node) = self.inner.node_weight_mut(key) {
+            node.last_session_visited = self.current_session;
         }
         self.update_node_url(key, url.to_string());
     }

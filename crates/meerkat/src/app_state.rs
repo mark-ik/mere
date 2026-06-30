@@ -139,6 +139,12 @@ pub(crate) struct Session {
     /// Host text shaping for host-drawn labels (the switcher tile names). Holds the
     /// parley contexts so they aren't rebuilt per frame. (Host text path.)
     pub(crate) host_text: text::HostText,
+    /// This persona's app-launch counter, incremented and persisted once at boot
+    /// (`PersonaSettings::session_count`). Pushed into every pooled orrery via
+    /// `Orrery::set_current_session` so in-place navigation stamps
+    /// `last_session_visited`; `run_forgetting_pass` reads it back for
+    /// `EvictionPolicy::KeepSessions`. (Alembic B5 — by-sessions eviction.)
+    pub(crate) current_session_count: u64,
 }
 
 /// The `presentation` subsystem: the resolved theme + the persisted chrome

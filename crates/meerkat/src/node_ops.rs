@@ -64,7 +64,8 @@ impl WindowCtx<'_> {
         // The persisted, user-editable policy (the Alembic Recent header control), not a
         // hardcoded default. (Editable eviction policy, B4.)
         let policy = self.shared.presentation.eviction_policy;
-        let proposal = athanor::propose_forgetting(&snapshot, &timing, policy, now_ms);
+        let current_session = self.shared.session.current_session_count;
+        let proposal = athanor::propose_forgetting(&snapshot, &timing, policy, now_ms, current_session);
 
         if proposal.is_empty() {
             self.shared.observability.record_diagnostic(

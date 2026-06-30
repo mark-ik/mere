@@ -175,6 +175,7 @@ impl crate::Shell {
                 orrery.visit("mere://welcome");
             }
             orrery.offload_physics(self.physics_wake.clone());
+            orrery.set_current_session(self.shared.session.current_session_count);
             slot.insert(orrery);
         }
     }
