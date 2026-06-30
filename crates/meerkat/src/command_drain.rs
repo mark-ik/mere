@@ -444,6 +444,11 @@ impl WindowCtx<'_> {
                 format!("unknown scene: {name}")
             });
         }
+        // A `compose_engrams("<id-a>", "<id-b>")` call unions the two engrams by URL identity
+        // into a new one and echoes the result. (Alembic B7-P3.)
+        if let Some((id_a, id_b)) = &outcome.compose_engrams {
+            note = Some(self.compose_engrams(id_a, id_b));
+        }
         // A `sparql("…")` call runs over the focused graph and echoes the result.
         // Read-only: an ephemeral in-memory store, the kernel stays the authority.
         if let Some(query) = &outcome.sparql_query {

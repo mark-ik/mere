@@ -485,6 +485,7 @@ impl Shell {
                     menu_actions,
                     command_usage,
                     eviction_policy,
+                    pending_compose_engram: None,
                 },
                 comms_handle,
                 sync_handle,

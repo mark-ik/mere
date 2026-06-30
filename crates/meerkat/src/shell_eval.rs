@@ -120,6 +120,11 @@ pub struct ShellOutcome {
     /// Mirrors `sparql` / `relate`: an arg-bearing binding that records into the outcome rather than
     /// mutating, since the shell can't reach the live orrery. (Scene verb.)
     pub scene_request: Option<String>,
+    /// A pair of engram ids passed to `compose_engrams("<id-a>", "<id-b>")` — the host unions
+    /// them by URL identity into a new engram and echoes the result. `None` when not called.
+    /// Mirrors `script_event`: a 2-arg binding that records into the outcome (the host, not the
+    /// shell, holds the private store). (Alembic B7-P3.)
+    pub compose_engrams: Option<(String, String)>,
     /// A compile / runtime error message, if the script failed. Commands called
     /// before a mid-script failure are still present in `commands`.
     pub error: Option<String>,
@@ -152,6 +157,7 @@ impl CommandShell {
         let detach_script: Rc<RefCell<bool>> = Rc::new(RefCell::new(false));
         let script_event: Rc<RefCell<Option<(String, String)>>> = Rc::new(RefCell::new(None));
         let scene_request: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+        let compose_engrams: Rc<RefCell<Option<(String, String)>>> = Rc::new(RefCell::new(None));
         let snapshot = Rc::new(ctx.clone());
         let mut engine = script_rhai::base_engine();
 
@@ -271,6 +277,14 @@ impl CommandShell {
             *sr.borrow_mut() = Some(name.to_string());
         });
 
+        // `compose_engrams("<id-a>", "<id-b>")` — record the pair for the host to union by URL
+        // identity into a new engram and echo the result. Mirrors `script_event`: the shell
+        // snapshot has no store handle, so this records rather than composes. (Alembic B7-P3.)
+        let ce = compose_engrams.clone();
+        engine.register_fn("compose_engrams", move |id_a: &str, id_b: &str| {
+            *ce.borrow_mut() = Some((id_a.to_string(), id_b.to_string()));
+        });
+
         engine.set_max_operations(OP_BUDGET);
         let result = engine.eval::<Dynamic>(&desugar(source));
         let commands = commands.borrow().clone();
@@ -283,6 +297,7 @@ impl CommandShell {
         let detach_script = *detach_script.borrow();
         let script_event = script_event.borrow().clone();
         let scene_request = scene_request.borrow().clone();
+        let compose_engrams = compose_engrams.borrow().clone();
         match result {
             Ok(value) => ShellOutcome {
                 text: stringify(value),
@@ -296,6 +311,7 @@ impl CommandShell {
                 detach_script,
                 script_event,
                 scene_request,
+                compose_engrams,
                 error: None,
             },
             Err(err) => ShellOutcome {
@@ -310,6 +326,7 @@ impl CommandShell {
                 detach_script,
                 script_event,
                 scene_request,
+                compose_engrams,
                 error: Some(err.to_string()),
             },
         }
@@ -345,6 +362,7 @@ pub fn complete(prefix: &str) -> Option<&'static str> {
             "detach_script",
             "script_event",
             "scene",
+            "compose_engrams",
         ])
         .find(|name| name.len() > prefix.len() && name.starts_with(prefix))
 }
@@ -549,6 +567,20 @@ mod tests {
         assert!(bare.error.is_none());
         // `complete` ghosts the verb so a user discovers it.
         assert_eq!(complete("sce"), Some("scene"));
+    }
+
+    #[test]
+    fn compose_engrams_records_the_id_pair() {
+        // The 2-arg call records the pair for the host to union; no command, no error.
+        let out = CommandShell::new().eval(r#"compose_engrams("id-a", "id-b")"#, &ctx());
+        assert_eq!(
+            out.compose_engrams,
+            Some(("id-a".to_string(), "id-b".to_string()))
+        );
+        assert!(out.commands.is_empty());
+        assert!(out.error.is_none());
+        // The verb ghost-completes so a user discovers it.
+        assert_eq!(complete("compose"), Some("compose_engrams"));
     }
 
     #[test]

@@ -1,8 +1,8 @@
 # Engram compose / merge
 
 **Date**: 2026-06-25
-**Status**: **P1+P2 done 2026-06-27** (snapshot-level `merge_snapshots` + `compose_graph_engrams`, 6 tests
-green); **P3 host gesture deferred** (chrome-hot). Spun out of the
+**Status**: **P1+P2+P3 done 2026-06-30** (snapshot-level `merge_snapshots` + `compose_graph_engrams`, the
+`>compose_engrams` verb, and the Alembic Engrams two-select gesture all shipped). Spun out of the
 [Alembic tail handoff](2026-06-25_alembic_tail_and_audit_polish_handoff.md) B7; owns the "compose
 sub-feature" that [decision #1](2026-06-24_alembic_implementation_plan.md) defers to post-A/D.
 Architecture: [alembic memory + engrams](../technical_architecture/2026-06-09_alembic_memory_and_engrams.md).
@@ -110,3 +110,19 @@ primitive.
   origin, `upstream` = source ids). All three audit gaps handled. 6 tests green (94 in the crate). Landed
   via a concurrent bare commit (`831bdcf`). **P3 (host `>compose_engrams` verb + Alembic two-select
   gesture) deferred** — meerkat chrome, picked up when that lane is quiet.
+- 2026-06-30: **P3 shipped**, with two deliberate deviations from the plan's literal text, both audited
+  against the actual code rather than assumed:
+  - **No `ShellCommand` queueing.** The plan modeled this on `OpenEngramBeside`, which queues because
+    thawing an engram into a live pane re-keys the orrery pool — something a `WindowCtx` can't do mid-borrow.
+    `compose_graph_engrams` only touches `self.shared.content.store` (no `Graph`/`Orrery` involved), so
+    `WindowCtx::compose_engrams(id_a, id_b) -> String` runs directly, the same shape as `save_graph_engram`.
+  - **No Athanor propose/apply.** Propose/apply exists to gate an *automatic* judgment (what to evict,
+    eventually what to consolidate) before applying it. Compose has no such judgment here — the user already
+    named both ids (via the verb or the two-select gesture) — so it runs on confirm, like `SaveGraphEngram`,
+    not propose-then-apply like forgetting.
+  - `compose_engrams("<id-a>", "<id-b>")` is a new rhai binding in `shell_eval.rs` (mirrors `script_event`'s
+    2-arg shape), drained in `command_drain.rs::submit_omnibar_command`. The Engrams two-select gesture is
+    one slot of state (`Presentation::pending_compose_engram: Option<String>`, ephemeral, not persisted) —
+    click one engram's `⊕` to mark it pending, a second (different) click composes and clears the slot, the
+    same id again deselects. Routed through `input/panes.rs`'s `engram:compose:<id>` key to
+    `WindowCtx::toggle_compose_selection`. 3 new tests (the binding + both gesture transitions).

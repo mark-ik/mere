@@ -209,6 +209,10 @@ pub(crate) struct Presentation {
     /// settings store at boot, cycled by the header control, persisted on change; read by the
     /// Recent-header display and `run_forgetting_pass`. (Editable eviction policy, B4.)
     pub(crate) eviction_policy: session_runtime::memory_levels::EvictionPolicy,
+    /// The Engrams two-select compose gesture's pending first pick (an engram id), or `None`
+    /// between gestures. Ephemeral interaction state, not persisted — a fresh launch always
+    /// starts with no pending selection. (Alembic B7-P3.)
+    pub(crate) pending_compose_engram: Option<String>,
 }
 
 impl Presentation {

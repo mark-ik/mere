@@ -70,4 +70,65 @@ impl WindowCtx<'_> {
             Err(err) => format!("Save engram failed: {err}"),
         }
     }
+
+    /// Union two graph engrams (by id string) into a new one by URL identity, retaining
+    /// per-member provenance — the Alembic memory spine's "compose" (decision #1; B7-P3).
+    /// Reachable directly as the `>compose_engrams("<id-a>", "<id-b>")` omnibar verb, and from
+    /// the Engrams two-select gesture via [`toggle_compose_selection`](Self::toggle_compose_selection).
+    /// No Athanor propose/apply here, unlike forgetting: the user already named the two ids, so
+    /// there is no automatic-discovery judgment for Athanor to propose — this runs on confirm,
+    /// the same shape as `save_graph_engram`. Returns a one-line note (new engram id, or the
+    /// error) for the caller to surface.
+    pub(super) fn compose_engrams(&mut self, id_a: &str, id_b: &str) -> String {
+        use session_runtime::graph_engram::{RedactionPolicy, compose_graph_engrams};
+
+        let Some(a) = eidetic::Hash::parse(id_a).ok().map(eidetic::ManifestId::from_hash) else {
+            return format!("Compose failed: not a valid engram id: {id_a}");
+        };
+        let Some(b) = eidetic::Hash::parse(id_b).ok().map(eidetic::ManifestId::from_hash) else {
+            return format!("Compose failed: not a valid engram id: {id_b}");
+        };
+        let created_at = eidetic::Timestamp(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0),
+        );
+
+        let Some(store) = self.shared.content.store.as_mut() else {
+            return "Compose failed: no private memory store is open".to_string();
+        };
+        match pollster::block_on(compose_graph_engrams(
+            store,
+            &[a, b],
+            RedactionPolicy::default(),
+            created_at,
+        )) {
+            Ok(Some(id)) => format!("Composed engram {id} from {id_a} + {id_b}"),
+            Ok(None) => "Compose failed: one or both engram ids were not found".to_string(),
+            Err(err) => format!("Compose failed: {err}"),
+        }
+    }
+
+    /// The Alembic Engrams two-select gesture: click one engram's ⊕ to mark it pending, click a
+    /// second (different) engram's ⊕ to compose them, or click the same engram again to
+    /// deselect. One slot of state (`Presentation::pending_compose_engram`), not a multi-select
+    /// list — the thinnest gesture that still reads as "pick two". A composed pair's result is
+    /// recorded as an `alembic.compose` diagnostic (the Apparatus log), the same surface
+    /// `run_forgetting_pass` uses, since this path has no omnibar to echo into. (B7-P3.)
+    pub(super) fn toggle_compose_selection(&mut self, id: &str) {
+        match self.shared.presentation.pending_compose_engram.take() {
+            Some(pending) if pending == id => {} // same row again: deselect (already taken above)
+            Some(pending) => {
+                let note = self.compose_engrams(&pending, id);
+                self.shared.observability.record_diagnostic(
+                    "alembic.compose",
+                    super::observability::Severity::Info,
+                    note,
+                );
+            }
+            None => self.shared.presentation.pending_compose_engram = Some(id.to_string()),
+        }
+        self.view.request_redraw();
+    }
 }
