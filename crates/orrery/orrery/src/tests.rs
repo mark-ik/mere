@@ -1,10 +1,91 @@
 use super::build::hyperlink;
 use super::*;
 use kernel::geometry::PortablePoint;
-use kernel::graph::{Graph, SemanticSubKind};
+use kernel::graph::{EdgeFamily, Graph, RelationKind, RelationSelector, SemanticSubKind};
 use std::collections::HashMap;
 
 mod selection;
+
+fn selector_for_relation_kind(kind: RelationKind) -> RelationSelector {
+    match kind {
+        RelationKind::Semantic(sub) => RelationSelector::Semantic(sub),
+        RelationKind::Traversal => RelationSelector::Family(EdgeFamily::Traversal),
+        RelationKind::Containment(sub) => RelationSelector::Containment(sub),
+        RelationKind::Arrangement(sub) => RelationSelector::Arrangement(sub),
+        RelationKind::Imported(sub) => RelationSelector::Imported(sub),
+        RelationKind::Provenance(sub) => RelationSelector::Provenance(sub),
+    }
+}
+
+fn first_edge_cell_between(
+    orrery: &Orrery,
+    a: kernel::graph::NodeKey,
+    b: kernel::graph::NodeKey,
+) -> EdgeCell {
+    orrery
+        .graph()
+        .relations()
+        .find_map(|relation| {
+            let same_pair = (relation.from == a && relation.to == b)
+                || (relation.from == b && relation.to == a);
+            same_pair.then_some(EdgeCell {
+                from: relation.from,
+                to: relation.to,
+                selector: selector_for_relation_kind(relation.kind),
+            })
+        })
+        .expect("relation cell between the endpoints")
+}
+
+#[test]
+fn edge_cell_hit_test_picks_fanned_parallel_relation_cells() {
+    let mut orrery = Orrery::new();
+    let a = orrery.open_member_as_new_node(None, "https://fan-a.test");
+    let b = orrery.open_member_as_new_node(None, "https://fan-b.test");
+    let ak = orrery.graph().get_node_by_id(a).unwrap().0;
+    let bk = orrery.graph().get_node_by_id(b).unwrap().0;
+    assert!(orrery.assert_relation_between_members(a, b, SemanticSubKind::Cites));
+    assert!(orrery.assert_relation_between_members(a, b, SemanticSubKind::Quotes));
+    orrery
+        .view
+        .set_position(ak, euclid::default::Point2D::new(0.0, 0.0));
+    orrery
+        .view
+        .set_position(bk, euclid::default::Point2D::new(100.0, 0.0));
+
+    let pair = if ak <= bk { (ak, bk) } else { (bk, ak) };
+    let segments: Vec<_> = crate::edge_cells::visible_edge_cell_segments(
+        orrery.graph(),
+        &orrery.view,
+        &orrery.hidden_edges,
+    )
+    .into_iter()
+    .filter(|segment| segment.cell.endpoint_pair() == pair)
+    .collect();
+    assert_eq!(
+        segments.len(),
+        2,
+        "the pair exposes two relation-cell lanes"
+    );
+
+    for segment in segments {
+        let midpoint = euclid::default::Point2D::new(
+            (segment.from.x + segment.to.x) * 0.5,
+            (segment.from.y + segment.to.y) * 0.5,
+        );
+        assert_eq!(
+            crate::edge_cells::edge_cell_hit_test(
+                orrery.graph(),
+                &orrery.view,
+                &orrery.hidden_edges,
+                midpoint,
+                1.0,
+            ),
+            Some(segment.cell),
+            "the fanned lane picks its own relation cell"
+        );
+    }
+}
 
 #[test]
 fn zoom_at_keeps_the_anchor_world_point_fixed() {
@@ -398,7 +479,11 @@ fn retract_selected_relation_removes_the_user_relation() {
     let mut pair = [ak, bk];
     pair.sort_by_key(|k| orrery.graph().get_node(*k).map(|n| n.id));
     orrery.selected_edges.clear();
-    orrery.selected_edges.insert((pair[0], pair[1]));
+    orrery.selected_edges.insert(EdgeCell {
+        from: pair[0],
+        to: pair[1],
+        selector: RelationSelector::Semantic(SemanticSubKind::UserGrouped),
+    });
     assert_eq!(
         orrery.retract_selected_relation(),
         1,
@@ -412,6 +497,77 @@ fn retract_selected_relation_removes_the_user_relation() {
     assert!(
         orrery.selected_edges.is_empty(),
         "retraction clears the edge selection"
+    );
+}
+
+#[test]
+fn retract_selected_edge_cell_removes_only_that_relation() {
+    let mut orrery = Orrery::new();
+    let a = orrery.open_member_as_new_node(None, "https://cell-a.test");
+    let b = orrery.open_member_as_new_node(None, "https://cell-b.test");
+    let ak = orrery.graph().get_node_by_id(a).unwrap().0;
+    let bk = orrery.graph().get_node_by_id(b).unwrap().0;
+    assert!(orrery.assert_relation_between_members(a, b, SemanticSubKind::Cites));
+    assert!(orrery.assert_relation_between_members(a, b, SemanticSubKind::Quotes));
+
+    orrery.selected_edges.insert(EdgeCell {
+        from: ak,
+        to: bk,
+        selector: RelationSelector::Semantic(SemanticSubKind::Cites),
+    });
+
+    assert_eq!(orrery.retract_selected_relation(), 1);
+    let remaining: Vec<_> = orrery.graph().relations().map(|r| r.kind).collect();
+    assert_eq!(
+        remaining,
+        vec![RelationKind::Semantic(SemanticSubKind::Quotes)],
+        "the other semantic cell survives the canvas-cell delete"
+    );
+}
+
+#[test]
+fn hide_selected_edge_cell_hides_only_that_relation() {
+    let mut orrery = Orrery::new();
+    let a = orrery.open_member_as_new_node(None, "https://hide-cell-a.test");
+    let b = orrery.open_member_as_new_node(None, "https://hide-cell-b.test");
+    let ak = orrery.graph().get_node_by_id(a).unwrap().0;
+    let bk = orrery.graph().get_node_by_id(b).unwrap().0;
+    assert!(orrery.assert_relation_between_members(a, b, SemanticSubKind::Cites));
+    assert!(orrery.assert_relation_between_members(a, b, SemanticSubKind::Quotes));
+
+    orrery.selected_edges.insert(EdgeCell {
+        from: ak,
+        to: bk,
+        selector: RelationSelector::Semantic(SemanticSubKind::Cites),
+    });
+
+    assert_eq!(orrery.hide_selected_edges(), 1);
+    assert!(orrery.relation_between_members_hidden(
+        a,
+        b,
+        RelationSelector::Semantic(SemanticSubKind::Cites)
+    ));
+    assert!(!orrery.relation_between_members_hidden(
+        a,
+        b,
+        RelationSelector::Semantic(SemanticSubKind::Quotes)
+    ));
+    assert!(
+        !orrery.edge_between_members_hidden(a, b),
+        "the endpoint bundle is not fully hidden while another cell remains visible"
+    );
+    let visible: Vec<_> = crate::edge_cells::visible_edge_cell_segments(
+        orrery.graph(),
+        &orrery.view,
+        &orrery.hidden_edges,
+    )
+    .into_iter()
+    .filter(|segment| segment.cell.endpoint_pair() == (ak.min(bk), ak.max(bk)))
+    .collect();
+    assert_eq!(visible.len(), 1, "only one relation lane remains visible");
+    assert_eq!(
+        visible[0].cell.selector,
+        RelationSelector::Semantic(SemanticSubKind::Quotes)
     );
 }
 
@@ -2138,7 +2294,9 @@ fn hide_selected_edges_then_show_all_round_trips() {
         .get_node_by_url("https://b.example")
         .unwrap()
         .0;
-    orrery.selected_edges.insert((a, b)); // the host edge-picks this normally
+    orrery
+        .selected_edges
+        .insert(first_edge_cell_between(&orrery, a, b)); // the host edge-picks this normally
 
     assert_eq!(
         orrery.hide_selected_edges(),

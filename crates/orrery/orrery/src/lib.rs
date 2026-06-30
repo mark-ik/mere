@@ -63,8 +63,9 @@ fn build_affinity_spring(scores: &signals::AffinityScores) -> AffinitySpring {
 
 mod types;
 pub use signals::{BridgeMetric, ImportanceMetric};
-pub use types::{CameraView, Face, NodeShape, NodeState, PointerButton, Viewport};
+pub use types::{CameraView, EdgeCell, Face, NodeShape, NodeState, PointerButton, Viewport};
 
+mod edge_cells;
 mod fields;
 mod frame;
 mod input;
@@ -191,14 +192,13 @@ pub struct Orrery {
     field_drag: Option<fields::FieldDrag>,
     /// Currently-selected nodes (click selects one; marquee selects many).
     selected: HashSet<NodeKey>,
-    /// Currently-selected edges (edge-pick, or covered by a marquee), as the
-    /// `(from, to)` pairs gyre reports.
-    selected_edges: HashSet<(NodeKey, NodeKey)>,
-    /// Edges the user has hidden, as undirected `(from, to)` pairs (`from <= to`).
-    /// The edge pass skips any relation whose pair is here; the relation and its
-    /// physics spring persist (hiding is display-only). In-session for now;
-    /// persistence rides view-intent's `hidden_relations`.
-    hidden_edges: HashSet<(NodeKey, NodeKey)>,
+    /// Currently-selected relation cells (edge-pick, or covered by a marquee).
+    /// Layout stays pair-based, but selection is relation-selector-aware.
+    selected_edges: HashSet<EdgeCell>,
+    /// Relation cells the user has hidden from the canvas. The relation and its physics
+    /// spring persist; this is display-only. Persistence rides view-intent's
+    /// `hidden_relations`.
+    hidden_edges: HashSet<EdgeCell>,
     /// The field the cursor is over (hover) — drives box-on-interaction: a field's
     /// dashed extent box draws only while it is the active field; the soft disk well
     /// is always shown. `None` when the cursor is over no field. (Field regions.)

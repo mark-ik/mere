@@ -200,9 +200,13 @@ impl Orrery {
             removed += self.retract_semantic_between(pair[0], pair[1]);
             removed += self.retract_semantic_between(pair[1], pair[0]);
         }
-        // Also retract any directly-selected edges (the click-an-edge path).
-        for (a, b) in self.selected_edges.drain().collect::<Vec<_>>() {
-            removed += self.retract_semantic_between(a, b);
+        // Also retract any directly-selected relation cells (the click-an-edge path).
+        for cell in self.selected_edges.drain().collect::<Vec<_>>() {
+            if matches!(cell.selector, RelationSelector::Semantic(_)) {
+                removed += self
+                    .graph
+                    .retract_relations(cell.from, cell.to, cell.selector);
+            }
         }
         if removed > 0 {
             self.reconcile_derived();
@@ -254,49 +258,107 @@ impl Orrery {
         removed
     }
 
-    /// Whether any edge is currently selected (the host routes a `Delete` to edge
+    /// Whether any relation cell is currently selected (the host routes a `Delete` to edge
     /// retraction when so, else to node deletion).
     pub fn has_selected_edges(&self) -> bool {
         !self.selected_edges.is_empty()
     }
 
-    /// Hide the currently-selected edges: move them into the hidden set (as
-    /// undirected pairs) so the edge pass skips them, and clear the selection.
-    /// Returns how many were hidden. The relations and their physics springs
-    /// persist — this hides the drawn lines, it does not delete the relations.
+    /// Hide the currently-selected relation cells, and clear the selection. Relation-cell truth
+    /// and physics springs persist; this is display-only.
     pub fn hide_selected_edges(&mut self) -> usize {
-        let count = self.selected_edges.len();
-        for (a, b) in self.selected_edges.drain() {
-            let pair = if a <= b { (a, b) } else { (b, a) };
-            self.hidden_edges.insert(pair);
+        let mut count = 0;
+        for cell in self.selected_edges.drain().collect::<Vec<_>>() {
+            if self.hidden_edges.insert(cell) {
+                count += 1;
+            }
         }
         count
     }
 
-    /// Whether the display-only endpoint bundle between two graph members is hidden.
+    /// Whether every live relation cell in the endpoint bundle is hidden.
     pub fn edge_between_members_hidden(&self, from_id: uuid::Uuid, to_id: uuid::Uuid) -> bool {
-        self.edge_pair_between_members(from_id, to_id)
-            .is_some_and(|pair| self.hidden_edges.contains(&pair))
+        self.edge_cells_between_members(from_id, to_id)
+            .is_some_and(|cells| {
+                !cells.is_empty() && cells.iter().all(|cell| self.hidden_edges.contains(cell))
+            })
     }
 
-    /// Hide the display-only endpoint bundle between two graph members.
+    /// Whether one directed relation cell between two graph members is hidden.
+    pub fn relation_between_members_hidden(
+        &self,
+        from_id: uuid::Uuid,
+        to_id: uuid::Uuid,
+        selector: RelationSelector,
+    ) -> bool {
+        self.edge_cell_between_members(from_id, to_id, selector)
+            .is_some_and(|cell| self.hidden_edges.contains(&cell))
+    }
+
+    /// Hide every live relation cell in the endpoint bundle between two graph members.
     pub fn hide_edge_between_members(&mut self, from_id: uuid::Uuid, to_id: uuid::Uuid) -> bool {
-        self.edge_pair_between_members(from_id, to_id)
-            .is_some_and(|pair| self.hidden_edges.insert(pair))
+        let Some(cells) = self.edge_cells_between_members(from_id, to_id) else {
+            return false;
+        };
+        cells.into_iter().fold(false, |changed, cell| {
+            self.hidden_edges.insert(cell) || changed
+        })
     }
 
-    /// Reveal the display-only endpoint bundle between two graph members.
+    /// Hide one directed relation cell between two graph members.
+    pub fn hide_relation_between_members(
+        &mut self,
+        from_id: uuid::Uuid,
+        to_id: uuid::Uuid,
+        selector: RelationSelector,
+    ) -> bool {
+        self.edge_cell_between_members(from_id, to_id, selector)
+            .is_some_and(|cell| self.hidden_edges.insert(cell))
+    }
+
+    /// Reveal every hidden relation cell in the endpoint bundle between two graph members.
     pub fn show_edge_between_members(&mut self, from_id: uuid::Uuid, to_id: uuid::Uuid) -> bool {
-        self.edge_pair_between_members(from_id, to_id)
-            .is_some_and(|pair| self.hidden_edges.remove(&pair))
+        let Some(pair) = self.edge_pair_between_members(from_id, to_id) else {
+            return false;
+        };
+        let before = self.hidden_edges.len();
+        self.hidden_edges
+            .retain(|cell| cell.endpoint_pair() != pair);
+        self.hidden_edges.len() != before
+    }
+
+    /// Reveal one directed relation cell between two graph members.
+    pub fn show_relation_between_members(
+        &mut self,
+        from_id: uuid::Uuid,
+        to_id: uuid::Uuid,
+        selector: RelationSelector,
+    ) -> bool {
+        let (Some(from), Some(to)) = (
+            self.graph.get_node_key_by_id(from_id),
+            self.graph.get_node_key_by_id(to_id),
+        ) else {
+            return false;
+        };
+        self.hidden_edges.remove(&EdgeCell { from, to, selector })
     }
 
     /// Hidden display-only endpoint bundles as stable graph member ids.
     pub fn hidden_edge_member_pairs(&self) -> Vec<(uuid::Uuid, uuid::Uuid)> {
         self.hidden_edges
             .iter()
-            .filter_map(|&(a, b)| Some((self.graph.get_node(a)?.id, self.graph.get_node(b)?.id)))
+            .filter_map(|cell| {
+                let (a, b) = cell.endpoint_pair();
+                Some((self.graph.get_node(a)?.id, self.graph.get_node(b)?.id))
+            })
             .collect()
+    }
+
+    /// Whether the pair has at least one visible live relation cell.
+    pub(crate) fn edge_pair_has_visible_relation(&self, a: NodeKey, b: NodeKey) -> bool {
+        self.edge_cells_between_pair(a, b)
+            .into_iter()
+            .any(|cell| !self.hidden_edges.contains(&cell))
     }
 
     fn edge_pair_between_members(
@@ -307,6 +369,54 @@ impl Orrery {
         let from = self.graph.get_node_key_by_id(from_id)?;
         let to = self.graph.get_node_key_by_id(to_id)?;
         Some(if from <= to { (from, to) } else { (to, from) })
+    }
+
+    fn edge_cell_between_members(
+        &self,
+        from_id: uuid::Uuid,
+        to_id: uuid::Uuid,
+        selector: RelationSelector,
+    ) -> Option<EdgeCell> {
+        let from = self.graph.get_node_key_by_id(from_id)?;
+        let to = self.graph.get_node_key_by_id(to_id)?;
+        let cell = EdgeCell { from, to, selector };
+        self.graph
+            .relations()
+            .any(|relation| {
+                relation.from == from
+                    && relation.to == to
+                    && crate::edge_cells::selector_for_relation_kind(relation.kind) == selector
+            })
+            .then_some(cell)
+    }
+
+    fn edge_cells_between_members(
+        &self,
+        from_id: uuid::Uuid,
+        to_id: uuid::Uuid,
+    ) -> Option<Vec<EdgeCell>> {
+        let from = self.graph.get_node_key_by_id(from_id)?;
+        let to = self.graph.get_node_key_by_id(to_id)?;
+        Some(self.edge_cells_between_pair(from, to))
+    }
+
+    fn edge_cells_between_pair(&self, a: NodeKey, b: NodeKey) -> Vec<EdgeCell> {
+        let pair = if a <= b { (a, b) } else { (b, a) };
+        self.graph
+            .relations()
+            .filter_map(|relation| {
+                let rel_pair = if relation.from <= relation.to {
+                    (relation.from, relation.to)
+                } else {
+                    (relation.to, relation.from)
+                };
+                (rel_pair == pair).then_some(crate::edge_cells::edge_cell_for_relation(
+                    relation.from,
+                    relation.to,
+                    relation.kind,
+                ))
+            })
+            .collect()
     }
 
     /// Reveal every hidden edge. Returns how many were shown.

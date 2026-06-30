@@ -2,6 +2,27 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+use kernel::graph::{NodeKey, RelationSelector};
+
+/// A selected addressable relation cell on the canvas.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub struct EdgeCell {
+    pub from: NodeKey,
+    pub to: NodeKey,
+    pub selector: RelationSelector,
+}
+
+impl EdgeCell {
+    /// The display/visibility endpoint bundle this cell belongs to.
+    pub fn endpoint_pair(self) -> (NodeKey, NodeKey) {
+        if self.from <= self.to {
+            (self.from, self.to)
+        } else {
+            (self.to, self.from)
+        }
+    }
+}
+
 /// A pointer button the host reports to the orrery (winit / serval / … map onto it).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PointerButton {

@@ -26,8 +26,9 @@ use serval_scripted_dom::NodeId as DomNodeId;
 
 use super::build::{
     NODE_SHEET, background_cmds, bridge_ring_overlay, community_ring_overlay, field_overlay,
-    marquee_rect_cmds, selected_edge_overlay, set_class, set_style,
+    marquee_rect_cmds, set_class, set_style,
 };
+use super::edge_cells::{edge_cell_for_relation, relation_cell_overlay, selected_edge_overlay};
 use super::{NODE_HALF, NodeShape, NodeState, Orrery, PAN_DECAY};
 
 impl Orrery {
@@ -138,14 +139,12 @@ impl Orrery {
             &arrangement,
             |k| positions.get(&k).copied(),
             |k| !on_screen.contains(&k),
-            // Skip relations whose undirected pair the user has hidden.
+            // Skip relation cells the user has hidden. Platen still projects one pair-level
+            // edge after filtering, so a parallel relation keeps the bundle visible.
             |rel| {
-                let pair = if rel.from <= rel.to {
-                    (rel.from, rel.to)
-                } else {
-                    (rel.to, rel.from)
-                };
-                !self.hidden_edges.contains(&pair)
+                !self
+                    .hidden_edges
+                    .contains(&edge_cell_for_relation(rel.from, rel.to, rel.kind))
             },
             // Each node's face radius (node_size / 2) so straight edges trim to the
             // face and demoted underlay rects draw at the node's true size. (Node-rep
@@ -165,10 +164,20 @@ impl Orrery {
             self.active_field(),
             self.hidden_field_ids(),
         ));
+        underlay.splice_world_overlays(relation_cell_overlay(
+            &self.graph,
+            &self.view,
+            &self.hidden_edges,
+        ));
         // Highlight selected edges by splicing thicker strokes inside the
         // underlay's camera transform (world space — no transform replication).
         if !self.selected_edges.is_empty() {
-            underlay.splice_world_overlays(selected_edge_overlay(&self.view, &self.selected_edges));
+            underlay.splice_world_overlays(selected_edge_overlay(
+                &self.graph,
+                &self.view,
+                &self.hidden_edges,
+                &self.selected_edges,
+            ));
         }
         // Community rings: a halo per node in its community's colour, spliced into the same
         // world-space transform. (Graph signals — community to a ring.)

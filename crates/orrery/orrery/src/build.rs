@@ -24,6 +24,7 @@ use paint_list_api::{
     LayoutSize, PaintCmd, PathCommand, PathData, RadialGradientItem, RadialGradientPayload,
     RectItem, StrokeCap, StrokeItem, StrokeJoin,
 };
+
 use platen::scene_paint::ScenePaintStyle;
 use serval_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
 use signals::{BridgeNodes, ClusterSet};
@@ -301,40 +302,6 @@ pub(crate) fn background_cmds(w: u32, h: u32, color: ColorF) -> Vec<PaintCmd> {
         placement: CommonPlacement::new(rect),
         color,
     })]
-}
-
-/// Highlight strokes for the selected edges, in **world space** (no transform) —
-/// spliced inside the underlay's camera transform, so they reuse the producer's
-/// camera rather than replicating it. Each selected edge redraws as a thicker
-/// orange line over the underlay's thin grey one.
-pub(crate) fn selected_edge_overlay(
-    view: &LayoutView,
-    selected_edges: &HashSet<(NodeKey, NodeKey)>,
-) -> Vec<PaintCmd> {
-    let mut cmds = Vec::new();
-    for (a, b, pa, pb) in view.edge_segments() {
-        if !selected_edges.contains(&(a, b)) {
-            continue;
-        }
-        let p0 = LayoutPoint::new(pa.x, pa.y);
-        let p1 = LayoutPoint::new(pb.x, pb.y);
-        let bounds = LayoutRect::new(
-            LayoutPoint::new(p0.x.min(p1.x), p0.y.min(p1.y)),
-            LayoutPoint::new(p0.x.max(p1.x), p0.y.max(p1.y)),
-        );
-        cmds.push(PaintCmd::DrawStroke(StrokeItem {
-            placement: CommonPlacement::new(bounds),
-            path: PathData {
-                commands: vec![PathCommand::MoveTo(p0), PathCommand::LineTo(p1)],
-            },
-            color: ColorF::new(0.91, 0.59, 0.16, 1.0),
-            width: 3.5,
-            cap: StrokeCap::Round,
-            join: StrokeJoin::Round,
-            dash: None,
-        }));
-    }
-    cmds
 }
 
 /// A categorical palette for community rings: distinct hues legible on the dark backdrop, cycled

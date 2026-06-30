@@ -35,8 +35,11 @@ impl Orrery {
             .view
             .edge_segments()
             .filter_map(|(a, b, pa, pb)| {
-                let pair = if a <= b { (a, b) } else { (b, a) };
-                (!self.hidden_edges.contains(&pair)).then_some(((pa.x, pa.y), (pb.x, pb.y), 1.0))
+                self.edge_pair_has_visible_relation(a, b).then_some((
+                    (pa.x, pa.y),
+                    (pb.x, pb.y),
+                    1.0,
+                ))
             })
             .collect();
         (nodes, edges)
@@ -113,8 +116,7 @@ impl Orrery {
                 if !in_scope(&a) || !in_scope(&b) {
                     return None;
                 }
-                let pair = if a <= b { (a, b) } else { (b, a) };
-                if self.hidden_edges.contains(&pair) {
+                if !self.edge_pair_has_visible_relation(a, b) {
                     return None;
                 }
                 let pa = positions.get(&a)?;

@@ -14,6 +14,7 @@ use kernel::graph::{
 };
 
 use super::build::{hyperlink, seed_cluster};
+use super::edge_cells::{edge_cell_hit_test, edge_cells_in_rect};
 use super::{
     CLICK_SLOP, Drag, EDGE_PICK_TOL, ORBIT_TILT_PER_PX, ORBIT_YAW_PER_PX, Orrery, PointerButton,
     SETTLE_TICKS, WHEEL_PAN_SCALE, ZOOM_STEP,
@@ -230,7 +231,10 @@ impl Orrery {
                         ]);
                         let sel = self.view.rect_select(region);
                         self.selected = sel.nodes.into_iter().collect();
-                        self.selected_edges = sel.edges.into_iter().collect();
+                        self.selected_edges =
+                            edge_cells_in_rect(&self.graph, &self.view, &self.hidden_edges, region)
+                                .into_iter()
+                                .collect();
                     } else if !self.shift {
                         // A bare empty click clears the selection (and may pick an
                         // edge under the cursor). With Shift held it is a no-op, so a
@@ -239,8 +243,14 @@ impl Orrery {
                         let tol = EDGE_PICK_TOL / self.camera.zoom.max(f32::EPSILON);
                         self.selected.clear();
                         self.selected_edges.clear();
-                        if let Some(edge) = self.view.edge_hit_test(world, tol) {
-                            self.selected_edges.insert(edge);
+                        if let Some(cell) = edge_cell_hit_test(
+                            &self.graph,
+                            &self.view,
+                            &self.hidden_edges,
+                            world,
+                            tol,
+                        ) {
+                            self.selected_edges.insert(cell);
                         }
                     }
                     true
