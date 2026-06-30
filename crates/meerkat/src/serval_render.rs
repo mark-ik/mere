@@ -26,7 +26,9 @@ use std::hash::Hash;
 use layout_dom_api::LayoutDom;
 use netrender::Scene;
 use paint_list_api::{ColorF, DeviceIntSize};
-use serval_layout::{FragmentPlane, ImageLoader, IncrementalLayout, ScrollOffsets, ServalPaintList};
+use serval_layout::{
+    FragmentPlane, ImageLoader, IncrementalLayout, ScrollOffsets, ServalPaintList,
+};
 use serval_scripted_dom::{NodeId, ScriptedDom};
 
 /// Caret bar thickness, device px.
@@ -35,12 +37,27 @@ pub(crate) const CARET_WIDTH: f32 = 2.0;
 /// resolved. The caret normally tracks the node's cascaded text colour (so it is
 /// theme-correct on every theme); this light bar is the legible default if that
 /// lookup misses.
-const CARET_COLOR: ColorF = ColorF { r: 0.88, g: 0.90, b: 0.96, a: 1.0 };
+const CARET_COLOR: ColorF = ColorF {
+    r: 0.88,
+    g: 0.90,
+    b: 0.96,
+    a: 1.0,
+};
 /// Selection highlight colour (translucent blue; the text shows through). Alpha
 /// raised so the highlight actually reads against the chrome background.
-const SELECTION_COLOR: ColorF = ColorF { r: 0.42, g: 0.62, b: 0.98, a: 0.55 };
+const SELECTION_COLOR: ColorF = ColorF {
+    r: 0.42,
+    g: 0.62,
+    b: 0.98,
+    a: 0.55,
+};
 /// Focus-ring colour (the accent blue, drawn as a thin outline on the focused element).
-const FOCUS_RING_COLOR: ColorF = ColorF { r: 0.42, g: 0.62, b: 0.98, a: 0.95 };
+const FOCUS_RING_COLOR: ColorF = ColorF {
+    r: 0.42,
+    g: 0.62,
+    b: 0.98,
+    a: 0.95,
+};
 /// Focus-ring outline thickness, device px.
 const FOCUS_RING_WIDTH: f32 = 2.0;
 
@@ -100,7 +117,12 @@ fn paint_list_from_session(
             let rects = session.selection_rects(dom, c.node, start, end);
             let highlight = session
                 .selection_style(dom, c.node)
-                .map(|(bg, _fg)| ColorF { r: bg[0], g: bg[1], b: bg[2], a: bg[3] })
+                .map(|(bg, _fg)| ColorF {
+                    r: bg[0],
+                    g: bg[1],
+                    b: bg[2],
+                    a: bg[3],
+                })
                 .unwrap_or(SELECTION_COLOR);
             plist.push_selection(&rects, highlight);
         }
@@ -141,7 +163,12 @@ pub(crate) fn scene_from_layout_dom<D, L>(
     band_y: u32,
     band_h: u32,
     scroll: &ScrollOffsets<D::NodeId>,
-) -> (Scene, Vec<paint_list_render::BoxShadowMaskRequest>, u32, Vec<(String, [f32; 4])>)
+) -> (
+    Scene,
+    Vec<paint_list_render::BoxShadowMaskRequest>,
+    u32,
+    Vec<(String, [f32; 4])>,
+)
 where
     D: LayoutDom,
     // serval-layout's Send-ification (parallel shaping pre-pass) requires
@@ -160,7 +187,14 @@ where
     // box-shadow mask requests survive for the host to build. The link rects are
     // full-document px (band-independent). (HTML scroll; box-shadow; inline-link nav.)
     let (list, scroll_range, links) = serval_layout::paint_list_band_from_layout_dom(
-        dom, stylesheets, loader, width, height, band_y, band_h, scroll,
+        dom,
+        stylesheets,
+        loader,
+        width,
+        height,
+        band_y,
+        band_h,
+        scroll,
     );
     let tdl = paint_list_render::translate_paint_cmd_stream(
         list.viewport(),
@@ -184,7 +218,12 @@ pub(crate) fn scene_from_content_band<D>(
     band_y: u32,
     band_h: u32,
     scroll: &ScrollOffsets<D::NodeId>,
-) -> (Scene, Vec<paint_list_render::BoxShadowMaskRequest>, u32, Vec<(String, [f32; 4])>)
+) -> (
+    Scene,
+    Vec<paint_list_render::BoxShadowMaskRequest>,
+    u32,
+    Vec<(String, [f32; 4])>,
+)
 where
     D: LayoutDom,
     D::NodeId: Copy + Eq + Hash + Send + Sync + 'static,
@@ -224,7 +263,8 @@ pub(crate) fn hit_test_node(
     y: f32,
     scroll: &ScrollOffsets<NodeId>,
 ) -> Option<NodeId> {
-    IncrementalLayout::new(dom, stylesheets, width as f32, height as f32).hit_test(dom, x, y, scroll)
+    IncrementalLayout::new(dom, stylesheets, width as f32, height as f32)
+        .hit_test(dom, x, y, scroll)
 }
 
 /// Accumulate each laid-out node's absolute origin into `out`, walking from `node`
@@ -258,7 +298,9 @@ fn push_focus_ring(
 ) {
     let Some(node) = focus else { return };
     let fragments = session.fragments();
-    let Some(r) = fragments.rect_of(node) else { return };
+    let Some(r) = fragments.rect_of(node) else {
+        return;
+    };
     // Painted origin (the node's origin minus its ancestors' scroll) via the engine's shared
     // walk, instead of a host copy of the painted accumulation. (Upstreaming P2.)
     let origins = serval_layout::accumulate_painted_origins(dom, fragments, scroll_offsets);

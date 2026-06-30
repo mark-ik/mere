@@ -26,10 +26,10 @@ use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
 use armillary::{ActorHandle, Generations, Pool, Wake};
-use forme::GraphMemberId;
-use kernel::permissions::ResolvedPermission;
-use frame::GraphId;
 use document_canvas::{DocumentRenderPacket, DocumentStyleSheet, FontTable};
+use forme::GraphMemberId;
+use frame::GraphId;
+use kernel::permissions::ResolvedPermission;
 use linked_data::GraphContribution;
 use netrender::Scene;
 
@@ -202,7 +202,6 @@ pub struct Drained {
     /// respawned this drain. The host redraws so the next frame re-`Show`s them.
     pub respawned: Vec<GraphMemberId>,
 }
-
 
 mod drain;
 mod ops;

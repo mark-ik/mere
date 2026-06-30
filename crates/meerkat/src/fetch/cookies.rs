@@ -167,15 +167,17 @@ pub fn persist_cookies(store: &mut dyn Store, persona: PersonaId) {
             continue;
         }
         match serde_json::to_vec(cookie) {
-            Ok(bytes) => match pollster::block_on(store.save_blob(&cookie_blob_key(persona, key), &bytes)) {
-                Ok(()) => {
-                    shadow.insert(key.clone(), cookie.clone());
+            Ok(bytes) => {
+                match pollster::block_on(store.save_blob(&cookie_blob_key(persona, key), &bytes)) {
+                    Ok(()) => {
+                        shadow.insert(key.clone(), cookie.clone());
+                    }
+                    Err(err) => {
+                        tracing::warn!(%err, "cookie persist: save failed");
+                        any_failed = true;
+                    }
                 }
-                Err(err) => {
-                    tracing::warn!(%err, "cookie persist: save failed");
-                    any_failed = true;
-                }
-            },
+            }
             Err(err) => {
                 tracing::warn!(%err, "cookie persist: serialize failed");
                 any_failed = true;
@@ -184,7 +186,11 @@ pub fn persist_cookies(store: &mut dyn Store, persona: PersonaId) {
     }
 
     // Deletes: cookies that were persisted but are gone from the jar now.
-    let removed: Vec<CookieKey> = shadow.keys().filter(|k| !current.contains_key(*k)).cloned().collect();
+    let removed: Vec<CookieKey> = shadow
+        .keys()
+        .filter(|k| !current.contains_key(*k))
+        .cloned()
+        .collect();
     for key in removed {
         match pollster::block_on(store.delete_blob(&cookie_blob_key(persona, &key))) {
             Ok(_) => {

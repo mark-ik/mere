@@ -109,7 +109,13 @@ impl Frontier {
         let mut queue = VecDeque::new();
         seen.insert(seed.clone());
         queue.push_back((seed, 0));
-        Self { policy, seed_host, queue, seen, fetched: 0 }
+        Self {
+            policy,
+            seed_host,
+            queue,
+            seen,
+            fetched: 0,
+        }
     }
 
     /// The next `(url, depth)` to fetch, or `None` when the frontier is empty or the
@@ -185,17 +191,28 @@ impl Frontier {
 
 /// `url`'s host, lowercased, or `None` if it does not parse / has no host.
 pub(crate) fn host_of(url: &str) -> Option<String> {
-    url::Url::parse(url).ok()?.host_str().map(|h| h.to_ascii_lowercase())
+    url::Url::parse(url)
+        .ok()?
+        .host_str()
+        .map(|h| h.to_ascii_lowercase())
 }
 
 /// The `/robots.txt` URL for `page_url`'s origin, or `None` if it does not parse.
 pub(crate) fn robots_url(page_url: &str) -> Option<String> {
-    url::Url::parse(page_url).ok()?.join("/robots.txt").ok().map(|u| u.to_string())
+    url::Url::parse(page_url)
+        .ok()?
+        .join("/robots.txt")
+        .ok()
+        .map(|u| u.to_string())
 }
 
 /// The `/sitemap.xml` URL for `page_url`'s origin, or `None` if it does not parse.
 pub(crate) fn sitemap_url(page_url: &str) -> Option<String> {
-    url::Url::parse(page_url).ok()?.join("/sitemap.xml").ok().map(|u| u.to_string())
+    url::Url::parse(page_url)
+        .ok()?
+        .join("/sitemap.xml")
+        .ok()
+        .map(|u| u.to_string())
 }
 
 /// `page_url`'s path (e.g. `/foo/bar`), for matching against robots rules; `/` if it
@@ -214,7 +231,7 @@ pub(crate) fn normalize(url: &str) -> String {
         Ok(mut u) => {
             u.set_fragment(None);
             u.to_string()
-        },
+        }
         Err(_) => url.trim().to_string(),
     }
 }

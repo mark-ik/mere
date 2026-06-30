@@ -44,8 +44,12 @@ impl WindowCtx<'_> {
             _ => None,
         });
         let ready = from_pages.or_else(|| {
-            self.load_cached(&url)
-                .map(|s| (s.content_type, String::from_utf8_lossy(&s.body).into_owned()))
+            self.load_cached(&url).map(|s| {
+                (
+                    s.content_type,
+                    String::from_utf8_lossy(&s.body).into_owned(),
+                )
+            })
         });
         let Some((content_type, body)) = ready else {
             self.clear_find();
@@ -92,10 +96,13 @@ impl WindowCtx<'_> {
         // even for a stale generation.
         for url in &result.wanted {
             if let Some(stored) = self.load_cached(url) {
-                self.shared.content.find_worker.command(FindCommand::Resource {
-                    url: url.clone(),
-                    bytes: stored.body,
-                });
+                self.shared
+                    .content
+                    .find_worker
+                    .command(FindCommand::Resource {
+                        url: url.clone(),
+                        bytes: stored.body,
+                    });
             }
         }
         if result.generation != self.view.find_gen {

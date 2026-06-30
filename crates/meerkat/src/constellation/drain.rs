@@ -132,8 +132,7 @@ impl Constellation {
                         // re-render rides a separate `Scene`; surface the text for
                         // diagnostics (a script console rides this later). Dropped if the
                         // node has navigated away.
-                        let current =
-                            self.active.get(&member).is_some_and(|a| a.gens.nav == nav);
+                        let current = self.active.get(&member).is_some_and(|a| a.gens.nav == nav);
                         if current {
                             tracing::debug!(outcome = %outcome, "document script outcome");
                         }
@@ -161,13 +160,12 @@ impl Constellation {
         if activation.respawns >= MAX_RESPAWNS {
             return false;
         }
-        let (handle, rx) =
-            spawn_content(
-                        &self.pool,
-                        self.wake.clone(),
-                        self.disabled_engines.clone(),
-                        self.auto_ingest_linked_data,
-                    );
+        let (handle, rx) = spawn_content(
+            &self.pool,
+            self.wake.clone(),
+            self.disabled_engines.clone(),
+            self.auto_ingest_linked_data,
+        );
         activation.handle = handle;
         activation.rx = rx;
         activation.gens = Generations::default();

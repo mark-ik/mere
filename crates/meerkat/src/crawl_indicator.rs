@@ -38,13 +38,25 @@ mod tests {
 
     #[test]
     fn summary_reflects_the_crawl_state() {
-        assert_eq!(CrawlIndicator::default().summary(), "", "idle, never run -> hidden");
         assert_eq!(
-            CrawlIndicator { running: true, fetched: 3 }.summary(),
+            CrawlIndicator::default().summary(),
+            "",
+            "idle, never run -> hidden"
+        );
+        assert_eq!(
+            CrawlIndicator {
+                running: true,
+                fetched: 3
+            }
+            .summary(),
             "crawling: 3 pages",
         );
         assert_eq!(
-            CrawlIndicator { running: false, fetched: 12 }.summary(),
+            CrawlIndicator {
+                running: false,
+                fetched: 12
+            }
+            .summary(),
             "crawled: 12 pages",
             "the finished result lingers",
         );

@@ -17,7 +17,7 @@
 //! `to`, `transition`, and `at_ms` from the first traversal so neither needs a
 //! migration later.
 
-use eidetic::browsing::{save_trace, BrowsingTrace, PageRef, TraceEvent, TraceTransition};
+use eidetic::browsing::{BrowsingTrace, PageRef, TraceEvent, TraceTransition, save_trace};
 
 use super::WindowCtx;
 
@@ -177,12 +177,22 @@ mod tests {
     use super::*;
 
     fn page(url: &str) -> PageRef {
-        PageRef { url: url.to_string(), title: None }
+        PageRef {
+            url: url.to_string(),
+            title: None,
+        }
     }
 
     #[test]
     fn an_empty_from_is_an_origin_event() {
-        let trace = build_nav_trace("p", "", "https://to.test/", TraceTransition::UrlTyped, Vec::new(), 42);
+        let trace = build_nav_trace(
+            "p",
+            "",
+            "https://to.test/",
+            TraceTransition::UrlTyped,
+            Vec::new(),
+            42,
+        );
         assert_eq!(trace.owner, "p");
         assert_eq!(trace.events.len(), 1);
         let event = &trace.events[0];
@@ -207,7 +217,10 @@ mod tests {
             100,
         );
         let event = &trace.events[0];
-        assert_eq!(event.from.as_ref().map(|p| p.url.as_str()), Some("https://from.test/a"));
+        assert_eq!(
+            event.from.as_ref().map(|p| p.url.as_str()),
+            Some("https://from.test/a")
+        );
         assert_eq!(event.to.url, "https://to.test/b");
         assert_eq!(event.transition, TraceTransition::Back);
         // The chosen `to` plus the in-context negative are both retained (the
@@ -229,7 +242,10 @@ mod tests {
             assert_eq!(CaptureConsent::from_key(level.as_key()), Some(level));
         }
         // Friendly aliases + case-insensitivity; an unknown token is rejected.
-        assert_eq!(CaptureConsent::from_key("INCOGNITO"), Some(CaptureConsent::Off));
+        assert_eq!(
+            CaptureConsent::from_key("INCOGNITO"),
+            Some(CaptureConsent::Off)
+        );
         assert_eq!(CaptureConsent::from_key("on"), Some(CaptureConsent::Full));
         assert_eq!(CaptureConsent::from_key("nonsense"), None);
         // Granularity: Off records nothing; CorridorOnly keeps the corridor but

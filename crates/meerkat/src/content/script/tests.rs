@@ -27,21 +27,40 @@ fn mirror_preserves_elements_attributes_and_text() {
 
     let p = find_element(&dom, dom.document(), "p").expect("mirror keeps the <p>");
     assert_eq!(
-        dom.attribute(p, &layout_dom_api::Namespace::from(""), &layout_dom_api::LocalName::from("class")),
+        dom.attribute(
+            p,
+            &layout_dom_api::Namespace::from(""),
+            &layout_dom_api::LocalName::from("class")
+        ),
         Some("intro"),
         "the class attribute is carried into the mirror",
     );
-    let text = dom.dom_children(p).next().expect("the <p> has a text child");
-    assert_eq!(dom.text(text), Some("Hello"), "the text node is carried into the mirror");
+    let text = dom
+        .dom_children(p)
+        .next()
+        .expect("the <p> has a text child");
+    assert_eq!(
+        dom.text(text),
+        Some("Hello"),
+        "the text node is carried into the mirror"
+    );
 }
 
 #[test]
 fn grant_maps_resolved_permissions() {
     use kernel::permissions::SettingScope;
-    let allow = ResolvedPermission { effective: Permission::Allow, decided_by: None };
-    let deny =
-        ResolvedPermission { effective: Permission::Deny, decided_by: Some(SettingScope::Surface) };
-    let prompt = ResolvedPermission { effective: Permission::Prompt, decided_by: None };
+    let allow = ResolvedPermission {
+        effective: Permission::Allow,
+        decided_by: None,
+    };
+    let deny = ResolvedPermission {
+        effective: Permission::Deny,
+        decided_by: Some(SettingScope::Surface),
+    };
+    let prompt = ResolvedPermission {
+        effective: Permission::Prompt,
+        decided_by: None,
+    };
 
     let g = grant_from_resolved(allow, allow, allow);
     assert_eq!(g.log, CapPermission::Allow);
@@ -50,11 +69,20 @@ fn grant_maps_resolved_permissions() {
 
     // A denied document capability maps to Deny -> the import is omitted, so a
     // component that requires it fails to instantiate (the enforced boundary).
-    assert_eq!(grant_from_resolved(allow, deny, allow).document, CapPermission::Deny);
+    assert_eq!(
+        grant_from_resolved(allow, deny, allow).document,
+        CapPermission::Deny
+    );
     // Prompt is preserved (P2 omits it conservatively, like Deny, at link time).
-    assert_eq!(grant_from_resolved(allow, prompt, allow).document, CapPermission::Prompt);
+    assert_eq!(
+        grant_from_resolved(allow, prompt, allow).document,
+        CapPermission::Prompt
+    );
     // net maps independently (a denied net omits the import).
-    assert_eq!(grant_from_resolved(allow, allow, deny).net, CapPermission::Deny);
+    assert_eq!(
+        grant_from_resolved(allow, allow, deny).net,
+        CapPermission::Deny
+    );
 }
 
 #[test]
@@ -63,12 +91,19 @@ fn attach_permissions_resolve_with_narrowing() {
     let (log, document, net) = resolve_attach_permissions(ScriptCapPolicy::default());
     assert_eq!(log.effective, Permission::Allow);
     assert_eq!(document.effective, Permission::Allow);
-    assert_eq!(net.effective, Permission::Deny, "net is denied unless granted");
+    assert_eq!(
+        net.effective,
+        Permission::Deny,
+        "net is denied unless granted"
+    );
 
     // A Session-scope Deny on `document` narrows past the Allow baseline (the
     // narrowing rule); the grant then omits the document import — a session-wide
     // "no script may touch the page" switch.
-    let policy = ScriptCapPolicy { document: Some(Permission::Deny), ..Default::default() };
+    let policy = ScriptCapPolicy {
+        document: Some(Permission::Deny),
+        ..Default::default()
+    };
     let (_log, document, _net) = resolve_attach_permissions(policy);
     assert_eq!(document.effective, Permission::Deny);
     assert_eq!(document.decided_by, Some(SettingScope::Session));
@@ -77,10 +112,20 @@ fn attach_permissions_resolve_with_narrowing() {
     // loop-closing case: a user opts a script into network egress. (This is why
     // the baseline is the resolve default, not an explicit App Deny — an App Deny
     // could never be granted back by a narrower scope.)
-    let policy = ScriptCapPolicy { net: Some(Permission::Allow), ..Default::default() };
+    let policy = ScriptCapPolicy {
+        net: Some(Permission::Allow),
+        ..Default::default()
+    };
     let (log, _doc, net) = resolve_attach_permissions(policy);
-    assert_eq!(net.effective, Permission::Allow, "a session grant flips net on");
-    assert_eq!(grant_from_resolved(log, _doc, net).net, CapPermission::Allow);
+    assert_eq!(
+        net.effective,
+        Permission::Allow,
+        "a session grant flips net on"
+    );
+    assert_eq!(
+        grant_from_resolved(log, _doc, net).net,
+        CapPermission::Allow
+    );
 }
 
 #[test]
@@ -88,17 +133,32 @@ fn origin_matching_handles_exact_host_and_suffix_glob() {
     assert!(origin_matches("https://example.com/path", "example.com"));
     assert!(!origin_matches("https://evil.com/", "example.com"));
     // `*.` matches the apex and any subdomain, not an unrelated host.
-    assert!(origin_matches("https://en.wikipedia.org/wiki/X", "*.wikipedia.org"));
+    assert!(origin_matches(
+        "https://en.wikipedia.org/wiki/X",
+        "*.wikipedia.org"
+    ));
     assert!(origin_matches("https://wikipedia.org/", "*.wikipedia.org"));
-    assert!(!origin_matches("https://notwikipedia.org/", "*.wikipedia.org"));
+    assert!(!origin_matches(
+        "https://notwikipedia.org/",
+        "*.wikipedia.org"
+    ));
     // Host extraction drops scheme / path / query / fragment (any scheme).
-    assert!(origin_matches("gemini://example.com/cap?q#f", "example.com"));
+    assert!(origin_matches(
+        "gemini://example.com/cap?q#f",
+        "example.com"
+    ));
     // Userinfo + port + case are normalized away, so a non-default port or a
     // cased host still matches (and userinfo cannot smuggle a different host).
     assert!(origin_matches("https://example.com:8443/", "example.com"));
     assert!(origin_matches("https://EXAMPLE.com/", "example.com"));
-    assert!(origin_matches("https://x.wikipedia.org:8443/", "*.wikipedia.org"));
-    assert!(!origin_matches("https://example.com@evil.com/", "example.com"));
+    assert!(origin_matches(
+        "https://x.wikipedia.org:8443/",
+        "*.wikipedia.org"
+    ));
+    assert!(!origin_matches(
+        "https://example.com@evil.com/",
+        "example.com"
+    ));
 }
 
 #[test]
@@ -117,7 +177,10 @@ fn ssrf_floor_blocks_loopback_and_private_hosts() {
 
 #[test]
 fn binding_for_finds_the_matching_origin() {
-    let allow = ResolvedPermission { effective: Permission::Allow, decided_by: None };
+    let allow = ResolvedPermission {
+        effective: Permission::Allow,
+        decided_by: None,
+    };
     let bindings = vec![
         ResolvedScriptBinding {
             origin: "example.com".into(),
@@ -167,10 +230,18 @@ fn load_mod_bindings_derives_bindings_from_installed_mods() {
     std::fs::write(mods_dir.join("plain.wasm.toml"), "mod_id = \"mod:plain\"\n").unwrap();
 
     // net allowed this session -> only a mod that *declares* Network may fetch.
-    let prefs = ScriptPermissionPrefs { log: None, document: None, net: Some(Permission::Allow) };
+    let prefs = ScriptPermissionPrefs {
+        log: None,
+        document: None,
+        net: Some(Permission::Allow),
+    };
     let bindings = load_mod_bindings(mere_root.path(), &prefs);
 
-    assert_eq!(bindings.len(), 3, "weather's 2 origins + reader's 1; plain adds none");
+    assert_eq!(
+        bindings.len(),
+        3,
+        "weather's 2 origins + reader's 1; plain adds none"
+    );
     let example = bindings
         .iter()
         .find(|b| b.origin == "example.com")

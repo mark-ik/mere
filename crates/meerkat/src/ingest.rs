@@ -292,11 +292,18 @@ mod tests {
         let node = &c.nodes[0];
         assert_eq!(node.id, "https://x.test/page");
         assert_eq!(node.title.as_deref(), Some("The Page"));
-        assert!(node.properties.contains(&(SCHEMA_DESCRIPTION.to_string(), "What it is about.".to_string())));
-        assert!(node.properties.contains(&(SCHEMA_URL.to_string(), "https://x.test/canon".to_string())));
-        assert!(node
-            .properties
-            .contains(&("https://ogp.me/ns#image".to_string(), "https://x.test/og.png".to_string())));
+        assert!(node.properties.contains(&(
+            SCHEMA_DESCRIPTION.to_string(),
+            "What it is about.".to_string()
+        )));
+        assert!(
+            node.properties
+                .contains(&(SCHEMA_URL.to_string(), "https://x.test/canon".to_string()))
+        );
+        assert!(node.properties.contains(&(
+            "https://ogp.me/ns#image".to_string(),
+            "https://x.test/og.png".to_string()
+        )));
         // Links are NOT contributed as edges here (the crawl frontier owns the link graph).
         assert!(c.edges.is_empty(), "no link edges from a single visit");
     }
@@ -315,10 +322,14 @@ mod tests {
         // Two distinct outbound targets: the dup collapses; fragment / mailto / js skip.
         assert_eq!(c.edges.len(), 2, "two outbound edges: {:?}", c.edges);
         assert_eq!(c.nodes.len(), 3, "seed node + two target nodes");
-        assert!(c.nodes.iter().any(|n| n.id == "https://seed.test/page"), "seed node present");
         assert!(
-            c.nodes.iter().any(|n| n.id == "https://seed.test/one"
-                && n.title.as_deref() == Some("First")),
+            c.nodes.iter().any(|n| n.id == "https://seed.test/page"),
+            "seed node present"
+        );
+        assert!(
+            c.nodes
+                .iter()
+                .any(|n| n.id == "https://seed.test/one" && n.title.as_deref() == Some("First")),
             "relative href resolved against seed, first anchor text kept: {:?}",
             c.nodes,
         );
@@ -337,20 +348,27 @@ mod tests {
     fn harvest_links_is_none_without_outbound_links() {
         assert!(harvest_links("https://seed.test/", "<body><p>no links here</p></body>").is_none());
         // A page whose only links are in-page anchors has no outbound neighborhood.
-        assert!(harvest_links("https://seed.test/", "<body><a href='#top'>top</a></body>").is_none());
+        assert!(
+            harvest_links("https://seed.test/", "<body><a href='#top'>top</a></body>").is_none()
+        );
     }
 
     #[test]
     fn page_extract_is_none_without_metadata_or_for_non_html() {
         // HTML that declares nothing extractable → no contribution.
         assert!(
-            page_extract_contribution("https://x.test/", Some("text/html"), "<body><p>hi</p></body>")
-                .is_none(),
+            page_extract_contribution(
+                "https://x.test/",
+                Some("text/html"),
+                "<body><p>hi</p></body>"
+            )
+            .is_none(),
             "a page with no title/description/og contributes nothing",
         );
         // Non-HTML → no contribution (JSON-LD has its own harvest path).
         assert!(
-            page_extract_contribution("https://x.test/", Some("application/ld+json"), "{}").is_none(),
+            page_extract_contribution("https://x.test/", Some("application/ld+json"), "{}")
+                .is_none(),
             "non-HTML is not extracted here",
         );
     }

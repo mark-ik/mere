@@ -38,8 +38,12 @@ fn glyph_runs(scene: &Scene) -> usize {
 
 #[test]
 fn show_renders_a_scene_off_thread() {
-    let (handle, updates) =
-        spawn_content(&Pool::new(), noop_wake(), std::collections::HashSet::new(), false);
+    let (handle, updates) = spawn_content(
+        &Pool::new(),
+        noop_wake(),
+        std::collections::HashSet::new(),
+        false,
+    );
     handle.command(show(
         "https://example.com/",
         "text/html",
@@ -61,12 +65,49 @@ fn show_renders_a_scene_off_thread() {
 }
 
 #[test]
+fn transfer_transport_decodes_actor_scene_update() {
+    let (handle, updates) = spawn_content_transfer(
+        &Pool::new(),
+        noop_wake(),
+        std::collections::HashSet::new(),
+        false,
+    );
+    handle.command(show(
+        "https://example.com/",
+        "text/html",
+        "<h1>Hi</h1><p>There</p>",
+    ));
+    handle.join();
+
+    let mut decoder = SceneTransferDecoder::default();
+    let scene = updates
+        .iter()
+        .find_map(|buffer| {
+            match ContentUpdate::from_transfer_buffer(buffer.as_bytes(), &mut decoder)
+                .expect("decode transferred update")
+            {
+                ContentUpdate::Scene { scene, .. } => Some(scene),
+                _ => None,
+            }
+        })
+        .expect("a transferred scene update");
+    assert!(
+        glyph_runs(&scene) >= 1,
+        "the transfer channel decoded the actor scene update"
+    );
+}
+
+#[test]
 fn materialize_links_emits_a_hyperlink_contribution() {
     // An explicit invoke (not gated by auto-ingest): the open page's outbound
     // links become graph nodes joined by Semantic:Hyperlink edges. (Relational
     // browse V1.)
-    let (handle, updates) =
-        spawn_content(&Pool::new(), noop_wake(), std::collections::HashSet::new(), false);
+    let (handle, updates) = spawn_content(
+        &Pool::new(),
+        noop_wake(),
+        std::collections::HashSet::new(),
+        false,
+    );
     handle.command(show(
         "https://seed.test/page",
         "text/html",
@@ -86,13 +127,20 @@ fn materialize_links_emits_a_hyperlink_contribution() {
         }),
         _ => false,
     });
-    assert!(materialized, "MaterializeLinks emitted the Hyperlink-edged neighborhood");
+    assert!(
+        materialized,
+        "MaterializeLinks emitted the Hyperlink-edged neighborhood"
+    );
 }
 
 #[test]
 fn show_harvests_embedded_jsonld_into_a_contribution() {
-    let (handle, updates) =
-        spawn_content(&Pool::new(), noop_wake(), std::collections::HashSet::new(), true);
+    let (handle, updates) = spawn_content(
+        &Pool::new(),
+        noop_wake(),
+        std::collections::HashSet::new(),
+        true,
+    );
     handle.command(show(
         "https://example.com/",
         "text/html",
@@ -151,8 +199,12 @@ fn first_scene(updates: std::sync::mpsc::Receiver<ContentUpdate>) -> Scene {
 #[cfg(feature = "scripted")]
 #[test]
 fn scripted_rung_runs_inline_script_and_renders() {
-    let (handle, updates) =
-        spawn_content(&Pool::new(), noop_wake(), std::collections::HashSet::new(), false);
+    let (handle, updates) = spawn_content(
+        &Pool::new(),
+        noop_wake(),
+        std::collections::HashSet::new(),
+        false,
+    );
     handle.command(scripted_show("https://example.com/app", INLINE_SCRIPT_PAGE));
     handle.join();
     assert!(
@@ -176,8 +228,12 @@ fn scripted_rung_click_dispatches_to_script() {
             p.appendChild(document.createTextNode('clicked'));\
             document.body.appendChild(p);\
         });</script></body>";
-    let (handle, updates) =
-        spawn_content(&Pool::new(), noop_wake(), std::collections::HashSet::new(), false);
+    let (handle, updates) = spawn_content(
+        &Pool::new(),
+        noop_wake(),
+        std::collections::HashSet::new(),
+        false,
+    );
     handle.command(scripted_show("https://example.com/app", PAGE));
     handle.command(ContentCommand::ScriptedClick {
         x: 50.0,
@@ -193,8 +249,16 @@ fn scripted_rung_click_dispatches_to_script() {
             _ => None,
         })
         .collect();
-    assert!(scenes.len() >= 2, "Show then ScriptedClick each emit a scene (got {})", scenes.len());
-    assert_eq!(glyph_runs(&scenes[0]), 0, "the empty body paints no text before the click");
+    assert!(
+        scenes.len() >= 2,
+        "Show then ScriptedClick each emit a scene (got {})",
+        scenes.len()
+    );
+    assert_eq!(
+        glyph_runs(&scenes[0]),
+        0,
+        "the empty body paints no text before the click"
+    );
     assert!(
         glyph_runs(scenes.last().unwrap()) >= 1,
         "the click ran the listener, injecting text that renders",
@@ -207,9 +271,17 @@ fn scripted_rung_click_dispatches_to_script() {
 #[cfg(feature = "scripted")]
 #[test]
 fn static_lane_leaves_the_inline_script_unrun() {
-    let (handle, updates) =
-        spawn_content(&Pool::new(), noop_wake(), std::collections::HashSet::new(), false);
-    handle.command(show("https://example.com/app", "text/html", INLINE_SCRIPT_PAGE));
+    let (handle, updates) = spawn_content(
+        &Pool::new(),
+        noop_wake(),
+        std::collections::HashSet::new(),
+        false,
+    );
+    handle.command(show(
+        "https://example.com/app",
+        "text/html",
+        INLINE_SCRIPT_PAGE,
+    ));
     handle.join();
     assert_eq!(
         glyph_runs(&first_scene(updates)),
@@ -310,8 +382,12 @@ fn scripted_rung_post_js_extract_contributes_metadata() {
         document.head.appendChild(m);\
         </script></body>";
     // auto_ingest = true so the actor runs the extraction/harvest path.
-    let (handle, updates) =
-        spawn_content(&Pool::new(), noop_wake(), std::collections::HashSet::new(), true);
+    let (handle, updates) = spawn_content(
+        &Pool::new(),
+        noop_wake(),
+        std::collections::HashSet::new(),
+        true,
+    );
     handle.command(scripted_show("https://spa.test/app", PAGE));
     handle.join();
 

@@ -20,7 +20,7 @@ pub(crate) fn attach_script(
     store: &RefCell<ResourceStore>,
     registry: &EngineRegistry,
     policy: &EngineRoutePolicy,
-    out: &Emitter<ContentUpdate>,
+    out: &impl ContentUpdateSink,
 ) -> String {
     if !is_serval_html_lane(&content.url, content.state.as_ref(), registry, policy) {
         return "not an HTML/serval page (no mirrorable DOM)".to_string();
@@ -75,7 +75,7 @@ pub(crate) fn deliver_event(
     kind: &str,
     payload: &str,
     store: &RefCell<ResourceStore>,
-    out: &Emitter<ContentUpdate>,
+    out: &impl ContentUpdateSink,
 ) -> String {
     let url = content.url.clone();
     let wanted = RefCell::new(Vec::new());
@@ -145,7 +145,7 @@ pub(crate) fn render(
     store: &RefCell<ResourceStore>,
     registry: &EngineRegistry,
     policy: &EngineRoutePolicy,
-    out: &Emitter<ContentUpdate>,
+    out: &impl ContentUpdateSink,
 ) {
     let (w, h) = content.viewport;
     // Scripted render rung: a `serval.scripted` node renders straight from its live
@@ -156,7 +156,7 @@ pub(crate) fn render(
     #[cfg(feature = "scripted")]
     if let Some(doc) = content.scripted_doc.as_mut() {
         let scene = doc.frame(w, h);
-        out.emit(ContentUpdate::Scene {
+        out.emit_update(ContentUpdate::Scene {
             nav: content.nav,
             viewport_gen: content.viewport_gen,
             scene,
@@ -181,8 +181,11 @@ pub(crate) fn render(
             content.band_h,
             &scroll,
         );
-        let links = link_rects.into_iter().map(|(url, rect)| LinkHit { rect, url }).collect();
-        out.emit(ContentUpdate::Scene {
+        let links = link_rects
+            .into_iter()
+            .map(|(url, rect)| LinkHit { rect, url })
+            .collect();
+        out.emit_update(ContentUpdate::Scene {
             nav: content.nav,
             viewport_gen: content.viewport_gen,
             scene,
@@ -197,7 +200,10 @@ pub(crate) fn render(
     let wanted = RefCell::new(Vec::new());
     if ensure_html_layout(content, store, registry, policy, &wanted) {
         // HTML/serval lane: emit this band off the retained layout, no re-cascade.
-        let (doc, layout) = content.html.as_ref().expect("ensure_html_layout returned true");
+        let (doc, layout) = content
+            .html
+            .as_ref()
+            .expect("ensure_html_layout returned true");
         let scroll = ScrollOffsets::default();
         let (scene, masks, content_height, link_rects) =
             scene_from_content_band(layout, doc, h, content.band_y, content.band_h, &scroll);
@@ -205,7 +211,7 @@ pub(crate) fn render(
             .into_iter()
             .map(|(url, rect)| LinkHit { rect, url })
             .collect();
-        out.emit(ContentUpdate::Scene {
+        out.emit_update(ContentUpdate::Scene {
             nav: content.nav,
             viewport_gen: content.viewport_gen,
             scene,
@@ -240,7 +246,7 @@ pub(crate) fn render(
                 packet,
                 fonts,
                 content_height,
-            } => out.emit(ContentUpdate::Document {
+            } => out.emit_update(ContentUpdate::Document {
                 nav: content.nav,
                 viewport_gen: content.viewport_gen,
                 packet,
@@ -252,7 +258,7 @@ pub(crate) fn render(
                 content_height,
                 links,
                 masks,
-            } => out.emit(ContentUpdate::Scene {
+            } => out.emit_update(ContentUpdate::Scene {
                 nav: content.nav,
                 viewport_gen: content.viewport_gen,
                 scene,
@@ -274,7 +280,7 @@ pub(crate) fn emit_fresh_wanted(
     nav: NavGeneration,
     wanted: RefCell<Vec<String>>,
     store: &RefCell<ResourceStore>,
-    out: &Emitter<ContentUpdate>,
+    out: &impl ContentUpdateSink,
 ) {
     let fresh: Vec<String> = wanted
         .into_inner()
@@ -282,7 +288,7 @@ pub(crate) fn emit_fresh_wanted(
         .filter(|url| store.borrow_mut().request(url.clone()))
         .collect();
     if !fresh.is_empty() {
-        out.emit(ContentUpdate::Wanted { nav, urls: fresh });
+        out.emit_update(ContentUpdate::Wanted { nav, urls: fresh });
     }
 }
 
@@ -292,7 +298,7 @@ pub(crate) fn emit_fresh_wanted(
 pub(crate) fn relayout_script(
     content: &mut Content,
     store: &RefCell<ResourceStore>,
-    out: &Emitter<ContentUpdate>,
+    out: &impl ContentUpdateSink,
     w: u32,
     h: u32,
 ) {
@@ -303,7 +309,11 @@ pub(crate) fn relayout_script(
     let wanted = RefCell::new(Vec::new());
     {
         let loader = ResourceLoader::new(store, &url, &wanted);
-        content.script.as_mut().expect("checked is_some").relayout(&loader, w, h);
+        content
+            .script
+            .as_mut()
+            .expect("checked is_some")
+            .relayout(&loader, w, h);
     }
     emit_fresh_wanted(content.nav, wanted, store, out);
 }

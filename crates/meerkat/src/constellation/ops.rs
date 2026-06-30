@@ -114,13 +114,12 @@ impl Constellation {
             if !self.active.contains_key(&member) {
                 self.touch_clock += 1;
                 let touch = self.touch_clock;
-                let (handle, rx) =
-                    spawn_content(
-                        &self.pool,
-                        self.wake.clone(),
-                        self.disabled_engines.clone(),
-                        self.auto_ingest_linked_data,
-                    );
+                let (handle, rx) = spawn_content(
+                    &self.pool,
+                    self.wake.clone(),
+                    self.disabled_engines.clone(),
+                    self.auto_ingest_linked_data,
+                );
                 self.active.insert(
                     member,
                     Activation {
@@ -579,5 +578,4 @@ impl Constellation {
             });
         }
     }
-
 }

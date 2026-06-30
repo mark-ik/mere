@@ -31,7 +31,6 @@ mod robots;
 mod sitemap;
 use robots::RobotsRules;
 
-
 mod frontier;
 pub use frontier::*;
 
@@ -57,7 +56,9 @@ pub enum CrawlCommand {
 pub enum CrawlUpdate {
     /// Graph contributions harvested from one crawled page: its outbound-link
     /// neighborhood (`Semantic:Hyperlink` edges) plus the page node's metadata.
-    Contribution { contributions: Vec<GraphContribution> },
+    Contribution {
+        contributions: Vec<GraphContribution>,
+    },
     /// Progress after a page: total pages fetched and the URL just processed.
     Progress { fetched: usize, last_url: String },
     /// The crawl finished (frontier drained or page cap reached) after `fetched` pages.
@@ -74,7 +75,11 @@ pub enum CrawlUpdate {
 /// stop a running crawl mid-flight.
 pub fn spawn_crawl(
     wake: Wake,
-) -> (ActorHandle<CrawlCommand>, Receiver<CrawlUpdate>, Arc<AtomicBool>) {
+) -> (
+    ActorHandle<CrawlCommand>,
+    Receiver<CrawlUpdate>,
+    Arc<AtomicBool>,
+) {
     let cancel = Arc::new(AtomicBool::new(false));
     let actor_cancel = cancel.clone();
     let (handle, rx) = spawn(wake, move |commands, out: Emitter<CrawlUpdate>| {
@@ -101,7 +106,7 @@ pub fn spawn_crawl(
                         || cancel.load(Ordering::Relaxed),
                         |update| out.emit(update),
                     ));
-                },
+                }
             }
         }
     });
@@ -171,8 +176,11 @@ where
                 if !contributions.is_empty() {
                     emit(CrawlUpdate::Contribution { contributions });
                 }
-                emit(CrawlUpdate::Progress { fetched: frontier.fetched(), last_url: url });
-            },
+                emit(CrawlUpdate::Progress {
+                    fetched: frontier.fetched(),
+                    last_url: url,
+                });
+            }
             Err(error) => tracing::warn!(%url, %error, "crawl fetch failed; skipping"),
         }
     }
@@ -200,9 +208,11 @@ fn crawl_page(
         frontier.enqueue(&targets, depth);
         contributions.push(links);
     }
-    if let Some(meta) =
-        meerkat::ingest::page_extract_contribution(url, fetched.content_type.as_deref(), &fetched.body)
-    {
+    if let Some(meta) = meerkat::ingest::page_extract_contribution(
+        url,
+        fetched.content_type.as_deref(),
+        &fetched.body,
+    ) {
         contributions.push(meta);
     }
     contributions
@@ -332,8 +342,15 @@ impl CrawlSession {
     /// `graph_id` (the seed page's graph). Supersedes any previous crawl's target.
     pub fn start(&mut self, seed: &str, policy: CrawlPolicy, graph_id: GraphId) {
         self.graph_id = Some(graph_id);
-        self.progress = CrawlProgress { fetched: 0, last_url: None, running: true };
-        self.handle.command(CrawlCommand::Start { seed: seed.to_string(), policy });
+        self.progress = CrawlProgress {
+            fetched: 0,
+            last_url: None,
+            running: true,
+        };
+        self.handle.command(CrawlCommand::Start {
+            seed: seed.to_string(),
+            policy,
+        });
     }
 
     /// Cancel a running crawl. Sets the shared flag the actor's loop polls between
@@ -374,16 +391,16 @@ fn fold_update(
             if let Some(gid) = graph_id {
                 applied.extend(contributions.into_iter().map(|c| (gid, c)));
             }
-        },
+        }
         CrawlUpdate::Progress { fetched, last_url } => {
             progress.fetched = fetched;
             progress.last_url = Some(last_url);
             progress.running = true;
-        },
+        }
         CrawlUpdate::Done { fetched } => {
             progress.fetched = fetched;
             progress.running = false;
-        },
+        }
     }
 }
 

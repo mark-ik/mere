@@ -52,7 +52,7 @@ impl RobotsRules {
                         seen_rule = false;
                     }
                     group_uas.push(value.to_ascii_lowercase());
-                },
+                }
                 "disallow" | "allow" => {
                     seen_rule = true;
                     if value.is_empty() {
@@ -65,8 +65,8 @@ impl RobotsRules {
                     if group_uas.iter().any(|u| u == CRAWLER_UA) {
                         ours.push(rule);
                     }
-                },
-                _ => {},
+                }
+                _ => {}
             }
         }
         let rules = if ours.is_empty() { star } else { ours };
@@ -135,7 +135,10 @@ mod tests {
         // `*` disallows everything; our group narrows it to just /secret.
         let txt = "User-agent: *\nDisallow: /\n\nUser-agent: merebot\nDisallow: /secret";
         let r = RobotsRules::parse(txt);
-        assert!(r.allows("/public"), "our UA ignores the * group's Disallow: /");
+        assert!(
+            r.allows("/public"),
+            "our UA ignores the * group's Disallow: /"
+        );
         assert!(!r.allows("/secret/x"));
     }
 

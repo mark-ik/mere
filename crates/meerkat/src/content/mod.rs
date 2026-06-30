@@ -20,6 +20,7 @@
 //! kernel applies it to the graph). The actor never touches the graph or the GPU.
 
 use std::cell::RefCell;
+use std::sync::mpsc::{Receiver, TryRecvError};
 
 use armillary::{ActorHandle, Emitter, NavGeneration, Pool, ViewportGeneration, Wake, spawn_on};
 use document_canvas::{DocumentRenderPacket, DocumentStyleSheet, FontTable};
@@ -39,7 +40,7 @@ use pelt_desktop::ScriptedDocument;
 use script_engine_boa::BoaEngine;
 
 use crate::card::{
-    build_html_layout, is_serval_html_lane, render_content, LinkHit, RenderedContent,
+    LinkHit, RenderedContent, build_html_layout, is_serval_html_lane, render_content,
 };
 use crate::fetch::ContentState;
 use crate::resources::{ResourceLoader, ResourceStore};
@@ -134,17 +135,13 @@ pub enum ContentCommand {
     },
     /// Detach the DocumentScript (runs its `deactivate`) and revert to the static page.
     /// (P2.5c, DocumentScript.)
-    DetachScript {
-        viewport_gen: ViewportGeneration,
-    },
+    DetachScript { viewport_gen: ViewportGeneration },
     /// Materialize the current page's outbound-link neighborhood as graph nodes +
     /// `Semantic:Hyperlink` edges (relational-browse V1), emitted as a Contribution.
     /// A render-free parse of the already-fetched body — no target fetch, no new
     /// actor. No-op if the node has no fetched HTML body. (Extraction lane / crawl
     /// frontier, single-hop.)
-    MaterializeLinks {
-        viewport_gen: ViewportGeneration,
-    },
+    MaterializeLinks { viewport_gen: ViewportGeneration },
     /// Forward a pointer click at card-local scene point `(x, y)` (device px) to the
     /// scripted render rung: the live `ScriptedDocument` hit-tests the point and
     /// dispatches a `click` (so the page's listeners run and may mutate the DOM),
@@ -216,10 +213,51 @@ pub enum ContentUpdate {
     /// The result of a DocumentScript attach / turn / detach, for the host to surface
     /// (diagnostics / a script console). The re-render rides the `Scene` update; this
     /// is the textual outcome alongside it. (P2.5c, DocumentScript.)
-    ScriptOutcome {
-        nav: NavGeneration,
-        outcome: String,
+    ScriptOutcome { nav: NavGeneration, outcome: String },
+}
+
+pub(crate) trait ContentUpdateSink {
+    fn emit_update(&self, update: ContentUpdate);
+}
+
+impl ContentUpdateSink for Emitter<ContentUpdate> {
+    fn emit_update(&self, update: ContentUpdate) {
+        self.emit(update);
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ContentUpdateTransport {
+    Native,
+    Transfer,
+}
+
+#[allow(dead_code)]
+pub(crate) enum ContentUpdateStream {
+    Native(Receiver<ContentUpdate>),
+    Transfer {
+        updates: Receiver<transfer::TransferBuffer>,
+        decoder: transfer::SceneTransferDecoder,
     },
+}
+
+#[allow(dead_code)]
+impl ContentUpdateStream {
+    pub(crate) fn try_recv_update(&mut self) -> Result<Option<ContentUpdate>, TransferError> {
+        match self {
+            Self::Native(updates) => match updates.try_recv() {
+                Ok(update) => Ok(Some(update)),
+                Err(TryRecvError::Empty | TryRecvError::Disconnected) => Ok(None),
+            },
+            Self::Transfer { updates, decoder } => match updates.try_recv() {
+                Ok(update) => {
+                    ContentUpdate::from_transfer_buffer(update.as_bytes(), decoder).map(Some)
+                }
+                Err(TryRecvError::Empty | TryRecvError::Disconnected) => Ok(None),
+            },
+        }
+    }
 }
 
 /// The actor-thread-local current document.
@@ -277,7 +315,10 @@ impl ScriptFetcher {
 #[cfg(feature = "scripted")]
 impl pelt_core::ResourceFetcher for ScriptFetcher {
     fn fetch(&self, url: &str) -> Option<Vec<u8>> {
-        self.0.fetch(url).ok().map(|response| response.body.into_bytes())
+        self.0
+            .fetch(url)
+            .ok()
+            .map(|response| response.body.into_bytes())
     }
 }
 
@@ -310,11 +351,15 @@ impl pelt_desktop::CookieProvider for JarCookieProvider {
     }
 }
 
-
 mod actor;
 mod handlers;
+mod transfer;
 pub(crate) use actor::*;
 pub(crate) use handlers::*;
+#[allow(unused_imports)]
+pub(crate) use transfer::{
+    SceneTransferDecoder, SceneTransferEncoder, TransferBuffer, TransferError,
+};
 
 #[cfg(test)]
 mod tests;

@@ -19,7 +19,7 @@ agent-harness = []
 # it is the working compat view and a light dep, unlike the heavy graft (Servo) / weld
 # (CEF) engines below. Off => the scrying / verso-scry / dpi deps and the windows_pool
 # driver drop out, and ScryingHost degrades to its no-op (off-platform) surface.
-engine-scry = ["dep:scrying", "dep:verso-scry", "dep:dpi"]
+engine-scry = ["dep:scrying", "dep:scrying-engine", "dep:grafting", "dep:verso-scry", "dep:dpi"]
 # `engine-graft` (Servo via wgpu-graft) and `engine-weld` (Chromium/CEF via wgpu-weld)
 # are off by default. Each turns on its concrete host pool (GraftHost / WeldHost) and
 # the engine's presence in routing. Today these are no-op seams: enabling the real
@@ -92,7 +92,7 @@ paint_list_render = { git = "https://github.com/mark-ik/netrender.git", branch =
 # Engine-agnostic paint command types (ColorF, DeviceIntSize) the render glue names.
 paint_list_api = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
 # Scene / Renderer / ColorLoad / ExternalTexturePlacement for the present pass.
-netrender = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
+netrender = { git = "https://github.com/mark-ik/netrender.git", branch = "main", features = ["serde"] }
 # Favicon PNG encoding for the orrery-as-element node cards: RGBA -> PNG bytes -> a
 # `data:` URI <img> the card carries (serval decodes it). Already resolved in the
 # workspace via serval's image decoder, so this only exposes the built crate to
@@ -104,6 +104,9 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 # for the session-switcher tile labels (the textless-switcher deferral) and session
 # rename display. Same parley 0.10 pin as document-canvas, so the Layout type unifies.
 parley = { workspace = true }
+# Rebuilds document-canvas FontTable sidecars in the transferable content-update
+# wire form; this is the Blob type parley's FontData uses.
+linebender_resource_handle = "0.1"
 netrender_text = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
 # The `LayoutDom` trait: `document()` + `element_name` / `dom_children` to walk
 # and measure the chrome band (toolbar split + click-region gate). ScriptedDom
@@ -276,6 +279,9 @@ strum = { version = "0.28", features = ["derive"] }
 serde_json = { workspace = true }
 # Durable cookie-jar records persisted to eidetic (native session store).
 serde = { workspace = true }
+# Transferable content-update envelope; scenes themselves use netrender's
+# postcard encoder, but the update wrapper needs its own flat byte envelope.
+postcard = { version = "1", features = ["alloc"] }
 # Seed colour manipulation for the in-app theme editor (HSL nudges on seeds), plus
 # the perceptual syntax palette its `syntax` module derives for the editor.
 tincture = { workspace = true }
@@ -295,6 +301,8 @@ accesskit_windows = { workspace = true }
 # sibling layout; a local checkout is picked up via the gitignored
 # `.cargo/config.toml` `paths` override.
 scrying = { git = "https://github.com/mark-ik/wgpu-scry.git", branch = "main", optional = true }
+scrying-engine = { workspace = true, optional = true }
+grafting = { git = "https://github.com/mark-ik/wgpu-graft.git", branch = "main", default-features = false, features = ["wgpu-29"], optional = true }
 dpi = { workspace = true, optional = true }
 
 # The verso compatibility-view flip: when a node is pinned serval -> scrying.web,

@@ -43,7 +43,10 @@ mod tests {
               <url><loc>https://s.test/a</loc><lastmod>2026-01-01</lastmod></url>
               <url><loc> https://s.test/b </loc></url>
             </urlset>"#;
-        assert_eq!(parse_sitemap(xml), vec!["https://s.test/a", "https://s.test/b"]);
+        assert_eq!(
+            parse_sitemap(xml),
+            vec!["https://s.test/a", "https://s.test/b"]
+        );
     }
 
     #[test]

@@ -138,7 +138,10 @@ pub enum FetchUpdate {
     Subresource(SubresourceOutcome),
     /// Raw favicon bytes (only on success) plus the page they belong to; the host
     /// decodes them to RGBA and stamps them on that node. (Favicon-on-tile.)
-    Favicon { owner_url: String, bytes: Vec<u8> },
+    Favicon {
+        owner_url: String,
+        bytes: Vec<u8>,
+    },
 }
 
 /// Spawn the fetch actor on its own thread (armillary harness). It owns a
@@ -293,7 +296,6 @@ fn smolweb_content_type(url: &url::Url, response: &errand::Response) -> String {
     }
 }
 
-
 mod cookies;
 pub use cookies::*;
 
@@ -301,7 +303,10 @@ pub use cookies::*;
 /// error once the accumulated length would exceed `max_bytes` (§A5). Enforced *during*
 /// the stream (not after `bytes()` buffers it all), so an unbounded / chunked body
 /// cannot OOM the host: the read stops the moment the cap is crossed.
-async fn read_capped(mut body: netfetcher::ResponseBody, max_bytes: usize) -> Result<Vec<u8>, String> {
+async fn read_capped(
+    mut body: netfetcher::ResponseBody,
+    max_bytes: usize,
+) -> Result<Vec<u8>, String> {
     let mut buf: Vec<u8> = Vec::new();
     while let Some(chunk) = body.next_chunk().await {
         let chunk = chunk.map_err(|e| format!("read error: {e}"))?;
@@ -338,7 +343,9 @@ async fn do_fetch_ua(
     let mut request = netfetcher::Request::get(parsed);
     if let Some(ua) = user_agent {
         // netfetcher only injects its default UA when none is set, so this wins.
-        request.headers.push(("user-agent".to_owned(), ua.to_owned()));
+        request
+            .headers
+            .push(("user-agent".to_owned(), ua.to_owned()));
     }
     let response = netfetcher::fetch(request, &cx).await;
     if response.is_network_error() {
@@ -370,7 +377,6 @@ async fn fetch_bytes(url: &str) -> Option<Vec<u8>> {
     }
     read_capped(response.body, SUBRESOURCE_BODY_CAP).await.ok()
 }
-
 
 #[cfg(test)]
 mod tests;

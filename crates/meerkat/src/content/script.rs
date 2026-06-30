@@ -18,17 +18,19 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use document_host::{CapPermission, DocumentScript, Grant, NetFetcher, NetResponse, Quota, TurnOutcome};
-use session_runtime::settings_store::ScriptPermissionPrefs;
+use document_host::{
+    CapPermission, DocumentScript, Grant, NetFetcher, NetResponse, Quota, TurnOutcome,
+};
 use kernel::permissions::{
-    resolve_permission, Permission, ResolvedPermission, ScopedPermission, SettingScope,
+    Permission, ResolvedPermission, ScopedPermission, SettingScope, resolve_permission,
 };
 use layout_dom_api::{LayoutDom, LayoutDomMut, NodeKind};
 use serval_layout::{
-    inline_stylesheets, lay_out_content, linked_stylesheets_with_loader, ContentLayout, ImageLoader,
+    ContentLayout, ImageLoader, inline_stylesheets, lay_out_content, linked_stylesheets_with_loader,
 };
 use serval_scripted_dom::{NodeId, ScriptedDom};
 use serval_static_dom::StaticDocument;
+use session_runtime::settings_store::ScriptPermissionPrefs;
 
 use crate::card::HTML_SHEET;
 
@@ -59,7 +61,9 @@ pub(crate) struct ContentNetFetcher {
 
 impl ContentNetFetcher {
     pub(crate) fn new() -> std::io::Result<Self> {
-        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
         Ok(Self { rt })
     }
 }
@@ -87,10 +91,17 @@ impl NetFetcher for ContentNetFetcher {
         let fetched = match result {
             Ok(inner) => inner?,
             Err(_elapsed) => {
-                return Err(format!("net.fetch: timed out after {}s", NET_FETCH_TIMEOUT.as_secs()))
+                return Err(format!(
+                    "net.fetch: timed out after {}s",
+                    NET_FETCH_TIMEOUT.as_secs()
+                ));
             }
         };
-        Ok(NetResponse { status: 200, content_type: fetched.content_type, body: fetched.body })
+        Ok(NetResponse {
+            status: 200,
+            content_type: fetched.content_type,
+            body: fetched.body,
+        })
     }
 }
 
@@ -231,11 +242,16 @@ pub(crate) fn host_of(url: &str) -> String {
     let after_scheme = url.split_once("://").map(|(_, rest)| rest).unwrap_or(url);
     let authority = after_scheme.split(['/', '?', '#']).next().unwrap_or("");
     // Drop userinfo: everything up to and including the last '@'.
-    let host_port = authority.rsplit_once('@').map(|(_, h)| h).unwrap_or(authority);
+    let host_port = authority
+        .rsplit_once('@')
+        .map(|(_, h)| h)
+        .unwrap_or(authority);
     // Drop the port. For an IPv6 literal ([..]:port) take the bracketed host; the
     // ':' inside the address must not be read as a port separator.
     let host = if let Some(rest) = host_port.strip_prefix('[') {
-        rest.split_once(']').map(|(inner, _)| inner).unwrap_or(host_port)
+        rest.split_once(']')
+            .map(|(inner, _)| inner)
+            .unwrap_or(host_port)
     } else {
         host_port.split(':').next().unwrap_or(host_port)
     };
@@ -275,7 +291,11 @@ pub(crate) fn load_resolved_bindings(
         .ok()
         .flatten()
         .unwrap_or_default();
-    let policy = ScriptCapPolicy { log: prefs.log, document: prefs.document, net: prefs.net };
+    let policy = ScriptCapPolicy {
+        log: prefs.log,
+        document: prefs.document,
+        net: prefs.net,
+    };
     let (log, document, net) = resolve_attach_permissions(policy);
     bindings
         .into_iter()
@@ -308,9 +328,16 @@ pub(crate) fn load_mod_bindings(
     mere_root: &Path,
     prefs: &ScriptPermissionPrefs,
 ) -> Vec<ResolvedScriptBinding> {
-    let policy = ScriptCapPolicy { log: prefs.log, document: prefs.document, net: prefs.net };
+    let policy = ScriptCapPolicy {
+        log: prefs.log,
+        document: prefs.document,
+        net: prefs.net,
+    };
     let (log, document, net) = resolve_attach_permissions(policy);
-    let net_deny = ResolvedPermission { effective: Permission::Deny, decided_by: None };
+    let net_deny = ResolvedPermission {
+        effective: Permission::Deny,
+        decided_by: None,
+    };
 
     let mut mods = register_mod_loader::discover_wasm_mods_in_dir(&mere_root.join("mods"));
     mods.sort_by(|a, b| a.1.module_path.cmp(&b.1.module_path));
@@ -364,10 +391,17 @@ pub(crate) fn mirror_to_scripted_dom<D: LayoutDom>(src: &D) -> ScriptedDom {
     dst
 }
 
-fn mirror_node<D: LayoutDom>(src: &D, src_id: D::NodeId, dst: &mut ScriptedDom, dst_parent: NodeId) {
+fn mirror_node<D: LayoutDom>(
+    src: &D,
+    src_id: D::NodeId,
+    dst: &mut ScriptedDom,
+    dst_parent: NodeId,
+) {
     match src.kind(src_id) {
         NodeKind::Element => {
-            let Some(name) = src.element_name(src_id) else { return };
+            let Some(name) = src.element_name(src_id) else {
+                return;
+            };
             let el = dst.create_element(name.clone());
             for attr in src.attributes(src_id) {
                 dst.set_attribute(el, attr.name.clone(), attr.value);
@@ -445,7 +479,12 @@ impl ScriptInstance {
         let script =
             DocumentScript::attach(component_path, scripted, grant, quota, fetcher, net_origins)
                 .map_err(|e| e.to_string())?;
-        Ok(Self { script, layout, sheets, viewport: (w, h) })
+        Ok(Self {
+            script,
+            layout,
+            sheets,
+            viewport: (w, h),
+        })
     }
 
     /// Deliver one event to the script. If the script changed the DOM (its revision
@@ -457,7 +496,10 @@ impl ScriptInstance {
         loader: &impl ImageLoader,
     ) -> Result<TurnOutcome, String> {
         let before = self.script.revision();
-        let outcome = self.script.deliver_event(kind, payload).map_err(|e| e.to_string())?;
+        let outcome = self
+            .script
+            .deliver_event(kind, payload)
+            .map_err(|e| e.to_string())?;
         if self.script.revision() != before {
             let (w, h) = self.viewport;
             self.layout = lay_out_with(self.script.dom(), &self.sheets, loader, w, h);
@@ -489,7 +531,6 @@ impl ScriptInstance {
         self.script.detach().map_err(|e| e.to_string())
     }
 }
-
 
 #[cfg(test)]
 mod tests;
