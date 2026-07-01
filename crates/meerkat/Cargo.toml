@@ -152,6 +152,10 @@ kernel = { workspace = true }
 # `query` enables the `>sparql("…")` omnibar verb (an in-memory Oxigraph store
 # over the focused graph; no RocksDB, so the wasm target stays viable).
 linked-data = { workspace = true, features = ["query"] }
+# The graph digest projection (djot outline + cheap metrics): the gloss outline
+# lens's `Graph -> view` backend. Pure, host-free — meerkat builds the DOM rows
+# from its output. (gloss-outline plan P1.)
+glossary = { workspace = true }
 
 # The actor-kernel runtime: the !Send host-kernel boundary + the Send actor
 # harness. meerkat's I/O subsystems (fetch, ...) are expressed as armillary

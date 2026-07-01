@@ -28,9 +28,12 @@ impl WindowCtx<'_> {
     }
 
     /// Whether `(x, y)` falls in a folded pane that routes its clicks through the shell
-    /// hit-test (`chrome_click`): the roster, the four list panes, and comms — every pane in
-    /// the shell document except the gloss (which focuses minimap nodes itself). The single
-    /// content-band check that replaced the per-pane rect branches. (Phase 1, step 3.)
+    /// hit-test (`chrome_click`): the roster, the four list panes, and comms — every
+    /// *whole-leaf* pane in the shell document. The gloss is only partly folded (its
+    /// outline third is DOM, the minimap/recent thirds are bespoke Scene hit-testing —
+    /// see [`gloss_outline_at`](Self::gloss_outline_at)), so it is not a whole-leaf match
+    /// here. The single content-band check that replaced the per-pane rect branches.
+    /// (Phase 1, step 3.)
     pub(crate) fn chrome_routed_leaf_at(&self, x: f32, y: f32) -> bool {
         self.laid_leaves().iter().any(|leaf| {
             matches!(
@@ -57,6 +60,15 @@ impl WindowCtx<'_> {
             .settings_rects
             .iter()
             .any(|(_, r)| x >= r[0] && x < r[2] && y >= r[1] && y < r[3])
+    }
+
+    /// Whether `(x, y)` is inside the gloss outline lens's rect — a press there routes to
+    /// the shell document (the outline's rows) rather than the gloss's bespoke minimap /
+    /// recent hit-test beside it. (gloss-outline plan P1 — the first DOM gloss section.)
+    pub(crate) fn gloss_outline_at(&self, x: f32, y: f32) -> bool {
+        self.view
+            .gloss_outline_rect()
+            .is_some_and(|r| x >= r[0] && x < r[2] && y >= r[1] && y < r[3])
     }
 
     /// Whether `(x, y)` is inside the open knot-editor pane — a press there routes to the shell
@@ -111,7 +123,38 @@ impl WindowCtx<'_> {
         };
         if let Some(node) = hit {
             self.chrome_activate(node, (x, y));
+            self.place_caret_from_click(x, y);
         }
+    }
+
+    /// Click-to-place: after [`chrome_activate`](Self::chrome_activate) resolves
+    /// DOM focus for this press, snap the caret to the clicked point when focus
+    /// landed on a text field (the omnibar, palette, comms fields, or the knot
+    /// editor source). Shift-click extends the selection instead of collapsing it,
+    /// matching every other caret motion on [`TextInput`](xilem_serval::TextInput).
+    /// A no-op off a text field, before the first render, or when `(x, y)` falls
+    /// outside the field's laid-out text. Kept out of
+    /// [`chrome_activate`](Self::chrome_activate) itself since that tail is shared
+    /// with the a11y activation path, which has no real click point to place from.
+    fn place_caret_from_click(&mut self, x: f32, y: f32) {
+        let Some(node) = self.view.runner.focus() else {
+            return;
+        };
+        if !self.is_text_input(node) {
+            return;
+        }
+        let Some(session) = self.view.chrome_session.as_ref() else {
+            return;
+        };
+        let byte = {
+            let dom = self.view.dom.borrow();
+            session.caret_byte_at_point(&dom, node, x, y)
+        };
+        let Some(byte) = byte else {
+            return;
+        };
+        self.set_caret_field_byte(node, byte, self.view.modifiers.shift);
+        self.view.request_redraw();
     }
 
     /// Dispatch a click to chrome `node` and drain every intent its handlers may
@@ -153,6 +196,7 @@ impl WindowCtx<'_> {
         self.drain_history_step();
         self.drain_physics_toggle();
         self.drain_roster_intents();
+        self.drain_gloss_outline_intents();
         self.drain_list_pane_activations();
         self.drain_object_card();
         self.sync_settings();

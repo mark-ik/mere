@@ -257,6 +257,10 @@ pub struct GraphletCard {
     pub binding_label: String,
     pub members: Vec<String>,
     pub selectors_label: String,
+    /// The editable family-selector chips for a **Linked** graphlet's spec (checked =
+    /// present in the derivation filter); `None` when the binding has no live spec to
+    /// edit (`UnlinkedSession` / `Branched`). Selector/family editing.
+    pub family_selectors: Option<Vec<(EdgeFamily, bool)>>,
     pub drift_tracking: bool,
     pub drift_summary: String,
     pub added: Vec<String>,

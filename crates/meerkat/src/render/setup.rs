@@ -21,6 +21,7 @@ pub(super) struct FrameRects {
     pub orrery_gid: frame::GraphId,
     pub workbench_rect: Option<[f32; 4]>,
     pub roster_rect: Option<[f32; 4]>,
+    pub gloss_rect: Option<[f32; 4]>,
     pub comms_rect: Option<[f32; 4]>,
     pub list_pane_rects: [Option<[f32; 4]>; 5],
     pub dividers: Vec<frame_view::LaidDivider>,
@@ -416,10 +417,11 @@ impl crate::WindowCtx<'_> {
     }
 
     /// Build the owned per-pane chrome stylesheets for this frame: the roster sheet plus
-    /// the folded list panes' (apparatus + utility) sheets, returned as
-    /// `(roster_css, apparatus_css, utility_css)`. They are owned so they outlive the
-    /// deferred `chrome_sheet` assembly below. (Extracted from `render()`.)
-    pub(super) fn gather_chrome_css(&self) -> (Vec<String>, Vec<String>, Vec<String>) {
+    /// the folded list panes' (apparatus + utility) sheets and the gloss outline's,
+    /// returned as `(roster_css, apparatus_css, utility_css, gloss_outline_css)`. They
+    /// are owned so they outlive the deferred `chrome_sheet` assembly below. (Extracted
+    /// from `render()`; gloss_outline_css added by the gloss-outline plan P1.)
+    pub(super) fn gather_chrome_css(&self) -> (Vec<String>, Vec<String>, Vec<String>, Vec<String>) {
         let roster_css = crate::roster::roster_sheet(&self.shared.presentation.chrome_theme);
         // The folded list panes' CSS rides the shell stylesheet too; rules are inert when
         // no matching pane element is in the document, so they can be unconditional. The
@@ -428,7 +430,9 @@ impl crate::WindowCtx<'_> {
             crate::apparatus::apparatus_sheet(&self.shared.presentation.chrome_theme);
         let utility_css =
             crate::utility_panes::utility_pane_sheet(&self.shared.presentation.chrome_theme);
-        (roster_css, apparatus_css, utility_css)
+        let gloss_outline_css =
+            crate::gloss_outline_view::gloss_outline_sheet(&self.shared.presentation.chrome_theme);
+        (roster_css, apparatus_css, utility_css, gloss_outline_css)
     }
 
     /// Lay this frame's content band out into pane rects: carve the shellbar strip, lay
@@ -483,6 +487,10 @@ impl crate::WindowCtx<'_> {
         let roster_rect = leaves
             .iter()
             .find(|l| matches!(l.content, PaneContent::Roster))
+            .map(|l| l.rect);
+        let gloss_rect = leaves
+            .iter()
+            .find(|l| matches!(l.content, PaneContent::Gloss))
             .map(|l| l.rect);
         let comms_rect = leaves
             .iter()
@@ -547,6 +555,7 @@ impl crate::WindowCtx<'_> {
             orrery_gid,
             workbench_rect,
             roster_rect,
+            gloss_rect,
             comms_rect,
             list_pane_rects,
             dividers,

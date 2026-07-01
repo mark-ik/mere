@@ -45,6 +45,8 @@ mod error;
 pub mod memory;
 pub mod p2panda_transport;
 mod peer_id;
+#[cfg(feature = "reticulum")]
+pub mod reticulum_transport;
 mod transport;
 
 pub use crate::alpn::Alpn;
@@ -55,6 +57,10 @@ pub use crate::p2panda_transport::{sync_overlay_topic, P2pandaStream, P2pandaTra
 // `publish(bytes)` to broadcast, `subscribe()` for the received-bytes stream.
 pub use p2panda_net::gossip::GossipHandle;
 pub use crate::peer_id::PeerID;
+#[cfg(feature = "reticulum")]
+pub use crate::reticulum_transport::{
+    ReticulumInterface, ReticulumStream, ReticulumTransport, ReticulumTransportBuilder,
+};
 pub use crate::transport::Transport;
 
 // Re-export commonly-used identity types so consumers don't need a direct

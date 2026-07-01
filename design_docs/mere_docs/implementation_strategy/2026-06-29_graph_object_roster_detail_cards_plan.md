@@ -5,13 +5,20 @@
 2026-06-29. Active-tab styling, high-zoom roster box-sizing, endpoint-bundle
 visibility persistence, connections-swatch relation-cell routing, Graphlet Card
 member wording, canvas relation-cell overlay/picking, and relation-cell visibility
-persistence have landed. Deeper graphlet selector/family editing and true
-parallel edge instances remain.
+persistence have landed. The 2026-07-01 pass closed the R6 open list's two
+concrete items: gyre spring topology is now per-visible-relation-cell (not
+endpoint-pair collapsed), and graphlet family-selector editing is wired
+end-to-end from the Graphlet Card. Sub-kind selector editing (e.g. only
+`Cites`) and true parallel edge instances remain out of scope.
 **Code**: `crates/meerkat/src/roster.rs`, `roster_data.rs`, `roster_view.rs`,
-`roster_view_parts.rs`, `swatch.rs`, `render/connections.rs`, `input/panes.rs`,
-`input/editing.rs`, `input/mouse_dispatch/press.rs`, `session_ops/view_intent.rs`;
-`crates/orrery/orrery/src/edge_cells.rs`, `frame.rs`, `input.rs`, and
-`selection.rs` for canvas relation-cell display, picking, and visibility helpers.
+`roster_view_parts.rs`, `roster_view_links.rs`, `roster_view_graphlets.rs`,
+`swatch.rs`, `render/connections.rs`, `input/panes.rs`, `input/editing.rs`,
+`input/mouse_dispatch/press.rs`, `menus/build.rs`, `session_ops/view_intent.rs`,
+`session_ops/shell_session.rs`, `shell_command.rs`, `app_handler/shell_ops.rs`,
+`graphlets.rs`, `graphlets_tests.rs`; `crates/orrery/orrery/src/edge_cells.rs`,
+`frame.rs`, `input.rs`, `selection.rs`, `build.rs`, `build_tests.rs`, and
+`lifecycle.rs` for canvas relation-cell display, picking, visibility, and the
+per-cell spring topology.
 
 This plan turns the Roster into the first stateful control layer for graph
 objects. The canvas still owns spatial selection, snapshots, object cards, and
@@ -119,23 +126,32 @@ hidden behind node-only affordances.
 
 ### R6 - Runtime polish and future edge depth
 
-The Roster is now the right place for link/graphlet/field inspection, but the
-edge-depth story is not finished.
+The Roster is now the right place for link/graphlet/field inspection. The
+edge-depth story's two concrete open items (spring topology, family-selector
+editing) closed 2026-07-01; a narrower open list remains below.
+
+**Status**: Spring topology and family-selector editing done 2026-07-01. See
+the 2026-07-01 progress entry for what shipped and what's still deferred.
 
 Open:
 
-- Gyre topology and physics springs still collapse relations to endpoint pairs.
-  Orrery now overlays and picks fanned relation cells without changing that
-  topology.
-- Relation-cell visibility is display/session scoped and keyed by current
-  `(source, target, RelationKind)` cells. Bundle hide/show is still a wrapper
-  over the current cells between two endpoints.
+- Sub-kind selector editing (e.g. filter a Linked graphlet's derivation to only
+  `Cites`, not the whole `Semantic` family) is not built. Family-level toggles
+  are; `derive_members`/`selectors_from_spec` still name sub-kind selectors as
+  "a later refinement."
+- The P5 layered visibility stack (`GraphDefault < GraphViewOverride <
+  SelectionOverride`) is not built. Hide/show is still the single session-scoped
+  layer it always was; 2026-07-01 only made that existing layer also relax the
+  spring, not added new layers.
 - Connections swatch P4 emits one fanned DOM relation cell per relation kind,
   filters hidden cells, and routes clicks to the same `RelationCell` card.
 - Keep kernel storage untouched in this slice. True parallel edge instances stay
   out of scope.
-- Deeper graphlet selector/family editing remains with graphlet/swatch follow-up
-  work.
+- Headed verification of the 2026-07-01 slice is blocked in the current
+  environment: `meerkat.exe` launches and logs a clean startup, but its window
+  renders at a stuck 13x13px rect instead of a real size, so no interactive
+  drive or screenshot was possible. Automated coverage (below) stands in for
+  it; a physical-display drive is still owed.
 
 ---
 
@@ -444,3 +460,109 @@ Still open:
 - Relation-cell visibility is keyed to current `(source, target, RelationKind)`
   cells. True parallel edge instances remain out of scope.
 - Graphlet selector/family editing remains deferred.
+
+### 2026-07-01 - Closing the R6 open list
+
+Landed:
+
+- **Canvas/context-menu hide action.** Right-clicking with a bare relation cell
+  selected (no node selected) previously fell into the empty-canvas menu branch
+  with no edge action, since `selection_working_set()`/`context_set` are
+  node-only. `build_curated_menu_items` (`menus/build.rs`) now adds a dynamic
+  "Hide selected edge" row — mirroring the existing "Delete field" dynamic-row
+  pattern — when `orrery().has_selected_edges()`, routed through the same
+  `Command::HideSelectedEdge` / `ContextAction::RunCommand` path the palette
+  already used. Link Card's per-cell `(hidden)` label + hide/show action
+  (`roster_view_links.rs`) already covered the "show effective hidden state"
+  half of R6's visibility-surface item.
+- **Graphlet family-selector editing.** `forme::GraphletSpec.selectors` are
+  opaque strings that `graphlets.rs::selectors_from_spec` already parsed as
+  `EdgeFamily` names (`"semantic"`, `"traversal"`, ...). New
+  `SessionGraphlets::toggle_family_selector(id, family)` adds/removes that
+  family's string on a **Linked** graphlet's spec (a no-op elsewhere — Session
+  and Branched bindings have no live derivation to filter); `spec_has_family`
+  + the `EDGE_FAMILIES` const back the chip state. Wiring: `RosterIntent::
+  ToggleGraphletFamilySelector` -> `input/panes.rs` queues `ShellCommand::
+  ToggleGraphletFamilySelector` -> `Shell::toggle_graphlet_family_selector`
+  (`session_ops/shell_session.rs`, mirrors `reconcile_linked_graphlet`'s
+  session-dir + persist pattern). The Graphlet Card
+  (`roster_view_graphlets.rs`) renders one chip per family below the
+  `selectors:` row for Linked graphlets (`GraphletCard.family_selectors: Option
+  <Vec<(EdgeFamily, bool)>>`, `None` for non-Linked bindings); the existing
+  drift-preview pipeline already re-reads `spec` fresh each render, so no new
+  derivation plumbing was needed — toggling a chip changes the `selectors:`
+  label and drift proposal on the next frame. Chose the Graphlet Card over the
+  swatch strip as the UI owner per the plan's own reasoning ("the Roster Card
+  can display and invoke it"); the mutation lives on `SessionGraphlets`, not
+  behind a Roster-only side channel, so a future swatch-strip control can call
+  the same method without a second edit path.
+- **Gyre spring topology is per relation-cell, not per pair.** New
+  `orrery::build::visible_relation_edges(graph, hidden_edges)` replaces
+  `dedup_edges` at the two spring-sync call sites (`build_simulation`,
+  `Orrery::reconcile_derived`): one `(NodeKey, NodeKey)` tuple per **visible**
+  relation cell instead of one deduped tuple per pair, so a pair with three
+  live cells pulls three times as hard as a pair with one. `gyre`'s own types
+  are untouched (`ForceContext::edges: &[(NodeKey, NodeKey)]` stays as-is,
+  preserving the "gyre stays relation-taxonomy agnostic" boundary the P4 doc
+  comment names) — multiplicity is how the orrery hands gyre weight without
+  leaking `RelationSelector` into gyre's edge type. All six hide/show mutators
+  in `selection.rs` (`hide_selected_edges`, `hide_edge_between_members`,
+  `hide_relation_between_members`, `show_edge_between_members`,
+  `show_relation_between_members`, `show_all_edges`) now call a new
+  `resync_edge_springs` helper when they actually changed something, so a
+  hide/show relaxes/restores its spring immediately in that instance rather
+  than waiting for an unrelated graph mutation to reconcile. This is the P5
+  finding's "hiding relaxes the spring" behavior for the existing single-layer
+  visibility set — **not** the full P5 `GraphDefault < GraphViewOverride <
+  SelectionOverride` stack, which remains unbuilt.
+- **File-size ceiling.** `roster_view_parts.rs` (596 lines) split into
+  `roster_view_parts.rs` (dispatch + Nodes/Fields + shared card helpers),
+  `roster_view_links.rs` (Links tab + Link Card), and `roster_view_graphlets.rs`
+  (Graphlets tab + Graphlet Card). `graphlets.rs` (693 lines after the family-
+  selector addition) and `orrery/build.rs` (620 lines after the new spring-edge
+  builder + test) both had their `#[cfg(test)] mod tests` extracted to sibling
+  files (`graphlets_tests.rs`, `build_tests.rs`), matching the
+  `roster_action_tests.rs` convention already in the crate.
+
+Verification:
+
+- `cargo test -p orrery --lib` - passed, 85 tests (84 prior + 1 new:
+  `visible_relation_edges_keeps_one_tuple_per_cell_and_drops_hidden_ones`,
+  proving multiplicity and hidden-cell filtering directly).
+- `cargo test -p meerkat --bin meerkat` (full bin suite) - passed, 232 tests,
+  including 2 new graphlet-selector tests (`toggle_family_selector_mutates_a_
+  linked_specs_selectors_and_is_a_noop_elsewhere`,
+  `toggle_family_selector_narrows_a_linked_graphlets_derivation` - the latter
+  proves the toggle actually changes a Linked Component graphlet's derived
+  membership, not just the spec string).
+- `cargo check -p meerkat --bin meerkat --message-format=short` /
+  `cargo check -p orrery --lib --message-format=short` - both clean, no new
+  warnings beyond the pre-existing set.
+- File line counts after the splits: `roster_view_parts.rs` 292,
+  `roster_view_links.rs` 231, `roster_view_graphlets.rs` 133, `roster.rs` 532,
+  `roster_data.rs` 558, `graphlets.rs` 400, `graphlets_tests.rs` 298,
+  `orrery/build.rs` 524, `orrery/build_tests.rs` 104, `orrery/lifecycle.rs` 467,
+  `orrery/selection.rs` 474.
+- **Headed verification blocked.** `meerkat.exe` (freshly built at
+  `C:\t\meerkat-target\debug\meerkat.exe` — the local `CARGO_TARGET_DIR` moved
+  from the `graphshell-target` name earlier sessions recorded to
+  `meerkat-target`; `scripts/meerkat.ps1 -Command drive` is the current
+  committed launcher) starts cleanly (session/comms/sync logs all green,
+  `Responding: True`), but its window stayed at a `(0,0)-(13,13)` rect for 16+
+  seconds of polling — never sized to a real window, so no click-through or
+  screenshot was possible. Not reproducible as a code issue (nothing in this
+  slice touches window/surface creation); left for a follow-up drive once the
+  window-sizing issue is understood. The combined route (select a cell, hide
+  it from Link Card or the new context-menu row, watch the canvas/swatch drop
+  only that lane, confirm the spring relaxes, restart and confirm it stays
+  hidden, toggle a graphlet family chip and watch the drift proposal change)
+  is still owed a physical-display drive.
+
+Still open:
+
+- Sub-kind graphlet selector editing (only `Cites`, not all of `Semantic`).
+- The P5 layered visibility stack (`GraphDefault < GraphViewOverride <
+  SelectionOverride`).
+- True parallel edge instances (kernel storage change, explicitly out of scope
+  for this plan).
+- A physical-display headed drive of this pass's combined route.

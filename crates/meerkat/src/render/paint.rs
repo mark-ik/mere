@@ -21,6 +21,11 @@ pub(super) struct PaintInputs {
     pub workbench_scene: Option<(netrender::Scene, u32, u32)>,
     pub workbench_ghost: Option<((f32, f32, f32, f32), netrender::Scene)>,
     pub workbench_rect: Option<[f32; 4]>,
+    /// The gloss pane's leaf rect, if open — split via `gloss::gloss_sections` into the
+    /// minimap / outline / recent bands; the outline third is DOM (already folded into
+    /// `chrome_scene` above), so only the minimap + recent bands rasterize here.
+    /// (gloss-outline plan P1.)
+    pub gloss_rect: Option<[f32; 4]>,
     pub cards: Vec<(GraphMemberId, [f32; 4], (u32, u32))>,
     pub scrying_surfaces: Vec<(GraphMemberId, [f32; 4])>,
     pub snapshot_card: Option<(
@@ -51,6 +56,7 @@ impl WindowCtx<'_> {
             workbench_scene,
             workbench_ghost,
             workbench_rect,
+            gloss_rect,
             cards,
             scrying_surfaces,
             snapshot_card,
@@ -288,7 +294,7 @@ impl WindowCtx<'_> {
         // click-to-focus; recent is the `SharedNavigationMemory` projection. (Gloss.)
         self.view.gloss_node_rects.clear();
         self.view.gloss_recent_rects.clear();
-        if let Some(grect) = self.gloss_leaf_rect() {
+        if let Some(grect) = gloss_rect {
             let pb = self.shared.presentation.chrome_theme.panel_bg.to_array();
             let clear = wgpu::Color {
                 r: pb[0] as f64 / 255.0,
@@ -296,10 +302,10 @@ impl WindowCtx<'_> {
                 b: pb[2] as f64 / 255.0,
                 a: 1.0,
             };
-            // Split the pane: minimap (top ~58%), recent list (the rest).
-            let minimap_h = ((grect[3] - grect[1]) * 0.58).max(1.0);
-            let minimap_rect = [grect[0], grect[1], grect[2], grect[1] + minimap_h];
-            let recent_rect = [grect[0], grect[1] + minimap_h, grect[2], grect[3]];
+            // Three stacked sections: minimap (Scene), outline (DOM, already folded into
+            // chrome_scene at this same split — see the `gloss_rect` fold-in above), recent
+            // (Scene). Only the minimap + recent bands rasterize here. (gloss-outline P1.)
+            let (minimap_rect, _outline_rect, recent_rect) = crate::gloss::gloss_sections(grect);
 
             // Minimap swatch. With a gloss lens set, the gloss shows its OWN arrangement (recomputed
             // only when its inputs change, since it may be an expensive layout); otherwise it mirrors

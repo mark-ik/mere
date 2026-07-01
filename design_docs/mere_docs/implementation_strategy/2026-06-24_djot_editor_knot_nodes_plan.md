@@ -9,8 +9,13 @@ tile, themed note sheet, `>clip` semantic plus cropped-visual clip writer, and
 focused `>knot_editor` save path are built. Note tiles now report their laid-out
 height and render cached scroll bands instead of only the top viewport. The bound
 source editor now sits over the focused tile content rect when that tile is
-visible. Remaining near-term UI work: richer source highlighting, live-on-change
-render refresh, autosave/history, and stable anchors for inline clip decorations.
+visible. Source highlighting also landed (2026-06-26, via the
+[illume text lexer plan](2026-06-26_illume_text_lexer_plan.md): illume spans →
+tinct roles → a serval styled field, headed-verified) — see the correction note
+in Progress. Click-to-place landed 2026-07-01 (a chrome click resolves DOM
+focus, then snaps the caret to the clicked byte). Remaining near-term UI work:
+drag-select, live-on-change render refresh, autosave/history, and stable
+anchors for inline clip decorations.
 Originally scoped 2026-06-24 via multi-agent code sweeps of the live workspace,
 adding the *write* side to a knot/djot stack that is already read-complete, plus an
 element-pick clip path into the graph, with an editor that stays pure Rust (jotdown
@@ -102,8 +107,9 @@ onboards.
 4. **Edit writeback — first slice landed.** `>knot_editor` now binds to the focused
    `knot://` node, seeds from `Node.body`, saves back to that body, refreshes the
    live `text/x-knot` content state, invalidates note tile caches, and sits over
-   the focused tile content rect when visible. Remaining: richer highlight,
-   autosave/history, and live re-render-on-change behavior.
+   the focused tile content rect when visible. The field also highlights live
+   (illume/tinct/serval bridge, landed separately — see Progress). Remaining:
+   autosave/history and live re-render-on-change behavior.
 
 The semantic clip writer is now the first capture/provenance slice. Query blocks,
 agent nodes, cropped clip textures, and deferred power-editing continue unchanged.
@@ -200,10 +206,11 @@ reusable.
 ## What is net-new
 
 - **The edit-in side.** The first write path is live: the focused `knot://` node's
-  source opens in the bound tile-positioned editor and saves to `Node.body`.
-  Remaining editor work is a per-range style channel on the field,
-  click-to-place polish, autosave/history, and the highlight/ergonomics/structural
-  layers below.
+  source opens in the bound tile-positioned editor and saves to `Node.body`. The
+  per-range style channel landed too (illume/tinct/serval bridge), and so has
+  click-to-place (a press resolves DOM focus, then snaps the caret to the
+  clicked byte). Remaining editor work is drag-select, autosave/history, and
+  the ergonomics/structural layers below.
 - **A reachable new-note entry.** `knot://` navigation creates/focuses a local note
   node, opens it as a workbench tile, and `>knot_editor` opens that focused note's
   source.
@@ -510,7 +517,7 @@ its own round-trip test.
 
 | Feature | Why it serves notes | Phase | Cost |
 | --- | --- | --- | --- |
-| Click-to-place, drag-select | Mouse caret placement and selection. Table stakes the field cannot do yet. | 1 | Cheap, load-bearing. Wire `caret_byte_at_point` through to `set_caret_byte`. |
+| Click-to-place, drag-select | Mouse caret placement and selection. Table stakes for the field. | 1 | Click-to-place landed (`caret_byte_at_point` wired to `set_caret_byte` on press). Drag-select (continuous extend while held) remains. |
 | Syntax highlight | Emphasis, headings, links, fence boundaries colored as you type. | 2 | Cheap. The `(range, style)` list is already computed by jotdown; net-new is the style channel. |
 | Soft-wrap goal column | Up/Down across wrapped lines holds the target column. Lifts the field from Tier 1. | 2 | Cheap. Store goal column on vertical move, clear on horizontal. |
 | Undo/redo transactions | Reliable undo, grouping auto-pair and list inserts with their keystroke. | 2 | Cheap at note size. Snapshot stack, no rope. |
@@ -541,13 +548,15 @@ Live: the bound editor opens the focused `.knot` source, edits through the exist
 multi-line `TextInput`, and saves back to `Node.body`; the routed note tile refreshes
 from the updated `text/x-knot` content state. It is positioned over the focused
 tile content rect when that rect exists, with fixed overlay fallback otherwise.
-Remaining Phase 1 polish is any click/drag behavior that only fails in the
-tile-positioned placement.
+Click-to-place is now wired end to end (a chrome click resolves focus, then
+snaps the caret to the clicked byte via `caret_byte_at_point`). Remaining
+Phase 1 polish is drag-select (continuous selection while the button is held).
 
 **Phase 2: highlight, ergonomics, new-note entry, persistence, other formats.**
 Partly live: `knot://` creates/focuses the note node, inline `Node.body` plus
-snapshot round-trip are built, and the editor saves/reopens through that body.
-Remaining: jotdown `into_offset_iter` spans driving a per-range style channel,
+snapshot round-trip are built, the editor saves/reopens through that body, and
+jotdown `into_offset_iter` spans now drive a per-range style channel (the
+illume/tinct/serval bridge, headed-verified — see Progress). Remaining:
 undo/redo grouping, embedded-tile ergonomics, and `.md` / `.txt` raw-edit saveback
 through `sniff`.
 
@@ -1175,6 +1184,49 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   stamps `text/x-knot`, refreshes `shared.content.pages`, invalidates note tile
   band/texture/height caches, and sits over the focused tile content rect when
   visible. Regression coverage: `knot_editor_saves_the_focused_note_body` and
-  `knot_editor_uses_bound_tile_rect_when_available`. Remaining: richer highlight,
-  live-on-change render refresh, inline clip decoration anchors, and
-  autosave/history polish.
+  `knot_editor_uses_bound_tile_rect_when_available`. Remaining: live-on-change
+  render refresh, inline clip decoration anchors, and autosave/history polish.
+- **2026-07-01, status-refresh correction.** Re-verified this plan's own "remaining"
+  claims against the code and against the
+  [illume text lexer plan](2026-06-26_illume_text_lexer_plan.md), which this plan
+  had spun highlight work out to on 2026-06-26 but never synced back. Finding:
+  "richer source highlighting" was stale everywhere it appeared (top status, Reframe
+  slice 4, What is net-new, Phase 2 remaining, and the prior progress bullet) — the
+  illume → tinct → serval styled-field bridge landed and was headed-verified on
+  2026-06-26, and is confirmed still live in the tree
+  (`knot_editor_pane` in `views/panels.rs` renders
+  `styled_textarea(t, &knot_highlight::knot_styles(t.text()))`). Corrected all five
+  spots to point at the illume plan instead of listing highlighting as open. Verified
+  the rest of the remaining-work list still holds: no autosave/live-re-render path
+  (`drain_knot_editor_save` is a one-shot Save), no undo grouping, `caret_byte_at_point`
+  still has no pointer-down call site, no container-tree/outline wiring into meerkat
+  (illume's `tree.rs` exists but nothing in meerkat calls it), no authoring
+  affordances (list continuation, auto-pairs, slash menu, `[[` completion), and no
+  `=query` / agent-node code anywhere in inker or meerkat.
+- **2026-07-01, click-to-place landed.** Wired the pointer-down call site the prior
+  correction pass flagged as still missing: `WindowCtx::place_caret_from_click`
+  (`input/chrome.rs`) runs after `chrome_activate` resolves DOM focus for a chrome
+  click, and when focus landed on a text input (omnibar, palette, comms fields, or
+  the knot editor source) it reads the session's `caret_byte_at_point` at the click
+  point and applies it via a new mutating twin of `caret_field`,
+  `set_caret_field_byte` (`input/text_input.rs`) — the same node-to-field match,
+  restructured to look up the target field before the `chrome_update` closure so the
+  immutable `dom` borrow doesn't overlap the mutable one. Shift-click extends the
+  selection (`extend = self.view.modifiers.shift`), matching every other caret
+  motion on `TextInput`. Landed alongside a prerequisite refactor: `xilem-serval`'s
+  `controls.rs` (997 LOC) split into `controls/{text_input, field, toggle, button}`,
+  and `text_input.rs` further split into `text_input/{core, multiline, word_motion}`
+  (struct fields and four cross-called helpers made `pub(super)` so the split impls
+  can still touch them directly); pure reorganization, verified behavior-identical
+  by `cargo test -p xilem-serval` (76/76 both before and after). `cargo check -p
+  meerkat` clean (the split's only effect on meerkat: the pre-existing
+  `caret_byte_at_point`-never-used warning is now gone, since this change is what
+  finally calls it). Full `cargo test -p meerkat --bin meerkat` green, 235/235,
+  including the `knot_editor_saves_the_focused_note_body` /
+  `knot_editor_uses_bound_tile_rect_when_available` regression pair — run against
+  `--bin`, not `--lib`, since `input` (and most editor/UI code) is a `main.rs`
+  module the lib target doesn't compile. Scope: single-click placement only;
+  drag-select (continuous extend while the button is held across pointer-move) is
+  a separate mechanism and remains open. Not committed — sitting in the working
+  tree alongside Mark's own concurrent, unrelated edits in the same three input
+  files (the gloss-outline lens plan's P1 click routing).

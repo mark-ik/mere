@@ -35,6 +35,7 @@ use xilem_serval::{
 };
 
 use super::{CachedTile, ContentPane, ResizeDrag};
+use crate::gloss_outline_view::{GlossOutlineState, GlossOutlineView, gloss_outline_view};
 use crate::list_pane::{ListPaneState, ListView, PaneItem, list_pane_view};
 use crate::pane_session::PaneSession;
 use crate::roster_view::{RosterState, RosterView, roster_view};
@@ -541,6 +542,13 @@ pub(crate) struct ShellState {
     /// lensed `list_pane_view` subtree when its matching rect is `Some`. (Phase 1, step 2.)
     pub(crate) panes: [ListPaneState; 5],
     pub(crate) pane_rects: [Option<[f32; 4]>; 5],
+    /// The gloss outline lens's view state (rows + metrics), folded into the shell
+    /// document like the roster — the first DOM gloss section. (gloss-outline plan P1.)
+    pub(crate) gloss_outline: GlossOutlineState,
+    /// The outline's window rect `[x0,y0,x1,y1]`, `Some` while the gloss pane is open;
+    /// the shell view positions the outline subtree there (the gloss pane's middle
+    /// third — [`crate::gloss::gloss_sections`]). `None` keeps it out of the document.
+    pub(crate) gloss_outline_rect: Option<[f32; 4]>,
     /// The most recent orrery wheel delta (device px), queued by the orrery pane element's
     /// `on_wheel` when the host dispatches a wheel there, and drained by the host into gyre's
     /// pan / Ctrl-zoom. Routes the orrery wheel through the document. (cond 5 input bridge.)

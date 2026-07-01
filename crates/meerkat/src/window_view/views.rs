@@ -34,6 +34,30 @@ pub(crate) fn shell_view(s: &ShellState) -> ShellView {
                 ),
         ) as ShellView
     });
+    // The gloss outline lens, when open, is a positioned subtree of the shell document
+    // like the roster: lensed onto `ShellState.gloss_outline`, sized to the gloss pane's
+    // middle third ([`crate::gloss::gloss_sections`]) so the one shell runner renders it,
+    // hit-tests it, and dispatches its row clicks — the first DOM gloss section, the
+    // minimap and recent list still Scene-rasterize the top/bottom thirds. `None` keeps
+    // the document identical to before this section existed. (gloss-outline plan P1.)
+    let gloss_outline = s.gloss_outline_rect.map(|[x0, y0, x1, y1]| {
+        let make_outline: fn(&mut GlossOutlineState) -> GlossOutlineView =
+            |g: &mut GlossOutlineState| gloss_outline_view(g);
+        let to_outline: fn(&mut ShellState) -> &mut GlossOutlineState =
+            |s: &mut ShellState| &mut s.gloss_outline;
+        Box::new(
+            el::<_, ShellState, ()>("div", lens(make_outline, to_outline))
+                .attr("class", "gloss-outline-pane")
+                .attr(
+                    "style",
+                    format!(
+                        "position:absolute;left:{x0}px;top:{y0}px;width:{}px;height:{}px;overflow:hidden",
+                        x1 - x0,
+                        y1 - y0
+                    ),
+                ),
+        ) as ShellView
+    });
     // The four list panes (apparatus / steward / inspector / trail), each a positioned
     // subtree of the shell document when open: its inner `list_pane_view` is lensed onto
     // the matching `panes` slot, so the one shell runner lays it out, scrolls it, and
@@ -90,6 +114,7 @@ pub(crate) fn shell_view(s: &ShellState) -> ShellView {
             (
                 orrery_element(&s.orrery),
                 roster,
+                gloss_outline,
                 list_panes,
                 settings,
                 chrome,
@@ -471,6 +496,8 @@ pub(crate) fn shell_runner(dom: Rc<RefCell<ScriptedDom>>, chrome: Chrome) -> She
             roster_rect: None,
             panes: std::array::from_fn(|_| ListPaneState::default()),
             pane_rects: [None; 5],
+            gloss_outline: GlossOutlineState::default(),
+            gloss_outline_rect: None,
             orrery_wheel: None,
             settings: SettingsPanesState::default(),
             node_card_keys: Vec::new(),

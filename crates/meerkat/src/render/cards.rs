@@ -67,10 +67,11 @@ impl crate::WindowCtx<'_> {
     }
 
     /// Build the chrome (shell document) scene for this frame, now that every folded pane
-    /// is set: assemble the chrome stylesheet (base + roster + apparatus + utility), render
-    /// the shell through its persistent incremental session, time it, and enumerate the
-    /// chrome's `<external-texture>` placements. Returns
-    /// `(chrome_scene, chrome_us, external_texture_placements)`. (Extracted from `render()`.)
+    /// is set: assemble the chrome stylesheet (base + roster + apparatus + utility + gloss
+    /// outline), render the shell through its persistent incremental session, time it, and
+    /// enumerate the chrome's `<external-texture>` placements. Returns
+    /// `(chrome_scene, chrome_us, external_texture_placements)`. (Extracted from `render()`;
+    /// gloss_outline_css added by the gloss-outline plan P1.)
     pub(super) fn render_chrome_scene(
         &mut self,
         w: u32,
@@ -80,6 +81,7 @@ impl crate::WindowCtx<'_> {
         roster_css: &[String],
         apparatus_css: &[String],
         utility_css: &[String],
+        gloss_outline_css: &[String],
     ) -> (netrender::Scene, u128, Vec<(u64, [f32; 4])>) {
         // Build the chrome (shell document) scene now that every folded pane — roster, the
         // list panes, and the settings panes (positioned at this frame's tile rects) — is set,
@@ -93,6 +95,7 @@ impl crate::WindowCtx<'_> {
             .chain(roster_css.iter().map(String::as_str))
             .chain(apparatus_css.iter().map(String::as_str))
             .chain(utility_css.iter().map(String::as_str))
+            .chain(gloss_outline_css.iter().map(String::as_str))
             .collect();
         let chrome_t = Instant::now();
         // C3 (cheap-path): render the chrome through its persistent `IncrementalLayout`

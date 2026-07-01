@@ -48,9 +48,11 @@ use serval_layout::IncrementalLayout;
 use serval_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
 
 mod build;
+#[cfg(test)]
+mod build_tests;
 use build::{
     build_pool_dom, build_simulation, cluster_color, dark_scene_style, dedup_edges,
-    dedup_edges_weighted, sample_graph, surface_bg,
+    dedup_edges_weighted, sample_graph, surface_bg, visible_relation_edges,
 };
 use paint_list_api::ColorF;
 

@@ -121,6 +121,30 @@ pub(crate) fn dedup_edges(graph: &Graph) -> Vec<(NodeKey, NodeKey)> {
         .collect()
 }
 
+/// The relation-cell edges that feed the layout **springs**, respecting this instance's
+/// hidden-cell visibility (swatch-primitive P5 — hiding relaxes the spring in that
+/// instance only, never graph truth). Unlike [`dedup_edges`] (one topology edge per pair,
+/// for graph-algorithm layout strategies that need plain connectivity, not weight), this
+/// keeps one `(NodeKey, NodeKey)` tuple per **visible** relation cell: a pair with three
+/// live cells pulls three times as hard as a pair with one, and hiding one cell drops the
+/// pull by exactly that cell's share. gyre stays relation-taxonomy agnostic — this
+/// multiplicity is how the orrery hands it weight without leaking `RelationSelector` into
+/// gyre's edge type.
+pub(crate) fn visible_relation_edges(
+    graph: &Graph,
+    hidden_edges: &HashSet<crate::EdgeCell>,
+) -> Vec<(NodeKey, NodeKey)> {
+    graph
+        .relations()
+        .filter(|r| {
+            !hidden_edges.contains(&crate::edge_cells::edge_cell_for_relation(
+                r.from, r.to, r.kind,
+            ))
+        })
+        .map(|r| (r.from, r.to))
+        .collect()
+}
+
 /// Like [`dedup_edges`], but each collapsed pair carries its **statement multiplicity**: the number
 /// of *statement* relations connecting it (more statements between two nodes => a heavier edge — the
 /// multigraph truth made legible). **Traversal events are excluded**: a navigation re-visit is not a
@@ -159,14 +183,16 @@ pub(crate) fn dedup_edges_weighted(graph: &Graph) -> Vec<(NodeKey, NodeKey, u32)
     edges
 }
 
-/// Build the force-directed simulation from `graph`: a body per node, the
-/// undirected de-duplicated relation pairs as the spring topology, the standard
-/// force trio (exclusion + edge-springs + a centering boundary), seeded into a
-/// tight central spiral so the first settle is visible.
+/// Build the force-directed simulation from `graph`: a body per node, one spring
+/// edge per visible relation cell as the topology (see [`visible_relation_edges`]),
+/// the standard force trio (exclusion + edge-springs + a centering boundary), seeded
+/// into a tight central spiral so the first settle is visible.
 pub(crate) fn build_simulation(graph: &Graph) -> Simulation {
     let mut sim = Simulation::new();
     sim.sync_with_graph(graph);
-    sim.sync_edges(dedup_edges(graph));
+    // No `Orrery` (and so no hidden-cell set) exists yet at construction time; the first
+    // real sync happens once session/view-intent restore runs and calls `reconcile_derived`.
+    sim.sync_edges(visible_relation_edges(graph, &HashSet::new()));
 
     sim.add_force(NodeExclusion::default());
     sim.add_force(EdgeSpring::default());
@@ -495,55 +521,4 @@ pub(crate) fn field_overlay(
         }
     }
     cmds
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn sample_graph_has_nodes_and_edges() {
-        let g = sample_graph();
-        assert_eq!(g.nodes().count(), 12, "the ring has twelve nodes");
-        assert!(g.relations().count() >= 12, "at least the ring edges");
-    }
-
-    #[test]
-    fn pool_has_a_gnode_per_node() {
-        let g = sample_graph();
-        let (_dom, gnode_of, _stage) = build_pool_dom(&g);
-        assert_eq!(
-            gnode_of.len(),
-            g.nodes().count(),
-            "the pre-materialized pool has one gnode per graph node",
-        );
-    }
-
-    #[test]
-    fn simulation_has_a_body_per_node_and_the_edge_topology() {
-        let g = sample_graph();
-        let sim = build_simulation(&g);
-        assert_eq!(sim.body_count(), 12, "one physics body per node");
-        assert!(
-            sim.edge_count() >= 12,
-            "the spring topology carries the edges"
-        );
-    }
-
-    #[test]
-    fn ticking_moves_nodes_from_the_seed() {
-        let g = sample_graph();
-        let mut sim = build_simulation(&g);
-        let before: Vec<(NodeKey, Point2D<f32>)> = sim.positions().collect();
-        for _ in 0..60 {
-            sim.tick(crate::TICK_DT);
-        }
-        let after: HashMap<NodeKey, Point2D<f32>> = sim.positions().collect();
-        let moved = before.iter().any(|(k, p0)| {
-            after
-                .get(k)
-                .is_some_and(|p1| (p1.x - p0.x).hypot(p1.y - p0.y) > 1.0)
-        });
-        assert!(moved, "the force-directed settle moves nodes off the seed");
-    }
 }

@@ -96,8 +96,12 @@ mod frame_a11y_panes;
 mod frame_ops;
 mod frame_view;
 mod gloss;
+mod gloss_outline_data;
+mod gloss_outline_view;
 mod graphlet_classifier;
 mod graphlets;
+#[cfg(test)]
+mod graphlets_tests;
 mod ime;
 mod input;
 mod inspector;

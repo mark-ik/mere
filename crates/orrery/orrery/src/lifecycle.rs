@@ -257,7 +257,8 @@ impl Orrery {
             })
             .collect();
         self.physics.sync_nodes(nodes);
-        self.physics.sync_edges(dedup_edges(&self.graph));
+        self.physics
+            .sync_edges(visible_relation_edges(&self.graph, &self.hidden_edges));
         // Re-resolve field couplings against the new node set, so a field gathers
         // nodes added after it was placed (its targets snapshot at build time).
         // (Field regions — rebuild-on-mutation / new-node capture.)

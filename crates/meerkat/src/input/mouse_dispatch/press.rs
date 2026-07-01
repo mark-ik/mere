@@ -203,15 +203,17 @@ impl WindowCtx<'_> {
             // shell document, so a left press in any of them routes through the single
             // shell hit-test + dispatch (chrome_click); chrome_activate then drains
             // whatever the hit row/button queued (roster selections, apparatus theme /
-            // engine / physics, trail recover, comms). The gloss is the one pane with
-            // bespoke handling (it focuses minimap nodes itself), so it stays its own
-            // branch below. (Phase 1, step 3 — Y-band collapse.)
+            // engine / physics, trail recover, comms). The gloss's outline third is DOM
+            // too (gloss-outline plan P1), so it routes the same way; the gloss's
+            // minimap/recent thirds keep their own bespoke handling below. (Phase 1,
+            // step 3 — Y-band collapse.)
             // A settings tile's body lives in the shell document too (it paints over
             // the workbench composite at the tile rect), so a press there routes to the
             // same shell hit-test + dispatch as the folded panes. (Settings lane P1.)
             if self.chrome_routed_leaf_at(x, y)
                 || self.settings_pane_at(x, y)
                 || self.knot_editor_pane_at(x, y)
+                || self.gloss_outline_at(x, y)
             {
                 if button == MouseButton::Left {
                     // A press near a node swatch's hull vertex begins a vertex drag
@@ -234,8 +236,11 @@ impl WindowCtx<'_> {
                 }
                 return;
             }
-            // The gloss pane consumes the press: a left click on a minimap
-            // node focuses it (shared selection with the orrery). (Gloss.)
+            // The rest of the gloss pane (minimap + recent, still bespoke Scene hit-testing —
+            // the outline third above already returned) consumes the press: a left click on a
+            // minimap or recent-list node focuses it (shared selection with the orrery). The
+            // whole-pane rect is still the right gate here (a click over the outline band never
+            // reaches this branch, since `gloss_outline_at` returned first above). (Gloss.)
             if let Some(grect) = self.gloss_leaf_rect() {
                 if x >= grect[0] && x < grect[2] && y >= grect[1] && y < grect[3] {
                     if button == MouseButton::Left {

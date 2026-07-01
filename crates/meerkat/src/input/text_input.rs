@@ -397,6 +397,37 @@ impl WindowCtx<'_> {
         }
     }
 
+    /// [`caret_field`](Self::caret_field)'s mutating twin: set the caret byte on
+    /// whichever field `node` names, via the same match — the click-to-place
+    /// primitive lands here once a pointer press has resolved DOM focus onto a
+    /// text input (see [`chrome_click`](Self::chrome_click)). The lookups run
+    /// before [`chrome_update`](WindowView::chrome_update) so the immutable `dom`
+    /// borrow they need doesn't overlap the mutable one it takes.
+    pub(crate) fn set_caret_field_byte(&mut self, node: NodeId, byte: usize, extend: bool) {
+        let focus = Some(node);
+        let comms_new_to = self.input_under_class("comms-new-to");
+        let comms_new_body = self.input_under_class("comms-new-body");
+        let comms_compose = self.input_under_class("comms-compose");
+        let knot_source = self.input_under_class("knot-editor-source");
+        let palette_open = self.view.chrome().palette_open;
+        self.view.chrome_update(move |c| {
+            let field = if focus == comms_new_to {
+                &mut c.comms_new_to
+            } else if focus == comms_new_body {
+                &mut c.comms_new_body
+            } else if focus == comms_compose {
+                &mut c.comms_draft
+            } else if focus == knot_source {
+                &mut c.knot_source
+            } else if palette_open {
+                &mut c.palette_input
+            } else {
+                &mut c.omnibar
+            };
+            field.set_caret_byte(byte, extend);
+        });
+    }
+
     /// Toggle the palette and move focus to match: into the palette query when
     /// it opens, back to the omnibar when it closes.
     pub(crate) fn toggle_palette(&mut self) {

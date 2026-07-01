@@ -456,6 +456,15 @@ impl WindowCtx<'_> {
                         });
                     self.view.request_redraw();
                 }
+                crate::roster_view::RosterIntent::ToggleGraphletFamilySelector(graphlet, family) => {
+                    self.commands
+                        .push(crate::ShellCommand::ToggleGraphletFamilySelector {
+                            graph: self.view.focused_graph,
+                            graphlet,
+                            family,
+                        });
+                    self.view.request_redraw();
+                }
                 crate::roster_view::RosterIntent::SelectField(id) => {
                     if self.orrery_mut().center_on_field(id) {
                         self.view.request_redraw();
@@ -475,6 +484,21 @@ impl WindowCtx<'_> {
                             self.view.request_redraw();
                         }
                     }
+                }
+            }
+        }
+    }
+
+    /// Apply the gloss outline row intents the shell runner's dispatch queued: a click
+    /// selects + focuses that node, mirroring the minimap's click-to-focus and the
+    /// roster's non-additive click (`Orrery::select_by_url`, the shared primitive).
+    /// (gloss-outline plan P1.)
+    pub(crate) fn drain_gloss_outline_intents(&mut self) {
+        for intent in self.view.take_gloss_outline_intents() {
+            match intent {
+                crate::gloss_outline_view::GlossOutlineIntent::Select(url) => {
+                    self.orrery_mut().select_by_url(&url);
+                    self.view.request_redraw();
                 }
             }
         }

@@ -59,6 +59,7 @@ impl WindowCtx<'_> {
             orrery_gid,
             workbench_rect,
             roster_rect,
+            gloss_rect,
             comms_rect,
             list_pane_rects,
             dividers,
@@ -81,6 +82,19 @@ impl WindowCtx<'_> {
             self.view
                 .set_roster(crate::roster::RosterSnapshot::default(), None);
         }
+        // Fold the gloss outline lens into the same shell document: the first DOM gloss
+        // section (outline rows + metrics), sized to the gloss pane's middle third; the
+        // minimap + recent list still Scene-rasterize into the remaining top/bottom
+        // thirds below (`gloss_sections` splits the same `gloss_rect` both places agree
+        // on). (gloss-outline plan P1.)
+        if let Some(grect) = gloss_rect {
+            let (_, outline_rect, _) = crate::gloss::gloss_sections(grect);
+            let snapshot = self.gloss_outline_snapshot();
+            self.view.set_gloss_outline(snapshot, Some(outline_rect));
+        } else if self.view.gloss_outline_open() {
+            self.view
+                .set_gloss_outline(crate::gloss_outline_view::GlossOutlineSnapshot::default(), None);
+        }
         // Fold the four list panes (apparatus / steward / inspector / trail) into the same
         // shell document: snapshot each open pane's items + rect into its slot before the
         // render lays the document out. Replaces the separate ListPane frames + composites.
@@ -90,7 +104,7 @@ impl WindowCtx<'_> {
         // retained `element_scroll` (the wheel drives `scroll_at`), which `emit_paint_list`
         // folds in through `merged_scroll`. The host no longer mirrors per-pane offsets into
         // `chrome_scroll` here; it carries only the scroll-into-view targets below. (Host-scroll P2.)
-        let (roster_css, apparatus_css, utility_css) = self.gather_chrome_css();
+        let (roster_css, apparatus_css, utility_css, gloss_outline_css) = self.gather_chrome_css();
         // The chrome (shell document) scene is built **after** the workbench block below,
         // not here: the folded settings panes are positioned at the workbench's tile rects,
         // which are only known once the tile surface has laid out. Rendering the shell after
@@ -141,6 +155,7 @@ impl WindowCtx<'_> {
             &roster_css,
             &apparatus_css,
             &utility_css,
+            &gloss_outline_css,
         );
         // The "last visit" snapshot card (focused, visited, not live) + the "unvisited"
         // placeholder card (focused node, no snapshot yet): both composite on their own
@@ -180,6 +195,7 @@ impl WindowCtx<'_> {
             workbench_scene,
             workbench_ghost,
             workbench_rect,
+            gloss_rect,
             cards,
             scrying_surfaces,
             snapshot_card,

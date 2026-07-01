@@ -7,7 +7,7 @@
 //! runner; the host applies graph mutations and graphlet window commands.
 
 use forme::{GraphMemberId, GraphletId};
-use kernel::graph::{FieldId, RelationSelector, SemanticSubKind};
+use kernel::graph::{EdgeFamily, FieldId, RelationSelector, SemanticSubKind};
 #[cfg(test)]
 use layout_dom_api::LayoutDom;
 #[cfg(test)]
@@ -75,6 +75,7 @@ pub enum RosterIntent {
     KeepGraphletAsSession(GraphletId),
     BranchGraphlet(GraphletId),
     OpenGraphlet(GraphletId),
+    ToggleGraphletFamilySelector(GraphletId, EdgeFamily),
 }
 
 #[derive(Default)]
@@ -544,6 +545,7 @@ mod tests {
                     binding_label: "Linked".to_string(),
                     members: vec!["A".to_string()],
                     selectors_label: "Semantic".to_string(),
+                    family_selectors: None,
                     drift_tracking: true,
                     drift_summary: "drift proposal: +1 -1".to_string(),
                     added: vec!["B".to_string()],

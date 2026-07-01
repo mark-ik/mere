@@ -6,11 +6,13 @@
 //! (binding, members, selectors, drift preview, control actions). Split out
 //! of `roster_view_parts.rs` per the 600-LOC ceiling.
 
+use kernel::graph::EdgeFamily;
 use xilem_serval::{PointerClick, clickable, el};
 
 use crate::roster::{GraphletCard, GraphletRow, RosterSubject};
+use crate::roster_data::edge_family_label;
 use crate::roster_view::{RosterIntent, RosterState, RosterView};
-use crate::roster_view_parts::{action_bar, card_row, card_shell};
+use crate::roster_view_parts::{action, action_bar, card_row, card_shell};
 
 pub(crate) fn graphlet_table(rows: &[GraphletRow]) -> Vec<RosterView> {
     let mut children: Vec<RosterView> = Vec::new();
@@ -57,6 +59,9 @@ pub(crate) fn graphlet_card(card: &GraphletCard) -> RosterView {
         rows.push(card_row(format!("members: {}", card.members.join(", "))));
     }
     rows.push(card_row(format!("selectors: {}", card.selectors_label)));
+    if let Some(families) = &card.family_selectors {
+        rows.push(family_selector_row(card.id, families));
+    }
     rows.push(card_row(if card.drift_tracking {
         "drift tracking: linked".to_string()
     } else {
@@ -89,6 +94,31 @@ fn graphlet_drift_rows(card: &GraphletCard) -> Vec<RosterView> {
         )));
     }
     rows
+}
+
+/// The family-selector chip row (a Linked graphlet only): one toggle per relation
+/// family, checked when it currently narrows the graphlet's derivation walk. Empty
+/// (all unchecked) means no filter — the derivation follows every family, per the
+/// `selectors_label` row above it. (Graphlet selector/family editing.)
+fn family_selector_row(id: forme::GraphletId, families: &[(EdgeFamily, bool)]) -> RosterView {
+    let chips: Vec<RosterView> = families
+        .iter()
+        .map(|&(family, on)| family_selector_chip(id, family, on))
+        .collect();
+    Box::new(el::<_, RosterState, ()>("div", chips).attr("class", "roster-card-actions"))
+}
+
+fn family_selector_chip(id: forme::GraphletId, family: EdgeFamily, on: bool) -> RosterView {
+    let label = if on {
+        format!("{} \u{2713}", edge_family_label(family))
+    } else {
+        edge_family_label(family).to_string()
+    };
+    action(label, move |st, ev| {
+        ev.stop_propagation();
+        st.pending
+            .push(RosterIntent::ToggleGraphletFamilySelector(id, family));
+    })
 }
 
 fn graphlet_action(

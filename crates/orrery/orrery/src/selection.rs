@@ -264,14 +264,18 @@ impl Orrery {
         !self.selected_edges.is_empty()
     }
 
-    /// Hide the currently-selected relation cells, and clear the selection. Relation-cell truth
-    /// and physics springs persist; this is display-only.
+    /// Hide the currently-selected relation cells, and clear the selection. Relation-cell
+    /// truth persists (display-only); the spring for each newly-hidden cell relaxes in
+    /// this instance only (swatch-primitive P5).
     pub fn hide_selected_edges(&mut self) -> usize {
         let mut count = 0;
         for cell in self.selected_edges.drain().collect::<Vec<_>>() {
             if self.hidden_edges.insert(cell) {
                 count += 1;
             }
+        }
+        if count > 0 {
+            self.resync_edge_springs();
         }
         count
     }
@@ -300,9 +304,13 @@ impl Orrery {
         let Some(cells) = self.edge_cells_between_members(from_id, to_id) else {
             return false;
         };
-        cells.into_iter().fold(false, |changed, cell| {
+        let changed = cells.into_iter().fold(false, |changed, cell| {
             self.hidden_edges.insert(cell) || changed
-        })
+        });
+        if changed {
+            self.resync_edge_springs();
+        }
+        changed
     }
 
     /// Hide one directed relation cell between two graph members.
@@ -312,8 +320,13 @@ impl Orrery {
         to_id: uuid::Uuid,
         selector: RelationSelector,
     ) -> bool {
-        self.edge_cell_between_members(from_id, to_id, selector)
-            .is_some_and(|cell| self.hidden_edges.insert(cell))
+        let changed = self
+            .edge_cell_between_members(from_id, to_id, selector)
+            .is_some_and(|cell| self.hidden_edges.insert(cell));
+        if changed {
+            self.resync_edge_springs();
+        }
+        changed
     }
 
     /// Reveal every hidden relation cell in the endpoint bundle between two graph members.
@@ -324,7 +337,11 @@ impl Orrery {
         let before = self.hidden_edges.len();
         self.hidden_edges
             .retain(|cell| cell.endpoint_pair() != pair);
-        self.hidden_edges.len() != before
+        let changed = self.hidden_edges.len() != before;
+        if changed {
+            self.resync_edge_springs();
+        }
+        changed
     }
 
     /// Reveal one directed relation cell between two graph members.
@@ -340,7 +357,11 @@ impl Orrery {
         ) else {
             return false;
         };
-        self.hidden_edges.remove(&EdgeCell { from, to, selector })
+        let changed = self.hidden_edges.remove(&EdgeCell { from, to, selector });
+        if changed {
+            self.resync_edge_springs();
+        }
+        changed
     }
 
     /// Hidden display-only endpoint bundles as stable graph member ids.
@@ -423,7 +444,21 @@ impl Orrery {
     pub fn show_all_edges(&mut self) -> usize {
         let count = self.hidden_edges.len();
         self.hidden_edges.clear();
+        if count > 0 {
+            self.resync_edge_springs();
+        }
         count
+    }
+
+    /// Re-sync the physics spring topology to the current visible relation-cell set and
+    /// give it a quick settle nudge. Hiding/showing a cell should relax/restore its own
+    /// spring in this instance right away, not wait for an unrelated graph mutation to
+    /// reconcile it. (Swatch-primitive P5 — hiding relaxes the spring in that instance
+    /// only; graph truth, membership, and every other instance are unaffected.)
+    fn resync_edge_springs(&mut self) {
+        self.physics
+            .sync_edges(visible_relation_edges(&self.graph, &self.hidden_edges));
+        self.settle_physics(SETTLE_TICKS / 3);
     }
 
     /// Set the per-node activation states the orrery colors its on-screen nodes

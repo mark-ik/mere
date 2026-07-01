@@ -167,6 +167,7 @@ fn graphlet_card_actions_queue_graphlet_intents() {
                 binding_label: "Linked".to_string(),
                 members: vec!["A".to_string()],
                 selectors_label: "Semantic".to_string(),
+                family_selectors: None,
                 drift_tracking: true,
                 drift_summary: "drift proposal: +1 -0".to_string(),
                 added: vec!["B".to_string()],

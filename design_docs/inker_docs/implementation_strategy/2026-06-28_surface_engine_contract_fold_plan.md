@@ -149,4 +149,23 @@ registry path. Steps 4-5 remove the bypass entirely.
   folded on (`0bee036`); grafting GL-gate (`953da76`) + welding/scrying DX12 delegation
   (`1f29bb6` / `44c785a`) pushed. Sub-trait decision settled with Mark (one `WebSurface`
   + capability descriptor; base = frame transport). Repo-edit + cross-repo gates cleared.
-  Next: phase 1 (the `WebSurface` sub-trait + `inker::Cookie`).
+- **2026-06-29** — **Phases 1-4 landed + verified** (executed in the concurrent
+  workstream, not this thread). The clean-split design shipped, not the minimal fold: base
+  `SurfaceProducer` (frames/input/lifecycle) + `WebSurface: SurfaceProducer` with an
+  `as_web_surface` upcast, a full `WebSurfaceCapabilities` descriptor (find/pdf/downloads/
+  drag/ime tiers), and a `WebSurfaceEvent` enum; nav/history/cookies/script moved onto
+  `WebSurface`. All three adapters (graft/weld/scrying-engine) impl `WebSurface`. scry's own
+  `WebSurfaceProducer` trait grew cookie get/set across every backend (wgpu-scry `27943f5`).
+  grafting grew the `EpochCachedImporter` (import-once by `resource_epoch`, per-frame
+  cache-flush *submitted*, defensive on reused-without-cache) + `close_shared_handle`
+  (wgpu-graft `0163d03`). scrying-engine fills: `translation.rs` populates `SurfaceFrame.sync`
+  as `D3d12Fence` on the explicit-fence path; the empty-poll stall recovery (600->4800) is
+  internalized inside `ScryingProducer::acquire_frame` behind the neutral `Ok(None)`. Verified
+  green: inker + 3 adapters (pulling scry) + grafting all compile; the flush submits.
+  **Remaining: phase 5 only** — the meerkat generic pool over `Box<dyn SurfaceProducer>`
+  (+ `as_web_surface` queried once per drive for the control plane), the render rewire
+  replacing `ScryingHost`/`windows_pool` and driving import through grafting's
+  `EpochCachedImporter`, and collapsing the flip's `ProducerSurface` onto `WebSurface`. Gated
+  on the live roster/gloss render churn settling (`window_view`/`render/*` dirty) and needs
+  the headed scry-shots smoke on the producer's UI thread (the fence path is scry's
+  un-exercised path; a green build won't prove the off-window tile composites non-blank).

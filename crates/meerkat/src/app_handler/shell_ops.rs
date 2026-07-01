@@ -154,6 +154,11 @@ impl Shell {
                 crate::ShellCommand::KeepGraphletAsSession { graph, graphlet } => {
                     self.keep_graphlet_as_session(graph, graphlet)
                 }
+                crate::ShellCommand::ToggleGraphletFamilySelector {
+                    graph,
+                    graphlet,
+                    family,
+                } => self.toggle_graphlet_family_selector(graph, graphlet, family),
                 crate::ShellCommand::BranchGraphlet { graph, graphlet } => {
                     if self.render_core.is_some() {
                         if let Some(branch_id) = self.branch_existing_graphlet(graph, graphlet) {

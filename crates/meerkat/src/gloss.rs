@@ -21,6 +21,26 @@ use super::text::HostText;
 const PAD: f32 = 16.0;
 /// Edge length (px) of a minimap node square.
 const NODE: f32 = 7.0;
+/// Fixed height (px) of the gloss "recent" section: a header plus a handful of rows
+/// at [`RECENT_ROW_H`], sized like [`recent_scene`] already assumes.
+const RECENT_H: f32 = 110.0;
+
+/// Split the gloss pane's rect into its three stacked sections, top to bottom:
+/// minimap (Scene), outline (DOM), recent (Scene). Recent stays fixed height; the
+/// minimap and outline flex evenly over the remainder, so the DOM outline lens
+/// (gloss-outline plan P1) and the two Scene sections agree on the same geometry
+/// every frame. Recent shrinks (never negative) on a too-short pane.
+pub fn gloss_sections(rect: [f32; 4]) -> ([f32; 4], [f32; 4], [f32; 4]) {
+    let [x0, y0, x1, y1] = rect;
+    let total_h = (y1 - y0).max(0.0);
+    let recent_h = RECENT_H.min(total_h * 0.5);
+    let remaining = total_h - recent_h;
+    let minimap_h = (remaining * 0.5).round();
+    let minimap_rect = [x0, y0, x1, y0 + minimap_h];
+    let outline_rect = [x0, y0 + minimap_h, x1, y1 - recent_h];
+    let recent_rect = [x0, y1 - recent_h, x1, y1];
+    (minimap_rect, outline_rect, recent_rect)
+}
 
 /// A chrome token at `alpha` as a premultiplied `[r, g, b, a]`.
 fn rgba(c: Color32, alpha: f32) -> [f32; 4] {

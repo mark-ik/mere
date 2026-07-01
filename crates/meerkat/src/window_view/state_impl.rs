@@ -97,6 +97,47 @@ impl WindowView {
         out
     }
 
+    /// Fold the gloss outline lens into the shell document: replace its rows + metrics +
+    /// window rect (or `None` to close it). The runner re-renders, diffing the outline
+    /// subtree into the one shell DOM, so it lays out, hit-tests, and dispatches its row
+    /// clicks with the chrome — the first DOM gloss section. (gloss-outline plan P1.)
+    pub(crate) fn set_gloss_outline(
+        &mut self,
+        snapshot: crate::gloss_outline_view::GlossOutlineSnapshot,
+        rect: Option<[f32; 4]>,
+    ) {
+        self.runner.update(|s| {
+            s.gloss_outline.rows = snapshot.rows;
+            s.gloss_outline.metrics = snapshot.metrics;
+            s.gloss_outline_rect = rect;
+        });
+    }
+
+    /// Whether the gloss outline subtree is currently in the shell document (the gloss
+    /// pane is open), so the host can skip the per-frame `set_gloss_outline` while it
+    /// stays closed. (gloss-outline plan P1.)
+    pub(crate) fn gloss_outline_open(&self) -> bool {
+        self.runner.state().gloss_outline_rect.is_some()
+    }
+
+    /// The gloss outline lens's current window rect, if the gloss pane is open — input's
+    /// DOM-routing check (a press there dispatches through the shell hit-test instead of
+    /// the gloss's bespoke minimap/recent branch). (gloss-outline plan P1.)
+    pub(crate) fn gloss_outline_rect(&self) -> Option<[f32; 4]> {
+        self.runner.state().gloss_outline_rect
+    }
+
+    /// Drain the row selections the outline's click handlers queued through the shell
+    /// runner's dispatch, for the host to apply. (gloss-outline plan P1.)
+    pub(crate) fn take_gloss_outline_intents(
+        &mut self,
+    ) -> Vec<crate::gloss_outline_view::GlossOutlineIntent> {
+        let mut out = Vec::new();
+        self.runner
+            .update(|s| out = std::mem::take(&mut s.gloss_outline.pending));
+        out
+    }
+
     /// Fold a list pane (apparatus / steward / inspector / trail) into the shell document:
     /// set its root class + items + window rect (or `None` to close it). The runner
     /// re-renders, diffing the pane subtree into the one shell DOM so it lays out, scrolls,

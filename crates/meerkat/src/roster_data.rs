@@ -330,12 +330,22 @@ impl WindowCtx<'_> {
             None if drift_tracking => "drift proposal: clean".to_string(),
             None => "drift proposal: not tracked".to_string(),
         };
+        let family_selectors = match &graphlet.binding {
+            GraphletBinding::Linked { spec } => Some(
+                crate::graphlets::EDGE_FAMILIES
+                    .iter()
+                    .map(|&family| (family, crate::graphlets::spec_has_family(spec, family)))
+                    .collect(),
+            ),
+            _ => None,
+        };
         Some(roster::GraphletCard {
             id,
             kind_label: graphlet_kind_label(graphlet.kind.as_ref()),
             binding_label: graphlet_binding_label(&graphlet.binding).to_string(),
             members: member_labels(graph, &graphlet.anchors),
             selectors_label: graphlet_selectors_label(graphlet),
+            family_selectors,
             drift_tracking,
             drift_summary,
             added: delta

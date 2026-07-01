@@ -245,3 +245,30 @@ an ad-hoc list: the format *is* the editing + export path.
   nesting / flat / empty, metrics counts / empty). **P0 done.** Next: P1, the gloss DOM section
   (render the outline + metrics as the first DOM gloss section; rows route `SelectNodeByUrl`, carry
   node color/selection).
+- **2026-07-01 (P1 landed).** meerkat took the live `glossary` dep. New: `gloss_outline_view.rs`
+  (`GlossOutlineRow` / `GlossOutlineNode` / `GlossOutlineSnapshot` / `GlossOutlineState` /
+  `GlossOutlineIntent`, the `gloss_outline_view` DOM builder, `gloss_outline_sheet` CSS) and
+  `gloss_outline_data.rs` (`WindowCtx::gloss_outline_snapshot` — enriches `glossary::outline_rows`
+  with each node row's member id + NODE_SHEET state/selection via the same `node_states()` /
+  `selected_members()` / `get_node_by_url` the workbench tabs already tint from). Folded into the
+  **same unified shell document** as the roster (`ShellState.gloss_outline` /
+  `gloss_outline_rect`, `shell_view`'s `gloss_outline` positioned subtree) rather than a standalone
+  `ViewPane` — so it hit-tests + dispatches through the one shell runner, not a bespoke rect cache.
+  `gloss.rs` gained `gloss_sections(rect) -> (minimap, outline, recent)`, replacing the old
+  58/42 minimap/recent-only split: recent stays fixed height, minimap and outline flex the
+  remainder evenly; both `render/mod.rs` (the outline's fold-in) and `render/paint.rs` (the
+  minimap/recent Scene rasterize) call the same function so the three sections never disagree on
+  geometry. Input: `WindowView::gloss_outline_rect()` + `WindowCtx::gloss_outline_at()` route a
+  press over the outline's band through `chrome_click` (DOM dispatch) ahead of the gloss's bespoke
+  minimap/recent branch in `press.rs`; `drain_gloss_outline_intents()` applies a row click via
+  `Orrery::select_by_url` — the same primitive the roster's non-additive click already used, so a
+  click's effect is identical everywhere. Structural (path-segment) rows carry no `GlossOutlineNode`
+  and render unclickable. 3 new tests in `gloss_outline_view.rs` (empty state, row rendering /
+  classes, click -> `Select` intent) via a `ViewPane` test harness mirroring `RosterPane`; full
+  `meerkat` suite (235 tests) green, no regressions. Headed-verified against a real persisted
+  session: the outline renders the metrics header (`"N nodes · N edges · N components · N
+  orphans"`) and correct host -> path -> leaf nesting (e.g. `iana.org` -> `domains` -> `Learn
+  more`); clicking a leaf row (including a depth-2 nested one) selects + focuses the node, the
+  roster's matching row highlights in lockstep (shared `selected_members()` state), and the
+  orrery's focus card appears; clicking a structural row is a confirmed no-op. **P1 done.** Next:
+  P2, the pluggable nesting axis + scope lens.

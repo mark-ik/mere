@@ -1,12 +1,18 @@
 # Swatch Primitive Plan — one configurable, embeddable projection of the graph
 
 **Date**: 2026-06-27
-**Status (2026-06-30)**: P1, P2, and P3a/b/c landed — see Progress below. P2b
+**Status (2026-07-01)**: P1, P2, and P3a/b/c landed — see Progress below. P2b
 (cartography re-layout, `Scope`/`SwatchInstance` unification) and the rest of P3's
 done condition (live projection toggle, frontier ghosts, contextual detectors,
 Linked/Astroid crystallize, chip-click crystallize) are deferred slices, still open.
-P4/P5 now have partial downstream slices through the roster/orrery relation-cell
-work, but their full done conditions remain open. P6/P7 remain unstarted. Sequence:
+P4/P5 now have further downstream slices through the roster/orrery relation-cell
+work: 2026-07-01 closed the "gyre topology and springs remain endpoint-pair
+scoped" gap (springs are now per-visible-relation-cell — see the [roster detail
+cards plan](2026-06-29_graph_object_roster_detail_cards_plan.md)'s 2026-07-01
+entry), but P4/P5's full done conditions (per-cell edge *thickness*, one shared
+element-model edge renderer between the orrery and the connections swatch, and
+the P5 `GraphDefault < GraphViewOverride < SelectionOverride` layered stack)
+remain open. P6/P7 remain unstarted. Sequence:
 **primitive-first** (Mark, 2026-06-27): P1 extract the
 generic component, P2 the connections swatch, P3 the classifier + strip, then the
 edge enrichment (P4/P5), the gloss migration (P6), and templates (P7).
@@ -176,6 +182,12 @@ element model.
 thickness is per-cell; selecting an edge resolves to its `RelationSelector`; the
 orrery and the connections swatch share the per-cell edge render.
 
+**Status (2026-06-30/2026-07-01)**: The first two clauses are done — the
+canvas fans and picks per-cell (2026-06-30 pass) and selecting a cell resolves
+to its `RelationSelector`. Still open: edge thickness is not yet per-cell
+(uniform per fan lane), and the orrery + connections swatch still render edges
+through two separate paths, not one shared element-model renderer.
+
 ### P5 — Edge visibility: the default plus non-propagating override stack
 
 Build the visibility curation (design §8): `GraphDefault` (a graph-native base, the
@@ -194,6 +206,17 @@ relate / retract) live in the strip. Field-region visibility
 else; the cell stays drawn and live in every other instance, in a selection, and in
 a Linked graphlet; a `GraphDefault` hide applies as the base everywhere; graphlet
 membership is unaffected by any hide.
+
+**Status (2026-07-01)**: The named "hiding relaxes the spring in that instance
+only" behavior is built — `orrery::build::visible_relation_edges` feeds the
+instance's `hidden_edges` into the gyre spring sync, and every hide/show
+mutator re-syncs immediately (see the [roster detail cards
+plan](2026-06-29_graph_object_roster_detail_cards_plan.md)'s 2026-07-01 entry).
+Graphlet membership is confirmed unaffected (hide/show never touches
+`derive_members`/graphlet truth). **Not built**: the `GraphDefault <
+GraphViewOverride < SelectionOverride` layered stack itself — hide/show is
+still the one session-scoped layer it always was, just now spring-aware; there
+is no graph-level default layer yet.
 
 ### P6 — Migrate the gloss minimap onto the DOM swatch
 
@@ -377,3 +400,21 @@ template renders a purpose-built UI over its own subgraph.
   per-cell, the orrery and connections swatch do not yet share one element-model
   edge renderer, and the P5 `GraphDefault < GraphViewOverride <
   SelectionOverride` stack is still unbuilt.
+- **2026-07-01 - Gyre spring topology closed the "endpoint-pair scoped" gap.**
+  The roster detail-cards plan's 2026-07-01 pass replaced the pair-deduped
+  `dedup_edges` spring feed with `visible_relation_edges`: one spring tuple per
+  **visible** relation cell (multiplicity, not a single collapsed pair edge),
+  and every hide/show mutator now re-syncs the spring set immediately instead
+  of waiting for an unrelated reconcile. This is exactly the "hiding relaxes
+  the spring in that instance only" behavior P5 named. `gyre`'s own edge type
+  is untouched by design (still `(NodeKey, NodeKey)`, taxonomy-agnostic);
+  multiplicity is how the orrery hands it weight. Graphlet family-selector
+  editing also landed (Graphlet Card chips, `SessionGraphlets::
+  toggle_family_selector`), separate from this P4/P5 edge work but closing the
+  roster plan's other named R6 item. Still open for P4/P5: per-cell edge
+  thickness, one shared element-model edge renderer between the orrery and the
+  connections swatch, and the full `GraphDefault < GraphViewOverride <
+  SelectionOverride` stack (today there is still only the one session-scoped
+  visibility layer, now spring-aware). Not headed-verified — the app's window
+  rendered at a stuck 13x13px in this session's environment; see the roster
+  plan's 2026-07-01 entry.
