@@ -1,7 +1,8 @@
 # Smolweb Host Integration Plan — the serval native lane in meerkat
 
 **Date**: 2026-06-28
-**Status**: **P1 landed 2026-06-28** (serval `1bbbfdb`, mere `476880b`). P2–P4 remain.
+**Status**: **P1 + P2 landed 2026-06-28** (serval `1bbbfdb`; mere `476880b`, `0dd0c3e`).
+P3 (input) scoped, P4 optional.
 
 **Thesis**: render a focused smolweb capsule (gemini/gopher/feed/…) in the Mere host
 through the **serval lane** — the native `smolweb-views` render we built and shipped
@@ -98,3 +99,17 @@ later).
   scripted lane). **Remaining**: P2 (host tinct → `SmolwebTheme::App`), P3 (scroll via
   the `band_y` delta → `SmolwebDocument::scroll_by`; link click → node navigation),
   P4 (optional activation rung).
+- **2026-06-28**: **P2 landed** (mere `0dd0c3e`). The smolweb lane builds
+  `SmolwebDocument` with `SmolwebTheme::App`, mapping the host theme-derived document
+  colours (`sheet.colors`) + `CARD_BG` to a `SmolwebPalette` (rgb strings), so a native
+  capsule themes like the app chrome instead of the per-site default. Rebuilt on
+  `Retheme` (the actor clears the retained doc so the new sheet re-themes). Builds green.
+- **P3 (input) — scoped; needs serval `SmolwebDocument` API.** (a) **Scroll**: the host
+  only issues `Scroll` once content exceeds the viewport, so `SmolwebDocument` must
+  expose `content_height()` (from the session's `scroll_extent` + viewport) and the
+  render branch must emit it (not `h`); the `Scroll` handler then scrolls to `band_y`
+  via `scroll_by(band_y - viewport_scroll().1)` and re-frames (`scroll_by` /
+  `viewport_scroll` already exist). (b) **Link nav**: either expose laid-out `<a>` rects
+  from `SmolwebDocument` → emit as `LinkHit` so the host's existing click→navigate path
+  fires (reuses host machinery; anchor-rect extraction is the new serval work), or add a
+  `Click` actor command → `SmolwebDocument::click_at` → a navigate. P4 unchanged.
