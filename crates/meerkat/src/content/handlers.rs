@@ -274,15 +274,23 @@ pub(crate) fn render(
     if ensure_smolweb(content) {
         let (w, h) = content.viewport;
         if let Some(doc) = content.smolweb.as_mut() {
+            // The host requests a band once it sees `content_height` exceed the
+            // viewport (`constellation::request_scroll`); scroll to the requested
+            // offset before framing, and echo it back so the host's band bookkeeping
+            // matches (mirrors the HTML lane's `band_y`/`band_h`, though here the
+            // "band" is always one viewport tall — the session scrolls, not the frame).
+            // (Smolweb host P3.)
+            let content_height = doc.content_height(w, h);
+            doc.scroll_to(content.band_y as f32);
             let scene = doc.frame(w, h);
             out.emit_update(ContentUpdate::Scene {
                 nav: content.nav,
                 viewport_gen: content.viewport_gen,
                 scene,
-                content_height: h,
+                content_height,
                 masks: Vec::new(),
                 links: Vec::new(),
-                band_y: 0,
+                band_y: content.band_y,
                 band_h: h,
             });
             return;
