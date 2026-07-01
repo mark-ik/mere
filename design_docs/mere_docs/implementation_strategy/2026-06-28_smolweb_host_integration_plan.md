@@ -155,11 +155,30 @@ later).
   `IncrementalLayout::link_rects`; 1 new test (37/37 in `serval-scripted`, incl.
   confirming a boxed anchor harvests both a text-line and a border-box rect — matches
   `link_harvest`'s own precedent, not a bug). meerkat's scripted-live render branch
-  wired the same way as smolweb's. **Verification gap, flagged honestly**: this
-  meerkat edit is **not compiled** — `meerkat --features scripted` fails on a
-  pre-existing, unrelated `icu_calendar`/`temporal_rs` version mismatch inside boa's
-  Temporal support (confirmed present on a clean stash of the edit too, so not
-  introduced here). The serval-scripted side is fully compiled and tested; the
-  meerkat side mirrors the exact already-proven smolweb pattern (same `LinkHit`
-  construction, same field) but wants a real build once that dependency break is
-  separately resolved.
+  wired the same way as smolweb's. **Verification gap at the time, since resolved**:
+  this meerkat edit could not be compiled — `meerkat --features scripted` failed on
+  an `icu_calendar`/`temporal_rs` version mismatch, which turned out **not** to be
+  boa's Temporal support at all.
+- **2026-06-28: the actual dependency break, root-caused and fixed** (serval
+  `5f50134`). `script-engine-nova` was an unconditional dependency of
+  `serval-scripted` on every 64-bit target (`[target.'cfg(...)'.dependencies]`, no
+  `optional`), even though every use of it in the crate (a Nova-specific
+  `run_script` helper, its test module) was already `#[cfg(feature =
+  "scripted-nova")]`-gated in the *code* — the crate never gated the *dependency* to
+  match. So any Boa-only consumer still compiled `nova_vm`; on a top-level workspace
+  without serval's own local-checkout override for it (mere, building meerkat), that
+  resolved the **published crates.io `nova_vm 1.0.0`**, whose `temporal_rs = "0.1.2"`
+  pin doesn't compile against the `icu_calendar` version unified into the graph —
+  nothing to do with boa's own (perfectly fine) `temporal_rs 0.2.3`. Fixed by making
+  `script-engine-nova` optional and `scripted-nova = ["dep:script-engine-nova"]`,
+  plus extending the gate onto two spots the original code-level `#[cfg]` missed
+  (`mod native`'s public `run_script` re-export — confirmed unused by any caller —
+  and a test module gated on `test`+pointer-width but not the feature). Verified:
+  default build clean (35/35 tests), `scripted-nova` clean (65/65, Nova included),
+  `pelt --features scripted`/`scripted-nova` both clean, and **the icu_calendar
+  error is completely gone from `meerkat --features scripted`**. One caveat found
+  along the way, not fixed here (out of scope, dependency-graph-independent): a
+  separate, pre-existing bug in `content/actor.rs` now surfaces — it passes a
+  `pelt_core::ResourceFetcher` where `ScriptedDocument::from_body` wants
+  `serval_scripted::ResourceFetcher`, two genuinely distinct traits. That's meerkat's
+  own fix to make.
