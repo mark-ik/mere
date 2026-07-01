@@ -118,6 +118,12 @@ the count lands in the Apparatus diagnostics buffer, not Steward's live-ops view
 
 ### E — Event log + Timeline (scoped for implementation, decision #5)
 
+**Spun out 2026-07-01** to its own plan:
+[event_log_timeline_plan](2026-07-01_event_log_timeline_plan.md) — read that doc for the current,
+code-verified implementation spec (it corrects one finding here: `apply_graph_delta` is not the mutation
+chokepoint this section implies; it has 2 real call sites, not a universal funnel). This section stays as
+the historical decision record.
+
 The substrate undo/redo and the Timeline both ride. One append-only log of graph mutations, two
 projections (eidetic R0): the **Alembic** current fold (slice C's live nodes / facets) and the
 **Timeline** historical replay. This log is local short/long-term memory, not engrams (no
