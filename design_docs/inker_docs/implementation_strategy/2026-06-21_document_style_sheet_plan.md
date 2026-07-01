@@ -63,7 +63,7 @@ document engines and emitted through parley glyph layout instead of a GTK
 | Layer | Where | State |
 |---|---|---|
 | Gemtext parse → semantic blocks | `engines/nematic/src/gemtext.rs` | clean; no styling, same separation Geopard's `gemini/src/parser.rs` keeps |
-| Document model | `inker/src/document.rs` | `DocumentBlock` (12 variants), `InlineSpan` (7 variants) |
+| Document model | `inker/src/document.rs` | `Block` (12 variants), `InlineSpan` (7 variants) |
 | Layout dispatch | [layout.rs:101-176](../../../crates/inker/document-canvas/src/layout.rs) | per-variant `render_block`; styling hardcoded at each renderer |
 | Parley wrapper | [text.rs:163-336](../../../crates/inker/document-canvas/src/text.rs) | ranged builder, glyph-run extraction, link hit-regions |
 | Style knobs | [style.rs](../../../crates/inker/document-canvas/src/style.rs) | `StyleConfig` (flat), `ColorVocabulary`, `InlineStyle` (parley brush = flags only) |
@@ -152,7 +152,7 @@ role, which is the property `ColorVocabulary`'s comment already aims at.
 `render_*` builds its `TextBaseStyle` from `sheet.resolve(role)` instead of
 fixed fields. `render_block`'s match
 ([layout.rs:107-175](../../../crates/inker/document-canvas/src/layout.rs)) is
-the one dispatch point that maps `DocumentBlock` variant → `BlockRole`. No new
+the one dispatch point that maps `Block` variant → `BlockRole`. No new
 control flow; the five hand-built `TextBaseStyle` sites become one helper.
 
 ### 3.3 Color emission

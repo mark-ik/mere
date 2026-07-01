@@ -24,7 +24,7 @@ Two things follow from that:
 1. A clip taken from a protocol-rendered tile must preserve that protocol's representation in the knot, not flatten it to plain markdown. Gopher menu items stay gopher items. Gemtext links stay gemtext links. Feed entries stay feed entries.
 2. A knot is an *aggregate* — it can mix markdown prose authored by the user with protocol blocks clipped from any number of sources. The knot is the only Mere-defined format; the protocol blocks inside it stay spec-faithful per the protocol-faithfulness rule established during the engine-layer slice (now captured in [`../../mere_docs/implementation_strategy/2026-05-09_post_engine_layer_priorities.md`](../../mere_docs/implementation_strategy/2026-05-09_post_engine_layer_priorities.md) §3).
 
-The existing v1 knot engine already uses [`DocumentBlock`](../../../crates/inker/src/document.rs)'s semantic variants (`FeedEntry`, `MetadataRow`, etc.) for the *output* of parsing. What's missing is a way for those variants — or raw gemtext / gopher / nex content — to *appear in the knot's body* and round-trip cleanly.
+The existing v1 knot engine already uses [`Block`](../../../crates/inker/src/document.rs)'s semantic variants (`FeedEntry`, `MetadataRow`, etc.) for the *output* of parsing. What's missing is a way for those variants — or raw gemtext / gopher / nex content — to *appear in the knot's body* and round-trip cleanly.
 
 ---
 
@@ -45,10 +45,10 @@ Recognised fence languages:
 | `gemtext` | Heading / Paragraph / Link / Quote / List / CodeBlock blocks | `nematic::gemtext::GemtextEngine` |
 | `gopher` | Paragraph (info merge) + Link blocks | `nematic::gopher::GopherEngine` |
 | `nex` | List of Link blocks (directory) or Paragraphs (content) | `nematic::nex::NexEngine` |
-| `feed-entry` | One `DocumentBlock::FeedEntry` block | knot-local key:value parser |
-| `feed-header` | One `DocumentBlock::FeedHeader` block | knot-local key:value parser |
-| `metadata-row` | One `DocumentBlock::MetadataRow` per non-empty line (`label: value`) | knot-local line parser |
-| `badge` | One `DocumentBlock::Badge` per non-empty line | knot-local line parser |
+| `feed-entry` | One `Block::FeedEntry` block | knot-local key:value parser |
+| `feed-header` | One `Block::FeedHeader` block | knot-local key:value parser |
+| `metadata-row` | One `Block::MetadataRow` per non-empty line (`label: value`) | knot-local line parser |
+| `badge` | One `Block::Badge` per non-empty line | knot-local line parser |
 | anything else | Unchanged — stays a `CodeBlock` with the original language hint | n/a |
 
 The unknown-tag fall-through is important: a knot embedding `python` or `rust` code blocks must keep them as code blocks, not error.
@@ -148,7 +148,7 @@ Option (b) is the right shape for clip workflows — a clipped gopher menu shoul
 
 A knot's frontmatter carries whole-document provenance: where the clip came from, when it was captured, what the trust state was. v1 keeps provenance at the document level only — individual blocks do not carry per-block source attribution.
 
-Future: per-block source URLs (which gopher selector did *this* item come from? which paragraph in the original capsule was this quote?) become useful when a knot aggregates from many sources. The slot exists in the document model already (`DocumentBlock::FeedEntry.source_url`); a more general `block.provenance` field can be added when intelligence layers need it.
+Future: per-block source URLs (which gopher selector did *this* item come from? which paragraph in the original capsule was this quote?) become useful when a knot aggregates from many sources. The slot exists in the document model already (`Block::FeedEntry.source_url`); a more general `block.provenance` field can be added when intelligence layers need it.
 
 ---
 
@@ -157,7 +157,7 @@ Future: per-block source URLs (which gopher selector did *this* item come from? 
 Two user gestures that consume this format. Both live in the future host crate (gpui / iced / etc.), not in nematic itself, but the semantics matter for what nematic must guarantee.
 
 - **Open-all-links**: the user selects an element (a paragraph, a list, a section) on a tile. The host calls `EngineDocument::outgoing_links()` over the selected blocks (or a future `selection.outgoing_links()` once selections are first-class), then spawns one new graph node per URL. Already wired today — needs only the selection gesture and a "spawn from URL" action.
-- **Clip-to-knot**: the user selects an element, takes the corresponding `Vec<DocumentBlock>`, and calls a host-level `clip_to_knot(blocks, source_provenance) -> String` builder that:
+- **Clip-to-knot**: the user selects an element, takes the corresponding `Vec<Block>`, and calls a host-level `clip_to_knot(blocks, source_provenance) -> String` builder that:
   1. Serialises each block via `to_knot()` rules (FeedEntry → `feed-entry` fence, gemtext-derived blocks → `gemtext` fence with original raw, etc.).
   2. Wraps the result with frontmatter populated from the source tile's `EngineDocument.provenance`: `source = canonical_uri`, `captured = now()`, `trust = source.trust`, `source_label = source.source_kind`.
   3. Saves the knot file to Eidetic / a chosen workspace path.
@@ -292,7 +292,7 @@ express the same statements the kernel stores.**
 ### 10.5 Phased migration (additive; the shipped CommonMark knot stays working)
 
 1. **PoC (additive):** add `jotdown` (the Rust djot pull-parser); a new
-   `knot/djot.rs` parses a djot body into `DocumentBlock`s for the key constructs
+   `knot/djot.rs` parses a djot body into `Block`s for the key constructs
    (div-with-class → semantic block; definition list → `MetadataRow`; protocol
    code-fence → existing expansion; inline `rel`/`typeof` attribute → a predicate
    carried on the block/link). Behind a flag / experimental engine id; existing

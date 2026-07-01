@@ -62,7 +62,7 @@ exporters are pure and dependency-free.
   offline, denied, or pre-consent — so degradation is authored, not
   invented). Works identically in CommonMark and djot knot bodies.
 - **Parse (nematic, pure)**: both knot engines emit a new
-  `DocumentBlock::Transclusion { url, fallback }` descriptor.
+  `Block::Transclusion { url, fallback }` descriptor.
   `to_knot`/`to_markdown` round-trip it; exporters render the fallback.
 - **Resolve pass (inker, host-driven)**: an async
   `resolve_transclusions(doc, fetcher, registry, policy)` walk: policy
@@ -100,7 +100,7 @@ cycles capped; policy branches covered by tests with a stub fetcher; the
 - **Fence form**: `<lang> eval` (e.g. ` ```lua eval `) — a plain ` ```lua `
   fence stays what it is today, a code sample. Evaluation is opt-in **per
   fence** on top of the per-document trust gate.
-- **Parse (pure)** → `DocumentBlock::Evaluation { language, source }`.
+- **Parse (pure)** → `Block::Evaluation { language, source }`.
 - **Evaluate pass (host)**: an inker-level `BlockEvaluator` seam the host
   implements; first backend is **piccolo Lua** through the DOM-neutral
   ScriptEngine seam (pure Rust, no JIT constraint, the fork is in-tree,
@@ -132,7 +132,7 @@ received knot's script fences render as inert source.
   (`evaluated:<lang>`), and the full gate: `EvaluationPolicy`
   (`deny_all` floor, `for_own_notes`), a plain ` ```lua ` sample left
   untouched, denied/failed reported, source fence kept on refusal or error.
-  Same no-new-`DocumentBlock`-variant decision as K1a (the descriptor is a
+  Same no-new-`Block`-variant decision as K1a (the descriptor is a
   `CodeBlock` with `language = "lua eval"`), so inert rendering is free
   everywhere.
 - **K2b — the Lua engine already exists; do NOT build a new crate.** Survey
@@ -315,8 +315,8 @@ K-lanes read its trust state, nothing more).
   `knot-render --as gemtext` → `.gmi`. Next slice: K1.
 - **2026-06-12** — **K1a landed: the transclusion resolve pass (inker 81
   tests; nematic 157 + 3 green; rehearsed through the bin).** One design
-  deviation from the plan, recorded: **no new `DocumentBlock` variant.**
-  The blast-radius survey found exhaustive `DocumentBlock` matches across
+  deviation from the plan, recorded: **no new `Block` variant.**
+  The blast-radius survey found exhaustive `Block` matches across
   document-canvas, uxtree, gloss, and platen (meerkat's have catchalls) —
   so the descriptor *is* the existing `CodeBlock` with
   `language = "include <url>"` (the full fence info string already

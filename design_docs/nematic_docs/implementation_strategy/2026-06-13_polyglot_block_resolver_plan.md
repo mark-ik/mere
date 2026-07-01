@@ -45,7 +45,7 @@ produce":
 ```rust
 // Illustrative signature, not final.
 enum BlockResolution {
-    Blocks(Vec<DocumentBlock>),   // splice these (rendered/fetched/evaluated)
+    Blocks(Vec<Block>),   // splice these (rendered/fetched/evaluated)
     Leave,                        // not mine; pass through
     Denied(String),               // mine, but policy refused
     Failed(String),               // mine, but it errored (keep source + report)
@@ -108,8 +108,8 @@ A block whose body is a diagram description, rendered to a visual swatch.
   tie), more as backends land.
 - **Handler**: `DiagramHandler` routes a tag to a renderer that produces a
   scene (a platen canvas swatch) rather than text blocks. This is the first
-  resolver whose output is *visual*, not `DocumentBlock` text, so it needs a
-  block variant or a swatch-embedding seam (a `DocumentBlock::Canvas`-shaped
+  resolver whose output is *visual*, not `Block` text, so it needs a
+  block variant or a swatch-embedding seam (a `Block::Canvas`-shaped
   hole, decided with platen).
 - **Backend choice, no heavy native deps**: prefer pure-Rust or
   wasm-deliverable renderers (a Rust DOT layout, or the diagram engine
