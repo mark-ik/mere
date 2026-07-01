@@ -126,9 +126,9 @@ reusable.
   `nematic.knot`) and `DjotKnotEngine` (jotdown 0.10, `nematic.knot-djot`) are
   registered in `nematic::engines()` (lib.rs:97-98). `routing.rs:424-431` sends
   `text/x-knot` to the djot engine as the default grammar. `DjotKnotEngine`
-  parses the body into `Vec<DocumentBlock>`; `blocks_to_djot()` writes it back.
+  parses the body into `Vec<Block>`; `blocks_to_djot()` writes it back.
   Files: `crates/inker/engines/nematic/src/knot/djot.rs`, `knot.rs`.
-- **Portable block model.** `EngineDocument` / `DocumentBlock` / `InlineSpan`
+- **Portable block model.** `EngineDocument` / `Block` / `InlineSpan`
   (with `Link.predicate` carrying open rel IRIs), serde plus a11y mapped.
   File: `crates/inker/src/document.rs`.
 - **Export half.** `to_knot` / `to_markdown` / `to_gemini` / `to_gophermap` /
@@ -245,7 +245,7 @@ browser build the same way. The editor decorates and navigates; the engine decid
 meaning.
 
 - **jotdown is the parse for both meaning and editor structure.** It is a pure-Rust
-  djot parser. `Parser::into_offset_iter()` turns source text into `DocumentBlock`s
+  djot parser. `Parser::into_offset_iter()` turns source text into `Block`s
   (the meaning pipe: render, export, statements, graph) and into
   `(Event, Range<usize>)` byte spans (the highlight list). Its nested
   `Start(Container)` / `End(Container)` events also build a small container tree,
@@ -413,7 +413,7 @@ also the key the injection dispatch reads to pick the inner lexer. The editor ma
 those regions visible and editable, and holds the trust rule: a SelfAsserted note
 you own runs its fences per setting, received content renders inert source. The
 descriptor stays a `CodeBlock` with the fence info string (the shipped decision in
-the polyglot plans); the editor adds no new `DocumentBlock` variant.
+the polyglot plans); the editor adds no new `Block` variant.
 
 Other formats ride `sniff`. `sniff_content_type` splits knot from markdown today.
 Markdown opens through the CommonMark engine; `.txt` opens as a plain body. The
@@ -620,7 +620,7 @@ the optional tree-sitter branch (Crate decision) would land.
 **jotdown for the outer djot, a pluggable injection registry for inner languages,
 on the host's parley text widget.**
 
-- jotdown 0.10 is the one parse: source text to `DocumentBlock`s (meaning) and to
+- jotdown 0.10 is the one parse: source text to `Block`s (meaning) and to
   highlight spans plus a container tree (editor structure). Source text is the
   single source of truth. [`jotdown`](https://crates.io/crates/jotdown) is
   parse-only, so the editor never re-serializes an AST. Pure Rust, builds for
@@ -1102,9 +1102,9 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   edit mode). Context: tinct 0.1.0 + illume 0.0.1 were published earlier this session
   (see the illume plan). Starting slice 1, the `EngineDocument` → serval-view mapper.
 - **2026-06-27, slice 1 done + native-smolweb-plan alignment.** Built the
-  document-family block→view mapper (`meerkat/note_view.rs`: `DocumentBlock` /
+  document-family block→view mapper (`meerkat/note_view.rs`: `Block` /
   `InlineSpan` → xilem_serval `el` / `text`, every block + inline-span variant, 3 tests;
-  mere `0ab66a7`) and the render surface (`meerkat/note_surface.rs`: `note_scene` builds
+  mere `0ab66a7`) and the render surface (`meerkat/note_surface.rs`: `note_scene_band` builds
   the views into a `ScriptedDom` via a `ServalAppRunner`, lays out, lowers to a
   `netrender::Scene` through the chrome's `scene_from_session` path; a test renders
   `mere://welcome` end to end; mere `3d7c7ea`). The
@@ -1113,15 +1113,15 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   markdown, and reader-mode HTML all ride this one mapper (so it is not note-specific —
   its doc + eventual name should read "document-family"). The **smolweb family**
   (gemtext / gopher / feed / scroll / misfin) instead gets per-format native views in a
-  new `serval/smolweb-views`, shareable with pelt because they avoid `DocumentBlock`; so
+  new `serval/smolweb-views`, shareable with pelt because they avoid `Block`; so
   the slice-1b content integration routes only document-family content through
-  `note_scene`, never smolweb. Pending prerequisite from that plan: **`DocumentBlock::Table`**
+  `note_scene_band`, never smolweb. Pending prerequisite from that plan: **`Block::Table`**
   (the enum lacks it; both djot and markdown need it) lands as its own change — touching
-  the mapper, the round-trip exporters, and every exhaustive `DocumentBlock` match —
+  the mapper, the round-trip exporters, and every exhaustive `Block` match —
   before the live djot/markdown tile.
-- **2026-06-27, Table prerequisite done** (mere `1b29cda`). Added `DocumentBlock::Table`
+- **2026-06-27, Table prerequisite done** (mere `1b29cda`). Added `Block::Table`
   (header + rows of inline-span cells, per-column `TableAlignment`) and covered every
-  exhaustive `DocumentBlock` match across the workspace (inker render / statements /
+  exhaustive `Block` match across the workspace (inker render / statements /
   document helpers, the djot round-trip writer, uxtree a11y, document-canvas card, the
   meerkat inspector, and the `note_view` serval mapper → `<table>` / `<thead>` / `<tbody>`);
   markdown + djot pipe-table exporters, with text / gemini / gopher fallbacks. `cargo check
@@ -1135,7 +1135,7 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   `DjotKnotEngine` route renders it), a starter body for a fresh note, and open-the-note-as-a-tile
   on `knot://` navigation; `knot://` already classifies as a URL (`is_verbatim_url`) and `visit()`
   already creates-or-finds the node, so create-on-miss was free. B: the tile rasterizer gains a
-  knot lane that renders the note through serval (`note_scene`: `note_view` → `ScriptedDom` →
+  knot lane that renders the note through serval (`note_scene_band`: `note_view` → `ScriptedDom` →
   netrender) instead of document-canvas, the reframe's native web-engine path. Headed-confirmed
   before/after (scry-shots `knotnote-BEFORE-document-canvas.png` / `-AFTER-serval.png`):
   `knot://field-notes` opens a serval-rendered tile (serif `<h1>` / `<p>` on a light page) beside
@@ -1145,7 +1145,7 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   resolution.
 - **2026-06-29, status refresh before web-clip implementation.** Re-read the plan
   against the live seams after the capture/provenance membrane closed C4. Landed:
-  the document-family mapper, `DocumentBlock::Table`, inline `Node.body`, local
+  the document-family mapper, `Block::Table`, inline `Node.body`, local
   `knot://` producer, open-as-tile navigation, and serval-rendered knot note. Still
   live but superseded: the `>knot_editor` chrome panel, useful only as a scratch
   prototype until in-tile source editing replaces it. Next implementation target:
