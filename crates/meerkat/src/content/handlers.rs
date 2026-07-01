@@ -136,6 +136,40 @@ pub(crate) fn ensure_html_layout(
     true
 }
 
+/// Whether `url` is a smolweb scheme. The content actor is the focused path, so a
+/// smolweb capsule here renders through the serval lane; cards keep the separate
+/// synchronous block path. (Smolweb host P1.)
+#[cfg(feature = "smolweb")]
+fn is_smolweb_lane(url: &str) -> bool {
+    ["gemini://", "gopher://", "nex://", "finger://", "spartan://", "guppy://"]
+        .iter()
+        .any(|scheme| url.starts_with(scheme))
+}
+
+/// Build the retained [`SmolwebDocument`](pelt_desktop::SmolwebDocument) into
+/// `content.smolweb` if this is a smolweb capsule with a ready body, returning whether
+/// it is now present. v1 themes with the per-site default; P2 maps the host's tinct
+/// palette to `SmolwebTheme::App`. (Smolweb host P1.)
+#[cfg(feature = "smolweb")]
+fn ensure_smolweb(content: &mut Content) -> bool {
+    if !is_smolweb_lane(&content.url) {
+        return false;
+    }
+    if content.smolweb.is_none() {
+        let body = match &content.state {
+            Some(ContentState::Ready(fetched)) => &fetched.body,
+            // Not fetched yet: fall through to the loading card until Ready.
+            _ => return false,
+        };
+        content.smolweb = Some(pelt_desktop::SmolwebDocument::parse(
+            &content.url,
+            body,
+            pelt_desktop::SmolwebTheme::default(),
+        ));
+    }
+    true
+}
+
 /// Render `content` against the cached subresources, emitting the scene and any
 /// subresources the render newly wants. The HTML/serval lane rides the retained
 /// [`ContentLayout`] (cascade once, emit each band off it without re-cascading); the
@@ -196,6 +230,28 @@ pub(crate) fn render(
             band_h: content.band_h,
         });
         return;
+    }
+    // Serval smolweb lane: a focused smolweb capsule (gemini/gopher/feed) renders
+    // natively through `SmolwebDocument`. Like the scripted lane it scrolls internally,
+    // so it emits one viewport, not host bands (host-band scroll is P3). Falls through
+    // to the loading/document lane while the body is not yet ready. (Smolweb host P1.)
+    #[cfg(feature = "smolweb")]
+    if ensure_smolweb(content) {
+        let (w, h) = content.viewport;
+        if let Some(doc) = content.smolweb.as_mut() {
+            let scene = doc.frame(w, h);
+            out.emit_update(ContentUpdate::Scene {
+                nav: content.nav,
+                viewport_gen: content.viewport_gen,
+                scene,
+                content_height: h,
+                masks: Vec::new(),
+                links: Vec::new(),
+                band_y: 0,
+                band_h: h,
+            });
+            return;
+        }
     }
     let wanted = RefCell::new(Vec::new());
     if ensure_html_layout(content, store, registry, policy, &wanted) {

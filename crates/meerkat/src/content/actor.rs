@@ -258,6 +258,8 @@ fn run_content<S: ContentUpdateSink>(
                     script: None,
                     #[cfg(feature = "scripted")]
                     scripted_doc,
+                    #[cfg(feature = "smolweb")]
+                    smolweb: None,
                 };
                 // Run the outgoing scripted page's `deactivate` before it is
                 // dropped: navigation is a teardown, and neither ScriptInstance

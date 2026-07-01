@@ -308,6 +308,14 @@ pub(crate) struct Content {
     /// lane in `render`. (Render ladder phase 2a.)
     #[cfg(feature = "scripted")]
     scripted_doc: Option<ScriptedDocument<BoaEngine>>,
+    /// The serval smolweb lane: a focused smolweb capsule (gemini/gopher/feed) rendered
+    /// natively through pelt's `SmolwebDocument` (errand parse -> smolweb-views ->
+    /// ScriptedDom -> serval-layout). `Some` once a smolweb-scheme node's body is ready
+    /// (built lazily in `render`). It scrolls internally (like the scripted lane), so it
+    /// emits one viewport, not host bands; `frame(w, h)` re-lays-out on a viewport change,
+    /// so a resize needs no explicit clear. (Smolweb host lane P1.)
+    #[cfg(feature = "smolweb")]
+    smolweb: Option<pelt_desktop::SmolwebDocument>,
 }
 
 /// A pelt `ResourceFetcher` for the scripted rung's external `<script src>`, over the
