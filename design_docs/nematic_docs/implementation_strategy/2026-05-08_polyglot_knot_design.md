@@ -365,3 +365,13 @@ express the same statements the kernel stores.**
 Open question: keep a permanent CommonMark compat-parse mode for pasted markdown,
 or convert-on-paste markdown → djot? Likely the former (cheap; preserves "paste
 anything" for import while djot is the native author format).
+
+## Alignment — smolweb fidelity plan (2026-07-01)
+
+The semantic variants this design puts in knot bodies (`FeedEntry`, `MetadataRow`,
+`Badge`, gemtext/gopher fences) are populated from the same errand parse ASTs the
+[smolweb fidelity plan](2026-07-01_smolweb_fidelity_plan.md)'s Workstream 1 enriches.
+As feed gains content-vs-summary and enclosure, and gopher keeps its raw item-type,
+a clip that lowers a capsule into a knot carries more of the source's meaning, not
+less. The protocol-faithfulness rule this design states is what that workstream
+operationalizes at the parse layer, so the two stay in agreement.

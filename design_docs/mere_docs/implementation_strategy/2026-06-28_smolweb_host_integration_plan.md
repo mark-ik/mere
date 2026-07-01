@@ -86,6 +86,13 @@ later).
   focused tile; cards render through the separate `render_content_scene` path
   entirely, so no explicit cross-check was needed, but this is worth a second look.*
 - ~~Click→navigation~~ — resolved, see Progress (P3b landed).
+- **Trust posture (new, unresolved)**: the serval lane bypasses `Block`, so it drops
+  the `DocumentTrustState` the block/card lane carries. A spartan (unauthenticated by
+  design), gemini (TOFU), and misfin (signed sender) tile currently render with the
+  same neutral chrome. Producing trust at the errand transport, carrying it on
+  `SmolwebDocument`, and surfacing it as tile chrome is Workstream 2 of the
+  [smolweb fidelity plan](../../nematic_docs/implementation_strategy/2026-07-01_smolweb_fidelity_plan.md);
+  it lands against this plan's P3/P4.
 
 ## Progress
 

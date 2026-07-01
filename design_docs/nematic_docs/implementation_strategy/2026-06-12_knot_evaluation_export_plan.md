@@ -371,3 +371,17 @@ K-lanes read its trust state, nothing more).
   *page* fetches; the transclusion path reuses it (an `errand::Response`→
   `Fetched` map in the resolve closure), meerkat-deferred like all shell
   wiring. Next plan slice: K2 (`lua eval` script fences).
+
+## Alignment — smolweb fidelity plan (2026-07-01)
+
+Two touchpoints with the [smolweb fidelity plan](2026-07-01_smolweb_fidelity_plan.md).
+
+- **Round-trip fidelity.** The `to_gemtext` / gophermap / `to_knot` exporters are only
+  as faithful as the parse ASTs feeding them. That plan's Workstream 1 enriches those
+  ASTs (feed content-vs-summary and published-vs-updated, enclosure, guid; gopher
+  `raw_type`), so the exporters gain fields they must preserve on the round-trip rather
+  than silently drop.
+- **Trust.** K1 here already built the errand-transport TOFU half (the `set_trust_store`
+  / pin-match loop proven against the live capsule). The fidelity plan's Workstream 2
+  carries that transport trust up into the native view's tile chrome, so the card lane
+  and the focused-tile lane surface one posture.
