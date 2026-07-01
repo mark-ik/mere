@@ -1,8 +1,9 @@
 # Smolweb Host Integration Plan — the serval native lane in meerkat
 
 **Date**: 2026-06-28
-**Status**: **P1 + P2 landed 2026-06-28** (serval `1bbbfdb`; mere `476880b`, `0dd0c3e`).
-P3 (input) scoped, P4 optional.
+**Status**: **P1 + P2 + P3a landed 2026-06-28** (serval `1bbbfdb`, `0b7ca87`; mere
+`476880b`, `0dd0c3e`, `3eed418`). P3b (link nav) blocked on a pre-existing meerkat
+gap shared with the HTML lane, not smolweb-specific. P4 optional.
 
 **Thesis**: render a focused smolweb capsule (gemini/gopher/feed/…) in the Mere host
 through the **serval lane** — the native `smolweb-views` render we built and shipped
@@ -80,8 +81,10 @@ later).
 - **Focused-vs-card selection**: confirm the trigger for "focused tile → serval lane"
   vs "card → block lane" in the existing focus model (`compute_focus_cards` /
   `collect_cards`).
-- **Click→navigation**: how a serval-lane link target becomes a kernel node op
-  (existing omnibar/navigate path reused).
+- **Click→navigation (P3b, reframed)**: not smolweb-specific — a pre-existing gap the
+  HTML lane also has ("empty until Phase 5 lane parity" per `link_at`'s own comment).
+  The right fix is a shared mechanism (a `Click` actor command, or an anchor-rect
+  emission) both lanes adopt together, not a smolweb-only shortcut.
 
 ## Progress
 
@@ -104,12 +107,25 @@ later).
   colours (`sheet.colors`) + `CARD_BG` to a `SmolwebPalette` (rgb strings), so a native
   capsule themes like the app chrome instead of the per-site default. Rebuilt on
   `Retheme` (the actor clears the retained doc so the new sheet re-themes). Builds green.
-- **P3 (input) — scoped; needs serval `SmolwebDocument` API.** (a) **Scroll**: the host
-  only issues `Scroll` once content exceeds the viewport, so `SmolwebDocument` must
-  expose `content_height()` (from the session's `scroll_extent` + viewport) and the
-  render branch must emit it (not `h`); the `Scroll` handler then scrolls to `band_y`
-  via `scroll_by(band_y - viewport_scroll().1)` and re-frames (`scroll_by` /
-  `viewport_scroll` already exist). (b) **Link nav**: either expose laid-out `<a>` rects
-  from `SmolwebDocument` → emit as `LinkHit` so the host's existing click→navigate path
-  fires (reuses host machinery; anchor-rect extraction is the new serval work), or add a
-  `Click` actor command → `SmolwebDocument::click_at` → a navigate. P4 unchanged.
+- **2026-06-28**: **P3a (scroll) landed** (serval `0b7ca87`, mere `3eed418`).
+  `SmolwebDocument` gained `content_height(w, h)` (viewport height + the layout
+  session's `scroll_range` max — 2 new tests) and `scroll_to(y)` (absolute offset via
+  `set_viewport_scroll`, the counterpart to the existing delta `scroll_by`/`scroll_at`/
+  `scroll_for_key`). The smolweb render branch now reports the real content height
+  and scrolls to `content.band_y` before framing, echoing `band_y`/`band_h` back —
+  which plugs the lane into the **host's existing HTML-lane band protocol
+  unchanged**: `constellation::request_scroll` already gates on `content_height >
+  viewport` and dedupes `Scroll` commands against any Scene-based lane (it checks
+  `activation.packet.is_none()`, which is already true for smolweb), so **no
+  host-side change was needed** — only the actor-side content_height/scroll_to.
+  Builds green (smolweb feature + base).
+- **P3b (link nav) — investigated, correctly out of scope for this plan.** Checked
+  how the existing HTML/serval lane does link-click navigation, to mirror it for
+  smolweb: it does not, yet. `ConstellationOps::link_at`'s own doc comment says the
+  HTML lane's `links` list is "empty until the Phase 5 lane parity" (no
+  `ContentCommand::Click`, no anchor-rect emission exists anywhere in meerkat today).
+  So link-nav-from-content-actor is a **pre-existing meerkat gap shared by every
+  Scene-based lane** (HTML, scripted, and now smolweb), not something to invent
+  bespoke for smolweb alone — that would fork the architecture two ways right before
+  the shared fix lands. Correctly deferred to whatever lands the Phase-5 lane parity
+  (HTML and smolweb should get link nav together, one mechanism). P4 unchanged.
