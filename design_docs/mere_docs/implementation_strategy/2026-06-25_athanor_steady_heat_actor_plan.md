@@ -1,7 +1,7 @@
 # Athanor's steady-heat actor
 
 **Date**: 2026-06-25
-**Status**: P1 done (2026-06-30). Spun out of the [Alembic tail handoff](2026-06-25_alembic_tail_and_audit_polish_handoff.md)
+**Status**: P1 + P2 done (2026-07-01). Spun out of the [Alembic tail handoff](../../archive_docs/2026-06-30_completed_plans/2026-06-25_alembic_tail_and_audit_polish_handoff.md)
 B1 (slice D's remainder). Architecture: [alembic memory + engrams](../technical_architecture/2026-06-09_alembic_memory_and_engrams.md).
 
 ## Goal
@@ -66,9 +66,9 @@ up a thread + snapshot hand-off for it. The actor's reason to exist is the conso
   idle-detection); fires `run_forgetting_pass` steady-heat without a manual click. Done: with the app left
   idle past `PASS_INTERVAL`, a stale short-term node's cached content is evicted automatically and Steward's
   "Last forgetting" row (B2) updates; active use does not trigger a pass mid-interaction.
-- **P2 (consolidation pass).** *Prereq: B7 (or an archive-on-refetch path) populates `upstream` so chains
-  exist.* `propose_consolidation`/`apply_consolidation` in `athanor.rs` relating version chains; driven by
-  the same cadence. Done: two engrams of the same material gain a lineage link.
+- **P2 (consolidation pass).** ✅ **DONE 2026-07-01.** `propose_consolidation`/`apply_consolidation` in
+  `athanor.rs` relating version chains; driven by the same idle cadence as P1. Done: two engrams of the
+  same material gain a lineage link.
 - **P3 (Path B, when facet extraction lands).** `spawn_athanor` actor owns the cadence + heavy passes
   off-thread; forgetting/consolidation move behind it. Done: a heavy pass runs without dropping a frame.
 
@@ -103,3 +103,21 @@ up a thread + snapshot hand-off for it. The actor's reason to exist is the conso
   outside this slice's scope, so P1 reads `Instant::now()` each tick instead (two comparisons, cheap) and
   leaves `ControlFlow` untouched. P2 (consolidation) stays blocked on B7's lineage per the plan; P3 (Path B
   actor) stays blocked on facet extraction landing.
+- 2026-07-01: **P2 shipped**, unblocked now that B7 (engram compose) populates `upstream`. New
+  `ConsolidationProposal` + `propose_consolidation`/`apply_consolidation` in `athanor.rs`: lists engram
+  manifests (`provenance.upstream` rides on the manifest, so checking "already linked" needs no thaw),
+  thaws the newest `CONSOLIDATION_CANDIDATE_CAP` (50) *`Generated`-origin* engrams once each to build their
+  url sets, and proposes pairs whose url overlap is `>= SAME_MATERIAL_OVERLAP` (0.5, of the smaller set)
+  and aren't already named together in some other manifest's `upstream`. Restricting candidates to
+  `Generated` origin keeps composite-of-composite growth from running away — a `Derived` (already-
+  consolidated) engram is never re-proposed as a fresh pairing target. **Applying composes the pair** —
+  audited against eidetic (manifests are immutable once saved, no lighter-weight post-hoc link exists) —
+  which is content-addressed, so re-linking an already-consolidated pair on a later pass is a safe no-op,
+  not a duplicate; this is also why the "already linked" pre-filter matters (keeps a converged store from
+  re-thawing/re-composing the same settled pairs every idle tick forever). `run_consolidation_pass` (new,
+  in `export.rs` — `node_ops.rs` was already at the 600-LOC ceiling) runs right after `run_forgetting_pass`
+  in the same `maybe_run_idle_forgetting_pass` gate, so one cadence drives both per the plan; records an
+  `alembic.consolidate` diagnostic (Apparatus-visible), the same surface B2 uses for forgetting. 7 tests
+  (4 new) in `athanor.rs`, all green. Not yet surfaced in Steward beyond the diagnostic — no "last
+  consolidation" row like B2's forgetting one; a thin follow-on if it turns out to matter. P3 (Path B
+  actor) still blocked on facet extraction landing.

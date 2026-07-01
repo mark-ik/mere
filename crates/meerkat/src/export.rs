@@ -131,4 +131,61 @@ impl WindowCtx<'_> {
         }
         self.view.request_redraw();
     }
+
+    /// Run Athanor's consolidation pass (Alembic B1-P2) over the private memory
+    /// store: relate graph engrams that are successive versions of the same
+    /// material (significant url overlap) but carry no lineage link yet, by
+    /// composing each such pair — the only linking mechanism eidetic offers, since
+    /// manifests are immutable once saved. Content-addressed, so re-linking an
+    /// already-consolidated pair on a later pass is a safe no-op, not a duplicate.
+    /// Records the count as an `alembic.consolidate` diagnostic, the same surface
+    /// `run_forgetting_pass` uses — driven by the same idle cadence (B1-P1).
+    pub(super) fn run_consolidation_pass(&mut self) {
+        use session_runtime::athanor;
+        use session_runtime::graph_engram::RedactionPolicy;
+
+        let Some(store) = self.shared.content.store.as_mut() else {
+            return;
+        };
+        let proposal = match pollster::block_on(athanor::propose_consolidation(store)) {
+            Ok(proposal) => proposal,
+            Err(err) => {
+                self.shared.observability.record_diagnostic(
+                    "alembic.consolidate",
+                    super::observability::Severity::Warn,
+                    format!("Consolidation propose failed: {err}"),
+                );
+                return;
+            }
+        };
+        if proposal.is_empty() {
+            self.shared.observability.record_diagnostic(
+                "alembic.consolidate",
+                super::observability::Severity::Info,
+                "Consolidation: no unlinked version chains found".to_string(),
+            );
+            return;
+        }
+        let created_at = eidetic::Timestamp(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0),
+        );
+        let Some(store) = self.shared.content.store.as_mut() else {
+            return;
+        };
+        let linked = pollster::block_on(athanor::apply_consolidation(
+            store,
+            &proposal,
+            RedactionPolicy::default(),
+            created_at,
+        ))
+        .unwrap_or(0);
+        self.shared.observability.record_diagnostic(
+            "alembic.consolidate",
+            super::observability::Severity::Info,
+            format!("Consolidation: linked {linked} engram pair(s)"),
+        );
+    }
 }

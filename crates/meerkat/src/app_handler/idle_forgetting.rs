@@ -2,13 +2,14 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Steady-heat idle-cadence forgetting (Alembic B1, Path A): run Athanor's forgetting
-//! pass automatically once the app has sat idle a while, instead of only on the
-//! Alembic pane's manual "forget stale recent now" click. Host-side timers on `Shell`
-//! (no actor, no thread) — forgetting reads a snapshot and drops a handful of cached
-//! blobs, light enough to ride the existing `about_to_wait` tick rather than earning
-//! an armillary actor (the spun-out plan's recommendation; the actor's reason to
-//! exist is the heavier consolidation/facet passes, not forgetting alone).
+//! Steady-heat idle-cadence Athanor passes (Alembic B1, Path A): run forgetting
+//! (P1) and consolidation (P2) automatically once the app has sat idle a while,
+//! instead of only on their manual Alembic-pane triggers. Host-side timers on
+//! `Shell` (no actor, no thread) — both passes are light enough (a snapshot + a
+//! handful of evictions; a manifest list + a bounded pairwise compare) to ride the
+//! existing `about_to_wait` tick rather than earning an armillary actor (the
+//! spun-out plan's recommendation; the actor's reason to exist is the heavier
+//! facet-extraction pass, not these two). One cadence drives both, per the plan.
 
 use std::time::{Duration, Instant};
 
@@ -32,12 +33,14 @@ impl Shell {
         self.last_activity = Instant::now();
     }
 
-    /// Run Athanor's forgetting pass once the app has been idle past [`IDLE_GRACE`],
-    /// at most every [`PASS_INTERVAL`]. Called from `about_to_wait` on every tick;
-    /// cheap when not due (two `Instant` comparisons). Runs against the **primary**
-    /// window's ctx only — every pooled orrery and the content store are shared, so
-    /// one pass covers the whole session (the spun-out plan's "which orrery" note);
-    /// running it per-window would re-propose the same urls.
+    /// Run Athanor's forgetting (P1) and consolidation (P2) passes once the app has
+    /// been idle past [`IDLE_GRACE`], at most every [`PASS_INTERVAL`] — one shared
+    /// gate for both, per the plan's "driven by the same cadence". Called from
+    /// `about_to_wait` on every tick; cheap when not due (two `Instant`
+    /// comparisons). Runs against the **primary** window's ctx only — every pooled
+    /// orrery and the content store are shared, so one pass covers the whole
+    /// session (the spun-out plan's "which orrery" note); running it per-window
+    /// would re-propose the same urls / engram pairs.
     ///
     /// Does not touch the event loop's `ControlFlow`: this app already runs the
     /// winit default (`Poll`, never set to `Wait`/`WaitUntil` anywhere today), so
@@ -58,6 +61,7 @@ impl Shell {
         }
         if let Some(mut wc) = self.window_ctx(primary) {
             wc.run_forgetting_pass();
+            wc.run_consolidation_pass();
         }
         self.last_forgetting = Some(now);
     }
