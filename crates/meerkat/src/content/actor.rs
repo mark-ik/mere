@@ -291,6 +291,13 @@ fn run_content<S: ContentUpdateSink>(
             } => {
                 if let Some(content) = current.as_mut() {
                     content.sheet = sheet;
+                    // The smolweb serval lane bakes the theme into its App palette at
+                    // build time, so clear it to re-theme the capsule on the new sheet.
+                    // (Smolweb host P2.)
+                    #[cfg(feature = "smolweb")]
+                    {
+                        content.smolweb = None;
+                    }
                     // A bumped gen so the re-baked packet clears the generation gate.
                     content.viewport_gen = viewport_gen;
                     render(content, &store, &registry, &policy, out);

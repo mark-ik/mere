@@ -161,13 +161,48 @@ fn ensure_smolweb(content: &mut Content) -> bool {
             // Not fetched yet: fall through to the loading card until Ready.
             _ => return false,
         };
-        content.smolweb = Some(pelt_desktop::SmolwebDocument::parse(
-            &content.url,
-            body,
-            pelt_desktop::SmolwebTheme::default(),
-        ));
+        let theme = smolweb_app_theme(&content.sheet);
+        content.smolweb = Some(pelt_desktop::SmolwebDocument::parse(&content.url, body, theme));
     }
     true
+}
+
+/// Map the host's theme-derived document colours (+ the card background) onto a
+/// smolweb `App` palette, so a native capsule matches the app chrome instead of the
+/// per-site default. Rebuilt on `Retheme` (the content actor clears `smolweb`).
+/// (Smolweb host P2.)
+#[cfg(feature = "smolweb")]
+fn smolweb_app_theme(sheet: &document_canvas::DocumentStyleSheet) -> pelt_desktop::SmolwebTheme {
+    let c = sheet.colors;
+    let bg = crate::theme_sheets::CARD_BG;
+    // A slightly lifted background for code/pre blocks so they read against `bg`.
+    let pre = wgpu::Color {
+        r: (bg.r + 0.05).min(1.0),
+        g: (bg.g + 0.05).min(1.0),
+        b: (bg.b + 0.05).min(1.0),
+        a: 1.0,
+    };
+    pelt_desktop::SmolwebTheme::App(pelt_desktop::SmolwebPalette {
+        bg: css_wgpu(bg),
+        fg: css_rgba(c.body_text),
+        link: css_rgba(c.link_text),
+        quote: css_rgba(c.badge_text),
+        pre_bg: css_wgpu(pre),
+    })
+}
+
+/// An `rgb(...)` string from a linear `[r, g, b, a]` colour (alpha dropped).
+#[cfg(feature = "smolweb")]
+fn css_rgba(c: [f32; 4]) -> String {
+    let ch = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+    format!("rgb({}, {}, {})", ch(c[0]), ch(c[1]), ch(c[2]))
+}
+
+/// An `rgb(...)` string from a `wgpu::Color` (alpha dropped).
+#[cfg(feature = "smolweb")]
+fn css_wgpu(c: wgpu::Color) -> String {
+    let ch = |v: f64| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+    format!("rgb({}, {}, {})", ch(c.r), ch(c.g), ch(c.b))
 }
 
 /// Render `content` against the cached subresources, emitting the scene and any
