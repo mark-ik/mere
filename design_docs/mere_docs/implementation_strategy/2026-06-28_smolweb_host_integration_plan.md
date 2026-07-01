@@ -1,8 +1,7 @@
 # Smolweb Host Integration Plan — the serval native lane in meerkat
 
 **Date**: 2026-06-28
-**Status**: planning (with Mark). Design settled; meerkat code deferred to a clean
-window (concurrent meerkat edits in flight at time of writing).
+**Status**: **P1 landed 2026-06-28** (serval `1bbbfdb`, mere `476880b`). P2–P4 remain.
 
 **Thesis**: render a focused smolweb capsule (gemini/gopher/feed/…) in the Mere host
 through the **serval lane** — the native `smolweb-views` render we built and shipped
@@ -86,6 +85,16 @@ later).
 ## Progress
 
 - **2026-06-28**: Plan created. Design settled (serval lane = focused tile, block lane
-  = cards; fits the content-actor `Scene` model). meerkat implementation deferred to a
-  clean window — concurrent agent edits are live in meerkat (app_state, browse_capture,
-  command_drain, frame_ops, shell_eval, shell_new). No code yet.
+  = cards; fits the content-actor `Scene` model).
+- **2026-06-28**: **P1 landed.** `meerkat` `smolweb` feature → `pelt-desktop/smolweb`;
+  `Content` gains a retained `SmolwebDocument` (feature-gated), built lazily in the
+  content actor for a smolweb-scheme node with a ready body (`ensure_smolweb` /
+  `is_smolweb_lane` in `content/handlers.rs`); `render` frames it to one viewport and
+  emits `ContentUpdate::Scene` **exactly like the scripted lane** (internal scroll;
+  host-band scroll deferred to P3). pelt-desktop re-exports `SmolwebTheme` /
+  `SmolwebPalette` so the host can name the theme. Builds green both ways (`meerkat
+  --features smolweb` and the base build; all additions cfg-gated). serval `1bbbfdb`,
+  mere `476880b`. Compile-verified; runtime/headed check pending (mirrors the proven
+  scripted lane). **Remaining**: P2 (host tinct → `SmolwebTheme::App`), P3 (scroll via
+  the `band_y` delta → `SmolwebDocument::scroll_by`; link click → node navigation),
+  P4 (optional activation rung).
