@@ -225,13 +225,21 @@ pub(crate) fn render(
     #[cfg(feature = "scripted")]
     if let Some(doc) = content.scripted_doc.as_mut() {
         let scene = doc.frame(w, h);
+        // The link-rect table a click resolves against (ConstellationOps::link_at),
+        // read off the frame's retained cascade — the same mechanism the HTML/serval
+        // lane and the smolweb lane use, no per-click query into the live DOM.
+        let links = doc
+            .links()
+            .into_iter()
+            .map(|(url, rect)| LinkHit { rect, url })
+            .collect();
         out.emit_update(ContentUpdate::Scene {
             nav: content.nav,
             viewport_gen: content.viewport_gen,
             scene,
             content_height: h,
             masks: Vec::new(),
-            links: Vec::new(),
+            links,
             band_y: 0,
             band_h: h,
         });
