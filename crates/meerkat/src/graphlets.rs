@@ -221,6 +221,33 @@ impl SessionGraphlets {
         true
     }
 
+    /// Toggle a relation-family selector on a **Linked** graphlet's spec (Graphlet
+    /// Card selector/family editing): adds the family projection string if absent,
+    /// removes it if present. Only `Linked` carries a spec whose selectors drive
+    /// live re-derivation (`reconcile` / `preview_reconcile`); a no-op elsewhere
+    /// (`Branched`'s `parent_spec` is lineage, not an active derivation rule).
+    /// Returns whether the toggle applied.
+    pub(crate) fn toggle_family_selector(&mut self, id: GraphletId, family: EdgeFamily) -> bool {
+        let Some(g) = self.graphlets.iter_mut().find(|g| g.id == id) else {
+            return false;
+        };
+        let GraphletBinding::Linked { spec } = &mut g.binding else {
+            return false;
+        };
+        let name = edge_family_str(family);
+        match spec
+            .selectors
+            .iter()
+            .position(|s| s.eq_ignore_ascii_case(name))
+        {
+            Some(pos) => {
+                spec.selectors.remove(pos);
+            }
+            None => spec.selectors.push(name.to_string()),
+        }
+        true
+    }
+
     /// Branch an existing graphlet's current seed/roster into a new local graphlet.
     /// The parent spec is preserved when present; otherwise we derive a default spec
     /// from the first available member.
@@ -327,6 +354,37 @@ fn edge_family_from_str(name: &str) -> Option<EdgeFamily> {
         "provenance" => EdgeFamily::Provenance,
         _ => return None,
     })
+}
+
+/// Format a relation family to the opaque selector-string vocabulary
+/// [`edge_family_from_str`] parses — its inverse.
+fn edge_family_str(family: EdgeFamily) -> &'static str {
+    match family {
+        EdgeFamily::Semantic => "semantic",
+        EdgeFamily::Traversal => "traversal",
+        EdgeFamily::Containment => "containment",
+        EdgeFamily::Arrangement => "arrangement",
+        EdgeFamily::Imported => "imported",
+        EdgeFamily::Provenance => "provenance",
+    }
+}
+
+/// The relation families a Linked graphlet's spec can filter its derivation walk to
+/// (Graphlet Card selector/family editing chips).
+pub(crate) const EDGE_FAMILIES: [EdgeFamily; 6] = [
+    EdgeFamily::Semantic,
+    EdgeFamily::Traversal,
+    EdgeFamily::Containment,
+    EdgeFamily::Arrangement,
+    EdgeFamily::Imported,
+    EdgeFamily::Provenance,
+];
+
+/// Whether `family` is present in a graphlet spec's selector-string list (a Graphlet
+/// Card selector chip's checked state).
+pub(crate) fn spec_has_family(spec: &GraphletSpec, family: EdgeFamily) -> bool {
+    let name = edge_family_str(family);
+    spec.selectors.iter().any(|s| s.eq_ignore_ascii_case(name))
 }
 
 /// A minimal `GraphletSpec` for a branch whose donor carried no canonical spec: a

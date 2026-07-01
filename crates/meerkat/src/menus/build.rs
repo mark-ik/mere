@@ -57,6 +57,16 @@ impl WindowCtx<'_> {
             if self.view.context_field.is_some() {
                 items.push(ContextItem::new("Delete field", ContextAction::DeleteField));
             }
+            // A bare click on a relation cell (no node) picks the edge but leaves the
+            // node working-set empty, so this row can't ride the registry's len>=1
+            // `MenuScope::Selection` gate — it's a dynamic row like "Delete field"
+            // above. (Roster detail cards R6 — canvas/context visibility action.)
+            if self.orrery().has_selected_edges() {
+                items.push(ContextItem::new(
+                    meerkat::command::Command::HideSelectedEdge.label(),
+                    ContextAction::RunCommand(meerkat::command::Command::HideSelectedEdge.verb()),
+                ));
+            }
             // The 10 layout strategies fold under one "Layout" submenu instead of a flat tail on
             // the empty-canvas menu (the active one is ✓-marked inside). (Submenus.)
             items.push(ContextItem::with_children(

@@ -255,6 +255,23 @@ impl crate::Shell {
         }
     }
 
+    pub(crate) fn toggle_graphlet_family_selector(
+        &mut self,
+        graph: GraphId,
+        graphlet: forme::GraphletId,
+        family: kernel::graph::EdgeFamily,
+    ) {
+        let Some(session_dir) = self.graph_session_dir(graph) else {
+            return;
+        };
+        if let Some(idx) = self.graphlets.get_mut(&graph)
+            && idx.toggle_family_selector(graphlet, family)
+            && let Err(err) = idx.save(&session_dir)
+        {
+            tracing::warn!(%err, dir = ?session_dir, "failed to persist graphlet selector change");
+        }
+    }
+
     pub(crate) fn branch_existing_graphlet(
         &mut self,
         graph: GraphId,

@@ -59,6 +59,13 @@ pub(crate) enum ShellCommand {
         graph: GraphId,
         graphlet: forme::GraphletId,
     },
+    /// Toggle a relation-family selector on a Linked graphlet's spec, from the
+    /// Roster Graphlet Card (selector/family editing).
+    ToggleGraphletFamilySelector {
+        graph: GraphId,
+        graphlet: forme::GraphletId,
+        family: kernel::graph::EdgeFamily,
+    },
     /// Branch an existing graphlet and open the branch.
     BranchGraphlet {
         graph: GraphId,

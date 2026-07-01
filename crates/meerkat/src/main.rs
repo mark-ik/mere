@@ -118,6 +118,8 @@ mod roster_data;
 mod roster_facet_data;
 mod roster_facet_view;
 mod roster_view;
+mod roster_view_graphlets;
+mod roster_view_links;
 mod roster_view_parts;
 mod scene_settings;
 mod settings_lane;
