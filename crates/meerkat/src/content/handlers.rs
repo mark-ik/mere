@@ -283,13 +283,22 @@ pub(crate) fn render(
             let content_height = doc.content_height(w, h);
             doc.scroll_to(content.band_y as f32);
             let scene = doc.frame(w, h);
+            // The link-rect table a click resolves against (ConstellationOps::link_at),
+            // the same mechanism the HTML/serval lane's `harvest_link_rects` populates —
+            // full-document px, unscrolled, cached host-side; no per-click round trip.
+            // (Smolweb host P3b.)
+            let links = doc
+                .links()
+                .into_iter()
+                .map(|(url, rect)| LinkHit { rect, url })
+                .collect();
             out.emit_update(ContentUpdate::Scene {
                 nav: content.nav,
                 viewport_gen: content.viewport_gen,
                 scene,
                 content_height,
                 masks: Vec::new(),
-                links: Vec::new(),
+                links,
                 band_y: content.band_y,
                 band_h: h,
             });
