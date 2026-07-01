@@ -1,9 +1,9 @@
 # Smolweb Host Integration Plan — the serval native lane in meerkat
 
 **Date**: 2026-06-28
-**Status**: **P1 + P2 + P3a landed 2026-06-28** (serval `1bbbfdb`, `0b7ca87`; mere
-`476880b`, `0dd0c3e`, `3eed418`). P3b (link nav) blocked on a pre-existing meerkat
-gap shared with the HTML lane, not smolweb-specific. P4 optional.
+**Status**: **P1–P3 all landed 2026-06-28** (serval `1bbbfdb`, `0b7ca87`, `5c07ad5`;
+mere `476880b`, `0dd0c3e`, `3eed418`, `8dc3683`). Core integration complete
+(render, theme, scroll, link nav). P4 optional.
 
 **Thesis**: render a focused smolweb capsule (gemini/gopher/feed/…) in the Mere host
 through the **serval lane** — the native `smolweb-views` render we built and shipped
@@ -77,14 +77,15 @@ later).
 
 - **Retention shape**: where the per-tile `SmolwebDocument` lives in the actor's state
   and how navigation/resize invalidates it (mirror the HTML lane's `ContentLayout`
-  retention).
+  retention). *Settled in P1: a `Content` field, built lazily, left to `frame`'s own
+  size-change detection (no explicit invalidation needed).*
 - **Focused-vs-card selection**: confirm the trigger for "focused tile → serval lane"
   vs "card → block lane" in the existing focus model (`compute_focus_cards` /
-  `collect_cards`).
-- **Click→navigation (P3b, reframed)**: not smolweb-specific — a pre-existing gap the
-  HTML lane also has ("empty until Phase 5 lane parity" per `link_at`'s own comment).
-  The right fix is a shared mechanism (a `Click` actor command, or an anchor-rect
-  emission) both lanes adopt together, not a smolweb-only shortcut.
+  `collect_cards`). *Not yet confirmed against that model — P1's `is_smolweb_lane`
+  branches on the content actor's own dispatch, which the actor only serves for the
+  focused tile; cards render through the separate `render_content_scene` path
+  entirely, so no explicit cross-check was needed, but this is worth a second look.*
+- ~~Click→navigation~~ — resolved, see Progress (P3b landed).
 
 ## Progress
 
@@ -119,13 +120,25 @@ later).
   `activation.packet.is_none()`, which is already true for smolweb), so **no
   host-side change was needed** — only the actor-side content_height/scroll_to.
   Builds green (smolweb feature + base).
-- **P3b (link nav) — investigated, correctly out of scope for this plan.** Checked
-  how the existing HTML/serval lane does link-click navigation, to mirror it for
-  smolweb: it does not, yet. `ConstellationOps::link_at`'s own doc comment says the
-  HTML lane's `links` list is "empty until the Phase 5 lane parity" (no
-  `ContentCommand::Click`, no anchor-rect emission exists anywhere in meerkat today).
-  So link-nav-from-content-actor is a **pre-existing meerkat gap shared by every
-  Scene-based lane** (HTML, scripted, and now smolweb), not something to invent
-  bespoke for smolweb alone — that would fork the architecture two ways right before
-  the shared fix lands. Correctly deferred to whatever lands the Phase-5 lane parity
-  (HTML and smolweb should get link nav together, one mechanism). P4 unchanged.
+- **2026-06-28: P3b (link nav) — corrected and landed** (serval `5c07ad5`, mere
+  `8dc3683`). The prior entry's "empty until Phase 5 lane parity" read was a stale
+  doc comment, not the real state — a fresh investigation (dedicated agent pass,
+  cross-checked by hand) found the mechanism **already works** for the block lane
+  (`DocumentRenderPacket`'s static interaction list) and the HTML/serval lane
+  (`serval_layout::link_harvest::harvest_link_rects`, wired through
+  `ContentLayout::emit_band`, 4 passing tests). It is **not** a per-click round trip:
+  the actor harvests every `<a href>`'s hit rect once at render time, ships the list
+  alongside the scene (`ContentUpdate::Scene.links`), and the host caches + does its
+  own point-in-rect test locally (`ConstellationOps::link_at`) — the same shape
+  `ContentCommand::Find`/`FindMatches` uses for search. Only two lanes never called
+  it: scripted-live and smolweb, both hardcoding `links: Vec::new()`. The harvester
+  needs exactly the three fields `IncrementalLayout` already retains (`fragments`,
+  `built`, `text_ctx` — the same session type `SmolwebDocument` *and* the
+  scripted-live rung's `ScriptedDocument` both hold), so the fix was exposing it as
+  `IncrementalLayout::link_rects` (was `pub(crate)`) and wiring
+  `SmolwebDocument::links()` through the existing `LinkHit` field — no new
+  `ContentCommand`, no round trip, architecturally identical to the working lanes.
+  1 new serval test (8 total). Builds green. **Follow-on, not done here**: the
+  scripted-live rung (`content.scripted_doc`) has the identical gap and the identical
+  fix is now available (it retains an `IncrementalLayout` session too) — belongs to
+  the render-ladder plan's lane, not this one. P4 unchanged.
