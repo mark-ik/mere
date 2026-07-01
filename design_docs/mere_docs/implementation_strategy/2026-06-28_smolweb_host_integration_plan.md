@@ -142,3 +142,17 @@ later).
   scripted-live rung (`content.scripted_doc`) has the identical gap and the identical
   fix is now available (it retains an `IncrementalLayout` session too) — belongs to
   the render-ladder plan's lane, not this one. P4 unchanged.
+- **2026-06-28: scripted-live follow-on landed too** (serval `1856486`, mere
+  `737e0cd`). `ScriptedDocument::links()` reads the dom + retained cascade it already
+  shares with the `getComputedStyle` bridge and calls the same
+  `IncrementalLayout::link_rects`; 1 new test (37/37 in `serval-scripted`, incl.
+  confirming a boxed anchor harvests both a text-line and a border-box rect — matches
+  `link_harvest`'s own precedent, not a bug). meerkat's scripted-live render branch
+  wired the same way as smolweb's. **Verification gap, flagged honestly**: this
+  meerkat edit is **not compiled** — `meerkat --features scripted` fails on a
+  pre-existing, unrelated `icu_calendar`/`temporal_rs` version mismatch inside boa's
+  Temporal support (confirmed present on a clean stash of the edit too, so not
+  introduced here). The serval-scripted side is fully compiled and tested; the
+  meerkat side mirrors the exact already-proven smolweb pattern (same `LinkHit`
+  construction, same field) but wants a real build once that dependency break is
+  separately resolved.
