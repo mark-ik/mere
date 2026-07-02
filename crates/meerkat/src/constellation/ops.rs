@@ -491,8 +491,13 @@ impl Constellation {
         let (x, y) = (x / self.dpr, y / self.dpr);
         let activation = self.active.get(&member)?;
         // Document lane: hit-test the retained packet's interactions directly (the
-        // query API subsumes the old parallel link-rect table). HTML lane has no
-        // packet, so it walks `links` (empty until the Phase 5 lane parity).
+        // query API subsumes the old parallel link-rect table). The Scene lanes
+        // (HTML, smolweb, scripted) have no packet, so they walk `links` — the
+        // rect table each lane harvests at render time and ships on
+        // `ContentUpdate::Scene` (link_harvest / IncrementalLayout::link_rects).
+        // (A prior version of this comment said `links` was "empty until the
+        // Phase 5 lane parity"; that went stale and misled a review — every lane
+        // populates it now.)
         if let Some(packet) = &activation.packet {
             return packet.link_at(x, y);
         }

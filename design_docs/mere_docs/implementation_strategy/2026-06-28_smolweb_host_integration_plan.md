@@ -86,6 +86,20 @@ later).
   focused tile; cards render through the separate `render_content_scene` path
   entirely, so no explicit cross-check was needed, but this is worth a second look.*
 - ~~Click→navigation~~ — resolved, see Progress (P3b landed).
+- **Theme is hard-coded to App (2026-07-01 review) — contradicts the settled theming
+  design.** P2 forces `SmolwebTheme::App` unconditionally, but the agreed design
+  (native rendering plan; Mark 2026-06-28) is **Site (per-site hue) as the default**,
+  with Plain/Light/Dark/App/System as user overrides — and the
+  configurability-over-defaults rule points the same way. Pelt honors that (Site
+  default); meerkat currently forecloses it. Wants a user setting whose default is
+  revisited with Mark (Site vs App in-app is a real product question: capsule
+  identity vs chrome cohesion), not a hard-coded pick.
+- **Band-scroll cadence untested (2026-07-01 review).** The smolweb lane emits
+  `band_h = viewport height` exactly, so *any* scroll leaves the band and triggers a
+  `Scroll` round-trip + full re-frame; the HTML lane amortizes by requesting
+  taller-than-viewport bands. Never runtime-tested (the whole meerkat lane is
+  compile-verified only) — the first headed pass should watch for scroll jank, and
+  the cheap fix if it appears is emitting a taller band the way the HTML lane does.
 - **Trust posture (new, unresolved)**: the serval lane bypasses `Block`, so it drops
   the `DocumentTrustState` the block/card lane carries. A spartan (unauthenticated by
   design), gemini (TOFU), and misfin (signed sender) tile currently render with the

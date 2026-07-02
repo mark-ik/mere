@@ -62,6 +62,15 @@ misfin message (signed sender) render with the same neutral chrome. The transpor
 already knows the outcome (Phase A installs `InMemoryTofu`; a pin mismatch fails the
 load) and then discards it.
 
+**Correction (2026-07-01 review): the card lane's trust is structurally present but
+empty in practice.** Every nematic smolweb engine emits `trust:
+DocumentTrustState::Unknown` today (verified in `gemtext.rs` / `gopher.rs` / `nex.rs`
+/ `feed.rs`), so the `Block` lane *models* the posture without ever *populating* it.
+WS2 therefore has to produce trust for **both** lanes from the one transport source,
+not merely carry it into the native one; the done-condition ("same posture on card
+and focused tile") already implies this, but the audit contrast above overstates the
+card lane's current state.
+
 ---
 
 ## 2. The regime spectrum (design frame)
@@ -114,6 +123,21 @@ Channel level gains `ttl: Option<u32>` (the poll-interval hint the real Subscrib
 feature needs) and `image: Option<String>`. `feed_view` keeps showing summary+date;
 the new fields feed the article reader, the podcast affordance, and read-state.
 
+**Two flags on this workstream (2026-07-01 review):**
+
+- **Lockstep + publish timing.** These are public-struct field changes on errand,
+  breaking nematic's lowerings and `feed_view` simultaneously: one coordinated
+  cross-repo pass (errand → serval → mere) per the established push choreography.
+  And errand's manifest is publish-shaped (crates.io metadata, keywords, readme), so
+  the field set should settle through WS1 *before* any crates.io publish; churning
+  public struct fields post-publish is a semver treadmill.
+- **`content` is an HTML fragment — the article reader needs a lane decision.** Feed
+  bodies (`<content>`/`<content:encoded>`) are HTML. Rendering them inside
+  `feed_view` would pull HTML rendering into smolweb-views, against the two-family
+  split; the alternative is a cross-lane handoff (the entry card opens the article
+  via the HTML/document lane, with `content` as the offline body). Decide before the
+  article reader is built; the field itself is lane-neutral and can land first.
+
 **Gopher** ([errand/src/parse/gopher.rs](../../../../errand/src/parse/gopher.rs)):
 add `raw_type: char` to `GopherItem` so the exact item type always survives even when
 `kind` is coarse; fix the `8`/`T` inversion; add `Cso` (type 2, interactive query);
@@ -158,6 +182,15 @@ same whether shown as a card or a focused tile.
   the host maps between them at the lane boundary. Default: errand defines a minimal
   `TransportTrust`, the host maps it to `DocumentTrustState`, avoiding a new shared
   crate until a second consumer wants one.
+- **Precondition to verify (2026-07-01 review): the host's TOFU store.** errand
+  defaults to `PermissiveTofu` (accept-any) unless a store is installed; pelt's
+  fetcher installs an `InMemoryTofu`, but whether **meerkat's** fetch path does has
+  not been checked. If it does not, gemini in Mere is silently accept-any today and
+  "a gemini tile reads its TOFU pin state" has nothing to read — installing (and
+  eventually persisting) the host trust store is part of this workstream, not an
+  assumption. The card lane needs the same feed: nematic engines emit
+  `DocumentTrustState::Unknown` unconditionally (see the §1 correction), so WS2's
+  transport descriptor must reach the `EngineInput`/lowering side too.
 
 ---
 
@@ -170,7 +203,9 @@ box-shaped.
   (a `pre`-context or a CSS grid with a monospace font) so type marker, display, and
   the info ASCII-art columns align, while links stay focusable. This recovers the
   alignment without a bespoke typesetter and is unit-testable against the element
-  tree. Escalate to **B-full** (a bespoke fixed-width line layout emitting to the
+  tree. Half the ground is already held: `gopher_view` folds info runs into one
+  monospace `pre.gopher-info` today; B-lite extends that treatment to the item rows
+  rather than starting over. Escalate to **B-full** (a bespoke fixed-width line layout emitting to the
   paint list) only if terminal-precise columns demand it. Gopher is the one format
   that plausibly earns B-full.
 - **Type-7 search affordance.** Render a `Search` item as an inline query input that
