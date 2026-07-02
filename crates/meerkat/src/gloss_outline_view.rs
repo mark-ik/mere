@@ -258,6 +258,7 @@ mod tests {
     use xilem_serval::PointerClick;
 
     use super::*;
+    use kernel::graph::fixtures::GraphFixtures;
     use crate::view_pane::ViewPane;
 
     type GlossOutlineLogic = fn(&GlossOutlineState) -> GlossOutlineView;
