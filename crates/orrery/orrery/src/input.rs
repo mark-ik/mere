@@ -8,6 +8,7 @@
 
 use euclid::default::{Box2D, Point2D};
 use kernel::geometry::PortablePoint;
+use kernel::graph::apply::{self as graph_apply, GraphDelta, GraphDeltaResult, apply_graph_delta};
 use kernel::graph::{
     Coupling, CouplingId, CouplingResponse, Falloff, Field, FieldDefinition, FieldExtent, FieldId,
     NodeKey, NodeSelector, ScalarField,
@@ -325,10 +326,16 @@ impl Orrery {
     pub fn recover_node(&mut self, url: &str, title: Option<&str>, tags: &[String]) -> uuid::Uuid {
         let key = self.mint_node(None, url);
         if let Some(title) = title.filter(|t| !t.is_empty()) {
-            self.graph.set_node_title(key, title.to_string());
+            let _ = apply_graph_delta(
+                &mut self.graph,
+                GraphDelta::SetNodeTitle { key, title: title.to_string() },
+            );
         }
         for tag in tags {
-            self.graph.insert_node_tag(key, tag.clone());
+            let _ = apply_graph_delta(
+                &mut self.graph,
+                GraphDelta::InsertNodeTag { key, tag: tag.clone() },
+            );
         }
         self.graph
             .get_node(key)
@@ -373,8 +380,10 @@ impl Orrery {
             max_x: world.x + radius,
             max_y: world.y + radius,
         };
-        self.graph
-            .add_field(Field::new(id, definition).with_extent(extent));
+        let _ = apply_graph_delta(
+            &mut self.graph,
+            GraphDelta::AddField { field: Field::new(id, definition).with_extent(extent) },
+        );
         // The no-placebo gesture: a default coupling so the placed field immediately
         // *does* something — its nodes gather toward the disk's center. The disk is a
         // peak (1 at center → 0 at the radius), so `RepelFromMax` (force along +grad,
@@ -389,7 +398,7 @@ impl Orrery {
             CouplingResponse::RepelFromMax,
             DEFAULT_FIELD_STRENGTH,
         );
-        self.graph.add_coupling(coupling);
+        let _ = apply_graph_delta(&mut self.graph, GraphDelta::AddCoupling { coupling });
         // Rebuild the live coupling forces (re-resolving every coupling against the
         // current nodes) so the new field's well pulls immediately, then settle.
         // (Field regions — rebuild-on-mutation.)
@@ -410,7 +419,13 @@ impl Orrery {
     /// the field was found. Strength is graph truth, so the host persists on a
     /// change. (Field regions — strength tuning.)
     pub fn set_field_strength(&mut self, id: FieldId, strength: f32) -> bool {
-        let changed = self.graph.set_field_coupling_strength(id, strength);
+        let changed = matches!(
+            apply_graph_delta(
+                &mut self.graph,
+                GraphDelta::SetFieldCouplingStrength { field: id, strength },
+            ),
+            GraphDeltaResult::FieldChanged(true)
+        );
         if changed {
             self.rebuild_coupling_forces();
             self.settle_physics(SETTLE_TICKS);
@@ -463,12 +478,16 @@ impl Orrery {
     /// origin-less twin of [`mint_node`](Self::mint_node): no navigated-from edge,
     /// no branched history — a fresh graphlet candidate placed exactly where asked.
     fn mint_node_at(&mut self, seed: Point2D<f32>, url: &str) -> NodeKey {
-        let key = self.graph.add_node_with_id(
-            uuid::Uuid::new_v4(),
+        let key = graph_apply::add_node(
+            &mut self.graph,
+            Some(uuid::Uuid::new_v4()),
             url.to_string(),
             PortablePoint::new(seed.x, seed.y),
         );
-        self.graph.navigate_node(key, url);
+        let _ = apply_graph_delta(
+            &mut self.graph,
+            GraphDelta::NavigateNode { key, url: url.to_string() },
+        );
         self.reconcile_derived();
         self.view.set_position(key, seed);
         self.physics.seed(vec![(key, seed)]);
@@ -492,8 +511,9 @@ impl Orrery {
         // a new random id is the right one here (node_namespace_id is for convergent
         // linked-data ingest, not user-minted nodes). new_v4 works on wasm via the
         // unified uuid `js` backend.
-        let key = self.graph.add_node_with_id(
-            uuid::Uuid::new_v4(),
+        let key = graph_apply::add_node(
+            &mut self.graph,
+            Some(uuid::Uuid::new_v4()),
             url.to_string(),
             PortablePoint::new(seed.x, seed.y),
         );
@@ -501,13 +521,19 @@ impl Orrery {
         // navigated-from point) BEFORE its first visit, so that first visit
         // attaches there in the shared lineage tree (the (b) cross-node anchor).
         if let Some(origin) = origin {
-            self.graph.branch_history(key, origin);
+            let _ = apply_graph_delta(
+                &mut self.graph,
+                GraphDelta::BranchHistory { child: key, parent: origin },
+            );
         }
         // The new surface opens on `url`: seed its own history with that first
         // visit (the node is born with one page, not an empty history).
-        self.graph.navigate_node(key, url);
+        let _ = apply_graph_delta(
+            &mut self.graph,
+            GraphDelta::NavigateNode { key, url: url.to_string() },
+        );
         if let Some(origin) = origin {
-            let _ = self.graph.assert_relation(origin, key, hyperlink());
+            let _ = graph_apply::assert_relation(&mut self.graph, origin, key, hyperlink());
         }
         // Re-sync derived state (bodies, edges, node pool), then seed the new node
         // near the anchor and re-settle.

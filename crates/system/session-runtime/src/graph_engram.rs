@@ -248,6 +248,7 @@ pub async fn compose_graph_engrams(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kernel::graph::fixtures::GraphFixtures;
     use async_trait::async_trait;
     use euclid::default::Point2D;
     use kernel::persistence::PersistedNodeSessionState;

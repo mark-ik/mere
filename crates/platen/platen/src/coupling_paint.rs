@@ -182,6 +182,7 @@ pub fn paint_projection_with_visuals(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kernel::graph::fixtures::GraphFixtures;
     use cartography::projection::PositionedNode;
     use kernel::graph::{
         Coupling, CouplingId, CouplingResponse, Field, FieldDefinition, FieldId, NodeSelector,

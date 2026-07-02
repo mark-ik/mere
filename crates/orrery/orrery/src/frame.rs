@@ -675,6 +675,7 @@ mod tests {
     use crate::Orrery;
     use euclid::default::Point2D;
     use kernel::graph::Graph;
+    use kernel::graph::fixtures::GraphFixtures;
 
     fn graph_with_one_node(url: &str) -> (Graph, kernel::graph::NodeKey) {
         let mut graph = Graph::new();

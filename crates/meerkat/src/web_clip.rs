@@ -230,23 +230,38 @@ fn write_clip_node(
     if graph.get_node(source_key).is_none() {
         return ClipWriteResult { member: None };
     }
-    let clip_key = graph.add_node(clip_url.to_string(), Default::default());
-    graph.set_node_title(clip_key, clip_title(fragment));
-    graph.set_node_mime_hint(clip_key, Some("text/x-knot".to_string()));
-    let mut member = None;
-    if let Some(node) = graph.get_node_mut(clip_key) {
-        node.body = Some(fragment_to_knot(fragment));
-        member = Some(node.id);
-    }
+    use kernel::graph::apply::{self as graph_apply, GraphDelta, apply_graph_delta};
+
+    let clip_key = graph_apply::add_node(graph, None, clip_url.to_string(), Default::default());
+    let _ = apply_graph_delta(
+        graph,
+        GraphDelta::SetNodeTitle { key: clip_key, title: clip_title(fragment) },
+    );
+    let _ = apply_graph_delta(
+        graph,
+        GraphDelta::SetNodeMimeHint {
+            key: clip_key,
+            mime_hint: Some("text/x-knot".to_string()),
+        },
+    );
+    let _ = apply_graph_delta(
+        graph,
+        GraphDelta::SetNodeBody { key: clip_key, body: Some(fragment_to_knot(fragment)) },
+    );
+    let member = graph.get_node(clip_key).map(|n| n.id);
     if let Some(visual) = &fragment.visual {
-        graph.set_node_thumbnail(
-            clip_key,
-            visual.png_bytes.clone(),
-            visual.width,
-            visual.height,
+        let _ = apply_graph_delta(
+            graph,
+            GraphDelta::SetNodeThumbnail {
+                key: clip_key,
+                png_bytes: visual.png_bytes.clone(),
+                width: visual.width,
+                height: visual.height,
+            },
         );
     }
-    graph.assert_relation(
+    let _ = graph_apply::assert_relation(
+        graph,
         clip_key,
         source_key,
         EdgeAssertion::Provenance {
@@ -808,6 +823,7 @@ fn first_nonempty(values: impl IntoIterator<Item = Option<String>>) -> Option<St
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kernel::graph::fixtures::GraphFixtures;
     use kernel::graph::RelationKind;
 
     #[test]

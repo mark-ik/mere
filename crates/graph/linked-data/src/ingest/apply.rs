@@ -3,6 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 #[cfg(not(target_arch = "wasm32"))]
+use kernel::graph::apply::{self as graph_apply, GraphDelta, apply_graph_delta};
+#[cfg(not(target_arch = "wasm32"))]
 use kernel::graph::{
     EdgeAssertion, Graph, NodeKey, ProvenanceSubKind, SemanticSubKind, predicate_iri,
     sub_kind_from_iri,
@@ -64,34 +66,46 @@ pub fn apply_contribution(graph: &mut Graph, contribution: &GraphContribution) -
                 // The `@id` is the node's identity here, so mint a deterministic
                 // UUIDv5 from it: two hosts ingesting the same document agree on
                 // node ids, so a federated merge needs no reconciliation.
-                graph.add_node_with_id(
-                    Graph::node_namespace_id(&node.id),
+                graph_apply::add_node(
+                    graph,
+                    Some(Graph::node_namespace_id(&node.id)),
                     node.id.clone(),
                     Default::default(),
                 )
             });
-        if node.title.is_some() || !node.tags.is_empty() || !node.properties.is_empty() {
-            if let Some(target) = graph.get_node_mut(key) {
-                if let Some(title) = &node.title {
-                    target.title = title.clone();
-                }
-                for tag in &node.tags {
-                    target.tags.insert(tag.clone());
-                }
-                for (predicate, value) in &node.properties {
-                    let property = NodeProperty {
+        if let Some(title) = &node.title {
+            let _ = apply_graph_delta(
+                graph,
+                GraphDelta::SetNodeTitle { key, title: title.clone() },
+            );
+        }
+        for tag in &node.tags {
+            let _ = apply_graph_delta(
+                graph,
+                GraphDelta::InsertNodeTag { key, tag: tag.clone() },
+            );
+        }
+        for (predicate, value) in &node.properties {
+            let _ = apply_graph_delta(
+                graph,
+                GraphDelta::AppendNodeProperty {
+                    key,
+                    property: NodeProperty {
                         predicate: predicate.clone(),
                         value: value.clone(),
-                    };
-                    if !target.properties.contains(&property) {
-                        target.properties.push(property);
-                    }
-                }
-            }
+                    },
+                },
+            );
         }
         // `@type` IRIs become `rdf:type` classifications (kernel dedups them).
         for type_iri in &node.types {
-            graph.add_node_classification(key, rdf_type_classification(type_iri));
+            let _ = apply_graph_delta(
+                graph,
+                GraphDelta::AddNodeClassification {
+                    key,
+                    classification: rdf_type_classification(type_iri),
+                },
+            );
         }
         key_for.insert(node.id.as_str(), key);
     }
@@ -106,22 +120,26 @@ pub fn apply_contribution(graph: &mut Graph, contribution: &GraphContribution) -
         };
         let asserted = if let Some(sub_kind) = sub_kind_from_iri(&edge.predicate) {
             // Recognized: typed Semantic edge + its canonical predicate IRI.
-            let semantic_ok = graph
-                .assert_relation(
-                    from,
-                    to,
-                    EdgeAssertion::Semantic {
-                        sub_kind,
-                        label: None,
-                        decay_progress: None,
+            let semantic_ok = graph_apply::assert_relation(
+                graph,
+                from,
+                to,
+                EdgeAssertion::Semantic {
+                    sub_kind,
+                    label: None,
+                    decay_progress: None,
+                },
+            )
+            .inspect(|&key| {
+                let _ = apply_graph_delta(
+                    graph,
+                    GraphDelta::SetEdgeSemanticPredicate {
+                        edge: key,
+                        predicate: Some(predicate_iri(sub_kind).to_string()),
                     },
-                )
-                .inspect(|&key| {
-                    if let Some(payload) = graph.get_edge_mut(key) {
-                        payload.set_semantic_predicate(Some(predicate_iri(sub_kind).to_string()));
-                    }
-                })
-                .is_some();
+                );
+            })
+            .is_some();
             // A harvested hyperlink also records derivation provenance on the
             // target: it was `ExtractedFrom` the source page (capture plan C3).
             // Recorded as a node derivation (like cross-graph `CopiedFrom`), so it
@@ -129,12 +147,15 @@ pub fn apply_contribution(graph: &mut Graph, contribution: &GraphContribution) -
             // out-edges — a channel distinct from the `Hyperlink` semantic edge.
             if sub_kind == SemanticSubKind::Hyperlink {
                 if let Some(source_node) = graph.get_node(from).map(|n| n.id.to_string()) {
-                    graph.record_derivation(
-                        to,
-                        NodeDerivation {
-                            sub_kind: ProvenanceSubKind::ExtractedFrom,
-                            source_node,
-                            source_graph: None,
+                    let _ = apply_graph_delta(
+                        graph,
+                        GraphDelta::RecordNodeDerivation {
+                            key: to,
+                            derivation: NodeDerivation {
+                                sub_kind: ProvenanceSubKind::ExtractedFrom,
+                                source_node,
+                                source_graph: None,
+                            },
                         },
                     );
                 }
@@ -142,9 +163,17 @@ pub fn apply_contribution(graph: &mut Graph, contribution: &GraphContribution) -
             semantic_ok
         } else {
             // Unrecognized: an open-predicate Semantic edge (raw IRI).
-            graph
-                .assert_semantic_predicate(from, to, edge.predicate.clone())
-                .is_some()
+            matches!(
+                apply_graph_delta(
+                    graph,
+                    GraphDelta::AssertSemanticPredicate {
+                        from,
+                        to,
+                        predicate: edge.predicate.clone(),
+                    },
+                ),
+                kernel::graph::apply::GraphDeltaResult::EdgeAdded(Some(_))
+            )
         };
         if asserted {
             outcome.edges_asserted += 1;

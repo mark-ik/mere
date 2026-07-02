@@ -6,6 +6,7 @@
 //! builders). Split into a sibling file per the 600-LOC ceiling.
 
 use std::collections::{HashMap, HashSet};
+use kernel::graph::fixtures::GraphFixtures;
 
 use euclid::default::Point2D;
 use kernel::graph::{

@@ -17,4 +17,5 @@ path = "src/lib.rs"
 kernel.workspace = true
 
 [dev-dependencies]
+kernel = { workspace = true, features = ["fixtures"] }
 euclid = "0.22"

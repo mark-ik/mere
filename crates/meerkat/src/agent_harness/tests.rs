@@ -5,6 +5,7 @@
 //! Agent-harness tests.
 
 use super::*;
+use kernel::graph::fixtures::GraphFixtures;
 use accesskit::Action;
 use register_theme::theme::{THEME_ID_DARK, THEME_ID_LIGHT};
 use winit::event_loop::EventLoopProxy;

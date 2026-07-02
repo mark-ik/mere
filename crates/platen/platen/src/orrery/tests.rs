@@ -5,6 +5,7 @@
 //! Orrery projection tests.
 
 use super::*;
+use kernel::graph::fixtures::GraphFixtures;
 use kernel::graph::{
     COUPLING_VOCAB, Coupling, CouplingId, CouplingResponse, EdgeAssertion, Field,
     FieldDefinition, FieldId, NodeSelector, ScalarField, SemanticSubKind,

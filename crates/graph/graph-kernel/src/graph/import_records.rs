@@ -80,7 +80,7 @@ impl Graph {
         member_keys
     }
 
-    pub fn delete_import_record(&mut self, record_id: &str) -> bool {
+    pub(crate) fn delete_import_record(&mut self, record_id: &str) -> bool {
         let original_len = self.import_records.len();
         self.import_records
             .retain(|record| record.record_id != record_id);
@@ -91,7 +91,7 @@ impl Graph {
         true
     }
 
-    pub fn set_import_record_membership_suppressed(
+    pub(crate) fn set_import_record_membership_suppressed(
         &mut self,
         record_id: &str,
         key: NodeKey,
@@ -121,7 +121,7 @@ impl Graph {
         changed
     }
 
-    pub fn set_import_records(&mut self, mut import_records: Vec<ImportRecord>) -> bool {
+    pub(crate) fn set_import_records(&mut self, mut import_records: Vec<ImportRecord>) -> bool {
         normalize_import_records(&mut import_records);
         if self.import_records == import_records {
             return false;
@@ -217,7 +217,7 @@ impl Graph {
         self.sync_node_import_provenance_from_records();
     }
 
-    pub fn set_node_import_provenance(
+    pub(crate) fn set_node_import_provenance(
         &mut self,
         key: NodeKey,
         import_provenance: Vec<NodeImportProvenance>,

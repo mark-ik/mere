@@ -12,3 +12,6 @@ path = "src/lib.rs"
 [dependencies]
 kernel.workspace = true
 cartography.workspace = true
+
+[dev-dependencies]
+kernel = { workspace = true, features = ["fixtures"] }

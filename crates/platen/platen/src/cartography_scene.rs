@@ -330,7 +330,12 @@ pub fn project_orrery_subgraph(
     for &key in scope {
         if let Some(node) = graph.get_node(key) {
             let p = node.projected_position();
-            sub.add_node_with_id(node.id, node.url().to_string(), PortablePoint::new(p.x, p.y));
+            let _ = kernel::graph::apply::add_node(
+                &mut sub,
+                Some(node.id),
+                node.url().to_string(),
+                PortablePoint::new(p.x, p.y),
+            );
         }
     }
     // Induced edges: one per scoped pair (no self-loops), as a plain hyperlink so `relations()` (the
@@ -352,7 +357,8 @@ pub fn project_orrery_subgraph(
         else {
             continue;
         };
-        sub.assert_relation(
+        let _ = kernel::graph::apply::assert_relation(
+            &mut sub,
             sa,
             sb,
             EdgeAssertion::Semantic {
@@ -399,6 +405,7 @@ pub fn project_orrery_strategy(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kernel::graph::fixtures::GraphFixtures;
     use arrangements::adapters::PhyllotaxisAdapter;
     use kernel::geometry::PortablePoint;
     use uuid::Uuid;

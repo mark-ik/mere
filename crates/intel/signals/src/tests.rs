@@ -5,6 +5,7 @@
 //! Graph-signal tests.
 
 use super::*;
+use kernel::graph::fixtures::GraphFixtures;
 use kernel::geometry::PortablePoint;
 use kernel::graph::Graph;
 

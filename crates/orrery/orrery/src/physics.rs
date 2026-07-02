@@ -594,6 +594,7 @@ mod tests {
     use kernel::graph::Graph;
 
     use super::*;
+    use kernel::graph::fixtures::GraphFixtures;
 
     /// The actor processes a sync + settle and emits layout snapshots, then ends
     /// cleanly when the handle drops. (The physics math itself is gyre's concern;

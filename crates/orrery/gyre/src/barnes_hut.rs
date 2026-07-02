@@ -349,6 +349,7 @@ impl Quadtree {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kernel::graph::fixtures::GraphFixtures;
 
     #[test]
     fn repulsion_pushes_nearby_bodies_apart() {

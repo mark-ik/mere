@@ -176,7 +176,8 @@ pub fn apply_link_statements(
             outcome.pending_targets.push(stmt.target_url);
             continue;
         };
-        let edge = graph.assert_relation(
+        let edge = kernel::graph::apply::assert_relation(
+            graph,
             source,
             target,
             EdgeAssertion::Semantic {
@@ -186,9 +187,13 @@ pub fn apply_link_statements(
             },
         );
         if let Some(key) = edge {
-            if let Some(payload) = graph.get_edge_mut(key) {
-                payload.set_semantic_predicate(Some(predicate.to_string()));
-            }
+            let _ = kernel::graph::apply::apply_graph_delta(
+                graph,
+                kernel::graph::apply::GraphDelta::SetEdgeSemanticPredicate {
+                    edge: key,
+                    predicate: Some(predicate.to_string()),
+                },
+            );
             outcome.edges_asserted += 1;
         }
     }
@@ -198,6 +203,7 @@ pub fn apply_link_statements(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kernel::graph::fixtures::GraphFixtures;
     use crate::{DocumentProvenance, DocumentTrustState};
     use kernel::graph::RelationSelector;
 

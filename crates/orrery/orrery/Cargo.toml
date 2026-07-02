@@ -65,3 +65,6 @@ wgpu = { version = "29", default-features = false, features = ["std", "wgsl"] }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+kernel = { workspace = true, features = ["fixtures"] }

@@ -221,6 +221,7 @@ fn bounds<K>(positions: &std::collections::HashMap<K, PortablePoint>) -> (f32, f
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kernel::graph::fixtures::GraphFixtures;
     use kernel::graph::{EdgeAssertion, EdgeFamily, RelationKind, SemanticSubKind};
 
     fn hyperlink() -> EdgeAssertion {

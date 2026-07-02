@@ -55,6 +55,10 @@ pub mod edge_data;
 pub mod edge_payload;
 pub mod edge_taxonomy;
 pub mod facet_projection;
+/// Test-fixture escape hatch over the `pub(crate)` mutators (write-path
+/// migration). Feature-gated: enable `fixtures` in dev-dependencies only.
+#[cfg(feature = "fixtures")]
+pub mod fixtures;
 pub mod filter;
 pub mod history;
 pub mod identity;
@@ -325,10 +329,25 @@ impl Graph {
         self.revision = self.revision.wrapping_add(1);
     }
 
-    // Single-write-path boundary (Phase 6.5): graph topology mutators are
-    // crate-internal and intended for trusted writers (reducer + persistence
-    // replay/recovery). Other runtime/shell code paths should route through
-    // reducer intents rather than calling topology mutators directly.
+    // Single-write-path boundary (Phase 6.5 — ENFORCED as of the 2026-07-01
+    // write-path migration). Every primitive durable mutator on `Graph` is
+    // `pub(crate)`; external code routes through `apply::apply_graph_delta`
+    // (the one funnel a future recording hook — the event log — instruments).
+    // The four writer classes:
+    //   1. Primitive durable mutations (topology, relations, nav history, tags,
+    //      titles, body, media, classifications, properties, predicates,
+    //      fields/couplings, frame hints, import records) — `pub(crate)`,
+    //      reached externally only via `GraphDelta`.
+    //   2. Compound kernel operations stay `pub`: `from_snapshot`,
+    //      `cross_graph::copy_*` — kernel-authored multi-step ops over
+    //      non-delta-able inputs (`&Graph` donors); the "trusted writers".
+    //   3. Transient/runtime state stays `pub`, exempt by design:
+    //      `set_node_position` / `set_node_projected_position` (physics/view —
+    //      positions are not graph truth), `set_current_session` (per-launch
+    //      host wiring), `set_node_lifecycle` (webview runtime state).
+    //   4. Test fixtures: the `fixtures` cargo feature re-exposes the raw
+    //      mutators via `graph::fixtures::GraphFixtures` — dev-dependencies
+    //      only, never a production enable.
 
     /// The fixed namespace for the deterministic node id (see
     /// [`node_namespace_id`](Self::node_namespace_id)). Fixed forever: changing it
@@ -351,12 +370,12 @@ impl Graph {
     /// Not available on `wasm32`; use [`add_node_with_id`] with a host-provided
     /// UUID (e.g. from [`node_namespace_id`](Self::node_namespace_id)) instead.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn add_node(&mut self, url: String, position: Point2D<f32>) -> NodeKey {
+    pub(crate) fn add_node(&mut self, url: String, position: Point2D<f32>) -> NodeKey {
         self.add_node_with_id(Uuid::new_v4(), url, position)
     }
 
     /// Add a node with a pre-existing UUID.
-    pub fn add_node_with_id(&mut self, id: Uuid, url: String, position: Point2D<f32>) -> NodeKey {
+    pub(crate) fn add_node_with_id(&mut self, id: Uuid, url: String, position: Point2D<f32>) -> NodeKey {
         let now = std::time::SystemTime::now();
         let primary_address = address_from_url(&url);
         let key = self.inner.add_node(Node {
@@ -399,7 +418,7 @@ impl Graph {
     }
 
     /// Remove a node and all its connected edges
-    pub fn remove_node(&mut self, key: NodeKey) -> bool {
+    pub(crate) fn remove_node(&mut self, key: NodeKey) -> bool {
         if let Some(node) = self.inner.remove_node(key) {
             self.id_to_node.remove(&node.id);
             // The node's navigation owner is intentionally *kept* in the shared
@@ -433,7 +452,7 @@ impl Graph {
     ///
     /// Operates on the Primary claim only; aliases (when supported) stay
     /// attached. To mutate aliases, use dedicated alias methods (future).
-    pub fn update_node_url(&mut self, key: NodeKey, new_url: String) -> Option<String> {
+    pub(crate) fn update_node_url(&mut self, key: NodeKey, new_url: String) -> Option<String> {
         let node = self.inner.node_weight_mut(key)?;
         let old_url = node.primary_address().as_url_str().to_string();
         node.cached_host = cached_host_from_url(&new_url);
@@ -464,7 +483,7 @@ impl Graph {
     /// its Primary URL. No new node and no edge — the node is a browsing surface
     /// whose content changes; the graph shape does not. Cross-node lineage
     /// (the navigated-from relation) is a separate, explicit edge.
-    pub fn navigate_node(&mut self, key: NodeKey, url: &str) {
+    pub(crate) fn navigate_node(&mut self, key: NodeKey, url: &str) {
         let at_ms = Self::epoch_ms();
         if let Some(id) = self.inner.node_weight(key).map(|n| n.id) {
             self.nav.record_visit(id, url, node_lineage::TransitionKind::UrlTyped, at_ms);
@@ -479,7 +498,7 @@ impl Graph {
     /// visit — the navigated-from anchor. Call **before** the child's first
     /// [`navigate_node`](Self::navigate_node) so that first visit attaches there in
     /// the shared lineage tree (the (b) cross-node anchor; the branch-mint path).
-    pub fn branch_history(&mut self, child: NodeKey, parent: NodeKey) {
+    pub(crate) fn branch_history(&mut self, child: NodeKey, parent: NodeKey) {
         let (Some(child_id), Some(parent_id)) = (
             self.inner.node_weight(child).map(|n| n.id),
             self.inner.node_weight(parent).map(|n| n.id),
@@ -491,7 +510,7 @@ impl Graph {
 
     /// Step `key` back one visit in its own history, updating its Primary URL to
     /// the revealed page. Returns the new URL, or `None` if already at the root.
-    pub fn node_history_back(&mut self, key: NodeKey) -> Option<String> {
+    pub(crate) fn node_history_back(&mut self, key: NodeKey) -> Option<String> {
         let at_ms = Self::epoch_ms();
         let id = self.inner.node_weight(key)?.id;
         let url = self.nav.back(id, at_ms)?;
@@ -501,7 +520,7 @@ impl Graph {
 
     /// Step `key` forward one visit in its own history. Returns the new URL, or
     /// `None` if already at the tip.
-    pub fn node_history_forward(&mut self, key: NodeKey) -> Option<String> {
+    pub(crate) fn node_history_forward(&mut self, key: NodeKey) -> Option<String> {
         let at_ms = Self::epoch_ms();
         let id = self.inner.node_weight(key)?.id;
         let url = self.nav.forward(id, at_ms)?;
@@ -564,7 +583,7 @@ impl Graph {
             .unwrap_or(0)
     }
 
-    pub fn recompute_cached_hosts(&mut self) {
+    pub(crate) fn recompute_cached_hosts(&mut self) {
         for node in self.inner.node_weights_mut() {
             node.cached_host = cached_host_from_url(node.primary_address().as_url_str());
         }

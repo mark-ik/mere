@@ -212,6 +212,7 @@ fn escape(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kernel::graph::fixtures::GraphFixtures;
     use euclid::default::Point2D;
     use kernel::graph::{EdgeAssertion, Graph, SemanticSubKind};
 

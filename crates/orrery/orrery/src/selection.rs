@@ -4,7 +4,24 @@
 
 //! Selection, tagging, semantic relations, and node-state setters.
 
+use kernel::graph::Graph;
+use kernel::graph::apply::{GraphDelta, GraphDeltaResult, apply_graph_delta};
+
 use super::*;
+
+/// Retract relations through the sanctioned delta path, unwrapping the count.
+/// (Write-path migration, 2026-07-01.)
+fn retract_via_delta(
+    graph: &mut Graph,
+    from: NodeKey,
+    to: NodeKey,
+    selector: RelationSelector,
+) -> usize {
+    match apply_graph_delta(graph, GraphDelta::RetractRelations { from, to, selector }) {
+        GraphDeltaResult::EdgesRemoved(n) => n,
+        _ => 0,
+    }
+}
 
 impl Orrery {
     /// Replace the selection with just `key` (clearing any selected nodes/edges).
@@ -54,7 +71,7 @@ impl Orrery {
         }
         let key = *self.selected.iter().next()?;
         let id = self.graph.get_node(key)?.id;
-        self.graph.remove_node(key);
+        let _ = apply_graph_delta(&mut self.graph, GraphDelta::RemoveNode { key });
         self.selected.clear();
         self.selected_edges.clear();
         self.reconcile_derived();
@@ -103,13 +120,16 @@ impl Orrery {
         // already present), so we don't gate success on its return: for a clean
         // pair the relation is present afterwards either way, which is what
         // "relate these two" means. Reconcile rebuilds edges / springs.
-        self.graph.assert_relation(
-            pair[0],
-            pair[1],
-            EdgeAssertion::Semantic {
-                sub_kind,
-                label: None,
-                decay_progress: None,
+        let _ = apply_graph_delta(
+            &mut self.graph,
+            GraphDelta::AssertRelation {
+                from: pair[0],
+                to: pair[1],
+                assertion: EdgeAssertion::Semantic {
+                    sub_kind,
+                    label: None,
+                    decay_progress: None,
+                },
             },
         );
         self.reconcile_derived();
@@ -131,13 +151,16 @@ impl Orrery {
         let Some(to) = self.graph.get_node_key_by_id(to_id) else {
             return false;
         };
-        self.graph.assert_relation(
-            from,
-            to,
-            EdgeAssertion::Semantic {
-                sub_kind,
-                label: None,
-                decay_progress: None,
+        let _ = apply_graph_delta(
+            &mut self.graph,
+            GraphDelta::AssertRelation {
+                from,
+                to,
+                assertion: EdgeAssertion::Semantic {
+                    sub_kind,
+                    label: None,
+                    decay_progress: None,
+                },
             },
         );
         self.reconcile_derived();
@@ -157,7 +180,13 @@ impl Orrery {
         let keys: Vec<NodeKey> = self.selected.iter().copied().collect();
         let mut tagged = 0;
         for key in keys {
-            if self.graph.insert_node_tag(key, tag.to_string()) {
+            if matches!(
+                apply_graph_delta(
+                    &mut self.graph,
+                    GraphDelta::InsertNodeTag { key, tag: tag.to_string() },
+                ),
+                GraphDeltaResult::NodeMetadataUpdated(true)
+            ) {
                 tagged += 1;
             }
         }
@@ -171,7 +200,13 @@ impl Orrery {
         let Some(key) = self.graph.get_node_by_url(url).map(|(k, _)| k) else {
             return false;
         };
-        self.graph.insert_node_tag(key, tag.to_string())
+        matches!(
+            apply_graph_delta(
+                &mut self.graph,
+                GraphDelta::InsertNodeTag { key, tag: tag.to_string() },
+            ),
+            GraphDeltaResult::NodeMetadataUpdated(true)
+        )
     }
 
     /// Remove `tag` from the node addressed by `url`, if present (the Alembic "release"
@@ -181,7 +216,13 @@ impl Orrery {
         let Some(key) = self.graph.get_node_by_url(url).map(|(k, _)| k) else {
             return false;
         };
-        self.graph.remove_node_tag(key, tag)
+        matches!(
+            apply_graph_delta(
+                &mut self.graph,
+                GraphDelta::RemoveNodeTag { key, tag: tag.to_string() },
+            ),
+            GraphDeltaResult::NodeMetadataUpdated(true)
+        )
     }
 
     /// Retract the user-asserted semantic relation(s) on the selected edge(s) —
@@ -203,9 +244,7 @@ impl Orrery {
         // Also retract any directly-selected relation cells (the click-an-edge path).
         for cell in self.selected_edges.drain().collect::<Vec<_>>() {
             if matches!(cell.selector, RelationSelector::Semantic(_)) {
-                removed += self
-                    .graph
-                    .retract_relations(cell.from, cell.to, cell.selector);
+                removed += retract_via_delta(&mut self.graph, cell.from, cell.to, cell.selector);
             }
         }
         if removed > 0 {
@@ -229,9 +268,7 @@ impl Orrery {
             .unwrap_or_default();
         let mut removed = 0;
         for sk in sub_kinds {
-            removed += self
-                .graph
-                .retract_relations(a, b, RelationSelector::Semantic(sk));
+            removed += retract_via_delta(&mut self.graph, a, b, RelationSelector::Semantic(sk));
         }
         removed
     }
@@ -251,7 +288,7 @@ impl Orrery {
         let Some(to) = self.graph.get_node_key_by_id(to_id) else {
             return 0;
         };
-        let removed = self.graph.retract_relations(from, to, selector);
+        let removed = retract_via_delta(&mut self.graph, from, to, selector);
         if removed > 0 {
             self.reconcile_derived();
         }

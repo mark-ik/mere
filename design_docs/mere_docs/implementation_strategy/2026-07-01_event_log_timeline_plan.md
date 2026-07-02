@@ -34,20 +34,21 @@ is the one place a chosen past state crosses into slice A.
   `EdgeCommand`) whose own header comment defers `GraphMutation`/`GraphIntent` promotion to a future
   "Slice 57c", not this one. Flagging per the project's own doc-vs-code verification norm; not fixing the
   older doc here, since this plan supersedes its operative content for slice E.
-- **`GraphDelta` / `apply_graph_delta` exist, but are *not* a universal mutation chokepoint — this
-  corrects an initial research pass that assumed otherwise.** `graph-kernel/src/graph/apply.rs` does define
-  a single `apply_graph_delta(graph, delta) -> GraphDeltaResult` matching over a 22-variant `GraphDelta`
-  enum (including four `Replay*` sync variants) — a real, well-shaped single-function-many-variants design.
-  But grepping its actual call sites finds exactly **two**, both in `facet_projection.rs`. Meanwhile,
-  `orrery/src/{build,frame,input,nodes,physics,selection}.rs` alone make **95+** direct calls to kernel
-  `Graph` methods (`add_node`, `add_node_with_id`, `remove_node`, `navigate_node`, edge/tag/field setters),
-  none of them routed through `GraphDelta`. So instrumenting `apply_graph_delta` would miss the overwhelming
-  majority of real mutations. **The actual single-funnel point is each kernel `Graph` mutator's own
-  function body** (one definition, many callers) — not a call-site wrap, not the delta-apply match. This is
-  the exact pattern [B5](2026-06-25_alembic_tail_and_audit_polish_handoff.md) already used successfully:
-  `Graph::navigate_node` stamps `last_session_visited` inside its own body, so every caller gets it for
-  free regardless of which of orrery's many methods invoked it. Slice E's recording hook follows the same
-  shape.
+- **`apply_graph_delta` IS the universal mutation chokepoint — as of the
+  [write-path migration](2026-07-01_graph_write_path_migration_plan.md) (2026-07-01, same day this plan
+  was drafted).** History of this bullet: the original research found `apply_graph_delta` had exactly 2
+  real call sites against 95+ direct kernel-mutator calls from orrery alone (the Phase 6.5 boundary was
+  declared but unenforced), so this plan initially redirected the recording hook to each mutator's own
+  body. Mark then asked for the migration to be finished instead: every primitive durable mutator is now
+  `pub(crate)`, all shell/runtime code routes through `GraphDelta` (extended with 16 new variants to
+  cover the real mutation surface), and a `fixtures` feature covers test code. **So E1's recording hook
+  instruments exactly one function — `apply_graph_delta` — as the 2026-06-24 plan originally intended.**
+  Two recording caveats survive the migration, both documented in the kernel's Phase 6.5 comment: the
+  compound kernel ops (`from_snapshot`, `cross_graph::copy_*`) stay outside the delta funnel and need
+  their own recording treatment (compound events, or internal decomposition), and the transient-state
+  exemptions (positions, session counter, lifecycle) are deliberately not recorded — they are not graph
+  truth. The event log will also want per-`Graph`-instance opt-in (record the session graph, not the
+  scratch subgraphs platen/engram-thaw legitimately build through the same funnel).
 - **The tessera/cable `LogStore`** (`moothold/src/tessera/log_store.rs`, `murmuring/src/cable/log_store.rs`)
   is real, shipped, and proven (two-peer p2panda-net convergence tests pass for both). It implements
   `p2panda_store::LogStore` — a network/author/topic-shaped trait (`VerifyingKey`, topic resolution, async
@@ -114,14 +115,15 @@ chokepoint).
   undo) or extend it with an `old` field now, while it's still uncalled. Decide before E1 lands; it is
   free now and not free later. Done: the enum compiles, round-trip serializes, and a unit test applies
   each variant's own stored inverse and asserts the graph returns to its prior state.
-- **E1 (recording).** Instrument each kernel `Graph` mutator's own body (`add_node_with_id`,
-  `remove_node`, `navigate_node`, the edge-assertion/retraction methods, the field/coupling setters) to
-  push a `GraphMutation` onto an in-memory sequence — mirroring `navigate_node`'s existing
-  `last_session_visited` stamp (B5), which already proved this exact "instrument the single definition,
-  not the many callers" shape in this codebase. **Not** `apply_graph_delta` (verified: 2 call sites, not a
-  real funnel) and not a host-side hook (would miss any mutation that doesn't come from meerkat's UI, e.g.
-  a future sync-apply path). Done: every one of orrery's 95+ mutating call sites produces a logged
-  `GraphMutation` with no call site itself needing to remember to log anything.
+- **E1 (recording).** Instrument `apply_graph_delta` — since the
+  [write-path migration](2026-07-01_graph_write_path_migration_plan.md) it is the enforced single
+  external write path (every raw mutator is `pub(crate)`), so one recording hook in one function covers
+  every shell/runtime mutation with no call site needing to remember anything. Recording is a
+  per-`Graph`-instance opt-in (e.g. an `Option<recorder>` on `Graph` the host sets on the session graph
+  only), so the scratch graphs platen/engram-thaw build through the same funnel don't pollute the log.
+  The compound kernel ops (`from_snapshot`, `cross_graph::copy_*`) sit outside the funnel by design and
+  get compound-event treatment when E1 lands. Done: every mutating gesture in the live app produces a
+  logged `GraphMutation`; scratch-graph construction produces none.
 - **E1/E2 (undo/redo — ship first, no storage yet).** Undo/redo as **inverse-mutation application**
   against an in-memory cursor (not replay-from-checkpoint): undo pops the in-memory sequence and applies
   the stored inverse directly via the existing kernel mutators; redo re-applies forward; a new mutation

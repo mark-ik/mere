@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::*;
+use kernel::graph::fixtures::GraphFixtures;
 
 fn attach_and_query() {
     let mut topo = TreeTopology::<u64>::new();

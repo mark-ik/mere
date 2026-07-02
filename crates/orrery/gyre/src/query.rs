@@ -75,6 +75,7 @@ impl Simulation {
 mod tests {
     use euclid::default::{Box2D, Point2D};
     use kernel::graph::{Graph, NodeKey};
+    use kernel::graph::fixtures::GraphFixtures;
 
     use crate::Simulation;
 

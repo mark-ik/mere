@@ -4,6 +4,8 @@
 
 //! Physics/ambient scene loaders, size tiers, and focus / member / history queries.
 
+use kernel::graph::apply::{self as graph_apply, GraphDelta, apply_graph_delta};
+
 use super::*;
 
 impl Orrery {
@@ -241,7 +243,10 @@ impl Orrery {
         let Some((key, _)) = self.graph.get_node_by_id(member) else {
             return false;
         };
-        self.graph.navigate_node(key, url);
+        let _ = apply_graph_delta(
+            &mut self.graph,
+            GraphDelta::NavigateNode { key, url: url.to_string() },
+        );
         true
     }
 
@@ -249,13 +254,13 @@ impl Orrery {
     /// revealed URL (the host re-fetches / re-renders it). `None` at the root.
     pub fn member_history_back(&mut self, member: uuid::Uuid) -> Option<String> {
         let (key, _) = self.graph.get_node_by_id(member)?;
-        self.graph.node_history_back(key)
+        graph_apply::node_history_back(&mut self.graph, key)
     }
 
     /// Step `member` forward one visit in its own history. `None` at the tip.
     pub fn member_history_forward(&mut self, member: uuid::Uuid) -> Option<String> {
         let (key, _) = self.graph.get_node_by_id(member)?;
-        self.graph.node_history_forward(key)
+        graph_apply::node_history_forward(&mut self.graph, key)
     }
 
     /// Whether `member`'s history can step back (toolbar enablement).

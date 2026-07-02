@@ -354,6 +354,7 @@ pub(crate) fn segment_intersects_box(a: Point2D<f32>, b: Point2D<f32>, r: Box2D<
 mod tests {
     use euclid::default::{Box2D, Point2D};
     use kernel::graph::{Graph, NodeKey};
+    use kernel::graph::fixtures::GraphFixtures;
 
     use crate::Simulation;
 
