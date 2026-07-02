@@ -297,9 +297,9 @@ fn static_lane_leaves_the_inline_script_unrun() {
 #[cfg(feature = "scripted")]
 #[test]
 fn scripted_rung_runs_external_script() {
-    use pelt_core::ResourceFetcher;
+    use pelt_desktop::ScriptResourceFetcher;
     struct MapFetcher(std::collections::HashMap<String, Vec<u8>>);
-    impl ResourceFetcher for MapFetcher {
+    impl ScriptResourceFetcher for MapFetcher {
         fn fetch(&self, url: &str) -> Option<Vec<u8>> {
             self.0.get(url).cloned()
         }
@@ -336,9 +336,9 @@ fn scripted_rung_runs_external_script() {
 #[cfg(feature = "scripted")]
 #[test]
 fn scripted_rung_document_cookie_reaches_the_jar() {
-    use pelt_core::ResourceFetcher;
+    use pelt_desktop::ScriptResourceFetcher;
     struct NoFetch;
-    impl ResourceFetcher for NoFetch {
+    impl ScriptResourceFetcher for NoFetch {
         fn fetch(&self, _url: &str) -> Option<Vec<u8>> {
             None
         }

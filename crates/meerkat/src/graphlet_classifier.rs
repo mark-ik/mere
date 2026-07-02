@@ -128,6 +128,42 @@ fn rank(kind: GraphletKind, fit: f32, label: String) -> ShapeRank {
     ShapeRank { kind, fit, label }
 }
 
+/// A stable string tag for a shape kind, carried on the swatch chip strip's DOM
+/// (`data-shape-kind`) so a chip click can name the shape to crystallize as. The inverse is
+/// [`shape_kind_from_tag`]. (Swatch primitive — P3, chip-click crystallize.)
+pub(crate) fn shape_kind_tag(kind: &GraphletKind) -> String {
+    match kind {
+        GraphletKind::Ego { radius } => format!("ego:{radius}"),
+        GraphletKind::Corridor => "corridor".into(),
+        GraphletKind::Component => "component".into(),
+        GraphletKind::Loop => "loop".into(),
+        GraphletKind::Frontier => "frontier".into(),
+        GraphletKind::Facet => "facet".into(),
+        GraphletKind::Session => "session".into(),
+        GraphletKind::Bridge => "bridge".into(),
+        GraphletKind::WorkbenchCorrespondence => "workbench-correspondence".into(),
+    }
+}
+
+/// Parse a [`shape_kind_tag`] back to its kind; `None` for an unknown tag (a stale DOM
+/// attribute never panics the input path).
+pub(crate) fn shape_kind_from_tag(tag: &str) -> Option<GraphletKind> {
+    Some(match tag {
+        "corridor" => GraphletKind::Corridor,
+        "component" => GraphletKind::Component,
+        "loop" => GraphletKind::Loop,
+        "frontier" => GraphletKind::Frontier,
+        "facet" => GraphletKind::Facet,
+        "session" => GraphletKind::Session,
+        "bridge" => GraphletKind::Bridge,
+        "workbench-correspondence" => GraphletKind::WorkbenchCorrespondence,
+        _ => {
+            let radius = tag.strip_prefix("ego:")?.parse().ok()?;
+            GraphletKind::Ego { radius }
+        }
+    })
+}
+
 /// Whether the `n`-node graph (by adjacency) is a single connected component.
 fn is_connected(n: usize, adj: &[Vec<usize>]) -> bool {
     if n <= 1 {
@@ -195,5 +231,30 @@ mod tests {
     #[test]
     fn two_connected_nodes_are_a_trivial_corridor() {
         assert_eq!(top(2, &[(0, 1)]), GraphletKind::Corridor);
+    }
+
+    #[test]
+    fn shape_kind_tags_round_trip_every_kind() {
+        let kinds = [
+            GraphletKind::Ego { radius: 1 },
+            GraphletKind::Ego { radius: 2 },
+            GraphletKind::Corridor,
+            GraphletKind::Component,
+            GraphletKind::Loop,
+            GraphletKind::Frontier,
+            GraphletKind::Facet,
+            GraphletKind::Session,
+            GraphletKind::Bridge,
+            GraphletKind::WorkbenchCorrespondence,
+        ];
+        for kind in kinds {
+            assert_eq!(
+                shape_kind_from_tag(&shape_kind_tag(&kind)),
+                Some(kind.clone()),
+                "tag round-trip failed for {kind:?}",
+            );
+        }
+        assert_eq!(shape_kind_from_tag("nonsense"), None);
+        assert_eq!(shape_kind_from_tag("ego:x"), None);
     }
 }

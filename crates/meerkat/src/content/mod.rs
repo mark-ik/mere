@@ -318,7 +318,9 @@ pub(crate) struct Content {
     smolweb: Option<pelt_desktop::SmolwebDocument>,
 }
 
-/// A pelt `ResourceFetcher` for the scripted rung's external `<script src>`, over the
+/// The scripted rung's external `<script src>` fetcher
+/// ([`pelt_desktop::ScriptResourceFetcher`], the byte seam `ScriptedDocument::from_body`
+/// takes — not `pelt_core::ResourceFetcher`, a distinct shell-level trait), over the
 /// content actor's blocking [`script::ContentNetFetcher`] (a tokio `block_on` of the
 /// routing fetch — so scripts ride the session jar and the same SSRF / scheme floors as
 /// `net.fetch`). One per scripted document; built on `Show`. (Render ladder 2b.)
@@ -333,7 +335,7 @@ impl ScriptFetcher {
 }
 
 #[cfg(feature = "scripted")]
-impl pelt_core::ResourceFetcher for ScriptFetcher {
+impl pelt_desktop::ScriptResourceFetcher for ScriptFetcher {
     fn fetch(&self, url: &str) -> Option<Vec<u8>> {
         self.0
             .fetch(url)

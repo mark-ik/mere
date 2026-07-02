@@ -1,9 +1,16 @@
 # Smolweb Host Integration Plan — the serval native lane in meerkat
 
 **Date**: 2026-06-28
-**Status**: **P1–P3 all landed 2026-06-28** (serval `1bbbfdb`, `0b7ca87`, `5c07ad5`;
-mere `476880b`, `0dd0c3e`, `3eed418`, `8dc3683`). Core integration complete
-(render, theme, scroll, link nav). P4 optional.
+**Status (2026-07-01)**: **P1–P3 landed 2026-06-28** (serval `1bbbfdb`, `0b7ca87`,
+`5c07ad5`; mere `476880b`, `0dd0c3e`, `3eed418`, `8dc3683`) — render, theme, scroll,
+link nav all wired, but **compile-verified only, no headed run yet**. The 2026-07-01
+review left open items (see Open questions): theme hard-coded to `App` against the
+settled Site-default design, band-scroll cadence untested, and the trust-posture gap
+(owned by the smolweb fidelity plan's Workstream 2). P4 optional, unstarted.
+Separately, the scripted-live follow-on's `ResourceFetcher` trait mismatch at
+`content/actor.rs:33` was **fixed 2026-07-01** (render-ladder plan's lane — see its
+progress log; `--features scripted` now compiles, 5/5 tests). The smolweb feature
+itself builds green.
 
 **Thesis**: render a focused smolweb capsule (gemini/gopher/feed/…) in the Mere host
 through the **serval lane** — the native `smolweb-views` render we built and shipped
@@ -196,3 +203,15 @@ later).
   `pelt_core::ResourceFetcher` where `ScriptedDocument::from_body` wants
   `serval_scripted::ResourceFetcher`, two genuinely distinct traits. That's meerkat's
   own fix to make.
+- **2026-07-01: scripted-feature break re-verified, then fixed same day.** `cargo
+  check -p meerkat --features scripted` failed with the E0308 trait mismatch at
+  `content/actor.rs:33` (`pelt_core::ResourceFetcher` at `ports/pelt-core/lib.rs:125`
+  vs `serval_scripted::ResourceFetcher` at `components/serval-scripted/lib.rs:36`; no
+  bridging impl existed — pelt-desktop's `LocalFetcher` implements both traits
+  separately). Fixed in the render-ladder plan's lane (see its 2026-07-01 progress
+  entry): pelt-desktop re-exports the serval trait as
+  `pelt_desktop::ScriptResourceFetcher`, and meerkat's whole scripted-fetch seam
+  (`ScriptFetcher`, `build_scripted`, test mocks) switched to it. `--features
+  scripted` compiles, 5/5 scripted tests pass. The smolweb lane was never affected;
+  theme remains hard-coded to `SmolwebTheme::App` (`content/handlers.rs:185`),
+  confirming the open-question review item.

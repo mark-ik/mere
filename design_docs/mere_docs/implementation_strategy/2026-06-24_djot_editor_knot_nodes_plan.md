@@ -12,10 +12,11 @@ source editor now sits over the focused tile content rect when that tile is
 visible. Source highlighting also landed (2026-06-26, via the
 [illume text lexer plan](2026-06-26_illume_text_lexer_plan.md): illume spans →
 tinct roles → a serval styled field, headed-verified) — see the correction note
-in Progress. Click-to-place landed 2026-07-01 (a chrome click resolves DOM
-focus, then snaps the caret to the clicked byte). Remaining near-term UI work:
-drag-select, live-on-change render refresh, autosave/history, and stable
-anchors for inline clip decorations.
+in Progress. Click-to-place and drag-select landed 2026-07-01 (a chrome click
+resolves DOM focus and snaps the caret to the clicked byte; a held press
+extends the selection as the pointer moves), completing Phase 1's mouse input.
+Remaining near-term UI work: live-on-change render refresh, autosave/history,
+and stable anchors for inline clip decorations.
 Originally scoped 2026-06-24 via multi-agent code sweeps of the live workspace,
 adding the *write* side to a knot/djot stack that is already read-complete, plus an
 element-pick clip path into the graph, with an editor that stays pure Rust (jotdown
@@ -207,10 +208,11 @@ reusable.
 
 - **The edit-in side.** The first write path is live: the focused `knot://` node's
   source opens in the bound tile-positioned editor and saves to `Node.body`. The
-  per-range style channel landed too (illume/tinct/serval bridge), and so has
-  click-to-place (a press resolves DOM focus, then snaps the caret to the
-  clicked byte). Remaining editor work is drag-select, autosave/history, and
-  the ergonomics/structural layers below.
+  per-range style channel landed too (illume/tinct/serval bridge), and so have
+  click-to-place and drag-select (a press resolves DOM focus and snaps the
+  caret to the clicked byte; a held press extends the selection as the pointer
+  moves). Remaining editor work is autosave/history and the
+  ergonomics/structural layers below.
 - **A reachable new-note entry.** `knot://` navigation creates/focuses a local note
   node, opens it as a workbench tile, and `>knot_editor` opens that focused note's
   source.
@@ -517,7 +519,7 @@ its own round-trip test.
 
 | Feature | Why it serves notes | Phase | Cost |
 | --- | --- | --- | --- |
-| Click-to-place, drag-select | Mouse caret placement and selection. Table stakes for the field. | 1 | Click-to-place landed (`caret_byte_at_point` wired to `set_caret_byte` on press). Drag-select (continuous extend while held) remains. |
+| Click-to-place, drag-select | Mouse caret placement and selection. Table stakes for the field. | 1 | **Landed 2026-07-01.** `caret_byte_at_point` wired to `set_caret_byte` on press; a held press extends the selection on each move (`caret_drag` gesture). |
 | Syntax highlight | Emphasis, headings, links, fence boundaries colored as you type. | 2 | Cheap. The `(range, style)` list is already computed by jotdown; net-new is the style channel. |
 | Soft-wrap goal column | Up/Down across wrapped lines holds the target column. Lifts the field from Tier 1. | 2 | Cheap. Store goal column on vertical move, clear on horizontal. |
 | Undo/redo transactions | Reliable undo, grouping auto-pair and list inserts with their keystroke. | 2 | Cheap at note size. Snapshot stack, no rope. |
@@ -548,9 +550,10 @@ Live: the bound editor opens the focused `.knot` source, edits through the exist
 multi-line `TextInput`, and saves back to `Node.body`; the routed note tile refreshes
 from the updated `text/x-knot` content state. It is positioned over the focused
 tile content rect when that rect exists, with fixed overlay fallback otherwise.
-Click-to-place is now wired end to end (a chrome click resolves focus, then
-snaps the caret to the clicked byte via `caret_byte_at_point`). Remaining
-Phase 1 polish is drag-select (continuous selection while the button is held).
+Click-to-place and drag-select are now wired end to end (a chrome click
+resolves focus and snaps the caret to the clicked byte via
+`caret_byte_at_point`; a held press extends the selection as the pointer
+moves). **Phase 1 is complete.**
 
 **Phase 2: highlight, ergonomics, new-note entry, persistence, other formats.**
 Partly live: `knot://` creates/focuses the note node, inline `Node.body` plus
@@ -1230,3 +1233,21 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   a separate mechanism and remains open. Not committed — sitting in the working
   tree alongside Mark's own concurrent, unrelated edits in the same three input
   files (the gloss-outline lens plan's P1 click routing).
+- **2026-07-01, drag-select landed — Phase 1 complete.** The held-press half of the
+  mouse input, following the window's existing drag-gesture pattern (a state field
+  set on press, driven on `CursorMoved`, cleared on release): `caret_drag:
+  Option<NodeId>` on `WindowView` is armed by `place_caret_from_click` when a press
+  places the caret in a text field; each `CursorMoved` routes to
+  `drag_caret_select` (extend the selection to the byte under the cursor via
+  `caret_byte_at_point` + `set_caret_field_byte(extend=true)` — the anchor stays at
+  the press point) and routes nowhere else; the release disarms without an early
+  return, so a plain click's release routing is unchanged. One trap dodged: the
+  toolbar/omnibar click is press-DEFERRED (the custom titlebar's `titlebar_press`
+  resolves it on release), so an unconditional arm would have left the drag stuck
+  with no button down, tracking no-button moves — `chrome_click` therefore split
+  into the press-path default (arms) and `chrome_click_deferred` (the release-
+  resolved toolbar click, never arms). `cargo check -p meerkat` clean (no new
+  warnings from my files) and `cargo test -p meerkat --bin meerkat` green, 247/247.
+  Phase 1's ergonomics row (click-to-place, drag-select) is now fully landed;
+  remaining editor UI work is live-on-change render refresh, autosave/history, undo
+  grouping, and the Phase 3 structural/authoring layers.

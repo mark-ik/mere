@@ -15,7 +15,7 @@ pub(crate) fn build_scripted(
     engine: &str,
     url: &str,
     state: Option<&ContentState>,
-    fetcher: Option<&dyn pelt_core::ResourceFetcher>,
+    fetcher: Option<&dyn pelt_desktop::ScriptResourceFetcher>,
 ) -> Option<ScriptedDocument<BoaEngine>> {
     if engine != inker::routing::ENGINE_SERVAL_SCRIPTED {
         return None;
@@ -222,7 +222,7 @@ fn run_content<S: ContentUpdateSink>(
                         state.as_ref(),
                         fetcher
                             .as_ref()
-                            .map(|f| f as &dyn pelt_core::ResourceFetcher),
+                            .map(|f| f as &dyn pelt_desktop::ScriptResourceFetcher),
                     )
                 };
                 #[cfg(not(feature = "scripted"))]

@@ -1,8 +1,16 @@
 # Mere render ladder + web-extraction lane
 
 **Date**: 2026-06-23
-**Status**: Architecture aligned; no meerkat code yet. Grounds the page-JS lane as a
-*rung*, not a static-path replacement, and adds the orthogonal analysis axis.
+**Status (2026-07-01)**: Substantially built — see Progress. Phase 1a (rung taxonomy),
+phase 2a-c (scripted render rung + external scripts + cookies), phase 3 (input → event
+bridge), and phase 4 slices 1-3 + wiring (serval-extract, Contribution path,
+headless-scripted + reader-mode extract, single-hop link materializer) all landed
+2026-06-23/24. The `--features scripted` compile break (the `ResourceFetcher` trait
+mismatch at `content/actor.rs:33`) was **fixed 2026-07-01** — see the Progress entry;
+the scripted feature builds and its 5 tests pass. 1b (picker surfacing), keyboard
+dispatch, interactive-region refinement, and the crawl frontier (V2 actor) remain
+open. Grounds the page-JS lane as a *rung*, not a
+static-path replacement, and adds the orthogonal analysis axis.
 **Origin**: the page-JS scoping conversation. Page JS is mostly built in serval + pelt
 (see "Findings"); before wiring it into meerkat we fix the framing so it slots into the
 principled profile ladder and the "analyze the web, don't just render it" goal.
@@ -381,7 +389,7 @@ parsed (and optionally scripted) DOM.
   `wrapNode` call; `set_function` is `register_global_callable`, so natives are global.)
   pelt's `ScriptedDocument::click_at` (`b157af1`) hit-tests + dispatches + applies the
   anchor-nav default only when not prevented. meerkat added `ContentCommand::ScriptedClick`
-  + `Constellation::click_scripted` / `is_scripted` (`f58ab47`) and routes left clicks on
+  plus `Constellation::click_scripted` / `is_scripted` (`f58ab47`) and routes left clicks on
   a `serval.scripted` card/tile to the page, consumed like a link click (`f277afc`).
   Tested at every layer (serval Boa+Nova `dispatch_event_fires_a_listener`; pelt
   `click_dispatches_to_script` + `prevent_default_blocks_anchor_nav`; meerkat
@@ -443,3 +451,27 @@ parsed (and optionally scripted) DOM.
   V1 in the content-actor path, V2 a dedicated crawl actor, V3 consolidates into eidetic
   (articles → graph nodes = short-term memory → selective consolidation = long-term).
   See `2026-06-23_relational_browse_graphlet_plan.md`.
+- **2026-07-01 (scripted rung — feature build broken, open item)**: `cargo check -p
+  meerkat --features scripted` fails (E0308) at `content/actor.rs:33` —
+  `build_scripted` passes `&dyn pelt_core::ResourceFetcher` where
+  `ScriptedDocument::from_body` wants `&dyn serval_scripted::ResourceFetcher`, two
+  distinct traits with no bridging impl (pelt-desktop's `LocalFetcher` implements each
+  separately). Surfaced 2026-06-28 by the smolweb host plan's dependency-break fix
+  (serval `5f50134` made the underlying icu_calendar error visible, then this one) and
+  re-verified today. Fix is meerkat-side and small: impl
+  `serval_scripted::ResourceFetcher` for `ScriptFetcher` (or an adapter) and pass
+  that. Until then the scripted-live rung's link-nav wiring (serval `1856486`, mere
+  `737e0cd`) has never compiled. The default JS-free build is unaffected.
+- **2026-07-01 (scripted-feature break fixed, same day)**: pelt-desktop now re-exports
+  `serval_scripted::ResourceFetcher` as `pelt_desktop::ScriptResourceFetcher`
+  (`ports/pelt-desktop/scripted.rs` + `lib.rs`, mirroring the existing
+  `LocalFetcher` bridge idiom), and meerkat's scripted-fetch seam switched to it
+  wholesale: `ScriptFetcher`'s impl, `build_scripted`'s `fetcher` parameter, the
+  actor call-site cast, and the two test mocks (`MapFetcher`, `NoFetch`) all use
+  `ScriptResourceFetcher` now — one trait end to end, since `from_body` is the only
+  consumer; `pelt_core::ResourceFetcher` stays the shell-level contract elsewhere.
+  Verified: `cargo check -p meerkat --features scripted` clean; all 5 scripted tests
+  pass (`cargo test -p meerkat --bin meerkat --features scripted scripted_rung`,
+  including the external-script and click-dispatch tests — the scripted-live link-nav
+  wiring compiles and passes for the first time); base `cargo check -p meerkat`
+  unaffected.
