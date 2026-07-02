@@ -1544,6 +1544,106 @@ fn accesskit_actions_route_to_semantic_node_selection() {
         .any(|record| record.channel == "meerkat.agent.action_applied"));
 }
 
+/// The gloss outline lens's a11y wiring (gloss-outline plan P1a): a row's
+/// `SelectNodeByUrl` route, reached via the gloss pane's a11y subtree rather than the
+/// orrery's, still drives real node selection through `apply_a11y_request` — proving the
+/// a11y path and the mouse path (`drain_gloss_outline_intents`) agree.
+#[test]
+fn gloss_outline_row_a11y_action_selects_the_node() {
+    let mut app = test_app();
+    app.orrery_mut().visit("https://example.test/deep/path");
+    app.orrery_mut().visit("https://other.test/");
+    assert_eq!(app.orrery().focused_url(), Some("https://other.test/"));
+
+    let step = app.apply_agent_action(AgentAction::OpenPane(AgentPane::Gloss));
+    assert!(step.result.applied);
+    app.ctx().refresh_a11y_summary();
+
+    let target = app
+        .a11y_action_routes
+        .iter()
+        .find_map(|(id, action)| match action {
+            crate::A11yHostAction::SelectNodeByUrl(url)
+                if url == "https://example.test/deep/path" =>
+            {
+                Some(*id)
+            }
+            _ => None,
+        })
+        .expect("the gloss outline row for example.test/deep/path has an AccessKit route");
+
+    app.ctx()
+        .apply_a11y_request(crate::a11y_bridge::A11yActionRequest {
+            action: Action::Click,
+            target_node: target,
+        });
+
+    assert_eq!(
+        app.orrery().focused_url(),
+        Some("https://example.test/deep/path")
+    );
+}
+
+/// The gloss recent lens's a11y wiring (Scene-to-DOM migration P3): once it moved
+/// off the retired `gloss_recent_rects` rect cache onto live DOM-layout bounds
+/// (`dom_member_bounds`), it still emits a `SelectNodeByUrl` route for the same
+/// node the outline already routes — two independent AccessKit nodes agreeing on
+/// one node, the same multi-representation pattern the orrery/roster already
+/// prove. The minimap's own node-square a11y route is *not* exercised here: unlike
+/// outline/recent (built from the graph/navigation-memory directly, bounds only
+/// enriching an always-emitted route), the minimap's a11y loop walks
+/// `dom_member_bounds("gloss-minimap-node")` as its *source* of which nodes to
+/// list — and the minimap has no DOM node squares at all until the orrery's
+/// physics has assigned world positions, which this bare unit harness never ticks.
+/// The minimap's click-to-intent wiring is covered by
+/// `gloss_view::tests::clicking_a_minimap_node_queues_select_by_url`; the a11y
+/// route atop it is headed-verified (2026-07-02 gloss Scene-to-DOM migration
+/// session) rather than unit-tested, since faking settled physics positions here
+/// would test the fake, not the real path.
+#[test]
+fn gloss_recent_a11y_route_also_selects_the_node() {
+    let mut app = test_app();
+    app.orrery_mut().visit("https://example.test/deep/path");
+    app.orrery_mut().visit("https://other.test/");
+
+    let step = app.apply_agent_action(AgentAction::OpenPane(AgentPane::Gloss));
+    assert!(step.result.applied);
+    app.ctx().refresh_a11y_summary();
+
+    let routes_for_url: Vec<_> = app
+        .a11y_action_routes
+        .iter()
+        .filter_map(|(id, action)| match action {
+            crate::A11yHostAction::SelectNodeByUrl(url)
+                if url == "https://example.test/deep/path" =>
+            {
+                Some(*id)
+            }
+            _ => None,
+        })
+        .collect();
+    // Outline + recent, both routing the same visited node.
+    assert_eq!(
+        routes_for_url.len(),
+        2,
+        "expected one SelectNodeByUrl route per data-driven gloss section, got {routes_for_url:?}"
+    );
+
+    for target in routes_for_url {
+        app.orrery_mut().visit("https://other.test/");
+        assert_eq!(app.orrery().focused_url(), Some("https://other.test/"));
+        app.ctx()
+            .apply_a11y_request(crate::a11y_bridge::A11yActionRequest {
+                action: Action::Click,
+                target_node: target,
+            });
+        assert_eq!(
+            app.orrery().focused_url(),
+            Some("https://example.test/deep/path")
+        );
+    }
+}
+
 #[test]
 fn accesskit_focus_on_a_chrome_control_routes_to_the_runner() {
     // G2.4 part 2: a screen reader's action on a chrome control routes back to

@@ -10,20 +10,34 @@
 //! design doc lays out; this is the G1/G2 seed. The gloss draws its own swatch
 //! from graph geometry rather than rendering a second orrery (the Navigator is
 //! one surface, never a second instance).
+//!
+//! Outline and recent are real DOM now (`gloss_outline_view.rs` / `gloss_view.rs`);
+//! this file keeps the pane-split math (`gloss_sections`) plus the minimap's Scene
+//! raster, still pending its own DOM-nodes-plus-embedded-Scene-edges migration (the
+//! [Scene-to-DOM migration plan](../../../design_docs/mere_docs/implementation_strategy/2026-07-01_gloss_scene_to_dom_migration_plan.md)'s
+//! Phase 2).
 
-use forme::GraphMemberId;
 use netrender::Scene;
 use register_theme::chrome::{ChromeTheme, Color32};
-
-use super::text::HostText;
 
 /// Inset (px) of the swatch from the pane edges.
 const PAD: f32 = 16.0;
 /// Edge length (px) of a minimap node square.
 const NODE: f32 = 7.0;
-/// Fixed height (px) of the gloss "recent" section: a header plus a handful of rows
-/// at [`RECENT_ROW_H`], sized like [`recent_scene`] already assumes.
+/// Fixed height (px) of the gloss "recent" section — the DOM recent lens
+/// (`gloss_view::recent_view`) still gets a fixed band; only its rendering
+/// mechanism changed, not its sizing.
 const RECENT_H: f32 = 110.0;
+
+/// Intent a gloss row (outline / minimap / recent) queues on click: select + focus
+/// the node at this URL — the shared `Orrery::select_by_url` primitive every gloss
+/// section (and the roster's non-additive click) drives, so a click's effect is
+/// identical everywhere. One shared type instead of three near-identical
+/// single-variant enums. (gloss-outline plan; Scene-to-DOM migration P1.)
+#[derive(Clone, Debug, PartialEq)]
+pub enum GlossRowIntent {
+    Select(String),
+}
 
 /// Split the gloss pane's rect into its three stacked sections, top to bottom:
 /// minimap (Scene), outline (DOM), recent (Scene). Recent stays fixed height; the
@@ -53,48 +67,89 @@ fn rgba(c: Color32, alpha: f32) -> [f32; 4] {
     ]
 }
 
-/// Build the minimap swatch: fit the node positions into the `w` x `h` pane
-/// (uniform scale, centered), draw the edges then the nodes, and highlight the
-/// selected node. Returns the scene plus each node's **pane-local** rect for the
-/// host's hit-test (offset by the pane origin to focus a node on click).
-pub fn minimap_scene(
-    nodes: &[(GraphMemberId, (f32, f32), bool, f32)],
+/// A chrome token as a CSS `rgb(...)` string, for DOM node squares (the minimap's
+/// nodes are DOM now; only its edges/rings backdrop stays a Scene raster).
+pub fn theme_rgb_css(c: Color32) -> String {
+    let [r, g, b, _] = c.to_array();
+    format!("rgb({r}, {g}, {b})")
+}
+
+/// A minimap node's edge length (px): the focused node draws a touch larger so it
+/// stands out; `size_factor` (1.0 unless the gloss sizes by importance) scales it
+/// further. (Graph signals — P6c.) Shared by the DOM node squares and, previously,
+/// the Scene-drawn ones — kept as one function so they can't drift.
+pub fn minimap_node_size(selected: bool, size_factor: f32) -> f32 {
+    (if selected { NODE + 3.0 } else { NODE }) * size_factor
+}
+
+/// The minimap's fit transform: uniform-scale + center the node bounding box into
+/// `w`x`h` with `PAD` inset. Computed once from the (world-space) node positions so
+/// the backdrop Scene (edges/rings, [`minimap_backdrop_scene`]) and the DOM node
+/// squares (`gloss_view::minimap_view`) map through the identical transform and
+/// can't disagree about where anything sits. (Scene-to-DOM migration P2.)
+pub struct MinimapFit {
+    scale: f32,
+    off_x: f32,
+    off_y: f32,
+    min_x: f32,
+    min_y: f32,
+}
+
+impl MinimapFit {
+    /// `None` for an empty node set — nothing to fit, nothing to draw.
+    pub fn compute(positions: &[(f32, f32)], w: u32, h: u32) -> Option<Self> {
+        if positions.is_empty() {
+            return None;
+        }
+        let (mut min_x, mut min_y, mut max_x, mut max_y) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+        for (x, y) in positions {
+            min_x = min_x.min(*x);
+            min_y = min_y.min(*y);
+            max_x = max_x.max(*x);
+            max_y = max_y.max(*y);
+        }
+        let bbox_w = (max_x - min_x).max(1.0);
+        let bbox_h = (max_y - min_y).max(1.0);
+        let avail_w = (w as f32 - 2.0 * PAD).max(1.0);
+        let avail_h = (h as f32 - 2.0 * PAD).max(1.0);
+        let scale = (avail_w / bbox_w).min(avail_h / bbox_h);
+        let off_x = PAD + (avail_w - bbox_w * scale) * 0.5;
+        let off_y = PAD + (avail_h - bbox_h * scale) * 0.5;
+        Some(Self {
+            scale,
+            off_x,
+            off_y,
+            min_x,
+            min_y,
+        })
+    }
+
+    pub fn apply(&self, (x, y): (f32, f32)) -> (f32, f32) {
+        (
+            (x - self.min_x) * self.scale + self.off_x,
+            (y - self.min_y) * self.scale + self.off_y,
+        )
+    }
+}
+
+/// Build the minimap's backdrop Scene: edges + signal rings only — no node squares
+/// (those are DOM now, `gloss_view::minimap_view`). `edges`/`rings` are already
+/// mapped to pane-local coordinates via the same [`MinimapFit`] the DOM nodes used,
+/// so this only draws, it never positions. (Scene-to-DOM migration P2; trimmed from
+/// the old `minimap_scene`, which also drew the nodes.)
+pub fn minimap_backdrop_scene(
     edges: &[((f32, f32), (f32, f32), f32)],
     rings: &[((f32, f32), f32, [f32; 4])],
     w: u32,
     h: u32,
     theme: &ChromeTheme,
-) -> (Scene, Vec<(GraphMemberId, [f32; 4])>) {
+) -> Scene {
     let mut scene = Scene::new(w.max(1), h.max(1));
-    let mut rects = Vec::new();
-    if nodes.is_empty() {
-        return (scene, rects);
-    }
-
-    // World bounding box of the node positions.
-    let (mut min_x, mut min_y, mut max_x, mut max_y) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
-    for (_, (x, y), _, _) in nodes {
-        min_x = min_x.min(*x);
-        min_y = min_y.min(*y);
-        max_x = max_x.max(*x);
-        max_y = max_y.max(*y);
-    }
-    let bbox_w = (max_x - min_x).max(1.0);
-    let bbox_h = (max_y - min_y).max(1.0);
-    let avail_w = (w as f32 - 2.0 * PAD).max(1.0);
-    let avail_h = (h as f32 - 2.0 * PAD).max(1.0);
-    let scale = (avail_w / bbox_w).min(avail_h / bbox_h);
-    // Center the scaled graph in the available area.
-    let off_x = PAD + (avail_w - bbox_w * scale) * 0.5;
-    let off_y = PAD + (avail_h - bbox_h * scale) * 0.5;
-    let map = |(x, y): (f32, f32)| ((x - min_x) * scale + off_x, (y - min_y) * scale + off_y);
 
     let edge_color = rgba(theme.muted_text, 0.7);
     for (a, b, weight) in edges {
-        let (ax, ay) = map(*a);
-        let (bx, by) = map(*b);
         let mut path = netrender::ScenePath::new();
-        path.move_to(ax, ay).line_to(bx, by);
+        path.move_to(a.0, a.1).line_to(b.0, b.1);
         // Stroke width grows with the edge's multiplicity weight (relations between the pair),
         // capped so a very dense pair stays legible in the swatch. (Graph signals — edge thickness.)
         let width = (1.0 + 0.6 * (*weight - 1.0)).clamp(1.0, 3.0);
@@ -107,14 +162,13 @@ pub fn minimap_scene(
     // arrive straight-alpha, so premultiply for the scene. (Graph signals — P6b, gloss overlays.)
     const RING_SEGMENTS: usize = 20;
     for (center, factor, color) in rings {
-        let (cx, cy) = map(*center);
         let r = NODE * *factor;
         let [cr, cg, cb, ca] = *color;
         let premul = [cr * ca, cg * ca, cb * ca, ca];
         let mut path = netrender::ScenePath::new();
         for i in 0..=RING_SEGMENTS {
             let t = (i as f32 / RING_SEGMENTS as f32) * std::f32::consts::TAU;
-            let (x, y) = (cx + r * t.cos(), cy + r * t.sin());
+            let (x, y) = (center.0 + r * t.cos(), center.1 + r * t.sin());
             if i == 0 {
                 path.move_to(x, y);
             } else {
@@ -123,106 +177,6 @@ pub fn minimap_scene(
         }
         scene.push_shape_stroked(path, premul, 1.5);
     }
-
-    let node_color = rgba(theme.body_text, 1.0);
-    let selected_color = rgba(theme.strong_text, 1.0);
-    for (id, pos, selected, size_factor) in nodes {
-        let (cx, cy) = map(*pos);
-        // The focused node draws a touch larger + brighter so it stands out; the size factor (1.0
-        // unless the gloss sizes by importance) scales it further. (Graph signals — P6c.)
-        let base = if *selected { NODE + 3.0 } else { NODE };
-        let size = base * *size_factor;
-        let half = size * 0.5;
-        let color = if *selected {
-            selected_color
-        } else {
-            node_color
-        };
-        // push_rect takes corners (x0, y0, x1, y1), not (x, y, w, h).
-        scene.push_rect(cx - half, cy - half, cx + half, cy + half, color);
-        rects.push((*id, [cx - half, cy - half, cx + half, cy + half]));
-    }
-    (scene, rects)
+    scene
 }
 
-/// Row height (px), row font, and header font for the recent-visited list.
-const RECENT_ROW_H: f32 = 16.0;
-const RECENT_FONT: f32 = 11.0;
-const RECENT_HEADER_FONT: f32 = 10.0;
-
-/// Build the gloss "recent" list: a header plus one row per recently-visited node
-/// (its label, truncated to fit), drawn into the `w` x `h` recent sub-pane. `text`
-/// shapes the labels. Returns the scene plus each row's **pane-local** rect (node
-/// id), so the host hit-tests a click to focus that node, exactly like the minimap
-/// squares. (gloss recent-nodes; the `SharedNavigationMemory` projection.)
-pub fn recent_scene(
-    recent: &[(GraphMemberId, String)],
-    w: u32,
-    h: u32,
-    theme: &ChromeTheme,
-    text: &mut HostText,
-) -> (Scene, Vec<(GraphMemberId, [f32; 4])>) {
-    let mut scene = Scene::new(w.max(1), h.max(1));
-    let mut rects = Vec::new();
-    let wf = w as f32;
-    // A thin divider at the top separates the list from the minimap above.
-    let mut path = netrender::ScenePath::new();
-    path.move_to(PAD, 0.5).line_to(wf - PAD, 0.5);
-    scene.push_shape_stroked(path, rgba(theme.muted_text, 0.4), 1.0);
-
-    let mut y = 5.0;
-    text.push_line(
-        &mut scene,
-        "Recent",
-        RECENT_HEADER_FONT,
-        rgba(theme.muted_text, 0.9),
-        [PAD, y],
-    );
-    y += RECENT_HEADER_FONT + 5.0;
-
-    if recent.is_empty() {
-        text.push_line(
-            &mut scene,
-            "nothing visited yet",
-            RECENT_FONT,
-            rgba(theme.muted_text, 0.55),
-            [PAD, y],
-        );
-        return (scene, rects);
-    }
-
-    let row_color = rgba(theme.body_text, 0.95);
-    for (id, label) in recent {
-        if y + RECENT_ROW_H > h as f32 {
-            break; // out of vertical room
-        }
-        let fitted = fit_label(text, label, wf - 2.0 * PAD, RECENT_FONT);
-        if !fitted.is_empty() {
-            text.push_line(&mut scene, &fitted, RECENT_FONT, row_color, [PAD, y]);
-        }
-        rects.push((*id, [PAD, y, wf - PAD, y + RECENT_ROW_H]));
-        y += RECENT_ROW_H;
-    }
-    (scene, rects)
-}
-
-/// Trim `label` from the end until it fits `max_w` at `font`. Returns at least the
-/// first char of a non-empty label.
-fn fit_label(text: &mut HostText, label: &str, max_w: f32, font: f32) -> String {
-    let label = label.trim();
-    if label.is_empty() || max_w <= 0.0 {
-        return String::new();
-    }
-    if text.measure(label, font).0 <= max_w {
-        return label.to_string();
-    }
-    let mut chars: Vec<char> = label.chars().collect();
-    while chars.len() > 1 {
-        chars.pop();
-        let candidate: String = chars.iter().collect();
-        if text.measure(&candidate, font).0 <= max_w {
-            return candidate;
-        }
-    }
-    chars.into_iter().collect()
-}

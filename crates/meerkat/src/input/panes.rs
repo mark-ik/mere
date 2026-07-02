@@ -496,7 +496,33 @@ impl WindowCtx<'_> {
     pub(crate) fn drain_gloss_outline_intents(&mut self) {
         for intent in self.view.take_gloss_outline_intents() {
             match intent {
-                crate::gloss_outline_view::GlossOutlineIntent::Select(url) => {
+                crate::gloss::GlossRowIntent::Select(url) => {
+                    self.orrery_mut().select_by_url(&url);
+                    self.view.request_redraw();
+                }
+            }
+        }
+    }
+
+    /// Apply the gloss recent lens's row intents, mirroring `drain_gloss_outline_intents`.
+    /// (Scene-to-DOM migration P1.)
+    pub(crate) fn drain_gloss_recent_intents(&mut self) {
+        for intent in self.view.take_gloss_recent_intents() {
+            match intent {
+                crate::gloss::GlossRowIntent::Select(url) => {
+                    self.orrery_mut().select_by_url(&url);
+                    self.view.request_redraw();
+                }
+            }
+        }
+    }
+
+    /// Apply the gloss minimap's node-square intents, mirroring the outline/recent
+    /// drains. (Scene-to-DOM migration P2.)
+    pub(crate) fn drain_gloss_minimap_intents(&mut self) {
+        for intent in self.view.take_gloss_minimap_intents() {
+            match intent {
+                crate::gloss::GlossRowIntent::Select(url) => {
                     self.orrery_mut().select_by_url(&url);
                     self.view.request_redraw();
                 }

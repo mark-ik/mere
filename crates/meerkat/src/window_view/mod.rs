@@ -25,7 +25,7 @@ use frame::{FrameLayout, GraphId, PaneId, SessionId, SplitAxis, SplitChoice};
 use meerkat::{Chrome, ChromeView, chrome_view};
 use orrery::Face;
 use platen::Workbench;
-use serval_scripted_dom::ScriptedDom;
+use serval_scripted_dom::{NodeId, ScriptedDom};
 use serval_winit_host::WindowSurface;
 use session_runtime::settings_store::ScriptPermissionPrefs;
 use winit::window::CursorIcon;
@@ -36,6 +36,10 @@ use xilem_serval::{
 
 use super::{CachedTile, ContentPane, ResizeDrag};
 use crate::gloss_outline_view::{GlossOutlineState, GlossOutlineView, gloss_outline_view};
+use crate::gloss_view::{
+    GlossMinimapState, GlossMinimapView, GlossRecentState, GlossRecentView, minimap_view,
+    recent_view,
+};
 use crate::list_pane::{ListPaneState, ListView, PaneItem, list_pane_view};
 use crate::pane_session::PaneSession;
 use crate::roster_view::{RosterState, RosterView, roster_view};
@@ -181,10 +185,6 @@ pub(crate) struct WindowView {
     pub(crate) session_close_rects: Vec<(SessionId, [f32; 4])>,
     /// The "+" new-graph tile rect this frame, if the switcher is shown.
     pub(crate) session_add_rect: Option<[f32; 4]>,
-    /// Each gloss minimap node's rect this frame (node id): a press focuses it.
-    pub(crate) gloss_node_rects: Vec<(GraphMemberId, [f32; 4])>,
-    /// Each gloss "recent" row's rect this frame (node id): a press focuses it.
-    pub(crate) gloss_recent_rects: Vec<(GraphMemberId, [f32; 4])>,
     /// Each open tile's content rect this frame (member): the drag resolves its
     /// drop target + zone against it.
     pub(crate) tile_rects: Vec<(GraphMemberId, [f32; 4])>,
@@ -272,6 +272,12 @@ pub(crate) struct WindowView {
     /// `Some` while a grip press is being dragged; the move tracks the drop target, the release
     /// repositions + persists. (Command registry B2 — drag reorder.)
     pub(crate) row_reorder_drag: Option<RowReorderDrag>,
+    /// An in-progress caret drag-select: the text-input DOM node a left press placed the
+    /// caret in. While `Some`, each pointer move extends that field's selection to the
+    /// byte under the cursor; the release disarms it. Armed only by the press path (a
+    /// release-resolved toolbar click never arms — the button is already up). (Djot
+    /// editor — drag-select.)
+    pub(crate) caret_drag: Option<NodeId>,
     /// An in-progress tear-out drag (G1): `Some` from a modified left-press on an orrery
     /// node until release, which spawns a leaf carrying the node. (Tear-out gestures.)
     pub(crate) tear_out_drag: Option<TearOutDrag>,
@@ -549,6 +555,20 @@ pub(crate) struct ShellState {
     /// the shell view positions the outline subtree there (the gloss pane's middle
     /// third — [`crate::gloss::gloss_sections`]). `None` keeps it out of the document.
     pub(crate) gloss_outline_rect: Option<[f32; 4]>,
+    /// The gloss recent-visited lens's view state, folded into the shell document like
+    /// the outline. (Scene-to-DOM migration P1.)
+    pub(crate) gloss_recent: GlossRecentState,
+    /// The recent section's window rect, `Some` while the gloss pane is open; positions
+    /// the recent subtree at the gloss pane's bottom third
+    /// ([`crate::gloss::gloss_sections`]).
+    pub(crate) gloss_recent_rect: Option<[f32; 4]>,
+    /// The gloss minimap's view state (DOM node squares; the edges/rings backdrop
+    /// rides an embedded `<external-texture>` inside this same subtree, not a
+    /// separate host composite). (Scene-to-DOM migration P2.)
+    pub(crate) gloss_minimap: GlossMinimapState,
+    /// The minimap's window rect, `Some` while the gloss pane is open; positions the
+    /// minimap subtree at the gloss pane's top third ([`crate::gloss::gloss_sections`]).
+    pub(crate) gloss_minimap_rect: Option<[f32; 4]>,
     /// The most recent orrery wheel delta (device px), queued by the orrery pane element's
     /// `on_wheel` when the host dispatches a wheel there, and drained by the host into gyre's
     /// pan / Ctrl-zoom. Routes the orrery wheel through the document. (cond 5 input bridge.)

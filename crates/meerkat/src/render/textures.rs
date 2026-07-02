@@ -5,6 +5,62 @@
 //! Texture readback and data-URI helpers for render-owned preview imagery.
 
 use image::ImageEncoder;
+use std::path::PathBuf;
+use std::sync::OnceLock;
+
+/// The directory a headed-verify driver drops capture requests into, read once from
+/// `MEERKAT_CAPTURE_DIR`. `None` (the default) makes [`maybe_dump_chrome_capture`] a
+/// single cached-`None` check per frame — no per-frame env lookup, no cost when unset.
+fn capture_dir() -> Option<&'static PathBuf> {
+    static DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
+    DIR.get_or_init(|| std::env::var_os("MEERKAT_CAPTURE_DIR").map(PathBuf::from))
+        .as_ref()
+}
+
+/// Self-capture the chrome (shell document) texture straight off the GPU, bypassing the
+/// OS compositor entirely — a driver script requesting a screenshot via
+/// `SetForegroundWindow` + `CopyFromScreen` depends on this window actually being the
+/// visually topmost surface, which a remote/virtual desktop session cannot guarantee (a
+/// headed-verify session found the capture silently showing a *different* topmost window
+/// instead, with no error). This reads the same already-rasterized texture the frame just
+/// composited from (the pattern `read_texture_rgba` already proves out for the snapshot
+/// card), so it needs no new render path and is exactly as correct as the shell document
+/// itself. Polls for a `request.txt` (the target PNG path) in `MEERKAT_CAPTURE_DIR` each
+/// frame — a single `Path::exists` stat when unset, so idle cost is negligible; only a
+/// driver script that wrote a request pays the readback + encode cost. Captures the chrome
+/// layer only (toolbar/shellbar/roster/outline/minimap-nodes/recent/list-panes/settings —
+/// everything folded into the shell document); the orrery canvas and any
+/// `<external-texture>` backdrop (the gloss minimap's edges/rings) composite separately
+/// onto the swap-chain target and are not part of this texture.
+pub(crate) fn maybe_dump_chrome_capture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    tex: &wgpu::Texture,
+    w: u32,
+    h: u32,
+) {
+    let Some(dir) = capture_dir() else {
+        return;
+    };
+    let request = dir.join("request.txt");
+    let Ok(target) = std::fs::read_to_string(&request) else {
+        return;
+    };
+    let target = target.trim();
+    if target.is_empty() {
+        return;
+    }
+    let rgba = read_texture_rgba(device, queue, tex, w, h);
+    if let Ok(file) = std::fs::File::create(target) {
+        let _ = image::codecs::png::PngEncoder::new(file).write_image(
+            &rgba,
+            w,
+            h,
+            image::ExtendedColorType::Rgba8,
+        );
+    }
+    let _ = std::fs::remove_file(&request);
+}
 
 /// The node's favicon RGBA (straight-alpha RGBA8) encoded as a `data:image/png;base64,`
 /// URI, or `None` if it can't be encoded. The orrery card carries it as a leading

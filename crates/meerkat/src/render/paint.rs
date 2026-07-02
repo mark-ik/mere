@@ -21,11 +21,15 @@ pub(super) struct PaintInputs {
     pub workbench_scene: Option<(netrender::Scene, u32, u32)>,
     pub workbench_ghost: Option<((f32, f32, f32, f32), netrender::Scene)>,
     pub workbench_rect: Option<[f32; 4]>,
-    /// The gloss pane's leaf rect, if open — split via `gloss::gloss_sections` into the
-    /// minimap / outline / recent bands; the outline third is DOM (already folded into
-    /// `chrome_scene` above), so only the minimap + recent bands rasterize here.
-    /// (gloss-outline plan P1.)
-    pub gloss_rect: Option<[f32; 4]>,
+    /// The gloss minimap's backdrop (edges + signal rings) Scene + its pixel size,
+    /// built by `render_gloss_minimap` — `None` when the gloss pane is closed or
+    /// empty. Rasterized here, then composited generically by `compose_surfaces`'s
+    /// `external_texture_placements` loop at `GLOSS_MINIMAP_SCENE_KEY` (the DOM
+    /// layout owns the placement rect now, like the orrery's own backdrop — no
+    /// manual rect tracking). The minimap's node squares, plus the outline + recent
+    /// lenses, are already folded into `chrome_scene` above. (Scene-to-DOM
+    /// migration P1 outline/recent, P2 minimap.)
+    pub gloss_minimap_scene: Option<(netrender::Scene, u32, u32)>,
     pub cards: Vec<(GraphMemberId, [f32; 4], (u32, u32))>,
     pub scrying_surfaces: Vec<(GraphMemberId, [f32; 4])>,
     pub snapshot_card: Option<(
@@ -56,7 +60,7 @@ impl WindowCtx<'_> {
             workbench_scene,
             workbench_ghost,
             workbench_rect,
-            gloss_rect,
+            gloss_minimap_scene,
             cards,
             scrying_surfaces,
             snapshot_card,
@@ -76,6 +80,7 @@ impl WindowCtx<'_> {
             h,
             ColorLoad::Clear(wgpu::Color::TRANSPARENT),
         );
+        maybe_dump_chrome_capture(core.device(), core.queue(), &_chrome_tex, w, h);
         // The orrery paints its own opaque backdrop, but clear to the same dark
         // tone so a resize frame cannot flash white before the backdrop lands.
         let backdrop = wgpu::Color {
@@ -110,6 +115,25 @@ impl WindowCtx<'_> {
             }
             None => (None, None),
         };
+        // The gloss minimap's edges/rings backdrop, embedded via `<external-texture>`
+        // inside the shell document (its node squares are DOM, already folded into
+        // `chrome_scene`) — composited generically below by `compose_surfaces`'s
+        // `external_texture_placements` loop, not a manual rect. (Scene-to-DOM
+        // migration P2.)
+        let pb = self.shared.presentation.chrome_theme.panel_bg.to_array();
+        let gloss_clear = wgpu::Color {
+            r: pb[0] as f64 / 255.0,
+            g: pb[1] as f64 / 255.0,
+            b: pb[2] as f64 / 255.0,
+            a: 1.0,
+        };
+        let (_gloss_minimap_tex, gloss_minimap_view) = match gloss_minimap_scene.as_ref() {
+            Some((scene, mw, mh)) => {
+                let (tex, view) = core.rasterize(scene, *mw, *mh, ColorLoad::Clear(gloss_clear));
+                (Some(tex), Some(view))
+            }
+            None => (None, None),
+        };
         let composite = self.rasterize_cards(core, dpr, &cards);
 
         let surface = self.view.surface.as_ref().expect("window surface present");
@@ -133,6 +157,7 @@ impl WindowCtx<'_> {
             secondary_textures,
             workbench_view,
             workbench_rect,
+            gloss_minimap_view,
             composite,
             external_texture_placements,
             &scrying_surfaces,
@@ -289,152 +314,13 @@ impl WindowCtx<'_> {
         // shell state before the chrome render, so the one render lays them out, scrolls
         // them, and routes their clicks. Replaces the per-pane ListPane frame + composite.
         // (Phase 1, step 2.)
-        // The gloss pane (the Navigator): a whole-graph minimap swatch on top, the
-        // recently-visited nodes listed below. Both carry node hit-rects for
-        // click-to-focus; recent is the `SharedNavigationMemory` projection. (Gloss.)
-        self.view.gloss_node_rects.clear();
-        self.view.gloss_recent_rects.clear();
-        if let Some(grect) = gloss_rect {
-            let pb = self.shared.presentation.chrome_theme.panel_bg.to_array();
-            let clear = wgpu::Color {
-                r: pb[0] as f64 / 255.0,
-                g: pb[1] as f64 / 255.0,
-                b: pb[2] as f64 / 255.0,
-                a: 1.0,
-            };
-            // Three stacked sections: minimap (Scene), outline (DOM, already folded into
-            // chrome_scene at this same split — see the `gloss_rect` fold-in above), recent
-            // (Scene). Only the minimap + recent bands rasterize here. (gloss-outline P1.)
-            let (minimap_rect, _outline_rect, recent_rect) = crate::gloss::gloss_sections(grect);
-
-            // Minimap swatch. With a gloss lens set, the gloss shows its OWN arrangement (recomputed
-            // only when its inputs change, since it may be an expensive layout); otherwise it mirrors
-            // the main view. (Graph signals — P6, the independent gloss projection.)
-            let mw = (minimap_rect[2] - minimap_rect[0]).round().max(1.0) as u32;
-            let mh = (minimap_rect[3] - minimap_rect[1]).round().max(1.0) as u32;
-            let (nodes, edges, rings) =
-                if let Some(id) = self.orrery().gloss_strategy().map(str::to_string) {
-                    if self.orrery().gloss_needs_recompute(mw, mh) {
-                        let pane = self.orrery();
-                        // Gate the lens's overlays on the same ring toggles as the main view: the
-                        // gloss shows community / bridge rings exactly when those toggles are on. The
-                        // overlays ride the projection (the overlay pipe), placed at the lens's own
-                        // positions by `gloss_geometry`. (Graph signals — P6b.)
-                        let clusters = pane
-                            .show_community_rings()
-                            .then(|| pane.community())
-                            .flatten();
-                        let bridges = pane.show_bridge_rings().then(|| pane.bridges()).flatten();
-                        // Positions come from the whole graph or, when the gloss is scoped to the
-                        // selection, the *induced subgraph* of those nodes — so the lens reflects the
-                        // selection's own structure, not a crop of the whole-graph layout. The
-                        // overlays are layout-independent (the same signal builder either way).
-                        // (Graph signals — P6c, the gloss subgraph re-layout.)
-                        let (positions, overlays): (Vec<_>, _) = match pane.gloss_scope_keys() {
-                            Some(scope) => (
-                                platen::project_orrery_subgraph(
-                                    pane.graph(),
-                                    &scope,
-                                    &id,
-                                    pane.focused_key(),
-                                    mw,
-                                    mh,
-                                ),
-                                platen::signal_overlays(clusters, bridges),
-                            ),
-                            None => {
-                                let projection = platen::project_orrery_lens(
-                                    &id,
-                                    pane.graph(),
-                                    pane.focused_key(),
-                                    mw,
-                                    mh,
-                                    clusters,
-                                    bridges,
-                                );
-                                let pos = projection
-                                    .nodes
-                                    .iter()
-                                    .map(|n| (n.node, n.position))
-                                    .collect();
-                                (pos, projection.overlays)
-                            }
-                        };
-                        self.orrery_mut()
-                            .set_gloss_positions(positions, overlays, mw, mh);
-                    }
-                    self.orrery().gloss_geometry_cached()
-                } else {
-                    let (n, e) = self.orrery().minimap_geometry();
-                    (n, e, Vec::new())
-                };
-            let (scene, local) = crate::gloss::minimap_scene(
-                &nodes,
-                &edges,
-                &rings,
-                mw,
-                mh,
-                &self.shared.presentation.chrome_theme,
-            );
-            let (_t, view) = core.rasterize(&scene, mw, mh, ColorLoad::Clear(clear));
-            core.renderer().compose_external_texture(
-                &view,
-                &target_view,
-                format,
-                w,
-                h,
-                ExternalTexturePlacement::new(minimap_rect),
-            );
-            for (id, r) in local {
-                self.view.gloss_node_rects.push((
-                    id,
-                    [
-                        minimap_rect[0] + r[0],
-                        minimap_rect[1] + r[1],
-                        minimap_rect[0] + r[2],
-                        minimap_rect[1] + r[3],
-                    ],
-                ));
-            }
-
-            // Recently-visited list.
-            let recent: Vec<_> = self
-                .orrery()
-                .graph()
-                .recent_visited(8)
-                .into_iter()
-                .map(|rv| (rv.node, rv.url))
-                .collect();
-            let rw = (recent_rect[2] - recent_rect[0]).round().max(1.0) as u32;
-            let rh = (recent_rect[3] - recent_rect[1]).round().max(1.0) as u32;
-            let (rscene, rlocal) = crate::gloss::recent_scene(
-                &recent,
-                rw,
-                rh,
-                &self.shared.presentation.chrome_theme,
-                &mut self.shared.session.host_text,
-            );
-            let (_t2, rview) = core.rasterize(&rscene, rw, rh, ColorLoad::Clear(clear));
-            core.renderer().compose_external_texture(
-                &rview,
-                &target_view,
-                format,
-                w,
-                h,
-                ExternalTexturePlacement::new(recent_rect),
-            );
-            for (id, r) in rlocal {
-                self.view.gloss_recent_rects.push((
-                    id,
-                    [
-                        recent_rect[0] + r[0],
-                        recent_rect[1] + r[1],
-                        recent_rect[0] + r[2],
-                        recent_rect[1] + r[3],
-                    ],
-                ));
-            }
-        }
+        // The gloss pane (the Navigator): all three sections — minimap, outline,
+        // recent — are folded into the shell document now. The outline + recent +
+        // minimap-node-squares are already part of `chrome_scene`; the minimap's
+        // edges/rings backdrop was rasterized above (`gloss_minimap_view`) and
+        // composites generically below via `compose_surfaces`'s
+        // `external_texture_placements` loop, like the orrery's own backdrop. Nothing
+        // left to do here. (gloss-outline plan P1; Scene-to-DOM migration P1/P2.)
         core.renderer().compose_external_texture(
             &chrome_view,
             &target_view,

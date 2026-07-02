@@ -92,6 +92,9 @@ const FOLDED_PANE_WRAPPERS: &[&str] = &[
     "steward-pane",
     "inspector-pane",
     "trail-pane",
+    "gloss-outline-pane",
+    "gloss-recent-pane",
+    "gloss-minimap-pane",
 ];
 
 /// Whether `node` is a folded-pane wrapper the chrome walk should skip (the frame tree owns

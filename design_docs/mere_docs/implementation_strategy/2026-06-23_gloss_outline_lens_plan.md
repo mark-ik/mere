@@ -169,10 +169,25 @@ an ad-hoc list: the format *is* the editing + export path.
   rows route `SelectNodeByUrl` and carry node color / selection; three-way gloss auto-size.
   The first DOM gloss section. Done: opening the gloss shows the live outline + counts, clicking
   a row focuses the node, headed-verified.
-- **P2 — hierarchy + scope lens.** Make the nesting axis configurable (URL-structure default ->
-  explicit-Containment overlay / Arrangement sub-kind / Semantic family, via `forme::ProjectionLens`) and the scope honor the
-  gloss scope picker (full graph / active selection / graphlet). Folds into the gloss design's
-  G3 form-factor/scope work. Done: the outline re-nests by a chosen edge family and re-scopes.
+- **P1a — a11y wiring.** The outline is mouse-only after P1; wire its rows into the a11y tree the
+  same hand-built-per-pane way the roster already is (`roster_a11y_tree` in `frame_a11y_panes.rs`
+  is the pattern — a11y here is never a generic DOM walk). A new `gloss_outline_a11y_tree` reads
+  `gloss_outline_snapshot()` fresh, routes real-node rows through the existing
+  `A11yHostAction::SelectNodeByUrl` (identical to the mouse path, so the two can't drift), and
+  gives structural rows a non-interactive label so the host/path hierarchy still reads for a
+  screen-reader user. Done: `AgentAction::SelectNodeByUrl` against an outline row's URL focuses
+  the node, same as a click.
+- **P2 — hierarchy + scope lens, plus dynamic caps.** Make the nesting axis configurable
+  (URL-structure default -> explicit-Containment overlay / Arrangement sub-kind / Semantic family,
+  via `forme::ProjectionLens`) and the scope honor the gloss scope picker (full graph / active
+  selection / graphlet). Folds into the gloss design's G3 form-factor/scope work. Also settles
+  Open Decision #3: the pane view caps by a row budget derived from the outline rect's live
+  height (viewport-dependent, recomputed every frame `gloss_outline_snapshot()` runs) plus a fixed
+  depth ceiling as a secondary safeguard against pathologically deep chains; `outline_rows` /
+  `outline_djot` themselves stay fully uncapped, so any future export/knot consumer always gets
+  the complete tree with zero `glossary` changes — the pane's cap and the full-export pitch are
+  the same data, just truncated differently at the view layer. Done: the outline re-nests by a
+  chosen edge family, re-scopes, and its visible row count tracks the pane's resize live.
 - **P3 — signals-fed metrics.** When `intel/signals` ships (graph_signals P1-P3), the outline
   consumes importance (node emphasis) + community (grouping) with degree / components fallback
   until then. Gated on graph_signals; no work here lands ahead of that producer. Done: importance
@@ -192,17 +207,28 @@ an ad-hoc list: the format *is* the editing + export path.
    (containment edges are not auto-populated, so reading them would be flat); pluggable in P2.
    Open at P2: which families earn a lens, and whether outline-order is its own Arrangement
    sub-kind, a [projections-research](../research/2026-06-22_graph_projections_research.md) question.
-3. **Depth / breadth caps** for the constrained pane vs the full export document.
-4. **Metrics surface split.** Which metrics live in the gloss readout vs apparatus diagnostics
-   (the [system-diagnostics plan](2026-06-08_system_diagnostics_and_accessibility_plan.md) owns
-   read-only inspection; quick graph stats may belong there, not the gloss).
-5. **Scene -> DOM for minimap / recent.** Out of scope here (owned by the gloss design's G-series),
-   but the outline lens is its proof-of-path; sequence the migration after P1.
+3. ~~**Depth / breadth caps**~~ **Settled 2026-07-01 (with Mark):** dynamic, viewport-driven — a
+   row budget from the outline rect's live height, plus a fixed depth ceiling; see P2. The full
+   export document (`outline_rows` / `outline_djot`) stays uncapped regardless, so "full export vs
+   caps" is a view-layer truncation choice, not two different data sources.
+4. ~~**Metrics surface split**~~ **Settled 2026-07-01 (with Mark):** gloss keeps bare scale (node
+   count, edge count, component count) for glance-orientation beside the minimap; the full
+   breakdown (per-`EdgeFamily` histogram, orphan detail, largest-component sizing) moves to
+   apparatus as a new "Graph" section — apparatus's first graph-content section, following its
+   existing Accessibility section's title+rows template (`apparatus_items()` in `apparatus.rs`).
+   Reasoning: gloss answers "where am I, how big, is it fragmented" at a glance; apparatus is
+   where you go to actually diagnose.
+5. ~~**Scene -> DOM for minimap / recent**~~ **Spun out 2026-07-01:** the outline was P1's proof of
+   path; the migration itself is now its own plan,
+   [gloss Scene-to-DOM migration](2026-07-01_gloss_scene_to_dom_migration_plan.md).
 
 ---
 
 ## Cross-references (consume, do not duplicate)
 
+- [gloss Scene-to-DOM migration plan](2026-07-01_gloss_scene_to_dom_migration_plan.md) — the
+  minimap/recent migration this plan's Open Decision #5 deferred until P1 landed; spun out
+  2026-07-01.
 - [gloss Navigator design](../design/2026-06-07_gloss_navigator_design.md) — the outline form
   factor (deferred G3) + §2a DOM decision this plan realizes.
 - [graph signals layer plan](2026-06-22_graph_signals_layer_plan.md) — P6 gloss lens + the
@@ -272,3 +298,40 @@ an ad-hoc list: the format *is* the editing + export path.
   roster's matching row highlights in lockstep (shared `selected_members()` state), and the
   orrery's focus card appears; clicking a structural row is a confirmed no-op. **P1 done.** Next:
   P2, the pluggable nesting axis + scope lens.
+- **2026-07-01 (P1 follow-ups scoped with Mark).** Reviewing what P1 left open surfaced four
+  threads, each with a decision: a11y wiring for the outline rows ("we gotta do it" — new **P1a**
+  phase above), dynamic viewport-driven caps ("nice if... but full export vs caps is good" —
+  settles Open Decision #3, folded into P2), the metrics surface split ("prefer apparatus for
+  metrics" — settles Open Decision #4), and the Scene -> DOM migration for minimap/recent ("heck
+  yeah" — settles Open Decision #5 by spinning it into its own plan, since it was already scoped
+  out of this one). A Plan-agent design review validated the Scene->DOM approach specifically
+  (hybrid DOM-nodes-plus-embedded-Scene-edges, confirmed against the actual serval primitive set —
+  no SVG-like tag exists in `xilem-serval`, so embedded Scene is the only viable option for edges,
+  not just the chosen one) before it was committed to the new doc. P1a/P2-caps/Decision-4 land as
+  updates to this doc; the Scene->DOM work is
+  [its own plan](2026-07-01_gloss_scene_to_dom_migration_plan.md). No code yet for any of the four;
+  implementation starts now.
+- **2026-07-02 (P1a, P2 caps, and Decision #4 landed; 247/247 tests green).**
+  **P1a (a11y):** `gloss_outline_a11y_tree` builds an AccessKit `Role::ListItem`
+  per real-node outline row (routing `SelectNodeByUrl`, identical to the mouse
+  path) and a non-interactive `Role::Label` per structural row, bounds read off
+  the live chrome layout (`dom_member_bounds`, added this pass and since reused
+  by the [Scene-to-DOM migration](2026-07-01_gloss_scene_to_dom_migration_plan.md)'s
+  P3 for the minimap/recent groups too); `"gloss-outline-pane"` joined
+  `FOLDED_PANE_WRAPPERS` so the generic a11y walk doesn't double-produce nodes
+  for it. **P2 caps:** `gloss_outline_snapshot` takes the outline rect's live
+  `available_height`, rows budget via `((available_height - header) /
+  OUTLINE_ROW_H).floor()`, truncating to a synthetic `"+N more"` summary row
+  past budget or `MAX_OUTLINE_DEPTH` (8); `glossary::outline_rows`/
+  `outline_djot` stay fully uncapped, proven by a dedicated test
+  (`cap_never_touches_glossary_rows_uncapped_export_stays_whole`) — resizing
+  the window live-changes the cap since the snapshot rebuilds every frame.
+  **Decision #4 (metrics split):** gloss's header trimmed to
+  `"{nodes} nodes · {edges} edges · {components} components"`; apparatus
+  gained a "Graph" section (family histogram, orphans, largest component) via
+  a new `glossary::GraphMetrics` parameter threaded through
+  `apparatus_items()`. All three headed-verified together with the
+  Scene-to-DOM migration's P1-P3 in the same session — see that doc's
+  Progress for the two real rendering bugs found and fixed along the way
+  (both in the minimap, not the outline) and the harness/perf work that
+  surfaced.

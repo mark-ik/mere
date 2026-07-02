@@ -137,7 +137,7 @@ impl Default for A11ySnapshot {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub(super) struct ObservabilitySnapshot {
     pub uptime: String,
     pub diagnostics: Vec<DiagnosticRecord>,
@@ -149,7 +149,7 @@ pub(super) struct ObservabilitySnapshot {
     pub registry: RegistrySnapshot,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub(super) struct RegistrySnapshot {
     pub registered_channels: usize,
     pub orphan_channels: Vec<(String, u64)>,

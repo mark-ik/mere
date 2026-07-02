@@ -58,6 +58,72 @@ pub(crate) fn shell_view(s: &ShellState) -> ShellView {
                 ),
         ) as ShellView
     });
+    // The gloss recent-visited lens, when open, is a positioned subtree of the shell
+    // document exactly like the outline above — the Scene-to-DOM migration's Phase 1.
+    // Sized to the gloss pane's bottom third ([`crate::gloss::gloss_sections`]).
+    let gloss_recent = s.gloss_recent_rect.map(|[x0, y0, x1, y1]| {
+        let make_recent: fn(&mut GlossRecentState) -> GlossRecentView =
+            |g: &mut GlossRecentState| recent_view(g);
+        let to_recent: fn(&mut ShellState) -> &mut GlossRecentState =
+            |s: &mut ShellState| &mut s.gloss_recent;
+        Box::new(
+            el::<_, ShellState, ()>("div", lens(make_recent, to_recent))
+                .attr("class", "gloss-recent-pane")
+                .attr(
+                    "style",
+                    format!(
+                        "position:absolute;left:{x0}px;top:{y0}px;width:{}px;height:{}px;overflow:hidden",
+                        x1 - x0,
+                        y1 - y0
+                    ),
+                ),
+        ) as ShellView
+    });
+    // The gloss minimap, when open, is TWO positioned elements at the same rect — the
+    // Scene-to-DOM migration's Phase 2, split like this per a debugging finding: an
+    // `<external-texture>` nested inside a *lensed* subtree broke the whole chrome
+    // document (see the debugging note on `gloss_view::minimap_view`). So the backdrop
+    // (edges/rings) is a top-level, non-lensed `<external-texture>` — exactly how
+    // `orrery_element`'s own backdrop is a direct, non-lensed shell-tuple child, not a
+    // lensed one — while only the interactive node squares (which need per-node click
+    // state) stay lensed onto `ShellState.gloss_minimap`. Sized to the gloss pane's
+    // top third.
+    let gloss_minimap_backdrop = s.gloss_minimap_rect.map(|[x0, y0, x1, y1]| {
+        Box::new(
+            external_texture::<ShellState, ()>(
+                crate::gloss_view::GLOSS_MINIMAP_SCENE_KEY,
+                (x1 - x0).max(1.0) as u32,
+                (y1 - y0).max(1.0) as u32,
+            )
+            .attr("class", "gloss-minimap-backdrop")
+            .attr(
+                "style",
+                format!(
+                    "position:absolute;left:{x0}px;top:{y0}px;width:{}px;height:{}px",
+                    x1 - x0,
+                    y1 - y0
+                ),
+            ),
+        ) as ShellView
+    });
+    let gloss_minimap = s.gloss_minimap_rect.map(|[x0, y0, x1, y1]| {
+        let make_minimap: fn(&mut GlossMinimapState) -> GlossMinimapView =
+            |g: &mut GlossMinimapState| minimap_view(g);
+        let to_minimap: fn(&mut ShellState) -> &mut GlossMinimapState =
+            |s: &mut ShellState| &mut s.gloss_minimap;
+        Box::new(
+            el::<_, ShellState, ()>("div", lens(make_minimap, to_minimap))
+                .attr("class", "gloss-minimap-pane")
+                .attr(
+                    "style",
+                    format!(
+                        "position:absolute;left:{x0}px;top:{y0}px;width:{}px;height:{}px;overflow:hidden",
+                        x1 - x0,
+                        y1 - y0
+                    ),
+                ),
+        ) as ShellView
+    });
     // The four list panes (apparatus / steward / inspector / trail), each a positioned
     // subtree of the shell document when open: its inner `list_pane_view` is lensed onto
     // the matching `panes` slot, so the one shell runner lays it out, scrolls it, and
@@ -115,6 +181,9 @@ pub(crate) fn shell_view(s: &ShellState) -> ShellView {
                 orrery_element(&s.orrery),
                 roster,
                 gloss_outline,
+                gloss_recent,
+                gloss_minimap_backdrop,
+                gloss_minimap,
                 list_panes,
                 settings,
                 chrome,
@@ -498,6 +567,10 @@ pub(crate) fn shell_runner(dom: Rc<RefCell<ScriptedDom>>, chrome: Chrome) -> She
             pane_rects: [None; 5],
             gloss_outline: GlossOutlineState::default(),
             gloss_outline_rect: None,
+            gloss_recent: GlossRecentState::default(),
+            gloss_recent_rect: None,
+            gloss_minimap: GlossMinimapState::default(),
+            gloss_minimap_rect: None,
             orrery_wheel: None,
             settings: SettingsPanesState::default(),
             node_card_keys: Vec::new(),

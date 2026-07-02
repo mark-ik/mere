@@ -39,7 +39,7 @@ impl WindowCtx<'_> {
                 action_routes,
             ),
             PaneContent::Roster => self.roster_a11y_tree(pane_id, action_routes),
-            PaneContent::Gloss => self.gloss_a11y_tree(pane_id),
+            PaneContent::Gloss => self.gloss_a11y_tree(pane_id, action_routes),
             PaneContent::Comms => self.comms_a11y_tree(pane_id),
             PaneContent::Steward => self.list_pane_a11y_tree(
                 ShellListPane::Steward,
@@ -291,38 +291,180 @@ impl WindowCtx<'_> {
         UxTree { root, nodes }
     }
 
-    fn gloss_a11y_tree(&self, pane_id: PaneId) -> UxTree {
+    /// The gloss pane's a11y subtree: "Minimap", "Outline"
+    /// ([`gloss_outline_a11y_tree`](Self::gloss_outline_a11y_tree)), and "Recent" groups —
+    /// the same three sections the DOM renders, so this walks the live layout for bounds
+    /// (via [`dom_member_bounds`](Self::dom_member_bounds)) rather than trusting a
+    /// host-tracked rect cache (retired by the Scene-to-DOM migration's Phase 3 — the
+    /// minimap's edges/rings backdrop is still a Scene, but its node squares and the
+    /// recent list are DOM now, same as the outline). Minimap/Recent route
+    /// `SelectNodeByUrl`, identical to their mouse path (`drain_gloss_minimap_intents` /
+    /// `drain_gloss_recent_intents`). (gloss-outline P1a; Scene-to-DOM migration P3.)
+    fn gloss_a11y_tree(
+        &self,
+        pane_id: PaneId,
+        action_routes: &mut HashMap<AccessNodeId, A11yHostAction>,
+    ) -> UxTree {
         let root_path = pane_content_root_path(&self.view.frame_layout, pane_id, "gloss");
         let root = node_id_for_path(&root_path);
-        let node_bounds: HashMap<GraphMemberId, [f32; 4]> =
-            self.view.gloss_node_rects.iter().copied().collect();
         let focused = self.orrery().focused_member();
+        let graph = self.orrery().graph();
         let mut nodes = Vec::new();
-        let mut children = Vec::new();
-        for (_key, graph_node) in self.orrery().graph().nodes() {
-            let id = node_id_for_path(&format!("{root_path}/node/{}", graph_node.id));
+
+        let minimap_bounds = self.dom_member_bounds("gloss-minimap-node");
+        let minimap_root = node_id_for_path(&format!("{root_path}/minimap"));
+        let mut minimap_children = Vec::new();
+        for (member, bounds) in &minimap_bounds {
+            let Some((_, graph_node)) = graph.get_node_by_id(*member) else {
+                continue;
+            };
+            let id = node_id_for_path(&format!("{root_path}/minimap/node/{member}"));
             let mut node = Node::new(Role::Link);
+            let url = graph_node.primary_address().as_url_str().to_string();
             let label = if graph_node.title.is_empty() {
-                graph_node.primary_address().as_url_str().to_string()
+                url.clone()
             } else {
                 graph_node.title.clone()
             };
+            node.add_action(Action::Click);
+            node.add_action(Action::Focus);
+            action_routes.insert(id, A11yHostAction::SelectNodeByUrl(url.clone()));
             node.set_label(label);
-            node.set_value(graph_node.primary_address().as_url_str().to_string());
-            if focused == Some(graph_node.id) {
+            node.set_value(url);
+            if focused == Some(*member) {
                 node.set_description("focused");
             }
-            if let Some(bounds) = node_bounds.get(&graph_node.id) {
-                node.set_bounds(rect(*bounds));
-            }
+            node.set_bounds(rect(*bounds));
             nodes.push((id, node));
-            children.push(id);
+            minimap_children.push(id);
         }
+        let mut minimap_node = Node::new(Role::Group);
+        minimap_node.set_label("Minimap");
+        minimap_node.set_children(minimap_children);
+        nodes.push((minimap_root, minimap_node));
+
+        let (outline_root, outline_nodes) =
+            self.gloss_outline_a11y_tree(&root_path, action_routes);
+        nodes.extend(outline_nodes);
+
+        let recent_bounds = self.dom_member_bounds("gloss-recent-row");
+        let recent_root = node_id_for_path(&format!("{root_path}/recent"));
+        let mut recent_children = Vec::new();
+        for (member, bounds) in &recent_bounds {
+            let Some((_, graph_node)) = graph.get_node_by_id(*member) else {
+                continue;
+            };
+            let id = node_id_for_path(&format!("{root_path}/recent/row/{member}"));
+            let mut node = Node::new(Role::ListItem);
+            let url = graph_node.primary_address().as_url_str().to_string();
+            node.add_action(Action::Click);
+            node.add_action(Action::Focus);
+            action_routes.insert(id, A11yHostAction::SelectNodeByUrl(url.clone()));
+            node.set_label(url);
+            node.set_bounds(rect(*bounds));
+            nodes.push((id, node));
+            recent_children.push(id);
+        }
+        let mut recent_node = Node::new(Role::List);
+        recent_node.set_label("Recent");
+        recent_node.set_children(recent_children);
+        nodes.push((recent_root, recent_node));
+
         let mut root_node = Node::new(Role::Group);
         root_node.set_label("Gloss");
-        root_node.set_children(children);
+        root_node.set_children(vec![minimap_root, outline_root, recent_root]);
         nodes.push((root, root_node));
         UxTree { root, nodes }
+    }
+
+    /// Every element carrying `class` under the chrome document, keyed by its
+    /// `data-member` attribute and positioned via the session's retained layout
+    /// (fragment rect + accumulated scroll/translate origin) — the same live-layout
+    /// bounds lookup [`gloss_outline_a11y_tree`](Self::gloss_outline_a11y_tree)
+    /// pioneered, factored out so the minimap and recent sections can reuse it instead
+    /// of a host-tracked rect cache. Empty before the chrome session's first render.
+    fn dom_member_bounds(&self, class: &str) -> HashMap<GraphMemberId, [f32; 4]> {
+        let mut map = HashMap::new();
+        let Some(session) = self.view.chrome_session.as_ref() else {
+            return map;
+        };
+        let frags = session.fragments();
+        let dom = self.view.dom.borrow();
+        let droot = dom.document();
+        let origins =
+            serval_layout::accumulate_painted_origins(&*dom, frags, session.element_scroll());
+        for node in crate::all_with_class(&dom, droot, class) {
+            if let (Some(member), Some(l), Some(p)) = (
+                crate::member_attr(&dom, node),
+                frags.rect_of(node),
+                origins.get(&node),
+            ) {
+                map.insert(member, [p.x, p.y, p.x + l.size.width, p.y + l.size.height]);
+            }
+        }
+        map
+    }
+
+    /// The gloss outline lens's a11y nodes: bounds off the shell layout (keyed by
+    /// `data-member`, the same scheme the roster rows use), rows from a fresh
+    /// [`gloss_outline_snapshot`](Self::gloss_outline_snapshot) (mirroring how
+    /// `roster_a11y_tree` recomputes rather than reading cached `ShellState`). A real-node
+    /// row routes through `SelectNodeByUrl`, identical to the mouse path
+    /// (`drain_gloss_outline_intents`); a structural row is a non-interactive label so the
+    /// host/path hierarchy still reads for a screen-reader user, not just a flat leaf list.
+    /// Returns `(outline_group_id, nodes)` for [`gloss_a11y_tree`](Self::gloss_a11y_tree) to
+    /// fold into the pane's tree. (gloss-outline P1a.)
+    fn gloss_outline_a11y_tree(
+        &self,
+        root_path: &str,
+        action_routes: &mut HashMap<AccessNodeId, A11yHostAction>,
+    ) -> (AccessNodeId, Vec<(AccessNodeId, Node)>) {
+        let row_bounds = self.dom_member_bounds("gloss-outline-row");
+        // The a11y tree should describe exactly what's visibly rendered (same cap), so
+        // it reads the same live outline rect the last render's fold-in stored, rather
+        // than an independent height — falling back generously (effectively uncapped)
+        // before the first render has set one. (gloss-outline plan P2.)
+        let available_height = self
+            .view
+            .gloss_outline_rect()
+            .map_or(10_000.0, |r| r[3] - r[1]);
+        let snapshot = self.gloss_outline_snapshot(available_height);
+        let mut nodes = Vec::new();
+        let mut children = Vec::new();
+        for (i, row) in snapshot.rows.iter().enumerate() {
+            let id = node_id_for_path(&format!("{root_path}/outline/row/{i}"));
+            match &row.node {
+                Some(n) => {
+                    let mut node = Node::new(Role::ListItem);
+                    node.add_action(Action::Click);
+                    node.add_action(Action::Focus);
+                    action_routes.insert(id, A11yHostAction::SelectNodeByUrl(n.url.clone()));
+                    node.set_label(row.label.clone());
+                    let desc = if n.selected {
+                        format!("selected; {}", n.url)
+                    } else {
+                        n.url.clone()
+                    };
+                    node.set_description(desc);
+                    if let Some(bounds) = row_bounds.get(&n.member) {
+                        node.set_bounds(rect(*bounds));
+                    }
+                    nodes.push((id, node));
+                }
+                None => {
+                    let mut node = Node::new(Role::Label);
+                    node.set_label(row.label.clone());
+                    nodes.push((id, node));
+                }
+            }
+            children.push(id);
+        }
+        let outline_root = node_id_for_path(&format!("{root_path}/outline"));
+        let mut outline_node = Node::new(Role::List);
+        outline_node.set_label("Outline");
+        outline_node.set_children(children);
+        nodes.push((outline_root, outline_node));
+        (outline_root, nodes)
     }
 
     fn comms_a11y_tree(&self, pane_id: PaneId) -> UxTree {

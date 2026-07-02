@@ -151,7 +151,9 @@ impl crate::WindowCtx<'_> {
             let system_rows = self.apparatus_system_rows();
             let sync_rows = self.apparatus_sync_rows();
             let obs = self.apparatus_observability();
-            let items = crate::apparatus::apparatus_items(&system_rows, &sync_rows, &obs);
+            let graph_metrics = glossary::graph_metrics(self.orrery().graph());
+            let items =
+                crate::apparatus::apparatus_items(&system_rows, &sync_rows, &obs, &graph_metrics);
             self.view
                 .set_list_pane(Apparatus, "apparatus", items, Some(rect));
         } else if self.view.list_pane_open(Apparatus) {
@@ -416,23 +418,21 @@ impl crate::WindowCtx<'_> {
         (frame_t, w, h, toolbar_h, dpr)
     }
 
-    /// Build the owned per-pane chrome stylesheets for this frame: the roster sheet plus
-    /// the folded list panes' (apparatus + utility) sheets and the gloss outline's,
-    /// returned as `(roster_css, apparatus_css, utility_css, gloss_outline_css)`. They
-    /// are owned so they outlive the deferred `chrome_sheet` assembly below. (Extracted
-    /// from `render()`; gloss_outline_css added by the gloss-outline plan P1.)
-    pub(super) fn gather_chrome_css(&self) -> (Vec<String>, Vec<String>, Vec<String>, Vec<String>) {
-        let roster_css = crate::roster::roster_sheet(&self.shared.presentation.chrome_theme);
-        // The folded list panes' CSS rides the shell stylesheet too; rules are inert when
-        // no matching pane element is in the document, so they can be unconditional. The
-        // apparatus root is `.apparatus`, the others `.utility-pane`. (Phase 1, step 2.)
-        let apparatus_css =
-            crate::apparatus::apparatus_sheet(&self.shared.presentation.chrome_theme);
-        let utility_css =
-            crate::utility_panes::utility_pane_sheet(&self.shared.presentation.chrome_theme);
-        let gloss_outline_css =
-            crate::gloss_outline_view::gloss_outline_sheet(&self.shared.presentation.chrome_theme);
-        (roster_css, apparatus_css, utility_css, gloss_outline_css)
+    /// Build the owned per-pane chrome stylesheets for this frame, pre-merged into one
+    /// sheet: the roster, the folded list panes (apparatus + utility), and the gloss
+    /// outline + recent lenses. Owned so it outlives the deferred `chrome_sheet`
+    /// assembly below. Rules are inert when no matching pane element is in the
+    /// document, so every pane's sheet can be unconditional. (Extracted from
+    /// `render()`; gloss sheets added by the gloss-outline plan P1 / Scene-to-DOM P1.)
+    pub(super) fn gather_chrome_css(&self) -> Vec<String> {
+        let theme = &self.shared.presentation.chrome_theme;
+        let mut css = crate::roster::roster_sheet(theme);
+        css.extend(crate::apparatus::apparatus_sheet(theme));
+        css.extend(crate::utility_panes::utility_pane_sheet(theme));
+        css.extend(crate::gloss_outline_view::gloss_outline_sheet(theme));
+        css.extend(crate::gloss_view::gloss_recent_sheet(theme));
+        css.extend(crate::gloss_view::gloss_minimap_sheet(theme));
+        css
     }
 
     /// Lay this frame's content band out into pane rects: carve the shellbar strip, lay

@@ -28,12 +28,12 @@ impl WindowCtx<'_> {
     }
 
     /// Whether `(x, y)` falls in a folded pane that routes its clicks through the shell
-    /// hit-test (`chrome_click`): the roster, the four list panes, and comms — every
-    /// *whole-leaf* pane in the shell document. The gloss is only partly folded (its
-    /// outline third is DOM, the minimap/recent thirds are bespoke Scene hit-testing —
-    /// see [`gloss_outline_at`](Self::gloss_outline_at)), so it is not a whole-leaf match
-    /// here. The single content-band check that replaced the per-pane rect branches.
-    /// (Phase 1, step 3.)
+    /// hit-test (`chrome_click`): the roster, the four list panes, comms, and gloss —
+    /// every *whole-leaf* pane in the shell document. Gloss joined this list once all
+    /// three of its sections (outline, recent, minimap node squares) were DOM-folded;
+    /// its edges/rings backdrop stays a Scene, but that's a paint detail under the same
+    /// leaf rect, not a separate hit-test. The single content-band check that replaced
+    /// the per-pane rect branches. (Phase 1, step 3; Scene-to-DOM migration P3.)
     pub(crate) fn chrome_routed_leaf_at(&self, x: f32, y: f32) -> bool {
         self.laid_leaves().iter().any(|leaf| {
             matches!(
@@ -45,6 +45,7 @@ impl WindowCtx<'_> {
                     | PaneContent::Trail
                     | PaneContent::Alembic
                     | PaneContent::Comms
+                    | PaneContent::Gloss
             ) && x >= leaf.rect[0]
                 && x < leaf.rect[2]
                 && y >= leaf.rect[1]
@@ -60,15 +61,6 @@ impl WindowCtx<'_> {
             .settings_rects
             .iter()
             .any(|(_, r)| x >= r[0] && x < r[2] && y >= r[1] && y < r[3])
-    }
-
-    /// Whether `(x, y)` is inside the gloss outline lens's rect — a press there routes to
-    /// the shell document (the outline's rows) rather than the gloss's bespoke minimap /
-    /// recent hit-test beside it. (gloss-outline plan P1 — the first DOM gloss section.)
-    pub(crate) fn gloss_outline_at(&self, x: f32, y: f32) -> bool {
-        self.view
-            .gloss_outline_rect()
-            .is_some_and(|r| x >= r[0] && x < r[2] && y >= r[1] && y < r[3])
     }
 
     /// Whether `(x, y)` is inside the open knot-editor pane — a press there routes to the shell
@@ -98,6 +90,18 @@ impl WindowCtx<'_> {
     /// suggestion / palette rows). A row / backdrop click that closes the palette
     /// restores focus so the caret doesn't dangle on the removed field.
     pub(crate) fn chrome_click(&mut self, x: f32, y: f32) {
+        self.chrome_click_at(x, y, true);
+    }
+
+    /// [`chrome_click`](Self::chrome_click) for the release-resolved toolbar click
+    /// (the custom-titlebar press deferral): identical, except it never arms a caret
+    /// drag-select — the button is already up when this runs, so an armed drag would
+    /// have no release left to end it and would track no-button moves.
+    pub(crate) fn chrome_click_deferred(&mut self, x: f32, y: f32) {
+        self.chrome_click_at(x, y, false);
+    }
+
+    fn chrome_click_at(&mut self, x: f32, y: f32, arm_drag: bool) {
         // The retained chrome session folds its own `element_scroll` (the panes' wheel
         // offsets) into hit-testing via `merged_scroll`, so the host no longer mirrors a
         // per-pane offset map here. The stateless fallback (pre-first-render) has no scroll
@@ -123,7 +127,7 @@ impl WindowCtx<'_> {
         };
         if let Some(node) = hit {
             self.chrome_activate(node, (x, y));
-            self.place_caret_from_click(x, y);
+            self.place_caret_from_click(x, y, arm_drag);
         }
     }
 
@@ -132,11 +136,13 @@ impl WindowCtx<'_> {
     /// landed on a text field (the omnibar, palette, comms fields, or the knot
     /// editor source). Shift-click extends the selection instead of collapsing it,
     /// matching every other caret motion on [`TextInput`](xilem_serval::TextInput).
-    /// A no-op off a text field, before the first render, or when `(x, y)` falls
-    /// outside the field's laid-out text. Kept out of
-    /// [`chrome_activate`](Self::chrome_activate) itself since that tail is shared
-    /// with the a11y activation path, which has no real click point to place from.
-    fn place_caret_from_click(&mut self, x: f32, y: f32) {
+    /// `arm_drag` additionally arms the drag-select gesture (press path only —
+    /// subsequent moves extend the selection until release). A no-op off a text
+    /// field, before the first render, or when `(x, y)` falls outside the field's
+    /// laid-out text. Kept out of [`chrome_activate`](Self::chrome_activate) itself
+    /// since that tail is shared with the a11y activation path, which has no real
+    /// click point to place from.
+    fn place_caret_from_click(&mut self, x: f32, y: f32, arm_drag: bool) {
         let Some(node) = self.view.runner.focus() else {
             return;
         };
@@ -154,6 +160,33 @@ impl WindowCtx<'_> {
             return;
         };
         self.set_caret_field_byte(node, byte, self.view.modifiers.shift);
+        if arm_drag {
+            self.view.caret_drag = Some(node);
+        }
+        self.view.request_redraw();
+    }
+
+    /// Drive an in-progress caret drag-select (armed by
+    /// [`place_caret_from_click`](Self::place_caret_from_click)): extend the
+    /// field's selection to the byte under the cursor. The anchor stays where the
+    /// press placed it; only the caret follows the pointer. A move that resolves
+    /// no byte (past the field's laid-out text) keeps the last position. (Djot
+    /// editor — drag-select.)
+    pub(crate) fn drag_caret_select(&mut self, x: f32, y: f32) {
+        let Some(node) = self.view.caret_drag else {
+            return;
+        };
+        let Some(session) = self.view.chrome_session.as_ref() else {
+            return;
+        };
+        let byte = {
+            let dom = self.view.dom.borrow();
+            session.caret_byte_at_point(&dom, node, x, y)
+        };
+        let Some(byte) = byte else {
+            return;
+        };
+        self.set_caret_field_byte(node, byte, true);
         self.view.request_redraw();
     }
 
@@ -197,6 +230,8 @@ impl WindowCtx<'_> {
         self.drain_physics_toggle();
         self.drain_roster_intents();
         self.drain_gloss_outline_intents();
+        self.drain_gloss_recent_intents();
+        self.drain_gloss_minimap_intents();
         self.drain_list_pane_activations();
         self.drain_object_card();
         self.sync_settings();

@@ -131,10 +131,68 @@ impl WindowView {
     /// runner's dispatch, for the host to apply. (gloss-outline plan P1.)
     pub(crate) fn take_gloss_outline_intents(
         &mut self,
-    ) -> Vec<crate::gloss_outline_view::GlossOutlineIntent> {
+    ) -> Vec<crate::gloss::GlossRowIntent> {
         let mut out = Vec::new();
         self.runner
             .update(|s| out = std::mem::take(&mut s.gloss_outline.pending));
+        out
+    }
+
+    /// Fold the gloss recent-visited lens into the shell document: replace its rows +
+    /// window rect (or `None` to close it). (Scene-to-DOM migration P1.)
+    pub(crate) fn set_gloss_recent(
+        &mut self,
+        snapshot: crate::gloss_view::GlossRecentSnapshot,
+        rect: Option<[f32; 4]>,
+    ) {
+        self.runner.update(|s| {
+            s.gloss_recent.rows = snapshot.rows;
+            s.gloss_recent_rect = rect;
+        });
+    }
+
+    /// Whether the gloss recent subtree is currently in the shell document.
+    /// (Scene-to-DOM migration P1.)
+    pub(crate) fn gloss_recent_open(&self) -> bool {
+        self.runner.state().gloss_recent_rect.is_some()
+    }
+
+    /// Drain the row selections the recent lens's click handlers queued.
+    /// (Scene-to-DOM migration P1.)
+    pub(crate) fn take_gloss_recent_intents(&mut self) -> Vec<crate::gloss::GlossRowIntent> {
+        let mut out = Vec::new();
+        self.runner
+            .update(|s| out = std::mem::take(&mut s.gloss_recent.pending));
+        out
+    }
+
+    /// Fold the gloss minimap into the shell document: replace its node squares +
+    /// window rect (or `None` to close it). (Scene-to-DOM migration P2.)
+    pub(crate) fn set_gloss_minimap(
+        &mut self,
+        snapshot: crate::gloss_view::GlossMinimapSnapshot,
+        rect: Option<[f32; 4]>,
+    ) {
+        self.runner.update(|s| {
+            s.gloss_minimap.nodes = snapshot.nodes;
+            s.gloss_minimap.w = snapshot.w;
+            s.gloss_minimap.h = snapshot.h;
+            s.gloss_minimap_rect = rect;
+        });
+    }
+
+    /// Whether the gloss minimap subtree is currently in the shell document.
+    /// (Scene-to-DOM migration P2.)
+    pub(crate) fn gloss_minimap_open(&self) -> bool {
+        self.runner.state().gloss_minimap_rect.is_some()
+    }
+
+    /// Drain the node selections the minimap's click handlers queued.
+    /// (Scene-to-DOM migration P2.)
+    pub(crate) fn take_gloss_minimap_intents(&mut self) -> Vec<crate::gloss::GlossRowIntent> {
+        let mut out = Vec::new();
+        self.runner
+            .update(|s| out = std::mem::take(&mut s.gloss_minimap.pending));
         out
     }
 
@@ -235,8 +293,6 @@ impl WindowView {
             session_row_rects: Default::default(),
             session_close_rects: Default::default(),
             session_add_rect: Default::default(),
-            gloss_node_rects: Default::default(),
-            gloss_recent_rects: Default::default(),
             tile_rects: Default::default(),
             content_rects: Default::default(),
             settings_rects: Default::default(),
@@ -259,6 +315,7 @@ impl WindowView {
             titlebar_press: Default::default(),
             swatch_drag: Default::default(),
             row_reorder_drag: Default::default(),
+            caret_drag: Default::default(),
             tear_out_drag: Default::default(),
             clip_picker: None,
             branch_graphlet: None,

@@ -98,6 +98,7 @@ mod frame_view;
 mod gloss;
 mod gloss_outline_data;
 mod gloss_outline_view;
+mod gloss_view;
 mod graphlet_classifier;
 mod graphlets;
 #[cfg(test)]

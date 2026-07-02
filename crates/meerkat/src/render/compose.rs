@@ -25,6 +25,7 @@ impl crate::WindowCtx<'_> {
         secondary_textures: Vec<(wgpu::Texture, wgpu::TextureView, [f32; 4])>,
         workbench_view: Option<wgpu::TextureView>,
         workbench_rect: Option<[f32; 4]>,
+        gloss_minimap_view: Option<wgpu::TextureView>,
         composite: Vec<([f32; 4], GraphMemberId)>,
         external_texture_placements: Vec<(u64, [f32; 4])>,
         scrying_surfaces: &[(GraphMemberId, [f32; 4])],
@@ -35,8 +36,10 @@ impl crate::WindowCtx<'_> {
         // + dropdown on top, the rest letting the content through.
         // Composite each chrome-document `<external-texture>` element's registered texture at its
         // laid-out rect: the placement comes from the document, not a hardcoded host rect. The
-        // orrery scene is the first such element (its key is `ORRERY_SCENE_KEY`); secondaries /
-        // workbench / scrying join as they become document elements and register their views. (cond 5.)
+        // orrery scene was the first such element (`ORRERY_SCENE_KEY`); the gloss minimap's
+        // edges/rings backdrop is the second (`GLOSS_MINIMAP_SCENE_KEY`, Scene-to-DOM migration
+        // P2) — each new consumer adds its own key branch here (no generic key->texture registry;
+        // see the Scene-to-DOM migration plan's design review). (cond 5.)
         for &(key, rect) in &external_texture_placements {
             if key == crate::window_view::ORRERY_SCENE_KEY {
                 core.renderer().compose_external_texture(
@@ -47,6 +50,17 @@ impl crate::WindowCtx<'_> {
                     h,
                     ExternalTexturePlacement::new(rect),
                 );
+            } else if key == crate::gloss_view::GLOSS_MINIMAP_SCENE_KEY {
+                if let Some(view) = &gloss_minimap_view {
+                    core.renderer().compose_external_texture(
+                        view,
+                        target_view,
+                        format,
+                        w,
+                        h,
+                        ExternalTexturePlacement::new(rect),
+                    );
+                }
             }
         }
         // Composite each secondary graph-pane's orrery into its own leaf. (Window

@@ -153,12 +153,48 @@ pub fn apparatus_items(
     system_rows: &[(String, String)],
     sync_rows: &[(String, String)],
     obs: &ObservabilitySnapshot,
+    graph_metrics: &glossary::GraphMetrics,
 ) -> Vec<PaneItem> {
     let mut items = Vec::new();
 
     items.push(PaneItem::text("app-title", "Overview"));
     for (label, value) in system_rows {
         items.push(PaneItem::text("app-row", format!("{label}: {value}")));
+    }
+
+    // The graph's full diagnostic breakdown (settles the gloss-outline plan's metrics
+    // surface split): gloss keeps only bare node/edge/component counts for a glance
+    // beside the minimap; everything with an interpretive angle — the relation-family
+    // histogram, orphan detail, largest-component sizing — lives here instead. The
+    // first graph-content section in apparatus. (gloss-outline plan, settled 2026-07-01.)
+    items.push(PaneItem::text("app-title", "Graph"));
+    items.push(PaneItem::text(
+        "app-row",
+        format!(
+            "Nodes: {}; edges: {}",
+            graph_metrics.node_count, graph_metrics.edge_count
+        ),
+    ));
+    items.push(PaneItem::text(
+        "app-row",
+        format!(
+            "Components: {} (largest {})",
+            graph_metrics.component_count, graph_metrics.largest_component
+        ),
+    ));
+    items.push(PaneItem::text(
+        "app-row",
+        format!("Orphans: {}", graph_metrics.orphan_count),
+    ));
+    if graph_metrics.relations_by_family.is_empty() {
+        items.push(PaneItem::text("app-row-muted", "No relations yet"));
+    } else {
+        for (family, count) in &graph_metrics.relations_by_family {
+            items.push(PaneItem::text(
+                "app-row",
+                format!("{}: {count}", crate::roster_data::edge_family_label(*family)),
+            ));
+        }
     }
 
     // The at-rest sync record (the record half of the static-vs-live split; Steward
@@ -311,4 +347,39 @@ pub fn apparatus_items(
     }
 
     items
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kernel::graph::EdgeFamily;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn graph_section_reports_the_full_metrics_breakdown() {
+        let mut relations_by_family = BTreeMap::new();
+        relations_by_family.insert(EdgeFamily::Semantic, 3);
+        let metrics = glossary::GraphMetrics {
+            node_count: 5,
+            edge_count: 4,
+            relation_count: 3,
+            relations_by_family,
+            orphan_count: 1,
+            component_count: 2,
+            largest_component: 4,
+        };
+        let items = apparatus_items(
+            &[],
+            &[],
+            &ObservabilitySnapshot::default(),
+            &metrics,
+        );
+        assert!(items.iter().any(|i| i.class == "app-title" && i.text == "Graph"));
+        assert!(items.iter().any(|i| i.text.contains("Nodes: 5") && i.text.contains("edges: 4")));
+        assert!(items
+            .iter()
+            .any(|i| i.text.contains("Components: 2") && i.text.contains("largest 4")));
+        assert!(items.iter().any(|i| i.text == "Orphans: 1"));
+        assert!(items.iter().any(|i| i.text == "Semantic: 3"));
+    }
 }

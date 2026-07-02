@@ -15,6 +15,12 @@ impl WindowCtx<'_> {
             _ => None,
         };
         let (x, y) = self.view.cursor;
+        // End an in-progress caret drag-select: the selection was extended live on
+        // each move, so the release just disarms it. Deliberately NOT an early
+        // return — a plain click (press, no move) also arms this, and the rest of
+        // the release routing must still run exactly as it does for a click.
+        // (Djot editor — drag-select.)
+        self.view.caret_drag = None;
         // A tear-out drag (G1): a Shift-drag of a node past the slop tears it out
         // into a new leaf window (queued; the registry op runs after the ctx borrow
         // ends). A non-moved press (a Shift-click that never dragged) just clears.
@@ -117,7 +123,7 @@ impl WindowCtx<'_> {
         // reached them. (Custom titlebar.)
         if button == MouseButton::Left {
             if let Some((px, py)) = self.view.titlebar_press.take() {
-                self.chrome_click(px, py);
+                self.chrome_click_deferred(px, py);
                 return;
             }
             // A manual window resize ends on release; skip the orrery /

@@ -86,6 +86,22 @@ impl PaneSession {
             None => true,
             Some(s) => structural || s.dims != dims || !sheet_eq(&s.sheet, sheet),
         };
+        // Every `rebuild` frame pays a full cascade+layout — the same cost the old
+        // stateless-per-frame chrome render paid. `RUST_LOG=meerkat::profile=debug`
+        // surfaces this alongside `frame render profile` (render/paint.rs) so a slow
+        // session shows whether it's from rebuilds firing too often, or the cheap
+        // `rebuild=false` path itself costing more than expected (2026-07-02 perf
+        // investigation: found the latter — `chrome_us` stayed 100-145ms even on
+        // `rebuild=false` frames, pointing at paint-list emission scaling with total
+        // DOM size rather than the mutation delta; a `serval-layout` question, not
+        // fixed here).
+        tracing::debug!(
+            target: "meerkat::profile",
+            rebuild,
+            mut_count = muts.len(),
+            structural,
+            "chrome session rebuild decision"
+        );
 
         if rebuild {
             // Full cascade + layout — same cost as the old stateless frame, but

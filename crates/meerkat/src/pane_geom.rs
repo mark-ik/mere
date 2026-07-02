@@ -113,14 +113,6 @@ impl WindowCtx<'_> {
             .map(|l| l.rect)
     }
 
-    /// The gloss pane's screen rect, if open.
-    pub(super) fn gloss_leaf_rect(&self) -> Option<[f32; 4]> {
-        self.laid_leaves()
-            .into_iter()
-            .find(|l| matches!(l.content, PaneContent::Gloss))
-            .map(|l| l.rect)
-    }
-
     /// If window point `(x, y)` falls on a live scrying surface, the member +
     /// **surface-local** `(x, y)` to forward into its WebView. Scans the surfaces
     /// last-first so the most recently composited (topmost) pane wins on overlap.
@@ -132,24 +124,6 @@ impl WindowCtx<'_> {
             .rev()
             .find(|(_, r)| x >= r[0] && x < r[2] && y >= r[1] && y < r[3])
             .map(|(member, r)| (*member, (x - r[0]) as i32, (y - r[1]) as i32))
-    }
-
-    /// The node whose gloss minimap square contains window point `(x, y)`, if any.
-    pub(super) fn gloss_node_at(&self, x: f32, y: f32) -> Option<GraphMemberId> {
-        self.view
-            .gloss_node_rects
-            .iter()
-            .find(|(_, r)| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3])
-            .map(|(member, _)| *member)
-    }
-
-    /// The node whose gloss "recent" row contains window point `(x, y)`, if any.
-    pub(super) fn gloss_recent_at(&self, x: f32, y: f32) -> Option<GraphMemberId> {
-        self.view
-            .gloss_recent_rects
-            .iter()
-            .find(|(_, r)| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3])
-            .map(|(member, _)| *member)
     }
 
     /// The pane (leaf) under window point `(x, y)`, if any.

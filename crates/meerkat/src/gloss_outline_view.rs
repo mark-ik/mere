@@ -13,14 +13,9 @@ use orrery::NodeState;
 use register_theme::chrome::{ChromeTheme, Color32};
 use xilem_serval::{AnyView, PointerClick, ServalCtx, ServalElement, clickable, el};
 
-pub type GlossOutlineView = Box<dyn AnyView<GlossOutlineState, (), ServalCtx, ServalElement>>;
+use crate::gloss::GlossRowIntent;
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum GlossOutlineIntent {
-    /// Select + focus the node at this URL — the shared `Orrery::select_by_url`
-    /// primitive the minimap and roster's non-additive click both drive.
-    Select(String),
-}
+pub type GlossOutlineView = Box<dyn AnyView<GlossOutlineState, (), ServalCtx, ServalElement>>;
 
 /// A real graph node backing an outline row: its identity (for `data-member` +
 /// keying) and the NODE_SHEET accent (state + selection) every representation of
@@ -56,12 +51,61 @@ pub struct GlossOutlineSnapshot {
 pub struct GlossOutlineState {
     pub rows: Vec<GlossOutlineRow>,
     pub metrics: glossary::GraphMetrics,
-    pub pending: Vec<GlossOutlineIntent>,
+    pub pending: Vec<GlossRowIntent>,
 }
 
 /// Indent step (px) per outline depth level, plus a base inset.
 const INDENT_BASE: f32 = 10.0;
 const INDENT_STEP: f32 = 14.0;
+
+/// Approximate rendered row / header heights (px), for the row-budget estimate in
+/// [`cap_outline_rows`] — not a hard CSS contract (rows auto-size to content), just close
+/// enough that the budget tracks the pane's live height without needing a fixed-height
+/// CSS rewrite. (gloss-outline plan P2 — dynamic caps.)
+pub(crate) const OUTLINE_ROW_H: f32 = 22.0;
+pub(crate) const OUTLINE_HEADER_H: f32 = 18.0;
+/// Depth ceiling independent of viewport: a pathologically deep single URL chain
+/// shouldn't blow up the tree just because it is technically nested. Collapses into
+/// the same "+N more" summary row the row budget uses.
+const MAX_OUTLINE_DEPTH: usize = 8;
+
+/// Cap `rows` to what `available_height` px can actually show: the depth ceiling
+/// above (viewport-independent) plus a row budget derived from the pane's live
+/// height (viewport-dependent — recomputed every frame the outline snapshot is
+/// built, so resizing the window or dragging the gloss pane's divider live-updates
+/// what's visible). A truncated list gets one synthetic "+N more" summary row in
+/// place of what it replaced. `glossary::outline_rows` / `outline_djot` themselves
+/// are never capped — this only trims the *view's* copy, so any future export/knot
+/// consumer still gets the complete tree; "full export vs caps" is the same data,
+/// truncated only here. (gloss-outline plan P2 — dynamic caps.)
+pub(crate) fn cap_outline_rows(
+    mut rows: Vec<GlossOutlineRow>,
+    available_height: f32,
+) -> Vec<GlossOutlineRow> {
+    let before = rows.len();
+    rows.retain(|r| r.depth <= MAX_OUTLINE_DEPTH);
+    let mut hidden = before - rows.len();
+
+    let budget = ((available_height - OUTLINE_HEADER_H).max(0.0) / OUTLINE_ROW_H).floor() as usize;
+    let needs_summary = hidden > 0 || rows.len() > budget;
+    let visible_budget = if needs_summary {
+        budget.saturating_sub(1)
+    } else {
+        budget
+    };
+    if rows.len() > visible_budget {
+        hidden += rows.len() - visible_budget;
+        rows.truncate(visible_budget);
+    }
+    if needs_summary && budget > 0 {
+        rows.push(GlossOutlineRow {
+            depth: 0,
+            label: format!("+{hidden} more"),
+            node: None,
+        });
+    }
+    rows
+}
 
 pub fn gloss_outline_view(state: &GlossOutlineState) -> GlossOutlineView {
     let header = metrics_header(&state.metrics);
@@ -82,18 +126,21 @@ pub fn gloss_outline_view(state: &GlossOutlineState) -> GlossOutlineView {
     )
 }
 
+/// Bare-scale glance readout: node / edge / component counts only. The full breakdown
+/// (relation-family histogram, orphan detail, largest-component sizing) lives in
+/// apparatus's "Graph" section instead — gloss answers "where am I, how big, is it
+/// fragmented" at a glance beside the minimap; apparatus is where you go to diagnose.
+/// (gloss-outline plan, metrics surface split settled 2026-07-01.)
 fn metrics_header(m: &glossary::GraphMetrics) -> GlossOutlineView {
     let plural = |n: usize| if n == 1 { "" } else { "s" };
     let text = format!(
-        "{} node{} \u{b7} {} edge{} \u{b7} {} component{} \u{b7} {} orphan{}",
+        "{} node{} \u{b7} {} edge{} \u{b7} {} component{}",
         m.node_count,
         plural(m.node_count),
         m.edge_count,
         plural(m.edge_count),
         m.component_count,
         plural(m.component_count),
-        m.orphan_count,
-        plural(m.orphan_count),
     );
     Box::new(el::<_, GlossOutlineState, ()>("div", text).attr("class", "gloss-outline-metrics"))
 }
@@ -117,7 +164,7 @@ fn outline_row(row: &GlossOutlineRow) -> GlossOutlineView {
                     .attr("style", indent)
                     .attr("data-member", node.member.to_string()),
                 move |st: &mut GlossOutlineState, _: PointerClick| {
-                    st.pending.push(GlossOutlineIntent::Select(url.clone()));
+                    st.pending.push(GlossRowIntent::Select(url.clone()));
                 },
             ))
         }
@@ -238,7 +285,7 @@ mod tests {
             self.pane.dom()
         }
 
-        fn take_intents(&mut self) -> Vec<GlossOutlineIntent> {
+        fn take_intents(&mut self) -> Vec<GlossRowIntent> {
             let mut out = Vec::new();
             self.pane.update(|s| out = std::mem::take(&mut s.pending));
             out
@@ -272,6 +319,55 @@ mod tests {
             .dom_children(id)
             .map(|c| count_by_class(dom, c, class))
             .sum::<usize>()
+    }
+
+    fn plain_row(depth: usize, label: &str) -> GlossOutlineRow {
+        GlossOutlineRow {
+            depth,
+            label: label.to_string(),
+            node: Some(node(1, "https://x.test/", NodeState::Idle, false)),
+        }
+    }
+
+    #[test]
+    fn cap_leaves_a_short_list_untouched() {
+        let rows = vec![plain_row(0, "a"), plain_row(0, "b")];
+        let capped = cap_outline_rows(rows.clone(), 1000.0);
+        assert_eq!(capped, rows);
+    }
+
+    #[test]
+    fn cap_truncates_to_the_row_budget_with_a_summary_row() {
+        // ~2 rows' worth of height: budget = floor((44 - 18) / 22) = 1.
+        let rows: Vec<_> = (0..5).map(|i| plain_row(0, &i.to_string())).collect();
+        let capped = cap_outline_rows(rows, 44.0);
+        assert_eq!(capped.len(), 1, "budget(1) reserves its one slot for the summary");
+        assert_eq!(capped[0].label, "+5 more");
+        assert!(capped[0].node.is_none(), "the summary row is not clickable");
+    }
+
+    #[test]
+    fn cap_collapses_rows_past_the_depth_ceiling() {
+        let mut rows = vec![plain_row(0, "shallow")];
+        rows.push(plain_row(MAX_OUTLINE_DEPTH + 1, "too deep"));
+        let capped = cap_outline_rows(rows, 1000.0);
+        assert_eq!(capped.len(), 2);
+        assert_eq!(capped[0].label, "shallow");
+        assert_eq!(capped[1].label, "+1 more");
+    }
+
+    #[test]
+    fn cap_never_touches_glossary_rows_uncapped_export_stays_whole() {
+        use kernel::graph::Graph;
+        let mut g = Graph::new();
+        for i in 0..50 {
+            g.add_node(format!("https://site.test/{i}"), euclid::default::Point2D::new(0.0, 0.0));
+        }
+        // `outline_rows`/`outline_djot` never see a pane height; they always return the
+        // complete tree regardless of how small the gloss pane's cap would be. 51 = the
+        // one shared "site.test" host row (structural) + the 50 leaves under it.
+        assert_eq!(glossary::outline_rows(&g).len(), 51);
+        assert_eq!(glossary::outline_djot(&g).lines().count(), 51);
     }
 
     #[test]
@@ -332,7 +428,7 @@ mod tests {
         pane.pane.dispatch_click(row_node, PointerClick::at((20.0, 10.0)));
         assert_eq!(
             pane.take_intents(),
-            vec![GlossOutlineIntent::Select("https://site.test/guide".to_string())]
+            vec![GlossRowIntent::Select("https://site.test/guide".to_string())]
         );
     }
 }

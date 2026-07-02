@@ -156,6 +156,15 @@ pub(crate) struct ConnEdge {
     pub family: EdgeFamily,
 }
 
+/// One chip in the strip: the classifier's display label plus the stable kind tag the chip's
+/// DOM carries (`data-shape-kind`), so a click can crystallize the selection *as* that shape.
+/// (Swatch primitive — P3, chip-click crystallize.)
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct ShapeChip {
+    pub label: String,
+    pub kind_tag: String,
+}
+
 /// What a connections swatch shows: the selected nodes plus the edges among them, laid out in the
 /// card. The Selection-scope payload, sibling to [`SwatchSpec`] (the Node scope). A unified `Scope`
 /// / `SwatchInstance` config follows as more scopes converge. (Swatch primitive — P2.)
@@ -163,9 +172,9 @@ pub(crate) struct ConnEdge {
 pub(crate) struct ConnectionsSpec {
     pub nodes: Vec<ConnNode>,
     pub edges: Vec<ConnEdge>,
-    /// The classifier's ranked shape labels (dominant first) for the chip strip, or empty when
+    /// The classifier's ranked shapes (dominant first) for the chip strip, or empty when
     /// unclassified. (Swatch primitive — P3.)
-    pub shape_chips: Vec<String>,
+    pub shape_chips: Vec<ShapeChip>,
 }
 
 /// Build a connections-swatch spec from the selected nodes' raw positions and their inter-edges:
@@ -322,26 +331,33 @@ pub(crate) fn connections_swatch_view<S: 'static>(spec: &ConnectionsSpec) -> Swa
         ));
     }
     // The classifier's ranked shapes, as a chip strip across the top of the card: the dominant chip
-    // highlighted, the runners-up dimmed. (Swatch primitive — P3, the strip.)
+    // highlighted, the runners-up dimmed. Each chip carries `data-element="shape-chip"` +
+    // `data-shape-kind` so a host click crystallizes the selection as that shape. (Swatch
+    // primitive — P3, the strip + chip-click crystallize.)
     if !spec.shape_chips.is_empty() {
         let chips: Vec<SwatchView<S>> = spec
             .shape_chips
             .iter()
             .enumerate()
-            .map(|(i, label)| {
+            .map(|(i, chip)| {
                 let bg = if i == 0 {
                     "rgba(137,180,250,0.32)"
                 } else {
                     "rgba(0,0,0,0.45)"
                 };
-                Box::new(el::<_, S, ()>("div", label.clone()).attr(
-                    "style",
-                    format!(
-                        "display:inline-block;margin-right:4px;font-size:11px;line-height:1;\
-                         color:#cdd6f4;background-color:{bg};padding:2px 6px;border-radius:5px;\
-                         white-space:nowrap"
-                    ),
-                )) as SwatchView<S>
+                Box::new(
+                    el::<_, S, ()>("div", chip.label.clone())
+                        .attr("data-element", "shape-chip")
+                        .attr("data-shape-kind", chip.kind_tag.clone())
+                        .attr(
+                            "style",
+                            format!(
+                                "display:inline-block;margin-right:4px;font-size:11px;line-height:1;\
+                                 color:#cdd6f4;background-color:{bg};padding:2px 6px;border-radius:5px;\
+                                 white-space:nowrap"
+                            ),
+                        ),
+                ) as SwatchView<S>
             })
             .collect();
         children.push(Box::new(

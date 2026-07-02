@@ -31,6 +31,7 @@ use meerkat::ShellbarPaneStates;
 mod cards;
 mod compose;
 mod connections;
+mod gloss_scene;
 mod orrery_scene;
 mod overlays;
 mod paint;
@@ -82,19 +83,34 @@ impl WindowCtx<'_> {
             self.view
                 .set_roster(crate::roster::RosterSnapshot::default(), None);
         }
-        // Fold the gloss outline lens into the same shell document: the first DOM gloss
-        // section (outline rows + metrics), sized to the gloss pane's middle third; the
-        // minimap + recent list still Scene-rasterize into the remaining top/bottom
-        // thirds below (`gloss_sections` splits the same `gloss_rect` both places agree
-        // on). (gloss-outline plan P1.)
+        // Fold all three gloss lenses into the same shell document: outline (middle
+        // third), recent (bottom third), and now the minimap's DOM node squares (top
+        // third) — `gloss_sections` splits the same `gloss_rect` every consumer
+        // agrees on. The minimap's edges/rings backdrop is still a Scene, but now
+        // rasterized + composited as an embedded `<external-texture>` inside the
+        // shell document rather than a standalone host composite (below, via
+        // `gloss_minimap_scene` threaded through `PaintInputs`). (gloss-outline plan
+        // P1; recent + minimap DOM-ified by the Scene-to-DOM migration P1 / P2.)
         if let Some(grect) = gloss_rect {
-            let (_, outline_rect, _) = crate::gloss::gloss_sections(grect);
-            let snapshot = self.gloss_outline_snapshot();
+            let (_, outline_rect, recent_rect) = crate::gloss::gloss_sections(grect);
+            let available_height = outline_rect[3] - outline_rect[1];
+            let snapshot = self.gloss_outline_snapshot(available_height);
             self.view.set_gloss_outline(snapshot, Some(outline_rect));
-        } else if self.view.gloss_outline_open() {
-            self.view
-                .set_gloss_outline(crate::gloss_outline_view::GlossOutlineSnapshot::default(), None);
+            let recent_snapshot = self.gloss_recent_snapshot();
+            self.view.set_gloss_recent(recent_snapshot, Some(recent_rect));
+        } else {
+            if self.view.gloss_outline_open() {
+                self.view.set_gloss_outline(
+                    crate::gloss_outline_view::GlossOutlineSnapshot::default(),
+                    None,
+                );
+            }
+            if self.view.gloss_recent_open() {
+                self.view
+                    .set_gloss_recent(crate::gloss_view::GlossRecentSnapshot::default(), None);
+            }
         }
+        let gloss_minimap_scene = self.render_gloss_minimap(gloss_rect);
         // Fold the four list panes (apparatus / steward / inspector / trail) into the same
         // shell document: snapshot each open pane's items + rect into its slot before the
         // render lays the document out. Replaces the separate ListPane frames + composites.
@@ -104,13 +120,13 @@ impl WindowCtx<'_> {
         // retained `element_scroll` (the wheel drives `scroll_at`), which `emit_paint_list`
         // folds in through `merged_scroll`. The host no longer mirrors per-pane offsets into
         // `chrome_scroll` here; it carries only the scroll-into-view targets below. (Host-scroll P2.)
-        let (roster_css, apparatus_css, utility_css, gloss_outline_css) = self.gather_chrome_css();
+        let pane_css = self.gather_chrome_css();
         // The chrome (shell document) scene is built **after** the workbench block below,
         // not here: the folded settings panes are positioned at the workbench's tile rects,
         // which are only known once the tile surface has laid out. Rendering the shell after
         // `snapshot_settings_panes` lets a spine page-switch land this frame instead of one
-        // frame late. `roster_css` / `apparatus_css` / `utility_css` are owned, so they stay
-        // here and feed the deferred `chrome_sheet`. (Settings lane P1.)
+        // frame late. `pane_css` is owned, so it stays here and feeds the deferred
+        // `chrome_sheet`. (Settings lane P1.)
 
         // The orrery's per-frame update (node state/shape, resize, recenter, mirror,
         // strategy) and the node-card snapshot now run *above* the chrome render, so the
@@ -147,16 +163,8 @@ impl WindowCtx<'_> {
         // `element_scroll` (the wheel drives `scroll_at`); `emit_paint_list` folds it in, so the
         // host no longer mirrors the offset into `chrome_scroll`. (Host-scroll P2.)
 
-        let (chrome_scene, chrome_us, external_texture_placements) = self.render_chrome_scene(
-            w,
-            h,
-            cursor,
-            &chrome_scroll,
-            &roster_css,
-            &apparatus_css,
-            &utility_css,
-            &gloss_outline_css,
-        );
+        let (chrome_scene, chrome_us, external_texture_placements) =
+            self.render_chrome_scene(w, h, cursor, &chrome_scroll, &pane_css);
         // The "last visit" snapshot card (focused, visited, not live) + the "unvisited"
         // placeholder card (focused node, no snapshot yet): both composite on their own
         // path below. `snapshot_card` is `(member, url, dest rect, scene)` — the scene is
@@ -195,7 +203,7 @@ impl WindowCtx<'_> {
             workbench_scene,
             workbench_ghost,
             workbench_rect,
-            gloss_rect,
+            gloss_minimap_scene,
             cards,
             scrying_surfaces,
             snapshot_card,

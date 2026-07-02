@@ -80,6 +80,14 @@ impl Shell {
                     wc.drag_row_reorder(wc.view.cursor.0, wc.view.cursor.1);
                     return;
                 }
+                // A caret drag-select in progress (a left press placed the caret in a
+                // text field): each move extends that field's selection to the byte
+                // under the cursor and routes nowhere else; the release disarms it.
+                // (Djot editor — drag-select.)
+                if wc.view.caret_drag.is_some() {
+                    wc.drag_caret_select(wc.view.cursor.0, wc.view.cursor.1);
+                    return;
+                }
                 // Hint the resize edges: the borderless window has no OS frame, so
                 // the host sets the resize arrows on hover. (Custom titlebar.)
                 wc.update_hover_cursor();
