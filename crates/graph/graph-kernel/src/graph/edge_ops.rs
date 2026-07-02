@@ -24,7 +24,7 @@ use super::identity::{EdgeKey, NodeKey};
 use super::{DissolvedTraversalRecord, Graph};
 
 impl Graph {
-    pub fn assert_relation(
+    pub(crate) fn assert_relation(
         &mut self,
         from: NodeKey,
         to: NodeKey,
@@ -62,7 +62,7 @@ impl Graph {
     /// predicate still reports the `Semantic` family. Returns the edge, or `None`
     /// if either endpoint is missing. Write path for raw web predicates
     /// (linked-data ingest / knot `rel`s outside Mere's vocabulary).
-    pub fn assert_semantic_predicate(
+    pub(crate) fn assert_semantic_predicate(
         &mut self,
         from: NodeKey,
         to: NodeKey,
@@ -83,7 +83,7 @@ impl Graph {
     }
 
     /// Replay helper: add node only if UUID is not already present.
-    pub fn replay_add_node_with_id_if_missing(
+    pub(crate) fn replay_add_node_with_id_if_missing(
         &mut self,
         id: Uuid,
         url: String,
@@ -96,14 +96,14 @@ impl Graph {
     }
 
     /// Replay helper: remove node by stable UUID.
-    pub fn replay_remove_node_by_id(&mut self, node_id: Uuid) -> bool {
+    pub(crate) fn replay_remove_node_by_id(&mut self, node_id: Uuid) -> bool {
         let Some(key) = self.get_node_key_by_id(node_id) else {
             return false;
         };
         self.remove_node(key)
     }
 
-    pub fn replay_retract_relations_by_ids(
+    pub(crate) fn replay_retract_relations_by_ids(
         &mut self,
         from_id: Uuid,
         to_id: Uuid,
@@ -118,7 +118,7 @@ impl Graph {
         self.retract_relations(from_key, to_key, selector)
     }
 
-    pub fn replay_assert_relation_by_ids(
+    pub(crate) fn replay_assert_relation_by_ids(
         &mut self,
         from_id: Uuid,
         to_id: Uuid,
@@ -130,7 +130,7 @@ impl Graph {
     }
 
     /// Dissolve helper: collect traversals from all incident edges and remove the node.
-    pub fn dissolve_remove_node_collect_traversals(
+    pub(crate) fn dissolve_remove_node_collect_traversals(
         &mut self,
         key: NodeKey,
     ) -> Option<Vec<DissolvedTraversalRecord>> {
@@ -185,7 +185,7 @@ impl Graph {
         Some(records)
     }
 
-    pub fn retract_relations(
+    pub(crate) fn retract_relations(
         &mut self,
         from: NodeKey,
         to: NodeKey,
@@ -222,8 +222,22 @@ impl Graph {
     }
 
     /// Get a mutable edge payload by key.
-    pub fn get_edge_mut(&mut self, key: EdgeKey) -> Option<&mut EdgePayload> {
+    pub(crate) fn get_edge_mut(&mut self, key: EdgeKey) -> Option<&mut EdgePayload> {
         self.inner.edge_weight_mut(key)
+    }
+
+    /// Set (or clear) the canonical semantic-predicate IRI on an existing edge.
+    /// Returns whether the edge exists. The sanctioned write path for a payload's
+    /// predicate — the linked-data ingest and inker statements previously reached
+    /// it through `get_edge_mut` (write-path migration, 2026-07-01). A content
+    /// annotation on an existing edge, not a structural change, so the revision
+    /// holds (same rule as title/tag edits).
+    pub(crate) fn set_edge_semantic_predicate(&mut self, key: EdgeKey, predicate: Option<String>) -> bool {
+        let Some(payload) = self.inner.edge_weight_mut(key) else {
+            return false;
+        };
+        payload.set_semantic_predicate(predicate);
+        true
     }
 
     /// Get an edge payload by key.
@@ -237,7 +251,7 @@ impl Graph {
     }
 
     /// Append a traversal event to an existing edge, or create an edge carrying the traversal.
-    pub fn push_traversal(&mut self, from: NodeKey, to: NodeKey, traversal: Traversal) -> bool {
+    pub(crate) fn push_traversal(&mut self, from: NodeKey, to: NodeKey, traversal: Traversal) -> bool {
         if from == to || !self.inner.contains_node(from) || !self.inner.contains_node(to) {
             return false;
         }
@@ -263,7 +277,7 @@ impl Graph {
     /// `Traversal` struct themselves. `timestamp_ms = None` stamps
     /// now-via-`Traversal::now`; `Some(t)` uses the supplied
     /// timestamp (importers, replay).
-    pub fn append_traversal(
+    pub(crate) fn append_traversal(
         &mut self,
         from: NodeKey,
         to: NodeKey,

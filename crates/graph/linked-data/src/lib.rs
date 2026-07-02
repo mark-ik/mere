@@ -375,6 +375,7 @@ mod tests {
         EdgeContribution, GraphContribution, apply_contribution, from_jsonld, to_jsonld,
         to_jsonld_compact,
     };
+    use kernel::graph::fixtures::GraphFixtures;
     use kernel::graph::{EdgeAssertion, Graph, SemanticSubKind};
     use serde_json::json;
 

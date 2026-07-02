@@ -32,7 +32,7 @@ impl Graph {
     }
 
     /// Get a mutable node by key.
-    pub fn get_node_mut(&mut self, key: NodeKey) -> Option<&mut Node> {
+    pub(crate) fn get_node_mut(&mut self, key: NodeKey) -> Option<&mut Node> {
         self.inner.node_weight_mut(key)
     }
 
@@ -228,7 +228,7 @@ impl Graph {
     /// Rebuild derived containment edges from current node URLs.
     ///
     /// Derived relations are additive/read-only and are never persisted.
-    pub fn rebuild_derived_containment_relations(&mut self) {
+    pub(crate) fn rebuild_derived_containment_relations(&mut self) {
         let edge_ids: Vec<EdgeKey> = self.inner.edge_indices().collect();
         let mut empty_edges = Vec::new();
         // This rebuild retracts containment relations and removes empty edges directly on `inner`

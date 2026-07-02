@@ -88,6 +88,7 @@ impl CommunityActor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kernel::graph::fixtures::GraphFixtures;
     use std::sync::Arc;
 
     use kernel::geometry::PortablePoint;

@@ -6,6 +6,7 @@
 //! keep both files under the workspace's per-file size ceiling.
 
 use super::*;
+use kernel::graph::fixtures::GraphFixtures;
 
 fn graph_with_two_nodes() -> Graph {
     let mut g = Graph::new();

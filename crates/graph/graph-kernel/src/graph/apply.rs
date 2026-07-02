@@ -6,8 +6,10 @@ use euclid::default::Point2D;
 use uuid::Uuid;
 
 use super::{
-    EdgeAssertion, EdgeKey, FrameLayoutHint, Graph, NavigationTrigger, NodeKey, RelationSelector,
+    Coupling, EdgeAssertion, EdgeKey, Field, FieldId, FrameLayoutHint, Graph, NavigationTrigger,
+    NodeKey, RelationSelector,
 };
+use crate::types::{NodeClassification, NodeDerivation, NodeProperty};
 
 #[derive(Debug, Clone)]
 pub enum GraphDelta {
@@ -120,6 +122,58 @@ pub enum GraphDelta {
         entries: Vec<String>,
         current_index: usize,
     },
+    // --- Write-path migration (2026-07-01): the variants below complete the
+    // Phase 6.5 boundary. Every primitive durable mutation shell/runtime code
+    // performs now has a delta; the raw mutators are `pub(crate)`. ---
+    /// Navigate a node in place: record the visit in its own browse history and
+    /// update its Primary URL. No new node, no edge.
+    NavigateNode { key: NodeKey, url: String },
+    /// Anchor a freshly-minted `child` node's history under `parent`'s current
+    /// visit (the navigated-from anchor; call before the child's first navigate).
+    BranchHistory { child: NodeKey, parent: NodeKey },
+    /// Step a node back one visit in its own history (result:
+    /// [`GraphDeltaResult::HistoryStepped`] carries the revealed URL).
+    NodeHistoryBack { key: NodeKey },
+    /// Step a node forward one visit in its own history.
+    NodeHistoryForward { key: NodeKey },
+    /// Add a durable semantic tag (also appends to the presentation order).
+    InsertNodeTag { key: NodeKey, tag: String },
+    /// Remove a durable semantic tag (also drops its presentation entries).
+    RemoveNodeTag { key: NodeKey, tag: String },
+    /// Set (or clear) a node's inline authored content body (knot note source).
+    SetNodeBody { key: NodeKey, body: Option<String> },
+    /// Append an open literal property (dedup by exact predicate+value pair).
+    AppendNodeProperty { key: NodeKey, property: NodeProperty },
+    /// Add a provenance-bearing classification record (dedup by scheme+value).
+    AddNodeClassification {
+        key: NodeKey,
+        classification: NodeClassification,
+    },
+    /// Record cross-graph / extraction derivation provenance on a node.
+    RecordNodeDerivation {
+        key: NodeKey,
+        derivation: NodeDerivation,
+    },
+    /// Set (or clear) the canonical semantic-predicate IRI on an existing edge.
+    SetEdgeSemanticPredicate {
+        edge: EdgeKey,
+        predicate: Option<String>,
+    },
+    /// Assert a plain semantic edge carrying a raw predicate IRI (the
+    /// unrecognized-predicate ingest path), creating the edge if absent.
+    AssertSemanticPredicate {
+        from: NodeKey,
+        to: NodeKey,
+        predicate: String,
+    },
+    /// Add (or replace by id) a field — field-layer truth.
+    AddField { field: Field },
+    /// Retire a field (lifecycle to Retired; couplings stop evaluating).
+    RetireField { id: FieldId },
+    /// Add (or replace by id) a coupling binding a field to a node selector.
+    AddCoupling { coupling: Coupling },
+    /// Set the strength of every coupling bound to `field`.
+    SetFieldCouplingStrength { field: FieldId, strength: f32 },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -132,6 +186,13 @@ pub enum GraphDeltaResult {
     TraversalAppended(bool),
     NodeMetadataUpdated(bool),
     NodeUrlUpdated(Option<String>),
+    /// A history back/forward step: the revealed URL, or `None` at the
+    /// root/tip (the cursor did not move).
+    HistoryStepped(Option<String>),
+    /// A field-layer mutation: whether anything actually changed.
+    FieldChanged(bool),
+    /// A mutation with no observable result (e.g. navigate, branch-history).
+    Applied,
 }
 
 pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResult {
@@ -254,5 +315,108 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
             entries,
             current_index,
         )),
+        GraphDelta::NavigateNode { key, url } => {
+            graph.navigate_node(key, &url);
+            GraphDeltaResult::Applied
+        }
+        GraphDelta::BranchHistory { child, parent } => {
+            graph.branch_history(child, parent);
+            GraphDeltaResult::Applied
+        }
+        GraphDelta::NodeHistoryBack { key } => {
+            GraphDeltaResult::HistoryStepped(graph.node_history_back(key))
+        }
+        GraphDelta::NodeHistoryForward { key } => {
+            GraphDeltaResult::HistoryStepped(graph.node_history_forward(key))
+        }
+        GraphDelta::InsertNodeTag { key, tag } => {
+            GraphDeltaResult::NodeMetadataUpdated(graph.insert_node_tag(key, tag))
+        }
+        GraphDelta::RemoveNodeTag { key, tag } => {
+            GraphDeltaResult::NodeMetadataUpdated(graph.remove_node_tag(key, &tag))
+        }
+        GraphDelta::SetNodeBody { key, body } => {
+            GraphDeltaResult::NodeMetadataUpdated(graph.set_node_body(key, body))
+        }
+        GraphDelta::AppendNodeProperty { key, property } => {
+            GraphDeltaResult::NodeMetadataUpdated(graph.append_node_property(key, property))
+        }
+        GraphDelta::AddNodeClassification {
+            key,
+            classification,
+        } => GraphDeltaResult::NodeMetadataUpdated(
+            graph.add_node_classification(key, classification),
+        ),
+        GraphDelta::RecordNodeDerivation { key, derivation } => {
+            GraphDeltaResult::NodeMetadataUpdated(graph.record_derivation(key, derivation))
+        }
+        GraphDelta::SetEdgeSemanticPredicate { edge, predicate } => {
+            GraphDeltaResult::NodeMetadataUpdated(graph.set_edge_semantic_predicate(edge, predicate))
+        }
+        GraphDelta::AssertSemanticPredicate {
+            from,
+            to,
+            predicate,
+        } => GraphDeltaResult::EdgeAdded(graph.assert_semantic_predicate(from, to, predicate)),
+        GraphDelta::AddField { field } => {
+            graph.add_field(field);
+            GraphDeltaResult::FieldChanged(true)
+        }
+        GraphDelta::RetireField { id } => GraphDeltaResult::FieldChanged(graph.retire_field(id)),
+        GraphDelta::AddCoupling { coupling } => {
+            graph.add_coupling(coupling);
+            GraphDeltaResult::FieldChanged(true)
+        }
+        GraphDelta::SetFieldCouplingStrength { field, strength } => {
+            GraphDeltaResult::FieldChanged(graph.set_field_coupling_strength(field, strength))
+        }
+    }
+}
+
+// --- Ergonomic wrappers (write-path migration, 2026-07-01) ---
+//
+// Thin constructors over [`apply_graph_delta`] for the deltas whose result the
+// caller almost always unwraps. They keep the funnel — every one routes through
+// `apply_graph_delta`, so a future recording hook (the event log) instruments
+// exactly one function — while sparing hot call sites the enum-unwrap noise.
+
+/// Add a node (fresh random id when `id` is `None`; not available on wasm
+/// without an explicit id) and return its key.
+pub fn add_node(graph: &mut Graph, id: Option<Uuid>, url: String, position: Point2D<f32>) -> NodeKey {
+    match apply_graph_delta(graph, GraphDelta::AddNode { id, url, position }) {
+        GraphDeltaResult::NodeAdded(key) => key,
+        other => unreachable!("AddNode returned {other:?}"),
+    }
+}
+
+/// Assert a relation between two nodes, returning the edge key (or `None` when
+/// either endpoint is gone).
+pub fn assert_relation(
+    graph: &mut Graph,
+    from: NodeKey,
+    to: NodeKey,
+    assertion: EdgeAssertion,
+) -> Option<EdgeKey> {
+    match apply_graph_delta(graph, GraphDelta::AssertRelation { from, to, assertion }) {
+        GraphDeltaResult::EdgeAdded(key) => key,
+        other => unreachable!("AssertRelation returned {other:?}"),
+    }
+}
+
+/// Step a node back one visit in its own browse history, returning the
+/// revealed URL (`None` at the root).
+pub fn node_history_back(graph: &mut Graph, key: NodeKey) -> Option<String> {
+    match apply_graph_delta(graph, GraphDelta::NodeHistoryBack { key }) {
+        GraphDeltaResult::HistoryStepped(url) => url,
+        other => unreachable!("NodeHistoryBack returned {other:?}"),
+    }
+}
+
+/// Step a node forward one visit in its own browse history, returning the
+/// revealed URL (`None` at the tip).
+pub fn node_history_forward(graph: &mut Graph, key: NodeKey) -> Option<String> {
+    match apply_graph_delta(graph, GraphDelta::NodeHistoryForward { key }) {
+        GraphDeltaResult::HistoryStepped(url) => url,
+        other => unreachable!("NodeHistoryForward returned {other:?}"),
     }
 }

@@ -462,6 +462,12 @@ impl Orrery {
         let Some(key) = self.graph.get_node_by_url(url).map(|(k, _)| k) else {
             return false;
         };
-        self.graph.set_node_favicon(key, rgba, width, height)
+        matches!(
+            kernel::graph::apply::apply_graph_delta(
+                &mut self.graph,
+                kernel::graph::apply::GraphDelta::SetNodeFavicon { key, rgba, width, height },
+            ),
+            kernel::graph::apply::GraphDeltaResult::NodeMetadataUpdated(true)
+        )
     }
 }

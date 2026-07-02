@@ -10,6 +10,11 @@ description = "Portable identity, authority, and mutation kernel for the Mere br
 
 [features]
 test-utils = []
+# Test-fixture escape hatch: re-exposes the pub(crate) graph mutators through
+# the `graph::fixtures::GraphFixtures` extension trait so test code can build
+# sample graphs without routing through GraphDelta. Enable in dev-dependencies
+# ONLY — a non-dev enable reopens the Phase 6.5 write-path boundary.
+fixtures = []
 # Native on-disk graph persistence (the `store` module: Graph <-> graph.json
 # via GraphSnapshot). Off by default so the kernel stays portable-by-default;
 # the native host enables it. serde_json is already a base dep.

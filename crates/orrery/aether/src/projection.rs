@@ -81,11 +81,17 @@ impl FieldProjection {
             if let Some(name) = self.registry.name_of(id) {
                 field = field.with_name(name);
             }
-            graph.add_field(field);
+            let _ = kernel::graph::apply::apply_graph_delta(
+                graph,
+                kernel::graph::apply::GraphDelta::AddField { field },
+            );
             fields += 1;
         }
         for coupling in &self.couplings {
-            graph.add_coupling(coupling.clone());
+            let _ = kernel::graph::apply::apply_graph_delta(
+                graph,
+                kernel::graph::apply::GraphDelta::AddCoupling { coupling: coupling.clone() },
+            );
         }
         (fields, self.couplings.len())
     }

@@ -204,6 +204,7 @@ impl Force for CouplingForce {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kernel::graph::fixtures::GraphFixtures;
     use crate::{Boundary, Simulation};
     use euclid::default::Point2D;
     use kernel::graph::{Field, FieldId};

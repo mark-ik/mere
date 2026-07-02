@@ -334,6 +334,7 @@ wasm-bindgen = "0.2"
 web-sys = { version = "0.3", features = ["DedicatedWorkerGlobalScope", "Worker"] }
 
 [dev-dependencies]
+kernel = { workspace = true, features = ["fixtures"] }
 # Workbench-composition tests mint graph-member ids (kernel node UUIDs) and
 # build small session graphs to resolve tiles against.
 uuid = { workspace = true }

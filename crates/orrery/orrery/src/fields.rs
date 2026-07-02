@@ -11,6 +11,7 @@ use std::collections::HashSet;
 
 use euclid::default::Point2D;
 use gyre::CouplingForce;
+use kernel::graph::apply::{GraphDelta, GraphDeltaResult, apply_graph_delta};
 use kernel::graph::{Falloff, Field, FieldDefinition, FieldExtent, FieldId, ScalarField};
 
 use super::Orrery;
@@ -76,7 +77,11 @@ impl Orrery {
     /// sets and settling the nodes it no longer pulls. The host's "Delete field" context
     /// action. (Field regions — delete.)
     pub fn delete_field(&mut self, id: FieldId) {
-        if self.graph.retire_field(id) {
+        let retired = matches!(
+            apply_graph_delta(&mut self.graph, GraphDelta::RetireField { id }),
+            GraphDeltaResult::FieldChanged(true)
+        );
+        if retired {
             if self.active_field == Some(id) {
                 self.active_field = None;
             }
@@ -356,7 +361,7 @@ impl Orrery {
         if let Some(name) = name {
             field = field.with_name(name);
         }
-        self.graph.add_field(field);
+        let _ = apply_graph_delta(&mut self.graph, GraphDelta::AddField { field });
         self.rebuild_coupling_forces();
     }
 }

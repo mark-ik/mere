@@ -17,13 +17,13 @@ impl Graph {
     // ── Fields ────────────────────────────────────────────────────────────────
 
     /// Add or replace a field by its id.
-    pub fn add_field(&mut self, field: Field) {
+    pub(crate) fn add_field(&mut self, field: Field) {
         self.fields.insert(field.id, field);
     }
 
     /// Retire a field: mark it `Retired` (keeping its definition for history /
     /// federation) rather than dropping it. Returns whether the field existed.
-    pub fn retire_field(&mut self, id: FieldId) -> bool {
+    pub(crate) fn retire_field(&mut self, id: FieldId) -> bool {
         self.set_field_lifecycle(id, FieldLifecycle::Retired)
     }
 
@@ -31,7 +31,7 @@ impl Graph {
     /// [`retire_field`](Self::retire_field); together they make the field
     /// lifecycle fully round-trippable from the kernel (the activate/retire UX
     /// drives these). Returns whether the field existed.
-    pub fn activate_field(&mut self, id: FieldId) -> bool {
+    pub(crate) fn activate_field(&mut self, id: FieldId) -> bool {
         self.set_field_lifecycle(id, FieldLifecycle::Active)
     }
 
@@ -58,13 +58,13 @@ impl Graph {
     // ── Couplings ─────────────────────────────────────────────────────────────
 
     /// Add or replace a coupling by its id.
-    pub fn add_coupling(&mut self, coupling: Coupling) {
+    pub(crate) fn add_coupling(&mut self, coupling: Coupling) {
         self.couplings.insert(coupling.id, coupling);
     }
 
     /// Remove a coupling. Returns whether it existed. (Couplings have no
     /// lifecycle state of their own; retracting drops the rule.)
-    pub fn retract_coupling(&mut self, id: CouplingId) -> bool {
+    pub(crate) fn retract_coupling(&mut self, id: CouplingId) -> bool {
         self.couplings.remove(&id).is_some()
     }
 
@@ -88,7 +88,7 @@ impl Graph {
     /// Set the `strength` of every coupling targeting `field`, returning whether any
     /// was updated — the per-field force-well tuning the roster drives. (Field
     /// regions — strength tuning.)
-    pub fn set_field_coupling_strength(&mut self, field: FieldId, strength: f32) -> bool {
+    pub(crate) fn set_field_coupling_strength(&mut self, field: FieldId, strength: f32) -> bool {
         let mut changed = false;
         for coupling in self.couplings.values_mut() {
             if coupling.field == field {

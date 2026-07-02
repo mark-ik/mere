@@ -313,7 +313,13 @@ impl Shell {
         self.copy_node_across(node, from, to);
         let released = if let Some(src) = self.orreries.get_mut(&from) {
             src.ingest_graph(|g| match g.get_node_by_id(node) {
-                Some((key, _)) => g.remove_node(key),
+                Some((key, _)) => matches!(
+                    kernel::graph::apply::apply_graph_delta(
+                        g,
+                        kernel::graph::apply::GraphDelta::RemoveNode { key },
+                    ),
+                    kernel::graph::apply::GraphDeltaResult::NodeRemoved(true)
+                ),
                 None => false,
             })
         } else {

@@ -241,22 +241,28 @@ impl WindowCtx<'_> {
         }
         let body_for_graph = body.clone();
         let changed = self.orrery_mut().ingest_graph(|graph| {
+            use kernel::graph::apply::{GraphDelta, GraphDeltaResult, apply_graph_delta};
             let Some((key, _)) = graph.get_node_by_id(member) else {
                 return false;
             };
-            let Some(node) = graph.get_node_mut(key) else {
-                return false;
-            };
-            let mut changed = false;
-            if node.body.as_deref() != Some(body_for_graph.as_str()) {
-                node.body = Some(body_for_graph.clone());
-                changed = true;
-            }
-            if node.mime_hint.as_deref() != Some("text/x-knot") {
-                node.mime_hint = Some("text/x-knot".to_string());
-                changed = true;
-            }
-            changed
+            let body_changed = matches!(
+                apply_graph_delta(
+                    graph,
+                    GraphDelta::SetNodeBody { key, body: Some(body_for_graph.clone()) },
+                ),
+                GraphDeltaResult::NodeMetadataUpdated(true)
+            );
+            let mime_changed = matches!(
+                apply_graph_delta(
+                    graph,
+                    GraphDelta::SetNodeMimeHint {
+                        key,
+                        mime_hint: Some("text/x-knot".to_string()),
+                    },
+                ),
+                GraphDeltaResult::NodeMetadataUpdated(true)
+            );
+            body_changed || mime_changed
         });
         self.shared.content.pages.insert(
             url.clone(),

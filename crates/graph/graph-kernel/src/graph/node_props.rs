@@ -29,11 +29,11 @@ use super::identity::NodeKey;
 use super::node::{Node, NodeLifecycle};
 use crate::types::{
     ClassificationProvenance, ClassificationScheme, ClassificationStatus, FrameLayoutHint,
-    NodeClassification, NodeImportProvenance, NodeTagPresentationState,
+    NodeClassification, NodeImportProvenance, NodeProperty, NodeTagPresentationState,
 };
 
 impl Graph {
-    pub fn set_node_title(&mut self, key: NodeKey, title: String) -> bool {
+    pub(crate) fn set_node_title(&mut self, key: NodeKey, title: String) -> bool {
         let Some(node) = self.inner.node_weight_mut(key) else {
             return false;
         };
@@ -44,7 +44,7 @@ impl Graph {
         true
     }
 
-    pub fn set_node_thumbnail(
+    pub(crate) fn set_node_thumbnail(
         &mut self,
         key: NodeKey,
         png_bytes: Vec<u8>,
@@ -66,7 +66,7 @@ impl Graph {
         true
     }
 
-    pub fn set_node_favicon(
+    pub(crate) fn set_node_favicon(
         &mut self,
         key: NodeKey,
         rgba: Vec<u8>,
@@ -88,7 +88,7 @@ impl Graph {
         true
     }
 
-    pub fn set_node_mime_hint(&mut self, key: NodeKey, mime_hint: Option<String>) -> bool {
+    pub(crate) fn set_node_mime_hint(&mut self, key: NodeKey, mime_hint: Option<String>) -> bool {
         let Some(node) = self.inner.node_weight_mut(key) else {
             return false;
         };
@@ -99,7 +99,7 @@ impl Graph {
         true
     }
 
-    pub fn set_node_viewer_override(
+    pub(crate) fn set_node_viewer_override(
         &mut self,
         key: NodeKey,
         viewer_override: Option<String>,
@@ -114,7 +114,7 @@ impl Graph {
         true
     }
 
-    pub fn set_node_pinned(&mut self, key: NodeKey, is_pinned: bool) -> bool {
+    pub(crate) fn set_node_pinned(&mut self, key: NodeKey, is_pinned: bool) -> bool {
         let Some(node) = self.inner.node_weight_mut(key) else {
             return false;
         };
@@ -125,7 +125,7 @@ impl Graph {
         true
     }
 
-    pub fn set_node_compat_mode(&mut self, key: NodeKey, compat_mode: bool) -> bool {
+    pub(crate) fn set_node_compat_mode(&mut self, key: NodeKey, compat_mode: bool) -> bool {
         let Some(node) = self.inner.node_weight_mut(key) else {
             return false;
         };
@@ -140,7 +140,7 @@ impl Graph {
         self.get_node(key).map(|node| node.compat_mode)
     }
 
-    pub fn append_frame_layout_hint(&mut self, key: NodeKey, hint: FrameLayoutHint) -> bool {
+    pub(crate) fn append_frame_layout_hint(&mut self, key: NodeKey, hint: FrameLayoutHint) -> bool {
         let Some(node) = self.inner.node_weight_mut(key) else {
             return false;
         };
@@ -148,7 +148,7 @@ impl Graph {
         true
     }
 
-    pub fn remove_frame_layout_hint_at(&mut self, key: NodeKey, hint_index: usize) -> bool {
+    pub(crate) fn remove_frame_layout_hint_at(&mut self, key: NodeKey, hint_index: usize) -> bool {
         let Some(node) = self.inner.node_weight_mut(key) else {
             return false;
         };
@@ -159,7 +159,7 @@ impl Graph {
         true
     }
 
-    pub fn move_frame_layout_hint(
+    pub(crate) fn move_frame_layout_hint(
         &mut self,
         key: NodeKey,
         from_index: usize,
@@ -179,7 +179,7 @@ impl Graph {
         true
     }
 
-    pub fn set_frame_split_offer_suppressed(&mut self, key: NodeKey, suppressed: bool) -> bool {
+    pub(crate) fn set_frame_split_offer_suppressed(&mut self, key: NodeKey, suppressed: bool) -> bool {
         let Some(node) = self.inner.node_weight_mut(key) else {
             return false;
         };
@@ -200,7 +200,7 @@ impl Graph {
             .map(|node| node.frame_split_offer_suppressed)
     }
 
-    pub fn insert_node_tag(&mut self, key: NodeKey, tag: String) -> bool {
+    pub(crate) fn insert_node_tag(&mut self, key: NodeKey, tag: String) -> bool {
         let Some(node) = self.inner.node_weight_mut(key) else {
             return false;
         };
@@ -211,7 +211,7 @@ impl Graph {
         inserted
     }
 
-    pub fn remove_node_tag(&mut self, key: NodeKey, tag: &str) -> bool {
+    pub(crate) fn remove_node_tag(&mut self, key: NodeKey, tag: &str) -> bool {
         let Some(node) = self.inner.node_weight_mut(key) else {
             return false;
         };
@@ -223,6 +223,36 @@ impl Graph {
             node.tag_presentation.icon_overrides.remove(tag);
         }
         removed
+    }
+
+    /// Set a node's inline authored content body (a knot note's djot source).
+    /// Returns whether the body actually changed. The sanctioned write path for
+    /// `Node::body` — the note editor and web-clip previously reached it through
+    /// `get_node_mut` (write-path migration, 2026-07-01).
+    pub(crate) fn set_node_body(&mut self, key: NodeKey, body: Option<String>) -> bool {
+        let Some(node) = self.inner.node_weight_mut(key) else {
+            return false;
+        };
+        if node.body == body {
+            return false;
+        }
+        node.body = body;
+        true
+    }
+
+    /// Append an open literal property, deduplicating exact `(predicate, value)`
+    /// pairs. Returns whether the property was newly added. The sanctioned write
+    /// path for `Node::properties` — the linked-data ingest previously pushed
+    /// through `get_node_mut` (write-path migration, 2026-07-01).
+    pub(crate) fn append_node_property(&mut self, key: NodeKey, property: NodeProperty) -> bool {
+        let Some(node) = self.inner.node_weight_mut(key) else {
+            return false;
+        };
+        if node.properties.contains(&property) {
+            return false;
+        }
+        node.properties.push(property);
+        true
     }
 
     pub fn node_tags(&self, key: NodeKey) -> Option<&HashSet<String>> {
@@ -248,7 +278,7 @@ impl Graph {
     /// Add a classification record to a node.
     ///
     /// Deduplicates by `(scheme, value)`. Returns `true` if the record was inserted.
-    pub fn add_node_classification(
+    pub(crate) fn add_node_classification(
         &mut self,
         key: NodeKey,
         classification: NodeClassification,
@@ -273,7 +303,7 @@ impl Graph {
     /// + source) is not re-added. Returns whether it was added. Same-graph
     /// derivations are recorded after the fact here; cross-graph ones ride node
     /// creation via `copy_node_from`.
-    pub fn record_derivation(
+    pub(crate) fn record_derivation(
         &mut self,
         key: NodeKey,
         derivation: crate::types::NodeDerivation,
@@ -291,7 +321,7 @@ impl Graph {
     /// Remove all classification records matching `(scheme, value)`.
     ///
     /// Returns `true` if at least one record was removed.
-    pub fn remove_node_classification(
+    pub(crate) fn remove_node_classification(
         &mut self,
         key: NodeKey,
         scheme: &ClassificationScheme,
@@ -309,7 +339,7 @@ impl Graph {
     /// Update the `status` of a classification record identified by `(scheme, value)`.
     ///
     /// Returns `true` if a matching record was found and updated.
-    pub fn set_node_classification_status(
+    pub(crate) fn set_node_classification_status(
         &mut self,
         key: NodeKey,
         scheme: &ClassificationScheme,
@@ -332,7 +362,7 @@ impl Graph {
     /// Promote a classification record to primary for its scheme; demotes all others.
     ///
     /// Returns `true` if a matching record was found.
-    pub fn set_node_primary_classification(
+    pub(crate) fn set_node_primary_classification(
         &mut self,
         key: NodeKey,
         scheme: &ClassificationScheme,
@@ -353,7 +383,7 @@ impl Graph {
         found
     }
 
-    pub fn set_node_tag_icon_override(
+    pub(crate) fn set_node_tag_icon_override(
         &mut self,
         key: NodeKey,
         tag: &str,
@@ -421,7 +451,7 @@ impl Graph {
         }
     }
 
-    pub fn set_node_form_draft(&mut self, key: NodeKey, form_draft: Option<String>) -> bool {
+    pub(crate) fn set_node_form_draft(&mut self, key: NodeKey, form_draft: Option<String>) -> bool {
         let Some(node) = self.inner.node_weight_mut(key) else {
             return false;
         };
@@ -432,7 +462,7 @@ impl Graph {
         true
     }
 
-    pub fn touch_node_last_visited_now(&mut self, key: NodeKey) -> bool {
+    pub(crate) fn touch_node_last_visited_now(&mut self, key: NodeKey) -> bool {
         let Some(node) = self.inner.node_weight_mut(key) else {
             return false;
         };
@@ -469,7 +499,7 @@ impl Graph {
         true
     }
 
-    pub fn set_node_session_scroll(
+    pub(crate) fn set_node_session_scroll(
         &mut self,
         key: NodeKey,
         session_scroll: Option<(f32, f32)>,

@@ -6,6 +6,7 @@
 //! sibling file per the 600-LOC ceiling.
 
 use crate::graphlets::*;
+use kernel::graph::fixtures::GraphFixtures;
 use forme::{GraphletBinding, GraphletKind, GraphletSpec};
 use kernel::graph::{EdgeFamily, Graph};
 

@@ -166,6 +166,7 @@ fn edge_signature(e: &PersistedEdge) -> (String, String, String) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kernel::graph::fixtures::GraphFixtures;
     use euclid::default::Point2D;
     use kernel::graph::Graph;
 

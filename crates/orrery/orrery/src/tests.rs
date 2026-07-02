@@ -1,4 +1,5 @@
 use super::build::hyperlink;
+use kernel::graph::fixtures::GraphFixtures;
 use super::*;
 use kernel::geometry::PortablePoint;
 use kernel::graph::{EdgeFamily, Graph, RelationKind, RelationSelector, SemanticSubKind};

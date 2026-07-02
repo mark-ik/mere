@@ -125,6 +125,7 @@ impl Force for AffinitySpring {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kernel::graph::fixtures::GraphFixtures;
     use crate::{NodeExclusion, Simulation};
     use euclid::default::Point2D;
     use kernel::graph::Graph;

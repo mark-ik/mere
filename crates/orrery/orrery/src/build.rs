@@ -15,6 +15,7 @@ use std::collections::{HashMap, HashSet};
 use euclid::default::Point2D;
 use gyre::{Boundary, CouplingForce, EdgeSpring, LayoutView, NodeExclusion, Simulation};
 use kernel::geometry::PortablePoint;
+use kernel::graph::apply::{self as graph_apply};
 use kernel::graph::{
     EdgeAssertion, FieldExtent, FieldId, Graph, NodeKey, RelationKind, SemanticSubKind,
 };
@@ -73,8 +74,9 @@ pub(crate) fn sample_graph() -> Graph {
     for i in 0..count {
         let theta = (i as f32) / (count as f32) * std::f32::consts::TAU;
         let pos = PortablePoint::new(radius * theta.cos(), radius * theta.sin());
-        let key = graph.add_node_with_id(
-            uuid::Uuid::from_u128(i as u128 + 1),
+        let key = graph_apply::add_node(
+            &mut graph,
+            Some(uuid::Uuid::from_u128(i as u128 + 1)),
             format!("mere://node/{i}"),
             pos,
         );
@@ -83,11 +85,11 @@ pub(crate) fn sample_graph() -> Graph {
     }
     // Ring edges around the cycle.
     for i in 0..count {
-        let _ = graph.assert_relation(keys[i], keys[(i + 1) % count], hyperlink());
+        let _ = graph_apply::assert_relation(&mut graph, keys[i], keys[(i + 1) % count], hyperlink());
     }
     // A few spokes from node 0 across the ring.
     for i in (2..count).step_by(3) {
-        let _ = graph.assert_relation(keys[0], keys[i], hyperlink());
+        let _ = graph_apply::assert_relation(&mut graph, keys[0], keys[i], hyperlink());
     }
     graph
 }

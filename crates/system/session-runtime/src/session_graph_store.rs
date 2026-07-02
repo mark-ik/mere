@@ -69,6 +69,7 @@ pub fn load(path: &Path) -> io::Result<Option<Graph>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kernel::graph::fixtures::GraphFixtures;
     use euclid::default::Point2D;
     use uuid::Uuid;
 
