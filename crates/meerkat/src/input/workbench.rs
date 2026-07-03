@@ -7,6 +7,38 @@
 use super::*;
 
 impl WindowCtx<'_> {
+    fn log_workbench_drag_stage(
+        &self,
+        stage: &str,
+        abs: (f32, f32),
+        local: (f32, f32),
+        workbench_rect: [f32; 4],
+        events: &[pelt_core::tile::TileEvent],
+        consumed: Option<bool>,
+    ) {
+        if !tracing::enabled!(tracing::Level::DEBUG) {
+            return;
+        }
+        tracing::debug!(
+            stage,
+            abs_x = abs.0,
+            abs_y = abs.1,
+            local_x = local.0,
+            local_y = local.1,
+            leaf_left = workbench_rect[0],
+            leaf_top = workbench_rect[1],
+            leaf_right = workbench_rect[2],
+            leaf_bottom = workbench_rect[3],
+            focused_graph = ?self.view.focused_graph,
+            focused_tile = ?self.view.focused_tile,
+            gesture = self.view.workbench_gesture,
+            event_count = events.len(),
+            events = ?events,
+            consumed,
+            "workbench drag stage"
+        );
+    }
+
     /// Route a left press in the workbench pane into the host-authoritative pelt shell:
     /// set its cursor (pane-local), press, and apply each emitted gesture to the
     /// `Workbench` — the authority. Marks a gesture in flight so subsequent moves feed
@@ -28,6 +60,7 @@ impl WindowCtx<'_> {
             shell.take_events()
         };
         self.view.workbench_gesture = true;
+        self.log_workbench_drag_stage("pointer_down", (x, y), (lx, ly), wr, &events, None);
         for event in events {
             self.apply_tile_event(event);
         }
@@ -48,6 +81,7 @@ impl WindowCtx<'_> {
             shell.pointer_move(lx, ly);
             shell.take_events()
         };
+        self.log_workbench_drag_stage("pointer_move", (x, y), (lx, ly), wr, &events, None);
         for event in events {
             self.apply_tile_event(event);
         }
@@ -74,6 +108,7 @@ impl WindowCtx<'_> {
             shell.take_events()
         };
         let consumed = !events.is_empty();
+        self.log_workbench_drag_stage("pointer_up", (x, y), (lx, ly), wr, &events, Some(consumed));
         for event in events {
             self.apply_tile_event(event);
         }
@@ -103,6 +138,12 @@ impl WindowCtx<'_> {
     /// surface stays a driven view. (Tile-event seam.)
     pub(crate) fn apply_tile_event(&mut self, event: pelt_core::tile::TileEvent) {
         use pelt_core::tile::{DropTarget, Edge, SplitAxis, TileEvent};
+        tracing::debug!(
+            event = ?event,
+            focused_graph = ?self.view.focused_graph,
+            focused_tile = ?self.view.focused_tile,
+            "apply workbench tile event"
+        );
         match event {
             TileEvent::Activated(id) => {
                 if let Some(m) = self.tile_member(id) {

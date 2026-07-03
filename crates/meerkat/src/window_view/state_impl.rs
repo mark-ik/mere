@@ -287,6 +287,7 @@ impl WindowView {
             workbench,
             pelt_shell: None,
             pelt_theme: None,
+            pelt_ui_scale: None,
             session_row_rects: Default::default(),
             session_close_rects: Default::default(),
             session_add_rect: Default::default(),

@@ -112,14 +112,23 @@ impl crate::WindowCtx<'_> {
                     }
                 }
                 // Theme the tiles to match the chrome: layer the chrome-theme-derived
-                // tile CSS over the shell's structural default, rebuilt only when the
-                // active theme changed (the shell persists across frames).
+                // tile CSS over the shell's structural default, rebuilt when either the
+                // active theme or the effective chrome scale changed (the shell persists
+                // across frames).
                 let theme = self.shared.presentation.chrome_theme;
-                if self.view.pelt_theme != Some(theme) {
+                let ui_scale = self.shared.presentation.ui_scale();
+                if self.view.pelt_theme != Some(theme)
+                    || self
+                        .view
+                        .pelt_ui_scale
+                        .is_none_or(|current| (current - ui_scale).abs() > 1e-3)
+                {
                     if let Some(s) = self.view.pelt_shell.as_mut() {
-                        s.set_theme(crate::tile_sheet(&theme));
+                        s.set_theme(crate::tile_sheet(&theme, ui_scale));
+                        s.set_ui_scale(ui_scale);
                     }
                     self.view.pelt_theme = Some(theme);
+                    self.view.pelt_ui_scale = Some(ui_scale);
                 }
                 let shell = self.view.pelt_shell.as_mut().unwrap();
                 shell.resize(ww, wh);

@@ -1,22 +1,22 @@
 # Tear-out gestures plan (leaf / branch / fork + cross-graph drag)
 
 **Date**: 2026-06-24
-**Status**: **Trichotomy + cross-graph copy + cascade DONE + driven** (G1 plumbing, G3 branch,
-G4 fork, G5 copy, G6 cascade via graphlet #3; graphlet #1 per-window focus also landed).
-**Trailing items (2026-06-27):** **fork restore** (was already working, locked by a test),
-**G5 move**, and **G2 leaf content** are DONE + unit-tested. The leaf's two **triggers** turned
-into subsystems under Mark's reframes, and their *verifiable foundations* are now built while the
-*interactive* layers are sequenced for a headed session:
+**Status**: **Trichotomy + cross-graph copy/move + cascade DONE + driven** (G1 plumbing, G3
+branch, G4 fork, G5 copy+move, G6 cascade via graphlet #3; graphlet #1 per-window focus also
+landed). **Tile-tab leaf tear-out is now DONE + fresh-headed verified.** The one substantial
+interactive item still open is the ambiguous **no-modifier orrery drag** path, which now cleanly
+belongs to the notification/toast subsystem plus the pin-vs-drag-out gesture split:
 
 - **Ambiguous-drag toast → notification subsystem.** Notifications are a **Steward-accounted
   subsystem**; toasts are their transient view; the prompt is one actionable notification.
   **Foundation DONE + tested** (`NotificationRecord` log + `record_notification` +
   `notification_rows` surfaced by the Steward). Remaining (interactive, headed): the chrome toast
   view, actionable notifications, and the no-modifier drag-out-vs-pin gesture.
-- **Tile-tab origin → orrery-as-desktop + configurable split.** The orrery is the persistent
-  *desktop* (already the summon anchor); make the workbench **dock side + ratio** a setting, and
-  add a `pelt_core` drag-*out* signal (`TileEvent::Dragged` resolves only `Stack`/`Edge` today).
-  The dock-side setting is verifiable; the drag-out + toggle UI are interactive/cross-crate.
+- **Tile-tab origin → DONE + fresh-headed verified.** A workbench tile-tab drag-out now resolves
+  to `TileEvent::Dragged { to: Outside }`, and the host maps that to `TearOut { node, from }`.
+  Fresh leaf / branch / fork runs off a fresh app binary each ended with a second Meerkat window.
+  The broader "orrery as desktop" dock-side + ratio setting reframe is still a separate follow-up
+  if we want it; it is no longer the blocker for the tile-tab origin itself.
 
 Both triggers queue the now-built `TearOut { node, from }`. Spun out of the
 now-closed
@@ -112,14 +112,15 @@ tear axis on it: `Fork` → `ForkNode` (G4, wired + driven); `Branch` → `Branc
 driven — mints a `Branched` graphlet, no longer a leaf-stub). Cross-graph-pane drops still
 short-circuit to the G5 copy before the op split.
 
-**Slice 2+ — remaining:** **branch**'s real operation (a forme graphlet, not the leaf stub — G3 /
-OQ-7); the **toast** on the ambiguous drop (new chrome element, escalating the leaf in place); the
-**tile-tab origin** (the no-modifier leaf path from a workbench tab).
+**Slice 2+ — remaining:** the **toast** on the ambiguous drop (new chrome element, escalating the
+leaf in place) and the **no-modifier orrery drag-out vs pin-drag** split. Branch's real operation,
+fork, move, and the **tile-tab origin** are all live.
 
 Done when: a no-modifier tile-tab drag-out opens a leaf + shows the toast; Shift / Ctrl+Shift
-select branch / fork directly; the toast escalates a leaf to branch or fork in place.
+select branch / fork directly; the toast escalates a leaf to branch or fork in place. **As of
+2026-07-03, the tile-tab drag-out half is live and headed-verified; the toast half remains.**
 
-### G2 — Leaf content (the C3 remainder) — content DONE (2026-06-27); trigger pending
+### G2 — Leaf content (the C3 remainder) — content DONE (2026-06-27); one trigger live
 
 The brief's leaf (§4.1) is a **`Workbench` pane** holding the dragged node's tile, resolving to
 the **donor's pooled orrery** (same `GraphId`), with **no `Orrery` pane of its own**. Edits
@@ -129,14 +130,14 @@ the node.
 Done when: a torn leaf window shows the dragged node's live tile, navigates on its own,
 propagates node edits to the donor, and instantiates no orrery of its own.
 
-**Status (2026-06-27): content built + tested.** `Shell::build_leaf_view_for(bind_graph, node)`
+**Status (2026-07-03): content built + tested; one trigger live.** `Shell::build_leaf_view_for(bind_graph, node)`
 builds the leaf as a single `leaf_workbench_frame` (`PaneContent::Workbench` over the donor
 graph, no orrery leaf) with the node opened as the focused tile
 (`Workbench::ensure_tiled` + `open_tile`); `spawn_torn_window` uses it, and `TearOut` now carries
 `{ node, from }` so the leaf binds the donor's pooled graph. Unit-tested
-`torn_leaf_is_a_workbench_pane_with_the_node_tile`. **Trigger still pending:** nothing queues
-`TearOut` yet — the leaf is reached through the **ambiguous-drag toast** ("Keep as leaf") and the
-**tile-tab origin** below, both of which queue `TearOut { node, from }`.
+`torn_leaf_is_a_workbench_pane_with_the_node_tile`. **Trigger status:** the **tile-tab origin** now
+queues `TearOut { node, from }` and is fresh-headed verified; the **ambiguous-drag toast**
+("Keep as leaf") still remains.
 
 ### G3 — Branch (Shift+drag) — Phase 1 + Phase 2 DONE + driven (2026-06-25)
 
@@ -293,28 +294,18 @@ The remaining gesture work, with seams and rough size. Independent of the graphl
   the tear is a *drag-out* released outside the source orrery pane → snap back → toast). `tear_out_
   drag` arms only on a Shift-press today, so the no-modifier path + snap-back are new. Keep-as-leaf
   queues the built `TearOut { node, from }`; Branch/Fork queue `BranchNode`/`ForkNode`.
-- **Tile-tab no-modifier-leaf origin (G1) — remaining; reframed 2026-06-27 (orrery-as-desktop).**
-  A workbench tile-tab drag-out is a plain leaf. **Needs a `pelt_core` change first:**
-  `TileEvent::Dragged { tile, to }` resolves `to` only to `DropTarget::Stack` (merge) or
-  `DropTarget::Edge` (split) — there is **no "torn out of the workbench" target**, so the drag-out
-  is invisible to the host. Add a `DropTarget::Outside` (or a `TileEvent::TornOut`) emitted when a
-  tab is released outside any tile, then map it in `apply_tile_event` to
-  `TearOut { node: tile_member, from }`. Cross-crate + interactive.
-  - **Reframe (Mark, 2026-06-27): the orrery is the *desktop*, not a peer tile.** Today
-    `open_workbench` already summons the workbench *beside* the orrery (`GRAPH_PANE`) with a
-    hardcoded `InsertSide::Right` + ratio `0.6`, and closing a pane returns to the orrery — so the
-    orrery is already the persistent anchor. Make that explicit and **configurable**: a setting for
-    the workbench **dock side** (left / right / top / bottom → `InsertSide` + split axis) and ratio,
-    persisted, applied at every summon site (`open_workbench` + siblings). The data-model half (the
-    setting + applying it) is verifiable; the toggle UI rides the existing `pelt/*` settings-page
-    pattern. The deeper "orrery is the desktop, panes dock over/beside it" model also ties into the
-    unified-document-host orrery-as-scene-underlay direction and likely wants its own short design
-    pass before the frame model changes much. The tile-tab tear-out is "drag a tile off the desktop
-    → leaf," which is why it sits with this reframe.
+- **Tile-tab no-modifier-leaf origin (G1) — DONE + fresh-headed verified (2026-07-03).**
+  A workbench tile-tab drag-out is now a plain leaf. The pelt drag-out path resolves to
+  `TileEvent::Dragged { tile, to: Outside }`, and `apply_tile_event` maps that to
+  `TearOut { node: tile_member, from }`. Instrumented directly at
+  `workbench_pointer_down/move/up` and the emitted `TileEvent`, then driven fresh-headed: the live
+  path logs `Dragged { to: Outside }`, and fresh leaf / branch / fork runs each end with a second
+  Meerkat window. The broader "orrery as desktop" dock-side + ratio setting remains a separate
+  design follow-up if we still want that model explicit in settings.
 - **G2 leaf content — DONE (2026-06-27).** `build_leaf_view_for` / `leaf_workbench_frame`: the
   leaf is a single `PaneContent::Workbench` pane over the donor graph with the torn node as its
-  focused tile, no orrery pane. `TearOut` carries `{ node, from }`. Unit-tested. (Trigger still
-  pending: the toast + tile-tab origin queue `TearOut`.)
+  focused tile, no orrery pane. `TearOut` carries `{ node, from }`. Unit-tested. (Remaining trigger:
+  the toast path; the tile-tab origin is now live.)
 - **G5 move-vs-copy — DONE (2026-06-27).** Alt-modified cross-graph drop → `MoveNodeAcross` →
   `move_node_across` (copy + release the source by uuid, no tombstone). v0 copy+release (fresh
   dest uuid); identity-preserving move is a refinement. Unit-tested.
@@ -323,11 +314,11 @@ The remaining gesture work, with seams and rough size. Independent of the graphl
   `create_session` does, and `bootstrap_sessions` (`load_from_disk`) re-scans every session dir,
   so a fork re-appears in the switcher after restart. Locked by `fork_session_restores_on_restart`.
 
-Done order (2026-06-27): **fork restore** (already worked), **G5 move**, **G2 leaf content** —
-all unit-tested. Remaining as **one focused interactive session** (both need headed driving):
-the **ambiguous-drag toast** (new chrome + the no-modifier drag-out vs pin-drag) and the
-**tile-tab origin** (the `pelt_core` drag-out signal). The leaf content + `TearOut { node, from }`
-are built and waiting for these two triggers. Schedulable independently of the graphlet plan.
+Done order (2026-07-03): **fork restore**, **G5 move**, **G2 leaf content**, and the
+**tile-tab origin** are all landed, with the tile-tab path fresh-headed verified. Remaining as
+one focused interactive session: the **ambiguous-drag toast** (new chrome + the no-modifier
+orrery drag-out vs pin-drag). The leaf content + `TearOut { node, from }` are already live for
+the workbench-tab path and waiting only on that toast path for the orrery-origin no-modifier case.
 
 ### Related — N-orrery-elements seam (rendering, not a gesture)
 
@@ -484,3 +475,10 @@ v0 (palette parent link suffices); auto-consolidation policy disabled by default
   dock-side setting + toggle UI, and the `pelt_core` `DropTarget::Outside`) is sequenced for a
   headed session. Full suite green: forme 114, kernel 257, meerkat 92 lib / 178 bin, orrery 80.
   Nothing committed.
+- **2026-07-03** — **Tile-tab origin landed + fresh-headed verified.** Instrumented the live
+  workbench seam directly around `workbench_pointer_down/move/up` and the emitted `TileEvent`s,
+  then drove the workbench tab drag-out on a fresh app binary. The live path now logs
+  `Dragged { to: Outside }` and maps it to `TearOut { node, from }`; fresh leaf / branch / fork
+  runs each ended with a second Meerkat window. That clears the tile-tab trigger from the
+  remaining list. The only material tear-out-gesture item still open is the ambiguous
+  no-modifier orrery drag path, which stays coupled to the notification/toast work.

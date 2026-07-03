@@ -197,6 +197,9 @@ pub(crate) struct WindowView {
     /// The chrome theme last applied to `pelt_shell` (via `set_theme`), so the tile
     /// theme is rebuilt only when the active theme actually changes, not every frame.
     pub(crate) pelt_theme: Option<register_theme::chrome::ChromeTheme>,
+    /// The UI scale last applied to `pelt_shell`, so the tile theme and drag ghost are
+    /// only rebuilt when the chrome's effective scale changes.
+    pub(crate) pelt_ui_scale: Option<f32>,
     // The roster is folded into the shell runner now (ShellState.roster); no separate pane.
     // (Unified document host Phase 1.)
     /// Each switcher row's on-screen rect this frame: a click switches to it.
