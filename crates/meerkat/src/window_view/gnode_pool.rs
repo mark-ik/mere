@@ -48,6 +48,7 @@ struct GnodeEntry {
     label: NodeId,
     label_text: NodeId,
     wash: NodeId,
+    parked: bool,
     hot: Option<GnodeHotRow>,
     stable: Option<GnodeStableRow>,
 }
@@ -235,12 +236,8 @@ impl GnodePool {
             .filter(|member| !seen.contains(member))
             .collect();
         for member in stale {
-            self.stable_cache.remove(&member);
-            if let Some(entry) = self.entries.remove(&member) {
-                if d.is_live(entry.root) {
-                    d.remove(entry.root);
-                    stats.structural_removes += 1;
-                }
+            if let Some(entry) = self.entries.get_mut(&member) {
+                Self::sync_parked_state(&mut d, entry, true, &mut stats);
             }
         }
         stats
@@ -279,6 +276,7 @@ impl GnodePool {
             label,
             label_text,
             wash,
+            parked: false,
             hot: None,
             stable: None,
         }
@@ -290,6 +288,7 @@ impl GnodePool {
         node: &GnodeSnapshot,
         stats: &mut GnodePoolStats,
     ) {
+        Self::sync_parked_state(dom, entry, false, stats);
         let prev_hot = entry.hot.as_ref();
         let prev_stable = entry.stable.as_ref();
         let root_style_changed = match prev_hot {
@@ -322,8 +321,7 @@ impl GnodePool {
                 stats,
             );
         }
-        let face_selected_changed =
-            prev_hot.is_none_or(|prev| prev.selected != node.hot.selected);
+        let face_selected_changed = prev_hot.is_none_or(|prev| prev.selected != node.hot.selected);
         if face_selected_changed {
             Self::set_attribute_if_changed(
                 dom,
@@ -360,7 +358,8 @@ impl GnodePool {
         let image_changed = match prev_stable {
             None => true,
             Some(prev) => {
-                prev.image_uri != node.stable.image_uri || prev.image_cover != node.stable.image_cover
+                prev.image_uri != node.stable.image_uri
+                    || prev.image_cover != node.stable.image_cover
             }
         };
         if image_changed {
@@ -384,7 +383,13 @@ impl GnodePool {
                     );
                 }
                 None => {
-                    Self::remove_attribute_if_present(dom, entry.image, "src", WriteClass::Stable, stats);
+                    Self::remove_attribute_if_present(
+                        dom,
+                        entry.image,
+                        "src",
+                        WriteClass::Stable,
+                        stats,
+                    );
                 }
             }
         }
@@ -433,6 +438,26 @@ impl GnodePool {
 
         entry.hot = Some(node.hot.clone());
         entry.stable = Some(node.stable.clone());
+    }
+
+    fn sync_parked_state(
+        dom: &mut ScriptedDom,
+        entry: &mut GnodeEntry,
+        parked: bool,
+        stats: &mut GnodePoolStats,
+    ) {
+        if entry.parked == parked {
+            return;
+        }
+        Self::set_optional_attribute(
+            dom,
+            entry.root,
+            "data-parked",
+            parked.then_some("true"),
+            WriteClass::Hot,
+            stats,
+        );
+        entry.parked = parked;
     }
 
     fn set_attribute_if_changed(
@@ -531,9 +556,7 @@ fn root_style(hot: &GnodeHotRow) -> String {
     let size = if hot.selected { face + LIFT } else { face };
     let half = size / 2.0;
     let (cx, cy) = (hot.x - half, hot.y - half);
-    format!(
-        "transform:translate({cx}px,{cy}px);width:{size}px;height:{size}px"
-    )
+    format!("transform:translate({cx}px,{cy}px);width:{size}px;height:{size}px")
 }
 
 fn face_class(stable: &GnodeStableRow) -> String {
@@ -590,12 +613,16 @@ fn state_name(color: &'static str) -> &'static str {
 }
 
 fn bool_attr(value: bool) -> &'static str {
-    if value { "true" } else { "false" }
+    if value {
+        "true"
+    } else {
+        "false"
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use layout_dom_api::{Namespace, NodeKind};
+    use layout_dom_api::{DomMutation, Namespace, NodeKind};
 
     use super::*;
 
@@ -760,6 +787,105 @@ mod tests {
         assert_eq!(second.structural_removes, 0);
         assert_eq!(second.hot_attr_writes, 0);
         assert_eq!(second.stable_attr_writes, 0);
+    }
+
+    #[test]
+    fn reconcile_parks_offpane_nodes_without_structural_remove() {
+        let dom = Rc::new(RefCell::new(ScriptedDom::new()));
+        {
+            let mut d = dom.borrow_mut();
+            let root = d.create_element(html_qual("div"));
+            d.set_attribute(root, attr_qual("class"), ORRERY_GNODE_POOL_CLASS);
+            let doc = d.document();
+            d.append_child(doc, root);
+        }
+        let mut pool = GnodePool::default();
+        let graph = GraphId::new();
+        let member = uuid::Uuid::new_v4();
+        let node = snapshot(
+            member,
+            "Bird",
+            10.0,
+            20.0,
+            "#5a8fc8",
+            false,
+            false,
+            36.0,
+            "50%",
+            None,
+            false,
+            true,
+            &[],
+        );
+
+        let first = pool.reconcile(&dom, graph, [node.clone()]);
+        let root = pool.entries.get(&member).expect("entry").root;
+        let parked = pool.reconcile(&dom, graph, std::iter::empty());
+        {
+            let d = dom.borrow();
+            assert_eq!(attr(&d, root, "data-parked"), Some("true"));
+        }
+        let returned = pool.reconcile(&dom, graph, [node]);
+        let d = dom.borrow();
+
+        assert_eq!(first.structural_inserts, 1);
+        assert_eq!(parked.structural_removes, 0);
+        assert!(parked.hot_attr_writes > 0, "parking rides attribute writes");
+        assert_eq!(returned.structural_inserts, 0);
+        assert_eq!(returned.structural_removes, 0);
+        assert_eq!(attr(&d, root, "data-parked"), None);
+    }
+
+    #[test]
+    fn parking_and_returning_only_emit_attribute_mutations() {
+        let dom = Rc::new(RefCell::new(ScriptedDom::new()));
+        {
+            let mut d = dom.borrow_mut();
+            let root = d.create_element(html_qual("div"));
+            d.set_attribute(root, attr_qual("class"), ORRERY_GNODE_POOL_CLASS);
+            let doc = d.document();
+            d.append_child(doc, root);
+        }
+        let mut pool = GnodePool::default();
+        let graph = GraphId::new();
+        let member = uuid::Uuid::new_v4();
+        let node = snapshot(
+            member,
+            "Bird",
+            10.0,
+            20.0,
+            "#5a8fc8",
+            false,
+            false,
+            36.0,
+            "50%",
+            None,
+            false,
+            true,
+            &[],
+        );
+        let mut muts = Vec::new();
+
+        pool.reconcile(&dom, graph, [node.clone()]);
+        dom.borrow_mut().drain_mutations(&mut muts);
+        muts.clear();
+
+        pool.reconcile(&dom, graph, std::iter::empty());
+        dom.borrow_mut().drain_mutations(&mut muts);
+        assert!(
+            muts.iter()
+                .all(|m| matches!(m, DomMutation::AttributeChanged { .. })),
+            "parking should stay on the attribute-only path"
+        );
+        muts.clear();
+
+        pool.reconcile(&dom, graph, [node]);
+        dom.borrow_mut().drain_mutations(&mut muts);
+        assert!(
+            muts.iter()
+                .all(|m| matches!(m, DomMutation::AttributeChanged { .. })),
+            "returning a parked gnode should also stay attribute-only"
+        );
     }
 
     #[test]

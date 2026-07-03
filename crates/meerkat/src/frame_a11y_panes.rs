@@ -13,9 +13,9 @@ use std::collections::HashMap;
 use accesskit::{Action, Node, NodeId as AccessNodeId, Role};
 use forme::GraphMemberId;
 use frame::{PaneContent, PaneId};
-use layout_dom_api::{LayoutDom, NodeKind};
+use layout_dom_api::{LayoutDom, Namespace, NodeKind};
 use serval_scripted_dom::NodeId;
-use uxtree::{UxTree, node_id_for_path};
+use uxtree::{node_id_for_path, UxTree};
 
 use super::frame_a11y::rect;
 use super::{A11yHostAction, WindowCtx};
@@ -172,6 +172,11 @@ impl WindowCtx<'_> {
                 let droot = dom.document();
                 let origins = crate::serval_render::accumulate_origins(&dom, frags);
                 for node in crate::all_with_class(&dom, droot, "gnode-root") {
+                    if dom.attribute(node, &Namespace::from(""), &"data-parked".into())
+                        == Some("true")
+                    {
+                        continue;
+                    }
                     if let (Some(member), Some(l), Some(&(ox, oy))) = (
                         crate::member_attr(&dom, node),
                         frags.rect_of(node),

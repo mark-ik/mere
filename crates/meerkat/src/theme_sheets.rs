@@ -436,6 +436,7 @@ pub(crate) fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
         ),
         ".orrery-gnode-pool { position: absolute; left: 0; top: 0; right: 0; bottom: 0; pointer-events: none; }".to_string(),
         ".gnode-root { position: absolute; left: 0; top: 0; pointer-events: none; }".to_string(),
+        ".gnode-root[data-parked='true'] { display: none; }".to_string(),
         ".gnode-face-shell { position: absolute; left: 0; top: 0; width: 100%; height: 100%; \
             box-sizing: border-box; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.45); }"
             .to_string(),
