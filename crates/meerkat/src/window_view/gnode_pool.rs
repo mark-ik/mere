@@ -43,6 +43,7 @@ pub(crate) struct GnodeBuildStats {
 
 struct GnodeEntry {
     root: NodeId,
+    face: NodeId,
     image: NodeId,
     label: NodeId,
     label_text: NodeId,
@@ -255,22 +256,25 @@ impl GnodePool {
 
     fn create_entry(dom: &mut ScriptedDom, parent: NodeId, member: GraphMemberId) -> GnodeEntry {
         let root = dom.create_element(html_qual("div"));
-        dom.set_attribute(root, attr_qual("class"), "gnode");
+        dom.set_attribute(root, attr_qual("class"), "gnode-root");
         dom.set_attribute(root, attr_qual("data-member"), &member.to_string());
 
+        let face = dom.create_element(html_qual("div"));
         let image = dom.create_element(html_qual("img"));
         let label = dom.create_element(html_qual("span"));
         let label_text = dom.create_text("");
         dom.append_child(label, label_text);
         let wash = dom.create_element(html_qual("div"));
 
-        dom.append_child(root, image);
+        dom.append_child(face, image);
+        dom.append_child(face, wash);
+        dom.append_child(root, face);
         dom.append_child(root, label);
-        dom.append_child(root, wash);
         dom.append_child(parent, root);
 
         GnodeEntry {
             root,
+            face,
             image,
             label,
             label_text,
@@ -288,34 +292,86 @@ impl GnodePool {
     ) {
         let prev_hot = entry.hot.as_ref();
         let prev_stable = entry.stable.as_ref();
-        let root_changed = prev_hot != Some(&node.hot)
-            || match prev_stable {
-                None => true,
-                Some(prev) => prev.radius != node.stable.radius || prev.hull != node.stable.hull,
-            };
-        if root_changed {
+        let root_style_changed = match prev_hot {
+            None => true,
+            Some(prev) => {
+                prev.x != node.hot.x
+                    || prev.y != node.hot.y
+                    || prev.selected != node.hot.selected
+                    || prev.size != node.hot.size
+            }
+        };
+        if root_style_changed {
             Self::set_attribute_if_changed(
                 dom,
                 entry.root,
                 "style",
-                &root_style(&node.hot, &node.stable),
+                &root_style(&node.hot),
                 WriteClass::Hot,
                 stats,
             );
         }
-
-        let image_changed = match prev_hot {
+        let face_state_changed = prev_hot.is_none_or(|prev| prev.color != node.hot.color);
+        if face_state_changed {
+            Self::set_attribute_if_changed(
+                dom,
+                entry.face,
+                "data-state",
+                state_name(node.hot.color),
+                WriteClass::Hot,
+                stats,
+            );
+        }
+        let face_selected_changed =
+            prev_hot.is_none_or(|prev| prev.selected != node.hot.selected);
+        if face_selected_changed {
+            Self::set_attribute_if_changed(
+                dom,
+                entry.face,
+                "data-selected",
+                bool_attr(node.hot.selected),
+                WriteClass::Hot,
+                stats,
+            );
+        }
+        let face_class_changed = match prev_stable {
             None => true,
-            Some(prev) => prev.size != node.hot.size,
-        } || match prev_stable {
+            Some(prev) => prev.radius != node.stable.radius || prev.hull != node.stable.hull,
+        };
+        if face_class_changed {
+            Self::set_attribute_if_changed(
+                dom,
+                entry.face,
+                "class",
+                &face_class(&node.stable),
+                WriteClass::Stable,
+                stats,
+            );
+            Self::set_optional_attribute(
+                dom,
+                entry.face,
+                "style",
+                face_style(&node.stable).as_deref(),
+                WriteClass::Stable,
+                stats,
+            );
+        }
+
+        let image_changed = match prev_stable {
             None => true,
             Some(prev) => {
-                prev.radius != node.stable.radius
-                    || prev.image_uri != node.stable.image_uri
-                    || prev.image_cover != node.stable.image_cover
+                prev.image_uri != node.stable.image_uri || prev.image_cover != node.stable.image_cover
             }
         };
         if image_changed {
+            Self::set_attribute_if_changed(
+                dom,
+                entry.image,
+                "class",
+                image_class(&node.stable),
+                WriteClass::Stable,
+                stats,
+            );
             match node.stable.image_uri.as_ref() {
                 Some(uri) => {
                     Self::set_attribute_if_changed(
@@ -326,31 +382,9 @@ impl GnodePool {
                         WriteClass::Stable,
                         stats,
                     );
-                    Self::set_attribute_if_changed(
-                        dom,
-                        entry.image,
-                        "style",
-                        &image_style(&node.hot, &node.stable),
-                        WriteClass::Stable,
-                        stats,
-                    );
                 }
                 None => {
-                    Self::remove_attribute_if_present(
-                        dom,
-                        entry.image,
-                        "src",
-                        WriteClass::Stable,
-                        stats,
-                    );
-                    Self::set_attribute_if_changed(
-                        dom,
-                        entry.image,
-                        "style",
-                        "display:none",
-                        WriteClass::Stable,
-                        stats,
-                    );
+                    Self::remove_attribute_if_present(dom, entry.image, "src", WriteClass::Stable, stats);
                 }
             }
         }
@@ -378,26 +412,20 @@ impl GnodePool {
             Self::set_attribute_if_changed(
                 dom,
                 entry.label,
-                "style",
-                &label_style(&node.hot, &node.stable),
-                WriteClass::Hot,
+                "class",
+                label_class(&node.stable),
+                WriteClass::Stable,
                 stats,
             );
         }
 
-        let wash_changed = match prev_hot {
-            None => true,
-            Some(prev) => prev.size != node.hot.size || prev.hovered != node.hot.hovered,
-        } || match prev_stable {
-            None => true,
-            Some(prev) => prev.radius != node.stable.radius,
-        };
+        let wash_changed = prev_hot.is_none_or(|prev| prev.hovered != node.hot.hovered);
         if wash_changed {
             Self::set_attribute_if_changed(
                 dom,
                 entry.wash,
-                "style",
-                &wash_style(&node.hot, &node.stable),
+                "data-hovered",
+                bool_attr(node.hot.hovered),
                 WriteClass::Hot,
                 stats,
             );
@@ -445,6 +473,20 @@ impl GnodePool {
         }
     }
 
+    fn set_optional_attribute(
+        dom: &mut ScriptedDom,
+        node: NodeId,
+        name: &str,
+        value: Option<&str>,
+        class: WriteClass,
+        stats: &mut GnodePoolStats,
+    ) {
+        match value {
+            Some(value) => Self::set_attribute_if_changed(dom, node, name, value, class, stats),
+            None => Self::remove_attribute_if_present(dom, node, name, class, stats),
+        }
+    }
+
     fn set_text_if_changed(
         dom: &mut ScriptedDom,
         node: NodeId,
@@ -483,84 +525,72 @@ fn derive_label(title: &str) -> String {
     }
 }
 
-fn root_style(hot: &GnodeHotRow, stable: &GnodeStableRow) -> String {
+fn root_style(hot: &GnodeHotRow) -> String {
     let face = hot.size;
     const LIFT: f32 = 4.0;
     let size = if hot.selected { face + LIFT } else { face };
     let half = size / 2.0;
     let (cx, cy) = (hot.x - half, hot.y - half);
-    let ring = if hot.selected {
-        "box-shadow:0 0 0 2px #ffffff,0 3px 10px rgba(0,0,0,0.6);"
+    format!(
+        "transform:translate({cx}px,{cy}px);width:{size}px;height:{size}px"
+    )
+}
+
+fn face_class(stable: &GnodeStableRow) -> String {
+    format!("gnode-face-shell {}", shape_class(stable))
+}
+
+fn shape_class(stable: &GnodeStableRow) -> &'static str {
+    if stable.hull.len() >= 3 {
+        "gnode-shape-hull"
     } else {
-        "box-shadow:0 1px 3px rgba(0,0,0,0.45);"
-    };
-    let shape_style = if stable.hull.len() >= 3 {
+        match stable.radius {
+            "9px" => "gnode-shape-rounded",
+            "50%" => "gnode-shape-circle",
+            _ => "gnode-shape-square",
+        }
+    }
+}
+
+fn face_style(stable: &GnodeStableRow) -> Option<String> {
+    if stable.hull.len() >= 3 {
         let pts: Vec<String> = stable
             .hull
             .iter()
             .map(|&(nx, ny)| format!("{:.2}% {:.2}%", (nx + 0.5) * 100.0, (ny + 0.5) * 100.0))
             .collect();
-        format!("clip-path:polygon({});{ring}", pts.join(", "))
+        Some(format!("clip-path:polygon({})", pts.join(", ")))
     } else {
-        format!("border-radius:{};{ring}", stable.radius)
-    };
-    format!(
-        "position:absolute;left:0;top:0;transform:translate({cx}px,{cy}px);width:{size}px;\
-         height:{size}px;box-sizing:border-box;background-color:{};{shape_style}",
-        hot.color
-    )
+        None
+    }
 }
 
-fn image_style(hot: &GnodeHotRow, stable: &GnodeStableRow) -> String {
-    let size = if hot.selected {
-        hot.size + 4.0
-    } else {
-        hot.size
-    };
-    let fit = if stable.image_cover {
-        "object-fit:cover;"
-    } else {
-        ""
-    };
-    format!(
-        "position:absolute;left:0;top:0;width:{size}px;height:{size}px;border-radius:{};{fit}display:block",
-        stable.radius
-    )
+fn image_class(stable: &GnodeStableRow) -> &'static str {
+    match (stable.image_uri.is_some(), stable.image_cover) {
+        (false, _) => "gnode-face gnode-face-hidden",
+        (true, true) => "gnode-face gnode-face-cover",
+        (true, false) => "gnode-face",
+    }
 }
 
-fn label_style(hot: &GnodeHotRow, stable: &GnodeStableRow) -> String {
-    let size = if hot.selected {
-        hot.size + 4.0
-    } else {
-        hot.size
-    };
+fn label_class(stable: &GnodeStableRow) -> &'static str {
     if stable.show_label {
-        format!(
-            "position:absolute;left:{}px;top:{}px;white-space:nowrap;color:#d8deea;\
-             font-size:14px;font-weight:500;display:block",
-            size + 6.0,
-            (size / 2.0 - 8.0).max(0.0)
-        )
+        "gnode-label"
     } else {
-        "display:none".to_string()
+        "gnode-label gnode-label-hidden"
     }
 }
 
-fn wash_style(hot: &GnodeHotRow, stable: &GnodeStableRow) -> String {
-    let size = if hot.selected {
-        hot.size + 4.0
-    } else {
-        hot.size
-    };
-    if hot.hovered {
-        format!(
-            "position:absolute;left:0;top:0;width:{size}px;height:{size}px;border-radius:{};\
-             background-color:rgba(255,255,255,0.16);pointer-events:none;display:block",
-            stable.radius
-        )
-    } else {
-        "display:none".to_string()
+fn state_name(color: &'static str) -> &'static str {
+    match color {
+        "#5fb878" => "open",
+        "#cc5a54" => "closed",
+        _ => "idle",
     }
+}
+
+fn bool_attr(value: bool) -> &'static str {
+    if value { "true" } else { "false" }
 }
 
 #[cfg(test)]

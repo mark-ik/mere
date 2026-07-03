@@ -434,6 +434,32 @@ pub(crate) fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
             rgb(c.body_text),
             rgb(c.surface_bg)
         ),
+        ".orrery-gnode-pool { position: absolute; left: 0; top: 0; right: 0; bottom: 0; pointer-events: none; }".to_string(),
+        ".gnode-root { position: absolute; left: 0; top: 0; pointer-events: none; }".to_string(),
+        ".gnode-face-shell { position: absolute; left: 0; top: 0; width: 100%; height: 100%; \
+            box-sizing: border-box; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.45); }"
+            .to_string(),
+        ".gnode-face-shell[data-selected='true'] { box-shadow: 0 0 0 2px #ffffff, 0 3px 10px rgba(0,0,0,0.6); }".to_string(),
+        ".gnode-face-shell[data-state='idle'] { background-color: rgb(90, 143, 200); }".to_string(),
+        ".gnode-face-shell[data-state='open'] { background-color: rgb(95, 184, 120); }".to_string(),
+        ".gnode-face-shell[data-state='closed'] { background-color: rgb(204, 90, 84); }".to_string(),
+        ".gnode-shape-square { border-radius: 0; }".to_string(),
+        ".gnode-shape-rounded { border-radius: 9px; }".to_string(),
+        ".gnode-shape-circle { border-radius: 50%; }".to_string(),
+        ".gnode-face { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }"
+            .to_string(),
+        ".gnode-face-cover { object-fit: cover; }".to_string(),
+        ".gnode-face-hidden { display: none; }".to_string(),
+        format!(
+            ".gnode-label {{ position: absolute; left: 100%; top: 50%; transform: translate(6px, -50%); \
+                white-space: nowrap; color: {}; font-size: 14px; font-weight: 500; display: block; }}",
+            rgb(c.body_text)
+        ),
+        ".gnode-label-hidden { display: none; }".to_string(),
+        ".gnode-wash { position: absolute; left: 0; top: 0; width: 100%; height: 100%; \
+            pointer-events: none; display: none; background-color: rgba(255,255,255,0.16); }"
+            .to_string(),
+        ".gnode-wash[data-hovered='true'] { display: block; }".to_string(),
     ]
 }
 

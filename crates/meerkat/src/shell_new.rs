@@ -265,8 +265,14 @@ impl Shell {
         let sync_wake: armillary::Wake = Arc::new(move || {
             let _ = sync_proxy.send_event(());
         });
-        let (sync_handle, sync_rx) =
-            sync::spawn_sync(sync_wake, mere_root.clone(), sync::DEMO_MOOT);
+        let disable_network_actors = std::env::var_os("MEERKAT_DISABLE_NETWORK_ACTORS").is_some();
+        let (sync_handle, sync_rx) = if disable_network_actors {
+            armillary::spawn(sync_wake, |commands: Receiver<sync::SyncCommand>, _out| {
+                while commands.recv().is_ok() {}
+            })
+        } else {
+            sync::spawn_sync(sync_wake, mere_root.clone(), sync::DEMO_MOOT)
+        };
         // The comms actor: owns the live `Comms` (misfin + murm adapters over local
         // stores under the session dir) on its own tokio runtime, waking the loop
         // through the same winit proxy. Setup failure disables comms, not the shell.
@@ -274,7 +280,16 @@ impl Shell {
         let comms_wake: armillary::Wake = Arc::new(move || {
             let _ = comms_proxy.send_event(());
         });
-        let (comms_handle, comms_rx) = comms_host::spawn_comms(comms_wake, mere_root.clone());
+        let (comms_handle, comms_rx) = if disable_network_actors {
+            armillary::spawn(
+                comms_wake,
+                |commands: Receiver<comms_host::CommsCommand>, _out| {
+                    while commands.recv().is_ok() {}
+                },
+            )
+        } else {
+            comms_host::spawn_comms(comms_wake, mere_root.clone())
+        };
         // The host's own nematic engine registry, for rendering snapshot cards
         // from the durable cache without a live actor (Card #4).
         let mut engine_registry = EngineRegistry::new();

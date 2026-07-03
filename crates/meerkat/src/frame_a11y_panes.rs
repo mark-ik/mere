@@ -159,7 +159,7 @@ impl WindowCtx<'_> {
     fn orrery_a11y_tree(&self, pane_id: PaneId) -> UxTree {
         let root_path = pane_content_root_path(&self.view.frame_layout, pane_id, "orrery");
         let root = node_id_for_path(&root_path);
-        // Per-node rect off the shell layout: each `.gnode` div's absolute origin plus
+        // Per-node rect off the shell layout: each gnode root's absolute origin plus
         // its accumulated CSS translate, keyed by `data-member` (the same scheme the roster +
         // workbench placeholders use). The gnodes are not in a scroll container (the orrery pans
         // by the per-gnode transform, not DOM scroll), so the unscrolled `accumulate_origins`
@@ -171,7 +171,7 @@ impl WindowCtx<'_> {
                 let dom = self.view.dom.borrow();
                 let droot = dom.document();
                 let origins = crate::serval_render::accumulate_origins(&dom, frags);
-                for node in crate::all_with_class(&dom, droot, "gnode") {
+                for node in crate::all_with_class(&dom, droot, "gnode-root") {
                     if let (Some(member), Some(l), Some(&(ox, oy))) = (
                         crate::member_attr(&dom, node),
                         frags.rect_of(node),
