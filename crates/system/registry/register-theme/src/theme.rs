@@ -159,7 +159,10 @@ pub enum ThemeSource {
 pub enum Harmony {
     #[default]
     Custom,
-    Locked { secondary_deg: f32, tertiary_deg: f32 },
+    Locked {
+        secondary_deg: f32,
+        tertiary_deg: f32,
+    },
 }
 
 /// A theme's authored definition: its seeds + name + mode. The full
@@ -245,7 +248,10 @@ impl ThemeRegistry {
         if key == self.fallback_id {
             return false;
         }
-        if !matches!(self.defs.get(&key).map(|d| d.source), Some(ThemeSource::User)) {
+        if !matches!(
+            self.defs.get(&key).map(|d| d.source),
+            Some(ThemeSource::User)
+        ) {
             return false;
         }
         self.defs.remove(&key);
@@ -273,7 +279,10 @@ impl ThemeRegistry {
     /// the source's seeds. The non-destructive "edit a built-in" path. Returns
     /// the new def, or `None` if `source_id` is unknown / the new id collides.
     pub fn fork(&mut self, source_id: &str, new_id: &str, new_name: &str) -> Option<ThemeDef> {
-        let src = self.defs.get(&source_id.trim().to_ascii_lowercase())?.clone();
+        let src = self
+            .defs
+            .get(&source_id.trim().to_ascii_lowercase())?
+            .clone();
         let new_key = new_id.trim().to_ascii_lowercase();
         if self.defs.contains_key(&new_key) {
             return None;

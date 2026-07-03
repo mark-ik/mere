@@ -5,9 +5,9 @@
 //! Graph-signal tests.
 
 use super::*;
-use kernel::graph::fixtures::GraphFixtures;
 use kernel::geometry::PortablePoint;
 use kernel::graph::Graph;
+use kernel::graph::fixtures::GraphFixtures;
 
 /// The cluster id that `set` assigns `key`, for partition-structure assertions.
 fn community_of(set: &ClusterSet, key: NodeKey) -> Option<&str> {
@@ -21,33 +21,63 @@ fn community_of(set: &ClusterSet, key: NodeKey) -> Option<&str> {
 fn degree_importance_normalizes_to_the_most_connected_node() {
     // A hub linked to two leaves: hub degree 2, each leaf degree 1.
     let mut graph = Graph::new();
-    let hub = graph.add_node("https://hub.example".to_string(), PortablePoint::new(0.0, 0.0));
-    let a = graph.add_node("https://a.example".to_string(), PortablePoint::new(1.0, 0.0));
-    let b = graph.add_node("https://b.example".to_string(), PortablePoint::new(2.0, 0.0));
+    let hub = graph.add_node(
+        "https://hub.example".to_string(),
+        PortablePoint::new(0.0, 0.0),
+    );
+    let a = graph.add_node(
+        "https://a.example".to_string(),
+        PortablePoint::new(1.0, 0.0),
+    );
+    let b = graph.add_node(
+        "https://b.example".to_string(),
+        PortablePoint::new(2.0, 0.0),
+    );
     graph.assert_semantic_predicate(hub, a, "links".to_string());
     graph.assert_semantic_predicate(hub, b, "links".to_string());
 
     let importance = degree_importance(&graph);
-    assert_eq!(importance.lookup(hub), Some(1.0), "the most-connected node is 1.0");
-    assert_eq!(importance.lookup(a), Some(0.5), "a degree-1 leaf is half the hub");
+    assert_eq!(
+        importance.lookup(hub),
+        Some(1.0),
+        "the most-connected node is 1.0"
+    );
+    assert_eq!(
+        importance.lookup(a),
+        Some(0.5),
+        "a degree-1 leaf is half the hub"
+    );
     assert_eq!(importance.lookup(b), Some(0.5));
 }
 
 #[test]
 fn no_edges_yields_all_zero_importance() {
     let mut graph = Graph::new();
-    let only = graph.add_node("https://one.example".to_string(), PortablePoint::new(0.0, 0.0));
+    let only = graph.add_node(
+        "https://one.example".to_string(),
+        PortablePoint::new(0.0, 0.0),
+    );
     let importance = degree_importance(&graph);
-    assert_eq!(importance.lookup(only), Some(0.0), "no edges => zero importance, not NaN");
+    assert_eq!(
+        importance.lookup(only),
+        Some(0.0),
+        "no edges => zero importance, not NaN"
+    );
 }
 
 #[test]
 fn produce_cheap_signals_fills_only_importance() {
     let mut graph = Graph::new();
-    graph.add_node("https://one.example".to_string(), PortablePoint::new(0.0, 0.0));
+    graph.add_node(
+        "https://one.example".to_string(),
+        PortablePoint::new(0.0, 0.0),
+    );
     let signals = produce_cheap_signals(&graph);
     assert!(signals.importance.is_some(), "importance is produced");
-    assert!(signals.clusters.is_none(), "the un-produced signals stay None");
+    assert!(
+        signals.clusters.is_none(),
+        "the un-produced signals stay None"
+    );
     assert!(signals.affinity.is_none());
     assert!(signals.bridges.is_none());
     assert!(signals.embeddings.is_none());
@@ -57,13 +87,26 @@ fn produce_cheap_signals_fills_only_importance() {
 fn betweenness_marks_the_broker_on_a_path() {
     // a-b-c: b is on the only a–c shortest path => betweenness max; the endpoints are 0.
     let mut graph = Graph::new();
-    let a = graph.add_node("https://a.example".to_string(), PortablePoint::new(0.0, 0.0));
-    let b = graph.add_node("https://b.example".to_string(), PortablePoint::new(1.0, 0.0));
-    let c = graph.add_node("https://c.example".to_string(), PortablePoint::new(2.0, 0.0));
+    let a = graph.add_node(
+        "https://a.example".to_string(),
+        PortablePoint::new(0.0, 0.0),
+    );
+    let b = graph.add_node(
+        "https://b.example".to_string(),
+        PortablePoint::new(1.0, 0.0),
+    );
+    let c = graph.add_node(
+        "https://c.example".to_string(),
+        PortablePoint::new(2.0, 0.0),
+    );
     graph.assert_semantic_predicate(a, b, "links".to_string());
     graph.assert_semantic_predicate(b, c, "links".to_string());
     let imp = betweenness_importance(&graph);
-    assert_eq!(imp.lookup(b), Some(1.0), "the broker b is the normalized max");
+    assert_eq!(
+        imp.lookup(b),
+        Some(1.0),
+        "the broker b is the normalized max"
+    );
     assert_eq!(imp.lookup(a), Some(0.0), "an endpoint has zero betweenness");
     assert_eq!(imp.lookup(c), Some(0.0));
 }
@@ -75,7 +118,10 @@ fn betweenness_rewards_the_bridge_node() {
     let mut graph = Graph::new();
     let n: Vec<_> = (0..5)
         .map(|i| {
-            graph.add_node(format!("https://{i}.example"), PortablePoint::new(i as f32, 0.0))
+            graph.add_node(
+                format!("https://{i}.example"),
+                PortablePoint::new(i as f32, 0.0),
+            )
         })
         .collect();
     for &(a, b) in &[(0, 1), (1, 2), (2, 0), (2, 3), (3, 4), (4, 2)] {
@@ -85,14 +131,22 @@ fn betweenness_rewards_the_bridge_node() {
     let bridge = imp.lookup(n[2]).unwrap();
     let peripheral = imp.lookup(n[0]).unwrap();
     assert_eq!(bridge, 1.0, "the bridge node is the normalized max");
-    assert!(bridge > peripheral, "the bridge outscores a peripheral node: {bridge} vs {peripheral}");
+    assert!(
+        bridge > peripheral,
+        "the bridge outscores a peripheral node: {bridge} vs {peripheral}"
+    );
 }
 
 /// Build a graph of `n` nodes (urls `https://{i}.example`) wired by undirected edge pairs.
 fn graph_from_edges(n: usize, edges: &[(usize, usize)]) -> (Graph, Vec<NodeKey>) {
     let mut graph = Graph::new();
     let keys: Vec<NodeKey> = (0..n)
-        .map(|i| graph.add_node(format!("https://{i}.example"), PortablePoint::new(i as f32, 0.0)))
+        .map(|i| {
+            graph.add_node(
+                format!("https://{i}.example"),
+                PortablePoint::new(i as f32, 0.0),
+            )
+        })
         .collect();
     for &(a, b) in edges {
         graph.assert_semantic_predicate(keys[a], keys[b], "links".to_string());
@@ -107,10 +161,22 @@ fn community_splits_two_triangles_joined_by_a_bridge() {
     let (graph, k) = graph_from_edges(6, &[(0, 1), (1, 2), (2, 0), (3, 4), (4, 5), (5, 3), (2, 3)]);
     let set = community_louvain(&graph);
     assert_eq!(set.clusters.len(), 2, "two triangles => two communities");
-    assert_eq!(community_of(&set, k[0]), community_of(&set, k[1]), "triangle A coheres");
+    assert_eq!(
+        community_of(&set, k[0]),
+        community_of(&set, k[1]),
+        "triangle A coheres"
+    );
     assert_eq!(community_of(&set, k[0]), community_of(&set, k[2]));
-    assert_eq!(community_of(&set, k[3]), community_of(&set, k[5]), "triangle B coheres");
-    assert_ne!(community_of(&set, k[0]), community_of(&set, k[3]), "the bridge does not merge them");
+    assert_eq!(
+        community_of(&set, k[3]),
+        community_of(&set, k[5]),
+        "triangle B coheres"
+    );
+    assert_ne!(
+        community_of(&set, k[0]),
+        community_of(&set, k[3]),
+        "the bridge does not merge them"
+    );
 }
 
 #[test]
@@ -128,7 +194,11 @@ fn community_separates_disconnected_components() {
     // Two disjoint edges => two communities.
     let (graph, k) = graph_from_edges(4, &[(0, 1), (2, 3)]);
     let set = community_louvain(&graph);
-    assert_eq!(set.clusters.len(), 2, "disjoint components are distinct communities");
+    assert_eq!(
+        set.clusters.len(),
+        2,
+        "disjoint components are distinct communities"
+    );
     assert_eq!(community_of(&set, k[0]), community_of(&set, k[1]));
     assert_ne!(community_of(&set, k[0]), community_of(&set, k[2]));
 }
@@ -137,7 +207,11 @@ fn community_separates_disconnected_components() {
 fn community_edgeless_graph_is_all_singletons() {
     let (graph, k) = graph_from_edges(3, &[]);
     let set = community_louvain(&graph);
-    assert_eq!(set.clusters.len(), 3, "no edges => every node its own community");
+    assert_eq!(
+        set.clusters.len(),
+        3,
+        "no edges => every node its own community"
+    );
     assert_ne!(community_of(&set, k[0]), community_of(&set, k[1]));
 }
 
@@ -148,20 +222,51 @@ fn community_three_triangles_in_a_line_are_three_communities() {
     let (graph, k) = graph_from_edges(
         9,
         &[
-            (0, 1), (1, 2), (2, 0), // T1
-            (3, 4), (4, 5), (5, 3), // T2
-            (6, 7), (7, 8), (8, 6), // T3
-            (2, 3), (5, 6), // bridges
+            (0, 1),
+            (1, 2),
+            (2, 0), // T1
+            (3, 4),
+            (4, 5),
+            (5, 3), // T2
+            (6, 7),
+            (7, 8),
+            (8, 6), // T3
+            (2, 3),
+            (5, 6), // bridges
         ],
     );
     let set = community_louvain(&graph);
-    assert_eq!(set.clusters.len(), 3, "three triangles => three communities");
-    assert_eq!(community_of(&set, k[0]), community_of(&set, k[1]), "T1 coheres");
+    assert_eq!(
+        set.clusters.len(),
+        3,
+        "three triangles => three communities"
+    );
+    assert_eq!(
+        community_of(&set, k[0]),
+        community_of(&set, k[1]),
+        "T1 coheres"
+    );
     assert_eq!(community_of(&set, k[0]), community_of(&set, k[2]));
-    assert_eq!(community_of(&set, k[3]), community_of(&set, k[5]), "T2 coheres");
-    assert_eq!(community_of(&set, k[6]), community_of(&set, k[8]), "T3 coheres");
-    assert_ne!(community_of(&set, k[0]), community_of(&set, k[3]), "T1 != T2");
-    assert_ne!(community_of(&set, k[3]), community_of(&set, k[6]), "T2 != T3");
+    assert_eq!(
+        community_of(&set, k[3]),
+        community_of(&set, k[5]),
+        "T2 coheres"
+    );
+    assert_eq!(
+        community_of(&set, k[6]),
+        community_of(&set, k[8]),
+        "T3 coheres"
+    );
+    assert_ne!(
+        community_of(&set, k[0]),
+        community_of(&set, k[3]),
+        "T1 != T2"
+    );
+    assert_ne!(
+        community_of(&set, k[3]),
+        community_of(&set, k[6]),
+        "T2 != T3"
+    );
     // Every node lands in exactly one cluster.
     let total: usize = set.clusters.iter().map(|c| c.members.len()).sum();
     assert_eq!(total, 9, "the partition covers every node once");
@@ -171,8 +276,7 @@ fn community_three_triangles_in_a_line_are_three_communities() {
 fn community_detection_is_deterministic() {
     // The same snapshot must yield the identical partition run to run (sorted tie-breaks +
     // first-seen compaction): the community-ring colours depend on it.
-    let (graph, _) =
-        graph_from_edges(6, &[(0, 1), (1, 2), (2, 0), (3, 4), (4, 5), (5, 3), (2, 3)]);
+    let (graph, _) = graph_from_edges(6, &[(0, 1), (1, 2), (2, 0), (3, 4), (4, 5), (5, 3), (2, 3)]);
     let snapshot = CommunitySnapshot::from_graph(&graph);
     let a = community_louvain_on_snapshot(&snapshot);
     let b = community_louvain_on_snapshot(&snapshot);
@@ -184,14 +288,21 @@ fn bridge_nodes_picks_the_high_betweenness_broker() {
     // Bowtie: triangles {0,1,2} and {2,3,4} share node 2 (betweenness 1.0); the rest are ~0.
     // At threshold 0.5 only the broker qualifies as a bridge.
     let (graph, k) = graph_from_edges(5, &[(0, 1), (1, 2), (2, 0), (2, 3), (3, 4), (4, 2)]);
-    assert_eq!(bridge_nodes(&graph, 0.5).bridges, vec![k[2]], "only the broker is a bridge");
+    assert_eq!(
+        bridge_nodes(&graph, 0.5).bridges,
+        vec![k[2]],
+        "only the broker is a bridge"
+    );
 }
 
 #[test]
 fn bridge_nodes_empty_for_a_clique() {
     // A triangle: every node's betweenness is 0, so there are no bridges.
     let (graph, _) = graph_from_edges(3, &[(0, 1), (1, 2), (2, 0)]);
-    assert!(bridge_nodes(&graph, 0.5).bridges.is_empty(), "a clique has no bridges");
+    assert!(
+        bridge_nodes(&graph, 0.5).bridges.is_empty(),
+        "a clique has no bridges"
+    );
 }
 
 /// The articulation-point set as a sorted Vec, for order-independent comparison.
@@ -207,21 +318,31 @@ fn articulation_points_finds_a_paths_interior() {
     let (graph, k) = graph_from_edges(4, &[(0, 1), (1, 2), (2, 3)]);
     let mut expected = vec![k[1], k[2]];
     expected.sort();
-    assert_eq!(aps(&graph), expected, "the path interior nodes are cut vertices");
+    assert_eq!(
+        aps(&graph),
+        expected,
+        "the path interior nodes are cut vertices"
+    );
 }
 
 #[test]
 fn articulation_points_empty_for_a_clique() {
     // A triangle is 2-connected: removing any node leaves the other two connected.
     let (graph, _) = graph_from_edges(3, &[(0, 1), (1, 2), (2, 0)]);
-    assert!(articulation_points(&graph).bridges.is_empty(), "a clique has no cut vertex");
+    assert!(
+        articulation_points(&graph).bridges.is_empty(),
+        "a clique has no cut vertex"
+    );
 }
 
 #[test]
 fn articulation_points_empty_for_a_cycle() {
     // A 4-cycle is 2-connected: removing one node leaves a path, still connected.
     let (graph, _) = graph_from_edges(4, &[(0, 1), (1, 2), (2, 3), (3, 0)]);
-    assert!(articulation_points(&graph).bridges.is_empty(), "a cycle has no cut vertex");
+    assert!(
+        articulation_points(&graph).bridges.is_empty(),
+        "a cycle has no cut vertex"
+    );
 }
 
 #[test]
@@ -229,7 +350,11 @@ fn articulation_points_finds_the_bowtie_hinge() {
     // Two triangles {0,1,2} and {2,3,4} sharing node 2: only 2 is a cut vertex (its removal
     // splits {0,1} from {3,4}).
     let (graph, k) = graph_from_edges(5, &[(0, 1), (1, 2), (2, 0), (2, 3), (3, 4), (4, 2)]);
-    assert_eq!(aps(&graph), vec![k[2]], "the shared hinge is the only cut vertex");
+    assert_eq!(
+        aps(&graph),
+        vec![k[2]],
+        "the shared hinge is the only cut vertex"
+    );
 }
 
 #[test]
@@ -237,11 +362,23 @@ fn bridges_dispatch_picks_the_metric() {
     // Bowtie: node 2 is both the betweenness broker and the cut vertex (here they agree). The
     // dispatcher routes to each producer by metric.
     let (graph, k) = graph_from_edges(5, &[(0, 1), (1, 2), (2, 0), (2, 3), (3, 4), (4, 2)]);
-    assert_eq!(bridges(&graph, BridgeMetric::Betweenness, 0.5).bridges, vec![k[2]]);
-    assert_eq!(bridges(&graph, BridgeMetric::Articulation, 0.5).bridges, vec![k[2]]);
+    assert_eq!(
+        bridges(&graph, BridgeMetric::Betweenness, 0.5).bridges,
+        vec![k[2]]
+    );
+    assert_eq!(
+        bridges(&graph, BridgeMetric::Articulation, 0.5).bridges,
+        vec![k[2]]
+    );
     // The codes round-trip for persistence.
-    assert_eq!(BridgeMetric::from_code(BridgeMetric::Articulation.as_code()), BridgeMetric::Articulation);
-    assert_eq!(BridgeMetric::from_code("nonsense"), BridgeMetric::Betweenness);
+    assert_eq!(
+        BridgeMetric::from_code(BridgeMetric::Articulation.as_code()),
+        BridgeMetric::Articulation
+    );
+    assert_eq!(
+        BridgeMetric::from_code("nonsense"),
+        BridgeMetric::Betweenness
+    );
 }
 
 /// The affinity recorded for an unordered pair, or `None` if it was not emitted.
@@ -263,10 +400,17 @@ fn triangle_members_all_share_affinity() {
     // Every pair in a triangle shares the third node: J = 1/(2 + 2 − 1) = 1/3 for all three.
     let (graph, k) = graph_from_edges(3, &[(0, 1), (1, 2), (2, 0)]);
     let scores = structural_affinity(&graph, 0.0);
-    assert_eq!(scores.pairs.len(), 3, "all three triangle pairs are similar");
+    assert_eq!(
+        scores.pairs.len(),
+        3,
+        "all three triangle pairs are similar"
+    );
     for &(a, b) in &[(0, 1), (1, 2), (2, 0)] {
         let j = affinity_of(&scores, k[a], k[b]).expect("pair present");
-        assert!((j - 1.0 / 3.0).abs() < 1e-5, "triangle Jaccard is 1/3, got {j}");
+        assert!(
+            (j - 1.0 / 3.0).abs() < 1e-5,
+            "triangle Jaccard is 1/3, got {j}"
+        );
     }
 }
 
@@ -275,15 +419,28 @@ fn affinity_clusters_within_triangles_not_across() {
     // Two triangles {0,1,2},{3,4,5} joined by the bridge 2-3. Same-triangle nodes share a
     // neighbour (affinity ~1/3); the far cross pairs share none (absent) — affinity reads as
     // the clusters, the property the affinity force exploits.
-    let (graph, k) =
-        graph_from_edges(6, &[(0, 1), (1, 2), (2, 0), (3, 4), (4, 5), (5, 3), (2, 3)]);
+    let (graph, k) = graph_from_edges(6, &[(0, 1), (1, 2), (2, 0), (3, 4), (4, 5), (5, 3), (2, 3)]);
     let scores = structural_affinity(&graph, 0.0);
     let within_a = affinity_of(&scores, k[0], k[1]).expect("within triangle A");
     let within_b = affinity_of(&scores, k[4], k[5]).expect("within triangle B");
-    assert!((within_a - 1.0 / 3.0).abs() < 1e-5, "a clean within-A pair is 1/3");
-    assert!((within_b - 1.0 / 3.0).abs() < 1e-5, "a clean within-B pair is 1/3");
-    assert_eq!(affinity_of(&scores, k[1], k[4]), None, "a far cross pair shares no neighbour");
-    assert_eq!(affinity_of(&scores, k[0], k[5]), None, "another far cross pair is absent");
+    assert!(
+        (within_a - 1.0 / 3.0).abs() < 1e-5,
+        "a clean within-A pair is 1/3"
+    );
+    assert!(
+        (within_b - 1.0 / 3.0).abs() < 1e-5,
+        "a clean within-B pair is 1/3"
+    );
+    assert_eq!(
+        affinity_of(&scores, k[1], k[4]),
+        None,
+        "a far cross pair shares no neighbour"
+    );
+    assert_eq!(
+        affinity_of(&scores, k[0], k[5]),
+        None,
+        "another far cross pair is absent"
+    );
 }
 
 #[test]

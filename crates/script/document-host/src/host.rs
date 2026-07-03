@@ -76,12 +76,18 @@ impl crate::mere::script::net::Host for ScriptHost {
         // same-origin), so a granted `net` cannot exfiltrate to or read an arbitrary
         // third-party host. Enforced before the backend is even consulted.
         if !host_in_origins(&req.url, &self.net_origins) {
-            return Err(format!("net.fetch: {} is outside this script's net origins", req.url));
+            return Err(format!(
+                "net.fetch: {} is outside this script's net origins",
+                req.url
+            ));
         }
         // Call the injected backend (netfetcher/errand, supplied by the content actor).
         // Blocking on the turn's fiber: the host thread parks for the I/O, then the
         // fiber resumes with the result. No backend configured = an error to the guest.
-        let fetcher = self.fetcher.as_ref().ok_or_else(|| "net backend not configured".to_string())?;
+        let fetcher = self
+            .fetcher
+            .as_ref()
+            .ok_or_else(|| "net backend not configured".to_string())?;
         let resp = fetcher.fetch(&req.url)?;
         Ok(crate::mere::script::net::Response {
             status: resp.status,
@@ -108,7 +114,10 @@ impl crate::mere::script::document_host::Host for ScriptHost {
 
 impl WasiView for ScriptHost {
     fn ctx(&mut self) -> WasiCtxView<'_> {
-        WasiCtxView { ctx: &mut self.wasi, table: &mut self.table }
+        WasiCtxView {
+            ctx: &mut self.wasi,
+            table: &mut self.table,
+        }
     }
 }
 
@@ -132,7 +141,10 @@ pub(crate) fn full_linker(engine: &Engine) -> wasmtime::Result<Linker<ScriptHost
     let mut linker = Linker::new(engine);
     wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
     crate::mere::script::log::add_to_linker::<ScriptHost, HasSelf<ScriptHost>>(&mut linker, |s| s)?;
-    crate::mere::script::caps::add_to_linker::<ScriptHost, HasSelf<ScriptHost>>(&mut linker, |s| s)?;
+    crate::mere::script::caps::add_to_linker::<ScriptHost, HasSelf<ScriptHost>>(
+        &mut linker,
+        |s| s,
+    )?;
     crate::mere::script::net::add_to_linker::<ScriptHost, HasSelf<ScriptHost>>(&mut linker, |s| s)?;
     crate::mere::script::document_host::add_to_linker::<ScriptHost, HasSelf<ScriptHost>>(
         &mut linker,
@@ -172,7 +184,11 @@ pub async fn run_turns(component_path: &Path, turns: &[(&str, &str)]) -> wasmtim
     let linker = full_linker(&engine)?;
     let mut store = Store::new(
         &engine,
-        new_host(seed_dom(), Grant::allow_all().granted_names(), StoreLimits::default()),
+        new_host(
+            seed_dom(),
+            Grant::allow_all().granted_names(),
+            StoreLimits::default(),
+        ),
     );
 
     let bindings = DocumentCore::instantiate_async(&mut store, &component, &linker).await?;
@@ -180,7 +196,10 @@ pub async fn run_turns(component_path: &Path, turns: &[(&str, &str)]) -> wasmtim
 
     let mut outcomes = Vec::new();
     for (kind, payload) in turns {
-        let ev = Event { kind: (*kind).to_string(), payload: (*payload).to_string() };
+        let ev = Event {
+            kind: (*kind).to_string(),
+            payload: (*payload).to_string(),
+        };
         match bindings.call_handle_event(&mut store, &ev).await? {
             Ok(batch) => {
                 let cited = batch.expected_revision;
@@ -193,12 +212,15 @@ pub async fn run_turns(component_path: &Path, turns: &[(&str, &str)]) -> wasmtim
                     Ok(new_rev) => {
                         outcomes.push(format!("{kind}: applied (cited {cited}) -> rev {new_rev}"))
                     }
-                    Err(TurnError::RevisionConflict(cur)) => outcomes
-                        .push(format!("{kind}: revision-conflict (cited {cited}, current {cur})")),
+                    Err(TurnError::RevisionConflict(cur)) => outcomes.push(format!(
+                        "{kind}: revision-conflict (cited {cited}, current {cur})"
+                    )),
                     Err(TurnError::UnknownNode(id)) => {
                         outcomes.push(format!("{kind}: unknown-node {id} (nothing applied)"))
                     }
-                    Err(TurnError::Refused(why)) => outcomes.push(format!("{kind}: refused ({why})")),
+                    Err(TurnError::Refused(why)) => {
+                        outcomes.push(format!("{kind}: refused ({why})"))
+                    }
                 }
             }
             Err(TurnError::Refused(why)) => outcomes.push(format!("{kind}: declined ({why})")),
@@ -215,8 +237,11 @@ pub async fn run_turns(component_path: &Path, turns: &[(&str, &str)]) -> wasmtim
 
     let h = store.data();
     let view = dom_view::snapshot(&h.dom, h.revision);
-    let final_rows =
-        view.nodes.iter().map(|n| (n.id, n.kind.clone(), n.text.clone())).collect();
+    let final_rows = view
+        .nodes
+        .iter()
+        .map(|n| (n.id, n.kind.clone(), n.text.clone()))
+        .collect();
     Ok(TurnLog {
         outcomes,
         guest_logs: h.logs.clone(),

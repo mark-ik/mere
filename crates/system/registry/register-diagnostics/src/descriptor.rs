@@ -180,7 +180,6 @@ fn global_registry() -> &'static Mutex<DiagnosticsRegistry> {
     GLOBAL_DIAGNOSTICS_REGISTRY.get_or_init(|| Mutex::new(DiagnosticsRegistry::default()))
 }
 
-
 pub fn should_emit_and_observe(channel_id: &str) -> (bool, Vec<DiagnosticsInvariantViolation>) {
     let mut registry = global_registry()
         .lock()
@@ -291,4 +290,3 @@ pub fn register_invariant_global(
         .expect("diagnostics registry lock poisoned")
         .register_invariant(invariant, capabilities)
 }
-

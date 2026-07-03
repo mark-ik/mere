@@ -12,8 +12,8 @@ use euclid::default::Vector2D;
 use crate::camera::CanvasViewport;
 use crate::scene::CanvasSceneInput;
 
-use crate::{Layout, LayoutExtras};
 use super::LayoutCapability;
+use crate::{Layout, LayoutExtras};
 
 // ── DynLayout — object-safe Layout ───────────────────────────────────────────
 

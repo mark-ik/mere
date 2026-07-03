@@ -4,9 +4,7 @@
 
 use super::*;
 use crate::types::InteractionKind;
-use inker::{
-    Block, DocumentProvenance, DocumentTrustState, EngineDocument, InlineSpan,
-};
+use inker::{Block, DocumentProvenance, DocumentTrustState, EngineDocument, InlineSpan};
 
 fn doc(blocks: Vec<Block>) -> EngineDocument {
     EngineDocument {
@@ -207,9 +205,11 @@ fn feed_entry_composes_into_group_with_h2_summary_link() {
     assert_eq!(children.len(), 4);
 
     // Article URL surfaces as an interaction region.
-    assert!(packet.interactions.iter().any(
-        |r| matches!(&r.kind, InteractionKind::Link { url } if url == "https://feed.test/x")
-    ));
+    assert!(
+        packet.interactions.iter().any(
+            |r| matches!(&r.kind, InteractionKind::Link { url } if url == "https://feed.test/x")
+        )
+    );
 }
 
 #[test]
@@ -289,7 +289,10 @@ fn document_dedups_shared_face() {
         .map(|r| r.font_face)
         .collect();
     assert!(faces.len() >= 2, "expected a run per paragraph");
-    assert!(faces.iter().all(|f| *f == faces[0]), "runs share one face id");
+    assert!(
+        faces.iter().all(|f| *f == faces[0]),
+        "runs share one face id"
+    );
 }
 
 #[test]
@@ -304,7 +307,10 @@ fn text_populates_font_sidecar() {
         viewport(),
         &DocumentStyleSheet::default(),
     );
-    assert!(!laid.fonts.is_empty(), "text should populate the font sidecar");
+    assert!(
+        !laid.fonts.is_empty(),
+        "text should populate the font sidecar"
+    );
     for block in &laid.packet.blocks {
         if let RenderedBlockKind::Text { glyph_runs } = &block.kind {
             for run in glyph_runs {
@@ -396,8 +402,20 @@ fn glyph_runs_carry_per_role_colors() {
         })
         .flatten()
         .collect();
-    assert!(colors.contains(&palette.heading_text), "heading run uses heading_text");
-    assert!(colors.contains(&palette.body_text), "body run uses body_text");
-    assert!(colors.contains(&palette.link_text), "link run uses link_text");
-    assert!(colors.contains(&palette.code_text), "inline code run uses code_text");
+    assert!(
+        colors.contains(&palette.heading_text),
+        "heading run uses heading_text"
+    );
+    assert!(
+        colors.contains(&palette.body_text),
+        "body run uses body_text"
+    );
+    assert!(
+        colors.contains(&palette.link_text),
+        "link run uses link_text"
+    );
+    assert!(
+        colors.contains(&palette.code_text),
+        "inline code run uses code_text"
+    );
 }

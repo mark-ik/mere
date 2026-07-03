@@ -26,11 +26,11 @@ use std::collections::{HashMap, HashSet};
 use forme::{Arrangement, ArrangementNodeId, GraphMemberId};
 use serde::{Deserialize, Serialize};
 
-use super::tree::{Branch, Pane, Stack};
 use super::Workbench;
-use crate::projection_geometry::{TreeBranch, TreeGeometry};
-use crate::tree_projection::{project_tree, PlanSlot};
+use super::tree::{Branch, Pane, Stack};
 use crate::ProjectionKind;
+use crate::projection_geometry::{TreeBranch, TreeGeometry};
+use crate::tree_projection::{PlanSlot, project_tree};
 
 /// The on-disk form of a tiled workbench: the canonical `(Arrangement, geometry)`
 /// pair the bridge derives, written beside the session graph so split shape, tab
@@ -87,7 +87,10 @@ impl Workbench {
             }
             None => flat_pane(arrangement),
         };
-        Workbench { mode: ProjectionKind::Tree, root }
+        Workbench {
+            mode: ProjectionKind::Tree,
+            root,
+        }
     }
 
     /// The A4 invariant: the live `Pane` tree holds nothing the canonical
@@ -111,7 +114,10 @@ impl Workbench {
             "workbench Pane tree is not canonical-derivable from its (Arrangement, geometry) pair",
         );
         let (arrangement, geometry) = self.to_arrangement();
-        serde_json::to_string(&PersistedWorkbench { arrangement, geometry })
+        serde_json::to_string(&PersistedWorkbench {
+            arrangement,
+            geometry,
+        })
     }
 
     /// Rebuild a tiled workbench from session-persisted JSON, keeping only members in
@@ -133,12 +139,18 @@ impl Workbench {
 /// A `Pane` split tree mirrored as geometry (structure + fractions + active).
 fn pane_to_geom(pane: &Pane) -> TreeGeometry {
     match pane {
-        Pane::Stack(s) => TreeGeometry::Stack { members: s.members.clone(), active: s.active },
+        Pane::Stack(s) => TreeGeometry::Stack {
+            members: s.members.clone(),
+            active: s.active,
+        },
         Pane::Split { axis, children } => TreeGeometry::Split {
             axis: (*axis).into(),
             children: children
                 .iter()
-                .map(|b| TreeBranch { fraction: b.fraction, node: pane_to_geom(&b.pane) })
+                .map(|b| TreeBranch {
+                    fraction: b.fraction,
+                    node: pane_to_geom(&b.pane),
+                })
                 .collect(),
         },
     }
@@ -147,14 +159,18 @@ fn pane_to_geom(pane: &Pane) -> TreeGeometry {
 /// Geometry mirrored back into a `Pane` split tree (the inverse of [`pane_to_geom`]).
 fn geom_to_pane(geom: &TreeGeometry) -> Pane {
     match geom {
-        TreeGeometry::Stack { members, active } => {
-            Pane::Stack(Stack { members: members.clone(), active: *active })
-        }
+        TreeGeometry::Stack { members, active } => Pane::Stack(Stack {
+            members: members.clone(),
+            active: *active,
+        }),
         TreeGeometry::Split { axis, children } => Pane::Split {
             axis: (*axis).into(),
             children: children
                 .iter()
-                .map(|b| Branch { fraction: b.fraction, pane: geom_to_pane(&b.node) })
+                .map(|b| Branch {
+                    fraction: b.fraction,
+                    pane: geom_to_pane(&b.node),
+                })
                 .collect(),
         },
     }
@@ -233,7 +249,10 @@ mod tests {
 
     /// A workbench built from a raw root, in Tree mode (the bridge's target mode).
     fn tiled(root: Pane) -> Workbench {
-        Workbench { mode: ProjectionKind::Tree, root: Some(root) }
+        Workbench {
+            mode: ProjectionKind::Tree,
+            root: Some(root),
+        }
     }
 
     /// `wb -> (arrangement, geometry) -> wb` reproduces the split tree exactly.
@@ -246,7 +265,10 @@ mod tests {
 
     #[test]
     fn lone_stack_round_trips() {
-        assert_round_trips(&tiled(Pane::Stack(Stack { members: vec![m(1), m(2)], active: 1 })));
+        assert_round_trips(&tiled(Pane::Stack(Stack {
+            members: vec![m(1), m(2)],
+            active: 1,
+        })));
     }
 
     #[test]
@@ -254,14 +276,23 @@ mod tests {
         let wb = tiled(Pane::Split {
             axis: SplitAxis::Row,
             children: vec![
-                Branch { fraction: 0.4, pane: Pane::leaf(m(1)) },
+                Branch {
+                    fraction: 0.4,
+                    pane: Pane::leaf(m(1)),
+                },
                 Branch {
                     fraction: 0.6,
-                    pane: Pane::Stack(Stack { members: vec![m(2), m(3)], active: 1 }),
+                    pane: Pane::Stack(Stack {
+                        members: vec![m(2), m(3)],
+                        active: 1,
+                    }),
                 },
             ],
         });
-        assert!(wb.canonical_roundtrips(), "a tree built from valid mutators is canonical-derivable");
+        assert!(
+            wb.canonical_roundtrips(),
+            "a tree built from valid mutators is canonical-derivable"
+        );
     }
 
     #[test]
@@ -269,8 +300,14 @@ mod tests {
         assert_round_trips(&tiled(Pane::Split {
             axis: SplitAxis::Row,
             children: vec![
-                Branch { fraction: 0.3, pane: Pane::leaf(m(1)) },
-                Branch { fraction: 0.7, pane: Pane::leaf(m(2)) },
+                Branch {
+                    fraction: 0.3,
+                    pane: Pane::leaf(m(1)),
+                },
+                Branch {
+                    fraction: 0.7,
+                    pane: Pane::leaf(m(2)),
+                },
             ],
         }));
     }
@@ -282,7 +319,10 @@ mod tests {
         assert_round_trips(&tiled(Pane::Split {
             axis: SplitAxis::Row,
             children: vec![
-                Branch { fraction: 0.4, pane: Pane::leaf(m(1)) },
+                Branch {
+                    fraction: 0.4,
+                    pane: Pane::leaf(m(1)),
+                },
                 Branch {
                     fraction: 0.6,
                     pane: Pane::Split {
@@ -290,9 +330,15 @@ mod tests {
                         children: vec![
                             Branch {
                                 fraction: 0.5,
-                                pane: Pane::Stack(Stack { members: vec![m(2), m(3)], active: 1 }),
+                                pane: Pane::Stack(Stack {
+                                    members: vec![m(2), m(3)],
+                                    active: 1,
+                                }),
                             },
-                            Branch { fraction: 0.5, pane: Pane::leaf(m(4)) },
+                            Branch {
+                                fraction: 0.5,
+                                pane: Pane::leaf(m(4)),
+                            },
                         ],
                     },
                 },
@@ -305,10 +351,16 @@ mod tests {
         let wb = tiled(Pane::Split {
             axis: SplitAxis::Row,
             children: vec![
-                Branch { fraction: 0.5, pane: Pane::leaf(m(1)) },
                 Branch {
                     fraction: 0.5,
-                    pane: Pane::Stack(Stack { members: vec![m(2), m(3)], active: 0 }),
+                    pane: Pane::leaf(m(1)),
+                },
+                Branch {
+                    fraction: 0.5,
+                    pane: Pane::Stack(Stack {
+                        members: vec![m(2), m(3)],
+                        active: 0,
+                    }),
                 },
             ],
         });
@@ -348,10 +400,16 @@ mod tests {
         let geom = TreeGeometry::Split {
             axis: crate::projection_geometry::Axis::Row,
             children: vec![
-                TreeBranch { fraction: 0.5, node: TreeGeometry::leaf(m(1)) },
                 TreeBranch {
                     fraction: 0.5,
-                    node: TreeGeometry::Stack { members: vec![m(2), m(3)], active: 0 },
+                    node: TreeGeometry::leaf(m(1)),
+                },
+                TreeBranch {
+                    fraction: 0.5,
+                    node: TreeGeometry::Stack {
+                        members: vec![m(2), m(3)],
+                        active: 0,
+                    },
                 },
             ],
         };
@@ -361,7 +419,11 @@ mod tests {
         let wb = Workbench::from_arrangement(&arr, Some(&geom));
         let mut open = wb.open_members();
         open.sort();
-        assert_eq!(open, vec![m(1), m(3)], "the dropped member is reconciled away");
+        assert_eq!(
+            open,
+            vec![m(1), m(3)],
+            "the dropped member is reconciled away"
+        );
     }
 
     /// A small deterministic PRNG (LCG) so the fuzz test is reproducible in CI.
@@ -392,17 +454,37 @@ mod tests {
             for _ in 0..steps {
                 let a = pool[lcg(&mut st) as usize % pool.len()];
                 let b = pool[lcg(&mut st) as usize % pool.len()];
-                let axis = if lcg(&mut st) % 2 == 0 { SplitAxis::Row } else { SplitAxis::Column };
+                let axis = if lcg(&mut st) % 2 == 0 {
+                    SplitAxis::Row
+                } else {
+                    SplitAxis::Column
+                };
                 let after = lcg(&mut st) % 2 == 0;
                 match lcg(&mut st) % 8 {
-                    0 => { wb.open_tile(a); }
-                    1 => { wb.open_stack(&[a, b]); }
-                    2 => { wb.split_beside_axis(a, b, axis, after); }
-                    3 => { wb.split_out(a, axis, after); }
-                    4 => { wb.move_to_slot_of(a, b); }
-                    5 => { wb.open_in_slot_of(a, b); }
-                    6 => { wb.close_tile(a); }
-                    _ => { wb.activate(a); }
+                    0 => {
+                        wb.open_tile(a);
+                    }
+                    1 => {
+                        wb.open_stack(&[a, b]);
+                    }
+                    2 => {
+                        wb.split_beside_axis(a, b, axis, after);
+                    }
+                    3 => {
+                        wb.split_out(a, axis, after);
+                    }
+                    4 => {
+                        wb.move_to_slot_of(a, b);
+                    }
+                    5 => {
+                        wb.open_in_slot_of(a, b);
+                    }
+                    6 => {
+                        wb.close_tile(a);
+                    }
+                    _ => {
+                        wb.activate(a);
+                    }
                 }
                 // Occasionally nudge a top-level divider, exercising the fraction path.
                 if lcg(&mut st) % 3 == 0 {

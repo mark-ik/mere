@@ -499,7 +499,7 @@ impl WindowCtx<'_> {
     pub(crate) fn drain_gloss_outline_intents(&mut self) {
         for intent in self.view.take_gloss_outline_intents() {
             match intent {
-                crate::gloss::GlossRowIntent::Select(url) => {
+                gloss::GlossRowIntent::Select(url) => {
                     self.orrery_mut().select_by_url(&url);
                     self.view.request_redraw();
                 }
@@ -512,7 +512,7 @@ impl WindowCtx<'_> {
     pub(crate) fn drain_gloss_recent_intents(&mut self) {
         for intent in self.view.take_gloss_recent_intents() {
             match intent {
-                crate::gloss::GlossRowIntent::Select(url) => {
+                gloss::GlossRowIntent::Select(url) => {
                     self.orrery_mut().select_by_url(&url);
                     self.view.request_redraw();
                 }
@@ -525,7 +525,7 @@ impl WindowCtx<'_> {
     pub(crate) fn drain_gloss_minimap_intents(&mut self) {
         for intent in self.view.take_gloss_minimap_intents() {
             match intent {
-                crate::gloss::GlossRowIntent::Select(url) => {
+                gloss::GlossRowIntent::Select(url) => {
                     self.orrery_mut().select_by_url(&url);
                     self.view.request_redraw();
                 }

@@ -183,7 +183,10 @@ impl Orrery {
             if matches!(
                 apply_graph_delta(
                     &mut self.graph,
-                    GraphDelta::InsertNodeTag { key, tag: tag.to_string() },
+                    GraphDelta::InsertNodeTag {
+                        key,
+                        tag: tag.to_string()
+                    },
                 ),
                 GraphDeltaResult::NodeMetadataUpdated(true)
             ) {
@@ -203,7 +206,10 @@ impl Orrery {
         matches!(
             apply_graph_delta(
                 &mut self.graph,
-                GraphDelta::InsertNodeTag { key, tag: tag.to_string() },
+                GraphDelta::InsertNodeTag {
+                    key,
+                    tag: tag.to_string()
+                },
             ),
             GraphDeltaResult::NodeMetadataUpdated(true)
         )
@@ -219,7 +225,10 @@ impl Orrery {
         matches!(
             apply_graph_delta(
                 &mut self.graph,
-                GraphDelta::RemoveNodeTag { key, tag: tag.to_string() },
+                GraphDelta::RemoveNodeTag {
+                    key,
+                    tag: tag.to_string()
+                },
             ),
             GraphDeltaResult::NodeMetadataUpdated(true)
         )

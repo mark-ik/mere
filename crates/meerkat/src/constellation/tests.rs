@@ -3,12 +3,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 //! Constellation tests.
-
-use engine_observables_api::{DomArenaStats, LayoutApplyKind, LayoutBatchStats};
 use uuid::Uuid;
 
 use super::*;
-use crate::content::ContentHandle;
+use crate::content::{ContentHandle, DomArenaStats, LayoutApplyKind, LayoutBatchStats};
 
 fn m(n: u128) -> GraphMemberId {
     Uuid::from_u128(n)

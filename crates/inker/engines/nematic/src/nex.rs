@@ -20,7 +20,7 @@
 //! [`InlineSpan::Link`] spans, with URLs synthesised relative to
 //! [`EngineInput::address`].
 
-use errand::parse::nex::{base_url, parse as parse_nex, NexEntry};
+use errand::parse::nex::{NexEntry, base_url, parse as parse_nex};
 use inker::{
     Block, DocumentProvenance, DocumentTrustState, Engine, EngineDocument, EngineError,
     EngineInput, InlineSpan,

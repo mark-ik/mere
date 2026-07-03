@@ -61,7 +61,10 @@ impl Pool {
     pub fn new() -> Self {
         Self {
             inner: Arc::new(Inner {
-                state: Mutex::new(State { queue: VecDeque::new(), idle: 0 }),
+                state: Mutex::new(State {
+                    queue: VecDeque::new(),
+                    idle: 0,
+                }),
                 available: Condvar::new(),
                 workers: AtomicUsize::new(0),
             }),
@@ -93,27 +96,29 @@ impl Pool {
     fn spawn_worker(&self) {
         self.inner.workers.fetch_add(1, Ordering::SeqCst);
         let inner = Arc::clone(&self.inner);
-        thread::spawn(move || loop {
-            let job = {
-                let mut state = inner.state.lock().unwrap();
-                loop {
-                    if let Some(job) = state.queue.pop_front() {
-                        break job;
+        thread::spawn(move || {
+            loop {
+                let job = {
+                    let mut state = inner.state.lock().unwrap();
+                    loop {
+                        if let Some(job) = state.queue.pop_front() {
+                            break job;
+                        }
+                        state.idle += 1;
+                        state = inner.available.wait(state).unwrap();
+                        state.idle -= 1;
                     }
-                    state.idle += 1;
-                    state = inner.available.wait(state).unwrap();
-                    state.idle -= 1;
-                }
-            };
-            job(); // the actor's whole lifetime; the worker is reused when it returns
+                };
+                job(); // the actor's whole lifetime; the worker is reused when it returns
+            }
         });
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::mpsc;
     use std::sync::Barrier;
+    use std::sync::mpsc;
 
     use super::*;
 
@@ -135,8 +140,15 @@ mod tests {
         }
         let mut got: Vec<i32> = (0..5).map(|_| rx.recv().unwrap()).collect();
         got.sort();
-        assert_eq!(got, vec![0, 1, 2, 3, 4], "all five ran concurrently (the barrier released)");
-        assert!(pool.workers() >= 5, "the pool grew to serve five concurrent jobs");
+        assert_eq!(
+            got,
+            vec![0, 1, 2, 3, 4],
+            "all five ran concurrently (the barrier released)"
+        );
+        assert!(
+            pool.workers() >= 5,
+            "the pool grew to serve five concurrent jobs"
+        );
     }
 
     #[test]
@@ -154,6 +166,10 @@ mod tests {
         let (tx2, rx2) = mpsc::channel();
         pool.submit(Box::new(move || tx2.send(()).unwrap()));
         rx2.recv().unwrap();
-        assert_eq!(pool.workers(), 1, "the idle worker was reused, not a second spawned");
+        assert_eq!(
+            pool.workers(),
+            1,
+            "the idle worker was reused, not a second spawned"
+        );
     }
 }

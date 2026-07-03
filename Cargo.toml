@@ -20,6 +20,7 @@ members = [
     "crates/shell/frame",
     "crates/system/session-runtime",
     "crates/system/fetch",
+    "crates/system/content-contract",
     "crates/system/shell-state",
     "crates/system/registry/register-diagnostics",
     "crates/system/registry/register-input",
@@ -46,7 +47,8 @@ members = [
     "crates/forme/forme",
     "crates/forme/uxtree",
     "crates/platen/domain/apparatus",
-    "crates/platen/domain/gloss",
+    "crates/domain/gloss",
+    "crates/domain/roster",
     "crates/platen/domain/workbench",
     "crates/platen/platen",
     "crates/eidetic/eidetic-core",
@@ -112,6 +114,7 @@ armillary = { path = "crates/armillary" }
 meerkat-browser-worker = { path = "crates/meerkat-browser-worker" }
 
 fetch = { path = "crates/system/fetch" }
+content-contract = { path = "crates/system/content-contract" }
 shell-state = { path = "crates/system/shell-state" }
 frame = { path = "crates/shell/frame" }
 chrome = { path = "crates/shell/chrome" }
@@ -137,7 +140,8 @@ uxtree = { path = "crates/forme/uxtree" }
 
 platen = { path = "crates/platen/platen" }
 apparatus = { path = "crates/platen/domain/apparatus" }
-gloss = { path = "crates/platen/domain/gloss" }
+gloss = { path = "crates/domain/gloss" }
+roster = { path = "crates/domain/roster" }
 workbench = { path = "crates/platen/domain/workbench" }
 
 eidetic = { path = "crates/eidetic/eidetic-core" }

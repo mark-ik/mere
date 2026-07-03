@@ -51,7 +51,7 @@ outbound half of the same boundary.
   the gating the exposed tools sit behind.
 - [federation_interop plan](2026-06-26_federation_interop_plan.md): capability-scoped read
   for external agents.
-- [document_script_substrate plan](2026-06-21_document_script_substrate_plan.md),
+- [document_script_substrate plan](../../archive_docs/2026-07-03_completed_plans/2026-06-21_document_script_substrate_plan.md),
   [local_models_harness brief](../research/2026-06-24_local_models_harness_brief.md): the
   agentic lanes this complements.
 

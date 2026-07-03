@@ -27,7 +27,10 @@ fn doc_wasm() -> PathBuf {
 fn source_for(wasm: PathBuf) -> WasmModSource {
     // The manifest path is unused by the bridge (the loader has already parsed it);
     // point it next to the module for shape.
-    WasmModSource { module_path: wasm, manifest_path: PathBuf::from("mod.toml") }
+    WasmModSource {
+        module_path: wasm,
+        manifest_path: PathBuf::from("mod.toml"),
+    }
 }
 
 fn manifest(mod_id: &str, capabilities: Vec<ModCapability>) -> ModManifest {
@@ -49,11 +52,18 @@ fn activate_then_deactivate_runs_the_full_lifecycle() {
     let src = source_for(doc_wasm());
 
     rt.activate(&m, &src).expect("activate should succeed");
-    assert!(rt.is_active("doc.basic"), "mod should be active after activate");
+    assert!(
+        rt.is_active("doc.basic"),
+        "mod should be active after activate"
+    );
     assert_eq!(rt.active_ids(), vec!["doc.basic".to_string()]);
 
-    rt.deactivate("doc.basic").expect("deactivate should succeed");
-    assert!(!rt.is_active("doc.basic"), "mod should be gone after deactivate");
+    rt.deactivate("doc.basic")
+        .expect("deactivate should succeed");
+    assert!(
+        !rt.is_active("doc.basic"),
+        "mod should be gone after deactivate"
+    );
     assert!(rt.active_ids().is_empty());
 }
 
@@ -66,12 +76,17 @@ fn denied_capability_is_refused_before_instantiation() {
     let m = manifest("doc.netty", vec![ModCapability::Network]);
     let src = source_for(PathBuf::from("does/not/exist.wasm"));
 
-    let err = rt.activate(&m, &src).expect_err("over-asking mod must be refused");
+    let err = rt
+        .activate(&m, &src)
+        .expect_err("over-asking mod must be refused");
     assert!(
         err.contains("Network") && err.contains("not granted"),
         "refusal should name the denied capability, got: {err}"
     );
-    assert!(!rt.is_active("doc.netty"), "a refused mod must not be retained");
+    assert!(
+        !rt.is_active("doc.netty"),
+        "a refused mod must not be retained"
+    );
 }
 
 #[test]
@@ -81,7 +96,8 @@ fn within_policy_capability_is_admitted() {
     // not yet gate a live import — but the host-policy gate is exercised).
     let rt = DocumentScriptRuntime::new(vec![ModCapability::Network]);
     let m = manifest("doc.allowed", vec![ModCapability::Network]);
-    rt.activate(&m, &source_for(doc_wasm())).expect("within-policy mod should activate");
+    rt.activate(&m, &source_for(doc_wasm()))
+        .expect("within-policy mod should activate");
     assert!(rt.is_active("doc.allowed"));
 }
 
@@ -90,8 +106,11 @@ fn double_activate_is_refused() {
     let rt = DocumentScriptRuntime::new(vec![]);
     let m = manifest("doc.dup", vec![]);
     let src = source_for(doc_wasm());
-    rt.activate(&m, &src).expect("first activate should succeed");
-    let err = rt.activate(&m, &src).expect_err("second activate must be refused");
+    rt.activate(&m, &src)
+        .expect("first activate should succeed");
+    let err = rt
+        .activate(&m, &src)
+        .expect_err("second activate must be refused");
     assert!(err.contains("already active"), "got: {err}");
     // Still active (the duplicate did not disturb the live instance).
     assert!(rt.is_active("doc.dup"));
@@ -100,6 +119,8 @@ fn double_activate_is_refused() {
 #[test]
 fn deactivate_unknown_mod_is_an_error() {
     let rt = DocumentScriptRuntime::new(vec![]);
-    let err = rt.deactivate("nope").expect_err("deactivating an unknown mod must error");
+    let err = rt
+        .deactivate("nope")
+        .expect_err("deactivating an unknown mod must error");
     assert!(err.contains("not active"), "got: {err}");
 }

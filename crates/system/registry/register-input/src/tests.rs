@@ -2,10 +2,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use super::*;
-use super::defaults::*;
 use super::action_id;
 use super::binding_id;
+use super::defaults::*;
+use super::*;
 use std::collections::HashMap;
 
 fn is_namespaced_action_id(action_id: &str) -> bool {

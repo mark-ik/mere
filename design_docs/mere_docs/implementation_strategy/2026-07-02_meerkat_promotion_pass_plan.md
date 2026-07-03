@@ -1,15 +1,14 @@
 # Meerkat Promotion Pass Plan
 
 **Date**: 2026-07-02
-**Status**: P1/P2/P5/P6/P7 promoted. P3 boundary reassessed; P8's first
-input-snapshot seam landed in `meerkat`, but the domain move is still gated on
-the wider snapshot rollout and existing gloss/domain migration
-2026-07-02; the follow-up review on 2026-07-02 tightened P3/P4/P8 before code
-move. A later implementation pass on 2026-07-02 landed P1/P2/P5/P6/P7 and then
-re-ran the P3 seam check. The compile witness for P1/P2 is still blocked by
-unrelated workspace breakage (`session-runtime` and earlier `graph-kernel`
-errors), but the nearby imports settled enough to confirm the wider P3 contract
-shape below.
+**Status**: P1/P2/P3-first-slice/P4/P5/P6/P7 promoted. P8's input-snapshot seam,
+first two domain moves, and roster's pure helper layer landed, but the
+roster/pane-data host builders still remain in `meerkat`. The follow-up review
+on 2026-07-02 tightened P3/P4/P8 before code move. A later implementation pass
+on 2026-07-02 landed P1/P2/P5/P6/P7 and then re-ran the P3 seam check. The
+compile witness for P1/P2 is still blocked by unrelated workspace breakage
+(`session-runtime` and earlier `graph-kernel` errors), but the nearby imports
+settled enough to confirm the wider P3 contract shape below.
 **Scope**: Promote host-neutral domain and infrastructure modules out of the
 `meerkat` crate into workspace crates, and consolidate what stays. meerkat is
 54,760 LOC across ~86 modules, with ~85 of them declared in `main.rs` (the bin)
@@ -19,9 +18,9 @@ description says "chrome shell"; this plan makes the code match it.
 [render ladder + extraction plan](2026-06-23_render_ladder_and_extraction_plan.md)
 (frames the crawl/extraction axis as corpus + agent infrastructure, not shell
 code), the archived
-[serval render glue extraction plan](2026-06-11_serval_render_glue_extraction_plan.md)
+[serval render glue extraction plan](../../archive_docs/2026-07-03_completed_plans/2026-06-11_serval_render_glue_extraction_plan.md)
 (the precedent: own the seam, depend on components), the
-[meerkat CLI tooling plan](2026-06-29_meerkat_cli_tooling_plan.md) (owns the
+[meerkat CLI tooling plan](../../archive_docs/2026-07-03_completed_plans/2026-06-29_meerkat_cli_tooling_plan.md) (owns the
 agent_harness cluster; out of scope here), and the mere-domain layer direction
 (existing pane-domain crates live under `crates/platen/domain/` today, but the
 second-pass review below narrows that as historical precedent rather than the
@@ -88,8 +87,15 @@ grows a real content transport; extract before that happens, not after.
   problem. `transfer.rs` defines `LinkHitWire` with `From` conversions both
   ways; the extracted contract can take `LinkHitWire` while the conversions stay
   beside `LinkHit`.
-- The split also retires the file's `#![allow(dead_code)]` by giving the wire
-  form its own test surface.
+- First slice landed 2026-07-03: `crates/system/content-contract` now owns the
+  transferable content message vocabulary (`ContentCommandMessage` /
+  `ContentUpdateMessage`), scene/font/image transfer caches, and the postcard
+  transport. `meerkat::content::transfer` was reduced to native<->message
+  adapters, so the browser-worker seam no longer lives only in one endpoint
+  crate. Native runtime enums and actor logic still stay in `meerkat` for now.
+- The split also retires the file's `#![allow(dead_code)]`: the transport API is
+  now public in its own crate, though the old file-local tests were not carried
+  over as part of this first slice.
 - Done when: the post-P1/P2 reassessment chooses the contract boundary, the
   chosen crate builds for native and `wasm32`, meerkat and (when wired)
   meerkat-browser-worker both consume it, and the file-size ceiling is
@@ -109,6 +115,11 @@ super::{WindowCtx, fetch, render}` feeding a single `impl WindowCtx` block
   `render::base64_encode` when `attach_cropped_visual` mints the PNG data URI.
   That helper must move with the pure core (or be replaced in import) so P4 is
   not blocked on a hidden host dependency.
+- Landed 2026-07-03: `import::web_clip` now owns the clip fragment model,
+  script/result parsing, document-body fallback, image crop + PNG/data-URI
+  helper, knot emission, and graph-write helper. `meerkat::web_clip` keeps the
+  `WindowCtx` wrapper and cache/live-body lookup only, and the old hidden
+  `render::base64_encode` dependency was replaced inside `import`.
 
 - Home: `crates/import` (decided 2026-07-02). Cost accepted: import gains
   inker + image deps it does not have today.
@@ -166,14 +177,14 @@ view types currently leak into data.
   doctrine is tile composition only, and the two existing tenants are not
   alike. **workbench** is platen's own projection domain and stays;
   **apparatus** merely landed there and migrates to `crates/domain/` whenever
-  next touched. The live workspace also already has `crates/platen/domain/gloss`,
-  so this phase must include an explicit migration/rename path for that crate
-  rather than pretending the name is free. Roster and gloss data have no platen
-  affinity (kernel/forme and glossary material respectively), so sending them to
-  platen would grow it into the grab-bag the accessory-orchestrator doctrine
-  forbids. The old "wait for the mere-domain layout" gate stays dropped: every
-  mere-domain reference in design_docs is archived gpui-era material, so this
-  plan sets the layout rather than waiting on one.
+  next touched. The phase had to start by dealing with the pre-existing
+  `crates/platen/domain/gloss` occupant rather than pretending the name was
+  free. Roster and gloss data have no platen affinity (kernel/forme and
+  glossary material respectively), so sending them to platen would grow it into
+  the grab-bag the accessory-orchestrator doctrine forbids. The old "wait for
+  the mere-domain layout" gate stays dropped: every mere-domain reference in
+  design_docs is archived gpui-era material, so this plan sets the layout
+  rather than waiting on one.
 - Prerequisite 1: add an input-snapshot seam. The current modules are not just
   bad output-type placements; they are `impl WindowCtx` builders over live host
   state (selection, workbench openness, content cache, store access, gloss row
@@ -201,7 +212,36 @@ view types currently leak into data.
   vocabulary and row-capping logic now live in `gloss.rs`, with both
   `gloss_outline_data.rs` and `gloss_outline_view.rs` depending on that neutral
   module. That is the first real move from "data imports a view type" toward the
-  P8 target shape. Roster still needs the same treatment.
+  P8 target shape.
+- First domain slice landed 2026-07-03: the old `crates/platen/domain/gloss`
+  crate was moved to the new top-level `crates/domain/gloss` home, and the
+  host-neutral gloss vocabulary/geometry from `meerkat::gloss` moved into that
+  crate. `meerkat` now depends on `gloss` directly for the outline snapshot
+  types, pane-section math, and minimap helpers, while the host snapshot builder
+  (`gloss_outline_data.rs`) and render/input wiring still stay local.
+- Follow-up gloss slice landed 2026-07-03: the actual outline projection
+  (`glossary::outline_rows` + node-state enrichment + row capping) now lives in
+  `gloss::build_outline_snapshot`, so `gloss_outline_data.rs` is down to a thin
+  `WindowCtx` wrapper that supplies per-window selection/state callbacks.
+- Second domain slice landed 2026-07-03: `roster_model.rs` moved to the new
+  `crates/domain/roster` crate, and `meerkat::roster` was reduced to the local
+  CSS/view wrapper plus re-exports. The roster data builders, facet builders,
+  and views now read the same vocabulary through the crate boundary without
+  changing their host-local behavior.
+- Third domain slice landed 2026-07-03: the roster crate now owns the pure
+  helper layer that used to sit at the bottom of `roster_data.rs` and
+  `roster_facet_data.rs` too: content bucketing, relation/graphlet/field
+  labels and selectors, member-label formatting, and the roster facet/card
+  helpers. `roster_data.rs`, `roster_facet_data.rs`, the graphlet roster view,
+  and apparatus now consume those helpers through `crates/domain/roster`,
+  while the actual `WindowCtx` graph/store walks still stay local pending a
+  later builder-input contract cut.
+- Second inversion slice landed 2026-07-02: the roster row/card/subject
+  vocabulary now lives in `roster_model.rs`; `roster.rs` keeps the stylesheet
+  surface plus re-exports, while `roster_data.rs`, `roster_facet_data.rs`,
+  `roster_view.rs`, and the roster render/window glue now depend on the neutral
+  module directly. That leaves the actual crate move for later, but the
+  data-to-view ownership now matches the P8 direction.
 - Done when: data halves build host-free with their tests; meerkat keeps the
   views.
 
@@ -220,7 +260,7 @@ apply it whenever a phase touches a neighbor module.
 the pane and roster *views*, settings views, menus, ime, viewport, titlebar.
 These own the window, the event loop, or shell mutations. `agent_harness`
 (470 + 1,726 test LOC) is owned by the
-[CLI tooling plan](2026-06-29_meerkat_cli_tooling_plan.md), not this one.
+[CLI tooling plan](../../archive_docs/2026-07-03_completed_plans/2026-06-29_meerkat_cli_tooling_plan.md), not this one.
 `command.rs` / `shell_eval.rs` stay because the `Command` enum names shell
 mutations: it is host vocabulary by nature, not a portable domain waiting on
 a consumer.
@@ -311,3 +351,41 @@ Verified by grepping each candidate's `use` lines. "crate-refs" counts
   hidden `render::base64_encode` helper cut in `attach_cropped_visual`. P8 now
   names the live `crates/platen/domain/gloss` occupant and adds an explicit
   input-snapshot prerequisite before the data/view inversion.
+- **2026-07-03**: P3's first implementation slice landed. Added
+  `crates/system/content-contract` for the transferable content message
+  contract and scene asset transport, wired `meerkat` to consume it through a
+  thin adapter layer, and verified `cargo check -p content-contract --lib` plus
+  `cargo check -p meerkat --lib`. The fully native `ContentCommand` /
+  `ContentUpdate` enums still live in `meerkat`; that larger move is no longer
+  required for the worker seam itself.
+- **2026-07-03**: P4 landed. Added `import::web_clip` for the host-neutral clip
+  core, moved the clip tests with it, replaced the old
+  `render::base64_encode` dependency with a local import-side helper, and
+  reduced `meerkat::web_clip` to the `WindowCtx` host wrapper plus cache/live
+  document lookup. Verified with `cargo check -p import --lib` and
+  `cargo check -p meerkat --lib`.
+- **2026-07-03**: P8's first domain move landed. Created the real
+  `crates/domain/gloss` home by moving the old platen-side `gloss` crate there,
+  folded the host-neutral `meerkat::gloss` vocabulary/geometry into it, deleted
+  the local `meerkat` module, and rewired `meerkat` to consume the crate
+  directly. Verified `cargo check -p gloss --lib` and `cargo check -p meerkat --lib`;
+  then followed up by moving the pure outline-snapshot projection into
+  `gloss::build_outline_snapshot`, leaving only the per-window wrapper in
+  `meerkat`. The remaining P8 work is still roster/pane-data promotion.
+- **2026-07-03**: P8's second domain move landed. Added `crates/domain/roster`
+  for the neutral roster snapshot vocabulary, deleted `meerkat`'s local
+  `roster_model.rs`, and rewired the roster data/view glue to consume the new
+  crate through the existing `meerkat::roster` wrapper. Verified
+  `cargo check -p roster --lib` and `cargo check -p meerkat --lib`.
+- **2026-07-03**: P8's third domain move landed. `crates/domain/roster` now
+  owns the roster helper layer too: content buckets, relation/field/graphlet
+  labels and selectors, member-label formatting, and the facet/card helper
+  builders. `roster_data.rs`, `roster_facet_data.rs`, the graphlet view, and
+  apparatus were cut over to the crate boundary; the remaining work is the
+  heavier builder-input extraction from `WindowCtx`.
+- **2026-07-02** (later implementation pass): P8's next inversion slice landed.
+  `roster_model.rs` now owns the roster snapshot vocabulary, `roster.rs` was
+  reduced to stylesheet plus compatibility re-exports, and the roster
+  data/view/render glue was pointed at the neutral module. The remaining P8
+  work is crate placement and any further host-input slimming, not view-owned
+  roster types.

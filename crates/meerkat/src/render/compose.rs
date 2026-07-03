@@ -207,6 +207,64 @@ impl crate::WindowCtx<'_> {
                 }
             }
         }
+        if let Some(selection) = &self.view.page_selection {
+            if self
+                .shared
+                .content
+                .constellation
+                .scene_version(selection.member)
+                == selection.version
+            {
+                for (dest, member) in &composite {
+                    if *member != selection.member {
+                        continue;
+                    }
+                    let Some(cached) = self.view.tile_textures.get(member) else {
+                        continue;
+                    };
+                    let tex_w = cached.size.0 as f32;
+                    let dest_w = (dest[2] - dest[0]).max(1.0);
+                    let dest_h = (dest[3] - dest[1]).max(1.0);
+                    let s = dest_w / tex_w;
+                    let visible_h = dest_h / s;
+                    let content_h = self.member_content_height(*member, visible_h);
+                    let scroll = self
+                        .view
+                        .scroll
+                        .get(member)
+                        .copied()
+                        .unwrap_or(0.0)
+                        .clamp(0.0, (content_h - visible_h).max(0.0));
+                    let mut fill = netrender::Scene::new(1, 1);
+                    fill.push_rect(0.0, 0.0, 1.0, 1.0, [0.24, 0.47, 0.98, 0.28]);
+                    let (_t, fill_view) =
+                        core.rasterize(&fill, 1, 1, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
+                    for r in &selection.rects {
+                        let (r0, r1, r2, r3) = (r[0] * dpr, r[1] * dpr, r[2] * dpr, r[3] * dpr);
+                        let wy0 = dest[1] + (r1 - scroll) * s;
+                        let wy1 = dest[1] + (r3 - scroll) * s;
+                        if wy1 <= dest[1] || wy0 >= dest[3] {
+                            continue;
+                        }
+                        let wx0 = (dest[0] + r0 * s).max(dest[0]);
+                        let wx1 = (dest[0] + r2 * s).min(dest[2]);
+                        let cy0 = wy0.max(dest[1]);
+                        let cy1 = wy1.min(dest[3]);
+                        if wx1 <= wx0 || cy1 <= cy0 {
+                            continue;
+                        }
+                        core.renderer().compose_external_texture(
+                            &fill_view,
+                            target_view,
+                            format,
+                            w,
+                            h,
+                            ExternalTexturePlacement::new([wx0, cy0, wx1, cy1]),
+                        );
+                    }
+                }
+            }
+        }
         // The compatibility-view surfaces: each pane's imported WebView texture at
         // its tile / card rect. No UV window — the WebView scrolls itself. The rects
         // are recorded so the input path can forward mouse / wheel / keys into the

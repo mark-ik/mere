@@ -126,8 +126,7 @@ pub fn resolve_transclusions(
     for _pass in 0..passes {
         let mut any_resolved = false;
         let old_blocks = std::mem::take(&mut document.blocks);
-        let old_provenance =
-            std::mem::replace(&mut outcome.provenance, BlockProvenanceMap::new());
+        let old_provenance = std::mem::replace(&mut outcome.provenance, BlockProvenanceMap::new());
         let mut blocks: Vec<Block> = Vec::with_capacity(old_blocks.len());
 
         for (old_index, block) in old_blocks.into_iter().enumerate() {
@@ -146,9 +145,7 @@ pub fn resolve_transclusions(
 
             // Every path that keeps the original block also keeps its
             // carried provenance.
-            let keep = |block: Block,
-                            blocks: &mut Vec<Block>,
-                            outcome: &mut TranscludeOutcome| {
+            let keep = |block: Block, blocks: &mut Vec<Block>, outcome: &mut TranscludeOutcome| {
                 if let Some(p) = carried.clone() {
                     outcome.provenance.insert(new_index, p);
                 }
@@ -161,9 +158,7 @@ pub fn resolve_transclusions(
             };
 
             if !policy.enabled {
-                outcome
-                    .denied
-                    .push((url, "transclusion disabled".into()));
+                outcome.denied.push((url, "transclusion disabled".into()));
                 keep(block, &mut blocks, &mut outcome);
                 continue;
             }
@@ -206,7 +201,9 @@ pub fn resolve_transclusions(
 
             let source = BlockProvenance::from_document(child.provenance.clone());
             for (offset, child_block) in child.blocks.into_iter().enumerate() {
-                outcome.provenance.insert(new_index + offset, source.clone());
+                outcome
+                    .provenance
+                    .insert(new_index + offset, source.clone());
                 blocks.push(child_block);
             }
             outcome.resolved += 1;
@@ -258,10 +255,7 @@ mod tests {
     }
 
     fn policy(schemes: &[&str], depth: u8) -> TransclusionPolicy {
-        TransclusionPolicy::for_own_notes(
-            schemes.iter().map(|s| s.to_string()).collect(),
-            depth,
-        )
+        TransclusionPolicy::for_own_notes(schemes.iter().map(|s| s.to_string()).collect(), depth)
     }
 
     #[test]
@@ -293,7 +287,10 @@ mod tests {
             &document.blocks[1],
             Block::Paragraph { spans } if spans == &vec![InlineSpan::Text("from the capsule".into())]
         ));
-        let provenance = outcome.provenance.get(1).expect("spliced block has provenance");
+        let provenance = outcome
+            .provenance
+            .get(1)
+            .expect("spliced block has provenance");
         assert_eq!(
             provenance.provenance.canonical_uri.as_deref(),
             Some("gemini://x.test/page.gmi")
@@ -341,11 +338,10 @@ mod tests {
             })
         };
         let mut render = |input: &EngineInput| -> Result<EngineDocument, String> {
-            Ok(doc_with(vec![include_fence("gemini://x.test/a", "")]))
-                .map(|mut d| {
-                    d.provenance.canonical_uri = Some(input.address.clone());
-                    d
-                })
+            Ok(doc_with(vec![include_fence("gemini://x.test/a", "")])).map(|mut d| {
+                d.provenance.canonical_uri = Some(input.address.clone());
+                d
+            })
         };
         let outcome = resolve_transclusions(
             &mut document,
@@ -383,8 +379,7 @@ mod tests {
     #[test]
     fn fetch_failures_keep_the_fallback_and_report() {
         let mut document = doc_with(vec![include_fence("gemini://down.test/", "fallback")]);
-        let mut fetch =
-            |_: &str| -> Result<Fetched, String> { Err("connection refused".into()) };
+        let mut fetch = |_: &str| -> Result<Fetched, String> { Err("connection refused".into()) };
         let outcome = resolve_transclusions(
             &mut document,
             &mut fetch,

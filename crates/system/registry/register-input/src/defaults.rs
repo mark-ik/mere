@@ -2,7 +2,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use super::{action_id, binding_id, InputBinding, Keycode, ModifierMask, NamedKey, InputContext, InputBindingSection};
+use super::{
+    InputBinding, InputBindingSection, InputContext, Keycode, ModifierMask, NamedKey, action_id,
+    binding_id,
+};
 
 pub(super) fn toolbar_submit_binding() -> InputBinding {
     InputBinding::Key {

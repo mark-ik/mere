@@ -17,7 +17,7 @@ use register_theme::chrome::{ChromeTheme, Color32};
 use xilem_serval::{AnyView, Keyed, PointerClick, ServalCtx, ServalElement, clickable, el};
 
 use super::WindowCtx;
-use crate::gloss::GlossRowIntent;
+use gloss::GlossRowIntent;
 
 pub type GlossRecentView = Box<dyn AnyView<GlossRecentState, (), ServalCtx, ServalElement>>;
 
@@ -117,7 +117,7 @@ pub const GLOSS_MINIMAP_SCENE_KEY: u64 = 0xF0F0_0000_0000_0002;
 pub type GlossMinimapView = Box<dyn AnyView<GlossMinimapState, (), ServalCtx, ServalElement>>;
 
 /// One minimap node: identity, pane-local position + size (already mapped through
-/// `crate::gloss::MinimapFit` — this struct carries no world coordinates), and its
+/// `gloss::MinimapFit` — this struct carries no world coordinates), and its
 /// resolved CSS color. Selection-tinted only, matching pre-migration behavior — the
 /// minimap has never carried the outline's full NODE_SHEET state palette, just
 /// selected-vs-not.

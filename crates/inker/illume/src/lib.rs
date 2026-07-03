@@ -23,7 +23,7 @@ pub mod pack;
 pub mod tree;
 
 pub use entity::entities;
-pub use highlight::{SyntaxKind, Span, highlight_djot, highlight};
+pub use highlight::{Span, SyntaxKind, highlight, highlight_djot};
 pub use injection::{InjectionLexer, InjectionRegistry};
 pub use pack::default_pack;
 pub use tree::{

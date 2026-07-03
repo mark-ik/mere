@@ -105,7 +105,11 @@ fn djot_engine_expands_protocol_fences_for_parity() {
         b,
         Block::CodeBlock { language, .. } if language.as_deref() == Some("gemtext")
     )));
-    assert!(doc.outgoing_links().iter().any(|u| u.contains("gemini://x/")));
+    assert!(
+        doc.outgoing_links()
+            .iter()
+            .any(|u| u.contains("gemini://x/"))
+    );
 }
 
 #[test]

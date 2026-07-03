@@ -87,7 +87,8 @@ fn louvain_local_moving(adj: &[Vec<(usize, f64)>], self_loops: &[f64]) -> Vec<us
             let mut candidates: Vec<usize> = neigh_w.keys().copied().collect();
             candidates.sort_unstable();
             let mut best_c = ci;
-            let mut best_gain = neigh_w.get(&ci).copied().unwrap_or(0.0) - sigma_tot[ci] * ki / two_m;
+            let mut best_gain =
+                neigh_w.get(&ci).copied().unwrap_or(0.0) - sigma_tot[ci] * ki / two_m;
             for &c in &candidates {
                 let gain = neigh_w[&c] - sigma_tot[c] * ki / two_m;
                 if gain > best_gain {
@@ -176,8 +177,11 @@ pub fn community_louvain_on_snapshot(snapshot: &CommunitySnapshot) -> ClusterSet
         return ClusterSet::default();
     }
     // No edges at all: every node is its own singleton community (no level can merge them).
-    let total_weight: f64 =
-        snapshot.adjacency.iter().map(|row| row.iter().map(|&(_, w)| w).sum::<f64>()).sum();
+    let total_weight: f64 = snapshot
+        .adjacency
+        .iter()
+        .map(|row| row.iter().map(|&(_, w)| w).sum::<f64>())
+        .sum();
     if total_weight == 0.0 {
         return ClusterSet {
             clusters: nodes

@@ -186,6 +186,40 @@ fn torn_leaf_is_a_workbench_pane_with_the_node_tile() {
 }
 
 #[test]
+fn workbench_drag_outside_queues_leaf_tearout() {
+    // The tile-tab origin for a leaf tear-out: an outside drop from the workbench
+    // should queue the existing leaf window command on the donor graph.
+    let mut app = test_app();
+    let from = app.ctx().active_graph_id();
+    app.orrery_mut().visit("https://leaf-drag.example");
+    let node = app
+        .orrery()
+        .focused_member()
+        .expect("the visited node is focused");
+    {
+        let view = app.focused_view_mut();
+        view.workbench.ensure_tiled();
+        view.workbench.open_tile(node);
+        view.focused_tile = Some(node);
+    }
+
+    app.ctx()
+        .apply_tile_event(pelt_core::tile::TileEvent::Dragged {
+            tile: pelt_core::tile::TileId(node.as_u128() as u64),
+            to: pelt_core::tile::DropTarget::Outside,
+        });
+
+    assert!(
+        app.commands.iter().any(|cmd| matches!(
+            cmd,
+            crate::ShellCommand::TearOut { node: torn, from: graph }
+            if *torn == node && *graph == from
+        )),
+        "an outside workbench drop queues the leaf tear-out command"
+    );
+}
+
+#[test]
 fn cycle_session_wraps_through_the_open_sessions() {
     let mut app = test_app();
     let a = app.shared.session.active_session_id;

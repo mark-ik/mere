@@ -45,11 +45,11 @@ pub mod statements;
 
 pub use a11y::A11yCapability;
 pub use document::{
-    evaluate_blocks, inline_text, parse_eval, parse_include, resolve_transclusions, Block,
-    BlockEvaluator, BlockEvaluators, BlockProvenance, BlockProvenanceMap, DocumentDiagnostic,
-    DocumentProvenance, DocumentTrustState, EngineDocument, EvalOutcome, EvalOutput,
-    EvaluationPolicy, Fetched, GophermapContext, InlineSpan, ResolvedProvenance, TableAlignment,
-    TranscludeOutcome, TransclusionPolicy,
+    Block, BlockEvaluator, BlockEvaluators, BlockProvenance, BlockProvenanceMap,
+    DocumentDiagnostic, DocumentProvenance, DocumentTrustState, EngineDocument, EvalOutcome,
+    EvalOutput, EvaluationPolicy, Fetched, GophermapContext, InlineSpan, ResolvedProvenance,
+    TableAlignment, TranscludeOutcome, TransclusionPolicy, evaluate_blocks, inline_text,
+    parse_eval, parse_include, resolve_transclusions,
 };
 pub use engine::{Engine, EngineError, EngineInput, EngineRegistry};
 pub use routing::{
@@ -58,7 +58,7 @@ pub use routing::{
 };
 pub use sniff::sniff_content_type;
 pub use statements::{
-    apply_link_statements, link_statements, resolve_rel, LinkStatement, StatementOutcome,
+    LinkStatement, StatementOutcome, apply_link_statements, link_statements, resolve_rel,
 };
 pub use surface_engine::{
     Cookie, CookieAttributeCapabilities, CookieCapabilities, CursorShape, EngineProfileBinding,

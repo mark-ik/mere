@@ -36,7 +36,7 @@ pub mod boundary;
 pub mod message;
 pub mod pool;
 
-pub use actor::{spawn, spawn_on, ActorHandle, Emitter, Wake};
+pub use actor::{ActorHandle, Emitter, Wake, spawn, spawn_on};
 pub use boundary::KernelThread;
 pub use message::{Generations, NavGeneration, ViewportGeneration};
 pub use pool::Pool;

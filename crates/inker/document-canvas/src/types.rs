@@ -377,14 +377,27 @@ mod window_tests {
             2100.0,
         );
         let w = p.window(950.0, 200.0); // band [950, 1150]
-        assert_eq!(w.blocks.len(), 1, "only the middle block intersects the band");
-        assert_eq!(w.blocks[0].bounds.origin.y, 50.0, "block translated by -band_y");
+        assert_eq!(
+            w.blocks.len(),
+            1,
+            "only the middle block intersects the band"
+        );
+        assert_eq!(
+            w.blocks[0].bounds.origin.y, 50.0,
+            "block translated by -band_y"
+        );
         let RenderedBlockKind::Text { glyph_runs } = &w.blocks[0].kind else {
             panic!("text block");
         };
-        assert_eq!(glyph_runs[0].origin.y, 62.0, "run origin translated by -band_y");
+        assert_eq!(
+            glyph_runs[0].origin.y, 62.0,
+            "run origin translated by -band_y"
+        );
         assert_eq!(w.viewport.height, 200.0, "viewport is the band height");
-        assert_eq!(w.content_bounds.size.height, 200.0, "content_bounds is the band");
+        assert_eq!(
+            w.content_bounds.size.height, 200.0,
+            "content_bounds is the band"
+        );
         assert_eq!(w.viewport.width, 400.0, "width is preserved");
     }
 
@@ -394,7 +407,10 @@ mod window_tests {
         let p = packet(vec![text_block(900.0, 200.0, 912.0)], 1200.0);
         let w = p.window(1000.0, 200.0); // band [1000, 1200]; block covers [900, 1100]
         assert_eq!(w.blocks.len(), 1, "the straddling block is kept");
-        assert_eq!(w.blocks[0].bounds.origin.y, -100.0, "its top is above the band, at -100");
+        assert_eq!(
+            w.blocks[0].bounds.origin.y, -100.0,
+            "its top is above the band, at -100"
+        );
     }
 
     #[test]
@@ -416,7 +432,10 @@ mod window_tests {
             panic!("group survives");
         };
         assert_eq!(children.len(), 1, "only the in-band child is kept");
-        assert_eq!(children[0].bounds.origin.y, 100.0, "child translated into the band");
+        assert_eq!(
+            children[0].bounds.origin.y, 100.0,
+            "child translated into the band"
+        );
     }
 
     #[test]
@@ -434,7 +453,10 @@ mod window_tests {
         ];
         let w = p.window(950.0, 200.0);
         assert_eq!(w.interactions.len(), 1, "only the in-band link survives");
-        assert_eq!(w.interactions[0].bounds.origin.y, 60.0, "link translated into the band");
+        assert_eq!(
+            w.interactions[0].bounds.origin.y, 60.0,
+            "link translated into the band"
+        );
         assert!(matches!(&w.interactions[0].kind, InteractionKind::Link { url } if url == "in"));
     }
 
@@ -444,15 +466,27 @@ mod window_tests {
         p.interactions = vec![
             InteractionRegion {
                 bounds: Rect::from_xywh(0.0, 10.0, 80.0, 20.0),
-                kind: InteractionKind::Link { url: "outer".into() },
+                kind: InteractionKind::Link {
+                    url: "outer".into(),
+                },
             },
             InteractionRegion {
                 bounds: Rect::from_xywh(10.0, 12.0, 40.0, 16.0),
-                kind: InteractionKind::Link { url: "inner".into() },
+                kind: InteractionKind::Link {
+                    url: "inner".into(),
+                },
             },
         ];
-        assert_eq!(p.link_at(20.0, 18.0), Some("inner"), "the last (innermost) match wins");
-        assert_eq!(p.link_at(70.0, 18.0), Some("outer"), "outside inner, inside outer");
+        assert_eq!(
+            p.link_at(20.0, 18.0),
+            Some("inner"),
+            "the last (innermost) match wins"
+        );
+        assert_eq!(
+            p.link_at(70.0, 18.0),
+            Some("outer"),
+            "outside inner, inside outer"
+        );
         assert_eq!(p.link_at(300.0, 300.0), None, "no link at an empty point");
     }
 
@@ -478,6 +512,9 @@ mod window_tests {
             Some(0),
             "a point in the group but outside any child resolves to the group"
         );
-        assert!(p.block_at(500.0, 500.0).is_none(), "no block at an outside point");
+        assert!(
+            p.block_at(500.0, 500.0).is_none(),
+            "no block at an outside point"
+        );
     }
 }

@@ -34,7 +34,11 @@ pub struct SpectralConfig {
 
 impl Default for SpectralConfig {
     fn default() -> Self {
-        Self { center: Point2D::new(0.0, 0.0), scale: 320.0, iterations: 200 }
+        Self {
+            center: Point2D::new(0.0, 0.0),
+            scale: 320.0,
+            iterations: 200,
+        }
     }
 }
 
@@ -65,7 +69,10 @@ impl LayoutStrategy for SpectralAdapter {
             settled: true,
         };
         if n == 0 {
-            return Projection { metadata, ..Projection::empty() };
+            return Projection {
+                metadata,
+                ..Projection::empty()
+            };
         }
 
         let adjacency = weighted_adjacency(request.graph, &ordered_keys);
@@ -76,7 +83,10 @@ impl LayoutStrategy for SpectralAdapter {
         // Auto-fit the (small, unit-ish) eigenvector coords into +/- scale, centered. If the spectral
         // coords collapse (an edgeless or perfectly symmetric graph has no structure to project),
         // fall back to a deterministic circle so nodes never pile on one point.
-        let max_abs = coords.iter().flat_map(|&(x, y)| [x.abs(), y.abs()]).fold(0.0_f64, f64::max);
+        let max_abs = coords
+            .iter()
+            .flat_map(|&(x, y)| [x.abs(), y.abs()])
+            .fold(0.0_f64, f64::max);
         let mut positions: HashMap<NodeKey, Point2D<f32>> = HashMap::with_capacity(n);
         if max_abs > 1e-9 {
             let s = scale as f64 / max_abs;
@@ -88,14 +98,21 @@ impl LayoutStrategy for SpectralAdapter {
         } else {
             for (idx, &key) in ordered_keys.iter().enumerate() {
                 let theta = idx as f32 / n as f32 * std::f32::consts::TAU;
-                let pos = Point2D::new(center.x + scale * theta.cos(), center.y + scale * theta.sin());
+                let pos = Point2D::new(
+                    center.x + scale * theta.cos(),
+                    center.y + scale * theta.sin(),
+                );
                 positions.insert(key, pos);
             }
         }
 
         let nodes: Vec<PositionedNode> = positions
             .iter()
-            .map(|(key, pos)| PositionedNode { node: *key, position: *pos, radius: 0.0 })
+            .map(|(key, pos)| PositionedNode {
+                node: *key,
+                position: *pos,
+                radius: 0.0,
+            })
             .collect();
         let edges = build_positioned_edges(request, &positions);
         Projection {
@@ -149,7 +166,10 @@ fn smallest_laplacian_eigenvectors(
     iterations: usize,
 ) -> Vec<Vec<f64>> {
     let n = adj.len();
-    let degree: Vec<f64> = adj.iter().map(|row| row.iter().map(|&(_, w)| w).sum()).collect();
+    let degree: Vec<f64> = adj
+        .iter()
+        .map(|row| row.iter().map(|&(_, w)| w).sum())
+        .collect();
     let c = degree.iter().copied().fold(0.0_f64, f64::max) * 2.0;
     let mut found: Vec<Vec<f64>> = Vec::new();
     for eigen_idx in 0..count {
@@ -216,22 +236,36 @@ mod tests {
 
     fn project(graph: &Graph) -> HashMap<NodeKey, Point2D<f32>> {
         let signals = IntelligenceSignals::default();
-        let request = ProjectionRequest { graph, signals: &signals, intent: ViewIntent::default() };
+        let request = ProjectionRequest {
+            graph,
+            signals: &signals,
+            intent: ViewIntent::default(),
+        };
         let projection = SpectralAdapter::default().project(&request);
-        projection.nodes.iter().map(|n| (n.node, n.position)).collect()
+        projection
+            .nodes
+            .iter()
+            .map(|n| (n.node, n.position))
+            .collect()
     }
 
     #[test]
     fn projection_id_is_stable() {
-        assert_eq!(SpectralAdapter::default().projection_id(), "spectral.default");
+        assert_eq!(
+            SpectralAdapter::default().projection_id(),
+            "spectral.default"
+        );
     }
 
     #[test]
     fn empty_graph_is_empty_and_settled() {
         let graph = Graph::new();
         let signals = IntelligenceSignals::default();
-        let request =
-            ProjectionRequest { graph: &graph, signals: &signals, intent: ViewIntent::default() };
+        let request = ProjectionRequest {
+            graph: &graph,
+            signals: &signals,
+            intent: ViewIntent::default(),
+        };
         let projection = SpectralAdapter::default().project(&request);
         assert!(projection.nodes.is_empty());
         assert!(projection.metadata.settled);
@@ -282,10 +316,15 @@ mod tests {
         let b = centroid(&[3, 4, 5]);
         let gap = (a - b).length();
         let spread = |keys: &[usize], c: Point2D<f32>| {
-            keys.iter().map(|&i| (pos[&n[i]] - c).length()).fold(0.0f32, f32::max)
+            keys.iter()
+                .map(|&i| (pos[&n[i]] - c).length())
+                .fold(0.0f32, f32::max)
         };
         let intra = spread(&[0, 1, 2], a).max(spread(&[3, 4, 5], b));
-        assert!(gap > intra, "the clusters separate: gap {gap} > intra-spread {intra}");
+        assert!(
+            gap > intra,
+            "the clusters separate: gap {gap} > intra-spread {intra}"
+        );
     }
 
     #[test]
@@ -297,6 +336,10 @@ mod tests {
         for &(a, b) in &[(0, 1), (1, 2), (2, 0), (3, 4), (4, 5), (5, 3), (2, 3)] {
             graph.assert_semantic_predicate(n[a], n[b], "links".to_string());
         }
-        assert_eq!(project(&graph), project(&graph), "same graph => same layout");
+        assert_eq!(
+            project(&graph),
+            project(&graph),
+            "same graph => same layout"
+        );
     }
 }

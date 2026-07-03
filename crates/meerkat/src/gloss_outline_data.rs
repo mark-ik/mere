@@ -9,7 +9,7 @@
 //! `glossary` itself stays graph-pure. (gloss-outline plan P1, P8 seam prep.)
 
 use super::WindowCtx;
-use crate::gloss::{GlossOutlineNode, GlossOutlineRow, GlossOutlineSnapshot, cap_outline_rows};
+use gloss::GlossOutlineSnapshot;
 
 impl WindowCtx<'_> {
     /// Project the focused graph into the gloss outline lens's snapshot for this
@@ -23,26 +23,10 @@ impl WindowCtx<'_> {
     pub(super) fn gloss_outline_snapshot(&self, available_height: f32) -> GlossOutlineSnapshot {
         let graph = self.orrery().graph();
         let input = self.pane_input_snapshot();
-        let rows = glossary::outline_rows(graph)
-            .into_iter()
-            .map(|row| GlossOutlineRow {
-                depth: row.depth,
-                label: row.label,
-                node: row.url.and_then(|url| {
-                    let (_, found) = graph.get_node_by_url(&url)?;
-                    let member = found.id;
-                    Some(GlossOutlineNode {
-                        member,
-                        url,
-                        state: input.node_state(member),
-                        selected: input.is_selected(member),
-                    })
-                }),
-            })
-            .collect();
-        GlossOutlineSnapshot {
-            rows: cap_outline_rows(rows, available_height),
-            metrics: glossary::graph_metrics(graph),
-        }
+        gloss::build_outline_snapshot(
+            graph,
+            |member| (input.node_state(member), input.is_selected(member)),
+            available_height,
+        )
     }
 }

@@ -8,7 +8,6 @@ use crate::schema::{ProvenanceOrigin, ProvenanceRecord, Timestamp};
 use async_trait::async_trait;
 use std::collections::HashMap;
 
-
 #[derive(Default)]
 struct InMemoryStore {
     blobs: HashMap<String, Vec<u8>>,
@@ -360,8 +359,7 @@ fn validate_against_schema_resolves_engram_and_runs_validator() {
             .unwrap();
 
         // Invalid payload: missing required field.
-        let result =
-            validate_against_schema(&mut store, &mut fetcher, schema_ref, br#"{}"#).await;
+        let result = validate_against_schema(&mut store, &mut fetcher, schema_ref, br#"{}"#).await;
         assert!(result.is_err());
     });
 }
@@ -451,8 +449,7 @@ fn mere_native_builder_produces_validating_schema() {
     // Round-trip: serialize, validate against meta-schema, validate
     // a real payload against the built schema.
     let bytes = serde_json::to_vec(&definition).unwrap();
-    let meta_definition: SchemaDefinition =
-        serde_json::from_slice(META_SCHEMA_PAYLOAD).unwrap();
+    let meta_definition: SchemaDefinition = serde_json::from_slice(META_SCHEMA_PAYLOAD).unwrap();
     validate_payload(&meta_definition, &bytes).unwrap();
 
     validate_payload(&definition, br#"{"ticks": 7}"#).unwrap();
@@ -524,8 +521,7 @@ fn meta_schema_payload_validates_a_well_formed_schema_definition() {
     // The meta-schema describes the SchemaDefinition shape itself —
     // verify that a real SchemaDefinition payload conforms to the
     // meta-schema body (the recursion holds).
-    let meta_definition: SchemaDefinition =
-        serde_json::from_slice(META_SCHEMA_PAYLOAD).unwrap();
+    let meta_definition: SchemaDefinition = serde_json::from_slice(META_SCHEMA_PAYLOAD).unwrap();
     assert_eq!(meta_definition.format, SchemaFormat::MereNative);
     assert_eq!(meta_definition.schema_id, "eidetic.meta-schema/v1");
 

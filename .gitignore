@@ -49,6 +49,13 @@ logs/
 .test-logs/
 .cargo-check-logs/
 
+# Local scratch and verification artifacts. These runs can contain logs,
+# screenshots, session state, comms stores, and diagnostics dumps that are
+# machine-local and should never be published from the repo.
+/.tmp/
+/target-codex/
+/diagnostics-dump.txt
+
 # Locally-downloaded model weights (e.g. all-MiniLM-L6-v2 fetched via
 # `huggingface_hub.snapshot_download` for intelligence-embeddings BERT
 # validation). Multi-MB binaries; do not commit. Devs set MERE_MINILM_DIR

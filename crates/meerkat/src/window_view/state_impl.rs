@@ -101,7 +101,7 @@ impl WindowView {
     /// clicks with the chrome — the first DOM gloss section. (gloss-outline plan P1.)
     pub(crate) fn set_gloss_outline(
         &mut self,
-        snapshot: crate::gloss::GlossOutlineSnapshot,
+        snapshot: gloss::GlossOutlineSnapshot,
         rect: Option<[f32; 4]>,
     ) {
         self.runner.update(|s| {
@@ -127,7 +127,7 @@ impl WindowView {
 
     /// Drain the row selections the outline's click handlers queued through the shell
     /// runner's dispatch, for the host to apply. (gloss-outline plan P1.)
-    pub(crate) fn take_gloss_outline_intents(&mut self) -> Vec<crate::gloss::GlossRowIntent> {
+    pub(crate) fn take_gloss_outline_intents(&mut self) -> Vec<gloss::GlossRowIntent> {
         let mut out = Vec::new();
         self.runner
             .update(|s| out = std::mem::take(&mut s.gloss_outline.pending));
@@ -155,7 +155,7 @@ impl WindowView {
 
     /// Drain the row selections the recent lens's click handlers queued.
     /// (Scene-to-DOM migration P1.)
-    pub(crate) fn take_gloss_recent_intents(&mut self) -> Vec<crate::gloss::GlossRowIntent> {
+    pub(crate) fn take_gloss_recent_intents(&mut self) -> Vec<gloss::GlossRowIntent> {
         let mut out = Vec::new();
         self.runner
             .update(|s| out = std::mem::take(&mut s.gloss_recent.pending));
@@ -185,7 +185,7 @@ impl WindowView {
 
     /// Drain the node selections the minimap's click handlers queued.
     /// (Scene-to-DOM migration P2.)
-    pub(crate) fn take_gloss_minimap_intents(&mut self) -> Vec<crate::gloss::GlossRowIntent> {
+    pub(crate) fn take_gloss_minimap_intents(&mut self) -> Vec<gloss::GlossRowIntent> {
         let mut out = Vec::new();
         self.runner
             .update(|s| out = std::mem::take(&mut s.gloss_minimap.pending));
@@ -297,6 +297,7 @@ impl WindowView {
             find_matches: Default::default(),
             find_member: None,
             find_gen: 0,
+            page_selection: None,
             tile_textures: Default::default(),
             tile_bands: Default::default(),
             note_content_heights: Default::default(),
@@ -313,6 +314,7 @@ impl WindowView {
             swatch_drag: Default::default(),
             row_reorder_drag: Default::default(),
             caret_drag: Default::default(),
+            page_text_drag: Default::default(),
             tear_out_drag: Default::default(),
             clip_picker: None,
             branch_graphlet: None,

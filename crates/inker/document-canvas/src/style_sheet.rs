@@ -98,7 +98,10 @@ impl LinkAdornment {
 pub fn url_scheme(url: &str) -> Option<&str> {
     let idx = url.find(':')?;
     let scheme = &url[..idx];
-    let valid_start = scheme.chars().next().is_some_and(|c| c.is_ascii_alphabetic());
+    let valid_start = scheme
+        .chars()
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic());
     let valid_rest = scheme
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '.' | '-'));

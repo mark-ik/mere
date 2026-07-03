@@ -7,14 +7,18 @@
 use super::*;
 use kernel::graph::fixtures::GraphFixtures;
 use kernel::graph::{
-    COUPLING_VOCAB, Coupling, CouplingId, CouplingResponse, EdgeAssertion, Field,
-    FieldDefinition, FieldId, NodeSelector, ScalarField, SemanticSubKind,
+    COUPLING_VOCAB, Coupling, CouplingId, CouplingResponse, EdgeAssertion, Field, FieldDefinition,
+    FieldId, NodeSelector, ScalarField, SemanticSubKind,
 };
 use paint_list_api::{PaintCmd, PaintList};
 use uuid::Uuid;
 
 fn node(g: &mut Graph, id: u128, x: f32, y: f32) -> kernel::graph::NodeKey {
-    let key = g.add_node_with_id(Uuid::from_u128(id), format!("mere://{id}"), PortablePoint::new(x, y));
+    let key = g.add_node_with_id(
+        Uuid::from_u128(id),
+        format!("mere://{id}"),
+        PortablePoint::new(x, y),
+    );
     g.set_node_position(key, PortablePoint::new(x, y));
     key
 }
@@ -39,7 +43,11 @@ fn projection_from_graph_carries_positions_and_dedupes_edges() {
     assert_eq!(p.nodes.len(), 2);
     let pa = p.nodes.iter().find(|n| n.node == a).unwrap();
     assert_eq!(pa.position, PortablePoint::new(10.0, 20.0));
-    assert_eq!(p.edges.len(), 1, "the bidirectional pair de-dupes to one edge");
+    assert_eq!(
+        p.edges.len(),
+        1,
+        "the bidirectional pair de-dupes to one edge"
+    );
     // content_bounds spans the two nodes.
     assert_eq!(p.content_bounds.min_x(), 10.0);
     assert_eq!(p.content_bounds.max_y(), 40.0);
@@ -62,7 +70,13 @@ fn demoted_underlay_draws_only_the_off_screen_nodes() {
 
     let full = orrery_paint_list_demoted(
         &g,
-        |k| Some(if k == a { PortablePoint::new(0.0, 0.0) } else { PortablePoint::new(100.0, 0.0) }),
+        |k| {
+            Some(if k == a {
+                PortablePoint::new(0.0, 0.0)
+            } else {
+                PortablePoint::new(100.0, 0.0)
+            })
+        },
         |_| true,
         |_| true,
         DeviceIntSize::new(200, 200),
@@ -70,11 +84,21 @@ fn demoted_underlay_draws_only_the_off_screen_nodes() {
         &ScenePaintStyle::default(),
         0,
     );
-    assert_eq!(draw_rect_count(&full), 2, "both nodes drawn when all demoted");
+    assert_eq!(
+        draw_rect_count(&full),
+        2,
+        "both nodes drawn when all demoted"
+    );
 
     let one = orrery_paint_list_demoted(
         &g,
-        |k| Some(if k == a { PortablePoint::new(0.0, 0.0) } else { PortablePoint::new(100.0, 0.0) }),
+        |k| {
+            Some(if k == a {
+                PortablePoint::new(0.0, 0.0)
+            } else {
+                PortablePoint::new(100.0, 0.0)
+            })
+        },
         |k| k == a,
         |_| true,
         DeviceIntSize::new(200, 200),
@@ -82,7 +106,11 @@ fn demoted_underlay_draws_only_the_off_screen_nodes() {
         &ScenePaintStyle::default(),
         0,
     );
-    assert_eq!(draw_rect_count(&one), 1, "only the demoted node draws a rect");
+    assert_eq!(
+        draw_rect_count(&one),
+        1,
+        "only the demoted node draws a rect"
+    );
     // The edge still renders (one DrawStroke) even though b's rect is culled.
     let strokes = one
         .commands()
@@ -104,7 +132,13 @@ fn edge_visibility_predicate_hides_relations() {
     let strokes = |edge_visible: fn(&RelationView) -> bool| {
         orrery_paint_list_demoted(
             &g,
-            |k| Some(if k == a { PortablePoint::new(0.0, 0.0) } else { PortablePoint::new(100.0, 0.0) }),
+            |k| {
+                Some(if k == a {
+                    PortablePoint::new(0.0, 0.0)
+                } else {
+                    PortablePoint::new(100.0, 0.0)
+                })
+            },
             |_| true,
             edge_visible,
             DeviceIntSize::new(200, 200),
@@ -128,14 +162,21 @@ fn projection_from_positions_overrides_committed_and_falls_back() {
     let a = node(&mut g, 1, 10.0, 20.0); // committed (10, 20)
     let b = node(&mut g, 2, 30.0, 40.0); // committed (30, 40)
     // A live position for `a` only; `b` has none → falls back to committed.
-    let live =
-        move |k: NodeKey| (k == a).then_some(PortablePoint::new(99.0, 99.0));
+    let live = move |k: NodeKey| (k == a).then_some(PortablePoint::new(99.0, 99.0));
     let p = projection_from_positions(&g, live);
 
     let pa = p.nodes.iter().find(|n| n.node == a).unwrap();
     let pb = p.nodes.iter().find(|n| n.node == b).unwrap();
-    assert_eq!(pa.position, PortablePoint::new(99.0, 99.0), "a uses the live position");
-    assert_eq!(pb.position, PortablePoint::new(30.0, 40.0), "b falls back to committed");
+    assert_eq!(
+        pa.position,
+        PortablePoint::new(99.0, 99.0),
+        "a uses the live position"
+    );
+    assert_eq!(
+        pb.position,
+        PortablePoint::new(30.0, 40.0),
+        "b falls back to committed"
+    );
     assert_eq!(p.metadata.strategy_id.as_deref(), Some("orrery.live"));
 }
 
@@ -205,16 +246,29 @@ fn identity_arrangement_projects_byte_identically_to_the_whole_graph() {
     let via_arrangement = projection_from_arrangement(&g, &identity_arrangement(&g), pos);
 
     let tuples = |p: &Projection| {
-        p.nodes.iter().map(|n| (n.node, n.position)).collect::<Vec<_>>()
+        p.nodes
+            .iter()
+            .map(|n| (n.node, n.position))
+            .collect::<Vec<_>>()
     };
     assert_eq!(
         tuples(&via_arrangement),
         tuples(&via_graph),
         "same nodes + positions, in the same (graph) order"
     );
-    assert_eq!(via_arrangement.edges.len(), via_graph.edges.len(), "same edges");
-    assert_eq!(via_arrangement.content_bounds.min_x(), via_graph.content_bounds.min_x());
-    assert_eq!(via_arrangement.content_bounds.max_y(), via_graph.content_bounds.max_y());
+    assert_eq!(
+        via_arrangement.edges.len(),
+        via_graph.edges.len(),
+        "same edges"
+    );
+    assert_eq!(
+        via_arrangement.content_bounds.min_x(),
+        via_graph.content_bounds.min_x()
+    );
+    assert_eq!(
+        via_arrangement.content_bounds.max_y(),
+        via_graph.content_bounds.max_y()
+    );
 }
 
 #[test]
@@ -229,7 +283,10 @@ fn curated_arrangement_projects_only_its_members() {
     let p = projection_from_arrangement(&g, &arr, |_| None);
     let keys: HashSet<NodeKey> = p.nodes.iter().map(|n| n.node).collect();
     assert_eq!(p.nodes.len(), 2, "only the curated members project");
-    assert!(keys.contains(&a) && keys.contains(&c), "members 1 and 3, not 2");
+    assert!(
+        keys.contains(&a) && keys.contains(&c),
+        "members 1 and 3, not 2"
+    );
 }
 
 #[test]
@@ -243,7 +300,10 @@ fn projected_edges_dedup_per_pair_and_weight_by_multiplicity() {
     let _ = g.assert_relation(b, c, hyperlink());
     let edges = projected_undirected_edges(&g, &|_| true);
     assert_eq!(edges.len(), 2, "one edge per connected pair");
-    assert!(edges.iter().all(|e| (e.weight - 1.0).abs() < 1e-6), "a single-link pair is unit weight");
+    assert!(
+        edges.iter().all(|e| (e.weight - 1.0).abs() < 1e-6),
+        "a single-link pair is unit weight"
+    );
 
     // A reciprocal pair (a->b and b->a) is two relations on the same undirected pair => the
     // edge weighs 2 (the multigraph multiplicity), so it paints thicker. (Graph signals.)
@@ -254,7 +314,10 @@ fn projected_edges_dedup_per_pair_and_weight_by_multiplicity() {
     let _ = g2.assert_relation(y, x, hyperlink());
     let edges = projected_undirected_edges(&g2, &|_| true);
     assert_eq!(edges.len(), 1, "still one edge for the pair");
-    assert!((edges[0].weight - 2.0).abs() < 1e-6, "two relations on the pair => weight 2");
+    assert!(
+        (edges[0].weight - 2.0).abs() < 1e-6,
+        "two relations on the pair => weight 2"
+    );
 }
 
 fn hyperlink() -> EdgeAssertion {

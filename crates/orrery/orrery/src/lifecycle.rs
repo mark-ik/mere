@@ -465,7 +465,12 @@ impl Orrery {
         matches!(
             kernel::graph::apply::apply_graph_delta(
                 &mut self.graph,
-                kernel::graph::apply::GraphDelta::SetNodeFavicon { key, rgba, width, height },
+                kernel::graph::apply::GraphDelta::SetNodeFavicon {
+                    key,
+                    rgba,
+                    width,
+                    height
+                },
             ),
             kernel::graph::apply::GraphDeltaResult::NodeMetadataUpdated(true)
         )

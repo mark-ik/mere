@@ -135,15 +135,25 @@ fn deleting_a_spawned_owner_leaves_a_serializable_snapshot() {
         EntryPrivacy::LocalOnly,
     );
     let a = memory.ensure_owner(owner("a"), None);
-    memory.visit_entry(a, a_entry, ctx("a"), TransitionKind::UrlTyped, 10).unwrap();
+    memory
+        .visit_entry(a, a_entry, ctx("a"), TransitionKind::UrlTyped, 10)
+        .unwrap();
     // Spawn a child under a's current visit, give it a visit, then delete it.
     let child = memory.ensure_owner(owner("c"), Some(a));
-    memory.visit_entry(child, c_entry, ctx("c"), TransitionKind::TabSpawn, 20).unwrap();
+    memory
+        .visit_entry(child, c_entry, ctx("c"), TransitionKind::TabSpawn, 20)
+        .unwrap();
     memory.delete_owner(child).unwrap();
     // The creator survives and the snapshot round-trips without panicking.
     let restored = Memory::from_snapshot(memory.to_snapshot());
-    assert!(restored.owner_id_by_identity(&owner("c")).is_none(), "spawned owner gone");
-    assert!(restored.owner_id_by_identity(&owner("a")).is_some(), "creator survives");
+    assert!(
+        restored.owner_id_by_identity(&owner("c")).is_none(),
+        "spawned owner gone"
+    );
+    assert!(
+        restored.owner_id_by_identity(&owner("a")).is_some(),
+        "creator survives"
+    );
 }
 
 #[test]

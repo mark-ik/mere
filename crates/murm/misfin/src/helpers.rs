@@ -2,8 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use std::path::{Path, PathBuf};
 use sha2::{Digest, Sha256};
+use std::path::{Path, PathBuf};
 
 use super::*;
 
@@ -131,4 +131,3 @@ pub(super) fn from_hex_digit(byte: u8) -> Result<u8, String> {
         _ => Err(format!("Invalid hex digit '{}'.", byte as char)),
     }
 }
-

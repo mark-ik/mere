@@ -138,7 +138,11 @@ pub fn outline_rows(graph: &Graph) -> Vec<OutlineRow> {
         walk_rows(host, child, 0, &mut rows);
     }
     for (label, url) in loose {
-        rows.push(OutlineRow { depth: 0, label, url: Some(url) });
+        rows.push(OutlineRow {
+            depth: 0,
+            label,
+            url: Some(url),
+        });
     }
     rows
 }
@@ -150,7 +154,11 @@ fn walk_rows(segment: &str, node: &OutlineTrie, depth: usize, rows: &mut Vec<Out
             label: label.clone(),
             url: Some(url.clone()),
         }),
-        None => rows.push(OutlineRow { depth, label: segment.to_string(), url: None }),
+        None => rows.push(OutlineRow {
+            depth,
+            label: segment.to_string(),
+            url: None,
+        }),
     }
     for (seg, child) in &node.children {
         walk_rows(seg, child, depth + 1, rows);
@@ -197,10 +205,16 @@ fn node_label(title: &str, url: &str) -> String {
 /// address), which routes the node to the flat loose list.
 fn parse_host_path(url: &str) -> Option<(String, Vec<String>)> {
     let after_scheme = url.split_once("://")?.1;
-    let path = after_scheme.split(['?', '#']).next().unwrap_or(after_scheme);
+    let path = after_scheme
+        .split(['?', '#'])
+        .next()
+        .unwrap_or(after_scheme);
     let mut parts = path.split('/');
     let host = parts.next().filter(|h| !h.is_empty())?.to_string();
-    let segments = parts.filter(|s| !s.is_empty()).map(str::to_string).collect();
+    let segments = parts
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .collect();
     Some((host, segments))
 }
 
@@ -212,8 +226,8 @@ fn escape(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kernel::graph::fixtures::GraphFixtures;
     use euclid::default::Point2D;
+    use kernel::graph::fixtures::GraphFixtures;
     use kernel::graph::{EdgeAssertion, Graph, SemanticSubKind};
 
     fn p() -> Point2D<f32> {
@@ -259,7 +273,10 @@ mod tests {
         g.set_node_title(c, "Other Home".into());
         let out = outline_djot(&g);
         assert!(out.contains("- site.test\n"), "host header; got:\n{out}");
-        assert!(out.contains("  - docs\n"), "structural segment; got:\n{out}");
+        assert!(
+            out.contains("  - docs\n"),
+            "structural segment; got:\n{out}"
+        );
         assert!(
             out.contains("    - [Guide](https://site.test/docs/guide)"),
             "leaf link; got:\n{out}"
@@ -295,8 +312,16 @@ mod tests {
         assert_eq!(
             outline_rows(&g),
             vec![
-                OutlineRow { depth: 0, label: "site.test".into(), url: None },
-                OutlineRow { depth: 1, label: "docs".into(), url: None },
+                OutlineRow {
+                    depth: 0,
+                    label: "site.test".into(),
+                    url: None
+                },
+                OutlineRow {
+                    depth: 1,
+                    label: "docs".into(),
+                    url: None
+                },
                 OutlineRow {
                     depth: 2,
                     label: "Guide".into(),

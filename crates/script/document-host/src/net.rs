@@ -4,7 +4,6 @@
 
 //! Net-fetch host seam: response type, fetcher trait, origin helpers.
 
-
 /// A response from [`NetFetcher::fetch`] (a clean public mirror of the WIT
 /// `net::response`, so an embedder need not name the generated type).
 pub struct NetResponse {
@@ -32,9 +31,14 @@ pub trait NetFetcher: Send + Sync {
 pub(crate) fn net_host_of(url: &str) -> String {
     let after = url.split_once("://").map(|(_, r)| r).unwrap_or(url);
     let authority = after.split(['/', '?', '#']).next().unwrap_or("");
-    let host_port = authority.rsplit_once('@').map(|(_, h)| h).unwrap_or(authority);
+    let host_port = authority
+        .rsplit_once('@')
+        .map(|(_, h)| h)
+        .unwrap_or(authority);
     let host = if let Some(rest) = host_port.strip_prefix('[') {
-        rest.split_once(']').map(|(inner, _)| inner).unwrap_or(host_port)
+        rest.split_once(']')
+            .map(|(inner, _)| inner)
+            .unwrap_or(host_port)
     } else {
         host_port.split(':').next().unwrap_or(host_port)
     };

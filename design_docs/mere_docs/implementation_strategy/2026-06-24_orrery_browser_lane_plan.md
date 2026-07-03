@@ -187,5 +187,5 @@ Nova/Boa, the companion (deferred with sync).
 - [gloss outline lens](2026-06-23_gloss_outline_lens_plan.md),
   [relational browse](2026-06-23_relational_browse_graphlet_plan.md),
   [node-body/face](2026-06-23_node_body_face_model_plan.md),
-  [document-script substrate](2026-06-21_document_script_substrate_plan.md)
+  [document-script substrate](../../archive_docs/2026-07-03_completed_plans/2026-06-21_document_script_substrate_plan.md)
   (the reused pieces).

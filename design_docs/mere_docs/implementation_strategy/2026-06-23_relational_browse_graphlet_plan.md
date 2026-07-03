@@ -32,8 +32,8 @@ not restate them):
 - Graph substrate: [node representation / arrangement](2026-06-18_node_representation_arrangement_plan.md)
   (LOD: dot → glyph → chip → card), [graph query layer](2026-06-18_graph_query_layer_plan.md),
   [petgraph/RDF](2026-06-18_petgraph_rdf_plan.md). DocumentScript driver, for the
-  later sandboxed form: [substrate](2026-06-21_document_script_substrate_plan.md)
-  + [follow-ons](2026-06-23_document_script_followons_plan.md).
+  later sandboxed form: [substrate](../../archive_docs/2026-07-03_completed_plans/2026-06-21_document_script_substrate_plan.md)
+  + [follow-ons](../../archive_docs/2026-07-03_completed_plans/2026-06-23_document_script_followons_plan.md).
 
 ---
 

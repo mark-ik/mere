@@ -2,6 +2,13 @@
 
 **Date**: 2026-05-14
 **Status**: Implementation plan — v0a trait + null runner landed; v0b real workers pending
+
+> **Reconcile note (2026-07-03 archive pass):** the code moved past the status line —
+> `session_service_runner.rs` now also ships an `InMemoryRunner` (`impl SessionServiceRunner`)
+> and the misfin server (`crates/murm/misfin/src/server.rs`) runs as a
+> `SessionServiceRunner` worker. v0b is at least partially real; the remaining question is
+> which of the §-listed worker kinds (fetcher pool, embedder, indexer, …) still lack runners.
+> File paths below are 2026-05-14-era; verify before use.
 **Scope**: Let sessions declare background workers (fetcher pool, embedder, indexer, intelligence-signal producer, …) that run with no attached client. Per the framing brief §5.7, the kernel stays a pure data layer; networking and GPU/model runtimes live behind a `SessionServiceRunner` capability the host implements. Land the trait + a no-op runner + the worker-status vocabulary now; per-worker implementations land as their workloads materialise.
 
 **Related**:

@@ -52,9 +52,7 @@ pub use static_layouts::{
 };
 
 pub mod semantic_embedding;
-pub use semantic_embedding::{
-    EmbeddingFallback, SemanticEmbedding, SemanticEmbeddingConfig,
-};
+pub use semantic_embedding::{EmbeddingFallback, SemanticEmbedding, SemanticEmbeddingConfig};
 
 pub mod l_system;
 pub use l_system::{IterationDepth, LSystem, LSystemConfig, LSystemGrammar};

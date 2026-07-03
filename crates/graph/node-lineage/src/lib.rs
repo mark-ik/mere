@@ -392,8 +392,8 @@ where
     }
 }
 
-mod snapshot;
-mod queries;
 mod mutations;
+mod queries;
+mod snapshot;
 #[cfg(test)]
 mod tests;

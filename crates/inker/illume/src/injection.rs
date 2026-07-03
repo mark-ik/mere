@@ -55,8 +55,7 @@ impl InjectionRegistry {
     /// Register `lexer` for `label` (matched case-insensitively). Replaces any
     /// existing lexer for that label, so a mod can override a built-in.
     pub fn register(&mut self, label: impl Into<String>, lexer: Box<dyn InjectionLexer>) {
-        self.lexers
-            .insert(label.into().to_ascii_lowercase(), lexer);
+        self.lexers.insert(label.into().to_ascii_lowercase(), lexer);
     }
 
     /// Whether a lexer is registered for `label`.

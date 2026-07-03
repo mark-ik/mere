@@ -36,12 +36,7 @@ pub struct FusedHit {
 /// dominance (60 unless you have a reason); `weights` are
 /// `(lexical, vector)`. Ties break lexicographically by URL so the output
 /// is deterministic.
-pub fn fuse(
-    lexical: &[String],
-    vector: &[String],
-    k: f64,
-    weights: (f64, f64),
-) -> Vec<FusedHit> {
+pub fn fuse(lexical: &[String], vector: &[String], k: f64, weights: (f64, f64)) -> Vec<FusedHit> {
     let mut by_url: BTreeMap<&str, FusedHit> = BTreeMap::new();
     for (rank, url) in lexical.iter().enumerate() {
         let entry = by_url.entry(url).or_insert_with(|| FusedHit {

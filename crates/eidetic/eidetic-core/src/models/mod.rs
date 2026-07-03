@@ -23,7 +23,9 @@ const MODEL_MANIFEST_SCHEMA_PAYLOAD: &[u8] = br#"{"format":"mere-native","schema
 /// The well-known schema reference for `ModelManifest` engrams.
 pub static MODEL_MANIFEST_SCHEMA_REF: std::sync::LazyLock<SchemaRef> =
     std::sync::LazyLock::new(|| {
-        SchemaRef::from_id(ManifestId::from_hash(Hash::of(MODEL_MANIFEST_SCHEMA_PAYLOAD)))
+        SchemaRef::from_id(ManifestId::from_hash(Hash::of(
+            MODEL_MANIFEST_SCHEMA_PAYLOAD,
+        )))
     });
 
 /// Canonical bytes of the `OpaqueBlob` schema engram payload.

@@ -142,7 +142,10 @@ fn garbage_bytes_are_malformed() {
         decode_post(&[0xff, 0x00, 0x13, 0x37]),
         Err(MurmuringError::MalformedPost)
     ));
-    assert!(matches!(decode_post(&[]), Err(MurmuringError::MalformedPost)));
+    assert!(matches!(
+        decode_post(&[]),
+        Err(MurmuringError::MalformedPost)
+    ));
 }
 
 #[test]
@@ -163,8 +166,7 @@ fn decoded_post_carries_the_signing_author_and_cabal() {
     let decoded = decode_post(&encode_post(&post)).unwrap();
     assert_eq!(decoded.author.to_bytes(), kp.public_key().to_bytes());
     assert_eq!(
-        decoded.cabal_id,
-        [0x42; 32],
+        decoded.cabal_id, [0x42; 32],
         "cabal id survives the round trip"
     );
 }
@@ -261,7 +263,10 @@ fn operation_to_post_handles_bodyless_posts() {
         },
     );
     let op = post_to_operation(&post).unwrap();
-    assert!(op.body.is_none(), "a bodyless post yields an op with no body");
+    assert!(
+        op.body.is_none(),
+        "a bodyless post yields an op with no body"
+    );
     let back = operation_to_post(&op).unwrap();
     assert_eq!(encode_post(&post), encode_post(&back));
 }

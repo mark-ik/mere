@@ -9,8 +9,7 @@
 use kernel::graph::EdgeFamily;
 use xilem_serval::{Keyed, PointerClick, clickable, el};
 
-use crate::roster::{GraphletCard, GraphletRow, RosterSubject};
-use crate::roster_data::edge_family_label;
+use crate::roster::{self, GraphletCard, GraphletRow, RosterSubject};
 use crate::roster_view::{RosterIntent, RosterState, RosterView};
 use crate::roster_view_parts::{action, action_bar, card_row, card_shell};
 
@@ -114,9 +113,9 @@ fn family_selector_row(id: forme::GraphletId, families: &[(EdgeFamily, bool)]) -
 
 fn family_selector_chip(id: forme::GraphletId, family: EdgeFamily, on: bool) -> RosterView {
     let label = if on {
-        format!("{} \u{2713}", edge_family_label(family))
+        format!("{} \u{2713}", roster::edge_family_label(family))
     } else {
-        edge_family_label(family).to_string()
+        roster::edge_family_label(family).to_string()
     };
     action(label, move |st, ev| {
         ev.stop_propagation();

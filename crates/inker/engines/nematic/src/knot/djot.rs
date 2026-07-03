@@ -24,8 +24,8 @@
 //! recognized block vocabulary. Parser: `jotdown` (the Rust djot pull-parser).
 
 use inker::{
-    Block, DocumentDiagnostic, DocumentProvenance, DocumentTrustState, Engine,
-    EngineDocument, EngineError, EngineInput, InlineSpan, inline_text,
+    Block, DocumentDiagnostic, DocumentProvenance, DocumentTrustState, Engine, EngineDocument,
+    EngineError, EngineInput, InlineSpan, inline_text,
 };
 use jotdown::{Container, Event, Parser};
 
@@ -42,9 +42,7 @@ pub fn parse_djot_knot_body(body: &str) -> Vec<Block> {
 /// div class, or a recognized div missing a required attribute). The recognized
 /// vocabulary is declared data ([`KNOT_DIV_SCHEMA`]) — the Markdoc lesson
 /// (§10.4): validate against a schema, render the unrecognized generically.
-pub fn parse_djot_knot_body_validated(
-    body: &str,
-) -> (Vec<Block>, Vec<DocumentDiagnostic>) {
+pub fn parse_djot_knot_body_validated(body: &str) -> (Vec<Block>, Vec<DocumentDiagnostic>) {
     let mut out = Vec::new();
     let mut diagnostics = Vec::new();
     let mut inline = Inline::default();
@@ -82,9 +80,18 @@ pub fn parse_djot_knot_body_validated(
             Event::Start(Container::Div { class }, attrs) => {
                 div = Some(DivCtx {
                     class: class.to_string(),
-                    title: attrs.get_value("title").map(|v| v.to_string()).or(pending.title.take()),
-                    url: attrs.get_value("url").map(|v| v.to_string()).or(pending.url.take()),
-                    date: attrs.get_value("date").map(|v| v.to_string()).or(pending.date.take()),
+                    title: attrs
+                        .get_value("title")
+                        .map(|v| v.to_string())
+                        .or(pending.title.take()),
+                    url: attrs
+                        .get_value("url")
+                        .map(|v| v.to_string())
+                        .or(pending.url.take()),
+                    date: attrs
+                        .get_value("date")
+                        .map(|v| v.to_string())
+                        .or(pending.date.take()),
                 });
                 inline.clear();
             }
@@ -355,12 +362,15 @@ fn validate_div(ctx: &DivCtx) -> Option<DocumentDiagnostic> {
         "date" => ctx.date.is_some(),
         _ => false,
     };
-    spec.required.iter().find(|&&attr| !present(attr)).map(|&attr| {
-        DocumentDiagnostic::ParseWarning(format!(
-            "knot '{}' div missing required attribute '{}'",
-            ctx.class, attr
-        ))
-    })
+    spec.required
+        .iter()
+        .find(|&&attr| !present(attr))
+        .map(|&attr| {
+            DocumentDiagnostic::ParseWarning(format!(
+                "knot '{}' div missing required attribute '{}'",
+                ctx.class, attr
+            ))
+        })
 }
 
 /// Serialize document blocks back into a djot knot body — the dual of
@@ -384,7 +394,9 @@ pub fn blocks_to_djot(blocks: &[Block]) -> String {
 /// flatten to inline text (the round-trip writer; the parser side that produces
 /// `Table` lands with the live tile).
 fn emit_djot_table(header: &[Vec<InlineSpan>], rows: &[Vec<Vec<InlineSpan>>], out: &mut String) {
-    let cols = header.len().max(rows.iter().map(Vec::len).max().unwrap_or(0));
+    let cols = header
+        .len()
+        .max(rows.iter().map(Vec::len).max().unwrap_or(0));
     if cols == 0 {
         return;
     }

@@ -46,7 +46,7 @@ pub(crate) fn shell_view(s: &ShellState) -> ShellView {
     });
     // The gloss outline lens, when open, is a positioned subtree of the shell document
     // like the roster: lensed onto `ShellState.gloss_outline`, sized to the gloss pane's
-    // middle third ([`crate::gloss::gloss_sections`]) so the one shell runner renders it,
+    // middle third ([`gloss::gloss_sections`]) so the one shell runner renders it,
     // hit-tests it, and dispatches its row clicks — the first DOM gloss section, the
     // minimap and recent list still Scene-rasterize the top/bottom thirds. `None` keeps
     // the document identical to before this section existed. (gloss-outline plan P1.)
@@ -70,7 +70,7 @@ pub(crate) fn shell_view(s: &ShellState) -> ShellView {
     });
     // The gloss recent-visited lens, when open, is a positioned subtree of the shell
     // document exactly like the outline above — the Scene-to-DOM migration's Phase 1.
-    // Sized to the gloss pane's bottom third ([`crate::gloss::gloss_sections`]).
+    // Sized to the gloss pane's bottom third ([`gloss::gloss_sections`]).
     let gloss_recent = s.gloss_recent_rect.map(|[x0, y0, x1, y1]| {
         let make_recent: fn(&mut GlossRecentState) -> GlossRecentView =
             |g: &mut GlossRecentState| recent_view(g);

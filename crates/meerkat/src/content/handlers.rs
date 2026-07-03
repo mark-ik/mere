@@ -35,8 +35,8 @@ fn emit_engine_stats(
     out: &impl ContentUpdateSink,
     nav: NavGeneration,
     viewport_gen: ViewportGeneration,
-    dom: engine_observables_api::DomArenaStats,
-    layout: Option<engine_observables_api::LayoutBatchStats>,
+    dom: DomArenaStats,
+    layout: Option<LayoutBatchStats>,
 ) {
     out.emit_update(ContentUpdate::EngineStats {
         nav,
@@ -295,13 +295,33 @@ pub(crate) fn render(
             links,
             Vec::new(),
         );
-        emit_engine_stats(
-            out,
-            content.nav,
-            content.viewport_gen,
-            doc.dom_stats(),
-            doc.last_layout_batch_stats(),
-        );
+        let dom = doc.dom_stats();
+        let dom = DomArenaStats {
+            live_nodes: dom.live_nodes,
+            node_kinds: DomNodeKindStats {
+                documents: dom.node_kinds.documents,
+                document_fragments: dom.node_kinds.document_fragments,
+                doctypes: dom.node_kinds.doctypes,
+                elements: dom.node_kinds.elements,
+                text: dom.node_kinds.text,
+                comments: dom.node_kinds.comments,
+                processing_instructions: dom.node_kinds.processing_instructions,
+            },
+            attribute_count: dom.attribute_count,
+            estimated_bytes: dom.estimated_bytes,
+        };
+        let layout = doc
+            .last_layout_batch_stats()
+            .map(|layout| LayoutBatchStats {
+                mutations_in: layout.mutations_in,
+                coalesced_invalidations: layout.coalesced_invalidations,
+                restyled_elements: layout.restyled_elements,
+                boxes_rebuilt: layout.boxes_rebuilt,
+                fragment_count: layout.fragment_count,
+                box_tree_nodes: layout.box_tree_nodes,
+                ..LayoutBatchStats::default()
+            });
+        emit_engine_stats(out, content.nav, content.viewport_gen, dom, layout);
         return;
     }
     // Scripted page (P2.5c): render from the script's mutable `ScriptedDom`, which
@@ -332,11 +352,25 @@ pub(crate) fn render(
             links,
             masks,
         );
+        let dom = inst.dom().stats();
         emit_engine_stats(
             out,
             content.nav,
             content.viewport_gen,
-            inst.dom().stats(),
+            DomArenaStats {
+                live_nodes: dom.live_nodes,
+                node_kinds: DomNodeKindStats {
+                    documents: dom.node_kinds.documents,
+                    document_fragments: dom.node_kinds.document_fragments,
+                    doctypes: dom.node_kinds.doctypes,
+                    elements: dom.node_kinds.elements,
+                    text: dom.node_kinds.text,
+                    comments: dom.node_kinds.comments,
+                    processing_instructions: dom.node_kinds.processing_instructions,
+                },
+                attribute_count: dom.attribute_count,
+                estimated_bytes: dom.estimated_bytes,
+            },
             None,
         );
         return;

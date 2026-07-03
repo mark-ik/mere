@@ -476,6 +476,6 @@ fn check_field_spec(
 }
 
 mod validators;
-pub use validators::{JsonSchemaValidator, JsonLdValidator};
+pub use validators::{JsonLdValidator, JsonSchemaValidator};
 #[cfg(test)]
 mod tests;

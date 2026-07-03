@@ -98,7 +98,9 @@ impl DocumentScript {
         net_origins: Vec<String>,
     ) -> wasmtime::Result<Self> {
         let engine = guarded_engine()?;
-        let limits = StoreLimitsBuilder::new().memory_size(quota.mem_bytes).build();
+        let limits = StoreLimitsBuilder::new()
+            .memory_size(quota.mem_bytes)
+            .build();
         let (mut store, bindings) =
             pollster::block_on(build_instance(&engine, component_path, dom, grant, limits))?;
         // The network backend for `net.fetch` (None = unconfigured -> fetch errors)
@@ -111,7 +113,11 @@ impl DocumentScript {
         let engine = store.engine().clone();
         let activate = bindings.call_activate(&mut store);
         guarded_block_on(engine, activate)?;
-        Ok(Self { store, bindings, epoch_deadline_ticks: quota.epoch_deadline_ticks })
+        Ok(Self {
+            store,
+            bindings,
+            epoch_deadline_ticks: quota.epoch_deadline_ticks,
+        })
     }
 
     /// Deliver one event under the guards; apply the returned batch to the live DOM;
@@ -119,7 +125,10 @@ impl DocumentScript {
     /// runaway or memory-bomb) — the host survives and the DOM is unchanged; the
     /// caller should detach the script.
     pub fn deliver_event(&mut self, kind: &str, payload: &str) -> wasmtime::Result<TurnOutcome> {
-        let ev = Event { kind: kind.to_string(), payload: payload.to_string() };
+        let ev = Event {
+            kind: kind.to_string(),
+            payload: payload.to_string(),
+        };
         self.store.set_epoch_deadline(self.epoch_deadline_ticks);
         self.store.data_mut().fetches_this_turn = 0; // fresh per-turn fetch budget (§A6)
         let engine = self.store.engine().clone();

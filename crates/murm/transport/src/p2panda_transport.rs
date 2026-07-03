@@ -46,8 +46,8 @@ use std::time::Duration;
 use identity::Ed25519Keypair;
 use iroh::EndpointAddr;
 use iroh::endpoint::{Connection, RecvStream, SendStream};
-use iroh_tickets::endpoint::EndpointTicket;
 use iroh::protocol::{AcceptError, ProtocolHandler};
+use iroh_tickets::endpoint::EndpointTicket;
 use p2panda_core::{SigningKey, Topic, VerifyingKey};
 use p2panda_net::addrs::NodeInfo;
 use p2panda_net::discovery::DiscoveryConfig;
@@ -112,7 +112,10 @@ struct StreamQueueHandler {
 
 impl ProtocolHandler for StreamQueueHandler {
     async fn accept(&self, connection: Connection) -> Result<(), AcceptError> {
-        let (send, recv) = connection.accept_bi().await.map_err(AcceptError::from_err)?;
+        let (send, recv) = connection
+            .accept_bi()
+            .await
+            .map_err(AcceptError::from_err)?;
         let _ = self.tx.send(P2pandaStream {
             send,
             recv,

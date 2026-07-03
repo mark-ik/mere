@@ -95,7 +95,6 @@ mod frame_a11y;
 mod frame_a11y_panes;
 mod frame_ops;
 mod frame_view;
-mod gloss;
 mod gloss_outline_data;
 mod gloss_outline_view;
 mod gloss_view;

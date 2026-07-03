@@ -5,8 +5,8 @@
 //! Tests for `build.rs` (sample graph, simulation construction, relation-edge
 //! builders). Split into a sibling file per the 600-LOC ceiling.
 
-use std::collections::{HashMap, HashSet};
 use kernel::graph::fixtures::GraphFixtures;
+use std::collections::{HashMap, HashSet};
 
 use euclid::default::Point2D;
 use kernel::graph::{

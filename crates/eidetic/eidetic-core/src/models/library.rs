@@ -4,8 +4,8 @@
 
 //! Model library — API for resolving model artifacts.
 
-use crate::schema::ManifestId;
 use crate::manifest::{BlobFetcher, BlobSource, load_manifest, resolve_blob};
+use crate::schema::ManifestId;
 use crate::schema::{PrivacyClass, ProvenanceRecord, Timestamp, TrustEnvelope};
 use crate::typed::{load_typed, save_typed};
 use crate::{Error, Result, Store};
@@ -90,11 +90,23 @@ impl ModelLibrary {
             tokenizer_blob,
         };
 
-        save_typed(store, &manifest, Vec::new(), privacy, provenance, trust, created_at).await
+        save_typed(
+            store,
+            &manifest,
+            Vec::new(),
+            privacy,
+            provenance,
+            trust,
+            created_at,
+        )
+        .await
     }
 
     /// Load a model manifest by its manifest ID.
-    pub async fn load_model(store: &mut dyn Store, id: ManifestId) -> Result<Option<ModelManifest>> {
+    pub async fn load_model(
+        store: &mut dyn Store,
+        id: ManifestId,
+    ) -> Result<Option<ModelManifest>> {
         load_typed::<ModelManifest>(store, &mut crate::manifest::NoFetcher, id).await
     }
 

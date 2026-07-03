@@ -11,8 +11,8 @@
 //! the orrery. Split out to keep files under the workspace 600-LOC ceiling.
 
 use super::*;
-use crate::gloss::MinimapFit;
 use crate::gloss_view::{GlossMinimapNode, GlossMinimapSnapshot};
+use gloss::MinimapFit;
 
 impl WindowCtx<'_> {
     /// Build this frame's gloss minimap: fold its DOM node snapshot into the shell
@@ -31,7 +31,7 @@ impl WindowCtx<'_> {
             }
             return None;
         };
-        let (minimap_rect, _, _) = crate::gloss::gloss_sections(grect);
+        let (minimap_rect, _, _) = gloss::gloss_sections(grect);
         let mw = (minimap_rect[2] - minimap_rect[0]).round().max(1.0) as u32;
         let mh = (minimap_rect[3] - minimap_rect[1]).round().max(1.0) as u32;
 
@@ -98,8 +98,8 @@ impl WindowCtx<'_> {
         };
 
         let theme = self.shared.presentation.chrome_theme.clone();
-        let node_color = crate::gloss::theme_rgb_css(theme.body_text);
-        let selected_color = crate::gloss::theme_rgb_css(theme.strong_text);
+        let node_color = gloss::theme_rgb_css(theme.body_text);
+        let selected_color = gloss::theme_rgb_css(theme.strong_text);
         let graph = self.orrery().graph();
         let dom_nodes: Vec<GlossMinimapNode> = nodes
             .iter()
@@ -114,7 +114,7 @@ impl WindowCtx<'_> {
                     url,
                     x,
                     y,
-                    size: crate::gloss::minimap_node_size(*selected, *size_factor),
+                    size: gloss::minimap_node_size(*selected, *size_factor),
                     color: if *selected {
                         selected_color.clone()
                     } else {
@@ -140,8 +140,7 @@ impl WindowCtx<'_> {
             .iter()
             .map(|(center, factor, color)| (fit.apply(*center), *factor, *color))
             .collect();
-        let backdrop =
-            crate::gloss::minimap_backdrop_scene(&mapped_edges, &mapped_rings, mw, mh, &theme);
+        let backdrop = gloss::minimap_backdrop_scene(&mapped_edges, &mapped_rings, mw, mh, &theme);
         Some((backdrop, mw, mh))
     }
 }

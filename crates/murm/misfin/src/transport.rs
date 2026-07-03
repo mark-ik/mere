@@ -7,8 +7,8 @@ use std::path::Path;
 use rcgen::{CertificateParams, DistinguishedName, DnType, KeyPair};
 use rustls::pki_types::CertificateDer;
 
-use super::*;
 use super::helpers::*;
+use super::*;
 
 pub(super) fn load_or_create_identity(
     spec: &MisfinIdentitySpec,
@@ -241,4 +241,3 @@ fn ed25519_pkcs8_der(seed: &[u8; 32]) -> Vec<u8> {
     der.extend_from_slice(seed);
     der
 }
-

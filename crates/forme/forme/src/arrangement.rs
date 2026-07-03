@@ -34,9 +34,7 @@ pub type GraphMemberId = Uuid;
 
 /// Local id of a node *within one arrangement* — distinct from a graph member
 /// id (one member may appear as several arrangement nodes: mirrors, compares).
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
-)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct ArrangementNodeId(Uuid);
 
 impl ArrangementNodeId {
@@ -174,7 +172,11 @@ impl Arrangement {
     /// Insert a node of `kind` with an optional label; returns its id. The
     /// node is *not* attached to anything — use [`attach`](Self::attach) or the
     /// `add_*` helpers, which attach to the root by default.
-    pub fn insert(&mut self, kind: ArrangementNodeKind, label: Option<String>) -> ArrangementNodeId {
+    pub fn insert(
+        &mut self,
+        kind: ArrangementNodeKind,
+        label: Option<String>,
+    ) -> ArrangementNodeId {
         let id = ArrangementNodeId::new();
         self.nodes.insert(id, ArrangementNode { id, kind, label });
         id
@@ -240,7 +242,11 @@ impl Arrangement {
 
     /// Bind (or unbind) a `TileIntent` node to a graph member. Returns whether
     /// `id` was a tile-intent node.
-    pub fn set_tile_member(&mut self, id: ArrangementNodeId, member: Option<GraphMemberId>) -> bool {
+    pub fn set_tile_member(
+        &mut self,
+        id: ArrangementNodeId,
+        member: Option<GraphMemberId>,
+    ) -> bool {
         match self.nodes.get_mut(&id).map(|n| &mut n.kind) {
             Some(ArrangementNodeKind::TileIntent { member: slot }) => {
                 *slot = member;
@@ -272,7 +278,10 @@ impl Arrangement {
     }
 
     /// Direct members of `container` (incoming `MemberOf` edges).
-    pub fn members_of(&self, container: ArrangementNodeId) -> impl Iterator<Item = ArrangementNodeId> + '_ {
+    pub fn members_of(
+        &self,
+        container: ArrangementNodeId,
+    ) -> impl Iterator<Item = ArrangementNodeId> + '_ {
         self.edges
             .iter()
             .filter(move |e| e.to == container && e.kind == ArrangementEdgeKind::MemberOf)

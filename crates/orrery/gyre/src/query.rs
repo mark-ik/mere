@@ -74,17 +74,24 @@ impl Simulation {
 #[cfg(test)]
 mod tests {
     use euclid::default::{Box2D, Point2D};
-    use kernel::graph::{Graph, NodeKey};
     use kernel::graph::fixtures::GraphFixtures;
+    use kernel::graph::{Graph, NodeKey};
 
     use crate::Simulation;
 
     /// a@(0,0), b@(100,0), one edge a–b. Index refreshed so positions are live.
     fn sim_with_edge() -> (Simulation, NodeKey, NodeKey) {
         let mut g = Graph::new();
-        let a = g.add_node_with_id(uuid::Uuid::from_u128(1), "mere://a".into(), Point2D::new(0.0, 0.0));
-        let b =
-            g.add_node_with_id(uuid::Uuid::from_u128(2), "mere://b".into(), Point2D::new(100.0, 0.0));
+        let a = g.add_node_with_id(
+            uuid::Uuid::from_u128(1),
+            "mere://a".into(),
+            Point2D::new(0.0, 0.0),
+        );
+        let b = g.add_node_with_id(
+            uuid::Uuid::from_u128(2),
+            "mere://b".into(),
+            Point2D::new(100.0, 0.0),
+        );
         let mut sim = Simulation::new();
         sim.sync_with_graph(&g);
         sim.sync_edges([(a, b)]);
@@ -107,9 +114,15 @@ mod tests {
     fn edge_hit_test_picks_near_segment_only() {
         let (sim, a, b) = sim_with_edge();
         // On the segment (midpoint) → hit.
-        assert_eq!(sim.edge_hit_test(Point2D::new(50.0, 0.0), 5.0), Some((a, b)));
+        assert_eq!(
+            sim.edge_hit_test(Point2D::new(50.0, 0.0), 5.0),
+            Some((a, b))
+        );
         // Just off it, within tolerance → hit.
-        assert_eq!(sim.edge_hit_test(Point2D::new(50.0, 3.0), 5.0), Some((a, b)));
+        assert_eq!(
+            sim.edge_hit_test(Point2D::new(50.0, 3.0), 5.0),
+            Some((a, b))
+        );
         // Far from it → miss.
         assert!(sim.edge_hit_test(Point2D::new(50.0, 50.0), 5.0).is_none());
         // Beyond an endpoint (past b along the line) → miss (segment, not line).
@@ -121,21 +134,27 @@ mod tests {
         let (sim, a, b) = sim_with_edge();
         // Box around the origin: contains a's center, not b's; the a–b segment
         // crosses it (runs out along +x from the origin).
-        let near_origin =
-            sim.rect_select(Box2D::new(Point2D::new(-10.0, -10.0), Point2D::new(10.0, 10.0)));
+        let near_origin = sim.rect_select(Box2D::new(
+            Point2D::new(-10.0, -10.0),
+            Point2D::new(10.0, 10.0),
+        ));
         assert_eq!(near_origin.nodes, vec![a]);
         assert_eq!(near_origin.edges, vec![(a, b)]);
 
         // A box straddling the segment's middle but no node center: no nodes, the
         // edge still selected (segment crosses it).
-        let midspan =
-            sim.rect_select(Box2D::new(Point2D::new(40.0, -5.0), Point2D::new(60.0, 5.0)));
+        let midspan = sim.rect_select(Box2D::new(
+            Point2D::new(40.0, -5.0),
+            Point2D::new(60.0, 5.0),
+        ));
         assert!(midspan.nodes.is_empty());
         assert_eq!(midspan.edges, vec![(a, b)]);
 
         // A box far above the segment: nothing.
-        let empty =
-            sim.rect_select(Box2D::new(Point2D::new(40.0, 500.0), Point2D::new(60.0, 600.0)));
+        let empty = sim.rect_select(Box2D::new(
+            Point2D::new(40.0, 500.0),
+            Point2D::new(60.0, 600.0),
+        ));
         assert!(empty.nodes.is_empty() && empty.edges.is_empty());
     }
 }

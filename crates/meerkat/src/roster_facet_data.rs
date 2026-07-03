@@ -4,13 +4,13 @@
 
 //! Data builders for Roster Facet Cards.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use forme::GraphMemberId;
 use kernel::graph::{EdgeFamily, FieldExtent};
 
-use super::{WindowCtx, roster};
-use crate::roster_data::{content_bucket, edge_family_label};
+use super::WindowCtx;
+use crate::roster;
 
 impl WindowCtx<'_> {
     pub(super) fn facet_card(&self, facet: &roster::FacetSubject) -> Option<roster::FacetCard> {
@@ -54,30 +54,30 @@ impl WindowCtx<'_> {
         let bucket = detail
             .content_type
             .as_deref()
-            .map(|ct| content_bucket(Some(ct)).1)
+            .map(|ct| roster::content_bucket(Some(ct)).1)
             .unwrap_or("Unknown");
-        Some(facet_card(
+        Some(roster::facet_card(
             "Content",
             detail.title.clone(),
             vec![
-                info("content type", content),
-                info("bucket", bucket),
-                info("url", detail.url),
+                roster::info("content type", content),
+                roster::info("bucket", bucket),
+                roster::info("url", detail.url),
             ],
-            vec![select_node_action(member)],
+            vec![roster::select_node_action(member)],
         ))
     }
 
     fn node_tags_facet(&self, member: GraphMemberId) -> Option<roster::FacetCard> {
         let detail = self.node_detail(member)?;
-        Some(facet_card(
+        Some(roster::facet_card(
             "Tags",
             detail.title,
             vec![
-                info("count", detail.tags.len().to_string()),
-                info("tags", nonempty_join(&detail.tags)),
+                roster::info("count", detail.tags.len().to_string()),
+                roster::info("tags", roster::nonempty_join(&detail.tags)),
             ],
-            vec![select_node_action(member)],
+            vec![roster::select_node_action(member)],
         ))
     }
 
@@ -88,31 +88,32 @@ impl WindowCtx<'_> {
         for rel in graph.relations().filter(|r| r.from == key || r.to == key) {
             *counts.entry(rel.kind.family()).or_default() += 1;
         }
-        let mut rows = vec![info("total", counts.values().sum::<usize>().to_string())];
-        rows.extend(
-            counts
-                .into_iter()
-                .map(|(family, count)| info(edge_family_label(family), count.to_string())),
-        );
-        Some(facet_card(
+        let mut rows = vec![roster::info(
+            "total",
+            counts.values().sum::<usize>().to_string(),
+        )];
+        rows.extend(counts.into_iter().map(|(family, count)| {
+            roster::info(roster::edge_family_label(family), count.to_string())
+        }));
+        Some(roster::facet_card(
             "Relations",
             graph.node_display_label(key),
             rows,
-            vec![select_node_action(member)],
+            vec![roster::select_node_action(member)],
         ))
     }
 
     fn node_fields_facet(&self, member: GraphMemberId) -> Option<roster::FacetCard> {
         let detail = self.node_detail(member)?;
         let fields = self.attached_field_names(member);
-        Some(facet_card(
+        Some(roster::facet_card(
             "Fields",
             detail.title,
             vec![
-                info("attached", fields.len().to_string()),
-                info("fields", nonempty_join(&fields)),
+                roster::info("attached", fields.len().to_string()),
+                roster::info("fields", roster::nonempty_join(&fields)),
             ],
-            vec![select_node_action(member)],
+            vec![roster::select_node_action(member)],
         ))
     }
 
@@ -125,16 +126,16 @@ impl WindowCtx<'_> {
         let link = self.link_card(from, to, None)?;
         let mut rows = Vec::new();
         for rel in link.relations.iter().filter(|rel| rel.family == family) {
-            rows.push(info(
+            rows.push(roster::info(
                 &rel.kind_label,
                 rel.label.as_deref().unwrap_or("relation cell"),
             ));
         }
         if rows.is_empty() {
-            rows.push(info("relations", "none"));
+            rows.push(roster::info("relations", "none"));
         }
-        Some(facet_card(
-            edge_family_label(family),
+        Some(roster::facet_card(
+            roster::edge_family_label(family),
             format!("{} -> {}", link.source_title, link.target_title),
             rows,
             vec![roster::FacetAction {
@@ -146,39 +147,39 @@ impl WindowCtx<'_> {
 
     fn field_rule_facet(&self, id: kernel::graph::FieldId) -> Option<roster::FacetCard> {
         let detail = self.field_detail(id)?;
-        Some(facet_card(
+        Some(roster::facet_card(
             "Field rule",
             detail.name,
             vec![
-                info("rule", detail.rule_label),
-                info("script", "not configured"),
-                info("template", "not configured"),
+                roster::info("rule", detail.rule_label),
+                roster::info("script", "not configured"),
+                roster::info("template", "not configured"),
             ],
-            vec![select_field_action(id)],
+            vec![roster::select_field_action(id)],
         ))
     }
 
     fn field_extent_facet(&self, id: kernel::graph::FieldId) -> Option<roster::FacetCard> {
         let detail = self.field_detail(id)?;
-        Some(facet_card(
+        Some(roster::facet_card(
             "Field extent",
             detail.name,
-            vec![info("extent", detail.extent_label)],
-            vec![select_field_action(id)],
+            vec![roster::info("extent", detail.extent_label)],
+            vec![roster::select_field_action(id)],
         ))
     }
 
     fn field_visibility_facet(&self, id: kernel::graph::FieldId) -> Option<roster::FacetCard> {
         let detail = self.field_detail(id)?;
-        Some(facet_card(
+        Some(roster::facet_card(
             "Field visibility",
             detail.name,
-            vec![info(
+            vec![roster::info(
                 "visibility",
                 if detail.hidden { "hidden" } else { "visible" },
             )],
             vec![
-                select_field_action(id),
+                roster::select_field_action(id),
                 roster::FacetAction {
                     label: if detail.hidden { "show" } else { "hide" }.to_string(),
                     intent: roster::FacetActionIntent::ToggleFieldVisibility(id),
@@ -189,10 +190,13 @@ impl WindowCtx<'_> {
 
     fn field_strength_facet(&self, id: kernel::graph::FieldId) -> Option<roster::FacetCard> {
         let detail = self.field_detail(id)?;
-        Some(facet_card(
+        Some(roster::facet_card(
             "Field strength",
             detail.name,
-            vec![info("strength", format!("{:.0}", detail.strength / 1000.0))],
+            vec![roster::info(
+                "strength",
+                format!("{:.0}", detail.strength / 1000.0),
+            )],
             vec![
                 roster::FacetAction {
                     label: "weaker".to_string(),
@@ -204,128 +208,5 @@ impl WindowCtx<'_> {
                 },
             ],
         ))
-    }
-}
-
-pub(super) fn node_facets(
-    member: GraphMemberId,
-    content_type: Option<&str>,
-    tag_count: usize,
-    relation_count: usize,
-    field_count: usize,
-) -> Vec<roster::FacetEntry> {
-    vec![
-        facet_entry(
-            "Content",
-            content_type.unwrap_or("unknown"),
-            roster::FacetSubject::NodeContent(member),
-        ),
-        facet_entry(
-            "Tags",
-            tag_count.to_string(),
-            roster::FacetSubject::NodeTags(member),
-        ),
-        facet_entry(
-            "Relations",
-            relation_count.to_string(),
-            roster::FacetSubject::NodeRelations(member),
-        ),
-        facet_entry(
-            "Fields",
-            field_count.to_string(),
-            roster::FacetSubject::NodeFields(member),
-        ),
-    ]
-}
-
-pub(super) fn link_facets(
-    from: GraphMemberId,
-    to: GraphMemberId,
-    relations: &[roster::LinkRelationRow],
-) -> Vec<roster::FacetEntry> {
-    let mut by_family: BTreeMap<EdgeFamily, (usize, BTreeSet<String>)> = BTreeMap::new();
-    for rel in relations {
-        let (count, kinds) = by_family.entry(rel.family).or_default();
-        *count += 1;
-        kinds.insert(rel.kind_label.clone());
-    }
-    by_family
-        .into_iter()
-        .map(|(family, (count, kinds))| {
-            let kinds = kinds.into_iter().collect::<Vec<_>>().join(", ");
-            facet_entry(
-                edge_family_label(family),
-                format!("{count}: {kinds}"),
-                roster::FacetSubject::LinkFamily { from, to, family },
-            )
-        })
-        .collect()
-}
-
-pub(super) fn field_facets(id: kernel::graph::FieldId) -> Vec<roster::FacetEntry> {
-    vec![
-        facet_entry("Rule", "inspect", roster::FacetSubject::FieldRule(id)),
-        facet_entry("Extent", "inspect", roster::FacetSubject::FieldExtent(id)),
-        facet_entry(
-            "Visibility",
-            "toggle",
-            roster::FacetSubject::FieldVisibility(id),
-        ),
-        facet_entry("Strength", "tune", roster::FacetSubject::FieldStrength(id)),
-    ]
-}
-
-fn facet_entry(
-    label: impl Into<String>,
-    value: impl Into<String>,
-    subject: roster::FacetSubject,
-) -> roster::FacetEntry {
-    roster::FacetEntry {
-        label: label.into(),
-        value: value.into(),
-        subject: roster::RosterSubject::Facet(subject),
-    }
-}
-
-fn facet_card(
-    title: impl Into<String>,
-    subtitle: impl Into<String>,
-    rows: Vec<roster::FacetInfoRow>,
-    actions: Vec<roster::FacetAction>,
-) -> roster::FacetCard {
-    roster::FacetCard {
-        title: title.into(),
-        subtitle: subtitle.into(),
-        rows,
-        actions,
-    }
-}
-
-fn info(label: impl Into<String>, value: impl Into<String>) -> roster::FacetInfoRow {
-    roster::FacetInfoRow {
-        label: label.into(),
-        value: value.into(),
-    }
-}
-
-fn select_node_action(member: GraphMemberId) -> roster::FacetAction {
-    roster::FacetAction {
-        label: "select node".to_string(),
-        intent: roster::FacetActionIntent::SelectNode(member),
-    }
-}
-
-fn select_field_action(id: kernel::graph::FieldId) -> roster::FacetAction {
-    roster::FacetAction {
-        label: "select field".to_string(),
-        intent: roster::FacetActionIntent::SelectField(id),
-    }
-}
-
-fn nonempty_join(values: &[String]) -> String {
-    if values.is_empty() {
-        "none".to_string()
-    } else {
-        values.join(", ")
     }
 }

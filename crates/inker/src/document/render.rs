@@ -118,9 +118,16 @@ impl EngineDocument {
 /// Each table row (header first, if any) as a plain-text line, cells joined by
 /// " | ". For exporters whose target format has no table model (gemtext,
 /// gophermap, plain text); callers wrap or prefix the lines as fits.
-pub(super) fn table_lines(header: &[Vec<InlineSpan>], rows: &[Vec<Vec<InlineSpan>>]) -> Vec<String> {
+pub(super) fn table_lines(
+    header: &[Vec<InlineSpan>],
+    rows: &[Vec<Vec<InlineSpan>>],
+) -> Vec<String> {
     let row_line = |cells: &[Vec<InlineSpan>]| {
-        cells.iter().map(|c| inline_text(c)).collect::<Vec<_>>().join(" | ")
+        cells
+            .iter()
+            .map(|c| inline_text(c))
+            .collect::<Vec<_>>()
+            .join(" | ")
     };
     let mut lines = Vec::new();
     if !header.is_empty() {
@@ -140,7 +147,9 @@ fn write_markdown_table(
     out: &mut String,
     pad: &str,
 ) {
-    let cols = header.len().max(rows.iter().map(Vec::len).max().unwrap_or(0));
+    let cols = header
+        .len()
+        .max(rows.iter().map(Vec::len).max().unwrap_or(0));
     if cols == 0 {
         return;
     }
@@ -304,7 +313,11 @@ impl Block {
             Self::Badge { text } => {
                 out.push_str(&format!("> *{text}*\n\n"));
             }
-            Self::Table { alignments, header, rows } => {
+            Self::Table {
+                alignments,
+                header,
+                rows,
+            } => {
                 write_markdown_table(alignments, header, rows, out, &pad);
             }
         }

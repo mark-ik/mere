@@ -211,7 +211,7 @@ shared core.
   (the serialization seams, §5/§5a measurements, the flat-Scene transfer path).
 - [mere_composition_spine](mere_docs/technical_architecture/2026-05-21_mere_composition_spine.md)
   (the layer tower: kernel → forme → platen → surfaces → host).
-- [document_script_substrate_plan](mere_docs/implementation_strategy/2026-06-21_document_script_substrate_plan.md)
+- [document_script_substrate_plan](archive_docs/2026-07-03_completed_plans/2026-06-21_document_script_substrate_plan.md)
   (D-doc §10.2/§10.3: the per-turn batched mutation contract, instance 7a).
 - serval repo: `components/script-engine-nova/lib.rs` (data-oriented `Value`,
   reflector bridge), `components/serval-scripted-dom/lib.rs` (NodeId arena,

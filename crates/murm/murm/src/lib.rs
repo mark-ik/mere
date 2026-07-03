@@ -54,8 +54,8 @@ pub use crate::gossip_sync::SyncedCabal;
 // Re-export key types from the layers we sit on, so consumers don't all
 // need direct dependencies on the lower crates.
 pub use identity::{Ed25519PublicKey, IdentityProvider};
-pub use transport::{Alpn, PeerID, Transport};
 pub use murmuring::{BilateralProtocol, ChannelName, InfoEntry, Post, PostId, PostKind};
+pub use transport::{Alpn, PeerID, Transport};
 
 // Re-export Cable's primary entry points so murm consumers don't need a
 // direct dependency on murmuring just to send/receive Cable posts.
@@ -162,7 +162,6 @@ impl<T: Transport> Murm<T> {
     ) -> Result<identity::Ed25519Keypair, MurmError> {
         Ok(self.identity.derive_keypair(cabal_key.as_bytes())?)
     }
-
 }
 
 /// Crate version.
@@ -207,10 +206,7 @@ mod tests {
             Err(transport::TransportError::ConnectionRefused)
         }
 
-        async fn accept(
-            &self,
-            _alpn: Alpn,
-        ) -> Result<Self::Stream, transport::TransportError> {
+        async fn accept(&self, _alpn: Alpn) -> Result<Self::Stream, transport::TransportError> {
             Err(transport::TransportError::ConnectionRefused)
         }
     }
@@ -349,7 +345,9 @@ mod tests {
         assert_eq!(hash_post(&got_local), local_id);
 
         // Alice authors; bob ingests the post object → subscriber sees it.
-        let remote_id = alice_cabal.send_text_at("session", "from alice", 2).unwrap();
+        let remote_id = alice_cabal
+            .send_text_at("session", "from alice", 2)
+            .unwrap();
         let post = alice_cabal.get_post(&remote_id).unwrap();
         bob_cabal.ingest_post(post).unwrap();
         let got_remote = bob_rx.try_recv().expect("ingested post emitted");
@@ -387,8 +385,8 @@ mod tests {
     // End-to-end integration: Cable post roundtrip between two peers
     // ─────────────────────────────────────────────────────────────────
 
-    use transport::memory::MemoryTransport;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use transport::memory::MemoryTransport;
 
     /// Read a LEB128 varint from an async reader.
     async fn read_varint_async(reader: &mut (impl AsyncReadExt + Unpin)) -> u64 {

@@ -4,8 +4,8 @@
 
 use std::collections::{HashMap, VecDeque};
 
-use crate::channels::*;
 use super::*;
+use crate::channels::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PendingInvariantToken {

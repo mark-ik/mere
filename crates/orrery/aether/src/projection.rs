@@ -90,7 +90,9 @@ impl FieldProjection {
         for coupling in &self.couplings {
             let _ = kernel::graph::apply::apply_graph_delta(
                 graph,
-                kernel::graph::apply::GraphDelta::AddCoupling { coupling: coupling.clone() },
+                kernel::graph::apply::GraphDelta::AddCoupling {
+                    coupling: coupling.clone(),
+                },
             );
         }
         (fields, self.couplings.len())

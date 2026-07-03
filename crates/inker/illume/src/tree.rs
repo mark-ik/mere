@@ -244,8 +244,8 @@ mod tests {
         let f = folds(SAMPLE);
         // The code block is multi-line and foldable.
         assert!(
-            f.iter()
-                .any(|fold| fold.kind == NodeKind::CodeBlock && SAMPLE[fold.range.clone()].contains('\n')),
+            f.iter().any(|fold| fold.kind == NodeKind::CodeBlock
+                && SAMPLE[fold.range.clone()].contains('\n')),
             "expected a code-block fold, got {f:?}"
         );
         // The list (two items across lines) folds.

@@ -24,9 +24,7 @@
 //! seam and translates its nav-event stream into [`NavSignal`]s, so this crate stays
 //! free of the platform WebView dep and is unit-testable on its own.
 
-use verso_api::{
-    Carry, Cookie, FlipReceiver, FormValues, LayerSet, PortableViewState,
-};
+use verso_api::{Carry, Cookie, FlipReceiver, FormValues, LayerSet, PortableViewState};
 
 /// The handful of WebView operations a forward flip needs, abstracted so this crate
 /// does not depend on the concrete (Windows-only) producer. The host implements it
@@ -166,7 +164,10 @@ impl ScryForward {
         }
         let mut js = String::from("(function(){");
         if has_scroll {
-            js.push_str(&format!("window.scrollTo({},{});", self.scroll.0, self.scroll.1));
+            js.push_str(&format!(
+                "window.scrollTo({},{});",
+                self.scroll.0, self.scroll.1
+            ));
         }
         for (key, value) in fields {
             // getElementsByName takes the raw name (no CSS escaping); fall back to id.
@@ -278,7 +279,10 @@ mod tests {
         let mut flip = ScryForward::new(forward_state());
         flip.begin(&mut surface).unwrap();
         assert_eq!(surface.cookies.len(), 1); // session set
-        assert_eq!(surface.navigated.as_deref(), Some("https://example.com/app")); // then navigate
+        assert_eq!(
+            surface.navigated.as_deref(),
+            Some("https://example.com/app")
+        ); // then navigate
         assert!(!flip.is_done()); // waiting for the load
     }
 

@@ -85,7 +85,8 @@ pub(crate) fn sample_graph() -> Graph {
     }
     // Ring edges around the cycle.
     for i in 0..count {
-        let _ = graph_apply::assert_relation(&mut graph, keys[i], keys[(i + 1) % count], hyperlink());
+        let _ =
+            graph_apply::assert_relation(&mut graph, keys[i], keys[(i + 1) % count], hyperlink());
     }
     // A few spokes from node 0 across the ring.
     for i in (2..count).step_by(3) {

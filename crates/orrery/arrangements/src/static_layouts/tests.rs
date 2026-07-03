@@ -1,6 +1,6 @@
 use super::*;
-use euclid::default::{Rect, Size2D};
 use crate::scene::{CanvasEdge, CanvasNode};
+use euclid::default::{Rect, Size2D};
 
 fn viewport() -> CanvasViewport {
     CanvasViewport {

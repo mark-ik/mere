@@ -40,9 +40,7 @@ mod tests {
     use crate::layout::layout_document;
     use crate::style_sheet::DocumentStyleSheet;
     use crate::types::Viewport;
-    use inker::{
-        Block, DocumentProvenance, DocumentTrustState, EngineDocument, InlineSpan,
-    };
+    use inker::{Block, DocumentProvenance, DocumentTrustState, EngineDocument, InlineSpan};
 
     fn doc(blocks: Vec<Block>) -> EngineDocument {
         EngineDocument {
@@ -58,8 +56,11 @@ mod tests {
     }
 
     fn scene_for(blocks: Vec<Block>) -> Scene {
-        let laid =
-            layout_document(&doc(blocks), Viewport::new(640.0, 480.0), &DocumentStyleSheet::default());
+        let laid = layout_document(
+            &doc(blocks),
+            Viewport::new(640.0, 480.0),
+            &DocumentStyleSheet::default(),
+        );
         scene_from_packet(&laid.packet, &laid.fonts, &ColorVocabulary::default())
     }
 
@@ -86,8 +87,11 @@ mod tests {
 
     #[test]
     fn viewport_rounds_to_u32() {
-        let laid =
-            layout_document(&doc(vec![]), Viewport::new(640.4, 480.6), &DocumentStyleSheet::default());
+        let laid = layout_document(
+            &doc(vec![]),
+            Viewport::new(640.4, 480.6),
+            &DocumentStyleSheet::default(),
+        );
         let scene = scene_from_packet(&laid.packet, &laid.fonts, &ColorVocabulary::default());
         assert_eq!(scene.viewport_width, 640);
         assert_eq!(scene.viewport_height, 481);

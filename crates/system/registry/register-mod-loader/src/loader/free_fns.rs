@@ -82,7 +82,9 @@ fn validate_wasm_binary(path: &Path) -> Result<(), ModLoadPathError> {
     Ok(())
 }
 
-pub(super) fn read_wasm_mod_from_path(path: &Path) -> Result<(ModManifest, WasmModSource), ModLoadPathError> {
+pub(super) fn read_wasm_mod_from_path(
+    path: &Path,
+) -> Result<(ModManifest, WasmModSource), ModLoadPathError> {
     if path.extension().and_then(|ext| ext.to_str()) != Some("wasm") {
         return Err(ModLoadPathError::UnsupportedModPath(path.to_path_buf()));
     }
@@ -259,11 +261,7 @@ pub fn resolve_mod_load_order(
 pub trait WasmModRuntime: Send + Sync {
     /// Activate a WASM mod. The runtime owns instantiation, WASI
     /// wiring, and any per-mod sandbox state.
-    fn activate(
-        &self,
-        manifest: &ModManifest,
-        source: &WasmModSource,
-    ) -> Result<(), String>;
+    fn activate(&self, manifest: &ModManifest, source: &WasmModSource) -> Result<(), String>;
     /// Deactivate a previously-activated WASM mod by ID. Called on
     /// rollback (activation failed midway through a load batch) and
     /// on explicit unload.
@@ -285,4 +283,3 @@ pub trait NativeModRuntime: Send + Sync {
     /// looks up the mod_id and dispatches to the mod's `activate` fn.
     fn activate(&self, mod_id: &str) -> Result<(), String>;
 }
-

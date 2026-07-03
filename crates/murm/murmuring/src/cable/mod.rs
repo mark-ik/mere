@@ -38,7 +38,7 @@ pub use crate::cable::persistent_store::PersistentCabalStore;
 pub use crate::cable::sign::{sign_post, verify_post};
 pub use crate::cable::store::InMemoryCabalStore;
 pub use crate::cable::wire::{
-    decode_post, encode_post, operation_id, operation_to_post, post_to_operation, CabalExt,
+    CabalExt, decode_post, encode_post, operation_id, operation_to_post, post_to_operation,
 };
 
 use crate::Post;

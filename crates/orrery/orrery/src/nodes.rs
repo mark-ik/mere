@@ -245,7 +245,10 @@ impl Orrery {
         };
         let _ = apply_graph_delta(
             &mut self.graph,
-            GraphDelta::NavigateNode { key, url: url.to_string() },
+            GraphDelta::NavigateNode {
+                key,
+                url: url.to_string(),
+            },
         );
         true
     }

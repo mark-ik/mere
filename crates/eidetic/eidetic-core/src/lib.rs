@@ -71,8 +71,8 @@ pub mod schema_def;
 pub mod typed;
 
 pub use browsing::{
-    BROWSING_TRACE_SCHEMA_REF, BrowsingMemory, BrowsingTrace, PageRef, TraceEvent,
-    TraceTransition, bootstrap_browsing_schema, save_trace,
+    BROWSING_TRACE_SCHEMA_REF, BrowsingMemory, BrowsingTrace, PageRef, TraceEvent, TraceTransition,
+    bootstrap_browsing_schema, save_trace,
 };
 pub use bundle::{
     BUNDLE_SCHEMA_REF, Bundle, BundleMember, bundle_schema_ref, load_bundle, save_bundle,

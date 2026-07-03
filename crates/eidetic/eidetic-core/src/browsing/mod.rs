@@ -25,12 +25,12 @@ pub mod lineage;
 
 use serde::{Deserialize, Serialize};
 
-use crate::manifest::{delete_manifest, NoFetcher};
+use crate::manifest::{NoFetcher, delete_manifest};
 use crate::schema::{
-    Hash, ManifestId, ModerationState, PrivacyClass, ProvenanceOrigin, ProvenanceRecord,
-    SchemaRef, Timestamp, TrustEnvelope, TrustLevel,
+    Hash, ManifestId, ModerationState, PrivacyClass, ProvenanceOrigin, ProvenanceRecord, SchemaRef,
+    Timestamp, TrustEnvelope, TrustLevel,
 };
-use crate::typed::{list_typed, load_typed, save_typed, TypedPayload};
+use crate::typed::{TypedPayload, list_typed, load_typed, save_typed};
 use crate::{Result, Store};
 
 /// Canonical bytes of the `BrowsingTrace` schema engram's payload
@@ -56,10 +56,7 @@ pub async fn bootstrap_browsing_schema(store: &mut dyn Store) -> Result<()> {
     }
     // Write the payload bytes verbatim — re-serialization could reorder JSON
     // keys and break the hash anchor.
-    let local_key = format!(
-        "blob:{}",
-        Hash::of(BROWSING_TRACE_SCHEMA_PAYLOAD).to_hex()
-    );
+    let local_key = format!("blob:{}", Hash::of(BROWSING_TRACE_SCHEMA_PAYLOAD).to_hex());
     store
         .save_blob(&local_key, BROWSING_TRACE_SCHEMA_PAYLOAD)
         .await?;
@@ -334,11 +331,7 @@ impl BrowsingMemory {
     /// Adopted unsaved traces are untouched — there is nothing stored to
     /// age out. Returns how many manifests were deleted.
     pub async fn apply_quota(&mut self, store: &mut dyn Store, keep_n: usize) -> Result<usize> {
-        let stored: Vec<ManifestId> = self
-            .traces
-            .iter()
-            .filter_map(|(id, _)| *id)
-            .collect();
+        let stored: Vec<ManifestId> = self.traces.iter().filter_map(|(id, _)| *id).collect();
         if stored.len() <= keep_n {
             return Ok(0);
         }
@@ -382,9 +375,7 @@ impl BrowsingMemory {
         self.traces = remaining;
         // Drop matching events from any unflushed open segment too.
         for events in self.open.values_mut() {
-            events.retain(|e| {
-                !(e.to.url == url || e.from.as_ref().is_some_and(|f| f.url == url))
-            });
+            events.retain(|e| !(e.to.url == url || e.from.as_ref().is_some_and(|f| f.url == url)));
         }
         Ok(forgotten)
     }

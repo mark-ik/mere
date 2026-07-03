@@ -75,7 +75,9 @@ fn hit_test_and_cull_resolve_nodes_by_position() {
     // No tick: refresh the index so queries see the synced positions.
     sim.refresh_spatial_index();
 
-    let a = sim.hit_test(Point2D::new(0.0, 0.0)).expect("point inside node a");
+    let a = sim
+        .hit_test(Point2D::new(0.0, 0.0))
+        .expect("point inside node a");
     let b = sim
         .hit_test(Point2D::new(100.0, 0.0))
         .expect("point inside node b");
@@ -87,8 +89,10 @@ fn hit_test_and_cull_resolve_nodes_by_position() {
 
     // A small box around the origin catches a (radius 18 reaches ±18) but
     // not b (its AABB starts at x=82).
-    let near_origin =
-        sim.cull_aabb(Box2D::new(Point2D::new(-10.0, -10.0), Point2D::new(10.0, 10.0)));
+    let near_origin = sim.cull_aabb(Box2D::new(
+        Point2D::new(-10.0, -10.0),
+        Point2D::new(10.0, 10.0),
+    ));
     assert_eq!(near_origin, vec![a]);
 
     // A wide box catches both.
@@ -336,16 +340,39 @@ fn node_collider_lowers_to_the_matching_parry_shape() {
     // The collider geometry follows the node's visible face: a ball for a circle, a cuboid
     // for a square, a round cuboid for a rounded square, and a convex polygon for a custom
     // hull (with a ball fallback when the hull is degenerate). (Node-rep — collider shape.)
-    assert_eq!(NodeCollider::Ball { radius: 10.0 }.to_shared_shape().shape_type(), ShapeType::Ball);
-    assert_eq!(NodeCollider::Square { half: 10.0 }.to_shared_shape().shape_type(), ShapeType::Cuboid);
     assert_eq!(
-        NodeCollider::RoundedSquare { half: 10.0, border: 3.0 }.to_shared_shape().shape_type(),
+        NodeCollider::Ball { radius: 10.0 }
+            .to_shared_shape()
+            .shape_type(),
+        ShapeType::Ball
+    );
+    assert_eq!(
+        NodeCollider::Square { half: 10.0 }
+            .to_shared_shape()
+            .shape_type(),
+        ShapeType::Cuboid
+    );
+    assert_eq!(
+        NodeCollider::RoundedSquare {
+            half: 10.0,
+            border: 3.0
+        }
+        .to_shared_shape()
+        .shape_type(),
         ShapeType::RoundCuboid,
     );
-    let square_hull =
-        NodeCollider::Hull { points: vec![(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)], fallback: 5.0 };
-    assert_eq!(square_hull.to_shared_shape().shape_type(), ShapeType::ConvexPolygon);
+    let square_hull = NodeCollider::Hull {
+        points: vec![(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)],
+        fallback: 5.0,
+    };
+    assert_eq!(
+        square_hull.to_shared_shape().shape_type(),
+        ShapeType::ConvexPolygon
+    );
     // A degenerate hull (a single point, no area) falls back to the ball.
-    let degenerate = NodeCollider::Hull { points: vec![(0.0, 0.0)], fallback: 5.0 };
+    let degenerate = NodeCollider::Hull {
+        points: vec![(0.0, 0.0)],
+        fallback: 5.0,
+    };
     assert_eq!(degenerate.to_shared_shape().shape_type(), ShapeType::Ball);
 }

@@ -153,7 +153,11 @@ pub const ORRERY_LAYOUT_STRATEGIES: &[(&str, &str)] = &[
 /// whole string. The kanban categorical axis groups nodes by this. (Arrangements — kanban.)
 fn url_host(url: &str) -> String {
     let after_scheme = url.split_once("://").map(|(_, rest)| rest).unwrap_or(url);
-    after_scheme.split(['/', '?', '#']).next().unwrap_or(after_scheme).to_string()
+    after_scheme
+        .split(['/', '?', '#'])
+        .next()
+        .unwrap_or(after_scheme)
+        .to_string()
 }
 
 /// Dispatch `id` to its cartography adapter and project against `graph` at viewport
@@ -200,8 +204,11 @@ fn project_orrery_dispatch(
                 .collect::<HashMap<_, _>>();
             let mut intent = options.to_view_intent();
             intent.axis_values = Some(axis);
-            KanbanAdapter::default()
-                .project(&ProjectionRequest { graph, signals: &signals, intent })
+            KanbanAdapter::default().project(&ProjectionRequest {
+                graph,
+                signals: &signals,
+                intent,
+            })
         }
         // Same kanban adapter, but the column key is the graph-structural **community** (the
         // Louvain partition) instead of the URL host — so the board groups by how the graph
@@ -220,15 +227,21 @@ fn project_orrery_dispatch(
             };
             let mut axis: HashMap<NodeKey, AxisValue> = HashMap::new();
             for (i, cluster) in clusters.clusters.iter().enumerate() {
-                let label = cluster.label.clone().unwrap_or_else(|| format!("Cluster {}", i + 1));
+                let label = cluster
+                    .label
+                    .clone()
+                    .unwrap_or_else(|| format!("Cluster {}", i + 1));
                 for &member in &cluster.members {
                     axis.insert(member, AxisValue::Categorical(label.clone()));
                 }
             }
             let mut intent = options.to_view_intent();
             intent.axis_values = Some(axis);
-            KanbanAdapter::default()
-                .project(&ProjectionRequest { graph, signals: &signals, intent })
+            KanbanAdapter::default().project(&ProjectionRequest {
+                graph,
+                signals: &signals,
+                intent,
+            })
         }
         // Timeline orders nodes along the horizontal axis by creation order (their enumeration
         // index) — a stand-in until a real per-node timestamp is plumbed. (Arrangements — timeline.)
@@ -240,8 +253,11 @@ fn project_orrery_dispatch(
                 .collect::<HashMap<_, _>>();
             let mut intent = options.to_view_intent();
             intent.axis_values = Some(axis);
-            TimelineAdapter::default()
-                .project(&ProjectionRequest { graph, signals: &signals, intent })
+            TimelineAdapter::default().project(&ProjectionRequest {
+                graph,
+                signals: &signals,
+                intent,
+            })
         }
         // Focus-driven: centers on `focus` (the pane's selection), BFS rings outward.
         // Without a focus there is no layout to compute, so leave the orrery as-is.
@@ -249,7 +265,10 @@ fn project_orrery_dispatch(
             if focus.is_none() {
                 return cartography::Projection::empty();
             }
-            let focused = CartographySceneOptions { focus, ..options.clone() };
+            let focused = CartographySceneOptions {
+                focus,
+                ..options.clone()
+            };
             project_with(graph, &signals, &focused, &RadialAdapter::default())
         }
         _ => return cartography::Projection::empty(),
@@ -345,15 +364,18 @@ pub fn project_orrery_subgraph(
         if r.from == r.to || !scope_set.contains(&r.from) || !scope_set.contains(&r.to) {
             continue;
         }
-        let pair = if r.from <= r.to { (r.from, r.to) } else { (r.to, r.from) };
+        let pair = if r.from <= r.to {
+            (r.from, r.to)
+        } else {
+            (r.to, r.from)
+        };
         if !seen.insert(pair) {
             continue;
         }
         let (Some(fa), Some(fb)) = (graph.get_node(r.from), graph.get_node(r.to)) else {
             continue;
         };
-        let (Some(sa), Some(sb)) =
-            (sub.get_node_key_by_id(fa.id), sub.get_node_key_by_id(fb.id))
+        let (Some(sa), Some(sb)) = (sub.get_node_key_by_id(fa.id), sub.get_node_key_by_id(fb.id))
         else {
             continue;
         };
@@ -405,9 +427,9 @@ pub fn project_orrery_strategy(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kernel::graph::fixtures::GraphFixtures;
     use arrangements::adapters::PhyllotaxisAdapter;
     use kernel::geometry::PortablePoint;
+    use kernel::graph::fixtures::GraphFixtures;
     use uuid::Uuid;
 
     fn triangle_graph() -> (Graph, [NodeKey; 3]) {
@@ -458,10 +480,19 @@ mod tests {
         let positions = project_orrery_strategy("kanban.community", &graph, None, 800, 600, None);
         assert_eq!(positions.len(), 6, "every node is placed");
         let x_of = |key: NodeKey| positions.iter().find(|(k, _)| *k == key).unwrap().1.x;
-        assert!((x_of(n[0]) - x_of(n[1])).abs() < 0.001, "triangle A shares one column");
+        assert!(
+            (x_of(n[0]) - x_of(n[1])).abs() < 0.001,
+            "triangle A shares one column"
+        );
         assert!((x_of(n[0]) - x_of(n[2])).abs() < 0.001);
-        assert!((x_of(n[3]) - x_of(n[4])).abs() < 0.001, "triangle B shares one column");
-        assert!((x_of(n[0]) - x_of(n[3])).abs() > 0.001, "the two communities are distinct columns");
+        assert!(
+            (x_of(n[3]) - x_of(n[4])).abs() < 0.001,
+            "triangle B shares one column"
+        );
+        assert!(
+            (x_of(n[0]) - x_of(n[3])).abs() > 0.001,
+            "the two communities are distinct columns"
+        );
     }
 
     #[test]
@@ -469,7 +500,11 @@ mod tests {
         let (graph, [a, _, _]) = triangle_graph();
         // With a focus, radial lays out the whole graph (focus at center).
         let with_focus = project_orrery_strategy("radial.default", &graph, Some(a), 800, 600, None);
-        assert_eq!(with_focus.len(), 3, "radial projects every node around the focus");
+        assert_eq!(
+            with_focus.len(),
+            3,
+            "radial projects every node around the focus"
+        );
         let focus_pos = with_focus.iter().find(|(k, _)| *k == a).unwrap().1;
         assert!(
             focus_pos.x.abs() < 0.001 && focus_pos.y.abs() < 0.001,
@@ -486,8 +521,18 @@ mod tests {
         let (a, b, c) = (NodeKey::new(0), NodeKey::new(1), NodeKey::new(2));
         let clusters = ClusterSet {
             clusters: vec![
-                Cluster { id: "c0".into(), label: Some("A".into()), members: vec![a, b], confidence: 1.0 },
-                Cluster { id: "c1".into(), label: None, members: vec![c], confidence: 1.0 },
+                Cluster {
+                    id: "c0".into(),
+                    label: Some("A".into()),
+                    members: vec![a, b],
+                    confidence: 1.0,
+                },
+                Cluster {
+                    id: "c1".into(),
+                    label: None,
+                    members: vec![c],
+                    confidence: 1.0,
+                },
             ],
         };
         let bridges = BridgeNodes { bridges: vec![b] };
@@ -497,13 +542,18 @@ mod tests {
             matches!(&overlays[0], Overlay::ClusterHalo { members, .. } if *members == vec![a, b]),
             "the first halo is the first cluster (order preserved for colour matching)"
         );
-        assert!(matches!(&overlays[1], Overlay::ClusterHalo { cluster_id, .. } if cluster_id == "c1"));
+        assert!(
+            matches!(&overlays[1], Overlay::ClusterHalo { cluster_id, .. } if cluster_id == "c1")
+        );
         assert!(matches!(&overlays[2], Overlay::BridgeEmphasis { node, .. } if *node == b));
     }
 
     #[test]
     fn signal_overlays_empty_without_signals() {
-        assert!(signal_overlays(None, None).is_empty(), "no signals => no overlays");
+        assert!(
+            signal_overlays(None, None).is_empty(),
+            "no signals => no overlays"
+        );
     }
 
     #[test]
@@ -518,8 +568,15 @@ mod tests {
             graph.assert_semantic_predicate(n[a], n[b], "links".to_string());
         }
         let clusters = signals::community_louvain(&graph);
-        let lens =
-            project_orrery_lens("spectral.default", &graph, None, 800, 600, Some(&clusters), None);
+        let lens = project_orrery_lens(
+            "spectral.default",
+            &graph,
+            None,
+            800,
+            600,
+            Some(&clusters),
+            None,
+        );
         assert_eq!(lens.nodes.len(), 6, "spectral lays out every node");
         let halos = lens
             .overlays
@@ -528,8 +585,13 @@ mod tests {
             .count();
         assert_eq!(halos, 2, "two communities => two halos ride the projection");
         // The positions-only path is unchanged (it drops the overlays).
-        let positions = project_orrery_strategy("spectral.default", &graph, None, 800, 600, Some(&clusters));
-        assert_eq!(positions.len(), 6, "the positions wrapper still returns every node");
+        let positions =
+            project_orrery_strategy("spectral.default", &graph, None, 800, 600, Some(&clusters));
+        assert_eq!(
+            positions.len(),
+            6,
+            "the positions wrapper still returns every node"
+        );
     }
 
     #[test]

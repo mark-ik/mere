@@ -125,8 +125,7 @@ fn viewer_registry_selects_middlenet_for_titan_scheme_without_mime_hint() {
 #[test]
 fn viewer_registry_selects_middlenet_for_gemini_mime() {
     let registry = ViewerRegistry::default();
-    let selection =
-        registry.select_for_uri("https://example.com/capsule.gmi", Some("text/gemini"));
+    let selection = registry.select_for_uri("https://example.com/capsule.gmi", Some("text/gemini"));
 
     assert_eq!(selection.viewer_id, "viewer:middlenet");
     assert!(!selection.fallback_used);

@@ -97,7 +97,7 @@ also where the scattered per-node toggles we keep adding to the context menu
    sprite orthogonal (any form can carry one)? Likely a variant for the face-replacing case.
 7. **Scripted / live forms.** Does the editor connect to P2's scripted form (the field-regions
    rhai substrate) and to live-texture nodes (P2-interactive, owned by
-   [native_surface_compositing_plan](../implementation_strategy/2026-06-19_native_surface_compositing_plan.md))?
+   [native_surface_compositing_plan](../../archive_docs/2026-07-03_completed_plans/2026-06-19_native_surface_compositing_plan.md))?
    A static sprite is the floor; scripted/live is the ceiling.
 
 ## Suggested first steps (smallest real progress, in order)

@@ -4,10 +4,15 @@
 
 use std::collections::{HashMap, hash_map::Entry};
 
-use super::{action_id, InputBinding, InputBindingRemap, InputContext, InputConflict, InputActionBindingDescriptor};
-use super::defaults::{binding_label, default_binding_specs, legacy_binding,
-    toolbar_submit_binding, graph_view_confirm_binding,
-    toolbar_nav_back_binding, toolbar_nav_forward_binding, toolbar_nav_reload_binding};
+use super::defaults::{
+    binding_label, default_binding_specs, graph_view_confirm_binding, legacy_binding,
+    toolbar_nav_back_binding, toolbar_nav_forward_binding, toolbar_nav_reload_binding,
+    toolbar_submit_binding,
+};
+use super::{
+    InputActionBindingDescriptor, InputBinding, InputBindingRemap, InputConflict, InputContext,
+    action_id,
+};
 
 pub(super) enum BindingSlot {
     Routed(String),
@@ -94,11 +99,7 @@ impl InputRegistry {
         }
     }
 
-    pub fn resolve(
-        &self,
-        binding: &InputBinding,
-        context: InputContext,
-    ) -> InputBindingResolution {
+    pub fn resolve(&self, binding: &InputBinding, context: InputContext) -> InputBindingResolution {
         let label = binding_label(binding, context);
         match self.bindings.get(&(context, binding.clone())) {
             Some(BindingSlot::Routed(action_id)) => InputBindingResolution {

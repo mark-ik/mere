@@ -20,12 +20,12 @@
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-use eidetic::schema::{
-    Hash, ManifestId, ModerationState, PrivacyClass, ProvenanceOrigin, ProvenanceRecord,
-    SchemaRef, Timestamp, TrustEnvelope, TrustLevel,
-};
-use eidetic::typed::{save_typed, TypedPayload};
 use eidetic::Store;
+use eidetic::schema::{
+    Hash, ManifestId, ModerationState, PrivacyClass, ProvenanceOrigin, ProvenanceRecord, SchemaRef,
+    Timestamp, TrustEnvelope, TrustLevel,
+};
+use eidetic::typed::{TypedPayload, save_typed};
 
 use crate::{Result, SearchError};
 

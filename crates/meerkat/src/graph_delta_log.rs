@@ -165,8 +165,9 @@ mod tests {
     };
     use kernel::persistence::GraphSnapshot;
     use kernel::types::{
-        ClassificationProvenance, ClassificationScheme, ClassificationStatus, FrameLayoutHint,
-        NodeClassification, NodeDerivation, NodeProperty, SplitOrientation,
+        BadgeIcon, ClassificationProvenance, ClassificationScheme, ClassificationStatus,
+        FrameLayoutHint, NodeClassification, NodeDerivation, NodeImportProvenance, NodeProperty,
+        SplitOrientation,
     };
 
     fn normalized_snapshot_json(graph: &Graph) -> serde_json::Value {
@@ -348,6 +349,21 @@ mod tests {
         );
         let _ = apply_graph_delta(
             &mut graph,
+            GraphDelta::InsertNodeTag {
+                key: a,
+                tag: "paper".into(),
+            },
+        );
+        let _ = apply_graph_delta(
+            &mut graph,
+            GraphDelta::SetNodeTagIconOverride {
+                key: a,
+                tag: "paper".into(),
+                icon: Some(BadgeIcon::Lucide("file-text".into())),
+            },
+        );
+        let _ = apply_graph_delta(
+            &mut graph,
             GraphDelta::NavigateNode {
                 key: b,
                 url: "https://b.test/one".into(),
@@ -436,6 +452,61 @@ mod tests {
         );
         let _ = apply_graph_delta(
             &mut graph,
+            GraphDelta::AddNodeClassification {
+                key: a,
+                classification: NodeClassification {
+                    scheme: ClassificationScheme::ContentKind,
+                    value: "essay".into(),
+                    label: Some("Essay".into()),
+                    confidence: 0.6,
+                    provenance: ClassificationProvenance::AgentSuggested,
+                    status: ClassificationStatus::Suggested,
+                    primary: false,
+                },
+            },
+        );
+        let _ = apply_graph_delta(
+            &mut graph,
+            GraphDelta::AddNodeClassification {
+                key: a,
+                classification: NodeClassification {
+                    scheme: ClassificationScheme::ContentKind,
+                    value: "draft".into(),
+                    label: Some("Draft".into()),
+                    confidence: 0.3,
+                    provenance: ClassificationProvenance::AgentSuggested,
+                    status: ClassificationStatus::Suggested,
+                    primary: false,
+                },
+            },
+        );
+        let _ = apply_graph_delta(
+            &mut graph,
+            GraphDelta::SetNodeClassificationStatus {
+                key: a,
+                scheme: ClassificationScheme::ContentKind,
+                value: "article".into(),
+                status: ClassificationStatus::Verified,
+            },
+        );
+        let _ = apply_graph_delta(
+            &mut graph,
+            GraphDelta::SetNodePrimaryClassification {
+                key: a,
+                scheme: ClassificationScheme::ContentKind,
+                value: "essay".into(),
+            },
+        );
+        let _ = apply_graph_delta(
+            &mut graph,
+            GraphDelta::RemoveNodeClassification {
+                key: a,
+                scheme: ClassificationScheme::ContentKind,
+                value: "draft".into(),
+            },
+        );
+        let _ = apply_graph_delta(
+            &mut graph,
             GraphDelta::RecordNodeDerivation {
                 key: a,
                 derivation: NodeDerivation {
@@ -517,10 +588,28 @@ mod tests {
                 current_index: 9,
             },
         );
+        let _ = apply_graph_delta(
+            &mut graph,
+            GraphDelta::SetNodeImportProvenance {
+                key: a,
+                import_provenance: vec![NodeImportProvenance {
+                    source_id: "import:seed".into(),
+                    source_label: "Seed import".into(),
+                }],
+            },
+        );
+        let _ = apply_graph_delta(
+            &mut graph,
+            GraphDelta::SetImportRecordMembershipSuppressed {
+                record_id: "import-record:import:seed".into(),
+                key: a,
+                suppressed: true,
+            },
+        );
 
         let path = log.path().expect("log path").to_path_buf();
         let entries = read_delta_log(&path).expect("read log");
-        assert_eq!(entries.len(), 37);
+        assert_eq!(entries.len(), 46);
         let replayed = replay_delta_log(&path).expect("replay log");
         assert_eq!(replayed.node_count(), 3);
         assert_eq!(replayed.edge_count(), 2);
@@ -558,13 +647,32 @@ mod tests {
         assert!(node.compat_mode);
         assert_eq!(node.body.as_deref(), Some("body"));
         assert!(!node.tags.contains("research"));
+        assert!(node.tags.contains("paper"));
+        assert_eq!(
+            node.tag_presentation.icon_overrides.get("paper"),
+            Some(&BadgeIcon::Lucide("file-text".into()))
+        );
         assert_eq!(node.properties.len(), 1);
         assert_eq!(
             node.properties[0].predicate,
             "https://schema.org/datePublished"
         );
-        assert_eq!(node.classifications.len(), 1);
-        assert_eq!(node.classifications[0].value, "article");
+        assert_eq!(node.classifications.len(), 2);
+        assert!(node.classifications.iter().any(|classification| {
+            classification.value == "article"
+                && classification.status == ClassificationStatus::Verified
+                && !classification.primary
+        }));
+        assert!(node.classifications.iter().any(|classification| {
+            classification.value == "essay"
+                && classification.status == ClassificationStatus::Suggested
+                && classification.primary
+        }));
+        assert!(
+            node.classifications
+                .iter()
+                .all(|classification| classification.value != "draft")
+        );
         assert_eq!(node.derivations.len(), 1);
         assert_eq!(
             node.derivations[0].sub_kind,
@@ -655,6 +763,16 @@ mod tests {
             ]
         );
         assert_eq!(history.current_index, 2);
+        let import_records = replayed.import_records();
+        assert_eq!(import_records.len(), 1);
+        assert_eq!(import_records[0].record_id, "import-record:import:seed");
+        assert!(import_records[0].memberships[0].suppressed);
+        assert!(
+            replayed
+                .node_import_provenance(replayed_a)
+                .expect("replayed import provenance")
+                .is_empty()
+        );
         assert_eq!(
             normalized_snapshot_json(&replayed),
             normalized_snapshot_json(&graph)

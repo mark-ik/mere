@@ -78,7 +78,10 @@ mod tests {
     #[test]
     fn matches_url_mention_tag() {
         let got = pairs("see https://ex.com/p and @ada about #rust");
-        assert!(got.contains(&(SyntaxKind::Url, "https://ex.com/p")), "{got:?}");
+        assert!(
+            got.contains(&(SyntaxKind::Url, "https://ex.com/p")),
+            "{got:?}"
+        );
         assert!(got.contains(&(SyntaxKind::Mention, "@ada")), "{got:?}");
         assert!(got.contains(&(SyntaxKind::Tag, "#rust")), "{got:?}");
     }
@@ -91,7 +94,10 @@ mod tests {
                 .any(|(k, s)| *k == SyntaxKind::Email && *s == "ada@example.com"),
             "{got:?}"
         );
-        assert!(!got.iter().any(|(k, _)| *k == SyntaxKind::Mention), "{got:?}");
+        assert!(
+            !got.iter().any(|(k, _)| *k == SyntaxKind::Mention),
+            "{got:?}"
+        );
     }
 
     #[test]

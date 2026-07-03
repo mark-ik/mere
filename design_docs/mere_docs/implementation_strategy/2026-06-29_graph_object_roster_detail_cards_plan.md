@@ -33,7 +33,7 @@ Sibling / converging docs:
   focus-card slot. This plan deliberately keeps roster cards inside the Roster pane.
 - [graphlet_wiring_plan](2026-06-25_graphlet_wiring_plan.md) owns graphlet
   derivation, drift tracking, reconciliation, and scoped windows.
-- [context_submenus_plan](2026-06-25_context_submenus_plan.md) owns the quick
+- [context_submenus_plan](../../archive_docs/2026-07-03_completed_plans/2026-06-25_context_submenus_plan.md) owns the quick
   context-menu grammar that roster cards reuse for relation actions.
 - [swatch_primitive_plan](2026-06-27_swatch_primitive_plan.md) owns per-cell
   canvas hit-testing, cells-as-edges, and the eventual visibility stack.

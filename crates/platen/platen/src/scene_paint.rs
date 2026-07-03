@@ -147,10 +147,22 @@ impl Camera {
         let z = self.zoom;
         let tz = self.tilt * self.zoom;
         LayoutTransform::new(
-            c * z, s * tz, 0.0, 0.0,
-            -s * z, c * tz, 0.0, 0.0,
-            0.0, 0.0, 1.0, 0.0,
-            self.offset.0, self.offset.1, 0.0, 1.0,
+            c * z,
+            s * tz,
+            0.0,
+            0.0,
+            -s * z,
+            c * tz,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            self.offset.0,
+            self.offset.1,
+            0.0,
+            1.0,
         )
     }
 }
@@ -228,9 +240,23 @@ pub fn paint_projection_filtered(
     let node_radius: HashMap<NodeKey, f32> = projection
         .nodes
         .iter()
-        .map(|n| (n.node, if n.radius > 0.0 { n.radius } else { style.default_node_radius }))
+        .map(|n| {
+            (
+                n.node,
+                if n.radius > 0.0 {
+                    n.radius
+                } else {
+                    style.default_node_radius
+                },
+            )
+        })
         .collect();
-    let radius_of = |key: &NodeKey| node_radius.get(key).copied().unwrap_or(style.default_node_radius);
+    let radius_of = |key: &NodeKey| {
+        node_radius
+            .get(key)
+            .copied()
+            .unwrap_or(style.default_node_radius)
+    };
 
     // Edges first (painted under the nodes).
     for edge in &projection.edges {
@@ -244,7 +270,7 @@ pub fn paint_projection_filtered(
                 // visual edge. (Node-rep Decision 5 — face geometry.)
                 (Some(&a), Some(&b)) => {
                     trim_to_faces(a, b, radius_of(&edge.from), radius_of(&edge.to))
-                },
+                }
                 _ => continue,
             }
         };
@@ -255,7 +281,9 @@ pub fn paint_projection_filtered(
         }
         commands.push(PaintCmd::DrawStroke(StrokeItem {
             placement: CommonPlacement::new(bounds_of(&polyline)),
-            path: PathData { commands: path_cmds },
+            path: PathData {
+                commands: path_cmds,
+            },
             color: style.edge_color,
             // Edge weight (the multigraph multiplicity) thickens the stroke: weight 1 paints the
             // normal width, heavier pairs scale up, capped so a busy pair stays legible. (Graph
@@ -395,7 +423,12 @@ mod tests {
         // the orrery's universal underlay path (project_keys -> paint_projection_filtered) feeds
         // weighted edges in EVERY layout mode, edge thickness shows under analytic layouts too, not
         // only force-directed. (Graph signals — edge-weight encoding.)
-        let (a, b, c, d) = (NodeKey::new(0), NodeKey::new(1), NodeKey::new(2), NodeKey::new(3));
+        let (a, b, c, d) = (
+            NodeKey::new(0),
+            NodeKey::new(1),
+            NodeKey::new(2),
+            NodeKey::new(3),
+        );
         let projection = Projection {
             nodes: vec![
                 node(a, 0.0, 0.0, 0.0),
@@ -404,8 +437,20 @@ mod tests {
                 node(d, 100.0, 100.0, 0.0),
             ],
             edges: vec![
-                PositionedEdge { edge: None, from: a, to: b, path: Vec::new(), weight: 1.0 },
-                PositionedEdge { edge: None, from: c, to: d, path: Vec::new(), weight: 2.0 },
+                PositionedEdge {
+                    edge: None,
+                    from: a,
+                    to: b,
+                    path: Vec::new(),
+                    weight: 1.0,
+                },
+                PositionedEdge {
+                    edge: None,
+                    from: c,
+                    to: d,
+                    path: Vec::new(),
+                    weight: 2.0,
+                },
             ],
             ..Projection::empty()
         };
@@ -427,7 +472,10 @@ mod tests {
             .collect();
         widths.sort_by(|x, y| x.partial_cmp(y).unwrap());
         assert_eq!(widths.len(), 2, "one stroke per edge");
-        assert!((widths[0] - style.edge_width).abs() < 1e-4, "the unit pair paints the default width");
+        assert!(
+            (widths[0] - style.edge_width).abs() < 1e-4,
+            "the unit pair paints the default width"
+        );
         assert!(
             (widths[1] - style.edge_width * 2.0).abs() < 1e-4,
             "the weight-2 pair paints twice as thick: {}",
@@ -480,8 +528,14 @@ mod tests {
         // a's face at r=10, b's at r=18 → the stroke runs 10..82 along the x-axis.
         let seg = trim_to_faces(a, b, 10.0, 18.0);
         assert_eq!(seg.len(), 2);
-        assert!((seg[0].x - 10.0).abs() < 1e-4 && seg[0].y.abs() < 1e-4, "near end at a's face");
-        assert!((seg[1].x - 82.0).abs() < 1e-4 && seg[1].y.abs() < 1e-4, "far end at b's face");
+        assert!(
+            (seg[0].x - 10.0).abs() < 1e-4 && seg[0].y.abs() < 1e-4,
+            "near end at a's face"
+        );
+        assert!(
+            (seg[1].x - 82.0).abs() < 1e-4 && seg[1].y.abs() < 1e-4,
+            "far end at b's face"
+        );
 
         // Faces that overlap (radii exceed the gap) fall back to center-to-center so
         // the stroke never reverses.
@@ -492,7 +546,12 @@ mod tests {
 
     #[test]
     fn camera_top_down_is_plain_scale_translate() {
-        let cam = Camera { offset: (10.0, 20.0), zoom: 2.0, yaw: 0.0, tilt: 1.0 };
+        let cam = Camera {
+            offset: (10.0, 20.0),
+            zoom: 2.0,
+            yaw: 0.0,
+            tilt: 1.0,
+        };
         assert_eq!(
             cam.to_screen(PortablePoint::new(5.0, 7.0)),
             (5.0 * 2.0 + 10.0, 7.0 * 2.0 + 20.0)
@@ -504,7 +563,12 @@ mod tests {
 
     #[test]
     fn camera_isometric_foreshortens_y_and_round_trips() {
-        let cam = Camera { offset: (0.0, 0.0), zoom: 1.0, yaw: 0.0, tilt: 0.5 };
+        let cam = Camera {
+            offset: (0.0, 0.0),
+            zoom: 1.0,
+            yaw: 0.0,
+            tilt: 0.5,
+        };
         let (sx, sy) = cam.to_screen(PortablePoint::new(10.0, 10.0));
         assert!((sx - 10.0).abs() < 1e-4, "x is unaffected by tilt");
         assert!((sy - 5.0).abs() < 1e-4, "y is foreshortened by tilt");
@@ -519,11 +583,18 @@ mod tests {
     fn ground_transform_matches_to_screen_under_yaw() {
         // The ground affine must agree with `to_screen` (which positions the upright
         // billboards) so edges meet the cards under an orbit. Verified at yaw != 0.
-        let cam = Camera { offset: (3.0, 5.0), zoom: 1.5, yaw: 0.6, tilt: 0.55 };
+        let cam = Camera {
+            offset: (3.0, 5.0),
+            zoom: 1.5,
+            yaw: 0.6,
+            tilt: 0.55,
+        };
         let t = cam.ground_transform();
         for (x, y) in [(0.0_f32, 0.0_f32), (40.0, -20.0), (-15.0, 33.0)] {
             let (sx, sy) = cam.to_screen(PortablePoint::new(x, y));
-            let p = t.transform_point2d(LayoutPoint::new(x, y)).expect("affine maps");
+            let p = t
+                .transform_point2d(LayoutPoint::new(x, y))
+                .expect("affine maps");
             assert!(
                 (p.x - sx).abs() < 1e-3 && (p.y - sy).abs() < 1e-3,
                 "ground transform must match to_screen at ({x},{y}): ({},{}) vs ({sx},{sy})",

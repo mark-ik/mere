@@ -28,7 +28,7 @@ use kernel::graph::{Graph, NodeKey, RelationView};
 use paint_list_api::DeviceIntSize;
 
 use crate::coupling_paint::{paint_projection_with_visuals, visual_overlays};
-use crate::scene_paint::{paint_projection_filtered, Camera, CanvasPaintList, ScenePaintStyle};
+use crate::scene_paint::{Camera, CanvasPaintList, ScenePaintStyle, paint_projection_filtered};
 
 /// Build a [`Projection`] from the graph's committed node positions and its
 /// relations (collapsed to undirected, de-duplicated pairs — the orrery draws one
@@ -36,7 +36,13 @@ use crate::scene_paint::{paint_projection_filtered, Camera, CanvasPaintList, Sce
 /// (the paint layer substitutes the style default); `content_bounds` is the
 /// axis-aligned box of the node positions, for a host that fits the view.
 pub fn projection_from_graph(graph: &Graph) -> Projection {
-    project(graph, |k| graph.node_projected_position(k), |_| true, "orrery.stored", true)
+    project(
+        graph,
+        |k| graph.node_projected_position(k),
+        |_| true,
+        "orrery.stored",
+        true,
+    )
 }
 
 /// Build a [`Projection`] from a caller-supplied *live* position lookup (e.g. the
@@ -79,7 +85,10 @@ pub fn identity_arrangement(graph: &Graph) -> Arrangement {
 pub fn arrangement_of_keys(graph: &Graph, keys: &[NodeKey]) -> Arrangement {
     let set: HashSet<NodeKey> = keys.iter().copied().collect();
     Arrangement::identity(
-        graph.nodes().filter(|(k, _)| set.contains(k)).map(|(_, node)| node.id),
+        graph
+            .nodes()
+            .filter(|(k, _)| set.contains(k))
+            .map(|(_, node)| node.id),
     )
 }
 
@@ -114,8 +123,7 @@ where
 /// is a membership filter over `graph.nodes()`; a member absent from the graph is
 /// skipped.
 fn arrangement_keys(graph: &Graph, arrangement: &Arrangement) -> Vec<NodeKey> {
-    let members: HashSet<GraphMemberId> =
-        arrangement.referenced_members().into_iter().collect();
+    let members: HashSet<GraphMemberId> = arrangement.referenced_members().into_iter().collect();
     graph
         .nodes()
         .filter(|(_, node)| members.contains(&node.id))
@@ -140,7 +148,14 @@ where
     V: Fn(&RelationView) -> bool,
 {
     let keys: Vec<NodeKey> = graph.nodes().map(|(key, _node)| key).collect();
-    project_keys(graph, &keys, position_of, edge_visible, strategy_id, settled)
+    project_keys(
+        graph,
+        &keys,
+        position_of,
+        edge_visible,
+        strategy_id,
+        settled,
+    )
 }
 
 /// Projection core over an explicit node-key set — the membership source. Both the
@@ -207,7 +222,13 @@ fn projected_undirected_edges(
             Some(&i) => edges[i].weight += 1.0,
             None => {
                 index_of.insert(pair, edges.len());
-                edges.push(PositionedEdge { edge: None, from: a, to: b, path: Vec::new(), weight: 1.0 });
+                edges.push(PositionedEdge {
+                    edge: None,
+                    from: a,
+                    to: b,
+                    path: Vec::new(),
+                    weight: 1.0,
+                });
             }
         }
     }
@@ -358,7 +379,6 @@ fn bounds_of_nodes(nodes: &[PositionedNode]) -> PortableRect {
         PortableSize::new(max_x - min_x, max_y - min_y),
     )
 }
-
 
 #[cfg(test)]
 mod tests;

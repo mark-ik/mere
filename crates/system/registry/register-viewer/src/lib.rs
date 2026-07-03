@@ -32,7 +32,7 @@
 
 use std::collections::HashMap;
 
-use kernel::address::{address_kind_from_url, AddressKind};
+use kernel::address::{AddressKind, address_kind_from_url};
 use register_layout::CapabilityDeclaration;
 
 pub const VIEWER_ID_FALLBACK: &str = "viewer:webview";
@@ -193,11 +193,7 @@ impl ViewerRegistry {
         }
     }
 
-    pub fn register_mime(
-        &mut self,
-        mime: &str,
-        viewer_id: &'static str,
-    ) -> Option<&'static str> {
+    pub fn register_mime(&mut self, mime: &str, viewer_id: &'static str) -> Option<&'static str> {
         self.mime_handlers
             .insert(mime.to_ascii_lowercase(), viewer_id)
     }
@@ -293,11 +289,7 @@ impl ViewerRegistry {
     ///
     /// This method does **not** consult `viewer_id_override` or workspace defaults;
     /// those are the caller's responsibility and should be applied before calling this.
-    pub fn select_for(
-        &self,
-        mime: Option<&str>,
-        kind: AddressKind,
-    ) -> &'static str {
+    pub fn select_for(&self, mime: Option<&str>, kind: AddressKind) -> &'static str {
         // 1. MIME-based lookup.
         if let Some(mime_val) = mime.map(|m| m.to_ascii_lowercase())
             && let Some(viewer_id) = self.mime_handlers.get(&mime_val)
@@ -512,4 +504,3 @@ impl ViewerHandler for PlaintextViewerHandler {
 
 #[cfg(test)]
 mod tests;
-

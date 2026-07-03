@@ -52,7 +52,7 @@ senses** that must not be conflated: the
 [capability-gate catalogue](../research/2026-05-14_capability_gate_catalogue_brief.md)
 (the permission spine the action bus consumes) and DocumentScript's WASM-component
 confinement
-([document_script_substrate](2026-06-21_document_script_substrate_plan.md)). Those gate
+([document_script_substrate](../../archive_docs/2026-07-03_completed_plans/2026-06-21_document_script_substrate_plan.md)). Those gate
 what local code may do; this gates what a remote peer may read or write.
 
 **Borrow.** Object-capability tokens: Meadowcap (Willow), UCAN, or Keyhive
@@ -97,7 +97,7 @@ both are scoped here so the design is settled before federation data starts flow
 - [graph-cluster namespaces brief](../research/2026-05-10_graph_cluster_namespaces_brief.md):
   namespace = capability scope.
 - [capability-gate catalogue brief](../research/2026-05-14_capability_gate_catalogue_brief.md),
-  [document_script_substrate plan](2026-06-21_document_script_substrate_plan.md): the
+  [document_script_substrate plan](../../archive_docs/2026-07-03_completed_plans/2026-06-21_document_script_substrate_plan.md): the
   in-app capability senses this is distinct from.
 - [persona_transport_unlinkability](2026-06-25_persona_transport_unlinkability_plan.md),
   [actor_constellation](2026-06-03_actor_constellation_plan.md): persona and federation

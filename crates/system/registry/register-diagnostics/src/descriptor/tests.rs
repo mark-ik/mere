@@ -2,8 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use crate::channels::*;
 use super::*;
+use crate::channels::*;
 
 #[test]
 fn diagnostics_registry_seeds_phase_contract_channels() {
@@ -19,9 +19,7 @@ fn diagnostics_registry_seeds_phase_contract_channels() {
     assert!(registry.has_channel(CHANNEL_COMPOSITOR_VIEWER_SURFACE_PATH_SHARED_WGPU));
     assert!(registry.has_channel(CHANNEL_COMPOSITOR_OVERLAY_STYLE_RECT_STROKE));
     assert!(registry.has_channel(CHANNEL_COMPOSITOR_OVERLAY_MODE_NATIVE_OVERLAY));
-    assert!(
-        registry.has_channel(CHANNEL_COMPOSITOR_OVERLAY_NATIVE_SUPPRESSED_INTERACTION_MENU)
-    );
+    assert!(registry.has_channel(CHANNEL_COMPOSITOR_OVERLAY_NATIVE_SUPPRESSED_INTERACTION_MENU));
     assert!(registry.has_channel(CHANNEL_VIEWER_FALLBACK_WRY_FEATURE_DISABLED));
     assert!(registry.has_channel(CHANNEL_VERSE_SYNC_UNIT_SENT));
 }
@@ -216,9 +214,7 @@ fn diagnostics_registry_attaches_structured_schema_to_high_value_contract_channe
     ] {
         let descriptor = channels
             .iter()
-            .find_map(|(descriptor, _)| {
-                (descriptor.channel_id == channel_id).then_some(descriptor)
-            })
+            .find_map(|(descriptor, _)| (descriptor.channel_id == channel_id).then_some(descriptor))
             .expect("channel should be registered");
         assert!(matches!(
             descriptor.payload_schema,

@@ -42,4 +42,3 @@ fn make_layout_tree(mode: LayoutMode) -> GraphTree<u64> {
     tree.apply(NavAction::ToggleExpand(1));
     tree
 }
-

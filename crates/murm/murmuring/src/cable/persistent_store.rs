@@ -239,7 +239,6 @@ impl PersistentCabalStore {
     pub fn is_empty(&self) -> Result<bool, MurmuringError> {
         Ok(self.len()? == 0)
     }
-
 }
 
 #[cfg(test)]

@@ -39,6 +39,216 @@ pub fn find_content(
     serval_layout::find_text_rects_from_layout_dom(&doc, &sheets, loader, w, h, query)
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DocumentSelection {
+    pub rects: Vec<[f32; 4]>,
+    pub text: String,
+}
+
+#[derive(Clone, Copy)]
+struct DocumentTextEntry<'a> {
+    source_index: usize,
+    top_index: usize,
+    block: &'a Block,
+}
+
+/// Find every occurrence of `query` in a retained document-lane page, returning one
+/// rect-set per match in full-document px (`[x0, y0, x1, y1]`). Without cluster
+/// offsets this is block-scoped: multiple hits in one rendered block share that
+/// block's rects, but the match count and stepping stay truthful. (Retained-text P3.)
+pub(crate) fn find_document_content(
+    doc: &EngineDocument,
+    packet: &DocumentRenderPacket,
+    query: &str,
+) -> Vec<Vec<[f32; 4]>> {
+    let needle = query.trim();
+    if needle.is_empty() {
+        return Vec::new();
+    }
+    let needle = needle.to_lowercase();
+    let mut matches = Vec::new();
+    for entry in document_text_entries(doc) {
+        let text = block_plain_text(entry.block);
+        if text.is_empty() {
+            continue;
+        }
+        let rects = rendered_rects_for_source(packet, entry.source_index);
+        if rects.is_empty() {
+            continue;
+        }
+        let hay = text.to_lowercase();
+        let mut from = 0usize;
+        while let Some(found) = hay[from..].find(&needle) {
+            matches.push(rects.clone());
+            from += found + needle.len();
+        }
+    }
+    matches
+}
+
+/// Select the inclusive document-block range between `anchor_source` and
+/// `focus_source`, using the layout's synthetic child-index scheme. The returned text
+/// is flattened through `EngineDocument::to_text`, so copy matches the document's
+/// plain-text exporter rather than whatever glyphs happened to be painted. (P4.)
+pub(crate) fn select_document_content(
+    doc: &EngineDocument,
+    packet: &DocumentRenderPacket,
+    anchor_source: usize,
+    focus_source: usize,
+) -> Option<DocumentSelection> {
+    let entries = document_text_entries(doc);
+    if entries.is_empty() {
+        return None;
+    }
+    let anchor = selection_span(&entries, anchor_source)?;
+    let focus = selection_span(&entries, focus_source)?;
+    let (start, end) = if anchor.0 <= focus.1 {
+        (anchor.0.min(focus.0), anchor.1.max(focus.1))
+    } else {
+        (focus.0.min(anchor.0), focus.1.max(anchor.1))
+    };
+    let chosen = &entries[start..=end];
+    let mut rects = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+    let mut blocks = Vec::new();
+    for entry in chosen {
+        if seen.insert(entry.source_index) {
+            rects.extend(rendered_rects_for_source(packet, entry.source_index));
+        }
+        blocks.push(entry.block.clone());
+    }
+    if rects.is_empty() {
+        return None;
+    }
+    let text = EngineDocument {
+        address: String::new(),
+        title: None,
+        content_type: "text/plain".to_string(),
+        lang: None,
+        provenance: Default::default(),
+        trust: Default::default(),
+        diagnostics: Vec::new(),
+        blocks,
+    }
+    .to_text();
+    Some(DocumentSelection { rects, text })
+}
+
+fn document_text_entries(doc: &EngineDocument) -> Vec<DocumentTextEntry<'_>> {
+    let mut out = Vec::new();
+    for (i, block) in doc.blocks.iter().enumerate() {
+        collect_document_text_entries(block, i, i, &mut out);
+    }
+    out
+}
+
+fn collect_document_text_entries<'a>(
+    block: &'a Block,
+    source_index: usize,
+    top_index: usize,
+    out: &mut Vec<DocumentTextEntry<'a>>,
+) {
+    match block {
+        Block::Quote { blocks } => {
+            for (i, child) in blocks.iter().enumerate() {
+                collect_document_text_entries(
+                    child,
+                    source_index.saturating_mul(1000) + i,
+                    top_index,
+                    out,
+                );
+            }
+        }
+        Block::List { items, .. } => {
+            for (i, item) in items.iter().enumerate() {
+                for (j, child) in item.iter().enumerate() {
+                    collect_document_text_entries(
+                        child,
+                        source_index.saturating_mul(1000) + i.saturating_mul(100) + j,
+                        top_index,
+                        out,
+                    );
+                }
+            }
+        }
+        _ => out.push(DocumentTextEntry {
+            source_index,
+            top_index,
+            block,
+        }),
+    }
+}
+
+fn selection_span(
+    entries: &[DocumentTextEntry<'_>],
+    source_index: usize,
+) -> Option<(usize, usize)> {
+    if let Some((i, _)) = entries
+        .iter()
+        .enumerate()
+        .find(|(_, entry)| entry.source_index == source_index)
+    {
+        return Some((i, i));
+    }
+    let top = source_index;
+    let mut first = None;
+    let mut last = None;
+    for (i, entry) in entries.iter().enumerate() {
+        if entry.top_index == top {
+            first.get_or_insert(i);
+            last = Some(i);
+        }
+    }
+    Some((first?, last?))
+}
+
+fn block_plain_text(block: &Block) -> String {
+    EngineDocument {
+        address: String::new(),
+        title: None,
+        content_type: "text/plain".to_string(),
+        lang: None,
+        provenance: Default::default(),
+        trust: Default::default(),
+        diagnostics: Vec::new(),
+        blocks: vec![block.clone()],
+    }
+    .to_text()
+    .trim()
+    .to_string()
+}
+
+fn rendered_rects_for_source(packet: &DocumentRenderPacket, source_index: usize) -> Vec<[f32; 4]> {
+    let mut rects = Vec::new();
+    collect_rendered_rects(&packet.blocks, source_index, &mut rects);
+    rects
+}
+
+fn collect_rendered_rects(
+    blocks: &[document_canvas::RenderedBlock],
+    source_index: usize,
+    out: &mut Vec<[f32; 4]>,
+) {
+    for block in blocks {
+        let before = out.len();
+        let child_matches =
+            if let document_canvas::RenderedBlockKind::Group { children } = &block.kind {
+                collect_rendered_rects(children, source_index, out);
+                out.len() > before
+            } else {
+                false
+            };
+        if block.source_block_index == source_index && !child_matches {
+            out.push([
+                block.bounds.origin.x,
+                block.bounds.origin.y,
+                block.bounds.max_x(),
+                block.bounds.max_y(),
+            ]);
+        }
+    }
+}
+
 /// The floating card rectangle within the content band (top-right, inset by
 /// [`CARD_MARGIN`]). Returns `(x0, y0, x1, y1, w, h)` — window-space corners for
 /// the composite plus the pixel size to rasterize at — or `None` when the band

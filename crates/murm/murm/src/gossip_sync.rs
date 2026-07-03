@@ -31,7 +31,7 @@ use tokio::task::JoinHandle;
 use tokio_stream::StreamExt;
 use transport::{GossipHandle, P2pandaTransport};
 
-use crate::{decode_post, encode_post, CabalHandle, CabalKey, Murm, MurmError, Post, PostId};
+use crate::{CabalHandle, CabalKey, Murm, MurmError, Post, PostId, decode_post, encode_post};
 
 /// Unix-epoch milliseconds, for stamping the last sync activity.
 fn now_ms() -> u64 {
@@ -99,7 +99,9 @@ impl Murm<P2pandaTransport> {
         let gossip_task = tokio::spawn(async move {
             while let Some(item) = received.next().await {
                 let Ok(bytes) = item else { continue };
-                let Ok(post) = decode_post(&bytes) else { continue };
+                let Ok(post) = decode_post(&bytes) else {
+                    continue;
+                };
                 if engine.ingest_post(&cabal_id, post).is_ok() {
                     let mut s = gossip_status.lock().unwrap();
                     s.posts_received += 1;
@@ -293,7 +295,7 @@ mod tests {
     use super::*;
     use identity::{IdentityProvider, InMemoryProvider};
     use std::time::Duration;
-    use transport::{PeerID, P2pandaTransport};
+    use transport::{P2pandaTransport, PeerID};
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn synced_cabal_subscribe_emits_a_locally_sent_post() {
@@ -352,7 +354,8 @@ mod tests {
             .await
             .unwrap();
         alice_t.set_topics(bob_id, &[cabal_id]).await.unwrap();
-        bob_t.add_peer(alice_t.endpoint_addr().await.unwrap())
+        bob_t
+            .add_peer(alice_t.endpoint_addr().await.unwrap())
             .await
             .unwrap();
         bob_t.set_topics(alice_id, &[cabal_id]).await.unwrap();
@@ -360,7 +363,10 @@ mod tests {
         let alice = Murm::new(alice_provider, alice_t);
         let bob = Murm::new(bob_provider, bob_t);
 
-        let alice_cabal = alice.subscribe_cabal(&cabal_key).await.expect("alice cabal");
+        let alice_cabal = alice
+            .subscribe_cabal(&cabal_key)
+            .await
+            .expect("alice cabal");
         let bob_cabal = bob.subscribe_cabal(&cabal_key).await.expect("bob cabal");
 
         // Alice authors; bob's background task should ingest it over gossip.

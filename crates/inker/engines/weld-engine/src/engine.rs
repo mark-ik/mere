@@ -183,7 +183,10 @@ mod tests {
         reg.register(Box::new(WeldEngine::new(Arc::new(StubFactory))));
         assert!(reg.contains(WELD_CHROMIUM_ENGINE_ID));
 
-        let mut producer = reg.spawn(&decision(), &stub_request()).ok().expect("spawn ok");
+        let mut producer = reg
+            .spawn(&decision(), &stub_request())
+            .ok()
+            .expect("spawn ok");
         match producer.acquire_frame() {
             Ok(opt) => assert!(opt.is_none()),
             Err(err) => panic!("unexpected acquire_frame err: {err:?}"),

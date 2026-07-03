@@ -18,7 +18,7 @@
 //!
 //! References: <https://gemini.circumlunar.space/docs/specification.html>.
 
-use errand::parse::gemtext::{parse as parse_gemtext, GemLine};
+use errand::parse::gemtext::{GemLine, parse as parse_gemtext};
 use inker::{
     Block, DocumentProvenance, DocumentTrustState, Engine, EngineDocument, EngineError,
     EngineInput, InlineSpan,
@@ -183,8 +183,9 @@ impl Lowering {
             Pending::None => {}
             Pending::Paragraph(lines) => {
                 if !lines.is_empty() {
-                    self.blocks
-                        .push(Block::Paragraph { spans: join_soft(lines) });
+                    self.blocks.push(Block::Paragraph {
+                        spans: join_soft(lines),
+                    });
                 }
             }
             Pending::List(items) => {
@@ -198,7 +199,9 @@ impl Lowering {
             Pending::Quote(lines) => {
                 if !lines.is_empty() {
                     self.blocks.push(Block::Quote {
-                        blocks: vec![Block::Paragraph { spans: join_soft(lines) }],
+                        blocks: vec![Block::Paragraph {
+                            spans: join_soft(lines),
+                        }],
                     });
                 }
             }

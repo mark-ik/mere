@@ -98,10 +98,7 @@ impl BlockEvaluator for RhaiEvaluator {
 fn to_output(value: Dynamic) -> EvalOutput {
     if value.is_map() {
         let map: Map = value.cast();
-        let text = map
-            .get("text")
-            .map(|d| d.to_string())
-            .unwrap_or_default();
+        let text = map.get("text").map(|d| d.to_string()).unwrap_or_default();
         match map.get("format") {
             Some(format) => EvalOutput {
                 format: format.to_string(),
@@ -158,9 +155,7 @@ mod tests {
     #[test]
     fn a_runaway_is_caught_by_the_operation_budget() {
         let mut evaluator = RhaiEvaluator::new();
-        let err = evaluator
-            .eval_block("loop { }", 10_000)
-            .unwrap_err();
+        let err = evaluator.eval_block("loop { }", 10_000).unwrap_err();
         // Rhai aborts a runaway with a too-many-operations error, not a hang.
         assert!(
             err.to_lowercase().contains("operation"),
@@ -174,7 +169,11 @@ mod tests {
     #[test]
     fn a_compile_error_is_reported_not_panicked() {
         let mut evaluator = RhaiEvaluator::new();
-        assert!(evaluator.eval_block("this is not valid rhai @@@", 1_000).is_err());
+        assert!(
+            evaluator
+                .eval_block("this is not valid rhai @@@", 1_000)
+                .is_err()
+        );
     }
 
     #[test]
@@ -195,8 +194,8 @@ mod tests {
     #[test]
     fn a_rhai_fence_evaluates_through_the_inker_pass() {
         use inker::{
-            evaluate_blocks, BlockEvaluators, Block, DocumentProvenance,
-            DocumentTrustState, EngineDocument, EngineInput, EvaluationPolicy, InlineSpan,
+            Block, BlockEvaluators, DocumentProvenance, DocumentTrustState, EngineDocument,
+            EngineInput, EvaluationPolicy, InlineSpan, evaluate_blocks,
         };
 
         let mut registry = BlockEvaluators::new();
@@ -217,10 +216,10 @@ mod tests {
             }],
         };
 
-        let mut evaluate =
-            |lang: &str, source: &str| registry.evaluate(lang, source, 1_000_000);
-        let mut render =
-            |_input: &EngineInput| -> Result<EngineDocument, String> { unreachable!("plain output") };
+        let mut evaluate = |lang: &str, source: &str| registry.evaluate(lang, source, 1_000_000);
+        let mut render = |_input: &EngineInput| -> Result<EngineDocument, String> {
+            unreachable!("plain output")
+        };
         let policy = EvaluationPolicy::for_own_notes(vec!["rhai".into()]);
 
         let outcome = evaluate_blocks(&mut document, &mut evaluate, &mut render, &policy);

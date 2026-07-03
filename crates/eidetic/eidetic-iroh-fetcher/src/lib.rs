@@ -31,8 +31,8 @@
 
 use async_trait::async_trait;
 use eidetic::{BlobFetcher, BlobSource, Error, Result};
-use transport::{BlobHash, BlobStore, P2pandaTransport, PeerID};
 use std::sync::Arc;
+use transport::{BlobHash, BlobStore, P2pandaTransport, PeerID};
 
 /// Iroh-only [`BlobFetcher`].
 ///

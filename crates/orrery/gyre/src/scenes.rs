@@ -25,8 +25,11 @@ pub fn drop_bowl_scene() -> SceneSpec {
     // The bumpy fixed floor.
     for i in 0..5 {
         bodies.push(
-            SceneBodySpec::fixed(NodeCollider::Ball { radius: 60.0 }, (-280.0 + i as f32 * 140.0, 340.0))
-                .restitution(0.4),
+            SceneBodySpec::fixed(
+                NodeCollider::Ball { radius: 60.0 },
+                (-280.0 + i as f32 * 140.0, 340.0),
+            )
+            .restitution(0.4),
         );
     }
     // Dynamic balls dropped from above the graph.
@@ -39,15 +42,22 @@ pub fn drop_bowl_scene() -> SceneSpec {
             .restitution(0.5),
         );
     }
-    SceneSpec { bodies, gravity: (0.0, 520.0), default_tangible: false, perpetual: false, joints: Vec::new() }
+    SceneSpec {
+        bodies,
+        gravity: (0.0, 520.0),
+        default_tangible: false,
+        perpetual: false,
+        joints: Vec::new(),
+    }
 }
 
 /// A stacked pyramid of dynamic blocks resting on a fixed slab — stable and architectural at
 /// rest, the headline knock-over once the graph is made tangible and plows through. (matter.js
 /// `pyramid` / rapier examples2d `Pyramid`.)
 pub fn pyramid_scene() -> SceneSpec {
-    let mut bodies =
-        vec![SceneBodySpec::fixed(NodeCollider::Square { half: 300.0 }, (0.0, 360.0)).restitution(0.0)];
+    let mut bodies = vec![
+        SceneBodySpec::fixed(NodeCollider::Square { half: 300.0 }, (0.0, 360.0)).restitution(0.0),
+    ];
     // 9 rows, row k has (9 - k) blocks, climbing upward (decreasing y). Row 0 sits on the floor's
     // top face (y=60: the half-300 slab spans [60,660]). Friction (0.3) + zero restitution = it holds.
     for k in 0..9 {
@@ -55,20 +65,30 @@ pub fn pyramid_scene() -> SceneSpec {
         for i in 0..count {
             let x = (i as f32 - (count as f32 - 1.0) / 2.0) * 50.0;
             bodies.push(
-                SceneBodySpec::dynamic(NodeCollider::Square { half: 24.0 }, (x, 36.0 - k as f32 * 48.0))
-                    .restitution(0.0),
+                SceneBodySpec::dynamic(
+                    NodeCollider::Square { half: 24.0 },
+                    (x, 36.0 - k as f32 * 48.0),
+                )
+                .restitution(0.0),
             );
         }
     }
-    SceneSpec { bodies, gravity: (0.0, 600.0), default_tangible: false, perpetual: false, joints: Vec::new() }
+    SceneSpec {
+        bodies,
+        gravity: (0.0, 600.0),
+        default_tangible: false,
+        perpetual: false,
+        joints: Vec::new(),
+    }
 }
 
 /// A row of tall thin dynamic blocks on a fixed floor; the first is nudged sideways on load to
 /// topple into its neighbour, cascading down the line. (planck.js `Dominos` / box2d.) A clean
 /// *tipping* cascade really wants per-body rotation tuning (P4b); today it tips by sliding contact.
 pub fn domino_scene() -> SceneSpec {
-    let mut bodies =
-        vec![SceneBodySpec::fixed(NodeCollider::Square { half: 300.0 }, (0.0, 360.0)).restitution(0.0)];
+    let mut bodies = vec![
+        SceneBodySpec::fixed(NodeCollider::Square { half: 300.0 }, (0.0, 360.0)).restitution(0.0),
+    ];
     // Tall thin domino via an axis-aligned Hull rect (Mere has no rotated cuboid).
     let tall = NodeCollider::Hull {
         points: vec![(-6.0, -44.0), (6.0, -44.0), (6.0, 44.0), (-6.0, 44.0)],
@@ -82,7 +102,13 @@ pub fn domino_scene() -> SceneSpec {
                 .restitution(0.0),
         );
     }
-    SceneSpec { bodies, gravity: (0.0, 520.0), default_tangible: false, perpetual: false, joints: Vec::new() }
+    SceneSpec {
+        bodies,
+        gravity: (0.0, 520.0),
+        default_tangible: false,
+        perpetual: false,
+        joints: Vec::new(),
+    }
 }
 
 /// A Galton board / Plinko: a triangular lattice of fixed pegs scatters a slow drip of dynamic
@@ -96,14 +122,19 @@ pub fn galton_scene() -> SceneSpec {
         for i in 0..n {
             let x = (i as f32 - (n as f32 - 1.0) / 2.0) * 60.0;
             bodies.push(
-                SceneBodySpec::fixed(NodeCollider::Ball { radius: 8.0 }, (x, -200.0 + row as f32 * 45.0))
-                    .restitution(0.5),
+                SceneBodySpec::fixed(
+                    NodeCollider::Ball { radius: 8.0 },
+                    (x, -200.0 + row as f32 * 45.0),
+                )
+                .restitution(0.5),
             );
         }
     }
     // Catch floor below the pegs (the half-320 slab's top face at y=200 clears the lowest pegs at
     // y=160). The scatter piles into a bell-shaped heap (the heap is the live distribution).
-    bodies.push(SceneBodySpec::fixed(NodeCollider::Square { half: 320.0 }, (0.0, 520.0)).restitution(0.2));
+    bodies.push(
+        SceneBodySpec::fixed(NodeCollider::Square { half: 320.0 }, (0.0, 520.0)).restitution(0.2),
+    );
     // A slow drip down the center (a true continuous stream wants the emitter extension).
     for i in 0..30 {
         bodies.push(
@@ -115,7 +146,13 @@ pub fn galton_scene() -> SceneSpec {
             .restitution(0.5),
         );
     }
-    SceneSpec { bodies, gravity: (0.0, 450.0), default_tangible: false, perpetual: false, joints: Vec::new() }
+    SceneSpec {
+        bodies,
+        gravity: (0.0, 450.0),
+        default_tangible: false,
+        perpetual: false,
+        joints: Vec::new(),
+    }
 }
 
 /// A funnel / hourglass: two converging fixed-ball chutes (a staircase fakes the slope, no
@@ -127,23 +164,40 @@ pub fn funnel_scene() -> SceneSpec {
     for i in 0..8 {
         let inset = i as f32 * 30.0;
         let y = -200.0 + i as f32 * 28.0;
-        bodies.push(SceneBodySpec::fixed(NodeCollider::Ball { radius: 30.0 }, (-360.0 + inset, y)).restitution(0.1));
-        bodies.push(SceneBodySpec::fixed(NodeCollider::Ball { radius: 30.0 }, (360.0 - inset, y)).restitution(0.1));
+        bodies.push(
+            SceneBodySpec::fixed(NodeCollider::Ball { radius: 30.0 }, (-360.0 + inset, y))
+                .restitution(0.1),
+        );
+        bodies.push(
+            SceneBodySpec::fixed(NodeCollider::Ball { radius: 30.0 }, (360.0 - inset, y))
+                .restitution(0.1),
+        );
     }
     // Catch floor below the throat.
-    bodies.push(SceneBodySpec::fixed(NodeCollider::Square { half: 200.0 }, (0.0, 320.0)).restitution(0.1));
+    bodies.push(
+        SceneBodySpec::fixed(NodeCollider::Square { half: 200.0 }, (0.0, 320.0)).restitution(0.1),
+    );
     // A column of grains trickling through.
     for i in 0..80 {
         bodies.push(
             SceneBodySpec::dynamic(
                 NodeCollider::Ball { radius: 8.0 },
-                (((i % 7) as f32 - 3.0) * 16.0, -340.0 - (i / 7) as f32 * 18.0),
+                (
+                    ((i % 7) as f32 - 3.0) * 16.0,
+                    -340.0 - (i / 7) as f32 * 18.0,
+                ),
             )
             .velocity((0.0, 20.0))
             .restitution(0.2),
         );
     }
-    SceneSpec { bodies, gravity: (0.0, 500.0), default_tangible: false, perpetual: false, joints: Vec::new() }
+    SceneSpec {
+        bodies,
+        gravity: (0.0, 500.0),
+        default_tangible: false,
+        perpetual: false,
+        joints: Vec::new(),
+    }
 }
 
 /// A gravity-free drift: a loose cluster of soft orbs coasting and bouncing off each other in lazy
@@ -170,12 +224,23 @@ pub fn drift_scene() -> SceneSpec {
         .map(|(i, &(x, y, vx, vy))| {
             // Elastic (restitution 1.0): mutual bounces conserve energy, so a near-zero-damping
             // drift keeps milling instead of bleeding to rest.
-            SceneBodySpec::dynamic(NodeCollider::Ball { radius: 26.0 + (i % 4) as f32 * 7.0 }, (x, y))
-                .velocity((vx, vy))
-                .restitution(1.0)
+            SceneBodySpec::dynamic(
+                NodeCollider::Ball {
+                    radius: 26.0 + (i % 4) as f32 * 7.0,
+                },
+                (x, y),
+            )
+            .velocity((vx, vy))
+            .restitution(1.0)
         })
         .collect();
-    SceneSpec { bodies, gravity: (0.0, 0.0), default_tangible: false, perpetual: true, joints: Vec::new() }
+    SceneSpec {
+        bodies,
+        gravity: (0.0, 0.0),
+        default_tangible: false,
+        perpetual: true,
+        joints: Vec::new(),
+    }
 }
 
 /// A rope chain hung from a fixed anchor: eight dynamic link-balls start stretched out horizontally
@@ -187,7 +252,10 @@ pub fn chain_scene() -> SceneSpec {
     let link = 48.0;
     // Body 0 is the fixed anchor; bodies 1..=8 are the dynamic links, laid out horizontally to the
     // right of the anchor (so gravity swings the whole chain down).
-    let mut bodies = vec![SceneBodySpec::fixed(NodeCollider::Ball { radius: 10.0 }, anchor)];
+    let mut bodies = vec![SceneBodySpec::fixed(
+        NodeCollider::Ball { radius: 10.0 },
+        anchor,
+    )];
     for i in 0..8 {
         bodies.push(
             SceneBodySpec::dynamic(
@@ -202,10 +270,20 @@ pub fn chain_scene() -> SceneSpec {
         .map(|i| SceneJointSpec {
             body_a: i,
             body_b: i + 1,
-            joint: SceneJoint::Rope { anchor_a: (0.0, 0.0), anchor_b: (0.0, 0.0), length: link },
+            joint: SceneJoint::Rope {
+                anchor_a: (0.0, 0.0),
+                anchor_b: (0.0, 0.0),
+                length: link,
+            },
         })
         .collect();
-    SceneSpec { bodies, gravity: (0.0, 520.0), default_tangible: false, perpetual: false, joints }
+    SceneSpec {
+        bodies,
+        gravity: (0.0, 520.0),
+        default_tangible: false,
+        perpetual: false,
+        joints,
+    }
 }
 
 /// A whirlpool: two rings of loose gravity-free balls that a [`SceneField::Vortex`] swirls into an
@@ -221,13 +299,21 @@ pub fn whirlpool_scene() -> SceneSpec {
         let a = (i % 10) as f32 * TAU / 10.0 + twist;
         bodies.push(
             SceneBodySpec::dynamic(
-                NodeCollider::Ball { radius: 14.0 + (i % 3) as f32 * 6.0 },
+                NodeCollider::Ball {
+                    radius: 14.0 + (i % 3) as f32 * 6.0,
+                },
                 (ring * a.cos(), ring * a.sin()),
             )
             .restitution(0.6),
         );
     }
-    SceneSpec { bodies, gravity: (0.0, 0.0), default_tangible: false, perpetual: false, joints: Vec::new() }
+    SceneSpec {
+        bodies,
+        gravity: (0.0, 0.0),
+        default_tangible: false,
+        perpetual: false,
+        joints: Vec::new(),
+    }
 }
 
 /// A fountain catch-basin: a wide fixed floor under gravity. The host pairs this with an upward
@@ -239,7 +325,13 @@ pub fn fountain_scene() -> SceneSpec {
         // Top face at y=300 (the half-300 slab spans [300, 900]); droplets land here and pile.
         SceneBodySpec::fixed(NodeCollider::Square { half: 300.0 }, (0.0, 600.0)).restitution(0.1),
     ];
-    SceneSpec { bodies, gravity: (0.0, 520.0), default_tangible: false, perpetual: false, joints: Vec::new() }
+    SceneSpec {
+        bodies,
+        gravity: (0.0, 520.0),
+        default_tangible: false,
+        perpetual: false,
+        joints: Vec::new(),
+    }
 }
 
 /// A Newton's cradle: five elastic balls, each hung from its own fixed anchor by a rigid revolute
@@ -257,7 +349,10 @@ pub fn cradle_scene() -> SceneSpec {
     let mut bodies = Vec::new();
     for i in 0..5 {
         let x = (i as f32 - 2.0) * (2.0 * r);
-        bodies.push(SceneBodySpec::fixed(NodeCollider::Ball { radius: 8.0 }, (x, anchor_y)));
+        bodies.push(SceneBodySpec::fixed(
+            NodeCollider::Ball { radius: 8.0 },
+            (x, anchor_y),
+        ));
     }
     for i in 0..5 {
         let x = (i as f32 - 2.0) * (2.0 * r);
@@ -281,7 +376,13 @@ pub fn cradle_scene() -> SceneSpec {
             },
         })
         .collect();
-    SceneSpec { bodies, gravity: (0.0, 600.0), default_tangible: false, perpetual: true, joints }
+    SceneSpec {
+        bodies,
+        gravity: (0.0, 600.0),
+        default_tangible: false,
+        perpetual: true,
+        joints,
+    }
 }
 
 /// A suspended plank bridge: nine plank bodies hinged end to end by free revolute joints and pinned
@@ -292,38 +393,70 @@ pub fn bridge_scene() -> SceneSpec {
     let halfw = 33.0;
     // Body 0 is the left post, bodies 1..=9 the nine planks, body 10 the right post (all in a row at
     // y=0); bodies 11, 12 are the weights dropped on the deck.
-    let mut bodies = vec![SceneBodySpec::fixed(NodeCollider::Ball { radius: 10.0 }, (-297.0, 0.0))];
+    let mut bodies = vec![SceneBodySpec::fixed(
+        NodeCollider::Ball { radius: 10.0 },
+        (-297.0, 0.0),
+    )];
     let plank = NodeCollider::Hull {
         points: vec![(-halfw, -6.0), (halfw, -6.0), (halfw, 6.0), (-halfw, 6.0)],
         fallback: 20.0,
     };
     for i in 0..9 {
-        bodies.push(SceneBodySpec::dynamic(plank.clone(), (-264.0 + i as f32 * 66.0, 0.0)).restitution(0.05));
+        bodies.push(
+            SceneBodySpec::dynamic(plank.clone(), (-264.0 + i as f32 * 66.0, 0.0))
+                .restitution(0.05),
+        );
     }
-    bodies.push(SceneBodySpec::fixed(NodeCollider::Ball { radius: 10.0 }, (297.0, 0.0)));
-    bodies.push(SceneBodySpec::dynamic(NodeCollider::Ball { radius: 28.0 }, (0.0, -170.0)).restitution(0.1));
-    bodies.push(SceneBodySpec::dynamic(NodeCollider::Ball { radius: 22.0 }, (90.0, -230.0)).restitution(0.1));
+    bodies.push(SceneBodySpec::fixed(
+        NodeCollider::Ball { radius: 10.0 },
+        (297.0, 0.0),
+    ));
+    bodies.push(
+        SceneBodySpec::dynamic(NodeCollider::Ball { radius: 28.0 }, (0.0, -170.0)).restitution(0.1),
+    );
+    bodies.push(
+        SceneBodySpec::dynamic(NodeCollider::Ball { radius: 22.0 }, (90.0, -230.0))
+            .restitution(0.1),
+    );
     // Hinge the chain: left post -> plank0 -> ... -> plank8 -> right post. Interior hinges join a
     // plank's right edge (+halfw) to the next plank's left edge (-halfw); the post hinges use the
     // post centre.
     let mut joints = vec![SceneJointSpec {
         body_a: 0,
         body_b: 1,
-        joint: SceneJoint::Revolute { anchor_a: (0.0, 0.0), anchor_b: (-halfw, 0.0), motor: None },
+        joint: SceneJoint::Revolute {
+            anchor_a: (0.0, 0.0),
+            anchor_b: (-halfw, 0.0),
+            motor: None,
+        },
     }];
     for i in 1..9 {
         joints.push(SceneJointSpec {
             body_a: i,
             body_b: i + 1,
-            joint: SceneJoint::Revolute { anchor_a: (halfw, 0.0), anchor_b: (-halfw, 0.0), motor: None },
+            joint: SceneJoint::Revolute {
+                anchor_a: (halfw, 0.0),
+                anchor_b: (-halfw, 0.0),
+                motor: None,
+            },
         });
     }
     joints.push(SceneJointSpec {
         body_a: 9,
         body_b: 10,
-        joint: SceneJoint::Revolute { anchor_a: (halfw, 0.0), anchor_b: (0.0, 0.0), motor: None },
+        joint: SceneJoint::Revolute {
+            anchor_a: (halfw, 0.0),
+            anchor_b: (0.0, 0.0),
+            motor: None,
+        },
     });
-    SceneSpec { bodies, gravity: (0.0, 500.0), default_tangible: false, perpetual: false, joints }
+    SceneSpec {
+        bodies,
+        gravity: (0.0, 500.0),
+        default_tangible: false,
+        perpetual: false,
+        joints,
+    }
 }
 
 /// A wrecking ball: a heavy ball on a five-link rope chain, anchored up and to the right and laid out
@@ -336,7 +469,10 @@ pub fn ball_and_chain_scene() -> SceneSpec {
     let link = 44.0;
     // Body 0 the fixed anchor; bodies 1..=4 the light links and body 5 the heavy ball, laid out
     // horizontally to the left of the anchor (taut, so gravity swings the whole thing down-right).
-    let mut bodies = vec![SceneBodySpec::fixed(NodeCollider::Ball { radius: 10.0 }, anchor)];
+    let mut bodies = vec![SceneBodySpec::fixed(
+        NodeCollider::Ball { radius: 10.0 },
+        anchor,
+    )];
     for i in 0..4 {
         bodies.push(SceneBodySpec::dynamic(
             NodeCollider::Ball { radius: 12.0 },
@@ -344,16 +480,24 @@ pub fn ball_and_chain_scene() -> SceneSpec {
         ));
     }
     bodies.push(
-        SceneBodySpec::dynamic(NodeCollider::Ball { radius: 34.0 }, (anchor.0 - 5.0 * link, anchor.1))
-            .restitution(0.2),
+        SceneBodySpec::dynamic(
+            NodeCollider::Ball { radius: 34.0 },
+            (anchor.0 - 5.0 * link, anchor.1),
+        )
+        .restitution(0.2),
     );
     // The target: a fixed floor (top face y=0) and a five-block tower at the bottom of the ball's
     // arc (x=140), which the swinging ball smashes through.
-    bodies.push(SceneBodySpec::fixed(NodeCollider::Square { half: 300.0 }, (0.0, 300.0)).restitution(0.1));
+    bodies.push(
+        SceneBodySpec::fixed(NodeCollider::Square { half: 300.0 }, (0.0, 300.0)).restitution(0.1),
+    );
     for k in 0..5 {
         bodies.push(
-            SceneBodySpec::dynamic(NodeCollider::Square { half: 16.0 }, (140.0, -16.0 - k as f32 * 32.0))
-                .restitution(0.0),
+            SceneBodySpec::dynamic(
+                NodeCollider::Square { half: 16.0 },
+                (140.0, -16.0 - k as f32 * 32.0),
+            )
+            .restitution(0.0),
         );
     }
     // Rope links: anchor(0) -> link(1) -> ... -> link(4) -> heavy(5), each capped at `link` apart.
@@ -361,10 +505,20 @@ pub fn ball_and_chain_scene() -> SceneSpec {
         .map(|i| SceneJointSpec {
             body_a: i,
             body_b: i + 1,
-            joint: SceneJoint::Rope { anchor_a: (0.0, 0.0), anchor_b: (0.0, 0.0), length: link },
+            joint: SceneJoint::Rope {
+                anchor_a: (0.0, 0.0),
+                anchor_b: (0.0, 0.0),
+                length: link,
+            },
         })
         .collect();
-    SceneSpec { bodies, gravity: (0.0, 540.0), default_tangible: false, perpetual: false, joints }
+    SceneSpec {
+        bodies,
+        gravity: (0.0, 540.0),
+        default_tangible: false,
+        perpetual: false,
+        joints,
+    }
 }
 
 /// A powered mixer: a long paddle bar pinned at its centre to a fixed hub by a motorised revolute
@@ -376,7 +530,10 @@ pub fn mixer_scene() -> SceneSpec {
     use std::f32::consts::TAU;
     let arm = 150.0;
     // Body 0 the fixed hub (a small disc at the centre); body 1 the dynamic paddle bar centred on it.
-    let mut bodies = vec![SceneBodySpec::fixed(NodeCollider::Ball { radius: 6.0 }, (0.0, 0.0))];
+    let mut bodies = vec![SceneBodySpec::fixed(
+        NodeCollider::Ball { radius: 6.0 },
+        (0.0, 0.0),
+    )];
     bodies.push(
         SceneBodySpec::dynamic(
             NodeCollider::Hull {
@@ -391,8 +548,11 @@ pub fn mixer_scene() -> SceneSpec {
     for i in 0..18 {
         let a = i as f32 * TAU / 18.0;
         bodies.push(
-            SceneBodySpec::fixed(NodeCollider::Ball { radius: 20.0 }, (250.0 * a.cos(), 250.0 * a.sin()))
-                .restitution(0.5),
+            SceneBodySpec::fixed(
+                NodeCollider::Ball { radius: 20.0 },
+                (250.0 * a.cos(), 250.0 * a.sin()),
+            )
+            .restitution(0.5),
         );
     }
     // Loose balls in the annulus between the paddle's reach and the wall, for the paddle to stir.
@@ -400,7 +560,9 @@ pub fn mixer_scene() -> SceneSpec {
         let a = i as f32 * TAU / 10.0 + 0.3;
         bodies.push(
             SceneBodySpec::dynamic(
-                NodeCollider::Ball { radius: 14.0 + (i % 3) as f32 * 5.0 },
+                NodeCollider::Ball {
+                    radius: 14.0 + (i % 3) as f32 * 5.0,
+                },
                 (200.0 * a.cos(), 200.0 * a.sin()),
             )
             .restitution(0.6),
@@ -413,10 +575,19 @@ pub fn mixer_scene() -> SceneSpec {
         joint: SceneJoint::Revolute {
             anchor_a: (0.0, 0.0),
             anchor_b: (0.0, 0.0),
-            motor: Some(JointMotorSpec { target_vel: 2.5, factor: 30.0 }),
+            motor: Some(JointMotorSpec {
+                target_vel: 2.5,
+                factor: 30.0,
+            }),
         },
     }];
-    SceneSpec { bodies, gravity: (0.0, 0.0), default_tangible: false, perpetual: true, joints }
+    SceneSpec {
+        bodies,
+        gravity: (0.0, 0.0),
+        default_tangible: false,
+        perpetual: true,
+        joints,
+    }
 }
 
 #[cfg(test)]
@@ -450,10 +621,25 @@ mod tests {
             let node = NodeKey::new(0);
             sim.sync_nodes([(node, Point2D::new(0.0, 0.0))]);
             sim.load_scene(&spec);
-            assert!(want <= 200, "scene must stay under SCENE_BODY_CAP (was {want})");
-            assert_eq!(sim.scene_body_count(), want, "every spec body became a scene body");
-            assert_eq!(sim.body_count(), 1, "the node is not counted as a scene body");
-            assert_eq!(sim.scene_perpetual(), perpetual, "scene reports its perpetual flag");
+            assert!(
+                want <= 200,
+                "scene must stay under SCENE_BODY_CAP (was {want})"
+            );
+            assert_eq!(
+                sim.scene_body_count(),
+                want,
+                "every spec body became a scene body"
+            );
+            assert_eq!(
+                sim.body_count(),
+                1,
+                "the node is not counted as a scene body"
+            );
+            assert_eq!(
+                sim.scene_perpetual(),
+                perpetual,
+                "scene reports its perpetual flag"
+            );
         }
     }
 
@@ -473,7 +659,10 @@ mod tests {
         }
         let b: Vec<_> = settle.scene_bodies().map(|b| b.position).collect();
         let settled_motion: f32 = a.iter().zip(&b).map(|(p, q)| (*p - *q).length()).sum();
-        assert!(settled_motion < 5.0, "pyramid should be at rest (moved {settled_motion})");
+        assert!(
+            settled_motion < 5.0,
+            "pyramid should be at rest (moved {settled_motion})"
+        );
 
         // Drift: still moving after the same long run (perpetual + near-zero damping).
         let mut drift = Simulation::new();
@@ -487,7 +676,10 @@ mod tests {
         }
         let b: Vec<_> = drift.scene_bodies().map(|b| b.position).collect();
         let drift_motion: f32 = a.iter().zip(&b).map(|(p, q)| (*p - *q).length()).sum();
-        assert!(drift_motion > 5.0, "drift orbs should still be moving (moved {drift_motion})");
+        assert!(
+            drift_motion > 5.0,
+            "drift orbs should still be moving (moved {drift_motion})"
+        );
     }
 
     /// The rope joints anchor the chain: instead of the eight links falling away forever under
@@ -500,13 +692,19 @@ mod tests {
         for _ in 0..300 {
             sim.tick(1.0 / 60.0);
         }
-        let max_y = sim.scene_bodies().map(|b| b.position.y).fold(f32::NEG_INFINITY, f32::max);
+        let max_y = sim
+            .scene_bodies()
+            .map(|b| b.position.y)
+            .fold(f32::NEG_INFINITY, f32::max);
         assert!(
             max_y < 500.0,
             "rope joints should anchor the chain, not let it fall away (max_y {max_y})"
         );
         // ...and it hangs below the anchor (it swung down from the horizontal start).
-        assert!(max_y > 0.0, "the chain should hang below the anchor (max_y {max_y})");
+        assert!(
+            max_y > 0.0,
+            "the chain should hang below the anchor (max_y {max_y})"
+        );
     }
 
     /// The mixer's revolute motor actually turns the paddle: its rotation advances over a run
@@ -548,7 +746,13 @@ mod tests {
             .filter(|b| matches!(b.collider, crate::NodeCollider::Hull { .. }))
             .map(|b| b.position.y)
             .fold(f32::NEG_INFINITY, f32::max);
-        assert!(lowest_plank_y > 20.0, "the loaded bridge should sag below the deck (was {lowest_plank_y})");
-        assert!(lowest_plank_y < 600.0, "the posts should still hold the span, not drop it (was {lowest_plank_y})");
+        assert!(
+            lowest_plank_y > 20.0,
+            "the loaded bridge should sag below the deck (was {lowest_plank_y})"
+        );
+        assert!(
+            lowest_plank_y < 600.0,
+            "the posts should still hold the span, not drop it (was {lowest_plank_y})"
+        );
     }
 }

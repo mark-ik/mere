@@ -61,8 +61,8 @@ pub fn load_forme(session_dir: &Path, id: FormeId) -> io::Result<Option<FormeDoc
         return Ok(None);
     }
     let text = fs::read_to_string(&path)?;
-    let doc = serde_json::from_str(&text)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    let doc =
+        serde_json::from_str(&text).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
     Ok(Some(doc))
 }
 
@@ -116,7 +116,8 @@ mod tests {
     fn save_stamps_timestamps_and_round_trips() {
         let dir = temp_session();
         let mut doc = FormeDocument::new(uuid::Uuid::from_u128(1), Some("research".into()));
-        doc.arrangement.add_tile_intent(Some(uuid::Uuid::from_u128(9)));
+        doc.arrangement
+            .add_tile_intent(Some(uuid::Uuid::from_u128(9)));
         let id = doc.id;
 
         save_forme(&dir, &mut doc, 1_700_000_000_000).unwrap();

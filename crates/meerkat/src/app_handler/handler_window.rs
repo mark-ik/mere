@@ -88,6 +88,10 @@ impl Shell {
                     wc.drag_caret_select(wc.view.cursor.0, wc.view.cursor.1);
                     return;
                 }
+                if wc.view.page_text_drag.is_some() {
+                    wc.drag_page_text_selection(wc.view.cursor.0, wc.view.cursor.1);
+                    return;
+                }
                 // Hint the resize edges: the borderless window has no OS frame, so
                 // the host sets the resize arrows on hover. (Custom titlebar.)
                 wc.update_hover_cursor();

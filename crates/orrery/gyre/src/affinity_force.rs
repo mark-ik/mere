@@ -92,8 +92,7 @@ impl Force for AffinitySpring {
             if a == b || weight <= 0.0 {
                 continue; // a self-pair or a zero weight exerts nothing
             }
-            let (Some(&ha), Some(&hb)) =
-                (ctx.bodies_by_node.get(&a), ctx.bodies_by_node.get(&b))
+            let (Some(&ha), Some(&hb)) = (ctx.bodies_by_node.get(&a), ctx.bodies_by_node.get(&b))
             else {
                 continue; // endpoint without a body (stale pair / not yet synced)
             };
@@ -110,8 +109,7 @@ impl Force for AffinitySpring {
             if dist <= self.rest_length || dist < 1e-3 {
                 continue;
             }
-            let pull =
-                delta / dist * (self.stiffness * weight * (dist - self.rest_length));
+            let pull = delta / dist * (self.stiffness * weight * (dist - self.rest_length));
             if let Some(body) = ctx.bodies.get_mut(ha) {
                 body.add_force(pull, true);
             }
@@ -125,13 +123,17 @@ impl Force for AffinitySpring {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kernel::graph::fixtures::GraphFixtures;
     use crate::{NodeExclusion, Simulation};
     use euclid::default::Point2D;
     use kernel::graph::Graph;
+    use kernel::graph::fixtures::GraphFixtures;
 
     fn node_at(g: &mut Graph, id: u128, x: f32, y: f32) -> NodeKey {
-        g.add_node_with_id(uuid::Uuid::from_u128(id), format!("mere://{id}"), Point2D::new(x, y))
+        g.add_node_with_id(
+            uuid::Uuid::from_u128(id),
+            format!("mere://{id}"),
+            Point2D::new(x, y),
+        )
     }
 
     fn distance(sim: &Simulation, a: NodeKey, b: NodeKey) -> f32 {
@@ -154,7 +156,10 @@ mod tests {
             sim.tick(1.0 / 60.0);
         }
         let end = distance(&sim, a, b);
-        assert!(end < start, "affinity should pull the pair closer: {start} -> {end}");
+        assert!(
+            end < start,
+            "affinity should pull the pair closer: {start} -> {end}"
+        );
     }
 
     #[test]

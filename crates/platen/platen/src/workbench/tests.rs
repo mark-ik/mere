@@ -57,8 +57,15 @@ fn activate_switches_the_visible_tab_in_a_stack() {
         assert_eq!(view.members, &[m(1), m(2), m(3)], "three stacked tabs");
         assert_eq!(view.active, 0, "first tab active by default");
     }
-    assert!(wb.activate(m(3)), "activating a member in the stack succeeds");
-    assert_eq!(wb.slot_views().next().unwrap().active, 2, "the active tab switched");
+    assert!(
+        wb.activate(m(3)),
+        "activating a member in the stack succeeds"
+    );
+    assert_eq!(
+        wb.slot_views().next().unwrap().active,
+        2,
+        "the active tab switched"
+    );
 }
 
 #[test]
@@ -66,7 +73,11 @@ fn open_split_opens_each_as_its_own_slot_and_dedups() {
     let mut wb = Workbench::new();
     assert_eq!(wb.open_split(&[m(1), m(2), m(3)]), 3, "all three are new");
     assert_eq!(wb.slot_count(), 3, "one column per member");
-    assert_eq!(wb.open_split(&[m(2), m(4)]), 1, "only the unseen member opens");
+    assert_eq!(
+        wb.open_split(&[m(2), m(4)]),
+        1,
+        "only the unseen member opens"
+    );
     assert_eq!(wb.slot_count(), 4);
 }
 
@@ -115,7 +126,11 @@ fn move_to_slot_of_moves_across_and_reorders_within() {
     assert_eq!(wb.tile_count(), 3, "no tab lost");
     let stack = wb.slot_views().find(|s| s.members.contains(&m(1))).unwrap();
     assert_eq!(stack.members, &[m(3), m(1)], "m(1) appended to m(3)'s cell");
-    assert_eq!(stack.members[stack.active], m(1), "the dragged tab is active");
+    assert_eq!(
+        stack.members[stack.active],
+        m(1),
+        "the dragged tab is active"
+    );
     assert!(wb.move_to_slot_of(m(3), m(1)));
     let stack = wb.slot_views().find(|s| s.members.contains(&m(3))).unwrap();
     assert_eq!(stack.members, &[m(1), m(3)], "m(3) reordered to after m(1)");
@@ -152,7 +167,11 @@ fn split_beside_pulls_a_tab_into_its_own_slot() {
     assert_eq!(members, vec![vec![m(1)], vec![m(2)]]);
     assert!(wb.split_beside(m(1), m(2), false));
     let members: Vec<_> = wb.slot_views().map(|s| s.members.to_vec()).collect();
-    assert_eq!(members, vec![vec![m(1)], vec![m(2)]], "m(1) inserted before m(2)");
+    assert_eq!(
+        members,
+        vec![vec![m(1)], vec![m(2)]],
+        "m(1) inserted before m(2)"
+    );
     assert!(!wb.split_beside(m(1), m(1), true), "self is a no-op");
 }
 
@@ -183,13 +202,19 @@ fn split_out_pulls_a_tab_out_of_its_own_stack() {
     wb.open_tile(m(2));
     wb.stack_all(); // one stack [1, 2]
     assert_eq!(wb.slot_count(), 1);
-    assert!(wb.split_out(m(1), SplitAxis::Row, true), "m(1) splits out beside the stack");
+    assert!(
+        wb.split_out(m(1), SplitAxis::Row, true),
+        "m(1) splits out beside the stack"
+    );
     assert_eq!(wb.slot_count(), 2);
     assert_eq!(wb.tile_count(), 2, "no tab lost");
     // A tab alone in its cell has no sibling to anchor on — a no-op.
     let mut wb2 = Workbench::new();
     wb2.open_tile(m(5));
-    assert!(!wb2.split_out(m(5), SplitAxis::Column, false), "alone → no-op");
+    assert!(
+        !wb2.split_out(m(5), SplitAxis::Column, false),
+        "alone → no-op"
+    );
 }
 
 #[test]
@@ -199,9 +224,16 @@ fn weights_are_fractions_default_equal_and_set_renormalizes() {
     assert_eq!(wb.weights(), vec![0.5, 0.5], "equal fractions by default");
     wb.set_weights(&[3.0, 1.0]);
     let w = wb.weights();
-    assert!((w[0] - 0.75).abs() < 1e-5 && (w[1] - 0.25).abs() < 1e-5, "renormalized to sum 1");
+    assert!(
+        (w[0] - 0.75).abs() < 1e-5 && (w[1] - 0.25).abs() < 1e-5,
+        "renormalized to sum 1"
+    );
     wb.set_weights(&[-1.0, 0.0]);
-    assert_eq!(wb.weights(), vec![0.5, 0.5], "clamped + renormalized so neither collapses");
+    assert_eq!(
+        wb.weights(),
+        vec![0.5, 0.5],
+        "clamped + renormalized so neither collapses"
+    );
 }
 
 #[test]
@@ -211,7 +243,11 @@ fn nested_split_fractions_addressed_by_path() {
     wb.split_beside_axis(m(3), m(2), SplitAxis::Column, true); // [1 | (2 / 3)]
     // The top-level row has two children; child 1 is the nested column.
     assert_eq!(wb.split_fractions(&[]).unwrap().len(), 2);
-    assert_eq!(wb.split_fractions(&[1]).unwrap().len(), 2, "the nested column");
+    assert_eq!(
+        wb.split_fractions(&[1]).unwrap().len(),
+        2,
+        "the nested column"
+    );
     assert!(wb.set_split_fractions(&[1], &[0.7, 0.3]));
     let nested = wb.split_fractions(&[1]).unwrap();
     assert!((nested[0] - 0.7).abs() < 1e-5 && (nested[1] - 0.3).abs() < 1e-5);
@@ -243,7 +279,10 @@ fn to_tile_tree_single_slot_is_a_stack() {
     let mut wb = Workbench::new();
     wb.open_tile(m(1));
     let tree = wb.to_tile_tree(actor_tile_for).expect("one slot");
-    assert!(matches!(tree, TileTree::Stack(_)), "a lone slot is the stack itself");
+    assert!(
+        matches!(tree, TileTree::Stack(_)),
+        "a lone slot is the stack itself"
+    );
     assert_eq!(tree.tiles().len(), 1);
 }
 
@@ -275,8 +314,16 @@ fn to_tile_tree_slots_become_a_weighted_row_split() {
         TileTree::Split { axis, children } => {
             assert_eq!(axis, Axis::Row, "slots lay side by side");
             assert_eq!(children.len(), 2);
-            assert!((children[0].fraction - 0.75).abs() < 1e-6, "got {}", children[0].fraction);
-            assert!((children[1].fraction - 0.25).abs() < 1e-6, "got {}", children[1].fraction);
+            assert!(
+                (children[0].fraction - 0.75).abs() < 1e-6,
+                "got {}",
+                children[0].fraction
+            );
+            assert!(
+                (children[1].fraction - 0.25).abs() < 1e-6,
+                "got {}",
+                children[1].fraction
+            );
         }
         other => panic!("expected a row split, got {other:?}"),
     }

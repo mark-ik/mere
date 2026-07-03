@@ -1,0 +1,15 @@
+[package]
+name = "roster"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Roster domain vocabulary for Mere: pane tabs, subjects, rows, cards, and snapshots."
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+forme.workspace = true
+kernel.workspace = true

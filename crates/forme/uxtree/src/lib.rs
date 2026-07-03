@@ -371,7 +371,9 @@ where
 {
     for span in spans {
         match span {
-            InlineSpan::Link { url, title, spans, .. } => {
+            InlineSpan::Link {
+                url, title, spans, ..
+            } => {
                 f(url.as_str(), title.as_ref(), spans.as_slice());
                 walk_inline_links(spans, f);
             }
@@ -389,9 +391,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use inker::{
-        Block, DocumentProvenance, DocumentTrustState, EngineDocument, InlineSpan,
-    };
+    use inker::{Block, DocumentProvenance, DocumentTrustState, EngineDocument, InlineSpan};
 
     fn doc_with(blocks: Vec<Block>) -> EngineDocument {
         EngineDocument {

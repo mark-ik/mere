@@ -118,7 +118,13 @@ impl Force for BarnesHutRepulsion {
         }
         // k = 1.0 folds the ideal-edge-length term out, leaving
         // `strength * mass / distance` per (pseudo-)body.
-        let forces = repulsion_forces(&positions, self.config, 1.0, self.strength, self.min_distance);
+        let forces = repulsion_forces(
+            &positions,
+            self.config,
+            1.0,
+            self.strength,
+            self.min_distance,
+        );
         for (handle, f) in handles.iter().zip(forces) {
             if let Some(body) = ctx.bodies.get_mut(*handle) {
                 body.add_force(Vector::new(f.x, f.y), true);
@@ -357,8 +363,14 @@ mod tests {
         let forces = repulsion_forces(&positions, BarnesHutConfig::default(), 30.0, 1.0, 0.01);
         assert_eq!(forces.len(), 2);
         // Body 0 is pushed left (−x), body 1 right (+x).
-        assert!(forces[0].x < 0.0, "left body should be pushed left: {forces:?}");
-        assert!(forces[1].x > 0.0, "right body should be pushed right: {forces:?}");
+        assert!(
+            forces[0].x < 0.0,
+            "left body should be pushed left: {forces:?}"
+        );
+        assert!(
+            forces[1].x > 0.0,
+            "right body should be pushed right: {forces:?}"
+        );
     }
 
     #[test]
@@ -411,11 +423,13 @@ mod tests {
         sim.sync_with_graph(&g);
         sim.add_force(BarnesHutRepulsion::default());
 
-        let dist0 = (sim.position_of(keys[0]).unwrap() - sim.position_of(keys[1]).unwrap()).length();
+        let dist0 =
+            (sim.position_of(keys[0]).unwrap() - sim.position_of(keys[1]).unwrap()).length();
         for _ in 0..60 {
             sim.tick(1.0 / 60.0);
         }
-        let dist1 = (sim.position_of(keys[0]).unwrap() - sim.position_of(keys[1]).unwrap()).length();
+        let dist1 =
+            (sim.position_of(keys[0]).unwrap() - sim.position_of(keys[1]).unwrap()).length();
         assert!(
             dist1 > dist0,
             "barnes-hut repulsion should push bodies apart: {dist0} -> {dist1}"

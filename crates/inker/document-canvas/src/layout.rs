@@ -196,9 +196,7 @@ impl<'a> DocumentLayouter<'a> {
             Block::MetadataRow { label, value } => {
                 Some(self.render_metadata_row(source_index, indent_level, label, value))
             }
-            Block::Badge { text } => {
-                Some(self.render_badge(source_index, indent_level, text))
-            }
+            Block::Badge { text } => Some(self.render_badge(source_index, indent_level, text)),
         }
     }
 
@@ -252,8 +250,11 @@ impl<'a> DocumentLayouter<'a> {
         spacing_above: f32,
         spacing_below: f32,
     ) -> RenderedBlock {
-        let flattened =
-            flatten_inline(spans, self.style.link_adornment, self.base_scheme.as_deref());
+        let flattened = flatten_inline(
+            spans,
+            self.style.link_adornment,
+            self.base_scheme.as_deref(),
+        );
         self.render_flattened_with_spacing(
             source_index,
             indent_level,

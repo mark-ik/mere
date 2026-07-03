@@ -15,10 +15,10 @@
 //! text (lossy v1), and the count of stripped entries surfaces as a
 //! `DegradedRendering` diagnostic.
 
-use errand::parse::feed::{parse as parse_feed_xml, strip_html_tags, Feed, FeedEntry};
+use errand::parse::feed::{Feed, FeedEntry, parse as parse_feed_xml, strip_html_tags};
 use inker::{
-    Block, DocumentDiagnostic, DocumentProvenance, DocumentTrustState, Engine,
-    EngineDocument, EngineError, EngineInput,
+    Block, DocumentDiagnostic, DocumentProvenance, DocumentTrustState, Engine, EngineDocument,
+    EngineError, EngineInput,
 };
 use serde::Deserialize;
 
@@ -155,7 +155,12 @@ fn parse_json(body: &str) -> Result<Feed, EngineError> {
             });
 
         if title.is_some() || link.is_some() || summary.is_some() {
-            out.entries.push(FeedEntry { title, link, date, summary });
+            out.entries.push(FeedEntry {
+                title,
+                link,
+                date,
+                summary,
+            });
         }
     }
 
@@ -178,8 +183,7 @@ fn trimmed_some(value: Option<String>) -> Option<String> {
 fn build_document_blocks(feed: Feed) -> (Vec<Block>, Vec<DocumentDiagnostic>) {
     let mut blocks = Vec::with_capacity(feed.entries.len() + 1);
 
-    let header_has_content =
-        feed.title.is_some() || feed.subtitle.is_some() || feed.link.is_some();
+    let header_has_content = feed.title.is_some() || feed.subtitle.is_some() || feed.link.is_some();
     if header_has_content {
         blocks.push(Block::FeedHeader {
             title: feed.title.clone().unwrap_or_default(),

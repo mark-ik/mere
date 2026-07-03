@@ -129,8 +129,7 @@ impl Force for EdgeSpring {
             if a == b {
                 continue; // no self-springs
             }
-            let (Some(&ha), Some(&hb)) =
-                (ctx.bodies_by_node.get(&a), ctx.bodies_by_node.get(&b))
+            let (Some(&ha), Some(&hb)) = (ctx.bodies_by_node.get(&a), ctx.bodies_by_node.get(&b))
             else {
                 continue; // endpoint without a body (stale edge / not yet synced)
             };

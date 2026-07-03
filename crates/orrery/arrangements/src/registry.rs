@@ -94,7 +94,6 @@ pub struct LayoutCapability {
 pub mod dyn_layout;
 pub use dyn_layout::*;
 
-
 // ── Registry ─────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq)]

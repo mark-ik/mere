@@ -5,11 +5,11 @@ use std::path::PathBuf;
 
 use super::registry::compute_active_capabilities;
 
-use register_diagnostics::{DiagnosticEvent, install_global_sender};
 use register_diagnostics::channels::{
     CHANNEL_MOD_QUARANTINED, CHANNEL_MOD_ROLLBACK_FAILED, CHANNEL_MOD_ROLLBACK_SUCCEEDED,
     CHANNEL_MOD_UNLOAD_FAILED,
 };
+use register_diagnostics::{DiagnosticEvent, install_global_sender};
 
 fn test_manifest(id: &str, provides: &[&str], requires: &[&str]) -> ModManifest {
     ModManifest::new(
@@ -160,8 +160,7 @@ fn resolves_dependency_order() {
 #[test]
 fn fails_on_missing_requirement() {
     let manifest = test_manifest("mod:x", &["x"], &["ProtocolRegistry"]);
-    let error =
-        resolve_mod_load_order(&[manifest]).expect_err("should fail missing requirement");
+    let error = resolve_mod_load_order(&[manifest]).expect_err("should fail missing requirement");
     assert!(matches!(
         error,
         ModDependencyError::MissingRequirement { mod_id, requirement }

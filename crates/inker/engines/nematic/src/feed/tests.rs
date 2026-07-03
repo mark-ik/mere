@@ -130,18 +130,20 @@ fn json_feed_content_html_is_stripped_and_flagged() {
         .blocks
         .iter()
         .find_map(|b| match b {
-            Block::FeedEntry { title, summary, .. } if title == "First post" => {
-                summary.as_deref()
-            }
+            Block::FeedEntry { title, summary, .. } if title == "First post" => summary.as_deref(),
             _ => None,
         })
         .expect("expected first-post summary");
     assert_eq!(summary, "This is the first post.");
 
-    let degraded = doc.diagnostics.iter().any(|d| {
-        matches!(d, DocumentDiagnostic::DegradedRendering(msg) if msg.contains("HTML"))
-    });
-    assert!(degraded, "expected DegradedRendering diagnostic for stripped HTML");
+    let degraded = doc
+        .diagnostics
+        .iter()
+        .any(|d| matches!(d, DocumentDiagnostic::DegradedRendering(msg) if msg.contains("HTML")));
+    assert!(
+        degraded,
+        "expected DegradedRendering diagnostic for stripped HTML"
+    );
 }
 
 #[test]
@@ -151,9 +153,7 @@ fn json_feed_content_text_is_kept_verbatim() {
         .blocks
         .iter()
         .find_map(|b| match b {
-            Block::FeedEntry { title, summary, .. } if title == "Second post" => {
-                summary.as_deref()
-            }
+            Block::FeedEntry { title, summary, .. } if title == "Second post" => summary.as_deref(),
             _ => None,
         })
         .expect("expected second-post summary");
@@ -241,9 +241,7 @@ fn rss_summary_strips_html_tags_into_feed_entry_summary() {
         .blocks
         .iter()
         .find_map(|b| match b {
-            Block::FeedEntry { title, summary, .. } if title == "First post" => {
-                summary.as_deref()
-            }
+            Block::FeedEntry { title, summary, .. } if title == "First post" => summary.as_deref(),
             _ => None,
         })
         .expect("expected first-post summary");
@@ -283,9 +281,7 @@ fn atom_content_html_is_stripped_into_entry_summary() {
         .blocks
         .iter()
         .find_map(|b| match b {
-            Block::FeedEntry { title, summary, .. } if title == "Atom two" => {
-                summary.as_deref()
-            }
+            Block::FeedEntry { title, summary, .. } if title == "Atom two" => summary.as_deref(),
             _ => None,
         })
         .expect("expected atom-two summary");

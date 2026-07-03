@@ -73,8 +73,7 @@ pub fn bridges(graph: &Graph, metric: BridgeMetric, threshold: f32) -> BridgeNod
 /// ascending key order. (Graph signals — bridges / articulation points.)
 pub fn articulation_points(graph: &Graph) -> BridgeNodes {
     let nodes: Vec<NodeKey> = graph.nodes().map(|(k, _)| k).collect();
-    let index: HashMap<NodeKey, usize> =
-        nodes.iter().enumerate().map(|(i, &k)| (k, i)).collect();
+    let index: HashMap<NodeKey, usize> = nodes.iter().enumerate().map(|(i, &k)| (k, i)).collect();
     let n = nodes.len();
     // Distinct undirected adjacency as indices (dedup parallel edges, drop self-loops).
     let adj: Vec<Vec<usize>> = nodes

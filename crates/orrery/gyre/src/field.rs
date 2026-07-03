@@ -31,7 +31,12 @@ impl Simulation {
     /// Apply the scene force-field (if any) to every dynamic scene body — a whirlpool's tangential
     /// swirl + inward pull. A no-op without a field. (Physics scenes P4 — force-field tier.)
     pub(crate) fn apply_scene_field(&mut self) {
-        let Some(SceneField::Vortex { center, strength, inward }) = self.scene_field else {
+        let Some(SceneField::Vortex {
+            center,
+            strength,
+            inward,
+        }) = self.scene_field
+        else {
             return;
         };
         let c = Vector::new(center.0, center.1);

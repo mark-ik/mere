@@ -2,7 +2,6 @@ use super::super::*;
 use super::render;
 use inker::InlineSpan;
 
-
 #[test]
 fn wikilink_rewrites_to_mere_node_url() {
     let doc = render("See [[my note]] for context.\n");
@@ -55,9 +54,7 @@ fn unterminated_wikilink_stays_as_text() {
     let doc = render("This is [[unclosed and continues...\n");
     // No wikilink should have been emitted.
     let any_link = doc.blocks.iter().any(|b| match b {
-        Block::Paragraph { spans } => {
-            spans.iter().any(|s| matches!(s, InlineSpan::Link { .. }))
-        }
+        Block::Paragraph { spans } => spans.iter().any(|s| matches!(s, InlineSpan::Link { .. })),
         _ => false,
     });
     assert!(!any_link, "unterminated [[ should not produce a link");

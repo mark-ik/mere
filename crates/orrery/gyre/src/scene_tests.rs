@@ -20,12 +20,18 @@ fn scene_body_is_intangible_to_nodes_and_ignored_by_forces() {
     // A scene body overlapping the node (centers 5px apart, radii sum 36) — a hard
     // collision would shove the node off the origin.
     let id = sim.add_scene_body(
-        NodeCollider::Ball { radius: NODE_BODY_RADIUS },
+        NodeCollider::Ball {
+            radius: NODE_BODY_RADIUS,
+        },
         Point2D::new(5.0, 0.0),
         (0.0, 0.0),
     );
     assert_eq!(sim.scene_body_count(), 1);
-    assert_eq!(sim.body_count(), 1, "the scene body is not counted as a node");
+    assert_eq!(
+        sim.body_count(),
+        1,
+        "the scene body is not counted as a node"
+    );
     assert_eq!(sim.scene_bodies().count(), 1);
 
     // No forces registered, so the node only moves if the scene body collides with
@@ -52,7 +58,9 @@ fn node_tangibility_toggles_scene_collision() {
     let node = NodeKey::new(0);
     sim.sync_nodes([(node, Point2D::new(0.0, 0.0))]);
     sim.add_scene_body(
-        NodeCollider::Ball { radius: NODE_BODY_RADIUS },
+        NodeCollider::Ball {
+            radius: NODE_BODY_RADIUS,
+        },
         Point2D::new(5.0, 0.0),
         (0.0, 0.0),
     );
@@ -62,7 +70,10 @@ fn node_tangibility_toggles_scene_collision() {
         sim.tick(1.0 / 60.0);
     }
     let intangible = sim.position_of(node).expect("node has a position");
-    assert!(intangible.x.abs() < 1.0, "intangible: node not pushed (was {intangible:?})");
+    assert!(
+        intangible.x.abs() < 1.0,
+        "intangible: node not pushed (was {intangible:?})"
+    );
 
     // Flip the node tangible: now the overlapping scene body's hard collision shoves it
     // off the origin (away from the body at +x, so toward -x).
@@ -85,16 +96,28 @@ fn load_scene_falls_under_gravity_while_nodes_float() {
     sim.load_scene(&crate::drop_bowl_scene());
     assert_eq!(sim.scene_body_count(), 13, "5 floor + 8 falling balls");
 
-    let min_before = sim.scene_bodies().map(|b| b.position.y).fold(f32::INFINITY, f32::min);
+    let min_before = sim
+        .scene_bodies()
+        .map(|b| b.position.y)
+        .fold(f32::INFINITY, f32::min);
     for _ in 0..60 {
         sim.tick(1.0 / 60.0);
     }
-    let min_after = sim.scene_bodies().map(|b| b.position.y).fold(f32::INFINITY, f32::min);
-    assert!(min_after > min_before + 5.0, "gravity pulled the falling balls down");
+    let min_after = sim
+        .scene_bodies()
+        .map(|b| b.position.y)
+        .fold(f32::INFINITY, f32::min);
+    assert!(
+        min_after > min_before + 5.0,
+        "gravity pulled the falling balls down"
+    );
 
     // The node carries gravity_scale(0), so scene gravity never drags the graph down.
     let np = sim.position_of(node).expect("node has a position");
-    assert!(np.y.abs() < 5.0, "nodes float under scene gravity (was {np:?})");
+    assert!(
+        np.y.abs() < 5.0,
+        "nodes float under scene gravity (was {np:?})"
+    );
 }
 
 #[test]
@@ -105,24 +128,35 @@ fn tangible_node_displaces_the_fluid_pool() {
     let mut sim = Simulation::new();
     let node = NodeKey::new(0);
     sim.sync_nodes([(node, Point2D::new(0.0, 0.0))]);
-    let params = FluidParams { gravity: Vector2D::zero(), ..FluidParams::default() };
-    let basin = Basin { min_x: -200.0, max_x: 200.0, floor_y: 300.0 };
+    let params = FluidParams {
+        gravity: Vector2D::zero(),
+        ..FluidParams::default()
+    };
+    let basin = Basin {
+        min_x: -200.0,
+        max_x: 200.0,
+        floor_y: 300.0,
+    };
     sim.load_fluid(params, basin, Point2D::new(-30.0, -30.0), 5, 5, 14.0);
 
     // Intangible (default): the node does not push the fluid — a particle can sit near the origin.
     for _ in 0..8 {
         sim.tick(1.0 / 60.0);
     }
-    let nearest_intangible =
-        sim.fluid_particles().map(|p| p.to_vector().length()).fold(f32::INFINITY, f32::min);
+    let nearest_intangible = sim
+        .fluid_particles()
+        .map(|p| p.to_vector().length())
+        .fold(f32::INFINITY, f32::min);
 
     // Tangible: the node now displaces the pool — the nearest particle is pushed out to ~its radius.
     sim.set_nodes_tangible(true);
     for _ in 0..8 {
         sim.tick(1.0 / 60.0);
     }
-    let nearest_tangible =
-        sim.fluid_particles().map(|p| p.to_vector().length()).fold(f32::INFINITY, f32::min);
+    let nearest_tangible = sim
+        .fluid_particles()
+        .map(|p| p.to_vector().length())
+        .fold(f32::INFINITY, f32::min);
 
     assert!(
         nearest_tangible > nearest_intangible,
@@ -139,24 +173,41 @@ fn vortex_field_swirls_scene_bodies() {
     use crate::SceneField;
     // A loose scene ball on the +x axis; a counter-clockwise vortex at the origin.
     let mut sim = Simulation::new();
-    sim.add_scene_body(NodeCollider::Ball { radius: 14.0 }, Point2D::new(100.0, 0.0), (0.0, 0.0));
+    sim.add_scene_body(
+        NodeCollider::Ball { radius: 14.0 },
+        Point2D::new(100.0, 0.0),
+        (0.0, 0.0),
+    );
     sim.set_scene_field(Some(SceneField::Vortex {
         center: (0.0, 0.0),
         strength: 90.0,
         inward: 30.0,
     }));
-    assert!(sim.wants_continuous_tick(), "a scene field keeps the actor ticking");
+    assert!(
+        sim.wants_continuous_tick(),
+        "a scene field keeps the actor ticking"
+    );
 
     for _ in 0..60 {
         sim.tick(1.0 / 60.0);
     }
     // A CCW vortex pushes a body on the +x axis toward +y.
-    let p = sim.scene_bodies().next().map(|b| b.position).expect("the scene body");
-    assert!(p.y > 5.0, "CCW vortex swirled the body toward +y (was at +x): {p:?}");
+    let p = sim
+        .scene_bodies()
+        .next()
+        .map(|b| b.position)
+        .expect("the scene body");
+    assert!(
+        p.y > 5.0,
+        "CCW vortex swirled the body toward +y (was at +x): {p:?}"
+    );
 
     // Clearing the scene drops the field too.
     sim.clear_scene();
-    assert!(!sim.wants_continuous_tick(), "clearing the scene clears the field");
+    assert!(
+        !sim.wants_continuous_tick(),
+        "clearing the scene clears the field"
+    );
 }
 
 #[test]
@@ -174,7 +225,10 @@ fn emitter_spawns_then_reaps_to_a_bounded_count() {
         max_alive: 40,
     });
     assert_eq!(sim.emitter_count(), 1);
-    assert!(sim.wants_continuous_tick(), "an emitter keeps the actor ticking");
+    assert!(
+        sim.wants_continuous_tick(),
+        "an emitter keeps the actor ticking"
+    );
 
     // After more than one lifetime, spawning (~30/s) and reaping (age > 0.5s) balance near
     // rate*lifetime (~15) — a bounded steady count, not unbounded growth.
@@ -182,11 +236,18 @@ fn emitter_spawns_then_reaps_to_a_bounded_count() {
         sim.tick(1.0 / 60.0);
     }
     let steady = sim.scene_body_count();
-    assert!((6..=40).contains(&steady), "emitter holds a bounded steady count (was {steady})");
+    assert!(
+        (6..=40).contains(&steady),
+        "emitter holds a bounded steady count (was {steady})"
+    );
 
     // Clearing the emitters removes the bodies it spawned.
     sim.clear_emitters();
-    assert_eq!(sim.scene_body_count(), 0, "clearing emitters removes its bodies");
+    assert_eq!(
+        sim.scene_body_count(),
+        0,
+        "clearing emitters removes its bodies"
+    );
     assert_eq!(sim.emitter_count(), 0);
 }
 
@@ -208,11 +269,25 @@ fn scene_prop_carries_its_sprite_handle_through_to_the_view() {
     sim.load_scene(&spec);
     let sprites: Vec<Option<String>> = sim.scene_bodies().map(|b| b.sprite).collect();
     // Order is unspecified (a HashMap), so check the multiset: exactly one "crate", one bare.
-    assert_eq!(sprites.iter().filter(|s| s.as_deref() == Some("crate")).count(), 1, "one prop wears the sprite");
-    assert_eq!(sprites.iter().filter(|s| s.is_none()).count(), 1, "the other carries none");
+    assert_eq!(
+        sprites
+            .iter()
+            .filter(|s| s.as_deref() == Some("crate"))
+            .count(),
+        1,
+        "one prop wears the sprite"
+    );
+    assert_eq!(
+        sprites.iter().filter(|s| s.is_none()).count(),
+        1,
+        "the other carries none"
+    );
 
     // Clearing drops the sprite mapping (no leak into the next scene).
     sim.clear_scene();
     assert_eq!(sim.scene_bodies().count(), 0);
-    assert!(sim.scene_bodies().all(|b| b.sprite.is_none()), "no stale sprites after clear");
+    assert!(
+        sim.scene_bodies().all(|b| b.sprite.is_none()),
+        "no stale sprites after clear"
+    );
 }

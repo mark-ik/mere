@@ -1,7 +1,11 @@
 # Mere Post-Engine-Layer Priorities
 
 **Date**: 2026-05-09
-**Status**: Active forward-looking plan
+**Status**: ~~Active forward-looking plan~~ **Superseded as a priorities list (2026-07-03 archive pass)** — the current
+workspace state and priority map live in the
+[workspace_state_overview_brief](../research/2026-07-01_workspace_state_overview_brief.md) and the
+[modular_integration_plan](2026-06-02_modular_integration_plan.md). Kept in place as the
+post-migration historical record (the 2026-06-09 crate-rename banner below still applies).
 
 > **Crate-name note (2026-06-09 audit):** the §1 18-crate list and §2 host references are a 2026-05-09 **gpui-era** snapshot. The host is now `meerkat` (serval-as-host), not gpui: `mere-host`→`meerkat`, `mere-kernel`→`graph/graph-kernel`, `mere-host-contract`→`system/...`, `intelligence-embeddings`→`intel/embed`, `mere-transport`→`murm/transport`, `verso-tile`→`verso`. Dated status notes below are historical record.
 **Scope**: What's still open after the Graphshell→Mere migration finished and the engine layer (inker + nematic + polyglot knot + uxtree projection) landed. Replaces the 2026-05-06 Graphshell migration plan, which is archived under [`../../archive_docs/2026-05-09_engine_layer_complete/`](../../archive_docs/2026-05-09_engine_layer_complete/) along with its companion donor inventory.

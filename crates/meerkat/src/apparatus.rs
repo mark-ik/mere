@@ -193,10 +193,7 @@ pub fn apparatus_items(
         for (family, count) in &graph_metrics.relations_by_family {
             items.push(PaneItem::text(
                 "app-row",
-                format!(
-                    "{}: {count}",
-                    crate::roster_data::edge_family_label(*family)
-                ),
+                format!("{}: {count}", crate::roster::edge_family_label(*family)),
             ));
         }
     }

@@ -189,7 +189,10 @@ mod tests {
         reg.register(Box::new(GraftEngine::new(Arc::new(StubFactory))));
         assert!(reg.contains(GRAFT_SERVO_ENGINE_ID));
 
-        let mut producer = reg.spawn(&decision(), &stub_request()).ok().expect("spawn ok");
+        let mut producer = reg
+            .spawn(&decision(), &stub_request())
+            .ok()
+            .expect("spawn ok");
         // StubSurface yields no frame.
         match producer.acquire_frame() {
             Ok(opt) => assert!(opt.is_none()),

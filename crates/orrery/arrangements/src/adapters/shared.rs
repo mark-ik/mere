@@ -20,9 +20,9 @@
 use std::collections::HashMap;
 
 use crate::LayoutExtras;
-use euclid::default::{Point2D, Rect, Size2D};
 use crate::camera::CanvasViewport;
 use crate::scene::{CanvasEdge, CanvasNode, CanvasSceneInput};
+use euclid::default::{Point2D, Rect, Size2D};
 use kernel::graph::{NodeKey, RelationKind};
 
 use cartography::projection::{PositionedEdge, Projection};

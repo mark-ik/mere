@@ -21,7 +21,9 @@ fn doc_wasm() -> PathBuf {
 #[tokio::test(flavor = "current_thread")]
 async fn guest_discovers_its_grant_via_caps_granted() {
     // No turns — we only need `activate`, where the guest calls `granted()`.
-    let log = document_host::run_turns(&doc_wasm(), &[]).await.expect("run_turns");
+    let log = document_host::run_turns(&doc_wasm(), &[])
+        .await
+        .expect("run_turns");
     let activate_line = log
         .guest_logs
         .iter()

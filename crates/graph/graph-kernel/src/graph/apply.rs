@@ -15,7 +15,10 @@ use super::{
     },
 };
 use crate::persistence::{PersistedCoupling, PersistedField};
-use crate::types::{NodeClassification, NodeDerivation, NodeProperty};
+use crate::types::{
+    BadgeIcon, ClassificationScheme, ClassificationStatus, ImportRecord, NodeClassification,
+    NodeDerivation, NodeImportProvenance, NodeProperty,
+};
 
 #[derive(Debug, Clone)]
 pub enum GraphDelta {
@@ -131,9 +134,30 @@ pub enum GraphDelta {
         node_id: Uuid,
         classification: NodeClassification,
     },
+    ReplayRemoveNodeClassificationById {
+        node_id: Uuid,
+        scheme: ClassificationScheme,
+        value: String,
+    },
+    ReplaySetNodeClassificationStatusById {
+        node_id: Uuid,
+        scheme: ClassificationScheme,
+        value: String,
+        status: ClassificationStatus,
+    },
+    ReplaySetNodePrimaryClassificationById {
+        node_id: Uuid,
+        scheme: ClassificationScheme,
+        value: String,
+    },
     ReplayRecordNodeDerivationById {
         node_id: Uuid,
         derivation: NodeDerivation,
+    },
+    ReplaySetNodeTagIconOverrideById {
+        node_id: Uuid,
+        tag: String,
+        icon: Option<BadgeIcon>,
     },
     ReplaySetEdgeSemanticPredicateByIds {
         from_id: Uuid,
@@ -166,6 +190,9 @@ pub enum GraphDelta {
         node_id: Uuid,
         entries: Vec<String>,
         current_index: usize,
+    },
+    ReplaySetImportRecords {
+        import_records: Vec<ImportRecord>,
     },
     RetractRelations {
         from: NodeKey,
@@ -245,6 +272,25 @@ pub enum GraphDelta {
         entries: Vec<String>,
         current_index: usize,
     },
+    /// Replace the durable import-record table with a normalized whole-table snapshot.
+    SetImportRecords {
+        import_records: Vec<ImportRecord>,
+    },
+    /// Delete one durable import record by id.
+    DeleteImportRecord {
+        record_id: String,
+    },
+    /// Suppress or unsuppress one node membership within an import record.
+    SetImportRecordMembershipSuppressed {
+        record_id: String,
+        key: NodeKey,
+        suppressed: bool,
+    },
+    /// Replace one node's import provenance; the kernel rebuilds import records from it.
+    SetNodeImportProvenance {
+        key: NodeKey,
+        import_provenance: Vec<NodeImportProvenance>,
+    },
     // --- Write-path migration (2026-07-01): the variants below complete the
     // Phase 6.5 boundary. Every primitive durable mutation shell/runtime code
     // performs now has a delta; the raw mutators are `pub(crate)`. ---
@@ -294,10 +340,35 @@ pub enum GraphDelta {
         key: NodeKey,
         classification: NodeClassification,
     },
+    /// Remove a classification record identified by `(scheme, value)`.
+    RemoveNodeClassification {
+        key: NodeKey,
+        scheme: ClassificationScheme,
+        value: String,
+    },
+    /// Update the status of a classification record identified by `(scheme, value)`.
+    SetNodeClassificationStatus {
+        key: NodeKey,
+        scheme: ClassificationScheme,
+        value: String,
+        status: ClassificationStatus,
+    },
+    /// Promote one classification record to primary within its scheme.
+    SetNodePrimaryClassification {
+        key: NodeKey,
+        scheme: ClassificationScheme,
+        value: String,
+    },
     /// Record cross-graph / extraction derivation provenance on a node.
     RecordNodeDerivation {
         key: NodeKey,
         derivation: NodeDerivation,
+    },
+    /// Set or clear a tag-icon override for a durable user tag.
+    SetNodeTagIconOverride {
+        key: NodeKey,
+        tag: String,
+        icon: Option<BadgeIcon>,
     },
     /// Set (or clear) the canonical semantic-predicate IRI on an existing edge.
     SetEdgeSemanticPredicate {
@@ -358,8 +429,16 @@ pub enum GraphDeltaResult {
     HistoryStepped(Option<String>),
     /// A field-layer mutation: whether anything actually changed.
     FieldChanged(bool),
+    /// An import-record mutation: whether anything actually changed.
+    ImportRecordsUpdated(bool),
     /// A mutation with no observable result (e.g. navigate, branch-history).
     Applied,
+}
+
+fn capture_resolved_import_records(graph: &Graph) {
+    record_captured_delta(&CapturedDelta::ReplaySetImportRecords {
+        import_records: graph.import_records().to_vec(),
+    });
 }
 
 pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResult {
@@ -897,6 +976,13 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
             }
             GraphDeltaResult::NodeMetadataUpdated(updated)
         }
+        GraphDelta::ReplaySetImportRecords { import_records } => {
+            let changed = graph.set_import_records(import_records);
+            if changed {
+                capture_resolved_import_records(graph);
+            }
+            GraphDeltaResult::ImportRecordsUpdated(changed)
+        }
         GraphDelta::NavigateNode { key, url } => {
             let Some(node_id) = graph.get_node(key).map(|node| node.id) else {
                 return GraphDeltaResult::Applied;
@@ -1171,6 +1257,108 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
             }
             GraphDeltaResult::NodeMetadataUpdated(updated)
         }
+        GraphDelta::ReplayRemoveNodeClassificationById {
+            node_id,
+            scheme,
+            value,
+        } => {
+            let updated = graph
+                .get_node_key_by_id(node_id)
+                .is_some_and(|key| graph.remove_node_classification(key, &scheme, &value));
+            if updated {
+                record_captured_delta(&CapturedDelta::ReplayRemoveNodeClassificationById {
+                    node_id: node_id.to_string(),
+                    scheme,
+                    value,
+                });
+            }
+            GraphDeltaResult::NodeMetadataUpdated(updated)
+        }
+        GraphDelta::RemoveNodeClassification { key, scheme, value } => {
+            let node_id = graph.get_node(key).map(|node| node.id);
+            let capture_scheme = scheme.clone();
+            let capture_value = value.clone();
+            let updated = graph.remove_node_classification(key, &scheme, &value);
+            if updated && let Some(node_id) = node_id {
+                record_captured_delta(&CapturedDelta::ReplayRemoveNodeClassificationById {
+                    node_id: node_id.to_string(),
+                    scheme: capture_scheme,
+                    value: capture_value,
+                });
+            }
+            GraphDeltaResult::NodeMetadataUpdated(updated)
+        }
+        GraphDelta::ReplaySetNodeClassificationStatusById {
+            node_id,
+            scheme,
+            value,
+            status,
+        } => {
+            let updated = graph.get_node_key_by_id(node_id).is_some_and(|key| {
+                graph.set_node_classification_status(key, &scheme, &value, status.clone())
+            });
+            if updated {
+                record_captured_delta(&CapturedDelta::ReplaySetNodeClassificationStatusById {
+                    node_id: node_id.to_string(),
+                    scheme,
+                    value,
+                    status,
+                });
+            }
+            GraphDeltaResult::NodeMetadataUpdated(updated)
+        }
+        GraphDelta::SetNodeClassificationStatus {
+            key,
+            scheme,
+            value,
+            status,
+        } => {
+            let node_id = graph.get_node(key).map(|node| node.id);
+            let capture_scheme = scheme.clone();
+            let capture_value = value.clone();
+            let capture_status = status.clone();
+            let updated = graph.set_node_classification_status(key, &scheme, &value, status);
+            if updated && let Some(node_id) = node_id {
+                record_captured_delta(&CapturedDelta::ReplaySetNodeClassificationStatusById {
+                    node_id: node_id.to_string(),
+                    scheme: capture_scheme,
+                    value: capture_value,
+                    status: capture_status,
+                });
+            }
+            GraphDeltaResult::NodeMetadataUpdated(updated)
+        }
+        GraphDelta::ReplaySetNodePrimaryClassificationById {
+            node_id,
+            scheme,
+            value,
+        } => {
+            let updated = graph
+                .get_node_key_by_id(node_id)
+                .is_some_and(|key| graph.set_node_primary_classification(key, &scheme, &value));
+            if updated {
+                record_captured_delta(&CapturedDelta::ReplaySetNodePrimaryClassificationById {
+                    node_id: node_id.to_string(),
+                    scheme,
+                    value,
+                });
+            }
+            GraphDeltaResult::NodeMetadataUpdated(updated)
+        }
+        GraphDelta::SetNodePrimaryClassification { key, scheme, value } => {
+            let node_id = graph.get_node(key).map(|node| node.id);
+            let capture_scheme = scheme.clone();
+            let capture_value = value.clone();
+            let updated = graph.set_node_primary_classification(key, &scheme, &value);
+            if updated && let Some(node_id) = node_id {
+                record_captured_delta(&CapturedDelta::ReplaySetNodePrimaryClassificationById {
+                    node_id: node_id.to_string(),
+                    scheme: capture_scheme,
+                    value: capture_value,
+                });
+            }
+            GraphDeltaResult::NodeMetadataUpdated(updated)
+        }
         GraphDelta::ReplayRecordNodeDerivationById {
             node_id,
             derivation,
@@ -1194,6 +1382,33 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
                 record_captured_delta(&CapturedDelta::ReplayRecordNodeDerivationById {
                     node_id: node_id.to_string(),
                     derivation: capture_derivation,
+                });
+            }
+            GraphDeltaResult::NodeMetadataUpdated(updated)
+        }
+        GraphDelta::ReplaySetNodeTagIconOverrideById { node_id, tag, icon } => {
+            let updated = graph
+                .get_node_key_by_id(node_id)
+                .is_some_and(|key| graph.set_node_tag_icon_override(key, &tag, icon.clone()));
+            if updated {
+                record_captured_delta(&CapturedDelta::ReplaySetNodeTagIconOverrideById {
+                    node_id: node_id.to_string(),
+                    tag,
+                    icon,
+                });
+            }
+            GraphDeltaResult::NodeMetadataUpdated(updated)
+        }
+        GraphDelta::SetNodeTagIconOverride { key, tag, icon } => {
+            let node_id = graph.get_node(key).map(|node| node.id);
+            let capture_tag = tag.clone();
+            let capture_icon = icon.clone();
+            let updated = graph.set_node_tag_icon_override(key, &tag, icon);
+            if updated && let Some(node_id) = node_id {
+                record_captured_delta(&CapturedDelta::ReplaySetNodeTagIconOverrideById {
+                    node_id: node_id.to_string(),
+                    tag: capture_tag,
+                    icon: capture_icon,
                 });
             }
             GraphDeltaResult::NodeMetadataUpdated(updated)
@@ -1347,6 +1562,42 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
                 });
             }
             GraphDeltaResult::FieldChanged(changed)
+        }
+        GraphDelta::SetImportRecords { import_records } => {
+            let changed = graph.set_import_records(import_records);
+            if changed {
+                capture_resolved_import_records(graph);
+            }
+            GraphDeltaResult::ImportRecordsUpdated(changed)
+        }
+        GraphDelta::DeleteImportRecord { record_id } => {
+            let changed = graph.delete_import_record(&record_id);
+            if changed {
+                capture_resolved_import_records(graph);
+            }
+            GraphDeltaResult::ImportRecordsUpdated(changed)
+        }
+        GraphDelta::SetImportRecordMembershipSuppressed {
+            record_id,
+            key,
+            suppressed,
+        } => {
+            let changed =
+                graph.set_import_record_membership_suppressed(&record_id, key, suppressed);
+            if changed {
+                capture_resolved_import_records(graph);
+            }
+            GraphDeltaResult::ImportRecordsUpdated(changed)
+        }
+        GraphDelta::SetNodeImportProvenance {
+            key,
+            import_provenance,
+        } => {
+            let changed = graph.set_node_import_provenance(key, import_provenance);
+            if changed {
+                capture_resolved_import_records(graph);
+            }
+            GraphDeltaResult::ImportRecordsUpdated(changed)
         }
     }
 }

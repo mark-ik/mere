@@ -33,6 +33,44 @@ fn body_text(doc: &EngineDocument) -> String {
         .join(" ")
 }
 
+fn nematic_registry() -> EngineRegistry {
+    let mut registry = EngineRegistry::new();
+    for engine in nematic::engines() {
+        registry.register(engine);
+    }
+    registry
+}
+
+fn markdown_document_and_packet(body: &str) -> (EngineDocument, DocumentRenderPacket) {
+    let registry = nematic_registry();
+    let ready = ContentState::Ready(Fetched {
+        content_type: Some("text/markdown".into()),
+        body: body.into(),
+    });
+    let doc = engine_document_for(
+        "https://example.test/",
+        Some(&ready),
+        &registry,
+        &inker::EngineRoutePolicy::default(),
+    )
+    .expect("markdown content routes through a document engine");
+    let RenderedContent::Document { packet, .. } = render_content(
+        "https://example.test/",
+        Some(&ready),
+        &registry,
+        &inker::EngineRoutePolicy::default(),
+        &NoImageLoader,
+        420,
+        360,
+        0,
+        360,
+        &card_sheet(card_vocabulary()),
+    ) else {
+        panic!("markdown routes to the document lane");
+    };
+    (doc, packet)
+}
+
 #[test]
 fn welcome_document_leads_with_a_heading() {
     let doc = content_document("mere://welcome", None);
@@ -316,6 +354,63 @@ fn document_lane_surfaces_link_hit_regions() {
         Some("https://example.test/spec"),
         "link_at resolves the link at its center"
     );
+}
+
+#[test]
+fn document_lane_find_counts_repeated_hits_per_block() {
+    let (doc, packet) = markdown_document_and_packet("alpha alpha\n\nalpha");
+    let matches = find_document_content(&doc, &packet, "alpha");
+    assert_eq!(matches.len(), 3, "three textual hits stay visible to find");
+    assert!(!matches[0].is_empty(), "matches carry block rects");
+    assert_eq!(
+        matches[0], matches[1],
+        "two hits in one paragraph share that paragraph's block rects"
+    );
+    assert_ne!(
+        matches[1], matches[2],
+        "a later paragraph resolves to a different block rect set"
+    );
+}
+
+#[test]
+fn document_lane_selection_spans_multiple_blocks() {
+    let (doc, packet) = markdown_document_and_packet("first para\n\nsecond para");
+    let selection = select_document_content(&doc, &packet, 0, 1).expect("adjacent blocks select");
+    assert!(
+        selection.rects.len() >= 2,
+        "multi-block selection carries rects for both paragraphs"
+    );
+    assert_eq!(selection.text.trim(), "first para\n\nsecond para");
+}
+
+#[test]
+fn document_lane_selection_prefers_nested_block_rects_over_group_bounds() {
+    let doc = EngineDocument {
+        address: "https://example.test/quote".into(),
+        title: None,
+        content_type: "text/plain".into(),
+        lang: None,
+        provenance: Default::default(),
+        trust: Default::default(),
+        diagnostics: Vec::new(),
+        blocks: vec![Block::Quote {
+            blocks: vec![Block::Paragraph {
+                spans: vec![InlineSpan::Text("quoted line".into())],
+            }],
+        }],
+    };
+    let RenderedContent::Document { packet, .. } =
+        layout_document_content(&doc, 420, 360, &card_sheet(card_vocabulary()))
+    else {
+        panic!("manual document uses the document lane");
+    };
+    let selection = select_document_content(&doc, &packet, 0, 0).expect("quoted child selects");
+    assert_eq!(
+        selection.rects.len(),
+        1,
+        "selection should highlight the quoted paragraph, not both the group and child"
+    );
+    assert_eq!(selection.text.trim(), "quoted line");
 }
 
 #[test]

@@ -146,7 +146,10 @@ fn ld_json_routes_to_graph_contribution_ingest() {
     ));
     assert_eq!(decision.engine_id, ENGINE_LINKED_DATA_INGEST);
     // A graph contribution has no visible surface.
-    assert_eq!(decision.surface_contract.mode, SurfaceContractMode::Headless);
+    assert_eq!(
+        decision.surface_contract.mode,
+        SurfaceContractMode::Headless
+    );
     // And it is recognized as a non-render route the host handles itself.
     assert!(is_graph_contribution_route(&decision.engine_id));
     assert!(!is_graph_contribution_route(ENGINE_SERVAL_WEB));
@@ -308,7 +311,10 @@ fn per_host_override_match_is_case_insensitive() {
 fn serval_rungs_classify_and_round_trip() {
     // serval.web is the static rung (the legacy id, kept for pin compatibility).
     assert_eq!(serval_rung(ENGINE_SERVAL_WEB), Some(ServalRung::Static));
-    assert_eq!(serval_rung(ENGINE_SERVAL_SCRIPTED), Some(ServalRung::Scripted));
+    assert_eq!(
+        serval_rung(ENGINE_SERVAL_SCRIPTED),
+        Some(ServalRung::Scripted)
+    );
     // Each rung's engine id round-trips back to the rung.
     for rung in ServalRung::ALL {
         assert_eq!(serval_rung(rung.engine_id()), Some(rung));
@@ -336,7 +342,6 @@ fn unregistered_higher_rung_pin_falls_back_to_static() {
     let mut req = request("https://example.com/app");
     req.pinned_engine = Some(ENGINE_SERVAL_SCRIPTED.to_string());
     // Only the static rung is "registered" on this host.
-    let decision =
-        EngineRoutePolicy::default().route_filtered(&req, |id| id == ENGINE_SERVAL_WEB);
+    let decision = EngineRoutePolicy::default().route_filtered(&req, |id| id == ENGINE_SERVAL_WEB);
     assert_eq!(decision.engine_id, ENGINE_SERVAL_WEB);
 }

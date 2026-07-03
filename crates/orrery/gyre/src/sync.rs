@@ -13,7 +13,9 @@ use euclid::default::Point2D;
 use kernel::graph::{Graph, NodeKey};
 use rapier2d::prelude::*;
 
-use crate::{DEFAULT_ANGULAR_DAMPING, NODE_BODY_DENSITY, NODE_BODY_RADIUS, Simulation, node_groups};
+use crate::{
+    DEFAULT_ANGULAR_DAMPING, NODE_BODY_DENSITY, NODE_BODY_RADIUS, Simulation, node_groups,
+};
 
 impl Simulation {
     /// Replace the topology the layout forces pull along (see

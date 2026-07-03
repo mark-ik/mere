@@ -126,8 +126,10 @@ impl WindowCtx<'_> {
             }
             // A tab dropped past the slop: onto a tab bar (Stack) it merges into that
             // stack; onto another tile's content (Edge) it splits that pane on the
-            // dropped edge. The drag itself + the drop-zone resolution live in the pelt
-            // shell; here each resolved DropTarget maps to a Workbench mutation.
+            // dropped edge; outside the surface it tears that tile into its own leaf
+            // window. The drag itself + the drop-zone resolution live in the pelt
+            // shell; here each resolved DropTarget maps to a Workbench mutation or a
+            // shell command.
             TileEvent::Dragged { tile, to } => {
                 let Some(dragged) = self.tile_member(tile) else {
                     return;
@@ -172,6 +174,12 @@ impl WindowCtx<'_> {
                         if moved {
                             self.view.focused_tile = Some(dragged);
                         }
+                    }
+                    DropTarget::Outside => {
+                        self.commands.push(crate::ShellCommand::TearOut {
+                            node: dragged,
+                            from: self.view.focused_graph,
+                        });
                     }
                 }
             }

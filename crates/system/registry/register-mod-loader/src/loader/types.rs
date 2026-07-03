@@ -85,8 +85,7 @@ pub enum ModExtensionRecord {
     },
     ViewerCapabilities {
         viewer_id: String,
-        previous_capabilities:
-            Option<register_viewer::ViewerSubsystemCapabilities>,
+        previous_capabilities: Option<register_viewer::ViewerSubsystemCapabilities>,
     },
     Action {
         action_id: String,
@@ -133,10 +132,7 @@ impl ModActivationError {
         }
     }
 
-    pub fn rollback(
-        reason: impl Into<String>,
-        applied_records: Vec<ModExtensionRecord>,
-    ) -> Self {
+    pub fn rollback(reason: impl Into<String>, applied_records: Vec<ModExtensionRecord>) -> Self {
         Self {
             reason: reason.into(),
             applied_records,
@@ -164,4 +160,3 @@ pub enum ModLoadPathError {
     Io { path: PathBuf, reason: String },
     DuplicateModId(String),
 }
-

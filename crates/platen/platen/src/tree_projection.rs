@@ -19,7 +19,10 @@
 
 use std::collections::HashMap;
 
-use forme::{Arrangement, ArrangementEdgeKind, ArrangementNode, ArrangementNodeId, ArrangementNodeKind, GraphMemberId};
+use forme::{
+    Arrangement, ArrangementEdgeKind, ArrangementNode, ArrangementNodeId, ArrangementNodeKind,
+    GraphMemberId,
+};
 use serde::{Deserialize, Serialize};
 
 /// Which projection a forme is presented through. Keys projection geometry
@@ -135,12 +138,11 @@ pub fn tile_tree_from_plan(
     if plan.slots.is_empty() {
         return None;
     }
-    let slot_tree = |slot: &PlanSlot, tile_for: &mut dyn FnMut(&TilePlan) -> pelt_core::tile::Tile| {
-        match slot {
+    let slot_tree =
+        |slot: &PlanSlot, tile_for: &mut dyn FnMut(&TilePlan) -> pelt_core::tile::Tile| match slot {
             PlanSlot::Tile(t) => TileTree::single(tile_for(t)),
             PlanSlot::Tabs(v) => TileTree::stack(v.iter().map(|t| tile_for(t)).collect(), 0),
-        }
-    };
+        };
 
     if plan.slots.len() == 1 {
         return Some(slot_tree(&plan.slots[0], &mut tile_for));
@@ -298,7 +300,10 @@ mod tests {
         a.add_tile_intent(Some(Uuid::from_u128(1)));
         let plan = project_tree(&a);
         let tree = tile_tree_from_plan(&plan, make_tile_for()).expect("one slot -> a tree");
-        assert!(matches!(tree, TileTree::Stack(_)), "a lone slot is the stack itself");
+        assert!(
+            matches!(tree, TileTree::Stack(_)),
+            "a lone slot is the stack itself"
+        );
         assert_eq!(tree.tiles().len(), 1);
     }
 
@@ -334,11 +339,21 @@ mod tests {
                 assert_eq!(axis, SplitAxis::Row, "side-by-side slots are a row");
                 assert_eq!(children.len(), 3);
                 for b in &children {
-                    assert!((b.fraction - 1.0 / 3.0).abs() < 1e-6, "even shares, got {}", b.fraction);
+                    assert!(
+                        (b.fraction - 1.0 / 3.0).abs() < 1e-6,
+                        "even shares, got {}",
+                        b.fraction
+                    );
                 }
             }
             other => panic!("expected a row split, got {other:?}"),
         }
-        assert_eq!(tile_tree_from_plan(&plan, make_tile_for()).unwrap().tiles().len(), 3);
+        assert_eq!(
+            tile_tree_from_plan(&plan, make_tile_for())
+                .unwrap()
+                .tiles()
+                .len(),
+            3
+        );
     }
 }

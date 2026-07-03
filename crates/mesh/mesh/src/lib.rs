@@ -40,8 +40,8 @@ pub mod worker;
 pub use board::{Job, JobBoard, JobId, JobState};
 pub use store::{MeshStore, MeshStoreError};
 pub use sync::{MeshSyncError, SyncRound, SyncStatus, SyncedMesh};
-pub use wire::{from_operation, to_operation, verify, JobKind, MeshEvent, MeshExt, WireError};
-pub use worker::{execute, next_action, WorkerAction};
+pub use wire::{JobKind, MeshEvent, MeshExt, WireError, from_operation, to_operation, verify};
+pub use worker::{WorkerAction, execute, next_action};
 
 /// Crate version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

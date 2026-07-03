@@ -20,7 +20,8 @@
 use kernel::graph::Graph;
 use oxigraph::model::{
     BlankNode as OxBlankNode, GraphName as OxGraphName, Literal as OxLiteral,
-    NamedNode as OxNamedNode, NamedOrBlankNode as OxNamedOrBlankNode, Quad as OxQuad, Term as OxTerm,
+    NamedNode as OxNamedNode, NamedOrBlankNode as OxNamedOrBlankNode, Quad as OxQuad,
+    Term as OxTerm,
 };
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;

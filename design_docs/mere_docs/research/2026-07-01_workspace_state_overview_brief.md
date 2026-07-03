@@ -98,7 +98,7 @@ complete), user zoom shipped, auto-DPI planned.
   and much waits behind it.
 - **`net.fetch` is prototype-only** until origin-scoped uncredentialed fetch
   lands; as built it carries the user's ambient cookies onto the open
-  internet ([net hardening](../implementation_strategy/2026-06-23_documentscript_net_hardening_plan.md) §A1).
+  internet ([net hardening](../../archive_docs/2026-07-03_completed_plans/2026-06-23_documentscript_net_hardening_plan.md) §A1).
 - **`cargo check -p meerkat --lib` false-cleans**: swatch / render /
   window_view / graphlets are bin modules; use targeted bin tests.
 - **Semantics discipline**: hiding a cell is view curation, never graph

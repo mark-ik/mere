@@ -143,7 +143,7 @@ substrate owners are named; this plan owns the Representation variant + dispatch
   wgpu import, composite-under-chrome, and mouse / keyboard / IME forwarding by API, shipping in
   pelt tiles. Putting it on a node body is a Representation variant dispatching to that path with
   the node's rect. The compositing + input substrate is owned by
-  [native_surface_compositing_plan](2026-06-19_native_surface_compositing_plan.md). The
+  [native_surface_compositing_plan](../../archive_docs/2026-07-03_completed_plans/2026-06-19_native_surface_compositing_plan.md). The
   canvas / arbitrary-producer-behind-an-`<external-texture>` subcase is the one genuine gap (the
   texture-local input bridge), owned by [tearout_composability_plan](2026-06-19_tearout_composability_plan.md)
   C2.

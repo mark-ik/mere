@@ -38,7 +38,7 @@ use tokio_stream::StreamExt;
 
 use crate::board::JobBoard;
 use crate::store::{MeshStore, MeshStoreError};
-use crate::wire::{to_operation, verify, MeshEvent, MeshExt};
+use crate::wire::{MeshEvent, MeshExt, to_operation, verify};
 
 /// The mesh's LogSync session type: the SQLite store, one log per author per
 /// mesh (the log id is the mesh id), mesh extensions on every operation.
@@ -276,7 +276,7 @@ mod tests {
     use super::*;
     use crate::board::{JobId, JobState};
     use crate::wire::JobKind;
-    use crate::worker::{execute, next_action, WorkerAction};
+    use crate::worker::{WorkerAction, execute, next_action};
     use identity::{IdentityProvider, InMemoryProvider};
     use std::sync::Arc as StdArc;
     use transport::P2pandaTransport;
@@ -288,8 +288,7 @@ mod tests {
     async fn two_peers() -> (P2pandaTransport, P2pandaTransport) {
         let alice_provider = StdArc::new(InMemoryProvider::from_seed([60; 32]));
         let bob_provider = StdArc::new(InMemoryProvider::from_seed([61; 32]));
-        let alice_id =
-            transport::PeerID::from_public_key(alice_provider.master_public_key());
+        let alice_id = transport::PeerID::from_public_key(alice_provider.master_public_key());
         let bob_id = transport::PeerID::from_public_key(bob_provider.master_public_key());
 
         let alice_t = P2pandaTransport::builder(alice_provider.master_keypair())
@@ -320,15 +319,13 @@ mod tests {
     async fn join(t: &P2pandaTransport) -> SyncedMesh {
         let (ep, gossip) = t.sync_parts().expect("sync parts");
         let store = MeshStore::in_memory().await.expect("store");
-        SyncedMesh::join(ep, gossip, store, MESH).await.expect("join")
+        SyncedMesh::join(ep, gossip, store, MESH)
+            .await
+            .expect("join")
     }
 
     /// Poll `mesh`'s board until `pred` holds (or the timeout trips).
-    async fn wait_for_board(
-        mesh: &SyncedMesh,
-        pred: impl Fn(&JobBoard) -> bool,
-        what: &str,
-    ) {
+    async fn wait_for_board(mesh: &SyncedMesh, pred: impl Fn(&JobBoard) -> bool, what: &str) {
         let outcome = tokio::time::timeout(Duration::from_secs(30), async {
             loop {
                 if pred(&mesh.board().await.unwrap()) {
@@ -376,9 +373,15 @@ mod tests {
         wait_for_board(&bob, |b| b.job(id).is_some(), "bob sees the posted job").await;
         let board = bob.board().await.unwrap();
         assert_eq!(next_action(&board, &bob_me), WorkerAction::Claim(id));
-        bob.author(&bob_kp, &MeshEvent::JobClaimed { job: id.0, at_ms: 20 })
-            .await
-            .expect("bob claims");
+        bob.author(
+            &bob_kp,
+            &MeshEvent::JobClaimed {
+                job: id.0,
+                at_ms: 20,
+            },
+        )
+        .await
+        .expect("bob claims");
 
         wait_for_board(
             &bob,
@@ -429,7 +432,10 @@ mod tests {
 
         // The manual checkpoint settles quickly on a synced mesh.
         let round = alice.resync().await.expect("resync runs");
-        println!("mesh resync checkpoint: items_received={}", round.items_received);
+        println!(
+            "mesh resync checkpoint: items_received={}",
+            round.items_received
+        );
     }
 
     /// The offline-catch-up lane: A holds a posted job *before* B connects;

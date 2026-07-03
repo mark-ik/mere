@@ -204,13 +204,17 @@ impl Force for CouplingForce {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kernel::graph::fixtures::GraphFixtures;
     use crate::{Boundary, Simulation};
     use euclid::default::Point2D;
+    use kernel::graph::fixtures::GraphFixtures;
     use kernel::graph::{Field, FieldId};
 
     fn node_at(g: &mut Graph, id: u128, x: f32, y: f32) -> NodeKey {
-        g.add_node_with_id(uuid::Uuid::from_u128(id), format!("mere://{id}"), Point2D::new(x, y))
+        g.add_node_with_id(
+            uuid::Uuid::from_u128(id),
+            format!("mere://{id}"),
+            Point2D::new(x, y),
+        )
     }
 
     fn radius(sim: &Simulation, k: NodeKey) -> f32 {
@@ -265,7 +269,10 @@ mod tests {
 
         let pb = boundary_sim.position_of(a).unwrap();
         let pc = coupling_sim.position_of(a).unwrap();
-        assert!(radius(&coupling_sim, a) < 500.0, "coupling should pull inward");
+        assert!(
+            radius(&coupling_sim, a) < 500.0,
+            "coupling should pull inward"
+        );
         assert!(
             (pb - pc).length() < 5.0,
             "coupling diverged from Boundary: {pb:?} vs {pc:?}"

@@ -100,7 +100,10 @@ where
             });
         }
         if !events.is_empty() {
-            traces.push(BrowsingTrace::from_events(owner_tag(&owner.identity), events));
+            traces.push(BrowsingTrace::from_events(
+                owner_tag(&owner.identity),
+                events,
+            ));
         }
     }
     traces

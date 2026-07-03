@@ -222,7 +222,11 @@ fn graph_bound_panes_are_classified_apart_from_window_chrome() {
         PaneContent::Inspector,
         PaneContent::Tile(LeafNodeRef(0)),
     ] {
-        assert!(c.follows_active_graph(), "{} should follow the graph", c.tag());
+        assert!(
+            c.follows_active_graph(),
+            "{} should follow the graph",
+            c.tag()
+        );
     }
     // Window-chrome: about the window / system, not any one graph.
     for c in [
@@ -256,8 +260,16 @@ fn retag_graph_bound_repoints_only_graph_bound_leaves() {
             .map(|(_, _, g)| g)
             .unwrap()
     };
-    assert_eq!(by_pane(1), new, "workbench (graph-bound) follows the new graph");
-    assert_eq!(by_pane(2), new, "orrery (graph-bound) follows the new graph");
+    assert_eq!(
+        by_pane(1),
+        new,
+        "workbench (graph-bound) follows the new graph"
+    );
+    assert_eq!(
+        by_pane(2),
+        new,
+        "orrery (graph-bound) follows the new graph"
+    );
     assert_eq!(by_pane(3), old, "apparatus (window-chrome) stays put");
 }
 
@@ -334,7 +346,16 @@ fn dedupe_graph_panes_keeps_one_orrery_per_graph() {
     layout.dedupe_graph_panes();
     let leaves: Vec<(u64, GraphId)> = layout.iter_leaves().map(|(p, _, g)| (p.0, g)).collect();
     assert_eq!(leaves.len(), 2, "one Orrery pane per graph: {leaves:?}");
-    assert!(leaves.iter().any(|(p, g)| *p == 1 && *g == a), "the first `a` pane kept");
-    assert!(leaves.iter().any(|(p, g)| *p == 3 && *g == b), "the `b` pane kept");
-    assert!(!leaves.iter().any(|(p, _)| *p == 2), "the duplicate `a` pane dropped");
+    assert!(
+        leaves.iter().any(|(p, g)| *p == 1 && *g == a),
+        "the first `a` pane kept"
+    );
+    assert!(
+        leaves.iter().any(|(p, g)| *p == 3 && *g == b),
+        "the `b` pane kept"
+    );
+    assert!(
+        !leaves.iter().any(|(p, _)| *p == 2),
+        "the duplicate `a` pane dropped"
+    );
 }

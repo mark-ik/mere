@@ -41,7 +41,10 @@ pub struct Emitter<U> {
 // `Arc` are cloned, never an `U`).
 impl<U> Clone for Emitter<U> {
     fn clone(&self) -> Self {
-        Self { updates: self.updates.clone(), wake: Arc::clone(&self.wake) }
+        Self {
+            updates: self.updates.clone(),
+            wake: Arc::clone(&self.wake),
+        }
     }
 }
 
@@ -128,17 +131,30 @@ where
 {
     let (command_tx, command_rx) = mpsc::channel::<C>();
     let (update_tx, update_rx) = mpsc::channel::<U>();
-    let emitter = Emitter { updates: update_tx, wake };
+    let emitter = Emitter {
+        updates: update_tx,
+        wake,
+    };
     let join = thread::spawn(move || run_with_lifecycle_span(name, command_rx, emitter, run));
-    (ActorHandle { commands: command_tx, join: Some(join) }, update_rx)
+    (
+        ActorHandle {
+            commands: command_tx,
+            join: Some(join),
+        },
+        update_rx,
+    )
 }
 
 /// Run `run` on the actor thread under a lifecycle span. Shared by [`spawn_named`] and
 /// [`spawn_named_on`]; the span's paired enter/exit gives the host the actor's lifetime, and the
 /// bracketing events mark start/finish for the event log. A panic in `run` still exits the span
 /// (the guard drops on unwind), so a crashed actor reports a finish.
-fn run_with_lifecycle_span<C, U, F>(name: &'static str, commands: Receiver<C>, emitter: Emitter<U>, run: F)
-where
+fn run_with_lifecycle_span<C, U, F>(
+    name: &'static str,
+    commands: Receiver<C>,
+    emitter: Emitter<U>,
+    run: F,
+) where
     F: FnOnce(Receiver<C>, Emitter<U>),
 {
     let span = tracing::info_span!(target: "armillary", "actor", actor = name);
@@ -188,9 +204,20 @@ where
 {
     let (command_tx, command_rx) = mpsc::channel::<C>();
     let (update_tx, update_rx) = mpsc::channel::<U>();
-    let emitter = Emitter { updates: update_tx, wake };
-    pool.submit(Box::new(move || run_with_lifecycle_span(name, command_rx, emitter, run)));
-    (ActorHandle { commands: command_tx, join: None }, update_rx)
+    let emitter = Emitter {
+        updates: update_tx,
+        wake,
+    };
+    pool.submit(Box::new(move || {
+        run_with_lifecycle_span(name, command_rx, emitter, run)
+    }));
+    (
+        ActorHandle {
+            commands: command_tx,
+            join: None,
+        },
+        update_rx,
+    )
 }
 
 #[cfg(test)]
@@ -236,8 +263,16 @@ mod tests {
         handle.join(); // closes the command channel; the loop ends; the thread joins
 
         let got: Vec<u32> = updates.iter().collect();
-        assert_eq!(got, vec![2, 5], "updates reflect the running total, in order");
-        assert_eq!(wakes.load(Ordering::SeqCst), 2, "each emit woke the kernel once");
+        assert_eq!(
+            got,
+            vec![2, 5],
+            "updates reflect the running total, in order"
+        );
+        assert_eq!(
+            wakes.load(Ordering::SeqCst),
+            2,
+            "each emit woke the kernel once"
+        );
     }
 
     #[test]
@@ -254,7 +289,11 @@ mod tests {
         // The update channel closes once the actor thread (holding the Emitter)
         // ends, so collecting terminates rather than hanging.
         let got: Vec<u8> = updates.iter().collect();
-        assert_eq!(got, vec![1, 2], "the actor ran to completion after the handle dropped");
+        assert_eq!(
+            got,
+            vec![1, 2],
+            "the actor ran to completion after the handle dropped"
+        );
     }
 
     #[test]
@@ -300,7 +339,10 @@ mod tests {
         tracing::subscriber::with_default(subscriber, || {
             let (command_tx, command_rx) = mpsc::channel::<u32>();
             let (update_tx, _update_rx) = mpsc::channel::<u32>();
-            let emitter = Emitter { updates: update_tx, wake: Arc::new(|| {}) };
+            let emitter = Emitter {
+                updates: update_tx,
+                wake: Arc::new(|| {}),
+            };
             drop(command_tx); // close the command channel so `run` returns at once
             run_with_lifecycle_span("test_actor", command_rx, emitter, |commands, _out| {
                 while commands.recv().is_ok() {}
@@ -309,11 +351,15 @@ mod tests {
 
         let events = captured.0.lock().unwrap();
         assert!(
-            events.iter().any(|(m, a)| m.contains("actor started") && a == "test_actor"),
+            events
+                .iter()
+                .any(|(m, a)| m.contains("actor started") && a == "test_actor"),
             "a named start event fires: {events:?}",
         );
         assert!(
-            events.iter().any(|(m, a)| m.contains("actor finished") && a == "test_actor"),
+            events
+                .iter()
+                .any(|(m, a)| m.contains("actor finished") && a == "test_actor"),
             "a named finish event fires: {events:?}",
         );
     }

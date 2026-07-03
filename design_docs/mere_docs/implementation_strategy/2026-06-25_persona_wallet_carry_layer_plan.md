@@ -1,11 +1,13 @@
 # Persona Wallet — The Universal Carry Layer
 
-**Status (2026-07-02):** storage slice, first host-adoption slice, typed signed-grant
+**Status (2026-07-03):** storage slice, first host-adoption slice, typed signed-grant
 slice, remote-auth grant issuance slice, wrapped private-epoch crypto helper slice,
 pairing-transcript helper slice, pairing ticket/code helper slice, first Meerkat
 pairing-host slice, delegated-device response/SAS preview slice, enrollment-bundle
 slice plus delegatee enrollment-host/bootstrap-preservation slice, and the first
-`private.read` host/restore slice landed. Companion to the
+`private.read` host/restore slice plus pairing-expiry/artifact-coherence hardening
+slice plus first capability-slot wiring slice plus first delegated-device
+revocation slice landed. Companion to the
 [persona_transport_unlinkability_plan](2026-06-25_persona_transport_unlinkability_plan.md).
 The wallet is "Layer 0", the carry layer everything else references. Most of what sits
 under it exists or is named in code; the identity-level and persona-level wallet manifest
@@ -26,11 +28,14 @@ delegated device side: it persists a local delegated-device identity bridge, cac
 pairing ticket locally, writes a filled response artifact from a scanned ticket, previews
 the shared short auth string before grant issuance, and on install restores the signed
 grant, persona wallet manifests, roster enrollment, grant index, and the current plaintext
-private epoch against that local delegated-device identity. The remaining gap is still the
-actual PAKE/QR chrome, transport UI around that shared secret, per-persona
-encryption-at-rest and epoch-history usage beyond the current epoch, copy-mode export/import,
-and replacing the temporary plaintext seed/epoch/device-identity bridges with the encrypted
-vault path.
+private epoch against that local delegated-device identity. Remote-auth revocation can now
+also mark a delegated device revoked, clear its persona wallet slot grants, block new
+enrollment-bundle export, and rotate future-write private epochs when that device had
+`private.read`. The remaining gap is still the actual PAKE/QR chrome, transport UI around
+that shared secret, automatic re-wrap/distribution of the new epoch for the remaining
+devices, per-persona encryption-at-rest and epoch-history usage beyond the current epoch,
+copy-mode export/import, and replacing the temporary plaintext seed/epoch/device-identity
+bridges with the encrypted vault path.
 
 This doc answers three questions that turned out to be one: how do you *carry* a persona
 across devices, is that mechanism the same for engrams and history, and is data private
@@ -347,8 +352,7 @@ both evaluated in the substrate spike.
    identity seed/path helpers, deterministic persona chain-root derivation, startup/session-load
    bootstrap of wallet + roster + persona wallet, and `sync`/`comms` now sharing the
    identity root instead of separate ad hoc seed files. Still open: replacing the
-   transitional plaintext `identity/master.seed` bridge with the encrypted vault handoff,
-   and threading the wallet root through the pairing/revocation flows.
+   transitional plaintext `identity/master.seed` bridge with the encrypted vault handoff.
 2. **Per-persona encryption-at-rest for eidetic** — private-lane payloads sealed under a
    persona-owned private epoch history, with per-device wrapped copies for remote-auth
    devices. Today privacy is a metadata tag, encryption is wire-only.
@@ -545,12 +549,36 @@ both evaluated in the substrate spike.
   now loads the delegator's current plaintext private epoch from the temporary per-persona
   bridge, requests `private.read` in `pair_remote_auth()`, wraps that epoch into the
   signed remote-auth grant, caches the pairing ticket on the delegatee side, and uses the
-  cached ticket to recover the pairing-derived wrapping key during
-  `install_remote_auth_enrollment(bundle)` so the delegatee restores the current plaintext
-  epoch bridge alongside the signed grant and persona wallet manifests. This closes the
-  immediate "grant can carry wrapped epochs but install cannot use them" gap, leaving the
-  actual PAKE/QR chrome, encrypted-at-rest integration, epoch-history restore beyond the
-  current head, and replacement of the temporary plaintext bridges as the live seams.
+cached ticket to recover the pairing-derived wrapping key during
+`install_remote_auth_enrollment(bundle)` so the delegatee restores the current plaintext
+epoch bridge alongside the signed grant and persona wallet manifests. This closes the
+immediate "grant can carry wrapped epochs but install cannot use them" gap, leaving the
+actual PAKE/QR chrome, encrypted-at-rest integration, epoch-history restore beyond the
+current head, and replacement of the temporary plaintext bridges as the live seams.
+- **2026-07-02** — landed the next pairing hardening slice: runtime grant issuance now
+  rejects expired pairing tickets, enrollment install now rejects expired signed grants,
+  delegatee response preparation / preview / acceptance now reject expired tickets on the
+  host side, and Meerkat now requires the response artifact's `ticket_id` to match the
+  ticket being previewed or accepted instead of silently accepting cross-ticket mixups.
+  This does not add the actual PAKE/QR chrome yet, but it closes the integrity gap around
+  stale or mismatched artifact reuse in the manual pairing seam.
+- **2026-07-03** — landed the first capability-slot wiring slice: remote-auth device grants
+  now also populate a stable per-persona wallet slot
+  (`capability_slots += "device-grant:<device_id>" -> grant_ref`) on both the delegator
+  side during issuance and the delegatee side during enrollment install, including
+  multi-persona grants. This closes the gap where `identity/grant_index` tracked the grant
+  globally but the persona wallet surface still had no first-class slot entry for the same
+  capability. Meadowcap vocabulary, cluster-path read caps, and later Biscuit
+  re-expression remain open above that slot surface.
+- **2026-07-03** — landed the first delegated-device revocation slice:
+  `session-runtime::revoke_remote_auth_device(...)` now verifies the signed grant, rejects
+  copy-mode devices, appends the delegated device to `device-roster.json`'s revocation set,
+  clears the active `device-grant:<device_id>` persona wallet slots, rotates the current
+  private epoch head for granted personas when the revoked grant had `private.read`, and
+  blocks new enrollment-bundle export for revoked devices. Meerkat's manual/admin omnibar
+  seam now also records `revoke_remote_auth_device("<device-id>")` and routes it through
+  that runtime path. Automatic re-wrap/distribution of the new epoch to the remaining
+  delegated devices is still open.
 
 ## Findings (research, 2026-06-25)
 

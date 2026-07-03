@@ -28,7 +28,10 @@ async fn epoch_cancels_a_runaway_loop() {
     let r = document_host::run_guarded(&bomb_wasm(), "loop", 256 * 1024 * 1024, 1)
         .await
         .expect("run_guarded");
-    assert!(matches!(r, Guarded::Trapped(_)), "runaway loop should be trapped, got {r:?}");
+    assert!(
+        matches!(r, Guarded::Trapped(_)),
+        "runaway loop should be trapped, got {r:?}"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -37,7 +40,10 @@ async fn store_limits_deny_a_memory_bomb() {
     let r = document_host::run_guarded(&bomb_wasm(), "grow", 32 * 1024 * 1024, 100_000)
         .await
         .expect("run_guarded");
-    assert!(matches!(r, Guarded::Trapped(_)), "memory bomb should be denied/trapped, got {r:?}");
+    assert!(
+        matches!(r, Guarded::Trapped(_)),
+        "memory bomb should be denied/trapped, got {r:?}"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -45,5 +51,8 @@ async fn a_well_behaved_turn_completes() {
     let r = document_host::run_guarded(&bomb_wasm(), "noop", 256 * 1024 * 1024, 100_000)
         .await
         .expect("run_guarded");
-    assert!(matches!(r, Guarded::Completed), "a benign turn should complete, got {r:?}");
+    assert!(
+        matches!(r, Guarded::Completed),
+        "a benign turn should complete, got {r:?}"
+    );
 }

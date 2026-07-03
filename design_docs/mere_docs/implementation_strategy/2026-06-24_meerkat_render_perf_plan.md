@@ -35,7 +35,7 @@
 ### M5 — Cheap compositing redundancies
 
 - Overlay textures: while find is open, two 1x1 amber overlay scenes are rasterized fresh every frame (`render.rs:1566-1588`), unlike the cached `divider_tex`/`window_controls_tex`. Cache them like the other decoration textures.
-- Scrying flush batching: `drive()` issues a separate `create_command_encoder` + `queue.submit` for a 1x1 cache-flush per live tile per redraw (`scrying_host.rs:533-563`, flagged deferred in `2026-06-19_native_surface_compositing_plan.md`); batch the per-tile flushes into the main encoder for one submit/frame.
+- Scrying flush batching: `drive()` issues a separate `create_command_encoder` + `queue.submit` for a 1x1 cache-flush per live tile per redraw (`scrying_host.rs:533-563`, flagged deferred in the archived [native_surface_compositing_plan](../../archive_docs/2026-07-03_completed_plans/2026-06-19_native_surface_compositing_plan.md)); batch the per-tile flushes into the main encoder for one submit/frame.
 - Netrender tail: external-texture interleaving re-renders the whole scene tail into a full-viewport scratch per boundary (`repos/netrender/netrender/src/renderer/mod.rs:1449-1481`); prefer the topmost-overlay path where surfaces allow. (Cross-repo; netrender side.)
 - **Done when** find-overlay textures are cached, scrying does one submit/frame regardless of tile count, and the netrender tail-redraw is avoided on the focused-card path.
 

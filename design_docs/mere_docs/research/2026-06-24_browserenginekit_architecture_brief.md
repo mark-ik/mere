@@ -76,7 +76,7 @@ one-to-one onto Mere's actors (see [actor_constellation_plan](../implementation_
 | Rendering extension | render / compositor | netrender / platen / the scrying GPU import |
 
 The constellation deliberately runs Servo's split **in-process** ("scenes travel as messages"), and
-[document_script_substrate_plan](../implementation_strategy/2026-06-21_document_script_substrate_plan.md)
+[document_script_substrate_plan](../../archive_docs/2026-07-03_completed_plans/2026-06-21_document_script_substrate_plan.md)
 chose **in-process capability confinement** (WASM components) as "the third option between
 semi-trusted-in-process and OS-subprocess." BEK is that OS-subprocess model. Because Mere drew the
 boundaries the same way, the model is **process-portable**: on a BEK target each actor promotes to an

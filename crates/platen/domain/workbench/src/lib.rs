@@ -78,7 +78,10 @@ pub fn project_workbench(workbench: &Workbench) -> UxTree {
         "projected workbench into uxtree subtree"
     );
 
-    UxTree { root: root_id, nodes }
+    UxTree {
+        root: root_id,
+        nodes,
+    }
 }
 
 #[cfg(test)]
@@ -108,8 +111,16 @@ mod tests {
         wb.open_tile(m(1));
         wb.open_tile(m(2));
         let tree = project_workbench(&wb);
-        let groups = tree.nodes.iter().filter(|(_, n)| n.role() == Role::Group).count();
-        let tabs = tree.nodes.iter().filter(|(_, n)| n.role() == Role::Tab).count();
+        let groups = tree
+            .nodes
+            .iter()
+            .filter(|(_, n)| n.role() == Role::Group)
+            .count();
+        let tabs = tree
+            .nodes
+            .iter()
+            .filter(|(_, n)| n.role() == Role::Tab)
+            .count();
         assert_eq!(groups, 3, "the workbench root + one per slot");
         assert_eq!(tabs, 2, "one tab per single-tile slot");
     }
@@ -124,9 +135,16 @@ mod tests {
         wb.open_tile(m(3));
         wb.stack_all(); // one stack of three; first active
         let tree = project_workbench(&wb);
-        let tabs: Vec<_> = tree.nodes.iter().filter(|(_, n)| n.role() == Role::Tab).collect();
+        let tabs: Vec<_> = tree
+            .nodes
+            .iter()
+            .filter(|(_, n)| n.role() == Role::Tab)
+            .collect();
         assert_eq!(tabs.len(), 3, "three stacked tabs");
-        let active = tabs.iter().filter(|(_, n)| n.description() == Some("active")).count();
+        let active = tabs
+            .iter()
+            .filter(|(_, n)| n.description() == Some("active"))
+            .count();
         assert_eq!(active, 1, "exactly the active tab is marked");
     }
 

@@ -133,6 +133,24 @@ pub(crate) struct TearOutDrag {
     pub(crate) origin: (f32, f32),
 }
 
+/// A live page-text selection on a retained document-lane card. The source page is
+/// identified by `(member, version)` so a navigation or re-render invalidates it.
+pub(crate) struct PageTextSelection {
+    pub(crate) member: GraphMemberId,
+    pub(crate) version: u64,
+    pub(crate) rects: Vec<[f32; 4]>,
+    pub(crate) text: String,
+}
+
+/// An in-progress drag selection over a retained document-lane card. The anchor is a
+/// `DocumentRenderPacket::source_block_index`; the live selection recomputes against
+/// the same `(member, version)` until release.
+pub(crate) struct PageTextDrag {
+    pub(crate) member: GraphMemberId,
+    pub(crate) version: u64,
+    pub(crate) anchor_source: usize,
+}
+
 /// State owned by a single window's view. Methods on `Shell` reach it through
 /// `self.view`; when the window registry lands (MW2) the render / input paths
 /// take `&mut WindowView` for the target window explicitly.
@@ -216,6 +234,10 @@ pub(crate) struct WindowView {
     /// it back; only the latest is applied (a stale layout for an old query is dropped),
     /// so fast typing never paints an out-of-date highlight set. (Find-in-page.)
     pub(crate) find_gen: u64,
+    /// The current page-text selection on a retained document-lane content card, if
+    /// any. The overlay paints these rects and `Ctrl/Cmd+C` copies `text`. Cleared by
+    /// a new selection or when its page version changes. (Retained-text P4.)
+    pub(crate) page_selection: Option<PageTextSelection>,
 
     // ── Paint caches: GPU textures rasterized for this window's surface, reused
     //    across frames while their version + size hold. ────────────────────────
@@ -280,6 +302,9 @@ pub(crate) struct WindowView {
     /// release-resolved toolbar click never arms — the button is already up). (Djot
     /// editor — drag-select.)
     pub(crate) caret_drag: Option<NodeId>,
+    /// An in-progress drag-select over a retained document-lane card. Pointer moves
+    /// update the selection; release disarms it. (Retained-text P4.)
+    pub(crate) page_text_drag: Option<PageTextDrag>,
     /// An in-progress tear-out drag (G1): `Some` from a modified left-press on an orrery
     /// node until release, which spawns a leaf carrying the node. (Tear-out gestures.)
     pub(crate) tear_out_drag: Option<TearOutDrag>,
@@ -506,21 +531,21 @@ pub(crate) struct ShellState {
     pub(crate) gloss_outline: GlossOutlineState,
     /// The outline's window rect `[x0,y0,x1,y1]`, `Some` while the gloss pane is open;
     /// the shell view positions the outline subtree there (the gloss pane's middle
-    /// third — [`crate::gloss::gloss_sections`]). `None` keeps it out of the document.
+    /// third — [`gloss::gloss_sections`]). `None` keeps it out of the document.
     pub(crate) gloss_outline_rect: Option<[f32; 4]>,
     /// The gloss recent-visited lens's view state, folded into the shell document like
     /// the outline. (Scene-to-DOM migration P1.)
     pub(crate) gloss_recent: GlossRecentState,
     /// The recent section's window rect, `Some` while the gloss pane is open; positions
     /// the recent subtree at the gloss pane's bottom third
-    /// ([`crate::gloss::gloss_sections`]).
+    /// ([`gloss::gloss_sections`]).
     pub(crate) gloss_recent_rect: Option<[f32; 4]>,
     /// The gloss minimap's view state (DOM node squares; the edges/rings backdrop
     /// rides an embedded `<external-texture>` inside this same subtree, not a
     /// separate host composite). (Scene-to-DOM migration P2.)
     pub(crate) gloss_minimap: GlossMinimapState,
     /// The minimap's window rect, `Some` while the gloss pane is open; positions the
-    /// minimap subtree at the gloss pane's top third ([`crate::gloss::gloss_sections`]).
+    /// minimap subtree at the gloss pane's top third ([`gloss::gloss_sections`]).
     pub(crate) gloss_minimap_rect: Option<[f32; 4]>,
     /// The most recent orrery wheel delta (device px), queued by the orrery pane element's
     /// `on_wheel` when the host dispatches a wheel there, and drained by the host into gyre's

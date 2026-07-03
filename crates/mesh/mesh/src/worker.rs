@@ -63,7 +63,7 @@ pub fn execute(kind: JobKind, payload: &[u8]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::wire::{to_operation, MeshEvent};
+    use crate::wire::{MeshEvent, to_operation};
     use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
 
     const MESH: [u8; 32] = [0x4d; 32];

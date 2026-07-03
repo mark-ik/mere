@@ -43,8 +43,8 @@ use p2panda_store::logs::LogStore;
 use p2panda_store::topics::TopicStore;
 use redb::{ReadableTable, TableDefinition, WriteTransaction};
 
-use crate::cable::persistent_store::{PersistentCabalStore, POSTS};
-use crate::cable::wire::{post_to_operation, CabalExt};
+use crate::cable::persistent_store::{POSTS, PersistentCabalStore};
+use crate::cable::wire::{CabalExt, post_to_operation};
 use crate::{MurmuringError, Post, PostId};
 
 /// `author(32) ++ log_id_be(8) ++ seq_be(8)` → `post_id(32)` — per-author log
@@ -171,7 +171,10 @@ impl LogStore<Operation<CabalExt>, VerifyingKey, u64, u64, Hash> for PersistentC
             None => Ok(None),
             Some(entry) => {
                 let (_k, v) = entry.map_err(be)?;
-                let pid: [u8; 32] = v.value().try_into().map_err(|_| MurmuringError::MalformedPost)?;
+                let pid: [u8; 32] = v
+                    .value()
+                    .try_into()
+                    .map_err(|_| MurmuringError::MalformedPost)?;
                 self.operation_by_id(&read, &pid)
             }
         }
@@ -199,7 +202,11 @@ impl LogStore<Operation<CabalExt>, VerifyingKey, u64, u64, Hash> for PersistentC
             let prefix = log_prefix(author.as_bytes(), *log_id);
             let lo = with_seq(&prefix, 0);
             let hi = with_seq(&prefix, u64::MAX);
-            if let Some(entry) = by_log.range(lo.as_slice()..=hi.as_slice()).map_err(be)?.next_back() {
+            if let Some(entry) = by_log
+                .range(lo.as_slice()..=hi.as_slice())
+                .map_err(be)?
+                .next_back()
+            {
                 let (k, _v) = entry.map_err(be)?;
                 map.insert(*log_id, seq_from_key(k.value()));
             }
@@ -224,7 +231,10 @@ impl LogStore<Operation<CabalExt>, VerifyingKey, u64, u64, Hash> for PersistentC
         let mut bytes = 0u64;
         for entry in by_log.range(lo.as_slice()..=hi.as_slice()).map_err(be)? {
             let (_k, v) = entry.map_err(be)?;
-            let pid: [u8; 32] = v.value().try_into().map_err(|_| MurmuringError::MalformedPost)?;
+            let pid: [u8; 32] = v
+                .value()
+                .try_into()
+                .map_err(|_| MurmuringError::MalformedPost)?;
             if let Some(p) = posts.get(&pid).map_err(be)? {
                 count += 1;
                 // Approximate stored size with the canonical wire-byte length;
@@ -232,7 +242,11 @@ impl LogStore<Operation<CabalExt>, VerifyingKey, u64, u64, Hash> for PersistentC
                 bytes += p.value().len() as u64;
             }
         }
-        Ok(if count == 0 { None } else { Some((count, bytes)) })
+        Ok(if count == 0 {
+            None
+        } else {
+            Some((count, bytes))
+        })
     }
 
     async fn get_log_entries(
@@ -252,7 +266,10 @@ impl LogStore<Operation<CabalExt>, VerifyingKey, u64, u64, Hash> for PersistentC
         let mut ids = Vec::new();
         for entry in by_log.range(lo.as_slice()..=hi.as_slice()).map_err(be)? {
             let (_k, v) = entry.map_err(be)?;
-            let pid: [u8; 32] = v.value().try_into().map_err(|_| MurmuringError::MalformedPost)?;
+            let pid: [u8; 32] = v
+                .value()
+                .try_into()
+                .map_err(|_| MurmuringError::MalformedPost)?;
             ids.push(pid);
         }
         for pid in ids {
@@ -261,7 +278,11 @@ impl LogStore<Operation<CabalExt>, VerifyingKey, u64, u64, Hash> for PersistentC
                 entries.push((operation, header_cbor));
             }
         }
-        Ok(if entries.is_empty() { None } else { Some(entries) })
+        Ok(if entries.is_empty() {
+            None
+        } else {
+            Some(entries)
+        })
     }
 
     async fn prune_entries(
@@ -322,7 +343,10 @@ impl TopicStore<Topic, VerifyingKey, u64> for PersistentCabalStore {
         Ok(removed)
     }
 
-    async fn resolve(&self, topic: &Topic) -> Result<BTreeMap<VerifyingKey, Vec<u64>>, Self::Error> {
+    async fn resolve(
+        &self,
+        topic: &Topic,
+    ) -> Result<BTreeMap<VerifyingKey, Vec<u64>>, Self::Error> {
         let prefix = topic.as_bytes();
         let read = self.db.begin_read().map_err(be)?;
         let t = read.open_table(LOG_TOPICS).map_err(be)?;
@@ -336,8 +360,8 @@ impl TopicStore<Topic, VerifyingKey, u64> for PersistentCabalStore {
             let author_bytes: [u8; 32] = key[32..64]
                 .try_into()
                 .map_err(|_| MurmuringError::Backend("topic key author".into()))?;
-            let author =
-                VerifyingKey::from_bytes(&author_bytes).map_err(|e| MurmuringError::Backend(e.to_string()))?;
+            let author = VerifyingKey::from_bytes(&author_bytes)
+                .map_err(|e| MurmuringError::Backend(e.to_string()))?;
             let log_id = u64::from_be_bytes(
                 key[64..72]
                     .try_into()
@@ -403,25 +427,45 @@ mod tests {
         store.insert(id2, &p2).unwrap();
 
         // Latest entry is op2, and its operation id is the signed-header hash.
-        let latest = store.get_latest_entry(&author, &LOG_ID).await.unwrap().unwrap();
+        let latest = store
+            .get_latest_entry(&author, &LOG_ID)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(latest.hash.as_bytes(), id2.as_bytes());
 
         // Height is 2 (seq of the latest entry).
-        let heights = store.get_log_heights(&author, &[LOG_ID]).await.unwrap().unwrap();
+        let heights = store
+            .get_log_heights(&author, &[LOG_ID])
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(heights.get(&LOG_ID), Some(&2));
 
         // All three entries, in seq order.
-        let all = store.get_log_entries(&author, &LOG_ID, None, None).await.unwrap().unwrap();
+        let all = store
+            .get_log_entries(&author, &LOG_ID, None, None)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(all.len(), 3);
         assert_eq!(all[0].0.hash.as_bytes(), id0.as_bytes());
         assert_eq!(all[2].0.hash.as_bytes(), id2.as_bytes());
 
         // Ranged: after seq 0 (exclusive) yields op1, op2.
-        let ranged = store.get_log_entries(&author, &LOG_ID, Some(0), None).await.unwrap().unwrap();
+        let ranged = store
+            .get_log_entries(&author, &LOG_ID, Some(0), None)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(ranged.len(), 2);
         assert_eq!(ranged[0].0.hash.as_bytes(), id1.as_bytes());
 
-        let (count, bytes) = store.get_log_size(&author, &LOG_ID, None, None).await.unwrap().unwrap();
+        let (count, bytes) = store
+            .get_log_size(&author, &LOG_ID, None, None)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(count, 3);
         assert!(bytes > 0);
     }
@@ -440,7 +484,11 @@ mod tests {
         store.insert(id0, &p0).unwrap();
         store.insert(id1, &p1).unwrap();
 
-        let entries = store.get_log_entries(&author, &LOG_ID, None, None).await.unwrap().unwrap();
+        let entries = store
+            .get_log_entries(&author, &LOG_ID, None, None)
+            .await
+            .unwrap()
+            .unwrap();
         let h0 = &entries[0].0.header;
         let h1 = &entries[1].0.header;
         assert!(validate_header(h0).is_ok());
@@ -485,7 +533,10 @@ mod tests {
         assert!(store.associate(&topic, &vk, &LOG_ID).await.unwrap());
         // Idempotent: associating again reports "already present".
         assert!(!store.associate(&topic, &vk, &LOG_ID).await.unwrap());
-        assert_eq!(store.resolve(&topic).await.unwrap().get(&vk), Some(&vec![LOG_ID]));
+        assert_eq!(
+            store.resolve(&topic).await.unwrap().get(&vk),
+            Some(&vec![LOG_ID])
+        );
 
         assert!(store.remove(&topic, &vk, &LOG_ID).await.unwrap());
         assert!(store.resolve(&topic).await.unwrap().is_empty());

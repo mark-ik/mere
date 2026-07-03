@@ -13,7 +13,7 @@ use orrery::NodeState;
 use register_theme::chrome::{ChromeTheme, Color32};
 use xilem_serval::{AnyView, PointerClick, ServalCtx, ServalElement, clickable, el};
 
-use crate::gloss::{
+use gloss::{
     GlossOutlineNode, GlossOutlineRow, GlossOutlineSnapshot, GlossRowIntent, OUTLINE_HEADER_H,
     OUTLINE_ROW_H, cap_outline_rows,
 };
@@ -279,7 +279,7 @@ mod tests {
     #[test]
     fn cap_collapses_rows_past_the_depth_ceiling() {
         let mut rows = vec![plain_row(0, "shallow")];
-        rows.push(plain_row(MAX_OUTLINE_DEPTH + 1, "too deep"));
+        rows.push(plain_row(usize::MAX, "too deep"));
         let capped = cap_outline_rows(rows, 1000.0);
         assert_eq!(capped.len(), 2);
         assert_eq!(capped[0].label, "shallow");

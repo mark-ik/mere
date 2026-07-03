@@ -1,5 +1,5 @@
-use super::super::types::*;
 use super::super::free_fns::NativeModRegistration;
+use super::super::types::*;
 use super::ModRegistry;
 
 impl Default for ModRegistry {
@@ -131,4 +131,3 @@ inventory::submit! {
         manifest: verso_manifest,
     }
 }
-

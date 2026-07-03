@@ -28,7 +28,7 @@ host-positioned DOM.
 
 The remaining **surface migration** does **not** mean "every host-composited surface becomes a
 document external-texture element". Surfaces split **by nature** (the four-way layering owned by the
-[native-surface-compositing plan](2026-06-19_native_surface_compositing_plan.md)): serval-rendered
+[native-surface-compositing plan](../../archive_docs/2026-07-03_completed_plans/2026-06-19_native_surface_compositing_plan.md)): serval-rendered
 content → a real DOM subtree; genuinely-external content (scrying = a system WebView2 visual) → a
 **native composition visual below the chrome**, *not* a document element; dormant surfaces → a
 snapshot texture; the orrery gyre **scene** → a texture is correct. The earlier blanket recipe is
@@ -37,7 +37,7 @@ superseded for the scry case (see "Surface migration" and C2 below). A cross-pla
 
 Sibling/converging docs:
 
-- [native_surface_compositing_plan](2026-06-19_native_surface_compositing_plan.md) — owns the layer
+- [native_surface_compositing_plan](../../archive_docs/2026-07-03_completed_plans/2026-06-19_native_surface_compositing_plan.md) — owns the layer
   below the shell document: scry = a native composition visual on an off-window host HWND, under the
   chrome; dormant = a snapshot texture; these are **NOT** document external-texture elements. Its
   by-nature layering (C2) **supersedes this plan's blanket external-texture-migration recipe for
@@ -388,7 +388,7 @@ commits, using serval's existing `<external-texture>` machinery (no new element 
   host composite is retired.
 
 **Surface migration — corrected per C2 (2026-06-19; owner =
-[native_surface_compositing_plan](2026-06-19_native_surface_compositing_plan.md)).** The
+[native_surface_compositing_plan](../../archive_docs/2026-07-03_completed_plans/2026-06-19_native_surface_compositing_plan.md)).** The
 external-texture-element mechanism above is correct for the orrery **scene** specifically — a
 rendered *field*, not a document, so a texture is the right shape (C2 case (d)). It does **not**
 generalize to "every host-composited surface becomes a document external-texture element". Surfaces
@@ -723,7 +723,7 @@ original four resolve or narrow; resolutions are reflected in the phase notes ab
 - **2026-06-19 (cross-plan consolidation, this plan reconciled against its siblings).** A
   three-plan reconciliation pass (this plan + the
   [node-representation-arrangement plan](2026-06-18_node_representation_arrangement_plan.md) + the
-  [native-surface-compositing plan](2026-06-19_native_surface_compositing_plan.md), aligned to the
+  [native-surface-compositing plan](../../archive_docs/2026-07-03_completed_plans/2026-06-19_native_surface_compositing_plan.md), aligned to the
   [cross-platform parallelism research doc](../research/2026-06-19_cross_platform_parallelism_strategy.md))
   folded its decisions into this plan. **No prior progress entry was edited** (DOC_POLICY 8/9); this
   entry records what reconciles the older "Phase 2 ... remains" line above with the updated Status

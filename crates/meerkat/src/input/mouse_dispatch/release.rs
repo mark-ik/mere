@@ -106,6 +106,10 @@ impl WindowCtx<'_> {
             self.view.request_redraw();
             return;
         }
+        if button == MouseButton::Left && self.finish_page_text_selection() {
+            self.view.request_redraw();
+            return;
+        }
         // A release over the focused compatibility-view tile forwards into
         // its WebView (button-up to complete a click). (Scrying X2.)
         if let Some((member, lx, ly)) = self.scrying_at(x, y) {

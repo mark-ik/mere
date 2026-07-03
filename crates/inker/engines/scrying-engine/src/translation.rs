@@ -25,7 +25,6 @@ use inker::{
     WebMessage, WebSurfaceCapabilities as InkerWebSurfaceCapabilities, WebSurfaceEvent,
 };
 use scrying::{
-    native_frame::NativeFrame as ScryingNativeFrame, native_frame::SyncMechanism,
     CapabilityStatus as ScryingCapabilityStatus, CursorShape as ScryingCursorShape,
     FocusReason as ScryingFocusReason, KeyEventKind as ScryingKeyEventKind,
     KeyModifierFlags as ScryingKeyModifierFlags, KeyboardInput as ScryingKeyboardInput,
@@ -35,6 +34,7 @@ use scrying::{
     PointerInput as ScryingPointerInput, SameSite as ScryingSameSite,
     SystemWebviewBackend as ScryingBackend, WebSurfaceCapabilities as ScryingCapabilities,
     WebSurfaceError, WebSurfaceFrame, WebSurfaceMode as ScryingSurfaceMode, WebSurfaceSettings,
+    native_frame::NativeFrame as ScryingNativeFrame, native_frame::SyncMechanism,
 };
 
 // ── Errors ────────────────────────────────────────────────────────────

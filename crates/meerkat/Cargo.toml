@@ -33,7 +33,7 @@ engine-weld = []
 # Off by default so the base build stays the static rung — no JS engine in its
 # dependency graph (the profile ladder's witness discipline) and clear of the
 # Boa+wgpu link-size limit. Build the scripted variant with `--features scripted`.
-scripted = ["pelt-desktop/scripted", "dep:script-engine-boa"]
+scripted = ["pelt-desktop/scripted", "dep:script-engine-boa", "content-contract/scripted"]
 # The serval smolweb render lane: a focused gemini/gopher/feed capsule renders
 # natively through pelt's `SmolwebDocument` (errand parse -> smolweb-views ->
 # ScriptedDom -> serval-layout), the serval lane rather than the block card. Off by
@@ -163,13 +163,17 @@ linked-data = { workspace = true, features = ["query"] }
 # from its output. (gloss-outline plan P1.)
 glossary = { workspace = true }
 graphlets = { workspace = true }
+gloss = { workspace = true }
+roster = { workspace = true }
 
 # The actor-kernel runtime: the !Send host-kernel boundary + the Send actor
 # harness. meerkat's I/O subsystems (fetch, ...) are expressed as armillary
 # actors; the kernel context is pinned to the UI thread by type.
 armillary = { workspace = true }
 fetch = { workspace = true }
+content-contract = { workspace = true }
 crawl = { workspace = true }
+import = { workspace = true }
 
 # Tiled-workbench composition (S4): forme owns the geometry-free arrangement
 # (a graph of tile / member intents); platen projects it into a WorkbenchPlan,

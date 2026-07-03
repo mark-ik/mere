@@ -118,12 +118,7 @@ fn collect_links(span: &InlineSpan, out: &mut Vec<(String, String)>) {
     }
 }
 
-fn write_gophermap_block(
-    block: &Block,
-    ctx: &GophermapContext,
-    out: &mut String,
-    prefix: &str,
-) {
+fn write_gophermap_block(block: &Block, ctx: &GophermapContext, out: &mut String, prefix: &str) {
     match block {
         Block::Heading { spans, .. } => {
             push_info(out, &format!("{prefix}{}", inline_text(spans)));
@@ -163,7 +158,9 @@ fn write_gophermap_block(
         }
         Block::Image { url, alt } => push_link(out, ctx, url, alt),
         Block::Rule => push_info(out, &format!("{prefix}---")),
-        Block::FeedHeader { title, subtitle, .. } => {
+        Block::FeedHeader {
+            title, subtitle, ..
+        } => {
             push_info(out, &format!("{prefix}{title}"));
             if let Some(subtitle) = subtitle {
                 push_info(out, &format!("{prefix}{subtitle}"));

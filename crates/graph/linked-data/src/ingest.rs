@@ -146,8 +146,8 @@ const TITLE_PREDICATES: &[&str] = &[
 
 /// Literal predicates promoted to a node's tags.
 const TAGS_PREDICATES: &[&str] = &[
-    SCHEMA_KEYWORDS,                          // schema:keywords
-    "http://purl.org/dc/terms/subject",       // dcterms:subject
+    SCHEMA_KEYWORDS,                           // schema:keywords
+    "http://purl.org/dc/terms/subject",        // dcterms:subject
     "http://purl.org/dc/elements/1.1/subject", // dc:subject
 ];
 
@@ -259,9 +259,9 @@ fn collect_context_urls(value: &serde_json::Value, out: &mut Vec<String>) {
                     collect_context_urls(child, out);
                 }
             }
-        },
+        }
         serde_json::Value::Array(items) => items.iter().for_each(|i| collect_context_urls(i, out)),
-        _ => {},
+        _ => {}
     }
 }
 
@@ -271,11 +271,11 @@ fn collect_context_strings(ctx: &serde_json::Value, out: &mut Vec<String>) {
     match ctx {
         serde_json::Value::String(s) if s.starts_with("http://") || s.starts_with("https://") => {
             out.push(s.clone());
-        },
+        }
         serde_json::Value::Array(items) => {
             items.iter().for_each(|i| collect_context_strings(i, out))
-        },
-        _ => {},
+        }
+        _ => {}
     }
 }
 
@@ -344,9 +344,13 @@ fn collect_contribution<E: std::fmt::Display>(
                     node.properties.push((predicate.to_string(), value));
                 }
             }
-            Term::NamedNode(object) => {
-                route_resource(&mut nodes, &mut edges, &subject, predicate, object.as_str().to_string())
-            }
+            Term::NamedNode(object) => route_resource(
+                &mut nodes,
+                &mut edges,
+                &subject,
+                predicate,
+                object.as_str().to_string(),
+            ),
             Term::BlankNode(object) => route_resource(
                 &mut nodes,
                 &mut edges,
@@ -423,7 +427,10 @@ const ACTIVITYSTREAMS_URLS: &[&str] = &[
 const DUBLIN_CORE_CONTEXT: &[u8] = include_bytes!("../assets/dublin-core.context.jsonld");
 
 #[cfg(feature = "bundled-contexts")]
-const DUBLIN_CORE_URLS: &[&str] = &["http://purl.org/dc/terms/", "http://purl.org/dc/elements/1.1/"];
+const DUBLIN_CORE_URLS: &[&str] = &[
+    "http://purl.org/dc/terms/",
+    "http://purl.org/dc/elements/1.1/",
+];
 
 /// Whether `url` is a remote `@context` the bundled packs already cover, so a host
 /// need not fetch it before ingest. Always `false` when `bundled-contexts` is off

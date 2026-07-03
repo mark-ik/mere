@@ -75,8 +75,14 @@ async fn ticket_round_trips_identity_and_registers_the_peer() {
     // Alice shares a ticket string; bob parses it, which carries alice's
     // identity and registers her transport info for dialing.
     let ticket = alice.ticket().await.expect("alice ticket");
-    assert!(!ticket.is_empty(), "the ticket serializes to a non-empty string");
-    let learned = bob.add_peer_ticket(&ticket).await.expect("bob parses alice's ticket");
+    assert!(
+        !ticket.is_empty(),
+        "the ticket serializes to a non-empty string"
+    );
+    let learned = bob
+        .add_peer_ticket(&ticket)
+        .await
+        .expect("bob parses alice's ticket");
     assert_eq!(learned, alice_id, "the ticket round-trips alice's PeerID");
 }
 
@@ -186,7 +192,10 @@ async fn gossip_propagates_ops_between_subscribed_peers() {
     let payload = b"a synced cabal operation".to_vec();
     let received = tokio::time::timeout(std::time::Duration::from_secs(20), async {
         loop {
-            alice_handle.publish(payload.clone()).await.expect("publish");
+            alice_handle
+                .publish(payload.clone())
+                .await
+                .expect("publish");
             tokio::select! {
                 msg = bob_rx.next() => {
                     if let Some(Ok(bytes)) = msg
@@ -202,5 +211,8 @@ async fn gossip_propagates_ops_between_subscribed_peers() {
     .await
     .expect("bob received the gossip-broadcast operation within the timeout");
 
-    assert_eq!(received, payload, "bob received exactly what alice published");
+    assert_eq!(
+        received, payload,
+        "bob received exactly what alice published"
+    );
 }

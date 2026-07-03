@@ -80,7 +80,8 @@ fn init_tables(db: &Database) -> Result<(), MisfinServerError> {
     let txn = db.begin_write().map_err(storage_err)?;
     {
         txn.open_table(MESSAGES).map_err(storage_err)?;
-        txn.open_multimap_table(MAILBOX_INDEX).map_err(storage_err)?;
+        txn.open_multimap_table(MAILBOX_INDEX)
+            .map_err(storage_err)?;
         txn.open_table(META).map_err(storage_err)?;
         txn.open_table(SENDERS).map_err(storage_err)?;
     }
@@ -138,9 +139,13 @@ impl MailboxStore {
             let bytes = serde_json::to_vec(&message).map_err(storage_err)?;
 
             let mut messages = txn.open_table(MESSAGES).map_err(storage_err)?;
-            messages.insert(seq, bytes.as_slice()).map_err(storage_err)?;
+            messages
+                .insert(seq, bytes.as_slice())
+                .map_err(storage_err)?;
 
-            let mut index = txn.open_multimap_table(MAILBOX_INDEX).map_err(storage_err)?;
+            let mut index = txn
+                .open_multimap_table(MAILBOX_INDEX)
+                .map_err(storage_err)?;
             index
                 .insert(recipient_spec.as_str(), seq)
                 .map_err(storage_err)?;
@@ -175,7 +180,9 @@ impl MailboxStore {
     /// delivery order.
     pub fn list(&self, mailbox: &str) -> Result<Vec<ReceivedMessage>, MisfinServerError> {
         let txn = self.db.begin_read().map_err(storage_err)?;
-        let index = txn.open_multimap_table(MAILBOX_INDEX).map_err(storage_err)?;
+        let index = txn
+            .open_multimap_table(MAILBOX_INDEX)
+            .map_err(storage_err)?;
         let messages = txn.open_table(MESSAGES).map_err(storage_err)?;
 
         let mut out = Vec::new();

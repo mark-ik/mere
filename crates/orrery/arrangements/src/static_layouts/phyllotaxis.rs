@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 use crate::camera::CanvasViewport;
 use crate::scene::CanvasSceneInput;
 
-use crate::{Layout, LayoutExtras};
 use super::{StaticLayoutState, emit};
+use crate::{Layout, LayoutExtras};
 
 // ── Phyllotaxis ───────────────────────────────────────────────────────────────
 

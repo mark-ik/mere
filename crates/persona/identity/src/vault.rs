@@ -507,6 +507,5 @@ impl IdentityStorage for InMemoryStorage {
 }
 
 #[cfg(test)]
-
 #[cfg(test)]
 mod tests;

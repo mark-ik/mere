@@ -2,6 +2,13 @@
 
 **Date**: 2026-05-14
 **Status**: Implementation plan — v0a path-resolution primitive landed; v0b per-engine wiring pending
+
+> **Reconcile note (2026-07-03 archive pass):** `engine_profile_store.rs`
+> (`crates/system/session-runtime/`) now carries `engine_profile_path` /
+> `engine_profile_path_for_session` with tests, so the primitive is live; per-engine UDF
+> wiring status (scrying/graft/weld each reference engine-profile types) was not
+> re-verified engine-by-engine. The engine list here predates the serval multiplexer
+> framing (scry/graft/weld as `SurfaceEngine`s); read alongside the current inker code.
 **Scope**: Make the line between *graph truth* and *engine profile bytes* explicit. Engines (WebView2 via scrying, Wry, Servo via netrender, nematic, future others) own cookies, permissions, cache, IndexedDB, localStorage; the session references a profile binding, never owns those bytes. Land the path-resolution primitive now; per-engine UDF wiring (scrying first, then siblings) follows.
 
 **Related**:

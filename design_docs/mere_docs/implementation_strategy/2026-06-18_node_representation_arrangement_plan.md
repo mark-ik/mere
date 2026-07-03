@@ -49,7 +49,7 @@ Sibling / converging docs:
   mechanism, and its "materialization is state" rule (a glyph by default, a DOM subtree on expand)
   is the hinge between the two plans. This plan owns the **sprite / representation layer** (the
   card is *one* sprite, never the node's truth-form).
-- [native_surface_compositing_plan](2026-06-19_native_surface_compositing_plan.md) — owns the
+- [native_surface_compositing_plan](../../archive_docs/2026-07-03_completed_plans/2026-06-19_native_surface_compositing_plan.md) — owns the
   **snapshot-texture-vs-live-visual** split for the orrery card and the host-surface **layering**
   (the four-way by-nature split: serval DOM subtree / external WebView2 native visual below chrome /
   dormant snapshot / orrery scene texture). The orrery card = snapshot is its compositing half.
@@ -140,7 +140,7 @@ Architecture:
   `render_as_cards` flag is the seed to generalize.
 - The orrery renders each node through its representation's renderer, **split by nature** (the
   compositing layering is owned by
-  [native_surface_compositing_plan](2026-06-19_native_surface_compositing_plan.md); the
+  [native_surface_compositing_plan](../../archive_docs/2026-07-03_completed_plans/2026-06-19_native_surface_compositing_plan.md); the
   external-texture *input* bridge by [tearout_composability_plan](2026-06-19_tearout_composability_plan.md)
   per the spine, line 139 — name both, they are distinct):
   - **serval-rendered content** diffs into the shell document as a **real DOM subtree** (a11y /
@@ -327,7 +327,7 @@ bridge, and the DOM route for the other half needs the chrome image-decode gap c
   itself interactive: a live page as a body, the compat WebView node, a canvas you draw on. **By
   nature this is genuinely-external content** (C2): it wants a **native composition visual** below
   the chrome (owned by
-  [native_surface_compositing_plan](2026-06-19_native_surface_compositing_plan.md)) **PLUS** the
+  [native_surface_compositing_plan](../../archive_docs/2026-07-03_completed_plans/2026-06-19_native_surface_compositing_plan.md)) **PLUS** the
   `<external-texture>` element to **bear input** (forward a hit, in texture-local coords, to the
   producer behind it), the external-texture-input bridge owned by the
   [tearout_composability_plan](2026-06-19_tearout_composability_plan.md) (the window-composition
@@ -369,7 +369,7 @@ double-click, carrying the X / tile buttons) is **dropped**: a node opens in a *
 and the orrery keeps only the static **Stage-1 snapshot** (the peek without the X). This
 implements the 2026-06-19 node-vs-card decision (the live view moves to pelt; the orrery card
 stays a snapshot); the compositing half (live content hosted in a tile, not a floating surface)
-is [native_surface_compositing](2026-06-19_native_surface_compositing_plan.md) P3. The Stage-2
+is [native_surface_compositing](../../archive_docs/2026-07-03_completed_plans/2026-06-19_native_surface_compositing_plan.md) P3. The Stage-2
 surface was built by the archived
 [card_system_and_staging_plan](../../archive_docs/2026-06-09_completed_plans/2026-06-07_card_system_and_staging_plan.md);
 this retires it.
@@ -500,7 +500,7 @@ it is the default of a setting, not a baked constant.
     cue renders now.
   The menu-vs-host-composited-surfaces precedence (scry System WebViews drawn over the menu) is a
   separate native-compositing issue, split out into
-  [native_surface_compositing_plan](2026-06-19_native_surface_compositing_plan.md).
+  [native_surface_compositing_plan](../../archive_docs/2026-07-03_completed_plans/2026-06-19_native_surface_compositing_plan.md).
 - 2026-06-19: **Cross-plan consolidation pass (orrery/host cluster reconciliation).** Folded the
   node-vs-card sharpening (filed only in the Progress log until now) **up** into the thesis,
   Status, and the Representation open set, and aligned this plan with its two siblings and the
@@ -612,7 +612,7 @@ it is the default of a setting, not a baked constant.
   td-02): a focused visited node shows its static snapshot card with **no X and no floating live
   card**; content opens in pelt. **P4 complete.** (The scry compat node now renders live in a pelt
   tile via the off-window WebView2 capture — the DX12-backend + cache-flush fixes for that live in
-  the [native_surface_compositing_plan](2026-06-19_native_surface_compositing_plan.md) territory.)
+  the [native_surface_compositing_plan](../../archive_docs/2026-07-03_completed_plans/2026-06-19_native_surface_compositing_plan.md) territory.)
 - 2026-06-21: **Orrery card-over-nodes layering fixed — the focused card is now chrome DOM over
   the node cards.** Mark caught the orrery node cards painting *over* the focused node's snapshot
   card. Root finding (code- + runtime-verified): the orrery renders its nodes as **chrome DOM cards**
@@ -633,7 +633,7 @@ it is the default of a setting, not a baked constant.
   overlapped (the rep-01 full-band-overlay was a transient layout state). Retired the old
   host-composited snapshot/unvisited textures, the `snapshot_textures` / `unvisited_tex` caches, and
   `unvisited_card_scene`. The "a texture can't paint over chrome DOM" finding belongs to the
-  [native_surface_compositing_plan](2026-06-19_native_surface_compositing_plan.md).
+  [native_surface_compositing_plan](../../archive_docs/2026-07-03_completed_plans/2026-06-19_native_surface_compositing_plan.md).
 - 2026-06-21: **P0 hover landed (Decision 2's faint brighten).** The host computes per node card,
   in the OrreryRender loop, whether the cursor (`self.view.cursor`, window px) is over the node's
   face box (~`NODE_HALF`), and `node_card_view` paints a faint white wash

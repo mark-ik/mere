@@ -8,9 +8,9 @@
 //! [`super::apply::GraphDelta`]: add/remove node, assert/retract relation,
 //! traversal append, media writes, navigation chronology/history mutations, the
 //! lighter per-node content/presentation setters, semantic-predicate edge
-//! writes, the node-enrichment setters, and deterministic frame/history state
-//! setters. The broader content-mutation lane still stays separate until those
-//! writes grow stable-id replay forms of their own.
+//! writes, the node-enrichment setters, import-record truth, and deterministic
+//! frame/history state setters. The broader content-mutation lane still stays
+//! separate until those writes grow stable-id replay forms of their own.
 
 use std::cell::RefCell;
 use std::sync::Arc;
@@ -29,7 +29,10 @@ use crate::persistence::{
     PersistedCoupling, PersistedCouplingResponse, PersistedField, PersistedFieldExtent,
     PersistedFieldLifecycle, PersistedNodeSelector,
 };
-use crate::types::{NodeClassification, NodeDerivation, NodeProperty};
+use crate::types::{
+    BadgeIcon, ClassificationScheme, ClassificationStatus, ImportRecord, NodeClassification,
+    NodeDerivation, NodeProperty,
+};
 
 /// The stable-id, serializable mirror of the replayable graph deltas.
 #[derive(
@@ -135,9 +138,30 @@ pub enum CapturedDelta {
         node_id: String,
         classification: NodeClassification,
     },
+    ReplayRemoveNodeClassificationById {
+        node_id: String,
+        scheme: ClassificationScheme,
+        value: String,
+    },
+    ReplaySetNodeClassificationStatusById {
+        node_id: String,
+        scheme: ClassificationScheme,
+        value: String,
+        status: ClassificationStatus,
+    },
+    ReplaySetNodePrimaryClassificationById {
+        node_id: String,
+        scheme: ClassificationScheme,
+        value: String,
+    },
     ReplayRecordNodeDerivationById {
         node_id: String,
         derivation: NodeDerivation,
+    },
+    ReplaySetNodeTagIconOverrideById {
+        node_id: String,
+        tag: String,
+        icon: Option<BadgeIcon>,
     },
     ReplaySetEdgeSemanticPredicateByIds {
         from_id: String,
@@ -170,6 +194,9 @@ pub enum CapturedDelta {
         node_id: String,
         entries: Vec<String>,
         current_index: usize,
+    },
+    ReplaySetImportRecords {
+        import_records: Vec<ImportRecord>,
     },
     ReplayAddField {
         field: PersistedField,
@@ -344,6 +371,35 @@ impl CapturedDelta {
                 node_id: parse_uuid(node_id),
                 classification: classification.clone(),
             },
+            Self::ReplayRemoveNodeClassificationById {
+                node_id,
+                scheme,
+                value,
+            } => GraphDelta::ReplayRemoveNodeClassificationById {
+                node_id: parse_uuid(node_id),
+                scheme: scheme.clone(),
+                value: value.clone(),
+            },
+            Self::ReplaySetNodeClassificationStatusById {
+                node_id,
+                scheme,
+                value,
+                status,
+            } => GraphDelta::ReplaySetNodeClassificationStatusById {
+                node_id: parse_uuid(node_id),
+                scheme: scheme.clone(),
+                value: value.clone(),
+                status: status.clone(),
+            },
+            Self::ReplaySetNodePrimaryClassificationById {
+                node_id,
+                scheme,
+                value,
+            } => GraphDelta::ReplaySetNodePrimaryClassificationById {
+                node_id: parse_uuid(node_id),
+                scheme: scheme.clone(),
+                value: value.clone(),
+            },
             Self::ReplayRecordNodeDerivationById {
                 node_id,
                 derivation,
@@ -351,6 +407,13 @@ impl CapturedDelta {
                 node_id: parse_uuid(node_id),
                 derivation: derivation.clone(),
             },
+            Self::ReplaySetNodeTagIconOverrideById { node_id, tag, icon } => {
+                GraphDelta::ReplaySetNodeTagIconOverrideById {
+                    node_id: parse_uuid(node_id),
+                    tag: tag.clone(),
+                    icon: icon.clone(),
+                }
+            }
             Self::ReplaySetEdgeSemanticPredicateByIds {
                 from_id,
                 to_id,
@@ -406,6 +469,9 @@ impl CapturedDelta {
                 node_id: parse_uuid(node_id),
                 entries: entries.clone(),
                 current_index: *current_index,
+            },
+            Self::ReplaySetImportRecords { import_records } => GraphDelta::ReplaySetImportRecords {
+                import_records: import_records.clone(),
             },
             Self::ReplayAddField { field } => GraphDelta::ReplayAddField {
                 field: field.clone(),
@@ -617,8 +683,9 @@ mod tests {
         ProvenanceSubKind, ScalarField, SemanticSubKind, SharedNavigationMemory,
     };
     use crate::types::{
-        ClassificationProvenance, ClassificationScheme, ClassificationStatus, FrameLayoutHint,
-        NodeClassification, NodeDerivation, NodeProperty, SplitOrientation,
+        BadgeIcon, ClassificationProvenance, ClassificationScheme, ClassificationStatus,
+        FrameLayoutHint, ImportRecordMembership, NodeClassification, NodeDerivation,
+        NodeImportProvenance, NodeProperty, SplitOrientation,
     };
 
     fn point(x: f32, y: f32) -> Point2D<f32> {
@@ -706,6 +773,31 @@ mod tests {
     }
 
     #[test]
+    fn classification_admin_captured_delta_round_trips_through_postcard() {
+        let delta = CapturedDelta::ReplaySetNodeClassificationStatusById {
+            node_id: Uuid::from_u128(61).to_string(),
+            scheme: ClassificationScheme::ContentKind,
+            value: "article".into(),
+            status: ClassificationStatus::Verified,
+        };
+        let bytes = postcard::to_allocvec(&delta).expect("encode");
+        let restored: CapturedDelta = postcard::from_bytes(&bytes).expect("decode");
+        assert_eq!(restored, delta);
+    }
+
+    #[test]
+    fn tag_presentation_captured_delta_round_trips_through_postcard() {
+        let delta = CapturedDelta::ReplaySetNodeTagIconOverrideById {
+            node_id: Uuid::from_u128(62).to_string(),
+            tag: "paper".into(),
+            icon: Some(BadgeIcon::Lucide("file-text".into())),
+        };
+        let bytes = postcard::to_allocvec(&delta).expect("encode");
+        let restored: CapturedDelta = postcard::from_bytes(&bytes).expect("decode");
+        assert_eq!(restored, delta);
+    }
+
+    #[test]
     fn node_media_captured_delta_round_trips_through_postcard() {
         let delta = CapturedDelta::ReplaySetNodeThumbnailById {
             node_id: Uuid::from_u128(7).to_string(),
@@ -762,6 +854,25 @@ mod tests {
             node_id: Uuid::from_u128(10).to_string(),
             entries: vec!["https://a.test".into(), "https://b.test".into()],
             current_index: 1,
+        };
+        let bytes = postcard::to_allocvec(&delta).expect("encode");
+        let restored: CapturedDelta = postcard::from_bytes(&bytes).expect("decode");
+        assert_eq!(restored, delta);
+    }
+
+    #[test]
+    fn import_records_captured_delta_round_trips_through_postcard() {
+        let delta = CapturedDelta::ReplaySetImportRecords {
+            import_records: vec![ImportRecord {
+                record_id: "import-record:seed".into(),
+                source_id: "import:seed".into(),
+                source_label: "Seed import".into(),
+                imported_at_secs: 1_763_500_800,
+                memberships: vec![ImportRecordMembership {
+                    node_id: Uuid::from_u128(10).to_string(),
+                    suppressed: false,
+                }],
+            }],
         };
         let bytes = postcard::to_allocvec(&delta).expect("encode");
         let restored: CapturedDelta = postcard::from_bytes(&bytes).expect("decode");
@@ -853,6 +964,15 @@ mod tests {
                 node_id: a_id.to_string(),
                 body: Some("body".into()),
             },
+            CapturedDelta::ReplayInsertNodeTagById {
+                node_id: a_id.to_string(),
+                tag: "paper".into(),
+            },
+            CapturedDelta::ReplaySetNodeTagIconOverrideById {
+                node_id: a_id.to_string(),
+                tag: "paper".into(),
+                icon: Some(BadgeIcon::Lucide("file-text".into())),
+            },
             CapturedDelta::ReplayNavigateNodeById {
                 node_id: b_id.to_string(),
                 url: "https://b.test/one".into(),
@@ -918,6 +1038,46 @@ mod tests {
                     primary: true,
                 },
             },
+            CapturedDelta::ReplayAddNodeClassificationById {
+                node_id: a_id.to_string(),
+                classification: NodeClassification {
+                    scheme: ClassificationScheme::ContentKind,
+                    value: "essay".into(),
+                    label: Some("Essay".into()),
+                    confidence: 0.6,
+                    provenance: ClassificationProvenance::AgentSuggested,
+                    status: ClassificationStatus::Suggested,
+                    primary: false,
+                },
+            },
+            CapturedDelta::ReplayAddNodeClassificationById {
+                node_id: a_id.to_string(),
+                classification: NodeClassification {
+                    scheme: ClassificationScheme::ContentKind,
+                    value: "draft".into(),
+                    label: Some("Draft".into()),
+                    confidence: 0.3,
+                    provenance: ClassificationProvenance::AgentSuggested,
+                    status: ClassificationStatus::Suggested,
+                    primary: false,
+                },
+            },
+            CapturedDelta::ReplaySetNodeClassificationStatusById {
+                node_id: a_id.to_string(),
+                scheme: ClassificationScheme::ContentKind,
+                value: "article".into(),
+                status: ClassificationStatus::Verified,
+            },
+            CapturedDelta::ReplaySetNodePrimaryClassificationById {
+                node_id: a_id.to_string(),
+                scheme: ClassificationScheme::ContentKind,
+                value: "essay".into(),
+            },
+            CapturedDelta::ReplayRemoveNodeClassificationById {
+                node_id: a_id.to_string(),
+                scheme: ClassificationScheme::ContentKind,
+                value: "draft".into(),
+            },
             CapturedDelta::ReplayRecordNodeDerivationById {
                 node_id: a_id.to_string(),
                 derivation: NodeDerivation {
@@ -974,6 +1134,24 @@ mod tests {
                 ],
                 current_index: 9,
             },
+            CapturedDelta::ReplaySetImportRecords {
+                import_records: vec![ImportRecord {
+                    record_id: "import-record:seed".into(),
+                    source_id: "import:seed".into(),
+                    source_label: "Seed import".into(),
+                    imported_at_secs: 1_763_500_800,
+                    memberships: vec![
+                        ImportRecordMembership {
+                            node_id: a_id.to_string(),
+                            suppressed: false,
+                        },
+                        ImportRecordMembership {
+                            node_id: c_id.to_string(),
+                            suppressed: true,
+                        },
+                    ],
+                }],
+            },
         ];
 
         let graph = replay_captured_deltas(deltas);
@@ -1008,14 +1186,33 @@ mod tests {
         assert!(node.compat_mode);
         assert_eq!(node.body.as_deref(), Some("body"));
         assert!(!node.tags.contains("research"));
+        assert!(node.tags.contains("paper"));
+        assert_eq!(
+            node.tag_presentation.icon_overrides.get("paper"),
+            Some(&BadgeIcon::Lucide("file-text".into()))
+        );
         assert_eq!(node.properties.len(), 1);
         assert_eq!(
             node.properties[0].predicate,
             "https://schema.org/datePublished"
         );
         assert_eq!(node.properties[0].value, "2026-07-02");
-        assert_eq!(node.classifications.len(), 1);
-        assert_eq!(node.classifications[0].value, "article");
+        assert_eq!(node.classifications.len(), 2);
+        assert!(node.classifications.iter().any(|classification| {
+            classification.value == "article"
+                && classification.status == ClassificationStatus::Verified
+                && !classification.primary
+        }));
+        assert!(node.classifications.iter().any(|classification| {
+            classification.value == "essay"
+                && classification.status == ClassificationStatus::Suggested
+                && classification.primary
+        }));
+        assert!(
+            node.classifications
+                .iter()
+                .all(|classification| classification.value != "draft")
+        );
         assert_eq!(node.derivations.len(), 1);
         assert_eq!(
             node.derivations[0].sub_kind,
@@ -1100,6 +1297,28 @@ mod tests {
             ]
         );
         assert_eq!(history.current_index, 2);
+        let import_records = graph.import_records();
+        assert_eq!(import_records.len(), 1);
+        assert_eq!(import_records[0].record_id, "import-record:seed");
+        assert_eq!(
+            graph.import_record_member_keys("import-record:seed"),
+            vec![from]
+        );
+        assert_eq!(
+            graph
+                .node_import_provenance(from)
+                .expect("import provenance"),
+            [NodeImportProvenance {
+                source_id: "import:seed".into(),
+                source_label: "Seed import".into(),
+            }]
+        );
+        assert!(
+            graph
+                .node_import_provenance(branched_node_key)
+                .expect("suppressed provenance")
+                .is_empty()
+        );
         let mut expected_nav = SharedNavigationMemory::empty();
         expected_nav.record_visit(b_id, "https://b.test/one", TransitionKind::UrlTyped, 111);
         expected_nav.record_visit(b_id, "https://b.test/two", TransitionKind::UrlTyped, 222);
@@ -1288,6 +1507,21 @@ mod tests {
         );
         let _ = crate::graph::apply::apply_graph_delta(
             &mut graph,
+            GraphDelta::InsertNodeTag {
+                key: a,
+                tag: "paper".into(),
+            },
+        );
+        let _ = crate::graph::apply::apply_graph_delta(
+            &mut graph,
+            GraphDelta::SetNodeTagIconOverride {
+                key: a,
+                tag: "paper".into(),
+                icon: Some(BadgeIcon::Lucide("file-text".into())),
+            },
+        );
+        let _ = crate::graph::apply::apply_graph_delta(
+            &mut graph,
             GraphDelta::NavigateNode {
                 key: b,
                 url: "https://b.test/one".into(),
@@ -1368,6 +1602,61 @@ mod tests {
                     status: ClassificationStatus::Accepted,
                     primary: true,
                 },
+            },
+        );
+        let _ = crate::graph::apply::apply_graph_delta(
+            &mut graph,
+            GraphDelta::AddNodeClassification {
+                key: a,
+                classification: NodeClassification {
+                    scheme: ClassificationScheme::ContentKind,
+                    value: "essay".into(),
+                    label: Some("Essay".into()),
+                    confidence: 0.6,
+                    provenance: ClassificationProvenance::AgentSuggested,
+                    status: ClassificationStatus::Suggested,
+                    primary: false,
+                },
+            },
+        );
+        let _ = crate::graph::apply::apply_graph_delta(
+            &mut graph,
+            GraphDelta::AddNodeClassification {
+                key: a,
+                classification: NodeClassification {
+                    scheme: ClassificationScheme::ContentKind,
+                    value: "draft".into(),
+                    label: Some("Draft".into()),
+                    confidence: 0.3,
+                    provenance: ClassificationProvenance::AgentSuggested,
+                    status: ClassificationStatus::Suggested,
+                    primary: false,
+                },
+            },
+        );
+        let _ = crate::graph::apply::apply_graph_delta(
+            &mut graph,
+            GraphDelta::SetNodeClassificationStatus {
+                key: a,
+                scheme: ClassificationScheme::ContentKind,
+                value: "article".into(),
+                status: ClassificationStatus::Verified,
+            },
+        );
+        let _ = crate::graph::apply::apply_graph_delta(
+            &mut graph,
+            GraphDelta::SetNodePrimaryClassification {
+                key: a,
+                scheme: ClassificationScheme::ContentKind,
+                value: "essay".into(),
+            },
+        );
+        let _ = crate::graph::apply::apply_graph_delta(
+            &mut graph,
+            GraphDelta::RemoveNodeClassification {
+                key: a,
+                scheme: ClassificationScheme::ContentKind,
+                value: "draft".into(),
             },
         );
         let _ = crate::graph::apply::apply_graph_delta(
@@ -1455,6 +1744,40 @@ mod tests {
         );
         let _ = crate::graph::apply::apply_graph_delta(
             &mut graph,
+            GraphDelta::SetNodeImportProvenance {
+                key: a,
+                import_provenance: vec![NodeImportProvenance {
+                    source_id: "import:seed".into(),
+                    source_label: "Seed import".into(),
+                }],
+            },
+        );
+        let _ = crate::graph::apply::apply_graph_delta(
+            &mut graph,
+            GraphDelta::SetImportRecordMembershipSuppressed {
+                record_id: "import-record:import:seed".into(),
+                key: a,
+                suppressed: true,
+            },
+        );
+        let c_node_id = graph.get_node(c).expect("node c").id.to_string();
+        let _ = crate::graph::apply::apply_graph_delta(
+            &mut graph,
+            GraphDelta::SetImportRecords {
+                import_records: vec![ImportRecord {
+                    record_id: "import-record:seed-two".into(),
+                    source_id: "import:seed-two".into(),
+                    source_label: "Seed import two".into(),
+                    imported_at_secs: 1_763_500_801,
+                    memberships: vec![ImportRecordMembership {
+                        node_id: c_node_id,
+                        suppressed: false,
+                    }],
+                }],
+            },
+        );
+        let _ = crate::graph::apply::apply_graph_delta(
+            &mut graph,
             GraphDelta::RetractRelations {
                 from: a,
                 to: b,
@@ -1467,7 +1790,7 @@ mod tests {
         set_captured_delta_hook(None);
 
         let out = captured.lock().expect("capture sink");
-        assert_eq!(out.len(), 39);
+        assert_eq!(out.len(), 49);
         assert!(matches!(
             out[0],
             CapturedDelta::ReplayAddNodeWithIdIfMissing { .. }
@@ -1531,88 +1854,128 @@ mod tests {
         ));
         assert!(matches!(
             out[16],
-            CapturedDelta::ReplayNavigateNodeById { .. }
+            CapturedDelta::ReplayInsertNodeTagById { .. }
         ));
         assert!(matches!(
             out[17],
-            CapturedDelta::ReplayNavigateNodeById { .. }
+            CapturedDelta::ReplaySetNodeTagIconOverrideById { .. }
         ));
         assert!(matches!(
             out[18],
-            CapturedDelta::ReplayNodeHistoryBackById { .. }
+            CapturedDelta::ReplayNavigateNodeById { .. }
         ));
         assert!(matches!(
             out[19],
-            CapturedDelta::ReplayNodeHistoryForwardById { .. }
+            CapturedDelta::ReplayNavigateNodeById { .. }
         ));
         assert!(matches!(
             out[20],
-            CapturedDelta::ReplayBranchHistoryByIds { .. }
+            CapturedDelta::ReplayNodeHistoryBackById { .. }
         ));
         assert!(matches!(
             out[21],
+            CapturedDelta::ReplayNodeHistoryForwardById { .. }
+        ));
+        assert!(matches!(
+            out[22],
+            CapturedDelta::ReplayBranchHistoryByIds { .. }
+        ));
+        assert!(matches!(
+            out[23],
             CapturedDelta::ReplayNavigateNodeById { .. }
         ));
-        assert!(matches!(out[22], CapturedDelta::ReplayAddField { .. }));
-        assert!(matches!(out[23], CapturedDelta::ReplayAddCoupling { .. }));
+        assert!(matches!(out[24], CapturedDelta::ReplayAddField { .. }));
+        assert!(matches!(out[25], CapturedDelta::ReplayAddCoupling { .. }));
         assert!(matches!(
-            out[24],
+            out[26],
             CapturedDelta::ReplaySetFieldCouplingStrengthByFieldId { .. }
         ));
         assert!(matches!(
-            out[25],
+            out[27],
             CapturedDelta::ReplayRetireFieldById { .. }
         ));
         assert!(matches!(
-            out[26],
+            out[28],
             CapturedDelta::ReplayAppendNodePropertyById { .. }
         ));
         assert!(matches!(
-            out[27],
+            out[29],
             CapturedDelta::ReplayAddNodeClassificationById { .. }
         ));
         assert!(matches!(
-            out[28],
-            CapturedDelta::ReplayRecordNodeDerivationById { .. }
-        ));
-        assert!(matches!(
-            out[29],
-            CapturedDelta::ReplaySetEdgeSemanticPredicateByIds { .. }
-        ));
-        assert!(matches!(
             out[30],
-            CapturedDelta::ReplayAssertSemanticPredicateByIds { .. }
+            CapturedDelta::ReplayAddNodeClassificationById { .. }
         ));
         assert!(matches!(
             out[31],
-            CapturedDelta::ReplayAppendFrameLayoutHintById { .. }
+            CapturedDelta::ReplayAddNodeClassificationById { .. }
         ));
         assert!(matches!(
             out[32],
-            CapturedDelta::ReplayAppendFrameLayoutHintById { .. }
+            CapturedDelta::ReplaySetNodeClassificationStatusById { .. }
         ));
         assert!(matches!(
             out[33],
-            CapturedDelta::ReplayMoveFrameLayoutHintById { .. }
+            CapturedDelta::ReplaySetNodePrimaryClassificationById { .. }
         ));
         assert!(matches!(
             out[34],
-            CapturedDelta::ReplayRemoveFrameLayoutHintById { .. }
+            CapturedDelta::ReplayRemoveNodeClassificationById { .. }
         ));
         assert!(matches!(
             out[35],
-            CapturedDelta::ReplaySetFrameSplitOfferSuppressedById { .. }
+            CapturedDelta::ReplayRecordNodeDerivationById { .. }
         ));
         assert!(matches!(
             out[36],
-            CapturedDelta::ReplayUpdateNodeHistoryById { .. }
+            CapturedDelta::ReplaySetEdgeSemanticPredicateByIds { .. }
         ));
         assert!(matches!(
             out[37],
-            CapturedDelta::ReplayRetractRelationsByIds { .. }
+            CapturedDelta::ReplayAssertSemanticPredicateByIds { .. }
         ));
         assert!(matches!(
             out[38],
+            CapturedDelta::ReplayAppendFrameLayoutHintById { .. }
+        ));
+        assert!(matches!(
+            out[39],
+            CapturedDelta::ReplayAppendFrameLayoutHintById { .. }
+        ));
+        assert!(matches!(
+            out[40],
+            CapturedDelta::ReplayMoveFrameLayoutHintById { .. }
+        ));
+        assert!(matches!(
+            out[41],
+            CapturedDelta::ReplayRemoveFrameLayoutHintById { .. }
+        ));
+        assert!(matches!(
+            out[42],
+            CapturedDelta::ReplaySetFrameSplitOfferSuppressedById { .. }
+        ));
+        assert!(matches!(
+            out[43],
+            CapturedDelta::ReplayUpdateNodeHistoryById { .. }
+        ));
+        assert!(matches!(
+            out[44],
+            CapturedDelta::ReplaySetImportRecords { .. }
+        ));
+        assert!(matches!(
+            out[45],
+            CapturedDelta::ReplaySetImportRecords { .. }
+        ));
+        assert!(matches!(
+            out[46],
+            CapturedDelta::ReplaySetImportRecords { .. }
+        ));
+        assert!(matches!(
+            out[47],
+            CapturedDelta::ReplayRetractRelationsByIds { .. }
+        ));
+        assert!(matches!(
+            out[48],
             CapturedDelta::ReplayRemoveNodeById { .. }
         ));
     }

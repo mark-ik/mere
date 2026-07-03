@@ -45,7 +45,12 @@ fn registry_lists_built_ins_in_order() {
     let ids: Vec<&str> = registry.list().iter().map(|d| d.id.as_str()).collect();
     assert_eq!(
         ids,
-        vec![THEME_ID_DEFAULT, THEME_ID_DARK, THEME_ID_LIGHT, THEME_ID_HIGH_CONTRAST]
+        vec![
+            THEME_ID_DEFAULT,
+            THEME_ID_DARK,
+            THEME_ID_LIGHT,
+            THEME_ID_HIGH_CONTRAST
+        ]
     );
 }
 
@@ -57,7 +62,9 @@ fn user_theme_crud_fork_rename_remove_add() {
     let builtins = reg.list().len();
 
     // Fork a built-in into a user theme (the non-destructive edit path).
-    let forked = reg.fork(THEME_ID_DEFAULT, "user:test", "My Theme").expect("fork succeeds");
+    let forked = reg
+        .fork(THEME_ID_DEFAULT, "user:test", "My Theme")
+        .expect("fork succeeds");
     assert_eq!(forked.source, ThemeSource::User);
     assert_eq!(reg.list().len(), builtins + 1);
     assert!(reg.resolve_theme(Some("user:test")).matched);
@@ -94,7 +101,8 @@ fn user_theme_crud_fork_rename_remove_add() {
         high_contrast: false,
         harmony: Default::default(),
     };
-    reg.add_user_theme(def).expect("user theme passes validation");
+    reg.add_user_theme(def)
+        .expect("user theme passes validation");
     assert!(reg.resolve_theme(Some("user:green")).matched);
 }
 

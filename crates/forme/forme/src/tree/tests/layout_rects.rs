@@ -2,8 +2,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use super::*;
 use super::make_layout_tree;
+use super::*;
 
 #[test]
 fn tree_style_tabs_single_pane() {
@@ -304,4 +304,3 @@ fn all_members_reachable_after_mixed_attaches() {
 }
 
 // --- Nested layout tests (Phase E/G) ---
-

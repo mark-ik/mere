@@ -29,9 +29,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
-use mesh::{
-    execute, next_action, JobState, MeshEvent, MeshStore, SyncedMesh, WorkerAction,
-};
+use mesh::{JobState, MeshEvent, MeshStore, SyncedMesh, WorkerAction, execute, next_action};
 use p2panda_core::Hash;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use transport::P2pandaTransport;

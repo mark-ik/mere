@@ -61,7 +61,10 @@ pub async fn run_guarded(
     let outcome = async {
         let bindings = DocumentCore::instantiate_async(&mut store, &component, &linker).await?;
         bindings.call_activate(&mut store).await?;
-        let ev = Event { kind: kind.to_string(), payload: String::new() };
+        let ev = Event {
+            kind: kind.to_string(),
+            payload: String::new(),
+        };
         // The inner Result (the guest's batch or a turn-error) is irrelevant here;
         // this run only distinguishes "completed" from "trapped/denied".
         let _ = bindings.call_handle_event(&mut store, &ev).await?;
@@ -143,7 +146,10 @@ impl Grant {
 /// Link the WASI floor (always) plus exactly the granted `mere:script` imports.
 /// Only `Allow` links; `Deny`/`Prompt` omit. (A `Prompt` must be resolved to
 /// Allow/Deny before instantiation by the caller; P2 omits it conservatively.)
-pub(crate) fn link_with_grant(linker: &mut Linker<ScriptHost>, grant: &Grant) -> wasmtime::Result<()> {
+pub(crate) fn link_with_grant(
+    linker: &mut Linker<ScriptHost>,
+    grant: &Grant,
+) -> wasmtime::Result<()> {
     wasmtime_wasi::p2::add_to_linker_async(linker)?;
     // `caps` is always linked — it reports the grant, it is not itself a capability
     // (§11.4), so even a maximally-denied instance can discover it has nothing.
@@ -228,8 +234,14 @@ pub(crate) async fn build_instance(
 /// guest (and a future `caps.granted()`) see exactly what was allowed.
 pub async fn instantiate_with_grant(component_path: &Path, grant: &Grant) -> wasmtime::Result<()> {
     let engine = Engine::default();
-    let (mut store, bindings) =
-        build_instance(&engine, component_path, seed_dom(), grant, StoreLimits::default()).await?;
+    let (mut store, bindings) = build_instance(
+        &engine,
+        component_path,
+        seed_dom(),
+        grant,
+        StoreLimits::default(),
+    )
+    .await?;
     bindings.call_activate(&mut store).await?;
     Ok(())
 }

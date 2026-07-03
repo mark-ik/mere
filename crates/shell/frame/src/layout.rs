@@ -288,7 +288,11 @@ impl FrameLayout {
         valid: &std::collections::HashSet<GraphId>,
         fallback: GraphId,
     ) {
-        fn walk(node: &mut PaneNode, valid: &std::collections::HashSet<GraphId>, fallback: GraphId) {
+        fn walk(
+            node: &mut PaneNode,
+            valid: &std::collections::HashSet<GraphId>,
+            fallback: GraphId,
+        ) {
             match node {
                 PaneNode::Leaf {
                     content, graph_id, ..

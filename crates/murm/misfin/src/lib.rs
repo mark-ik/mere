@@ -18,7 +18,6 @@ use std::path::PathBuf;
 use rustls::pki_types::CertificateDer;
 use serde::{Deserialize, Serialize};
 
-
 const MISFIN_USER_ID_OID: [u64; 7] = [0, 9, 2342, 19200300, 100, 1, 1];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -175,7 +174,6 @@ pub fn parse_gemmail(text: &str) -> MisfinGemmail {
     }
 }
 
-mod transport;
 mod helpers;
 #[cfg(feature = "server")]
 mod mailbox;
@@ -183,18 +181,21 @@ mod mailbox;
 mod server;
 #[cfg(test)]
 mod tests;
+mod transport;
 
-use helpers::{misfin_identity_root, parse_sender_line, parse_recipients_line,
-    parse_timestamp_line};
-use transport::{identity_status_with_root, ensure_identity_with_root,
-    rotate_identity_with_root, forget_identity_with_root};
+use helpers::{
+    misfin_identity_root, parse_recipients_line, parse_sender_line, parse_timestamp_line,
+};
+use transport::{
+    ensure_identity_with_root, forget_identity_with_root, identity_status_with_root,
+    rotate_identity_with_root,
+};
 
 #[cfg(feature = "server")]
 pub use mailbox::{MailboxStore, ReceivedMessage, SenderSeen};
 #[cfg(feature = "server")]
 pub use server::{
-    BoundMisfinServer, MisfinResponse, MisfinServer, MisfinServerConfig, ServedMailbox,
-    MISFIN_PORT,
+    BoundMisfinServer, MISFIN_PORT, MisfinResponse, MisfinServer, MisfinServerConfig, ServedMailbox,
 };
 
 /// An error from the misfin receive server (the `server` feature): a mailbox
@@ -319,8 +320,16 @@ mod deterministic_identity_tests {
     fn the_identity_salt_is_per_address() {
         let alice = MisfinAddress::parse("alice@example.test").unwrap();
         let bob = MisfinAddress::parse("bob@example.test").unwrap();
-        assert_ne!(identity_salt(&alice), identity_salt(&bob), "addresses derive distinct keys");
+        assert_ne!(
+            identity_salt(&alice),
+            identity_salt(&bob),
+            "addresses derive distinct keys"
+        );
         let alice_again = MisfinAddress::parse("alice@example.test").unwrap();
-        assert_eq!(identity_salt(&alice), identity_salt(&alice_again), "stable per address");
+        assert_eq!(
+            identity_salt(&alice),
+            identity_salt(&alice_again),
+            "stable per address"
+        );
     }
 }

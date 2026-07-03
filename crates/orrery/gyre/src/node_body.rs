@@ -29,7 +29,10 @@ pub enum NodeCollider {
     /// A custom convex hull in body-local world units — the sprite's traced outline or a
     /// hand-edited polygon. Falls back to a ball of `fallback` if the hull is degenerate
     /// (fewer than 3 points / collinear). (Node-rep — sprite hull / shape editor.)
-    Hull { points: Vec<(f32, f32)>, fallback: f32 },
+    Hull {
+        points: Vec<(f32, f32)>,
+        fallback: f32,
+    },
 }
 
 impl NodeCollider {
@@ -80,7 +83,11 @@ pub struct NodeMaterial {
 
 impl Default for NodeMaterial {
     fn default() -> Self {
-        Self { restitution: 0.0, friction: 0.0, density: NODE_BODY_DENSITY }
+        Self {
+            restitution: 0.0,
+            friction: 0.0,
+            density: NODE_BODY_DENSITY,
+        }
     }
 }
 
@@ -92,7 +99,10 @@ impl Simulation {
     /// keep position and velocity; only the shape changes. Mass is left at the spawn value — it is
     /// the face geometry, not the inertia, that tracks size. Nodes without a body are skipped.
     /// (P0/P5 collider; node-rep — collider matches shape.)
-    pub fn set_node_colliders(&mut self, colliders: impl IntoIterator<Item = (NodeKey, NodeCollider)>) {
+    pub fn set_node_colliders(
+        &mut self,
+        colliders: impl IntoIterator<Item = (NodeKey, NodeCollider)>,
+    ) {
         for (node, collider) in colliders {
             let Some(&body_handle) = self.bodies_by_node.get(&node) else {
                 continue;
@@ -119,7 +129,10 @@ impl Simulation {
     /// A density change re-derives the body's mass from its colliders, so a heavier node resists
     /// pushing. The defaults match the spawn values, so an unconfigured node is a no-op. Nodes
     /// without a body are skipped. (Node body & face — material.)
-    pub fn set_node_materials(&mut self, materials: impl IntoIterator<Item = (NodeKey, NodeMaterial)>) {
+    pub fn set_node_materials(
+        &mut self,
+        materials: impl IntoIterator<Item = (NodeKey, NodeMaterial)>,
+    ) {
         for (node, material) in materials {
             let Some(&body_handle) = self.bodies_by_node.get(&node) else {
                 continue;

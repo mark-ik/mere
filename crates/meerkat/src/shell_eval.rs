@@ -147,6 +147,10 @@ pub struct ShellOutcome {
     /// the host loads the delegator-produced enrollment artifact and restores the
     /// delegated device's wallet state from it.
     pub remote_auth_enrollment_install: Option<String>,
+    /// The `device_id` passed to `revoke_remote_auth_device("<uuid>")` — the
+    /// host revokes that delegated device, clears its active capability slots,
+    /// and rotates future-write private epochs when needed.
+    pub remote_auth_device_revoke: Option<String>,
     /// A compile / runtime error message, if the script failed. Commands called
     /// before a mid-script failure are still present in `commands`.
     pub error: Option<String>,
@@ -196,6 +200,7 @@ impl CommandShell {
             Rc::new(RefCell::new(None));
         let remote_auth_enrollment_install: Rc<RefCell<Option<String>>> =
             Rc::new(RefCell::new(None));
+        let remote_auth_device_revoke: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
         let snapshot = Rc::new(ctx.clone());
         let mut engine = script_rhai::base_engine();
 
@@ -378,6 +383,14 @@ impl CommandShell {
             },
         );
 
+        // `revoke_remote_auth_device("<device-id>")` — ask the host to revoke a
+        // delegated device from the shared wallet root. This stays an admin-grade
+        // host seam until the dedicated roster UI lands.
+        let rrd = remote_auth_device_revoke.clone();
+        engine.register_fn("revoke_remote_auth_device", move |device_id: &str| {
+            *rrd.borrow_mut() = Some(device_id.to_string());
+        });
+
         engine.set_max_operations(OP_BUDGET);
         let result = engine.eval::<Dynamic>(&desugar(source));
         let commands = commands.borrow().clone();
@@ -396,6 +409,7 @@ impl CommandShell {
         let remote_auth_pairing_respond = remote_auth_pairing_respond.borrow().clone();
         let remote_auth_pairing_preview = remote_auth_pairing_preview.borrow().clone();
         let remote_auth_enrollment_install = remote_auth_enrollment_install.borrow().clone();
+        let remote_auth_device_revoke = remote_auth_device_revoke.borrow().clone();
         match result {
             Ok(value) => ShellOutcome {
                 text: stringify(value),
@@ -415,6 +429,7 @@ impl CommandShell {
                 remote_auth_pairing_respond,
                 remote_auth_pairing_preview,
                 remote_auth_enrollment_install,
+                remote_auth_device_revoke,
                 error: None,
             },
             Err(err) => ShellOutcome {
@@ -435,6 +450,7 @@ impl CommandShell {
                 remote_auth_pairing_respond,
                 remote_auth_pairing_preview,
                 remote_auth_enrollment_install,
+                remote_auth_device_revoke,
                 error: Some(err.to_string()),
             },
         }
@@ -476,6 +492,7 @@ pub fn complete(prefix: &str) -> Option<&'static str> {
             "respond_remote_auth_pairing",
             "preview_remote_auth_pairing",
             "install_remote_auth_enrollment",
+            "revoke_remote_auth_device",
         ])
         .find(|name| name.len() > prefix.len() && name.starts_with(prefix))
 }
@@ -743,6 +760,16 @@ mod tests {
         );
         assert!(out.commands.is_empty() && out.error.is_none());
 
+        let out = CommandShell::new().eval(
+            r#"revoke_remote_auth_device("123e4567-e89b-12d3-a456-426614174000")"#,
+            &ctx(),
+        );
+        assert_eq!(
+            out.remote_auth_device_revoke.as_deref(),
+            Some("123e4567-e89b-12d3-a456-426614174000")
+        );
+        assert!(out.commands.is_empty() && out.error.is_none());
+
         assert_eq!(complete("pair_r"), Some("pair_remote_auth"));
         assert_eq!(
             complete("accept_remote"),
@@ -760,6 +787,7 @@ mod tests {
             complete("install_remote"),
             Some("install_remote_auth_enrollment")
         );
+        assert_eq!(complete("revoke_remote"), Some("revoke_remote_auth_device"));
     }
 
     #[test]

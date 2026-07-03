@@ -24,7 +24,8 @@
 //! narrow and well-defined.
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+
+pub mod web_clip;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BrowserImportPayload {

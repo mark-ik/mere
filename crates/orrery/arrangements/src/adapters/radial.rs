@@ -21,11 +21,11 @@
 
 use std::collections::HashMap;
 
+use crate::scene::{CanvasEdge, CanvasNode, CanvasSceneInput};
 use crate::{
     Layout, Radial, RadialAngularPolicy, RadialConfig, RadialUnreachablePolicy, StaticLayoutState,
 };
 use euclid::default::Point2D;
-use crate::scene::{CanvasEdge, CanvasNode, CanvasSceneInput};
 use kernel::graph::NodeKey;
 
 use super::shared::{bounds_of, build_positioned_edges};

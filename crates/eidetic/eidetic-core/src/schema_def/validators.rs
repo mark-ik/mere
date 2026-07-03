@@ -159,4 +159,3 @@ fn collect_types(value: Option<&serde_json::Value>) -> Option<Vec<String>> {
     }
     None
 }
-

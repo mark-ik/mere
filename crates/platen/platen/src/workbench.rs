@@ -59,7 +59,10 @@ impl Default for Workbench {
 impl Workbench {
     /// A new workbench: empty, in Cartography (orrery) mode.
     pub fn new() -> Self {
-        Self { mode: ProjectionKind::Cartography, root: None }
+        Self {
+            mode: ProjectionKind::Cartography,
+            root: None,
+        }
     }
 
     /// The current projection mode.
@@ -152,7 +155,9 @@ impl Workbench {
     /// Set the child fractions of the split at `path` (clamped, renormalized). Returns
     /// whether the split was found. The per-split divider write.
     pub fn set_split_fractions(&mut self, path: &[usize], fractions: &[f32]) -> bool {
-        self.root.as_mut().is_some_and(|r| r.set_fractions_at(path, fractions))
+        self.root
+            .as_mut()
+            .is_some_and(|r| r.set_fractions_at(path, fractions))
     }
 
     /// Whether `member` is open somewhere in the tree.
@@ -192,7 +197,10 @@ impl Workbench {
         for &m in &stack {
             self.detach(m);
         }
-        self.push_column(Pane::Stack(Stack { members: stack, active: 0 }));
+        self.push_column(Pane::Stack(Stack {
+            members: stack,
+            active: 0,
+        }));
     }
 
     /// Open `member` as a new tab in the cell holding `target`, made the active tab —
@@ -206,7 +214,9 @@ impl Workbench {
         if self.has_tile(member) {
             self.detach(member);
         }
-        self.root.as_mut().is_some_and(|r| r.stack_into(member, target))
+        self.root
+            .as_mut()
+            .is_some_and(|r| r.stack_into(member, target))
     }
 
     /// Close the tab showing `member`: drop it from its cell (collapsing an emptied cell
@@ -232,14 +242,21 @@ impl Workbench {
             return false;
         }
         self.detach(dragged);
-        self.root.as_mut().is_some_and(|r| r.stack_into(dragged, target))
+        self.root
+            .as_mut()
+            .is_some_and(|r| r.stack_into(dragged, target))
     }
 
     /// Split `dragged` out as its own cell beside `target`, along the **Row** axis, on
     /// the left (`after == false`) or right (`after == true`) — the back-compatible
     /// horizontal split. See [`split_beside_axis`](Self::split_beside_axis) for vertical
     /// and nesting.
-    pub fn split_beside(&mut self, dragged: GraphMemberId, target: GraphMemberId, after: bool) -> bool {
+    pub fn split_beside(
+        &mut self,
+        dragged: GraphMemberId,
+        target: GraphMemberId,
+        after: bool,
+    ) -> bool {
         self.split_beside_axis(dragged, target, SplitAxis::Row, after)
     }
 
@@ -259,7 +276,9 @@ impl Workbench {
             return false;
         }
         self.detach(dragged);
-        self.root.as_mut().is_some_and(|r| r.split_beside(dragged, target, axis, after))
+        self.root
+            .as_mut()
+            .is_some_and(|r| r.split_beside(dragged, target, axis, after))
     }
 
     /// Split `dragged` out of its current cell into a fresh cell beside that cell along
@@ -299,7 +318,10 @@ impl Workbench {
                     axis: SplitAxis::Row,
                     children: members
                         .into_iter()
-                        .map(|m| Branch { fraction: frac, pane: Pane::leaf(m) })
+                        .map(|m| Branch {
+                            fraction: frac,
+                            pane: Pane::leaf(m),
+                        })
                         .collect(),
                 })
             }
@@ -333,20 +355,35 @@ impl Workbench {
     fn push_column(&mut self, pane: Pane) {
         match self.root.take() {
             None => self.root = Some(pane),
-            Some(Pane::Split { axis: SplitAxis::Row, mut children }) => {
+            Some(Pane::Split {
+                axis: SplitAxis::Row,
+                mut children,
+            }) => {
                 let frac = 1.0 / (children.len() + 1) as f32;
                 for b in &mut children {
                     b.fraction *= 1.0 - frac;
                 }
-                children.push(Branch { fraction: frac, pane });
-                self.root = Some(Pane::Split { axis: SplitAxis::Row, children });
+                children.push(Branch {
+                    fraction: frac,
+                    pane,
+                });
+                self.root = Some(Pane::Split {
+                    axis: SplitAxis::Row,
+                    children,
+                });
             }
             Some(other) => {
                 self.root = Some(Pane::Split {
                     axis: SplitAxis::Row,
                     children: vec![
-                        Branch { fraction: 0.5, pane: other },
-                        Branch { fraction: 0.5, pane },
+                        Branch {
+                            fraction: 0.5,
+                            pane: other,
+                        },
+                        Branch {
+                            fraction: 0.5,
+                            pane,
+                        },
                     ],
                 });
             }
@@ -368,7 +405,11 @@ impl Workbench {
 /// fraction as the weight.
 fn collect_slots<'a>(pane: &'a Pane, weight: f32, out: &mut Vec<SlotView<'a>>) {
     match pane {
-        Pane::Stack(s) => out.push(SlotView { members: &s.members, active: s.active, weight }),
+        Pane::Stack(s) => out.push(SlotView {
+            members: &s.members,
+            active: s.active,
+            weight,
+        }),
         Pane::Split { children, .. } => {
             for b in children {
                 collect_slots(&b.pane, b.fraction, out);
@@ -376,7 +417,6 @@ fn collect_slots<'a>(pane: &'a Pane, weight: f32, out: &mut Vec<SlotView<'a>>) {
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests;

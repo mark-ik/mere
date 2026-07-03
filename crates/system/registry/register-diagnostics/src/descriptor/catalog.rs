@@ -4,8 +4,8 @@
 
 use std::sync::OnceLock;
 
-use crate::channels::*;
 use super::*;
+use crate::channels::*;
 
 mod phase3a;
 mod phase3b;

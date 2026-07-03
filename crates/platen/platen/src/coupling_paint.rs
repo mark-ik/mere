@@ -182,8 +182,8 @@ pub fn paint_projection_with_visuals(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kernel::graph::fixtures::GraphFixtures;
     use cartography::projection::PositionedNode;
+    use kernel::graph::fixtures::GraphFixtures;
     use kernel::graph::{
         Coupling, CouplingId, CouplingResponse, Field, FieldDefinition, FieldId, NodeSelector,
         ScalarField,
@@ -196,9 +196,7 @@ mod tests {
 
     // A graph with one node at the origin and a Gaussian field peaking there
     // (value ≈ 1 at the node), plus a projection placing that node at the origin.
-    fn graph_field_and_projection(
-        response: CouplingResponse,
-    ) -> (Graph, Projection) {
+    fn graph_field_and_projection(response: CouplingResponse) -> (Graph, Projection) {
         let mut g = Graph::new();
         let node = g.add_node_with_id(
             Uuid::from_u128(1),
@@ -237,14 +235,16 @@ mod tests {
 
     #[test]
     fn recognized_visual_emits_overlay_scaled_by_field() {
-        let (g, projection) =
-            graph_field_and_projection(CouplingResponse::open(halo_iri()));
+        let (g, projection) = graph_field_and_projection(CouplingResponse::open(halo_iri()));
         let style = ScenePaintStyle::default();
         let overlays = visual_overlays(&g, &projection, &style);
         assert_eq!(overlays.len(), 1, "one halo over the targeted node");
         // Gaussian ≈ 1 at the peak, strength 1 → halo alpha = 0.6 * 1.
         let a = rect_alpha(&overlays[0]);
-        assert!((a - 0.6).abs() < 1.0e-3, "alpha tracks the field value: {a}");
+        assert!(
+            (a - 0.6).abs() < 1.0e-3,
+            "alpha tracks the field value: {a}"
+        );
     }
 
     #[test]
@@ -283,8 +283,7 @@ mod tests {
 
     #[test]
     fn with_visuals_splices_overlay_inside_the_transform() {
-        let (g, projection) =
-            graph_field_and_projection(CouplingResponse::open(halo_iri()));
+        let (g, projection) = graph_field_and_projection(CouplingResponse::open(halo_iri()));
         let base = paint_projection(
             &projection,
             DeviceIntSize::new(100, 100),

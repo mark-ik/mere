@@ -99,6 +99,7 @@ mod chrome;
 mod editing;
 mod keyboard;
 mod mouse_dispatch;
+mod page_text;
 mod panes;
 mod targets;
 mod text_input;

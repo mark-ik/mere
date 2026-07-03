@@ -172,7 +172,11 @@ mod tests {
         assert_eq!(kinds.iter().filter(|k| **k == "p").count(), 2);
         assert_eq!(kinds.iter().filter(|k| **k == "#text").count(), 2);
 
-        let t1_view = view.nodes.iter().find(|n| n.id == dom.opaque_id(t1)).unwrap();
+        let t1_view = view
+            .nodes
+            .iter()
+            .find(|n| n.id == dom.opaque_id(t1))
+            .unwrap();
         assert_eq!(t1_view.kind, "#text");
         assert_eq!(t1_view.text, "Intro");
     }
@@ -200,7 +204,10 @@ mod tests {
             &mut rev,
             ApplyBatch {
                 expected_revision: 0,
-                changes: vec![Mutation::SetText(SetTextArgs { node: t1_id, text: "Edited".into() })],
+                changes: vec![Mutation::SetText(SetTextArgs {
+                    node: t1_id,
+                    text: "Edited".into(),
+                })],
             },
         );
         assert!(matches!(r, Ok(1)), "set-text should apply: {r:?}");
@@ -214,7 +221,10 @@ mod tests {
                 expected_revision: 1,
                 changes: vec![Mutation::AppendChild(AppendArgs {
                     parent: body_id,
-                    new: Block { kind: "p".into(), text: String::new() },
+                    new: Block {
+                        kind: "p".into(),
+                        text: String::new(),
+                    },
                 })],
             },
         );
@@ -230,7 +240,10 @@ mod tests {
                 changes: vec![Mutation::Remove(t1_id)],
             },
         );
-        assert!(matches!(r, Err(TurnError::RevisionConflict(2))), "stale should conflict: {r:?}");
+        assert!(
+            matches!(r, Err(TurnError::RevisionConflict(2))),
+            "stale should conflict: {r:?}"
+        );
 
         // unknown id → unknown-node, nothing applied, revision unchanged.
         let r = apply(
@@ -238,7 +251,10 @@ mod tests {
             &mut rev,
             ApplyBatch {
                 expected_revision: 2,
-                changes: vec![Mutation::SetText(SetTextArgs { node: u64::MAX, text: "x".into() })],
+                changes: vec![Mutation::SetText(SetTextArgs {
+                    node: u64::MAX,
+                    text: "x".into(),
+                })],
             },
         );
         assert!(

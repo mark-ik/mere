@@ -719,9 +719,10 @@ mod tests {
         let mut reg = SurfaceEngineRegistry::new();
         reg.register(Box::new(StubSurfaceEngine));
         // `Box<dyn SurfaceProducer>` doesn't implement Debug, so avoid .expect()
-        assert!(reg
-            .spawn(&decision("test.surface"), &stub_request())
-            .is_ok());
+        assert!(
+            reg.spawn(&decision("test.surface"), &stub_request())
+                .is_ok()
+        );
     }
 
     #[test]

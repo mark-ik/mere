@@ -315,8 +315,8 @@ fn normalize_path(raw: &[Point2D<f32>], config: &LSystemConfig) -> Vec<Point2D<f
 #[cfg(test)]
 mod tests {
     use super::*;
-    use euclid::default::{Rect, Size2D};
     use crate::scene::{CanvasEdge, CanvasNode};
+    use euclid::default::{Rect, Size2D};
 
     fn viewport() -> CanvasViewport {
         CanvasViewport {

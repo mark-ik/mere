@@ -12,10 +12,12 @@ use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 
 use identity::{Ed25519Keypair, Ed25519Signature};
-use reticulum::destination::{DestinationDesc, DestinationName, SingleInputDestination, NAME_HASH_LENGTH};
+use reticulum::destination::{
+    DestinationDesc, DestinationName, NAME_HASH_LENGTH, SingleInputDestination,
+};
 use reticulum::identity::Identity as ReticulumIdentity;
 use reticulum::transport::{AnnounceEvent, Transport as ReticulumStack};
-use tokio::sync::{broadcast, Mutex as TokioMutex};
+use tokio::sync::{Mutex as TokioMutex, broadcast};
 
 use crate::{Alpn, PeerID};
 

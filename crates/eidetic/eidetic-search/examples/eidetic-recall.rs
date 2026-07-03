@@ -65,16 +65,16 @@ use eidetic::schema::{
     TrustLevel,
 };
 use eidetic::{
-    bootstrap_browsing_schema, save_trace, BrowsingMemory, BrowsingTrace, NoFetcher, PageRef,
-    TraceEvent, TraceTransition,
+    BrowsingMemory, BrowsingTrace, NoFetcher, PageRef, TraceEvent, TraceTransition,
+    bootstrap_browsing_schema, save_trace,
 };
 use eidetic_fjall::FjallStore;
-use eidetic_search::{bootstrap_search_schema, fuse, SearchError, TrailIndex};
+use eidetic_search::{SearchError, TrailIndex, bootstrap_search_schema, fuse};
 use embed::provider::EmbeddingProvider;
 use embed::{BertEmbeddingProvider, VectorIndex};
 use import::{
-    parse_bookmark_items, HistoryTransitionKind, ImportedBookmarkItem, ImportedHistoryVisitItem,
-    ImportedPageSeed,
+    HistoryTransitionKind, ImportedBookmarkItem, ImportedHistoryVisitItem, ImportedPageSeed,
+    parse_bookmark_items,
 };
 
 /// The CPU backend the rehearsal bin embeds on.
@@ -166,7 +166,10 @@ fn print_event(e: &TraceEvent) {
         .as_ref()
         .map(|p| format!("  (from {})", p.url))
         .unwrap_or_default();
-    println!("  {:>13}  [{:?}] {} {}{}", e.at_ms, e.transition, e.to.url, title, from);
+    println!(
+        "  {:>13}  [{:?}] {} {}{}",
+        e.at_ms, e.transition, e.to.url, title, from
+    );
 }
 
 /// (Re-)mint the trail index from the stored trace corpus.
@@ -211,9 +214,7 @@ fn load_provider(model_dir: &str) -> Result<BertEmbeddingProvider<CpuBackend>, S
 }
 
 /// The newest stored vector-index engram, if any.
-async fn load_vector_index(
-    store: &mut FjallStore,
-) -> Result<Option<VectorIndex<String>>, String> {
+async fn load_vector_index(store: &mut FjallStore) -> Result<Option<VectorIndex<String>>, String> {
     let manifests = eidetic::list_typed::<VectorIndex<String>>(store)
         .await
         .map_err(|e| format!("list vector indices: {e}"))?;
@@ -231,7 +232,9 @@ async fn open_or_mint(store: &mut FjallStore, index_dir: &str) -> Result<TrailIn
     match TrailIndex::open(index_dir) {
         Ok(index) => Ok(index),
         Err(SearchError::FormatMismatch { found, current }) => {
-            println!("index format mismatch (on disk {found}; this build {current}) — re-minting from traces");
+            println!(
+                "index format mismatch (on disk {found}; this build {current}) — re-minting from traces"
+            );
             let memory = load(store).await?;
             mint_index(&memory, index_dir)
         }
@@ -340,9 +343,7 @@ async fn run() -> Result<(), String> {
             let query = rest.get(1).ok_or(usage)?;
             let n = rest.get(2).and_then(|s| s.parse().ok()).unwrap_or(10);
             let index = open_or_mint(&mut store, &index_dir).await?;
-            let hits = index
-                .search(query, n)
-                .map_err(|e| format!("search: {e}"))?;
+            let hits = index.search(query, n).map_err(|e| format!("search: {e}"))?;
             println!("{} hit(s) for {query:?}:", hits.len());
             for h in &hits {
                 println!(
@@ -431,12 +432,19 @@ async fn run() -> Result<(), String> {
 
             // The E4 seam, both engines live.
             let fused = fuse(&lexical, &vector, 60.0, (1.0, 1.0));
-            println!("{} fused hit(s) for {query:?} (lexical + vector):", fused.len().min(n));
+            println!(
+                "{} fused hit(s) for {query:?} (lexical + vector):",
+                fused.len().min(n)
+            );
             for hit in fused.iter().take(n) {
                 let ranks = format!(
                     "lex {} / vec {}",
-                    hit.lexical_rank.map(|r| (r + 1).to_string()).unwrap_or_else(|| "—".into()),
-                    hit.vector_rank.map(|r| (r + 1).to_string()).unwrap_or_else(|| "—".into()),
+                    hit.lexical_rank
+                        .map(|r| (r + 1).to_string())
+                        .unwrap_or_else(|| "—".into()),
+                    hit.vector_rank
+                        .map(|r| (r + 1).to_string())
+                        .unwrap_or_else(|| "—".into()),
                 );
                 println!(
                     "  {:>6.4}  [{ranks}]  {}  {}",
@@ -582,9 +590,11 @@ mod tests {
         assert_eq!(events.len(), 2);
         assert_eq!(events[0].to.url, "https://a.example", "sorted by time");
         assert_eq!(events[0].at_ms, 100_000);
-        assert!(events
-            .iter()
-            .all(|e| e.transition == TraceTransition::Imported && e.from.is_none()));
+        assert!(
+            events
+                .iter()
+                .all(|e| e.transition == TraceTransition::Imported && e.from.is_none())
+        );
     }
 
     #[test]

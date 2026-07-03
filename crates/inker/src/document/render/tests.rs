@@ -2,9 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use super::super::{
-    Block, DocumentProvenance, DocumentTrustState, EngineDocument, InlineSpan,
-};
+use super::super::{Block, DocumentProvenance, DocumentTrustState, EngineDocument, InlineSpan};
 
 fn doc(blocks: Vec<Block>) -> EngineDocument {
     EngineDocument {
@@ -206,8 +204,14 @@ fn to_gophermap_renders_info_lines_links_and_terminator() {
         },
     ]);
     let map = document.to_gophermap(&ctx());
-    assert!(map.contains("iNotes\tfake\t(NULL)\t0\r\n"), "heading is an info line: {map}");
-    assert!(map.contains("isee docs\tfake\t(NULL)\t0\r\n"), "paragraph text flattens: {map}");
+    assert!(
+        map.contains("iNotes\tfake\t(NULL)\t0\r\n"),
+        "heading is an info line: {map}"
+    );
+    assert!(
+        map.contains("isee docs\tfake\t(NULL)\t0\r\n"),
+        "paragraph text flattens: {map}"
+    );
     assert!(
         map.contains("hdocs\tURL:https://x.test/page\tgopher.example\t70\r\n"),
         "non-gopher link uses the URL: form on the serving host: {map}"

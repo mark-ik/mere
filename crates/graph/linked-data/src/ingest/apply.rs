@@ -76,13 +76,19 @@ pub fn apply_contribution(graph: &mut Graph, contribution: &GraphContribution) -
         if let Some(title) = &node.title {
             let _ = apply_graph_delta(
                 graph,
-                GraphDelta::SetNodeTitle { key, title: title.clone() },
+                GraphDelta::SetNodeTitle {
+                    key,
+                    title: title.clone(),
+                },
             );
         }
         for tag in &node.tags {
             let _ = apply_graph_delta(
                 graph,
-                GraphDelta::InsertNodeTag { key, tag: tag.clone() },
+                GraphDelta::InsertNodeTag {
+                    key,
+                    tag: tag.clone(),
+                },
             );
         }
         for (predicate, value) in &node.properties {
@@ -182,4 +188,3 @@ pub fn apply_contribution(graph: &mut Graph, contribution: &GraphContribution) -
 
     outcome
 }
-

@@ -2,7 +2,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-
 //! Input binding registry — keyboard / mouse / pad bindings keyed by
 //! `action_id` strings, late-bound via `register_binding` and resolved
 //! via `resolve_binding_id`.

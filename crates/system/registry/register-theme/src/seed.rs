@@ -24,13 +24,15 @@
 use kernel::color::Color32;
 use register_lens::ThemeData;
 use tincture::oklch::Oklch;
-use tincture::{best_on, contrast, derive_palette, mix, Seeds, Srgb};
+use tincture::{Seeds, Srgb, best_on, contrast, derive_palette, mix};
 
 use crate::chrome::ChromeTheme;
-use crate::edge_style::{EdgeAccessibilityMode, ThemeAccessibilitySupport, ThemeContract, ThemeEdgeTokens};
+use crate::edge_style::{
+    EdgeAccessibilityMode, ThemeAccessibilitySupport, ThemeContract, ThemeEdgeTokens,
+};
 use crate::theme::{
-    GraphNodeChromeTheme, Harmony, ThemeDef, ThemeSource, ThemeTokenSet, THEME_ID_DARK,
-    THEME_ID_DEFAULT, THEME_ID_HIGH_CONTRAST, THEME_ID_LIGHT,
+    GraphNodeChromeTheme, Harmony, THEME_ID_DARK, THEME_ID_DEFAULT, THEME_ID_HIGH_CONTRAST,
+    THEME_ID_LIGHT, ThemeDef, ThemeSource, ThemeTokenSet,
 };
 
 // =============================================================================
@@ -127,16 +129,26 @@ pub fn derive_token_set(
     // A stroke / divider tone: a mid-neutral, or pure-contrast in HC.
     let stroke = |dl: f64, ll: f64| -> Color32 {
         if hc {
-            return c32(best_on(neutral.with_l(if dark { 0.0 } else { 1.0 }).to_srgb()));
+            return c32(best_on(
+                neutral.with_l(if dark { 0.0 } else { 1.0 }).to_srgb(),
+            ));
         }
         c32(neutral.with_l(if dark { dl } else { ll }).to_srgb())
     };
     // Body / header / dim / disabled text, contrast-forced in HC.
     let surface = c32(p.surface);
-    let text = if hc { c32(best_on(srgb(step(0.0, 1.0)))) } else { c32(p.text) };
+    let text = if hc {
+        c32(best_on(srgb(step(0.0, 1.0))))
+    } else {
+        c32(p.text)
+    };
     let header = if hc { text } else { c32(p.text_header) };
     let dim = if hc { text } else { c32(p.text_dim) };
-    let disabled = if hc { stroke(0.0, 1.0) } else { c32(p.text_disabled) };
+    let disabled = if hc {
+        stroke(0.0, 1.0)
+    } else {
+        c32(p.text_disabled)
+    };
 
     // Brand triad (used directly; secondary only tints badges, via `p.secondary`).
     let primary = c32(p.primary);
@@ -172,7 +184,9 @@ pub fn derive_token_set(
     let notice = c32(ensure_contrast(p.tertiary, srgb(hover_label_bg), 4.5));
 
     // --- Selection highlight (attention; theme-tinted but high-vis) -------
-    let sel_bg = c32(Oklch::from_srgb(p.tertiary).with_l(if dark { 0.86 } else { 0.80 }).to_srgb());
+    let sel_bg = c32(Oklch::from_srgb(p.tertiary)
+        .with_l(if dark { 0.86 } else { 0.80 })
+        .to_srgb());
     let sel_text = c32(best_on(srgb(sel_bg)));
     let sel_stroke = c32(best_on(srgb(sel_text)));
 
@@ -198,7 +212,11 @@ pub fn derive_token_set(
         radial_hub_fill: hub_fill,
         radial_hub_stroke: stroke(0.420, 0.620),
         radial_hub_text: hub_text,
-        radial_domain_active_fill: if hc { primary } else { c32(mix(p.primary, p.surface, 0.30)) },
+        radial_domain_active_fill: if hc {
+            primary
+        } else {
+            c32(mix(p.primary, p.surface, 0.30))
+        },
         radial_domain_idle_fill: idle_fill,
         radial_command_active_fill: primary,
         radial_command_hover_fill: hover_bg,
@@ -217,12 +235,20 @@ pub fn derive_token_set(
         graph_node_hover_ring: with_alpha(stroke(0.560, 0.560), 190),
         graph_node_chrome: GraphNodeChromeTheme {
             workspace_badge_background: with_alpha(
-                if hc { step(0.0, 1.0) } else { c32(mix(p.surface, p.primary, 0.15)) },
+                if hc {
+                    step(0.0, 1.0)
+                } else {
+                    c32(mix(p.surface, p.primary, 0.15))
+                },
                 224,
             ),
             workspace_badge_text: c32(best_on(srgb(surface))),
             semantic_badge_background: with_alpha(
-                if hc { step(0.0, 1.0) } else { c32(mix(p.surface, p.secondary, 0.15)) },
+                if hc {
+                    step(0.0, 1.0)
+                } else {
+                    c32(mix(p.surface, p.secondary, 0.15))
+                },
                 224,
             ),
             semantic_badge_text: c32(best_on(srgb(surface))),
@@ -300,7 +326,11 @@ fn profile_for(dark: bool, high_contrast: bool) -> ThemeProfile {
     } else {
         ThemeEdgeTokens::light_theme()
     };
-    let (font_scale, stroke_width) = if high_contrast { (1.1, 1.5) } else { (1.0, 1.0) };
+    let (font_scale, stroke_width) = if high_contrast {
+        (1.1, 1.5)
+    } else {
+        (1.0, 1.0)
+    };
     ThemeProfile {
         edge_tokens,
         font_scale,

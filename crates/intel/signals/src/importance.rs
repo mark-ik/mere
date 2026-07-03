@@ -6,7 +6,6 @@
 
 use super::*;
 
-
 /// Which graph-structural metric drives a node's **importance** weight. `Degree` is the cheap,
 /// synchronous default (connection count); `Betweenness` is the structural broker metric (how
 /// often a node lies on shortest paths) — a node bridging two clusters scores high even at

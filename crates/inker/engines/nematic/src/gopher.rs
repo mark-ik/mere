@@ -35,7 +35,7 @@
 //! - RFC 1436 (The Internet Gopher Protocol)
 //! - RFC 4266 (gopher URI scheme)
 
-use errand::parse::gopher::{parse as parse_gopher, GopherKind};
+use errand::parse::gopher::{GopherKind, parse as parse_gopher};
 use inker::{
     Block, DocumentProvenance, DocumentTrustState, Engine, EngineDocument, EngineError,
     EngineInput, InlineSpan,

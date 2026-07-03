@@ -17,7 +17,11 @@ use serval_scripted_dom::{NodeId, ScriptedDom};
 struct EchoFetcher;
 impl NetFetcher for EchoFetcher {
     fn fetch(&self, url: &str) -> Result<NetResponse, String> {
-        Ok(NetResponse { status: 200, content_type: Some("text/plain".into()), body: format!("fetched:{url}") })
+        Ok(NetResponse {
+            status: 200,
+            content_type: Some("text/plain".into()),
+            body: format!("fetched:{url}"),
+        })
     }
 }
 
@@ -60,14 +64,26 @@ fn script_mutates_a_caller_provided_dom_and_reads_back() {
     let body_count_before = dom.dom_children(body).count();
     assert_eq!(body_count_before, 1, "body starts with one <p>");
 
-    let mut script =
-        DocumentScript::attach(&doc_wasm(), dom, &Grant::allow_all(), Quota::default(), None, Vec::new())
-            .expect("attach should succeed under the full grant");
+    let mut script = DocumentScript::attach(
+        &doc_wasm(),
+        dom,
+        &Grant::allow_all(),
+        Quota::default(),
+        None,
+        Vec::new(),
+    )
+    .expect("attach should succeed under the full grant");
     assert_eq!(script.revision(), 0);
 
     // The guest's "set" edits the first #text node.
-    let out = script.deliver_event("set", "Edited via node-id").expect("set turn");
-    assert_eq!(out, TurnOutcome::Applied(1), "set should apply and bump the revision");
+    let out = script
+        .deliver_event("set", "Edited via node-id")
+        .expect("set turn");
+    assert_eq!(
+        out,
+        TurnOutcome::Applied(1),
+        "set should apply and bump the revision"
+    );
     assert_eq!(
         text_of(script.dom(), t1).as_deref(),
         Some("Edited via node-id"),
@@ -77,7 +93,11 @@ fn script_mutates_a_caller_provided_dom_and_reads_back() {
     // "append" adds a <p> under <body>.
     let out = script.deliver_event("append", "").expect("append turn");
     assert_eq!(out, TurnOutcome::Applied(2));
-    assert_eq!(script.dom().dom_children(body).count(), 2, "a <p> was appended");
+    assert_eq!(
+        script.dom().dom_children(body).count(),
+        2,
+        "a <p> was appended"
+    );
 
     // The error paths surface as semantic outcomes (no WIT types leaked).
     assert_eq!(
@@ -85,15 +105,26 @@ fn script_mutates_a_caller_provided_dom_and_reads_back() {
         TurnOutcome::UnknownNode(u64::MAX),
     );
     assert!(
-        matches!(script.deliver_event("frobnicate", "").expect("decline turn"), TurnOutcome::Refused(_)),
+        matches!(
+            script
+                .deliver_event("frobnicate", "")
+                .expect("decline turn"),
+            TurnOutcome::Refused(_)
+        ),
         "an unknown event kind is declined by the guest",
     );
     // A rejected turn left the revision where the last applied turn put it.
     assert_eq!(script.revision(), 2);
 
     // detach returns the mutated DOM to the caller.
-    let dom = script.detach().expect("detach runs deactivate + returns the DOM");
-    assert_eq!(dom.dom_children(body).count(), 2, "detached DOM keeps the appended <p>");
+    let dom = script
+        .detach()
+        .expect("detach runs deactivate + returns the DOM");
+    assert_eq!(
+        dom.dom_children(body).count(),
+        2,
+        "detached DOM keeps the appended <p>"
+    );
     assert_eq!(text_of(&dom, t1).as_deref(), Some("Edited via node-id"));
 }
 
@@ -107,8 +138,15 @@ fn precompiled_cwasm_attaches_and_drives_without_codegen() {
     std::fs::write(&path, &cwasm).expect("write cwasm");
 
     let (dom, _body, t1) = page();
-    let mut script = DocumentScript::attach(&path, dom, &Grant::allow_all(), Quota::default(), None, Vec::new())
-        .expect("attach from a precompiled .cwasm");
+    let mut script = DocumentScript::attach(
+        &path,
+        dom,
+        &Grant::allow_all(),
+        Quota::default(),
+        None,
+        Vec::new(),
+    )
+    .expect("attach from a precompiled .cwasm");
     assert_eq!(
         script.deliver_event("set", "Edited via AOT").expect("turn"),
         TurnOutcome::Applied(1),
@@ -135,7 +173,9 @@ fn a_granted_script_fetches_through_the_async_net_import() {
         vec!["example.com".to_string()],
     )
     .expect("attach with net granted");
-    let out = script.deliver_event("fetch", "https://example.com/x").expect("fetch turn");
+    let out = script
+        .deliver_event("fetch", "https://example.com/x")
+        .expect("fetch turn");
     assert_eq!(out, TurnOutcome::Applied(1));
     assert_eq!(
         text_of(script.dom(), t1).as_deref(),
@@ -160,7 +200,9 @@ fn a_cross_origin_fetch_is_refused_by_the_origin_gate() {
         vec!["example.com".to_string()],
     )
     .expect("attach with net granted");
-    let out = script.deliver_event("fetch", "https://attacker.test/leak").expect("turn completes");
+    let out = script
+        .deliver_event("fetch", "https://attacker.test/leak")
+        .expect("turn completes");
     assert!(
         matches!(out, TurnOutcome::Refused(_)),
         "a fetch outside the allowlist is refused, not performed (got {out:?})",
@@ -183,23 +225,55 @@ fn the_per_turn_fetch_cap_refuses_a_flood_and_resets_each_turn() {
     // Cap of 1: the second fetch in the turn is refused.
     let (dom, _b, _t) = page();
     let fetcher: Arc<dyn NetFetcher> = Arc::new(EchoFetcher);
-    let quota = Quota { max_fetches_per_turn: 1, ..Quota::default() };
-    let mut tight =
-        DocumentScript::attach(&doc_wasm(), dom, &Grant::allow_all(), quota, Some(fetcher), origins.clone())
-            .expect("attach");
-    let out = tight.deliver_event("fetch-twice", url).expect("turn completes");
-    assert!(matches!(out, TurnOutcome::Refused(_)), "cap=1 refuses two fetches (got {out:?})");
+    let quota = Quota {
+        max_fetches_per_turn: 1,
+        ..Quota::default()
+    };
+    let mut tight = DocumentScript::attach(
+        &doc_wasm(),
+        dom,
+        &Grant::allow_all(),
+        quota,
+        Some(fetcher),
+        origins.clone(),
+    )
+    .expect("attach");
+    let out = tight
+        .deliver_event("fetch-twice", url)
+        .expect("turn completes");
+    assert!(
+        matches!(out, TurnOutcome::Refused(_)),
+        "cap=1 refuses two fetches (got {out:?})"
+    );
 
     // Cap of 2: both fetches in the turn succeed, and a later turn fetches again
     // (the per-turn budget reset).
     let (dom, _b, t1) = page();
     let fetcher: Arc<dyn NetFetcher> = Arc::new(EchoFetcher);
-    let quota = Quota { max_fetches_per_turn: 2, ..Quota::default() };
-    let mut roomy =
-        DocumentScript::attach(&doc_wasm(), dom, &Grant::allow_all(), quota, Some(fetcher), origins)
-            .expect("attach");
-    assert_eq!(roomy.deliver_event("fetch-twice", url).expect("turn 1"), TurnOutcome::Applied(1));
+    let quota = Quota {
+        max_fetches_per_turn: 2,
+        ..Quota::default()
+    };
+    let mut roomy = DocumentScript::attach(
+        &doc_wasm(),
+        dom,
+        &Grant::allow_all(),
+        quota,
+        Some(fetcher),
+        origins,
+    )
+    .expect("attach");
+    assert_eq!(
+        roomy.deliver_event("fetch-twice", url).expect("turn 1"),
+        TurnOutcome::Applied(1)
+    );
     // A second turn: the budget reset, so it fetches again rather than staying spent.
-    assert_eq!(roomy.deliver_event("fetch-twice", url).expect("turn 2"), TurnOutcome::Applied(2));
-    assert_eq!(text_of(roomy.dom(), t1).as_deref(), Some("fetched:https://example.com/x"));
+    assert_eq!(
+        roomy.deliver_event("fetch-twice", url).expect("turn 2"),
+        TurnOutcome::Applied(2)
+    );
+    assert_eq!(
+        text_of(roomy.dom(), t1).as_deref(),
+        Some("fetched:https://example.com/x")
+    );
 }

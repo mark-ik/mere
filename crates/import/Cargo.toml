@@ -11,6 +11,16 @@ publish = false
 path = "src/lib.rs"
 
 [dependencies]
+forme = { workspace = true }
+image = { version = "0.25", default-features = false, features = ["png"] }
+inker = { workspace = true }
+kernel = { workspace = true }
+nematic = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serval-extract = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+serval-static-dom = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 url = "2.5"
+
+[dev-dependencies]
+kernel = { workspace = true, features = ["fixtures"] }

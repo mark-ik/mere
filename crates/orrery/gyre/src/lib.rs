@@ -101,8 +101,8 @@ pub use scenes::{
 /// simulation core. (Physics scenes P4b.)
 mod scene_spec;
 pub use scene_spec::{
-    JointMotorSpec, SceneBodyId, SceneBodySpec, SceneBodyType, SceneEmitter, SceneField, SceneJoint,
-    SceneJointSpec, SceneSpec,
+    JointMotorSpec, SceneBodyId, SceneBodySpec, SceneBodyType, SceneEmitter, SceneField,
+    SceneJoint, SceneJointSpec, SceneSpec,
 };
 
 /// The node-body axis: a node's collider **shape** ([`NodeCollider`]) and physical **material**
@@ -191,7 +191,11 @@ fn node_groups() -> InteractionGroups {
 /// colliding with the scene and admitting nodes (a node still passes through unless
 /// its own filter opts in).
 fn scene_groups() -> InteractionGroups {
-    InteractionGroups::new(SCENE_GROUP, SCENE_GROUP | NODE_GROUP, InteractionTestMode::And)
+    InteractionGroups::new(
+        SCENE_GROUP,
+        SCENE_GROUP | NODE_GROUP,
+        InteractionTestMode::And,
+    )
 }
 
 /// A pluggable force-applier. Forces read the body store and apply
@@ -379,7 +383,9 @@ impl Simulation {
 
     /// Number of affinity pairs the installed affinity force pulls along (`0` when none is set).
     pub fn affinity_pair_count(&self) -> usize {
-        self.affinity_force.as_ref().map_or(0, AffinitySpring::pair_count)
+        self.affinity_force
+            .as_ref()
+            .map_or(0, AffinitySpring::pair_count)
     }
 
     /// A rapier-free [`LayoutView`] over the current layout: the live positions,
@@ -388,7 +394,11 @@ impl Simulation {
     /// query index, so those reads can run on the UI thread while the simulation
     /// itself ticks elsewhere (the always-offload physics actor, P6).
     pub fn view(&self) -> LayoutView {
-        LayoutView::from_parts(self.positions(), self.edges.iter().copied(), NODE_BODY_RADIUS)
+        LayoutView::from_parts(
+            self.positions(),
+            self.edges.iter().copied(),
+            NODE_BODY_RADIUS,
+        )
     }
 
     /// A `Send` [`LayoutSnapshot`] of the current positions, stamped with
@@ -399,8 +409,16 @@ impl Simulation {
         LayoutSnapshot {
             positions: self.positions().collect(),
             scene: self.scene_bodies().collect(),
-            fluid: self.fluid.as_ref().map(|f| f.positions().collect()).unwrap_or_default(),
-            fluid_radius: self.fluid.as_ref().map(|f| f.params().particle_radius).unwrap_or(0.0),
+            fluid: self
+                .fluid
+                .as_ref()
+                .map(|f| f.positions().collect())
+                .unwrap_or_default(),
+            fluid_radius: self
+                .fluid
+                .as_ref()
+                .map(|f| f.params().particle_radius)
+                .unwrap_or(0.0),
             generation,
         }
     }
@@ -435,8 +453,11 @@ impl Simulation {
         let r = NODE_BODY_RADIUS;
         self.positions()
             .filter(|(_, p)| {
-                Box2D::new(Point2D::new(p.x - r, p.y - r), Point2D::new(p.x + r, p.y + r))
-                    .intersects(&region)
+                Box2D::new(
+                    Point2D::new(p.x - r, p.y - r),
+                    Point2D::new(p.x + r, p.y + r),
+                )
+                .intersects(&region)
             })
             .map(|(node, _)| node)
             .collect()

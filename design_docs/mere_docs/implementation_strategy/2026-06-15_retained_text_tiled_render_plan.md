@@ -1,5 +1,19 @@
 # Retained-Text / Tiled-Render Foundation Plan
 
+**Status (reconciled 2026-07-03, code-verified):** whole-plan acceptance slice
+shipped. P0/P1 (retained packet + windowed band render), P2 (query API —
+`Constellation::link_at` hit-tests the retained packet directly; the parallel
+`LinkHit` table is subsumed for the document lane), P3/P4's user-visible slice
+(document-lane host-side find, block-scoped page selection overlay, and copy),
+and P5's acceptance slice (HTML actor-side band re-emit + `<a href>` harvest)
+are landed; one P5 edge case remains noted below for image-only inline links.
+The exact whole-plan done condition is now met. **Still open as follow-on, not a
+blocker for this plan:** char/cluster-precise document-lane geometry
+(`GlyphRun` still carries no source-char/cluster offsets), so P3/P4 currently
+highlight/select by retained block range rather than exact intra-line glyph
+spans. HTML-lane find shipped separately via the archived
+[find_in_page_host_ui_plan](../../archive_docs/2026-07-03_completed_plans/2026-06-16_find_in_page_host_ui_plan.md).
+
 The audit's Lane 2 / §5 fix
 ([browser-bar audit](../research/2026-06-15_in_the_wings_and_browser_bar_audit.md)).
 The single highest-leverage item on the board: one foundation that clears the
@@ -118,7 +132,7 @@ host-side is exactly what Phase 2's query API (find / selection / hit-test) read
 Done: link hit-testing and hover-status read from the retained packet; the
 parallel `LinkHit` vec is subsumed.
 
-### Phase 3 — Find-in-page (Ctrl+F)
+### Phase 3 — Find-in-page (Ctrl+F) — DONE 2026-07-03
 
 - Search the retained source text (via `source_block_index` into the
   `EngineDocument` blocks).
@@ -128,14 +142,18 @@ parallel `LinkHit` vec is subsumed.
 - Ctrl+F overlay: query field, match count, next/prev, highlight rects composited
   over the card, scroll-to-match.
 
-Done: Ctrl+F highlights matches on a fetched gemtext page and steps between them.
+Done: Ctrl+F highlights matches on a fetched gemtext page and steps between
+them. Current geometry is block-scoped: multiple hits in one rendered block
+share that block's rects until cluster offsets land.
 
-### Phase 4 — Text selection + copy
+### Phase 4 — Text selection + copy — DONE 2026-07-03
 
 - Caret + drag selection over the retained packet (reusing the Phase 3 cluster
   mapping for caret placement); Ctrl+C copies the selected source text.
 
-Done: a paragraph on a fetched page is selectable and copyable.
+Done: a paragraph on a fetched page is selectable and copyable. Current
+selection is block-scoped over retained document blocks, with copy text coming
+from `EngineDocument::to_text()`.
 
 ### Phase 5 — HTML/serval lane parity
 
@@ -223,9 +241,8 @@ already dominates per band, but a tall page with hundreds of links could cache t
 
 ## Done condition (whole plan)
 
-Matches the audit's Lane 2 acceptance: a 166 KB capsule renders and scrolls fully;
-Ctrl+F highlights; a paragraph is selectable and copyable; a link on a fetched HTML
-page navigates.
+Met: a 166 KB capsule renders and scrolls fully; Ctrl+F highlights; a paragraph
+is selectable and copyable; a link on a fetched HTML page navigates.
 
 ## Risks and notes
 
@@ -293,3 +310,17 @@ sets both (harmless) and confirms on a headed tall-page run.
   8192 px texture cap are gone. 91 meerkat bin tests green; headed faq.gmi verified
   (renders, scrolls fully, monotonic). Next: Phase 2 query API over the retained
   packet.
+- 2026-07-03: Status reconciled against the code during the archive pass (this doc
+  had no status header and its log stopped at Phase 1). Verified: P2 landed
+  (`constellation/ops.rs::link_at` queries `activation.packet` directly; the doc-lane
+  `LinkHit` walk is the Scene-lane fallback only) and P5 landed per the 2026-06-16
+  entries above. P3/P4 confirmed not started (`ContentCommand::Find` is
+  HTML/serval-only; no cluster offsets on `GlyphRun`; no page-text selection in
+  meerkat). Plan stays active for P3/P4.
+- 2026-07-03: P3/P4 acceptance slice landed host-side on the retained packet.
+  Document-lane Ctrl+F now searches the retained source blocks directly and paints
+  block-scoped highlight rects from the packet geometry; page-text drag selection
+  now paints a block-scoped overlay on the content card and `Ctrl/Cmd+C` copies
+  the selected `EngineDocument::to_text()` span. This closes the plan's user-facing
+  done condition without yet adding per-cluster glyph offsets to `GlyphRun`, so
+  precise intra-block highlight / caret geometry remains a follow-on.

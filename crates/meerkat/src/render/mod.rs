@@ -92,7 +92,7 @@ impl WindowCtx<'_> {
         // `gloss_minimap_scene` threaded through `PaintInputs`). (gloss-outline plan
         // P1; recent + minimap DOM-ified by the Scene-to-DOM migration P1 / P2.)
         if let Some(grect) = gloss_rect {
-            let (_, outline_rect, recent_rect) = crate::gloss::gloss_sections(grect);
+            let (_, outline_rect, recent_rect) = gloss::gloss_sections(grect);
             let available_height = outline_rect[3] - outline_rect[1];
             let snapshot = self.gloss_outline_snapshot(available_height);
             self.view.set_gloss_outline(snapshot, Some(outline_rect));
@@ -102,7 +102,7 @@ impl WindowCtx<'_> {
         } else {
             if self.view.gloss_outline_open() {
                 self.view
-                    .set_gloss_outline(crate::gloss::GlossOutlineSnapshot::default(), None);
+                    .set_gloss_outline(gloss::GlossOutlineSnapshot::default(), None);
             }
             if self.view.gloss_recent_open() {
                 self.view

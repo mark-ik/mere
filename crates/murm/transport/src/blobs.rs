@@ -273,9 +273,10 @@ mod tests {
         let alice_blobs = BlobStore::new();
         let bob_blobs = BlobStore::new();
 
-        let alice_transport = P2pandaTransport::bind_with_blobs(&alice_kp, vec![], Some(&alice_blobs))
-            .await
-            .expect("alice bind");
+        let alice_transport =
+            P2pandaTransport::bind_with_blobs(&alice_kp, vec![], Some(&alice_blobs))
+                .await
+                .expect("alice bind");
         let bob_transport = P2pandaTransport::bind_with_blobs(&bob_kp, vec![], Some(&bob_blobs))
             .await
             .expect("bob bind");

@@ -32,26 +32,49 @@ async fn eight_turns_drive_the_live_dom() {
         ("frobnicate", ""),
     ];
 
-    let log = document_host::run_turns(&path, &turns).await.expect("run_turns");
+    let log = document_host::run_turns(&path, &turns)
+        .await
+        .expect("run_turns");
     let joined = log.outcomes.join("\n");
 
     assert!(log.outcomes[0].starts_with("set: applied"), "{joined}");
     assert!(log.outcomes[1].starts_with("append: applied"), "{joined}");
     assert!(log.outcomes[2].starts_with("insert: applied"), "{joined}");
-    assert!(log.outcomes[3].contains("no-op"), "subtree should be a no-op:\n{joined}");
+    assert!(
+        log.outcomes[3].contains("no-op"),
+        "subtree should be a no-op:\n{joined}"
+    );
     assert!(log.outcomes[4].starts_with("remove: applied"), "{joined}");
-    assert!(log.outcomes[5].contains("revision-conflict"), "stale should conflict:\n{joined}");
-    assert!(log.outcomes[6].contains("unknown-node"), "bad-id should be unknown-node:\n{joined}");
-    assert!(log.outcomes[7].contains("declined"), "frobnicate should be declined:\n{joined}");
+    assert!(
+        log.outcomes[5].contains("revision-conflict"),
+        "stale should conflict:\n{joined}"
+    );
+    assert!(
+        log.outcomes[6].contains("unknown-node"),
+        "bad-id should be unknown-node:\n{joined}"
+    );
+    assert!(
+        log.outcomes[7].contains("declined"),
+        "frobnicate should be declined:\n{joined}"
+    );
 
-    assert_eq!(log.final_revision, 4, "exactly four mutations applied\n{joined}");
+    assert_eq!(
+        log.final_revision, 4,
+        "exactly four mutations applied\n{joined}"
+    );
 
     // Final DOM: <body> has three <p> children (two appended/inserted, one of the
     // originals removed), and the first text node now carries the edited text.
     let p_count = log.final_rows.iter().filter(|(_, k, _)| k == "p").count();
-    assert_eq!(p_count, 3, "expected 3 <p> elements\nrows: {:?}", log.final_rows);
+    assert_eq!(
+        p_count, 3,
+        "expected 3 <p> elements\nrows: {:?}",
+        log.final_rows
+    );
     assert!(
-        log.final_rows.iter().any(|(_, k, t)| k == "#text" && t == "Edited intro via node-id."),
+        log.final_rows
+            .iter()
+            .any(|(_, k, t)| k == "#text" && t == "Edited intro via node-id."),
         "the edited text should be live in a #text node\nrows: {:?}",
         log.final_rows
     );

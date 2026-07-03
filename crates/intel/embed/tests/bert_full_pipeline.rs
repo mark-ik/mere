@@ -26,14 +26,14 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use aether::eval::eval_scalar;
+use aether::projection::FieldProjection;
+use aether::registry::FieldRegistry;
 use async_trait::async_trait;
 use eidetic::{
     ModelLibrary, ModerationState, NoFetcher, PrivacyClass, ProvenanceOrigin, ProvenanceRecord,
     Store, Timestamp, TrustEnvelope, TrustLevel,
 };
-use aether::eval::eval_scalar;
-use aether::projection::FieldProjection;
-use aether::registry::FieldRegistry;
 use embed::bert::BertEmbeddingProvider;
 use embed::{
     EmbeddingProvider, SemanticSearch, SimilarityMetric, VectorIndex,

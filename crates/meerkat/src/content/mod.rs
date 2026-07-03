@@ -24,13 +24,19 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 
 use armillary::{ActorHandle, Emitter, NavGeneration, Pool, ViewportGeneration, Wake, spawn_on};
 use document_canvas::{DocumentRenderPacket, DocumentStyleSheet, FontTable};
-use engine_observables_api::{DomArenaStats, LayoutBatchStats};
 use inker::{EngineRegistry, EngineRoutePolicy};
 use linked_data::GraphContribution;
 use netrender::Scene;
 
 use serval_layout::{ContentLayout, ScrollOffsets};
 use serval_static_dom::{StaticDocument, StaticNodeId};
+
+pub(crate) use content_contract::{
+    ContentSceneStats, DomArenaStatsMessage as DomArenaStats,
+    DomNodeKindStatsMessage as DomNodeKindStats, LayoutApplyKindMessage as LayoutApplyKind,
+    LayoutBatchStatsMessage as LayoutBatchStats, LayoutDamageClassMessage as LayoutDamageClass,
+    SceneTransferDecoder, SceneTransferEncoder, TransferBuffer, TransferError, scene_stats,
+};
 
 // The scripted render rung (render ladder phase 2): a `serval.scripted`-pinned node
 // runs its page JS through pelt's `ScriptedDocument` on Boa. Behind the `scripted`
@@ -236,12 +242,6 @@ pub struct ContentEngineStats {
     pub layout: Option<LayoutBatchStats>,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct ContentSceneStats {
-    pub op_count: u64,
-    pub encoded_bytes: u64,
-}
-
 pub(crate) trait ContentUpdateSink {
     fn emit_update(&self, update: ContentUpdate);
 }
@@ -279,8 +279,8 @@ pub(crate) enum ContentUpdateTransport {
 pub(crate) enum ContentUpdateStream {
     Native(Receiver<ContentUpdate>),
     Transfer {
-        updates: Receiver<transfer::TransferBuffer>,
-        decoder: transfer::SceneTransferDecoder,
+        updates: Receiver<TransferBuffer>,
+        decoder: SceneTransferDecoder,
     },
 }
 
@@ -417,10 +417,6 @@ mod transfer;
 mod worker;
 pub(crate) use actor::*;
 pub(crate) use handlers::*;
-#[allow(unused_imports)]
-pub(crate) use transfer::{
-    SceneTransferDecoder, SceneTransferEncoder, TransferBuffer, TransferError, scene_stats,
-};
 #[allow(unused_imports)]
 pub(crate) use worker::*;
 

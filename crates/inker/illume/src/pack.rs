@@ -183,21 +183,59 @@ impl InjectionLexer for ClikeLexer {
 
 /// Rust keywords (including reserved plus `async` / `await` / `dyn`).
 const RUST_KEYWORDS: &[&str] = &[
-    "as", "async", "await", "break", "const", "continue", "crate", "dyn", "else", "enum",
-    "extern", "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move",
-    "mut", "pub", "ref", "return", "self", "Self", "static", "struct", "super", "trait", "true",
-    "type", "unsafe", "use", "where", "while",
+    "as", "async", "await", "break", "const", "continue", "crate", "dyn", "else", "enum", "extern",
+    "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub",
+    "ref", "return", "self", "Self", "static", "struct", "super", "trait", "true", "type",
+    "unsafe", "use", "where", "while",
 ];
 
 /// JavaScript keywords. The coarse C-family floor: engine-independent, so JS
 /// highlighting does not depend on which VM (Nova / Boa) is compiled in. A host
 /// may override with a precise reuse-lexer (Boa's / Nova's / oxc's) where present.
 const JS_KEYWORDS: &[&str] = &[
-    "as", "async", "await", "break", "case", "catch", "class", "const", "continue", "debugger",
-    "default", "delete", "do", "else", "export", "extends", "false", "finally", "for", "function",
-    "if", "import", "in", "instanceof", "let", "new", "null", "of", "return", "static", "super",
-    "switch", "this", "throw", "true", "try", "typeof", "undefined", "var", "void", "while",
-    "with", "yield",
+    "as",
+    "async",
+    "await",
+    "break",
+    "case",
+    "catch",
+    "class",
+    "const",
+    "continue",
+    "debugger",
+    "default",
+    "delete",
+    "do",
+    "else",
+    "export",
+    "extends",
+    "false",
+    "finally",
+    "for",
+    "function",
+    "if",
+    "import",
+    "in",
+    "instanceof",
+    "let",
+    "new",
+    "null",
+    "of",
+    "return",
+    "static",
+    "super",
+    "switch",
+    "this",
+    "throw",
+    "true",
+    "try",
+    "typeof",
+    "undefined",
+    "var",
+    "void",
+    "while",
+    "with",
+    "yield",
 ];
 
 /// Rhai keywords. A C-family floor like JS, so rhai highlights even in a build
@@ -334,8 +372,19 @@ mod tests {
     fn default_pack_registers_the_batch() {
         let reg = default_pack();
         for label in [
-            "json", "json-ld", "toml", "rust", "rs", "js", "javascript", "rhai", "rune", "lua",
-            "css", "html", "htm",
+            "json",
+            "json-ld",
+            "toml",
+            "rust",
+            "rs",
+            "js",
+            "javascript",
+            "rhai",
+            "rune",
+            "lua",
+            "css",
+            "html",
+            "htm",
         ] {
             assert!(reg.has(label), "missing {label}");
         }

@@ -2,11 +2,13 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use super::super::free_fns::{
+    NativeModRuntime, WasmModRuntime, discover_mod_manifests, read_wasm_mod_from_path,
+    resolve_mod_load_order,
+};
 use super::super::types::*;
-use super::super::free_fns::{NativeModRuntime, WasmModRuntime, discover_mod_manifests,
-    resolve_mod_load_order, read_wasm_mod_from_path};
-use super::parse_disabled_mod_ids_from_env;
 use super::ModRegistry;
+use super::parse_disabled_mod_ids_from_env;
 
 impl ModRegistry {
     fn rollback_extension_records<F>(
@@ -61,10 +63,7 @@ impl ModRegistry {
     /// Builder-style setter for the host's WASM runtime. Without
     /// it, `load_all` errors out activation for `ModType::Wasm` mods
     /// (the manifests are still parsed and tracked). Slice 68a.
-    pub fn with_wasm_runtime(
-        mut self,
-        runtime: std::sync::Arc<dyn WasmModRuntime>,
-    ) -> Self {
+    pub fn with_wasm_runtime(mut self, runtime: std::sync::Arc<dyn WasmModRuntime>) -> Self {
         self.wasm_runtime = Some(runtime);
         self
     }
@@ -73,10 +72,7 @@ impl ModRegistry {
     /// it, `load_all` errors out activation for `ModType::Native`
     /// mods (the manifests are still parsed and tracked).
     /// Slice 68b.
-    pub fn with_native_runtime(
-        mut self,
-        runtime: std::sync::Arc<dyn NativeModRuntime>,
-    ) -> Self {
+    pub fn with_native_runtime(mut self, runtime: std::sync::Arc<dyn NativeModRuntime>) -> Self {
         self.native_runtime = Some(runtime);
         self
     }
@@ -100,8 +96,8 @@ impl ModRegistry {
     /// Resolve dependencies and compute load order.
     /// Returns error if dependencies are missing or cyclic.
     pub fn resolve_dependencies(&mut self) -> Result<(), ModDependencyError> {
-        use register_diagnostics::{DiagnosticEvent, emit_event};
         use register_diagnostics::channels::CHANNEL_MOD_DEPENDENCY_MISSING;
+        use register_diagnostics::{DiagnosticEvent, emit_event};
 
         let manifests_vec: Vec<_> = self
             .manifests
@@ -222,11 +218,11 @@ impl ModRegistry {
         ) -> Result<Vec<ModExtensionRecord>, ModActivationError>,
         R: FnMut(ModExtensionRecord) -> Result<(), String>,
     {
-        use register_diagnostics::{DiagnosticEvent, emit_event};
         use register_diagnostics::channels::{
             CHANNEL_MOD_LOAD_FAILED, CHANNEL_MOD_LOAD_STARTED, CHANNEL_MOD_LOAD_SUCCEEDED,
             CHANNEL_MOD_QUARANTINED, CHANNEL_MOD_ROLLBACK_FAILED, CHANNEL_MOD_ROLLBACK_SUCCEEDED,
         };
+        use register_diagnostics::{DiagnosticEvent, emit_event};
 
         let mut loaded = Vec::new();
 
@@ -316,10 +312,8 @@ impl ModRegistry {
     where
         F: FnMut(ModExtensionRecord) -> Result<(), String>,
     {
+        use register_diagnostics::channels::{CHANNEL_MOD_QUARANTINED, CHANNEL_MOD_UNLOAD_FAILED};
         use register_diagnostics::{DiagnosticEvent, emit_event};
-        use register_diagnostics::channels::{
-            CHANNEL_MOD_QUARANTINED, CHANNEL_MOD_UNLOAD_FAILED,
-        };
 
         let normalized = mod_id.trim().to_ascii_lowercase();
         let Some(status) = self.status.get(&normalized).copied() else {
@@ -467,4 +461,3 @@ impl ModRegistry {
             .collect()
     }
 }
-

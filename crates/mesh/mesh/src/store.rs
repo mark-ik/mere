@@ -52,10 +52,7 @@ impl MeshStore {
     /// connection opens its *own* empty database, so one connection is what
     /// makes the store coherent.
     pub async fn in_memory() -> Result<Self, MeshStoreError> {
-        let sqlite = SqliteStoreBuilder::new()
-            .max_connections(1)
-            .build()
-            .await?;
+        let sqlite = SqliteStoreBuilder::new().max_connections(1).build().await?;
         Ok(Self { sqlite })
     }
 
@@ -84,10 +81,7 @@ impl MeshStore {
         // An error before commit drops the permit, which rolls the
         // transaction back — the op row and its index entry land together or
         // not at all.
-        let fresh = self
-            .sqlite
-            .insert_operation(&op.hash, op, &mesh_id)
-            .await?;
+        let fresh = self.sqlite.insert_operation(&op.hash, op, &mesh_id).await?;
         self.sqlite
             .associate(&Topic::from(mesh_id), &op.header.verifying_key, &mesh_id)
             .await?;
@@ -136,7 +130,7 @@ impl MeshStore {
 mod tests {
     use super::*;
     use crate::board::JobState;
-    use crate::wire::{to_operation, JobKind, MeshEvent};
+    use crate::wire::{JobKind, MeshEvent, to_operation};
     use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
 
     const MESH: [u8; 32] = [0x4d; 32];

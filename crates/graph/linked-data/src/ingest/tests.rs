@@ -28,10 +28,23 @@ fn from_html_harvests_embedded_jsonld_scripts() {
       <script type="text/javascript">console.log("ignored");</script>
     </head><body>body</body></html>"#;
     let contributions = from_html(html);
-    assert_eq!(contributions.len(), 1, "only the ld+json script is harvested");
+    assert_eq!(
+        contributions.len(),
+        1,
+        "only the ld+json script is harvested"
+    );
     let nodes = &contributions[0].nodes;
-    assert!(nodes.iter().any(|n| n.id == "https://a.test/" && n.title.as_deref() == Some("Paper A")));
-    assert!(contributions[0].edges.iter().any(|e| e.predicate.ends_with("#cites")));
+    assert!(
+        nodes
+            .iter()
+            .any(|n| n.id == "https://a.test/" && n.title.as_deref() == Some("Paper A"))
+    );
+    assert!(
+        contributions[0]
+            .edges
+            .iter()
+            .any(|e| e.predicate.ends_with("#cites"))
+    );
 }
 
 #[test]
@@ -57,8 +70,16 @@ fn blank_nodes_skolemize_under_a_document_namespace() {
     // Everything before the final `:` is the `urn:mere:bnode:<namespace>`
     // prefix; the label after it is what oxjsonld varies per parse.
     let prefix = |iri: &str| iri.rsplit_once(':').map(|(p, _)| p.to_string()).unwrap();
-    assert_eq!(prefix(&a), prefix(&blank(doc_a)), "namespace is content-stable");
-    assert_ne!(prefix(&a), prefix(&blank(doc_b)), "different doc, different namespace");
+    assert_eq!(
+        prefix(&a),
+        prefix(&blank(doc_a)),
+        "namespace is content-stable"
+    );
+    assert_ne!(
+        prefix(&a),
+        prefix(&blank(doc_b)),
+        "different doc, different namespace"
+    );
 }
 
 #[test]
@@ -113,7 +134,9 @@ fn apply_materializes_recognized_and_raw_edges() {
     let (c, _) = graph.get_node_by_url("https://c.test/").expect("node c");
 
     // Recognized predicate → typed Semantic edge with canonical IRI.
-    let cites = graph.get_edge(graph.find_edge_key(a, b).expect("a→b")).unwrap();
+    let cites = graph
+        .get_edge(graph.find_edge_key(a, b).expect("a→b"))
+        .unwrap();
     assert!(cites.has_relation(RelationSelector::Semantic(SemanticSubKind::Cites)));
     assert_eq!(
         cites.semantic_data().and_then(|d| d.predicate.as_deref()),
@@ -121,11 +144,19 @@ fn apply_materializes_recognized_and_raw_edges() {
     );
 
     // Raw predicate → open-predicate Semantic edge (no sub-kinds).
-    let citation = graph.get_edge(graph.find_edge_key(a, c).expect("a→c")).unwrap();
+    let citation = graph
+        .get_edge(graph.find_edge_key(a, c).expect("a→c"))
+        .unwrap();
     assert!(citation.has_relation(RelationSelector::Family(EdgeFamily::Semantic)));
-    assert!(citation.semantic_data().is_some_and(|d| d.sub_kinds.is_empty()));
+    assert!(
+        citation
+            .semantic_data()
+            .is_some_and(|d| d.sub_kinds.is_empty())
+    );
     assert_eq!(
-        citation.semantic_data().and_then(|d| d.predicate.as_deref()),
+        citation
+            .semantic_data()
+            .and_then(|d| d.predicate.as_deref()),
         Some("https://schema.org/citation")
     );
 }
@@ -150,12 +181,20 @@ fn a_harvested_hyperlink_records_extracted_from_provenance_on_the_target() {
     let mut graph = Graph::new();
     apply_contribution(&mut graph, &contribution);
 
-    let (_, src) = graph.get_node_by_url("https://src.test/").expect("source node");
-    let (_, dst) = graph.get_node_by_url("https://dst.test/").expect("target node");
+    let (_, src) = graph
+        .get_node_by_url("https://src.test/")
+        .expect("source node");
+    let (_, dst) = graph
+        .get_node_by_url("https://dst.test/")
+        .expect("target node");
 
     // The target names the page it was extracted from; the source carries none.
     assert!(src.derivations.is_empty(), "the source page is not derived");
-    assert_eq!(dst.derivations.len(), 1, "the target carries one derivation");
+    assert_eq!(
+        dst.derivations.len(),
+        1,
+        "the target carries one derivation"
+    );
     let d = &dst.derivations[0];
     assert_eq!(d.sub_kind, ProvenanceSubKind::ExtractedFrom);
     assert_eq!(
@@ -246,14 +285,23 @@ fn full_pack_resolves_activitystreams() {
 fn ingested_node_ids_are_deterministic_across_graphs() {
     // Two hosts ingesting the same document mint the same node ids (federation
     // identity), each derived from its `@id`.
-    let doc = br#"{"@context":{"name":"https://schema.org/name"},"@id":"https://x.test/","name":"X"}"#;
+    let doc =
+        br#"{"@context":{"name":"https://schema.org/name"},"@id":"https://x.test/","name":"X"}"#;
     let contribution = from_jsonld(doc).expect("parsed");
     let mut g1 = Graph::new();
     let mut g2 = Graph::new();
     apply_contribution(&mut g1, &contribution);
     apply_contribution(&mut g2, &contribution);
-    let id1 = g1.get_node_by_url("https://x.test/").expect("node in g1").1.id;
-    let id2 = g2.get_node_by_url("https://x.test/").expect("node in g2").1.id;
+    let id1 = g1
+        .get_node_by_url("https://x.test/")
+        .expect("node in g1")
+        .1
+        .id;
+    let id2 = g2
+        .get_node_by_url("https://x.test/")
+        .expect("node in g2")
+        .1
+        .id;
     assert_eq!(id1, id2, "same @id yields the same node id on every host");
     assert_eq!(id1, Graph::node_namespace_id("https://x.test/"));
 }
@@ -279,13 +327,20 @@ fn referenced_context_urls_finds_remote_refs() {
     let urls = referenced_context_urls(doc);
     assert!(urls.contains(&"https://schema.org/".to_string()));
     assert!(urls.contains(&"https://www.w3.org/ns/activitystreams".to_string()));
-    assert_eq!(urls.len(), 2, "inline object entries are not URL references");
+    assert_eq!(
+        urls.len(),
+        2,
+        "inline object entries are not URL references"
+    );
 }
 
 #[test]
 fn referenced_context_urls_ignores_inline_and_nonjson() {
     let inline = br#"{"@context":{"name":"https://schema.org/name"},"@id":"a"}"#;
-    assert!(referenced_context_urls(inline).is_empty(), "inline context has no remote ref");
+    assert!(
+        referenced_context_urls(inline).is_empty(),
+        "inline context has no remote ref"
+    );
     assert!(referenced_context_urls(b"not json at all").is_empty());
 }
 
@@ -326,5 +381,8 @@ fn unbundled_remote_context_is_refused() {
         Err(IngestError::Parse(_))
     ));
     // The network-free parser refuses a remote @context outright.
-    assert!(matches!(from_jsonld(REMOTE_DOC), Err(IngestError::Parse(_))));
+    assert!(matches!(
+        from_jsonld(REMOTE_DOC),
+        Err(IngestError::Parse(_))
+    ));
 }

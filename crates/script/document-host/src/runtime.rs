@@ -74,7 +74,11 @@ impl DocumentScriptRuntime {
     /// A runtime that grants exactly the `allowed` host capabilities. A mod whose
     /// manifest requests anything outside this set is refused at `activate`.
     pub fn new(allowed: Vec<ModCapability>) -> Self {
-        Self { engine: Engine::default(), allowed, active: Mutex::new(HashMap::new()) }
+        Self {
+            engine: Engine::default(),
+            allowed,
+            active: Mutex::new(HashMap::new()),
+        }
     }
 
     /// A fully-trusted surface: every host capability granted.
@@ -98,7 +102,10 @@ impl DocumentScriptRuntime {
 
     /// Whether `mod_id` is currently active.
     pub fn is_active(&self, mod_id: &str) -> bool {
-        self.active.lock().map(|a| a.contains_key(mod_id)).unwrap_or(false)
+        self.active
+            .lock()
+            .map(|a| a.contains_key(mod_id))
+            .unwrap_or(false)
     }
 }
 
@@ -113,7 +120,11 @@ fn grant_for(_manifest: &ModManifest) -> Grant {
 impl WasmModRuntime for DocumentScriptRuntime {
     fn activate(&self, manifest: &ModManifest, source: &WasmModSource) -> Result<(), String> {
         // 1. Host-policy capability check — before any instantiation.
-        if let Some(denied) = manifest.capabilities.iter().find(|c| !self.allowed.contains(c)) {
+        if let Some(denied) = manifest
+            .capabilities
+            .iter()
+            .find(|c| !self.allowed.contains(c))
+        {
             return Err(format!(
                 "mod '{}' requests capability {:?} not granted by this surface",
                 manifest.mod_id, denied
@@ -122,7 +133,10 @@ impl WasmModRuntime for DocumentScriptRuntime {
 
         // 2. No double-activation (the loader should not, but be defensive).
         {
-            let active = self.active.lock().map_err(|_| "runtime lock poisoned".to_string())?;
+            let active = self
+                .active
+                .lock()
+                .map_err(|_| "runtime lock poisoned".to_string())?;
             if active.contains_key(&manifest.mod_id) {
                 return Err(format!("mod '{}' already active", manifest.mod_id));
             }
@@ -157,11 +171,16 @@ impl WasmModRuntime for DocumentScriptRuntime {
         // Remove under the lock, then run the export with the lock released so a
         // teardown call never blocks other activations.
         let entry = {
-            let mut active = self.active.lock().map_err(|_| "runtime lock poisoned".to_string())?;
+            let mut active = self
+                .active
+                .lock()
+                .map_err(|_| "runtime lock poisoned".to_string())?;
             active.remove(mod_id)
         };
-        let ActiveMod { mut store, bindings } =
-            entry.ok_or_else(|| format!("mod '{mod_id}' not active"))?;
+        let ActiveMod {
+            mut store,
+            bindings,
+        } = entry.ok_or_else(|| format!("mod '{mod_id}' not active"))?;
         pollster::block_on(bindings.call_deactivate(&mut store))
             .map_err(|e| format!("deactivate '{mod_id}': {e}"))?;
         // `store` (and the instance it owns) dropped here.

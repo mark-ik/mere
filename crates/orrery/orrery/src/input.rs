@@ -328,13 +328,19 @@ impl Orrery {
         if let Some(title) = title.filter(|t| !t.is_empty()) {
             let _ = apply_graph_delta(
                 &mut self.graph,
-                GraphDelta::SetNodeTitle { key, title: title.to_string() },
+                GraphDelta::SetNodeTitle {
+                    key,
+                    title: title.to_string(),
+                },
             );
         }
         for tag in tags {
             let _ = apply_graph_delta(
                 &mut self.graph,
-                GraphDelta::InsertNodeTag { key, tag: tag.clone() },
+                GraphDelta::InsertNodeTag {
+                    key,
+                    tag: tag.clone(),
+                },
             );
         }
         self.graph
@@ -382,7 +388,9 @@ impl Orrery {
         };
         let _ = apply_graph_delta(
             &mut self.graph,
-            GraphDelta::AddField { field: Field::new(id, definition).with_extent(extent) },
+            GraphDelta::AddField {
+                field: Field::new(id, definition).with_extent(extent),
+            },
         );
         // The no-placebo gesture: a default coupling so the placed field immediately
         // *does* something — its nodes gather toward the disk's center. The disk is a
@@ -422,7 +430,10 @@ impl Orrery {
         let changed = matches!(
             apply_graph_delta(
                 &mut self.graph,
-                GraphDelta::SetFieldCouplingStrength { field: id, strength },
+                GraphDelta::SetFieldCouplingStrength {
+                    field: id,
+                    strength
+                },
             ),
             GraphDeltaResult::FieldChanged(true)
         );
@@ -486,7 +497,10 @@ impl Orrery {
         );
         let _ = apply_graph_delta(
             &mut self.graph,
-            GraphDelta::NavigateNode { key, url: url.to_string() },
+            GraphDelta::NavigateNode {
+                key,
+                url: url.to_string(),
+            },
         );
         self.reconcile_derived();
         self.view.set_position(key, seed);
@@ -523,14 +537,20 @@ impl Orrery {
         if let Some(origin) = origin {
             let _ = apply_graph_delta(
                 &mut self.graph,
-                GraphDelta::BranchHistory { child: key, parent: origin },
+                GraphDelta::BranchHistory {
+                    child: key,
+                    parent: origin,
+                },
             );
         }
         // The new surface opens on `url`: seed its own history with that first
         // visit (the node is born with one page, not an empty history).
         let _ = apply_graph_delta(
             &mut self.graph,
-            GraphDelta::NavigateNode { key, url: url.to_string() },
+            GraphDelta::NavigateNode {
+                key,
+                url: url.to_string(),
+            },
         );
         if let Some(origin) = origin {
             let _ = graph_apply::assert_relation(&mut self.graph, origin, key, hyperlink());

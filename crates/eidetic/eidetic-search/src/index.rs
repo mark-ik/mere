@@ -20,10 +20,8 @@ use std::path::{Path, PathBuf};
 use eidetic::browsing::BrowsingTrace;
 use tantivy::collector::TopDocs;
 use tantivy::query::QueryParser;
-use tantivy::schema::{
-    Field, Schema, Value, FAST, INDEXED, STORED, STRING, TEXT,
-};
-use tantivy::{doc, Index, TantivyDocument};
+use tantivy::schema::{FAST, Field, INDEXED, STORED, STRING, Schema, TEXT, Value};
+use tantivy::{Index, TantivyDocument, doc};
 
 use crate::spec::SearchIndexSpec;
 use crate::{Result, SearchError};
@@ -281,8 +279,8 @@ impl TrailIndex {
     }
 
     fn run_aggregation(&self, request: serde_json::Value) -> Result<serde_json::Value> {
-        use tantivy::aggregation::agg_req::Aggregations;
         use tantivy::aggregation::AggregationCollector;
+        use tantivy::aggregation::agg_req::Aggregations;
         use tantivy::query::AllQuery;
 
         let aggregations: Aggregations = serde_json::from_value(request)
@@ -318,9 +316,21 @@ mod tests {
         vec![BrowsingTrace::from_events(
             "mark",
             vec![
-                event("https://docs.example/vello", "vello scene encoding API", 1_000),
-                event("https://docs.example/tantivy", "tantivy index format notes", 90_000_000),
-                event("https://news.example/wgpu", "wgpu 29 release announcement", 90_500_000),
+                event(
+                    "https://docs.example/vello",
+                    "vello scene encoding API",
+                    1_000,
+                ),
+                event(
+                    "https://docs.example/tantivy",
+                    "tantivy index format notes",
+                    90_000_000,
+                ),
+                event(
+                    "https://news.example/wgpu",
+                    "wgpu 29 release announcement",
+                    90_500_000,
+                ),
             ],
         )]
     }
@@ -351,9 +361,10 @@ mod tests {
         )]
         .into_iter()
         .collect();
-        let index =
-            TrailIndex::rebuild_with_text(dir.path().join("idx"), &traces, |u| texts.get(u).cloned())
-                .unwrap();
+        let index = TrailIndex::rebuild_with_text(dir.path().join("idx"), &traces, |u| {
+            texts.get(u).cloned()
+        })
+        .unwrap();
         // A term that appears only in the body — not the title or URL — still
         // recalls the page (the C5 payoff).
         let hits = index.search("entanglement", 5).unwrap();
@@ -407,7 +418,10 @@ mod tests {
         let index = TrailIndex::rebuild(dir.path().join("idx"), &corpus()).unwrap();
 
         let domains = index.top_domains(5).unwrap();
-        assert_eq!(domains.first().map(|(d, c)| (d.as_str(), *c)), Some(("docs.example", 2)));
+        assert_eq!(
+            domains.first().map(|(d, c)| (d.as_str(), *c)),
+            Some(("docs.example", 2))
+        );
         assert!(domains.iter().any(|(d, c)| d == "news.example" && *c == 1));
 
         // Day buckets: two events fall in day 1 (86.4M..172.8M), one in day 0.

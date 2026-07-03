@@ -20,9 +20,7 @@
 //!   secondary never implements `FlipDonor`, so there is no type path to forward a
 //!   document from one secondary to another. A flip is always primary ↔ secondary.
 
-use verso_api::{
-    BackState, Carry, FlipBack, FlipDonor, FlipReceiver, LayerSet, PortableViewState,
-};
+use verso_api::{BackState, Carry, FlipBack, FlipDonor, FlipReceiver, LayerSet, PortableViewState};
 
 /// Drop every forward layer outside `carried`. The intersection of what the donor
 /// donates and what the receiver receives is the only state that crosses; the rest

@@ -353,8 +353,8 @@ pub(crate) fn segment_intersects_box(a: Point2D<f32>, b: Point2D<f32>, r: Box2D<
 #[cfg(test)]
 mod tests {
     use euclid::default::{Box2D, Point2D};
-    use kernel::graph::{Graph, NodeKey};
     use kernel::graph::fixtures::GraphFixtures;
+    use kernel::graph::{Graph, NodeKey};
 
     use crate::Simulation;
 
@@ -362,9 +362,16 @@ mod tests {
     /// the view-vs-sim parity assertions share one source of truth.
     fn sim_with_edge() -> (Simulation, NodeKey, NodeKey) {
         let mut g = Graph::new();
-        let a = g.add_node_with_id(uuid::Uuid::from_u128(1), "mere://a".into(), Point2D::new(0.0, 0.0));
-        let b =
-            g.add_node_with_id(uuid::Uuid::from_u128(2), "mere://b".into(), Point2D::new(100.0, 0.0));
+        let a = g.add_node_with_id(
+            uuid::Uuid::from_u128(1),
+            "mere://a".into(),
+            Point2D::new(0.0, 0.0),
+        );
+        let b = g.add_node_with_id(
+            uuid::Uuid::from_u128(2),
+            "mere://b".into(),
+            Point2D::new(100.0, 0.0),
+        );
         let mut sim = Simulation::new();
         sim.sync_with_graph(&g);
         sim.sync_edges([(a, b)]);
@@ -378,7 +385,10 @@ mod tests {
         let view = sim.view();
 
         // Node point-pick parity (well-separated, so rapier and the view agree).
-        assert_eq!(view.hit_test(Point2D::new(0.0, 0.0)), sim.hit_test(Point2D::new(0.0, 0.0)));
+        assert_eq!(
+            view.hit_test(Point2D::new(0.0, 0.0)),
+            sim.hit_test(Point2D::new(0.0, 0.0))
+        );
         assert_eq!(view.hit_test(Point2D::new(0.0, 0.0)), Some(a));
         assert_eq!(view.hit_test(Point2D::new(100.0, 0.0)), Some(b));
         assert!(view.hit_test(Point2D::new(5000.0, 5000.0)).is_none());
@@ -398,12 +408,20 @@ mod tests {
         let (sim, a, b) = sim_with_edge();
         let view = sim.view();
 
-        assert_eq!(view.edge_hit_test(Point2D::new(50.0, 0.0), 5.0), Some((a, b)));
-        assert_eq!(view.edge_hit_test(Point2D::new(50.0, 0.0), 5.0), sim.edge_hit_test(Point2D::new(50.0, 0.0), 5.0));
+        assert_eq!(
+            view.edge_hit_test(Point2D::new(50.0, 0.0), 5.0),
+            Some((a, b))
+        );
+        assert_eq!(
+            view.edge_hit_test(Point2D::new(50.0, 0.0), 5.0),
+            sim.edge_hit_test(Point2D::new(50.0, 0.0), 5.0)
+        );
         assert!(view.edge_hit_test(Point2D::new(50.0, 50.0), 5.0).is_none());
 
-        let near_origin =
-            view.rect_select(Box2D::new(Point2D::new(-10.0, -10.0), Point2D::new(10.0, 10.0)));
+        let near_origin = view.rect_select(Box2D::new(
+            Point2D::new(-10.0, -10.0),
+            Point2D::new(10.0, 10.0),
+        ));
         assert_eq!(near_origin.nodes, vec![a]);
         assert_eq!(near_origin.edges, vec![(a, b)]);
     }

@@ -26,7 +26,7 @@ Sibling / converging docs:
 - [scriptable_field_regions_plan](2026-06-13_scriptable_field_regions_plan.md): gyre's
   `CouplingForce` is a **field** mechanism (per-node field sample), *not* the pairwise affinity
   force — the affinity force is new.
-- [document_script_substrate_plan](2026-06-21_document_script_substrate_plan.md): the
+- [document_script_substrate_plan](../../archive_docs/2026-07-03_completed_plans/2026-06-21_document_script_substrate_plan.md): the
   wasmtime-async lane is the **scriptable** path for user-authored analyses (below).
 - [meaningful_physics_signals_plan](2026-06-24_meaningful_physics_signals_plan.md): the
   **physics-side consumer**. It maps runtime signals (content / sync / observability) *and* the

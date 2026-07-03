@@ -83,7 +83,10 @@ impl Simulation {
                 if let Some(body) = self.bodies.get(*handle) {
                     let t = body.translation();
                     handles.push(*handle);
-                    contacts.push(FluidContact::circle(Point2D::new(t.x, t.y), NODE_BODY_RADIUS));
+                    contacts.push(FluidContact::circle(
+                        Point2D::new(t.x, t.y),
+                        NODE_BODY_RADIUS,
+                    ));
                 }
             }
         }

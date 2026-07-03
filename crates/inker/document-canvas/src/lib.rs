@@ -51,8 +51,8 @@ pub mod netrender_backend;
 
 pub use font::{FontResolver, NoFontResolver};
 pub use font_table::FontTable;
-pub use paint_list::{paint_list_from_packet, InkerPaintList};
-pub use layout::{layout_document, LaidOutDocument};
+pub use layout::{LaidOutDocument, layout_document};
+pub use paint_list::{InkerPaintList, paint_list_from_packet};
 pub use style::{ColorVocabulary, InlineStyle};
 pub use style_sheet::{
     BlockRole, BlockStyle, ColorToken, DocumentStyleSheet, FontChoice, HeadingStyle, LinkAdornment,

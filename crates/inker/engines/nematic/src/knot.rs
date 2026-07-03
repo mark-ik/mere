@@ -46,16 +46,15 @@
 use std::collections::HashMap;
 
 use inker::{
-    Block, DocumentProvenance, DocumentTrustState, Engine, EngineDocument, EngineError,
-    EngineInput,
+    Block, DocumentProvenance, DocumentTrustState, Engine, EngineDocument, EngineError, EngineInput,
 };
 
 use crate::MarkdownEngine;
 
-mod expand;
 /// Djot-substrate proof-of-concept (design doc §10, Phase 1). Additive and not
 /// yet wired into the engine; parses a djot knot body into `Block`s.
 pub mod djot;
+mod expand;
 #[cfg(test)]
 mod tests;
 

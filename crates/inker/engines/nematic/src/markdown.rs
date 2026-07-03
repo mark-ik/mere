@@ -540,11 +540,7 @@ mod tests {
         let Block::Quote { blocks } = &doc.blocks[0] else {
             panic!("expected quote, got {:?}", doc.blocks[0]);
         };
-        assert!(
-            blocks
-                .iter()
-                .any(|b| matches!(b, Block::Quote { .. }))
-        );
+        assert!(blocks.iter().any(|b| matches!(b, Block::Quote { .. })));
     }
 
     #[test]

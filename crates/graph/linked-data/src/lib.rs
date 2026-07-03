@@ -43,13 +43,13 @@ pub mod ingest;
 #[cfg(feature = "query")]
 pub mod query;
 
+#[cfg(not(target_arch = "wasm32"))]
+pub use ingest::{ApplyOutcome, apply_contribution};
 pub use ingest::{
     ContextCache, EdgeContribution, GraphContribution, IngestError, NodeContribution, from_html,
     from_html_with_contexts, from_jsonld, from_jsonld_with_contexts, is_bundled_context,
     referenced_context_urls,
 };
-#[cfg(not(target_arch = "wasm32"))]
-pub use ingest::{ApplyOutcome, apply_contribution};
 
 /// `schema:name` — the curated mapping target for a node's title.
 pub(crate) const SCHEMA_NAME: &str = "https://schema.org/name";
@@ -328,9 +328,10 @@ fn compact_node_object(
                 };
                 (emit_key, json!({ "@id": object.as_str() }))
             }
-            Term::Literal(object) => {
-                (predicate.to_string(), Value::String(object.value().to_string()))
-            }
+            Term::Literal(object) => (
+                predicate.to_string(),
+                Value::String(object.value().to_string()),
+            ),
             _ => continue,
         };
         by_key.entry(emit_key).or_default().push(value);

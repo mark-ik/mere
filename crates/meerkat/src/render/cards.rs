@@ -274,8 +274,8 @@ impl crate::WindowCtx<'_> {
         // lowers + rasterizes only the band the scroll sits in (centred, with
         // overscan), UV-shifts within it for fine scroll, and re-rasters when the
         // scroll leaves the band. The full scroll range is the document's real height.
-        // (Retained-text / tiled render; document lane. The HTML/serval lane still
-        // rasterizes one capped texture until Phase 5 lane parity.)
+        // (Retained-text / tiled render; document lane. The HTML/serval lane uses
+        // actor-side band re-emit below.)
         const BAND_CAP: u32 = 6144;
         // The HTML/serval lane re-emits its band actor-side, culled to the band
         // viewport, so the constraint is the band's *op density* (the whole dense

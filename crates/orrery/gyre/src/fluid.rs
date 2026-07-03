@@ -82,7 +82,11 @@ impl Basin {
         let lo = self.min_x + r;
         let hi = self.max_x - r;
         // Guard against a basin narrower than the particle (lo > hi): centre it.
-        let x = if lo <= hi { p.x.clamp(lo, hi) } else { 0.5 * (self.min_x + self.max_x) };
+        let x = if lo <= hi {
+            p.x.clamp(lo, hi)
+        } else {
+            0.5 * (self.min_x + self.max_x)
+        };
         Point2D::new(x, p.y.min(self.floor_y - r))
     }
 }
@@ -110,12 +114,18 @@ pub enum ContactShape {
 impl FluidContact {
     /// A circle contact at `center` with `radius`.
     pub fn circle(center: Point2D<f32>, radius: f32) -> Self {
-        Self { center, shape: ContactShape::Circle { radius } }
+        Self {
+            center,
+            shape: ContactShape::Circle { radius },
+        }
     }
 
     /// An oriented-box contact at `center` with local half-extents `half`, rotated by `angle` (rad).
     pub fn obb(center: Point2D<f32>, half: (f32, f32), angle: f32) -> Self {
-        Self { center, shape: ContactShape::Obb { half, angle } }
+        Self {
+            center,
+            shape: ContactShape::Obb { half, angle },
+        }
     }
 }
 
@@ -139,7 +149,14 @@ pub struct Fluid {
 impl Fluid {
     /// An empty fluid with the given params + basin.
     pub fn new(params: FluidParams, basin: Basin) -> Self {
-        Self { pos: Vec::new(), vel: Vec::new(), pred: Vec::new(), lambda: Vec::new(), params, basin }
+        Self {
+            pos: Vec::new(),
+            vel: Vec::new(),
+            pred: Vec::new(),
+            lambda: Vec::new(),
+            params,
+            basin,
+        }
     }
 
     /// Seed a `cols × rows` grid of still particles at `spacing` from `origin` (top-left), capped at
@@ -152,7 +169,10 @@ impl Fluid {
                 if self.pos.len() >= self.params.max_particles {
                     break;
                 }
-                let p = Point2D::new(origin.x + col as f32 * spacing, origin.y + row as f32 * spacing);
+                let p = Point2D::new(
+                    origin.x + col as f32 * spacing,
+                    origin.y + row as f32 * spacing,
+                );
                 self.pos.push(p);
                 self.vel.push(Vector2D::zero());
                 self.pred.push(p);
@@ -305,7 +325,11 @@ impl Fluid {
                             continue;
                         }
                         // Outward normal (straight up if a particle sits dead-centre).
-                        let n = if d > 1.0e-4 { delta / d } else { Vector2D::new(0.0, -1.0) };
+                        let n = if d > 1.0e-4 {
+                            delta / d
+                        } else {
+                            Vector2D::new(0.0, -1.0)
+                        };
                         n * (rmin - d)
                     }
                     ContactShape::Obb { half, angle } => {
@@ -395,7 +419,11 @@ mod tests {
     use super::*;
 
     fn pool() -> (Fluid, Basin) {
-        let basin = Basin { min_x: -200.0, max_x: 200.0, floor_y: 200.0 };
+        let basin = Basin {
+            min_x: -200.0,
+            max_x: 200.0,
+            floor_y: 200.0,
+        };
         let mut fluid = Fluid::new(FluidParams::default(), basin);
         // 14×10 block at spacing 16 (h=40 ≈ 2.5×), dropped above the basin floor.
         fluid.spawn_block(Point2D::new(-104.0, -150.0), 14, 10, 16.0);
@@ -407,7 +435,10 @@ mod tests {
         let (mut fluid, basin) = pool();
         let n = fluid.particle_count();
         assert_eq!(n, 140, "the block seeded 14×10 particles");
-        assert!(fluid.params().rest_density > 0.0, "rest density auto-set from the spawn");
+        assert!(
+            fluid.params().rest_density > 0.0,
+            "rest density auto-set from the spawn"
+        );
 
         for _ in 0..400 {
             fluid.step(1.0 / 60.0);
@@ -416,19 +447,33 @@ mod tests {
         assert_eq!(fluid.particle_count(), n, "particle count is conserved");
         for p in fluid.positions() {
             assert!(p.x.is_finite() && p.y.is_finite(), "no NaN/inf: {p:?}");
-            assert!(p.x >= basin.min_x - 1.0 && p.x <= basin.max_x + 1.0, "contained in x: {p:?}");
+            assert!(
+                p.x >= basin.min_x - 1.0 && p.x <= basin.max_x + 1.0,
+                "contained in x: {p:?}"
+            );
             assert!(p.y <= basin.floor_y + 1.0, "stayed above the floor: {p:?}");
         }
         // Settled: the pool came (nearly) to rest rather than churning or exploding.
-        assert!(fluid.max_speed() < 40.0, "fluid settled (max speed {})", fluid.max_speed());
+        assert!(
+            fluid.max_speed() < 40.0,
+            "fluid settled (max speed {})",
+            fluid.max_speed()
+        );
         // Sank: the pool fell from its spawn (mean y < -50) toward the floor (y=200).
         let mean_y: f32 = fluid.positions().map(|p| p.y).sum::<f32>() / n as f32;
-        assert!(mean_y > 0.0, "the pool sank toward the floor (mean_y {mean_y})");
+        assert!(
+            mean_y > 0.0,
+            "the pool sank toward the floor (mean_y {mean_y})"
+        );
     }
 
     #[test]
     fn empty_fluid_step_is_a_noop() {
-        let basin = Basin { min_x: -100.0, max_x: 100.0, floor_y: 100.0 };
+        let basin = Basin {
+            min_x: -100.0,
+            max_x: 100.0,
+            floor_y: 100.0,
+        };
         let mut fluid = Fluid::new(FluidParams::default(), basin);
         fluid.step(1.0 / 60.0);
         assert_eq!(fluid.particle_count(), 0);
@@ -436,7 +481,11 @@ mod tests {
 
     #[test]
     fn contacts_push_particles_out_and_report_reaction() {
-        let basin = Basin { min_x: -200.0, max_x: 200.0, floor_y: 200.0 };
+        let basin = Basin {
+            min_x: -200.0,
+            max_x: 200.0,
+            floor_y: 200.0,
+        };
         let mut fluid = Fluid::new(FluidParams::default(), basin);
         fluid.spawn_block(Point2D::new(-30.0, -30.0), 5, 5, 14.0); // a block straddling the origin
         let pr = fluid.params().particle_radius;
@@ -449,10 +498,16 @@ mod tests {
         // Every particle now sits at or beyond the contact surface (radius + particle radius).
         for p in fluid.positions() {
             let d = (p - center).length();
-            assert!(d >= radius + pr - 0.5, "particle pushed out of the contact (d {d})");
+            assert!(
+                d >= radius + pr - 0.5,
+                "particle pushed out of the contact (d {d})"
+            );
         }
         // The fluid reported a non-zero reaction back on the overlapped solid.
-        assert!(reactions[0].length() > 0.0, "non-zero reaction on the overlapped contact");
+        assert!(
+            reactions[0].length() > 0.0,
+            "non-zero reaction on the overlapped contact"
+        );
         // An empty contact list is a no-op.
         assert!(fluid.resolve_contacts(&[]).is_empty());
     }
@@ -461,7 +516,11 @@ mod tests {
     fn obb_contact_pushes_particles_out_of_the_box() {
         // An axis-aligned box (local == world) clears every particle from its inflated interior - the
         // true-shape coupling, vs the circle approximation that would over-push at the box's edges.
-        let basin = Basin { min_x: -300.0, max_x: 300.0, floor_y: 300.0 };
+        let basin = Basin {
+            min_x: -300.0,
+            max_x: 300.0,
+            floor_y: 300.0,
+        };
         let mut fluid = Fluid::new(FluidParams::default(), basin);
         fluid.spawn_block(Point2D::new(-40.0, -40.0), 6, 6, 14.0); // a block over the origin
         let pr = fluid.params().particle_radius;
@@ -474,6 +533,9 @@ mod tests {
             let inside = p.x.abs() < half.0 + pr - 0.5 && p.y.abs() < half.1 + pr - 0.5;
             assert!(!inside, "particle pushed out of the box (was at {p:?})");
         }
-        assert!(reactions[0].length() > 0.0, "non-zero reaction on the overlapped box");
+        assert!(
+            reactions[0].length() > 0.0,
+            "non-zero reaction on the overlapped box"
+        );
     }
 }

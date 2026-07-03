@@ -40,7 +40,7 @@ use crate::cable::hash::hash_cabal_id;
 use crate::cable::hash_post;
 use crate::cable::persistent_store::PersistentCabalStore;
 use crate::cable::sign::sign_post;
-use crate::cable::wire::{operation_to_post, CabalExt};
+use crate::cable::wire::{CabalExt, operation_to_post};
 use crate::{BilateralProtocol, ChannelName, MurmuringError, Post, PostId, PostKind};
 
 /// Cable protocol concrete runtime.
@@ -264,7 +264,12 @@ impl CableEngine {
 
     /// Get a single post by id within a cabal.
     pub fn get_post(&self, cabal_id: &[u8; 32], post_id: &PostId) -> Option<Post> {
-        self.session(cabal_id).ok()?.store.get(post_id).ok().flatten()
+        self.session(cabal_id)
+            .ok()?
+            .store
+            .get(post_id)
+            .ok()
+            .flatten()
     }
 
     /// All posts in a channel of a cabal, in author-asserted time order.

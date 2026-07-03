@@ -53,7 +53,8 @@ impl Simulation {
             .friction(0.0)
             .collision_groups(scene_groups())
             .build();
-        self.colliders.insert_with_parent(c, handle, &mut self.bodies);
+        self.colliders
+            .insert_with_parent(c, handle, &mut self.bodies);
         // Keep the collider shape alongside the handle for the host's shape-aware paint. (P4b.)
         let id = SceneBodyId(self.next_scene_id);
         self.next_scene_id += 1;
@@ -100,18 +101,20 @@ impl Simulation {
     /// — the host's read for the shape-aware backdrop paint. Reflects the last [`Self::tick`];
     /// order is unspecified. (Physics scenes P1 / P4b.)
     pub fn scene_bodies(&self) -> impl Iterator<Item = SceneBodyView> + '_ {
-        self.scene_bodies.iter().filter_map(|(&id, (handle, collider))| {
-            self.bodies.get(*handle).map(|b| {
-                let t = b.translation();
-                SceneBodyView {
-                    id,
-                    position: Point2D::new(t.x, t.y),
-                    rotation: b.rotation().angle(),
-                    collider: collider.clone(),
-                    sprite: self.scene_sprites.get(&id).cloned(),
-                }
+        self.scene_bodies
+            .iter()
+            .filter_map(|(&id, (handle, collider))| {
+                self.bodies.get(*handle).map(|b| {
+                    let t = b.translation();
+                    SceneBodyView {
+                        id,
+                        position: Point2D::new(t.x, t.y),
+                        rotation: b.rotation().angle(),
+                        collider: collider.clone(),
+                        sprite: self.scene_sprites.get(&id).cloned(),
+                    }
+                })
             })
-        })
     }
 
     /// Number of scene bodies in the world. (Physics scenes P1.)
@@ -141,7 +144,11 @@ impl Simulation {
         self.set_gravity(spec.gravity);
         // Perpetual backdrops coast (near-zero damping); settling scenes use the heavier
         // SCENE_DAMPING so they come to rest. (Physics scenes P4a.)
-        let damping = if spec.perpetual { PERPETUAL_SCENE_DAMPING } else { SCENE_DAMPING };
+        let damping = if spec.perpetual {
+            PERPETUAL_SCENE_DAMPING
+        } else {
+            SCENE_DAMPING
+        };
         // Spawn bodies, keeping their handles in spec order so joints reference them by index.
         let mut handles: Vec<RigidBodyHandle> =
             Vec::with_capacity(spec.bodies.len().min(SCENE_BODY_CAP));
@@ -166,7 +173,8 @@ impl Simulation {
                 .friction(0.3)
                 .collision_groups(scene_groups())
                 .build();
-            self.colliders.insert_with_parent(c, handle, &mut self.bodies);
+            self.colliders
+                .insert_with_parent(c, handle, &mut self.bodies);
             let id = SceneBodyId(self.next_scene_id);
             self.next_scene_id += 1;
             self.scene_bodies.insert(id, (handle, b.collider.clone()));
@@ -200,22 +208,37 @@ impl Simulation {
                     .build();
                 self.impulse_joints.insert(a, b, jt, true);
             }
-            SceneJoint::Revolute { anchor_a, anchor_b, motor } => {
-                let mut builder =
-                    RevoluteJointBuilder::new().local_anchor1(v(anchor_a)).local_anchor2(v(anchor_b));
+            SceneJoint::Revolute {
+                anchor_a,
+                anchor_b,
+                motor,
+            } => {
+                let mut builder = RevoluteJointBuilder::new()
+                    .local_anchor1(v(anchor_a))
+                    .local_anchor2(v(anchor_b));
                 if let Some(m) = motor {
                     builder = builder.motor_velocity(m.target_vel, m.factor);
                 }
                 self.impulse_joints.insert(a, b, builder.build(), true);
             }
-            SceneJoint::Rope { anchor_a, anchor_b, length } => {
+            SceneJoint::Rope {
+                anchor_a,
+                anchor_b,
+                length,
+            } => {
                 let jt = RopeJointBuilder::new(length)
                     .local_anchor1(v(anchor_a))
                     .local_anchor2(v(anchor_b))
                     .build();
                 self.impulse_joints.insert(a, b, jt, true);
             }
-            SceneJoint::Spring { anchor_a, anchor_b, rest_length, stiffness, damping } => {
+            SceneJoint::Spring {
+                anchor_a,
+                anchor_b,
+                rest_length,
+                stiffness,
+                damping,
+            } => {
                 let jt = SpringJointBuilder::new(rest_length, stiffness, damping)
                     .local_anchor1(v(anchor_a))
                     .local_anchor2(v(anchor_b))
@@ -250,7 +273,11 @@ impl Simulation {
     /// (`NODE | SCENE`) filter. (Physics scenes P2.)
     fn remask_node(&mut self, body_handle: RigidBodyHandle, tangible: bool) {
         let groups = if tangible {
-            InteractionGroups::new(NODE_GROUP, NODE_GROUP | SCENE_GROUP, InteractionTestMode::And)
+            InteractionGroups::new(
+                NODE_GROUP,
+                NODE_GROUP | SCENE_GROUP,
+                InteractionTestMode::And,
+            )
         } else {
             crate::node_groups()
         };

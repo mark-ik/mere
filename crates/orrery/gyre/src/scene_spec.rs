@@ -71,7 +71,10 @@ impl SceneBodySpec {
 
     /// A fixed (immovable) body at `position` — a floor, wall, peg, or joint anchor.
     pub fn fixed(collider: NodeCollider, position: (f32, f32)) -> Self {
-        Self { body_type: SceneBodyType::Fixed, ..Self::dynamic(collider, position) }
+        Self {
+            body_type: SceneBodyType::Fixed,
+            ..Self::dynamic(collider, position)
+        }
     }
 
     /// Set the initial velocity (px/s).
@@ -113,12 +116,23 @@ impl SceneBodySpec {
 #[derive(Clone, Copy, Debug)]
 pub enum SceneJoint {
     /// Rigidly weld the two bodies' anchor points together (no relative motion).
-    Fixed { anchor_a: (f32, f32), anchor_b: (f32, f32) },
+    Fixed {
+        anchor_a: (f32, f32),
+        anchor_b: (f32, f32),
+    },
     /// A hinge: the two anchor points coincide and the bodies rotate freely about that pivot. An
     /// optional motor drives the hinge (a powered drum, a wheel).
-    Revolute { anchor_a: (f32, f32), anchor_b: (f32, f32), motor: Option<JointMotorSpec> },
+    Revolute {
+        anchor_a: (f32, f32),
+        anchor_b: (f32, f32),
+        motor: Option<JointMotorSpec>,
+    },
     /// A rope: the anchor points stay at most `length` apart (a chain link, a string, a tether).
-    Rope { anchor_a: (f32, f32), anchor_b: (f32, f32), length: f32 },
+    Rope {
+        anchor_a: (f32, f32),
+        anchor_b: (f32, f32),
+        length: f32,
+    },
     /// A spring along the line between the anchors, settling toward `rest_length`.
     Spring {
         anchor_a: (f32, f32),
@@ -155,7 +169,11 @@ pub enum SceneField {
     /// A whirlpool centred at `center`: each dynamic scene body feels a tangential force of
     /// magnitude `strength` (the swirl, counter-clockwise) plus an inward pull `inward` toward the
     /// centre, so loose props orbit and slowly spiral in.
-    Vortex { center: (f32, f32), strength: f32, inward: f32 },
+    Vortex {
+        center: (f32, f32),
+        strength: f32,
+        inward: f32,
+    },
 }
 
 /// A continuous body spawner: emits dynamic scene bodies over time (a fountain, rain, a sand

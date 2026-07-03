@@ -343,7 +343,9 @@ fn subscribe_emits_locally_authored_posts() {
 
     let id = engine.post_text(&cabal_id, "session", "hello", 1).unwrap();
 
-    let got = rx.try_recv().expect("subscriber receives the authored post");
+    let got = rx
+        .try_recv()
+        .expect("subscriber receives the authored post");
     assert_eq!(hash_post(&got), id);
     assert!(rx.try_recv().is_err(), "nothing else is pending");
 }
@@ -370,7 +372,9 @@ fn subscribe_emits_an_ingested_post_once_across_duplicate_ingest() {
     let alice = engine_with_seed([10; 32]);
     let cabal_key = [0xcd; 32];
     let alice_cabal = alice.open_cabal(cabal_key).unwrap();
-    let id = alice.post_text(&alice_cabal, "session", "hi bob", 1).unwrap();
+    let id = alice
+        .post_text(&alice_cabal, "session", "hi bob", 1)
+        .unwrap();
     let post = alice.get_post(&alice_cabal, &id).unwrap();
 
     let bob = engine_with_seed([11; 32]);
@@ -383,5 +387,8 @@ fn subscribe_emits_an_ingested_post_once_across_duplicate_ingest() {
 
     let got = rx.try_recv().expect("ingested post is emitted");
     assert_eq!(hash_post(&got), id);
-    assert!(rx.try_recv().is_err(), "the duplicate ingest does not re-emit");
+    assert!(
+        rx.try_recv().is_err(),
+        "the duplicate ingest does not re-emit"
+    );
 }

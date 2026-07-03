@@ -369,7 +369,6 @@ impl PhysicsProfile {
             },
         }
     }
-
 }
 
 pub fn physics_profile_descriptors() -> &'static [PhysicsProfileDescriptor] {

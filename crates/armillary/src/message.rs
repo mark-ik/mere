@@ -73,11 +73,17 @@ mod tests {
         assert!(current.accepts(stamp), "fresh work is accepted");
 
         current.nav.bump(); // the tile navigated
-        assert!(!current.accepts(stamp), "a scene from before the navigation is stale");
+        assert!(
+            !current.accepts(stamp),
+            "a scene from before the navigation is stale"
+        );
 
         let after_nav = current;
         assert!(current.accepts(after_nav));
         current.viewport.bump(); // and then it resized
-        assert!(!current.accepts(after_nav), "a scene from before the resize is stale");
+        assert!(
+            !current.accepts(after_nav),
+            "a scene from before the resize is stale"
+        );
     }
 }

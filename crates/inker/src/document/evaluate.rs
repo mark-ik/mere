@@ -281,7 +281,9 @@ pub fn evaluate_blocks(
                 outcome.evaluated += 1;
             }
             Err(error) => {
-                outcome.failed.push((lang, format!("render output: {error}")));
+                outcome
+                    .failed
+                    .push((lang, format!("render output: {error}")));
                 blocks.push(block);
             }
         }
@@ -343,8 +345,7 @@ mod tests {
     #[test]
     fn a_plain_result_renders_as_a_block() {
         let mut document = doc_with(vec![eval_fence("lua eval", "return 1 + 1")]);
-        let mut evaluate =
-            |_lang: &str, _src: &str| Ok(EvalOutput::plain("2"));
+        let mut evaluate = |_lang: &str, _src: &str| Ok(EvalOutput::plain("2"));
         let outcome = evaluate_blocks(&mut document, &mut evaluate, &mut stub_render, &allow_lua());
 
         assert_eq!(outcome.evaluated, 1);
@@ -352,7 +353,10 @@ mod tests {
             &document.blocks[0],
             Block::Paragraph { spans } if spans == &vec![InlineSpan::Text("2".into())]
         ));
-        assert!(outcome.provenance.get(0).is_some(), "spliced block is marked generated");
+        assert!(
+            outcome.provenance.get(0).is_some(),
+            "spliced block is marked generated"
+        );
     }
 
     #[test]
@@ -399,8 +403,7 @@ mod tests {
 
         // Enabled, but the language is not allowed.
         let mut document = doc_with(vec![eval_fence("python eval", "print(1)")]);
-        let outcome =
-            evaluate_blocks(&mut document, &mut evaluate, &mut stub_render, &allow_lua());
+        let outcome = evaluate_blocks(&mut document, &mut evaluate, &mut stub_render, &allow_lua());
         assert_eq!(outcome.denied.len(), 1);
         assert!(outcome.denied[0].1.contains("allowlist"));
         assert!(matches!(&document.blocks[0], Block::CodeBlock { .. }));

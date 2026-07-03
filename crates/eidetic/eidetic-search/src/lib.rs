@@ -37,11 +37,9 @@ pub mod fusion;
 pub mod index;
 pub mod spec;
 
-pub use fusion::{fuse, FusedHit};
+pub use fusion::{FusedHit, fuse};
 pub use index::{Hit, TrailIndex};
-pub use spec::{
-    bootstrap_search_schema, SearchIndexSpec, SEARCH_INDEX_SCHEMA_REF, SPEC_SIDECAR,
-};
+pub use spec::{SEARCH_INDEX_SCHEMA_REF, SPEC_SIDECAR, SearchIndexSpec, bootstrap_search_schema};
 
 /// Search-lane failures.
 #[derive(Debug, thiserror::Error)]
@@ -49,9 +47,7 @@ pub enum SearchError {
     /// The on-disk index was written by a different tantivy format than this
     /// build links. Re-mint from traces ([`TrailIndex::rebuild`]) — the
     /// corpus is the source of truth, the index is derived.
-    #[error(
-        "index format mismatch: on disk {found}, this build {current} — re-mint from traces"
-    )]
+    #[error("index format mismatch: on disk {found}, this build {current} — re-mint from traces")]
     FormatMismatch { found: String, current: String },
     /// No index (or no spec sidecar) at the path. Build one from traces.
     #[error("no trail index at {0} — build one from traces first")]

@@ -137,11 +137,7 @@ fn content_type_by_extension(path: &str) -> Option<String> {
     Some(ct.to_string())
 }
 
-fn render_knot(
-    address: &str,
-    body: &str,
-    djot: bool,
-) -> Result<inker::EngineDocument, String> {
+fn render_knot(address: &str, body: &str, djot: bool) -> Result<inker::EngineDocument, String> {
     let mut input = EngineInput::new(address, body);
     input.content_type = Some("text/x-knot".to_string());
     let result = if djot {

@@ -203,9 +203,9 @@ pub fn apply_link_statements(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kernel::graph::fixtures::GraphFixtures;
     use crate::{DocumentProvenance, DocumentTrustState};
     use kernel::graph::RelationSelector;
+    use kernel::graph::fixtures::GraphFixtures;
 
     fn doc(blocks: Vec<Block>) -> EngineDocument {
         EngineDocument {
@@ -284,7 +284,11 @@ mod tests {
         let source = graph.add_node("knot:test".to_string(), Default::default());
         let target = graph.add_node("mere://node/topic".to_string(), Default::default());
 
-        let outcome = apply_link_statements(&mut graph, source, &link_doc("mere://node/topic", Some("cites")));
+        let outcome = apply_link_statements(
+            &mut graph,
+            source,
+            &link_doc("mere://node/topic", Some("cites")),
+        );
 
         assert_eq!(outcome.edges_asserted, 1);
         assert!(outcome.pending_targets.is_empty());
@@ -304,11 +308,17 @@ mod tests {
         let mut graph = Graph::new();
         let source = graph.add_node("knot:test".to_string(), Default::default());
 
-        let outcome =
-            apply_link_statements(&mut graph, source, &link_doc("mere://node/absent", Some("cites")));
+        let outcome = apply_link_statements(
+            &mut graph,
+            source,
+            &link_doc("mere://node/absent", Some("cites")),
+        );
 
         assert_eq!(outcome.edges_asserted, 0);
-        assert_eq!(outcome.pending_targets, vec!["mere://node/absent".to_string()]);
+        assert_eq!(
+            outcome.pending_targets,
+            vec!["mere://node/absent".to_string()]
+        );
     }
 
     #[test]

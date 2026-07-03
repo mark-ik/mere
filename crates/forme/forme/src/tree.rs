@@ -195,10 +195,9 @@ impl<N: MemberId> GraphTree<N> {
     pub fn scroll_anchor(&self) -> Option<&N> {
         self.scroll_anchor.as_ref()
     }
-
 }
 
-mod layout;
 mod actions;
+mod layout;
 #[cfg(test)]
 mod tests;

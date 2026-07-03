@@ -42,13 +42,15 @@ use serde::{Deserialize, Serialize};
 
 use paint_list_api::{
     ColorF, CommonPlacement, DeviceIntSize, EngineId, FontInstanceKey, FontResource, GlyphInstance,
-    IdNamespace, LayoutPoint, LayoutRect, LineItem, LineOrientation, LineStyle, PaintCmd, PaintList,
-    RectItem, TextOptions, TextRunItem,
+    IdNamespace, LayoutPoint, LayoutRect, LineItem, LineOrientation, LineStyle, PaintCmd,
+    PaintList, RectItem, TextOptions, TextRunItem,
 };
 
 use crate::font_table::FontTable;
 use crate::style::ColorVocabulary;
-use crate::types::{DocumentRenderPacket, FontFaceId, GlyphRun, Rect, RenderedBlock, RenderedBlockKind};
+use crate::types::{
+    DocumentRenderPacket, FontFaceId, GlyphRun, Rect, RenderedBlock, RenderedBlockKind,
+};
 
 /// Half the hairline thickness used for [`RenderedBlockKind::Rule`]
 /// (the rule fills a 1px strip centered on its mid-line).
@@ -143,10 +145,10 @@ impl<'a> Builder<'a> {
                 for run in glyph_runs {
                     self.emit_glyph_run(run);
                 }
-            },
+            }
             RenderedBlockKind::Image { .. } => {
                 self.push_rect(block.bounds, self.colors.placeholder_image);
-            },
+            }
             RenderedBlockKind::Rule => {
                 // Hairline: a 1px-tall strip centered on the rect's
                 // vertical midpoint. Lowered as a (filled) line primitive.
@@ -164,12 +166,12 @@ impl<'a> Builder<'a> {
                     orientation: LineOrientation::Horizontal,
                     wavy_thickness: 0.0,
                 }));
-            },
+            }
             RenderedBlockKind::Group { children } => {
                 for child in children {
                     self.emit_block(child);
                 }
-            },
+            }
         }
     }
 
@@ -267,9 +269,7 @@ mod tests {
     use crate::layout::layout_document;
     use crate::style_sheet::DocumentStyleSheet;
     use crate::types::Viewport;
-    use inker::{
-        Block, DocumentProvenance, DocumentTrustState, EngineDocument, InlineSpan,
-    };
+    use inker::{Block, DocumentProvenance, DocumentTrustState, EngineDocument, InlineSpan};
 
     fn doc(blocks: Vec<Block>) -> EngineDocument {
         EngineDocument {
@@ -287,8 +287,11 @@ mod tests {
     /// Lay out + build the paint list, returning both the list and the
     /// font sidecar (so tests can assert shipped faces came from parley).
     fn list_for(blocks: Vec<Block>) -> (InkerPaintList, FontTable) {
-        let laid =
-            layout_document(&doc(blocks), Viewport::new(640.0, 480.0), &DocumentStyleSheet::default());
+        let laid = layout_document(
+            &doc(blocks),
+            Viewport::new(640.0, 480.0),
+            &DocumentStyleSheet::default(),
+        );
         let list = paint_list_from_packet(&laid.packet, &laid.fonts, &ColorVocabulary::default());
         (list, laid.fonts)
     }
@@ -512,8 +515,11 @@ mod tests {
 
     #[test]
     fn viewport_rounds_to_device_int_size() {
-        let laid =
-            layout_document(&doc(vec![]), Viewport::new(640.4, 480.6), &DocumentStyleSheet::default());
+        let laid = layout_document(
+            &doc(vec![]),
+            Viewport::new(640.4, 480.6),
+            &DocumentStyleSheet::default(),
+        );
         let list = paint_list_from_packet(&laid.packet, &laid.fonts, &ColorVocabulary::default());
         assert_eq!(list.viewport().width, 640);
         assert_eq!(list.viewport().height, 481);

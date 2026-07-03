@@ -133,7 +133,10 @@ impl Dispatcher {
             log::warn!("misfin: recording sender failed: {error}");
             return MisfinResponse::new(40, "Temporary server error.");
         }
-        match self.store.store(&recipient, &fingerprint, None, message, now) {
+        match self
+            .store
+            .store(&recipient, &fingerprint, None, message, now)
+        {
             Ok(_) => MisfinResponse::new(20, &served.fingerprint),
             Err(error) => {
                 log::warn!("misfin: storing message failed: {error}");
@@ -143,7 +146,9 @@ impl Dispatcher {
     }
 
     fn serves_host(&self, host: &str) -> bool {
-        self.served.iter().any(|mailbox| mailbox.address.host == host)
+        self.served
+            .iter()
+            .any(|mailbox| mailbox.address.host == host)
     }
 
     fn find_mailbox(&self, recipient: &MisfinAddress) -> Option<&ServedMailbox> {
@@ -383,7 +388,7 @@ impl ClientCertVerifier for AcceptAnyClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{deterministic_identity, MisfinIdentitySpec};
+    use crate::{MisfinIdentitySpec, deterministic_identity};
 
     fn spec(addr: &str) -> MisfinIdentitySpec {
         MisfinIdentitySpec {
@@ -434,12 +439,16 @@ mod tests {
         let cert = CertificateDer::from(cert_der(3, "ana@other.test"));
         // No space → no message.
         assert_eq!(
-            dispatcher.dispatch("misfin://mark@example.test", Some(&cert), 1).status,
+            dispatcher
+                .dispatch("misfin://mark@example.test", Some(&cert), 1)
+                .status,
             59
         );
         // Wrong scheme.
         assert_eq!(
-            dispatcher.dispatch("gemini://mark@example.test hi", Some(&cert), 1).status,
+            dispatcher
+                .dispatch("gemini://mark@example.test hi", Some(&cert), 1)
+                .status,
             59
         );
     }
@@ -469,7 +478,10 @@ mod tests {
         let response =
             dispatcher.dispatch("misfin://mark@example.test Hello Mark", Some(&cert), 1234);
         assert_eq!(response.status, 20);
-        assert_eq!(response.meta, recipient_fingerprint, "META is the recipient's fingerprint");
+        assert_eq!(
+            response.meta, recipient_fingerprint,
+            "META is the recipient's fingerprint"
+        );
 
         let inbox = dispatcher.store.list("mark@example.test").unwrap();
         assert_eq!(inbox.len(), 1);
@@ -480,7 +492,8 @@ mod tests {
 
     #[tokio::test]
     async fn round_trip_delivers_over_tls() {
-        let server_identity = deterministic_identity(&[1u8; 32], &spec("mark@example.test")).unwrap();
+        let server_identity =
+            deterministic_identity(&[1u8; 32], &spec("mark@example.test")).unwrap();
         let server_fingerprint = sha256_hex(&server_identity.certificate_der);
         let store = MailboxStore::in_memory().unwrap();
         let config = MisfinServerConfig {
@@ -492,10 +505,7 @@ mod tests {
             }],
         };
         let server = MisfinServer::new(config, store.clone()).unwrap();
-        let bound = server
-            .bind("127.0.0.1:0".parse().unwrap())
-            .await
-            .unwrap();
+        let bound = server.bind("127.0.0.1:0".parse().unwrap()).await.unwrap();
         let addr = bound.local_addr().unwrap();
 
         let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
@@ -571,7 +581,10 @@ mod tests {
                 Ok(HandshakeSignatureValid::assertion())
             }
             fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-                vec![SignatureScheme::ED25519, SignatureScheme::ECDSA_NISTP256_SHA256]
+                vec![
+                    SignatureScheme::ED25519,
+                    SignatureScheme::ECDSA_NISTP256_SHA256,
+                ]
             }
         }
 

@@ -1,0 +1,33 @@
+[package]
+name = "content-contract"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Content worker command/update message contract and transferable transport for Mere."
+
+[features]
+scripted = []
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+document-canvas.workspace = true
+kernel.workspace = true
+linked-data.workspace = true
+linebender_resource_handle = "0.1"
+parley.workspace = true
+postcard = { version = "1", features = ["alloc"] }
+serde.workspace = true
+netrender = { git = "https://github.com/mark-ik/netrender.git", branch = "main", features = ["serde"] }
+paint_list_render = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features = ["DedicatedWorkerGlobalScope", "Worker"] }
+
+[lints]
+workspace = true

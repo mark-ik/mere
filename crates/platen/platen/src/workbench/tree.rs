@@ -27,7 +27,10 @@ pub(super) struct Stack {
 
 impl Stack {
     pub(super) fn single(member: GraphMemberId) -> Self {
-        Self { members: vec![member], active: 0 }
+        Self {
+            members: vec![member],
+            active: 0,
+        }
     }
 
     /// Drop `member` if present; clamp `active`. Returns whether it was removed.
@@ -54,7 +57,10 @@ pub(super) struct Branch {
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum Pane {
     Stack(Stack),
-    Split { axis: SplitAxis, children: Vec<Branch> },
+    Split {
+        axis: SplitAxis,
+        children: Vec<Branch>,
+    },
 }
 
 impl Pane {
@@ -89,9 +95,9 @@ impl Pane {
                 s.members.iter().copied().find(|m| *m != member)
             }
             Pane::Stack(_) => None,
-            Pane::Split { children, .. } => {
-                children.iter().find_map(|b| b.pane.sibling_in_stack(member))
-            }
+            Pane::Split { children, .. } => children
+                .iter()
+                .find_map(|b| b.pane.sibling_in_stack(member)),
         }
     }
 
@@ -184,9 +190,9 @@ impl Pane {
                 }
                 true
             }
-            Pane::Split { children, .. } => {
-                children.iter_mut().any(|b| b.pane.stack_into(member, target))
-            }
+            Pane::Split { children, .. } => children
+                .iter_mut()
+                .any(|b| b.pane.stack_into(member, target)),
         }
     }
 
@@ -204,18 +210,45 @@ impl Pane {
     ) -> bool {
         match self {
             Pane::Stack(s) if s.members.contains(&target) => {
-                let this = std::mem::replace(self, Pane::Stack(Stack { members: Vec::new(), active: 0 }));
+                let this = std::mem::replace(
+                    self,
+                    Pane::Stack(Stack {
+                        members: Vec::new(),
+                        active: 0,
+                    }),
+                );
                 let fresh = Pane::leaf(member);
                 let children = if after {
-                    vec![Branch { fraction: 0.5, pane: this }, Branch { fraction: 0.5, pane: fresh }]
+                    vec![
+                        Branch {
+                            fraction: 0.5,
+                            pane: this,
+                        },
+                        Branch {
+                            fraction: 0.5,
+                            pane: fresh,
+                        },
+                    ]
                 } else {
-                    vec![Branch { fraction: 0.5, pane: fresh }, Branch { fraction: 0.5, pane: this }]
+                    vec![
+                        Branch {
+                            fraction: 0.5,
+                            pane: fresh,
+                        },
+                        Branch {
+                            fraction: 0.5,
+                            pane: this,
+                        },
+                    ]
                 };
                 *self = Pane::Split { axis, children };
                 true
             }
             Pane::Stack(_) => false,
-            Pane::Split { axis: my_axis, children } => {
+            Pane::Split {
+                axis: my_axis,
+                children,
+            } => {
                 // The direct child that is target's own stack, if any.
                 let direct = children
                     .iter()
@@ -231,14 +264,22 @@ impl Pane {
                             b.fraction *= 1.0 - new_frac;
                         }
                         let at = if after { i + 1 } else { i };
-                        children.insert(at, Branch { fraction: new_frac, pane: Pane::leaf(member) });
+                        children.insert(
+                            at,
+                            Branch {
+                                fraction: new_frac,
+                                pane: Pane::leaf(member),
+                            },
+                        );
                         return true;
                     }
                     // Cross axis: nest — replace the child stack with an `axis` split.
                     return children[i].pane.split_beside(member, target, axis, after);
                 }
                 // target is deeper in some child: recurse.
-                children.iter_mut().any(|b| b.pane.split_beside(member, target, axis, after))
+                children
+                    .iter_mut()
+                    .any(|b| b.pane.split_beside(member, target, axis, after))
             }
         }
     }
@@ -247,7 +288,9 @@ impl Pane {
     /// each level), or `None` if the path does not land on a split.
     pub(super) fn fractions_at(&self, path: &[usize]) -> Option<Vec<f32>> {
         match (self, path.split_first()) {
-            (Pane::Split { children, .. }, None) => Some(children.iter().map(|b| b.fraction).collect()),
+            (Pane::Split { children, .. }, None) => {
+                Some(children.iter().map(|b| b.fraction).collect())
+            }
             (Pane::Split { children, .. }, Some((&i, rest))) => {
                 children.get(i).and_then(|b| b.pane.fractions_at(rest))
             }
@@ -333,8 +376,14 @@ mod tests {
         let mut root = Pane::Split {
             axis: SplitAxis::Row,
             children: vec![
-                Branch { fraction: 0.5, pane: Pane::leaf(m(1)) },
-                Branch { fraction: 0.5, pane: Pane::leaf(m(2)) },
+                Branch {
+                    fraction: 0.5,
+                    pane: Pane::leaf(m(1)),
+                },
+                Branch {
+                    fraction: 0.5,
+                    pane: Pane::leaf(m(2)),
+                },
             ],
         };
         assert!(root.split_beside(m(3), m(2), SplitAxis::Row, true));
@@ -356,8 +405,14 @@ mod tests {
         let mut root = Pane::Split {
             axis: SplitAxis::Row,
             children: vec![
-                Branch { fraction: 0.5, pane: Pane::leaf(m(1)) },
-                Branch { fraction: 0.5, pane: Pane::leaf(m(2)) },
+                Branch {
+                    fraction: 0.5,
+                    pane: Pane::leaf(m(1)),
+                },
+                Branch {
+                    fraction: 0.5,
+                    pane: Pane::leaf(m(2)),
+                },
             ],
         };
         assert!(root.split_beside(m(3), m(2), SplitAxis::Column, true));
@@ -367,7 +422,11 @@ mod tests {
                 assert_eq!(children.len(), 2, "still two top-level columns");
                 match &children[1].pane {
                     Pane::Split { axis, children } => {
-                        assert_eq!(*axis, SplitAxis::Column, "the second column nests a Column split");
+                        assert_eq!(
+                            *axis,
+                            SplitAxis::Column,
+                            "the second column nests a Column split"
+                        );
                         assert_eq!(children.len(), 2);
                     }
                     other => panic!("expected a nested column split, got {other:?}"),
@@ -384,14 +443,23 @@ mod tests {
         let mut root = Pane::Split {
             axis: SplitAxis::Row,
             children: vec![
-                Branch { fraction: 0.5, pane: Pane::leaf(m(1)) },
+                Branch {
+                    fraction: 0.5,
+                    pane: Pane::leaf(m(1)),
+                },
                 Branch {
                     fraction: 0.5,
                     pane: Pane::Split {
                         axis: SplitAxis::Column,
                         children: vec![
-                            Branch { fraction: 0.5, pane: Pane::leaf(m(2)) },
-                            Branch { fraction: 0.5, pane: Pane::leaf(m(3)) },
+                            Branch {
+                                fraction: 0.5,
+                                pane: Pane::leaf(m(2)),
+                            },
+                            Branch {
+                                fraction: 0.5,
+                                pane: Pane::leaf(m(3)),
+                            },
                         ],
                     },
                 },
@@ -401,8 +469,10 @@ mod tests {
         match &root {
             Pane::Split { children, .. } => {
                 assert_eq!(children.len(), 2);
-                assert!(matches!(&children[1].pane, Pane::Stack(s) if s.members == vec![m(2)]),
-                    "the column collapsed to a plain stack");
+                assert!(
+                    matches!(&children[1].pane, Pane::Stack(s) if s.members == vec![m(2)]),
+                    "the column collapsed to a plain stack"
+                );
             }
             other => panic!("expected a row split, got {other:?}"),
         }
@@ -414,8 +484,14 @@ mod tests {
         let mut root = Pane::Split {
             axis: SplitAxis::Row,
             children: vec![
-                Branch { fraction: 0.5, pane: Pane::leaf(m(1)) },
-                Branch { fraction: 0.5, pane: Pane::leaf(m(2)) },
+                Branch {
+                    fraction: 0.5,
+                    pane: Pane::leaf(m(1)),
+                },
+                Branch {
+                    fraction: 0.5,
+                    pane: Pane::leaf(m(2)),
+                },
             ],
         };
         // Stack 1 into 2's stack (the caller removes 1 from its slot first).
@@ -429,21 +505,38 @@ mod tests {
         let mut root = Pane::Split {
             axis: SplitAxis::Row,
             children: vec![
-                Branch { fraction: 0.5, pane: Pane::leaf(m(1)) },
+                Branch {
+                    fraction: 0.5,
+                    pane: Pane::leaf(m(1)),
+                },
                 Branch {
                     fraction: 0.5,
                     pane: Pane::Split {
                         axis: SplitAxis::Column,
                         children: vec![
-                            Branch { fraction: 0.5, pane: Pane::leaf(m(2)) },
-                            Branch { fraction: 0.5, pane: Pane::leaf(m(3)) },
+                            Branch {
+                                fraction: 0.5,
+                                pane: Pane::leaf(m(2)),
+                            },
+                            Branch {
+                                fraction: 0.5,
+                                pane: Pane::leaf(m(3)),
+                            },
                         ],
                     },
                 },
             ],
         };
-        assert_eq!(root.fractions_at(&[]).unwrap().len(), 2, "top-level row has two children");
-        assert_eq!(root.fractions_at(&[1]).unwrap().len(), 2, "the nested column has two");
+        assert_eq!(
+            root.fractions_at(&[]).unwrap().len(),
+            2,
+            "top-level row has two children"
+        );
+        assert_eq!(
+            root.fractions_at(&[1]).unwrap().len(),
+            2,
+            "the nested column has two"
+        );
         assert!(root.set_fractions_at(&[1], &[0.8, 0.2]));
         let nested = root.fractions_at(&[1]).unwrap();
         assert!((nested[0] - 0.8).abs() < 1e-5 && (nested[1] - 0.2).abs() < 1e-5);

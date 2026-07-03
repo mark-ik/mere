@@ -22,11 +22,13 @@ use serval_scripted_dom::NodeId;
 use xilem_serval::PointerClick;
 use xilem_serval::{AnyView, ServalCtx, ServalElement, el};
 
+#[cfg(test)]
+use crate::roster::RosterSnapshot;
+#[cfg(test)]
+use crate::roster::roster_sheet;
 use crate::roster::{
     FieldRow, GraphletRow, LinkRow, RosterDetail, RosterRow, RosterSubject, RosterTab,
 };
-#[cfg(test)]
-use crate::roster::{RosterSnapshot, roster_sheet};
 #[cfg(test)]
 use crate::view_pane::ViewPane;
 

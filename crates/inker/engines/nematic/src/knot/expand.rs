@@ -15,7 +15,7 @@
 use std::mem;
 
 use inker::{
-    BlockProvenanceMap, Block, DocumentProvenance, DocumentTrustState, Engine, EngineInput,
+    Block, BlockProvenanceMap, DocumentProvenance, DocumentTrustState, Engine, EngineInput,
     InlineSpan,
 };
 

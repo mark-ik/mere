@@ -352,7 +352,12 @@ impl WindowCtx<'_> {
                     // not fall through to gyre, which would grab the node under the card and
                     // never reach the button. (Object card — the press-routing gate.)
                     self.chrome_click(x, y);
+                } else if button == MouseButton::Left && self.try_begin_page_text_selection(x, y) {
+                    return;
                 } else if let Some(b) = orrery_button {
+                    if button == MouseButton::Left {
+                        self.clear_page_text_selection();
+                    }
                     let (ox, oy) = self.orrery_point(x, y);
                     // GA-1 (tear-out G1): a Shift-held left-press on a node arms a
                     // tear-out drag instead of the orrery's node-pin pick, so the

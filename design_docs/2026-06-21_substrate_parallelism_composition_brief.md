@@ -7,7 +7,7 @@ levels of the source docs.
 **Date:** 2026-06-21.
 **Scope:** how the [cross-platform parallelism strategy](mere_docs/research/2026-06-19_cross_platform_parallelism_strategy.md)
 (P-doc: how the engines go fast, cross-platform) and the
-[DocumentScript substrate plan](mere_docs/implementation_strategy/2026-06-21_document_script_substrate_plan.md)
+[DocumentScript substrate plan](archive_docs/2026-07-03_completed_plans/2026-06-21_document_script_substrate_plan.md)
 (D-doc: what a script is allowed to reach, across languages, sandboxed) fit into
 one stack.
 
@@ -244,7 +244,7 @@ What remains:
 
 - [cross_platform_parallelism_strategy](mere_docs/research/2026-06-19_cross_platform_parallelism_strategy.md)
   (P-doc: levers a-e, the PWA / open-web fork, the Scene serialization seam, WASI-out).
-- [document_script_substrate_plan](mere_docs/implementation_strategy/2026-06-21_document_script_substrate_plan.md)
+- [document_script_substrate_plan](archive_docs/2026-07-03_completed_plans/2026-06-21_document_script_substrate_plan.md)
   (D-doc: the capability profiles, the per-turn contract §10.2, the transaction
   contract §10.3, the capability-grant mechanics §10.4, runtime-sharing tension §10.5).
 - [actor_constellation_plan](mere_docs/implementation_strategy/2026-06-03_actor_constellation_plan.md)

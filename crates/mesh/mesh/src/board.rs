@@ -22,7 +22,7 @@ use std::collections::BTreeMap;
 
 use p2panda_core::Operation;
 
-use crate::wire::{from_operation, verify, JobKind, MeshEvent, MeshExt};
+use crate::wire::{JobKind, MeshEvent, MeshExt, from_operation, verify};
 
 /// A job's identity: the hash of its `JobPosted` operation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -107,7 +107,10 @@ impl JobBoard {
                         .insert(*op.hash.as_bytes(), author);
                 }
                 MeshEvent::JobDone { job, result, .. } => {
-                    results.entry(JobId(job)).or_default().insert(author, result);
+                    results
+                        .entry(JobId(job))
+                        .or_default()
+                        .insert(author, result);
                 }
             }
         }
@@ -322,7 +325,11 @@ mod tests {
         } else {
             &w2
         };
-        let loser_kp = if std::ptr::eq(winner_kp, &w1) { &w2 } else { &w1 };
+        let loser_kp = if std::ptr::eq(winner_kp, &w1) {
+            &w2
+        } else {
+            &w1
+        };
 
         // The loser races a result in; the board must not accept it.
         let loser_done = to_operation(

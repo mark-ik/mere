@@ -170,7 +170,7 @@ card is an inert snapshot), so the bridge is *not* needed for node cards. (2) Th
 scry-compositing determination (2026-06-19): **scrying / WebView tiles do NOT use this
 bridge**. They are genuinely-external native composition visuals captured to a texture
 and composited under the chrome with input forwarded by API / CDP, owned by the
-[native-surface-compositing plan](2026-06-19_native_surface_compositing_plan.md)
+[native-surface-compositing plan](../../archive_docs/2026-07-03_completed_plans/2026-06-19_native_surface_compositing_plan.md)
 (revision 2). The bridge's remaining scope is the narrower **serval-rendered
 textured-body**: serval content composited as a texture (the
 [node-representation](2026-06-18_node_representation_arrangement_plan.md) P2 textured-body)

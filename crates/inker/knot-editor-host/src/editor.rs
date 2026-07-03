@@ -12,8 +12,8 @@
 //! pipe), the heading outline + folds, and the rendered preview (via the same
 //! `DjotKnotEngine` the rest of the app renders knots through).
 
+use illume::{Fold, InjectionRegistry, OutlineItem, Span, folds, highlight, outline};
 use inker::{Engine, EngineDocument, EngineError, EngineInput};
-use illume::{folds, highlight, outline, Fold, InjectionRegistry, OutlineItem, Span};
 use nematic::DjotKnotEngine;
 
 /// Derives the editor's views of a knot. Holds the injection registry it highlights
@@ -73,8 +73,7 @@ mod tests {
     use super::*;
     use illume::SyntaxKind;
 
-    const SAMPLE: &str =
-        "# Title\n\nSome _em_ and a code block:\n\n```json\n{\"a\": 1}\n```\n";
+    const SAMPLE: &str = "# Title\n\nSome _em_ and a code block:\n\n```json\n{\"a\": 1}\n```\n";
 
     #[test]
     fn highlights_cover_djot_and_injected_json() {
@@ -94,7 +93,9 @@ mod tests {
     #[test]
     fn renders_a_preview_document_through_the_engine() {
         let r = KnotReadout::new();
-        let doc = r.rendered("mere://note/test", SAMPLE).expect("engine renders");
+        let doc = r
+            .rendered("mere://note/test", SAMPLE)
+            .expect("engine renders");
         assert!(!doc.blocks.is_empty(), "preview should have blocks");
         assert_eq!(doc.content_type, "text/x-knot");
     }

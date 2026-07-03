@@ -1,11 +1,11 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
 
+use super::free_fns::{NativeModRuntime, WasmModRuntime};
 use super::types::*;
-use super::free_fns::{WasmModRuntime, NativeModRuntime};
 
-mod registry_impl;
 mod registry_default;
+mod registry_impl;
 
 /// Runtime registry managing mod lifecycle and status.
 /// Handles discovery, dependency resolution, and activation of both native and WASM mods.
@@ -62,9 +62,7 @@ pub(crate) fn compute_active_capabilities() -> HashSet<String> {
 }
 
 #[cfg(any(test, feature = "test-utils"))]
-pub fn compute_active_capabilities_with_disabled(
-    disabled: &HashSet<String>,
-) -> HashSet<String> {
+pub fn compute_active_capabilities_with_disabled(disabled: &HashSet<String>) -> HashSet<String> {
     let mut registry = ModRegistry::new_with_disabled(disabled);
     let _ = registry.resolve_dependencies();
     let _ = registry.load_all();
@@ -76,5 +74,3 @@ pub fn runtime_has_capability(capability_id: &str) -> bool {
         .get_or_init(compute_active_capabilities)
         .contains(capability_id)
 }
-
-

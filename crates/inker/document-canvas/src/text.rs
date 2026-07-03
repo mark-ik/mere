@@ -128,7 +128,8 @@ fn flatten_into(
                 if let Some(prefix) = adornment.prefix_for(url, base_scheme) {
                     let p_start = out.text.len();
                     out.text.push_str(prefix);
-                    out.styles.push((p_start..out.text.len(), inherited.with_link()));
+                    out.styles
+                        .push((p_start..out.text.len(), inherited.with_link()));
                 }
                 flatten_into(inner, inherited.with_link(), adornment, base_scheme, out);
                 let link_end = out.text.len();
@@ -424,7 +425,11 @@ mod tests {
 
     #[test]
     fn in_protocol_link_gets_rightwards_double_arrow() {
-        let f = flatten_inline(&[link("gemini://x/")], LinkAdornment::SchemeArrow, Some("gemini"));
+        let f = flatten_inline(
+            &[link("gemini://x/")],
+            LinkAdornment::SchemeArrow,
+            Some("gemini"),
+        );
         assert!(f.text.starts_with("\u{21d2} "), "got {:?}", f.text);
         // The arrow is part of the link: the link byte range covers the whole
         // "⇒ label" string.
@@ -434,7 +439,11 @@ mod tests {
 
     #[test]
     fn external_link_gets_northeast_double_arrow() {
-        let f = flatten_inline(&[link("https://x/")], LinkAdornment::SchemeArrow, Some("gemini"));
+        let f = flatten_inline(
+            &[link("https://x/")],
+            LinkAdornment::SchemeArrow,
+            Some("gemini"),
+        );
         assert!(f.text.starts_with("\u{21d7} "), "got {:?}", f.text);
     }
 
@@ -446,10 +455,17 @@ mod tests {
 
     #[test]
     fn adornment_prefix_carries_link_style() {
-        let f = flatten_inline(&[link("https://x/")], LinkAdornment::SchemeArrow, Some("gemini"));
+        let f = flatten_inline(
+            &[link("https://x/")],
+            LinkAdornment::SchemeArrow,
+            Some("gemini"),
+        );
         // Every style range over the link (the arrow prefix + the label) is a
         // link, and one of them begins at byte 0 (the prefix).
         assert!(f.styles.iter().all(|(_, s)| s.link), "all link-styled");
-        assert!(f.styles.iter().any(|(r, _)| r.start == 0), "prefix styled from 0");
+        assert!(
+            f.styles.iter().any(|(r, _)| r.start == 0),
+            "prefix styled from 0"
+        );
     }
 }

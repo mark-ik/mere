@@ -141,7 +141,10 @@ pub fn highlight_djot(src: &str) -> Vec<Span> {
             Event::End(container) => {
                 if kind_of(&container).is_some() {
                     if let Some((kind, start)) = stack.pop() {
-                        spans.push(Span { range: start..range.end, kind });
+                        spans.push(Span {
+                            range: start..range.end,
+                            kind,
+                        });
                     }
                 }
             }
@@ -191,7 +194,9 @@ pub fn highlight(src: &str, registry: &InjectionRegistry) -> Vec<Span> {
         match event {
             Event::Start(container, _attrs) => {
                 match &container {
-                    Container::CodeBlock { language } => code = Some(CodeCtx::new(language.as_ref())),
+                    Container::CodeBlock { language } => {
+                        code = Some(CodeCtx::new(language.as_ref()))
+                    }
                     Container::RawBlock { format } => code = Some(CodeCtx::new(format.as_ref())),
                     _ => {}
                 }
@@ -205,7 +210,10 @@ pub fn highlight(src: &str, registry: &InjectionRegistry) -> Vec<Span> {
                 }
             }
             Event::End(container) => {
-                if matches!(&container, Container::CodeBlock { .. } | Container::RawBlock { .. }) {
+                if matches!(
+                    &container,
+                    Container::CodeBlock { .. } | Container::RawBlock { .. }
+                ) {
                     if let Some(ctx) = code.take() {
                         if !ctx.lang.is_empty() {
                             if let Some((s, e)) = ctx.inner {
@@ -218,7 +226,10 @@ pub fn highlight(src: &str, registry: &InjectionRegistry) -> Vec<Span> {
                 }
                 if kind_of(&container).is_some() {
                     if let Some((kind, start)) = stack.pop() {
-                        spans.push(Span { range: start..range.end, kind });
+                        spans.push(Span {
+                            range: start..range.end,
+                            kind,
+                        });
                     }
                 }
             }
@@ -289,7 +300,10 @@ mod tests {
     fn fenced_code_block_is_one_region() {
         let src = "```rust\nfn main() {}\n```";
         let spans = highlight_djot(src);
-        let n = spans.iter().filter(|s| s.kind == SyntaxKind::CodeBlock).count();
+        let n = spans
+            .iter()
+            .filter(|s| s.kind == SyntaxKind::CodeBlock)
+            .count();
         assert_eq!(n, 1, "expected one CodeBlock span, got {spans:?}");
     }
 
@@ -298,7 +312,10 @@ mod tests {
         // Strong nested inside emphasis: both spans present, emphasis enclosing.
         let src = "_a *b* c_";
         let spans = highlight_djot(src);
-        let em = spans.iter().find(|s| s.kind == SyntaxKind::Emphasis).unwrap();
+        let em = spans
+            .iter()
+            .find(|s| s.kind == SyntaxKind::Emphasis)
+            .unwrap();
         let st = spans.iter().find(|s| s.kind == SyntaxKind::Strong).unwrap();
         assert!(
             em.range.start <= st.range.start && st.range.end <= em.range.end,

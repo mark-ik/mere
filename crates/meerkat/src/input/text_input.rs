@@ -104,6 +104,13 @@ impl WindowCtx<'_> {
         let WinitKey::Character(s) = key else {
             return false;
         };
+        if s.eq_ignore_ascii_case("c")
+            && !self.view.chrome().palette_open
+            && self.view.runner.focus().is_none()
+            && self.copy_page_text_selection()
+        {
+            return true;
+        }
         let palette = self.view.chrome().palette_open;
         // The clipboard shortcuts act on the palette query or the omnibar; when
         // another field (the comms compose box) holds the caret, let the key fall
@@ -492,7 +499,16 @@ impl WindowCtx<'_> {
     /// reset the active match to the first. (The actor dedups and clears on empty.)
     pub(crate) fn submit_find_query(&mut self) {
         let query = self.view.chrome().find_input.text().to_string();
-        self.recompute_find(&query);
+        if let Some(member) = self.focused_member() {
+            if let Some(matches) = self.recompute_document_find(member, &query) {
+                self.view.find_matches = matches;
+                self.view.find_member = Some(member);
+            } else {
+                self.recompute_find(&query);
+            }
+        } else {
+            self.clear_find();
+        }
         self.view.chrome_update(|c| c.find_active = 0);
     }
 

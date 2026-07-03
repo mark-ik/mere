@@ -1,7 +1,7 @@
 # Host scroll + layout-rect engine adoption
 
 **Date**: 2026-06-25
-**Status**: Planned. From the [serval capability-misuse sweep](2026-06-25_context_submenus_plan.md) (4-agent
+**Status**: Planned. From the [serval capability-misuse sweep](../../archive_docs/2026-07-03_completed_plans/2026-06-25_context_submenus_plan.md) (4-agent
 sweep, 2026-06-25): the single largest "host reimplements an engine feature" cluster.
 **Owners**: serval-layout (expose accessors) + meerkat (adopt them).
 

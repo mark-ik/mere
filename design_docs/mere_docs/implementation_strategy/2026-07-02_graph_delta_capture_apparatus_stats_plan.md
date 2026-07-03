@@ -71,10 +71,11 @@ deviations in the brief; revisit when scale demands).
   node-content lane (add/remove node, assert/retract relation, append
   traversal, thumbnail/favicon, navigate/branch/back/forward,
   title/url/mime/viewer/tag/body style node setters, plus
-  property/classification/derivation enrichment, semantic-predicate edge
-  writes, field/coupling writes, and deterministic frame-layout/history
-  state); the rest of the write path still needs stable-id replay forms before
-  this can become a full graph oracle.
+  property/classification/derivation enrichment plus classification/tag
+  presentation maintenance, semantic-predicate edge writes, field/coupling
+  writes, import-record truth, and deterministic frame-layout/history state);
+  the rest of the write path still needs stable-id replay forms before this can
+  become a full graph oracle.
 - Oracle test (the brief's §6 item 4 pattern): record a scripted session,
   replay the log, compare `GraphSnapshot`s. Resolve the timestamp question
   here. The current landed oracle normalizes the snapshot write-time
@@ -159,6 +160,19 @@ deviations in the brief; revisit when scale demands).
   predicate-set/clear on an existing edge payload; the kernel capture oracle
   and the `meerkat` graph-delta log replay test now both assert those
   predicate IRIs survive round-trip.
+- 2026-07-03: import-record slice landed. Added a resolved
+  `ReplaySetImportRecords` capture/replay form plus live delta coverage for
+  `SetImportRecords`, `DeleteImportRecord`,
+  `SetImportRecordMembershipSuppressed`, and `SetNodeImportProvenance`, so the
+  recorder now persists the normalized post-mutation import-record table,
+  including actual `imported_at_secs` values from provenance rebuilds instead
+  of replaying a second `now`.
+- 2026-07-03: classification/tag-presentation admin slice landed. Added
+  stable-id replay/capture for `RemoveNodeClassification`,
+  `SetNodeClassificationStatus`, `SetNodePrimaryClassification`, and
+  `SetNodeTagIconOverride`, with kernel and `meerkat` replay tests asserting
+  classification status/primary changes, classification removal, and tag-icon
+  overrides survive the log round-trip.
 - 2026-07-02: apparatus engine-document stats slice landed. Content actors now
   ship focused-document Serval observables (`DomArenaStats` plus optional
   `LayoutBatchStats`) through the host update stream; the constellation caches

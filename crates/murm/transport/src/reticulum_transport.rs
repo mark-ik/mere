@@ -38,8 +38,8 @@ use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 
 use identity::Ed25519Keypair;
-use tokio::sync::{broadcast, Mutex as TokioMutex};
-use tokio::time::{sleep, timeout, Instant};
+use tokio::sync::{Mutex as TokioMutex, broadcast};
+use tokio::time::{Instant, sleep, timeout};
 
 use reticulum::destination::link::{LinkEvent, LinkEventData, LinkId, LinkStatus};
 use reticulum::destination::{DestinationDesc, DestinationName, SingleInputDestination};
@@ -48,9 +48,11 @@ use reticulum::transport::{Transport as ReticulumStack, TransportConfig};
 
 use crate::{Alpn, PeerID, Transport, TransportError};
 
-use self::announce::{announce_listener, announce_sender, build_app_data, name_hash_key, NameHashKey};
+use self::announce::{
+    NameHashKey, announce_listener, announce_sender, build_app_data, name_hash_key,
+};
 use self::keys::derive_identity;
-use self::stream::{bridge_link, LinkSide};
+use self::stream::{LinkSide, bridge_link};
 
 pub use self::stream::ReticulumStream;
 
@@ -264,7 +266,9 @@ impl ReticulumTransport {
             .get(alpn)
             .cloned()
             .ok_or(TransportError::AlpnNotRegistered)?;
-        self.inner.send_announce(&dest, Some(app_data.as_slice())).await;
+        self.inner
+            .send_announce(&dest, Some(app_data.as_slice()))
+            .await;
         Ok(())
     }
 

@@ -14,7 +14,7 @@
 //! canvas swatch is bound to a frame pane, without growing layout logic
 //! of its own.
 
-use document_canvas::{LaidOutDocument, DocumentStyleSheet, Viewport, layout_document};
+use document_canvas::{DocumentStyleSheet, LaidOutDocument, Viewport, layout_document};
 use inker::EngineDocument;
 
 /// Lay out a document for a single frame pane.

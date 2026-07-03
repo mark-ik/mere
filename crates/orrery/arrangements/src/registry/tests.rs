@@ -43,7 +43,11 @@ fn filter_by_category_partitions_cleanly() {
     // semantic-embedding); the Projection category is empty since SemanticEdgeWeight was retired.
     assert_eq!(positional.len(), 8);
     assert_eq!(projection.len(), 0);
-    assert!(registry.filter_by_category(LayoutCategory::Force).is_empty());
+    assert!(
+        registry
+            .filter_by_category(LayoutCategory::Force)
+            .is_empty()
+    );
 }
 
 #[test]

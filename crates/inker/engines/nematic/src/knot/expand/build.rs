@@ -1,5 +1,4 @@
-use inker::{BlockProvenanceMap, Block, DocumentProvenance, DocumentTrustState, EngineDocument};
-
+use inker::{Block, BlockProvenanceMap, DocumentProvenance, DocumentTrustState, EngineDocument};
 
 /// Build a knot file (frontmatter + body) from a sequence of blocks plus
 /// the source's [`DocumentProvenance`] and trust state.

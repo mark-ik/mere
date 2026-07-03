@@ -97,7 +97,7 @@ Expose the graph (nodes, edges, queries, crawl, clip) as MCP tools and resources
 and let internal agents consume MCP servers. Given the ecosystem this is the
 natural agent boundary, and it makes external agents first-class citizens without
 bespoke glue. **Net-new.** Connects to the document-script and harness lanes
-([document script substrate](../implementation_strategy/2026-06-21_document_script_substrate_plan.md),
+([document script substrate](../../archive_docs/2026-07-03_completed_plans/2026-06-21_document_script_substrate_plan.md),
 [local models harness brief](2026-06-24_local_models_harness_brief.md)).
 
 ### Speculative branches plus provenance (Patchwork / Upwell)
@@ -173,8 +173,8 @@ feature in itself:**
   [persona wallet carry](../implementation_strategy/2026-06-25_persona_wallet_carry_layer_plan.md),
   [actor constellation](../implementation_strategy/2026-06-03_actor_constellation_plan.md):
   persona and federation, for capability-scoped sharing.
-- [document script substrate](../implementation_strategy/2026-06-21_document_script_substrate_plan.md),
-  [document script followons](../implementation_strategy/2026-06-23_document_script_followons_plan.md):
+- [document script substrate](../../archive_docs/2026-07-03_completed_plans/2026-06-21_document_script_substrate_plan.md),
+  [document script followons](../../archive_docs/2026-07-03_completed_plans/2026-06-23_document_script_followons_plan.md):
   agentic scripting, for MCP and live blocks.
 - [local models harness brief](2026-06-24_local_models_harness_brief.md): local AI
   lane, for embeddings and agents.

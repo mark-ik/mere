@@ -19,10 +19,11 @@ use meerkat::CommsIntent;
 use meerkat::command::Command;
 use meerkat::shell_eval::{CommandShell, RemoteAuthPairingAcceptance, ShellContext};
 use session_runtime::{
-    PersonaId, PrivateEpochPlaintext, RemoteAuthPairingTicketRequest,
-    issue_remote_auth_device_grant_from_ticket, load_current_private_epoch, settings_store,
-    signed_device_grant_path,
+    DeviceId, PersonaId, PrivateEpochPlaintext, RemoteAuthPairingTicketRequest,
+    issue_remote_auth_device_grant_from_ticket, load_current_private_epoch,
+    revoke_remote_auth_device, settings_store, signed_device_grant_path,
 };
+use uuid::Uuid;
 
 use crate::fetch::{ContentState, Fetched};
 
@@ -531,6 +532,9 @@ impl WindowCtx<'_> {
         if let Some(bundle_path) = &outcome.remote_auth_enrollment_install {
             note = Some(self.run_install_remote_auth_enrollment(bundle_path));
         }
+        if let Some(device_id) = &outcome.remote_auth_device_revoke {
+            note = Some(self.run_revoke_remote_auth_device(device_id));
+        }
         // DocumentScript triggers (P2.5): attach / deliver-event / detach on the
         // focused tile. `attach` resolves the script's capability permissions (App
         // default for now; the Session-scope override store is the follow-on); the
@@ -858,6 +862,30 @@ impl WindowCtx<'_> {
                 format!("installed remote-auth enrollment {bundle_path}")
             }
             Err(err) => format!("remote-auth enrollment install failed: {err}"),
+        }
+    }
+
+    fn run_revoke_remote_auth_device(&self, device_id: &str) -> String {
+        let device_id = match Uuid::parse_str(device_id.trim()) {
+            Ok(uuid) => DeviceId::from_uuid(uuid),
+            Err(err) => return format!("remote-auth revoke failed: invalid device id: {err}"),
+        };
+        match revoke_remote_auth_device(&self.shared.session.mere_root, device_id) {
+            Ok(outcome) => {
+                let mut note = if outcome.already_revoked {
+                    format!("remote-auth device {} already revoked", device_id.as_uuid())
+                } else {
+                    format!("revoked remote-auth device {}", device_id.as_uuid())
+                };
+                if !outcome.rotated_personas.is_empty() {
+                    note.push_str(&format!(
+                        "; rotated {} private epoch(s)",
+                        outcome.rotated_personas.len()
+                    ));
+                }
+                note
+            }
+            Err(err) => format!("remote-auth revoke failed: {err}"),
         }
     }
 

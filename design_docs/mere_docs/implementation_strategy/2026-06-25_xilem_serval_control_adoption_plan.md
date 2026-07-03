@@ -2,7 +2,7 @@
 
 **Date**: 2026-06-25
 **Status**: P1 + P2 done 2026-06-25 (serval + meerkat). P3 gated/open. From the
-[serval capability-misuse sweep](2026-06-25_overlay_primitive_adoption_plan.md) (2026-06-25).
+[serval capability-misuse sweep](../../archive_docs/2026-07-03_completed_plans/2026-06-25_overlay_primitive_adoption_plan.md) (2026-06-25).
 **Owner**: meerkat (consumes xilem-serval `controls`); P1/P2 also touch serval (xilem-serval +
 serval-render).
 

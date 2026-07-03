@@ -151,8 +151,8 @@ fn fallback_ring_position<N: Hash>(id: &N, config: &SemanticEmbeddingConfig) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use euclid::default::{Rect, Size2D};
     use crate::scene::{CanvasEdge, CanvasNode};
+    use euclid::default::{Rect, Size2D};
 
     fn viewport() -> CanvasViewport {
         CanvasViewport {
@@ -231,5 +231,4 @@ mod tests {
         );
         assert_eq!(deltas[&0], Vector2D::new(-95.0, -95.0));
     }
-
 }

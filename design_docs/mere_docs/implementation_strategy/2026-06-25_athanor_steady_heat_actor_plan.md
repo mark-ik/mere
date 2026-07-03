@@ -54,7 +54,7 @@ up a thread + snapshot hand-off for it. The actor's reason to exist is the conso
   `ProvenanceRecord.upstream`, which is `Vec::new()` in every crate today (verified — nothing populates
   it), and the content store is url-keyed (latest content, no retained version history). So there are *no
   chains to relate* until something produces lineage. The first producer is
-  [engram compose/merge](2026-06-25_engram_compose_merge_plan.md) (B7, which sets `upstream = source ids`)
+  [engram compose/merge](../../archive_docs/2026-07-03_completed_plans/2026-06-25_engram_compose_merge_plan.md) (B7, which sets `upstream = source ids`)
   or an archive-on-refetch capture path. **Consolidation is downstream of B7**, not a standalone slice.
 - **Facet extraction** — heavier (it reads content, possibly runs a local model — ties to the
   [local-models harness](../research/2026-06-24_local_models_harness_brief.md)). This is the pass that

@@ -107,7 +107,10 @@ mod tests {
         assert!(has(SyntaxKind::Keyword, "function"), "{spans:?}");
         assert!(has(SyntaxKind::Number, "42"), "{spans:?}");
         assert!(has(SyntaxKind::StringLit, "\"hi\""), "{spans:?}");
-        assert!(has(SyntaxKind::StringLit, "[[long]]"), "long string: {spans:?}");
+        assert!(
+            has(SyntaxKind::StringLit, "[[long]]"),
+            "long string: {spans:?}"
+        );
     }
 
     #[test]
