@@ -120,7 +120,10 @@ mod tests {
         let mut restored_ids: Vec<_> = restored.nodes().map(|(_, n)| n.id).collect();
         orig_ids.sort();
         restored_ids.sort();
-        assert_eq!(orig_ids, restored_ids, "node ids must be stable across restart");
+        assert_eq!(
+            orig_ids, restored_ids,
+            "node ids must be stable across restart"
+        );
         fs::remove_dir_all(&dir).ok();
     }
 

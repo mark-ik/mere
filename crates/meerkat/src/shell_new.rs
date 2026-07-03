@@ -44,6 +44,27 @@ impl Shell {
             .get(active_session_id)
             .map(|m| m.persona_id)
             .unwrap_or_else(session_runtime::PersonaId::default_persona);
+        match session_runtime::bootstrap_wallet_state(
+            &mere_root,
+            active_persona,
+            &default_device_label(),
+        ) {
+            Ok(session_runtime::WalletBootstrapMode::DelegatedPending) => {
+                tracing::info!("wallet bootstrap preserved a pending delegated-device identity");
+            }
+            Ok(session_runtime::WalletBootstrapMode::DelegatedEnrolled) => {
+                tracing::info!("wallet bootstrap preserved delegated-device wallet state");
+            }
+            Ok(session_runtime::WalletBootstrapMode::CopySeeded) => {}
+            Err(err) => {
+                tracing::warn!(
+                    %err,
+                    "wallet bootstrap failed; identity-backed carry state is unavailable"
+                );
+            }
+        }
+        let graph_delta_log = crate::graph_delta_log::GraphDeltaLog::from_env();
+        graph_delta_log.install_hook();
         // The persona's UI settings (command registry P4/S3): the curated context menu + the
         // command-usage frequencies behind auto-suggest. Loaded before `mere_root` is moved into
         // the session struct below.
@@ -51,7 +72,10 @@ impl Shell {
             .ok()
             .flatten()
             .unwrap_or_default();
-        let menu_actions = persona_ui.menu_actions.clone().unwrap_or_else(default_menu_actions);
+        let menu_actions = persona_ui
+            .menu_actions
+            .clone()
+            .unwrap_or_else(default_menu_actions);
         let command_usage = persona_ui.command_usage.clone();
         let eviction_policy = persona_ui.eviction_policy;
         // This launch's session number (Alembic B5 — by-sessions eviction). `0` is reserved
@@ -241,7 +265,8 @@ impl Shell {
         let sync_wake: armillary::Wake = Arc::new(move || {
             let _ = sync_proxy.send_event(());
         });
-        let (sync_handle, sync_rx) = sync::spawn_sync(sync_wake, sync::DEMO_MOOT);
+        let (sync_handle, sync_rx) =
+            sync::spawn_sync(sync_wake, mere_root.clone(), sync::DEMO_MOOT);
         // The comms actor: owns the live `Comms` (misfin + murm adapters over local
         // stores under the session dir) on its own tokio runtime, waking the loop
         // through the same winit proxy. Setup failure disables comms, not the shell.
@@ -466,6 +491,7 @@ impl Shell {
                     session_labels: HashMap::new(),
                     host_text: text::HostText::new(),
                     current_session_count,
+                    graph_delta_log,
                 },
                 presentation: Presentation {
                     theme,

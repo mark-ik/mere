@@ -14,6 +14,7 @@ use orrery::NodeShape;
 
 use super::node_ops::content_shape;
 use super::{WindowCtx, fetch, roster};
+use crate::pane_input_snapshot::PaneInputSnapshot;
 use crate::roster_facet_data::{field_facets, link_facets, node_facets};
 
 impl WindowCtx<'_> {
@@ -21,24 +22,22 @@ impl WindowCtx<'_> {
         &self,
         subject: Option<&roster::RosterSubject>,
     ) -> roster::RosterSnapshot {
+        let input = self.pane_input_snapshot();
         roster::RosterSnapshot {
-            node_rows: self.roster_node_rows(),
+            node_rows: self.roster_node_rows(&input),
             link_rows: self.roster_link_rows(subject),
             graphlet_rows: self.roster_graphlet_rows(subject),
             field_rows: self.roster_field_rows(subject),
-            detail: subject.and_then(|s| self.roster_detail(s)),
+            detail: subject.and_then(|s| self.roster_detail(s, &input)),
         }
     }
 
     pub(super) fn roster_rows(&self) -> Vec<roster::RosterRow> {
-        self.roster_node_rows()
+        let input = self.pane_input_snapshot();
+        self.roster_node_rows(&input)
     }
 
-    fn roster_node_rows(&self) -> Vec<roster::RosterRow> {
-        let selected_members: std::collections::HashSet<GraphMemberId> =
-            self.orrery().selected_members().into_iter().collect();
-        let open_members: std::collections::HashSet<GraphMemberId> =
-            self.view.workbench.open_members().into_iter().collect();
+    fn roster_node_rows(&self, input: &PaneInputSnapshot) -> Vec<roster::RosterRow> {
         let graph = self.orrery().graph();
         let mut rows: Vec<roster::RosterRow> = graph
             .nodes()
@@ -56,8 +55,8 @@ impl WindowCtx<'_> {
                     url,
                     content_type,
                     tags,
-                    selected: selected_members.contains(&node.id),
-                    open: open_members.contains(&node.id),
+                    selected: input.is_selected(node.id),
+                    open: input.is_open(node.id),
                     section_header: None,
                 }
             })
@@ -209,11 +208,15 @@ impl WindowCtx<'_> {
         out
     }
 
-    fn roster_detail(&self, subject: &roster::RosterSubject) -> Option<roster::RosterDetail> {
+    fn roster_detail(
+        &self,
+        subject: &roster::RosterSubject,
+        input: &PaneInputSnapshot,
+    ) -> Option<roster::RosterDetail> {
         match subject {
-            roster::RosterSubject::Node(member) => {
-                self.node_detail(*member).map(roster::RosterDetail::Node)
-            }
+            roster::RosterSubject::Node(member) => self
+                .node_detail_with_input(*member, input)
+                .map(roster::RosterDetail::Node),
             roster::RosterSubject::LinkBundle { from, to } => self
                 .link_card(*from, *to, None)
                 .map(roster::RosterDetail::Link),
@@ -233,6 +236,15 @@ impl WindowCtx<'_> {
     }
 
     pub(super) fn node_detail(&self, member: GraphMemberId) -> Option<roster::NodeDetail> {
+        let input = self.pane_input_snapshot();
+        self.node_detail_with_input(member, &input)
+    }
+
+    fn node_detail_with_input(
+        &self,
+        member: GraphMemberId,
+        input: &PaneInputSnapshot,
+    ) -> Option<roster::NodeDetail> {
         let graph = self.orrery().graph();
         let (key, node) = graph.get_node_by_id(member)?;
         let url = node.url().to_string();
@@ -255,7 +267,7 @@ impl WindowCtx<'_> {
             content_type: content_type.clone(),
             tags,
             relation_count,
-            open: self.view.workbench.open_members().contains(&member),
+            open: input.is_open(member),
             facets: node_facets(
                 member,
                 content_type.as_deref(),

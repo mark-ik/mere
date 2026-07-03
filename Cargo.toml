@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/meerkat-browser-worker",
     "crates/meerkat",
     "crates/armillary",
     "crates/orrery/orrery",
@@ -10,6 +11,7 @@ members = [
     "crates/orrery/cartography",
     "crates/orrery/arrangements",
     "crates/graph/glossary",
+    "crates/graph/graphlets",
     "crates/graph/graph-kernel",
     "crates/graph/linked-data",
     "crates/graph/node-lineage",
@@ -17,6 +19,7 @@ members = [
     "crates/shell/comms",
     "crates/shell/frame",
     "crates/system/session-runtime",
+    "crates/system/fetch",
     "crates/system/shell-state",
     "crates/system/registry/register-diagnostics",
     "crates/system/registry/register-input",
@@ -52,6 +55,7 @@ members = [
     "crates/eidetic/eidetic-iroh-fetcher",
     "crates/eidetic/eidetic-search",
     "crates/import",
+    "crates/crawl",
     "crates/intel/embed",
     "crates/intel/signals",
     "crates/murm/misfin",
@@ -96,6 +100,7 @@ arrangements = { path = "crates/orrery/arrangements" }
 node-lineage = { path = "crates/graph/node-lineage" }
 linked-data = { path = "crates/graph/linked-data" }
 kernel = { path = "crates/graph/graph-kernel" }
+graphlets = { path = "crates/graph/graphlets" }
 # The orrery host content-root (was `orrery-host`); takes the bare `orrery` name.
 orrery = { path = "crates/orrery/orrery" }
 # Graph digest projections (djot outline, metrics) — `glossary` (was `mere-orrery`).
@@ -104,7 +109,9 @@ glossary = { path = "crates/graph/glossary" }
 # The actor-kernel runtime (host-neutral): the !Send host-kernel boundary + the
 # Send actor harness the constellation is built on.
 armillary = { path = "crates/armillary" }
+meerkat-browser-worker = { path = "crates/meerkat-browser-worker" }
 
+fetch = { path = "crates/system/fetch" }
 shell-state = { path = "crates/system/shell-state" }
 frame = { path = "crates/shell/frame" }
 chrome = { path = "crates/shell/chrome" }
@@ -144,6 +151,7 @@ eidetic-search = { path = "crates/eidetic/eidetic-search" }
 # Browser-data ingest (bookmarks/history/session models + parsers); consumed
 # by the eidetic-recall bridge and, later, the shell's import verbs.
 import = { path = "crates/import" }
+crawl = { path = "crates/crawl" }
 
 embed = { path = "crates/intel/embed" }
 signals = { path = "crates/intel/signals" }

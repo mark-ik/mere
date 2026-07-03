@@ -177,8 +177,8 @@ a branch window touches the scope; its ctx saves the orrery's prior scope, sets
 `scope_to_members(live roster)`, and `Drop` restores it, so the donor's own scope never
 leaks): `WindowCtx` gained a read-only `graphlets` ref + a `branch_scope_restore` slot, with
 `install_scope` / `restore_scope` in viewport.rs beside the camera/selection install/readback.
-Driving surfaced that the host's node-card builder (render/orrery_scene.rs) iterated *all* nodes, ignoring
-the orrery's scope — fixed with an `Orrery::node_in_scope` filter so the cards match the
+Driving surfaced that the host's gnode builder (render/orrery_scene.rs) iterated *all* nodes, ignoring
+the orrery's scope — fixed with an `Orrery::node_in_scope` filter so the gnodes match the
 scene's own scope filter. Drove headed: branched a node → its window showed **only** the
 anchor node, while the donor showed the whole graph (scope did not leak). meerkat 89 lib /
 172 bin + orrery 80 green.

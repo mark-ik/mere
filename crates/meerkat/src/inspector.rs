@@ -447,12 +447,14 @@ mod tests {
             body: "# Title\n\nBody with [link](https://example.test).".to_string(),
         };
         let rows = document_rows("https://example.test", &fetched);
-        assert!(rows
-            .iter()
-            .any(|(k, v)| k == "Parser lane" && v == nematic::ENGINE_MARKDOWN));
-        assert!(rows
-            .iter()
-            .any(|(k, v)| k == "Document structure" && v.contains("headings=1")));
+        assert!(
+            rows.iter()
+                .any(|(k, v)| k == "Parser lane" && v == nematic::ENGINE_MARKDOWN)
+        );
+        assert!(
+            rows.iter()
+                .any(|(k, v)| k == "Document structure" && v.contains("headings=1"))
+        );
         assert!(rows.iter().any(|(k, v)| k == "Outgoing links" && v == "1"));
     }
 
@@ -463,15 +465,18 @@ mod tests {
             body: "<html><head><title>The Page</title><meta name='description' content='Desc'></head><body><main><h1>Title</h1><p>Body text.</p><a href='/next'>Next</a></main></body></html>".to_string(),
         };
         let rows = document_rows("https://example.test", &fetched);
-        assert!(rows
-            .iter()
-            .any(|(k, v)| k == "Document title" && v == "The Page"));
-        assert!(rows
-            .iter()
-            .any(|(k, v)| k == "Document structure" && v.contains("headings=1")));
+        assert!(
+            rows.iter()
+                .any(|(k, v)| k == "Document title" && v == "The Page")
+        );
+        assert!(
+            rows.iter()
+                .any(|(k, v)| k == "Document structure" && v.contains("headings=1"))
+        );
         assert!(rows.iter().any(|(k, v)| k == "Outgoing links" && v == "1"));
-        assert!(rows
-            .iter()
-            .any(|(k, v)| k == "Parse diagnostics" && v == "serval-extract PageExtract"));
+        assert!(
+            rows.iter()
+                .any(|(k, v)| k == "Parse diagnostics" && v == "serval-extract PageExtract")
+        );
     }
 }

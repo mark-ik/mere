@@ -16,8 +16,10 @@ pub mod authorities;
 pub mod command_palette;
 pub mod frame_model;
 pub mod host_intent;
+pub mod nav;
 pub mod omnibar;
 pub mod routing;
+pub mod suggest;
 pub mod toolbar;
 
 /// Crate version.

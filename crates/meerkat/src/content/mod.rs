@@ -24,6 +24,7 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 
 use armillary::{ActorHandle, Emitter, NavGeneration, Pool, ViewportGeneration, Wake, spawn_on};
 use document_canvas::{DocumentRenderPacket, DocumentStyleSheet, FontTable};
+use engine_observables_api::{DomArenaStats, LayoutBatchStats};
 use inker::{EngineRegistry, EngineRoutePolicy};
 use linked_data::GraphContribution;
 use netrender::Scene;
@@ -180,6 +181,7 @@ pub enum ContentUpdate {
         nav: NavGeneration,
         viewport_gen: ViewportGeneration,
         scene: Scene,
+        stats: ContentSceneStats,
         content_height: u32,
         band_y: u32,
         band_h: u32,
@@ -210,6 +212,14 @@ pub enum ContentUpdate {
         viewport_gen: ViewportGeneration,
         matches: Vec<Vec<[f32; 4]>>,
     },
+    /// Focused-document engine observables for the current render lane, when the
+    /// actor owns a real Serval DOM/layout surface.
+    EngineStats {
+        nav: NavGeneration,
+        viewport_gen: ViewportGeneration,
+        dom: DomArenaStats,
+        layout: Option<LayoutBatchStats>,
+    },
     /// The result of a DocumentScript attach / turn / detach, for the host to surface
     /// (diagnostics / a script console). The re-render rides the `Scene` update; this
     /// is the textual outcome alongside it. (P2.5c, DocumentScript.)
@@ -220,8 +230,36 @@ pub enum ContentUpdate {
     TransportError { reason: String },
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct ContentEngineStats {
+    pub dom: DomArenaStats,
+    pub layout: Option<LayoutBatchStats>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ContentSceneStats {
+    pub op_count: u64,
+    pub encoded_bytes: u64,
+}
+
 pub(crate) trait ContentUpdateSink {
     fn emit_update(&self, update: ContentUpdate);
+}
+
+pub(crate) enum ContentHandle {
+    Native(ActorHandle<ContentCommand>),
+    #[cfg(target_arch = "wasm32")]
+    Worker(worker::WorkerContentHandle),
+}
+
+impl ContentHandle {
+    pub(crate) fn command(&self, command: ContentCommand) -> bool {
+        match self {
+            Self::Native(handle) => handle.command(command),
+            #[cfg(target_arch = "wasm32")]
+            Self::Worker(handle) => handle.command(command),
+        }
+    }
 }
 
 impl ContentUpdateSink for Emitter<ContentUpdate> {
@@ -376,12 +414,15 @@ impl pelt_desktop::CookieProvider for JarCookieProvider {
 mod actor;
 mod handlers;
 mod transfer;
+mod worker;
 pub(crate) use actor::*;
 pub(crate) use handlers::*;
 #[allow(unused_imports)]
 pub(crate) use transfer::{
-    SceneTransferDecoder, SceneTransferEncoder, TransferBuffer, TransferError,
+    SceneTransferDecoder, SceneTransferEncoder, TransferBuffer, TransferError, scene_stats,
 };
+#[allow(unused_imports)]
+pub(crate) use worker::*;
 
 #[cfg(test)]
 mod tests;

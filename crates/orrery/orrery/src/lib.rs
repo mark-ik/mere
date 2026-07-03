@@ -87,7 +87,7 @@ const SETTLE_TICKS: u32 = 360;
 /// neighbors ease away from a grown node without a full re-layout. (P0/P5 collider.)
 const SIZE_RESETTLE_TICKS: u32 = 90;
 /// The five face-size presets (px) the on-graph size editor steps between — the notch
-/// points of the snapshot-card resize control. The default (36) is tier 1 (0-indexed), so
+/// points of the object-card resize control. The default (36) is tier 1 (0-indexed), so
 /// an un-sized node reads as the second notch; the ends span dense-small to big-hub, inside
 /// the `set_node_size` 16..160 clamp. (Node-rep — size tiers.)
 pub const SIZE_TIERS: [f32; 5] = [24.0, 36.0, 56.0, 84.0, 120.0];
@@ -418,10 +418,11 @@ pub struct Orrery {
     /// full Identity one. `None` shows the whole graph. (Curated orrery.)
     scope: Option<Vec<NodeKey>>,
     /// When set, the scene omits the on-screen gnode + favicon layers: the host renders
-    /// those nodes as DOM cards in the shell document instead (the focused orrery only;
-    /// secondary panes keep their gnodes). Edges + demoted dots stay as the underlay.
-    /// (Orrery-as-element — Phase 2.)
-    render_as_cards: bool,
+    /// those gnodes as DOM elements in the shell document instead (the focused orrery only;
+    /// secondary panes keep their in-scene gnodes). Edges + demoted dots stay as the underlay.
+    /// A gnode is the node's rendered body either way — a Scene layer here, a chrome DOM
+    /// element there — never the node's referenced document. (Orrery-as-element — Phase 2.)
+    render_gnodes_as_dom: bool,
 }
 
 impl Default for Orrery {

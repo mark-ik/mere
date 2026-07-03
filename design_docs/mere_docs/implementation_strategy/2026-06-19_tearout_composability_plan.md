@@ -5,6 +5,12 @@
 spun out** to the [tearout_gestures_plan](2026-06-24_tearout_gestures_plan.md). Kept in place
 (not archived) as the foundational record active siblings cite, like the unified-document-host
 plan.
+**Rename banner (2026-07-02):** the code pointers below (`OrreryCard`, `node_card_view`,
+`.node-card`, `render_as_cards`) predate the node/card terminology cleanup — see
+[node_card_summoning_design](../design/2026-07-01_node_card_summoning_design.md) for the
+consensus (a node's rendered body is a **gnode**, never a card) and current names
+(`OrreryGnode`/`gnode_view`/`.gnode`/`render_gnodes_as_dom`). Left unedited below as the
+historical record.
 Banked: C1 (per-pane focus), C2 (gated, no work), C4 **core** (kernel cross-graph copy +
 `CopiedFrom` provenance), camera-on-the-view (standalone), and **MW3 multi-window 5/6** (redraw
 + chrome fan-out, per-window a11y) — the last three driven headed and confirmed. **Remaining

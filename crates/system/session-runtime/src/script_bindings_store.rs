@@ -37,7 +37,10 @@ pub struct ScriptBinding {
 
 impl ScriptBinding {
     pub fn new(origin: impl Into<String>, component_path: impl Into<String>) -> Self {
-        Self { origin: origin.into(), component_path: component_path.into() }
+        Self {
+            origin: origin.into(),
+            component_path: component_path.into(),
+        }
     }
 }
 

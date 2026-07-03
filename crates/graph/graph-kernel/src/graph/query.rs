@@ -543,9 +543,7 @@ impl Graph {
                 // Edge projection: only follow an edge matching a selector (empty = all
                 // families). This is what makes the same nodes derive a different shape
                 // under a different relation projection. (Graphlet derivation — selectors.)
-                if !selectors.is_empty()
-                    && !self.edge_matches_selectors(key, neighbor, selectors)
-                {
+                if !selectors.is_empty() && !self.edge_matches_selectors(key, neighbor, selectors) {
                     continue;
                 }
                 if seen.insert(neighbor) {
@@ -625,14 +623,25 @@ mod derivation_tests {
         let (g, [a, _b, _c, d]) = chain_plus_isolate();
         assert_eq!(g.component_members(a, &[]).len(), 3, "A reaches B and C");
         assert_eq!(g.component_members(d, &[]).len(), 1, "D is isolated");
-        assert!(g.component_members(uuid::Uuid::nil(), &[]).is_empty(), "unknown seed: empty");
+        assert!(
+            g.component_members(uuid::Uuid::nil(), &[]).is_empty(),
+            "unknown seed: empty"
+        );
     }
 
     #[test]
     fn ego_members_is_radius_bounded() {
         let (g, [a, _b, _c, _d]) = chain_plus_isolate();
-        assert_eq!(g.ego_members(a, 0, &[]).len(), 1, "radius 0 is just the seed");
-        assert_eq!(g.ego_members(a, 1, &[]).len(), 2, "radius 1 reaches B, not C");
+        assert_eq!(
+            g.ego_members(a, 0, &[]).len(),
+            1,
+            "radius 0 is just the seed"
+        );
+        assert_eq!(
+            g.ego_members(a, 1, &[]).len(),
+            2,
+            "radius 1 reaches B, not C"
+        );
         assert_eq!(g.ego_members(a, 2, &[]).len(), 3, "radius 2 reaches C");
     }
 
@@ -665,7 +674,11 @@ mod derivation_tests {
         let semantic = [RelationSelector::Family(EdgeFamily::Semantic)];
         let containment = [RelationSelector::Family(EdgeFamily::Containment)];
         // Whole graph under no projection; Semantic stops at B; Containment never leaves A.
-        assert_eq!(g.component_members(a_id, &[]).len(), 3, "all families: A, B, C");
+        assert_eq!(
+            g.component_members(a_id, &[]).len(),
+            3,
+            "all families: A, B, C"
+        );
         assert_eq!(
             g.component_members(a_id, &semantic).len(),
             2,

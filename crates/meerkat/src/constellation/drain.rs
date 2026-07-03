@@ -82,6 +82,7 @@ impl Constellation {
                         nav,
                         viewport_gen,
                         scene,
+                        stats,
                         content_height,
                         band_y,
                         band_h,
@@ -98,6 +99,7 @@ impl Constellation {
                                 activation.packet = None; // forget any stale document packet
                                 activation.masks = masks;
                                 activation.content_height = content_height;
+                                activation.scene_stats = Some(stats);
                                 // Record the band this scene covers so the host composites
                                 // it at the right offset; a Show/Resize that re-anchors the
                                 // band to the top arrives as band_y == 0. (HTML scroll.)
@@ -138,6 +140,22 @@ impl Constellation {
                             if activation.gens.accepts(stamp) {
                                 activation.find_matches = matches;
                                 out.any_scene = true; // redraw to paint the highlights
+                            }
+                        }
+                    }
+                    ContentUpdate::EngineStats {
+                        nav,
+                        viewport_gen,
+                        dom,
+                        layout,
+                    } => {
+                        if let Some(activation) = self.active.get_mut(&member) {
+                            let stamp = Generations {
+                                nav,
+                                viewport: viewport_gen,
+                            };
+                            if activation.gens.accepts(stamp) {
+                                activation.engine_stats = Some(ContentEngineStats { dom, layout });
                             }
                         }
                     }
@@ -188,6 +206,8 @@ impl Constellation {
         activation.rx = rx;
         activation.gens = Generations::default();
         activation.shown = None; // force the next drive() to re-Show, replaying the page
+        activation.engine_stats = None;
+        activation.scene_stats = None;
         activation.respawns += 1;
         true
     }

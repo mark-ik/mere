@@ -7,6 +7,14 @@ re-homed: cond 1 -> [orrery_custom_layout_element_plan](2026-06-23_orrery_custom
 slice 5 -> [layout_phase_split_probe_plan](2026-06-23_layout_phase_split_probe_plan.md);
 secondary-orreries -> tearout; tiles -> composition spine.
 
+**Rename banner (2026-07-02):** the code pointers throughout this doc (`OrreryCard`,
+`node_card_view`, `.node-card`, `render_as_cards`/`set_render_as_cards`, `point_over_orrery_card`)
+predate the node/card terminology cleanup and no longer exist under those names — see
+[node_card_summoning_design](../design/2026-07-01_node_card_summoning_design.md) for the
+consensus (a node's rendered body is a **gnode**, never a card) and current names
+(`OrreryGnode`/`gnode_view`/`.gnode`/`render_gnodes_as_dom`). Left unedited below as the
+historical record.
+
 Status (reconciled 2026-06-19 cross-plan consolidation). Phase 1's document consolidation is
 **done** (all 4 done-conditions). Phase 2 cond 3/4/5 **landed host-side**, **but** the
 card-as-node-hit-target mechanism (cond 3/4) was subsequently **reversed** by the

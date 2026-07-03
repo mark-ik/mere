@@ -12,7 +12,9 @@
 //!
 //! (Window composition P2 companion — list-pane view-ification.)
 
-use xilem_serval::{AnyView, PointerClick, ServalCtx, ServalElement, clickable, el};
+use std::collections::HashMap;
+
+use xilem_serval::{AnyView, Keyed, PointerClick, ServalCtx, ServalElement, clickable, el};
 
 // The `ListPane` bundle is a #[cfg(test)] harness now that the four list panes fold into
 // the shell document; its DOM / layout imports come along under the gate. (Phase 1, step 2.)
@@ -63,7 +65,7 @@ pub struct ReorderSpec {
 /// `bool` is the checked / selected state. The render paths emit `role` +
 /// `aria-checked`, which serval-render's a11y bridge maps to the accesskit role +
 /// toggled state.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PaneAria {
     /// A member of a single-selection group (`role="radio"`); `true` = selected.
     Radio(bool),
@@ -96,6 +98,22 @@ pub struct PaneItem {
     pub slider: Option<SliderSpec>,
     pub reorder: Option<ReorderSpec>,
     pub aria: Option<PaneAria>,
+}
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct PaneItemIdentity {
+    class: String,
+    text: String,
+    key: Option<String>,
+    slider_key_prefix: Option<String>,
+    reorder_id: Option<String>,
+    aria: Option<PaneAria>,
+}
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct PaneItemKey {
+    identity: PaneItemIdentity,
+    occurrence: usize,
 }
 
 impl PaneItem {
@@ -212,6 +230,17 @@ impl PaneItem {
             aria: None,
         }
     }
+
+    fn view_identity(&self) -> PaneItemIdentity {
+        PaneItemIdentity {
+            class: self.class.clone(),
+            text: self.text.clone(),
+            key: self.key.clone(),
+            slider_key_prefix: self.slider.as_ref().map(|slider| slider.key_prefix.clone()),
+            reorder_id: self.reorder.as_ref().map(|reorder| reorder.id.clone()),
+            aria: self.aria,
+        }
+    }
 }
 
 /// Reposition `id` to where `target` sits in `order` — "drop before the target": remove `id`,
@@ -255,10 +284,18 @@ pub type ListLogic = fn(&ListPaneState) -> ListView;
 /// Render a list pane: the root container with one classed div per item, a
 /// button item carrying an `on_click` that queues its key.
 pub fn list_pane_view(state: &ListPaneState) -> ListView {
-    let children: Vec<ListView> = state
+    let mut counts: HashMap<PaneItemIdentity, usize> = HashMap::new();
+    let children: Keyed<PaneItemKey, ListView> = state
         .items
         .iter()
         .map(|item| {
+            let identity = item.view_identity();
+            let occurrence = {
+                let next = counts.entry(identity.clone()).or_insert(0);
+                let occurrence = *next;
+                *next += 1;
+                occurrence
+            };
             let mut div = el::<_, ListPaneState, ()>("div", item.text.clone())
                 .attr("class", item.class.clone());
             if let Some(aria) = item.aria {
@@ -271,12 +308,26 @@ pub fn list_pane_view(state: &ListPaneState) -> ListView {
                     // `focusable` puts the button in the Tab order; the runner activates it on
                     // Enter/Space by synthesizing a click that fires this `on_click`, queuing
                     // the activation like a pointer click. (Phase 1, step 3c.)
-                    Box::new(clickable(
-                        div,
-                        move |s: &mut ListPaneState, _: PointerClick| s.pending.push(key.clone()),
-                    )) as ListView
+                    (
+                        PaneItemKey {
+                            identity,
+                            occurrence,
+                        },
+                        Box::new(clickable(
+                            div,
+                            move |s: &mut ListPaneState, _: PointerClick| {
+                                s.pending.push(key.clone())
+                            },
+                        )) as ListView,
+                    )
                 }
-                None => Box::new(div) as ListView,
+                None => (
+                    PaneItemKey {
+                        identity,
+                        occurrence,
+                    },
+                    Box::new(div) as ListView,
+                ),
             }
         })
         .collect();

@@ -212,7 +212,7 @@ manifest. Donor unchanged; the two are independent.
   before the clone, so the fork opens with the donor's layout. (Found + fixed by driving.)
 
 Driven (2026-06-25): Ctrl+Shift+drag a node → a new window opens showing the full connected
-component as distinct, laid-out node-cards; the donor window is intact.
+component as distinct, laid-out gnodes; the donor window is intact.
 
 **Refinements:** a borrow-split instead of the whole-donor clone (fine at demo scale); the exact
 camera framing of the fork window. (**Restore-on-restart: DONE / was already working** —

@@ -69,7 +69,9 @@ pub enum PersistedFieldLifecycle {
 }
 
 /// Persisted field. Identity + a JSON-encoded definition AST + extent + lifecycle.
-#[derive(Archive, Serialize, Deserialize, Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Archive, Serialize, Deserialize, Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize,
+)]
 #[rkyv(derive(Debug))]
 pub struct PersistedField {
     /// Stable field identity (UUID as string).
@@ -119,7 +121,9 @@ pub enum PersistedCouplingResponse {
 }
 
 /// Persisted coupling. Identity + target field + selector + response + strength.
-#[derive(Archive, Serialize, Deserialize, Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Archive, Serialize, Deserialize, Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize,
+)]
 #[rkyv(derive(Debug))]
 pub struct PersistedCoupling {
     /// Stable coupling identity (UUID as string).
@@ -149,11 +153,20 @@ mod tests {
         ];
         for e in &extents {
             let j = serde_json::to_string(e).unwrap();
-            assert_eq!(*e, serde_json::from_str::<PersistedFieldExtent>(&j).unwrap());
+            assert_eq!(
+                *e,
+                serde_json::from_str::<PersistedFieldExtent>(&j).unwrap()
+            );
         }
-        for l in [PersistedFieldLifecycle::Active, PersistedFieldLifecycle::Retired] {
+        for l in [
+            PersistedFieldLifecycle::Active,
+            PersistedFieldLifecycle::Retired,
+        ] {
             let j = serde_json::to_string(&l).unwrap();
-            assert_eq!(l, serde_json::from_str::<PersistedFieldLifecycle>(&j).unwrap());
+            assert_eq!(
+                l,
+                serde_json::from_str::<PersistedFieldLifecycle>(&j).unwrap()
+            );
         }
     }
 
@@ -167,7 +180,10 @@ mod tests {
         ];
         for s in &selectors {
             let j = serde_json::to_string(s).unwrap();
-            assert_eq!(*s, serde_json::from_str::<PersistedNodeSelector>(&j).unwrap());
+            assert_eq!(
+                *s,
+                serde_json::from_str::<PersistedNodeSelector>(&j).unwrap()
+            );
         }
         let responses = [
             PersistedCouplingResponse::AttractToMin,
@@ -179,7 +195,10 @@ mod tests {
         ];
         for r in &responses {
             let j = serde_json::to_string(r).unwrap();
-            assert_eq!(*r, serde_json::from_str::<PersistedCouplingResponse>(&j).unwrap());
+            assert_eq!(
+                *r,
+                serde_json::from_str::<PersistedCouplingResponse>(&j).unwrap()
+            );
         }
     }
 

@@ -266,9 +266,10 @@ pub struct ProfileSummary {
 
 /// Storage backend for an [`IdentityVault`].
 ///
-/// v0 ships only [`InMemoryStorage`]; production-grade `OsKeychainStorage`
-/// (Windows Credential Manager / macOS Keychain / kwallet/SecretService)
-/// and `PassphraseEncryptedStorage` are follow-ups.
+/// v0 ships [`InMemoryStorage`] and the real on-disk
+/// [`crate::PassphraseEncryptedStorage`]; production-grade
+/// `OsKeychainStorage` (Windows Credential Manager / macOS Keychain /
+/// kwallet/SecretService) remains the follow-up.
 pub trait IdentityStorage: Send + Sync {
     /// Load a profile by id.
     fn load_profile(&self, id: &ProfileId) -> Result<Profile, IdentityError>;

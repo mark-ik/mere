@@ -345,8 +345,7 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
-        let root =
-            std::env::temp_dir().join(format!("host-runtime-test-{label}-{pid}-{nanos}"));
+        let root = std::env::temp_dir().join(format!("host-runtime-test-{label}-{pid}-{nanos}"));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
         root

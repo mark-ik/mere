@@ -179,7 +179,11 @@ impl Graph {
         true
     }
 
-    pub(crate) fn set_frame_split_offer_suppressed(&mut self, key: NodeKey, suppressed: bool) -> bool {
+    pub(crate) fn set_frame_split_offer_suppressed(
+        &mut self,
+        key: NodeKey,
+        suppressed: bool,
+    ) -> bool {
         let Some(node) = self.inner.node_weight_mut(key) else {
             return false;
         };

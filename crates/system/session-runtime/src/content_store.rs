@@ -57,7 +57,9 @@ pub async fn load_content(store: &mut dyn Store, url: &str) -> Result<Option<Sto
 pub async fn save_content(store: &mut dyn Store, url: &str, content: &StoredContent) -> Result<()> {
     store.save_blob(&body_key(url), &content.body).await?;
     if let Some(content_type) = &content.content_type {
-        store.save_blob(&ct_key(url), content_type.as_bytes()).await?;
+        store
+            .save_blob(&ct_key(url), content_type.as_bytes())
+            .await?;
     }
     Ok(())
 }
@@ -108,16 +110,30 @@ mod tests {
                 content_type: Some("text/html".into()),
                 body: b"<h1>bye</h1>".to_vec(),
             };
-            save_content(&mut store, "https://gone.example/", &content).await.unwrap();
+            save_content(&mut store, "https://gone.example/", &content)
+                .await
+                .unwrap();
 
-            let dropped = evict_content(&mut store, "https://gone.example/").await.unwrap();
-            assert!(dropped, "the body was present, so eviction reports it removed");
+            let dropped = evict_content(&mut store, "https://gone.example/")
+                .await
+                .unwrap();
             assert!(
-                load_content(&mut store, "https://gone.example/").await.unwrap().is_none(),
+                dropped,
+                "the body was present, so eviction reports it removed"
+            );
+            assert!(
+                load_content(&mut store, "https://gone.example/")
+                    .await
+                    .unwrap()
+                    .is_none(),
                 "content is gone after eviction",
             );
             // Evicting again is a no-op (nothing left to drop).
-            assert!(!evict_content(&mut store, "https://gone.example/").await.unwrap());
+            assert!(
+                !evict_content(&mut store, "https://gone.example/")
+                    .await
+                    .unwrap()
+            );
         });
     }
 
@@ -129,10 +145,17 @@ mod tests {
                 content_type: Some("text/html; charset=utf-8".into()),
                 body: b"<h1>hi</h1>".to_vec(),
             };
-            save_content(&mut store, "https://example.com/", &content).await.unwrap();
-            let loaded =
-                load_content(&mut store, "https://example.com/").await.unwrap().expect("stored");
-            assert_eq!(loaded, content, "content-type + raw body survive the round trip");
+            save_content(&mut store, "https://example.com/", &content)
+                .await
+                .unwrap();
+            let loaded = load_content(&mut store, "https://example.com/")
+                .await
+                .unwrap()
+                .expect("stored");
+            assert_eq!(
+                loaded, content,
+                "content-type + raw body survive the round trip"
+            );
         });
     }
 
@@ -140,9 +163,17 @@ mod tests {
     fn body_only_round_trips_with_no_content_type() {
         pollster::block_on(async {
             let mut store = MemStore::default();
-            let content = StoredContent { content_type: None, body: b"raw bytes".to_vec() };
-            save_content(&mut store, "mere://x", &content).await.unwrap();
-            assert_eq!(load_content(&mut store, "mere://x").await.unwrap().unwrap(), content);
+            let content = StoredContent {
+                content_type: None,
+                body: b"raw bytes".to_vec(),
+            };
+            save_content(&mut store, "mere://x", &content)
+                .await
+                .unwrap();
+            assert_eq!(
+                load_content(&mut store, "mere://x").await.unwrap().unwrap(),
+                content
+            );
         });
     }
 
@@ -150,7 +181,12 @@ mod tests {
     fn absent_url_loads_to_none() {
         pollster::block_on(async {
             let mut store = MemStore::default();
-            assert!(load_content(&mut store, "https://absent").await.unwrap().is_none());
+            assert!(
+                load_content(&mut store, "https://absent")
+                    .await
+                    .unwrap()
+                    .is_none()
+            );
         });
     }
 }

@@ -17,7 +17,9 @@
 //! [Scene-to-DOM migration plan](../../../design_docs/mere_docs/implementation_strategy/2026-07-01_gloss_scene_to_dom_migration_plan.md)'s
 //! Phase 2).
 
+use forme::GraphMemberId;
 use netrender::Scene;
+use orrery::NodeState;
 use register_theme::chrome::{ChromeTheme, Color32};
 
 /// Inset (px) of the swatch from the pane edges.
@@ -37,6 +39,85 @@ const RECENT_H: f32 = 110.0;
 #[derive(Clone, Debug, PartialEq)]
 pub enum GlossRowIntent {
     Select(String),
+}
+
+/// A real graph node backing an outline row: its identity (for `data-member` +
+/// keying) and the NODE_SHEET accent (state + selection) every representation of
+/// a node takes. `url` drives the click route directly, independent of whether
+/// `member` resolved (defensive; in practice both always resolve together).
+#[derive(Clone, Debug, PartialEq)]
+pub struct GlossOutlineNode {
+    pub member: GraphMemberId,
+    pub url: String,
+    pub state: NodeState,
+    pub selected: bool,
+}
+
+/// One outline row. `node` is `Some` for a real graph node (a clickable, tinted
+/// row) and `None` for a structural path-segment row (plain text, unclickable) —
+/// the host-enriched twin of [`glossary::OutlineRow`].
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct GlossOutlineRow {
+    pub depth: usize,
+    pub label: String,
+    pub node: Option<GlossOutlineNode>,
+}
+
+/// The host-built outline projection for one frame: the depth-tagged rows plus the
+/// cheap graph metrics for the header readout.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct GlossOutlineSnapshot {
+    pub rows: Vec<GlossOutlineRow>,
+    pub metrics: glossary::GraphMetrics,
+}
+
+/// Approximate rendered row / header heights (px), for the row-budget estimate in
+/// [`cap_outline_rows`] — not a hard CSS contract (rows auto-size to content), just close
+/// enough that the budget tracks the pane's live height without needing a fixed-height
+/// CSS rewrite. (gloss-outline plan P2 — dynamic caps.)
+pub(crate) const OUTLINE_ROW_H: f32 = 22.0;
+pub(crate) const OUTLINE_HEADER_H: f32 = 18.0;
+/// Depth ceiling independent of viewport: a pathologically deep single URL chain
+/// shouldn't blow up the tree just because it is technically nested. Collapses into
+/// the same "+N more" summary row the row budget uses.
+const MAX_OUTLINE_DEPTH: usize = 8;
+
+/// Cap `rows` to what `available_height` px can actually show: the depth ceiling
+/// above (viewport-independent) plus a row budget derived from the pane's live
+/// height (viewport-dependent — recomputed every frame the outline snapshot is
+/// built, so resizing the window or dragging the gloss pane's divider live-updates
+/// what's visible). A truncated list gets one synthetic "+N more" summary row in
+/// place of what it replaced. `glossary::outline_rows` / `outline_djot` themselves
+/// are never capped — this only trims the *view's* copy, so any future export/knot
+/// consumer still gets the complete tree; "full export vs caps" is the same data,
+/// truncated only here. (gloss-outline plan P2 — dynamic caps.)
+pub(crate) fn cap_outline_rows(
+    mut rows: Vec<GlossOutlineRow>,
+    available_height: f32,
+) -> Vec<GlossOutlineRow> {
+    let before = rows.len();
+    rows.retain(|r| r.depth <= MAX_OUTLINE_DEPTH);
+    let mut hidden = before - rows.len();
+
+    let budget = ((available_height - OUTLINE_HEADER_H).max(0.0) / OUTLINE_ROW_H).floor() as usize;
+    let needs_summary = hidden > 0 || rows.len() > budget;
+    let visible_budget = if needs_summary {
+        budget.saturating_sub(1)
+    } else {
+        budget
+    };
+    if rows.len() > visible_budget {
+        hidden += rows.len() - visible_budget;
+        rows.truncate(visible_budget);
+    }
+    if needs_summary && budget > 0 {
+        rows.push(GlossOutlineRow {
+            depth: 0,
+            label: format!("+{hidden} more"),
+            node: None,
+        });
+    }
+    rows
 }
 
 /// Split the gloss pane's rect into its three stacked sections, top to bottom:
@@ -179,4 +260,3 @@ pub fn minimap_backdrop_scene(
     }
     scene
 }
-

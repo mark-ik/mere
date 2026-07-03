@@ -251,8 +251,8 @@ impl PaneSession {
 
     /// The accumulated CSS `translate` of `node` (its own plus its ancestors'), which the
     /// fragment plane omits. Added to a fragment origin, it lands a transform-positioned
-    /// element (an orrery node-card) where it actually paints — the same offset the focus
-    /// ring reads, so the orrery a11y rect tracks the painted card. Delegates to the
+    /// element (an orrery gnode) where it actually paints — the same offset the focus
+    /// ring reads, so the orrery a11y rect tracks the painted gnode. Delegates to the
     /// retained layout. (Slice 4.)
     pub(crate) fn accumulated_translate(&self, dom: &ScriptedDom, node: NodeId) -> (f32, f32) {
         self.layout.accumulated_translate(dom, node)

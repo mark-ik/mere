@@ -125,9 +125,39 @@ pub struct ShellOutcome {
     /// Mirrors `script_event`: a 2-arg binding that records into the outcome (the host, not the
     /// shell, holds the private store). (Alembic B7-P3.)
     pub compose_engrams: Option<(String, String)>,
+    /// True when `pair_remote_auth()` was called — the host mints a remote-auth
+    /// pairing ticket for the active persona and writes the ticket artifacts under
+    /// the Mere data root. The shell records the intent; the host owns ticket I/O.
+    pub remote_auth_pairing_ticket: bool,
+    /// The `(ticket_path, response_path)` passed to
+    /// `accept_remote_auth_pairing("ticket", "response")` — the host loads those
+    /// artifacts, issues the remote-auth grant, and updates wallet state. `None`
+    /// when not called.
+    pub remote_auth_pairing_accept: Option<RemoteAuthPairingAcceptance>,
+    /// The `ticket_path` passed to `respond_remote_auth_pairing("ticket")` — the
+    /// host ensures a stable delegated-device identity exists locally, derives the
+    /// SAS, and writes the response artifact for that device to hand back.
+    pub remote_auth_pairing_respond: Option<String>,
+    /// The `(ticket_path, response_path)` passed to
+    /// `preview_remote_auth_pairing("ticket", "response")` — the host derives the
+    /// short auth string without yet issuing the grant, so the user can compare
+    /// both sides before accepting.
+    pub remote_auth_pairing_preview: Option<RemoteAuthPairingAcceptance>,
+    /// The `bundle_path` passed to `install_remote_auth_enrollment("bundle")` —
+    /// the host loads the delegator-produced enrollment artifact and restores the
+    /// delegated device's wallet state from it.
+    pub remote_auth_enrollment_install: Option<String>,
     /// A compile / runtime error message, if the script failed. Commands called
     /// before a mid-script failure are still present in `commands`.
     pub error: Option<String>,
+}
+
+/// Paths of the host-owned pairing artifacts `accept_remote_auth_pairing(...)`
+/// consumes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemoteAuthPairingAcceptance {
+    pub ticket_path: String,
+    pub response_path: String,
 }
 
 /// The privileged command-shell evaluator. Stateless: each [`eval`](Self::eval)
@@ -158,6 +188,14 @@ impl CommandShell {
         let script_event: Rc<RefCell<Option<(String, String)>>> = Rc::new(RefCell::new(None));
         let scene_request: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
         let compose_engrams: Rc<RefCell<Option<(String, String)>>> = Rc::new(RefCell::new(None));
+        let remote_auth_pairing_ticket: Rc<RefCell<bool>> = Rc::new(RefCell::new(false));
+        let remote_auth_pairing_accept: Rc<RefCell<Option<RemoteAuthPairingAcceptance>>> =
+            Rc::new(RefCell::new(None));
+        let remote_auth_pairing_respond: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+        let remote_auth_pairing_preview: Rc<RefCell<Option<RemoteAuthPairingAcceptance>>> =
+            Rc::new(RefCell::new(None));
+        let remote_auth_enrollment_install: Rc<RefCell<Option<String>>> =
+            Rc::new(RefCell::new(None));
         let snapshot = Rc::new(ctx.clone());
         let mut engine = script_rhai::base_engine();
 
@@ -285,6 +323,61 @@ impl CommandShell {
             *ce.borrow_mut() = Some((id_a.to_string(), id_b.to_string()));
         });
 
+        // `pair_remote_auth()` — ask the host to mint ticket/code artifacts for the
+        // active persona. The shell records only the intent; the host owns file I/O
+        // and wallet defaults. This is an admin-grade host seam until the dedicated
+        // QR/SAS pairing UI lands.
+        let rpt = remote_auth_pairing_ticket.clone();
+        engine.register_fn("pair_remote_auth", move || {
+            *rpt.borrow_mut() = true;
+        });
+
+        // `accept_remote_auth_pairing("ticket", "response")` — ask the host to
+        // load the recorded ticket/response artifacts and issue the remote-auth
+        // grant. Recorded here, applied host-side like `sparql` / `scene`.
+        let rpa = remote_auth_pairing_accept.clone();
+        engine.register_fn(
+            "accept_remote_auth_pairing",
+            move |ticket_path: &str, response_path: &str| {
+                *rpa.borrow_mut() = Some(RemoteAuthPairingAcceptance {
+                    ticket_path: ticket_path.to_string(),
+                    response_path: response_path.to_string(),
+                });
+            },
+        );
+
+        // `respond_remote_auth_pairing("ticket")` — ask the host to ensure a
+        // stable delegated-device identity exists locally and write a filled
+        // response artifact for the supplied ticket.
+        let rpr = remote_auth_pairing_respond.clone();
+        engine.register_fn("respond_remote_auth_pairing", move |ticket_path: &str| {
+            *rpr.borrow_mut() = Some(ticket_path.to_string());
+        });
+
+        // `preview_remote_auth_pairing("ticket", "response")` — ask the host to
+        // derive the short auth string without yet issuing the grant.
+        let rpp = remote_auth_pairing_preview.clone();
+        engine.register_fn(
+            "preview_remote_auth_pairing",
+            move |ticket_path: &str, response_path: &str| {
+                *rpp.borrow_mut() = Some(RemoteAuthPairingAcceptance {
+                    ticket_path: ticket_path.to_string(),
+                    response_path: response_path.to_string(),
+                });
+            },
+        );
+
+        // `install_remote_auth_enrollment("bundle")` — ask the host to load a
+        // delegator-produced enrollment bundle and restore the delegated device's
+        // wallet state from it.
+        let rei = remote_auth_enrollment_install.clone();
+        engine.register_fn(
+            "install_remote_auth_enrollment",
+            move |bundle_path: &str| {
+                *rei.borrow_mut() = Some(bundle_path.to_string());
+            },
+        );
+
         engine.set_max_operations(OP_BUDGET);
         let result = engine.eval::<Dynamic>(&desugar(source));
         let commands = commands.borrow().clone();
@@ -298,6 +391,11 @@ impl CommandShell {
         let script_event = script_event.borrow().clone();
         let scene_request = scene_request.borrow().clone();
         let compose_engrams = compose_engrams.borrow().clone();
+        let remote_auth_pairing_ticket = *remote_auth_pairing_ticket.borrow();
+        let remote_auth_pairing_accept = remote_auth_pairing_accept.borrow().clone();
+        let remote_auth_pairing_respond = remote_auth_pairing_respond.borrow().clone();
+        let remote_auth_pairing_preview = remote_auth_pairing_preview.borrow().clone();
+        let remote_auth_enrollment_install = remote_auth_enrollment_install.borrow().clone();
         match result {
             Ok(value) => ShellOutcome {
                 text: stringify(value),
@@ -312,6 +410,11 @@ impl CommandShell {
                 script_event,
                 scene_request,
                 compose_engrams,
+                remote_auth_pairing_ticket,
+                remote_auth_pairing_accept,
+                remote_auth_pairing_respond,
+                remote_auth_pairing_preview,
+                remote_auth_enrollment_install,
                 error: None,
             },
             Err(err) => ShellOutcome {
@@ -327,6 +430,11 @@ impl CommandShell {
                 script_event,
                 scene_request,
                 compose_engrams,
+                remote_auth_pairing_ticket,
+                remote_auth_pairing_accept,
+                remote_auth_pairing_respond,
+                remote_auth_pairing_preview,
+                remote_auth_enrollment_install,
                 error: Some(err.to_string()),
             },
         }
@@ -363,6 +471,11 @@ pub fn complete(prefix: &str) -> Option<&'static str> {
             "script_event",
             "scene",
             "compose_engrams",
+            "pair_remote_auth",
+            "accept_remote_auth_pairing",
+            "respond_remote_auth_pairing",
+            "preview_remote_auth_pairing",
+            "install_remote_auth_enrollment",
         ])
         .find(|name| name.len() > prefix.len() && name.starts_with(prefix))
 }
@@ -581,6 +694,72 @@ mod tests {
         assert!(out.error.is_none());
         // The verb ghost-completes so a user discovers it.
         assert_eq!(complete("compose"), Some("compose_engrams"));
+    }
+
+    #[test]
+    fn remote_auth_pairing_intents_record_into_the_outcome() {
+        let out = CommandShell::new().eval("pair_remote_auth()", &ctx());
+        assert!(out.remote_auth_pairing_ticket);
+        assert!(out.commands.is_empty() && out.error.is_none());
+
+        let out = CommandShell::new().eval(
+            r#"accept_remote_auth_pairing("ticket.cbor", "response.json")"#,
+            &ctx(),
+        );
+        assert_eq!(
+            out.remote_auth_pairing_accept,
+            Some(RemoteAuthPairingAcceptance {
+                ticket_path: "ticket.cbor".to_string(),
+                response_path: "response.json".to_string(),
+            })
+        );
+        assert!(out.commands.is_empty() && out.error.is_none());
+
+        let out = CommandShell::new().eval(r#"respond_remote_auth_pairing("ticket.json")"#, &ctx());
+        assert_eq!(
+            out.remote_auth_pairing_respond.as_deref(),
+            Some("ticket.json")
+        );
+        assert!(out.commands.is_empty() && out.error.is_none());
+
+        let out = CommandShell::new().eval(
+            r#"preview_remote_auth_pairing("ticket.json", "response.json")"#,
+            &ctx(),
+        );
+        assert_eq!(
+            out.remote_auth_pairing_preview,
+            Some(RemoteAuthPairingAcceptance {
+                ticket_path: "ticket.json".to_string(),
+                response_path: "response.json".to_string(),
+            })
+        );
+        assert!(out.commands.is_empty() && out.error.is_none());
+
+        let out =
+            CommandShell::new().eval(r#"install_remote_auth_enrollment("bundle.cbor")"#, &ctx());
+        assert_eq!(
+            out.remote_auth_enrollment_install.as_deref(),
+            Some("bundle.cbor")
+        );
+        assert!(out.commands.is_empty() && out.error.is_none());
+
+        assert_eq!(complete("pair_r"), Some("pair_remote_auth"));
+        assert_eq!(
+            complete("accept_remote"),
+            Some("accept_remote_auth_pairing")
+        );
+        assert_eq!(
+            complete("respond_remote"),
+            Some("respond_remote_auth_pairing")
+        );
+        assert_eq!(
+            complete("preview_remote"),
+            Some("preview_remote_auth_pairing")
+        );
+        assert_eq!(
+            complete("install_remote"),
+            Some("install_remote_auth_enrollment")
+        );
     }
 
     #[test]

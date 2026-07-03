@@ -48,6 +48,7 @@ use crate::types::{
 };
 
 pub mod apply;
+pub mod capture;
 /// Cross-graph node copy (tear-out fork): mints a node in this graph from a
 /// donor node in another graph, recording cross-graph derivation provenance.
 pub mod cross_graph;
@@ -55,11 +56,11 @@ pub mod edge_data;
 pub mod edge_payload;
 pub mod edge_taxonomy;
 pub mod facet_projection;
+pub mod filter;
 /// Test-fixture escape hatch over the `pub(crate)` mutators (write-path
 /// migration). Feature-gated: enable `fixtures` in dev-dependencies only.
 #[cfg(feature = "fixtures")]
 pub mod fixtures;
-pub mod filter;
 pub mod history;
 pub mod identity;
 pub mod import_records;
@@ -107,15 +108,18 @@ pub use history::{
 // Stage 4 of the 2026-05-11 relation-taxonomy plan removed `EdgeType` and
 // `EdgeKind`; reads go through [`RelationKind`] + [`RelationSelector`], writes
 // through [`EdgeAssertion`].
+pub use capture::{
+    CapturedDelta, GraphTableStats, replay_captured_deltas, set_captured_delta_hook,
+};
+pub use edge_data::{
+    ArrangementData, ContainmentData, EdgeMetrics, ImportedData, ProvenanceData, REL_VOCAB,
+    SemanticData, Traversal, TraversalData, predicate_iri, sub_kind_from_iri,
+};
 pub use edge_payload::EdgePayload;
 pub use edge_taxonomy::{
     ArrangementSubKind, ContainmentSubKind, EdgeAssertion, EdgeFamily, ImportedSubKind,
     NavigationTrigger, ProvenanceSubKind, RelationDurability, RelationKind, RelationSelector,
     SemanticSubKind,
-};
-pub use edge_data::{
-    ArrangementData, ContainmentData, EdgeMetrics, ImportedData, ProvenanceData, SemanticData,
-    Traversal, TraversalData, predicate_iri, sub_kind_from_iri, REL_VOCAB,
 };
 
 // Field-system truth types (2026-05-31). Field/Coupling form a parallel field
@@ -375,7 +379,12 @@ impl Graph {
     }
 
     /// Add a node with a pre-existing UUID.
-    pub(crate) fn add_node_with_id(&mut self, id: Uuid, url: String, position: Point2D<f32>) -> NodeKey {
+    pub(crate) fn add_node_with_id(
+        &mut self,
+        id: Uuid,
+        url: String,
+        position: Point2D<f32>,
+    ) -> NodeKey {
         let now = std::time::SystemTime::now();
         let primary_address = address_from_url(&url);
         let key = self.inner.add_node(Node {
@@ -486,7 +495,8 @@ impl Graph {
     pub(crate) fn navigate_node(&mut self, key: NodeKey, url: &str) {
         let at_ms = Self::epoch_ms();
         if let Some(id) = self.inner.node_weight(key).map(|n| n.id) {
-            self.nav.record_visit(id, url, node_lineage::TransitionKind::UrlTyped, at_ms);
+            self.nav
+                .record_visit(id, url, node_lineage::TransitionKind::UrlTyped, at_ms);
         }
         if let Some(node) = self.inner.node_weight_mut(key) {
             node.last_session_visited = self.current_session;
@@ -530,12 +540,16 @@ impl Graph {
 
     /// Whether `key`'s within-node history can step back (toolbar gating).
     pub fn node_can_back(&self, key: NodeKey) -> bool {
-        self.inner.node_weight(key).is_some_and(|n| self.nav.can_back(n.id))
+        self.inner
+            .node_weight(key)
+            .is_some_and(|n| self.nav.can_back(n.id))
     }
 
     /// Whether `key`'s within-node history can step forward (toolbar gating).
     pub fn node_can_forward(&self, key: NodeKey) -> bool {
-        self.inner.node_weight(key).is_some_and(|n| self.nav.can_forward(n.id))
+        self.inner
+            .node_weight(key)
+            .is_some_and(|n| self.nav.can_forward(n.id))
     }
 
     /// `key`'s current page (its history cursor's URL), if any.
@@ -548,7 +562,10 @@ impl Graph {
     pub fn node_history_projection(&self, key: NodeKey) -> NodeHistoryProjection {
         match self.inner.node_weight(key) {
             Some(node) => self.nav.projection(node.id),
-            None => NodeHistoryProjection { entries: Vec::new(), current_index: 0 },
+            None => NodeHistoryProjection {
+                entries: Vec::new(),
+                current_index: 0,
+            },
         }
     }
 

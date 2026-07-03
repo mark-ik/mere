@@ -362,6 +362,85 @@ impl ThemeRegistry {
     }
 }
 
+/// Toggle a user theme's light/dark mode in place. Returns whether the edit applied.
+pub fn toggle_user_theme_mode(def: &mut ThemeDef) -> bool {
+    if def.source != ThemeSource::User {
+        return false;
+    }
+    def.seeds.dark = !def.seeds.dark;
+    true
+}
+
+/// Set one HSL channel of one seed of a user theme to `fraction` of its range.
+/// Returns whether the edit applied.
+pub fn set_user_theme_seed_channel(
+    def: &mut ThemeDef,
+    seed: &str,
+    channel: char,
+    fraction: f64,
+) -> bool {
+    if def.source != ThemeSource::User {
+        return false;
+    }
+    let target = match seed {
+        "primary" => &mut def.seeds.primary,
+        "secondary" => &mut def.seeds.secondary,
+        "tertiary" => &mut def.seeds.tertiary,
+        "neutral" => &mut def.seeds.neutral,
+        _ => return false,
+    };
+    let (mut h, mut s, mut l) = tincture::color_to_hsl(*target);
+    let f = fraction.clamp(0.0, 1.0);
+    match channel {
+        'h' => h = (f * 360.0).rem_euclid(360.0),
+        's' => s = f,
+        'l' => l = f,
+        _ => return false,
+    }
+    *target = tincture::color_from_hsl(h, s, l);
+    true
+}
+
+/// Set a user theme's accent harmony by key. Returns whether the edit applied.
+pub fn set_user_theme_harmony(def: &mut ThemeDef, key: &str) -> bool {
+    use tincture::oklch::Oklch;
+
+    if def.source != ThemeSource::User {
+        return false;
+    }
+    let base_h = Oklch::from_srgb(def.seeds.primary).h;
+    let gap = |c| {
+        (Oklch::from_srgb(c).h - base_h)
+            .to_degrees()
+            .rem_euclid(360.0) as f32
+    };
+    def.harmony = match key {
+        "custom" => Harmony::Custom,
+        "lock" => Harmony::Locked {
+            secondary_deg: gap(def.seeds.secondary),
+            tertiary_deg: gap(def.seeds.tertiary),
+        },
+        "triadic" => Harmony::Locked {
+            secondary_deg: 120.0,
+            tertiary_deg: 240.0,
+        },
+        "analogous" => Harmony::Locked {
+            secondary_deg: 30.0,
+            tertiary_deg: -30.0,
+        },
+        "complementary" => Harmony::Locked {
+            secondary_deg: 180.0,
+            tertiary_deg: 150.0,
+        },
+        "mono" => Harmony::Locked {
+            secondary_deg: 0.0,
+            tertiary_deg: 0.0,
+        },
+        _ => return false,
+    };
+    true
+}
+
 fn validate_theme_tokens(tokens: &ThemeTokenSet) -> Result<(), String> {
     let minimum_ratio = if tokens.theme_id == THEME_ID_HIGH_CONTRAST {
         7.0

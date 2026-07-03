@@ -9,7 +9,10 @@
 use super::super::*;
 
 /// A `GraphSnapshot` carrying one node and the given shared navigation history.
-fn snapshot_with(node: crate::persistence::PersistedNode, nav: SharedNavigationMemory) -> crate::persistence::GraphSnapshot {
+fn snapshot_with(
+    node: crate::persistence::PersistedNode,
+    nav: SharedNavigationMemory,
+) -> crate::persistence::GraphSnapshot {
     crate::persistence::GraphSnapshot {
         nodes: vec![node],
         edges: vec![],
@@ -110,7 +113,10 @@ fn test_cold_restore_reapplies_history_index() {
     assert_eq!(history.entries.len(), 3);
     assert_eq!(history.current_index, 2);
     // The restored current page follows the history cursor.
-    assert_eq!(restored.node_current_url(key).as_deref(), Some("https://example.com/three"));
+    assert_eq!(
+        restored.node_current_url(key).as_deref(),
+        Some("https://example.com/three")
+    );
 }
 
 #[test]
@@ -122,7 +128,10 @@ fn navigate_forward_fork_preserves_the_alternate_branch() {
     let key = graph.add_node("https://example.com/a".to_string(), Point2D::new(0.0, 0.0));
     graph.navigate_node(key, "https://example.com/a");
     graph.navigate_node(key, "https://example.com/b");
-    assert_eq!(graph.node_history_back(key).as_deref(), Some("https://example.com/a"));
+    assert_eq!(
+        graph.node_history_back(key).as_deref(),
+        Some("https://example.com/a")
+    );
     graph.navigate_node(key, "https://example.com/c");
 
     let branch = graph.node_history_branch_projection(key);
@@ -132,10 +141,16 @@ fn navigate_forward_fork_preserves_the_alternate_branch() {
         .find(|v| v.url == "https://example.com/a")
         .expect("a on the active path");
     assert!(
-        a_visit.alternate_children.iter().any(|alt| alt.url == "https://example.com/b"),
+        a_visit
+            .alternate_children
+            .iter()
+            .any(|alt| alt.url == "https://example.com/b"),
         "b is preserved as an alternate branch off a after the forward-fork",
     );
-    assert_eq!(graph.node_current_url(key).as_deref(), Some("https://example.com/c"));
+    assert_eq!(
+        graph.node_current_url(key).as_deref(),
+        Some("https://example.com/c")
+    );
 }
 
 #[test]
@@ -166,7 +181,10 @@ fn test_restore_fallback_without_session_state() {
     let restored = Graph::from_snapshot(&snapshot);
     let (key, _) = restored.get_node_by_id(node_id).unwrap();
     let history = restored.node_history_projection(key);
-    assert_eq!(history.entries, vec!["https://legacy-one.example".to_string()]);
+    assert_eq!(
+        history.entries,
+        vec!["https://legacy-one.example".to_string()]
+    );
     assert_eq!(history.current_index, 0);
     assert_eq!(restored.get_node(key).unwrap().session_scroll, None);
 }

@@ -48,8 +48,10 @@ The leaks cost wildly different amounts to close, which is why this is tiered.
 ## What we have today (grounded)
 
 - **Per-persona NodeId is a caller choice, not a wall.** `P2pandaTransport::bind` takes a
-  keypair argument; passing `derive_keypair(persona_id)` instead of the master makes the
-  NodeId that persona's key. Crypto is free; the binding to master is convention.
+  keypair argument; passing a persona-salt-derived keypair instead of the master makes the
+  NodeId that persona's key. The convention this doc and the wallet companion assume is
+  `derive_keypair(BLAKE3('persona' || persona_id))`. Crypto is free; the binding to master
+  is convention.
 - **Discovery is optional.** mDNS and random-walk are both opt-in builder calls
   ([`p2panda_transport.rs`](../../../crates/murm/transport/src/p2panda_transport.rs)); a
   quiet persona turns them off and connects via **iroh-tickets** (an out-of-band
@@ -61,10 +63,9 @@ The leaks cost wildly different amounts to close, which is why this is tiered.
   two-machine job round-trips over LogSync. But the mesh is cross-device *coordination*,
   not single-persona *egress routing*. A persona is a context boundary, not a network
   boundary: there is no "this persona egresses through device X."
-- **The seam is a design gap.** `PersonaId` is a bare UUID; there is no
-  `PersonaManifest.home_device`, no `PersonaStore` to persist it, and no
-  session-startup resolution of a persona's transport. Adding it is design work, not a
-  fight with iroh.
+- **The seam is a design gap.** `PersonaId` is a bare UUID; there is no identity-level
+  `DeviceRoster`, no `PersonaManifest.egress` persistence yet, and no session-startup
+  resolution of a persona's transport. Adding it is design work, not a fight with iroh.
 
 ## Mode 1 + the half-measure (the near-term plan)
 
@@ -130,8 +131,9 @@ persona, or accept that those faces are co-located behind home.
    the peer (iroh 0.98 does not expose this). Only worth it if in-protocol relay beats
    the WireGuard layer, which it probably does not for v1.
 
-The shared missing seam for all three is persona-owned transport config:
-`PersonaManifest.egress`, a synced `DeviceRoster`, session-startup resolution, and a
+The shared missing seam for all three is split across two ownership levels: persona-owned
+transport config (`PersonaManifest.egress`) and identity-owned device fabric (a synced
+`DeviceRoster` authored once for all personas), plus session-startup resolution and a
 `connect`-site check. The research scoped this at roughly 60% feasible in four weeks on
 today's stack, the bulk of it being the persona-to-transport plumbing rather than
 anything in iroh.
@@ -183,8 +185,9 @@ always-on node and degrades gracefully when you do not.
 **Not a new subsystem.** The device roster (your devices + their exposure/role) is a small
 synced structure over the personal mesh you already have, and it maps onto the
 resource-coordination trust rings (your own devices are the innermost ring). The two new
-pieces are `PersonaManifest.egress` and a synced `DeviceRoster`; the transport already
-supports binding an endpoint to a chosen key and reaching your own devices.
+pieces are one persona-level field (`PersonaManifest.egress`) and one identity-level
+fabric (`DeviceRoster`); the transport already supports binding an endpoint to a chosen
+key and reaching your own devices.
 
 ## Scale-up: friend / social relay routing
 
@@ -268,6 +271,15 @@ the per-persona-egress concentration question.
 - Friend-relay coordination and availability; anonymity-set sizing.
 - Whether the global-timing tier (Nym) is ever in scope, or "unlinkable to the directory,
   members, and a counterparty's current-location read" is the real product ceiling.
+
+## Progress
+
+- **2026-06-25** — initial design/research pass: adversary matrix, Mode 1, own-device
+  cluster, WireGuard-first path, and the device-fabric direction.
+- **2026-07-02** — aligned the transport brief with the carry-layer companion: the
+  persona-derivation convention is now stated explicitly as
+  `derive_keypair(BLAKE3('persona' || persona_id))`, and the device fabric is now named
+  correctly as identity-level `DeviceRoster` plus persona-level `PersonaManifest.egress`.
 
 ## Findings (research, 2026-06-25)
 

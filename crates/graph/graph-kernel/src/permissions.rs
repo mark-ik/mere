@@ -178,18 +178,28 @@ mod tests {
         // override an App-level Deny.
         let c = chain(&[(App, Permission::Deny), (Surface, Permission::Allow)]);
         let r = resolve_permission(&c, Permission::Allow);
-        assert_eq!(r.effective, Permission::Deny, "narrower scope broadened a Deny");
+        assert_eq!(
+            r.effective,
+            Permission::Deny,
+            "narrower scope broadened a Deny"
+        );
         assert_eq!(r.decided_by, Some(App));
     }
 
     #[test]
     fn prompt_sits_between_allow_and_deny() {
         let c = chain(&[(App, Permission::Allow), (Persona, Permission::Prompt)]);
-        assert_eq!(resolve_permission(&c, Permission::Allow).effective, Permission::Prompt);
+        assert_eq!(
+            resolve_permission(&c, Permission::Allow).effective,
+            Permission::Prompt
+        );
 
         // ...but Deny still wins over Prompt.
         let c = chain(&[(Persona, Permission::Prompt), (Graph, Permission::Deny)]);
-        assert_eq!(resolve_permission(&c, Permission::Allow).effective, Permission::Deny);
+        assert_eq!(
+            resolve_permission(&c, Permission::Allow).effective,
+            Permission::Deny
+        );
     }
 
     #[test]
@@ -204,7 +214,10 @@ mod tests {
     fn decided_by_is_the_narrowest_among_equally_restrictive() {
         // Two Denies: the narrower (Surface) is the more useful explanation.
         let c = chain(&[(Session, Permission::Deny), (Surface, Permission::Deny)]);
-        assert_eq!(resolve_permission(&c, Permission::Allow).decided_by, Some(Surface));
+        assert_eq!(
+            resolve_permission(&c, Permission::Allow).decided_by,
+            Some(Surface)
+        );
     }
 
     #[test]

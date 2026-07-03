@@ -284,13 +284,13 @@ fn connect_cabal(
 
 /// Build the live [`Comms`] over backends under `dir`, the misfin send identity,
 /// and (when the cabal comes up) the live post stream + cabal conversation id for
-/// the subscribe-drain. One per-install comms persona drives the murm cabal key and
-/// the misfin cert.
+/// the subscribe-drain. The shared identity root drives the murm transport key and
+/// the misfin cert derivation.
 async fn build_comms(dir: &Path) -> Result<CommsSetup, String> {
     let comms_dir = dir.join("comms");
     std::fs::create_dir_all(&comms_dir).map_err(|error| error.to_string())?;
 
-    let seed = load_or_create_seed(&comms_dir.join("comms_identity.seed"));
+    let seed = load_wallet_seed(dir);
     let provider: Arc<dyn IdentityProvider> = Arc::new(InMemoryProvider::from_seed(seed));
     let misfin_address = local_misfin_address();
 
@@ -434,22 +434,27 @@ async fn build_cabal(
     Ok((murm, adapter, rx, conversation, ticket, cabal_id))
 }
 
-/// Load the per-install comms persona seed from `path`, or mint + persist one on
-/// first launch (a stable, distinct murm author + misfin identity per install, so
-/// two installs are two peers). A read / write failure falls back to an ephemeral
-/// seed for this launch.
-fn load_or_create_seed(path: &Path) -> [u8; 32] {
-    if let Ok(bytes) = std::fs::read(path) {
-        if let Ok(seed) = <[u8; 32]>::try_from(bytes.as_slice()) {
-            return seed;
+/// Load the wallet root's shared master seed, warning and falling back to an
+/// ephemeral launch-local seed if bootstrap failed earlier.
+fn load_wallet_seed(data_root: &Path) -> [u8; 32] {
+    match session_runtime::load_identity_seed(data_root) {
+        Ok(Some(seed)) => seed,
+        Ok(None) => {
+            tracing::warn!(
+                ?data_root,
+                "identity seed missing; comms identity is ephemeral this launch"
+            );
+            InMemoryProvider::random().master_keypair().to_seed()
+        }
+        Err(err) => {
+            tracing::warn!(
+                %err,
+                ?data_root,
+                "identity seed unavailable; comms identity is ephemeral this launch"
+            );
+            InMemoryProvider::random().master_keypair().to_seed()
         }
     }
-    let seed = InMemoryProvider::random().master_keypair().to_seed();
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    let _ = std::fs::write(path, seed);
-    seed
 }
 
 /// Lowercase hex of bytes (the cabal id → conversation key).

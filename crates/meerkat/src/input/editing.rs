@@ -11,7 +11,7 @@ impl WindowCtx<'_> {
     /// cleared selection), and dispatch the activation keys its widget controls queued.
     /// (Object card — P1.)
     pub(crate) fn drain_object_card(&mut self) {
-        let keys = self.view.take_node_card_keys();
+        let keys = self.view.take_object_card_keys();
         if self.view.object_card.is_some() && self.view.object_card != self.focused_member() {
             self.view.object_card = None;
             self.view.request_redraw();
@@ -48,7 +48,7 @@ impl WindowCtx<'_> {
         }
     }
 
-    /// Whether `(x, y)` lands on the **object card** specifically (not a node-card), so the
+    /// Whether `(x, y)` lands on the **object card** specifically (not a gnode), so the
     /// double-click-to-open-in-pelt gesture can skip it — its − / + are tier steps, and a
     /// double-tap on + must step twice, never launch the node in pelt. (Object card P0.)
     pub(crate) fn point_over_object_card(&self, x: f32, y: f32) -> bool {

@@ -1,0 +1,28 @@
+[package]
+name = "graphlets"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Pure graphlet derivation and shape classification for the Mere graph family."
+documentation = "https://docs.rs/graphlets"
+readme = "README.md"
+keywords = ["graph", "graphlets", "mere", "forme", "classifier"]
+categories = ["algorithms", "data-structures"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+forme.workspace = true
+kernel.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+kernel = { workspace = true, features = ["fixtures"] }
+euclid = "0.22"
+
+[lints]
+workspace = true

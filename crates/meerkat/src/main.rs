@@ -17,7 +17,7 @@
 //! The window draws one **shell document**: a single `ScriptedDom` under one
 //! [`ServalAppRunner`], holding the chrome (toolbar, omnibar, palette, overlays),
 //! the folded panes (roster, apparatus, steward, inspector, trail) as lensed
-//! subtrees, and the orrery's node-card chips as transform-positioned DOM. That
+//! subtrees, and the orrery's gnodes as transform-positioned DOM. That
 //! document runs through serval-layout into one chrome `Scene`. Around and beneath
 //! it the host composites separate surfaces that are not serval documents: the
 //! orrery graph scene ([`Orrery`]'s own `Scene` of gnodes / edges / physics from
@@ -35,7 +35,7 @@
 //! two-root, route-by-Y-band composition.
 //!
 //! The orrery-as-element work lives in the unified-document-host plan: Phase 2a
-//! landed (node cards select + focus through the shell hit-test); retiring the
+//! landed (gnodes select + focus through the shell hit-test); retiring the
 //! standalone orrery `Scene` into a scene underlay (cond 5) remains.
 
 use std::cell::RefCell;
@@ -76,10 +76,10 @@ mod constellation;
 mod content;
 mod crawl;
 mod doc_style;
-mod fetch;
 mod note_surface;
 mod resources;
 mod sync;
+mod wallet_pairing;
 
 mod a11y_bridge;
 #[cfg(any(test, feature = "agent-harness"))]
@@ -99,10 +99,7 @@ mod gloss;
 mod gloss_outline_data;
 mod gloss_outline_view;
 mod gloss_view;
-mod graphlet_classifier;
-mod graphlets;
-#[cfg(test)]
-mod graphlets_tests;
+mod graph_delta_log;
 mod ime;
 mod input;
 mod inspector;
@@ -114,6 +111,7 @@ mod note_sheet;
 mod observability;
 mod pane_data;
 mod pane_geom;
+mod pane_input_snapshot;
 mod pane_session;
 mod render;
 mod roster;
@@ -159,6 +157,9 @@ mod view_pane;
 mod window_view;
 
 use constellation::Constellation;
+pub use fetch;
+pub use graphlets;
+pub use graphlets::classifier as graphlet_classifier;
 use observability::HostObservability;
 pub(crate) use shell_command::ShellCommand;
 
@@ -385,6 +386,15 @@ fn default_mere_root() -> PathBuf {
     dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("mere")
+}
+
+/// Best-effort local device label for the seeded wallet roster entry.
+fn default_device_label() -> String {
+    std::env::var("COMPUTERNAME")
+        .or_else(|_| std::env::var("HOSTNAME"))
+        .ok()
+        .filter(|name| !name.trim().is_empty())
+        .unwrap_or_else(|| "This device".to_string())
 }
 
 /// The registry default context menu as owned strings (the seed when no persona curation

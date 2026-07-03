@@ -113,10 +113,9 @@ impl WindowCtx<'_> {
         let Some(mut def) = self.shared.presentation.theme.theme_def(&active).cloned() else {
             return;
         };
-        if def.source != register_theme::theme::ThemeSource::User {
+        if !register_theme::theme::toggle_user_theme_mode(&mut def) {
             return;
         }
-        def.seeds.dark = !def.seeds.dark;
         self.apply_edited_theme(&active, def);
     }
 
@@ -129,25 +128,9 @@ impl WindowCtx<'_> {
         let Some(mut def) = self.shared.presentation.theme.theme_def(&active).cloned() else {
             return;
         };
-        if def.source != register_theme::theme::ThemeSource::User {
+        if !register_theme::theme::set_user_theme_seed_channel(&mut def, seed, channel, fraction) {
             return;
         }
-        let target = match seed {
-            "primary" => &mut def.seeds.primary,
-            "secondary" => &mut def.seeds.secondary,
-            "tertiary" => &mut def.seeds.tertiary,
-            "neutral" => &mut def.seeds.neutral,
-            _ => return,
-        };
-        let (mut h, mut s, mut l) = tincture::color_to_hsl(*target);
-        let f = fraction.clamp(0.0, 1.0);
-        match channel {
-            'h' => h = (f * 360.0).rem_euclid(360.0),
-            's' => s = f,
-            'l' => l = f,
-            _ => return,
-        }
-        *target = tincture::color_from_hsl(h, s, l);
         self.apply_edited_theme(&active, def);
     }
 
@@ -158,45 +141,13 @@ impl WindowCtx<'_> {
     /// OKLCH (matching the derivation), so "lock" is non-destructive. The editor's
     /// harmony buttons drain here. Built-ins are read-only. (Seed-palette harmony.)
     pub(super) fn set_active_harmony(&mut self, key: &str) {
-        use register_theme::theme::Harmony;
-        use tincture::oklch::Oklch;
         let active = self.shared.presentation.active_theme_id.clone();
         let Some(mut def) = self.shared.presentation.theme.theme_def(&active).cloned() else {
             return;
         };
-        if def.source != register_theme::theme::ThemeSource::User {
+        if !register_theme::theme::set_user_theme_harmony(&mut def, key) {
             return;
         }
-        let base_h = Oklch::from_srgb(def.seeds.primary).h;
-        let gap = |c| {
-            (Oklch::from_srgb(c).h - base_h)
-                .to_degrees()
-                .rem_euclid(360.0) as f32
-        };
-        def.harmony = match key {
-            "custom" => Harmony::Custom,
-            "lock" => Harmony::Locked {
-                secondary_deg: gap(def.seeds.secondary),
-                tertiary_deg: gap(def.seeds.tertiary),
-            },
-            "triadic" => Harmony::Locked {
-                secondary_deg: 120.0,
-                tertiary_deg: 240.0,
-            },
-            "analogous" => Harmony::Locked {
-                secondary_deg: 30.0,
-                tertiary_deg: -30.0,
-            },
-            "complementary" => Harmony::Locked {
-                secondary_deg: 180.0,
-                tertiary_deg: 150.0,
-            },
-            "mono" => Harmony::Locked {
-                secondary_deg: 0.0,
-                tertiary_deg: 0.0,
-            },
-            _ => return,
-        };
         self.apply_edited_theme(&active, def);
     }
 

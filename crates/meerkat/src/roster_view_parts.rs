@@ -8,12 +8,24 @@
 //! ([`crate::roster_view_links`]) and Graphlets ([`crate::roster_view_graphlets`])
 //! tabs also build on. Split out of one file per the 600-LOC ceiling.
 
-use xilem_serval::{PointerClick, ServalCtx, ServalElement, clickable, el, on_click};
+use xilem_serval::{Keyed, PointerClick, ServalCtx, ServalElement, clickable, el, on_click};
 
 use crate::roster::{
     FieldDetail, FieldRow, NodeDetail, RosterDetail, RosterRow, RosterSubject, RosterTab,
 };
 use crate::roster_view::{RosterIntent, RosterState, RosterView};
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+enum NodeTableKey {
+    Header(String),
+    Row(forme::GraphMemberId),
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum FieldTableKey {
+    Header,
+    Row(kernel::graph::FieldId),
+}
 
 pub(crate) fn tab_strip(state: &RosterState) -> RosterView {
     let tabs: Vec<RosterView> = RosterTab::ALL
@@ -38,19 +50,24 @@ pub(crate) fn tab_strip(state: &RosterState) -> RosterView {
 }
 
 pub(crate) fn active_table(state: &RosterState) -> RosterView {
-    let rows = match state.active_tab {
-        RosterTab::Nodes => node_table(&state.node_rows),
-        RosterTab::Links => crate::roster_view_links::link_table(&state.link_rows),
-        RosterTab::Graphlets => crate::roster_view_graphlets::graphlet_table(&state.graphlet_rows),
-        RosterTab::Fields => field_table(&state.field_rows),
+    let empty = match state.active_tab {
+        RosterTab::Nodes => state.node_rows.is_empty(),
+        RosterTab::Links => state.link_rows.is_empty(),
+        RosterTab::Graphlets => state.graphlet_rows.is_empty(),
+        RosterTab::Fields => state.field_rows.is_empty(),
     };
-    if rows.is_empty() {
+    if empty {
         return Box::new(
             el::<_, RosterState, ()>("div", state.active_tab.empty_label())
                 .attr("class", "roster-empty"),
         );
     }
-    Box::new(el::<_, RosterState, ()>("div", rows).attr("class", "roster-table"))
+    match state.active_tab {
+        RosterTab::Nodes => node_table(&state.node_rows),
+        RosterTab::Links => crate::roster_view_links::link_table(&state.link_rows),
+        RosterTab::Graphlets => crate::roster_view_graphlets::graphlet_table(&state.graphlet_rows),
+        RosterTab::Fields => field_table(&state.field_rows),
+    }
 }
 
 pub(crate) fn detail_card(state: &RosterState, detail: &RosterDetail) -> RosterView {
@@ -63,11 +80,11 @@ pub(crate) fn detail_card(state: &RosterState, detail: &RosterDetail) -> RosterV
     }
 }
 
-fn node_table(rows: &[RosterRow]) -> Vec<RosterView> {
-    let mut children: Vec<RosterView> = Vec::new();
+fn node_table(rows: &[RosterRow]) -> RosterView {
+    let mut children: Vec<(NodeTableKey, RosterView)> = Vec::new();
     for row in rows {
         if let Some(header) = &row.section_header {
-            children.push(section(header));
+            children.push((NodeTableKey::Header(header.clone()), section(header)));
         }
         let mut entry: Vec<RosterView> = vec![
             Box::new(
@@ -100,21 +117,26 @@ fn node_table(rows: &[RosterRow]) -> Vec<RosterView> {
         } else {
             "roster-row"
         };
-        children.push(Box::new(clickable(
-            el::<_, RosterState, ()>("div", entry)
-                .attr("class", class)
-                .attr("data-member", member.to_string()),
-            move |st: &mut RosterState, _: PointerClick| {
-                st.open_subject(subject.clone());
-                st.pending.push(RosterIntent::Select(member));
-            },
-        )));
+        children.push((
+            NodeTableKey::Row(member),
+            Box::new(clickable(
+                el::<_, RosterState, ()>("div", entry)
+                    .attr("class", class)
+                    .attr("data-member", member.to_string()),
+                move |st: &mut RosterState, _: PointerClick| {
+                    st.open_subject(subject.clone());
+                    st.pending.push(RosterIntent::Select(member));
+                },
+            )),
+        ));
     }
-    children
+    let children: Keyed<NodeTableKey, RosterView> = children.into();
+    Box::new(el::<_, RosterState, ()>("div", children).attr("class", "roster-table"))
 }
 
-fn field_table(rows: &[FieldRow]) -> Vec<RosterView> {
-    let mut children: Vec<RosterView> = vec![field_header()];
+fn field_table(rows: &[FieldRow]) -> RosterView {
+    let mut children: Vec<(FieldTableKey, RosterView)> =
+        vec![(FieldTableKey::Header, field_header())];
     for fr in rows {
         let id = fr.id;
         let subject = RosterSubject::Field(id);
@@ -141,15 +163,19 @@ fn field_table(rows: &[FieldRow]) -> Vec<RosterView> {
         } else {
             "roster-field"
         };
-        children.push(Box::new(clickable(
-            el::<_, RosterState, ()>("div", entry).attr("class", class),
-            move |st: &mut RosterState, _: PointerClick| {
-                st.open_subject(subject.clone());
-                st.pending.push(RosterIntent::SelectField(id));
-            },
-        )));
+        children.push((
+            FieldTableKey::Row(id),
+            Box::new(clickable(
+                el::<_, RosterState, ()>("div", entry).attr("class", class),
+                move |st: &mut RosterState, _: PointerClick| {
+                    st.open_subject(subject.clone());
+                    st.pending.push(RosterIntent::SelectField(id));
+                },
+            )),
+        ));
     }
-    children
+    let children: Keyed<FieldTableKey, RosterView> = children.into();
+    Box::new(el::<_, RosterState, ()>("div", children).attr("class", "roster-table"))
 }
 
 fn field_header() -> RosterView {

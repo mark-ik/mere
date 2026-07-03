@@ -61,16 +61,16 @@ pub fn load(path: &Path) -> io::Result<Option<Graph>> {
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(e),
     };
-    let snapshot: GraphSnapshot = serde_json::from_str(&json)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    let snapshot: GraphSnapshot =
+        serde_json::from_str(&json).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
     Ok(Some(Graph::from_snapshot(&snapshot)))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kernel::graph::fixtures::GraphFixtures;
     use euclid::default::Point2D;
+    use kernel::graph::fixtures::GraphFixtures;
     use uuid::Uuid;
 
     #[test]
@@ -85,7 +85,11 @@ mod tests {
 
         save(&path, &graph).expect("save");
         let loaded = load(&path).expect("load ok").expect("a graph is present");
-        assert_eq!(loaded.nodes().count(), 2, "both nodes survive the round trip");
+        assert_eq!(
+            loaded.nodes().count(),
+            2,
+            "both nodes survive the round trip"
+        );
         assert!(
             loaded.get_node_by_url("https://a.example").is_some(),
             "the URL index rebuilds from the snapshot",
@@ -98,7 +102,10 @@ mod tests {
     fn absent_file_loads_to_none() {
         let path = std::env::temp_dir().join("mere_session_graph_store_absent_zzz.json");
         let _ = fs::remove_file(&path);
-        assert!(load(&path).expect("load ok").is_none(), "no file means a fresh session");
+        assert!(
+            load(&path).expect("load ok").is_none(),
+            "no file means a fresh session"
+        );
     }
 
     #[test]

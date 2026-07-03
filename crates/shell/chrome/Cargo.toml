@@ -17,6 +17,7 @@ path = "src/lib.rs"
 forme.workspace = true
 kernel.workspace = true
 serde = { version = "1.0", features = ["derive"] }
+url = "2"
 
 [dev-dependencies]
 serde_json = "1.0"

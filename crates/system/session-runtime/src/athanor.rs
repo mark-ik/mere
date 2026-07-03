@@ -84,10 +84,15 @@ pub fn propose_forgetting(
     now_ms: u64,
     current_session: u64,
 ) -> ForgetProposal {
-    let evictable: HashSet<String> =
-        evictable_short_term(&snapshot.nodes, last_visit_ms, policy, now_ms, current_session)
-            .into_iter()
-            .collect();
+    let evictable: HashSet<String> = evictable_short_term(
+        &snapshot.nodes,
+        last_visit_ms,
+        policy,
+        now_ms,
+        current_session,
+    )
+    .into_iter()
+    .collect();
     let urls = snapshot
         .nodes
         .iter()
@@ -220,11 +225,11 @@ pub async fn apply_consolidation(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kernel::graph::fixtures::GraphFixtures;
     use crate::content_store::{StoredContent, save_content};
     use async_trait::async_trait;
     use euclid::default::Point2D;
     use kernel::graph::Graph;
+    use kernel::graph::fixtures::GraphFixtures;
 
     const DAY_MS: u64 = 86_400_000;
 
@@ -327,11 +332,20 @@ mod tests {
     fn apply_drops_proposed_content_and_leaves_the_rest() {
         pollster::block_on(async {
             let mut store = MemStore::default();
-            let page = |b: &str| StoredContent { content_type: None, body: b.as_bytes().to_vec() };
-            save_content(&mut store, "https://stale.example/", &page("old")).await.unwrap();
-            save_content(&mut store, "https://fresh.example/", &page("new")).await.unwrap();
+            let page = |b: &str| StoredContent {
+                content_type: None,
+                body: b.as_bytes().to_vec(),
+            };
+            save_content(&mut store, "https://stale.example/", &page("old"))
+                .await
+                .unwrap();
+            save_content(&mut store, "https://fresh.example/", &page("new"))
+                .await
+                .unwrap();
 
-            let proposal = ForgetProposal { urls: vec!["https://stale.example/".to_string()] };
+            let proposal = ForgetProposal {
+                urls: vec!["https://stale.example/".to_string()],
+            };
             let dropped = apply_forgetting(&mut store, &proposal).await.unwrap();
             assert_eq!(dropped, 1, "one url's content removed");
 
@@ -411,7 +425,10 @@ mod tests {
             .await;
 
             let proposal = propose_consolidation(&mut store).await.expect("propose");
-            assert!(proposal.is_empty(), "a lone shared url is not enough overlap");
+            assert!(
+                proposal.is_empty(),
+                "a lone shared url is not enough overlap"
+            );
         });
     }
 
@@ -425,17 +442,24 @@ mod tests {
             let proposal = propose_consolidation(&mut store).await.expect("propose");
             assert_eq!(proposal.len(), 1);
 
-            let linked =
-                apply_consolidation(&mut store, &proposal, RedactionPolicy::default(), Timestamp(3))
-                    .await
-                    .expect("apply");
+            let linked = apply_consolidation(
+                &mut store,
+                &proposal,
+                RedactionPolicy::default(),
+                Timestamp(3),
+            )
+            .await
+            .expect("apply");
             assert_eq!(linked, 1, "one pair composed");
 
-            let manifests = graph_engram::list_graph_engrams(&mut store).await.expect("list");
+            let manifests = graph_engram::list_graph_engrams(&mut store)
+                .await
+                .expect("list");
             assert!(
                 manifests
                     .iter()
-                    .any(|m| m.provenance.upstream.contains(&a) && m.provenance.upstream.contains(&b)),
+                    .any(|m| m.provenance.upstream.contains(&a)
+                        && m.provenance.upstream.contains(&b)),
                 "a new engram links a and b via upstream",
             );
         });
@@ -456,7 +480,9 @@ mod tests {
             // The two source engrams are still Generated (compose never mutates its
             // sources) and still overlap exactly as before, but a linking engram
             // now names both -- a second pass must not re-propose them.
-            let second = propose_consolidation(&mut store).await.expect("propose again");
+            let second = propose_consolidation(&mut store)
+                .await
+                .expect("propose again");
             assert!(
                 second.is_empty(),
                 "already-linked pairs are not re-proposed: {:?}",

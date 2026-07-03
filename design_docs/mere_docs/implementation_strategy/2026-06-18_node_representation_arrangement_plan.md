@@ -10,6 +10,14 @@ interactive/scripted-form feasibility). The **arrangement axis** is owned by
 [graph_signals_layer_plan](2026-06-22_graph_signals_layer_plan.md) (Decision 7). Kept as the
 record of P0-P4; new representation work lands in the successor.
 
+**Rename banner (2026-07-02):** this doc's code pointers predate the node/card terminology
+cleanup — `OrreryCard` → `OrreryGnode`, `node_card_view` → `gnode_view`, the `.node-card` CSS
+class → `.gnode`, `render_as_cards`/`set_render_as_cards` → `render_gnodes_as_dom`/
+`set_render_gnodes_as_dom`. See
+[node_card_summoning_design](../design/2026-07-01_node_card_summoning_design.md) for why (a node
+is not a card) and `crates/meerkat/src/window_view/views.rs`'s module doc for the current names.
+Left unedited below as the historical record of what the code was called at each session.
+
 *Original status: Planning (with Mark).* The orrery-as-element work (Phase 2 of the
 [unified document host plan](2026-06-17_unified_document_host_plan.md)) put the focused
 orrery's nodes into **host-positioned DOM** (cond 1, the custom-layout `<orrery>` element,

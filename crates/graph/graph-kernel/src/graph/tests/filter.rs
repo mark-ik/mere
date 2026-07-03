@@ -4,8 +4,8 @@
 
 //! Tests for the facet filter engine (filter.rs).
 
-use super::super::filter::*;
 use super::super::filter::facet_keys;
+use super::super::filter::*;
 
 fn text(s: &str) -> FacetScalar {
     FacetScalar::Text(s.to_string())

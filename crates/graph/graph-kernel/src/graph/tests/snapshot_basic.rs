@@ -35,7 +35,11 @@ fn assert_semantic_predicate_creates_open_predicate_edge() {
     // Carries no sub-kinds, yet still reports the Semantic family.
     assert!(payload.has_relation(RelationSelector::Family(EdgeFamily::Semantic)));
     assert!(!payload.is_empty());
-    assert!(payload.semantic_data().is_some_and(|d| d.sub_kinds.is_empty()));
+    assert!(
+        payload
+            .semantic_data()
+            .is_some_and(|d| d.sub_kinds.is_empty())
+    );
     assert_eq!(
         payload.semantic_data().and_then(|d| d.predicate.as_deref()),
         Some("https://schema.org/citation")
@@ -509,6 +513,11 @@ fn test_snapshot_roundtrips_open_coupling_response() {
         .couplings_for_field(fid)
         .next()
         .expect("open coupling restored");
-    assert_eq!(c.response, CouplingResponse::Open { predicate: iri.clone() });
+    assert_eq!(
+        c.response,
+        CouplingResponse::Open {
+            predicate: iri.clone()
+        }
+    );
     assert_eq!(c.response.predicate(), Some(iri.as_str()));
 }

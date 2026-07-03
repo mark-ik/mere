@@ -82,10 +82,16 @@ impl WindowCtx<'_> {
     pub(super) fn compose_engrams(&mut self, id_a: &str, id_b: &str) -> String {
         use session_runtime::graph_engram::{RedactionPolicy, compose_graph_engrams};
 
-        let Some(a) = eidetic::Hash::parse(id_a).ok().map(eidetic::ManifestId::from_hash) else {
+        let Some(a) = eidetic::Hash::parse(id_a)
+            .ok()
+            .map(eidetic::ManifestId::from_hash)
+        else {
             return format!("Compose failed: not a valid engram id: {id_a}");
         };
-        let Some(b) = eidetic::Hash::parse(id_b).ok().map(eidetic::ManifestId::from_hash) else {
+        let Some(b) = eidetic::Hash::parse(id_b)
+            .ok()
+            .map(eidetic::ManifestId::from_hash)
+        else {
             return format!("Compose failed: not a valid engram id: {id_b}");
         };
         let created_at = eidetic::Timestamp(

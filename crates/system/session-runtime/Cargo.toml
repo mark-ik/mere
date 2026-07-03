@@ -13,6 +13,10 @@ frame.workspace = true
 kernel.workspace = true
 forme.workspace = true
 identity.workspace = true
+blake3 = "1.5"
+p2panda-core = "0.6.1"
+chacha20poly1305 = "0.10"
+rand_core = { version = "0.6", features = ["getrandom"] }
 # The blob Store trait the content cache persists through (wasm-clean; the host
 # supplies the concrete fjall / OPFS backend).
 eidetic.workspace = true
@@ -33,3 +37,4 @@ pollster = "0.4"
 # The real fjall-backed Store, for the graph-engram persistence test that proves
 # an engram survives a store close + reopen (the "survives restart" condition).
 eidetic-fjall.workspace = true
+hex = "0.4"

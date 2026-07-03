@@ -348,7 +348,7 @@ impl WindowCtx<'_> {
                     // Links-table row, preselected to that relation cell. (Swatch P4.)
                 } else if button == MouseButton::Left && self.point_over_object_card(x, y) {
                     // The object card's widget buttons own this press: route it to the
-                    // chrome so their `on_click` fires (queuing `node_card_keys`). It must
+                    // chrome so their `on_click` fires (queuing `object_card_keys`). It must
                     // not fall through to gyre, which would grab the node under the card and
                     // never reach the button. (Object card — the press-routing gate.)
                     self.chrome_click(x, y);

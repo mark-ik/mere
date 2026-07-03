@@ -116,7 +116,10 @@ mod tests {
     use uuid::Uuid;
 
     fn temp_data_root(tag: &str) -> PathBuf {
-        let dir = env::temp_dir().join(format!("mere-persona-settings-{tag}-{}", std::process::id()));
+        let dir = env::temp_dir().join(format!(
+            "mere-persona-settings-{tag}-{}",
+            std::process::id()
+        ));
         let _ = fs::remove_dir_all(&dir);
         dir
     }
@@ -139,14 +142,22 @@ mod tests {
     #[test]
     fn load_returns_none_when_no_file() {
         let root = temp_data_root("none");
-        assert!(load_persona_settings(&root, fixture_persona()).unwrap().is_none());
+        assert!(
+            load_persona_settings(&root, fixture_persona())
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
     fn save_then_load_round_trips_menu_actions() {
         let root = temp_data_root("round-trip");
         let original = PersonaSettings {
-            menu_actions: Some(vec!["add_node".into(), "open_splits".into(), "settings".into()]),
+            menu_actions: Some(vec![
+                "add_node".into(),
+                "open_splits".into(),
+                "settings".into(),
+            ]),
             command_usage: [("settings".to_string(), 4u32), ("back".to_string(), 9u32)]
                 .into_iter()
                 .collect(),
@@ -158,7 +169,11 @@ mod tests {
             .unwrap()
             .expect("settings file should be present");
         assert_eq!(restored, original);
-        assert_eq!(restored.eviction_policy, EvictionPolicy::KeepDays(90), "the policy persists");
+        assert_eq!(
+            restored.eviction_policy,
+            EvictionPolicy::KeepDays(90),
+            "the policy persists"
+        );
         assert_eq!(restored.session_count, 7, "the launch counter persists");
         let _ = fs::remove_dir_all(&root);
     }

@@ -1,6 +1,7 @@
 # Gloss Scene-to-DOM Migration Plan
 
-**Planning (with Mark), 2026-07-01.** Converts the gloss pane's remaining two
+**Status: P1-P3 landed, headed-verified, 247/247 tests green (2026-07-01/02).** See Progress
+below. Converts the gloss pane's remaining two
 Scene-textured sections — the whole-graph **minimap** swatch and the
 **recently-visited** list — into real DOM, folded into the same unified shell
 document as the roster and the gloss outline. This finishes the migration the
@@ -29,8 +30,11 @@ proposes: the **orrery pane itself**. `window_view/views.rs`'s
 `orrery_element()` builds a DOM container whose first child is an
 `<external-texture>` element carrying the graph's edges/backdrop raster
 (`ORRERY_SCENE_KEY`), positioned by DOM layout, with real DOM squares
-(`node_card_view`) for every node layered on top, click-routed and
+(`gnode_view`) for every node layered on top, click-routed and
 NODE_SHEET-colored. The minimap becomes the same pattern at pane scale.
+(Terminology: the DOM node square is a **gnode**, not a card — a card is
+the summonable preview/object/connections family; see
+[node_card_summoning_design](../design/2026-07-01_node_card_summoning_design.md).)
 
 ---
 
@@ -112,7 +116,7 @@ way the outline was — new `gloss_recent: GlossRecentState` +
 ### Minimap → hybrid
 - Node squares become real DOM: absolutely positioned
   (`transform:translate(x,y)`), sized/colored from NODE_SHEET state +
-  selection (mirroring `node_card_view`, but simpler — no favicon, no hull,
+  selection (mirroring `gnode_view`, but simpler — no favicon, no hull,
   no label run), `data-member` attr, `clickable(...)`.
 - Edges + rings stay a Scene raster — the existing `minimap_scene` logic
   minus the node-drawing half — embedded via a new `<external-texture>`
@@ -198,8 +202,8 @@ intent type instead of three near-identical single-variant enums.
     in-app capture harness below:
     1. `.gloss-minimap` carried `position: relative`, a *third* positioning
        level (`gloss-minimap-pane`[absolute] > `gloss-minimap`[relative] >
-       `gloss-minimap-node`[absolute]) one deeper than the orrery's own node
-       cards (`orrery`[absolute] > `node-card`[absolute], no relative
+       `gloss-minimap-node`[absolute]) one deeper than the orrery's own
+       gnodes (`orrery`[absolute] > `gnode`[absolute], no relative
        wrapper between) — corrupted the whole chrome document (toolbar/
        shellbar/roster/outline all went blank or partial the moment the
        minimap opened). Fix: drop `position: relative` (static positioning
@@ -252,5 +256,6 @@ intent type instead of three near-identical single-variant enums.
     about the same as 203) — pointing at paint-list emission scaling with
     total DOM size rather than the changed delta. That's a `serval-layout`
     question, out of scope for this session; worth its own investigation/
-    plan given the shell document (roster + gloss + orrery node cards) is
-    only going to grow.
+    plan given the shell document (roster + gloss + orrery gnodes) is
+    only going to grow. See the [UI polish plan](2026-07-01_ui_polish_plan.md)
+    §5 for where this finding now lives as design_docs record.

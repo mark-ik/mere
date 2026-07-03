@@ -39,7 +39,10 @@ fn revision_advances_on_structural_change_only() {
     assert!(after_a > 0, "adding a node advances the revision");
 
     let b = graph.add_node("https://b.example".to_string(), Point2D::new(1.0, 0.0));
-    assert!(graph.revision() > after_a, "a second node advances it again");
+    assert!(
+        graph.revision() > after_a,
+        "a second node advances it again"
+    );
 
     // A new edge (relation) is structural.
     let before_edge = graph.revision();
@@ -50,11 +53,18 @@ fn revision_advances_on_structural_change_only() {
     // A content edit (the node url) is not structural: the revision holds, so a structural cache
     // is not needlessly invalidated by navigation/renames.
     graph.update_node_url(a, "https://a2.example".to_string());
-    assert_eq!(graph.revision(), after_edge, "a url edit is content, not structure");
+    assert_eq!(
+        graph.revision(),
+        after_edge,
+        "a url edit is content, not structure"
+    );
 
     // Removing a node is structural.
     graph.remove_node(b);
-    assert!(graph.revision() > after_edge, "removing a node advances the revision");
+    assert!(
+        graph.revision() > after_edge,
+        "removing a node advances the revision"
+    );
 }
 
 #[test]
@@ -152,7 +162,10 @@ fn test_projected_position_is_the_single_node_position() {
     let key = graph.add_node("https://example.com".to_string(), Point2D::new(10.0, 20.0));
 
     assert!(graph.set_node_projected_position(key, Point2D::new(150.0, 250.0)));
-    assert_eq!(graph.node_projected_position(key), Some(Point2D::new(150.0, 250.0)));
+    assert_eq!(
+        graph.node_projected_position(key),
+        Some(Point2D::new(150.0, 250.0))
+    );
     assert_eq!(graph.projected_centroid(), Some(Point2D::new(150.0, 250.0)));
     // Positions are no longer serialized to graph.json (they live in the cartography
     // sidecar), so the snapshot carries no position fields. (Position gut.)

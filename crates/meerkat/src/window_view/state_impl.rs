@@ -21,26 +21,24 @@ impl WindowView {
         self.runner.update(|s| f(&mut s.chrome));
     }
 
-    /// Replace the orrery element's node cards with a fresh gyre snapshot. The runner
-    /// re-renders, re-placing the cards by their transforms on the RepaintOnly path.
-    /// (Orrery-as-element — Phase 2.)
+    /// Replace the shell-facing orrery snapshot (pane rect + focus card). The retained
+    /// `.gnode` DOM is reconciled separately through [`WindowView::gnode_pool`].
     pub(crate) fn set_orrery(&mut self, render: OrreryRender) {
         self.runner.update(|s| s.orrery = render);
     }
 
-    /// The orrery render snapshot currently in the shell state, so the host can skip
-    /// the rebuild when a fresh snapshot is identical (a settled orrery costs no
-    /// per-frame view re-run). (Orrery-as-element — Phase 2.)
+    /// The current shell-facing orrery snapshot, so the host can skip the shell runner
+    /// rebuild when its rect + focus card are unchanged.
     pub(crate) fn orrery_render(&self) -> &OrreryRender {
         &self.runner.state().orrery
     }
 
     /// Drain the activation keys the object card's widget controls queued, for the host to
     /// dispatch to its member. (Object card — P1.)
-    pub(crate) fn take_node_card_keys(&mut self) -> Vec<String> {
+    pub(crate) fn take_object_card_keys(&mut self) -> Vec<String> {
         let mut out = Vec::new();
         self.runner
-            .update(|s| out = std::mem::take(&mut s.node_card_keys));
+            .update(|s| out = std::mem::take(&mut s.object_card_keys));
         out
     }
 
@@ -103,7 +101,7 @@ impl WindowView {
     /// clicks with the chrome — the first DOM gloss section. (gloss-outline plan P1.)
     pub(crate) fn set_gloss_outline(
         &mut self,
-        snapshot: crate::gloss_outline_view::GlossOutlineSnapshot,
+        snapshot: crate::gloss::GlossOutlineSnapshot,
         rect: Option<[f32; 4]>,
     ) {
         self.runner.update(|s| {
@@ -129,9 +127,7 @@ impl WindowView {
 
     /// Drain the row selections the outline's click handlers queued through the shell
     /// runner's dispatch, for the host to apply. (gloss-outline plan P1.)
-    pub(crate) fn take_gloss_outline_intents(
-        &mut self,
-    ) -> Vec<crate::gloss::GlossRowIntent> {
+    pub(crate) fn take_gloss_outline_intents(&mut self) -> Vec<crate::gloss::GlossRowIntent> {
         let mut out = Vec::new();
         self.runner
             .update(|s| out = std::mem::take(&mut s.gloss_outline.pending));
@@ -287,6 +283,7 @@ impl WindowView {
             dom,
             runner,
             chrome_session: None,
+            gnode_pool: GnodePool::default(),
             workbench,
             pelt_shell: None,
             pelt_theme: None,

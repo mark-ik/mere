@@ -83,6 +83,10 @@ pub mod persona_settings_store;
 pub mod switcher_thumbnail;
 pub mod tearout;
 pub mod view_intent_store;
+// Identity-level and persona-level wallet manifests (`identity/` + `personas/<id>/wallet.json`)
+// for the carry layer. Storage only; pairing and crypto semantics layer on top.
+pub mod wallet_grant;
+pub mod wallet_store;
 
 pub use engine_profile_store::{
     ENGINE_PROFILES_DIR, EngineProfileScope, GRAPHS_DIR, PERSONAS_DIR, SESSIONS_DIR,
@@ -93,20 +97,57 @@ pub use manifest::{
     SessionPolicy, SessionPolicyOverride, WorkerKind,
 };
 pub use manifest_store::{LoadFailure, LoadReport, MANIFEST_FILE, ManifestStore, TRASH_DIR};
-pub use session_service_runner::{
-    InMemoryRunner, NullRunner, SessionServiceRunner, WorkerHandle, WorkerStartError, WorkerState,
-    WorkerStatus, WorkerStopError,
-};
-pub use switcher_thumbnail::{
-    SwitcherThumbnail, SwitcherThumbnailOptions, ThumbnailEdge, ThumbnailNode,
-    build_switcher_thumbnail, build_switcher_thumbnail_with,
-};
 pub use persona_settings_store::{
     PERSONA_SETTINGS_DIR, PERSONA_UI_FILENAME, PersonaSettings, load_persona_settings,
     persona_settings_path, save_persona_settings,
 };
-pub use settings_store::{PersistedSettings, SETTINGS_FILENAME, ShellbarEdge};
 #[cfg(not(target_arch = "wasm32"))]
 pub use script_bindings_store::{SCRIPT_BINDINGS_FILENAME, ScriptBinding};
+pub use session_service_runner::{
+    InMemoryRunner, NullRunner, SessionServiceRunner, WorkerHandle, WorkerStartError, WorkerState,
+    WorkerStatus, WorkerStopError,
+};
+pub use settings_store::{PersistedSettings, SETTINGS_FILENAME, ShellbarEdge};
+pub use switcher_thumbnail::{
+    SwitcherThumbnail, SwitcherThumbnailOptions, ThumbnailEdge, ThumbnailNode,
+    build_switcher_thumbnail, build_switcher_thumbnail_with,
+};
 pub use tearout::{PaneDragPayload, TileDragPayload};
 pub use view_intent_store::{CameraSnapshot, HiddenRelationRecord, VIEW_INTENT_DIR, ViewIntent};
+pub use wallet_grant::{
+    DEVICE_GRANT_SCHEMA_VERSION, DeviceGrantError, DeviceGrantPayload, DeviceGrantSignature,
+    EnrollmentBundleError, PairedRemoteAuthGrantSpec, PairingCodeError, PairingMaterialError,
+    PairingTicketError, PrivateEpochPlaintext, REMOTE_AUTH_ENROLLMENT_BUNDLE_SCHEMA_VERSION,
+    REMOTE_AUTH_PAIRING_SAS_CONTEXT_V1, REMOTE_AUTH_PAIRING_SECRET_LEN,
+    REMOTE_AUTH_PAIRING_TICKET_SCHEMA_VERSION, REMOTE_AUTH_PAIRING_WRAP_CONTEXT_V1,
+    RemoteAuthEnrollmentBundle, RemoteAuthGrantSpec, RemoteAuthPairingMaterial,
+    RemoteAuthPairingResponse, RemoteAuthPairingTicket, RemoteAuthPairingTicketRequest,
+    SignedDeviceGrant, WRAPPED_PRIVATE_EPOCH_FORMAT_V1, WrappedEpochError, WrappedEpochMaterial,
+    build_remote_auth_enrollment_bundle, decode_remote_auth_enrollment_bundle,
+    decode_remote_auth_pairing_ticket, decode_signed_device_grant,
+    derive_remote_auth_pairing_material, device_grant_ref, encode_remote_auth_enrollment_bundle,
+    encode_remote_auth_pairing_ticket, encode_signed_device_grant, format_remote_auth_pairing_code,
+    install_remote_auth_enrollment_bundle, install_remote_auth_enrollment_bundle_with_wrapping_key,
+    issue_device_grant, issue_remote_auth_device_grant,
+    issue_remote_auth_device_grant_from_pairing, issue_remote_auth_device_grant_from_ticket,
+    load_signed_device_grant, mint_remote_auth_pairing_ticket, parse_remote_auth_pairing_code,
+    save_signed_device_grant, signed_device_grant_path, unwrap_private_epoch_material,
+    verify_device_grant, wrap_private_epoch_material,
+};
+pub use wallet_store::{
+    CapabilitySlotRef, DEVICE_ROSTER_FILENAME, DeviceExposure, DeviceGrantRef, DeviceId,
+    DeviceMode, DevicePublicKey, DeviceRecord, DeviceRoster, IDENTITY_DIR, IDENTITY_GRANTS_DIR,
+    IDENTITY_SEED_FILENAME, IDENTITY_WALLET_FILENAME, IdentityWalletManifest, KeyEpochId,
+    LOCAL_DEVICE_IDENTITY_FILENAME, LocalDeviceIdentity, PERSONA_EPOCH_BRIDGE_FILENAME,
+    PERSONA_WALLET_FILENAME, PersonaChainRoot, PersonaEpochBridge, PersonaWalletManifest,
+    PersonaWalletRef, PrivateEpochRecord, PrivateRoots, PublicRoots, RecoveryPolicy,
+    WALLET_SCHEMA_VERSION, WalletBootstrapMode, bootstrap_wallet_state, derive_persona_chain_root,
+    device_grant_path, device_roster_path, device_roster_ref, ensure_local_device_identity,
+    ensure_persona_epoch_bridge, ensure_wallet_state, identity_dir, identity_grants_dir,
+    identity_seed_path, identity_wallet_path, load_current_private_epoch, load_device_grant,
+    load_device_roster, load_identity_seed, load_identity_wallet, load_local_device_identity,
+    load_persona_epoch_bridge, load_persona_wallet, local_device_identity_path,
+    persona_epoch_bridge_path, persona_wallet_path, persona_wallet_salt, save_device_grant,
+    save_device_roster, save_identity_seed, save_identity_wallet, save_local_device_identity,
+    save_persona_epoch_bridge, save_persona_wallet, stage_persona_private_epoch,
+};

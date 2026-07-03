@@ -219,7 +219,10 @@ mod tests {
             predicate: format!("{COUPLING_VOCAB}visual/highlight"),
         };
         assert!(!r.is_force());
-        assert_eq!(r.predicate(), Some("https://mere.computer/ns/coupling#visual/highlight"));
+        assert_eq!(
+            r.predicate(),
+            Some("https://mere.computer/ns/coupling#visual/highlight")
+        );
         let j = serde_json::to_string(&r).unwrap();
         assert_eq!(r, serde_json::from_str::<CouplingResponse>(&j).unwrap());
     }
@@ -232,7 +235,11 @@ mod tests {
         for r in CouplingResponse::iter().filter(|r| r.is_force()) {
             let iri = r.recognized_iri().expect("force core has an IRI");
             let back = CouplingResponse::from_iri(iri).expect("IRI is recognized");
-            assert_eq!(back.recognized_iri(), Some(iri), "IRI round-trips for {r:?}");
+            assert_eq!(
+                back.recognized_iri(),
+                Some(iri),
+                "IRI round-trips for {r:?}"
+            );
         }
         // Open has no recognized IRI; an unknown IRI is not recognized.
         assert!(

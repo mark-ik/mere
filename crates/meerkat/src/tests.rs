@@ -755,61 +755,40 @@ fn shell_container_hosts_chrome_and_pane_under_one_runner() {
     );
 }
 
-/// Phase 2 skeleton spike (orrery-as-element): the orrery renders as a positioned
-/// `<div>` holding node cards as `position:absolute; transform: translate(...)` DOM
-/// children over an `<external-texture>` underlay (edges + demoted dots, host-painted
-/// via gyre), all in one serval document through a runner. Proves the exact view tree
-/// the live rework emits; serval's own transform-aware hit-test (serval-layout) covers
-/// the picking half, and the cheap-path work covers the RepaintOnly transform motion.
+/// The orrery shell element reserves a retained host-pool child beside its
+/// `<external-texture>` underlay, so the render path can reconcile `.gnode` DOM
+/// directly without rebuilding the shell view tree each frame.
 #[test]
-fn orrery_element_composes_transform_cards_over_an_external_texture_underlay() {
+fn orrery_element_reserves_a_retained_host_pool_over_the_external_texture_underlay() {
     use std::cell::RefCell;
     use std::rc::Rc;
-    use xilem_serval::{AnyView, ServalCtx, ServalElement, el, external_texture};
+    use xilem_serval::{AnyView, ServalCtx, ServalElement, el, external_texture, host_pool};
 
-    // A few node positions standing in for gyre's per-frame layout output.
-    struct OrreryDemo {
-        nodes: Vec<(String, f32, f32)>, // (label, world x, world y)
-    }
+    struct OrreryDemo;
     type OrreryView = Box<dyn AnyView<OrreryDemo, (), ServalCtx, ServalElement>>;
 
-    fn orrery_view(s: &OrreryDemo) -> OrreryView {
+    fn orrery_gnode_view(_s: &OrreryDemo) -> OrreryView {
         // The scene underlay the host paints (edges, demoted off-screen dots) via gyre.
         let underlay = external_texture::<OrreryDemo, ()>(1, 600, 400);
-        // One card per node, placed by a per-node transform (gyre output). The cards
-        // are out of flow, so they layer over the in-flow underlay block.
-        let cards: Vec<OrreryView> = s
-            .nodes
-            .iter()
-            .map(|(label, x, y)| {
-                Box::new(
-                    el::<_, OrreryDemo, ()>("div", label.clone())
-                        .attr("class", "node-card")
-                        .attr(
-                            "style",
-                            format!("position:absolute;transform:translate({x}px,{y}px)"),
-                        ),
-                ) as OrreryView
-            })
-            .collect();
         Box::new(
-            el::<_, OrreryDemo, ()>("div", (underlay, cards))
-                .attr("class", "orrery")
-                .attr("style", "position:relative;width:600px;height:400px"),
+            el::<_, OrreryDemo, ()>(
+                "div",
+                (
+                    underlay,
+                    host_pool::<OrreryDemo, ()>("div", "orrery-gnodes")
+                        .attr("class", "orrery-gnode-pool"),
+                ),
+            )
+            .attr("class", "orrery")
+            .attr("style", "position:relative;width:600px;height:400px"),
         )
     }
 
     let dom: Rc<RefCell<ScriptedDom>> = Rc::new(RefCell::new(ScriptedDom::new()));
     let runner = ServalAppRunner::new(
         dom,
-        orrery_view as fn(&OrreryDemo) -> OrreryView,
-        OrreryDemo {
-            nodes: vec![
-                ("Bird".into(), 120.0, 80.0),
-                ("Dog".into(), 300.0, 200.0),
-                ("Cat".into(), 60.0, 320.0),
-            ],
-        },
+        orrery_gnode_view as fn(&OrreryDemo) -> OrreryView,
+        OrreryDemo,
     );
 
     let root = runner.root();
@@ -821,7 +800,7 @@ fn orrery_element_composes_transform_cards_over_an_external_texture_underlay() {
     );
     assert_eq!(
         count_tag(&dom, root, "div"),
-        1 + 3,
-        "the orrery container plus one transform-positioned card per node"
+        2,
+        "the orrery container plus one retained host-pool child"
     );
 }

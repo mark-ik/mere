@@ -65,7 +65,8 @@ impl WindowCtx<'_> {
         // hardcoded default. (Editable eviction policy, B4.)
         let policy = self.shared.presentation.eviction_policy;
         let current_session = self.shared.session.current_session_count;
-        let proposal = athanor::propose_forgetting(&snapshot, &timing, policy, now_ms, current_session);
+        let proposal =
+            athanor::propose_forgetting(&snapshot, &timing, policy, now_ms, current_session);
 
         if proposal.is_empty() {
             self.shared.observability.record_diagnostic(

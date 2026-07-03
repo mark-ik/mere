@@ -23,7 +23,6 @@ use std::time::Instant;
 use forme::GraphMemberId;
 use frame::{FrameLayout, GraphId, PaneId, SessionId, SplitAxis, SplitChoice};
 use meerkat::{Chrome, ChromeView, chrome_view};
-use orrery::Face;
 use platen::Workbench;
 use serval_scripted_dom::{NodeId, ScriptedDom};
 use serval_winit_host::WindowSurface;
@@ -31,7 +30,7 @@ use session_runtime::settings_store::ScriptPermissionPrefs;
 use winit::window::CursorIcon;
 use xilem_serval::{
     AnyView, Modifiers, PointerClick, ServalAppRunner, ServalCtx, ServalElement, WheelEvent, el,
-    external_texture, lens, on_click, on_wheel, overlay_rect,
+    external_texture, host_pool, lens, on_click, on_wheel, overlay_rect,
 };
 
 use super::{CachedTile, ContentPane, ResizeDrag};
@@ -158,6 +157,9 @@ pub(crate) struct WindowView {
     /// until the first render builds it; rebuilt on a structural / resize / theme
     /// change, else the per-frame attribute batch applies on the `RepaintOnly` path.
     pub(crate) chrome_session: Option<PaneSession>,
+    /// This window's retained host-owned `.gnode` island under the shell document's
+    /// orrery element. Bound to one graph at a time, over the shared pooled orrery.
+    pub(crate) gnode_pool: GnodePool,
     /// The tiled-workbench composition (S4): the open tiles + the projection mode
     /// (Cartography = the orrery, Tree = the tiled view).
     pub(crate) workbench: Workbench,
@@ -230,7 +232,7 @@ pub(crate) struct WindowView {
     pub(crate) note_content_heights: HashMap<GraphMemberId, u32>,
     /// The focused node's "last visit" snapshot preview as a PNG data-URI, keyed by URL.
     /// Built once per url by a blocking readback + encode, then rendered as a chrome `<img>`
-    /// in the snapshot card (over the node cards). (Layering fix — card over nodes.)
+    /// in the snapshot card (over the gnodes). (Layering fix — card over nodes.)
     pub(crate) snapshot_data_uris: HashMap<String, String>,
     /// Cached rasterized window-control strip (min / max / close).
     pub(crate) window_controls_tex: Option<CachedTile>,
@@ -416,64 +418,15 @@ pub(crate) struct WindowView {
     pub(crate) scrying_input_focus: Option<GraphMemberId>,
 }
 
-/// A single orrery node card in the shell document: a label placed by a per-node
-/// transform (gyre's world position). The host snapshots the focused orrery into a
-/// `Vec<OrreryCard>` each frame, and the orrery element renders one card per entry.
-/// (Orrery-as-element — Phase 2.)
-#[derive(PartialEq)]
-pub(crate) struct OrreryCard {
-    /// The node's graph member id, stamped on the card div as `data-member` so the
-    /// orrery a11y projection can pair the laid-out card rect back to its graph node
-    /// (the same `data-member` scheme the roster + workbench placeholders use). (Slice 4.)
-    pub(crate) member: GraphMemberId,
-    pub(crate) label: String,
-    pub(crate) x: f32,
-    pub(crate) y: f32,
-    /// The node's activation-state color (hex), from `Orrery::node_state_color` (no
-    /// selection override — selection shows as a ring + lift on the face instead).
-    pub(crate) color: String,
-    /// Whether the node is selected: the face gets a ring + slight scale-lift, distinct
-    /// from the focus ring, so selection leaves the color channel free. (P0 selection.)
-    pub(crate) selected: bool,
-    /// Whether the cursor is over the node this frame: the face gets a faint brighten
-    /// (a wash overlay), the hover channel from Decision 2 — distinct from selection
-    /// (ring + lift) and focus (the focusable ring). (P0 hover.)
-    pub(crate) hovered: bool,
-    /// The node's face footprint (px) before the selection lift, from `Orrery::node_size`
-    /// (per-node override / size-by-degree / the uniform default). The card centers the
-    /// face on the gyre collider at this size. (P0 resize.)
-    pub(crate) size: f32,
-    /// The face's `border-radius` for the node's content-type silhouette (square
-    /// document / rounded menu `9px` / circle feed `50%`). (P0 shape.)
-    pub(crate) radius: &'static str,
-    /// The node's favicon as a `data:` image URI, or `None`. It fills the card face
-    /// (painted over the state color, clipped to the silhouette). (P0 favicon-as-face.)
-    pub(crate) favicon: Option<String>,
-    /// The node's custom sprite image as a `data:` image URI, when its face is `Sprite`
-    /// (from `Orrery::node_sprite`). Fills the whole face (the imported image), replacing
-    /// the state color + favicon. (Node body & face — sprite face.)
-    pub(crate) sprite: Option<String>,
-    /// The node's **face** (the texture axis), from `Orrery::node_face`: `Favicon` draws the
-    /// favicon + caption chip; `Bare` draws the bare content-typed face; `Sprite` draws the
-    /// imported image. Independent of the body (the collider shape). (Node body & face.)
-    pub(crate) face: Face,
-    /// The node's collider hull (face-normalized `[-0.5, 0.5]` polygon), when it has a custom
-    /// body. The face is **clipped to it**, so the rendered node matches its collider — a sprite's
-    /// transparent background stops reading as a square, and the picture is the body. Empty for a
-    /// silhouette-bodied node. (Node body & face — the face is the collider.)
-    pub(crate) hull: Vec<(f32, f32)>,
-}
-
 /// The focused orrery's render snapshot: the pane rect the element sits at and the
-/// node cards (each at its camera-mapped pane-local position). The host rebuilds it
-/// each frame so the cards track gyre and the element tracks the pane. (Phase 2.)
+/// focus card. The `.gnode` DOM now lives in a retained host-owned pool under the
+/// orrery element, reconciled directly against the shell DOM each frame. (Phase 2.)
 #[derive(PartialEq)]
 pub(crate) struct OrreryRender {
     /// The orrery pane rect `[x0, y0, x1, y1]` (left, top, right, bottom) in viewport px.
     pub(crate) rect: [f32; 4],
-    pub(crate) cards: Vec<OrreryCard>,
     /// The focused node's content card (snapshot or unvisited placeholder), placed
-    /// *after* the node cards in document order so it paints over them — the spatial
+    /// *after* the gnodes in document order so it paints over them — the spatial
     /// map's nodes sit under the focused content, and the chrome's overlays still paint
     /// over the card (shell order: orrery before chrome). `None` when no node is focused
     /// or the focused node is itself an open tile. (Layering fix — card over nodes.)
@@ -481,7 +434,7 @@ pub(crate) struct OrreryRender {
 }
 
 /// The focused node's content card in the shell document: a positioned element placed
-/// after the node cards so document order paints it over them. A `Snapshot` carries a PNG
+/// after the gnodes so document order paints it over them. A `Snapshot` carries a PNG
 /// data-URI `<img>` of the page's top peek (built host-side, cached per url); an
 /// `Unvisited` is a pure-DOM dashed placeholder. (Layering fix — card over nodes.)
 #[derive(PartialEq)]
@@ -494,10 +447,10 @@ pub(crate) struct FocusCard {
 #[derive(PartialEq)]
 pub(crate) enum FocusCardKind {
     /// A visited node's "last visit" preview: the page's top peek rendered to a PNG
-    /// data-URI image, placed as a chrome DOM `<img>` after the node cards (so it paints
+    /// data-URI image, placed as a chrome DOM `<img>` after the gnodes (so it paints
     /// over them and under the overlays — like the favicons already do). An
     /// external-texture cannot serve here: textures composite in the content layer below
-    /// the chrome, and the transparent hole does not erase the opaque node cards behind it.
+    /// the chrome, and the transparent hole does not erase the opaque gnodes behind it.
     /// Only built once the host's once-per-url readback + encode has cached the image, so
     /// there is no empty placeholder while it builds. (Layering fix; no placeholder flash.)
     Snapshot { data_uri: String },
@@ -505,7 +458,7 @@ pub(crate) enum FocusCardKind {
     Unvisited,
     /// The per-object action card, summoned in place of the preview by a context action: an
     /// ordered list of setting widgets for the selected object's type. Each widget's controls
-    /// queue a `node_card_keys` activation the host drains. (Object card — P1.)
+    /// queue an `object_card_keys` activation the host drains. (Object card — P1.)
     ObjectCard { widgets: Vec<CardWidget> },
     /// The connections swatch: a multi-node selection's nodes plus their inter-edges, laid out as
     /// DOM in the card (`swatch::connections_swatch_view`). Summoned in place of the single-node
@@ -580,7 +533,7 @@ pub(crate) struct ShellState {
     /// Activation keys queued by the object card's widget controls (`size:up` / `size:down`,
     /// `face:favicon` / `face:bare`, …); the host drains + dispatches them for the card's member.
     /// (Object card — P1.)
-    pub(crate) node_card_keys: Vec<String>,
+    pub(crate) object_card_keys: Vec<String>,
 }
 
 /// Index into [`ShellState::panes`] / `pane_rects` for the four folded list panes; the
@@ -629,7 +582,9 @@ pub(crate) type ShellLogic = fn(&ShellState) -> ShellView;
 /// The runner type the window holds: one document over the composed shell state.
 pub(crate) type ShellRunner = ServalAppRunner<ShellState, ShellLogic, ShellView>;
 
+mod gnode_pool;
 mod state_impl;
 mod views;
 
+pub(crate) use gnode_pool::*;
 pub(crate) use views::*;

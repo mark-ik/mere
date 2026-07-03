@@ -235,7 +235,10 @@ fn write_clip_node(
     let clip_key = graph_apply::add_node(graph, None, clip_url.to_string(), Default::default());
     let _ = apply_graph_delta(
         graph,
-        GraphDelta::SetNodeTitle { key: clip_key, title: clip_title(fragment) },
+        GraphDelta::SetNodeTitle {
+            key: clip_key,
+            title: clip_title(fragment),
+        },
     );
     let _ = apply_graph_delta(
         graph,
@@ -246,7 +249,10 @@ fn write_clip_node(
     );
     let _ = apply_graph_delta(
         graph,
-        GraphDelta::SetNodeBody { key: clip_key, body: Some(fragment_to_knot(fragment)) },
+        GraphDelta::SetNodeBody {
+            key: clip_key,
+            body: Some(fragment_to_knot(fragment)),
+        },
     );
     let member = graph.get_node(clip_key).map(|n| n.id);
     if let Some(visual) = &fragment.visual {
@@ -823,8 +829,8 @@ fn first_nonempty(values: impl IntoIterator<Item = Option<String>>) -> Option<St
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kernel::graph::fixtures::GraphFixtures;
     use kernel::graph::RelationKind;
+    use kernel::graph::fixtures::GraphFixtures;
 
     #[test]
     fn parses_webview2_quoted_json_result() {

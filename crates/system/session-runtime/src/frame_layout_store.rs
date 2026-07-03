@@ -105,7 +105,9 @@ mod tests {
         let dir = temp_session_dir("round-trip");
         let original = sample_layout();
         save_frame_layout(&dir, &original).unwrap();
-        let restored = load_frame_layout(&dir).unwrap().expect("frame file present");
+        let restored = load_frame_layout(&dir)
+            .unwrap()
+            .expect("frame file present");
         assert_eq!(restored, original);
         fs::remove_dir_all(&dir).ok();
     }

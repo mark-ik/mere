@@ -8,17 +8,36 @@
 
 use forme::GraphMemberId;
 use kernel::graph::EdgeFamily;
-use xilem_serval::{PointerClick, clickable, el};
+use xilem_serval::{Keyed, PointerClick, clickable, el};
 
 use crate::roster::{LinkCard, LinkRelationRow, LinkRow, RELATE_PICKER_KINDS, RosterSubject};
 use crate::roster_view::{RosterIntent, RosterState, RosterView};
 use crate::roster_view_parts::{action, action_bar, card_shell};
 
-pub(crate) fn link_table(rows: &[LinkRow]) -> Vec<RosterView> {
-    let mut children: Vec<RosterView> = Vec::new();
+#[derive(Clone, PartialEq, Eq, Hash)]
+enum LinkTableKey {
+    Bundle {
+        from: GraphMemberId,
+        to: GraphMemberId,
+    },
+    Row {
+        from: GraphMemberId,
+        to: GraphMemberId,
+        selector: kernel::graph::RelationSelector,
+    },
+}
+
+pub(crate) fn link_table(rows: &[LinkRow]) -> RosterView {
+    let mut children: Vec<(LinkTableKey, RosterView)> = Vec::new();
     for row in rows {
         if row.starts_bundle {
-            children.push(bundle_section(row));
+            children.push((
+                LinkTableKey::Bundle {
+                    from: row.from,
+                    to: row.to,
+                },
+                bundle_section(row),
+            ));
         }
         let subject = RosterSubject::RelationCell {
             from: row.from,
@@ -59,15 +78,23 @@ pub(crate) fn link_table(rows: &[LinkRow]) -> Vec<RosterView> {
         } else {
             "roster-row"
         };
-        children.push(Box::new(clickable(
-            el::<_, RosterState, ()>("div", cells)
-                .attr("class", format!("{class} roster-link-grid")),
-            move |st: &mut RosterState, _: PointerClick| {
-                st.open_subject(subject.clone());
+        children.push((
+            LinkTableKey::Row {
+                from: row.from,
+                to: row.to,
+                selector: row.selector,
             },
-        )));
+            Box::new(clickable(
+                el::<_, RosterState, ()>("div", cells)
+                    .attr("class", format!("{class} roster-link-grid")),
+                move |st: &mut RosterState, _: PointerClick| {
+                    st.open_subject(subject.clone());
+                },
+            )),
+        ));
     }
-    children
+    let children: Keyed<LinkTableKey, RosterView> = children.into();
+    Box::new(el::<_, RosterState, ()>("div", children).attr("class", "roster-table"))
 }
 
 fn bundle_section(row: &LinkRow) -> RosterView {

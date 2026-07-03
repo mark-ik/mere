@@ -222,11 +222,11 @@ impl Orrery {
             self.stage_node,
             "transform: translate(0px, 0px) scale(1);",
         );
-        // When the host renders these nodes as DOM cards (orrery-as-element) the gnode
-        // layer is dropped below, so skip the per-gnode transform/class updates: an empty
-        // set makes the loop a no-op, the costliest part of the frame on a big graph.
-        // (Phase 2 — perf / cleaning.)
-        let gnodes: Vec<(NodeKey, DomNodeId)> = if self.render_as_cards {
+        // When the host renders these gnodes as chrome DOM elements (orrery-as-element)
+        // the in-scene gnode layer is dropped below, so skip the per-gnode transform/class
+        // updates: an empty set makes the loop a no-op, the costliest part of the frame on
+        // a big graph. (Phase 2 — perf / cleaning.)
+        let gnodes: Vec<(NodeKey, DomNodeId)> = if self.render_gnodes_as_dom {
             Vec::new()
         } else {
             self.gnode_of.iter().map(|(&k, &g)| (k, g)).collect()
@@ -240,14 +240,14 @@ impl Orrery {
             }
             let pos = positions.get(&key).copied().unwrap_or_default();
             // Billboard: project the world center to its screen anchor and place the
-            // upright card centered there, scaled by zoom. At top-down (tilt 1) the
+            // upright gnode centered there, scaled by zoom. At top-down (tilt 1) the
             // anchor is exactly `pos*zoom + offset`, so the placement is unchanged.
             // (Isometric camera P1 — billboards.)
             let (ax, ay) = self.camera.to_screen(pos);
             let z = self.camera.zoom;
             let half = NODE_HALF * z;
-            // P3 fake height: raise the card above its ground anchor (a stem, drawn under
-            // the cards, drops back to the ground where the edges meet). Zero unless
+            // P3 fake height: raise the gnode above its ground anchor (a stem, drawn under
+            // the gnodes, drops back to the ground where the edges meet). Zero unless
             // height-by-degree is on. (Isometric camera P3 — fake height.)
             let lift = self.node_height(key) * z;
             // Depth-sort front-to-back by the projected ground depth (the post-yaw
@@ -343,7 +343,7 @@ impl Orrery {
             });
             // Billboard the favicon too: an upright screen-space square centered on the
             // node's projected anchor (not two projected corners, which would foreshorten
-            // it with the ground). Matches the gnode card. (Isometric camera P1.)
+            // it with the ground). Matches the gnode. (Isometric camera P1.)
             let (cx, cy) = self.camera.to_screen(*pos);
             let half = NODE_HALF * self.camera.zoom;
             let (x0, y0, x1, y1) = (cx - half, cy - half, cx + half, cy + half);
@@ -365,9 +365,9 @@ impl Orrery {
         }
 
         // P3 fake height: a stem from each raised node's ground anchor up to its floating
-        // card, so the card reads as standing above its ground spot (where its edges meet).
-        // Composited under the cards (before the gnode layer). Zero-height nodes contribute
-        // nothing, so this is empty until height-by-degree is on. (Isometric camera P3.)
+        // gnode, so the gnode reads as standing above its ground spot (where its edges meet).
+        // Composited before the gnode layer, so stems sit under the gnodes. Zero-height nodes
+        // contribute nothing, so this is empty until height-by-degree is on. (Isometric camera P3.)
         let mut stem_cmds: Vec<PaintCmd> = Vec::new();
         for &key in &on_screen {
             let Some(pos) = positions.get(&key) else {
@@ -626,11 +626,11 @@ impl Orrery {
             layers.push(CompositeLayer::commands_only(&fluid_cmds));
         }
         layers.push(CompositeLayer::commands_only(underlay.commands()));
-        // The on-screen gnode + favicon layers, unless the host renders these nodes as
-        // DOM cards in the shell document (orrery-as-element); then only edges + demoted
+        // The on-screen gnode + favicon layers, unless the host renders these gnodes as
+        // chrome DOM elements instead (orrery-as-element); then only edges + demoted
         // dots remain as the underlay. (Orrery-as-element — Phase 2.)
-        if !self.render_as_cards {
-            // Height stems under the cards (P3): the floating card paints over its stem.
+        if !self.render_gnodes_as_dom {
+            // Height stems under the gnodes (P3): the floating gnode paints over its stem.
             if !stem_cmds.is_empty() {
                 layers.push(CompositeLayer::commands_only(&stem_cmds));
             }

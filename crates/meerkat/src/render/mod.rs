@@ -25,7 +25,7 @@ use super::{
     shellbar,
 };
 use crate::pane_session::PaneSession;
-use crate::window_view::{OrreryCard, OrreryRender};
+use crate::window_view::OrreryRender;
 use meerkat::ShellbarPaneStates;
 
 mod cards;
@@ -97,13 +97,12 @@ impl WindowCtx<'_> {
             let snapshot = self.gloss_outline_snapshot(available_height);
             self.view.set_gloss_outline(snapshot, Some(outline_rect));
             let recent_snapshot = self.gloss_recent_snapshot();
-            self.view.set_gloss_recent(recent_snapshot, Some(recent_rect));
+            self.view
+                .set_gloss_recent(recent_snapshot, Some(recent_rect));
         } else {
             if self.view.gloss_outline_open() {
-                self.view.set_gloss_outline(
-                    crate::gloss_outline_view::GlossOutlineSnapshot::default(),
-                    None,
-                );
+                self.view
+                    .set_gloss_outline(crate::gloss::GlossOutlineSnapshot::default(), None);
             }
             if self.view.gloss_recent_open() {
                 self.view
@@ -129,8 +128,8 @@ impl WindowCtx<'_> {
         // `chrome_sheet`. (Settings lane P1.)
 
         // The orrery's per-frame update (node state/shape, resize, recenter, mirror,
-        // strategy) and the node-card snapshot now run *above* the chrome render, so the
-        // cards read this-frame positions/colors and align with the scene (no one-frame
+        // strategy) and the gnode snapshot now run *above* the chrome render, so the
+        // gnodes read this-frame positions/colors and align with the scene (no one-frame
         // lag). See the "Orrery-as-element" block before the snapshot.
         // P2 per-pane render: a second graph-pane (Shift+click a switcher tile)
         // drives its own pooled orrery into its own leaf, beside the focused one,

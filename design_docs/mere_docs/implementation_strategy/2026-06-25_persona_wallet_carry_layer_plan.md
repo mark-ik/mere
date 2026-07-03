@@ -1,10 +1,36 @@
 # Persona Wallet — The Universal Carry Layer
 
-**Status (2026-06-25):** design. Companion to the
+**Status (2026-07-02):** storage slice, first host-adoption slice, typed signed-grant
+slice, remote-auth grant issuance slice, wrapped private-epoch crypto helper slice,
+pairing-transcript helper slice, pairing ticket/code helper slice, first Meerkat
+pairing-host slice, delegated-device response/SAS preview slice, enrollment-bundle
+slice plus delegatee enrollment-host/bootstrap-preservation slice, and the first
+`private.read` host/restore slice landed. Companion to the
 [persona_transport_unlinkability_plan](2026-06-25_persona_transport_unlinkability_plan.md).
 The wallet is "Layer 0", the carry layer everything else references. Most of what sits
-under it exists or is named in code; the wallet primitive itself, per-persona
-encryption-at-rest, and the capability-token layer are the gap. No wallet code yet.
+under it exists or is named in code; the identity-level and persona-level wallet manifest
+stores are now real in `session-runtime`, and Meerkat now seeds/loads them at startup and
+points `sync`/`comms` at the shared identity root. `identity/grants/<device_id>.cbor` now
+also has a typed signed envelope with canonical CBOR encode/decode, signing, verification,
+stable content-hash helpers, a remote-auth issuance helper that updates roster/index
+state coherently, XChaCha20-based wrap/unwrap helpers for private-epoch material, and a
+deterministic pairing-transcript helper that derives both the wrapping key and short auth
+string from a shared pairing secret plus device identities. The wallet layer also now has
+a typed pairing ticket/response seam for QR or manual-code transport, and Meerkat now has
+an artifact-based omnibar host seam that can mint remote-auth pairing tickets and accept a
+filled response artifact into grant issuance. That host seam is still manual/admin, but it
+now requests `identity.act` plus `private.read`, loads the delegator's current plaintext
+private epoch from a temporary per-persona bridge, wraps it into the grant, and exports an
+enrollment artifact the delegatee can install. Meerkat can now also materialize the
+delegated device side: it persists a local delegated-device identity bridge, caches the
+pairing ticket locally, writes a filled response artifact from a scanned ticket, previews
+the shared short auth string before grant issuance, and on install restores the signed
+grant, persona wallet manifests, roster enrollment, grant index, and the current plaintext
+private epoch against that local delegated-device identity. The remaining gap is still the
+actual PAKE/QR chrome, transport UI around that shared secret, per-persona
+encryption-at-rest and epoch-history usage beyond the current epoch, copy-mode export/import,
+and replacing the temporary plaintext seed/epoch/device-identity bridges with the encrypted
+vault path.
 
 This doc answers three questions that turned out to be one: how do you *carry* a persona
 across devices, is that mechanism the same for engrams and history, and is data private
@@ -23,7 +49,8 @@ and a persona is just its root-of-trust instance.
 You carry three things with very different weights, and the trick is to carry only the
 smallest:
 
-1. **The secret root (tiny, must move securely).** Persona keys are derived, not stored:
+1. **The secret root (tiny, must move securely).** Persona keys are derived, not stored.
+   The v1 convention this doc and the transport companion both assume is:
    `derive_keypair(BLAKE3('persona' || persona_id))` over the master seed. You carry the
    32-byte seed and re-derive. This is the wallet's core.
 2. **The standing (derived, re-folded).** Tessera standing is a fold over the persona's
@@ -48,7 +75,7 @@ Ed25519 primitives with no new crypto.
   seed, signs its own actions, acts fully offline within its grant, and cannot exceed it
   (no sibling-persona keys, no acting past expiry). A lost device is a single append to a
   signed, append-only **revocation set on the `DeviceRoster`** the transport plan already
-  syncs. The root is untouched. This is least-privilege and the only mode with clean
+  wants. The root is untouched. This is least-privilege and the only mode with clean
   leaf-level revocation.
 - **Copy (an explicit "fully me" choice).** Transfer the 32-byte seed; the device
   reconstructs the identical provider and is indistinguishably the user (same master
@@ -69,9 +96,11 @@ Ed25519 primitives with no new crypto.
 3. **Mode choice, in plain words.** "Make this a full device (becomes fully me, works
    offline forever, can't be remotely revoked)" sends the seed over the channel.
    "Give this device limited access (revocable, expiring, scoped)" signs and returns a
-   delegation cert.
+   delegation cert plus the wrapped private-epoch material the device needs to read the
+   private lane.
 4. **Enroll.** Append a signed `DeviceEnrollment {device_pubkey, mode, label, exposure}`
-   to the synced `DeviceRoster`, the same structure that carries per-persona egress.
+   to the synced `DeviceRoster`, the identity-level device fabric the transport plan uses
+   for per-device exposure. Per-persona egress stays on `persona.json`.
 5. **Revoke.** Remote-auth: append the device pubkey to the roster's revocation set.
    Copy: trigger master rotation. The UI says which at pairing time, which is the whole
    argument for the remote-auth default.
@@ -91,6 +120,11 @@ already names it: every engram carries a `PrivacyClass` of `LocalOnly` (default)
 automatic. Today engrams are stored **cleartext**, content-addressed by BLAKE3, with the
 class as a metadata tag rather than an encryption boundary, so everything is in the
 cleartext lane until the encrypted lane is built.
+
+`LocalOnly` needs one clarification here: in this carry model it means **persona-local,
+not single-device-local**. A `LocalOnly` engram may sync to your authorized devices as
+ciphertext plus wrapped key material, but it does not widen beyond that persona unless you
+explicitly promote it.
 
 The decision rule: **is the readership the membership, and are the hosts trusted-enough?**
 
@@ -141,7 +175,7 @@ persona-encrypted. The dial is per node, not per session.
 
 | Layer | Private or public | What |
 | --- | --- | --- |
-| **0 Wallet** (unbuilt) | private | seed + capability tokens + persona roster + root CIDs; bulk synced by reference |
+| **0 Wallet** (storage landed; crypto/pairing unbuilt) | private | seed recovery policy + device roster + capability tokens + persona root refs; bulk synced by reference |
 | 1 Persona / vault | private | master Ed25519 + per-persona derivation; the identity boundary |
 | 2 Eidetic | private by default | immutable BLAKE3-hashed engrams + `PrivacyClass`; the data |
 | 3 Tessera | public within a moot | earned standing; an input to authz, gated by `gate.rs` |
@@ -154,66 +188,369 @@ Private (persona, eidetic) sits inside; public (moot, constitution, moothold) is
 shared outside; the wallet is the small carrier that lets a persona and its data move
 between your devices.
 
+## The concrete v1 shape
+
+The current persona plan already gives the per-persona root:
+`<data_root>/personas/<persona_id>/persona.json`, with sibling `vault/`,
+`settings/`, and `engine-profiles/` directories. The structural correction is that the
+wallet is **not only per-persona**. The device fabric, grant set, and seed recovery policy
+are identity-level; the root refs and private-lane epochs are persona-level. Keep the
+split:
+
+- `identity/wallet.json` is the identity-level carry root: master-seed recovery posture,
+  the device roster, the grant index, and the set of known personas.
+- `personas/<persona_id>/persona.json` stays the small, human-facing persona manifest:
+  display name, durability, default engine-profile posture, and the transport plan's
+  persona-level egress binding.
+- `personas/<persona_id>/wallet.json` is the persona-scoped carry file: root refs, epoch
+  history refs, and persona-scoped capability slots.
+
+```text
+<data_root>/
+├── identity/
+│   ├── wallet.json
+│   ├── device-roster.json
+│   └── grants/
+│       └── <device_id>.cbor
+└── personas/
+    └── <persona_id>/
+        ├── persona.json
+        ├── wallet.json
+        ├── vault/
+        ├── settings/
+        └── engine-profiles/
+```
+
+`identity/wallet.json` is the identity-level root. It carries only the small things that
+must move with the identity as a whole:
+
+```rust
+struct IdentityWalletManifest {
+    schema_version: u32,
+    device_roster_ref: Hash,
+    recovery_policy: RecoveryPolicy,
+    personas: Vec<PersonaWalletRef>,
+    grant_index: Vec<DeviceGrantRef>,
+}
+```
+
+- `recovery_policy` belongs here because copy mode transfers the one master seed that
+  derives every persona, not something owned by one persona directory.
+- `personas` belongs here because a device delegation may cover a persona set, and that
+  set needs one authoritative home.
+- `grant_index` belongs here for the same reason: one grant may authorize several
+  personas, so it should not be duplicated under each persona.
+
+`personas/<persona_id>/wallet.json` is the persona-scoped carry file:
+
+```rust
+struct PersonaWalletManifest {
+    schema_version: u32,
+    persona_id: PersonaId,
+    chain_root: PersonaChainRoot,
+    private_epoch_head: KeyEpochId,
+    epoch_history_ref: Hash,
+    private_roots: PrivateRoots,
+    public_roots: PublicRoots,
+    capability_slots: Vec<CapabilitySlotRef>,
+}
+```
+
+- `PrivateRoots` are references into the encrypted lane: the current eidetic root CID,
+  any typed subtree roots we decide are first-class, and later a wallet-local cursor for
+  faster restore. These are *pointers*, not bulk data.
+- `PublicRoots` are references into the cleartext lane: public/moot-portable roots whose
+  bytes can sync and verify without a decryption key.
+- `private_epoch_head` is the current wrapped-key epoch handle for new writes, not the key
+  bytes.
+- `epoch_history_ref` is required because restore and revocation rotate across many epochs
+  over time. Reading existing private engrams means either carrying readable historical
+  wraps or carrying the indirection that can re-wrap them; "current epoch only" is not
+  enough.
+- `capability_slots` are the persona-scoped signed grants the wallet knows about:
+  cluster-path read caps now, later moot-scoped capability bundles.
+
+`identity/device-roster.json` is the synced fabric the transport plan already wants. It
+owns membership, exposure, and revocation, not the per-persona wallet:
+
+```rust
+struct DeviceRoster {
+    schema_version: u32,
+    devices: Vec<DeviceRecord>,
+    revoked: Vec<DeviceId>,
+}
+
+struct DeviceRecord {
+    device_id: DeviceId,
+    device_pubkey: Ed25519PublicKey,
+    label: String,
+    mode: DeviceMode,          // Copy | RemoteAuth
+    exposure: DeviceExposure,  // HiddenClient | ExposedEgress
+    grant_ref: Option<Hash>,
+}
+```
+
+Each remote-auth device gets one grant file under `identity/grants/`. That grant has two
+parts and the current draft only named one of them:
+
+1. **Authorization** — the meadowcap-style delegation cert: what this device may do, for
+   how long, and for which persona.
+2. **Decryption material** — the current private-lane epoch key, wrapped to that device,
+   so it can actually read `LocalOnly` / `TrustedPeersOnly` material without receiving the
+   master seed.
+
+That split is the keystone. Without it, "encrypt at rest" and "remote-auth device" fight
+each other. The seed stays put; the device gets a signed grant plus the wrapped private
+epoch material it needs. Because the grant can span a persona set, the grant's home is the
+identity-level wallet root, not one persona's directory.
+
+## Carry modes, clarified by key material
+
+The earlier copy-vs-remote-auth split is right, but it needs the key story stated
+directly:
+
+- **Copy mode** receives the 32-byte master seed. The device can derive every persona
+  signing key and every future wallet key forever. Revocation means master rotation.
+- **Remote-auth mode** never receives the seed. It mints its own device keypair, receives
+  a signed delegation cert, and receives only the *current* wrapped private-lane epoch
+  material plus whatever scope-specific caps the grant includes.
+
+This yields a clean revocation story:
+
+- Revoke a remote-auth device: append it to `device-roster.json`, stop syncing new private
+  epochs to it, rotate the private epoch for future writes, and re-wrap the new epoch for
+  the remaining devices. Only the timing of that re-wrap is optional: eager at revocation
+  time or lazy on next unlock/write.
+- Revoke a copy device: you cannot. Rotate the master root and re-attest.
+
+Past ciphertext already handed to a revoked remote-auth device remains readable if it has
+the old epoch. That is not a flaw in the plan; it is the honest "no retroactive recall"
+boundary stated elsewhere in this doc.
+
 ## Exists vs gap
 
-**Built or named in code:** persona identity (master Ed25519 + BLAKE3 derivation);
-content-addressed engrams with `PrivacyClass` (cleartext today); the persona vault with
-`PassphraseEncryptedStorage` (Argon2id + ChaCha20-Poly1305) for credentials; the tessera
-ledger + gate; the moot roster + flora; the transport (iroh, per-persona NodeId optional);
-the chosen lane engines `p2panda-auth` (cleartext gating) and `p2panda-encryption` (the
-private lane), both evaluated in the substrate spike.
+**Built, shipped, or already source-grounded:** persona identity (master Ed25519 +
+BLAKE3 derivation); content-addressed engrams with `PrivacyClass` (cleartext today); the
+persona vault with `PassphraseEncryptedStorage` (Argon2id + ChaCha20-Poly1305) for
+credentials; the tessera ledger + gate; the moot roster + flora; the transport (iroh,
+per-persona NodeId optional); the new `session-runtime::wallet_store` module (identity
+wallet, device roster, persona wallet, grant paths, and tests); and the chosen lane
+engines `p2panda-auth` (cleartext gating) and `p2panda-encryption` (the private lane),
+both evaluated in the substrate spike.
 
 **Gap to build:**
 
-1. **The wallet primitive** — seed + persona roster + engram root-CID manifest +
-   capability-token slots + transport-profile bindings, with sync-on-demand for bulk data.
-   Today each layer bootstraps independently; there is no single "this is my wallet" entry
-   point. The closest existing structure is `personas/<persona_id>/persona.json`.
-2. **Per-persona encryption-at-rest for eidetic** — decide whether non-`LocalOnly` engrams
-   are sealed on disk or only on the wire, and wrap content keys per persona. Today
-   privacy is a metadata tag, encryption is wire-only.
-3. **The capability-token layer** — meadowcap certs now (device delegation + cluster-path
-   read caps), re-expressed as Biscuit when the constitution's authorize seam graduates.
-4. **The pairing ceremony** — PAKE + SAS + roster enrollment + the copy/remote-auth fork.
-5. **Cross-device persona restoration** — wallet export/import: seed recovery, engram
-   re-fetch by CID, standing re-fold.
+1. **The wallet store** — an identity-level root (`identity/wallet.json`,
+   `device-roster.json`, `grants/<device_id>`) plus per-persona `wallet.json` files under
+   `personas/<persona_id>/`, with typed load/save APIs. **Storage v1a plus first host
+   adoption landed 2026-07-02** in `session-runtime::wallet_store` and Meerkat startup:
+   identity seed/path helpers, deterministic persona chain-root derivation, startup/session-load
+   bootstrap of wallet + roster + persona wallet, and `sync`/`comms` now sharing the
+   identity root instead of separate ad hoc seed files. Still open: replacing the
+   transitional plaintext `identity/master.seed` bridge with the encrypted vault handoff,
+   and threading the wallet root through the pairing/revocation flows.
+2. **Per-persona encryption-at-rest for eidetic** — private-lane payloads sealed under a
+   persona-owned private epoch history, with per-device wrapped copies for remote-auth
+   devices. Today privacy is a metadata tag, encryption is wire-only.
+3. **The capability-token layer** — typed signed device-grant storage, remote-auth grant
+   issuance, wrapped private-epoch crypto helpers, pairing-transcript derivation, and a
+   typed pairing ticket/response seam landed 2026-07-02 in `session-runtime::wallet_grant`
+   (canonical CBOR envelope, signing, verification, content-hash refs, wallet/roster
+   persistence over `identity/grants/<device_id>.cbor`, XChaCha20 wrap/unwrap helpers for
+   the remote-auth private lane, deterministic wrapping-key + SAS derivation from a shared
+   pairing secret plus device identities, and CBOR pairing-ticket transport plus manual
+   code formatting/parsing). Still open: the actual meadowcap-shaped delegation vocabulary,
+   cluster-path read caps, and later Biscuit re-expression when the constitution's
+   authorize seam graduates.
+4. **The pairing ceremony** — PAKE + SAS + roster enrollment + the copy/remote-auth fork,
+   plus emitting the wrapped-key half of the remote-auth grant. A first Meerkat host seam
+   now exists for ticket artifacts, response ingestion, `private.read` grant wrapping, and
+   current-epoch restore on the delegatee side, but it is still a manual/admin path and the
+   actual PAKE/QR chrome is still open.
+5. **Cross-device persona restoration** — wallet export/import: seed recovery, root-CID
+   restore, private-epoch restore, standing re-fold. A first remote-auth enrollment
+   bundle now restores signed grant, persona wallet manifests, and the current wrapped
+   private epoch onto the delegatee side, but copy-mode export/import, epoch-history
+   restore, and standing re-fold are still open.
 
 ## Sequencing
 
-1. **Wallet primitive + manifest** (extend `persona.json` into the carry layer: seed
-   handle, persona roster, root CIDs, capability slots, transport bindings).
-2. **Pairing ceremony**, remote-auth default (meadowcap cert) + copy as explicit choice,
-   revocation over the `DeviceRoster`.
-3. **Per-persona encryption-at-rest** for the private lane (`p2panda-encryption` envelope):
-   `LocalOnly` / `TrustedPeersOnly` engrams sealed on disk under the persona vault key.
-   Decided posture (2026-06-25), so first-class, not deferred.
-4. **The public lane wired through replication:** honor `PrivacyClass` at the
+1. **Identity root + persona wallet store.** Keep `persona.json` small; add an
+   identity-level wallet root for the device fabric and grants, plus per-persona
+   `wallet.json` files for root refs and epoch history. Thread typed repositories through
+   the host the same way `ManifestStore` and persona settings already work.
+   Done when: the identity root can persist and reload device membership, grant refs, and
+   recovery posture once, while each persona root persists its own refs without duplicating
+   the same `DeviceRecord` or grant across persona directories.
+2. **Pairing ceremony**, remote-auth default. PAKE + SAS, then either seed copy or
+   meadowcap delegation plus wrapped private epoch, with enrollment in `DeviceRoster`.
+   Done when: a newly paired remote-auth device can restore a persona root, read existing
+   private engrams, and be revoked without rotating the master seed.
+3. **Per-persona encryption-at-rest** for the private lane (`p2panda-encryption`
+   envelope posture). `LocalOnly` / `TrustedPeersOnly` engrams are sealed on disk under the
+   current private epoch; the wallet stores wrapped epoch history per authorized device.
+   Done when: private engrams at rest are unreadable without either the seed or a valid
+   remote-auth wrapped-key bundle, and restore can still read pre-rotation content.
+4. **The public lane wired through replication.** Honor `PrivacyClass` at the
    `p2panda-auth` gate (who syncs cleartext) for promoted `MootScoped` / `PublicPortable`
-   engrams; promotion is the decrypt-and-recommit step.
-5. **Capabilities** as meadowcap caps, graduating to Biscuit with the constitution.
+   engrams; promotion is the decrypt-and-recommit step with explicit provenance.
+   Done when: publishing a private engram to a moot produces a new cleartext object in the
+   public lane, rather than silently widening the original object's readership.
+5. **Capabilities as first-class wallet slots.** Meadowcap grants now, Biscuit later,
+   unified under `capability_slots`.
+   Done when: device grants, cluster-path read grants, and future moot-scoped grants all
+   ride the same wallet slot surface even if their internal token format later changes.
+   V1 scope: `TrustedPeersOnly` wrapping only needs to reach your own device roster.
+   Cross-persona / other-human peer wrapping is a later contact-identity lane.
+6. **Recovery + rotation.** Recovery phrase / device handover for the seed, export/import
+   of the wallet manifest, standing re-fold, private-epoch rotation after revocation, and
+   master rotation only for copy-device loss.
+   Done when: a user can recover onto a fresh device, revoke a delegated device, and
+   understand from the product surface which action rotated an epoch versus which action
+   rotated the root.
 
-## Open questions
+## Decisions for v1
 
-- **Leaning (2026-06-25): the master root under FROST custody.** A `t`-of-`N` quorum of
-  your own devices to do anything irreversible (rotate the root, enroll a new device), so
-  no single device is a single point of failure (the companion to encrypt-at-rest: sealed
-  on disk *and* not wholesale-present on any one device). Everyday persona signing stays on
-  fast local keys; the quorum guards only the rare high-stakes root ops. Recovery is
-  re-sharing (a fresh split excluding a lost share, same public key, so external identity
-  survives). Open underneath: the threshold and device set (e.g. 2-of-3 of home server /
-  laptop / phone), and which everyday devices are copy (full) vs remote-auth (delegated).
+- **FROST custody is a later hardening tier, not a v1 blocker.** v1 needs the wallet store,
+  remote-auth grants, and private-epoch rotation first. A threshold-held master root is a
+  good follow-on once the ordinary copy-vs-remote-auth path exists and the user can already
+  recover and revoke cleanly.
 - **Decided (2026-06-25): encrypt at rest.** `LocalOnly` / `TrustedPeersOnly` engrams are
   sealed on disk under the persona vault key (private by default; the wallet leans keyring),
   and promotion to `MootScoped` / `PublicPortable` re-encodes into the cleartext-gated lane
   so the moot can dedup / pin / verify. `PrivacyClass` is therefore the storage regime, and
-  "publish to a moot" is a decrypt-and-recommit step. (Open underneath: convergent vs salted
-  for the private lane; whether `TrustedPeersOnly` is encrypted-with-handed-key or
-  cleartext-gated-to-those-peers.)
-- Convergent encryption only for high-entropy private payloads (dedup) vs salted (privacy
-  against confirmation), decided per schema.
+  "publish to a moot" is a decrypt-and-recommit step.
+- **`TrustedPeersOnly` stays in the encrypted lane.** It is not "cleartext gated to a short
+  allowlist"; it is private material whose keys are handed to named readers. For v1, that
+  reader set is your own authorized device roster; wrapping to external peers is a later
+  contact-identity lane. Otherwise the private-vs-public dial becomes mushy.
+- **Salted private encryption is the v1 default.** Dedup is the public lane's advantage.
+  Convergent encryption is optional and later, only for explicitly high-entropy schemas
+  where the confirmation attack is acceptable.
 - The wallet-sync bootstrap: the wallet is itself data that syncs over the personal mesh,
   but syncing it needs the identity, so the seed is the one thing transported out of band
   (recovery phrase vs device-pairing handover).
+
+## Remaining open questions
+
+- Whether `wallet.json` should carry only root refs, with every rotating detail in sibling
+  files, or whether a few tiny hot fields (`private_epoch`, last-restore cursor) belong in
+  the root manifest for faster restore.
+- Whether remote-auth grants should carry one wrapped private epoch per device directly or
+  a small indirection through a re-wrapable key slot record. The first shape is simpler; the
+  second may make bulk rotation cheaper.
+- How much of the wallet export is one bundle versus a few explicit artifacts
+  (recovery phrase, `wallet.json`, device roster, grant set) the user can inspect and move
+  separately.
+
+## Progress
+
+- **2026-06-25** — initial design/research pass: carry-by-reference model, copy vs
+  remote-auth ceremony, cleartext public lane vs encrypted private lane, and the
+  encrypt-at-rest decision.
+- **2026-07-02** — reconciled the structural contradiction between identity-level device
+  fabric and per-persona wallet placement: device roster + grants + recovery policy moved
+  to an identity-level wallet root; per-persona wallet files now hold only persona-scoped
+  refs and epoch history. Also clarified `LocalOnly`, aligned the persona-derivation
+  convention, scoped `TrustedPeersOnly` v1 to own devices, and made epoch-history support
+  an explicit restore requirement.
+- **2026-07-02** — implemented the first code slice in
+  `crates/system/session-runtime/src/wallet_store.rs`: typed `IdentityWalletManifest`,
+  `DeviceRoster`, and `PersonaWalletManifest` shapes; path helpers; atomic load/save for
+  identity wallet, persona wallet, roster, and opaque grant blobs; plus 8 focused tests.
+  Verified with `cargo test -p session-runtime wallet_store -- --nocapture`.
+- **2026-07-02** — landed the next host-adoption slice in Meerkat: a shared
+  `identity/master.seed` bridge under the wallet root, deterministic
+  `BLAKE3("persona" || persona_id)` persona-chain derivation, startup/session-load wallet
+  bootstrap, `active_persona` correction on session load, and `sync`/`comms` now reading the
+  shared identity root instead of separate `node_identity.seed` / `comms_identity.seed`
+  sidecars. Verified with `cargo check -p meerkat`.
+- **2026-07-02** — landed the typed grant slice in
+  `crates/system/session-runtime/src/wallet_grant.rs`: a signed
+  `identity/grants/<device_id>.cbor` envelope, canonical CBOR encode/decode helpers,
+  delegator-signing and verification helpers, stable content-hash refs, and load/save
+  helpers/tests over the existing grant path. This narrows the live gap to pairing,
+  wrapped-key emission, and the broader capability language above the storage seam.
+  Verified with `cargo test -p session-runtime wallet_grant -- --nocapture`.
+- **2026-07-02** — landed the remote-auth grant issuance slice in the same module:
+  issuing a device grant from the shared wallet root now persists the signed grant, updates
+  the enrolled `DeviceRoster` entry, records `grant_index` on the identity wallet, and
+  keeps `device_roster_ref` coherent instead of leaving signed grant files detached from
+  wallet state. Validation currently enforces "known persona wallet only" plus wrapped-epoch
+  persona-set consistency. Pairing UX and wrapped-key production still layer on top.
+  Verified with `cargo test -p session-runtime wallet_grant -- --nocapture`.
+- **2026-07-02** — landed the wrapped private-epoch crypto helper slice in the same module:
+  `wrap_private_epoch_material(...)` / `unwrap_private_epoch_material(...)` now seal remote-auth
+  epoch secrets under a caller-supplied 32-byte wrapping key using
+  `xchacha20poly1305-v1`, with persona+epoch AAD binding and grant validation that
+  requires wrapped epoch material whenever a device grant carries `private.read`.
+  This moves the live gap from "how do we represent wrapped key material?" to "how does
+  pairing derive and transport the wrapping key?" Verified with
+  `cargo test -p session-runtime wallet_grant -- --nocapture`.
+- **2026-07-02** — landed the pairing-transcript helper slice in the same module:
+  `derive_remote_auth_pairing_material(...)` now derives both the wrapping key and a
+  6-digit short auth string from a shared pairing secret plus the delegator pubkey,
+  delegatee pubkey, and device id, and
+  `issue_remote_auth_device_grant_from_pairing(...)` now wraps plaintext private epochs
+  and emits the signed remote-auth grant in one call. This moves the live gap from "how
+  does pairing represent its output?" to "where do PAKE / QR / SAS confirmation actually
+  run in the host?" Verified with `cargo test -p session-runtime wallet_grant -- --nocapture`.
+- **2026-07-02** — landed the pairing ticket/code helper slice in the same module:
+  `mint_remote_auth_pairing_ticket(...)`, CBOR encode/decode for QR transport,
+  `format_remote_auth_pairing_code(...)` / `parse_remote_auth_pairing_code(...)` for manual
+  entry, and `issue_remote_auth_device_grant_from_ticket(...)` bridging the ticket +
+  delegatee response into the pairing-backed issuance path. This moves the live gap from
+  "what payload crosses the host pairing boundary?" to "where do scanning, code entry,
+  and PAKE/SAS confirmation live in Meerkat?" Verified with
+  `cargo test -p session-runtime wallet_grant -- --nocapture`.
+- **2026-07-02** — landed the first Meerkat pairing-host slice: the omnibar command shell
+  now records `pair_remote_auth()` and `accept_remote_auth_pairing(ticket, response)`,
+  Meerkat writes pairing artifacts under `<mere_root>/pairing/`, and the host can ingest a
+  filled response artifact into remote-auth grant issuance plus roster/grant persistence.
+  This is intentionally the narrow host seam: at that slice it only minted
+  `identity.act`-only remote-auth tickets and still blocked `private.read`.
+  Verified with focused `meerkat` + `session-runtime` tests.
+- **2026-07-02** — landed the next pairing-host slice: `session-runtime::wallet_store`
+  now has a typed local delegated-device identity bridge, pairing offer artifacts carry the
+  delegator pubkey in their JSON summary, and Meerkat can now
+  `respond_remote_auth_pairing(ticket)` on the delegatee side plus
+  `preview_remote_auth_pairing(ticket, response)` on the delegator side before
+  `accept_remote_auth_pairing(...)`. This closes the host gap around response generation and
+  SAS derivation for `identity.act` grants, leaving the actual PAKE/QR chrome and
+  `private.read` epoch handoff as the next live seams. Verified in `session-runtime`; current
+  full-workspace `meerkat` verification is blocked by an unrelated dirty-tree `kernel`
+  compile error in `graph/apply.rs`.
+- **2026-07-02** — landed the enrollment-bundle slice in
+  `crates/system/session-runtime/src/wallet_grant.rs`: typed
+  `RemoteAuthEnrollmentBundle` CBOR encode/decode helpers, delegator-side
+  `build_remote_auth_enrollment_bundle(...)`, and delegatee-side
+  `install_remote_auth_enrollment_bundle(...)` now bridge signed grant + persona wallet
+  manifests into restored wallet state keyed to the local delegated-device identity.
+  This narrowed the carry gap from "how does the delegatee get enough state to restore the
+  granted personas?" to the remaining startup/load policy split and the still-unbuilt
+  private-epoch restore lane.
+- **2026-07-02** — landed the next Meerkat host slice over that bundle seam:
+  `accept_remote_auth_pairing(...)` now exports a concrete enrollment artifact under
+  `<mere_root>/pairing/`, `install_remote_auth_enrollment(bundle)` now installs it on the
+  delegatee side, and startup/session-load now call
+  `session_runtime::bootstrap_wallet_state(...)` so a pending or enrolled delegated device
+  is preserved instead of being clobbered by copy-mode `identity/master.seed` bootstrap.
+  This closes the immediate host gap around "accept there, restore here" for
+  `identity.act` grants, leaving the actual PAKE/QR chrome, `private.read` epoch handoff,
+  and the temporary plaintext seed/device-identity bridges as the live seams. Current
+  package/workspace verification is blocked by an unrelated dirty-tree `graph-kernel`
+  compile error in `graph/capture.rs` (`PersistedField` / `PersistedCoupling` missing
+  `PartialEq`).
+- **2026-07-02** — landed the first `private.read` host/restore slice: Meerkat pairing
+  now loads the delegator's current plaintext private epoch from the temporary per-persona
+  bridge, requests `private.read` in `pair_remote_auth()`, wraps that epoch into the
+  signed remote-auth grant, caches the pairing ticket on the delegatee side, and uses the
+  cached ticket to recover the pairing-derived wrapping key during
+  `install_remote_auth_enrollment(bundle)` so the delegatee restores the current plaintext
+  epoch bridge alongside the signed grant and persona wallet manifests. This closes the
+  immediate "grant can carry wrapped epochs but install cannot use them" gap, leaving the
+  actual PAKE/QR chrome, encrypted-at-rest integration, epoch-history restore beyond the
+  current head, and replacement of the temporary plaintext bridges as the live seams.
 
 ## Findings (research, 2026-06-25)
 
@@ -231,5 +568,8 @@ argument, codebase grounding). Cross-checks worth keeping:
   revocation, not recall.
 - Capabilities are orthogonal to the dial: they wrap a key (private) or are an invite
   token (public), one mechanism either way.
-- The wallet (Layer 0) is the one genuinely unbuilt carry primitive; the layers beneath it
-  exist or are named.
+- The wallet (Layer 0) was the one genuinely unbuilt carry primitive when this plan was
+  drafted; the storage seam, host adoption bridge, signed-grant seam, wrapped-key crypto
+  helper seam, pairing-transcript seam, and pairing ticket/code seam have now landed,
+  leaving the actual PAKE exchange, encrypted-at-rest integration, and pairing-host flow
+  as the live gaps.

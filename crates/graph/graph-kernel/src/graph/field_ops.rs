@@ -82,7 +82,10 @@ impl Graph {
     /// carries one default coupling). For the roster's per-field strength readout.
     /// (Field regions — strength tuning.)
     pub fn field_coupling_strength(&self, field: FieldId) -> Option<f32> {
-        self.couplings.values().find(|c| c.field == field).map(|c| c.strength)
+        self.couplings
+            .values()
+            .find(|c| c.field == field)
+            .map(|c| c.strength)
     }
 
     /// Set the `strength` of every coupling targeting `field`, returning whether any
@@ -117,9 +120,7 @@ impl Graph {
                 NodeSelector::All => true,
                 NodeSelector::Tagged(tag) => node.tags.contains(tag),
                 NodeSelector::NotTagged(tag) => !node.tags.contains(tag),
-                NodeSelector::Kind(kind) => {
-                    node.classifications.iter().any(|c| &c.value == kind)
-                }
+                NodeSelector::Kind(kind) => node.classifications.iter().any(|c| &c.value == kind),
             }
         })
     }
@@ -205,8 +206,16 @@ mod tests {
     #[test]
     fn nodes_matching_resolves_selectors() {
         let mut g = Graph::new();
-        let a = g.add_node_with_id(Uuid::from_u128(1), "mere://a".into(), Point2D::new(0.0, 0.0));
-        let b = g.add_node_with_id(Uuid::from_u128(2), "mere://b".into(), Point2D::new(10.0, 0.0));
+        let a = g.add_node_with_id(
+            Uuid::from_u128(1),
+            "mere://a".into(),
+            Point2D::new(0.0, 0.0),
+        );
+        let b = g.add_node_with_id(
+            Uuid::from_u128(2),
+            "mere://b".into(),
+            Point2D::new(10.0, 0.0),
+        );
         if let Some(node) = g.inner.node_weight_mut(a) {
             node.tags.insert("important".to_string());
         }
@@ -214,7 +223,9 @@ mod tests {
         let all: Vec<_> = g.nodes_matching(&NodeSelector::All).collect();
         assert_eq!(all.len(), 2);
 
-        let tagged: Vec<_> = g.nodes_matching(&NodeSelector::Tagged("important".into())).collect();
+        let tagged: Vec<_> = g
+            .nodes_matching(&NodeSelector::Tagged("important".into()))
+            .collect();
         assert_eq!(tagged, vec![a]);
 
         let not_tagged: Vec<_> = g
@@ -222,7 +233,9 @@ mod tests {
             .collect();
         assert_eq!(not_tagged, vec![b]);
 
-        let no_kind: Vec<_> = g.nodes_matching(&NodeSelector::Kind("paper".into())).collect();
+        let no_kind: Vec<_> = g
+            .nodes_matching(&NodeSelector::Kind("paper".into()))
+            .collect();
         assert!(no_kind.is_empty());
     }
 }

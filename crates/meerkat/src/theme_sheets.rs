@@ -31,8 +31,8 @@ pub(crate) fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
         // Shell z-stack: the chrome is the top layer. Making `.chrome` a stacking context
         // (position + z-index) above the orrery means every chrome surface — toolbar,
         // omnibar dropdown, context menu, palette, find, settings, shellbar — paints over
-        // the orrery's node/content cards and wins their hit-test, whether it is in normal
-        // flow or positioned. Without it, the node cards (each its own stacking context via
+        // the orrery's gnodes/content cards and wins their hit-test, whether it is in normal
+        // flow or positioned. Without it, the gnodes (each its own stacking context via
         // `transform`) paint above normal-flow chrome content (the omnibar dropdown was the
         // symptom). The orrery sits at the base layer (z-index:0, below). (Shell z-stack.)
         ".chrome { position: relative; z-index: 10; }".to_string(),

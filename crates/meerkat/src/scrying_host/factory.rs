@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use forme::GraphMemberId;
 use inker::routing::{
-    EngineRouteDecision, SurfaceContract, SurfaceContractMode, SurfaceTargetId, ENGINE_SCRYING_WEB,
+    ENGINE_SCRYING_WEB, EngineRouteDecision, SurfaceContract, SurfaceContractMode, SurfaceTargetId,
 };
 use inker::{EngineProfileBinding, SurfaceEngineRegistry, SurfaceError, SurfaceSpawnRequest};
 use scrying::{PlatformCompositionRoot, PlatformWebSurfaceConfig, PlatformWebSurfaceProducer};

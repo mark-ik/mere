@@ -147,6 +147,18 @@ impl SharedNavigationMemory {
         &self.snapshot
     }
 
+    pub fn owner_count(&self) -> usize {
+        self.snapshot.owners.len()
+    }
+
+    pub fn entry_count(&self) -> usize {
+        self.snapshot.entries.len()
+    }
+
+    pub fn visit_count(&self) -> usize {
+        self.snapshot.visits.len()
+    }
+
     fn hydrate(&self) -> Memory {
         Memory::from_snapshot(self.snapshot.clone())
     }
@@ -175,7 +187,13 @@ impl SharedNavigationMemory {
     /// navigating after [`back`](Self::back) branches off the current visit and
     /// preserves the prior forward path. Entries dedup by URL; each navigation is
     /// a distinct visit. Creates the owner (root) if absent.
-    pub fn record_visit(&mut self, node: Uuid, url: &str, transition: MemoryTransitionKind, at_ms: u64) {
+    pub fn record_visit(
+        &mut self,
+        node: Uuid,
+        url: &str,
+        transition: MemoryTransitionKind,
+        at_ms: u64,
+    ) {
         let mut memory = self.hydrate();
         let owner = memory.ensure_owner(NodeHistoryOwner::of(node), None);
         let entry = memory.resolve_or_create_entry(
@@ -222,7 +240,10 @@ impl SharedNavigationMemory {
     pub fn projection(&self, node: Uuid) -> NodeHistoryProjection {
         let memory = self.hydrate();
         let Some(owner) = memory.owner_id_by_identity(&NodeHistoryOwner::of(node)) else {
-            return NodeHistoryProjection { entries: Vec::new(), current_index: 0 };
+            return NodeHistoryProjection {
+                entries: Vec::new(),
+                current_index: 0,
+            };
         };
         let entries = memory
             .linear_history_entries_of_owner(owner)
@@ -230,9 +251,15 @@ impl SharedNavigationMemory {
             .into_iter()
             .filter_map(|entry_id| memory.entry(entry_id).map(|entry| entry.payload.clone()))
             .collect::<Vec<_>>();
-        let current_index =
-            memory.current_index_of_owner(owner).ok().flatten().unwrap_or(0);
-        NodeHistoryProjection { entries, current_index }
+        let current_index = memory
+            .current_index_of_owner(owner)
+            .ok()
+            .flatten()
+            .unwrap_or(0);
+        NodeHistoryProjection {
+            entries,
+            current_index,
+        }
     }
 
     /// `node`'s branching-history projection (visit tree with alternates).
@@ -285,9 +312,15 @@ impl SharedNavigationMemory {
             .filter_map(|visit_id| memory.visit(visit_id).map(|v| v.created_at_ms))
             .max()
             .filter(|timestamp| *timestamp > 0);
-        let visit_count =
-            memory.linear_history_visits_of_owner(owner).map(|v| v.len()).unwrap_or(0);
-        NodeHistorySemanticSummary { current_url, last_visit_at_ms, visit_count }
+        let visit_count = memory
+            .linear_history_visits_of_owner(owner)
+            .map(|v| v.len())
+            .unwrap_or(0);
+        NodeHistorySemanticSummary {
+            current_url,
+            last_visit_at_ms,
+            visit_count,
+        }
     }
 
     /// The graph's recently-visited nodes, newest first, capped at `limit`. A pure
@@ -307,10 +340,18 @@ impl SharedNavigationMemory {
                 let (entry_id, at_ms) = owner
                     .owned_visits
                     .iter()
-                    .filter_map(|vid| memory.visit(*vid).map(|visit| (visit.entry, visit.created_at_ms)))
+                    .filter_map(|vid| {
+                        memory
+                            .visit(*vid)
+                            .map(|visit| (visit.entry, visit.created_at_ms))
+                    })
                     .max_by_key(|(_, at)| *at)?;
                 let url = memory.entry(entry_id).map(|entry| entry.payload.clone())?;
-                Some(RecentVisit { node, url, last_visit_at_ms: at_ms })
+                Some(RecentVisit {
+                    node,
+                    url,
+                    last_visit_at_ms: at_ms,
+                })
             })
             .collect();
         recent.sort_by(|a, b| b.last_visit_at_ms.cmp(&a.last_visit_at_ms));
@@ -405,7 +446,11 @@ mod tests {
         m.record_visit(node, "d", MemoryTransitionKind::UrlTyped, 8);
         assert_eq!(m.current_url(node).as_deref(), Some("d"));
         let branch = m.branch_projection(node);
-        let b_visit = branch.visits.iter().find(|v| v.url == "b").expect("b on the active path");
+        let b_visit = branch
+            .visits
+            .iter()
+            .find(|v| v.url == "b")
+            .expect("b on the active path");
         assert!(
             b_visit.alternate_children.iter().any(|alt| alt.url == "c"),
             "c is preserved as an alternate branch off b after the forward-fork",
@@ -421,7 +466,10 @@ mod tests {
         m.record_visit(b, "b1", MemoryTransitionKind::UrlTyped, 3);
         assert_eq!(m.current_url(a).as_deref(), Some("a2"));
         assert_eq!(m.current_url(b).as_deref(), Some("b1"));
-        assert!(m.can_back(a) && !m.can_back(b), "each node walks only its own path");
+        assert!(
+            m.can_back(a) && !m.can_back(b),
+            "each node walks only its own path"
+        );
     }
 
     #[test]
@@ -445,7 +493,10 @@ mod tests {
         let mut m = SharedNavigationMemory::empty();
         m.record_visit(node, "a", MemoryTransitionKind::UrlTyped, 1);
         m.record_visit(node, "a", MemoryTransitionKind::Reload, 2);
-        assert_eq!(m.projection(node).entries, vec!["a".to_string(), "a".to_string()]);
+        assert_eq!(
+            m.projection(node).entries,
+            vec!["a".to_string(), "a".to_string()]
+        );
     }
 
     #[test]
@@ -453,7 +504,11 @@ mod tests {
         let node = n(1);
         let mut m = SharedNavigationMemory::empty();
         m.seed_linear(node, vec!["a".into(), "b".into(), "c".into()], 1);
-        assert_eq!(m.current_url(node).as_deref(), Some("b"), "cursor at the seeded index");
+        assert_eq!(
+            m.current_url(node).as_deref(),
+            Some("b"),
+            "cursor at the seeded index"
+        );
         assert!(m.can_back(node) && m.can_forward(node));
         m.remove(node);
         assert_eq!(m.current_url(node), None, "owner dropped on remove");

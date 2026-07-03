@@ -262,6 +262,130 @@ impl WindowCtx<'_> {
         ]
     }
 
+    /// Live kernel table rows for the apparatus Tables section.
+    pub(crate) fn apparatus_table_rows(&self) -> Vec<(String, String)> {
+        let kib = |bytes: usize| format!("{:.1} KiB", bytes as f64 / 1024.0);
+        let stats = self.orrery().graph().table_stats();
+        let log = &self.shared.session.graph_delta_log;
+        let log_value = if log.enabled() {
+            format!("{} entries / {} bytes", log.entry_count(), log.byte_count())
+        } else {
+            "not recording".to_string()
+        };
+        let mut rows = vec![
+            (
+                "Node table".to_string(),
+                format!("{} rows", stats.node_count),
+            ),
+            (
+                "Relation table".to_string(),
+                format!(
+                    "{} relation rows across {} edges",
+                    stats.relation_count, stats.edge_count
+                ),
+            ),
+            (
+                "Field table".to_string(),
+                format!("{} rows", stats.field_count),
+            ),
+            (
+                "Coupling table".to_string(),
+                format!("{} rows", stats.coupling_count),
+            ),
+            (
+                "History table".to_string(),
+                format!(
+                    "{} owners / {} entries / {} visits",
+                    stats.history_owner_count, stats.history_entry_count, stats.history_visit_count
+                ),
+            ),
+            ("Session delta log".to_string(), log_value),
+        ];
+        match self.focused_member() {
+            Some(member) => {
+                let constellation = &self.shared.content.constellation;
+                let Some(engine_id) = constellation.engine_id(member) else {
+                    rows.push((
+                        "Document tables".to_string(),
+                        "focused node is not active".to_string(),
+                    ));
+                    return rows;
+                };
+                match constellation.engine_stats(member) {
+                    Some(engine) => {
+                        rows.push((
+                            "Document DOM".to_string(),
+                            format!(
+                                "{} nodes / {} attrs / ~{}",
+                                engine.dom.live_nodes,
+                                engine.dom.attribute_count,
+                                kib(engine.dom.estimated_bytes)
+                            ),
+                        ));
+                        rows.push((
+                            "Document node kinds".to_string(),
+                            format!(
+                                "{} el / {} text / {} comments / {} docs",
+                                engine.dom.node_kinds.elements,
+                                engine.dom.node_kinds.text,
+                                engine.dom.node_kinds.comments,
+                                engine.dom.node_kinds.documents
+                            ),
+                        ));
+                        rows.push((
+                            "Document layout".to_string(),
+                            match engine.layout {
+                                Some(layout) => format!(
+                                    "{:?} / {:?}; {} restyled, {} rebuilt, {} frags",
+                                    layout.applied,
+                                    layout.damage,
+                                    layout.restyled_elements,
+                                    layout.boxes_rebuilt,
+                                    layout.fragment_count
+                                ),
+                                None => "layout batch stats unavailable on this lane".to_string(),
+                            },
+                        ));
+                    }
+                    None => rows.push((
+                        "Document DOM".to_string(),
+                        format!("not available on current lane ({engine_id})"),
+                    )),
+                }
+                match constellation.scene_stats(member) {
+                    Some(scene) => {
+                        rows.push((
+                            "Document scene ops".to_string(),
+                            format!("{} ops", scene.op_count),
+                        ));
+                        rows.push((
+                            "Document scene size".to_string(),
+                            format!(
+                                "{} bytes / ~{}",
+                                scene.encoded_bytes,
+                                kib(scene.encoded_bytes as usize)
+                            ),
+                        ));
+                    }
+                    None if constellation.packet(member).is_some() => rows.push((
+                        "Document scene".to_string(),
+                        "not available on document lane".to_string(),
+                    )),
+                    None if constellation.scene(member).is_some() => rows.push((
+                        "Document scene".to_string(),
+                        "scene stats missing for current frame".to_string(),
+                    )),
+                    None => rows.push((
+                        "Document scene".to_string(),
+                        format!("awaiting first scene on current lane ({engine_id})"),
+                    )),
+                }
+            }
+            None => rows.push(("Document tables".to_string(), "no focused node".to_string())),
+        }
+        rows
+    }
+
     /// Refresh and snapshot the host observability cache for Apparatus.
     pub(crate) fn apparatus_observability(&mut self) -> ObservabilitySnapshot {
         self.refresh_a11y_summary();

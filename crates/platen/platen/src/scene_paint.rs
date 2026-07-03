@@ -136,7 +136,7 @@ impl Camera {
 
     /// The world->screen affine the scene `PushTransform` carries for **ground-plane**
     /// paint (edges, field regions, demoted dots), so they recline onto the floor while
-    /// node cards stay upright billboards via [`Camera::to_screen`]. Built to match
+    /// nodes stay upright billboards via [`Camera::to_screen`]. Built to match
     /// `to_screen` exactly: rotate the ground by `yaw` (Z), foreshorten the vertical by
     /// `tilt`, scale by `zoom`, translate by `offset`. Row-major, per euclid's
     /// `transform_point2d` (`x' = x*m11 + y*m21 + m41`, `y' = x*m12 + y*m22 + m42`); at

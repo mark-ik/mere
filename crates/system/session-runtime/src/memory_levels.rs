@@ -249,7 +249,12 @@ mod tests {
     #[test]
     fn keep_days_evicts_only_stale_undated_safe_and_promoted_exempt() {
         let now = 100 * DAY_MS;
-        let mut nodes = vec![node("stale"), node("fresh"), node("undated"), node("promoted")];
+        let mut nodes = vec![
+            node("stale"),
+            node("fresh"),
+            node("undated"),
+            node("promoted"),
+        ];
         nodes[3].tags.push("keep".to_string()); // promoted by a tag: exempt even if stale
 
         let mut times = HashMap::new();
@@ -259,13 +264,22 @@ mod tests {
         // "undated" has no visit record -> never dropped (we don't drop what we can't date)
 
         let out = evictable_short_term(&nodes, &times, EvictionPolicy::KeepDays(30), now, 0);
-        assert_eq!(out, vec!["stale".to_string()], "only the dated, stale, un-promoted node");
+        assert_eq!(
+            out,
+            vec!["stale".to_string()],
+            "only the dated, stale, un-promoted node"
+        );
     }
 
     #[test]
     fn keep_sessions_evicts_only_stale_unstamped_safe_and_promoted_exempt() {
         let current_session = 10u64;
-        let mut nodes = vec![node("stale"), node("fresh"), node("unstamped"), node("promoted")];
+        let mut nodes = vec![
+            node("stale"),
+            node("fresh"),
+            node("unstamped"),
+            node("promoted"),
+        ];
         nodes[0].last_session_visited = 2; // 8 sessions ago, older than 3 -> evict
         nodes[1].last_session_visited = 9; // 1 session ago -> keep
         // "unstamped" keeps last_session_visited == 0 (never stamped) -> never dropped
@@ -279,7 +293,11 @@ mod tests {
             0,
             current_session,
         );
-        assert_eq!(out, vec!["stale".to_string()], "only the dated, stale, un-promoted node");
+        assert_eq!(
+            out,
+            vec!["stale".to_string()],
+            "only the dated, stale, un-promoted node"
+        );
     }
 
     #[test]

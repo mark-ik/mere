@@ -22,7 +22,7 @@
 //! ## Shell document vs content roots
 //!
 //! The **shell document** (this crate's view tree: chrome plus the folded panes
-//! and orrery node-cards, diffed by `xilem_serval` from app state) and each
+//! and orrery gnodes, diffed by `xilem_serval` from app state) and each
 //! **content-root** (a fetched page mutated by its engine, or the orrery graph
 //! scene) stay distinct document authorities; neither sees the other's tree (flip
 //! plan, Phase 3 + Standing constraints). Unified-document-host Phase 1 folded the
@@ -37,7 +37,7 @@
 //! omnibar drives a real linear [`History`](nav::History) (text classified and
 //! resolved to a URL, `can_go_*` mirrored back into the toolbar), and
 //! [`Chrome::content_location`] is the entry a content-root loads. The bin
-//! (`main.rs`) folds the roster, the four list panes, and the orrery's node-cards
+//! (`main.rs`) folds the roster, the four list panes, and the orrery's gnodes
 //! into that same document under one runner: unified-document-host Phase 1 is
 //! complete (one document, one focus ring, one a11y tree).
 
@@ -53,9 +53,9 @@ use xilem_serval::TextInput;
 pub mod command;
 pub mod crawl_indicator;
 pub mod ingest;
-pub mod nav;
+pub use chrome::nav;
 pub mod shell_eval;
-pub mod suggest;
+pub use chrome::suggest;
 pub mod sync_indicator;
 
 use command::{Command, PaletteItem};

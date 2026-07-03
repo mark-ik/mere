@@ -149,8 +149,8 @@ through the shell hit-test). The live engine asks are now image-decode and the
 external-texture-input bridge.
 
 1. **Custom-layout `<orrery>` element** with transform-positioned DOM children: deferred, not a
-   gate. The node-cards already work as host-positioned `position:absolute` DOM in the shell
-   document; a real `<orrery>` element only moves per-frame card placement from the host into the
+   gate. The gnodes already work as host-positioned `position:absolute` DOM in the shell
+   document; a real `<orrery>` element only moves per-frame gnode placement from the host into the
    engine. Revisit only if host-driven transform-setting becomes a perf or correctness problem.
    (unified-document-host Phase 2, cond 1.)
 2. **Transform-aware hit-test**: done in the engine. `IncrementalLayout::hit_test` →
@@ -178,9 +178,9 @@ external-texture-input bridge.
    into the one shell-container root, one focus ring, one a11y tree, collapse the Y-band input. The
    mechanism is proven (the 2026-06-17 spike); needs no engine work; it is the foundation the input
    spine and per-pane focus both need.
-3. **In parallel (no engine dependency)**: node-representation P0 (restore the card's lost cues:
-   shape-by-content-type, footprint, selection emphasis) and the moveable + resizable cards (a
-   `size` on `OrreryCard`; resize handles out of `content_rects`; size-by-degree opt-in).
+3. **In parallel (no engine dependency)**: node-representation P0 (restore the gnode's lost cues:
+   shape-by-content-type, footprint, selection emphasis) and the moveable + resizable gnodes (a
+   `size` on `OrreryGnode`; resize handles out of `content_rects`; size-by-degree opt-in).
 4. **The window-composition focus / active-session decoupling → the one input spine** over the
    consolidated document.
 5. **Then the cross-repo serval asks** for Phase 2 (the custom-layout `<orrery>` element +

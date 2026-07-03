@@ -34,7 +34,7 @@ into one mutually-exclusive `Representation` choice:
   `Tile` (favicon + caption), `Shape` (bare content-typed face, no texture), `Sprite` (an
   imported image fills the face). `NodeShape` (Square / Rounded / Circle) is a separate
   content-type silhouette axis.
-- **Face pick** ([window_view.rs](../../../crates/meerkat/src/window_view.rs) `node_card_view`):
+- **Face pick** ([window_view.rs](../../../crates/meerkat/src/window_view.rs) `gnode_view`):
   `match representation { Sprite => sprite, Tile => favicon, Shape => None }`. A sprite
   *categorically replaces* the favicon. There is no way to have a custom-bodied node that still
   shows a favicon, nor a sprite face on the default body.
@@ -218,7 +218,7 @@ fidelity) = a directly-authored hull, convex now, concave/compound as the B3 fid
 
 - **Texture and body-shape are already separable in data, coupled only in two pick sites.**
   `node_sprites`, `node_sprite_hulls`, and `node_shape` are independent maps; the conflation is
-  the `node_card_view` face match and the `node_collider` "Sprite gate" on the hull (above). So
+  the `gnode_view` face match and the `node_collider` "Sprite gate" on the hull (above). So
   the decoupling (B0) is a small structural change, not a data-model rework.
 - **The collider lowering is production-ready for authored hulls.** `gyre::NodeCollider`
   (Ball / Square / RoundedSquare / Hull) lowers a hull via parry `convex_hull` with a `< 3`-point

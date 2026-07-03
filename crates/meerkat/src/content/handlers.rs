@@ -6,6 +6,46 @@
 
 use super::*;
 
+fn emit_scene(
+    out: &impl ContentUpdateSink,
+    nav: NavGeneration,
+    viewport_gen: ViewportGeneration,
+    scene: Scene,
+    content_height: u32,
+    band_y: u32,
+    band_h: u32,
+    links: Vec<LinkHit>,
+    masks: Vec<paint_list_render::BoxShadowMaskRequest>,
+) {
+    let stats = scene_stats(&scene);
+    out.emit_update(ContentUpdate::Scene {
+        nav,
+        viewport_gen,
+        scene,
+        stats,
+        content_height,
+        band_y,
+        band_h,
+        links,
+        masks,
+    });
+}
+
+fn emit_engine_stats(
+    out: &impl ContentUpdateSink,
+    nav: NavGeneration,
+    viewport_gen: ViewportGeneration,
+    dom: engine_observables_api::DomArenaStats,
+    layout: Option<engine_observables_api::LayoutBatchStats>,
+) {
+    out.emit_update(ContentUpdate::EngineStats {
+        nav,
+        viewport_gen,
+        dom,
+        layout,
+    });
+}
+
 /// Mirror the current HTML page into a `ScriptedDom` and attach the DocumentScript at
 /// `component_path` over it under `grant` (P2.5c). HTML/serval lane only; returns a
 /// human-readable outcome for the `ScriptOutcome` update. A `grant` that denies a
@@ -141,9 +181,16 @@ pub(crate) fn ensure_html_layout(
 /// synchronous block path. (Smolweb host P1.)
 #[cfg(feature = "smolweb")]
 fn is_smolweb_lane(url: &str) -> bool {
-    ["gemini://", "gopher://", "nex://", "finger://", "spartan://", "guppy://"]
-        .iter()
-        .any(|scheme| url.starts_with(scheme))
+    [
+        "gemini://",
+        "gopher://",
+        "nex://",
+        "finger://",
+        "spartan://",
+        "guppy://",
+    ]
+    .iter()
+    .any(|scheme| url.starts_with(scheme))
 }
 
 /// Build the retained [`SmolwebDocument`](pelt_desktop::SmolwebDocument) into
@@ -162,7 +209,11 @@ fn ensure_smolweb(content: &mut Content) -> bool {
             _ => return false,
         };
         let theme = smolweb_app_theme(&content.sheet);
-        content.smolweb = Some(pelt_desktop::SmolwebDocument::parse(&content.url, body, theme));
+        content.smolweb = Some(pelt_desktop::SmolwebDocument::parse(
+            &content.url,
+            body,
+            theme,
+        ));
     }
     true
 }
@@ -233,16 +284,24 @@ pub(crate) fn render(
             .into_iter()
             .map(|(url, rect)| LinkHit { rect, url })
             .collect();
-        out.emit_update(ContentUpdate::Scene {
-            nav: content.nav,
-            viewport_gen: content.viewport_gen,
+        emit_scene(
+            out,
+            content.nav,
+            content.viewport_gen,
             scene,
-            content_height: h,
-            masks: Vec::new(),
+            h,
+            0,
+            h,
             links,
-            band_y: 0,
-            band_h: h,
-        });
+            Vec::new(),
+        );
+        emit_engine_stats(
+            out,
+            content.nav,
+            content.viewport_gen,
+            doc.dom_stats(),
+            doc.last_layout_batch_stats(),
+        );
         return;
     }
     // Scripted page (P2.5c): render from the script's mutable `ScriptedDom`, which
@@ -262,16 +321,24 @@ pub(crate) fn render(
             .into_iter()
             .map(|(url, rect)| LinkHit { rect, url })
             .collect();
-        out.emit_update(ContentUpdate::Scene {
-            nav: content.nav,
-            viewport_gen: content.viewport_gen,
+        emit_scene(
+            out,
+            content.nav,
+            content.viewport_gen,
             scene,
             content_height,
-            masks,
+            content.band_y,
+            content.band_h,
             links,
-            band_y: content.band_y,
-            band_h: content.band_h,
-        });
+            masks,
+        );
+        emit_engine_stats(
+            out,
+            content.nav,
+            content.viewport_gen,
+            inst.dom().stats(),
+            None,
+        );
         return;
     }
     // Serval smolweb lane: a focused smolweb capsule (gemini/gopher/feed) renders
@@ -300,16 +367,17 @@ pub(crate) fn render(
                 .into_iter()
                 .map(|(url, rect)| LinkHit { rect, url })
                 .collect();
-            out.emit_update(ContentUpdate::Scene {
-                nav: content.nav,
-                viewport_gen: content.viewport_gen,
+            emit_scene(
+                out,
+                content.nav,
+                content.viewport_gen,
                 scene,
                 content_height,
-                masks: Vec::new(),
+                content.band_y,
+                h,
                 links,
-                band_y: content.band_y,
-                band_h: h,
-            });
+                Vec::new(),
+            );
             return;
         }
     }
@@ -327,18 +395,19 @@ pub(crate) fn render(
             .into_iter()
             .map(|(url, rect)| LinkHit { rect, url })
             .collect();
-        out.emit_update(ContentUpdate::Scene {
-            nav: content.nav,
-            viewport_gen: content.viewport_gen,
+        emit_scene(
+            out,
+            content.nav,
+            content.viewport_gen,
             scene,
             content_height,
-            masks,
-            links,
             // Echo the band this scene represents so the host composites it at the
             // right offset and knows when to request the next band.
-            band_y: content.band_y,
-            band_h: content.band_h,
-        });
+            content.band_y,
+            content.band_h,
+            links,
+            masks,
+        );
     } else {
         // Document / synthesized lanes: the one-shot render_content path (the document lane
         // keeps its own retained packet; a synthesized page is cheap).
@@ -374,16 +443,17 @@ pub(crate) fn render(
                 content_height,
                 links,
                 masks,
-            } => out.emit_update(ContentUpdate::Scene {
-                nav: content.nav,
-                viewport_gen: content.viewport_gen,
+            } => emit_scene(
+                out,
+                content.nav,
+                content.viewport_gen,
                 scene,
                 content_height,
-                masks,
+                content.band_y,
+                content.band_h,
                 links,
-                band_y: content.band_y,
-                band_h: content.band_h,
-            }),
+                masks,
+            ),
         }
     }
     emit_fresh_wanted(content.nav, wanted, store, out);

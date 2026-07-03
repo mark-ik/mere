@@ -522,4 +522,3 @@ pub fn parse_omnibar_facet_token(token: &str) -> Option<FacetExpr> {
         operand: FacetOperand::None,
     }))
 }
-

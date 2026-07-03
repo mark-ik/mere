@@ -151,6 +151,7 @@ pub fn physics_section_items(physics_damping: f32) -> Vec<PaneItem> {
 /// renders these display rows. (Settings lane P2 — apparatus settings retired.)
 pub fn apparatus_items(
     system_rows: &[(String, String)],
+    table_rows: &[(String, String)],
     sync_rows: &[(String, String)],
     obs: &ObservabilitySnapshot,
     graph_metrics: &glossary::GraphMetrics,
@@ -192,9 +193,17 @@ pub fn apparatus_items(
         for (family, count) in &graph_metrics.relations_by_family {
             items.push(PaneItem::text(
                 "app-row",
-                format!("{}: {count}", crate::roster_data::edge_family_label(*family)),
+                format!(
+                    "{}: {count}",
+                    crate::roster_data::edge_family_label(*family)
+                ),
             ));
         }
+    }
+
+    items.push(PaneItem::text("app-title", "Tables"));
+    for (label, value) in table_rows {
+        items.push(PaneItem::text("app-row", format!("{label}: {value}")));
     }
 
     // The at-rest sync record (the record half of the static-vs-live split; Steward
@@ -368,17 +377,22 @@ mod tests {
             component_count: 2,
             largest_component: 4,
         };
-        let items = apparatus_items(
-            &[],
-            &[],
-            &ObservabilitySnapshot::default(),
-            &metrics,
+        let items = apparatus_items(&[], &[], &[], &ObservabilitySnapshot::default(), &metrics);
+        assert!(
+            items
+                .iter()
+                .any(|i| i.class == "app-title" && i.text == "Graph")
         );
-        assert!(items.iter().any(|i| i.class == "app-title" && i.text == "Graph"));
-        assert!(items.iter().any(|i| i.text.contains("Nodes: 5") && i.text.contains("edges: 4")));
-        assert!(items
-            .iter()
-            .any(|i| i.text.contains("Components: 2") && i.text.contains("largest 4")));
+        assert!(
+            items
+                .iter()
+                .any(|i| i.text.contains("Nodes: 5") && i.text.contains("edges: 4"))
+        );
+        assert!(
+            items
+                .iter()
+                .any(|i| i.text.contains("Components: 2") && i.text.contains("largest 4"))
+        );
         assert!(items.iter().any(|i| i.text == "Orphans: 1"));
         assert!(items.iter().any(|i| i.text == "Semantic: 3"));
     }

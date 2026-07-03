@@ -149,11 +149,17 @@ impl crate::WindowCtx<'_> {
             // The apparatus is read-only diagnostics now; its settings sections moved to the
             // pelt settings lane (Settings lane P2).
             let system_rows = self.apparatus_system_rows();
+            let table_rows = self.apparatus_table_rows();
             let sync_rows = self.apparatus_sync_rows();
             let obs = self.apparatus_observability();
             let graph_metrics = glossary::graph_metrics(self.orrery().graph());
-            let items =
-                crate::apparatus::apparatus_items(&system_rows, &sync_rows, &obs, &graph_metrics);
+            let items = crate::apparatus::apparatus_items(
+                &system_rows,
+                &table_rows,
+                &sync_rows,
+                &obs,
+                &graph_metrics,
+            );
             self.view
                 .set_list_pane(Apparatus, "apparatus", items, Some(rect));
         } else if self.view.list_pane_open(Apparatus) {
@@ -205,7 +211,7 @@ impl crate::WindowCtx<'_> {
     /// fills its external-texture from the url-cached scene); an unvisited node gets a
     /// dashed placeholder. `None` when no node is focused, or the focused node is an open
     /// workbench tile (the tile is the view; a card would contend for its content actor).
-    /// The card is placed *after* the node cards in document order, so it paints over them
+    /// The card is placed *after* the gnodes in document order, so it paints over them
     /// while the chrome overlays still paint over it. (Layering fix — card over nodes.)
     pub(super) fn compute_focus_card(
         &self,
@@ -221,7 +227,7 @@ impl crate::WindowCtx<'_> {
         let member = self.focused_member().filter(|m| {
             workbench_rect.is_none() || !self.view.workbench.open_members().contains(m)
         })?;
-        // The node's pane-local screen position (same camera the node cards use).
+        // The node's pane-local screen position (same camera the gnodes use).
         let (nx, ny) = self.orrery().focused_node_screen()?;
         let (pw, ph) = (
             orrery_rect[2] - orrery_rect[0],

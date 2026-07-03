@@ -3,6 +3,16 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 //! Shell + card view builders (pure ShellState -> ShellView functions).
+//!
+//! **Node vs card.** A node is an object — a physics body with its own hull in gyre, a
+//! DOM object here for tabbing/hit-test/a11y — that *references* an addressed thing (a
+//! page, a file, a settings namespace); it is not that thing, and it is not a card. Its
+//! rendered body is a **gnode** (the `.gnode` class), drawn either here as retained
+//! chrome DOM or by the orrery crate itself as an in-scene Scene layer — one primitive,
+//! two render tiers, never a summonable card. A **card** is
+//! summoned *about* a node or selection: the focus slot's preview/unvisited/object/
+//! connections family ([`FocusCard`]/[`FocusCardKind`], `focus_card_view`) and the
+//! roster's detail cards. See `design_docs/mere_docs/design/2026-07-01_node_card_summoning_design.md`.
 
 use super::*;
 
@@ -170,8 +180,8 @@ pub(crate) fn shell_view(s: &ShellState) -> ShellView {
             "shell",
             // Document order is paint + hit-test order in the one shell scene: the orrery
             // nodes and the folded panes come first (the content), then the chrome LAST so
-            // its modal overlays (context menu, palette, find, settings) paint over the node
-            // cards and win the hit-test, instead of the node DOM (formerly later in the
+            // its modal overlays (context menu, palette, find, settings) paint over the
+            // gnodes and win the hit-test, instead of the gnode DOM (formerly later in the
             // document) occluding the menu and stealing its clicks. The toolbar is in normal
             // flow and the content roots are `position:absolute`, so their geometry is
             // unchanged by the reorder; only the z-order is. The settings panes sit with the
@@ -199,148 +209,19 @@ pub(crate) fn shell_view(s: &ShellState) -> ShellView {
 /// (the external-texture-element compose). (cond 5.)
 pub(crate) const ORRERY_SCENE_KEY: u64 = 0xF0F0_0000_0000_0001;
 
-/// One orrery node card: a fixed-footprint square "face" carrying the node's
-/// activation-state color (and favicon, when present) shaped by content type, with the
-/// label beside it. Selection rings + lifts the face, distinct from the focus ring the
-/// `focusable` wrapper draws; the card click-selects its node through the shell hit-test
-/// (the two-hit-test's DOM half). The object anatomy mirrors the in-scene gnode the
-/// secondary panes still draw. (Node representation P0.)
-pub(crate) fn node_card_view(c: &OrreryCard) -> ShellView {
-    // The face footprint (px): per-node, from `Orrery::node_size` (default 36 = the in-scene
-    // gnode + gyre's NODE_HALF collider; size-by-degree / a per-node override raise it). The
-    // `.node-card` element IS the face + hit target (not a nested flex item, which serval
-    // collapsed to nothing — only the label rendered).
-    let face = c.size;
-    // Selection lifts the node: its face grows slightly and stays centered on the gyre
-    // collider, so the world grab point does not move (Decision 2 — the selection channel is
-    // a ring plus a slight lift, leaving the color channel free for activation state). The
-    // lift grows width/height and recenters the translate rather than applying a CSS scale,
-    // so it needs no transform-origin support; the gyre collider stays `NODE_HALF`, so the
-    // lift is visual emphasis only and the hit target is unchanged.
-    const LIFT: f32 = 4.0;
-    let size = if c.selected { face + LIFT } else { face };
-    let half = size / 2.0;
-    // Top-left at the node's world position minus half (of the lifted size), the same
-    // `pos - NODE_HALF` centering the in-scene gnode uses, so the square stays centered on
-    // the node as it lifts.
-    let (cx, cy) = (c.x - half, c.y - half);
-    // Selection: a bright ring + deeper shadow around the lifted face, distinct from the
-    // blue focus ring the `focusable` wrapper draws; else a base depth shadow.
-    let ring = if c.selected {
-        "box-shadow:0 0 0 2px #ffffff,0 3px 10px rgba(0,0,0,0.6);"
-    } else {
-        "box-shadow:0 1px 3px rgba(0,0,0,0.45);"
-    };
-    // The node body: a colored square rendered AT the gyre collider's screen position.
-    // `left:0;top:0` anchors it to the orrery element's origin so the transform places it
-    // exactly there, not offset by an absolute box's static-flow position (the cause of the
-    // collider-vs-visual gap — the press hit the bare collider beside the visual). This IS the
-    // node object the collider is pinned to and the drag grabs; the label and (later) the
-    // content-preview card anchor to it. Shaped square / rounded / circle by content type.
-    // The body shape: a node with a custom hull is **clipped to it**, so the rendered node IS its
-    // collider — a sprite's transparent background no longer reads as a square, and the picture
-    // matches the physics. (The selection lift still marks selection; a box-shadow ring would be
-    // erased by the clip, so it is dropped for a hulled node — a shaped ring is a later refinement.)
-    // A silhouette-bodied node keeps the content-type border-radius + the box-shadow ring.
-    let shape_style = if c.hull.len() >= 3 {
-        let pts: Vec<String> = c
-            .hull
-            .iter()
-            .map(|&(nx, ny)| format!("{:.2}% {:.2}%", (nx + 0.5) * 100.0, (ny + 0.5) * 100.0))
-            .collect();
-        format!("clip-path:polygon({});", pts.join(", "))
-    } else {
-        format!("border-radius:{};{ring}", c.radius)
-    };
-    let face_style = format!(
-        "position:absolute;left:0;top:0;transform:translate({cx}px,{cy}px);width:{size}px;\
-         height:{size}px;box-sizing:border-box;background-color:{};{shape_style}",
-        c.color
-    );
-    // Face axis: `Bare` is the bare content-typed face (no favicon, no caption), for dense
-    // graphs or a node with nothing to texture; `Favicon` (the default) textures the favicon
-    // on the face and sets the caption beside it; `Sprite` shows the imported image. The body
-    // (collider shape) is a separate axis, so only the face children below differ.
-    let chrome = !matches!(c.face, Face::Bare);
-    // The face image fills the face (absolutely positioned over the state color, shaped to
-    // match): a `Sprite` shows its imported image; a `Favicon` shows the favicon (transparency
-    // shows the color through); `Bare` shows neither. (Node body & face — the Face axis.)
-    let face_image = match c.face {
-        Face::Sprite => c.sprite.as_ref(),
-        Face::Favicon => c.favicon.as_ref(),
-        Face::Bare => None,
-    };
-    let favicon = face_image.map(|uri| {
-        // A sprite is a photo / artwork: cover-fit fills the face without distortion. A
-        // favicon is a small glyph: stretch it to the face as before.
-        let fit = if matches!(c.face, Face::Sprite) {
-            "object-fit:cover;"
-        } else {
-            ""
-        };
-        el::<_, ShellState, ()>("img", ()).attr("src", uri.clone()).attr(
-            "style",
-            format!(
-                "position:absolute;left:0;top:0;width:{size}px;height:{size}px;border-radius:{};{fit}display:block",
-                c.radius
-            ),
-        )
-    });
-    // The label rides beside the square (absolutely positioned, overflowing it), like the
-    // gnode caption at left:42px, so a long name reads in full on the dark canvas. Absent
-    // on a `Shape`, which is the caption-less bare face.
-    let label = chrome.then(|| {
-        el::<_, ShellState, ()>("span", c.label.clone()).attr(
-            "style",
-            // Beside the face (gap 6) and vertically centered on it, so the caption tracks
-            // the footprint as the node resizes. (P0 resize.)
-            format!(
-                "position:absolute;left:{}px;top:{}px;white-space:nowrap;color:#d8deea;font-size:14px;font-weight:500",
-                size + 6.0,
-                (size / 2.0 - 8.0).max(0.0)
-            ),
-        )
-    });
-    // Hover (Decision 2): a faint white wash over the face, painted last (after the favicon)
-    // so it brightens the whole silhouette. Sized to the face box (left:0..size), so the
-    // beside-face label keeps full contrast; `pointer-events:none` keeps it off the grab.
-    // (P0 hover.)
-    let wash = c.hovered.then(|| {
-        el::<_, ShellState, ()>("div", ()).attr(
-            "style",
-            format!(
-                "position:absolute;left:0;top:0;width:{size}px;height:{size}px;border-radius:{};\
-                 background-color:rgba(255,255,255,0.16);pointer-events:none",
-                c.radius
-            ),
-        )
-    });
-    // The card is a static snapshot content-preview, never the node's hit-target or a focus stop
-    // (the cond-3/4 reversal: presses route to gyre via CLICK_SLOP, the card is inert). So no
-    // `focusable` (it put every on-screen card in the Tab ring ahead of chrome, slice 2) and no
-    // `on_click` select (gyre owns selection, slice 3). Keyboard focus is the orrery container, not
-    // the per-card sprite. (Slices 2 + 3, 2026-06-21.)
-    Box::new(
-        el::<_, ShellState, ()>("div", (favicon, label, wash))
-            .attr("class", "node-card")
-            .attr("data-member", c.member.to_string())
-            .attr("style", face_style),
-    )
-}
-
-/// The orrery element: a positioned container whose node cards are `position:absolute`
-/// + `transform: translate(...)` DOM placed by gyre's world positions (the cards both
-/// paint and hit-test where the transform puts them). Empty until the host snapshots
-/// the focused orrery; the underlay (edges + demoted dots) joins in (ii). The rect is a
-/// placeholder until the frame tree drives the container layout (iii). (Phase 2.)
+/// The orrery element: a positioned container whose gnodes are `position:absolute`
+/// + `transform: translate(...)` DOM placed by gyre's world positions. The shell view
+/// reserves a stable host-owned child pool for them; the render path reconciles the pool
+/// directly against the DOM each frame. The underlay (edges + demoted dots) joins in (ii).
+/// The rect is a placeholder until the frame tree drives the container layout (iii).
+/// (Phase 2.)
 pub(crate) fn orrery_element(render: &OrreryRender) -> ShellView {
-    let card_views: Vec<ShellView> = render.cards.iter().map(node_card_view).collect();
     let [x0, y0, x1, y1] = render.rect;
     let (pw, ph) = ((x1 - x0).max(1.0), (y1 - y0).max(1.0));
     // The orrery scene (gyre edges / backdrop / demoted dots), which the host rasterizes to a
     // texture, sits as an `<external-texture>` underlay in the document so its placement comes from
-    // layout and the cards stack over it via the DOM. First child = painted first = under the
-    // cards. (cond 5: the scene becomes a document element, not a standalone host composite.)
+    // layout and the gnodes stack over it via the DOM. First child = painted first = under the
+    // gnodes. (cond 5: the scene becomes a document element, not a standalone host composite.)
     let scene: ShellView = Box::new(
         external_texture::<ShellState, ()>(ORRERY_SCENE_KEY, pw as u32, ph as u32)
             .attr("class", "orrery-scene")
@@ -349,26 +230,30 @@ pub(crate) fn orrery_element(render: &OrreryRender) -> ShellView {
                 format!("position:absolute;left:0;top:0;width:{pw}px;height:{ph}px"),
             ),
     );
-    let mut children: Vec<ShellView> = vec![scene];
-    children.extend(card_views);
+    let gnode_pool: ShellView = Box::new(
+        host_pool::<ShellState, ()>("div", ORRERY_GNODE_POOL_ID)
+            .attr("class", ORRERY_GNODE_POOL_CLASS)
+            .attr(
+                "style",
+                format!("position:absolute;left:0;top:0;width:{pw}px;height:{ph}px"),
+            ),
+    );
     // The focused node's content card paints LAST among the orrery's children, so it sits
-    // over the node cards (the spatial map's nodes are under the focused content). The
+    // over the gnodes (the spatial map's nodes are under the focused content). The
     // chrome (and its overlays) still paints over it, since the orrery element precedes the
     // chrome in the shell document. (Layering fix — card over nodes.)
-    if let Some(fc) = &render.focus_card {
-        children.push(focus_card_view(fc));
-    }
+    let focus_card = render.focus_card.as_ref().map(focus_card_view);
     // The orrery pane element bears the wheel: a wheel the host dispatches here queues its delta
     // for the host to drain into gyre's pan / Ctrl-zoom, routing the orrery wheel through the
-    // document (the form wheel.rs intends). The cards / scene under it have no wheel handler, so
+    // document (the form wheel.rs intends). The gnodes / scene under it have no wheel handler, so
     // the runner's ancestor walk resolves any orrery wheel to this element. (cond 5 input bridge.)
     Box::new(on_wheel(
-        el::<_, ShellState, ()>("div", children)
+        el::<_, ShellState, ()>("div", (scene, gnode_pool, focus_card))
             .attr("class", "orrery")
             .attr(
                 "style",
                 // z-index:0 makes the orrery the base layer of the shell z-stack: a
-                // stacking context that *contains* its node/focus cards, so they paint
+                // stacking context that *contains* its gnodes and focus card, so they paint
                 // within it and never hoist to compete with the chrome (z-index:10, above).
                 // (Shell z-stack — card under chrome.)
                 format!(
@@ -381,11 +266,11 @@ pub(crate) fn orrery_element(render: &OrreryRender) -> ShellView {
     ))
 }
 
-/// The focused node's content card: a positioned element over the orrery node cards. A
+/// The focused node's content card: a positioned element over the orrery's gnodes. A
 /// `Snapshot` is a framed card holding a PNG data-URI `<img>` of the page's top peek (the
 /// host builds + caches it per url); an `Unvisited` is a dashed "double-click to load"
 /// placeholder (double-click is host-handled via `content_rects`, so the element needs no
-/// click handler). The card is opaque chrome DOM after the node cards, so document order
+/// click handler). The card is opaque chrome DOM after the gnodes, so document order
 /// paints it over them and under the chrome overlays. (Layering fix — card over nodes.)
 pub(crate) fn focus_card_view(fc: &FocusCard) -> ShellView {
     let [x0, y0, x1, y1] = fc.rect;
@@ -393,7 +278,7 @@ pub(crate) fn focus_card_view(fc: &FocusCard) -> ShellView {
     match &fc.kind {
         FocusCardKind::Snapshot { data_uri } => {
             // The preview is a PNG data-URI <img> (like the favicons), so it is opaque chrome
-            // DOM after the node cards: document order paints it over them. Only the cached
+            // DOM after the gnodes: document order paints it over them. Only the cached
             // image renders — there is no placeholder while it builds. (Layering fix.)
             let img: ShellView = Box::new(
                 el::<_, ShellState, ()>("img", ())
@@ -465,7 +350,7 @@ pub(crate) fn focus_card_view(fc: &FocusCard) -> ShellView {
 }
 
 /// Render one object-card widget as a `(caption, control)` pair the card stacks as direct
-/// children. Each control queues a `node_card_keys` activation the host drains + dispatches.
+/// children. Each control queues an `object_card_keys` activation the host drains + dispatches.
 /// (Object card — P1.)
 pub(crate) fn object_card_widget_row(widget: &CardWidget) -> (ShellView, ShellView) {
     match widget {
@@ -483,13 +368,13 @@ pub(crate) fn object_card_widget_row(widget: &CardWidget) -> (ShellView, ShellVi
             let minus: ShellView = Box::new(on_click(
                 el::<_, ShellState, ()>("div", "\u{2212}".to_string()).attr("style", btn),
                 move |s: &mut ShellState, _: PointerClick| {
-                    s.node_card_keys.push("size:down".to_string())
+                    s.object_card_keys.push("size:down".to_string())
                 },
             ));
             let plus: ShellView = Box::new(on_click(
                 el::<_, ShellState, ()>("div", "+".to_string()).attr("style", btn),
                 move |s: &mut ShellState, _: PointerClick| {
-                    s.node_card_keys.push("size:up".to_string())
+                    s.object_card_keys.push("size:up".to_string())
                 },
             ));
             let notches: ShellView = Box::new(
@@ -526,7 +411,7 @@ pub(crate) fn object_card_widget_row(widget: &CardWidget) -> (ShellView, ShellVi
                     format!("{};border-radius:6px 0 0 6px", seg(*is_favicon)),
                 ),
                 move |s: &mut ShellState, _: PointerClick| {
-                    s.node_card_keys.push("face:favicon".to_string())
+                    s.object_card_keys.push("face:favicon".to_string())
                 },
             ));
             let shape_btn: ShellView = Box::new(on_click(
@@ -535,7 +420,7 @@ pub(crate) fn object_card_widget_row(widget: &CardWidget) -> (ShellView, ShellVi
                     format!("{};border-radius:0 6px 6px 0", seg(!*is_favicon)),
                 ),
                 move |s: &mut ShellState, _: PointerClick| {
-                    s.node_card_keys.push("face:bare".to_string())
+                    s.object_card_keys.push("face:bare".to_string())
                 },
             ));
             let row: ShellView = Box::new(
@@ -558,7 +443,6 @@ pub(crate) fn shell_runner(dom: Rc<RefCell<ScriptedDom>>, chrome: Chrome) -> She
             chrome,
             orrery: OrreryRender {
                 rect: [0.0; 4],
-                cards: Vec::new(),
                 focus_card: None,
             },
             roster: RosterState::default(),
@@ -573,7 +457,7 @@ pub(crate) fn shell_runner(dom: Rc<RefCell<ScriptedDom>>, chrome: Chrome) -> She
             gloss_minimap_rect: None,
             orrery_wheel: None,
             settings: SettingsPanesState::default(),
-            node_card_keys: Vec::new(),
+            object_card_keys: Vec::new(),
         },
     )
 }

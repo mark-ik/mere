@@ -138,6 +138,8 @@ impl Constellation {
                         requested_band: (0, 0),
                         links: Vec::new(),
                         find_matches: Vec::new(),
+                        engine_stats: None,
+                        scene_stats: None,
                         find_query: String::new(),
                         scene_version: 0,
                         background: false,
@@ -214,6 +216,8 @@ impl Constellation {
             activation.gens.nav.bump();
             activation.scene = None;
             activation.links.clear();
+            activation.engine_stats = None;
+            activation.scene_stats = None;
             // A new document invalidates the old find matches + query (a stale
             // highlight must not survive a navigation). (Find-in-page.)
             activation.find_matches.clear();
@@ -468,6 +472,26 @@ impl Constellation {
     /// way it maps link rects (offset by the card scroll). (Find-in-page.)
     pub fn find_matches(&self, member: GraphMemberId) -> &[Vec<[f32; 4]>] {
         self.active.get(&member).map_or(&[], |a| &a.find_matches)
+    }
+
+    /// The member's latest focused-document Serval stats, if its current content lane
+    /// reported any.
+    pub fn engine_stats(
+        &self,
+        member: GraphMemberId,
+    ) -> Option<crate::content::ContentEngineStats> {
+        self.active.get(&member).and_then(|a| a.engine_stats)
+    }
+
+    /// The member's latest scene transfer stats, if its current content lane
+    /// reported any.
+    pub fn scene_stats(&self, member: GraphMemberId) -> Option<crate::content::ContentSceneStats> {
+        self.active.get(&member).and_then(|a| a.scene_stats)
+    }
+
+    /// The current routed engine id for `member`, if it is active.
+    pub fn engine_id(&self, member: GraphMemberId) -> Option<&str> {
+        self.active.get(&member).map(|a| a.engine.as_str())
     }
 
     /// The member's retained document-lane packet (plus font sidecar), if it is a

@@ -4,6 +4,11 @@
 **Status**: Planning (with Mark), building widget 1.
 **Code**: `crates/meerkat/` (the focus-card slot, the context action, the drain),
 `crates/orrery/` (the per-object settings the widgets bind to).
+**Terminology note (2026-07-02):** the widget-key queue this doc sketches as `node_size_steps`
+shipped as `node_card_keys`, since renamed to `object_card_keys` in the node/card terminology
+cleanup — see [node_card_summoning_design](../design/2026-07-01_node_card_summoning_design.md).
+Also renamed: `node_card_view` → `gnode_view`, `OrreryCard` → `OrreryGnode`, the `.node-card`
+class → `.gnode` (the object card itself keeps its name — it is a real card).
 
 A light, in-canvas card scoped to the selected graph primitive, holding a customizable,
 type-scoped set of setting and action widgets. An iOS-Control-Center for graph objects.

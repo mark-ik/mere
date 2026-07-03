@@ -6,7 +6,7 @@
 //!
 //! The tessera counterpart of [`fetch`](crate::fetch): the same async-host seam,
 //! a different payload. A [`SyncHost`] owns a tokio runtime, stands up one
-//! `P2pandaTransport` (a persistent seed-file identity) and joins a tessera moot's
+//! `P2pandaTransport` (the shared identity-root seed) and joins a tessera moot's
 //! `SyncedMoot` LogSync session on it, then polls the lane's real `SyncStatus`
 //! and pushes each change over an `mpsc` channel + an `EventLoopProxy<()>` wake
 //! (delivery model 2, shared with the fetcher). The host drains it in
@@ -20,13 +20,13 @@
 //! logged at startup to hand out; [`connect`](SyncHost::connect) dials another's),
 //! and the host authors a small starter tessera log on launch so a connecting
 //! peer has something to sync.
-//! S5.2: identity is a persistent seed file under the data dir (a stable node id
-//! across restarts; the passphrase-encrypted persona vault is the follow-on), and
+//! S5.2: identity is the wallet root's persistent master seed (a stable node id
+//! across restarts; the passphrase-encrypted persona vault is still the follow-on), and
 //! the tessera store is on disk (`<data>/mere/moots/<moot>.redb`), so a peer's log
 //! survives restart. Still S5.x-shaped: the moot is a fixed demo id (real moot
 //! selection is S5.3).
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
@@ -102,6 +102,7 @@ pub enum SyncCommand {
 /// Returns the kernel's command handle plus the receiver it drains in `user_event`.
 pub fn spawn_sync(
     wake: Wake,
+    data_root: PathBuf,
     moot_id: [u8; 32],
 ) -> (ActorHandle<SyncCommand>, Receiver<SyncUpdate>) {
     spawn(wake, move |commands, out: Emitter<SyncUpdate>| {
@@ -111,14 +112,12 @@ pub fn spawn_sync(
             .expect("build the sync runtime");
 
         // Bind the transport + join the moot once at startup (both async). A
-        // persistent seed-file identity (created on first launch, reused after)
-        // makes this install a stable, distinct peer across restarts (S5.2).
-        let dir = data_dir();
+        // wallet-root seed (created once by shell bootstrap, reused after) makes
+        // this install a stable, distinct peer across restarts (S5.2).
+        let dir = data_root;
         let setup: Result<(P2pandaTransport, SyncedMoot, Option<ChainRoot>), String> = runtime
             .block_on(async {
-                let provider = InMemoryProvider::from_seed(load_or_create_seed(
-                    &dir.join("node_identity.seed"),
-                ));
+                let provider = InMemoryProvider::from_seed(load_wallet_seed(&dir));
                 let keypair = provider.master_keypair().clone();
                 let transport = P2pandaTransport::builder(&keypair)
                     .gossip()
@@ -265,44 +264,27 @@ fn author_starter_log(provider: &InMemoryProvider, moot_id: [u8; 32], store: &Te
     }
 }
 
-/// The meerkat session data dir (`<data_dir>/mere`). Mirrors `main.rs`'s
-/// `session_dir` so this S5.2 persistence change stays contained to the sync
-/// module (no `spawn_sync` signature change); a later refactor can thread one
-/// shared session dir through both if desired.
-fn data_dir() -> PathBuf {
-    dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("mere")
-}
-
-/// Load the 32-byte node-identity seed from `path`, or mint + persist a fresh one
-/// on first launch (so this peer keeps the same node id across restarts, S5.2).
-/// A read / parse / write failure falls back to an ephemeral seed for this launch
-/// and warns — identity is never fatal to the shell.
-///
-/// **The file holds a secret seed in plaintext** — the S5.2 minimal form; the
-/// passphrase-encrypted persona vault (`<data_root>/personas/<id>/vault/`) is the
-/// follow-on that supersedes it.
-fn load_or_create_seed(path: &Path) -> [u8; 32] {
-    if let Ok(bytes) = std::fs::read(path) {
-        if let Ok(seed) = <[u8; 32]>::try_from(bytes.as_slice()) {
-            return seed;
+/// Load the wallet root's shared master seed, warning and falling back to an
+/// ephemeral launch-local seed if bootstrap failed earlier.
+fn load_wallet_seed(data_root: &std::path::Path) -> [u8; 32] {
+    match session_runtime::load_identity_seed(data_root) {
+        Ok(Some(seed)) => seed,
+        Ok(None) => {
+            tracing::warn!(
+                ?data_root,
+                "identity seed missing; sync identity is ephemeral this launch"
+            );
+            InMemoryProvider::random().master_keypair().to_seed()
         }
-        tracing::warn!(
-            ?path,
-            "node identity seed file is the wrong size; regenerating"
-        );
+        Err(err) => {
+            tracing::warn!(
+                %err,
+                ?data_root,
+                "identity seed unavailable; sync identity is ephemeral this launch"
+            );
+            InMemoryProvider::random().master_keypair().to_seed()
+        }
     }
-    // A throwaway random keypair yields a fresh 32-byte seed without pulling an rng
-    // dependency into this bin; `to_seed` exposes exactly those bytes.
-    let seed = InMemoryProvider::random().master_keypair().to_seed();
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    if let Err(err) = std::fs::write(path, seed) {
-        tracing::warn!(%err, ?path, "could not persist node identity seed; it is ephemeral this launch");
-    }
-    seed
 }
 
 /// Lowercase hex of a 32-byte id, for a per-moot store filename.
@@ -375,18 +357,16 @@ mod tests {
     }
 
     #[test]
-    fn the_node_seed_is_stable_across_calls() {
-        // A unique path under the temp dir; non-concurrent test runs keep it ours.
+    fn the_wallet_seed_is_stable_across_calls() {
         let dir = std::env::temp_dir().join(format!("meerkat-seed-{}", std::process::id()));
-        let path = dir.join("node_identity.seed");
-        let _ = std::fs::remove_file(&path);
-        let first = load_or_create_seed(&path);
-        let second = load_or_create_seed(&path);
+        let _ = std::fs::remove_dir_all(&dir);
+        session_runtime::save_identity_seed(&dir, [0x77; 32]).unwrap();
+        let first = load_wallet_seed(&dir);
+        let second = load_wallet_seed(&dir);
         assert_eq!(
             first, second,
             "the persisted seed is reused on the next call"
         );
-        let _ = std::fs::remove_file(&path);
-        let _ = std::fs::remove_dir(&dir);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

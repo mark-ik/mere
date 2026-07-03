@@ -1,0 +1,29 @@
+[package]
+name = "fetch"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Host-neutral fetch actor and session-cookie runtime for Mere."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+armillary.workspace = true
+eidetic.workspace = true
+errand = { git = "https://github.com/mark-ik/errand.git" }
+netfetcher = { git = "https://github.com/mark-ik/netfetcher.git", branch = "main" }
+pollster = "0.4"
+rustls-pki-types = "1"
+serde = { workspace = true }
+serde_json = { workspace = true }
+session-runtime.workspace = true
+tokio = { version = "1", features = ["rt-multi-thread", "time", "io-util", "sync"] }
+tracing.workspace = true
+url = "2"
+verso-api.workspace = true
+
+[lints]
+workspace = true

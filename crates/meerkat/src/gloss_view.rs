@@ -14,7 +14,7 @@
 
 use forme::GraphMemberId;
 use register_theme::chrome::{ChromeTheme, Color32};
-use xilem_serval::{AnyView, PointerClick, ServalCtx, ServalElement, clickable, el, external_texture};
+use xilem_serval::{AnyView, Keyed, PointerClick, ServalCtx, ServalElement, clickable, el};
 
 use super::WindowCtx;
 use crate::gloss::GlossRowIntent;
@@ -67,17 +67,25 @@ pub fn recent_view(state: &GlossRecentState) -> GlossRecentView {
         el::<_, GlossRecentState, ()>("div", "Recent".to_string())
             .attr("class", "gloss-recent-header"),
     );
-    let rows: Vec<GlossRecentView> = if state.rows.is_empty() {
-        vec![Box::new(
-            el::<_, GlossRecentState, ()>("div", "nothing visited yet".to_string())
-                .attr("class", "gloss-recent-empty"),
-        )]
+    let scroll: GlossRecentView = if state.rows.is_empty() {
+        Box::new(
+            el::<_, GlossRecentState, ()>(
+                "div",
+                vec![Box::new(
+                    el::<_, GlossRecentState, ()>("div", "nothing visited yet".to_string())
+                        .attr("class", "gloss-recent-empty"),
+                ) as GlossRecentView],
+            )
+            .attr("class", "gloss-recent-scroll"),
+        )
     } else {
-        state.rows.iter().map(recent_row).collect()
+        let rows: Keyed<GraphMemberId, GlossRecentView> = state
+            .rows
+            .iter()
+            .map(|row| (row.member, recent_row(row)))
+            .collect();
+        Box::new(el::<_, GlossRecentState, ()>("div", rows).attr("class", "gloss-recent-scroll"))
     };
-    let scroll: GlossRecentView = Box::new(
-        el::<_, GlossRecentState, ()>("div", rows).attr("class", "gloss-recent-scroll"),
-    );
     Box::new(
         el::<_, GlossRecentState, ()>("div", vec![header, scroll]).attr("class", "gloss-recent"),
     )
@@ -86,8 +94,7 @@ pub fn recent_view(state: &GlossRecentState) -> GlossRecentView {
 fn recent_row(row: &GlossRecentRow) -> GlossRecentView {
     let url = row.url.clone();
     let label: GlossRecentView = Box::new(
-        el::<_, GlossRecentState, ()>("span", row.url.clone())
-            .attr("class", "gloss-recent-label"),
+        el::<_, GlossRecentState, ()>("span", row.url.clone()).attr("class", "gloss-recent-label"),
     );
     Box::new(clickable(
         el::<_, GlossRecentState, ()>("div", vec![label])
@@ -157,7 +164,11 @@ pub struct GlossMinimapState {
 /// non-lensed element in `shell_view` (`window_view/views.rs`), matching orrery's
 /// pattern exactly; only the interactive node squares stay lensed here.
 pub fn minimap_view(state: &GlossMinimapState) -> GlossMinimapView {
-    let children: Vec<GlossMinimapView> = state.nodes.iter().map(minimap_node_view).collect();
+    let children: Keyed<GraphMemberId, GlossMinimapView> = state
+        .nodes
+        .iter()
+        .map(|node| (node.member, minimap_node_view(node)))
+        .collect();
     Box::new(el::<_, GlossMinimapState, ()>("div", children).attr("class", "gloss-minimap"))
 }
 
@@ -216,8 +227,8 @@ pub fn gloss_recent_sheet(c: &ChromeTheme) -> Vec<String> {
 /// Deliberately no `position: relative` and no `background-color` on
 /// `.gloss-minimap`. A `relative` wrapper here would add a third positioning level
 /// (gloss-minimap-pane[absolute] > gloss-minimap[relative] > gloss-minimap-node
-/// [absolute]) — one deeper than the orrery's own node cards (orrery[absolute] >
-/// node-card[absolute], no relative wrapper between) — which corrupted the whole
+/// [absolute]) — one deeper than the orrery's own gnodes (orrery[absolute] >
+/// gnode[absolute], no relative wrapper between) — which corrupted the whole
 /// chrome document; static positioning lets `.gloss-minimap-node`'s `position:
 /// absolute` resolve its containing block to the pane wrapper directly, matching
 /// the orrery's (working) depth. A `background-color` here would paint over the
@@ -346,7 +357,8 @@ mod tests {
             let dom = dom.borrow();
             first_by_class(&dom, dom.document(), "gloss-recent-row").expect("a row")
         };
-        pane.pane.dispatch_click(row_node, PointerClick::at((20.0, 10.0)));
+        pane.pane
+            .dispatch_click(row_node, PointerClick::at((20.0, 10.0)));
         assert_eq!(
             pane.take_intents(),
             vec![GlossRowIntent::Select("https://a.test/".to_string())]
@@ -362,7 +374,10 @@ mod tests {
     impl MinimapPane {
         fn new() -> Self {
             Self {
-                pane: ViewPane::new(minimap_view as GlossMinimapLogic, GlossMinimapState::default()),
+                pane: ViewPane::new(
+                    minimap_view as GlossMinimapLogic,
+                    GlossMinimapState::default(),
+                ),
             }
         }
 
@@ -414,7 +429,10 @@ mod tests {
         let _ = pane.pane.frame(200, 150, &Default::default());
         let dom = pane.dom();
         let dom = dom.borrow();
-        assert_eq!(count_by_class(&dom, dom.document(), "gloss-minimap-node"), 2);
+        assert_eq!(
+            count_by_class(&dom, dom.document(), "gloss-minimap-node"),
+            2
+        );
         assert!(first_by_class(&dom, dom.document(), "gloss-minimap").is_some());
     }
 

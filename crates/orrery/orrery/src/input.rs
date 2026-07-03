@@ -128,7 +128,7 @@ impl Orrery {
     /// The node under a screen-px cursor. Under the plain top-down projection this is
     /// the exact world-space collider pick (`screen_to_world` -> gyre `hit_test`, which
     /// respects each node's collider shape, including sprite hulls). Under the isometric
-    /// / fake-height projection the cards are upright billboards drawn off their ground
+    /// / fake-height projection the gnodes are upright billboards drawn off their ground
     /// colliders, so instead test the cursor against each node's drawn billboard rect and
     /// take the front-most (largest projected ground depth). (Isometric camera — picking.)
     pub(crate) fn pick_at(&self, cursor: (f32, f32)) -> Option<NodeKey> {

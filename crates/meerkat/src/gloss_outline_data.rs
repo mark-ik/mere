@@ -2,19 +2,14 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Data builder for the gloss outline lens: the host-enriched [`GlossOutlineSnapshot`]
-//! `glossary` projects the graph into, with each node row's NODE_SHEET state +
-//! selection resolved against this frame's orrery (never reproduced by `glossary`,
-//! which stays graph-pure). (gloss-outline plan P1.)
-
-use std::collections::HashSet;
-
-use forme::GraphMemberId;
+//! Data builder for the gloss outline lens: the host-enriched
+//! [`GlossOutlineSnapshot`] `glossary` projects the graph into, with each node
+//! row's NODE_SHEET state + selection supplied by a narrow per-window input
+//! snapshot rather than live host reads scattered through the builder.
+//! `glossary` itself stays graph-pure. (gloss-outline plan P1, P8 seam prep.)
 
 use super::WindowCtx;
-use crate::gloss_outline_view::{
-    GlossOutlineNode, GlossOutlineRow, GlossOutlineSnapshot, cap_outline_rows,
-};
+use crate::gloss::{GlossOutlineNode, GlossOutlineRow, GlossOutlineSnapshot, cap_outline_rows};
 
 impl WindowCtx<'_> {
     /// Project the focused graph into the gloss outline lens's snapshot for this
@@ -27,9 +22,7 @@ impl WindowCtx<'_> {
     /// itself stays fully uncapped. (gloss-outline plan P1 / P2 dynamic caps.)
     pub(super) fn gloss_outline_snapshot(&self, available_height: f32) -> GlossOutlineSnapshot {
         let graph = self.orrery().graph();
-        let states = self.node_states();
-        let selected: HashSet<GraphMemberId> =
-            self.orrery().selected_members().into_iter().collect();
+        let input = self.pane_input_snapshot();
         let rows = glossary::outline_rows(graph)
             .into_iter()
             .map(|row| GlossOutlineRow {
@@ -41,11 +34,8 @@ impl WindowCtx<'_> {
                     Some(GlossOutlineNode {
                         member,
                         url,
-                        state: states
-                            .get(&member)
-                            .copied()
-                            .unwrap_or(orrery::NodeState::Idle),
-                        selected: selected.contains(&member),
+                        state: input.node_state(member),
+                        selected: input.is_selected(member),
                     })
                 }),
             })

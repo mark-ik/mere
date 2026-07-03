@@ -125,7 +125,9 @@ fn graph_engram_provenance(created_at: Timestamp) -> ProvenanceRecord {
     ProvenanceRecord {
         origin: ProvenanceOrigin::Generated,
         upstream: Vec::new(),
-        tooling: Some(concat!("session-runtime/graph-engram@", env!("CARGO_PKG_VERSION")).to_string()),
+        tooling: Some(
+            concat!("session-runtime/graph-engram@", env!("CARGO_PKG_VERSION")).to_string(),
+        ),
         generated_at: created_at,
     }
 }
@@ -179,7 +181,10 @@ pub async fn save_graph_snapshot_engram(
 /// The store is read-only here (eidetic replay-isolation), so opening an engram
 /// never mutates it; editing the returned graph forks a thaw and only persists if
 /// re-saved as a new engram.
-pub async fn open_engram_as_session(store: &mut dyn Store, id: ManifestId) -> Result<Option<Graph>> {
+pub async fn open_engram_as_session(
+    store: &mut dyn Store,
+    id: ManifestId,
+) -> Result<Option<Graph>> {
     let mut fetcher = NoFetcher;
     let payload: Option<GraphEngram> = load_typed::<GraphEngram>(store, &mut fetcher, id).await?;
     Ok(payload.map(|engram| Graph::from_snapshot(&engram.0)))
@@ -228,7 +233,11 @@ pub async fn compose_graph_engrams(
         origin: ProvenanceOrigin::Derived,
         upstream: ids.to_vec(),
         tooling: Some(
-            concat!("session-runtime/graph-engram-compose@", env!("CARGO_PKG_VERSION")).to_string(),
+            concat!(
+                "session-runtime/graph-engram-compose@",
+                env!("CARGO_PKG_VERSION")
+            )
+            .to_string(),
         ),
         generated_at: created_at,
     };
@@ -248,9 +257,9 @@ pub async fn compose_graph_engrams(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kernel::graph::fixtures::GraphFixtures;
     use async_trait::async_trait;
     use euclid::default::Point2D;
+    use kernel::graph::fixtures::GraphFixtures;
     use kernel::persistence::PersistedNodeSessionState;
     use std::collections::HashMap;
 
@@ -411,7 +420,9 @@ mod tests {
 
         let opened = pollster::block_on(async {
             let mut store = FjallStore::open(&dir).expect("reopen store");
-            open_engram_as_session(&mut store, id).await.expect("load ok")
+            open_engram_as_session(&mut store, id)
+                .await
+                .expect("load ok")
         })
         .expect("the engram is present after a store reopen");
         assert_eq!(
@@ -457,18 +468,26 @@ mod tests {
                 .await
                 .expect("save b");
 
-            let composed =
-                compose_graph_engrams(&mut store, &[id_a, id_b], RedactionPolicy::default(), Timestamp(3))
-                    .await
-                    .expect("compose ok")
-                    .expect("a non-empty id list composes an engram");
+            let composed = compose_graph_engrams(
+                &mut store,
+                &[id_a, id_b],
+                RedactionPolicy::default(),
+                Timestamp(3),
+            )
+            .await
+            .expect("compose ok")
+            .expect("a non-empty id list composes an engram");
 
             // The thawed union carries x, y, z — the shared y is not doubled.
             let graph = open_engram_as_session(&mut store, composed)
                 .await
                 .expect("load ok")
                 .expect("the composed engram is present");
-            assert_eq!(graph.nodes().count(), 3, "x, y, z union; shared y not doubled");
+            assert_eq!(
+                graph.nodes().count(),
+                3,
+                "x, y, z union; shared y not doubled"
+            );
             assert!(graph.get_node_by_url("https://x.example").is_some());
             assert!(graph.get_node_by_url("https://z.example").is_some());
 
@@ -479,7 +498,11 @@ mod tests {
                 .iter()
                 .find(|m| m.id == composed)
                 .expect("the composed manifest is listed");
-            assert_eq!(m.provenance.origin, ProvenanceOrigin::Derived, "a composed engram is Derived");
+            assert_eq!(
+                m.provenance.origin,
+                ProvenanceOrigin::Derived,
+                "a composed engram is Derived"
+            );
             assert_eq!(
                 m.provenance.upstream,
                 vec![id_a, id_b],

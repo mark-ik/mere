@@ -10,12 +10,19 @@
 //! actor. The chrome records intents; the host executes them. Factored out of
 //! `frame_ops.rs` to keep files under the 600-LOC ceiling.
 
+use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use frame::PaneContent;
 use kernel::graph::SemanticSubKind;
 use meerkat::CommsIntent;
 use meerkat::command::Command;
-use meerkat::shell_eval::{CommandShell, ShellContext};
-use session_runtime::settings_store;
+use meerkat::shell_eval::{CommandShell, RemoteAuthPairingAcceptance, ShellContext};
+use session_runtime::{
+    PersonaId, PrivateEpochPlaintext, RemoteAuthPairingTicketRequest,
+    issue_remote_auth_device_grant_from_ticket, load_current_private_epoch, settings_store,
+    signed_device_grant_path,
+};
 
 use crate::fetch::{ContentState, Fetched};
 
@@ -74,6 +81,33 @@ fn format_sparql_rows(rows: &linked_data::query::QueryRows) -> String {
 }
 
 impl WindowCtx<'_> {
+    fn load_pairing_private_epochs(
+        &self,
+        personas: &[PersonaId],
+    ) -> Result<Vec<PrivateEpochPlaintext>, String> {
+        personas
+            .iter()
+            .copied()
+            .map(|persona| {
+                match load_current_private_epoch(&self.shared.session.mere_root, persona) {
+                    Ok(Some(epoch)) => Ok(PrivateEpochPlaintext {
+                        persona_id: persona,
+                        epoch_id: epoch.epoch_id,
+                        epoch_secret: epoch.epoch_secret,
+                    }),
+                    Ok(None) => Err(format!(
+                        "pairing private epoch missing for persona {}",
+                        persona.as_uuid()
+                    )),
+                    Err(err) => Err(format!(
+                        "pairing private epoch load failed for persona {}: {err}",
+                        persona.as_uuid()
+                    )),
+                }
+            })
+            .collect()
+    }
+
     /// Dev-loop ring-dump escape hatch (Ctrl+Shift+D): write the full diagnostics ring to
     /// `<mere_root>/diagnostics-dump.txt` and surface the path as a toast. The Apparatus pane
     /// only shows a small recent window; this is the captured pulse + faults in full, readable
@@ -248,7 +282,10 @@ impl WindowCtx<'_> {
             let body_changed = matches!(
                 apply_graph_delta(
                     graph,
-                    GraphDelta::SetNodeBody { key, body: Some(body_for_graph.clone()) },
+                    GraphDelta::SetNodeBody {
+                        key,
+                        body: Some(body_for_graph.clone())
+                    },
                 ),
                 GraphDeltaResult::NodeMetadataUpdated(true)
             );
@@ -476,6 +513,24 @@ impl WindowCtx<'_> {
         if let Some(url) = &outcome.forget_url {
             note = Some(self.run_forget(url));
         }
+        // Remote-auth pairing host seam: ticket artifact minting plus later
+        // acceptance from a filled response artifact. This is the admin-grade
+        // bridge until the dedicated QR/SAS flow lands.
+        if outcome.remote_auth_pairing_ticket {
+            note = Some(self.run_pair_remote_auth());
+        }
+        if let Some(request) = &outcome.remote_auth_pairing_accept {
+            note = Some(self.run_accept_remote_auth_pairing(request));
+        }
+        if let Some(ticket_path) = &outcome.remote_auth_pairing_respond {
+            note = Some(self.run_respond_remote_auth_pairing(ticket_path));
+        }
+        if let Some(request) = &outcome.remote_auth_pairing_preview {
+            note = Some(self.run_preview_remote_auth_pairing(request));
+        }
+        if let Some(bundle_path) = &outcome.remote_auth_enrollment_install {
+            note = Some(self.run_install_remote_auth_enrollment(bundle_path));
+        }
         // DocumentScript triggers (P2.5): attach / deliver-event / detach on the
         // focused tile. `attach` resolves the script's capability permissions (App
         // default for now; the Session-scope override store is the follow-on); the
@@ -667,6 +722,145 @@ impl WindowCtx<'_> {
         }
     }
 
+    fn run_pair_remote_auth(&self) -> String {
+        let private_epochs =
+            match self.load_pairing_private_epochs(&[self.shared.session.active_persona]) {
+                Ok(epochs) => epochs,
+                Err(err) => return format!("pairing offer failed: {err}"),
+            };
+        let request = RemoteAuthPairingTicketRequest {
+            issued_at_ms: unix_time_ms(),
+            expires_at_ms: None,
+            personas: vec![self.shared.session.active_persona],
+            scopes: vec!["identity.act".to_string(), "private.read".to_string()],
+            attenuations: vec!["no-subdelegation".to_string()],
+        };
+        match super::wallet_pairing::mint_remote_auth_pairing_offer(
+            &self.shared.session.mere_root,
+            &request,
+        ) {
+            Ok(artifacts) => format!(
+                "pairing offer: {} (scopes identity.act private.read; epochs {}; code {}; response template {})",
+                artifacts.summary_path.display(),
+                private_epochs.len(),
+                artifacts.pairing_code,
+                artifacts.response_template_path.display()
+            ),
+            Err(err) => format!("pairing offer failed: {err}"),
+        }
+    }
+
+    fn run_accept_remote_auth_pairing(&mut self, request: &RemoteAuthPairingAcceptance) -> String {
+        let (ticket, response) = match super::wallet_pairing::load_remote_auth_pairing_acceptance(
+            Path::new(&request.ticket_path),
+            Path::new(&request.response_path),
+        ) {
+            Ok(pair) => pair,
+            Err(err) => return format!("pairing acceptance load failed: {err}"),
+        };
+        let private_epochs = if ticket.scopes.iter().any(|scope| scope == "private.read") {
+            match self.load_pairing_private_epochs(&ticket.personas) {
+                Ok(epochs) => epochs,
+                Err(err) => return format!("pairing accept failed: {err}"),
+            }
+        } else {
+            Vec::new()
+        };
+        match issue_remote_auth_device_grant_from_ticket(
+            &self.shared.session.mere_root,
+            &ticket,
+            &response,
+            private_epochs,
+        ) {
+            Ok((_grant, pairing)) => {
+                let grant_path =
+                    signed_device_grant_path(&self.shared.session.mere_root, response.device_id);
+                let bundle_note = match super::wallet_pairing::export_remote_auth_enrollment_bundle(
+                    &self.shared.session.mere_root,
+                    ticket.ticket_id,
+                    response.device_id,
+                ) {
+                    Ok(path) => format!(" enrollment {}", path.display()),
+                    Err(err) => format!(" enrollment export failed: {err}"),
+                };
+                format!(
+                    "paired {} ({}) SAS {} grant {}{}",
+                    response.label,
+                    response.device_id.as_uuid(),
+                    pairing.short_auth_string,
+                    grant_path.display(),
+                    bundle_note
+                )
+            }
+            Err(err) => format!("pairing accept failed: {err}"),
+        }
+    }
+
+    fn run_respond_remote_auth_pairing(&self, ticket_path: &str) -> String {
+        match super::wallet_pairing::prepare_remote_auth_pairing_response(
+            &self.shared.session.mere_root,
+            Path::new(ticket_path),
+            &default_pairing_device_label(),
+        ) {
+            Ok(artifacts) => format!(
+                "pairing response: {} SAS {} device {}",
+                artifacts.response_path.display(),
+                artifacts.short_auth_string,
+                artifacts.response.device_id.as_uuid()
+            ),
+            Err(err) => format!("pairing response failed: {err}"),
+        }
+    }
+
+    fn run_preview_remote_auth_pairing(&self, request: &RemoteAuthPairingAcceptance) -> String {
+        match super::wallet_pairing::preview_remote_auth_pairing(
+            &self.shared.session.mere_root,
+            Path::new(&request.ticket_path),
+            Path::new(&request.response_path),
+        ) {
+            Ok(preview) => format!(
+                "pairing preview: SAS {} for {} ({})",
+                preview.short_auth_string,
+                preview.response.label,
+                preview.response.device_id.as_uuid()
+            ),
+            Err(err) => format!("pairing preview failed: {err}"),
+        }
+    }
+
+    fn run_install_remote_auth_enrollment(&mut self, bundle_path: &str) -> String {
+        match super::wallet_pairing::install_remote_auth_enrollment_artifact(
+            &self.shared.session.mere_root,
+            Path::new(bundle_path),
+        ) {
+            Ok(()) => {
+                if let Ok(Some(wallet)) =
+                    session_runtime::load_identity_wallet(&self.shared.session.mere_root)
+                {
+                    if let Some(persona) = wallet.personas.first().map(|known| known.persona_id) {
+                        self.shared.session.active_persona = persona;
+                        self.shared.session.manifests.update(
+                            self.shared.session.active_session_id,
+                            |m| {
+                                m.persona_id = persona;
+                            },
+                        );
+                        if let Err(err) = self.shared.session.manifests.flush_dirty() {
+                            tracing::warn!(%err, "failed to persist enrolled session persona");
+                        }
+                        return format!(
+                            "installed remote-auth enrollment {} persona {}",
+                            bundle_path,
+                            persona.as_uuid()
+                        );
+                    }
+                }
+                format!("installed remote-auth enrollment {bundle_path}")
+            }
+            Err(err) => format!("remote-auth enrollment install failed: {err}"),
+        }
+    }
+
     /// A read-only snapshot of host state the command shell may query: the
     /// location, history + nav capability, the focused node, and every graph node
     /// URL (the cross-to-orrery reach). Built fresh per eval; nothing writes it.
@@ -758,4 +952,21 @@ impl WindowCtx<'_> {
             }
         }
     }
+}
+
+fn unix_time_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .try_into()
+        .unwrap_or(u64::MAX)
+}
+
+fn default_pairing_device_label() -> String {
+    std::env::var("COMPUTERNAME")
+        .or_else(|_| std::env::var("HOSTNAME"))
+        .ok()
+        .filter(|name| !name.trim().is_empty())
+        .unwrap_or_else(|| "This device".to_string())
 }

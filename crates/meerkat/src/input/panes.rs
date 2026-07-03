@@ -456,7 +456,10 @@ impl WindowCtx<'_> {
                         });
                     self.view.request_redraw();
                 }
-                crate::roster_view::RosterIntent::ToggleGraphletFamilySelector(graphlet, family) => {
+                crate::roster_view::RosterIntent::ToggleGraphletFamilySelector(
+                    graphlet,
+                    family,
+                ) => {
                     self.commands
                         .push(crate::ShellCommand::ToggleGraphletFamilySelector {
                             graph: self.view.focused_graph,

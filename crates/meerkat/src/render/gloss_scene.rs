@@ -43,7 +43,10 @@ impl WindowCtx<'_> {
             if let Some(id) = self.orrery().gloss_strategy().map(str::to_string) {
                 if self.orrery().gloss_needs_recompute(mw, mh) {
                     let pane = self.orrery();
-                    let clusters = pane.show_community_rings().then(|| pane.community()).flatten();
+                    let clusters = pane
+                        .show_community_rings()
+                        .then(|| pane.community())
+                        .flatten();
                     let bridges = pane.show_bridge_rings().then(|| pane.bridges()).flatten();
                     let (positions, overlays): (Vec<_>, _) = match pane.gloss_scope_keys() {
                         Some(scope) => (

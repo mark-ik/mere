@@ -155,3 +155,26 @@ fn theme_def_round_trips_through_serde() {
     let back: ThemeDef = serde_json::from_str(&json).expect("deserialize");
     assert_eq!(def, back);
 }
+
+#[test]
+fn user_theme_edit_helpers_only_mutate_user_defs() {
+    let mut built_in = crate::seed::builtin_defs().swap_remove(0);
+    assert!(!toggle_user_theme_mode(&mut built_in));
+    assert!(!set_user_theme_seed_channel(
+        &mut built_in,
+        "primary",
+        'h',
+        0.25
+    ));
+    assert!(!set_user_theme_harmony(&mut built_in, "triadic"));
+
+    built_in.source = ThemeSource::User;
+    assert!(toggle_user_theme_mode(&mut built_in));
+    assert!(set_user_theme_seed_channel(
+        &mut built_in,
+        "primary",
+        's',
+        0.5
+    ));
+    assert!(set_user_theme_harmony(&mut built_in, "triadic"));
+}

@@ -151,6 +151,32 @@ impl crate::Shell {
         }
         ctx.view.maximized_pane = None;
         ctx.view.active_content = crate::ContentPane::Orrery;
+        let active_persona = ctx
+            .shared
+            .session
+            .manifests
+            .get(id)
+            .map(|m| m.persona_id)
+            .unwrap_or_else(session_runtime::PersonaId::default_persona);
+        match session_runtime::bootstrap_wallet_state(
+            &ctx.shared.session.mere_root,
+            active_persona,
+            &crate::default_device_label(),
+        ) {
+            Ok(session_runtime::WalletBootstrapMode::DelegatedPending) => {
+                tracing::info!(
+                    "wallet bootstrap preserved a pending delegated-device identity during session load"
+                );
+            }
+            Ok(session_runtime::WalletBootstrapMode::DelegatedEnrolled) => {
+                tracing::info!(
+                    "wallet bootstrap preserved delegated-device wallet state during session load"
+                );
+            }
+            Ok(session_runtime::WalletBootstrapMode::CopySeeded) => {}
+            Err(err) => tracing::warn!(%err, "wallet bootstrap failed during session load"),
+        }
+        ctx.shared.session.active_persona = active_persona;
         ctx.shared.session.session_dir = session_dir;
         ctx.shared.session.active_session_id = id;
         ctx.view.content_location = ctx

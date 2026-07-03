@@ -7,15 +7,15 @@
 //! of `roster_view_parts.rs` per the 600-LOC ceiling.
 
 use kernel::graph::EdgeFamily;
-use xilem_serval::{PointerClick, clickable, el};
+use xilem_serval::{Keyed, PointerClick, clickable, el};
 
 use crate::roster::{GraphletCard, GraphletRow, RosterSubject};
 use crate::roster_data::edge_family_label;
 use crate::roster_view::{RosterIntent, RosterState, RosterView};
 use crate::roster_view_parts::{action, action_bar, card_row, card_shell};
 
-pub(crate) fn graphlet_table(rows: &[GraphletRow]) -> Vec<RosterView> {
-    let mut children: Vec<RosterView> = Vec::new();
+pub(crate) fn graphlet_table(rows: &[GraphletRow]) -> RosterView {
+    let mut children: Vec<(forme::GraphletId, RosterView)> = Vec::new();
     for row in rows {
         let subject = RosterSubject::Graphlet(row.id);
         let entry: Vec<RosterView> = vec![
@@ -39,14 +39,18 @@ pub(crate) fn graphlet_table(rows: &[GraphletRow]) -> Vec<RosterView> {
         } else {
             "roster-row"
         };
-        children.push(Box::new(clickable(
-            el::<_, RosterState, ()>("div", entry).attr("class", class),
-            move |st: &mut RosterState, _: PointerClick| {
-                st.open_subject(subject.clone());
-            },
-        )));
+        children.push((
+            row.id,
+            Box::new(clickable(
+                el::<_, RosterState, ()>("div", entry).attr("class", class),
+                move |st: &mut RosterState, _: PointerClick| {
+                    st.open_subject(subject.clone());
+                },
+            )),
+        ));
     }
-    children
+    let children: Keyed<forme::GraphletId, RosterView> = children.into();
+    Box::new(el::<_, RosterState, ()>("div", children).attr("class", "roster-table"))
 }
 
 pub(crate) fn graphlet_card(card: &GraphletCard) -> RosterView {

@@ -296,7 +296,10 @@ mod tests {
         let frame = fixture_frame();
         let mut intent = ViewIntent::new();
         intent.strategy = Some("phyllotaxis.default".to_string());
-        assert!(!intent.is_empty(), "a layout strategy alone is worth persisting");
+        assert!(
+            !intent.is_empty(),
+            "a layout strategy alone is worth persisting"
+        );
         save_view_intent(&dir, &frame, 1, &intent).unwrap();
         let restored = load_view_intent(&dir, &frame, 1).unwrap().unwrap();
         assert_eq!(restored.strategy.as_deref(), Some("phyllotaxis.default"));
@@ -405,8 +408,7 @@ mod tests {
         let from = Uuid::from_u128(1);
         let to = Uuid::from_u128(2);
         let cites_tag =
-            kernel::graph::RelationKind::Semantic(kernel::graph::SemanticSubKind::Cites)
-                .tag();
+            kernel::graph::RelationKind::Semantic(kernel::graph::SemanticSubKind::Cites).tag();
         original
             .hidden_relations
             .insert(HiddenRelationRecord::new(from, to, cites_tag));

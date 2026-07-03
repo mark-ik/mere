@@ -83,10 +83,10 @@ impl Orrery {
         }
     }
 
-    /// A node's render color, matching the on-screen tile's class palette: orange when
+    /// A node's render color, matching the in-scene gnode's class palette: orange when
     /// selected, else green open / red closed / blue idle. The host colors the orrery
-    /// element's DOM node-cards with it so they carry node identity without the gnode
-    /// layer. (Orrery-as-element — Phase 2.)
+    /// element's chrome-DOM gnodes with it so they carry node identity without the
+    /// in-scene gnode layer. (Orrery-as-element — Phase 2.)
     pub fn node_color(&self, key: NodeKey) -> &'static str {
         if self.selected.contains(&key) {
             return "#f7a440";
@@ -99,9 +99,9 @@ impl Orrery {
     }
 
     /// A node's activation-state color WITHOUT the selection override — green open /
-    /// red closed / blue idle. The card form colors its face with this and shows
+    /// red closed / blue idle. The chrome-DOM gnode colors its face with this and shows
     /// selection as a ring + lift instead, so the color channel stays free to carry
-    /// activation state. The in-scene tile path still uses [`node_color`](Self::node_color).
+    /// activation state. The in-scene gnode path still uses [`node_color`](Self::node_color).
     pub fn node_state_color(&self, key: NodeKey) -> &'static str {
         match self.node_states.get(&key) {
             Some(NodeState::Open) => "#5fb878",
@@ -117,7 +117,7 @@ impl Orrery {
     }
 
     /// A node's content-type silhouette (square document / rounded menu / circle feed),
-    /// for the card form to shape its face. `Square` (the default) for an unmapped node.
+    /// for the gnode to shape its face. `Square` (the default) for an unmapped node.
     pub fn node_shape(&self, key: NodeKey) -> NodeShape {
         self.node_shapes.get(&key).copied().unwrap_or_default()
     }
@@ -131,12 +131,14 @@ impl Orrery {
         self.node_faces.get(&key).copied().unwrap_or_default()
     }
 
-    /// Render the on-screen nodes as host DOM cards instead of in-scene gnodes: the
-    /// next [`frame`](Orrery::frame) drops the gnode + favicon layers, keeping edges +
-    /// demoted dots as the underlay. The host sets this on the focused orrery (whose
-    /// cards it snapshots) and leaves it off on secondary panes. (Orrery-as-element.)
-    pub fn set_render_as_cards(&mut self, on: bool) {
-        self.render_as_cards = on;
+    /// Render the on-screen gnodes as host chrome-DOM elements instead of in-scene Scene
+    /// layers: the next [`frame`](Orrery::frame) drops the gnode + favicon layers, keeping
+    /// edges + demoted dots as the underlay. The host sets this on the focused orrery
+    /// (whose gnodes it snapshots into the shell document) and leaves it off on secondary
+    /// panes. Either way a gnode is the node's rendered body, never the node's referenced
+    /// document. (Orrery-as-element.)
+    pub fn set_render_gnodes_as_dom(&mut self, on: bool) {
+        self.render_gnodes_as_dom = on;
     }
 
     /// Seed node positions from a persisted cartography sidecar, overriding the graph's
@@ -336,7 +338,7 @@ impl Orrery {
         }
     }
 
-    /// A node's custom sprite face (a PNG data-URI), if it has one. The card uses this as
+    /// A node's custom sprite face (a PNG data-URI), if it has one. The gnode uses this as
     /// the face image when [`node_face`](Self::node_face) is [`Sprite`](Face::Sprite).
     /// (Node body & face — sprite face.)
     pub fn node_sprite(&self, key: NodeKey) -> Option<&str> {
@@ -413,7 +415,7 @@ impl Orrery {
 
     /// A node's face footprint (px): a per-node override if set, else size-by-degree
     /// (the face grows with the node's undirected degree, capped) when that mode is on,
-    /// else the uniform default. The card applies the selection lift on top, and uses the
+    /// else the uniform default. The gnode applies the selection lift on top, and uses the
     /// same value to center the face on the gyre collider. (P0 resize.)
     pub fn node_size(&self, key: NodeKey) -> f32 {
         const DEFAULT: f32 = 36.0;
@@ -538,7 +540,7 @@ impl Orrery {
     /// A node's render height (px above the ground plane) for the isometric float: `0`
     /// (flat) unless height-by-degree is on, where a node rises with its undirected
     /// degree (capped) so hubs stand tallest. Purely visual: it does not move the gyre
-    /// body. The card is raised in screen-y by this (times zoom) and a stem drops to its
+    /// body. The gnode is raised in screen-y by this (times zoom) and a stem drops to its
     /// ground anchor, where its edges meet. (Isometric camera P3 — fake height.)
     pub fn node_height(&self, key: NodeKey) -> f32 {
         if !self.height_by_degree {

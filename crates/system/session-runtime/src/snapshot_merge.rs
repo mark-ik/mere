@@ -166,9 +166,9 @@ fn edge_signature(e: &PersistedEdge) -> (String, String, String) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kernel::graph::fixtures::GraphFixtures;
     use euclid::default::Point2D;
     use kernel::graph::Graph;
+    use kernel::graph::fixtures::GraphFixtures;
 
     /// A snapshot with one node per url (ids minted by the real graph API).
     fn snap(urls: &[&str]) -> GraphSnapshot {
@@ -200,7 +200,9 @@ mod tests {
         let b = snap(&["https://y", "https://z"]);
         let (merged, report) = merge_snapshots(&a, &b);
         let urls: HashSet<&str> = merged.nodes.iter().map(|n| n.url.as_str()).collect();
-        let want: HashSet<&str> = ["https://x", "https://y", "https://z"].into_iter().collect();
+        let want: HashSet<&str> = ["https://x", "https://y", "https://z"]
+            .into_iter()
+            .collect();
         assert_eq!(urls, want, "x, y, z union");
         assert_eq!(merged.nodes.len(), 3, "y is not doubled");
         assert_eq!(report.added_nodes, 1, "only z is new");
@@ -237,7 +239,11 @@ mod tests {
 
         let (merged, report) = merge_snapshots(&a, &b);
         assert_eq!(report.added_edges, 1);
-        let e = merged.edges.iter().find(|e| e.to_node_id == bz).expect("the y->z edge");
+        let e = merged
+            .edges
+            .iter()
+            .find(|e| e.to_node_id == bz)
+            .expect("the y->z edge");
         assert_eq!(
             e.from_node_id, ay,
             "b's edge endpoint is remapped to A's canonical y id",
@@ -254,7 +260,11 @@ mod tests {
         b.edges.push(edge(&bx, &by)); // same relation, different ids
 
         let (merged, report) = merge_snapshots(&a, &b);
-        assert_eq!(merged.edges.len(), 1, "the shared x->y relation is not doubled");
+        assert_eq!(
+            merged.edges.len(),
+            1,
+            "the shared x->y relation is not doubled"
+        );
         assert_eq!(report.deduped_edges, 1);
         assert_eq!(report.added_edges, 0);
     }

@@ -21,7 +21,7 @@
 //! compute). Reaping is dropping the [`Activation`]; the graph datum is untouched,
 //! so the node simply returns to dormant.
 
-use armillary::{ActorHandle, Generations, Pool, Wake};
+use armillary::{Generations, Pool, Wake};
 use document_canvas::{DocumentRenderPacket, DocumentStyleSheet, FontTable};
 use forme::GraphMemberId;
 use frame::GraphId;
@@ -33,8 +33,8 @@ use std::path::PathBuf;
 
 use crate::card::LinkHit;
 use crate::content::{
-    ContentCommand, ContentUpdate, ContentUpdatePoll, ContentUpdateStream, ContentUpdateTransport,
-    spawn_content_with_transport,
+    ContentCommand, ContentEngineStats, ContentHandle, ContentSceneStats, ContentUpdate,
+    ContentUpdatePoll, ContentUpdateStream, ContentUpdateTransport, spawn_content_with_transport,
 };
 use crate::fetch::ContentState;
 
@@ -55,7 +55,7 @@ pub struct ActiveOperation {
 /// LRU eviction when the active-tab cap is exceeded, unless `background` protects
 /// it.
 struct Activation {
-    handle: ActorHandle<ContentCommand>,
+    handle: ContentHandle,
     rx: ContentUpdateStream,
     /// The generation pair stamped on `Show` / `Resize`, so a scene built for a
     /// document or size this node has left is dropped on arrival.
@@ -107,6 +107,12 @@ struct Activation {
     /// and scrolls to the active one. Empty until a find query, on an empty query, or
     /// when a new document arrives (a stale match set must not survive). (Find-in-page.)
     find_matches: Vec<Vec<[f32; 4]>>,
+    /// The most recent focused-document Serval observables the actor reported, when
+    /// its active lane owns a real DOM/layout surface.
+    engine_stats: Option<ContentEngineStats>,
+    /// The most recent focused-document scene stats for lanes that ship a lowered
+    /// `netrender::Scene`.
+    scene_stats: Option<ContentSceneStats>,
     /// The query last sent to the actor via [`ContentCommand::Find`], so the host does
     /// not re-command an unchanged query every frame. (Find-in-page.)
     find_query: String,

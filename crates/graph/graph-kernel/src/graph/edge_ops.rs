@@ -129,6 +129,51 @@ impl Graph {
         self.assert_relation(from_key, to_key, assertion)
     }
 
+    pub(crate) fn replay_set_edge_semantic_predicate_by_ids(
+        &mut self,
+        from_id: Uuid,
+        to_id: Uuid,
+        predicate: Option<String>,
+    ) -> bool {
+        let Some(from_key) = self.get_node_key_by_id(from_id) else {
+            return false;
+        };
+        let Some(to_key) = self.get_node_key_by_id(to_id) else {
+            return false;
+        };
+        let Some(edge_key) = self.find_edge_key(from_key, to_key) else {
+            return false;
+        };
+        self.set_edge_semantic_predicate(edge_key, predicate)
+    }
+
+    pub(crate) fn replay_assert_semantic_predicate_by_ids(
+        &mut self,
+        from_id: Uuid,
+        to_id: Uuid,
+        predicate: String,
+    ) -> Option<EdgeKey> {
+        let from_key = self.get_node_key_by_id(from_id)?;
+        let to_key = self.get_node_key_by_id(to_id)?;
+        self.assert_semantic_predicate(from_key, to_key, predicate)
+    }
+
+    pub(crate) fn replay_append_traversal_by_ids(
+        &mut self,
+        from_id: Uuid,
+        to_id: Uuid,
+        trigger: super::edge_taxonomy::NavigationTrigger,
+        timestamp_ms: u64,
+    ) -> bool {
+        let Some(from_key) = self.get_node_key_by_id(from_id) else {
+            return false;
+        };
+        let Some(to_key) = self.get_node_key_by_id(to_id) else {
+            return false;
+        };
+        self.append_traversal(from_key, to_key, trigger, Some(timestamp_ms))
+    }
+
     /// Dissolve helper: collect traversals from all incident edges and remove the node.
     pub(crate) fn dissolve_remove_node_collect_traversals(
         &mut self,
@@ -232,7 +277,11 @@ impl Graph {
     /// it through `get_edge_mut` (write-path migration, 2026-07-01). A content
     /// annotation on an existing edge, not a structural change, so the revision
     /// holds (same rule as title/tag edits).
-    pub(crate) fn set_edge_semantic_predicate(&mut self, key: EdgeKey, predicate: Option<String>) -> bool {
+    pub(crate) fn set_edge_semantic_predicate(
+        &mut self,
+        key: EdgeKey,
+        predicate: Option<String>,
+    ) -> bool {
         let Some(payload) = self.inner.edge_weight_mut(key) else {
             return false;
         };
@@ -251,7 +300,12 @@ impl Graph {
     }
 
     /// Append a traversal event to an existing edge, or create an edge carrying the traversal.
-    pub(crate) fn push_traversal(&mut self, from: NodeKey, to: NodeKey, traversal: Traversal) -> bool {
+    pub(crate) fn push_traversal(
+        &mut self,
+        from: NodeKey,
+        to: NodeKey,
+        traversal: Traversal,
+    ) -> bool {
         if from == to || !self.inner.contains_node(from) || !self.inner.contains_node(to) {
             return false;
         }

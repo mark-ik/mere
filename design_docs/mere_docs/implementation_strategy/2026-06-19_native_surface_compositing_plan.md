@@ -272,7 +272,7 @@ Both are answered, kept for the routing record, not open work:
   System WebViews, pelt tiles, and content cards in sticky states) traced to scry's native-visual
   hosting (scrying_host.rs:437-442) sitting above meerkat's swapchain via DWM, distinct from the
   rasterized compose order (render.rs:1724, chrome-last), which is already correct for textures.
-  The in-document menu-over-node-cards z-order was fixed the same session in the shell document
+  The in-document menu-over-gnodes z-order was fixed the same session in the shell document
   (document order, chrome last). Direction set with Mark: snapshot-texture orrery + composition-tree
   pelt hosting, retiring the floating live WebView. No code yet.
 - 2026-06-19 (revision): Direction refined with Mark. Cards-in-graph constraints are not pelt's, so

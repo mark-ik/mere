@@ -271,11 +271,9 @@ impl Graph {
                                     sub_kind: ProvenanceSubKind::ImportedFromSource,
                                 }
                             }
-                            PersistedProvenanceSubKind::CopiedFrom => {
-                                EdgeAssertion::Provenance {
-                                    sub_kind: ProvenanceSubKind::CopiedFrom,
-                                }
-                            }
+                            PersistedProvenanceSubKind::CopiedFrom => EdgeAssertion::Provenance {
+                                sub_kind: ProvenanceSubKind::CopiedFrom,
+                            },
                         };
                         let _ = graph.assert_relation(from, to, assertion);
                     }

@@ -51,7 +51,10 @@ pub enum ScalarField {
     /// The current time (seconds since a host-chosen epoch).
     Time,
     /// `exp(-||p - center||^2 / (2 sigma^2))`.
-    Gaussian { center: Box<VectorField>, sigma: f32 },
+    Gaussian {
+        center: Box<VectorField>,
+        sigma: f32,
+    },
     /// `1.0` at center, `0.0` outside `radius`, with a falloff inside.
     Disk {
         center: Box<VectorField>,
@@ -59,7 +62,10 @@ pub enum ScalarField {
         falloff: Falloff,
     },
     /// `dot(normal(p), p) + offset`.
-    Linear { normal: Box<VectorField>, offset: f32 },
+    Linear {
+        normal: Box<VectorField>,
+        offset: f32,
+    },
     /// Pointwise sum.
     Add(Box<ScalarField>, Box<ScalarField>),
     /// Pointwise product.

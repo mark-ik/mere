@@ -27,9 +27,9 @@
 //! types) and recomputed on read, so ingest stays faithful and the label is free
 //! to evolve. Truncation to a widget's width is the caller's concern.
 
+use crate::graph::Graph;
 use crate::graph::identity::NodeKey;
 use crate::graph::node::Node;
-use crate::graph::Graph;
 use crate::types::ClassificationScheme;
 
 /// The skolemized-blank-node URI prefix (`linked_data::ingest::skolemize`).
@@ -153,7 +153,10 @@ fn humanize_term(term: &str) -> String {
 /// directory URL or an extensionless page slug (which falls through to the host).
 fn url_filename(url: &str) -> Option<String> {
     let parsed = url::Url::parse(url).ok()?;
-    let last = parsed.path_segments()?.filter(|s| !s.is_empty()).next_back()?;
+    let last = parsed
+        .path_segments()?
+        .filter(|s| !s.is_empty())
+        .next_back()?;
     let dot = last.rfind('.')?;
     // A real extension: a dot with non-empty name and extension around it.
     if dot > 0 && dot + 1 < last.len() {
@@ -174,7 +177,10 @@ fn host_of(url: &str) -> Option<String> {
 /// The namespace is the first colon segment; the blank label itself may contain a
 /// colon (`_:b3`), so split only off the namespace.
 fn short_blank_id(stripped: &str) -> String {
-    let label = stripped.split_once(':').map(|(_, rest)| rest).unwrap_or(stripped);
+    let label = stripped
+        .split_once(':')
+        .map(|(_, rest)| rest)
+        .unwrap_or(stripped);
     format!("node {label}")
 }
 
@@ -206,7 +212,11 @@ mod tests {
     }
 
     fn add(graph: &mut Graph, url: &str) -> NodeKey {
-        graph.add_node_with_id(Graph::node_namespace_id(url), url.to_string(), Point2D::zero())
+        graph.add_node_with_id(
+            Graph::node_namespace_id(url),
+            url.to_string(),
+            Point2D::zero(),
+        )
     }
 
     #[test]
@@ -254,7 +264,10 @@ mod tests {
     #[test]
     fn extensionless_page_falls_to_its_host() {
         let mut g = Graph::new();
-        let page = add(&mut g, "https://en.wikipedia.org/wiki/Rust_(programming_language)");
+        let page = add(
+            &mut g,
+            "https://en.wikipedia.org/wiki/Rust_(programming_language)",
+        );
         // `add_node_with_id` caches the host; no extension on the slug, so host wins.
         assert_eq!(g.node_display_label(page), "en.wikipedia.org");
     }

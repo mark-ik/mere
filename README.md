@@ -54,6 +54,20 @@ arranged by `forme`, projected into a presentation plan by `platen`, realized as
 surfaces, and backed per-surface by a content engine selected by `inker`. The
 host (`meerkat`) renders the result and composites it.
 
+## The stack's technical architecture
+
+The whole stack is arenas for ownership, id-linked trees for structure,
+and delta streams for change, repeated at every layer
+from the JS heap (forked Nova) up to the orrery graph.
+Have a look at `xilem_serval`, a component in that repository, too.
+Up and down the stack, this pattern repeats:  
+- Identity is an index, not an address.
+- Meaning is a kind, not a class.
+- Structure is explicit id-valued edges/links, ordered where semantic (in), indexed where derived (out).
+- Everything else is kind-dependent data in a table picked by the kind.
+- Change is a recorded delta stream against the tables,
+- and every downstream layer is an incremental fold over that stream.
+
 ## Screenshots
 
 <table>
@@ -121,6 +135,7 @@ There are two `[[bin]]` targets in the workspace:
 - `orrery` (`crates/orrery/orrery`): a thin winit shell over the reusable
   `Orrery` graph field-canvas, kept launchable on its own for development and
   testing. meerkat hosts the same `Orrery` as a content root.
+  Will likely become the seed of a thin wasm client for browser extension targets.
 
 `meerkat` has an `agent-harness` feature for automation/testing.
 

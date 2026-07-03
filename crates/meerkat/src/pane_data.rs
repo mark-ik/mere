@@ -10,20 +10,23 @@
 //! the list panes render. Factored out of `frame_ops.rs` to keep files under the
 //! 600-LOC ceiling.
 
+use eidetic::{BlobManifest, DeletedNode};
 use frame::PaneContent;
+use kernel::graph::Node;
 
 use super::WindowCtx;
+
+struct InspectorPaneInput<'a> {
+    node: Option<&'a Node>,
+    state: Option<&'a crate::fetch::ContentState>,
+}
 
 impl WindowCtx<'_> {
     pub(super) fn utility_pane_rows(&self, content: &PaneContent) -> Vec<(String, String)> {
         match content {
             PaneContent::Inspector => {
-                let focused = self.focused_member();
-                let node = focused
-                    .and_then(|member| self.orrery().graph().get_node_by_id(member))
-                    .map(|(_, node)| node);
-                let state = node.and_then(|node| self.shared.content.pages.get(node.url()));
-                super::inspector::inspector_rows(node, state)
+                let input = self.inspector_pane_input();
+                super::inspector::inspector_rows(input.node, input.state)
             }
             PaneContent::Steward => self.steward_rows(),
             _ => Vec::new(),
@@ -35,6 +38,7 @@ impl WindowCtx<'_> {
     /// titled sections of inert rows. (Lineage + eidetic pane.)
     pub(super) fn trail_items(&mut self) -> Vec<crate::list_pane::PaneItem> {
         use crate::list_pane::PaneItem;
+        let input = self.pane_input_snapshot();
         // Strip the scheme and cap the length so a row reads cleanly.
         let short = |url: &str| -> String {
             url.strip_prefix("https://")
@@ -56,7 +60,7 @@ impl WindowCtx<'_> {
         }
 
         // The focused node's own url history (shown only when it has gone somewhere).
-        let history = self
+        let history = input
             .focused_member()
             .and_then(|member| {
                 self.orrery()
@@ -75,13 +79,7 @@ impl WindowCtx<'_> {
 
         // Removed: the eidetic deleted-nodes log (newest first; fjall resolves
         // synchronously, so `block_on` does not stall the UI).
-        let removed = self
-            .shared
-            .content
-            .store
-            .as_mut()
-            .map(|store| pollster::block_on(eidetic::list_deleted(store)).unwrap_or_default())
-            .unwrap_or_default();
+        let removed = self.deleted_node_log();
         if !removed.is_empty() {
             items.push(PaneItem::text("utility-title", "Removed"));
             for tomb in removed.iter().take(12) {
@@ -105,6 +103,7 @@ impl WindowCtx<'_> {
     /// clickable to thaw into the orrery. (Alembic memory pane.)
     pub(super) fn alembic_items(&mut self) -> Vec<crate::list_pane::PaneItem> {
         use crate::list_pane::PaneItem;
+        let input = self.pane_input_snapshot();
         let clip = |s: &str| -> String { s.chars().take(56).collect() };
         let strip = |url: &str| -> String {
             url.strip_prefix("https://")
@@ -124,10 +123,7 @@ impl WindowCtx<'_> {
         // persists; the next forgetting pass uses the new policy. (Editable eviction policy, B4.)
         items.push(PaneItem::button(
             "utility-row-muted",
-            format!(
-                "{} \u{21bb}",
-                self.shared.presentation.eviction_policy.describe()
-            ),
+            format!("{} \u{21bb}", input.eviction_policy().describe()),
             "alembic:eviction:cycle",
         ));
         // A real "forget now" affordance: runs Athanor's forgetting pass, dropping stale
@@ -205,23 +201,13 @@ impl WindowCtx<'_> {
         // fjall resolves synchronously, so `block_on` does not stall the UI (the Trail /
         // deleted-log pattern). B2 makes these rows clickable to thaw into the orrery.
         items.push(PaneItem::text("utility-title", "Engrams"));
-        let engrams = self
-            .shared
-            .content
-            .store
-            .as_mut()
-            .map(|store| {
-                pollster::block_on(session_runtime::graph_engram::list_graph_engrams(store))
-                    .unwrap_or_default()
-            })
-            .unwrap_or_default();
+        let engrams = self.graph_engram_manifests();
         if engrams.is_empty() {
             items.push(PaneItem::text(
                 "utility-row-muted",
                 "save a graph as an engram (>save_graph_engram)",
             ));
         } else {
-            let pending_compose = self.shared.presentation.pending_compose_engram.clone();
             for manifest in engrams.iter().take(20) {
                 // A clickable row: the key carries the full manifest id; a click queues
                 // `engram:open:<id>`, which the host thaws into an Orrery pane beside. The
@@ -236,10 +222,14 @@ impl WindowCtx<'_> {
                 // The two-select compose gesture: ⊗ marks this row as the pending first pick
                 // (click again to deselect), ⊕ on every other row composes it with the pending
                 // one. (Alembic B7-P3.)
-                let is_pending = pending_compose.as_deref() == Some(id_str.as_str());
+                let is_pending = input.pending_compose_engram() == Some(id_str.as_str());
                 items.push(PaneItem::button(
                     "utility-row",
-                    if is_pending { "⊗ selected for compose" } else { "⊕ compose" },
+                    if is_pending {
+                        "⊗ selected for compose"
+                    } else {
+                        "⊕ compose"
+                    },
                     format!("engram:compose:{id_str}"),
                 ));
             }
@@ -265,6 +255,37 @@ impl WindowCtx<'_> {
             rows.push(("Last activity".to_string(), unix_age(then_ms)));
         }
         rows
+    }
+
+    fn inspector_pane_input(&self) -> InspectorPaneInput<'_> {
+        let input = self.pane_input_snapshot();
+        let node = input
+            .focused_member()
+            .and_then(|member| self.orrery().graph().get_node_by_id(member))
+            .map(|(_, node)| node);
+        let state = node.and_then(|node| self.shared.content.pages.get(node.url()));
+        InspectorPaneInput { node, state }
+    }
+
+    fn deleted_node_log(&mut self) -> Vec<DeletedNode> {
+        self.shared
+            .content
+            .store
+            .as_mut()
+            .map(|store| pollster::block_on(eidetic::list_deleted(store)).unwrap_or_default())
+            .unwrap_or_default()
+    }
+
+    fn graph_engram_manifests(&mut self) -> Vec<BlobManifest> {
+        self.shared
+            .content
+            .store
+            .as_mut()
+            .map(|store| {
+                pollster::block_on(session_runtime::graph_engram::list_graph_engrams(store))
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default()
     }
 }
 

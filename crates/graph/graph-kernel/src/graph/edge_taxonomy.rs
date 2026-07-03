@@ -239,7 +239,9 @@ impl ArrangementSubKind {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Archive, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Archive, Serialize, Deserialize, serde::Serialize, serde::Deserialize,
+)]
 pub enum EdgeAssertion {
     Semantic {
         sub_kind: SemanticSubKind,
@@ -291,7 +293,18 @@ pub enum RelationSelector {
 /// HTTP / meta redirects, session-restore navigations, in-document
 /// fragment jumps, find-in-page-style jumps, and imported-history
 /// hypotheses.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Archive,
+    Serialize,
+    Deserialize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub enum NavigationTrigger {
     Unknown,
     LinkClick,
@@ -413,4 +426,3 @@ impl RelationKind {
         }
     }
 }
-

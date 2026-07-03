@@ -68,7 +68,7 @@ impl Orrery {
 
     /// Toggle the isometric (foreshortened-ground) projection. `on` reclines the
     /// ground by foreshortening the vertical, so the graph reads as a tilted floor
-    /// while the node cards stay upright billboards; `off` restores the plain
+    /// while the gnodes stay upright billboards; `off` restores the plain
     /// top-down view. The free-cam yaw orbit + persistence are P2. (Isometric camera P1.)
     pub fn set_isometric(&mut self, on: bool) {
         /// Vertical foreshorten for the isometric preset (a dimetric squash); becomes
@@ -83,7 +83,7 @@ impl Orrery {
     }
 
     /// Orbit the view by `d_radians` about the vertical (the free-cam yaw). The
-    /// ground rotates while the node cards stay upright billboards; pair with the
+    /// ground rotates while the gnodes stay upright billboards; pair with the
     /// isometric `tilt` for the 2.5D orbit (at `tilt == 1` it spins the flat layout).
     /// The host's orbit gesture / projection picker drives this. (Isometric camera P2.)
     pub fn orbit_by(&mut self, d_radians: f32) {
@@ -163,9 +163,9 @@ impl Orrery {
     }
 
     /// Whether `key` is within the active scope lens (always true when unscoped). The
-    /// host's node-card builder filters on this so a scoped orrery (a branch window)
+    /// host's gnode builder filters on this so a scoped orrery (a branch window)
     /// shows only its scoped members, matching the `frame()` scene's own scope filter.
-    /// (Curated orrery — host card path.)
+    /// (Curated orrery — host gnode path.)
     pub fn node_in_scope(&self, key: NodeKey) -> bool {
         self.scope.as_ref().is_none_or(|s| s.contains(&key))
     }

@@ -145,6 +145,10 @@ pub(crate) struct Session {
     /// `last_session_visited`; `run_forgetting_pass` reads it back for
     /// `EvictionPolicy::KeepSessions`. (Alembic B5 — by-sessions eviction.)
     pub(crate) current_session_count: u64,
+    /// The current host launch's structural graph-delta log, if capture is enabled
+    /// via `MERE_GRAPH_DELTA_LOG`. One writer for the shell session, surfaced in
+    /// Apparatus and wired into the kernel's single `apply_graph_delta` funnel.
+    pub(crate) graph_delta_log: crate::graph_delta_log::GraphDeltaLog,
 }
 
 /// The `presentation` subsystem: the resolved theme + the persisted chrome

@@ -167,8 +167,7 @@ impl Graph {
         // Re-point the component's internal edges (both endpoints copied): clone each
         // edge's payload verbatim onto the new node pair.
         for edge in source.inner.edge_references() {
-            if let (Some(&from), Some(&to)) =
-                (remap.get(&edge.source()), remap.get(&edge.target()))
+            if let (Some(&from), Some(&to)) = (remap.get(&edge.source()), remap.get(&edge.target()))
             {
                 self.inner.add_edge(from, to, edge.weight().clone());
             }
@@ -185,7 +184,10 @@ mod tests {
 
     fn donor_with_content() -> (Graph, NodeKey) {
         let mut a = Graph::new();
-        let key = a.add_node("https://example.com/article".to_string(), Point2D::new(1.0, 2.0));
+        let key = a.add_node(
+            "https://example.com/article".to_string(),
+            Point2D::new(1.0, 2.0),
+        );
         let node = a.inner.node_weight_mut(key).unwrap();
         node.title = "An Article".to_string();
         node.tags = HashSet::from(["read-later".to_string(), "research".to_string()]);
@@ -205,8 +207,12 @@ mod tests {
 
         let mut b = Graph::new();
         let rev_before = b.revision();
-        let copy_key = b.copy_node_from(&source, Some("graph-A".to_string()), Point2D::new(9.0, 9.0));
-        assert!(b.revision() > rev_before, "copying a node in is structural and advances the revision");
+        let copy_key =
+            b.copy_node_from(&source, Some("graph-A".to_string()), Point2D::new(9.0, 9.0));
+        assert!(
+            b.revision() > rev_before,
+            "copying a node in is structural and advances the revision"
+        );
         let copy = b.get_node(copy_key).unwrap();
 
         // Fresh identity, content cloned.
@@ -249,7 +255,10 @@ mod tests {
             copy.import_provenance.is_empty(),
             "donor import provenance is the donor's, not the copy's"
         );
-        assert_eq!(copy.derivations[0].source_graph, None, "same-graph / unknown source graph");
+        assert_eq!(
+            copy.derivations[0].source_graph, None,
+            "same-graph / unknown source graph"
+        );
     }
 
     #[test]
@@ -274,7 +283,11 @@ mod tests {
         let new = b.copy_component_from(&a, seed, Some("graph-A".to_string()));
 
         // The connected component is {k1, k2}; the disconnected k3 is not pulled in.
-        assert_eq!(new.len(), 2, "copied the 2-node component, not the lone disconnected node");
+        assert_eq!(
+            new.len(),
+            2,
+            "copied the 2-node component, not the lone disconnected node"
+        );
         assert_eq!(b.nodes().count(), 2);
         // The component's internal edge is re-pointed onto the copies.
         assert_eq!(b.relations().count(), 1, "the internal edge is re-pointed");

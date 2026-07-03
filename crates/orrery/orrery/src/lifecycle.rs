@@ -173,7 +173,7 @@ impl Orrery {
             active_strategy: None,
             strategy_positions: None,
             scope: None,
-            render_as_cards: false,
+            render_gnodes_as_dom: false,
         }
     }
 

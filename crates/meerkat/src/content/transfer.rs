@@ -9,7 +9,7 @@
 //! an `ArrayBuffer` transfer, while splitting recurring scene asset bytes into a
 //! sender/receiver cache keyed by stable ids.
 
-#![allow(dead_code)] // called by the Web Worker actor backend when that backend lands.
+#![allow(dead_code)] // exercised by the browser Web Worker content transport.
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -17,6 +17,7 @@ use std::sync::Arc;
 
 use document_canvas::font_table::FontInterner;
 use document_canvas::{DocumentRenderPacket, FontTable};
+use engine_observables_api::{DomArenaStats, LayoutBatchStats};
 use linebender_resource_handle::Blob as ParleyBlob;
 use linked_data::{EdgeContribution, GraphContribution, NodeContribution};
 use netrender::{ImageKey, Scene, peniko};
@@ -24,8 +25,9 @@ use parley::FontData;
 use serde::{Deserialize, Serialize};
 
 use crate::card::LinkHit;
+use crate::fetch::Fetched;
 
-use super::ContentUpdate;
+use super::{ContentCommand, ContentSceneStats, ContentState, ContentUpdate};
 
 #[derive(Debug)]
 pub(crate) enum TransferError {
@@ -57,6 +59,10 @@ pub(crate) struct TransferBuffer {
 }
 
 impl TransferBuffer {
+    pub(crate) fn from_bytes(bytes: Vec<u8>) -> Self {
+        Self { bytes }
+    }
+
     pub(crate) fn from_transport_error(reason: impl Into<String>) -> Result<Self, TransferError> {
         ContentUpdateWire::TransportError {
             reason: reason.into(),
@@ -78,6 +84,13 @@ impl TransferBuffer {
     #[cfg(target_arch = "wasm32")]
     pub(crate) fn into_array_buffer(self) -> js_sys::ArrayBuffer {
         js_sys::Uint8Array::from(self.bytes.as_slice()).buffer()
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn from_array_buffer(buffer: js_sys::ArrayBuffer) -> Self {
+        Self {
+            bytes: js_sys::Uint8Array::new(&buffer).to_vec(),
+        }
     }
 
     /// Worker-side update send: `postMessage(buffer, [buffer])`.
@@ -148,6 +161,311 @@ impl ContentUpdate {
     }
 }
 
+impl ContentCommand {
+    pub(crate) fn into_transfer_buffer(self) -> Result<TransferBuffer, TransferError> {
+        ContentCommandWire::from_command(self).into_transfer_buffer()
+    }
+
+    pub(crate) fn from_transfer_buffer(bytes: &[u8]) -> Result<Self, TransferError> {
+        ContentCommandWire::from_transfer_buffer(bytes)?.into_command()
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+enum ContentCommandWire {
+    Show {
+        url: String,
+        state: Option<ContentStateWire>,
+        engine: String,
+        viewport: (u32, u32),
+        nav: u64,
+        viewport_gen: u64,
+        sheet: document_canvas::DocumentStyleSheet,
+    },
+    Resize {
+        viewport: (u32, u32),
+        viewport_gen: u64,
+    },
+    Retheme {
+        sheet: document_canvas::DocumentStyleSheet,
+        viewport_gen: u64,
+    },
+    Resource {
+        url: String,
+        bytes: Vec<u8>,
+    },
+    Scroll {
+        band_y: u32,
+        band_h: u32,
+        viewport_gen: u64,
+    },
+    Find {
+        query: String,
+        viewport_gen: u64,
+    },
+    AttachScript {
+        component_path: std::path::PathBuf,
+        log: kernel::permissions::ResolvedPermission,
+        document: kernel::permissions::ResolvedPermission,
+        net: kernel::permissions::ResolvedPermission,
+        viewport_gen: u64,
+    },
+    DeliverEvent {
+        kind: String,
+        payload: String,
+        viewport_gen: u64,
+    },
+    DetachScript {
+        viewport_gen: u64,
+    },
+    MaterializeLinks {
+        viewport_gen: u64,
+    },
+    #[cfg(feature = "scripted")]
+    ScriptedClick {
+        x: f32,
+        y: f32,
+        viewport_gen: u64,
+    },
+}
+
+impl ContentCommandWire {
+    fn from_command(command: ContentCommand) -> Self {
+        match command {
+            ContentCommand::Show {
+                url,
+                state,
+                engine,
+                viewport,
+                nav,
+                viewport_gen,
+                sheet,
+            } => Self::Show {
+                url,
+                state: state.map(ContentStateWire::from),
+                engine,
+                viewport,
+                nav: nav.0,
+                viewport_gen: viewport_gen.0,
+                sheet,
+            },
+            ContentCommand::Resize {
+                viewport,
+                viewport_gen,
+            } => Self::Resize {
+                viewport,
+                viewport_gen: viewport_gen.0,
+            },
+            ContentCommand::Retheme {
+                sheet,
+                viewport_gen,
+            } => Self::Retheme {
+                sheet,
+                viewport_gen: viewport_gen.0,
+            },
+            ContentCommand::Resource { url, bytes } => Self::Resource { url, bytes },
+            ContentCommand::Scroll {
+                band_y,
+                band_h,
+                viewport_gen,
+            } => Self::Scroll {
+                band_y,
+                band_h,
+                viewport_gen: viewport_gen.0,
+            },
+            ContentCommand::Find {
+                query,
+                viewport_gen,
+            } => Self::Find {
+                query,
+                viewport_gen: viewport_gen.0,
+            },
+            ContentCommand::AttachScript {
+                component_path,
+                log,
+                document,
+                net,
+                viewport_gen,
+            } => Self::AttachScript {
+                component_path,
+                log,
+                document,
+                net,
+                viewport_gen: viewport_gen.0,
+            },
+            ContentCommand::DeliverEvent {
+                kind,
+                payload,
+                viewport_gen,
+            } => Self::DeliverEvent {
+                kind,
+                payload,
+                viewport_gen: viewport_gen.0,
+            },
+            ContentCommand::DetachScript { viewport_gen } => Self::DetachScript {
+                viewport_gen: viewport_gen.0,
+            },
+            ContentCommand::MaterializeLinks { viewport_gen } => Self::MaterializeLinks {
+                viewport_gen: viewport_gen.0,
+            },
+            #[cfg(feature = "scripted")]
+            ContentCommand::ScriptedClick { x, y, viewport_gen } => Self::ScriptedClick {
+                x,
+                y,
+                viewport_gen: viewport_gen.0,
+            },
+        }
+    }
+
+    fn into_command(self) -> Result<ContentCommand, TransferError> {
+        Ok(match self {
+            Self::Show {
+                url,
+                state,
+                engine,
+                viewport,
+                nav,
+                viewport_gen,
+                sheet,
+            } => ContentCommand::Show {
+                url,
+                state: state.map(ContentStateWire::into_state),
+                engine,
+                viewport,
+                nav: armillary::NavGeneration(nav),
+                viewport_gen: armillary::ViewportGeneration(viewport_gen),
+                sheet,
+            },
+            Self::Resize {
+                viewport,
+                viewport_gen,
+            } => ContentCommand::Resize {
+                viewport,
+                viewport_gen: armillary::ViewportGeneration(viewport_gen),
+            },
+            Self::Retheme {
+                sheet,
+                viewport_gen,
+            } => ContentCommand::Retheme {
+                sheet,
+                viewport_gen: armillary::ViewportGeneration(viewport_gen),
+            },
+            Self::Resource { url, bytes } => ContentCommand::Resource { url, bytes },
+            Self::Scroll {
+                band_y,
+                band_h,
+                viewport_gen,
+            } => ContentCommand::Scroll {
+                band_y,
+                band_h,
+                viewport_gen: armillary::ViewportGeneration(viewport_gen),
+            },
+            Self::Find {
+                query,
+                viewport_gen,
+            } => ContentCommand::Find {
+                query,
+                viewport_gen: armillary::ViewportGeneration(viewport_gen),
+            },
+            Self::AttachScript {
+                component_path,
+                log,
+                document,
+                net,
+                viewport_gen,
+            } => ContentCommand::AttachScript {
+                component_path,
+                log,
+                document,
+                net,
+                viewport_gen: armillary::ViewportGeneration(viewport_gen),
+            },
+            Self::DeliverEvent {
+                kind,
+                payload,
+                viewport_gen,
+            } => ContentCommand::DeliverEvent {
+                kind,
+                payload,
+                viewport_gen: armillary::ViewportGeneration(viewport_gen),
+            },
+            Self::DetachScript { viewport_gen } => ContentCommand::DetachScript {
+                viewport_gen: armillary::ViewportGeneration(viewport_gen),
+            },
+            Self::MaterializeLinks { viewport_gen } => ContentCommand::MaterializeLinks {
+                viewport_gen: armillary::ViewportGeneration(viewport_gen),
+            },
+            #[cfg(feature = "scripted")]
+            Self::ScriptedClick { x, y, viewport_gen } => ContentCommand::ScriptedClick {
+                x,
+                y,
+                viewport_gen: armillary::ViewportGeneration(viewport_gen),
+            },
+        })
+    }
+
+    fn into_transfer_buffer(self) -> Result<TransferBuffer, TransferError> {
+        postcard::to_allocvec(&self)
+            .map(TransferBuffer::from_bytes)
+            .map_err(TransferError::Encode)
+    }
+
+    fn from_transfer_buffer(bytes: &[u8]) -> Result<Self, TransferError> {
+        postcard::from_bytes(bytes).map_err(TransferError::Decode)
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+enum ContentStateWire {
+    Loading,
+    Ready(FetchedWire),
+    Failed(String),
+}
+
+impl From<ContentState> for ContentStateWire {
+    fn from(state: ContentState) -> Self {
+        match state {
+            ContentState::Loading => Self::Loading,
+            ContentState::Ready(fetched) => Self::Ready(FetchedWire::from(fetched)),
+            ContentState::Failed(reason) => Self::Failed(reason),
+        }
+    }
+}
+
+impl ContentStateWire {
+    fn into_state(self) -> ContentState {
+        match self {
+            Self::Loading => ContentState::Loading,
+            Self::Ready(fetched) => ContentState::Ready(fetched.into_fetched()),
+            Self::Failed(reason) => ContentState::Failed(reason),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct FetchedWire {
+    content_type: Option<String>,
+    body: String,
+}
+
+impl From<Fetched> for FetchedWire {
+    fn from(fetched: Fetched) -> Self {
+        Self {
+            content_type: fetched.content_type,
+            body: fetched.body,
+        }
+    }
+}
+
+impl FetchedWire {
+    fn into_fetched(self) -> Fetched {
+        Fetched {
+            content_type: self.content_type,
+            body: self.body,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 enum ContentUpdateWire {
     Document {
@@ -161,6 +479,7 @@ enum ContentUpdateWire {
         nav: u64,
         viewport_gen: u64,
         scene: TransferScene,
+        stats: ContentSceneStats,
         content_height: u32,
         band_y: u32,
         band_h: u32,
@@ -178,6 +497,12 @@ enum ContentUpdateWire {
         nav: u64,
         viewport_gen: u64,
         matches: Vec<Vec<[f32; 4]>>,
+    },
+    EngineStats {
+        nav: u64,
+        viewport_gen: u64,
+        dom: DomArenaStats,
+        layout: Option<LayoutBatchStats>,
     },
     ScriptOutcome {
         nav: u64,
@@ -208,6 +533,7 @@ impl ContentUpdateWire {
                 nav,
                 viewport_gen,
                 scene,
+                stats,
                 content_height,
                 band_y,
                 band_h,
@@ -217,6 +543,7 @@ impl ContentUpdateWire {
                 nav: nav.0,
                 viewport_gen: viewport_gen.0,
                 scene: encoder.encode_scene(&scene),
+                stats,
                 content_height,
                 band_y,
                 band_h,
@@ -241,6 +568,17 @@ impl ContentUpdateWire {
                 nav: nav.0,
                 viewport_gen: viewport_gen.0,
                 matches,
+            },
+            ContentUpdate::EngineStats {
+                nav,
+                viewport_gen,
+                dom,
+                layout,
+            } => Self::EngineStats {
+                nav: nav.0,
+                viewport_gen: viewport_gen.0,
+                dom,
+                layout,
             },
             ContentUpdate::ScriptOutcome { nav, outcome } => Self::ScriptOutcome {
                 nav: nav.0,
@@ -272,6 +610,7 @@ impl ContentUpdateWire {
                 nav,
                 viewport_gen,
                 scene,
+                stats,
                 content_height,
                 band_y,
                 band_h,
@@ -281,6 +620,7 @@ impl ContentUpdateWire {
                 nav: armillary::NavGeneration(nav),
                 viewport_gen: armillary::ViewportGeneration(viewport_gen),
                 scene: decoder.decode_scene(scene)?,
+                stats,
                 content_height,
                 band_y,
                 band_h,
@@ -309,6 +649,17 @@ impl ContentUpdateWire {
                 viewport_gen: armillary::ViewportGeneration(viewport_gen),
                 matches,
             },
+            Self::EngineStats {
+                nav,
+                viewport_gen,
+                dom,
+                layout,
+            } => ContentUpdate::EngineStats {
+                nav: armillary::NavGeneration(nav),
+                viewport_gen: armillary::ViewportGeneration(viewport_gen),
+                dom,
+                layout,
+            },
             Self::ScriptOutcome { nav, outcome } => ContentUpdate::ScriptOutcome {
                 nav: armillary::NavGeneration(nav),
                 outcome,
@@ -333,6 +684,11 @@ struct TransferScene {
     scene_postcard: Vec<u8>,
     fonts: Vec<FontAsset>,
     images: Vec<ImageAsset>,
+}
+
+struct PreparedSceneSnapshot {
+    scene_postcard: Vec<u8>,
+    stats: ContentSceneStats,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -390,9 +746,9 @@ impl From<FontTableWire> for FontTable {
 
 impl SceneTransferEncoder {
     fn encode_scene(&mut self, scene: &Scene) -> TransferScene {
-        let mut stripped = scene.clone();
+        let prepared = prepare_scene_snapshot(scene);
         let mut fonts = Vec::new();
-        for font in &mut stripped.fonts {
+        for font in &scene.fonts {
             let id = font.data.id();
             let bytes = font.data.data();
             if !bytes.is_empty() && self.fonts.insert(id) {
@@ -401,11 +757,10 @@ impl SceneTransferEncoder {
                     bytes: bytes.to_vec(),
                 });
             }
-            font.data = empty_blob(id);
         }
 
         let mut images = Vec::new();
-        for (&key, image) in &mut stripped.image_sources {
+        for (&key, image) in &scene.image_sources {
             let blob_id = image.data.id();
             let bytes = image.data.data();
             if !bytes.is_empty() && self.images.insert(key) {
@@ -417,11 +772,10 @@ impl SceneTransferEncoder {
                     bytes: bytes.to_vec(),
                 });
             }
-            image.data = empty_blob(blob_id);
         }
 
         TransferScene {
-            scene_postcard: stripped.snapshot_postcard(),
+            scene_postcard: prepared.scene_postcard,
             fonts,
             images,
         }
@@ -478,6 +832,30 @@ fn empty_blob(id: u64) -> peniko::Blob<u8> {
 fn blob_from_bytes(bytes: Vec<u8>, id: u64) -> peniko::Blob<u8> {
     let arc: Arc<dyn AsRef<[u8]> + Send + Sync> = Arc::new(bytes);
     peniko::Blob::from_raw_parts(arc, id)
+}
+
+fn prepare_scene_snapshot(scene: &Scene) -> PreparedSceneSnapshot {
+    let mut stripped = scene.clone();
+    for font in &mut stripped.fonts {
+        let id = font.data.id();
+        font.data = empty_blob(id);
+    }
+    for image in stripped.image_sources.values_mut() {
+        let blob_id = image.data.id();
+        image.data = empty_blob(blob_id);
+    }
+    let scene_postcard = stripped.snapshot_postcard();
+    PreparedSceneSnapshot {
+        stats: ContentSceneStats {
+            op_count: scene.ops.len() as u64,
+            encoded_bytes: scene_postcard.len() as u64,
+        },
+        scene_postcard,
+    }
+}
+
+pub(crate) fn scene_stats(scene: &Scene) -> ContentSceneStats {
+    prepare_scene_snapshot(scene).stats
 }
 
 fn parley_blob_from_bytes(bytes: Vec<u8>, id: u64) -> ParleyBlob<u8> {
@@ -649,6 +1027,7 @@ impl From<EdgeContributionWire> for EdgeContribution {
 mod tests {
     use super::*;
     use armillary::{NavGeneration, ViewportGeneration};
+    use engine_observables_api::{DomArenaStats, LayoutApplyKind, LayoutBatchStats};
     use netrender::{FontBlob, Glyph, ImageData, Scene};
 
     fn font_scene(font_bytes: Vec<u8>) -> Scene {
@@ -684,6 +1063,96 @@ mod tests {
     }
 
     #[test]
+    fn show_command_transfer_round_trips() {
+        let command = ContentCommand::Show {
+            url: "https://example.test/".to_string(),
+            state: Some(ContentState::Ready(Fetched {
+                content_type: Some("text/html".to_string()),
+                body: "<p>hello</p>".to_string(),
+            })),
+            engine: inker::routing::ENGINE_SERVAL_WEB.to_string(),
+            viewport: (320, 200),
+            nav: NavGeneration(7),
+            viewport_gen: ViewportGeneration(9),
+            sheet: document_canvas::DocumentStyleSheet::default(),
+        };
+
+        let buffer = command.into_transfer_buffer().expect("encode show command");
+        let decoded =
+            ContentCommand::from_transfer_buffer(buffer.as_bytes()).expect("decode show command");
+
+        let ContentCommand::Show {
+            url,
+            state,
+            engine,
+            viewport,
+            nav,
+            viewport_gen,
+            ..
+        } = decoded
+        else {
+            panic!("expected show command");
+        };
+        assert_eq!(url, "https://example.test/");
+        assert_eq!(engine, inker::routing::ENGINE_SERVAL_WEB);
+        assert_eq!(viewport, (320, 200));
+        assert_eq!(nav, NavGeneration(7));
+        assert_eq!(viewport_gen, ViewportGeneration(9));
+        assert!(matches!(
+            state,
+            Some(ContentState::Ready(Fetched {
+                content_type: Some(content_type),
+                body,
+            })) if content_type == "text/html" && body == "<p>hello</p>"
+        ));
+    }
+
+    #[test]
+    fn attach_script_command_transfer_round_trips() {
+        let command = ContentCommand::AttachScript {
+            component_path: std::path::PathBuf::from("mods/weather.wasm"),
+            log: kernel::permissions::ResolvedPermission {
+                effective: kernel::permissions::Permission::Allow,
+                decided_by: Some(kernel::permissions::SettingScope::Surface),
+            },
+            document: kernel::permissions::ResolvedPermission {
+                effective: kernel::permissions::Permission::Prompt,
+                decided_by: Some(kernel::permissions::SettingScope::Graph),
+            },
+            net: kernel::permissions::ResolvedPermission {
+                effective: kernel::permissions::Permission::Deny,
+                decided_by: Some(kernel::permissions::SettingScope::App),
+            },
+            viewport_gen: ViewportGeneration(11),
+        };
+
+        let buffer = command
+            .into_transfer_buffer()
+            .expect("encode attach-script command");
+        let decoded = ContentCommand::from_transfer_buffer(buffer.as_bytes())
+            .expect("decode attach-script command");
+
+        let ContentCommand::AttachScript {
+            component_path,
+            log,
+            document,
+            net,
+            viewport_gen,
+        } = decoded
+        else {
+            panic!("expected attach-script command");
+        };
+        assert_eq!(
+            component_path,
+            std::path::PathBuf::from("mods/weather.wasm")
+        );
+        assert_eq!(log.effective, kernel::permissions::Permission::Allow);
+        assert_eq!(document.effective, kernel::permissions::Permission::Prompt);
+        assert_eq!(net.effective, kernel::permissions::Permission::Deny);
+        assert_eq!(viewport_gen, ViewportGeneration(11));
+    }
+
+    #[test]
     fn transport_error_transfer_round_trips() {
         let buffer =
             TransferBuffer::from_transport_error("encode failed").expect("encode error update");
@@ -698,10 +1167,56 @@ mod tests {
     }
 
     #[test]
+    fn engine_stats_transfer_round_trips() {
+        let update = ContentUpdate::EngineStats {
+            nav: NavGeneration(3),
+            viewport_gen: ViewportGeneration(4),
+            dom: DomArenaStats {
+                live_nodes: 9,
+                attribute_count: 5,
+                estimated_bytes: 2048,
+                ..DomArenaStats::default()
+            },
+            layout: Some(LayoutBatchStats {
+                applied: LayoutApplyKind::Restyled,
+                fragment_count: 17,
+                ..LayoutBatchStats::default()
+            }),
+        };
+        let mut encoder = SceneTransferEncoder::default();
+        let mut decoder = SceneTransferDecoder::default();
+        let buffer = update
+            .into_transfer_buffer(&mut encoder)
+            .expect("encode engine stats");
+        let decoded = ContentUpdate::from_transfer_buffer(buffer.as_bytes(), &mut decoder)
+            .expect("decode engine stats");
+
+        let ContentUpdate::EngineStats {
+            nav,
+            viewport_gen,
+            dom,
+            layout,
+        } = decoded
+        else {
+            panic!("expected engine stats");
+        };
+        assert_eq!(nav, NavGeneration(3));
+        assert_eq!(viewport_gen, ViewportGeneration(4));
+        assert_eq!(dom.live_nodes, 9);
+        assert_eq!(dom.attribute_count, 5);
+        assert_eq!(dom.estimated_bytes, 2048);
+        assert_eq!(
+            layout.expect("layout stats").applied,
+            LayoutApplyKind::Restyled
+        );
+    }
+
+    #[test]
     fn repeated_scene_transfer_omits_cached_font_bytes() {
-        let update = |scene| ContentUpdate::Scene {
+        let update = |scene: Scene| ContentUpdate::Scene {
             nav: NavGeneration(1),
             viewport_gen: ViewportGeneration(2),
+            stats: scene_stats(&scene),
             scene,
             content_height: 200,
             band_y: 0,
@@ -725,7 +1240,7 @@ mod tests {
             .expect("encode second");
         let decoded_second = ContentUpdate::from_transfer_buffer(second.as_bytes(), &mut decoder)
             .expect("decode second");
-        let ContentUpdate::Scene { scene, .. } = decoded_second else {
+        let ContentUpdate::Scene { scene, stats, .. } = decoded_second else {
             panic!("expected scene update");
         };
         assert!(
@@ -739,13 +1254,15 @@ mod tests {
             second.as_bytes().len() < first.as_bytes().len(),
             "second transfer should reuse the cached font asset",
         );
+        assert_eq!(stats.op_count, scene.ops.len() as u64);
     }
 
     #[test]
     fn repeated_scene_transfer_omits_cached_image_bytes() {
-        let update = |scene| ContentUpdate::Scene {
+        let update = |scene: Scene| ContentUpdate::Scene {
             nav: NavGeneration(1),
             viewport_gen: ViewportGeneration(2),
+            stats: scene_stats(&scene),
             scene,
             content_height: 64,
             band_y: 0,
@@ -770,7 +1287,13 @@ mod tests {
             .expect("encode second");
         let decoded = ContentUpdate::from_transfer_buffer(second.as_bytes(), &mut decoder)
             .expect("decode second");
-        let ContentUpdate::Scene { scene, links, .. } = decoded else {
+        let ContentUpdate::Scene {
+            scene,
+            stats,
+            links,
+            ..
+        } = decoded
+        else {
             panic!("expected scene update");
         };
         assert_eq!(links.len(), 1);
@@ -783,5 +1306,7 @@ mod tests {
             second.as_bytes().len() < first.as_bytes().len(),
             "second transfer should reuse the cached image asset",
         );
+        assert_eq!(stats.op_count, scene.ops.len() as u64);
+        assert!(stats.encoded_bytes > 0);
     }
 }

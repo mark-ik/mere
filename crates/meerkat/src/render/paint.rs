@@ -172,7 +172,7 @@ impl WindowCtx<'_> {
                 // snapshot card's chrome `<img>`. The card shows only its top band, so a fixed
                 // peek size suffices (the `<img>` scales it to the card). Once per url — the
                 // readback blocks, so it is gated on the data-uri cache miss above. The image
-                // is opaque chrome DOM after the node cards, so it paints over them and under
+                // is opaque chrome DOM after the gnodes, so it paints over them and under
                 // the overlays — the layering an external-texture could not give. (Layering fix.)
                 const PEEK_W: u32 = 300;
                 const PEEK_H: u32 = 390;
@@ -250,7 +250,7 @@ impl WindowCtx<'_> {
             }
         }
         // The unvisited placeholder card now renders as a pure-DOM shell element (a dashed
-        // "double-click to load" card, document-ordered over the node cards), so there is no
+        // "double-click to load" card, document-ordered over the gnodes), so there is no
         // host composite for it; `unvisited_card` survives only as a `content_rects` entry so
         // a double-click over it still opens the node in a pelt tile. (Layering fix.)
         // Frame dividers: fill each split gutter with a dark seam (so the gutter is

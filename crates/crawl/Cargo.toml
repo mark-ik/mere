@@ -1,0 +1,23 @@
+[package]
+name = "crawl"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Host-neutral crawl frontier and bounded crawl runtime for Mere."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+armillary.workspace = true
+fetch.workspace = true
+frame.workspace = true
+linked-data.workspace = true
+tokio = { version = "1", features = ["rt", "time"] }
+tracing.workspace = true
+url = "2"
+
+[lints]
+workspace = true

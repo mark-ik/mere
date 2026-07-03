@@ -65,12 +65,15 @@ impl crate::WindowCtx<'_> {
         }
         // Classify the selection's induced subgraph for the chip strip: the dominant shape plus its
         // best runners-up (fit-ranked, top 3). (Swatch primitive — P3, the strip.)
-        let shape_chips: Vec<String> =
+        let shape_chips: Vec<crate::swatch::ShapeChip> =
             crate::graphlet_classifier::classify_selection(graph, &members)
                 .iter()
                 .take(3)
                 .filter(|s| s.fit >= 0.4)
-                .map(|s| s.label.clone())
+                .map(|s| crate::swatch::ShapeChip {
+                    label: s.label.clone(),
+                    kind_tag: crate::graphlet_classifier::shape_kind_tag(&s.kind),
+                })
                 .collect();
         let mut spec = connections_spec_from(positions, edges);
         spec.shape_chips = shape_chips;

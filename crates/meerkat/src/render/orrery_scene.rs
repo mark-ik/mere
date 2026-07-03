@@ -3,19 +3,22 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 //! Orrery-scene rendering for [`render`](super): the focused pane's per-frame node
-//! state/shape sync, layout-strategy drive, scene frame + node-card snapshot, plus the
-//! secondary graph panes. Split from `render.rs` to keep files under the workspace
-//! 600-LOC ceiling.
+//! state/shape sync, layout-strategy drive, scene frame + retained gnode-pool
+//! reconcile, plus the secondary graph panes. Split from `render.rs` to keep files
+//! under the workspace 600-LOC ceiling.
 
 use super::*;
+use crate::window_view::{GnodeBuildStats, GnodeHotRow, GnodeSnapshot, GnodeStableRow};
 use frame::GraphId;
+use orrery::Face;
+use serval_scripted_dom::ScriptedDom;
 
 impl crate::WindowCtx<'_> {
     /// Drive the focused Orrery pane for this frame: push node state/shape colours, resize
     /// + recenter / self-heal, mirror the workbench tiles, run any active layout strategy,
-    /// produce the scene, snapshot the on-screen nodes as DOM cards (with the focused-node
-    /// content card) into the shell view, and return `(orrery_scene, orrery_redraw)`.
-    /// (Extracted from `render()`.)
+    /// produce the scene, reconcile the on-screen DOM gnodes through the window-local
+    /// retained pool, and return `(orrery_scene, orrery_redraw)`. (Extracted from
+    /// `render()`.)
     pub(super) fn render_orrery_scene(
         &mut self,
         orrery_gid: GraphId,
@@ -38,9 +41,10 @@ impl crate::WindowCtx<'_> {
         // centered once). The tiled workbench, when its pane is open, composites a
         // separate scene into its own leaf — the two coexist now, no longer toggled.
         self.pane_orrery_mut(orrery_gid).resize(orrery_w, orrery_h);
-        // The focused orrery renders its on-screen nodes as DOM cards in the shell (the
+        // The focused orrery renders its on-screen nodes as DOM gnodes in the shell (the
         // snapshot below), so drop its in-scene gnode layer. (Orrery-as-element.)
-        self.pane_orrery_mut(orrery_gid).set_render_as_cards(true);
+        self.pane_orrery_mut(orrery_gid)
+            .set_render_gnodes_as_dom(true);
         if !self.view.centered {
             self.pane_orrery_mut(orrery_gid).recenter();
             self.view.centered = true;
@@ -104,79 +108,64 @@ impl crate::WindowCtx<'_> {
         let (orrery_scene, orrery_redraw) =
             self.pane_orrery_mut(orrery_gid).frame(orrery_w, orrery_h);
 
-        // Orrery-as-element (i-2): snapshot the focused orrery's nodes through its
-        // camera into the shell state, so the orrery element renders a DOM card per
-        // node. The update + frame() above ran this frame, so the snapshot reads
-        // this-frame positions/colors/scope and the cards align with the scene. (Phase 2.)
-        // The cursor (window px) for the per-card hover test below, copied out so the card
-        // closure does not re-borrow self while `orrery` is held. (P0 hover.)
+        // The cursor (window px) for the per-gnode hover test below, copied out so the
+        // node loop does not re-borrow self while `orrery` is held. (P0 hover.)
         let hover_cursor = self.view.cursor;
-        let orrery_cards = {
+        let profile_enabled = tracing::enabled!(target: "meerkat::profile", tracing::Level::DEBUG);
+        let snapshot_t = std::time::Instant::now();
+        let mut build_stats = GnodeBuildStats::default();
+        let mut gnode_pool = std::mem::take(&mut self.view.gnode_pool);
+        let gnodes = {
             let orrery = self.pane_orrery(orrery_gid);
             let cam = orrery.camera();
-            // The focused pane box, for culling cards to it: serval does not clip
+            // The focused pane box, for culling gnodes to it: serval does not clip
             // transformed overflow, so an off-screen node would otherwise escape the
             // orrery element up into the chrome (the toolbar-escape we saw).
             let (pw, ph) = (
                 orrery_rect[2] - orrery_rect[0],
                 orrery_rect[3] - orrery_rect[1],
             );
-            let cards = orrery
-                .graph()
-                .nodes()
-                .filter_map(|(key, node)| {
-                    // Branch scope (Phase 2 slice 3): a scoped orrery — a branch window
-                    // scoped to its graphlet — shows only its scoped members as cards;
-                    // non-members are dropped, matching the scene's own scope filter.
-                    if !orrery.node_in_scope(key) {
-                        return None;
-                    }
-                    // Settings nodes render as normal nodes addressing their page (Mark,
-                    // 2026-06-22): a `settings://` node is a first-class, visible graph node you
-                    // can see / open / relate, not an invisible tile-only member. Opening it
-                    // routes to the settings page like any node. (Settings lane — visible nodes.)
-                    let w = orrery.node_position(key)?;
-                    let x = w.x * cam.zoom + cam.offset.0;
-                    let y = w.y * cam.zoom + cam.offset.1;
-                    // Off-pane nodes ride the underlay demote-dots, not a card.
-                    if !(0.0..=pw).contains(&x) || !(0.0..=ph).contains(&y) {
-                        return None;
-                    }
-                    // Label: a real page title once the node has loaded one; otherwise the
-                    // URL's last path segment (the readable slug, e.g. a wiki article name),
-                    // which previews the eventual title and keeps same-site nodes distinct.
-                    // node.title is seeded to the URL until a load completes, so a URL-shaped
-                    // title is the un-loaded case. (node_display_label would collapse these to
-                    // the bare host.) Capped with an ellipsis for the compact on-canvas card.
-                    const CARD_LABEL_CAP: usize = 24;
-                    let raw = node.title.trim_end_matches('/');
-                    let base = if raw.contains("://") {
-                        match raw.rsplit('/').next() {
-                            Some(slug) if !slug.is_empty() => slug,
-                            _ => raw,
-                        }
-                    } else {
-                        raw
-                    };
-                    let label = if base.chars().count() <= CARD_LABEL_CAP {
-                        base.to_string()
-                    } else {
-                        base.chars()
-                            .take(CARD_LABEL_CAP - 1)
-                            .chain(['\u{2026}'])
-                            .collect()
-                    };
-                    // The node's footprint (per-node override / size-by-degree / default),
-                    // used both as the card's face size and as the hover hit-box half. (P0.)
-                    let node_size = orrery.node_size(key);
-                    let face_half = node_size / 2.0;
-                    Some(OrreryCard {
-                        member: node.id,
-                        label,
+            let mut gnodes = Vec::new();
+            for (key, node) in orrery.graph().nodes() {
+                // Branch scope (Phase 2 slice 3): a scoped orrery — a branch window
+                // scoped to its graphlet — shows only its scoped members as gnodes;
+                // non-members are dropped, matching the scene's own scope filter.
+                if !orrery.node_in_scope(key) {
+                    continue;
+                }
+                // Settings nodes render as normal nodes addressing their page (Mark,
+                // 2026-06-22): a `settings://` node is a first-class, visible graph node you
+                // can see / open / relate, not an invisible tile-only member. Opening it
+                // routes to the settings page like any node. (Settings lane — visible nodes.)
+                let Some(w) = orrery.node_position(key) else {
+                    continue;
+                };
+                let x = w.x * cam.zoom + cam.offset.0;
+                let y = w.y * cam.zoom + cam.offset.1;
+                // Off-pane nodes ride the underlay demote-dots, not a gnode.
+                if !(0.0..=pw).contains(&x) || !(0.0..=ph).contains(&y) {
+                    continue;
+                }
+                // The node's footprint (per-node override / size-by-degree / default),
+                // used both as the gnode's face size and as the hover hit-box half. (P0.)
+                let node_size = orrery.node_size(key);
+                let face_half = node_size / 2.0;
+                let face = orrery.node_face(key);
+                let favicon = gnode_pool.cached_favicon(
+                    node.id,
+                    node.favicon_rgba.as_deref(),
+                    node.favicon_width,
+                    node.favicon_height,
+                    &mut build_stats,
+                );
+                let sprite = gnode_pool.cached_sprite(node.id, orrery.node_sprite(key));
+                gnodes.push(GnodeSnapshot {
+                    member: node.id,
+                    hot: GnodeHotRow {
                         x,
                         y,
-                        // State color only; selection shows as a ring + lift on the card face.
-                        color: orrery.node_state_color(key).to_string(),
+                        // State color only; selection shows as a ring + lift on the gnode face.
+                        color: orrery.node_state_color(key),
                         selected: orrery.node_selected(key),
                         // Hover: the cursor over this node's face box (window px). (P0 hover.)
                         hovered: {
@@ -185,41 +174,70 @@ impl crate::WindowCtx<'_> {
                                 && (hover_cursor.1 - wy).abs() <= face_half
                         },
                         size: node_size,
+                    },
+                    stable: GnodeStableRow {
+                        label: gnode_pool.cached_label(node.id, &node.title),
                         // Content-type silhouette as the face's border-radius.
                         radius: match orrery.node_shape(key) {
                             orrery::NodeShape::Square => "0",
                             orrery::NodeShape::Rounded => "9px",
                             orrery::NodeShape::Circle => "50%",
                         },
-                        favicon: node.favicon_rgba.as_ref().and_then(|rgba| {
-                            favicon_data_uri(rgba, node.favicon_width, node.favicon_height)
-                        }),
-                        // The custom sprite image (a data-URI), for a `Sprite` face. (P2.)
-                        sprite: orrery.node_sprite(key).map(str::to_string),
-                        face: orrery.node_face(key),
-                        // The body hull, so the card face is clipped to the collider shape. (B&F.)
-                        hull: orrery
-                            .node_sprite_hull(key)
-                            .map(<[(f32, f32)]>::to_vec)
-                            .unwrap_or_default(),
-                    })
-                })
-                .collect();
-            cards
+                        image_uri: match face {
+                            Face::Sprite => sprite,
+                            Face::Favicon => favicon,
+                            Face::Bare => None,
+                        },
+                        image_cover: matches!(face, Face::Sprite),
+                        show_label: !matches!(face, Face::Bare),
+                        // The body hull, so the gnode face is clipped to the collider shape. (B&F.)
+                        hull: gnode_pool.cached_hull(node.id, orrery.node_sprite_hull(key)),
+                    },
+                });
+            }
+            gnodes
         };
+        let gnode_count = gnodes.len();
+        let snapshot_build_us = snapshot_t.elapsed().as_micros();
+        let pool_stats = gnode_pool.reconcile(&self.view.dom, orrery_gid, gnodes);
+        self.view.gnode_pool = gnode_pool;
         // The focused node's content card (snapshot / unvisited placeholder), placed after
-        // the node cards in document order so it paints over them. (Layering fix.)
+        // the gnodes in document order so it paints over them. (Layering fix.)
         let focus_card = self.compute_focus_card(orrery_rect, workbench_rect);
         let orrery_render = OrreryRender {
             rect: orrery_rect,
-            cards: orrery_cards,
             focus_card,
         };
         // Only rebuild the shell view when the snapshot actually changed: a settled
         // orrery (no motion, selection, or camera change) produces an identical snapshot
         // each frame, so this skips the per-frame view re-run + diff entirely. (Perf.)
+        let mut view_rerun = false;
+        let mut view_rerun_us = 0;
         if &orrery_render != self.view.orrery_render() {
+            let view_rerun_t = std::time::Instant::now();
             self.view.set_orrery(orrery_render);
+            view_rerun = true;
+            view_rerun_us = view_rerun_t.elapsed().as_micros();
+        }
+        if profile_enabled {
+            let shell_node_count = {
+                let dom = self.view.dom.borrow();
+                count_dom_nodes(&dom, dom.document())
+            };
+            tracing::debug!(
+                target: "meerkat::profile",
+                snapshot_build_us,
+                view_rerun,
+                view_rerun_us,
+                gnode_count,
+                shell_node_count,
+                favicon_encodes = build_stats.favicon_encodes,
+                pool_structural_inserts = pool_stats.structural_inserts,
+                pool_structural_removes = pool_stats.structural_removes,
+                pool_hot_attr_writes = pool_stats.hot_attr_writes,
+                pool_stable_attr_writes = pool_stats.stable_attr_writes,
+                "gnode pool profile"
+            );
         }
         (orrery_scene, orrery_redraw)
     }
@@ -241,7 +259,7 @@ impl crate::WindowCtx<'_> {
                 let sh = (l.rect[3] - l.rect[1]).round().max(1.0) as u32;
                 let orrery = self.pane_orrery_mut(l.graph_id);
                 orrery.resize(sw, sh);
-                orrery.set_render_as_cards(false); // secondary panes keep their gnodes
+                orrery.set_render_gnodes_as_dom(false); // secondary panes keep their gnodes
                 if !orrery.graph_visible() {
                     orrery.recenter();
                 }
@@ -267,4 +285,11 @@ impl crate::WindowCtx<'_> {
             .collect();
         secondary_orreries
     }
+}
+
+fn count_dom_nodes(dom: &ScriptedDom, node: serval_scripted_dom::NodeId) -> usize {
+    1 + dom
+        .dom_children(node)
+        .map(|child| count_dom_nodes(dom, child))
+        .sum::<usize>()
 }

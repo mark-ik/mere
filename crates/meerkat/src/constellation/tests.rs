@@ -4,9 +4,11 @@
 
 //! Constellation tests.
 
+use engine_observables_api::{DomArenaStats, LayoutApplyKind, LayoutBatchStats};
 use uuid::Uuid;
 
 use super::*;
+use crate::content::ContentHandle;
 
 fn m(n: u128) -> GraphMemberId {
     Uuid::from_u128(n)
@@ -33,7 +35,7 @@ fn fake_activation(rx: std::sync::mpsc::Receiver<ContentUpdate>, graph_id: Graph
          _out: armillary::Emitter<ContentUpdate>| { while commands.recv().is_ok() {} },
     );
     Activation {
-        handle,
+        handle: ContentHandle::Native(handle),
         rx: ContentUpdateStream::Native(rx),
         gens: Generations::default(),
         shown: None,
@@ -47,6 +49,8 @@ fn fake_activation(rx: std::sync::mpsc::Receiver<ContentUpdate>, graph_id: Graph
         requested_band: (0, 0),
         links: Vec::new(),
         find_matches: Vec::new(),
+        engine_stats: None,
+        scene_stats: None,
         find_query: String::new(),
         scene_version: 0,
         background: false,
@@ -62,11 +66,34 @@ fn scene_update(content_height: u32) -> ContentUpdate {
         nav: gens.nav,
         viewport_gen: gens.viewport,
         scene: Scene::new(1, 1),
+        stats: crate::content::ContentSceneStats {
+            op_count: 3,
+            encoded_bytes: 128,
+        },
         content_height,
         band_y: 0,
         band_h: 1,
         links: Vec::new(),
         masks: Vec::new(),
+    }
+}
+
+fn engine_stats_update() -> ContentUpdate {
+    let gens = Generations::default();
+    ContentUpdate::EngineStats {
+        nav: gens.nav,
+        viewport_gen: gens.viewport,
+        dom: DomArenaStats {
+            live_nodes: 7,
+            attribute_count: 11,
+            estimated_bytes: 4096,
+            ..DomArenaStats::default()
+        },
+        layout: Some(LayoutBatchStats {
+            applied: LayoutApplyKind::RepaintOnly,
+            fragment_count: 19,
+            ..LayoutBatchStats::default()
+        }),
     }
 }
 
@@ -143,6 +170,39 @@ fn teardown_before_batch_drain_does_not_strand_sibling_update() {
         "sibling update is not stranded behind a cross-owner batch"
     );
     assert_eq!(c.content_height(m(2)), 20);
+}
+
+#[test]
+fn drain_caches_engine_stats_for_the_current_activation() {
+    let mut c = Constellation::new(noop_wake());
+    let (tx, rx) = std::sync::mpsc::channel();
+    c.active.insert(m(1), fake_activation(rx, g()));
+
+    tx.send(engine_stats_update()).unwrap();
+    c.drain();
+
+    let stats = c.engine_stats(m(1)).expect("engine stats cached");
+    assert_eq!(stats.dom.live_nodes, 7);
+    assert_eq!(stats.dom.attribute_count, 11);
+    assert_eq!(stats.dom.estimated_bytes, 4096);
+    assert_eq!(
+        stats.layout.expect("layout stats").applied,
+        LayoutApplyKind::RepaintOnly
+    );
+}
+
+#[test]
+fn drain_caches_scene_stats_for_the_current_activation() {
+    let mut c = Constellation::new(noop_wake());
+    let (tx, rx) = std::sync::mpsc::channel();
+    c.active.insert(m(1), fake_activation(rx, g()));
+
+    tx.send(scene_update(20)).unwrap();
+    c.drain();
+
+    let stats = c.scene_stats(m(1)).expect("scene stats cached");
+    assert_eq!(stats.op_count, 3);
+    assert_eq!(stats.encoded_bytes, 128);
 }
 
 #[test]
