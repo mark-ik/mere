@@ -106,4 +106,4 @@ When pulling a donor doc's content into a mere doc:
 
 - **Mere** — product name (humble; "merely a browser!")
 - **Strophos** — parent brand layer
-- **Crate names**: `mere`, `graphshell`, `verso-tile`, `inker`, `platen`, `nematic`, `murm`, `murmuring`, `moothold`, `mooting` (all reserved on crates.io 2026-05-04)
+- **Crate names**: `mere`, `graphshell`, `verso-tile`, `inker`, `platen`, `nematic`, `murm`, `murmuring`, `moothold`, `mooting` (all reserved on crates.io 2026-05-04); `eidetic` (2026-05-07), `illume` (2026-06-27), `armillary` (2026-07-03) published at 0.0.x from the workspace. `misfin` promoted 2026-07-03 to the standalone [mark-ik/misfin](https://github.com/mark-ik/misfin) repo (spec-complete; name held in stewardship, transfers to the protocol author on request). `forme` was lost to an unrelated claimant (2026-02) — needs a new name if ever published.

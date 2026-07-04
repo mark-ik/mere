@@ -46,7 +46,7 @@ members = [
     "crates/verso",
     "crates/forme/forme",
     "crates/forme/uxtree",
-    "crates/platen/domain/apparatus",
+    "crates/domain/apparatus",
     "crates/domain/gloss",
     "crates/domain/roster",
     "crates/platen/domain/workbench",
@@ -60,7 +60,6 @@ members = [
     "crates/crawl",
     "crates/intel/embed",
     "crates/intel/signals",
-    "crates/murm/misfin",
     "crates/murm/murm",
     "crates/murm/murmuring",
     "crates/murm/transport",
@@ -139,7 +138,7 @@ forme = { path = "crates/forme/forme" }
 uxtree = { path = "crates/forme/uxtree" }
 
 platen = { path = "crates/platen/platen" }
-apparatus = { path = "crates/platen/domain/apparatus" }
+apparatus = { path = "crates/domain/apparatus" }
 gloss = { path = "crates/domain/gloss" }
 roster = { path = "crates/domain/roster" }
 workbench = { path = "crates/platen/domain/workbench" }
@@ -160,7 +159,9 @@ crawl = { path = "crates/crawl" }
 embed = { path = "crates/intel/embed" }
 signals = { path = "crates/intel/signals" }
 
-misfin = { path = "crates/murm/misfin" }
+# Standalone spec-B misfin implementation (promoted out of this workspace
+# 2026-07-03); an owned mark-ik repo, tracked by branch per convention.
+misfin = { git = "https://github.com/mark-ik/misfin", branch = "main" }
 murm = { path = "crates/murm/murm" }
 murmuring = { path = "crates/murm/murmuring" }
 transport = { path = "crates/murm/transport" }

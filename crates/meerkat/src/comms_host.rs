@@ -354,14 +354,16 @@ async fn start_misfin_server(sender: &MisfinSendIdentity, address: &str, store: 
     let Ok(served_address) = MisfinAddress::parse(address) else {
         return;
     };
-    let config = MisfinServerConfig {
-        tls_certificate_der: sender.cert_der.clone(),
-        tls_private_key_pkcs8_der: sender.key_pkcs8_der.clone(),
-        served: vec![ServedMailbox {
+    // Default validation posture: fingerprint-only senders accepted, changed
+    // fingerprints for a known identity rejected with 63.
+    let config = MisfinServerConfig::new(
+        sender.cert_der.clone(),
+        sender.key_pkcs8_der.clone(),
+        vec![ServedMailbox {
             address: served_address,
             fingerprint: certificate_fingerprint(&sender.cert_der),
         }],
-    };
+    );
     let server = match MisfinServer::new(config, store) {
         Ok(server) => server,
         Err(err) => {
