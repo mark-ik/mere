@@ -13,7 +13,10 @@ protocol's author (lem) gets the name on request.
 ## What was done
 
 1. **Repo**: <https://github.com/mark-ik/misfin> (local `repos/misfin/`),
-   MPL-2.0, crates.io-only deps (the wgpu-sibling standalone bar). README
+   **MIT** (relicensed same-day at Mark's direction to match how lem's repo
+   licenses the reference implementation; the protocol itself is declared
+   public domain there, spec docs CC-BY-SA 4.0), crates.io-only deps (the
+   wgpu-sibling standalone bar). README
    carries the stewardship language: not the reference implementation, name
    transfers to the protocol author on request.
 2. **Spec completion** (audited against the spec + best-practices docs at
