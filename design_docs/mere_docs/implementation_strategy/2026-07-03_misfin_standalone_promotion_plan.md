@@ -59,10 +59,8 @@ protocol's author (lem) gets the name on request.
 
 ## Remaining tail
 
-- **crates.io publish of 0.0.2**: prepared but not pushed (the harness
-  declined the registry write without explicit approval). One command from
-  `repos/misfin`: `cargo publish`. Until then crates.io still shows 0.0.1
-  (the workspace-era snapshot).
+- ~~crates.io publish of 0.0.2~~ **done 2026-07-04** (Mark published; the
+  registry now carries the MIT relicense, the send client, and the CLI).
 - **Send-path unification**: mere still sends misfin mail via
   `errand::misfin_send`; the crate now owns a spec-complete client, so errand's
   bespoke sender can eventually delegate or retire. Not urgent; errand is
@@ -77,6 +75,11 @@ protocol's author (lem) gets the name on request.
 
 ## Progress
 
+- **2026-07-04**: misfin 0.0.2 published to crates.io by Mark. The remaining
+  tail is errand send-path unification (errand's `misfin_send` could delegate
+  to `misfin::client::send`, the same move errand's guppy made to
+  `guppy-protocol` on 2026-07-04), the spec-C watch, and the standing
+  name-transfer offer.
 - **2026-07-03**: Spec + best-practices read; per-file audit of the workspace
   crate (solid: identity minting, gemmail parse, receive server, mailbox
   store; gaps: no client, 5/19 codes, no cert-identity read, silent
