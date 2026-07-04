@@ -66,16 +66,16 @@ deviations in the brief; revisit when scale demands).
 ### Phase C — replay + oracle test
 
 - `replay_delta_log(log) -> Graph`: fold `CapturedDelta`s into `Replay*`
-  deltas over an empty graph via `apply_graph_delta`. The current landed scope is
-  the structural + traversal + media + navigation chronology + light
-  node-content lane (add/remove node, assert/retract relation, append
-  traversal, thumbnail/favicon, navigate/branch/back/forward,
-  title/url/mime/viewer/tag/body style node setters, plus
-  property/classification/derivation enrichment plus classification/tag
-  presentation maintenance, semantic-predicate edge writes, field/coupling
-  writes, import-record truth, and deterministic frame-layout/history state);
-  the rest of the write path still needs stable-id replay forms before this can
-  become a full graph oracle.
+  deltas over an empty graph via `apply_graph_delta`. The current landed scope
+  now covers the sanctioned `GraphDelta` durable write lane end to end:
+  structural mutations, traversal/media/navigation chronology, the light
+  node-content and enrichment setters, classification/tag presentation
+  maintenance, field/coupling lifecycle and membership writes, import-record
+  truth, session fidelity (`form_draft`, `session_scroll`), and deterministic
+  frame-layout/history state. `last_visited` now also replays through a
+  resolved timestamp form and round-trips through `GraphSnapshot` session
+  state, so the replay oracle is back to comparing canonicalized whole
+  snapshots for that field too.
 - Oracle test (the brief's §6 item 4 pattern): record a scripted session,
   replay the log, compare `GraphSnapshot`s. Resolve the timestamp question
   here. The current landed oracle normalizes the snapshot write-time
@@ -90,7 +90,10 @@ deviations in the brief; revisit when scale demands).
 ### Phase D — apparatus table stats
 
 - A small stats convention (a struct, not a framework): per table, kind label,
-  row count, estimated bytes, deltas this session, last dirty-set size.
+  row count, estimated bytes, deltas this session, last dirty-set size. This
+  belongs to Meerkat's apparatus surface now that apparatus has been extracted
+  from `platen`; the cartography crate should stay out of diagnostics-surface
+  ownership.
 - Sources, in wiring order:
   1. kernel: node count, edge count by family, history owner/entry counts,
      delta-log length (from Phase B when active);
@@ -173,6 +176,22 @@ deviations in the brief; revisit when scale demands).
   `SetNodeTagIconOverride`, with kernel and `meerkat` replay tests asserting
   classification status/primary changes, classification removal, and tag-icon
   overrides survive the log round-trip.
+- 2026-07-03: field admin slice landed. Added stable-id replay/capture for
+  `ActivateField` and `RetractCoupling`, extending the existing field/coupling
+  replay lane from add/retire/strength writes to the remaining lifecycle and
+  membership operations.
+- 2026-07-03: session-fidelity slice landed. Added stable-id replay/capture for
+  `SetNodeFormDraft` and `SetNodeSessionScroll`, with kernel and `meerkat`
+  replay tests asserting those per-node session restore fields survive the log
+  round-trip.
+- 2026-07-03: last-visited slice landed. Added a resolved timestamp replay form
+  for `TouchNodeLastVisited`, so the recorder replays the actual observed
+  `last_visited` instant instead of minting a second `now`.
+- 2026-07-03: snapshot closure landed for `last_visited`. Added
+  `last_visited_ms` to persisted per-node session state, wired the
+  `Graph::to_snapshot` / `from_snapshot` round-trip, restored the dedicated
+  snapshot test, and returned the `meerkat` log replay oracle to full
+  canonicalized `GraphSnapshot` comparison for that field.
 - 2026-07-02: apparatus engine-document stats slice landed. Content actors now
   ship focused-document Serval observables (`DomArenaStats` plus optional
   `LayoutBatchStats`) through the host update stream; the constellation caches
@@ -185,3 +204,9 @@ deviations in the brief; revisit when scale demands).
   the constellation caches them beside the latest scene, and apparatus renders
   focused-document scene op-count / encoded-size rows or an explicit
   unavailable/awaiting message for lanes that do not currently have a scene.
+- 2026-07-03: apparatus stats-model slice landed. Replaced the old ad hoc
+  `(label, value)` table rows with a Meerkat-side typed apparatus stat model
+  (kind label, count, optional bytes, optional session deltas, optional last
+  dirty-set size, empty-state text), keeping the ownership boundary out of
+  `platen` while rendering richer kernel / engine / scene diagnostics from the
+  same apparatus pane.

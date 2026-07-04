@@ -1,7 +1,8 @@
 # Misfin Standalone Promotion Plan
 
 **Date**: 2026-07-03
-**Status**: Executed same-session; a short tail remains (below).
+**Status**: **Complete 2026-07-04, archived.** Standing watches only: the
+misfin(C) spec discussion, and the name-transfer offer to lem.
 **Scope**: Promote `crates/murm/misfin` out of the workspace into a standalone
 public repo, completed to specification prototype B, and point the workspace
 at it. The first workspace-crate analogue of the
@@ -61,10 +62,10 @@ protocol's author (lem) gets the name on request.
 
 - ~~crates.io publish of 0.0.2~~ **done 2026-07-04** (Mark published; the
   registry now carries the MIT relicense, the send client, and the CLI).
-- **Send-path unification**: mere still sends misfin mail via
-  `errand::misfin_send`; the crate now owns a spec-complete client, so errand's
-  bespoke sender can eventually delegate or retire. Not urgent; errand is
-  serval-side.
+- ~~Send-path unification~~ **done 2026-07-04**: errand 0.1.2 delegates
+  `misfin_send` to `misfin::client::send` (misfin 0.0.3 grew a selectable TLS
+  provider — ring for errand — and client cert chains to make it possible),
+  alongside spartan/nex delegations to their crates.
 - **Out of scope, recorded**: multi-domain hosting + CA-signed mailbox certs
   (spec §3.1 advanced), behaviors behind codes 42/43/44/64, and the
   community's post-B spec discussions (misfin "C") — revisit if the upstream

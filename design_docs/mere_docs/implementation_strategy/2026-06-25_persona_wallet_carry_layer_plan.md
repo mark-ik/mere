@@ -30,12 +30,12 @@ the shared short auth string before grant issuance, and on install restores the 
 grant, persona wallet manifests, roster enrollment, grant index, and the current plaintext
 private epoch against that local delegated-device identity. Remote-auth revocation can now
 also mark a delegated device revoked, clear its persona wallet slot grants, block new
-enrollment-bundle export, and rotate future-write private epochs when that device had
-`private.read`. The remaining gap is still the actual PAKE/QR chrome, transport UI around
-that shared secret, automatic re-wrap/distribution of the new epoch for the remaining
-devices, per-persona encryption-at-rest and epoch-history usage beyond the current epoch,
-copy-mode export/import, and replacing the temporary plaintext seed/epoch/device-identity
-bridges with the encrypted vault path.
+enrollment-bundle export, rotate future-write private epochs when that device had
+`private.read`, and refresh the remaining pairing-backed delegated grants with new wrapped
+epoch material for the rotated head. The remaining gap is still the actual PAKE/QR chrome,
+transport UI around that shared secret, per-persona encryption-at-rest and epoch-history
+usage beyond the current epoch, copy-mode export/import, and replacing the temporary
+plaintext seed/epoch/device-identity/wrapping-key bridges with the encrypted vault path.
 
 This doc answers three questions that turned out to be one: how do you *carry* a persona
 across devices, is that mechanism the same for engrams and history, and is data private
@@ -577,8 +577,31 @@ current head, and replacement of the temporary plaintext bridges as the live sea
   private epoch head for granted personas when the revoked grant had `private.read`, and
   blocks new enrollment-bundle export for revoked devices. Meerkat's manual/admin omnibar
   seam now also records `revoke_remote_auth_device("<device-id>")` and routes it through
-  that runtime path. Automatic re-wrap/distribution of the new epoch to the remaining
-  delegated devices is still open.
+  that runtime path.
+- **2026-07-03** — landed the next carry-layer refresh slice:
+  pairing-backed remote-auth grant issuance now retains a temporary identity-level
+  wrapping-key bridge, and delegated-device revocation now uses that bridge to re-sign the
+  still-authorized remote-auth grants with fresh wrapped epoch material for the rotated
+  `private_epoch_head`, updating roster grant refs, identity `grant_index`, and persona
+  `capability_slots` coherently. This closes the immediate "rotate locally but strand the
+  remaining delegated devices on the old epoch" gap. Focused runtime tests now also prove
+  that the revoked device is blocked at enrollment export while a still-authorized device
+  can install the refreshed enrollment bundle and recover the rotated current epoch.
+  The encrypted vault replacement for that wrapping-key bridge is still open.
+- **2026-07-03** — landed the next Meerkat admin-host slice:
+  the omnibar seam can now also `remote_auth_devices()` to list the known delegated devices
+  with their UUID, label, active-vs-revoked state, exposure, and whether the current grant
+  carries `private.read`. This does not replace the eventual roster UI, but it closes the
+  raw-discoverability gap around `revoke_remote_auth_device("<uuid>")` in the manual/admin
+  host path.
+- **2026-07-03** — landed the next Meerkat admin-host slice:
+  the omnibar seam can now also `export_remote_auth_enrollment("<device-id>")` to emit a
+  fresh enrollment bundle for an already-enrolled delegated device. Pairing-backed
+  `private.read` grants now retain their original pairing `ticket_id` in the temporary
+  wrapping-key bridge so that refreshed enrollment bundles still carry the right restore
+  metadata for the delegatee side. This keeps the manual/admin recovery path viable after
+  revocation-triggered epoch rotation, without pretending the encrypted-vault replacement
+  for that bridge is done.
 
 ## Findings (research, 2026-06-25)
 

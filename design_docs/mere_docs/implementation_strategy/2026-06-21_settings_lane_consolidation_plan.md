@@ -8,7 +8,7 @@ overlay + apparatus settings sections retired into `pelt/*`, tab cap on `pelt/ap
 absorbs the node-facets / node-editor work as the `node:` provider.
 **Code**: `crates/meerkat/` (apparatus, settings overlay, context menu, the tile-render arm),
 `serval/ports/pelt-core` (the `ContentSource::Settings` contract, already present),
-`crates/platen/domain/apparatus`.
+`crates/domain/apparatus`.
 **Siblings**:
 [node_editor_customization_probe](../research/2026-06-21_node_editor_customization_probe.md)
 (the node editor + sprite + hitbox axis, hosted by the `node:` provider here),

@@ -2,13 +2,15 @@
 
 **Date**: 2026-07-02
 **Status**: P1/P2/P3-first-slice/P4/P5/P6/P7 promoted. P8's input-snapshot seam,
-first two domain moves, and roster's pure helper layer landed, but the
-roster/pane-data host builders still remain in `meerkat`. The follow-up review
-on 2026-07-02 tightened P3/P4/P8 before code move. A later implementation pass
-on 2026-07-02 landed P1/P2/P5/P6/P7 and then re-ran the P3 seam check. The
-compile witness for P1/P2 is still blocked by unrelated workspace breakage
-(`session-runtime` and earlier `graph-kernel` errors), but the nearby imports
-settled enough to confirm the wider P3 contract shape below.
+first two domain moves, roster's pure helper layer, roster's explicit builder
+contract, and graphlet builder contract landed. `pane_data.rs` now has explicit
+local input structs and pure builders too, but the store-backed pane rows still
+remain in `meerkat`. The follow-up review on 2026-07-02 tightened P3/P4/P8
+before code move. A later implementation pass on 2026-07-02 landed P1/P2/P5/P6/P7
+and then re-ran the P3 seam check. The compile witness for P1/P2 is still
+blocked by unrelated workspace breakage (`session-runtime` and earlier
+`graph-kernel` errors), but the nearby imports settled enough to confirm the
+wider P3 contract shape below.
 **Scope**: Promote host-neutral domain and infrastructure modules out of the
 `meerkat` crate into workspace crates, and consolidate what stays. meerkat is
 54,760 LOC across ~86 modules, with ~85 of them declared in `main.rs` (the bin)
@@ -236,6 +238,24 @@ view types currently leak into data.
   and apparatus now consume those helpers through `crates/domain/roster`,
   while the actual `WindowCtx` graph/store walks still stay local pending a
   later builder-input contract cut.
+- Fourth domain slice landed 2026-07-03: `crates/domain/roster` now owns
+  explicit input structs plus the pure row/detail/facet builders for the node,
+  link, and field roster surfaces. `roster_data.rs` was reduced to host-side
+  graph/cache reads that gather `NodeRowInput` / `LinkCardInput` /
+  `FieldDetailInput`-style values and call into the crate, while
+  `roster_facet_data.rs` now mostly delegates facet-card assembly there too.
+- Fifth domain slice landed 2026-07-03: the same roster crate now owns the
+  graphlet row/card contract as well, via explicit graphlet input structs and
+  pure builders for drift labels, selector labels, and card summaries.
+  `roster_data.rs` now gathers graphlet/member-family state locally and hands
+  it over as `GraphletRowInput` / `GraphletCardInput`.
+- `pane_data.rs` follow-up slice landed 2026-07-03: the pane row assembly now
+  runs through explicit local input structs and pure helper builders
+  (`TrailPaneInput`, `AlembicPaneInput`, `ApparatusSyncInput`) instead of
+  mixing store/graph reads directly into the button/text row construction.
+  That is an honest in-crate seam, not a promoted domain crate yet: the
+  output still uses `PaneItem`, and the deleted-node / engram store reads stay
+  host-local.
 - Second inversion slice landed 2026-07-02: the roster row/card/subject
   vocabulary now lives in `roster_model.rs`; `roster.rs` keeps the stylesheet
   surface plus re-exports, while `roster_data.rs`, `roster_facet_data.rs`,
@@ -305,8 +325,9 @@ Verified by grepping each candidate's `use` lines. "crate-refs" counts
   embeddings/signals (wrong home for crawl); `crates/import` is browser-data
   import producing page seeds (right shape for web_clip);
   `crates/shell/chrome` is the designed home for chrome view-models;
-  `crates/platen/domain/{apparatus,gloss,workbench}` is the current pane-domain
-  layout the second-pass P8 answer deliberately narrows; `meerkat-browser-worker`
+  `crates/platen/domain/workbench` plus the domain-side `apparatus`/`gloss`
+  crates are the current pane-domain layout the second-pass P8 answer
+  deliberately narrows; `meerkat-browser-worker`
   is a 109-LOC bootstrap that does not yet consume the transfer wire form (the
   fork risk P3 still preempts once its contract boundary is chosen).
 - Precedent: the serval render glue extraction (2026-06-11) established the
@@ -343,6 +364,11 @@ Verified by grepping each candidate's `use` lines. "crate-refs" counts
   affinity; the mere-domain gate cited only archived gpui-era docs, so this
   plan sets the layout). Reworded the command.rs rationale from consumer-pull
   to host-vocabulary-by-nature.
+- **2026-07-03**: apparatus moved out of platen. The old
+  `crates/platen/domain/apparatus` crate now lives at the top-level
+  `crates/domain/apparatus` home, matching the already-landed `gloss` and
+  `roster` moves and leaving `platen` with only its own retained
+  `workbench` domain.
 - **2026-07-02** (follow-up live-code review): tightened the implementation
   order before code move. P3 no longer claims `transfer.rs` can move as a
   standalone wire file: it also depends on `ContentCommand`, `ContentState`,
@@ -383,6 +409,22 @@ Verified by grepping each candidate's `use` lines. "crate-refs" counts
   builders. `roster_data.rs`, `roster_facet_data.rs`, the graphlet view, and
   apparatus were cut over to the crate boundary; the remaining work is the
   heavier builder-input extraction from `WindowCtx`.
+- **2026-07-03**: P8's fourth domain move landed. `crates/domain/roster` now
+  owns explicit input structs and pure builders for node/link/field rows,
+  details, and facet cards. `roster_data.rs` and `roster_facet_data.rs` were
+  cut down to host-side data gathering plus crate calls. Verified with
+  `cargo check -p roster --lib`, `cargo check -p meerkat --lib`, and
+  `cargo test -p roster --lib`.
+- **2026-07-03**: P8's fifth domain move landed. `crates/domain/roster` now
+  owns explicit graphlet row/card inputs and builders too, so graphlet drift
+  labels, selector labels, and card summaries no longer live in
+  `roster_data.rs`. In the same pass, `pane_data.rs` was reduced to host-side
+  data gathering plus local pure builders over named pane inputs
+  (`TrailPaneInput`, `AlembicPaneInput`, `ApparatusSyncInput`). Verified with
+  `cargo check -p roster --lib`, `cargo check -p meerkat --lib`, and
+  `cargo test -p roster --lib`; a targeted `cargo test -p meerkat --lib` pane
+  test hit unrelated `serval-layout` compile errors and does not reflect this
+  slice itself.
 - **2026-07-02** (later implementation pass): P8's next inversion slice landed.
   `roster_model.rs` now owns the roster snapshot vocabulary, `roster.rs` was
   reduced to stylesheet plus compatibility re-exports, and the roster

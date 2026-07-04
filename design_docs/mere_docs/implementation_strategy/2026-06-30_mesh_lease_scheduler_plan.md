@@ -128,6 +128,41 @@ lane.
 
 ---
 
+## Prior art: burn-remote over iroh (noted 2026-07-03)
+
+Burn's `burn-remote` gained iroh as its **primary transport** (tracel-ai/burn
+PR #5111, on main 2026-07; unreleased — burn 0.21 is what mere pins in
+`intel/embed` / `eidetic-search` / `aether`). Before any bespoke compute-worker
+protocol is written for this mesh, evaluate it: the shape matches this plan
+family point-for-point.
+
+- **The compute half of the mesh, ready-made**: a peer advertises devices; a
+  client holds `Device::remote_iroh(&node, peer, idx)` and tensor ops execute
+  remotely. Their `p2p-remote-training` example is the personal-fleet picture.
+- **Authorization is the tessera/kith seam**: `RemoteTicket` carries an
+  `EndpointAddr` plus *opaque credential bytes*; the compute peer's
+  `PeerAuthorizer` callback verifies them — signature format, expiry, and fleet
+  membership are explicitly application concerns. A tessera receipt or kith
+  capability grant plugs in without burn knowing either exists.
+- **Composes onto murm's endpoint**: burn registers as an ALPN on an
+  application-owned `iroh::protocol::Router` (`accept(BURN_REMOTE_ALPN, ..)`),
+  so it mounts on the same endpoint/identity/relay policy Mere already runs —
+  no second identity, no second connection pool. "Applications own the endpoint
+  configuration" is their stated design.
+- **Peer-to-peer tensor movement uses short-lived capabilities**: transfers go
+  source-peer → destination-peer directly (not via the client), gated by a
+  random short-lived capability bound to the destination's authenticated
+  endpoint identity, download-count-limited.
+- **Also reopens the deferred geist/serving lane**: their `remote-inference-web`
+  example (wasm client, remote compute peer) is the right shape for the no-JIT
+  browser lane — though browser-side transport is websocket, not iroh, so the
+  web story is transport-asymmetric for now.
+
+Caveats: freshly landed (expect API churn before it stabilizes in a release);
+burn is a heavy tree to widen beyond the current ndarray-only embed pin; and
+lease semantics (this plan's core) stay ours — burn gives execution + authz
+hooks, not owner-reclaim or heartbeat policy.
+
 ## Done Conditions
 
 - A worker that stops heartbeating is reassigned.
@@ -143,3 +178,6 @@ lane.
   narrowed to lease lifecycle, owner reclaim, and device policy.
 - **2026-06-30** - Added storage checkpoint and optional uptime classes so
   storage reliability does not leak into the default compute lease rule.
+- **2026-07-03** - Added the burn-remote-over-iroh prior-art section (Mark
+  flagged tracel-ai/burn PR #5111): the compute-worker protocol + authz seam
+  this mesh would otherwise hand-roll. Watch for the post-0.21 burn release.

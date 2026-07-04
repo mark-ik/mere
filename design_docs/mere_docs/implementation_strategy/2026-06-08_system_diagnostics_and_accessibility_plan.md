@@ -30,7 +30,7 @@ through typed observations and actions rather than raw pixel puppetry.
 - `crates/shell/frame` now gives meerkat a real pane tree. Its projected leaves
   are the natural unit for diagnostics, focus, accessibility bounds, and agent
   action targets.
-- `crates/platen/domain/apparatus` is a useful domain skeleton for an
+- `crates/domain/apparatus` is a useful domain skeleton for an
   accessibility projection, but the current rendered pane belongs in `meerkat`
   like roster/gloss/comms. The domain crate should not be mistaken for a full UI.
 - `crates/shell/chrome` still has valuable Graphshell-era shell semantics:
