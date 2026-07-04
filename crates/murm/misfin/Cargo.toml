@@ -3,6 +3,7 @@ name = "misfin"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "Misfin (gemini-style mail) for Mere: vault-derived self-signed mailbox identity, gemmail parsing, and a TLS receive server (the `server` feature). Sending is errand's transport."
 
 [features]
