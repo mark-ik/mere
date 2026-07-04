@@ -47,6 +47,7 @@ fn fake_activation(rx: std::sync::mpsc::Receiver<ContentUpdate>, graph_id: Graph
         requested_band: (0, 0),
         links: Vec::new(),
         find_matches: Vec::new(),
+        page_text_selection: None,
         engine_stats: None,
         scene_stats: None,
         find_query: String::new(),

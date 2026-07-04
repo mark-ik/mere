@@ -162,13 +162,13 @@ impl WindowCtx<'_> {
         // `element_scroll` (the wheel drives `scroll_at`); `emit_paint_list` folds it in, so the
         // host no longer mirrors the offset into `chrome_scroll`. (Host-scroll P2.)
 
-        let (chrome_scene, chrome_us, external_texture_placements) =
-            self.render_chrome_scene(w, h, cursor, &chrome_scroll, &pane_css);
+        let (chrome, chrome_us, external_texture_placements) =
+            self.render_chrome_scene(w, h, orrery_rect, cursor, &chrome_scroll, &pane_css);
         // The "last visit" snapshot card (focused, visited, not live) + the "unvisited"
         // placeholder card (focused node, no snapshot yet): both composite on their own
         // path below. `snapshot_card` is `(member, url, dest rect, scene)` — the scene is
-        // `Some` only when it must be (re)rasterized this frame; once its texture is cached
-        // by url, later frames carry `None`.
+        // `Some` only when it must be (re)rasterized this frame; once its image is cached
+        // for that member's current URL, later frames carry `None`.
         let (snapshot_card, unvisited_card) = self.compute_focus_cards(workbench_rect, orrery_rect);
 
         // Reap every compat WebView whose member isn't a surface shown this frame:
@@ -178,7 +178,8 @@ impl WindowCtx<'_> {
         // lifecycle; multi-tile.)
         let shown: std::collections::HashSet<GraphMemberId> =
             scrying_surfaces.iter().map(|(m, _)| *m).collect();
-        self.view.scrying.retain(&shown);
+        let reaped_thumbnails = self.view.scrying.retain(&shown);
+        self.persist_scrying_thumbnails(reaped_thumbnails);
 
         self.finalize_content_rects(&cards, unvisited_card, &snapshot_card, &scrying_surfaces);
 
@@ -193,7 +194,7 @@ impl WindowCtx<'_> {
         // The shared core (rasterize / compose) + this window's surface (acquire /
         // format); both checked present at the method entry. (MW3: one device, N surfaces.)
         self.paint_frame(PaintInputs {
-            chrome_scene,
+            chrome,
             orrery_scene,
             orrery_redraw,
             orrery_w,

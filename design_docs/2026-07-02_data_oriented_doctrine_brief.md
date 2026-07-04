@@ -194,6 +194,47 @@ shared core.
    review question for any new cache/index/payload design: which existing
    instance is this, and what are its kind/in/out/data. If the answer is
    "none, genuinely new," §5's sketch is the starting point.
+7. **Dormancy ladder for live executable state.** Item 5's answer (persist the
+   log, not the tables) is for *data* models; it does not transfer to a JS
+   heap, which holds executable state (closures over live environments,
+   bytecode) with no data-shaped mirror to serialize. But real browsers do
+   not persist heaps across tab discard either — they persist a small data
+   mirror (URL, scroll, form state, history) and re-execute on restore. That
+   mirror already exists in this stack, one layer above the heap: the
+   compositing snapshot data-URI (dormant surfaces, already named "the
+   suspended-tab model" in
+   [native_surface_compositing_plan](archive_docs/2026-07-03_completed_plans/2026-06-19_native_surface_compositing_plan.md)),
+   the DOM-as-HTML snapshot (item 2's DOM plan), the native cookie/storage
+   store, and the session-override replay lane (`SetNodeFormDraft`/
+   `SetNodeSessionScroll` in the graph-delta plan). The mirror pattern holds;
+   it just applies one altitude above the heap, to the session, not the
+   runtime.
+
+   Three dormancy tiers follow, each with a different honesty contract:
+   **live** (actor running); **heap-clone suspend** (same process,
+   `GcAgent::snapshot_clone`, exact resume — Promise chains and WeakMap
+   identity intact); **discarded** (survives restart, thaw re-executes
+   against the restored session mirror, and the surface must say so — a
+   tier-3 tab that returns must not present as one that never left). Nova's
+   index-shaped heap is the tier-2 differentiator: a clone is a handful of
+   `Vec`/`SoAVec` memcpys (§4 point 1), not a pointer-graph walk, so many
+   suspended-but-warm heaps can plausibly live in one process where a
+   pointer-heavy engine could not afford it, pushing tier 3 to fire under
+   real memory pressure rather than by default.
+
+   The irreducible residue is host entanglement, not code: `snapshot_clone`
+   already clears only each realm's `[[HostDefined]]` slot and refuses to run
+   with jobs still queued; bytecode and closures clone as ordinary heap data
+   alongside everything else. The one heap-serialization idea that stays
+   honest is a controlled-checkpoint snapshot: clone a realm once its
+   intrinsics are warmed but before user closures or host references exist —
+   the same move V8/SpiderMonkey startup snapshots make, and the one the WPT
+   harness already exploits post-`testharness.js`-eval. Its same-process form
+   is proven; a cross-restart form is the one heap-serialization project with
+   bounded scope, worth keeping named rather than planned — and its payoff
+   for scripted-tile spin-up (as opposed to WPT's testharness.js case) is
+   unconfirmed until Mere's own scripted tiles are shown to run a
+   prelude-shaped cost of their own.
 
 ## 7. Anti-goals
 
@@ -218,6 +259,16 @@ shared core.
   mutation stream, doc-tag fence), `components/serval-layout/box_tree.rs` +
   `incremental.rs` (layout arena, classify/coalesce, paint-only skip),
   `components/xilem-serval/src/lib.rs` (view diff → DomMutation).
+- §6 item 7 (dormancy ladder): nova_vm
+  `ecmascript/execution/agent.rs` (`GcAgent::snapshot_clone`,
+  `Agent::clone_for_snapshot`) and `heap.rs` (`Heap::clone`) for the
+  same-process primitive; serval `components/script-engine-nova/lib.rs`
+  (`NovaEngine::snapshot_clone`) and `components/script-runtime-api/lib.rs`
+  (`Runtime::snapshot_clone`) for the embedding wrapper; serval
+  `docs/2026-06-24_wpt_harness_exactness_plan.md` §H2 for the
+  checkpoint-snapshot precedent (clone posted after `testharness.js` eval);
+  [native_surface_compositing_plan](archive_docs/2026-07-03_completed_plans/2026-06-19_native_surface_compositing_plan.md)
+  for the pre-existing visual-layer "suspended-tab model" the ladder extends.
 - Nova provenance: [What is the Nova JavaScript engine?](https://trynova.dev/blog/what-is-the-nova-javascript-engine),
   [Web Engines Hackfest 2024 slides](https://webengineshackfest.org/2024/slides/nova_javascript_engine_exploring_a_data-oriented_engine_design_by_aapo_alasuutari.pdf).
   Wasm intent: upstream repo tagline ("A JavaScript and WebAssembly engine

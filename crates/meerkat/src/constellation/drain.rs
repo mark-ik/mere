@@ -143,6 +143,22 @@ impl Constellation {
                             }
                         }
                     }
+                    ContentUpdate::TextSelection {
+                        nav,
+                        viewport_gen,
+                        selection,
+                    } => {
+                        if let Some(activation) = self.active.get_mut(&member) {
+                            let stamp = Generations {
+                                nav,
+                                viewport: viewport_gen,
+                            };
+                            if activation.gens.accepts(stamp) {
+                                activation.page_text_selection = selection;
+                                out.any_scene = true;
+                            }
+                        }
+                    }
                     ContentUpdate::EngineStats {
                         nav,
                         viewport_gen,
@@ -206,6 +222,7 @@ impl Constellation {
         activation.rx = rx;
         activation.gens = Generations::default();
         activation.shown = None; // force the next drive() to re-Show, replaying the page
+        activation.page_text_selection = None;
         activation.engine_stats = None;
         activation.scene_stats = None;
         activation.respawns += 1;

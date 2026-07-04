@@ -27,6 +27,14 @@
 
 use forme::GraphMemberId;
 
+/// A captured live-surface thumbnail ready to persist onto the node when a WebView goes away.
+pub struct CapturedThumbnail {
+    pub png_bytes: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+    pub url: Option<String>,
+}
+
 /// A mouse button, host-neutral (mapped to scrying's vocabulary inside the
 /// Windows pool). (Scrying tile plan, X2.)
 #[derive(Clone, Copy)]
@@ -74,18 +82,25 @@ impl ScryingHost {
     }
 
     /// Drop `member`'s WebView (if any). The shared pin is untouched.
-    pub fn reap(&mut self, member: GraphMemberId) {
+    pub fn reap(&mut self, member: GraphMemberId) -> Option<CapturedThumbnail> {
         #[cfg(all(target_os = "windows", feature = "engine-scry"))]
-        self.pool.reap(member);
+        return self.pool.reap(member);
         #[cfg(not(all(target_os = "windows", feature = "engine-scry")))]
-        let _ = member;
+        {
+            let _ = member;
+            None
+        }
     }
 
     /// Drop every WebView in this window's pool (multi-graph switch, mirrors
     /// `Constellation::clear`). The shared pins are cleared by the caller.
-    pub fn clear(&mut self) {
+    pub fn clear(&mut self) -> Vec<(GraphMemberId, CapturedThumbnail)> {
         #[cfg(all(target_os = "windows", feature = "engine-scry"))]
-        self.pool.clear();
+        return self.pool.clear();
+        #[cfg(not(all(target_os = "windows", feature = "engine-scry")))]
+        {
+            Vec::new()
+        }
     }
 
     /// Reap every live tile whose member is not in `keep` (the surfaces shown this
@@ -95,11 +110,17 @@ impl ScryingHost {
     /// `new_attached`), so any number of compat tiles can stay live at once; this is
     /// just the "drop what's gone" pass. Called each frame before the shown surfaces
     /// are driven. (X2/X3 lifecycle; multi-tile.)
-    pub fn retain(&mut self, keep: &std::collections::HashSet<GraphMemberId>) {
+    pub fn retain(
+        &mut self,
+        keep: &std::collections::HashSet<GraphMemberId>,
+    ) -> Vec<(GraphMemberId, CapturedThumbnail)> {
         #[cfg(all(target_os = "windows", feature = "engine-scry"))]
-        self.pool.retain(keep);
+        return self.pool.retain(keep);
         #[cfg(not(all(target_os = "windows", feature = "engine-scry")))]
-        let _ = keep;
+        {
+            let _ = keep;
+            Vec::new()
+        }
     }
 
     /// Spawn / resize / navigate `member`'s WebView as needed and pump one
@@ -152,6 +173,18 @@ impl ScryingHost {
     pub fn texture_view(&self, member: GraphMemberId) -> Option<&wgpu::TextureView> {
         #[cfg(all(target_os = "windows", feature = "engine-scry"))]
         return self.pool.texture_view(member);
+        #[cfg(not(all(target_os = "windows", feature = "engine-scry")))]
+        {
+            let _ = member;
+            None
+        }
+    }
+
+    /// Capture a thumbnail from a live WebView without reaping it. Used for navigation-away
+    /// deposits where the tile stays open but its node retargets to a new URL.
+    pub fn capture_thumbnail(&mut self, member: GraphMemberId) -> Option<CapturedThumbnail> {
+        #[cfg(all(target_os = "windows", feature = "engine-scry"))]
+        return self.pool.capture_thumbnail(member);
         #[cfg(not(all(target_os = "windows", feature = "engine-scry")))]
         {
             let _ = member;

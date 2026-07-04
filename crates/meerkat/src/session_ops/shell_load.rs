@@ -103,7 +103,9 @@ impl crate::Shell {
         // collapse the duplicate so it doesn't render blank. (Pane-as-unit.)
         ctx.view.frame_layout.dedupe_graph_panes();
         ctx.shared.content.constellation.reap_graph(old_gid);
-        ctx.view.scrying.clear();
+        let cleared_thumbnails = ctx.view.scrying.clear();
+        ctx.persist_scrying_thumbnails(cleared_thumbnails);
+        ctx.persist_workbench_boundary_thumbnails();
         ctx.shared.content.engine_pins.clear();
         ctx.view.scrying_input_focus = None;
         ctx.view.scrying_rects.clear();
@@ -171,6 +173,11 @@ impl crate::Shell {
             Ok(session_runtime::WalletBootstrapMode::DelegatedEnrolled) => {
                 tracing::info!(
                     "wallet bootstrap preserved delegated-device wallet state during session load"
+                );
+            }
+            Ok(session_runtime::WalletBootstrapMode::Locked) => {
+                tracing::info!(
+                    "wallet startup is locked during session load; sealed local secrets will stay unavailable until unlock support lands"
                 );
             }
             Ok(session_runtime::WalletBootstrapMode::CopySeeded) => {}

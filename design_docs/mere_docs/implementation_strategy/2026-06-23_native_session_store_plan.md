@@ -1,8 +1,11 @@
 # Mere-native session + storage store
 
 **Date**: 2026-06-23
-**Status**: Findings resolved; foundational thread (persistent shared jar + flip
-SESSION layer + standard `Cookie` shape) in progress this session.
+**Status**: Immediate HTTP/session work landed; 2026-07-04 reconciliation found
+the scripted-rung cookie wiring has also landed. Remaining native-session work is
+the JS-cookie persistence trigger, durable `localStorage` host backing, flip-back
+SESSION import, live multi-persona jar selection, and web-privacy refinements
+(`Partitioned` / top-level-site storage keys).
 **Origin**: surfaced building the verso serval→scrying flip
 ([flipcarrier plan](../../verso_docs/implementation_strategy/2026-06-23_serval_scrying_flipcarrier_plan.md)).
 Carrying a login across a flip forced the question: *what is Mere's own session
@@ -120,21 +123,22 @@ One **Mere session substrate**, standard-shaped, consumed by every engine:
      `3cf326a`): a `CookieProvider` host seam (mirroring `ComputedStyleHandler` /
      `FetchHandler`) plus a `document.cookie` accessor; `get_cookies` returns the
      document's script-visible cookies, `set_cookie` records one assignment. Tested on
-     boa + nova. The seam advances serval's web-engine completeness and is ready for
-     any consumer that runs serval's JS (pelt/WPT today; meerkat later). **Remaining
-     (meerkat wiring, scoped below):** impl `CookieProvider` over the session jar and
-     set it on the page's serval runtime — *gated on meerkat actually running serval's
-     JS runtime*, which it does not yet (verified 2026-06-23: meerkat renders fetched
-     HTML through serval's **static layout**, no `BoaEngine`/`NovaEngine`/`Runtime`; the
-     `ScriptInstance` in meerkat is mere's `mere:script` WIT, a different runtime). So
-     this waits on the page-JS-execution lane, not just on a green build.
+     boa + nova. **Meerkat wiring landed later:** the `serval.scripted` rung builds a
+     `ScriptedDocument<BoaEngine>` from the already-fetched body and installs a
+     `JarCookieProvider` over `fetch::session_jar()`, hiding `HttpOnly` cookies from
+     script and marking the jar dirty on writes. This is not the default static HTML
+     lane, but it is a live Meerkat consumer now. **Remaining:** dirty JS cookie writes
+     still persist only when `persist_cookies` is called; move the dirty-gated flush to
+     host event-loop drain or another regular host tick so a JS-only cookie change
+     survives restart without waiting for a later page fetch. Also add a source-aware
+     `set_cookie` refinement so script cannot set `HttpOnly`.
    - **6b. Durable storage areas** — *engine seam done 2026-06-23* (serval `3ed0ed0`):
      a `StorageProvider` host seam (mirroring `CookieProvider`); when set, the
      `localStorage` `__storage*` sinks route through it (the in-memory
      `HostState.storage` stays the default for tests / WPT). The host backs it durably
      and persona+origin-partitioned (e.g. eidetic write-through). Tested on boa + nova.
-     **Remaining (host impl, same page-JS gating as 6a):** a `StorageProvider` over
-     eidetic keyed by `(persona, origin)`, set on the page runtime. `sessionStorage`
+     **Remaining (host impl):** a `StorageProvider` over eidetic keyed by
+     `(persona, origin)`, set on the scripted-rung page runtime. `sessionStorage`
      (per-session, not durable) and IndexedDB (a much larger spec) are separate.
 7. **Flip-back SESSION** *(future, scoped below)* — read the WebView jar
    (`request_all_cookies`) into the substrate on flip-back.
@@ -143,20 +147,23 @@ One **Mere session substrate**, standard-shaped, consumed by every engine:
 
 ### 6a — meerkat `CookieProvider` wiring
 
-**Prerequisite (verified 2026-06-23):** meerkat does not run serval's JS runtime yet —
-fetched HTML renders through serval's static layout, with no `Runtime` /
-`BoaEngine` / `NovaEngine` instantiated. So `document.cookie` is never invoked in the
-live path; the wiring below applies once the page-JS-execution lane lands (or in any
-serval-JS consumer like pelt). The seam is built and tested; this is the consumer.
+**Update 2026-07-04:** this prerequisite is stale. Meerkat now has a scripted rung
+(`serval.scripted`) that instantiates `ScriptedDocument<BoaEngine>` over the fetched
+body. It is still opt-in by engine route, not the default static HTML lane, but
+`document.cookie` is invoked in a live Meerkat path.
 
-When meerkat (or another host) runs serval's JS, it supplies the implementation:
+What landed:
 
 - A `CookieProvider` over `(document_url, session_jar())`. `get_cookies` =
   `jar.records_for(url, SameSiteContext::same_site())`, **filtered to `!http_only`**
   (script must not see HttpOnly cookies), rendered `n=v; n=v`. `set_cookie` =
   `jar.set_cookie(url, header)` + arm `COOKIES_DIRTY`.
-- Set it via `runtime.set_cookie_provider(...)` where the content actor already calls
-  `set_base_url` / `set_fetch_handler` (locate that serval-glue site).
+- The content actor passes it into `ScriptedDocument::<BoaEngine>::from_body(...)`;
+  serval installs it before scripts run, so load-time scripts see the session jar.
+- Regression coverage: `scripted_rung_document_cookie_reaches_the_jar`.
+
+Remaining:
+
 - **Persist trigger gap**: today the durable write fires after a *page fetch*. A
   JS-set cookie happens in the content actor off the fetch lifecycle, so move the
   (dirty-gated, cheap) `persist_cookies` call to fire on each host event-loop drain, so
@@ -225,12 +232,9 @@ jar to follow the active persona:
 - **2026-06-23 (thread 6a engine seam)**: serval gained `document.cookie` via a
   `CookieProvider` host seam mirroring `ComputedStyleHandler` (serval `3cf326a`; native
   `__cookieGet`/`__cookieSet` sinks + a `Document.prototype.cookie` accessor; tested on
-  boa + nova). **Found** while scoping the meerkat wiring: meerkat doesn't run serval's
-  JS runtime yet (static-layout render only), so `document.cookie` has no live consumer
-  in meerkat — the wiring is gated on the page-JS-execution lane, not a green build (the
-  seam is ready for pelt/WPT and any future JS consumer). The same gating applies to
-  thread 6b (durable `localStorage` is also JS-accessed), so all of thread 6 is
-  serval-engine work whose *meerkat* payoff awaits the page-JS lane. Also scoped:
+  boa + nova). **2026-07-04 note:** the original scoping sentence here said Meerkat
+  had no live Serval-JS consumer yet. That was true on 2026-06-23 but is stale now;
+  the scripted-rung Meerkat consumer landed later, as recorded below. Also scoped:
   flip-back SESSION (thread 7, awaits flip-back) and multi-persona (awaits v1). **The
   immediate-mere-payoff session work — threads 1-5 + the incremental refinement — is
   done: HTTP sessions persist, survive restart, and cross the flip.**
@@ -242,3 +246,13 @@ jar to follow the active persona:
   6a's page-JS gating. With this, serval's cookie + localStorage stores are both
   host-backable durably; `sessionStorage` / IndexedDB / the Cookie Store API remain
   separate standards items.
+- **2026-07-04 (reconciliation)**: the 6a Meerkat gating note had gone stale. The
+  scripted rung now runs Serval's JS runtime (`ScriptedDocument<BoaEngine>`) for
+  `serval.scripted` nodes, installs `JarCookieProvider` over the shared session jar,
+  filters `HttpOnly` on reads, and marks cookies dirty on writes. Verified against
+  `content/actor.rs`, `content/mod.rs`, `fetch/cookies.rs`, and the
+  `scripted_rung_document_cookie_reaches_the_jar` test. Remaining is narrower than
+  the old plan said: flush dirty JS cookies on host drain, add durable
+  `(persona, origin)` `localStorage` backing for the scripted rung, implement
+  flip-back SESSION import, and later replace the process-global jar with a live
+  per-persona registry.

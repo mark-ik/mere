@@ -97,6 +97,10 @@ pub enum CommsCommand {
     /// Connect the cabal to a peer from its join ticket (bootstrap the overlay so
     /// the two converge).
     ConnectCabal(String),
+    /// Retry startup after an explicit wallet unlock.
+    UnlockNow,
+    /// Return comms to an offline state after a manual relock.
+    LockNow,
 }
 
 /// A result the comms actor delivers back to the UI loop.
@@ -117,6 +121,8 @@ pub enum CommsUpdate {
         misfin_address: String,
         cabal_ticket: Option<String>,
     },
+    /// Comms is offline and local identity/connect info should be cleared.
+    Offline(String),
 }
 
 /// The vault-derived client identity this install sends misfin mail with: the
@@ -155,62 +161,39 @@ pub fn spawn_comms(wake: Wake, dir: PathBuf) -> (ActorHandle<CommsCommand>, Rece
             .build()
             .expect("build the comms runtime");
 
-        let CommsSetup {
-            backends,
-            cabal_live,
-            misfin_address,
-            cabal_ticket,
-        } = match runtime.block_on(build_comms(&dir)) {
-            Ok(setup) => setup,
+        let mut backends = match activate_comms(&runtime, &out, &dir) {
+            Ok(backends) => Some(backends),
             Err(err) => {
                 tracing::warn!(%err, "comms disabled: backend setup failed");
-                return;
+                out.emit(CommsUpdate::Offline(err));
+                None
             }
         };
-
-        // Surface this install's connect info: the misfin receive address + the
-        // cabal join ticket to share with a peer.
-        out.emit(CommsUpdate::Identity {
-            misfin_address,
-            cabal_ticket,
-        });
-
-        // The live cabal lane: a post landing (a peer's over gossip / LogSync, or
-        // our own) refreshes the open thread + the list, so the pane updates without
-        // a manual reload.
-        if let Some((mut rx, conversation)) = cabal_live {
-            let drain_comms = backends.comms.clone();
-            let drain_out = out.clone();
-            runtime.spawn(async move {
-                loop {
-                    match rx.recv().await {
-                        Ok(_post) => {
-                            if let Ok(messages) = drain_comms.messages(&conversation).await {
-                                drain_out.emit(CommsUpdate::Thread(conversation.clone(), messages));
-                            }
-                            drain_out.emit(CommsUpdate::Inbox(drain_comms.inbox().await));
-                        }
-                        Err(broadcast::error::RecvError::Lagged(_)) => continue,
-                        Err(broadcast::error::RecvError::Closed) => break,
-                    }
-                }
-            });
-        }
-
-        let comms = &backends.comms;
-        // Emit the initial inbox so the pane has data the first time it opens.
-        out.emit(CommsUpdate::Inbox(runtime.block_on(comms.inbox())));
 
         while let Ok(command) = commands.recv() {
             match command {
                 CommsCommand::Refresh => {
+                    let Some(backends) = backends.as_ref() else {
+                        continue;
+                    };
+                    let comms = &backends.comms;
                     out.emit(CommsUpdate::Inbox(runtime.block_on(comms.inbox())));
                 }
-                CommsCommand::Open(id) => match runtime.block_on(comms.messages(&id)) {
-                    Ok(messages) => out.emit(CommsUpdate::Thread(id, messages)),
-                    Err(err) => tracing::warn!(%err, "comms: loading a thread failed"),
-                },
+                CommsCommand::Open(id) => {
+                    let Some(backends) = backends.as_ref() else {
+                        continue;
+                    };
+                    let comms = &backends.comms;
+                    match runtime.block_on(comms.messages(&id)) {
+                        Ok(messages) => out.emit(CommsUpdate::Thread(id, messages)),
+                        Err(err) => tracing::warn!(%err, "comms: loading a thread failed"),
+                    }
+                }
                 CommsCommand::Send(draft) => {
+                    let Some(backends) = backends.as_ref() else {
+                        continue;
+                    };
+                    let comms = &backends.comms;
                     let Some(target) = draft.conversation.clone() else {
                         continue;
                     };
@@ -245,12 +228,76 @@ pub fn spawn_comms(wake: Wake, dir: PathBuf) -> (ActorHandle<CommsCommand>, Rece
                     }
                 }
                 CommsCommand::ConnectCabal(ticket) => {
+                    let Some(backends) = backends.as_ref() else {
+                        continue;
+                    };
                     let outcome = connect_cabal(&runtime, &backends, &ticket);
                     out.emit(CommsUpdate::SendOutcome(outcome));
+                }
+                CommsCommand::UnlockNow => {
+                    if backends.is_some() {
+                        continue;
+                    }
+                    match activate_comms(&runtime, &out, &dir) {
+                        Ok(new_backends) => {
+                            tracing::info!("comms resumed after wallet unlock");
+                            backends = Some(new_backends);
+                        }
+                        Err(err) => {
+                            tracing::warn!(%err, "comms stayed offline after wallet unlock");
+                            out.emit(CommsUpdate::Offline(err));
+                        }
+                    }
+                }
+                CommsCommand::LockNow => {
+                    backends = None;
+                    out.emit(CommsUpdate::Offline(
+                        "wallet relocked; comms stay offline until the next unlock".to_string(),
+                    ));
                 }
             }
         }
     })
+}
+
+fn activate_comms(
+    runtime: &tokio::runtime::Runtime,
+    out: &Emitter<CommsUpdate>,
+    dir: &Path,
+) -> Result<CommsBackends, String> {
+    let CommsSetup {
+        backends,
+        cabal_live,
+        misfin_address,
+        cabal_ticket,
+    } = runtime.block_on(build_comms(dir))?;
+
+    out.emit(CommsUpdate::Identity {
+        misfin_address,
+        cabal_ticket,
+    });
+
+    if let Some((mut rx, conversation)) = cabal_live {
+        let drain_comms = backends.comms.clone();
+        let drain_out = out.clone();
+        runtime.spawn(async move {
+            loop {
+                match rx.recv().await {
+                    Ok(_post) => {
+                        if let Ok(messages) = drain_comms.messages(&conversation).await {
+                            drain_out.emit(CommsUpdate::Thread(conversation.clone(), messages));
+                        }
+                        drain_out.emit(CommsUpdate::Inbox(drain_comms.inbox().await));
+                    }
+                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(broadcast::error::RecvError::Closed) => break,
+                }
+            }
+        });
+    }
+
+    out.emit(CommsUpdate::Inbox(runtime.block_on(backends.comms.inbox())));
+    Ok(backends)
 }
 
 /// Connect the cabal to a peer from its join `ticket`: register the peer's address
@@ -290,7 +337,9 @@ async fn build_comms(dir: &Path) -> Result<CommsSetup, String> {
     let comms_dir = dir.join("comms");
     std::fs::create_dir_all(&comms_dir).map_err(|error| error.to_string())?;
 
-    let seed = load_wallet_seed(dir);
+    let seed = load_wallet_seed(dir).ok_or_else(|| {
+        "wallet startup is locked; comms stay offline until unlock support lands".to_string()
+    })?;
     let provider: Arc<dyn IdentityProvider> = Arc::new(InMemoryProvider::from_seed(seed));
     let misfin_address = local_misfin_address();
 
@@ -438,23 +487,40 @@ async fn build_cabal(
 
 /// Load the wallet root's shared master seed, warning and falling back to an
 /// ephemeral launch-local seed if bootstrap failed earlier.
-fn load_wallet_seed(data_root: &Path) -> [u8; 32] {
+fn load_wallet_seed(data_root: &Path) -> Option<[u8; 32]> {
     match session_runtime::load_identity_seed(data_root) {
-        Ok(Some(seed)) => seed,
+        Ok(Some(seed)) => Some(seed),
         Ok(None) => {
-            tracing::warn!(
-                ?data_root,
-                "identity seed missing; comms identity is ephemeral this launch"
-            );
-            InMemoryProvider::random().master_keypair().to_seed()
+            if session_runtime::identity_seed_locked_at_startup(data_root) {
+                tracing::warn!(
+                    ?data_root,
+                    "wallet startup is locked; comms identity stays offline this launch"
+                );
+                None
+            } else {
+                tracing::warn!(
+                    ?data_root,
+                    "identity seed missing; comms identity is ephemeral this launch"
+                );
+                Some(InMemoryProvider::random().master_keypair().to_seed())
+            }
         }
         Err(err) => {
-            tracing::warn!(
-                %err,
-                ?data_root,
-                "identity seed unavailable; comms identity is ephemeral this launch"
-            );
-            InMemoryProvider::random().master_keypair().to_seed()
+            if session_runtime::identity_seed_locked_at_startup(data_root) {
+                tracing::warn!(
+                    %err,
+                    ?data_root,
+                    "wallet startup is locked; comms identity stays offline this launch"
+                );
+                None
+            } else {
+                tracing::warn!(
+                    %err,
+                    ?data_root,
+                    "identity seed unavailable; comms identity is ephemeral this launch"
+                );
+                Some(InMemoryProvider::random().master_keypair().to_seed())
+            }
         }
     }
 }

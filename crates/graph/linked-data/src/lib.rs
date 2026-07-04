@@ -14,9 +14,10 @@
 //! uses its canonical Mere IRI ([`kernel::graph::predicate_iri`]) or short term,
 //! while an open predicate passes through verbatim. The other edge families
 //! (Traversal, Containment, …) are Mere's *experience* layer and are not exported.
-//! Curated literals only (no general property bag): `title` → `schema:name`,
-//! `tags` → `schema:keywords`; `@id` is the node's URL, or a skolemized
-//! `urn:uuid:` IRI when it has none.
+//! Curated literals stay on their fast paths (`title` → `schema:name`, `tags` →
+//! `schema:keywords`), and the open node property bag projects as RDF literals
+//! with datatype / language-tag fidelity. `@id` is the node's URL, or a
+//! skolemized `urn:uuid:` IRI when it has none.
 //!
 //! **Ingest.** [`from_jsonld`] parses a document into a [`GraphContribution`]
 //! (via `oxjsonld`); [`from_jsonld_with_contexts`] resolves a remote `@context`
@@ -31,9 +32,11 @@
 
 use kernel::graph::{Graph, Node, NodeKey, SemanticData, predicate_iri, sub_kind_from_iri};
 use kernel::types::ClassificationScheme;
-use oxrdf::{GraphName, Literal, NamedNode, Quad, Term};
+use kernel::types::{GraphScope, NodeProperty};
+use oxrdf::{GraphName, Literal, NamedNode, Quad, Term, Triple};
 use serde_json::{Map, Value, json};
 use std::collections::BTreeMap;
+use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 /// JSON-LD ingest (Phase 2): `application/ld+json` → a graph contribution.
 pub mod ingest;
@@ -57,6 +60,16 @@ pub(crate) const SCHEMA_NAME: &str = "https://schema.org/name";
 pub(crate) const SCHEMA_KEYWORDS: &str = "https://schema.org/keywords";
 /// `rdf:type` — the predicate JSON-LD `@type` expands to.
 pub(crate) const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+const RDF_REIFIES: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies";
+const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
+const PROV_WAS_ATTRIBUTED_TO: &str = "http://www.w3.org/ns/prov#wasAttributedTo";
+const PROV_GENERATED_AT_TIME: &str = "http://www.w3.org/ns/prov#generatedAtTime";
+const XSD_STRING: &str = "http://www.w3.org/2001/XMLSchema#string";
+const XSD_DATETIME: &str = "http://www.w3.org/2001/XMLSchema#dateTime";
+const GRAPH_SCOPE_SOURCE: &str = "https://mere.computer/ns/graph#source";
+const GRAPH_SCOPE_USER: &str = "https://mere.computer/ns/graph#user";
+const GRAPH_SCOPE_AGENT: &str = "https://mere.computer/ns/graph#agent";
+const GRAPH_SCOPE_MOOT: &str = "https://mere.computer/ns/graph#moot";
 
 /// Export the whole graph as expanded JSON-LD: a [`Value::Array`] of node
 /// objects, one per graph node, in node-insertion order. Deterministic (tags and
@@ -91,7 +104,13 @@ fn node_id(node: &Node) -> String {
 /// predicate (raw or canonical) wins and is emitted verbatim; otherwise each
 /// recognized sub-kind maps to its canonical Mere IRI.
 fn edge_predicates(semantic: &SemanticData) -> Vec<String> {
-    if let Some(predicate) = &semantic.predicate {
+    if !semantic.statements().is_empty() {
+        semantic
+            .statements()
+            .iter()
+            .map(|statement| statement.predicate.clone())
+            .collect()
+    } else if let Some(predicate) = &semantic.predicate {
         vec![predicate.clone()]
     } else {
         semantic
@@ -102,30 +121,159 @@ fn edge_predicates(semantic: &SemanticData) -> Vec<String> {
     }
 }
 
-/// Push a quad `subject —predicate→ object` in the default graph, skipping it
-/// when `predicate` is not a valid IRI.
-fn push_quad(quads: &mut Vec<Quad>, subject: &NamedNode, predicate: &str, object: Term) {
-    if let Ok(predicate) = NamedNode::new(predicate) {
+fn graph_name_for_scope(scope: &GraphScope) -> Option<GraphName> {
+    match scope {
+        GraphScope::Default => Some(GraphName::DefaultGraph),
+        GraphScope::Source => NamedNode::new(GRAPH_SCOPE_SOURCE).ok().map(GraphName::from),
+        GraphScope::User => NamedNode::new(GRAPH_SCOPE_USER).ok().map(GraphName::from),
+        GraphScope::Agent => NamedNode::new(GRAPH_SCOPE_AGENT).ok().map(GraphName::from),
+        GraphScope::Moot => NamedNode::new(GRAPH_SCOPE_MOOT).ok().map(GraphName::from),
+        GraphScope::Custom(iri) => NamedNode::new(iri.as_str()).ok().map(GraphName::from),
+    }
+}
+
+/// Push a quad `subject —predicate→ object` in the given graph scope, skipping
+/// it when either the predicate or the graph name is not a valid IRI.
+fn push_quad(
+    quads: &mut Vec<Quad>,
+    subject: &NamedNode,
+    predicate: &str,
+    object: Term,
+    graph_scope: &GraphScope,
+) {
+    if let (Ok(predicate), Some(graph_name)) =
+        (NamedNode::new(predicate), graph_name_for_scope(graph_scope))
+    {
+        quads.push(Quad::new(subject.clone(), predicate, object, graph_name));
+    }
+}
+
+fn property_literal(property: &NodeProperty) -> Literal {
+    if let Some(lang) = property.lang.as_deref()
+        && let Ok(literal) = Literal::new_language_tagged_literal(property.value.clone(), lang)
+    {
+        return literal;
+    }
+    if let Some(datatype) = property.datatype.as_deref()
+        && datatype != XSD_STRING
+        && let Ok(datatype) = NamedNode::new(datatype)
+    {
+        return Literal::new_typed_literal(property.value.clone(), datatype);
+    }
+    Literal::new_simple_literal(property.value.clone())
+}
+
+fn statement_reifier_id(statement_id: &str) -> String {
+    format!("urn:mere:statement:{statement_id}")
+}
+
+fn asserted_at_literal(asserted_at_ms: u64) -> Option<Literal> {
+    let timestamp =
+        OffsetDateTime::from_unix_timestamp_nanos(i128::from(asserted_at_ms) * 1_000_000).ok()?;
+    let lexical = timestamp.format(&Rfc3339).ok()?;
+    let datatype = NamedNode::new(XSD_DATETIME).ok()?;
+    Some(Literal::new_typed_literal(lexical, datatype))
+}
+
+fn push_statement_metadata_quads(
+    quads: &mut Vec<Quad>,
+    subject: &NamedNode,
+    statement_id: &str,
+    predicate: &str,
+    object: Term,
+    graph_scope: &GraphScope,
+    label: Option<&str>,
+    provenance_iri: Option<&str>,
+    asserted_at_ms: Option<u64>,
+) {
+    let Ok(reifier) = NamedNode::new(statement_reifier_id(statement_id)) else {
+        return;
+    };
+    let Ok(predicate_node) = NamedNode::new(predicate) else {
+        return;
+    };
+    let Some(graph_name) = graph_name_for_scope(graph_scope) else {
+        return;
+    };
+    let Ok(rdf_reifies) = NamedNode::new(RDF_REIFIES) else {
+        return;
+    };
+
+    quads.push(Quad::new(
+        reifier.clone(),
+        rdf_reifies,
+        Term::from(Triple::new(subject.clone(), predicate_node, object)),
+        graph_name.clone(),
+    ));
+
+    if let Some(label) = label
+        && let Ok(predicate) = NamedNode::new(RDFS_LABEL)
+    {
         quads.push(Quad::new(
-            subject.clone(),
+            reifier.clone(),
             predicate,
-            object,
-            GraphName::DefaultGraph,
+            Term::from(Literal::new_simple_literal(label)),
+            graph_name.clone(),
+        ));
+    }
+    if let Some(provenance_iri) = provenance_iri
+        && let (Ok(predicate), Ok(agent)) = (
+            NamedNode::new(PROV_WAS_ATTRIBUTED_TO),
+            NamedNode::new(provenance_iri),
+        )
+    {
+        quads.push(Quad::new(
+            reifier.clone(),
+            predicate,
+            Term::from(agent),
+            graph_name.clone(),
+        ));
+    }
+    if let Some(asserted_at_ms) = asserted_at_ms
+        && let (Ok(predicate), Some(literal)) = (
+            NamedNode::new(PROV_GENERATED_AT_TIME),
+            asserted_at_literal(asserted_at_ms),
+        )
+    {
+        quads.push(Quad::new(
+            reifier,
+            predicate,
+            Term::from(literal),
+            graph_name,
         ));
     }
 }
 
-/// The RDF quads for one node: its `@id` subject carrying `rdf:type`, the curated
-/// literals (`schema:name` / `schema:keywords`), the recognized and raw
-/// `Semantic` edges, and the open literal properties, all in the default graph.
-///
-/// This is the single kernel-to-RDF projection. The expanded and compacted
-/// JSON-LD shapers both render from it (and a triple store can ingest it
-/// directly), so the mapping decisions live here once: `@id` skolemization, the
-/// title-equals-URL skip, and which edges and literals are emitted. A quad with a
-/// malformed subject or predicate IRI is skipped (the abstract model validates
-/// IRIs, where the old string path would have emitted invalid JSON-LD).
-pub fn node_quads(graph: &Graph, key: NodeKey, node: &Node) -> Vec<Quad> {
+fn literal_json_value(literal: &Literal) -> Value {
+    let mut value = Map::new();
+    value.insert(
+        "@value".to_string(),
+        Value::String(literal.value().to_string()),
+    );
+    if let Some(language) = literal.language() {
+        value.insert("@language".to_string(), Value::String(language.to_string()));
+    } else {
+        let datatype = literal.datatype().as_str();
+        if datatype != XSD_STRING {
+            value.insert("@type".to_string(), Value::String(datatype.to_string()));
+        }
+    }
+    Value::Object(value)
+}
+
+fn compact_literal_json_value(literal: &Literal) -> Value {
+    if literal.language().is_none() && literal.datatype().as_str() == XSD_STRING {
+        Value::String(literal.value().to_string())
+    } else {
+        literal_json_value(literal)
+    }
+}
+
+/// The direct RDF quads for one node: its `@id` subject carrying `rdf:type`,
+/// the curated literals (`schema:name` / `schema:keywords`), the recognized and
+/// raw `Semantic` edges, and the open literal properties, with graph scope taken
+/// from semantic statements / node properties.
+fn node_direct_quads(graph: &Graph, key: NodeKey, node: &Node) -> Vec<Quad> {
     let mut quads = Vec::new();
     let Ok(subject) = NamedNode::new(node_id(node)) else {
         return quads;
@@ -142,7 +290,13 @@ pub fn node_quads(graph: &Graph, key: NodeKey, node: &Node) -> Vec<Quad> {
     types.dedup();
     for ty in types {
         if let Ok(ty) = NamedNode::new(ty) {
-            push_quad(&mut quads, &subject, RDF_TYPE, ty.into());
+            push_quad(
+                &mut quads,
+                &subject,
+                RDF_TYPE,
+                ty.into(),
+                &GraphScope::Default,
+            );
         }
     }
 
@@ -155,6 +309,7 @@ pub fn node_quads(graph: &Graph, key: NodeKey, node: &Node) -> Vec<Quad> {
             &subject,
             SCHEMA_NAME,
             Literal::new_simple_literal(node.title.as_str()).into(),
+            &GraphScope::Default,
         );
     }
     let mut tags: Vec<&str> = node.tags.iter().map(String::as_str).collect();
@@ -165,12 +320,13 @@ pub fn node_quads(graph: &Graph, key: NodeKey, node: &Node) -> Vec<Quad> {
             &subject,
             SCHEMA_KEYWORDS,
             Literal::new_simple_literal(tag).into(),
+            &GraphScope::Default,
         );
     }
 
-    // Semantic edges -> predicate IRIs -> target `@id`s, sorted by (predicate,
-    // target) for a stable document.
-    let mut edges: Vec<(String, String)> = Vec::new();
+    // Semantic edges -> predicate IRIs -> target `@id`s, sorted by
+    // (predicate, target, graph) for a stable dataset.
+    let mut edges: Vec<(String, String, GraphScope)> = Vec::new();
     for target in graph.out_neighbors(key) {
         let Some(edge_key) = graph.find_edge_key(key, target) else {
             continue;
@@ -182,34 +338,176 @@ pub fn node_quads(graph: &Graph, key: NodeKey, node: &Node) -> Vec<Quad> {
             continue;
         };
         let target_id = node_id(target_node);
-        for predicate in edge_predicates(semantic) {
-            edges.push((predicate, target_id.clone()));
+        if !semantic.statements().is_empty() {
+            for statement in semantic.statements() {
+                edges.push((
+                    statement.predicate.clone(),
+                    target_id.clone(),
+                    statement.graph_scope.clone(),
+                ));
+            }
+        } else {
+            for predicate in edge_predicates(semantic) {
+                edges.push((predicate, target_id.clone(), GraphScope::Default));
+            }
         }
     }
     edges.sort();
-    for (predicate, target_id) in edges {
+    edges.dedup();
+    for (predicate, target_id, graph_scope) in edges {
         if let Ok(target) = NamedNode::new(target_id) {
-            push_quad(&mut quads, &subject, &predicate, target.into());
+            push_quad(
+                &mut quads,
+                &subject,
+                &predicate,
+                target.into(),
+                &graph_scope,
+            );
         }
     }
 
-    // Open literal properties, sorted by (predicate, value).
-    let mut props: Vec<(&str, &str)> = node
-        .properties
-        .iter()
-        .map(|p| (p.predicate.as_str(), p.value.as_str()))
-        .collect();
-    props.sort_unstable();
-    for (predicate, value) in props {
+    // Open literal properties, sorted by full literal identity.
+    let mut props: Vec<&NodeProperty> = node.properties.iter().collect();
+    props.sort_by(|a, b| {
+        (
+            a.predicate.as_str(),
+            a.value.as_str(),
+            a.datatype.as_deref(),
+            a.lang.as_deref(),
+            &a.graph_scope,
+        )
+            .cmp(&(
+                b.predicate.as_str(),
+                b.value.as_str(),
+                b.datatype.as_deref(),
+                b.lang.as_deref(),
+                &b.graph_scope,
+            ))
+    });
+    for property in props {
         push_quad(
             &mut quads,
             &subject,
-            predicate,
-            Literal::new_simple_literal(value).into(),
+            property.predicate.as_str(),
+            property_literal(property).into(),
+            &property.graph_scope,
         );
     }
 
     quads
+}
+
+/// Dataset-only metadata quads for one node. These are reifier nodes that carry
+/// statement handles plus provenance / time / label metadata without polluting
+/// the node-subject JSON-LD shaper.
+fn node_metadata_quads(graph: &Graph, key: NodeKey, node: &Node) -> Vec<Quad> {
+    let mut quads = Vec::new();
+    let Ok(subject) = NamedNode::new(node_id(node)) else {
+        return quads;
+    };
+
+    let mut semantic_statements = Vec::new();
+    for target in graph.out_neighbors(key) {
+        let Some(edge_key) = graph.find_edge_key(key, target) else {
+            continue;
+        };
+        let Some(semantic) = graph.get_edge(edge_key).and_then(|p| p.semantic_data()) else {
+            continue;
+        };
+        let Some(target_node) = graph.get_node(target) else {
+            continue;
+        };
+        let Ok(target_id) = NamedNode::new(node_id(target_node)) else {
+            continue;
+        };
+        for statement in semantic.statements() {
+            semantic_statements.push((
+                statement.predicate.clone(),
+                target_id.clone(),
+                statement.statement_id.clone(),
+                statement.graph_scope.clone(),
+                statement.label.clone(),
+                statement.provenance_iri.clone(),
+                statement.asserted_at_ms,
+            ));
+        }
+    }
+    semantic_statements
+        .sort_by(|a, b| (&a.0, a.1.as_str(), &a.3, &a.2).cmp(&(&b.0, b.1.as_str(), &b.3, &b.2)));
+    for (predicate, target, statement_id, graph_scope, label, provenance_iri, asserted_at_ms) in
+        semantic_statements
+    {
+        push_statement_metadata_quads(
+            &mut quads,
+            &subject,
+            &statement_id,
+            &predicate,
+            target.into(),
+            &graph_scope,
+            label.as_deref(),
+            provenance_iri.as_deref(),
+            asserted_at_ms,
+        );
+    }
+
+    let mut properties: Vec<&NodeProperty> = node.properties.iter().collect();
+    properties.sort_by(|a, b| {
+        (
+            a.predicate.as_str(),
+            a.value.as_str(),
+            a.datatype.as_deref(),
+            a.lang.as_deref(),
+            &a.graph_scope,
+            a.statement_id.as_str(),
+        )
+            .cmp(&(
+                b.predicate.as_str(),
+                b.value.as_str(),
+                b.datatype.as_deref(),
+                b.lang.as_deref(),
+                &b.graph_scope,
+                b.statement_id.as_str(),
+            ))
+    });
+    for property in properties {
+        push_statement_metadata_quads(
+            &mut quads,
+            &subject,
+            property.statement_id.as_str(),
+            property.predicate.as_str(),
+            property_literal(property).into(),
+            &property.graph_scope,
+            None,
+            property.provenance_iri.as_deref(),
+            property.asserted_at_ms,
+        );
+    }
+
+    quads
+}
+
+fn node_dataset_quads(graph: &Graph, key: NodeKey, node: &Node) -> Vec<Quad> {
+    let mut quads = node_direct_quads(graph, key, node);
+    quads.extend(node_metadata_quads(graph, key, node));
+    quads
+}
+
+/// The RDF quads for one node, restricted to the default graph. This remains
+/// the JSON-LD shaper's input until named-graph JSON-LD export lands.
+pub fn node_quads(graph: &Graph, key: NodeKey, node: &Node) -> Vec<Quad> {
+    node_direct_quads(graph, key, node)
+        .into_iter()
+        .filter(|quad| matches!(quad.graph_name, GraphName::DefaultGraph))
+        .collect()
+}
+
+/// The RDF dataset quads for the whole graph, including named-graph scoped
+/// semantic statements and node properties plus dataset-only reifier metadata.
+pub fn dataset_quads(graph: &Graph) -> Vec<Quad> {
+    graph
+        .nodes()
+        .flat_map(|(key, node)| node_dataset_quads(graph, key, node))
+        .collect()
 }
 
 fn node_object(graph: &Graph, key: NodeKey, node: &Node) -> Value {
@@ -232,7 +530,7 @@ fn node_object(graph: &Graph, key: NodeKey, node: &Node) -> Value {
         }
         let entry = match &quad.object {
             Term::NamedNode(object) => json!({ "@id": object.as_str() }),
-            Term::Literal(object) => json!({ "@value": object.value() }),
+            Term::Literal(object) => literal_json_value(object),
             _ => continue,
         };
         by_predicate
@@ -328,10 +626,7 @@ fn compact_node_object(
                 };
                 (emit_key, json!({ "@id": object.as_str() }))
             }
-            Term::Literal(object) => (
-                predicate.to_string(),
-                Value::String(object.value().to_string()),
-            ),
+            Term::Literal(object) => (predicate.to_string(), compact_literal_json_value(object)),
             _ => continue,
         };
         by_key.entry(emit_key).or_default().push(value);
@@ -373,11 +668,12 @@ fn compact_node_object(
 #[cfg(test)]
 mod tests {
     use super::{
-        EdgeContribution, GraphContribution, apply_contribution, from_jsonld, to_jsonld,
-        to_jsonld_compact,
+        EdgeContribution, GraphContribution, RDF_REIFIES, apply_contribution, from_jsonld,
+        node_quads, to_jsonld, to_jsonld_compact,
     };
     use kernel::graph::fixtures::GraphFixtures;
     use kernel::graph::{EdgeAssertion, Graph, SemanticSubKind};
+    use kernel::types::{GraphScope, NodeProperty};
     use serde_json::json;
 
     /// A graph with one recognized edge (A cites B, canonical IRI), one raw
@@ -419,6 +715,24 @@ mod tests {
         graph
     }
 
+    fn assert_property_fields(
+        property: &NodeProperty,
+        predicate: &str,
+        value: &str,
+        datatype: Option<&str>,
+        lang: Option<&str>,
+        graph_scope: GraphScope,
+    ) {
+        assert_eq!(property.predicate, predicate);
+        assert_eq!(property.value, value);
+        assert_eq!(property.datatype.as_deref(), datatype);
+        assert_eq!(property.lang.as_deref(), lang);
+        assert_eq!(property.graph_scope, graph_scope);
+        assert!(!property.statement_id.is_empty());
+        assert_eq!(property.provenance_iri, None);
+        assert_eq!(property.asserted_at_ms, None);
+    }
+
     #[test]
     fn empty_graph_exports_empty_array() {
         assert_eq!(to_jsonld(&Graph::new()), json!([]));
@@ -434,12 +748,14 @@ mod tests {
             .iter()
             .find(|n| n.id == "https://a.test/")
             .expect("node a");
-        assert_eq!(
-            node.properties,
-            vec![(
-                "https://schema.org/datePublished".to_string(),
-                "2026-06-02".to_string()
-            )]
+        assert_eq!(node.properties.len(), 1);
+        assert_property_fields(
+            &node.properties[0],
+            "https://schema.org/datePublished",
+            "2026-06-02",
+            None,
+            None,
+            GraphScope::Default,
         );
 
         let mut graph = Graph::new();
@@ -454,6 +770,62 @@ mod tests {
         assert_eq!(
             a["https://schema.org/datePublished"],
             json!([{ "@value": "2026-06-02" }])
+        );
+    }
+
+    #[test]
+    fn typed_and_language_tagged_properties_round_trip_via_the_property_bag() {
+        let doc = br#"{
+            "@id":"https://a.test/",
+            "https://schema.org/datePublished":[{"@value":"2026-06-02","@type":"http://www.w3.org/2001/XMLSchema#date"}],
+            "https://schema.org/headline":[{"@value":"Bonjour","@language":"fr"}]
+        }"#;
+        let contribution = from_jsonld(doc).expect("parse");
+        let node = contribution
+            .nodes
+            .iter()
+            .find(|n| n.id == "https://a.test/")
+            .expect("node a");
+        assert_eq!(node.properties.len(), 2);
+        assert_property_fields(
+            &node.properties[0],
+            "https://schema.org/datePublished",
+            "2026-06-02",
+            Some("http://www.w3.org/2001/XMLSchema#date"),
+            None,
+            GraphScope::Default,
+        );
+        assert_property_fields(
+            &node.properties[1],
+            "https://schema.org/headline",
+            "Bonjour",
+            None,
+            Some("fr"),
+            GraphScope::Default,
+        );
+
+        let mut graph = Graph::new();
+        apply_contribution(&mut graph, &contribution);
+        let exported = to_jsonld(&graph);
+        let a = exported
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|n| n["@id"] == json!("https://a.test/"))
+            .expect("exported node a");
+        assert_eq!(
+            a["https://schema.org/datePublished"],
+            json!([{
+                "@value": "2026-06-02",
+                "@type": "http://www.w3.org/2001/XMLSchema#date"
+            }])
+        );
+        assert_eq!(
+            a["https://schema.org/headline"],
+            json!([{
+                "@value": "Bonjour",
+                "@language": "fr"
+            }])
         );
     }
 
@@ -496,6 +868,36 @@ mod tests {
                 },
                 { "@id": "https://b.test/" },
                 { "@id": "https://c.test/" }
+            ])
+        );
+    }
+
+    #[test]
+    fn exports_multiple_statements_on_one_node_pair() {
+        let mut graph = Graph::new();
+        let a = graph.add_node("https://a.test/".to_string(), Default::default());
+        let b = graph.add_node("https://b.test/".to_string(), Default::default());
+
+        graph.assert_relation(
+            a,
+            b,
+            EdgeAssertion::Semantic {
+                sub_kind: SemanticSubKind::Cites,
+                label: None,
+                decay_progress: None,
+            },
+        );
+        graph.assert_semantic_predicate(a, b, "https://schema.org/citation".to_string());
+
+        assert_eq!(
+            to_jsonld(&graph),
+            json!([
+                {
+                    "@id": "https://a.test/",
+                    "https://mere.computer/ns/rel#cites": [{ "@id": "https://b.test/" }],
+                    "https://schema.org/citation": [{ "@id": "https://b.test/" }]
+                },
+                { "@id": "https://b.test/" }
             ])
         );
     }
@@ -556,11 +958,13 @@ mod tests {
             subject: "https://a.test/".into(),
             predicate: "https://mere.computer/ns/rel#cites".into(),
             object: "https://b.test/".into(),
+            graph_scope: GraphScope::Default,
         }));
         assert!(contribution.edges.contains(&EdgeContribution {
             subject: "https://a.test/".into(),
             predicate: "https://schema.org/citation".into(),
             object: "https://c.test/".into(),
+            graph_scope: GraphScope::Default,
         }));
     }
 
@@ -585,5 +989,132 @@ mod tests {
         )
         .expect("edge query");
         assert_eq!(cites.rows, vec![vec![Some("https://b.test/".to_string())]]);
+    }
+
+    #[cfg(feature = "query")]
+    #[test]
+    fn sparql_graph_clause_sees_scoped_statements_and_properties() {
+        let mut graph = Graph::new();
+        let a = graph.add_node("https://a.test/".to_string(), Default::default());
+        let b = graph.add_node("https://b.test/".to_string(), Default::default());
+
+        kernel::graph::apply::assert_semantic_relation_in_scope(
+            &mut graph,
+            a,
+            b,
+            SemanticSubKind::Cites,
+            None,
+            GraphScope::Source,
+        );
+        graph.get_node_mut(a).expect("node a").properties.push(
+            NodeProperty::new(
+                "https://schema.org/datePublished".to_string(),
+                "2026-07-04".to_string(),
+            )
+            .with_graph_scope(GraphScope::User),
+        );
+
+        let scoped_edge = crate::query::sparql(
+            &graph,
+            "SELECT ?t WHERE { GRAPH <https://mere.computer/ns/graph#source> { <https://a.test/> <https://mere.computer/ns/rel#cites> ?t } }",
+        )
+        .expect("scoped edge query");
+        assert_eq!(
+            scoped_edge.rows,
+            vec![vec![Some("https://b.test/".to_string())]]
+        );
+
+        let scoped_property = crate::query::sparql(
+            &graph,
+            "SELECT ?v WHERE { GRAPH <https://mere.computer/ns/graph#user> { <https://a.test/> <https://schema.org/datePublished> ?v } }",
+        )
+        .expect("scoped property query");
+        assert_eq!(
+            scoped_property.rows,
+            vec![vec![Some("2026-07-04".to_string())]]
+        );
+    }
+
+    #[cfg(feature = "query")]
+    #[test]
+    fn sparql_exposes_reifier_metadata_but_node_quads_stay_clean() {
+        let mut graph = Graph::new();
+        let a = graph.add_node("https://a.test/".to_string(), Default::default());
+        let b = graph.add_node("https://b.test/".to_string(), Default::default());
+
+        kernel::graph::apply::assert_semantic_relation_in_scope(
+            &mut graph,
+            a,
+            b,
+            SemanticSubKind::Cites,
+            Some("cites".to_string()),
+            GraphScope::Source,
+        );
+
+        let edge = graph.find_edge_key(a, b).expect("semantic edge");
+        let payload = graph.get_edge_mut(edge).expect("payload");
+        let statement = payload
+            .semantic
+            .as_mut()
+            .and_then(|semantic| semantic.statements.iter_mut().next())
+            .expect("semantic statement");
+        statement.statement_id = "stmt-edge-1".to_string();
+        statement.provenance_iri = Some("https://people.test/alice".to_string());
+        statement.asserted_at_ms = Some(1_720_000_000_123);
+
+        let mut property = NodeProperty::new(
+            "https://schema.org/datePublished".to_string(),
+            "2026-07-04".to_string(),
+        )
+        .with_graph_scope(GraphScope::User)
+        .with_metadata(
+            Some("https://people.test/bob".to_string()),
+            Some(1_720_000_100_456),
+        );
+        property.statement_id = "stmt-prop-1".to_string();
+        graph
+            .get_node_mut(a)
+            .expect("node a")
+            .properties
+            .push(property);
+
+        let (_, node_a) = graph.get_node_by_url("https://a.test/").expect("node a");
+        assert!(
+            node_quads(&graph, a, node_a)
+                .iter()
+                .all(|quad| quad.predicate.as_str() != RDF_REIFIES)
+        );
+
+        let edge_metadata = crate::query::sparql(
+            &graph,
+            "SELECT ?prov ?label WHERE {
+                GRAPH <https://mere.computer/ns/graph#source> {
+                    <urn:mere:statement:stmt-edge-1> <http://www.w3.org/ns/prov#wasAttributedTo> ?prov ;
+                                                     <http://www.w3.org/2000/01/rdf-schema#label> ?label .
+                }
+            }",
+        )
+        .expect("edge metadata query");
+        assert_eq!(
+            edge_metadata.rows,
+            vec![vec![
+                Some("https://people.test/alice".to_string()),
+                Some("cites".to_string()),
+            ]]
+        );
+
+        let property_metadata = crate::query::sparql(
+            &graph,
+            "SELECT ?prov WHERE {
+                GRAPH <https://mere.computer/ns/graph#user> {
+                    <urn:mere:statement:stmt-prop-1> <http://www.w3.org/ns/prov#wasAttributedTo> ?prov .
+                }
+            }",
+        )
+        .expect("property metadata query");
+        assert_eq!(
+            property_metadata.rows,
+            vec![vec![Some("https://people.test/bob".to_string())]]
+        );
     }
 }

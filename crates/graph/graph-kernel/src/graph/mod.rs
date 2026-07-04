@@ -42,9 +42,9 @@ use crate::persistence::{
 #[allow(unused_imports)] // Some used only in #[cfg(test)]
 use crate::types::{
     ClassificationProvenance, ClassificationScheme, ClassificationStatus, DominantEdge,
-    FrameLayoutHint, FrameLayoutNodeId, ImportRecord, ImportRecordMembership, NodeClassification,
-    NodeImportProvenance, NodeImportRecordSummary, NodeTagPresentationState, SplitOrientation,
-    format_imported_at_secs,
+    FrameLayoutHint, FrameLayoutNodeId, GraphScope, ImportRecord, ImportRecordMembership,
+    NodeClassification, NodeImportProvenance, NodeImportRecordSummary, NodeTagPresentationState,
+    SplitOrientation, format_imported_at_secs,
 };
 
 pub mod apply;
@@ -113,7 +113,7 @@ pub use capture::{
 };
 pub use edge_data::{
     ArrangementData, ContainmentData, EdgeMetrics, ImportedData, ProvenanceData, REL_VOCAB,
-    SemanticData, Traversal, TraversalData, predicate_iri, sub_kind_from_iri,
+    SemanticData, SemanticStatement, Traversal, TraversalData, predicate_iri, sub_kind_from_iri,
 };
 pub use edge_payload::EdgePayload;
 pub use edge_taxonomy::{

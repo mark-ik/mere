@@ -23,8 +23,8 @@ pub use crate::persistence_edge::{
     PersistedContainmentSubKind, PersistedEdge, PersistedEdgeAssertion, PersistedEdgeFamily,
     PersistedImportedEdgeData, PersistedImportedSubKind, PersistedNavigationTrigger,
     PersistedProvenanceEdgeData, PersistedProvenanceSubKind, PersistedRelationSelector,
-    PersistedSemanticEdgeData, PersistedSemanticSubKind, PersistedTraversalEdgeData,
-    PersistedTraversalMetrics, PersistedTraversalRecord,
+    PersistedSemanticEdgeData, PersistedSemanticStatement, PersistedSemanticSubKind,
+    PersistedTraversalEdgeData, PersistedTraversalMetrics, PersistedTraversalRecord,
 };
 
 use crate::graph::SharedNavigationMemory;
@@ -129,6 +129,8 @@ pub struct PersistedNodeSessionState {
     pub scroll_x: Option<f32>,
     pub scroll_y: Option<f32>,
     pub form_draft: Option<String>,
+    #[serde(default)]
+    pub last_visited_ms: Option<u64>,
 }
 
 /// Persisted node.

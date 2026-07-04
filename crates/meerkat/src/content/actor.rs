@@ -6,7 +6,7 @@
 
 use super::*;
 
-/// Build the scripted-rung document for a `serval.scripted` node: parse the already-
+/// Build the scripted-rung document for a scripted Serval node: parse the already-
 /// fetched HTML body and run its scripts. With a `fetcher`, external `<script src>` is
 /// fetched through it (`from_body`, no document re-fetch); without one, inline scripts
 /// only (`parse`). `None` for any other engine or a non-`Ready` state. (Render ladder.)
@@ -16,10 +16,7 @@ pub(crate) fn build_scripted(
     url: &str,
     state: Option<&ContentState>,
     fetcher: Option<&dyn pelt_desktop::ScriptResourceFetcher>,
-) -> Option<ScriptedDocument<BoaEngine>> {
-    if engine != inker::routing::ENGINE_SERVAL_SCRIPTED {
-        return None;
-    }
+) -> Option<HostScriptedDocument> {
     let Some(ContentState::Ready(fetched)) = state else {
         return None;
     };
@@ -28,13 +25,29 @@ pub(crate) fn build_scripted(
         url::Url::parse(url).ok().map(|parsed| {
             Box::new(JarCookieProvider { url: parsed }) as Box<dyn pelt_desktop::CookieProvider>
         });
-    let result = match fetcher {
-        Some(fetcher) => {
-            ScriptedDocument::<BoaEngine>::from_body(&fetched.body, fetcher, url, cookies)
-        }
-        // No fetcher (the blocking fetch could not be built): inline-only, no cookies.
-        None => ScriptedDocument::<BoaEngine>::parse(&fetched.body),
-    };
+    let result =
+        match engine {
+            inker::routing::ENGINE_SERVAL_SCRIPTED => match fetcher {
+                Some(fetcher) => {
+                    ScriptedDocument::<BoaEngine>::from_body(&fetched.body, fetcher, url, cookies)
+                        .map(HostScriptedDocument::Boa)
+                }
+                // No fetcher (the blocking fetch could not be built): inline-only, no cookies.
+                None => ScriptedDocument::<BoaEngine>::parse(&fetched.body)
+                    .map(HostScriptedDocument::Boa),
+            },
+            #[cfg(feature = "scripted-nova")]
+            inker::routing::ENGINE_SERVAL_SCRIPTED_NOVA => match fetcher {
+                Some(fetcher) => {
+                    ScriptedDocument::<NovaEngine>::from_body(&fetched.body, fetcher, url, cookies)
+                        .map(HostScriptedDocument::Nova)
+                }
+                // No fetcher (the blocking fetch could not be built): inline-only, no cookies.
+                None => ScriptedDocument::<NovaEngine>::parse(&fetched.body)
+                    .map(HostScriptedDocument::Nova),
+            },
+            _ => return None,
+        };
     match result {
         Ok(doc) => Some(doc),
         Err(err) => {
@@ -208,7 +221,8 @@ impl ContentRuntime {
                             &fetched.body,
                         );
                         #[cfg(feature = "scripted")]
-                        let is_scripted_rung = engine == inker::routing::ENGINE_SERVAL_SCRIPTED;
+                        let is_scripted_rung = inker::routing::serval_rung(&engine)
+                            == Some(inker::routing::ServalRung::Scripted);
                         #[cfg(not(feature = "scripted"))]
                         let is_scripted_rung = false;
                         if !is_scripted_rung {
@@ -343,6 +357,41 @@ impl ContentRuntime {
                         nav: content.nav,
                         viewport_gen,
                         matches,
+                    });
+                }
+            }
+            ContentCommand::SelectText {
+                anchor,
+                focus,
+                viewport_gen,
+            } => {
+                if let Some(content) = self.current.as_mut() {
+                    let wanted = RefCell::new(Vec::new());
+                    let selection = if ensure_html_layout(
+                        content,
+                        &self.store,
+                        &self.registry,
+                        &self.policy,
+                        &wanted,
+                    ) {
+                        let (doc, layout) = content.html.as_ref().expect("ensured");
+                        layout
+                            .select_text(doc, anchor, focus, &ScrollOffsets::default())
+                            .map(|selection| content_contract::TextSelectionMessage {
+                                rects: selection
+                                    .rects
+                                    .into_iter()
+                                    .map(|r| [r.x, r.y, r.x + r.width, r.y + r.height])
+                                    .collect(),
+                                text: selection.text,
+                            })
+                    } else {
+                        None
+                    };
+                    out.emit_update(ContentUpdate::TextSelection {
+                        nav: content.nav,
+                        viewport_gen,
+                        selection,
                     });
                 }
             }

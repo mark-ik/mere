@@ -18,10 +18,32 @@ use crate::persistence::{
     PersistedFieldExtent, PersistedFieldLifecycle, PersistedImportedEdgeData,
     PersistedImportedSubKind, PersistedNavigationTrigger, PersistedNode, PersistedNodeSelector,
     PersistedNodeSessionState, PersistedProvenanceEdgeData, PersistedProvenanceSubKind,
-    PersistedSemanticEdgeData, PersistedSemanticSubKind, PersistedTraversalEdgeData,
-    PersistedTraversalMetrics, PersistedTraversalRecord,
+    PersistedSemanticEdgeData, PersistedSemanticStatement, PersistedSemanticSubKind,
+    PersistedTraversalEdgeData, PersistedTraversalMetrics, PersistedTraversalRecord,
 };
 use crate::types::format_imported_at_secs;
+
+fn persisted_semantic_sub_kind(sub_kind: SemanticSubKind) -> PersistedSemanticSubKind {
+    match sub_kind {
+        SemanticSubKind::Hyperlink => PersistedSemanticSubKind::Hyperlink,
+        SemanticSubKind::UserGrouped => PersistedSemanticSubKind::UserGrouped,
+        SemanticSubKind::AgentDerived => PersistedSemanticSubKind::AgentDerived,
+        SemanticSubKind::Cites => PersistedSemanticSubKind::Cites,
+        SemanticSubKind::Quotes => PersistedSemanticSubKind::Quotes,
+        SemanticSubKind::Summarizes => PersistedSemanticSubKind::Summarizes,
+        SemanticSubKind::Elaborates => PersistedSemanticSubKind::Elaborates,
+        SemanticSubKind::ExampleOf => PersistedSemanticSubKind::ExampleOf,
+        SemanticSubKind::Supports => PersistedSemanticSubKind::Supports,
+        SemanticSubKind::Contradicts => PersistedSemanticSubKind::Contradicts,
+        SemanticSubKind::Questions => PersistedSemanticSubKind::Questions,
+        SemanticSubKind::SameEntityAs => PersistedSemanticSubKind::SameEntityAs,
+        SemanticSubKind::DuplicateOf => PersistedSemanticSubKind::DuplicateOf,
+        SemanticSubKind::CanonicalMirrorOf => PersistedSemanticSubKind::CanonicalMirrorOf,
+        SemanticSubKind::DependsOn => PersistedSemanticSubKind::DependsOn,
+        SemanticSubKind::Blocks => PersistedSemanticSubKind::Blocks,
+        SemanticSubKind::NextStep => PersistedSemanticSubKind::NextStep,
+    }
+}
 
 impl Graph {
     pub fn to_snapshot(&self) -> GraphSnapshot {
@@ -49,6 +71,11 @@ impl Graph {
                     scroll_x: node.session_scroll.map(|(x, _)| x),
                     scroll_y: node.session_scroll.map(|(_, y)| y),
                     form_draft: node.session_form_draft.clone(),
+                    last_visited_ms: node
+                        .last_visited
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .ok()
+                        .map(|duration| duration.as_millis() as u64),
                 }),
                 address: match node.primary_address() {
                     Address::Http(s) => PersistedAddress::Http(s.clone()),
@@ -106,53 +133,7 @@ impl Graph {
                                 data.sub_kinds
                                     .iter()
                                     .copied()
-                                    .map(|sub_kind| match sub_kind {
-                                        SemanticSubKind::Hyperlink => {
-                                            PersistedSemanticSubKind::Hyperlink
-                                        }
-                                        SemanticSubKind::UserGrouped => {
-                                            PersistedSemanticSubKind::UserGrouped
-                                        }
-                                        SemanticSubKind::AgentDerived => {
-                                            PersistedSemanticSubKind::AgentDerived
-                                        }
-                                        SemanticSubKind::Cites => PersistedSemanticSubKind::Cites,
-                                        SemanticSubKind::Quotes => PersistedSemanticSubKind::Quotes,
-                                        SemanticSubKind::Summarizes => {
-                                            PersistedSemanticSubKind::Summarizes
-                                        }
-                                        SemanticSubKind::Elaborates => {
-                                            PersistedSemanticSubKind::Elaborates
-                                        }
-                                        SemanticSubKind::ExampleOf => {
-                                            PersistedSemanticSubKind::ExampleOf
-                                        }
-                                        SemanticSubKind::Supports => {
-                                            PersistedSemanticSubKind::Supports
-                                        }
-                                        SemanticSubKind::Contradicts => {
-                                            PersistedSemanticSubKind::Contradicts
-                                        }
-                                        SemanticSubKind::Questions => {
-                                            PersistedSemanticSubKind::Questions
-                                        }
-                                        SemanticSubKind::SameEntityAs => {
-                                            PersistedSemanticSubKind::SameEntityAs
-                                        }
-                                        SemanticSubKind::DuplicateOf => {
-                                            PersistedSemanticSubKind::DuplicateOf
-                                        }
-                                        SemanticSubKind::CanonicalMirrorOf => {
-                                            PersistedSemanticSubKind::CanonicalMirrorOf
-                                        }
-                                        SemanticSubKind::DependsOn => {
-                                            PersistedSemanticSubKind::DependsOn
-                                        }
-                                        SemanticSubKind::Blocks => PersistedSemanticSubKind::Blocks,
-                                        SemanticSubKind::NextStep => {
-                                            PersistedSemanticSubKind::NextStep
-                                        }
-                                    })
+                                    .map(persisted_semantic_sub_kind)
                                     .collect()
                             })
                             .unwrap_or_default(),
@@ -163,11 +144,27 @@ impl Graph {
                         predicate: payload
                             .semantic_data()
                             .and_then(|data| data.predicate.clone()),
+                        statements: payload
+                            .semantic_statements()
+                            .iter()
+                            .map(|statement| PersistedSemanticStatement {
+                                statement_id: statement.statement_id.clone(),
+                                predicate: statement.predicate.clone(),
+                                recognized_sub_kind: statement
+                                    .recognized_sub_kind
+                                    .map(persisted_semantic_sub_kind),
+                                label: statement.label.clone(),
+                                graph_scope: statement.graph_scope.clone(),
+                                provenance_iri: statement.provenance_iri.clone(),
+                                asserted_at_ms: statement.asserted_at_ms,
+                            })
+                            .collect(),
                     })
                     .filter(|data| {
                         !data.sub_kinds.is_empty()
                             || data.label.is_some()
                             || data.predicate.is_some()
+                            || !data.statements.is_empty()
                     }),
                     traversal: payload
                         .traversal_data()

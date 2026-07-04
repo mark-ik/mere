@@ -19,6 +19,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use identity::StartupUnlockMode;
 use kernel::permissions::Permission;
 use serde::{Deserialize, Serialize};
 
@@ -135,6 +136,24 @@ pub struct PersistedSettings {
     /// — the baseline "a point or two larger" bump. (UI scale.)
     #[serde(default = "default_ui_zoom")]
     pub ui_zoom: f32,
+    /// Startup unlock policy for device-local wallet secrets. Defaults to `auto_os`
+    /// until the prompt/locked flows grow real chrome.
+    #[serde(default)]
+    pub startup_unlock_mode: StartupUnlockMode,
+    /// Whether the idle-cadence pass redeposits open workbench-tile thumbnails while
+    /// the app sits idle, on top of the always-on boundary-triggered deposits (tile
+    /// close, blur, navigation-away, app suspend). Defaults on. (Node/card summoning
+    /// design, §5 item 4 — "update while idle".)
+    #[serde(default = "default_snapshot_idle_refresh")]
+    pub snapshot_idle_refresh: bool,
+    /// The per-session cap, in megabytes, on thumbnail bytes the idle-refresh pass
+    /// will write before it stops depositing further snapshots this session.
+    /// Boundary-triggered deposits are never capped — they are the correctness-
+    /// critical path the summoning-design fix depends on; this only bounds the
+    /// extra, optional idle refresh. `None` = the host default. (Node/card summoning
+    /// design, §5 item 4 — the "per-session thumbnail byte cap".)
+    #[serde(default)]
+    pub snapshot_byte_cap_mb: Option<u32>,
 }
 
 /// The baseline chrome zoom: a touch larger than 1.0 so default text reads a point or
@@ -147,6 +166,12 @@ fn default_ui_zoom() -> f32 {
 /// `DEFAULT_LINEAR_DAMPING`); the seed when no setting is persisted.
 fn default_physics_damping() -> f32 {
     2.5
+}
+
+/// The idle-cadence snapshot refresh defaults on: it is what makes the preview
+/// card honest for tiles that sit open a long time without a boundary crossing.
+fn default_snapshot_idle_refresh() -> bool {
+    true
 }
 
 impl Default for PersistedSettings {
@@ -167,6 +192,9 @@ impl Default for PersistedSettings {
             capture_consent: None,
             retention_keep_n: None,
             ui_zoom: default_ui_zoom(),
+            startup_unlock_mode: StartupUnlockMode::default(),
+            snapshot_idle_refresh: default_snapshot_idle_refresh(),
+            snapshot_byte_cap_mb: None,
         }
     }
 }
@@ -250,6 +278,9 @@ mod tests {
             capture_consent: None,
             retention_keep_n: None,
             ui_zoom: 1.1,
+            startup_unlock_mode: StartupUnlockMode::Prompt,
+            snapshot_idle_refresh: true,
+            snapshot_byte_cap_mb: None,
         };
         save_settings(&dir, &original).unwrap();
         let restored = load_settings(&dir)
@@ -298,6 +329,9 @@ mod tests {
                 capture_consent: None,
                 retention_keep_n: None,
                 ui_zoom: 1.1,
+                startup_unlock_mode: StartupUnlockMode::AutoOs,
+                snapshot_idle_refresh: true,
+                snapshot_byte_cap_mb: None,
             },
         )
         .unwrap();
@@ -319,6 +353,9 @@ mod tests {
                 capture_consent: None,
                 retention_keep_n: None,
                 ui_zoom: 1.1,
+                startup_unlock_mode: StartupUnlockMode::Locked,
+                snapshot_idle_refresh: true,
+                snapshot_byte_cap_mb: None,
             },
         )
         .unwrap();

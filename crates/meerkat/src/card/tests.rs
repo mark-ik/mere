@@ -299,6 +299,7 @@ fn markdown_routes_through_nematic_to_glyph_runs() {
         &NoImageLoader,
         420,
         360,
+        0.0,
         &card_sheet(card_vocabulary()),
     );
     assert!(
@@ -429,6 +430,7 @@ fn html_routes_through_serval_to_glyph_runs() {
         &NoImageLoader,
         420,
         360,
+        0.0,
         &card_sheet(card_vocabulary()),
     );
     assert!(
@@ -496,6 +498,7 @@ fn html_lane_applies_page_supplied_style() {
         &NoImageLoader,
         420,
         360,
+        0.0,
         &card_sheet(card_vocabulary()),
     );
     assert_eq!(
@@ -517,6 +520,7 @@ fn html_lane_applies_page_supplied_style() {
         &NoImageLoader,
         420,
         360,
+        0.0,
         &card_sheet(card_vocabulary()),
     );
     assert!(
@@ -557,6 +561,7 @@ fn html_lane_applies_head_linked_stylesheet_through_the_loader() {
         &loader,
         420,
         360,
+        0.0,
         &card_sheet(card_vocabulary()),
     );
     assert_eq!(

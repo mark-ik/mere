@@ -314,6 +314,10 @@ impl WindowCtx<'_> {
                 // / pin).
                 self.view.active_content = crate::ContentPane::Workbench;
                 if button == MouseButton::Left {
+                    if self.try_begin_page_text_selection(x, y) {
+                        return;
+                    }
+                    self.clear_page_text_selection();
                     // Drive the pelt shell's pointer state machine: it hit-tests
                     // the frame (divider / tab / close) at the pane-local point
                     // and emits gestures the Workbench applies. (Drag via TileEvents.)
@@ -323,7 +327,7 @@ impl WindowCtx<'_> {
                 // The orrery pane: right-click opens the context menu; a left
                 // / middle press pans / selects / drags (unless it's over the
                 // orrery's card, which owns its own clicks).
-                self.view.active_content = crate::ContentPane::Orrery;
+                self.focus_orrery_content();
                 // Focus-follows-click: a press on a graph-pane moves focus to
                 // it, so the context menu, selection, and pointer all act on
                 // *this* pane (the existing handlers resolve focused_graph).

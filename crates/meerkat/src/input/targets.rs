@@ -112,8 +112,7 @@ impl WindowCtx<'_> {
         let Some((member, lx, ly)) = hit else {
             return false;
         };
-        self.view.workbench.activate(member);
-        self.view.focused_tile = Some(member);
+        self.focus_workbench_member(member);
         self.shared
             .content
             .constellation

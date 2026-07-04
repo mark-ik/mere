@@ -5,7 +5,7 @@
 //! SPARQL query over the graph (the `query` feature).
 //!
 //! An ephemeral, read-only query path: project the focused graph into an
-//! in-memory Oxigraph [`Store`] via [`crate::node_quads`] (the canonical
+//! in-memory Oxigraph [`Store`] via [`crate::dataset_quads`] (the canonical
 //! kernel-to-RDF projection), run a SPARQL query, return the solution rows. The
 //! store is built per call and dropped after, so there is no second persistence
 //! authority: the kernel stays truth, this is a derived view for interop and
@@ -17,16 +17,18 @@
 //! (both are the same RDF model at different crate versions); no shared-type
 //! version pin is needed.
 
+const XSD_STRING: &str = "http://www.w3.org/2001/XMLSchema#string";
+
 use kernel::graph::Graph;
 use oxigraph::model::{
     BlankNode as OxBlankNode, GraphName as OxGraphName, Literal as OxLiteral,
     NamedNode as OxNamedNode, NamedOrBlankNode as OxNamedOrBlankNode, Quad as OxQuad,
-    Term as OxTerm,
+    Term as OxTerm, Triple as OxTriple,
 };
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
 
-use crate::node_quads;
+use crate::dataset_quads;
 
 /// The rows of a SPARQL `SELECT` (or the boolean of an `ASK`).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -44,11 +46,9 @@ pub struct QueryRows {
 /// supported in this cut.
 pub fn sparql(graph: &Graph, query: &str) -> Result<QueryRows, String> {
     let store = Store::new().map_err(|e| e.to_string())?;
-    for (key, node) in graph.nodes() {
-        for quad in node_quads(graph, key, node) {
-            if let Some(oxquad) = to_ox_quad(&quad) {
-                store.insert(&oxquad).map_err(|e| e.to_string())?;
-            }
+    for quad in dataset_quads(graph) {
+        if let Some(oxquad) = to_ox_quad(&quad) {
+            store.insert(&oxquad).map_err(|e| e.to_string())?;
         }
     }
 
@@ -87,27 +87,58 @@ pub fn sparql(graph: &Graph, query: &str) -> Result<QueryRows, String> {
     }
 }
 
-/// Convert one of this crate's `oxrdf` quads into an Oxigraph-model quad. Both
-/// sides are the same RDF model at different crate versions, so this is a
-/// field-by-field rebuild. `node_quads` emits only simple literals, named nodes,
-/// and the default graph; a term that cannot be rebuilt (a malformed IRI) is
-/// dropped.
-fn to_ox_quad(quad: &oxrdf::Quad) -> Option<OxQuad> {
-    let subject: OxNamedOrBlankNode = match &quad.subject {
+fn to_ox_subject(subject: &oxrdf::NamedOrBlankNode) -> Option<OxNamedOrBlankNode> {
+    Some(match subject {
         oxrdf::NamedOrBlankNode::NamedNode(n) => OxNamedNode::new(n.as_str()).ok()?.into(),
         oxrdf::NamedOrBlankNode::BlankNode(b) => OxBlankNode::new(b.as_str()).ok()?.into(),
-    };
-    let predicate = OxNamedNode::new(quad.predicate.as_str()).ok()?;
-    let object: OxTerm = match &quad.object {
+    })
+}
+
+fn to_ox_term(term: &oxrdf::Term) -> Option<OxTerm> {
+    Some(match term {
         oxrdf::Term::NamedNode(n) => OxNamedNode::new(n.as_str()).ok()?.into(),
         oxrdf::Term::BlankNode(b) => OxBlankNode::new(b.as_str()).ok()?.into(),
-        oxrdf::Term::Literal(l) => OxLiteral::new_simple_literal(l.value()).into(),
-    };
+        oxrdf::Term::Literal(l) => {
+            if let Some(language) = l.language() {
+                OxLiteral::new_language_tagged_literal(l.value(), language)
+                    .ok()?
+                    .into()
+            } else if l.datatype().as_str() == XSD_STRING {
+                OxLiteral::new_simple_literal(l.value()).into()
+            } else {
+                OxLiteral::new_typed_literal(
+                    l.value(),
+                    OxNamedNode::new(l.datatype().as_str()).ok()?,
+                )
+                .into()
+            }
+        }
+        oxrdf::Term::Triple(triple) => OxTriple::new(
+            to_ox_subject(&triple.subject)?,
+            OxNamedNode::new(triple.predicate.as_str()).ok()?,
+            to_ox_term(&triple.object)?,
+        )
+        .into(),
+    })
+}
+
+/// Convert one of this crate's `oxrdf` quads into an Oxigraph-model quad. Both
+/// sides are the same RDF model at different crate versions, so this is a
+/// field-by-field rebuild. `dataset_quads` may carry named graphs, literals, and
+/// RDF 1.2 triple terms; a term that cannot be rebuilt is dropped.
+fn to_ox_quad(quad: &oxrdf::Quad) -> Option<OxQuad> {
+    let subject = to_ox_subject(&quad.subject)?;
+    let predicate = OxNamedNode::new(quad.predicate.as_str()).ok()?;
+    let object = to_ox_term(&quad.object)?;
     Some(OxQuad::new(
         subject,
         predicate,
         object,
-        OxGraphName::DefaultGraph,
+        match &quad.graph_name {
+            oxrdf::GraphName::DefaultGraph => OxGraphName::DefaultGraph,
+            oxrdf::GraphName::NamedNode(node) => OxNamedNode::new(node.as_str()).ok()?.into(),
+            oxrdf::GraphName::BlankNode(node) => OxBlankNode::new(node.as_str()).ok()?.into(),
+        },
     ))
 }
 
@@ -118,5 +149,6 @@ fn term_to_string(term: &OxTerm) -> String {
         OxTerm::NamedNode(n) => n.as_str().to_string(),
         OxTerm::Literal(l) => l.value().to_string(),
         OxTerm::BlankNode(b) => format!("_:{}", b.as_str()),
+        OxTerm::Triple(triple) => triple.to_string(),
     }
 }

@@ -17,9 +17,11 @@ use petgraph::Direction;
 use petgraph::visit::{EdgeRef, IntoEdgeReferences};
 use uuid::Uuid;
 
+use crate::types::GraphScope;
+
 use super::edge_data::Traversal;
 use super::edge_payload::EdgePayload;
-use super::edge_taxonomy::{EdgeAssertion, RelationSelector};
+use super::edge_taxonomy::{EdgeAssertion, RelationSelector, SemanticSubKind};
 use super::identity::{EdgeKey, NodeKey};
 use super::{DissolvedTraversalRecord, Graph};
 
@@ -30,6 +32,20 @@ impl Graph {
         to: NodeKey,
         assertion: EdgeAssertion,
     ) -> Option<EdgeKey> {
+        if let EdgeAssertion::Semantic {
+            sub_kind,
+            label,
+            decay_progress: _,
+        } = assertion
+        {
+            return self.assert_semantic_relation_in_scope(
+                from,
+                to,
+                sub_kind,
+                label,
+                GraphScope::Default,
+            );
+        }
         if !self.inner.contains_node(from) || !self.inner.contains_node(to) {
             return None;
         }
@@ -55,18 +71,13 @@ impl Graph {
         Some(edge_key)
     }
 
-    /// Assert an **open predicate** semantic relation from `from` to `to`,
-    /// identified by an IRI rather than a closed [`SemanticSubKind`]. Creates the
-    /// edge if absent and stamps the predicate on its semantic sidecar
-    /// (independent of any sub-kinds already present); an edge carrying only a
-    /// predicate still reports the `Semantic` family. Returns the edge, or `None`
-    /// if either endpoint is missing. Write path for raw web predicates
-    /// (linked-data ingest / knot `rel`s outside Mere's vocabulary).
-    pub(crate) fn assert_semantic_predicate(
+    pub(crate) fn assert_semantic_relation_in_scope(
         &mut self,
         from: NodeKey,
         to: NodeKey,
-        predicate: String,
+        sub_kind: SemanticSubKind,
+        label: Option<String>,
+        graph_scope: GraphScope,
     ) -> Option<EdgeKey> {
         if !self.inner.contains_node(from) || !self.inner.contains_node(to) {
             return None;
@@ -74,12 +85,55 @@ impl Graph {
         let edge_key = self
             .find_edge_key(from, to)
             .unwrap_or_else(|| self.inner.add_edge(from, to, EdgePayload::new()));
-        {
+        let changed = {
             let payload = self.inner.edge_weight_mut(edge_key)?;
-            payload.set_semantic_predicate(Some(predicate));
+            payload.assert_semantic_relation_in_scope(sub_kind, label, graph_scope)
+        };
+        if changed {
+            self.bump_revision();
+            return Some(edge_key);
         }
-        self.bump_revision();
-        Some(edge_key)
+        None
+    }
+
+    /// Assert an **open predicate** semantic relation from `from` to `to`,
+    /// identified by an IRI rather than a closed [`SemanticSubKind`]. Creates the
+    /// pair-local edge bucket if absent and appends one open semantic statement to
+    /// it; an edge carrying only such a statement still reports the `Semantic`
+    /// family. Returns the edge, or `None` if either endpoint is missing or the
+    /// same open predicate statement already exists. Write path for raw web
+    /// predicates (linked-data ingest / knot `rel`s outside Mere's vocabulary).
+    pub(crate) fn assert_semantic_predicate(
+        &mut self,
+        from: NodeKey,
+        to: NodeKey,
+        predicate: String,
+    ) -> Option<EdgeKey> {
+        self.assert_semantic_predicate_in_scope(from, to, predicate, GraphScope::Default)
+    }
+
+    pub(crate) fn assert_semantic_predicate_in_scope(
+        &mut self,
+        from: NodeKey,
+        to: NodeKey,
+        predicate: String,
+        graph_scope: GraphScope,
+    ) -> Option<EdgeKey> {
+        if !self.inner.contains_node(from) || !self.inner.contains_node(to) {
+            return None;
+        }
+        let edge_key = self
+            .find_edge_key(from, to)
+            .unwrap_or_else(|| self.inner.add_edge(from, to, EdgePayload::new()));
+        let changed = {
+            let payload = self.inner.edge_weight_mut(edge_key)?;
+            payload.assert_semantic_predicate_in_scope(predicate, graph_scope)
+        };
+        if changed {
+            self.bump_revision();
+            return Some(edge_key);
+        }
+        None
     }
 
     /// Replay helper: add node only if UUID is not already present.

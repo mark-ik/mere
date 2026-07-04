@@ -47,6 +47,87 @@ impl WindowCtx<'_> {
         self.view.script_caps = Some(prefs);
     }
 
+    /// Persist the chosen startup-unlock mode for device-local wallet secrets and keep the
+    /// open Wallet settings page's cache in step with the edit. (Startup unlock flow.)
+    pub(crate) fn set_wallet_startup_unlock_mode(
+        &mut self,
+        mode: session_runtime::StartupUnlockMode,
+    ) {
+        let root = self.shared.session.mere_root.clone();
+        let mut settings = settings_store::load_settings(&root)
+            .ok()
+            .flatten()
+            .unwrap_or_default();
+        if settings.startup_unlock_mode == mode {
+            return;
+        }
+        settings.startup_unlock_mode = mode;
+        if let Err(err) = settings_store::save_settings(&root, &settings) {
+            tracing::warn!(%err, "failed to persist startup unlock mode");
+            return;
+        }
+        self.view.wallet_unlock_mode = Some(mode);
+    }
+
+    /// Explicitly unlock device-local sealed wallet secrets with the OS store for this launch and
+    /// retry the lanes that stayed offline because startup was locked.
+    pub(crate) fn unlock_wallet_now(&mut self) {
+        let root = self.shared.session.mere_root.clone();
+        match session_runtime::unlock_wallet_with_auto_os(&root) {
+            Ok(true) => {
+                let has_seed = session_runtime::load_identity_seed(&root)
+                    .ok()
+                    .flatten()
+                    .is_some();
+                if has_seed {
+                    self.shared
+                        .sync_handle
+                        .command(crate::sync::SyncCommand::UnlockNow);
+                    self.shared
+                        .comms_handle
+                        .command(crate::comms_host::CommsCommand::UnlockNow);
+                    self.view.wallet_unlock_status = Some(
+                        "Unlocked for this launch. Sync and comms are retrying now.".to_string(),
+                    );
+                } else {
+                    self.view.wallet_unlock_status = Some(
+                        "Unlocked local records for this launch. Seed-backed sync/comms are still unavailable here."
+                            .to_string(),
+                    );
+                }
+            }
+            Ok(false) => {
+                self.view.wallet_unlock_status = Some(
+                    "OS-store unlock is not available here, or no sealed local wallet record could be opened."
+                        .to_string(),
+                );
+            }
+            Err(err) => {
+                tracing::warn!(%err, "failed to unlock wallet with OS store");
+                self.view.wallet_unlock_status = Some(format!("Unlock failed: {err}"));
+            }
+        }
+        self.view.wallet_locked = Some(session_runtime::wallet_local_secrets_locked(&root));
+    }
+
+    /// Re-lock device-local sealed wallet secrets for later reads this launch and return the
+    /// seed-backed lanes to their offline state.
+    pub(crate) fn relock_wallet_now(&mut self) {
+        let root = self.shared.session.mere_root.clone();
+        session_runtime::relock_wallet_after_manual_unlock(&root);
+        self.shared
+            .sync_handle
+            .command(crate::sync::SyncCommand::LockNow);
+        self.shared
+            .comms_handle
+            .command(crate::comms_host::CommsCommand::LockNow);
+        self.view.wallet_locked = Some(session_runtime::wallet_local_secrets_locked(&root));
+        self.view.wallet_unlock_status = Some(
+            "Relocked for later reads this launch. Sync and comms returned to offline mode."
+                .to_string(),
+        );
+    }
+
     /// Snapshot the open settings tiles into the shell document each frame: resolve each
     /// `(member, ref, body rect)` the content dispatch recorded through the provider seam
     /// (its page controls + the namespace's index spine) and fold them in. An empty list
@@ -78,6 +159,29 @@ impl WindowCtx<'_> {
             }
         } else {
             self.view.script_caps = None;
+        }
+        let wallet_open = tiles
+            .iter()
+            .any(|(_, reference, _)| reference == "pelt/wallet");
+        if wallet_open {
+            if self.view.wallet_unlock_mode.is_none() {
+                self.view.wallet_unlock_mode = Some(
+                    settings_store::load_settings(&self.shared.session.mere_root)
+                        .ok()
+                        .flatten()
+                        .unwrap_or_default()
+                        .startup_unlock_mode,
+                );
+            }
+            if self.view.wallet_locked.is_none() {
+                self.view.wallet_locked = Some(session_runtime::wallet_local_secrets_locked(
+                    &self.shared.session.mere_root,
+                ));
+            }
+        } else {
+            self.view.wallet_unlock_mode = None;
+            self.view.wallet_locked = None;
+            self.view.wallet_unlock_status = None;
         }
         if tiles.is_empty() {
             if self.view.settings_panes_open() {
@@ -176,7 +280,7 @@ impl WindowCtx<'_> {
             existing.unwrap_or_else(|| self.orrery_mut().open_member_as_new_node(subject, &url));
         self.open_workbench();
         self.view.workbench.open_tile(member);
-        self.view.focused_tile = Some(member);
+        self.set_focused_tile(Some(member));
         self.view.request_redraw();
     }
 }

@@ -305,6 +305,324 @@ pub struct RosterSnapshot {
     pub detail: Option<RosterDetail>,
 }
 
+#[derive(Clone)]
+pub struct GraphletRowInput {
+    pub id: GraphletId,
+    pub kind: Option<GraphletKind>,
+    pub binding: GraphletBinding,
+    pub member_count: usize,
+    pub added_count: usize,
+    pub removed_count: usize,
+    pub selected: bool,
+}
+
+#[derive(Clone)]
+pub struct GraphletCardInput {
+    pub id: GraphletId,
+    pub kind: Option<GraphletKind>,
+    pub binding: GraphletBinding,
+    pub members: Vec<String>,
+    pub family_selectors: Option<Vec<(EdgeFamily, bool)>>,
+    pub added: Vec<String>,
+    pub removed: Vec<String>,
+}
+
+#[derive(Clone)]
+pub struct NodeRowInput {
+    pub member: GraphMemberId,
+    pub title: String,
+    pub url: String,
+    pub content_type: Option<String>,
+    pub tags: Vec<String>,
+    pub selected: bool,
+    pub open: bool,
+}
+
+#[derive(Clone)]
+pub struct LinkRowInput {
+    pub from: GraphMemberId,
+    pub to: GraphMemberId,
+    pub source_title: String,
+    pub source_url: String,
+    pub target_title: String,
+    pub target_url: String,
+    pub kind: RelationKind,
+    pub source_label: Option<String>,
+    pub selected: bool,
+}
+
+#[derive(Clone)]
+pub struct FieldRowInput {
+    pub id: FieldId,
+    pub name: Option<String>,
+    pub definition: FieldDefinition,
+    pub extent: FieldExtent,
+    pub hidden: bool,
+    pub selected: bool,
+    pub strength: f32,
+}
+
+#[derive(Clone)]
+pub struct NodeDetailInput {
+    pub member: GraphMemberId,
+    pub title: String,
+    pub url: String,
+    pub content_type: Option<String>,
+    pub tags: Vec<String>,
+    pub relation_count: usize,
+    pub field_count: usize,
+    pub open: bool,
+}
+
+#[derive(Clone)]
+pub struct LinkRelationInput {
+    pub from: GraphMemberId,
+    pub to: GraphMemberId,
+    pub kind: RelationKind,
+    pub label: Option<String>,
+    pub selected: bool,
+    pub hidden: bool,
+}
+
+#[derive(Clone)]
+pub struct LinkCardInput {
+    pub from: GraphMemberId,
+    pub to: GraphMemberId,
+    pub source_title: String,
+    pub source_url: String,
+    pub target_title: String,
+    pub target_url: String,
+    pub hidden: bool,
+    pub relations: Vec<LinkRelationInput>,
+}
+
+#[derive(Clone)]
+pub struct FieldDetailInput {
+    pub id: FieldId,
+    pub name: Option<String>,
+    pub definition: FieldDefinition,
+    pub extent: FieldExtent,
+    pub hidden: bool,
+    pub strength: f32,
+}
+
+#[derive(Clone)]
+pub struct NodeRelationsFacetInput {
+    pub member: GraphMemberId,
+    pub title: String,
+    pub counts_by_family: Vec<(EdgeFamily, usize)>,
+}
+
+pub fn build_node_rows(inputs: Vec<NodeRowInput>) -> Vec<RosterRow> {
+    let mut rows: Vec<RosterRow> = inputs
+        .into_iter()
+        .map(|input| RosterRow {
+            member: input.member,
+            title: input.title,
+            url: input.url,
+            content_type: input.content_type,
+            tags: input.tags,
+            selected: input.selected,
+            open: input.open,
+            section_header: None,
+        })
+        .collect();
+    rows.sort_by(|a, b| {
+        let ba = content_bucket(a.content_type.as_deref());
+        let bb = content_bucket(b.content_type.as_deref());
+        ba.0.cmp(&bb.0)
+            .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
+    });
+    let mut current: Option<u8> = None;
+    for row in &mut rows {
+        let (ord, label) = content_bucket(row.content_type.as_deref());
+        if current != Some(ord) {
+            current = Some(ord);
+            row.section_header = Some(label.to_string());
+        }
+    }
+    rows
+}
+
+pub fn build_link_rows(inputs: Vec<LinkRowInput>) -> Vec<LinkRow> {
+    let mut rows: Vec<LinkRow> = inputs
+        .into_iter()
+        .map(|input| {
+            let family = input.kind.family();
+            let selector = relation_selector(input.kind);
+            LinkRow {
+                from: input.from,
+                to: input.to,
+                source_title: input.source_title,
+                source_url: input.source_url,
+                target_title: input.target_title,
+                target_url: input.target_url,
+                direction_label: "->".to_string(),
+                family,
+                family_label: edge_family_label(family).to_string(),
+                kind_label: relation_kind_label(input.kind).to_string(),
+                source_label: input.source_label,
+                selector,
+                selected: input.selected,
+                starts_bundle: false,
+            }
+        })
+        .collect();
+    rows.sort_by(|a, b| {
+        a.source_title
+            .to_lowercase()
+            .cmp(&b.source_title.to_lowercase())
+            .then_with(|| {
+                a.target_title
+                    .to_lowercase()
+                    .cmp(&b.target_title.to_lowercase())
+            })
+            .then_with(|| a.family.cmp(&b.family))
+            .then_with(|| a.kind_label.cmp(&b.kind_label))
+    });
+    let mut last: Option<(GraphMemberId, GraphMemberId)> = None;
+    for row in &mut rows {
+        let bundle = (row.from, row.to);
+        row.starts_bundle = last != Some(bundle);
+        last = Some(bundle);
+    }
+    rows
+}
+
+pub fn build_graphlet_rows(inputs: Vec<GraphletRowInput>) -> Vec<GraphletRow> {
+    inputs
+        .into_iter()
+        .map(|input| GraphletRow {
+            id: input.id,
+            kind_label: graphlet_kind_label(input.kind.as_ref()),
+            binding_label: graphlet_binding_label(&input.binding).to_string(),
+            member_count: input.member_count,
+            selectors_label: graphlet_binding_selectors_label(&input.binding),
+            drift_label: graphlet_drift_label(
+                &input.binding,
+                input.added_count,
+                input.removed_count,
+            ),
+            selected: input.selected,
+        })
+        .collect()
+}
+
+pub fn build_field_rows(inputs: Vec<FieldRowInput>) -> Vec<FieldRow> {
+    let mut rows: Vec<FieldRow> = inputs
+        .into_iter()
+        .map(|input| FieldRow {
+            id: input.id,
+            name: display_field_name(input.name.as_deref(), input.id),
+            rule_label: field_definition_label(&input.definition).to_string(),
+            extent_label: field_extent_label(&input.extent),
+            hidden: input.hidden,
+            selected: input.selected,
+            strength: input.strength,
+        })
+        .collect();
+    rows.sort_by(|a, b| {
+        a.name
+            .to_lowercase()
+            .cmp(&b.name.to_lowercase())
+            .then_with(|| a.id.as_uuid().cmp(&b.id.as_uuid()))
+    });
+    if rows.iter().any(|row| row.selected) {
+        rows.sort_by_key(|row| !row.selected);
+    }
+    rows
+}
+
+pub fn build_node_detail(input: NodeDetailInput) -> NodeDetail {
+    let tag_count = input.tags.len();
+    NodeDetail {
+        member: input.member,
+        title: input.title,
+        url: input.url,
+        content_type: input.content_type.clone(),
+        tags: input.tags,
+        relation_count: input.relation_count,
+        open: input.open,
+        facets: node_facets(
+            input.member,
+            input.content_type.as_deref(),
+            tag_count,
+            input.relation_count,
+            input.field_count,
+        ),
+    }
+}
+
+pub fn build_link_card(input: LinkCardInput) -> LinkCard {
+    let mut relations: Vec<LinkRelationRow> = input
+        .relations
+        .into_iter()
+        .map(|input| {
+            let family = input.kind.family();
+            let selector = relation_selector(input.kind);
+            let editable = matches!(selector, RelationSelector::Semantic(_));
+            LinkRelationRow {
+                from: input.from,
+                to: input.to,
+                family,
+                family_label: edge_family_label(family).to_string(),
+                kind_label: relation_kind_label(input.kind).to_string(),
+                label: input.label,
+                selector,
+                editable,
+                selected: input.selected,
+                hidden: input.hidden,
+            }
+        })
+        .collect();
+    relations.sort_by(|a, b| {
+        a.family
+            .cmp(&b.family)
+            .then_with(|| a.kind_label.cmp(&b.kind_label))
+    });
+    let facets = link_facets(input.from, input.to, &relations);
+    LinkCard {
+        from: input.from,
+        to: input.to,
+        source_title: input.source_title,
+        source_url: input.source_url,
+        target_title: input.target_title,
+        target_url: input.target_url,
+        hidden: input.hidden,
+        relations,
+        facets,
+    }
+}
+
+pub fn build_graphlet_card(input: GraphletCardInput) -> GraphletCard {
+    let drift_tracking = matches!(input.binding, GraphletBinding::Linked { .. });
+    let drift_summary = graphlet_drift_summary(&input.binding, &input.added, &input.removed);
+    GraphletCard {
+        id: input.id,
+        kind_label: graphlet_kind_label(input.kind.as_ref()),
+        binding_label: graphlet_binding_label(&input.binding).to_string(),
+        members: input.members,
+        selectors_label: graphlet_binding_selectors_label(&input.binding),
+        family_selectors: input.family_selectors,
+        drift_tracking,
+        drift_summary,
+        added: input.added,
+        removed: input.removed,
+    }
+}
+
+pub fn build_field_detail(input: FieldDetailInput) -> FieldDetail {
+    FieldDetail {
+        id: input.id,
+        name: display_field_name(input.name.as_deref(), input.id),
+        rule_label: field_definition_label(&input.definition).to_string(),
+        extent_label: field_extent_label(&input.extent),
+        hidden: input.hidden,
+        strength: input.strength,
+        facets: field_facets(input.id),
+    }
+}
+
 pub fn selected_field_id(subject: Option<&RosterSubject>) -> Option<FieldId> {
     match subject {
         Some(RosterSubject::Field(id)) => Some(*id),
@@ -391,7 +709,11 @@ pub fn graphlet_binding_label(binding: &GraphletBinding) -> &'static str {
 }
 
 pub fn graphlet_selectors_label(graphlet: &GraphletRef<GraphMemberId>) -> String {
-    let selectors = match &graphlet.binding {
+    graphlet_binding_selectors_label(&graphlet.binding)
+}
+
+pub fn graphlet_binding_selectors_label(binding: &GraphletBinding) -> String {
+    let selectors = match binding {
         GraphletBinding::Linked { spec } => &spec.selectors,
         GraphletBinding::Branched { parent_spec, .. } => &parent_spec.selectors,
         GraphletBinding::UnlinkedSession => return "all relations".to_string(),
@@ -440,6 +762,13 @@ pub fn member_labels(graph: &Graph, members: &[GraphMemberId]) -> Vec<String> {
 
 pub fn short_id(id: impl ToString) -> String {
     id.to_string().chars().take(8).collect()
+}
+
+pub fn display_field_name(name: Option<&str>, id: FieldId) -> String {
+    match name {
+        Some(name) => name.to_string(),
+        None => format!("Field {}", short_id(id.as_uuid())),
+    }
 }
 
 pub fn relation_kind_label(kind: RelationKind) -> &'static str {
@@ -550,6 +879,156 @@ pub fn field_facets(id: FieldId) -> Vec<FacetEntry> {
     ]
 }
 
+pub fn build_node_content_facet_card(detail: &NodeDetail) -> FacetCard {
+    let content = detail.content_type.as_deref().unwrap_or("unknown");
+    let bucket = detail
+        .content_type
+        .as_deref()
+        .map(|ct| content_bucket(Some(ct)).1)
+        .unwrap_or("Unknown");
+    facet_card(
+        "Content",
+        detail.title.clone(),
+        vec![
+            info("content type", content),
+            info("bucket", bucket),
+            info("url", detail.url.clone()),
+        ],
+        vec![select_node_action(detail.member)],
+    )
+}
+
+pub fn build_node_tags_facet_card(detail: &NodeDetail) -> FacetCard {
+    facet_card(
+        "Tags",
+        detail.title.clone(),
+        vec![
+            info("count", detail.tags.len().to_string()),
+            info("tags", nonempty_join(&detail.tags)),
+        ],
+        vec![select_node_action(detail.member)],
+    )
+}
+
+pub fn build_node_relations_facet_card(input: NodeRelationsFacetInput) -> FacetCard {
+    let mut counts = input.counts_by_family;
+    counts.sort_by_key(|(family, _)| *family);
+    let mut rows = vec![info(
+        "total",
+        counts
+            .iter()
+            .map(|(_, count)| *count)
+            .sum::<usize>()
+            .to_string(),
+    )];
+    rows.extend(
+        counts
+            .into_iter()
+            .map(|(family, count)| info(edge_family_label(family), count.to_string())),
+    );
+    facet_card(
+        "Relations",
+        input.title,
+        rows,
+        vec![select_node_action(input.member)],
+    )
+}
+
+pub fn build_node_fields_facet_card(detail: &NodeDetail, fields: &[String]) -> FacetCard {
+    facet_card(
+        "Fields",
+        detail.title.clone(),
+        vec![
+            info("attached", fields.len().to_string()),
+            info("fields", nonempty_join(fields)),
+        ],
+        vec![select_node_action(detail.member)],
+    )
+}
+
+pub fn build_link_family_facet_card(link: &LinkCard, family: EdgeFamily) -> FacetCard {
+    let mut rows = Vec::new();
+    for rel in link.relations.iter().filter(|rel| rel.family == family) {
+        rows.push(info(
+            &rel.kind_label,
+            rel.label.as_deref().unwrap_or("relation cell"),
+        ));
+    }
+    if rows.is_empty() {
+        rows.push(info("relations", "none"));
+    }
+    facet_card(
+        edge_family_label(family),
+        format!("{} -> {}", link.source_title, link.target_title),
+        rows,
+        vec![FacetAction {
+            label: "open link".to_string(),
+            intent: FacetActionIntent::OpenLinkBundle {
+                from: link.from,
+                to: link.to,
+            },
+        }],
+    )
+}
+
+pub fn build_field_rule_facet_card(detail: &FieldDetail) -> FacetCard {
+    facet_card(
+        "Field rule",
+        detail.name.clone(),
+        vec![
+            info("rule", detail.rule_label.clone()),
+            info("script", "not configured"),
+            info("template", "not configured"),
+        ],
+        vec![select_field_action(detail.id)],
+    )
+}
+
+pub fn build_field_extent_facet_card(detail: &FieldDetail) -> FacetCard {
+    facet_card(
+        "Field extent",
+        detail.name.clone(),
+        vec![info("extent", detail.extent_label.clone())],
+        vec![select_field_action(detail.id)],
+    )
+}
+
+pub fn build_field_visibility_facet_card(detail: &FieldDetail) -> FacetCard {
+    facet_card(
+        "Field visibility",
+        detail.name.clone(),
+        vec![info(
+            "visibility",
+            if detail.hidden { "hidden" } else { "visible" },
+        )],
+        vec![
+            select_field_action(detail.id),
+            FacetAction {
+                label: if detail.hidden { "show" } else { "hide" }.to_string(),
+                intent: FacetActionIntent::ToggleFieldVisibility(detail.id),
+            },
+        ],
+    )
+}
+
+pub fn build_field_strength_facet_card(detail: &FieldDetail) -> FacetCard {
+    facet_card(
+        "Field strength",
+        detail.name.clone(),
+        vec![info("strength", format!("{:.0}", detail.strength / 1000.0))],
+        vec![
+            FacetAction {
+                label: "weaker".to_string(),
+                intent: FacetActionIntent::AdjustFieldStrength(detail.id, -1000.0),
+            },
+            FacetAction {
+                label: "stronger".to_string(),
+                intent: FacetActionIntent::AdjustFieldStrength(detail.id, 1000.0),
+            },
+        ],
+    )
+}
+
 pub fn facet_card(
     title: impl Into<String>,
     subtitle: impl Into<String>,
@@ -602,6 +1081,34 @@ fn facet_entry(
         label: label.into(),
         value: value.into(),
         subject: RosterSubject::Facet(subject),
+    }
+}
+
+fn graphlet_drift_label(
+    binding: &GraphletBinding,
+    added_count: usize,
+    removed_count: usize,
+) -> String {
+    if added_count > 0 || removed_count > 0 {
+        format!("+{added_count} -{removed_count}")
+    } else if matches!(binding, GraphletBinding::Linked { .. }) {
+        "clean".to_string()
+    } else {
+        "manual".to_string()
+    }
+}
+
+fn graphlet_drift_summary(
+    binding: &GraphletBinding,
+    added: &[String],
+    removed: &[String],
+) -> String {
+    if !added.is_empty() || !removed.is_empty() {
+        format!("drift proposal: +{} -{}", added.len(), removed.len())
+    } else if matches!(binding, GraphletBinding::Linked { .. }) {
+        "drift proposal: clean".to_string()
+    } else {
+        "drift proposal: not tracked".to_string()
     }
 }
 
@@ -687,5 +1194,97 @@ mod tests {
                 family: EdgeFamily::Semantic,
             })
         );
+    }
+
+    #[test]
+    fn build_node_rows_sorts_and_marks_section_headers() {
+        let rows = build_node_rows(vec![
+            NodeRowInput {
+                member: GraphMemberId::from_u128(1),
+                title: "Zeta".to_string(),
+                url: "https://zeta.test".to_string(),
+                content_type: Some("text/html".to_string()),
+                tags: Vec::new(),
+                selected: false,
+                open: false,
+            },
+            NodeRowInput {
+                member: GraphMemberId::from_u128(2),
+                title: "Alpha".to_string(),
+                url: "https://alpha.test".to_string(),
+                content_type: Some("application/rss+xml".to_string()),
+                tags: Vec::new(),
+                selected: false,
+                open: false,
+            },
+        ]);
+        assert_eq!(rows[0].title, "Zeta");
+        assert_eq!(rows[0].section_header.as_deref(), Some("Documents"));
+        assert_eq!(rows[1].title, "Alpha");
+        assert_eq!(rows[1].section_header.as_deref(), Some("Feeds"));
+    }
+
+    #[test]
+    fn build_link_card_sorts_relations_and_uses_selector_intents() {
+        let from = GraphMemberId::from_u128(1);
+        let to = GraphMemberId::from_u128(2);
+        let card = build_link_card(LinkCardInput {
+            from,
+            to,
+            source_title: "From".to_string(),
+            source_url: "https://from.test".to_string(),
+            target_title: "To".to_string(),
+            target_url: "https://to.test".to_string(),
+            hidden: false,
+            relations: vec![
+                LinkRelationInput {
+                    from,
+                    to,
+                    kind: RelationKind::Semantic(SemanticSubKind::Quotes),
+                    label: None,
+                    selected: false,
+                    hidden: false,
+                },
+                LinkRelationInput {
+                    from,
+                    to,
+                    kind: RelationKind::Semantic(SemanticSubKind::Cites),
+                    label: None,
+                    selected: true,
+                    hidden: false,
+                },
+            ],
+        });
+        assert_eq!(card.relations.len(), 2);
+        assert_eq!(card.relations[0].kind_label, "Cites");
+        assert_eq!(
+            card.relations[0].selector,
+            RelationSelector::Semantic(SemanticSubKind::Cites)
+        );
+        assert_eq!(card.facets[0].label, "Semantic");
+    }
+
+    #[test]
+    fn build_graphlet_card_derives_drift_and_selector_labels() {
+        let card = build_graphlet_card(GraphletCardInput {
+            id: 7,
+            kind: Some(GraphletKind::Facet),
+            binding: GraphletBinding::Linked {
+                spec: forme::GraphletSpec {
+                    kind: GraphletKind::Facet,
+                    anchors: Vec::new(),
+                    primary_anchor: None,
+                    selectors: vec!["semantic".to_string()],
+                },
+            },
+            members: vec!["A".to_string()],
+            family_selectors: Some(vec![(EdgeFamily::Semantic, true)]),
+            added: vec!["B".to_string()],
+            removed: vec!["C".to_string()],
+        });
+        assert_eq!(card.kind_label, "Facet");
+        assert_eq!(card.selectors_label, "semantic");
+        assert!(card.drift_tracking);
+        assert_eq!(card.drift_summary, "drift proposal: +1 -1");
     }
 }

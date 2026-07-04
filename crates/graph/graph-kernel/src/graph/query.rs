@@ -89,10 +89,10 @@ impl Graph {
             .map(move |idx| (idx, &self.inner[idx]))
     }
 
-    /// Iterate over all stored relations, one row per
-    /// (from, to, [`RelationKind`]) tuple. A multi-relation edge
-    /// (an `EdgePayload` carrying multiple typed sidecars between
-    /// the same node pair) yields multiple rows.
+    /// Iterate over all stored relations, one row per recognized
+    /// statement/family carried by the pair-local edge bucket.
+    /// One `EdgePayload` between two nodes may therefore yield
+    /// multiple semantic rows.
     ///
     /// Canonical read surface per the 2026-05-11 relation-taxonomy
     /// plan §2. Stage 4 removed the legacy `EdgeType`-flavoured
@@ -104,8 +104,8 @@ impl Graph {
             let to = edge.target();
             let payload = edge.weight();
             let mut out: Vec<RelationView> = Vec::new();
-            if let Some(sem) = payload.semantic_data() {
-                for &sub_kind in &sem.sub_kinds {
+            for statement in payload.semantic_statements() {
+                if let Some(sub_kind) = statement.recognized_sub_kind {
                     out.push(RelationView {
                         from,
                         to,
@@ -171,22 +171,20 @@ impl Graph {
             let from = edge.source();
             let to = edge.target();
             let payload = edge.weight();
-            let label = payload.label().map(str::to_string);
             payload
-                .semantic_data()
-                .map(|data| {
-                    data.sub_kinds
-                        .iter()
-                        .copied()
+                .semantic_statements()
+                .iter()
+                .filter_map(|statement| {
+                    statement
+                        .recognized_sub_kind
                         .map(|sub_kind| SemanticEdgeView {
                             from,
                             to,
                             sub_kind,
-                            label: label.clone(),
+                            label: statement.label.clone(),
                         })
-                        .collect::<Vec<_>>()
                 })
-                .unwrap_or_default()
+                .collect::<Vec<_>>()
                 .into_iter()
         })
     }

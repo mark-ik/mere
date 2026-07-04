@@ -100,5 +100,22 @@ impl ApplicationHandler for Shell {
         // Steady-heat forgetting: a no-op check on every tick, a real pass only once
         // the app has sat idle a while. (Alembic B1 — athanor idle cadence, Path A.)
         self.maybe_run_idle_forgetting_pass();
+        // Steady-heat snapshot refresh: same idle signal, its own cadence + toggle.
+        // (Node/card summoning design, §5 item 4.)
+        self.maybe_run_idle_snapshot_refresh();
+    }
+
+    fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
+        let window_ids: Vec<_> = self.windows.keys().copied().collect();
+        for id in window_ids {
+            let Some(mut wc) = self.window_ctx(id) else {
+                continue;
+            };
+            if wc.view.active_content == crate::ContentPane::Workbench
+                && let Some(member) = wc.view.focused_tile
+            {
+                wc.persist_live_tile_thumbnail(member);
+            }
+        }
     }
 }

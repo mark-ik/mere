@@ -9,10 +9,20 @@
 
 use super::*;
 
+pub(super) enum ChromeRasterPlan {
+    Full(netrender::Scene),
+    Partitioned {
+        base_scene: Option<netrender::Scene>,
+        orrery_scene: Option<netrender::Scene>,
+        orrery_rect: [f32; 4],
+        base_sig: u64,
+    },
+}
+
 /// All the per-frame build-up outputs the paint pass consumes, bundled so
 /// the call site is one argument rather than twenty positionals.
 pub(super) struct PaintInputs {
-    pub chrome_scene: netrender::Scene,
+    pub chrome: ChromeRasterPlan,
     pub orrery_scene: netrender::Scene,
     pub orrery_redraw: bool,
     pub orrery_w: u32,
@@ -27,7 +37,7 @@ pub(super) struct PaintInputs {
     /// `external_texture_placements` loop at `GLOSS_MINIMAP_SCENE_KEY` (the DOM
     /// layout owns the placement rect now, like the orrery's own backdrop — no
     /// manual rect tracking). The minimap's node squares, plus the outline + recent
-    /// lenses, are already folded into `chrome_scene` above. (Scene-to-DOM
+    /// lenses, are already folded into the chrome DOM textures above. (Scene-to-DOM
     /// migration P1 outline/recent, P2 minimap.)
     pub gloss_minimap_scene: Option<(netrender::Scene, u32, u32)>,
     pub cards: Vec<(GraphMemberId, [f32; 4], (u32, u32))>,
@@ -51,7 +61,7 @@ pub(super) struct PaintInputs {
 impl WindowCtx<'_> {
     pub(super) fn paint_frame(&mut self, inputs: PaintInputs) {
         let PaintInputs {
-            chrome_scene,
+            chrome,
             orrery_scene,
             orrery_redraw,
             orrery_w,
@@ -74,13 +84,77 @@ impl WindowCtx<'_> {
             frame_t,
         } = inputs;
         let core = self.render_core.expect("render core present");
-        let (_chrome_tex, chrome_view) = core.rasterize(
-            &chrome_scene,
-            w,
-            h,
-            ColorLoad::Clear(wgpu::Color::TRANSPARENT),
-        );
-        maybe_dump_chrome_capture(core.device(), core.queue(), &_chrome_tex, w, h);
+        let secondary_count = secondary_orreries.len();
+        let mut snapshot_cache_fill_us = 0;
+        let chrome_raster_t = std::time::Instant::now();
+        let (_chrome_tex, chrome_view, partitioned_orrery_dom): (
+            Option<wgpu::Texture>,
+            wgpu::TextureView,
+            Option<(wgpu::TextureView, [f32; 4])>,
+        ) = match chrome {
+            ChromeRasterPlan::Full(chrome_scene) => {
+                let (tex, view) = core.rasterize(
+                    &chrome_scene,
+                    w,
+                    h,
+                    ColorLoad::Clear(wgpu::Color::TRANSPARENT),
+                );
+                (Some(tex), view, None)
+            }
+            ChromeRasterPlan::Partitioned {
+                base_scene,
+                orrery_scene,
+                orrery_rect,
+                base_sig,
+            } => {
+                let reraster_base = base_scene.is_some();
+                if reraster_base {
+                    let scene = base_scene
+                        .as_ref()
+                        .expect("base scene when rerastering chrome base");
+                    let (tex, view) =
+                        core.rasterize(scene, w, h, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
+                    self.view.chrome_base_tex = Some(crate::CachedTile {
+                        version: 0,
+                        size: (w, h),
+                        tex,
+                        view,
+                    });
+                    self.view.chrome_base_sig = base_sig;
+                }
+                let cached = self
+                    .view
+                    .chrome_base_tex
+                    .as_ref()
+                    .expect("chrome base texture cached");
+                let sw = (orrery_rect[2] - orrery_rect[0]).round().max(1.0) as u32;
+                let sh = (orrery_rect[3] - orrery_rect[1]).round().max(1.0) as u32;
+                if let Some(scene) = orrery_scene.as_ref() {
+                    let (subtree_tex, subtree_view) =
+                        core.rasterize(scene, sw, sh, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
+                    self.view.chrome_orrery_tex = Some(crate::CachedTile {
+                        version: 0,
+                        size: (sw, sh),
+                        tex: subtree_tex,
+                        view: subtree_view,
+                    });
+                }
+                let cached_subtree = self
+                    .view
+                    .chrome_orrery_tex
+                    .as_ref()
+                    .expect("chrome orrery texture cached");
+                (
+                    None,
+                    cached.view.clone(),
+                    Some((cached_subtree.view.clone(), orrery_rect)),
+                )
+            }
+        };
+        let chrome_raster_us = chrome_raster_t.elapsed().as_micros();
+        if let Some(tex) = _chrome_tex.as_ref() {
+            maybe_dump_chrome_capture(core.device(), core.queue(), tex, w, h);
+        }
         // The orrery paints its own opaque backdrop, but clear to the same dark
         // tone so a resize frame cannot flash white before the backdrop lands.
         let backdrop = wgpu::Color {
@@ -89,15 +163,18 @@ impl WindowCtx<'_> {
             b: 0.100,
             a: 1.0,
         };
+        let orrery_raster_t = std::time::Instant::now();
         let (_orrery_tex, orrery_view) = core.rasterize(
             &orrery_scene,
             orrery_w,
             orrery_h,
             ColorLoad::Clear(backdrop),
         );
+        let orrery_raster_us = orrery_raster_t.elapsed().as_micros();
         // Rasterize each secondary graph-pane's scene. The textures must outlive
         // the composite below (they back the views), so they are held in this Vec
         // until the command buffer is submitted. (Window composition P2.)
+        let secondary_raster_t = std::time::Instant::now();
         let secondary_textures: Vec<(wgpu::Texture, wgpu::TextureView, [f32; 4])> =
             secondary_orreries
                 .iter()
@@ -106,8 +183,10 @@ impl WindowCtx<'_> {
                     (tex, view, *rect)
                 })
                 .collect();
+        let secondary_raster_us = secondary_raster_t.elapsed().as_micros();
         // Rasterize the workbench pane scene too, when its pane is open. The tex is
         // bound to `_workbench_tex` so it outlives the composite below.
+        let workbench_raster_t = std::time::Instant::now();
         let (_workbench_tex, workbench_view) = match workbench_scene.as_ref() {
             Some((scene, ww, wh)) => {
                 let (tex, view) = core.rasterize(scene, *ww, *wh, ColorLoad::Clear(backdrop));
@@ -115,6 +194,7 @@ impl WindowCtx<'_> {
             }
             None => (None, None),
         };
+        let workbench_raster_us = workbench_raster_t.elapsed().as_micros();
         // The gloss minimap's edges/rings backdrop, embedded via `<external-texture>`
         // inside the shell document (its node squares are DOM, already folded into
         // `chrome_scene`) — composited generically below by `compose_surfaces`'s
@@ -127,6 +207,7 @@ impl WindowCtx<'_> {
             b: pb[2] as f64 / 255.0,
             a: 1.0,
         };
+        let gloss_minimap_raster_t = std::time::Instant::now();
         let (_gloss_minimap_tex, gloss_minimap_view) = match gloss_minimap_scene.as_ref() {
             Some((scene, mw, mh)) => {
                 let (tex, view) = core.rasterize(scene, *mw, *mh, ColorLoad::Clear(gloss_clear));
@@ -134,18 +215,24 @@ impl WindowCtx<'_> {
             }
             None => (None, None),
         };
+        let gloss_minimap_raster_us = gloss_minimap_raster_t.elapsed().as_micros();
+        let cards_raster_t = std::time::Instant::now();
         let composite = self.rasterize_cards(core, dpr, &cards);
+        let cards_raster_us = cards_raster_t.elapsed().as_micros();
 
         let surface = self.view.surface.as_ref().expect("window surface present");
+        let surface_acquire_t = std::time::Instant::now();
         let Some(frame) = surface.acquire(core) else {
             return;
         };
+        let surface_acquire_us = surface_acquire_t.elapsed().as_micros();
         let target_view = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
         let format = surface.format();
         // Composite the graph + content surfaces (orrery / secondary / workbench /
         // content cards / find / scrying) onto the frame. See render::compose.
+        let compose_surfaces_t = std::time::Instant::now();
         self.compose_surfaces(
             core,
             &target_view,
@@ -162,33 +249,50 @@ impl WindowCtx<'_> {
             external_texture_placements,
             &scrying_surfaces,
         );
+        let compose_surfaces_us = compose_surfaces_t.elapsed().as_micros();
         self.view.scrying_rects = scrying_surfaces;
         // The "last visit" snapshot card: rasterize the host-rendered scene once
-        // per url (cached), then composite uniform-scaled into the small dest with
+        // per member+url cache entry, then composite uniform-scaled into the small dest with
         // the same vertical-scroll UV window as the other cards.
-        if let Some((_, url, _, built)) = snapshot_card {
+        if let Some((member, url, _, built)) = snapshot_card {
             if let Some((scene, _content_h)) = built {
+                let snapshot_cache_fill_t = std::time::Instant::now();
                 // Render the page's top peek, read it back, and encode a PNG data-URI for the
                 // snapshot card's chrome `<img>`. The card shows only its top band, so a fixed
-                // peek size suffices (the `<img>` scales it to the card). Once per url — the
-                // readback blocks, so it is gated on the data-uri cache miss above. The image
-                // is opaque chrome DOM after the gnodes, so it paints over them and under
-                // the overlays — the layering an external-texture could not give. (Layering fix.)
+                // peek size suffices (the `<img>` scales it to the card). The readback blocks,
+                // so it is gated on the cache miss above. The image is opaque chrome DOM after
+                // the gnodes, so it paints over them and under the overlays — the layering an
+                // external-texture could not give. (Layering fix.)
                 const PEEK_W: u32 = 300;
                 const PEEK_H: u32 = 390;
                 let (tex, _view) =
                     core.rasterize(&scene, PEEK_W, PEEK_H, ColorLoad::Clear(CARD_BG));
                 let rgba = read_texture_rgba(core.device(), core.queue(), &tex, PEEK_W, PEEK_H);
-                if let Some(uri) = favicon_data_uri(&rgba, PEEK_W, PEEK_H) {
-                    // Bound the per-url snapshot cache: each entry is a base64 PNG peek
-                    // (tens of KB), so without a cap it grows unbounded over a long
-                    // session. Crude but bounded: drop the cache when it gets large; the
-                    // few visible cards re-encode once on a later frame. (Cache cap.)
-                    if self.view.snapshot_data_uris.len() >= 256 {
-                        self.view.snapshot_data_uris.clear();
+                if let Some(png_bytes) = png_bytes_from_rgba(&rgba, PEEK_W, PEEK_H) {
+                    if let Some(uri) = png_data_uri(&png_bytes) {
+                        // Bound the snapshot cache: each entry is a base64 PNG peek
+                        // (tens of KB), so without a cap it grows unbounded over a long
+                        // session. Crude but bounded: drop the cache when it gets large; the
+                        // few visible cards re-encode once on a later frame. (Cache cap.)
+                        if self.view.snapshot_data_uris.len() >= 256 {
+                            self.view.snapshot_data_uris.clear();
+                        }
+                        self.view.snapshot_data_uris.insert(
+                            member,
+                            crate::window_view::SnapshotDataUri {
+                                url: url.clone(),
+                                data_uri: uri,
+                            },
+                        );
+                        // Tally against the per-session thumbnail byte budget (node/card
+                        // summoning design, §5 item 4) — this on-demand render bypasses
+                        // `persist_node_thumbnail_png`'s funnel, so it accounts separately.
+                        self.shared.session.thumbnail_bytes_this_session += png_bytes.len();
+                        self.orrery_mut()
+                            .set_node_thumbnail(member, png_bytes, PEEK_W, PEEK_H);
                     }
-                    self.view.snapshot_data_uris.insert(url.clone(), uri);
                 }
+                snapshot_cache_fill_us += snapshot_cache_fill_t.elapsed().as_micros();
             }
         }
         // Tile decorations (workbench pane): a "Reloading…" placeholder over a tile
@@ -198,6 +302,7 @@ impl WindowCtx<'_> {
         // click-to-pin toggle stays on the Ctrl+B / command path. State is collected
         // first so the composite loop holds no `self` borrow. (Decoration re-applied on
         // the pelt surface path.)
+        let overlay_compose_t = std::time::Instant::now();
         let tile_decos: Vec<([f32; 4], bool, bool)> = self
             .view
             .tile_rects
@@ -316,7 +421,7 @@ impl WindowCtx<'_> {
         // (Phase 1, step 2.)
         // The gloss pane (the Navigator): all three sections — minimap, outline,
         // recent — are folded into the shell document now. The outline + recent +
-        // minimap-node-squares are already part of `chrome_scene`; the minimap's
+        // minimap-node-squares are already part of the chrome DOM textures above; the minimap's
         // edges/rings backdrop was rasterized above (`gloss_minimap_view`) and
         // composites generically below via `compose_surfaces`'s
         // `external_texture_placements` loop, like the orrery's own backdrop. Nothing
@@ -329,6 +434,16 @@ impl WindowCtx<'_> {
             h,
             ExternalTexturePlacement::new([0.0, 0.0, w as f32, h as f32]),
         );
+        if let Some((view, rect)) = partitioned_orrery_dom.as_ref() {
+            core.renderer().compose_external_texture(
+                view,
+                &target_view,
+                format,
+                w,
+                h,
+                ExternalTexturePlacement::new(*rect),
+            );
+        }
         // Window controls (borderless titlebar): the min / max / close strip drawn
         // over the chrome at the toolbar's top-right. Cached by band size; the input
         // path hit-tests the same geometry, so nothing is recorded here.
@@ -394,8 +509,13 @@ impl WindowCtx<'_> {
                 ExternalTexturePlacement::new([x0, y0, x0 + pw as f32, y0 + ph as f32]),
             );
         }
+        let overlay_compose_us = overlay_compose_t.elapsed().as_micros();
+        let present_t = std::time::Instant::now();
         frame.present();
+        let present_us = present_t.elapsed().as_micros();
+        let a11y_refresh_t = std::time::Instant::now();
         self.refresh_a11y_summary();
+        let a11y_refresh_us = a11y_refresh_t.elapsed().as_micros();
 
         // C0 baseline: one line per rendered frame (gated by the `meerkat::profile`
         // target). `total_us` is the whole `render()`; `chrome_us` is the chrome
@@ -404,6 +524,19 @@ impl WindowCtx<'_> {
             target: "meerkat::profile",
             total_us = frame_t.elapsed().as_micros(),
             chrome_us,
+            chrome_raster_us,
+            orrery_raster_us,
+            secondary_raster_us,
+            secondary_count,
+            workbench_raster_us,
+            gloss_minimap_raster_us,
+            cards_raster_us,
+            surface_acquire_us,
+            compose_surfaces_us,
+            snapshot_cache_fill_us,
+            overlay_compose_us,
+            present_us,
+            a11y_refresh_us,
             "frame render profile"
         );
 

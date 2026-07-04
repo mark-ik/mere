@@ -20,13 +20,14 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 
+use armillary::Generations;
 use forme::GraphMemberId;
 use frame::{FrameLayout, GraphId, PaneId, SessionId, SplitAxis, SplitChoice};
 use meerkat::{Chrome, ChromeView, chrome_view};
 use platen::Workbench;
 use serval_scripted_dom::{NodeId, ScriptedDom};
 use serval_winit_host::WindowSurface;
-use session_runtime::settings_store::ScriptPermissionPrefs;
+use session_runtime::{StartupUnlockMode, settings_store::ScriptPermissionPrefs};
 use winit::window::CursorIcon;
 use xilem_serval::{
     AnyView, Modifiers, PointerClick, ServalAppRunner, ServalCtx, ServalElement, WheelEvent, el,
@@ -133,22 +134,29 @@ pub(crate) struct TearOutDrag {
     pub(crate) origin: (f32, f32),
 }
 
-/// A live page-text selection on a retained document-lane card. The source page is
-/// identified by `(member, version)` so a navigation or re-render invalidates it.
+/// A live page-text selection on a content tile/card. The source page is identified
+/// by `(member, gens)` so navigation/resize invalidate it while scroll-band
+/// re-emits do not.
 pub(crate) struct PageTextSelection {
     pub(crate) member: GraphMemberId,
-    pub(crate) version: u64,
+    pub(crate) gens: Generations,
     pub(crate) rects: Vec<[f32; 4]>,
     pub(crate) text: String,
 }
 
-/// An in-progress drag selection over a retained document-lane card. The anchor is a
-/// `DocumentRenderPacket::source_block_index`; the live selection recomputes against
-/// the same `(member, version)` until release.
+#[derive(Clone, Copy)]
+pub(crate) enum PageTextAnchor {
+    Document { source_index: usize },
+    Html { point: (f32, f32) },
+}
+
+/// An in-progress drag selection over a content tile/card. The anchor is either a
+/// retained document source block or an HTML content-local point; it stays tied to
+/// the same `(member, gens)` until release.
 pub(crate) struct PageTextDrag {
     pub(crate) member: GraphMemberId,
-    pub(crate) version: u64,
-    pub(crate) anchor_source: usize,
+    pub(crate) gens: Generations,
+    pub(crate) anchor: PageTextAnchor,
 }
 
 /// State owned by a single window's view. Methods on `Shell` reach it through
@@ -225,6 +233,17 @@ pub(crate) struct WindowView {
     /// out-of-band change). The resolved bindings the page also lists come from the
     /// constellation's in-memory set. (Settings perf — no per-frame disk read.)
     pub(crate) script_caps: Option<ScriptPermissionPrefs>,
+    /// The `pelt/wallet` page's cached startup-unlock mode, loaded when that page opens so its
+    /// per-frame rebuild stays off disk, updated in place on edit, and cleared on close so a
+    /// reopen re-reads the persisted value. (Startup unlock flow.)
+    pub(crate) wallet_unlock_mode: Option<StartupUnlockMode>,
+    /// Whether device-local sealed wallet secrets are still locked this launch. Loaded when the
+    /// wallet settings page opens, updated in place on explicit unlock, and cleared on close so
+    /// a reopen re-reads the current runtime state. (Startup unlock flow.)
+    pub(crate) wallet_locked: Option<bool>,
+    /// One-line status from the wallet settings page's explicit unlock action. Kept only while
+    /// that page stays open so the next reopen starts from live state again. (Startup unlock flow.)
+    pub(crate) wallet_unlock_status: Option<String>,
     /// Find-in-page match rects for `find_member`, computed host-side (no actor
     /// round-trip) against the focused page's cached body — full-document px
     /// (`[x0,y0,x1,y1]`), one inner `Vec` per match. The overlay maps these like the
@@ -255,10 +274,28 @@ pub(crate) struct WindowView {
     /// notes have no actor, so the window caches the measured height from the
     /// latest note band render.
     pub(crate) note_content_heights: HashMap<GraphMemberId, u32>,
-    /// The focused node's "last visit" snapshot preview as a PNG data-URI, keyed by URL.
-    /// Built once per url by a blocking readback + encode, then rendered as a chrome `<img>`
-    /// in the snapshot card (over the gnodes). (Layering fix — card over nodes.)
-    pub(crate) snapshot_data_uris: HashMap<String, String>,
+    /// The focused node's "last visit" snapshot preview as a PNG data-URI, keyed by member.
+    /// Each entry carries the URL it was built for, so an in-place navigation invalidates the
+    /// cached image while two nodes on the same URL can still carry different previews. Built
+    /// either from the node's persisted thumbnail PNG or by a blocking synthetic readback, then
+    /// rendered as a chrome `<img>` in the snapshot card (over the gnodes). (Layering fix.)
+    pub(crate) snapshot_data_uris: HashMap<GraphMemberId, SnapshotDataUri>,
+    /// Cached rasterized chrome **base** texture (the shell document with the `.orrery`
+    /// subtree omitted). Reused across frames while only the orrery subtree churns.
+    pub(crate) chrome_base_tex: Option<CachedTile>,
+    /// Cached rasterized `.orrery` DOM subtree (gnodes + focus card, but not the
+    /// external-texture underlay). Reused when the shell stays settled.
+    pub(crate) chrome_orrery_tex: Option<CachedTile>,
+    /// Signature of the stylesheet set the cached chrome base texture was rendered from.
+    /// A sheet or scale change invalidates the cache even if the DOM mutation stream is
+    /// empty for that frame.
+    pub(crate) chrome_base_sig: u64,
+    /// Last shellbar geometry style the host stamped into the shell DOM. Used to suppress
+    /// identical render-patched writes so the shell base can stay clean on settled frames.
+    pub(crate) shellbar_style: Option<String>,
+    /// Last comms-pane geometry style the host stamped into the shell DOM. Cleared when the
+    /// pane leaves the document so a later reopen re-stamps it even if the rect matches.
+    pub(crate) comms_style: Option<String>,
     /// Cached rasterized window-control strip (min / max / close).
     pub(crate) window_controls_tex: Option<CachedTile>,
     /// A small solid texture filling the frame-divider gutters between split panes.
@@ -463,13 +500,22 @@ pub(crate) struct OrreryRender {
 
 /// The focused node's content card in the shell document: a positioned element placed
 /// after the gnodes so document order paints it over them. A `Snapshot` carries a PNG
-/// data-URI `<img>` of the page's top peek (built host-side, cached per url); an
-/// `Unvisited` is a pure-DOM dashed placeholder. (Layering fix — card over nodes.)
+/// data-URI `<img>` of the page's top peek (built host-side, cached per member while its
+/// current URL still matches); an `Unvisited` is a pure-DOM dashed placeholder.
+/// (Layering fix — card over nodes.)
 #[derive(PartialEq)]
 pub(crate) struct FocusCard {
     /// The card rect `[x0, y0, x1, y1]` local to the orrery element origin.
     pub(crate) rect: [f32; 4],
     pub(crate) kind: FocusCardKind,
+}
+
+/// One cached preview image for a focused-node snapshot card: the member's current URL plus the
+/// chrome `<img>` data URI rendered for it. The cache is window-local; the node thumbnail in the
+/// graph is the durable substrate.
+pub(crate) struct SnapshotDataUri {
+    pub(crate) url: String,
+    pub(crate) data_uri: String,
 }
 
 #[derive(PartialEq)]
@@ -479,8 +525,8 @@ pub(crate) enum FocusCardKind {
     /// over them and under the overlays — like the favicons already do). An
     /// external-texture cannot serve here: textures composite in the content layer below
     /// the chrome, and the transparent hole does not erase the opaque gnodes behind it.
-    /// Only built once the host's once-per-url readback + encode has cached the image, so
-    /// there is no empty placeholder while it builds. (Layering fix; no placeholder flash.)
+    /// Only built once the host's per-member cache has an image for the node's current URL,
+    /// so there is no empty placeholder while it builds. (Layering fix; no placeholder flash.)
     Snapshot { data_uri: String },
     /// A never-visited node: a static dashed "double-click to load" placeholder.
     Unvisited,

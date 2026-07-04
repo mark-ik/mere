@@ -337,6 +337,7 @@ mod tests {
                 scroll_x: Some(10.0),
                 scroll_y: Some(20.0),
                 form_draft: Some("a secret draft".to_string()),
+                last_visited_ms: None,
             });
         }
 

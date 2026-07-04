@@ -8,7 +8,8 @@ personal-corpus value that follow from it.
 Cross-refs:
 
 - [petgraph_rdf_plan](../implementation_strategy/2026-06-18_petgraph_rdf_plan.md)
-  — per-statement edges; the Mere RDF projection profile.
+  — statement records inside pair-local edge buckets; the Mere RDF projection
+  profile.
 - [statements_over_schema_stance](2026-05-22_statements_over_schema_stance.md) — the
   open-predicate model this completes.
 - [two_natured_kernel_brief](../research/2026-05-30_two_natured_kernel_brief.md) —
@@ -143,9 +144,10 @@ Honest bounds, so the model is not oversold:
 ## Implementation stance
 
 The lens is conceptual; the storage stays typed and compact. Statements are
-per-statement petgraph edges (and typed node properties) with family-typed payloads,
-not a generic dynamically-typed triple log. Predicate semantics (nature, behavior,
-durability, projectability) live in a registry. The RDF projection
+statement records inside pair-local `EdgePayload` buckets (and typed node
+properties) with family-typed payloads, not a generic dynamically-typed triple log.
+Predicate semantics (nature, behavior, durability, projectability) live in a registry.
+The RDF projection
 (petgraph_rdf_plan) is how content statements leave as standards RDF; the lifecycle
 policies are how experience statements stay bounded; eidetic/armillary are where the
 distillate lives.

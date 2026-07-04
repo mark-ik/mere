@@ -418,3 +418,16 @@ template renders a purpose-built UI over its own subgraph.
   visibility layer, now spring-aware). Not headed-verified — the app's window
   rendered at a stuck 13x13px in this session's environment; see the roster
   plan's 2026-07-01 entry.
+- **2026-07-04 - Headed verification: P2 swatch + P3c chip strip seen on screen.** A
+  driven session (fresh binary, marquee over two nodes) summoned the connections swatch
+  in the focus-card slot with the classifier chip rendering **"Loose · 2"** and both
+  selected nodes as dots, no inter-edge drawn — the correct Loose-floor output for a
+  2-node selection with no direct relation (capture `C:\t\smoke16-crop.png`). Selection
+  also flipped the selected nodes' incident edges to the amber selected rendering on the
+  canvas (the per-cell selected-edge draw from the 06-30 P4 pass, now headed-confirmed).
+  This clears the "chip render not yet headed-verified" residual from P3c; the sqlx/sync
+  crash that made earlier drives flaky did not recur. Note for drive harnesses: the app's
+  earlier crash-on-URL-load this session was the shell-partition dead-NodeId bug (fixed
+  in `serval_render.rs`/`pane_session.rs`, logged in the surface-engine fold plan), not a
+  swatch issue. Still unverified headed: the P5 hide/show spring relaxation (focused
+  tests cover it) and the P4 fan/pick on a multi-relation pair.

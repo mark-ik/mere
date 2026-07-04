@@ -315,6 +315,10 @@ fn serval_rungs_classify_and_round_trip() {
         serval_rung(ENGINE_SERVAL_SCRIPTED),
         Some(ServalRung::Scripted)
     );
+    assert_eq!(
+        serval_rung(ENGINE_SERVAL_SCRIPTED_NOVA),
+        Some(ServalRung::Scripted)
+    );
     // Each rung's engine id round-trips back to the rung.
     for rung in ServalRung::ALL {
         assert_eq!(serval_rung(rung.engine_id()), Some(rung));

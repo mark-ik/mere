@@ -18,9 +18,11 @@ use std::collections::BTreeSet;
 
 use rkyv::{Archive, Deserialize, Serialize};
 
+use crate::types::GraphScope;
+
 use super::edge_data::{
     ArrangementData, ContainmentData, EdgeMetrics, ImportedData, ProvenanceData, SemanticData,
-    Traversal, TraversalData,
+    SemanticStatement, Traversal, TraversalData, predicate_iri,
 };
 use super::edge_taxonomy::{
     ArrangementSubKind, EdgeAssertion, EdgeFamily, RelationSelector, SemanticSubKind,
@@ -54,28 +56,34 @@ impl EdgePayload {
         sub_kind: SemanticSubKind,
         label: Option<String>,
     ) -> bool {
+        self.insert_semantic_relation_in_scope(sub_kind, label, GraphScope::Default)
+    }
+
+    fn insert_semantic_relation_in_scope(
+        &mut self,
+        sub_kind: SemanticSubKind,
+        label: Option<String>,
+        graph_scope: GraphScope,
+    ) -> bool {
         let data = self.semantic.get_or_insert_with(SemanticData::default);
-        let inserted = data.sub_kinds.insert(sub_kind);
-        let mut changed = inserted;
-        if let Some(label) = label
-            && data.label.as_ref() != Some(&label)
-        {
-            data.label = Some(label);
-            changed = true;
-        }
-        changed
+        data.insert_statement(
+            Some(sub_kind),
+            predicate_iri(sub_kind).to_string(),
+            label,
+            graph_scope,
+            None,
+            None,
+        )
     }
 
     fn remove_semantic_relation(&mut self, sub_kind: SemanticSubKind) -> bool {
         let Some(data) = self.semantic.as_mut() else {
             return false;
         };
-        if !data.sub_kinds.remove(&sub_kind) {
+        if !data.remove_statements_with_sub_kind(sub_kind) {
             return false;
         }
-        if data.sub_kinds.is_empty() {
-            // Drop the sidecar entirely once no sub-kinds remain; any
-            // label was scoped to the now-removed relation set.
+        if data.statements().is_empty() {
             self.semantic = None;
         }
         true
@@ -193,10 +201,11 @@ impl EdgePayload {
 
     fn has_family(&self, family: EdgeFamily) -> bool {
         match family {
-            EdgeFamily::Semantic => self
-                .semantic
-                .as_ref()
-                .is_some_and(|data| !data.sub_kinds.is_empty() || data.predicate.is_some()),
+            EdgeFamily::Semantic => self.semantic.as_ref().is_some_and(|data| {
+                !data.statements().is_empty()
+                    || !data.sub_kinds.is_empty()
+                    || data.predicate.is_some()
+            }),
             EdgeFamily::Traversal => self.traversal.is_some(),
             EdgeFamily::Containment => self
                 .containment
@@ -236,6 +245,45 @@ impl EdgePayload {
         self.semantic.as_ref()
     }
 
+    pub fn semantic_statements(&self) -> &[SemanticStatement] {
+        self.semantic
+            .as_ref()
+            .map(SemanticData::statements)
+            .unwrap_or(&[])
+    }
+
+    pub(crate) fn assert_semantic_predicate(&mut self, predicate: String) -> bool {
+        self.assert_semantic_predicate_in_scope(predicate, GraphScope::Default)
+    }
+
+    pub(crate) fn assert_semantic_relation_in_scope(
+        &mut self,
+        sub_kind: SemanticSubKind,
+        label: Option<String>,
+        graph_scope: GraphScope,
+    ) -> bool {
+        self.insert_semantic_relation_in_scope(sub_kind, label, graph_scope)
+    }
+
+    pub(crate) fn assert_semantic_predicate_in_scope(
+        &mut self,
+        predicate: String,
+        graph_scope: GraphScope,
+    ) -> bool {
+        self.semantic
+            .get_or_insert_with(SemanticData::default)
+            .insert_statement(None, predicate, None, graph_scope, None, None)
+    }
+
+    pub(crate) fn push_persisted_semantic_statement(
+        &mut self,
+        statement: SemanticStatement,
+    ) -> bool {
+        self.semantic
+            .get_or_insert_with(SemanticData::default)
+            .push_persisted_statement(statement)
+    }
+
     /// Set (or clear) the open predicate IRI on the semantic sidecar, creating
     /// the sidecar if needed. The predicate is independent of `sub_kinds`: a
     /// recognized edge carries both; a raw web predicate may carry only this.
@@ -243,9 +291,18 @@ impl EdgePayload {
         if predicate.is_none() && self.semantic.is_none() {
             return;
         }
-        self.semantic
-            .get_or_insert_with(SemanticData::default)
-            .predicate = predicate;
+        if let Some(data) = self.semantic.as_mut() {
+            data.set_statement_predicate(predicate);
+            if data.statements().is_empty() {
+                self.semantic = None;
+            }
+            return;
+        }
+        let mut data = SemanticData::default();
+        data.set_statement_predicate(predicate);
+        if !data.statements().is_empty() {
+            self.semantic = Some(data);
+        }
     }
 
     pub fn traversal_data(&self) -> Option<&TraversalData> {

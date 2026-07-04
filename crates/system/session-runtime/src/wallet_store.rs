@@ -30,19 +30,22 @@
 //! This module owns the file layout and typed serde shapes. Pairing, wrapped-key
 //! semantics, and transport resolution layer on top.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 use std::{fs, io};
 
 use blake3::Hasher;
 use eidetic::Hash;
 use identity::{
     Ed25519Keypair, Ed25519PublicKey, IdentityError, IdentityProvider, InMemoryProvider, PersonaId,
+    SealedRecordStorage, StartupUnlockMode, load_or_create_auto_unlock_root,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::engine_profile_store::PERSONAS_DIR;
+use crate::settings_store;
 
 /// Top-level directory holding identity-scoped wallet state.
 pub const IDENTITY_DIR: &str = "identity";
@@ -57,19 +60,32 @@ pub const IDENTITY_GRANTS_DIR: &str = "grants";
 /// Transitional master-seed bridge under [`IDENTITY_DIR`].
 ///
 /// This keeps the host on one identity root until the passphrase-encrypted
-/// vault handoff replaces the plaintext seed file.
+/// vault handoff replaces the raw 32-byte seed file with a sealed local record.
 pub const IDENTITY_SEED_FILENAME: &str = "master.seed";
+/// Local auto-unlock root under [`IDENTITY_DIR`].
+///
+/// `StartupUnlockMode::AutoOs` uses this OS-protected local root to unlock
+/// device-local sealed records such as `identity/master.seed`.
+pub const IDENTITY_AUTO_UNLOCK_ROOT_FILENAME: &str = "vault-root.auto.json";
 /// Transitional delegated-device identity bridge under [`IDENTITY_DIR`].
 ///
 /// Remote-auth pairing needs a stable device id + keypair before the OS-keychain
-/// backend exists. This file is the typed host seam that later keychain storage
-/// replaces.
+/// backend exists. This file is still the typed host seam, but the local secret
+/// bytes now ride the same sealed-record backend as the local seed.
 pub const LOCAL_DEVICE_IDENTITY_FILENAME: &str = "local-device.json";
+/// Transitional remote-auth wrapping-key bridge under [`IDENTITY_DIR`].
+///
+/// Pairing-backed delegated devices need a retained per-device wrapping key so
+/// later private-epoch rotation can refresh their signed grant without rerunning
+/// the whole pairing ceremony. This file is a temporary host seam that later
+/// encrypted key history should replace.
+pub const REMOTE_AUTH_WRAPPING_KEYS_FILENAME: &str = "remote-auth-wrapping-keys.json";
 /// Transitional per-persona private-epoch bridge under `personas/<id>/`.
 ///
 /// Remote-auth pairing needs plaintext private-epoch material to wrap into a
-/// `private.read` grant before the encrypted-at-rest lane exists. This file is a
-/// temporary host seam that later encrypted epoch history replaces.
+/// `private.read` grant before the encrypted-at-rest lane exists. This file is
+/// still the typed host seam, but the secret bytes now migrate behind the
+/// sealed-record backend while epoch-history storage remains in transition.
 pub const PERSONA_EPOCH_BRIDGE_FILENAME: &str = "private-epoch-bridge.json";
 /// Current schema version for wallet and roster files.
 pub const WALLET_SCHEMA_VERSION: u32 = 1;
@@ -359,11 +375,40 @@ impl LocalDeviceIdentity {
     }
 }
 
+/// One retained remote-auth wrapping key keyed by delegated device id.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteAuthWrappingKeyRecord {
+    pub device_id: DeviceId,
+    #[serde(default)]
+    pub ticket_id: Option<Uuid>,
+    pub wrapping_key: [u8; 32],
+}
+
+/// Transitional identity-level bridge of remote-auth wrapping keys.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteAuthWrappingKeyBridge {
+    pub schema_version: u32,
+    #[serde(default)]
+    pub keys: Vec<RemoteAuthWrappingKeyRecord>,
+}
+
+impl RemoteAuthWrappingKeyBridge {
+    pub fn new() -> Self {
+        Self {
+            schema_version: WALLET_SCHEMA_VERSION,
+            keys: Vec::new(),
+        }
+    }
+}
+
 /// Which wallet bootstrap posture the current data root resolved to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WalletBootstrapMode {
     /// A copy-style wallet root with a shared identity seed is live.
     CopySeeded,
+    /// A sealed local secret exists, but the current startup-unlock mode left it
+    /// locked at launch, so copy/delegated state must not be clobbered.
+    Locked,
     /// A delegated-device identity exists locally, but enrollment has not yet
     /// installed persona wallet state.
     DelegatedPending,
@@ -400,6 +445,107 @@ pub fn identity_seed_path(data_root: &Path) -> PathBuf {
 /// `<data_root>/identity/local-device.json`
 pub fn local_device_identity_path(data_root: &Path) -> PathBuf {
     identity_dir(data_root).join(LOCAL_DEVICE_IDENTITY_FILENAME)
+}
+
+/// `<data_root>/identity/remote-auth-wrapping-keys.json`
+pub fn remote_auth_wrapping_keys_path(data_root: &Path) -> PathBuf {
+    identity_dir(data_root).join(REMOTE_AUTH_WRAPPING_KEYS_FILENAME)
+}
+
+/// `<data_root>/identity/vault-root.auto.json`
+pub fn identity_auto_unlock_root_path(data_root: &Path) -> PathBuf {
+    identity_dir(data_root).join(IDENTITY_AUTO_UNLOCK_ROOT_FILENAME)
+}
+
+fn io_backend_error(err: IdentityError) -> io::Error {
+    io::Error::other(err.to_string())
+}
+
+fn runtime_manual_unlocks() -> &'static Mutex<HashSet<PathBuf>> {
+    static MANUAL_UNLOCKS: OnceLock<Mutex<HashSet<PathBuf>>> = OnceLock::new();
+    MANUAL_UNLOCKS.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+fn runtime_manual_unlock_active(data_root: &Path) -> bool {
+    runtime_manual_unlocks()
+        .lock()
+        .map(|roots| roots.contains(data_root))
+        .unwrap_or(false)
+}
+
+fn set_runtime_manual_unlock(data_root: &Path, active: bool) {
+    let Ok(mut roots) = runtime_manual_unlocks().lock() else {
+        return;
+    };
+    if active {
+        roots.insert(data_root.to_path_buf());
+    } else {
+        roots.remove(data_root);
+    }
+}
+
+fn wallet_startup_unlock_mode(data_root: &Path) -> StartupUnlockMode {
+    settings_store::load_settings(data_root)
+        .ok()
+        .flatten()
+        .map(|settings| settings.startup_unlock_mode)
+        .unwrap_or_default()
+}
+
+fn looks_like_sealed_record(path: &Path) -> bool {
+    let Ok(bytes) = fs::read(path) else {
+        return false;
+    };
+    let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+        return false;
+    };
+    let Some(object) = value.as_object() else {
+        return false;
+    };
+    object.contains_key("version")
+        && object.contains_key("nonce")
+        && object.contains_key("ciphertext")
+}
+
+fn wallet_local_secret_store(data_root: &Path) -> io::Result<Option<SealedRecordStorage>> {
+    if runtime_manual_unlock_active(data_root) {
+        return load_or_create_auto_unlock_root(identity_auto_unlock_root_path(data_root))
+            .map(|root| root.map(|key| SealedRecordStorage::open_with_key(data_root, key)))
+            .map_err(io_backend_error);
+    }
+    match wallet_startup_unlock_mode(data_root) {
+        StartupUnlockMode::AutoOs => {
+            load_or_create_auto_unlock_root(identity_auto_unlock_root_path(data_root))
+                .map(|root| root.map(|key| SealedRecordStorage::open_with_key(data_root, key)))
+                .map_err(io_backend_error)
+        }
+        StartupUnlockMode::Prompt | StartupUnlockMode::Locked => Ok(None),
+    }
+}
+
+fn wallet_secret_record_root_key(seed: [u8; 32]) -> [u8; 32] {
+    blake3::derive_key(
+        "mere.session_runtime.wallet_store.secret_records.v1",
+        seed.as_slice(),
+    )
+}
+
+fn wallet_secret_store_from_seed(data_root: &Path, seed: [u8; 32]) -> SealedRecordStorage {
+    SealedRecordStorage::open_with_key(data_root, wallet_secret_record_root_key(seed))
+}
+
+fn wallet_secret_store(data_root: &Path) -> io::Result<Option<SealedRecordStorage>> {
+    Ok(load_identity_seed(data_root)?.map(|seed| wallet_secret_store_from_seed(data_root, seed)))
+}
+
+fn wallet_persona_secret_store(data_root: &Path) -> io::Result<Option<SealedRecordStorage>> {
+    if let Some(store) = wallet_secret_store(data_root)? {
+        return Ok(Some(store));
+    }
+    if load_local_device_identity(data_root)?.is_some() {
+        return wallet_local_secret_store(data_root);
+    }
+    Ok(None)
 }
 
 /// `<data_root>/identity/grants/<device_id>.cbor`
@@ -467,15 +613,43 @@ pub fn load_persona_epoch_bridge(
     data_root: &Path,
     persona: PersonaId,
 ) -> io::Result<Option<PersonaEpochBridge>> {
-    load_json_optional(&persona_epoch_bridge_path(data_root, persona))
+    let path = persona_epoch_bridge_path(data_root, persona);
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let relative = path
+        .strip_prefix(data_root)
+        .expect("wallet path under data root");
+    let secret_store = wallet_persona_secret_store(data_root)?;
+    if let Some(store) = &secret_store {
+        match store.load_record::<PersonaEpochBridge>(relative) {
+            Ok(bridge) => return Ok(bridge),
+            Err(_) => {}
+        }
+    }
+    if secret_store.is_none() && looks_like_sealed_record(&path) {
+        return Ok(None);
+    }
+    let legacy = load_json_optional(&path)?;
+    if let (Some(bridge), Some(_)) = (&legacy, &secret_store) {
+        save_persona_epoch_bridge(data_root, bridge)?;
+    }
+    Ok(legacy)
 }
 
 /// Save one persona epoch bridge atomically.
 pub fn save_persona_epoch_bridge(data_root: &Path, bridge: &PersonaEpochBridge) -> io::Result<()> {
-    save_json_atomic(
-        &persona_epoch_bridge_path(data_root, bridge.persona_id),
-        bridge,
-    )
+    let path = persona_epoch_bridge_path(data_root, bridge.persona_id);
+    if let Some(store) = wallet_persona_secret_store(data_root)? {
+        return store
+            .save_record(
+                path.strip_prefix(data_root)
+                    .expect("wallet path under data root"),
+                bridge,
+            )
+            .map_err(io_backend_error);
+    }
+    save_json_atomic(&path, bridge)
 }
 
 /// Load the opaque grant payload for one device, or `None` when absent.
@@ -497,27 +671,122 @@ pub fn save_device_grant(data_root: &Path, device_id: DeviceId, bytes: &[u8]) ->
 /// Load the shared master seed, or `None` when the bridge file is absent.
 pub fn load_identity_seed(data_root: &Path) -> io::Result<Option<[u8; 32]>> {
     let path = identity_seed_path(data_root);
-    match fs::read(&path) {
-        Ok(bytes) => match <[u8; 32]>::try_from(bytes.as_slice()) {
-            Ok(seed) => Ok(Some(seed)),
-            Err(_) => Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("identity seed at {path:?} is not 32 bytes"),
-            )),
-        },
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(e),
+    if !path.is_file() {
+        return Ok(None);
     }
+    let relative = path
+        .strip_prefix(data_root)
+        .expect("wallet path under data root");
+    let local_store = wallet_local_secret_store(data_root)?;
+    if let Some(store) = &local_store {
+        match store.load_record::<[u8; 32]>(relative) {
+            Ok(Some(seed)) => return Ok(Some(seed)),
+            Ok(None) => return Ok(None),
+            Err(_) => {}
+        }
+    }
+    if local_store.is_none() && looks_like_sealed_record(&path) {
+        return Ok(None);
+    }
+    let bytes = fs::read(&path)?;
+    let seed = <[u8; 32]>::try_from(bytes.as_slice()).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("identity seed at {path:?} is neither a sealed record nor 32 raw bytes"),
+        )
+    })?;
+    if local_store.is_some() {
+        save_identity_seed(data_root, seed)?;
+    }
+    Ok(Some(seed))
+}
+
+/// Whether the startup seed record exists but is currently inaccessible because
+/// the install stayed locked at launch.
+pub fn identity_seed_locked_at_startup(data_root: &Path) -> bool {
+    let path = identity_seed_path(data_root);
+    path.is_file()
+        && looks_like_sealed_record(&path)
+        && load_identity_seed(data_root).ok().flatten().is_none()
+}
+
+/// Whether any device-local sealed wallet secret is still unavailable this launch.
+pub fn wallet_local_secrets_locked(data_root: &Path) -> bool {
+    identity_seed_locked_at_startup(data_root) || local_device_identity_locked_at_startup(data_root)
+}
+
+/// Explicitly unlock device-local sealed wallet secrets with the local OS store for this
+/// session only, without changing the persisted startup policy.
+pub fn unlock_wallet_with_auto_os(data_root: &Path) -> io::Result<bool> {
+    let Some(_) = load_or_create_auto_unlock_root(identity_auto_unlock_root_path(data_root))
+        .map_err(io_backend_error)?
+    else {
+        return Ok(false);
+    };
+    set_runtime_manual_unlock(data_root, true);
+    let unlocked = load_identity_seed(data_root)?.is_some()
+        || load_local_device_identity(data_root)?.is_some();
+    if !unlocked {
+        set_runtime_manual_unlock(data_root, false);
+    }
+    Ok(unlocked)
+}
+
+/// Clear the session-scoped explicit unlock override so later secret loads respect the
+/// persisted startup policy again.
+pub fn relock_wallet_after_manual_unlock(data_root: &Path) {
+    set_runtime_manual_unlock(data_root, false);
 }
 
 /// Save the shared master seed atomically.
 pub fn save_identity_seed(data_root: &Path, seed: [u8; 32]) -> io::Result<()> {
-    save_bytes_atomic(&identity_seed_path(data_root), &seed)
+    let path = identity_seed_path(data_root);
+    if let Some(store) = wallet_local_secret_store(data_root)? {
+        return store
+            .save_record(
+                path.strip_prefix(data_root)
+                    .expect("wallet path under data root"),
+                &seed,
+            )
+            .map_err(io_backend_error);
+    }
+    save_bytes_atomic(&path, &seed)
 }
 
 /// Load the local delegated-device identity, or `None` when absent.
 pub fn load_local_device_identity(data_root: &Path) -> io::Result<Option<LocalDeviceIdentity>> {
-    load_json_optional(&local_device_identity_path(data_root))
+    let path = local_device_identity_path(data_root);
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let relative = path
+        .strip_prefix(data_root)
+        .expect("wallet path under data root");
+    let local_store = wallet_local_secret_store(data_root)?;
+    if let Some(store) = &local_store {
+        match store.load_record::<LocalDeviceIdentity>(relative) {
+            Ok(identity) => return Ok(identity),
+            Err(_) => {}
+        }
+    }
+    if local_store.is_none() && looks_like_sealed_record(&path) {
+        return Ok(None);
+    }
+    let legacy = load_json_optional(&path)?;
+    if let (Some(identity), Some(_)) = (&legacy, &local_store) {
+        save_local_device_identity(data_root, identity)?;
+    }
+    Ok(legacy)
+}
+
+fn local_device_identity_locked_at_startup(data_root: &Path) -> bool {
+    let path = local_device_identity_path(data_root);
+    path.is_file()
+        && looks_like_sealed_record(&path)
+        && load_local_device_identity(data_root)
+            .ok()
+            .flatten()
+            .is_none()
 }
 
 /// Save the local delegated-device identity atomically.
@@ -525,7 +794,67 @@ pub fn save_local_device_identity(
     data_root: &Path,
     identity: &LocalDeviceIdentity,
 ) -> io::Result<()> {
-    save_json_atomic(&local_device_identity_path(data_root), identity)
+    let path = local_device_identity_path(data_root);
+    if let Some(store) = wallet_local_secret_store(data_root)? {
+        return store
+            .save_record(
+                path.strip_prefix(data_root)
+                    .expect("wallet path under data root"),
+                identity,
+            )
+            .map_err(io_backend_error);
+    }
+    save_json_atomic(&path, identity)
+}
+
+/// Load the retained remote-auth wrapping-key bridge, or `None` when absent.
+pub fn load_remote_auth_wrapping_key_bridge(
+    data_root: &Path,
+) -> io::Result<Option<RemoteAuthWrappingKeyBridge>> {
+    let path = remote_auth_wrapping_keys_path(data_root);
+    if !path.is_file() {
+        return Ok(None);
+    }
+    if let Some(store) = wallet_secret_store(data_root)? {
+        match store.load_record(
+            path.strip_prefix(data_root)
+                .expect("wallet path under data root"),
+        ) {
+            Ok(bridge) => return Ok(bridge),
+            Err(err) => {
+                if let Some(bridge) = load_json_optional(&path)? {
+                    save_remote_auth_wrapping_key_bridge(data_root, &bridge)?;
+                    return Ok(Some(bridge));
+                }
+                return Err(io_backend_error(err));
+            }
+        }
+    }
+    if looks_like_sealed_record(&path) {
+        return Ok(None);
+    }
+    load_json_optional(&path)
+}
+
+/// Save the retained remote-auth wrapping-key bridge atomically.
+pub fn save_remote_auth_wrapping_key_bridge(
+    data_root: &Path,
+    bridge: &RemoteAuthWrappingKeyBridge,
+) -> io::Result<()> {
+    let store = wallet_secret_store(data_root)?.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            "identity seed missing; cannot seal remote-auth wrapping keys",
+        )
+    })?;
+    let path = remote_auth_wrapping_keys_path(data_root);
+    store
+        .save_record(
+            path.strip_prefix(data_root)
+                .expect("wallet path under data root"),
+            bridge,
+        )
+        .map_err(io_backend_error)
 }
 
 /// Ensure a stable delegated-device identity exists for this data root.
@@ -631,11 +960,17 @@ pub fn bootstrap_wallet_state(
         ensure_wallet_state(data_root, persona, device_label)?;
         return Ok(WalletBootstrapMode::CopySeeded);
     }
+    if identity_seed_locked_at_startup(data_root) {
+        return Ok(WalletBootstrapMode::Locked);
+    }
     if load_identity_wallet(data_root)?.is_some() {
         return Ok(WalletBootstrapMode::DelegatedEnrolled);
     }
     if load_local_device_identity(data_root)?.is_some() {
         return Ok(WalletBootstrapMode::DelegatedPending);
+    }
+    if local_device_identity_locked_at_startup(data_root) {
+        return Ok(WalletBootstrapMode::Locked);
     }
     ensure_wallet_state(data_root, persona, device_label)?;
     Ok(WalletBootstrapMode::CopySeeded)
@@ -775,6 +1110,7 @@ fn save_bytes_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::settings_store::{PersistedSettings, save_settings};
     use identity::{IdentityProvider, InMemoryProvider};
 
     fn temp_data_root(tag: &str) -> PathBuf {
@@ -954,6 +1290,91 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn copy_seeded_persona_epoch_bridge_round_trips_as_a_sealed_record() {
+        let root = temp_data_root("epoch-bridge-sealed-copy");
+        save_identity_seed(&root, [0x44; 32]).unwrap();
+        let bridge = PersonaEpochBridge {
+            schema_version: WALLET_SCHEMA_VERSION,
+            persona_id: fixture_persona(),
+            epochs: vec![PrivateEpochRecord {
+                epoch_id: fixture_epoch(),
+                epoch_secret: b"known-private-epoch".to_vec(),
+            }],
+        };
+
+        save_persona_epoch_bridge(&root, &bridge).unwrap();
+        let restored = load_persona_epoch_bridge(&root, fixture_persona())
+            .unwrap()
+            .unwrap();
+        assert_eq!(restored, bridge);
+
+        let text = fs::read_to_string(persona_epoch_bridge_path(&root, fixture_persona())).unwrap();
+        assert!(!text.contains("\"epoch_secret\":["));
+        assert!(!text.contains("known-private-epoch"));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn delegated_persona_epoch_bridge_round_trips_as_a_sealed_record() {
+        let root = temp_data_root("epoch-bridge-sealed-delegated");
+        ensure_local_device_identity(&root, "Pocket Meerkat").unwrap();
+        let bridge = PersonaEpochBridge {
+            schema_version: WALLET_SCHEMA_VERSION,
+            persona_id: fixture_persona(),
+            epochs: vec![PrivateEpochRecord {
+                epoch_id: fixture_epoch(),
+                epoch_secret: b"known-private-epoch".to_vec(),
+            }],
+        };
+
+        save_persona_epoch_bridge(&root, &bridge).unwrap();
+        let restored = load_persona_epoch_bridge(&root, fixture_persona())
+            .unwrap()
+            .unwrap();
+        assert_eq!(restored, bridge);
+
+        let text = fs::read_to_string(persona_epoch_bridge_path(&root, fixture_persona())).unwrap();
+        assert!(!text.contains("\"epoch_secret\":["));
+        assert!(!text.contains("known-private-epoch"));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn loading_a_legacy_plaintext_persona_epoch_bridge_migrates_it_to_a_sealed_record() {
+        let root = temp_data_root("epoch-bridge-migrate");
+        save_identity_seed(&root, [0x51; 32]).unwrap();
+        let bridge = PersonaEpochBridge {
+            schema_version: WALLET_SCHEMA_VERSION,
+            persona_id: fixture_persona(),
+            epochs: vec![PrivateEpochRecord {
+                epoch_id: fixture_epoch(),
+                epoch_secret: b"known-private-epoch".to_vec(),
+            }],
+        };
+        save_json_atomic(
+            &persona_epoch_bridge_path(&root, fixture_persona()),
+            &bridge,
+        )
+        .unwrap();
+
+        let restored = load_persona_epoch_bridge(&root, fixture_persona())
+            .unwrap()
+            .unwrap();
+        assert_eq!(restored, bridge);
+
+        let text = fs::read_to_string(persona_epoch_bridge_path(&root, fixture_persona())).unwrap();
+        assert!(!text.contains("\"epoch_secret\":["));
+        assert!(!text.contains("known-private-epoch"));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
     #[test]
     fn opaque_device_grant_round_trips() {
         let root = temp_data_root("grant");
@@ -973,6 +1394,23 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn loading_a_legacy_raw_seed_migrates_it_to_a_sealed_record() {
+        let root = temp_data_root("seed-migrate");
+        let seed = [0x7a; 32];
+        save_bytes_atomic(&identity_seed_path(&root), &seed).unwrap();
+
+        let restored = load_identity_seed(&root).unwrap().unwrap();
+        assert_eq!(restored, seed);
+        assert!(identity_auto_unlock_root_path(&root).is_file());
+
+        let text = fs::read_to_string(identity_seed_path(&root)).unwrap();
+        assert!(text.contains("ciphertext"));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
     #[test]
     fn local_device_identity_round_trips() {
         let root = temp_data_root("local-device");
@@ -984,6 +1422,49 @@ mod tests {
             restored.public_key(),
             DevicePublicKey::from(restored.keypair().public_key())
         );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn loading_a_legacy_local_device_identity_migrates_it_to_a_sealed_record() {
+        let root = temp_data_root("local-device-migrate");
+        let identity = LocalDeviceIdentity::new(fixture_device(), [0x33; 32], "Tablet".into());
+        save_json_atomic(&local_device_identity_path(&root), &identity).unwrap();
+
+        let restored = load_local_device_identity(&root).unwrap().unwrap();
+        assert_eq!(restored, identity);
+        assert!(identity_auto_unlock_root_path(&root).is_file());
+
+        let text = fs::read_to_string(local_device_identity_path(&root)).unwrap();
+        assert!(!text.contains("\"label\": \"Tablet\""));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn remote_auth_wrapping_key_bridge_round_trips_as_a_sealed_record() {
+        let root = temp_data_root("wrapping-keys");
+        save_identity_seed(&root, [0x66; 32]).unwrap();
+        let bridge = RemoteAuthWrappingKeyBridge {
+            schema_version: WALLET_SCHEMA_VERSION,
+            keys: vec![RemoteAuthWrappingKeyRecord {
+                device_id: fixture_device(),
+                ticket_id: Some(Uuid::from_u128(0xfeed)),
+                wrapping_key: [0x5a; 32],
+            }],
+        };
+
+        save_remote_auth_wrapping_key_bridge(&root, &bridge).unwrap();
+        let restored = load_remote_auth_wrapping_key_bridge(&root)
+            .unwrap()
+            .unwrap();
+        assert_eq!(restored, bridge);
+
+        let text = fs::read_to_string(remote_auth_wrapping_keys_path(&root)).unwrap();
+        assert!(!text.contains("\"wrapping_key\""));
+        assert!(!text.contains("feed"));
+
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -1176,6 +1657,118 @@ mod tests {
             }]
         );
 
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn bootstrap_wallet_state_reports_locked_when_copy_seed_is_sealed_but_startup_stays_locked() {
+        let root = temp_data_root("bootstrap-locked-copy");
+        let persona = fixture_persona();
+        ensure_wallet_state(&root, persona, "Studio PC").unwrap();
+        save_settings(
+            &root,
+            &PersistedSettings {
+                startup_unlock_mode: StartupUnlockMode::Locked,
+                ..PersistedSettings::default()
+            },
+        )
+        .unwrap();
+
+        let mode = bootstrap_wallet_state(&root, persona, "Studio PC").unwrap();
+
+        assert_eq!(mode, WalletBootstrapMode::Locked);
+        assert!(identity_seed_locked_at_startup(&root));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn bootstrap_wallet_state_reports_locked_when_delegated_identity_is_sealed_but_startup_stays_locked()
+     {
+        let root = temp_data_root("bootstrap-locked-delegated");
+        let persona = fixture_persona();
+        ensure_local_device_identity(&root, "Pocket Meerkat").unwrap();
+        save_settings(
+            &root,
+            &PersistedSettings {
+                startup_unlock_mode: StartupUnlockMode::Prompt,
+                ..PersistedSettings::default()
+            },
+        )
+        .unwrap();
+
+        let mode = bootstrap_wallet_state(&root, persona, "Studio PC").unwrap();
+
+        assert_eq!(mode, WalletBootstrapMode::Locked);
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn explicit_auto_os_unlock_opens_a_locked_seed_without_changing_startup_mode() {
+        let root = temp_data_root("explicit-auto-os-unlock");
+        let persona = fixture_persona();
+        ensure_wallet_state(&root, persona, "Studio PC").unwrap();
+        save_settings(
+            &root,
+            &PersistedSettings {
+                startup_unlock_mode: StartupUnlockMode::Locked,
+                ..PersistedSettings::default()
+            },
+        )
+        .unwrap();
+
+        assert!(wallet_local_secrets_locked(&root));
+        assert_eq!(load_identity_seed(&root).unwrap(), None);
+
+        assert!(unlock_wallet_with_auto_os(&root).unwrap());
+        assert!(!wallet_local_secrets_locked(&root));
+        assert!(load_identity_seed(&root).unwrap().is_some());
+        assert_eq!(
+            settings_store::load_settings(&root)
+                .unwrap()
+                .unwrap_or_default()
+                .startup_unlock_mode,
+            StartupUnlockMode::Locked
+        );
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn relock_after_manual_unlock_hides_the_seed_again_under_locked_startup() {
+        let root = temp_data_root("manual-relock");
+        let persona = fixture_persona();
+        ensure_wallet_state(&root, persona, "Studio PC").unwrap();
+        save_settings(
+            &root,
+            &PersistedSettings {
+                startup_unlock_mode: StartupUnlockMode::Prompt,
+                ..PersistedSettings::default()
+            },
+        )
+        .unwrap();
+
+        assert!(unlock_wallet_with_auto_os(&root).unwrap());
+        assert!(load_identity_seed(&root).unwrap().is_some());
+
+        relock_wallet_after_manual_unlock(&root);
+
+        assert!(wallet_local_secrets_locked(&root));
+        assert_eq!(load_identity_seed(&root).unwrap(), None);
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn explicit_auto_os_unlock_reports_unavailable_without_platform_support() {
+        let root = temp_data_root("explicit-auto-os-unlock-unsupported");
+        assert!(!unlock_wallet_with_auto_os(&root).unwrap());
         let _ = fs::remove_dir_all(&root);
     }
 }

@@ -109,6 +109,15 @@ impl From<ContentCommand> for ContentCommandMessage {
                 query,
                 viewport_gen: viewport_gen.0,
             },
+            ContentCommand::SelectText {
+                anchor,
+                focus,
+                viewport_gen,
+            } => Self::SelectText {
+                anchor,
+                focus,
+                viewport_gen: viewport_gen.0,
+            },
             ContentCommand::AttachScript {
                 component_path,
                 log,
@@ -198,6 +207,15 @@ impl From<ContentCommandMessage> for ContentCommand {
                 query,
                 viewport_gen: ViewportGeneration(viewport_gen),
             },
+            ContentCommandMessage::SelectText {
+                anchor,
+                focus,
+                viewport_gen,
+            } => Self::SelectText {
+                anchor,
+                focus,
+                viewport_gen: ViewportGeneration(viewport_gen),
+            },
             ContentCommandMessage::AttachScript {
                 component_path,
                 log,
@@ -284,6 +302,15 @@ impl From<ContentUpdate> for ContentUpdateMessage {
                 viewport_gen: viewport_gen.0,
                 matches,
             },
+            ContentUpdate::TextSelection {
+                nav,
+                viewport_gen,
+                selection,
+            } => Self::TextSelection {
+                nav: nav.0,
+                viewport_gen: viewport_gen.0,
+                selection,
+            },
             ContentUpdate::EngineStats {
                 nav,
                 viewport_gen,
@@ -356,6 +383,15 @@ impl From<ContentUpdateMessage> for ContentUpdate {
                 nav: NavGeneration(nav),
                 viewport_gen: ViewportGeneration(viewport_gen),
                 matches,
+            },
+            ContentUpdateMessage::TextSelection {
+                nav,
+                viewport_gen,
+                selection,
+            } => Self::TextSelection {
+                nav: NavGeneration(nav),
+                viewport_gen: ViewportGeneration(viewport_gen),
+                selection,
             },
             ContentUpdateMessage::EngineStats {
                 nav,

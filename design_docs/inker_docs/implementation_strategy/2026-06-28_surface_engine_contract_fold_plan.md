@@ -169,3 +169,23 @@ registry path. Steps 4-5 remove the bypass entirely.
   on the live roster/gloss render churn settling (`window_view`/`render/*` dirty) and needs
   the headed scry-shots smoke on the producer's UI thread (the fence path is scry's
   un-exercised path; a green build won't prove the off-window tile composites non-blank).
+- **2026-07-04 — Phase 5 reconciled (landed in the concurrent workstream) + the headed
+  smoke run.** Code-verified: `windows_pool.rs` holds `producer: Box<dyn SurfaceProducer>`,
+  spawns via `inker::SurfaceEngineRegistry`, imports through grafting's
+  `EpochCachedImporter` + `Dx12FenceSynchronizer`, and reaches the control plane via
+  `as_web_surface()` per drive; the flip's `ProducerSurface` is now a thin shim over
+  `&mut dyn WebSurface` (the generic forward, keeping the old name); the only concrete
+  `scrying::` types left sit in `factory.rs` (the legitimate construction boundary), and
+  `inner_mut` is gone (commits `71c1e5a`, `19eed3b`). **Headed fence smoke (gate #3): PASS.**
+  Fresh binary, live session: `>compat_view` on an example.com node spawned the WebView2
+  surface through the registry (capabilities line logged: `scrying.webview2`,
+  `transport=ImportedTexture`, Dx12SharedTexture + fence delegation), the off-window tile
+  composited **non-blank** beside a serval tile, and liveness was proven dynamically: a
+  select-all forwarded through the CDP input path re-rendered the page (selection
+  highlight visible in capture `C:\t\smoke8-wiki.png`), `WebSurfaceEvent` polling observed
+  the accelerator (`meerkat.surface.event` diagnostics), and **zero stall-restarts** were
+  logged across the session. Two crashes found and fixed on the way (the in-flight
+  partition classifier + batch diagnostics walked read accessors on dead batch NodeIds;
+  both now gate on the engine's never-panicking `is_live`: `serval_render.rs`
+  `node_under_root`, `pane_session.rs` `describe_node_brief`). Plan complete; the
+  remaining polish is the `SecondaryForward` rename if wanted.

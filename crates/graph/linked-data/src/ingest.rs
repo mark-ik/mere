@@ -9,9 +9,9 @@
 //! wasm-light) to RDF triples, grouped into the contribution. It mirrors
 //! [`crate::to_jsonld`]: a resource-valued predicate becomes an edge, `rdf:type`
 //! becomes a node type, and the curated literals `schema:name` / `schema:keywords`
-//! become a node's title / tags (every other literal is dropped — the kernel has
-//! no general property bag). Blank nodes are skolemized to a `urn:mere:bnode:`
-//! IRI.
+//! become a node's title / tags; every other literal lands in the node property
+//! bag, carrying datatype and language-tag metadata when present. Blank nodes are
+//! skolemized to a `urn:mere:bnode:` IRI.
 //!
 //! [`apply_contribution`] materializes a contribution into a [`Graph`]: it
 //! creates a node per subject/object (or reuses one matched by URL) and asserts
@@ -23,23 +23,17 @@
 //!
 //! Out of scope here (later): `@type` → node classification (a class-IRI scheme,
 //! as in export), CURIE/remote `@context` resolution (bundled-context loader),
-//! and full literal fidelity.
+//! and named-graph / statement metadata fidelity.
 
 use crate::{SCHEMA_KEYWORDS, SCHEMA_NAME};
+use kernel::types::{GraphScope, NodeProperty};
 use oxjsonld::{JsonLdParser, JsonLdRemoteDocument};
 use oxrdf::{NamedOrBlankNode, Quad, Term};
 use std::collections::BTreeMap;
 
-#[cfg(not(target_arch = "wasm32"))]
-use kernel::graph::{EdgeAssertion, Graph, NodeKey, predicate_iri, sub_kind_from_iri};
-#[cfg(not(target_arch = "wasm32"))]
-use kernel::types::{
-    ClassificationProvenance, ClassificationScheme, ClassificationStatus, NodeClassification,
-    NodeProperty,
-};
-
 /// `rdf:type` — the predicate JSON-LD `@type` expands to.
 const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+const XSD_STRING: &str = "http://www.w3.org/2001/XMLSchema#string";
 
 /// A node described by an ingested JSON-LD document.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -53,9 +47,9 @@ pub struct NodeContribution {
     pub title: Option<String>,
     /// `schema:keywords` values.
     pub tags: Vec<String>,
-    /// Non-curated literal properties: `(predicate IRI, value)` pairs — every
-    /// literal beyond `schema:name` / `schema:keywords`.
-    pub properties: Vec<(String, String)>,
+    /// Non-curated literal properties: every literal beyond `schema:name` /
+    /// `schema:keywords`, including datatype/lang fidelity when present.
+    pub properties: Vec<NodeProperty>,
 }
 
 impl NodeContribution {
@@ -76,6 +70,7 @@ pub struct EdgeContribution {
     pub subject: String,
     pub predicate: String,
     pub object: String,
+    pub graph_scope: GraphScope,
 }
 
 /// The result of parsing a JSON-LD document: the nodes it describes and the
@@ -175,6 +170,7 @@ fn route_resource(
     subject: &str,
     predicate: &str,
     object: String,
+    graph_scope: GraphScope,
 ) {
     if predicate == RDF_TYPE {
         nodes
@@ -187,7 +183,24 @@ fn route_resource(
             subject: subject.to_string(),
             predicate: predicate.to_string(),
             object,
+            graph_scope,
         });
+    }
+}
+
+fn scope_from_graph_name(graph_name: &oxrdf::GraphName, namespace: &str) -> GraphScope {
+    match graph_name {
+        oxrdf::GraphName::DefaultGraph => GraphScope::Default,
+        oxrdf::GraphName::NamedNode(node) => match node.as_str() {
+            "https://mere.computer/ns/graph#source" => GraphScope::Source,
+            "https://mere.computer/ns/graph#user" => GraphScope::User,
+            "https://mere.computer/ns/graph#agent" => GraphScope::Agent,
+            "https://mere.computer/ns/graph#moot" => GraphScope::Moot,
+            iri => GraphScope::Custom(iri.to_string()),
+        },
+        oxrdf::GraphName::BlankNode(node) => {
+            GraphScope::Custom(skolemize(namespace, node.as_str()))
+        }
     }
 }
 
@@ -327,6 +340,7 @@ fn collect_contribution<E: std::fmt::Display>(
         let subject = subject_iri(&quad.subject, namespace);
         let predicate_norm = normalize_schema_org(quad.predicate.as_str());
         let predicate = predicate_norm.as_str();
+        let graph_scope = scope_from_graph_name(&quad.graph_name, namespace);
         nodes
             .entry(subject.clone())
             .or_insert_with(|| NodeContribution::new(&subject));
@@ -335,13 +349,24 @@ fn collect_contribution<E: std::fmt::Display>(
             Term::Literal(literal) => {
                 let node = nodes.get_mut(&subject).expect("subject just inserted");
                 let value = literal.value().to_string();
-                if is_title_predicate(predicate) {
+                if graph_scope == GraphScope::Default && is_title_predicate(predicate) {
                     node.title = Some(value);
-                } else if is_tags_predicate(predicate) {
+                } else if graph_scope == GraphScope::Default && is_tags_predicate(predicate) {
                     node.tags.push(value);
                 } else {
                     // Any other literal goes into the open property bag.
-                    node.properties.push((predicate.to_string(), value));
+                    let lang = literal.language().map(str::to_string);
+                    let datatype = if lang.is_some() {
+                        None
+                    } else {
+                        let datatype = literal.datatype().as_str();
+                        (datatype != XSD_STRING).then(|| normalize_schema_org(datatype))
+                    };
+                    let mut property = NodeProperty::new(predicate.to_string(), value)
+                        .with_graph_scope(graph_scope.clone());
+                    property.datatype = datatype;
+                    property.lang = lang;
+                    node.properties.push(property);
                 }
             }
             Term::NamedNode(object) => route_resource(
@@ -350,6 +375,7 @@ fn collect_contribution<E: std::fmt::Display>(
                 &subject,
                 predicate,
                 object.as_str().to_string(),
+                graph_scope,
             ),
             Term::BlankNode(object) => route_resource(
                 &mut nodes,
@@ -357,7 +383,9 @@ fn collect_contribution<E: std::fmt::Display>(
                 &subject,
                 predicate,
                 skolemize(namespace, object.as_str()),
+                graph_scope,
             ),
+            Term::Triple(_) => {}
         }
     }
 
@@ -375,8 +403,23 @@ fn collect_contribution<E: std::fmt::Display>(
             node.types.dedup();
             node.tags.sort();
             node.tags.dedup();
-            node.properties.sort();
-            node.properties.dedup();
+            node.properties.sort_by(|a, b| {
+                (
+                    a.predicate.as_str(),
+                    a.value.as_str(),
+                    a.datatype.as_deref(),
+                    a.lang.as_deref(),
+                    &a.graph_scope,
+                )
+                    .cmp(&(
+                        b.predicate.as_str(),
+                        b.value.as_str(),
+                        b.datatype.as_deref(),
+                        b.lang.as_deref(),
+                        &b.graph_scope,
+                    ))
+            });
+            node.properties.dedup_by(|a, b| a.content_eq(b));
             node
         })
         .collect();

@@ -34,6 +34,10 @@ engine-weld = []
 # dependency graph (the profile ladder's witness discipline) and clear of the
 # Boa+wgpu link-size limit. Build the scripted variant with `--features scripted`.
 scripted = ["pelt-desktop/scripted", "dep:script-engine-boa", "content-contract/scripted"]
+# Add the Nova JS engine as a second scripted rung (`serval.scripted.nova`), keeping
+# the Boa rung and the shared scripted host path. Mirrors pelt-desktop's split so the
+# host can route to Nova explicitly rather than silently swapping engines under one id.
+scripted-nova = ["scripted", "pelt-desktop/scripted-nova", "dep:script-engine-nova"]
 # The serval smolweb render lane: a focused gemini/gopher/feed capsule renders
 # natively through pelt's `SmolwebDocument` (errand parse -> smolweb-views ->
 # ScriptedDom -> serval-layout), the serval lane rather than the block card. Off by
@@ -190,7 +194,7 @@ frame = { workspace = true }
 forme = { workspace = true }
 platen = { workspace = true }
 # Domain a11y projections for panes hosted by the frame tree.
-apparatus-domain = { package = "apparatus", path = "../platen/domain/apparatus" }
+apparatus-domain = { package = "apparatus", path = "../domain/apparatus" }
 workbench-domain = { package = "workbench", path = "../platen/domain/workbench" }
 # Pelt's tile-tree contract + the GPU-free tile surface (V6): meerkat hosts the
 # standalone pelt `TileSurface` as its workbench pane, driven entirely through the
@@ -204,6 +208,8 @@ pelt-desktop = { git = "https://github.com/mark-ik/serval.git", branch = "main",
 # actor drives). Optional — only the `scripted` feature pulls it, so the base build
 # links no JS engine. Pure Rust, all targets.
 script-engine-boa = { git = "https://github.com/mark-ik/serval.git", branch = "main", optional = true }
+# Optional Nova JS engine for the `scripted-nova` rung.
+script-engine-nova = { git = "https://github.com/mark-ik/serval.git", branch = "main", optional = true }
 
 # Off-UI-thread fetch (S2.2b): netfetcher's async WHATWG Fetch runs on a tokio
 # worker pool; results are delivered back to the winit loop over a channel + an
@@ -289,6 +295,7 @@ wgpu = { version = "29", default-features = false, features = ["std", "wgsl"] }
 arboard = "3"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+rustc-hash = "2.1.2"
 # Auto-derived enum metadata: `Command::COUNT` sizes `Command::ALL` so adding a
 # command needs no manual count bump (and a missing one is a compile error).
 strum = { version = "0.28", features = ["derive"] }

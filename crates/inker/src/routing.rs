@@ -37,6 +37,9 @@ pub const ENGINE_SERVAL_WEB: &str = "serval.web";
 /// (serval `docs/2026-05-12_serval_profile_ladder_plan.md`); these ids select the rung.
 pub const ENGINE_SERVAL_INTERACTIVE: &str = "serval.interactive";
 pub const ENGINE_SERVAL_SCRIPTED: &str = "serval.scripted";
+/// The scripted serval rung backed by Nova instead of Boa. Same ladder rung,
+/// distinct host-visible engine id so a node can pin the JS backend explicitly.
+pub const ENGINE_SERVAL_SCRIPTED_NOVA: &str = "serval.scripted.nova";
 pub const ENGINE_SERVAL_FULLWEB: &str = "serval.fullweb";
 /// Mere-managed system-WebView tile driven by the in-house `scrying`
 /// library. Embedded-frame composition into the host's wgpu surface
@@ -164,7 +167,7 @@ pub fn serval_rung(engine_id: &str) -> Option<ServalRung> {
     match engine_id {
         ENGINE_SERVAL_WEB => Some(ServalRung::Static),
         ENGINE_SERVAL_INTERACTIVE => Some(ServalRung::Interactive),
-        ENGINE_SERVAL_SCRIPTED => Some(ServalRung::Scripted),
+        ENGINE_SERVAL_SCRIPTED | ENGINE_SERVAL_SCRIPTED_NOVA => Some(ServalRung::Scripted),
         ENGINE_SERVAL_FULLWEB => Some(ServalRung::FullWeb),
         _ => None,
     }

@@ -8,6 +8,11 @@
 //! 600-LOC ceiling.
 
 use super::*;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+
+use layout_dom_api::{DomMutation, LayoutDom};
+use rustc_hash::FxHashSet;
 use serval_winit_host::RenderCore;
 
 impl crate::WindowCtx<'_> {
@@ -70,16 +75,17 @@ impl crate::WindowCtx<'_> {
     /// is set: assemble the chrome stylesheet (base + the pre-merged pane CSS from
     /// `gather_chrome_css` — roster + apparatus + utility + gloss outline/recent), render
     /// the shell through its persistent incremental session, time it, and enumerate the
-    /// chrome's `<external-texture>` placements. Returns
-    /// `(chrome_scene, chrome_us, external_texture_placements)`. (Extracted from `render()`.)
+    /// chrome's `<external-texture>` placements. Returns the chrome raster plan,
+    /// its build time, and the external-texture placements. (Extracted from `render()`.)
     pub(super) fn render_chrome_scene(
         &mut self,
         w: u32,
         h: u32,
+        orrery_rect: [f32; 4],
         cursor: Option<TextCursor>,
         chrome_scroll: &ScrollOffsets<NodeId>,
         pane_css: &[String],
-    ) -> (netrender::Scene, u128, Vec<(u64, [f32; 4])>) {
+    ) -> (super::paint::ChromeRasterPlan, u128, Vec<(u64, [f32; 4])>) {
         // Build the chrome (shell document) scene now that every folded pane — roster, the
         // list panes, and the settings panes (positioned at this frame's tile rects) — is set,
         // so the one shell render reflects them this frame (no page-switch lag). Moved down
@@ -92,30 +98,122 @@ impl crate::WindowCtx<'_> {
             .chain(pane_css.iter().map(String::as_str))
             .collect();
         let chrome_t = Instant::now();
-        // C3 (cheap-path): render the chrome through its persistent `IncrementalLayout`
-        // session — drains this frame's mutations, rebuilds only on a structural / resize /
-        // theme frame, else restyles incrementally (RepaintOnly, no relayout).
-        let chrome_scene = PaneSession::scene(
+        let mut muts = Vec::new();
+        self.view.dom.borrow_mut().drain_mutations(&mut muts);
+        let dom = self.view.dom.borrow();
+        let orrery_root = crate::first_with_class(&dom, dom.document(), "orrery");
+        let orrery_only = orrery_root.is_some_and(|root| {
+            !muts.is_empty() && muts.iter().all(|m| mutation_is_under_root(&dom, m, root))
+        });
+        let orrery_dirty = orrery_root
+            .is_some_and(|root| muts.iter().any(|m| mutation_is_under_root(&dom, m, root)));
+        let base_dirty = !muts.is_empty() && !orrery_only;
+        let refresh = PaneSession::refresh(
             &mut self.view.chrome_session,
-            &self.view.dom,
+            &dom,
             &chrome_sheet,
             w,
             h,
-            cursor,
-            chrome_scroll,
+            &muts,
         );
+        let session = self
+            .view
+            .chrome_session
+            .as_ref()
+            .expect("chrome session refreshed");
+        let chrome = if let Some(root) = orrery_root {
+            let base_sig = chrome_base_sig(&chrome_sheet);
+            let base_stale = self.view.chrome_base_tex.as_ref().map(|c| c.size) != Some((w, h))
+                || self.view.chrome_base_sig != base_sig;
+            let orrery_size = (
+                (orrery_rect[2] - orrery_rect[0]).round().max(1.0) as u32,
+                (orrery_rect[3] - orrery_rect[1]).round().max(1.0) as u32,
+            );
+            let orrery_stale =
+                self.view.chrome_orrery_tex.as_ref().map(|c| c.size) != Some(orrery_size);
+            let mut skipped = FxHashSet::default();
+            skipped.insert(root);
+            let base_scene = if !base_dirty && !base_stale {
+                None
+            } else {
+                Some(crate::serval_render::scene_from_session_excluding_subtrees(
+                    session.layout(),
+                    &dom,
+                    cursor,
+                    chrome_scroll,
+                    &skipped,
+                    w,
+                    h,
+                ))
+            };
+            let orrery_scene = if !orrery_dirty && !orrery_stale {
+                None
+            } else {
+                crate::serval_render::scene_from_session_subtree(
+                    session.layout(),
+                    &dom,
+                    root,
+                    cursor,
+                    chrome_scroll,
+                    orrery_size.0,
+                    orrery_size.1,
+                )
+            };
+            if base_scene.is_some() || orrery_scene.is_some() || (!base_stale && !orrery_stale) {
+                super::paint::ChromeRasterPlan::Partitioned {
+                    base_scene,
+                    orrery_scene,
+                    orrery_rect,
+                    base_sig,
+                }
+            } else {
+                super::paint::ChromeRasterPlan::Full(crate::serval_render::scene_from_session(
+                    session.layout(),
+                    &dom,
+                    cursor,
+                    chrome_scroll,
+                    w,
+                    h,
+                ))
+            }
+        } else {
+            super::paint::ChromeRasterPlan::Full(crate::serval_render::scene_from_session(
+                session.layout(),
+                &dom,
+                cursor,
+                chrome_scroll,
+                w,
+                h,
+            ))
+        };
+        if matches!(chrome, super::paint::ChromeRasterPlan::Full(_)) {
+            self.view.chrome_base_tex = None;
+            self.view.chrome_orrery_tex = None;
+            self.view.chrome_base_sig = 0;
+        }
         let chrome_us = chrome_t.elapsed().as_micros();
         // The chrome document's `<external-texture>` elements + their laid-out rects, enumerated
         // now that the chrome session has been laid out, composited at the compositor pass below
         // so each external surface's placement comes from the document. (cond 5.)
         let external_texture_placements = self.external_texture_placements();
-        (chrome_scene, chrome_us, external_texture_placements)
+        tracing::trace!(
+            target: "meerkat::profile",
+            orrery_only,
+            base_dirty,
+            orrery_dirty,
+            rebuild = refresh.rebuild,
+            structural = refresh.structural,
+            mut_count = refresh.mut_count,
+            "chrome partition decision"
+        );
+        (chrome, chrome_us, external_texture_placements)
     }
 
     /// Compute the orrery's focused-node content card for this frame (when the focused node
     /// is not itself an open tile): a "last visit" snapshot card for a visited node
-    /// (rendered host-side from the durable cache, once per url) or a dashed "double-click
-    /// to load" placeholder for an unvisited one. Returns `(snapshot_card, unvisited_card)`.
+    /// (rendered host-side from the node thumbnail or durable cache) or a dashed
+    /// "double-click to load" placeholder for an unvisited one. Returns
+    /// `(snapshot_card, unvisited_card)`.
     /// (Extracted from `render()`.)
     pub(super) fn compute_focus_cards(
         &mut self,
@@ -188,9 +286,41 @@ impl crate::WindowCtx<'_> {
                     })
                     .or_else(|| crate::card::card_rect(orrery_rect));
                 if let Some((x0, y0, x1, y1, _, _)) = rect {
-                    // Render the snapshot scene from cache / synthesis once per url;
-                    // `None` means its data-URI image is already cached (encoded below).
-                    let built = if self.view.snapshot_data_uris.contains_key(&url) {
+                    // Prefer the node's persisted thumbnail PNG when present; else synthesize
+                    // the preview scene from the durable cache below. The window-local cache is
+                    // member-scoped and carries the URL it was built for, so same-URL siblings do
+                    // not alias and an in-place navigation invalidates the stale image.
+                    let cached = self
+                        .view
+                        .snapshot_data_uris
+                        .get(&member)
+                        .is_some_and(|snapshot| snapshot.url == url);
+                    if !cached {
+                        let persisted = self
+                            .orrery()
+                            .graph()
+                            .get_node_by_id(member)
+                            .and_then(|(_, node)| node.thumbnail_png.as_deref())
+                            .and_then(crate::render::png_data_uri);
+                        if let Some(data_uri) = persisted {
+                            if self.view.snapshot_data_uris.len() >= 256 {
+                                self.view.snapshot_data_uris.clear();
+                            }
+                            self.view.snapshot_data_uris.insert(
+                                member,
+                                crate::window_view::SnapshotDataUri {
+                                    url: url.clone(),
+                                    data_uri,
+                                },
+                            );
+                        }
+                    }
+                    let built = if self
+                        .view
+                        .snapshot_data_uris
+                        .get(&member)
+                        .is_some_and(|snapshot| snapshot.url == url)
+                    {
                         None
                     } else {
                         const RENDER_W: u32 = 300;
@@ -207,6 +337,11 @@ impl crate::WindowCtx<'_> {
                         // A snapshot is a non-interactive peek (no actor, no
                         // content_rects entry), so its link map is dropped here —
                         // link nav rides the live actor cards. (Inline-link nav.)
+                        // Reproduce the node's last-known scroll position (if it was
+                        // ever an open tile this session) rather than always the page
+                        // top — same "exact last viewport" fix as the workbench-tile
+                        // fallback. (Node/card summoning design, §5.)
+                        let scroll = self.view.scroll.get(&member).copied().unwrap_or(0.0);
                         let (scene, content_height, _links) = crate::card::render_content_scene(
                             &url,
                             state.as_ref(),
@@ -215,6 +350,7 @@ impl crate::WindowCtx<'_> {
                             &loader,
                             RENDER_W,
                             RENDER_H,
+                            scroll,
                             &self.shared.presentation.document_sheet_composed(),
                         );
                         Some((scene, content_height))
@@ -518,4 +654,27 @@ impl crate::WindowCtx<'_> {
         }
         composite
     }
+}
+
+fn mutation_is_under_root(
+    dom: &serval_scripted_dom::ScriptedDom,
+    m: &DomMutation<NodeId>,
+    root: NodeId,
+) -> bool {
+    let anchor = match *m {
+        DomMutation::Inserted { parent, .. } => parent,
+        DomMutation::Removed { former_parent, .. } => former_parent,
+        DomMutation::AttributeChanged { node, .. } => node,
+        DomMutation::CharacterDataChanged { node } => node,
+        DomMutation::SubtreeReplaced { node } => node,
+    };
+    crate::serval_render::node_under_root(dom, anchor, root)
+}
+
+fn chrome_base_sig(sheet: &[&str]) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    for rule in sheet {
+        rule.hash(&mut hasher);
+    }
+    hasher.finish()
 }

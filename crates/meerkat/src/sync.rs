@@ -26,7 +26,9 @@
 //! survives restart. Still S5.x-shaped: the moot is a fixed demo id (real moot
 //! selection is S5.3).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
@@ -50,6 +52,7 @@ pub const LANE_LABEL: &str = "tessera";
 /// persona's folded ledger `standing` (the point of tessera) and the dialable `ticket`
 /// to share with a peer. (Tessera ledger fold + ticket surface.)
 pub struct SyncUpdate {
+    pub active: bool,
     pub status: SyncStatus,
     /// This persona's earned tessera standing (the folded ledger score), or `None`
     /// before a ledger has folded.
@@ -63,7 +66,7 @@ pub struct SyncUpdate {
 pub fn to_indicator(update: &SyncUpdate, label: &str) -> SyncIndicator {
     SyncIndicator {
         label: label.to_string(),
-        active: true,
+        active: update.active,
         syncing: update.status.syncing,
         ops: update.status.ops_received,
         last_activity_ms: update.status.last_activity_ms,
@@ -86,6 +89,10 @@ pub enum SyncCommand {
     /// Dial a peer from its ticket string so the LogSync overlay forms and the two
     /// converge.
     Connect(String),
+    /// Retry startup after an explicit wallet unlock.
+    UnlockNow,
+    /// Return the lane to an offline state after a manual relock.
+    LockNow,
 }
 
 /// Spawn the sync subsystem as an [`armillary`] I/O actor. Its `run` closure builds
@@ -110,96 +117,17 @@ pub fn spawn_sync(
             .enable_all()
             .build()
             .expect("build the sync runtime");
-
-        // Bind the transport + join the moot once at startup (both async). A
-        // wallet-root seed (created once by shell bootstrap, reused after) makes
-        // this install a stable, distinct peer across restarts (S5.2).
         let dir = data_root;
-        let setup: Result<(P2pandaTransport, SyncedMoot, Option<ChainRoot>), String> = runtime
-            .block_on(async {
-                let provider = InMemoryProvider::from_seed(load_wallet_seed(&dir));
-                let keypair = provider.master_keypair().clone();
-                let transport = P2pandaTransport::builder(&keypair)
-                    .gossip()
-                    .bind()
-                    .await
-                    .map_err(|e| format!("transport bind: {e}"))?;
-                let (endpoint, gossip) = transport
-                    .sync_parts()
-                    .ok_or_else(|| "transport has no gossip overlay".to_string())?;
-                // The tessera log lives on disk, one redb file per moot under the
-                // session dir, so it survives restart (S5.2).
-                let moots = dir.join("moots");
-                let _ = std::fs::create_dir_all(&moots);
-                let store = TesseraStore::open(moots.join(format!("{}.redb", hex32(&moot_id))))
-                    .map_err(|e| format!("tessera store: {e}"))?;
-                // Seed a small tessera log (commit -> fulfil -> govern) on first launch
-                // only (an empty store), so a connecting peer has something to catch up;
-                // on restart the persisted log is already present.
-                if store.is_empty().unwrap_or(true) {
-                    author_starter_log(&provider, moot_id, &store);
+        let lane_generation = Arc::new(AtomicU64::new(0));
+        let mut transport =
+            match activate_sync_lane(&runtime, &out, &dir, moot_id, &lane_generation) {
+                Ok(transport) => Some(transport),
+                Err(err) => {
+                    tracing::warn!(%err, "p2p sync disabled: transport / moot setup failed");
+                    out.emit(sync_offline_update());
+                    None
                 }
-                // This host's own persona chain root (the `tessera-host-author` keypair), so
-                // the poll loop can read its standing out of the folded ledger. (Tessera fold.)
-                let host_root = provider
-                    .derive_keypair(b"tessera-host-author")
-                    .ok()
-                    .map(|kp| ChainRoot(kp.public_key().to_bytes()));
-                let moot = SyncedMoot::join(endpoint, gossip, store, moot_id)
-                    .await
-                    .map_err(|e| format!("join moot: {e}"))?;
-                Ok((transport, moot, host_root))
-            });
-
-        let transport = match setup {
-            Ok((transport, moot, host_root)) => {
-                // The dialable ticket: captured so the poll loop can surface it to the
-                // chip (not only log it), so a peer can be invited without reading logs.
-                // (Tessera ticket surface.)
-                let ticket = runtime
-                    .block_on(transport.ticket())
-                    .ok()
-                    .map(|ticket| ticket.to_string());
-                if let Some(ticket) = &ticket {
-                    tracing::info!(%ticket, "p2p sync up: joined tessera demo moot — share this ticket with a peer");
-                }
-                // The status poll task emits each change through the actor's Emitter
-                // (which wakes the kernel), running on the runtime's workers in the
-                // background while the command loop below blocks on `recv`.
-                // The task owns an Arc clone, so the moot (and its own LogSync drain
-                // task) stays alive as long as this poll loop runs.
-                let poll_out = out.clone();
-                runtime.spawn(async move {
-                    let mut last: Option<SyncStatus> = None;
-                    loop {
-                        let status = moot.sync_status();
-                        if last.as_ref() != Some(&status) {
-                            // Fold the ledger and read this persona's standing — the
-                            // point of tessera, surfaced on the chip rather than left
-                            // invisible. Re-folds on each status change (the log is
-                            // small); a cache is a later refinement. (Tessera ledger fold.)
-                            let standing = host_root.as_ref().and_then(|root| {
-                                moot.ledger(TesseraConfig::default())
-                                    .ok()
-                                    .map(|ledger| ledger.score(root, now_ms()))
-                            });
-                            poll_out.emit(SyncUpdate {
-                                status: status.clone(),
-                                standing,
-                                ticket: ticket.clone(),
-                            });
-                            last = Some(status);
-                        }
-                        tokio::time::sleep(Duration::from_secs(1)).await;
-                    }
-                });
-                Some(transport)
-            }
-            Err(err) => {
-                tracing::warn!(%err, "p2p sync disabled: transport / moot setup failed");
-                None
-            }
-        };
+            };
 
         // The command loop: outbound verbs the kernel routes here, run to completion
         // on the runtime. Ends when the handle drops (the channel closes), which also
@@ -228,9 +156,118 @@ pub fn spawn_sync(
                         Err(err) => tracing::warn!(%err, "connect to peer failed"),
                     }
                 }
+                SyncCommand::UnlockNow => {
+                    if transport.is_some() {
+                        continue;
+                    }
+                    match activate_sync_lane(&runtime, &out, &dir, moot_id, &lane_generation) {
+                        Ok(new_transport) => {
+                            tracing::info!("p2p sync resumed after wallet unlock");
+                            transport = Some(new_transport);
+                        }
+                        Err(err) => {
+                            tracing::warn!(%err, "p2p sync stayed offline after wallet unlock")
+                        }
+                    }
+                }
+                SyncCommand::LockNow => {
+                    transport = None;
+                    lane_generation.fetch_add(1, Ordering::Relaxed);
+                    out.emit(sync_offline_update());
+                }
             }
         }
     })
+}
+
+fn sync_offline_update() -> SyncUpdate {
+    SyncUpdate {
+        active: false,
+        status: SyncStatus::default(),
+        standing: None,
+        ticket: None,
+    }
+}
+
+async fn build_sync_lane(
+    dir: &Path,
+    moot_id: [u8; 32],
+) -> Result<(P2pandaTransport, SyncedMoot, Option<ChainRoot>), String> {
+    let Some(seed) = load_wallet_seed(dir) else {
+        return Err(
+            "wallet startup is locked; sync stays offline until unlock support lands".to_string(),
+        );
+    };
+    let provider = InMemoryProvider::from_seed(seed);
+    let keypair = provider.master_keypair().clone();
+    let transport = P2pandaTransport::builder(&keypair)
+        .gossip()
+        .bind()
+        .await
+        .map_err(|e| format!("transport bind: {e}"))?;
+    let (endpoint, gossip) = transport
+        .sync_parts()
+        .ok_or_else(|| "transport has no gossip overlay".to_string())?;
+    let moots = dir.join("moots");
+    let _ = std::fs::create_dir_all(&moots);
+    let store = TesseraStore::open(moots.join(format!("{}.redb", hex32(&moot_id))))
+        .map_err(|e| format!("tessera store: {e}"))?;
+    if store.is_empty().unwrap_or(true) {
+        author_starter_log(&provider, moot_id, &store);
+    }
+    let host_root = provider
+        .derive_keypair(b"tessera-host-author")
+        .ok()
+        .map(|kp| ChainRoot(kp.public_key().to_bytes()));
+    let moot = SyncedMoot::join(endpoint, gossip, store, moot_id)
+        .await
+        .map_err(|e| format!("join moot: {e}"))?;
+    Ok((transport, moot, host_root))
+}
+
+fn activate_sync_lane(
+    runtime: &tokio::runtime::Runtime,
+    out: &Emitter<SyncUpdate>,
+    dir: &Path,
+    moot_id: [u8; 32],
+    lane_generation: &Arc<AtomicU64>,
+) -> Result<P2pandaTransport, String> {
+    let (transport, moot, host_root) = runtime.block_on(build_sync_lane(dir, moot_id))?;
+    let generation = lane_generation.fetch_add(1, Ordering::Relaxed) + 1;
+    let ticket = runtime
+        .block_on(transport.ticket())
+        .ok()
+        .map(|ticket| ticket.to_string());
+    if let Some(ticket) = &ticket {
+        tracing::info!(%ticket, "p2p sync up: joined tessera demo moot — share this ticket with a peer");
+    }
+    let poll_out = out.clone();
+    let poll_generation = lane_generation.clone();
+    runtime.spawn(async move {
+        let mut last: Option<SyncStatus> = None;
+        loop {
+            if poll_generation.load(Ordering::Relaxed) != generation {
+                break;
+            }
+            let status = moot.sync_status();
+            if last.as_ref() != Some(&status) {
+                let standing = host_root.as_ref().and_then(|root| {
+                    moot.ledger(TesseraConfig::default())
+                        .ok()
+                        .map(|ledger| ledger.score(root, now_ms()))
+                });
+                poll_out.emit(SyncUpdate {
+                    active: true,
+                    status: status.clone(),
+                    standing,
+                    ticket: ticket.clone(),
+                });
+                last = Some(status);
+            }
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+    });
+    Ok(transport)
 }
 
 /// Author a small `commit -> fulfil -> govern` tessera log for this host's own
@@ -266,23 +303,40 @@ fn author_starter_log(provider: &InMemoryProvider, moot_id: [u8; 32], store: &Te
 
 /// Load the wallet root's shared master seed, warning and falling back to an
 /// ephemeral launch-local seed if bootstrap failed earlier.
-fn load_wallet_seed(data_root: &std::path::Path) -> [u8; 32] {
+fn load_wallet_seed(data_root: &std::path::Path) -> Option<[u8; 32]> {
     match session_runtime::load_identity_seed(data_root) {
-        Ok(Some(seed)) => seed,
+        Ok(Some(seed)) => Some(seed),
         Ok(None) => {
-            tracing::warn!(
-                ?data_root,
-                "identity seed missing; sync identity is ephemeral this launch"
-            );
-            InMemoryProvider::random().master_keypair().to_seed()
+            if session_runtime::identity_seed_locked_at_startup(data_root) {
+                tracing::warn!(
+                    ?data_root,
+                    "wallet startup is locked; sync identity stays offline this launch"
+                );
+                None
+            } else {
+                tracing::warn!(
+                    ?data_root,
+                    "identity seed missing; sync identity is ephemeral this launch"
+                );
+                Some(InMemoryProvider::random().master_keypair().to_seed())
+            }
         }
         Err(err) => {
-            tracing::warn!(
-                %err,
-                ?data_root,
-                "identity seed unavailable; sync identity is ephemeral this launch"
-            );
-            InMemoryProvider::random().master_keypair().to_seed()
+            if session_runtime::identity_seed_locked_at_startup(data_root) {
+                tracing::warn!(
+                    %err,
+                    ?data_root,
+                    "wallet startup is locked; sync identity stays offline this launch"
+                );
+                None
+            } else {
+                tracing::warn!(
+                    %err,
+                    ?data_root,
+                    "identity seed unavailable; sync identity is ephemeral this launch"
+                );
+                Some(InMemoryProvider::random().master_keypair().to_seed())
+            }
         }
     }
 }
@@ -310,6 +364,7 @@ mod tests {
             last_activity_ms: Some(1_000),
         };
         let update = SyncUpdate {
+            active: true,
             status,
             standing: Some(4),
             ticket: Some("dial:xyz".into()),
@@ -339,6 +394,7 @@ mod tests {
         assert_eq!(
             to_indicator(
                 &SyncUpdate {
+                    active: true,
                     status: SyncStatus::default(),
                     standing: None,
                     ticket: None,
@@ -361,8 +417,8 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("meerkat-seed-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         session_runtime::save_identity_seed(&dir, [0x77; 32]).unwrap();
-        let first = load_wallet_seed(&dir);
-        let second = load_wallet_seed(&dir);
+        let first = load_wallet_seed(&dir).expect("seed should load");
+        let second = load_wallet_seed(&dir).expect("seed should load");
         assert_eq!(
             first, second,
             "the persisted seed is reused on the next call"

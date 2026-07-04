@@ -120,6 +120,7 @@ impl WindowCtx<'_> {
     /// Close the workbench pane: reap its tiles' actors, clear the tiles, drop the
     /// pane leaf, and hand focus back to the orrery.
     pub(crate) fn close_workbench(&mut self) {
+        self.persist_workbench_boundary_thumbnails();
         for member in self.view.workbench.open_members() {
             self.shared.content.constellation.reap(member);
         }
@@ -262,126 +263,151 @@ impl WindowCtx<'_> {
         ]
     }
 
-    /// Live kernel table rows for the apparatus Tables section.
-    pub(crate) fn apparatus_table_rows(&self) -> Vec<(String, String)> {
-        let kib = |bytes: usize| format!("{:.1} KiB", bytes as f64 / 1024.0);
+    /// Live apparatus table stats, owned by the apparatus surface rather than by `platen`.
+    pub(crate) fn apparatus_table_stats(&self) -> Vec<crate::apparatus::ApparatusTableStat> {
+        use crate::apparatus::ApparatusTableStat;
+
         let stats = self.orrery().graph().table_stats();
         let log = &self.shared.session.graph_delta_log;
-        let log_value = if log.enabled() {
-            format!("{} entries / {} bytes", log.entry_count(), log.byte_count())
-        } else {
-            "not recording".to_string()
-        };
         let mut rows = vec![
-            (
-                "Node table".to_string(),
-                format!("{} rows", stats.node_count),
+            ApparatusTableStat::present("Node table", "kernel", stats.node_count as u64, "rows"),
+            ApparatusTableStat::present(
+                "Relation table",
+                "kernel",
+                stats.relation_count as u64,
+                "relations",
+            )
+            .with_detail(format!("across {} links", stats.edge_count)),
+            ApparatusTableStat::present("Field table", "kernel", stats.field_count as u64, "rows"),
+            ApparatusTableStat::present(
+                "Coupling table",
+                "kernel",
+                stats.coupling_count as u64,
+                "rows",
             ),
-            (
-                "Relation table".to_string(),
-                format!(
-                    "{} relation rows across {} edges",
-                    stats.relation_count, stats.edge_count
-                ),
-            ),
-            (
-                "Field table".to_string(),
-                format!("{} rows", stats.field_count),
-            ),
-            (
-                "Coupling table".to_string(),
-                format!("{} rows", stats.coupling_count),
-            ),
-            (
-                "History table".to_string(),
-                format!(
-                    "{} owners / {} entries / {} visits",
-                    stats.history_owner_count, stats.history_entry_count, stats.history_visit_count
-                ),
-            ),
-            ("Session delta log".to_string(), log_value),
+            ApparatusTableStat::present(
+                "History table",
+                "kernel",
+                stats.history_owner_count as u64,
+                "owners",
+            )
+            .with_detail(format!(
+                "{} entries / {} visits",
+                stats.history_entry_count, stats.history_visit_count
+            )),
         ];
+        rows.push(if log.enabled() {
+            ApparatusTableStat::present(
+                "Session delta log",
+                "capture",
+                log.entry_count(),
+                "entries",
+            )
+            .with_estimated_bytes(log.byte_count())
+            .with_session_deltas(log.entry_count())
+        } else {
+            ApparatusTableStat::unavailable("Session delta log", "capture", "not recording")
+        });
         match self.focused_member() {
             Some(member) => {
                 let constellation = &self.shared.content.constellation;
                 let Some(engine_id) = constellation.engine_id(member) else {
-                    rows.push((
-                        "Document tables".to_string(),
-                        "focused node is not active".to_string(),
+                    rows.push(ApparatusTableStat::unavailable(
+                        "Document tables",
+                        "engine",
+                        "focused node is not active",
                     ));
                     return rows;
                 };
                 match constellation.engine_stats(member) {
                     Some(engine) => {
-                        rows.push((
-                            "Document DOM".to_string(),
-                            format!(
-                                "{} nodes / {} attrs / ~{}",
-                                engine.dom.live_nodes,
+                        rows.push(
+                            ApparatusTableStat::present(
+                                "Document DOM",
+                                "engine",
+                                engine.dom.live_nodes as u64,
+                                "nodes",
+                            )
+                            .with_estimated_bytes(engine.dom.estimated_bytes as u64)
+                            .with_detail(format!(
+                                "{} attrs; {} el / {} text / {} comments / {} docs",
                                 engine.dom.attribute_count,
-                                kib(engine.dom.estimated_bytes)
-                            ),
-                        ));
-                        rows.push((
-                            "Document node kinds".to_string(),
-                            format!(
-                                "{} el / {} text / {} comments / {} docs",
                                 engine.dom.node_kinds.elements,
                                 engine.dom.node_kinds.text,
                                 engine.dom.node_kinds.comments,
                                 engine.dom.node_kinds.documents
+                            )),
+                        );
+                        rows.push(match engine.layout {
+                            Some(layout) => ApparatusTableStat::present(
+                                "Document layout",
+                                "engine",
+                                layout.fragment_count as u64,
+                                "fragments",
+                            )
+                            .with_last_dirty_set_size(layout.restyled_elements as u64)
+                            .with_detail(format!(
+                                "{:?} / {:?}; {} rebuilt",
+                                layout.applied, layout.damage, layout.boxes_rebuilt
+                            )),
+                            None => ApparatusTableStat::unavailable(
+                                "Document layout",
+                                "engine",
+                                "layout batch stats unavailable on this lane",
                             ),
+                        });
+                    }
+                    None => {
+                        rows.push(ApparatusTableStat::unavailable(
+                            "Document DOM",
+                            "engine",
+                            format!("not available on current lane ({engine_id})"),
                         ));
-                        rows.push((
-                            "Document layout".to_string(),
-                            match engine.layout {
-                                Some(layout) => format!(
-                                    "{:?} / {:?}; {} restyled, {} rebuilt, {} frags",
-                                    layout.applied,
-                                    layout.damage,
-                                    layout.restyled_elements,
-                                    layout.boxes_rebuilt,
-                                    layout.fragment_count
-                                ),
-                                None => "layout batch stats unavailable on this lane".to_string(),
-                            },
+                        rows.push(ApparatusTableStat::unavailable(
+                            "Document layout",
+                            "engine",
+                            format!("not available on current lane ({engine_id})"),
                         ));
                     }
-                    None => rows.push((
-                        "Document DOM".to_string(),
-                        format!("not available on current lane ({engine_id})"),
-                    )),
                 }
                 match constellation.scene_stats(member) {
                     Some(scene) => {
-                        rows.push((
-                            "Document scene ops".to_string(),
-                            format!("{} ops", scene.op_count),
-                        ));
-                        rows.push((
-                            "Document scene size".to_string(),
-                            format!(
-                                "{} bytes / ~{}",
-                                scene.encoded_bytes,
-                                kib(scene.encoded_bytes as usize)
-                            ),
-                        ));
+                        rows.push(
+                            ApparatusTableStat::present(
+                                "Document scene",
+                                "scene",
+                                scene.op_count as u64,
+                                "ops",
+                            )
+                            .with_estimated_bytes(scene.encoded_bytes as u64),
+                        );
                     }
-                    None if constellation.packet(member).is_some() => rows.push((
-                        "Document scene".to_string(),
-                        "not available on document lane".to_string(),
-                    )),
-                    None if constellation.scene(member).is_some() => rows.push((
-                        "Document scene".to_string(),
-                        "scene stats missing for current frame".to_string(),
-                    )),
-                    None => rows.push((
-                        "Document scene".to_string(),
+                    None if constellation.packet(member).is_some() => {
+                        rows.push(ApparatusTableStat::unavailable(
+                            "Document scene",
+                            "scene",
+                            "not available on document lane",
+                        ))
+                    }
+                    None if constellation.scene(member).is_some() => {
+                        rows.push(ApparatusTableStat::unavailable(
+                            "Document scene",
+                            "scene",
+                            "scene stats missing for current frame",
+                        ))
+                    }
+                    None => rows.push(ApparatusTableStat::unavailable(
+                        "Document scene",
+                        "scene",
                         format!("awaiting first scene on current lane ({engine_id})"),
                     )),
                 }
             }
-            None => rows.push(("Document tables".to_string(), "no focused node".to_string())),
+            None => rows.push(ApparatusTableStat::unavailable(
+                "Document tables",
+                "engine",
+                "no focused node",
+            )),
         }
         rows
     }

@@ -35,16 +35,20 @@ pub(crate) use content_contract::{
     ContentSceneStats, DomArenaStatsMessage as DomArenaStats,
     DomNodeKindStatsMessage as DomNodeKindStats, LayoutApplyKindMessage as LayoutApplyKind,
     LayoutBatchStatsMessage as LayoutBatchStats, LayoutDamageClassMessage as LayoutDamageClass,
-    SceneTransferDecoder, SceneTransferEncoder, TransferBuffer, TransferError, scene_stats,
+    SceneTransferDecoder, SceneTransferEncoder, TextSelectionMessage, TransferBuffer,
+    TransferError, scene_stats,
 };
 
-// The scripted render rung (render ladder phase 2): a `serval.scripted`-pinned node
-// runs its page JS through pelt's `ScriptedDocument` on Boa. Behind the `scripted`
+// The scripted render rung (render ladder phase 2): a scripted Serval node runs its
+// page JS through pelt's `ScriptedDocument`. Boa is the base engine; `scripted-nova`
+// adds the Nova variant under a second host-visible engine id. Behind the `scripted`
 // feature so the base build links no JS engine (the ladder's witness discipline).
 #[cfg(feature = "scripted")]
 use pelt_desktop::ScriptedDocument;
 #[cfg(feature = "scripted")]
 use script_engine_boa::BoaEngine;
+#[cfg(feature = "scripted-nova")]
+use script_engine_nova::NovaEngine;
 
 use crate::card::{
     LinkHit, RenderedContent, build_html_layout, is_serval_html_lane, render_content,
@@ -61,6 +65,64 @@ use document_host::{Grant, NetFetcher, Quota};
 use kernel::permissions::ResolvedPermission;
 use script::ScriptInstance;
 
+#[cfg(feature = "scripted")]
+pub(crate) enum HostScriptedDocument {
+    Boa(ScriptedDocument<BoaEngine>),
+    #[cfg(feature = "scripted-nova")]
+    Nova(ScriptedDocument<NovaEngine>),
+}
+
+#[cfg(feature = "scripted")]
+impl HostScriptedDocument {
+    fn frame(&mut self, width: u32, height: u32) -> Scene {
+        match self {
+            Self::Boa(doc) => doc.frame(width, height),
+            #[cfg(feature = "scripted-nova")]
+            Self::Nova(doc) => doc.frame(width, height),
+        }
+    }
+
+    fn links(&self) -> Vec<(String, [f32; 4])> {
+        match self {
+            Self::Boa(doc) => doc.links(),
+            #[cfg(feature = "scripted-nova")]
+            Self::Nova(doc) => doc.links(),
+        }
+    }
+
+    fn click_at(&mut self, x: f32, y: f32) -> bool {
+        match self {
+            Self::Boa(doc) => doc.click_at(x, y),
+            #[cfg(feature = "scripted-nova")]
+            Self::Nova(doc) => doc.click_at(x, y),
+        }
+    }
+
+    fn dom_stats(&self) -> engine_observables_api::DomArenaStats {
+        match self {
+            Self::Boa(doc) => doc.dom_stats(),
+            #[cfg(feature = "scripted-nova")]
+            Self::Nova(doc) => doc.dom_stats(),
+        }
+    }
+
+    fn last_layout_batch_stats(&self) -> Option<engine_observables_api::LayoutBatchStats> {
+        match self {
+            Self::Boa(doc) => doc.last_layout_batch_stats(),
+            #[cfg(feature = "scripted-nova")]
+            Self::Nova(doc) => doc.last_layout_batch_stats(),
+        }
+    }
+
+    fn extract(&self) -> pelt_desktop::PageExtract {
+        match self {
+            Self::Boa(doc) => doc.extract(),
+            #[cfg(feature = "scripted-nova")]
+            Self::Nova(doc) => doc.extract(),
+        }
+    }
+}
+
 /// A command from the kernel to a content actor.
 pub enum ContentCommand {
     /// Show `fetched` at `url` (a fresh navigation): harvest its linked data once,
@@ -73,8 +135,9 @@ pub enum ContentCommand {
         state: Option<ContentState>,
         /// The host-routed engine id for this node (its pin or the policy decision).
         /// The actor renders the static serval lane for `serval.web`; the `scripted`
-        /// feature additionally drives `ScriptedDocument` for `serval.scripted`. Other
-        /// ids fall to the content-type routing the actor runs itself. (Render ladder.)
+        /// feature additionally drives `ScriptedDocument` for the scripted Serval
+        /// engine ids. Other ids fall to the content-type routing the actor runs
+        /// itself. (Render ladder.)
         engine: String,
         viewport: (u32, u32),
         nav: NavGeneration,
@@ -115,6 +178,16 @@ pub enum ContentCommand {
     /// has no host-queryable packet. An empty query clears the matches. (Find-in-page.)
     Find {
         query: String,
+        viewport_gen: ViewportGeneration,
+    },
+    /// Resolve a point-drag text selection in the current HTML/serval document. The
+    /// points are content-local document coords in device px (the host subtracts the
+    /// card origin and adds scroll before calling); the actor maps them through its
+    /// retained layout and ships back rects + plain text for copy. No-op on the
+    /// document lane. (HTML page selection.)
+    SelectText {
+        anchor: (f32, f32),
+        focus: (f32, f32),
         viewport_gen: ViewportGeneration,
     },
     /// Attach a DocumentScript (a wasm `document-core` component) to this tile's page.
@@ -217,6 +290,14 @@ pub enum ContentUpdate {
         nav: NavGeneration,
         viewport_gen: ViewportGeneration,
         matches: Vec<Vec<[f32; 4]>>,
+    },
+    /// The current HTML page-text selection for a drag query, if any: full-document
+    /// rects in device px plus plain text for copy. `None` when either endpoint
+    /// misses laid-out text or the range collapses. (HTML page selection.)
+    TextSelection {
+        nav: NavGeneration,
+        viewport_gen: ViewportGeneration,
+        selection: Option<TextSelectionMessage>,
     },
     /// Focused-document engine observables for the current render lane, when the
     /// actor owns a real Serval DOM/layout surface.
@@ -341,11 +422,12 @@ pub(crate) struct Content {
     /// script's edits are live; cleared on a fresh `Show` and by `DetachScript`.
     script: Option<ScriptInstance>,
     /// The scripted render rung: a live `ScriptedDocument` whose page JS ran on load
-    /// and whose mutated DOM renders each frame. `Some` only for a `serval.scripted`
-    /// node (built on `Show`), and only in the `scripted` build. Supersedes every other
-    /// lane in `render`. (Render ladder phase 2a.)
+    /// and whose mutated DOM renders each frame. `Some` only for a scripted Serval
+    /// rung (`serval.scripted`, or `serval.scripted.nova` when that feature is on),
+    /// built on `Show` and only in the `scripted` build. Supersedes every other lane
+    /// in `render`. (Render ladder phase 2a.)
     #[cfg(feature = "scripted")]
-    scripted_doc: Option<ScriptedDocument<BoaEngine>>,
+    scripted_doc: Option<HostScriptedDocument>,
     /// The serval smolweb lane: a focused smolweb capsule (gemini/gopher/feed) rendered
     /// natively through pelt's `SmolwebDocument` (errand parse -> smolweb-views ->
     /// ScriptedDom -> serval-layout). `Some` once a smolweb-scheme node's body is ready

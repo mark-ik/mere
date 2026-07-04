@@ -5,14 +5,11 @@
 #[cfg(not(target_arch = "wasm32"))]
 use kernel::graph::apply::{self as graph_apply, GraphDelta, apply_graph_delta};
 #[cfg(not(target_arch = "wasm32"))]
-use kernel::graph::{
-    EdgeAssertion, Graph, NodeKey, ProvenanceSubKind, SemanticSubKind, predicate_iri,
-    sub_kind_from_iri,
-};
+use kernel::graph::{Graph, NodeKey, ProvenanceSubKind, SemanticSubKind, sub_kind_from_iri};
 #[cfg(not(target_arch = "wasm32"))]
 use kernel::types::{
     ClassificationProvenance, ClassificationScheme, ClassificationStatus, NodeClassification,
-    NodeDerivation, NodeProperty,
+    NodeDerivation,
 };
 
 use super::GraphContribution;
@@ -91,15 +88,12 @@ pub fn apply_contribution(graph: &mut Graph, contribution: &GraphContribution) -
                 },
             );
         }
-        for (predicate, value) in &node.properties {
+        for property in &node.properties {
             let _ = apply_graph_delta(
                 graph,
                 GraphDelta::AppendNodeProperty {
                     key,
-                    property: NodeProperty {
-                        predicate: predicate.clone(),
-                        value: value.clone(),
-                    },
+                    property: property.clone(),
                 },
             );
         }
@@ -125,26 +119,15 @@ pub fn apply_contribution(graph: &mut Graph, contribution: &GraphContribution) -
             continue;
         };
         let asserted = if let Some(sub_kind) = sub_kind_from_iri(&edge.predicate) {
-            // Recognized: typed Semantic edge + its canonical predicate IRI.
-            let semantic_ok = graph_apply::assert_relation(
+            // Recognized: typed Semantic statement in the supplied graph scope.
+            let semantic_ok = graph_apply::assert_semantic_relation_in_scope(
                 graph,
                 from,
                 to,
-                EdgeAssertion::Semantic {
-                    sub_kind,
-                    label: None,
-                    decay_progress: None,
-                },
+                sub_kind,
+                None,
+                edge.graph_scope.clone(),
             )
-            .inspect(|&key| {
-                let _ = apply_graph_delta(
-                    graph,
-                    GraphDelta::SetEdgeSemanticPredicate {
-                        edge: key,
-                        predicate: Some(predicate_iri(sub_kind).to_string()),
-                    },
-                );
-            })
             .is_some();
             // A harvested hyperlink also records derivation provenance on the
             // target: it was `ExtractedFrom` the source page (capture plan C3).
@@ -169,17 +152,14 @@ pub fn apply_contribution(graph: &mut Graph, contribution: &GraphContribution) -
             semantic_ok
         } else {
             // Unrecognized: an open-predicate Semantic edge (raw IRI).
-            matches!(
-                apply_graph_delta(
-                    graph,
-                    GraphDelta::AssertSemanticPredicate {
-                        from,
-                        to,
-                        predicate: edge.predicate.clone(),
-                    },
-                ),
-                kernel::graph::apply::GraphDeltaResult::EdgeAdded(Some(_))
+            graph_apply::assert_semantic_predicate_in_scope(
+                graph,
+                from,
+                to,
+                edge.predicate.clone(),
+                edge.graph_scope.clone(),
             )
+            .is_some()
         };
         if asserted {
             outcome.edges_asserted += 1;

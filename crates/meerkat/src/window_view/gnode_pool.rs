@@ -613,11 +613,7 @@ fn state_name(color: &'static str) -> &'static str {
 }
 
 fn bool_attr(value: bool) -> &'static str {
-    if value {
-        "true"
-    } else {
-        "false"
-    }
+    if value { "true" } else { "false" }
 }
 
 #[cfg(test)]

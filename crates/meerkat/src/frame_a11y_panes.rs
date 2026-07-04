@@ -15,7 +15,7 @@ use forme::GraphMemberId;
 use frame::{PaneContent, PaneId};
 use layout_dom_api::{LayoutDom, Namespace, NodeKind};
 use serval_scripted_dom::NodeId;
-use uxtree::{node_id_for_path, UxTree};
+use uxtree::{UxTree, node_id_for_path};
 
 use super::frame_a11y::rect;
 use super::{A11yHostAction, WindowCtx};

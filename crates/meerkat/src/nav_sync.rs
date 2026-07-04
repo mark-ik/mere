@@ -74,7 +74,7 @@ impl WindowCtx<'_> {
                 if !stacked {
                     self.view.workbench.open_tile(new_member);
                 }
-                self.view.focused_tile = Some(new_member);
+                self.set_focused_tile(Some(new_member));
             }
             // Cartography: the new node is focused and shows its snapshot; opening it
             // live is the pelt path (double-click). (Node-rep P4.)
@@ -94,6 +94,7 @@ impl WindowCtx<'_> {
         }
         let navigated = match self.nav_target_member() {
             Some(member) => {
+                self.persist_live_tile_thumbnail_before_navigation(member);
                 self.orrery_mut().navigate_member(member, &loc);
                 self.view.scroll.remove(&member); // a new page starts at the top
                 Some(member)
@@ -114,7 +115,7 @@ impl WindowCtx<'_> {
             if let Some(member) = navigated {
                 self.open_workbench();
                 self.view.workbench.open_tile(member);
-                self.view.focused_tile = Some(member);
+                self.set_focused_tile(Some(member));
             }
         }
         // Record the navigation while `content_location` still holds the page we
@@ -175,6 +176,7 @@ impl WindowCtx<'_> {
         let Some(member) = self.nav_target_member() else {
             return;
         };
+        self.persist_live_tile_thumbnail_before_navigation(member);
         let url = match step {
             meerkat::HistoryStep::Back => self.orrery_mut().member_history_back(member),
             meerkat::HistoryStep::Forward => self.orrery_mut().member_history_forward(member),

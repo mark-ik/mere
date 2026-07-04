@@ -349,7 +349,7 @@ What shipped:
   `Provenance` edge family + `ProvenanceSubKind` exist and persist, but the sub-kinds are
   all content-transformation (`ClippedFrom` / `ExcerptedFrom` / …) with no plain copy, so a
   cross-graph copy wants a **new `CopiedFrom` (or `DuplicatedFrom`) `ProvenanceSubKind`**,
-  recorded by the C4 rekey. (Ties to the per-statement-edge + projection-profile work in
+  recorded by the C4 rekey. (Ties to the statement-bucket + projection-profile work in
   [petgraph_rdf_plan](2026-06-18_petgraph_rdf_plan.md): a cross-graph copy is exactly a
   provenance statement.)
 - **OQ-B (was OQ4) — move vs copy default.** A cross-graph drag defaults to which?

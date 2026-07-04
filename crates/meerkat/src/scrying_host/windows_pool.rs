@@ -17,6 +17,7 @@ use inker::{
 use scrying::PlatformCompositionRoot;
 use verso_scry::ScryForward;
 
+use super::CapturedThumbnail;
 use super::factory::{build_composition_root, registry_for_root, spawn};
 use super::frame_import::drive_frame;
 use super::scry_surface::drive_navigation;
@@ -56,10 +57,16 @@ pub(super) struct Tile {
 }
 
 impl Pool {
-    pub(super) fn reap(&mut self, member: GraphMemberId) {
+    pub(super) fn capture_thumbnail(&mut self, member: GraphMemberId) -> Option<CapturedThumbnail> {
+        self.tiles.get_mut(&member).and_then(capture_thumbnail)
+    }
+
+    pub(super) fn reap(&mut self, member: GraphMemberId) -> Option<CapturedThumbnail> {
+        let captured = self.tiles.get_mut(&member).and_then(capture_thumbnail);
         self.tiles.remove(&member);
         self.failed.remove(&member);
         self.pending_flips.remove(&member);
+        captured
     }
 
     /// Stage a forward flip for `member`. Its tile may not exist yet, so the
@@ -77,17 +84,42 @@ impl Pool {
         }
     }
 
-    pub(super) fn clear(&mut self) {
+    pub(super) fn clear(&mut self) -> Vec<(GraphMemberId, CapturedThumbnail)> {
+        let captured = self
+            .tiles
+            .iter_mut()
+            .filter_map(|(member, tile)| capture_thumbnail(tile).map(|png| (*member, png)))
+            .collect();
         self.tiles.clear();
         self.failed.clear();
         self.pending_flips.clear();
+        captured
     }
 
     /// Reap every tile whose member is not in `keep`.
-    pub(super) fn retain(&mut self, keep: &HashSet<GraphMemberId>) {
+    pub(super) fn retain(
+        &mut self,
+        keep: &HashSet<GraphMemberId>,
+    ) -> Vec<(GraphMemberId, CapturedThumbnail)> {
+        let stale: Vec<_> = self
+            .tiles
+            .keys()
+            .copied()
+            .filter(|member| !keep.contains(member))
+            .collect();
+        let captured = stale
+            .iter()
+            .filter_map(|member| {
+                self.tiles
+                    .get_mut(member)
+                    .and_then(capture_thumbnail)
+                    .map(|png| (*member, png))
+            })
+            .collect();
         self.tiles.retain(|member, _| keep.contains(member));
         self.failed.retain(|member, _| keep.contains(member));
         self.pending_flips.retain(|member, _| keep.contains(member));
+        captured
     }
 
     pub(super) fn texture_view(&self, member: GraphMemberId) -> Option<&wgpu::TextureView> {
@@ -327,6 +359,20 @@ fn drain_web_events(member: GraphMemberId, tile: &mut Tile) {
     for event in events {
         record_web_event(member, tile, event);
     }
+}
+
+fn capture_thumbnail(tile: &mut Tile) -> Option<CapturedThumbnail> {
+    let (width, height) = tile.size;
+    if width == 0 || height == 0 {
+        return None;
+    }
+    let png_bytes = tile.producer.capture_snapshot_png().ok()?;
+    Some(CapturedThumbnail {
+        png_bytes,
+        width,
+        height,
+        url: tile.last_url.clone().or_else(|| tile.shown_url.clone()),
+    })
 }
 
 fn record_web_event(member: GraphMemberId, tile: &mut Tile, event: WebSurfaceEvent) {

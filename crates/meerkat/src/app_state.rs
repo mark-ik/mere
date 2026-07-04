@@ -149,6 +149,17 @@ pub(crate) struct Session {
     /// via `MERE_GRAPH_DELTA_LOG`. One writer for the shell session, surfaced in
     /// Apparatus and wired into the kernel's single `apply_graph_delta` funnel.
     pub(crate) graph_delta_log: crate::graph_delta_log::GraphDeltaLog,
+    /// The per-session cap, in bytes, on thumbnail bytes the idle-cadence snapshot
+    /// refresh will write before it stops (`settings.json`'s `snapshot_byte_cap_mb`,
+    /// resolved to bytes at boot; a host default when unset). Boundary-triggered
+    /// deposits ignore this — only the idle pass checks it. (Node/card summoning
+    /// design, §5 item 4.)
+    pub(crate) thumbnail_byte_cap: usize,
+    /// Running total of thumbnail bytes deposited this session, across every deposit
+    /// path (boundary, on-demand card render, and idle refresh alike) — the idle
+    /// pass reads this against `thumbnail_byte_cap` before running again. Resets to
+    /// 0 each launch. (Node/card summoning design, §5 item 4.)
+    pub(crate) thumbnail_bytes_this_session: usize,
 }
 
 /// The `presentation` subsystem: the resolved theme + the persisted chrome
@@ -217,6 +228,12 @@ pub(crate) struct Presentation {
     /// between gestures. Ephemeral interaction state, not persisted — a fresh launch always
     /// starts with no pending selection. (Alembic B7-P3.)
     pub(crate) pending_compose_engram: Option<String>,
+    /// Whether the idle-cadence pass redeposits open workbench-tile thumbnails while the
+    /// app sits idle. Loaded from `settings.json` at boot; toggled by a future settings
+    /// control (none exists yet — hand-edit the sidecar to turn it off, like
+    /// `retention_keep_n`). Read by `maybe_run_idle_snapshot_refresh`. (Node/card summoning
+    /// design, §5 item 4.)
+    pub(crate) snapshot_idle_refresh: bool,
 }
 
 impl Presentation {

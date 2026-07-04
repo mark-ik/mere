@@ -387,10 +387,11 @@ pub(crate) fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
         // The toolbar session strip (Chrome bar P4): chips for the open sessions, the
         // overflow `+N ⌄`, and the add `+`. The active chip takes the selection fill so
         // the focused session reads at a glance (representation-identity).
-        ".session-strip { display: flex; align-items: center; }".to_string(),
+        ".session-strip { display: flex; align-items: center; min-width: 0; }".to_string(),
         format!(
             ".session-chip {{ display: flex; align-items: center; background-color: {}; \
-                color: {}; border-radius: 13px; margin: 4px 2px; padding: 2px 2px 2px 4px; }}",
+                color: {}; border-radius: 13px; margin: 4px 2px; padding: 2px 2px 2px 4px; \
+                min-width: 0; max-width: 190px; flex-shrink: 1; }}",
             rgb(c.control_bg),
             rgb(c.control_text)
         ),
@@ -399,9 +400,11 @@ pub(crate) fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
             rgb(c.active_bg),
             rgb(c.strong_text)
         ),
-        ".session-chip-label { font-size: 12px; padding: 4px 5px; }".to_string(),
+        ".session-chip-label { font-size: 12px; padding: 4px 5px; min-width: 0; \
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }"
+            .to_string(),
         format!(
-            ".session-chip-close {{ font-size: 12px; padding: 4px 6px; color: {}; }}",
+            ".session-chip-close {{ font-size: 12px; padding: 4px 6px; color: {}; flex-shrink: 0; }}",
             rgb(c.muted_text)
         ),
         format!(

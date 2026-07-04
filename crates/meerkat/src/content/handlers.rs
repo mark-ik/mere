@@ -268,7 +268,7 @@ pub(crate) fn render(
     out: &impl ContentUpdateSink,
 ) {
     let (w, h) = content.viewport;
-    // Scripted render rung: a `serval.scripted` node renders straight from its live
+    // Scripted render rung: a scripted Serval node renders straight from its live
     // `ScriptedDocument` (page JS already ran on load). `frame()` re-lays-out the
     // mutated DOM and paints; emit it as one viewport (banding/scroll of a scripted
     // tile is a follow-up — the document scrolls internally, not via host bands).

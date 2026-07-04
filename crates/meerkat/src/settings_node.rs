@@ -211,7 +211,15 @@ impl WindowCtx<'_> {
         ];
         // The scripted serval rung is pickable only in the `scripted` build. (Ladder.)
         #[cfg(feature = "scripted")]
-        pickable.push((inker::routing::ENGINE_SERVAL_SCRIPTED, "Serval (scripted)"));
+        pickable.push((
+            inker::routing::ENGINE_SERVAL_SCRIPTED,
+            "Serval (scripted, Boa)",
+        ));
+        #[cfg(feature = "scripted-nova")]
+        pickable.push((
+            inker::routing::ENGINE_SERVAL_SCRIPTED_NOVA,
+            "Serval (scripted, Nova)",
+        ));
         let pin = self
             .shared
             .content

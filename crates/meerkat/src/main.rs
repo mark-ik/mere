@@ -270,6 +270,11 @@ struct Shell {
     /// idle cadence and the manual click are independent triggers of the same verb.
     /// (Alembic B1.)
     last_forgetting: Option<Instant>,
+    /// When the idle-cadence snapshot-refresh pass last ran, or `None` before the
+    /// first one. Independent cadence + trigger from `last_forgetting` — the two
+    /// passes share the same idle signal (`last_activity`) but are otherwise
+    /// unrelated verbs. (Node/card summoning design, §5 item 4.)
+    last_snapshot_refresh: Option<Instant>,
     /// Marks this struct as the kernel-thread context: `!Send` by construction
     /// (armillary's typed boundary), so kernel authority cannot be moved onto an
     /// actor thread — the attempt is a compile error, not a review catch.

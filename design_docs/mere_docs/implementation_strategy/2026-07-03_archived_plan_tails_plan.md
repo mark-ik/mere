@@ -38,10 +38,12 @@ already tracked by an active plan are *not* repeated here.
 
 ## From find_in_page_host_ui (feature complete 2026-06-16)
 
-- **Gemtext/document-lane find** — owned by the still-active
-  [retained_text_tiled_render_plan](2026-06-15_retained_text_tiled_render_plan.md)
-  (its P3), not this backlog; listed here only as a pointer. Needs the glyph→char
-  cluster map on `GlyphRun`.
+- **Gemtext/document-lane find — closed 2026-07-03.** The user-facing retained-text
+  slice landed in the
+  [retained_text_tiled_render_plan](2026-06-15_retained_text_tiled_render_plan.md):
+  Ctrl+F searches retained document blocks, paints block-scoped highlights, and
+  page-text copy works from the retained packet. The precise glyph→char cluster
+  map on `GlyphRun` remains only a fidelity follow-on, not an open backlog tail.
 - **Paste into the find field** — `handle_clipboard_shortcut` routes to
   omnibar/palette only.
 
@@ -79,3 +81,6 @@ already tracked by an active plan are *not* repeated here.
 - **2026-07-03** — created during the archive/reconcile pass; 11 completed plans
   moved to `archive_docs/2026-07-03_completed_plans/`, their deferred items
   collected here.
+- **2026-07-04** — reconciled the find-in-page carry-over: the document-lane
+  retained-text find/copy acceptance slice is now closed in the retained-text
+  plan, while paste into the find field remains open.

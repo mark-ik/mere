@@ -25,7 +25,7 @@ use session_runtime::{
     encode_remote_auth_pairing_ticket, ensure_local_device_identity,
     format_remote_auth_pairing_code, install_remote_auth_enrollment_bundle,
     install_remote_auth_enrollment_bundle_with_wrapping_key, load_identity_seed,
-    mint_remote_auth_pairing_ticket,
+    load_remote_auth_wrapping_key_bridge, mint_remote_auth_pairing_ticket,
 };
 use uuid::Uuid;
 
@@ -250,6 +250,50 @@ pub(crate) fn export_remote_auth_enrollment_bundle(
         "{ticket_id}.{}.enrollment.cbor",
         device_id.as_uuid()
     ));
+    fs::write(&path, bytes)?;
+    Ok(path)
+}
+
+/// Export a fresh enrollment bundle for an already-enrolled delegated device.
+///
+/// This is the manual/admin seam used after later grant refreshes, such as
+/// private-epoch rotation on revocation. Pairing-backed `private.read` grants
+/// need the original ticket id retained in the temporary wrapping-key bridge so
+/// the delegatee can recover the same cached pairing ticket on install.
+pub(crate) fn export_remote_auth_enrollment_bundle_for_device(
+    data_root: &Path,
+    device_id: DeviceId,
+) -> io::Result<PathBuf> {
+    let mut bundle = build_remote_auth_enrollment_bundle(data_root, device_id)?;
+    if !bundle.grant.payload.wrapped_private_epochs.is_empty() {
+        let ticket_id = load_remote_auth_wrapping_key_bridge(data_root)?
+            .and_then(|bridge| {
+                bridge
+                    .keys
+                    .into_iter()
+                    .find(|known| known.device_id == device_id)
+            })
+            .and_then(|known| known.ticket_id)
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!(
+                        "remote-auth enrollment export missing pairing ticket id for {}",
+                        device_id.as_uuid()
+                    ),
+                )
+            })?;
+        bundle.ticket_id = Some(ticket_id);
+    }
+    let bytes = encode_remote_auth_enrollment_bundle(&bundle)
+        .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
+    let dir = pairing_dir(data_root);
+    fs::create_dir_all(&dir)?;
+    let stem = bundle
+        .ticket_id
+        .map(|ticket_id| ticket_id.to_string())
+        .unwrap_or_else(|| "manual".to_string());
+    let path = dir.join(format!("{stem}.{}.enrollment.cbor", device_id.as_uuid()));
     fs::write(&path, bytes)?;
     Ok(path)
 }
@@ -771,5 +815,53 @@ mod tests {
                 .any(|record| record.device_id == local.device_id
                     && record.mode == DeviceMode::RemoteAuth)
         );
+    }
+
+    #[test]
+    fn export_enrollment_bundle_for_device_reuses_the_original_pairing_ticket() {
+        let delegator = tempdir().expect("delegator tempdir");
+        let delegatee = tempdir().expect("delegatee tempdir");
+        let persona = PersonaId::new();
+        ensure_wallet_state(delegator.path(), persona, "Delegator").expect("wallet");
+        let request = RemoteAuthPairingTicketRequest {
+            issued_at_ms: 1234,
+            expires_at_ms: None,
+            personas: vec![persona],
+            scopes: vec!["identity.act".into(), "private.read".into()],
+            attenuations: vec!["no-subdelegation".into()],
+        };
+        let offer = mint_remote_auth_pairing_offer(delegator.path(), &request).expect("offer");
+        let response = prepare_remote_auth_pairing_response(
+            delegatee.path(),
+            &offer.summary_path,
+            "Pocket Meerkat",
+        )
+        .expect("response");
+        let current_epoch = load_current_private_epoch(delegator.path(), persona)
+            .expect("epoch load")
+            .expect("epoch bridge");
+        issue_remote_auth_device_grant_from_ticket(
+            delegator.path(),
+            &offer.ticket,
+            &response.response,
+            vec![session_runtime::PrivateEpochPlaintext {
+                persona_id: persona,
+                epoch_id: current_epoch.epoch_id,
+                epoch_secret: current_epoch.epoch_secret.clone(),
+            }],
+        )
+        .expect("grant");
+
+        let bundle_path = export_remote_auth_enrollment_bundle_for_device(
+            delegator.path(),
+            response.response.device_id,
+        )
+        .expect("bundle");
+        assert!(bundle_path.is_file());
+
+        let bundle = decode_remote_auth_enrollment_bundle(&fs::read(&bundle_path).expect("read"))
+            .expect("decode");
+        assert_eq!(bundle.ticket_id, Some(offer.ticket.ticket_id));
+        assert_eq!(bundle.grant.payload.device_id, response.response.device_id);
     }
 }

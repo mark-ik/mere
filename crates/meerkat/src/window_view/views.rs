@@ -268,10 +268,10 @@ pub(crate) fn orrery_element(render: &OrreryRender) -> ShellView {
 
 /// The focused node's content card: a positioned element over the orrery's gnodes. A
 /// `Snapshot` is a framed card holding a PNG data-URI `<img>` of the page's top peek (the
-/// host builds + caches it per url); an `Unvisited` is a dashed "double-click to load"
-/// placeholder (double-click is host-handled via `content_rects`, so the element needs no
-/// click handler). The card is opaque chrome DOM after the gnodes, so document order
-/// paints it over them and under the chrome overlays. (Layering fix — card over nodes.)
+/// host builds + caches it per member while the URL matches); an `Unvisited` is a dashed
+/// "double-click to load" placeholder (double-click is host-handled via `content_rects`,
+/// so the element needs no click handler). The card is opaque chrome DOM after the gnodes,
+/// so document order paints it over them and under the chrome overlays. (Layering fix.)
 pub(crate) fn focus_card_view(fc: &FocusCard) -> ShellView {
     let [x0, y0, x1, y1] = fc.rect;
     let (w, h) = ((x1 - x0).max(1.0), (y1 - y0).max(1.0));

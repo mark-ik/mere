@@ -171,13 +171,18 @@ const INLINE_SCRIPT_PAGE: &str = "<body><script>\
 
 #[cfg(feature = "scripted")]
 fn scripted_show(url: &str, body: &str) -> ContentCommand {
+    scripted_show_with_engine(inker::routing::ENGINE_SERVAL_SCRIPTED, url, body)
+}
+
+#[cfg(feature = "scripted")]
+fn scripted_show_with_engine(engine: &str, url: &str, body: &str) -> ContentCommand {
     ContentCommand::Show {
         url: url.to_string(),
         state: Some(ContentState::Ready(Fetched {
             content_type: Some("text/html".to_string()),
             body: body.to_string(),
         })),
-        engine: inker::routing::ENGINE_SERVAL_SCRIPTED.to_string(),
+        engine: engine.to_string(),
         viewport: (420, 360),
         nav: NavGeneration::default(),
         viewport_gen: ViewportGeneration::default(),
@@ -210,6 +215,27 @@ fn scripted_rung_runs_inline_script_and_renders() {
     assert!(
         glyph_runs(&first_scene(updates)) >= 1,
         "the scripted lane ran the inline script and rendered the injected text",
+    );
+}
+
+#[cfg(feature = "scripted-nova")]
+#[test]
+fn scripted_nova_rung_runs_inline_script_and_renders() {
+    let (handle, updates) = spawn_content(
+        &Pool::new(),
+        noop_wake(),
+        std::collections::HashSet::new(),
+        false,
+    );
+    handle.command(scripted_show_with_engine(
+        inker::routing::ENGINE_SERVAL_SCRIPTED_NOVA,
+        "https://example.com/app",
+        INLINE_SCRIPT_PAGE,
+    ));
+    handle.join();
+    assert!(
+        glyph_runs(&first_scene(updates)) >= 1,
+        "the Nova scripted lane ran the inline script and rendered the injected text",
     );
 }
 

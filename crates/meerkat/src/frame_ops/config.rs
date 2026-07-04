@@ -112,12 +112,13 @@ impl WindowCtx<'_> {
             }
             // Focus the node the open was seeded from (the primary selection), so the
             // omnibar shows its URL; fall back to the first opened tile.
-            self.view.focused_tile = self
-                .orrery()
-                .selected_members()
-                .first()
-                .copied()
-                .or_else(|| self.view.workbench.open_members().first().copied());
+            self.set_focused_tile(
+                self.orrery()
+                    .selected_members()
+                    .first()
+                    .copied()
+                    .or_else(|| self.view.workbench.open_members().first().copied()),
+            );
         }
         self.view.request_redraw();
     }
@@ -172,6 +173,7 @@ impl WindowCtx<'_> {
         // The retention cap is read at launch + tuned in settings.json, not held in
         // runtime state, so preserve it across saves (like script_permissions).
         let retention_keep_n = preserved.retention_keep_n;
+        let startup_unlock_mode = preserved.startup_unlock_mode;
         let settings = PersistedSettings {
             tab_cap: self.shared.presentation.saved_tab_cap,
             theme_id: Some(self.shared.presentation.active_theme_id.clone()),
@@ -212,6 +214,11 @@ impl WindowCtx<'_> {
             // The user's chrome zoom (Ctrl +/-/0); the display DPI factor is not persisted
             // (it is read fresh from the window each launch). (UI scale.)
             ui_zoom: self.shared.presentation.user_zoom,
+            startup_unlock_mode,
+            snapshot_idle_refresh: self.shared.presentation.snapshot_idle_refresh,
+            // The byte cap itself is read at launch + tuned in settings.json, not held in
+            // runtime state, so preserve it across saves (like retention_keep_n above).
+            snapshot_byte_cap_mb: preserved.snapshot_byte_cap_mb,
         };
         if let Err(err) = settings_store::save_settings(&self.shared.session.mere_root, &settings) {
             tracing::warn!(%err, "failed to persist settings");

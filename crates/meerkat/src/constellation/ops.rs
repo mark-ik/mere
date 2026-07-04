@@ -138,6 +138,7 @@ impl Constellation {
                         requested_band: (0, 0),
                         links: Vec::new(),
                         find_matches: Vec::new(),
+                        page_text_selection: None,
                         engine_stats: None,
                         scene_stats: None,
                         find_query: String::new(),
@@ -182,7 +183,7 @@ impl Constellation {
         ch: u32,
         sheet: DocumentStyleSheet,
         // The host-routed engine id (the node's pin or the policy decision), passed to
-        // the actor so it can take the scripted lane for `serval.scripted`. (Ladder.)
+        // the actor so it can take the scripted Serval lane when pinned there. (Ladder.)
         engine: &str,
     ) {
         let tag = ContentState::tag(state.as_ref());
@@ -208,6 +209,7 @@ impl Constellation {
         let lch = ((ch as f32) / self.dpr).round().max(1.0) as u32;
         if same_doc {
             activation.gens.viewport.bump();
+            activation.page_text_selection = None;
             activation.handle.command(ContentCommand::Resize {
                 viewport: (lcw, lch),
                 viewport_gen: activation.gens.viewport,
@@ -221,6 +223,7 @@ impl Constellation {
             // A new document invalidates the old find matches + query (a stale
             // highlight must not survive a navigation). (Find-in-page.)
             activation.find_matches.clear();
+            activation.page_text_selection = None;
             activation.find_query.clear();
             activation.handle.command(ContentCommand::Show {
                 url: url.to_string(),
@@ -373,6 +376,31 @@ impl Constellation {
         });
     }
 
+    /// Ask `member`'s actor to resolve a point-drag text selection in its current
+    /// HTML document. The host passes physical content-local points; the actor works
+    /// in logical coords, so the query is converted through the current DPR. Results
+    /// land via [`page_text_selection`](Self::page_text_selection). No-op for an
+    /// inactive member or a document-lane node.
+    pub fn request_text_selection(
+        &self,
+        member: GraphMemberId,
+        anchor: (f32, f32),
+        focus: (f32, f32),
+    ) {
+        let Some(activation) = self.active.get(&member) else {
+            return;
+        };
+        if activation.packet.is_some() {
+            return;
+        }
+        let scale = self.dpr.max(0.1);
+        activation.handle.command(ContentCommand::SelectText {
+            anchor: (anchor.0 / scale, anchor.1 / scale),
+            focus: (focus.0 / scale, focus.1 / scale),
+            viewport_gen: activation.gens.viewport,
+        });
+    }
+
     /// Materialize `member`'s outbound-link neighborhood as graph nodes +
     /// `Semantic:Hyperlink` edges (relational-browse V1): the host invokes this to
     /// place the open page's link neighborhood on the canvas. The actor parses the
@@ -426,23 +454,23 @@ impl Constellation {
         });
     }
 
-    /// Whether `member` is active and on the scripted render rung (`serval.scripted`).
-    /// The host checks this to decide a click on the tile routes to script dispatch
+    /// Whether `member` is active and on the scripted render rung. The host checks
+    /// this to decide a click on the tile routes to script dispatch
     /// ([`click_scripted`](Self::click_scripted)) rather than the orrery beneath.
     /// (Render ladder phase 3.)
     #[cfg(feature = "scripted")]
     pub fn is_scripted(&self, member: GraphMemberId) -> bool {
-        self.active
-            .get(&member)
-            .is_some_and(|a| a.engine == inker::routing::ENGINE_SERVAL_SCRIPTED)
+        self.active.get(&member).is_some_and(|a| {
+            inker::routing::serval_rung(&a.engine) == Some(inker::routing::ServalRung::Scripted)
+        })
     }
 
     /// Forward a pointer click at card-local scene point `(x, y)` (device px) to
     /// `member`'s scripted render rung: the live document hit-tests the point and
     /// dispatches a `click`, so the page's listeners run, then the tile re-renders.
     /// No-op if the node is not active or not on the scripted rung. The host calls
-    /// this when a click lands on a `serval.scripted` tile. (Render ladder phase 3 —
-    /// the input → event bridge.)
+    /// this when a click lands on a scripted tile. (Render ladder phase 3 — the input
+    /// → event bridge.)
     #[cfg(feature = "scripted")]
     pub fn click_scripted(&self, member: GraphMemberId, x: f32, y: f32) {
         let Some(activation) = self.active.get(&member) else {
@@ -472,6 +500,34 @@ impl Constellation {
     /// way it maps link rects (offset by the card scroll). (Find-in-page.)
     pub fn find_matches(&self, member: GraphMemberId) -> &[Vec<[f32; 4]>] {
         self.active.get(&member).map_or(&[], |a| &a.find_matches)
+    }
+
+    /// The latest HTML page-text selection for `member`, if any, plus the activation
+    /// generation stamp it is valid against.
+    pub fn page_text_selection(
+        &self,
+        member: GraphMemberId,
+    ) -> Option<(
+        &crate::content::TextSelectionMessage,
+        armillary::Generations,
+    )> {
+        self.active
+            .get(&member)
+            .and_then(|a| a.page_text_selection.as_ref().map(|s| (s, a.gens)))
+    }
+
+    /// The current generation pair for `member`, if it is active.
+    pub fn generations(&self, member: GraphMemberId) -> Option<armillary::Generations> {
+        self.active.get(&member).map(|a| a.gens)
+    }
+
+    /// Drop the cached HTML page-text selection for `member` without touching the
+    /// actor. The host calls this when a selection is cleared locally so a stale
+    /// async result cannot rehydrate it on the next wake.
+    pub fn clear_page_text_selection(&mut self, member: GraphMemberId) {
+        if let Some(activation) = self.active.get_mut(&member) {
+            activation.page_text_selection = None;
+        }
     }
 
     /// The member's latest focused-document Serval stats, if its current content lane

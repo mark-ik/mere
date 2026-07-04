@@ -212,8 +212,8 @@ impl crate::WindowCtx<'_> {
                 .shared
                 .content
                 .constellation
-                .scene_version(selection.member)
-                == selection.version
+                .generations(selection.member)
+                == Some(selection.gens)
             {
                 for (dest, member) in &composite {
                     if *member != selection.member {

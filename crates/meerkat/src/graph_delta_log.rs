@@ -349,6 +349,21 @@ mod tests {
         );
         let _ = apply_graph_delta(
             &mut graph,
+            GraphDelta::SetNodeFormDraft {
+                key: a,
+                form_draft: Some("draft body".into()),
+            },
+        );
+        let _ = apply_graph_delta(
+            &mut graph,
+            GraphDelta::SetNodeSessionScroll {
+                key: a,
+                session_scroll: Some((20.0, 640.0)),
+            },
+        );
+        let _ = apply_graph_delta(&mut graph, GraphDelta::TouchNodeLastVisited { key: a });
+        let _ = apply_graph_delta(
+            &mut graph,
             GraphDelta::InsertNodeTag {
                 key: a,
                 tag: "paper".into(),
@@ -425,14 +440,35 @@ mod tests {
             },
         );
         let _ = apply_graph_delta(&mut graph, GraphDelta::RetireField { id: field_id });
+        let _ = apply_graph_delta(&mut graph, GraphDelta::ActivateField { id: field_id });
+        let _ = apply_graph_delta(&mut graph, GraphDelta::RetractCoupling { id: coupling_id });
+        let _ = apply_graph_delta(
+            &mut graph,
+            GraphDelta::AddCoupling {
+                coupling: Coupling::new(
+                    coupling_id,
+                    field_id,
+                    NodeSelector::Kind("paper".into()),
+                    CouplingResponse::DampenInside { factor: 0.3 },
+                    1.5,
+                ),
+            },
+        );
+        let _ = apply_graph_delta(
+            &mut graph,
+            GraphDelta::SetFieldCouplingStrength {
+                field: field_id,
+                strength: 2.0,
+            },
+        );
         let _ = apply_graph_delta(
             &mut graph,
             GraphDelta::AppendNodeProperty {
                 key: a,
-                property: NodeProperty {
-                    predicate: "https://schema.org/datePublished".into(),
-                    value: "2026-07-02".into(),
-                },
+                property: NodeProperty::new(
+                    "https://schema.org/datePublished".into(),
+                    "2026-07-02".into(),
+                ),
             },
         );
         let _ = apply_graph_delta(
@@ -609,7 +645,7 @@ mod tests {
 
         let path = log.path().expect("log path").to_path_buf();
         let entries = read_delta_log(&path).expect("read log");
-        assert_eq!(entries.len(), 46);
+        assert_eq!(entries.len(), 55);
         let replayed = replay_delta_log(&path).expect("replay log");
         assert_eq!(replayed.node_count(), 3);
         assert_eq!(replayed.edge_count(), 2);
@@ -646,6 +682,8 @@ mod tests {
         assert!(node.is_pinned);
         assert!(node.compat_mode);
         assert_eq!(node.body.as_deref(), Some("body"));
+        assert_eq!(node.session_form_draft.as_deref(), Some("draft body"));
+        assert_eq!(node.session_scroll, Some((20.0, 640.0)));
         assert!(!node.tags.contains("research"));
         assert!(node.tags.contains("paper"));
         assert_eq!(
@@ -716,7 +754,7 @@ mod tests {
         );
         let field = replayed.field(field_id).expect("replayed field");
         assert_eq!(field.name.as_deref(), Some("focus"));
-        assert!(!field.is_active());
+        assert!(field.is_active());
         assert_eq!(
             field.extent,
             FieldExtent::Region {

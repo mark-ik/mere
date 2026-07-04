@@ -412,6 +412,9 @@ impl Shell {
         if Some(id) == self.primary {
             return;
         }
+        if let Some(mut wc) = self.window_ctx(id) {
+            wc.persist_workbench_boundary_thumbnails();
+        }
         if self.windows.remove(&id).is_some() {
             // Drop this secondary's AccessKit bridge with its window (MW3 step 6) — its
             // adapter is subclassed onto the now-gone OS window. The primary's bridge is

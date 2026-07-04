@@ -21,6 +21,47 @@ struct InspectorPaneInput<'a> {
     state: Option<&'a crate::fetch::ContentState>,
 }
 
+struct TrailRemovedInput {
+    node_id: String,
+    url: String,
+}
+
+struct TrailPaneInput {
+    recent_urls: Vec<String>,
+    history_urls: Vec<String>,
+    removed: Vec<TrailRemovedInput>,
+}
+
+struct AlembicRecentInput {
+    url: String,
+    shown: String,
+}
+
+struct AlembicSavedInput {
+    url: String,
+    label: String,
+}
+
+struct AlembicEngramInput {
+    id: String,
+    byte_size: u64,
+    pending_compose: bool,
+}
+
+struct AlembicPaneInput {
+    eviction_policy_label: String,
+    recent: Vec<AlembicRecentInput>,
+    saved: Vec<AlembicSavedInput>,
+    engrams: Vec<AlembicEngramInput>,
+}
+
+struct ApparatusSyncInput {
+    active: bool,
+    label: String,
+    ops_label: String,
+    last_activity_ms: Option<u64>,
+}
+
 impl WindowCtx<'_> {
     pub(super) fn utility_pane_rows(&self, content: &PaneContent) -> Vec<(String, String)> {
         match content {
@@ -37,30 +78,17 @@ impl WindowCtx<'_> {
     /// focused node's own url history, and the eidetic deleted-nodes log — three
     /// titled sections of inert rows. (Lineage + eidetic pane.)
     pub(super) fn trail_items(&mut self) -> Vec<crate::list_pane::PaneItem> {
-        use crate::list_pane::PaneItem;
         let input = self.pane_input_snapshot();
-        // Strip the scheme and cap the length so a row reads cleanly.
-        let short = |url: &str| -> String {
-            url.strip_prefix("https://")
-                .or_else(|| url.strip_prefix("http://"))
-                .unwrap_or(url)
-                .chars()
-                .take(56)
-                .collect()
-        };
-
-        let mut items = vec![PaneItem::text("utility-title", "Recent")];
-        let recent = self.orrery().graph().recent_visited(8);
-        if recent.is_empty() {
-            items.push(PaneItem::text("utility-row-muted", "nothing visited yet"));
-        } else {
-            for rv in &recent {
-                items.push(PaneItem::text("utility-row", short(&rv.url)));
-            }
-        }
+        let recent_urls = self
+            .orrery()
+            .graph()
+            .recent_visited(8)
+            .into_iter()
+            .map(|rv| rv.url)
+            .collect();
 
         // The focused node's own url history (shown only when it has gone somewhere).
-        let history = input
+        let history_urls = input
             .focused_member()
             .and_then(|member| {
                 self.orrery()
@@ -70,29 +98,23 @@ impl WindowCtx<'_> {
             })
             .map(|key| self.orrery().graph().node_history_projection(key).entries)
             .unwrap_or_default();
-        if history.len() > 1 {
-            items.push(PaneItem::text("utility-title", "This node"));
-            for url in &history {
-                items.push(PaneItem::text("utility-row", short(url)));
-            }
-        }
 
         // Removed: the eidetic deleted-nodes log (newest first; fjall resolves
         // synchronously, so `block_on` does not stall the UI).
-        let removed = self.deleted_node_log();
-        if !removed.is_empty() {
-            items.push(PaneItem::text("utility-title", "Removed"));
-            for tomb in removed.iter().take(12) {
-                // A clickable row: a click queues `recover:<node_id>`, which the host
-                // re-mints back into the graph. (Recover-deleted-node, Lane 0.)
-                items.push(PaneItem::button(
-                    "utility-row",
-                    short(&tomb.url),
-                    format!("recover:{}", tomb.node_id),
-                ));
-            }
-        }
-        items
+        let removed = self
+            .deleted_node_log()
+            .into_iter()
+            .take(12)
+            .map(|tomb| TrailRemovedInput {
+                node_id: tomb.node_id.to_string(),
+                url: tomb.url,
+            })
+            .collect();
+        build_trail_items(TrailPaneInput {
+            recent_urls,
+            history_urls,
+            removed,
+        })
     }
 
     /// The Alembic memory pane's item list: **Recent** (short-term working set),
@@ -102,38 +124,8 @@ impl WindowCtx<'_> {
     /// subset until slice C (explicit promote / evict); B1 lists engrams, B2 makes a row
     /// clickable to thaw into the orrery. (Alembic memory pane.)
     pub(super) fn alembic_items(&mut self) -> Vec<crate::list_pane::PaneItem> {
-        use crate::list_pane::PaneItem;
         let input = self.pane_input_snapshot();
-        let clip = |s: &str| -> String { s.chars().take(56).collect() };
-        let strip = |url: &str| -> String {
-            url.strip_prefix("https://")
-                .or_else(|| url.strip_prefix("http://"))
-                .unwrap_or(url)
-                .chars()
-                .take(56)
-                .collect()
-        };
-
-        // Recent (short-term): the working set — recently-visited *untagged* nodes, with the
-        // eviction policy shown (the visible, never-silent policy). The untagged = short-term
-        // rule mirrors `memory_levels::level_of`, the canonical model (decision #2: a tag is
-        // the promotion act; `is_pinned` is a physics position-pin, not a memory-keep). Slice C.
-        let mut items = vec![PaneItem::text("utility-title", "Recent")];
-        // The eviction policy is editable: this row cycles it (7d -> 30d -> 90d -> forever) and
-        // persists; the next forgetting pass uses the new policy. (Editable eviction policy, B4.)
-        items.push(PaneItem::button(
-            "utility-row-muted",
-            format!("{} \u{21bb}", input.eviction_policy().describe()),
-            "alembic:eviction:cycle",
-        ));
-        // A real "forget now" affordance: runs Athanor's forgetting pass, dropping stale
-        // short-term cached content (the count surfaces in Steward). No placebo. (Slice C/D.)
-        items.push(PaneItem::button(
-            "utility-row-muted",
-            "\u{232b} forget stale recent now",
-            "alembic:forget",
-        ));
-        let recent: Vec<(String, String)> = {
+        let recent = {
             let graph = self.orrery().graph();
             graph
                 .recent_visited(8)
@@ -144,97 +136,51 @@ impl WindowCtx<'_> {
                         .get_node_by_url(&rv.url)
                         .is_none_or(|(_, n)| n.tags.is_empty())
                 })
-                .map(|rv| (rv.url.clone(), strip(&rv.url)))
+                .map(|rv| AlembicRecentInput {
+                    shown: short_url(&rv.url),
+                    url: rv.url.clone(),
+                })
                 .collect()
         };
-        if recent.is_empty() {
-            items.push(PaneItem::text(
-                "utility-row-muted",
-                "nothing in recent working memory",
-            ));
-        } else {
-            // Each row is a one-click "keep": ☆ promotes it to Saved (adds the reserved `saved`
-            // tag). (Alembic one-click promote, B3.)
-            for (url, shown) in &recent {
-                items.push(PaneItem::button(
-                    "utility-row",
-                    format!("\u{2606} {shown}"),
-                    format!("alembic:keep:{url}"),
-                ));
-            }
-        }
 
         // Saved (long-term): tagged nodes — tagging is the promotion act (decision #2). A scoped
         // block so the graph borrow ends before the store borrow below.
-        let saved: Vec<(String, String)> = {
+        let saved = {
             let graph = self.orrery().graph();
-            let mut s: Vec<(String, String)> = graph
+            let mut s: Vec<AlembicSavedInput> = graph
                 .nodes()
                 .filter(|(_, node)| !node.tags.is_empty())
-                .map(|(key, node)| (node.url().to_string(), graph.node_display_label(key)))
+                .map(|(key, node)| AlembicSavedInput {
+                    url: node.url().to_string(),
+                    label: graph.node_display_label(key),
+                })
                 .collect();
-            s.sort_by(|a, b| a.1.cmp(&b.1));
+            s.sort_by(|a, b| a.label.cmp(&b.label));
             s
         };
-        items.push(PaneItem::text(
-            "utility-title",
-            format!("Saved ({})", saved.len()),
-        ));
-        if saved.is_empty() {
-            items.push(PaneItem::text(
-                "utility-row-muted",
-                "tag a node to keep it long-term",
-            ));
-        } else {
-            // Each row is a one-click "release": ★ removes the reserved `saved` tag (a node still
-            // tagged otherwise stays Saved). (Alembic one-click demote, B3.)
-            for (url, label) in saved.iter().take(12) {
-                items.push(PaneItem::button(
-                    "utility-row",
-                    format!("\u{2605} {}", clip(label)),
-                    format!("alembic:release:{url}"),
-                ));
-            }
-        }
 
         // Engrams (distillation): the content-addressed graph engrams in private memory.
         // fjall resolves synchronously, so `block_on` does not stall the UI (the Trail /
         // deleted-log pattern). B2 makes these rows clickable to thaw into the orrery.
-        items.push(PaneItem::text("utility-title", "Engrams"));
-        let engrams = self.graph_engram_manifests();
-        if engrams.is_empty() {
-            items.push(PaneItem::text(
-                "utility-row-muted",
-                "save a graph as an engram (>save_graph_engram)",
-            ));
-        } else {
-            for manifest in engrams.iter().take(20) {
-                // A clickable row: the key carries the full manifest id; a click queues
-                // `engram:open:<id>`, which the host thaws into an Orrery pane beside. The
-                // label shows a short id + size. (Alembic — open an engram, B2.)
-                let id_short: String = manifest.id.to_string().chars().take(20).collect();
-                let id_str = manifest.id.to_string();
-                items.push(PaneItem::button(
-                    "utility-row",
-                    format!("{id_short} · {} B", manifest.byte_size),
-                    format!("engram:open:{}", manifest.id),
-                ));
-                // The two-select compose gesture: ⊗ marks this row as the pending first pick
-                // (click again to deselect), ⊕ on every other row composes it with the pending
-                // one. (Alembic B7-P3.)
-                let is_pending = input.pending_compose_engram() == Some(id_str.as_str());
-                items.push(PaneItem::button(
-                    "utility-row",
-                    if is_pending {
-                        "⊗ selected for compose"
-                    } else {
-                        "⊕ compose"
-                    },
-                    format!("engram:compose:{id_str}"),
-                ));
-            }
-        }
-        items
+        let engrams = self
+            .graph_engram_manifests()
+            .into_iter()
+            .take(20)
+            .map(|manifest| {
+                let id = manifest.id.to_string();
+                AlembicEngramInput {
+                    pending_compose: input.pending_compose_engram() == Some(id.as_str()),
+                    id,
+                    byte_size: manifest.byte_size,
+                }
+            })
+            .collect();
+        build_alembic_items(AlembicPaneInput {
+            eviction_policy_label: input.eviction_policy().describe().to_string(),
+            recent,
+            saved,
+            engrams,
+        })
     }
 
     /// The at-rest sync record for Apparatus — the record half of the static-vs-live
@@ -244,17 +190,12 @@ impl WindowCtx<'_> {
     /// host folds each frame, so it stays honest (no placebo). (Chrome bar P1.)
     pub(super) fn apparatus_sync_rows(&self) -> Vec<(String, String)> {
         let indicator = &self.view.chrome().sync;
-        if !indicator.active {
-            return vec![("Lane".to_string(), "off".to_string())];
-        }
-        let mut rows = vec![
-            ("Lane".to_string(), indicator.label.clone()),
-            ("Caught-up ops".to_string(), indicator.ops.to_string()),
-        ];
-        if let Some(then_ms) = indicator.last_activity_ms {
-            rows.push(("Last activity".to_string(), unix_age(then_ms)));
-        }
-        rows
+        build_apparatus_sync_rows(ApparatusSyncInput {
+            active: indicator.active,
+            label: indicator.label.clone(),
+            ops_label: indicator.ops.to_string(),
+            last_activity_ms: indicator.last_activity_ms,
+        })
     }
 
     fn inspector_pane_input(&self) -> InspectorPaneInput<'_> {
@@ -289,6 +230,141 @@ impl WindowCtx<'_> {
     }
 }
 
+fn short_url(url: &str) -> String {
+    url.strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))
+        .unwrap_or(url)
+        .chars()
+        .take(56)
+        .collect()
+}
+
+fn short_label(label: &str) -> String {
+    label.chars().take(56).collect()
+}
+
+fn build_trail_items(input: TrailPaneInput) -> Vec<crate::list_pane::PaneItem> {
+    use crate::list_pane::PaneItem;
+
+    let mut items = vec![PaneItem::text("utility-title", "Recent")];
+    if input.recent_urls.is_empty() {
+        items.push(PaneItem::text("utility-row-muted", "nothing visited yet"));
+    } else {
+        for url in &input.recent_urls {
+            items.push(PaneItem::text("utility-row", short_url(url)));
+        }
+    }
+
+    if input.history_urls.len() > 1 {
+        items.push(PaneItem::text("utility-title", "This node"));
+        for url in &input.history_urls {
+            items.push(PaneItem::text("utility-row", short_url(url)));
+        }
+    }
+
+    if !input.removed.is_empty() {
+        items.push(PaneItem::text("utility-title", "Removed"));
+        for tomb in &input.removed {
+            items.push(PaneItem::button(
+                "utility-row",
+                short_url(&tomb.url),
+                format!("recover:{}", tomb.node_id),
+            ));
+        }
+    }
+    items
+}
+
+fn build_alembic_items(input: AlembicPaneInput) -> Vec<crate::list_pane::PaneItem> {
+    use crate::list_pane::PaneItem;
+
+    let mut items = vec![PaneItem::text("utility-title", "Recent")];
+    items.push(PaneItem::button(
+        "utility-row-muted",
+        format!("{} \u{21bb}", input.eviction_policy_label),
+        "alembic:eviction:cycle",
+    ));
+    items.push(PaneItem::button(
+        "utility-row-muted",
+        "\u{232b} forget stale recent now",
+        "alembic:forget",
+    ));
+    if input.recent.is_empty() {
+        items.push(PaneItem::text(
+            "utility-row-muted",
+            "nothing in recent working memory",
+        ));
+    } else {
+        for row in &input.recent {
+            items.push(PaneItem::button(
+                "utility-row",
+                format!("\u{2606} {}", row.shown),
+                format!("alembic:keep:{}", row.url),
+            ));
+        }
+    }
+
+    items.push(PaneItem::text(
+        "utility-title",
+        format!("Saved ({})", input.saved.len()),
+    ));
+    if input.saved.is_empty() {
+        items.push(PaneItem::text(
+            "utility-row-muted",
+            "tag a node to keep it long-term",
+        ));
+    } else {
+        for row in input.saved.iter().take(12) {
+            items.push(PaneItem::button(
+                "utility-row",
+                format!("\u{2605} {}", short_label(&row.label)),
+                format!("alembic:release:{}", row.url),
+            ));
+        }
+    }
+
+    items.push(PaneItem::text("utility-title", "Engrams"));
+    if input.engrams.is_empty() {
+        items.push(PaneItem::text(
+            "utility-row-muted",
+            "save a graph as an engram (>save_graph_engram)",
+        ));
+    } else {
+        for engram in &input.engrams {
+            let id_short: String = engram.id.chars().take(20).collect();
+            items.push(PaneItem::button(
+                "utility-row",
+                format!("{id_short} · {} B", engram.byte_size),
+                format!("engram:open:{}", engram.id),
+            ));
+            items.push(PaneItem::button(
+                "utility-row",
+                if engram.pending_compose {
+                    "⊗ selected for compose"
+                } else {
+                    "⊕ compose"
+                },
+                format!("engram:compose:{}", engram.id),
+            ));
+        }
+    }
+    items
+}
+
+fn build_apparatus_sync_rows(input: ApparatusSyncInput) -> Vec<(String, String)> {
+    if !input.active {
+        return vec![("Lane".to_string(), "off".to_string())];
+    }
+    let mut rows = vec![
+        ("Lane".to_string(), input.label),
+        ("Caught-up ops".to_string(), input.ops_label),
+    ];
+    if let Some(then_ms) = input.last_activity_ms {
+        rows.push(("Last activity".to_string(), unix_age(then_ms)));
+    }
+    rows
+}
+
 /// A coarse "N ago" readout from a Unix-epoch-ms timestamp, for the Apparatus
 /// at-rest sync record (`SyncIndicator::last_activity_ms` is Unix-epoch, not the
 /// monotonic `Instant` the observability `age` helper takes). (Chrome bar P1.)
@@ -307,5 +383,42 @@ fn unix_age(then_ms: u64) -> String {
         format!("{}m ago", secs / 60)
     } else {
         format!("{}h ago", secs / 3_600)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_apparatus_sync_rows_reports_off_lane() {
+        let rows = build_apparatus_sync_rows(ApparatusSyncInput {
+            active: false,
+            label: "mesh".to_string(),
+            ops_label: "7".to_string(),
+            last_activity_ms: Some(1),
+        });
+        assert_eq!(rows, vec![("Lane".to_string(), "off".to_string())]);
+    }
+
+    #[test]
+    fn build_trail_items_includes_removed_recovery_buttons() {
+        let items = build_trail_items(TrailPaneInput {
+            recent_urls: vec!["https://example.com/a".to_string()],
+            history_urls: vec![
+                "https://example.com/a".to_string(),
+                "https://example.com/b".to_string(),
+            ],
+            removed: vec![TrailRemovedInput {
+                node_id: "123".to_string(),
+                url: "https://example.com/z".to_string(),
+            }],
+        });
+        assert!(items.iter().any(|item| item.text == "Recent"));
+        assert!(
+            items
+                .iter()
+                .any(|item| item.key.as_deref() == Some("recover:123"))
+        );
     }
 }

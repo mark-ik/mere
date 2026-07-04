@@ -7,8 +7,8 @@ use node_lineage::TransitionKind;
 use uuid::Uuid;
 
 use super::{
-    Coupling, EdgeAssertion, EdgeKey, Field, FieldId, FrameLayoutHint, Graph, NavigationTrigger,
-    NodeKey, RelationSelector,
+    Coupling, CouplingId, EdgeAssertion, EdgeKey, Field, FieldId, FrameLayoutHint, Graph,
+    NavigationTrigger, NodeKey, RelationSelector, SemanticSubKind,
     capture::{
         CapturedDelta, coupling_from_persisted, field_from_persisted,
         persisted_coupling_from_coupling, persisted_field_from_field, record_captured_delta,
@@ -16,8 +16,8 @@ use super::{
 };
 use crate::persistence::{PersistedCoupling, PersistedField};
 use crate::types::{
-    BadgeIcon, ClassificationScheme, ClassificationStatus, ImportRecord, NodeClassification,
-    NodeDerivation, NodeImportProvenance, NodeProperty,
+    BadgeIcon, ClassificationScheme, ClassificationStatus, GraphScope, ImportRecord,
+    NodeClassification, NodeDerivation, NodeImportProvenance, NodeProperty,
 };
 
 #[derive(Debug, Clone)]
@@ -194,6 +194,18 @@ pub enum GraphDelta {
     ReplaySetImportRecords {
         import_records: Vec<ImportRecord>,
     },
+    ReplaySetNodeFormDraftById {
+        node_id: Uuid,
+        form_draft: Option<String>,
+    },
+    ReplaySetNodeSessionScrollById {
+        node_id: Uuid,
+        session_scroll: Option<[f32; 2]>,
+    },
+    ReplayTouchNodeLastVisitedById {
+        node_id: Uuid,
+        timestamp_ms: u64,
+    },
     RetractRelations {
         from: NodeKey,
         to: NodeKey,
@@ -290,6 +302,20 @@ pub enum GraphDelta {
     SetNodeImportProvenance {
         key: NodeKey,
         import_provenance: Vec<NodeImportProvenance>,
+    },
+    /// Set or clear one node's session draft payload.
+    SetNodeFormDraft {
+        key: NodeKey,
+        form_draft: Option<String>,
+    },
+    /// Set or clear one node's persisted session scroll offset.
+    SetNodeSessionScroll {
+        key: NodeKey,
+        session_scroll: Option<(f32, f32)>,
+    },
+    /// Stamp one node's last-visited clock from the kernel clock.
+    TouchNodeLastVisited {
+        key: NodeKey,
     },
     // --- Write-path migration (2026-07-01): the variants below complete the
     // Phase 6.5 boundary. Every primitive durable mutation shell/runtime code
@@ -395,6 +421,12 @@ pub enum GraphDelta {
         field_id: String,
         strength: f32,
     },
+    ReplayActivateFieldById {
+        field_id: String,
+    },
+    ReplayRetractCouplingById {
+        coupling_id: String,
+    },
     /// Add (or replace by id) a field — field-layer truth.
     AddField {
         field: Field,
@@ -411,6 +443,14 @@ pub enum GraphDelta {
     SetFieldCouplingStrength {
         field: FieldId,
         strength: f32,
+    },
+    /// Reactivate a retired field.
+    ActivateField {
+        id: FieldId,
+    },
+    /// Remove one coupling binding by id.
+    RetractCoupling {
+        id: CouplingId,
     },
 }
 
@@ -983,6 +1023,51 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
             }
             GraphDeltaResult::ImportRecordsUpdated(changed)
         }
+        GraphDelta::ReplaySetNodeFormDraftById {
+            node_id,
+            form_draft,
+        } => {
+            let updated = graph
+                .get_node_key_by_id(node_id)
+                .is_some_and(|key| graph.set_node_form_draft(key, form_draft.clone()));
+            if updated {
+                record_captured_delta(&CapturedDelta::ReplaySetNodeFormDraftById {
+                    node_id: node_id.to_string(),
+                    form_draft,
+                });
+            }
+            GraphDeltaResult::NodeMetadataUpdated(updated)
+        }
+        GraphDelta::ReplaySetNodeSessionScrollById {
+            node_id,
+            session_scroll,
+        } => {
+            let updated = graph.get_node_key_by_id(node_id).is_some_and(|key| {
+                graph.set_node_session_scroll(key, session_scroll.map(|[x, y]| (x, y)))
+            });
+            if updated {
+                record_captured_delta(&CapturedDelta::ReplaySetNodeSessionScrollById {
+                    node_id: node_id.to_string(),
+                    session_scroll,
+                });
+            }
+            GraphDeltaResult::NodeMetadataUpdated(updated)
+        }
+        GraphDelta::ReplayTouchNodeLastVisitedById {
+            node_id,
+            timestamp_ms,
+        } => {
+            let updated = graph
+                .get_node_key_by_id(node_id)
+                .is_some_and(|key| graph.set_node_last_visited_at_ms(key, timestamp_ms));
+            if updated {
+                record_captured_delta(&CapturedDelta::ReplayTouchNodeLastVisitedById {
+                    node_id: node_id.to_string(),
+                    timestamp_ms,
+                });
+            }
+            GraphDeltaResult::NodeMetadataUpdated(updated)
+        }
         GraphDelta::NavigateNode { key, url } => {
             let Some(node_id) = graph.get_node(key).map(|node| node.id) else {
                 return GraphDeltaResult::Applied;
@@ -1528,6 +1613,26 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
             }
             GraphDeltaResult::FieldChanged(changed)
         }
+        GraphDelta::ReplayActivateFieldById { field_id } => {
+            let changed = Uuid::parse_str(&field_id)
+                .ok()
+                .map(FieldId::from_uuid)
+                .is_some_and(|id| graph.activate_field(id));
+            if changed {
+                record_captured_delta(&CapturedDelta::ReplayActivateFieldById { field_id });
+            }
+            GraphDeltaResult::FieldChanged(changed)
+        }
+        GraphDelta::ReplayRetractCouplingById { coupling_id } => {
+            let changed = Uuid::parse_str(&coupling_id)
+                .ok()
+                .map(CouplingId::from_uuid)
+                .is_some_and(|id| graph.retract_coupling(id));
+            if changed {
+                record_captured_delta(&CapturedDelta::ReplayRetractCouplingById { coupling_id });
+            }
+            GraphDeltaResult::FieldChanged(changed)
+        }
         GraphDelta::AddField { field } => {
             let capture_field = persisted_field_from_field(&field);
             graph.add_field(field);
@@ -1559,6 +1664,24 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
                 record_captured_delta(&CapturedDelta::ReplaySetFieldCouplingStrengthByFieldId {
                     field_id: field.as_uuid().to_string(),
                     strength,
+                });
+            }
+            GraphDeltaResult::FieldChanged(changed)
+        }
+        GraphDelta::ActivateField { id } => {
+            let changed = graph.activate_field(id);
+            if changed {
+                record_captured_delta(&CapturedDelta::ReplayActivateFieldById {
+                    field_id: id.as_uuid().to_string(),
+                });
+            }
+            GraphDeltaResult::FieldChanged(changed)
+        }
+        GraphDelta::RetractCoupling { id } => {
+            let changed = graph.retract_coupling(id);
+            if changed {
+                record_captured_delta(&CapturedDelta::ReplayRetractCouplingById {
+                    coupling_id: id.as_uuid().to_string(),
                 });
             }
             GraphDeltaResult::FieldChanged(changed)
@@ -1598,6 +1721,50 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
                 capture_resolved_import_records(graph);
             }
             GraphDeltaResult::ImportRecordsUpdated(changed)
+        }
+        GraphDelta::SetNodeFormDraft { key, form_draft } => {
+            let node_id = graph.get_node(key).map(|node| node.id);
+            let capture_form_draft = form_draft.clone();
+            let updated = graph.set_node_form_draft(key, form_draft);
+            if updated && let Some(node_id) = node_id {
+                record_captured_delta(&CapturedDelta::ReplaySetNodeFormDraftById {
+                    node_id: node_id.to_string(),
+                    form_draft: capture_form_draft,
+                });
+            }
+            GraphDeltaResult::NodeMetadataUpdated(updated)
+        }
+        GraphDelta::SetNodeSessionScroll {
+            key,
+            session_scroll,
+        } => {
+            let node_id = graph.get_node(key).map(|node| node.id);
+            let capture_session_scroll = session_scroll.map(|(x, y)| [x, y]);
+            let updated = graph.set_node_session_scroll(key, session_scroll);
+            if updated && let Some(node_id) = node_id {
+                record_captured_delta(&CapturedDelta::ReplaySetNodeSessionScrollById {
+                    node_id: node_id.to_string(),
+                    session_scroll: capture_session_scroll,
+                });
+            }
+            GraphDeltaResult::NodeMetadataUpdated(updated)
+        }
+        GraphDelta::TouchNodeLastVisited { key } => {
+            let node_id = graph.get_node(key).map(|node| node.id);
+            let updated = graph.touch_node_last_visited_now(key);
+            if updated
+                && let Some(node_id) = node_id
+                && let Some(timestamp_ms) = graph
+                    .get_node(key)
+                    .and_then(|node| node.last_visited.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|duration| duration.as_millis() as u64)
+            {
+                record_captured_delta(&CapturedDelta::ReplayTouchNodeLastVisitedById {
+                    node_id: node_id.to_string(),
+                    timestamp_ms,
+                });
+            }
+            GraphDeltaResult::NodeMetadataUpdated(updated)
         }
     }
 }
@@ -1642,6 +1809,29 @@ pub fn assert_relation(
         GraphDeltaResult::EdgeAdded(key) => key,
         other => unreachable!("AssertRelation returned {other:?}"),
     }
+}
+
+/// Assert a recognized semantic statement in a specific named-graph scope.
+pub fn assert_semantic_relation_in_scope(
+    graph: &mut Graph,
+    from: NodeKey,
+    to: NodeKey,
+    sub_kind: SemanticSubKind,
+    label: Option<String>,
+    graph_scope: GraphScope,
+) -> Option<EdgeKey> {
+    graph.assert_semantic_relation_in_scope(from, to, sub_kind, label, graph_scope)
+}
+
+/// Assert an open-predicate semantic statement in a specific named-graph scope.
+pub fn assert_semantic_predicate_in_scope(
+    graph: &mut Graph,
+    from: NodeKey,
+    to: NodeKey,
+    predicate: String,
+    graph_scope: GraphScope,
+) -> Option<EdgeKey> {
+    graph.assert_semantic_predicate_in_scope(from, to, predicate, graph_scope)
 }
 
 /// Step a node back one visit in its own browse history, returning the

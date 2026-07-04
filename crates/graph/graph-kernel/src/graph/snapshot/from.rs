@@ -9,7 +9,7 @@
 //! decomposition pass.
 
 use std::collections::HashMap;
-use std::time::SystemTime;
+use std::time::{Duration, UNIX_EPOCH};
 
 use euclid::default::{Point2D, Vector2D};
 use uuid::Uuid;
@@ -23,6 +23,28 @@ use crate::persistence::{
     PersistedImportedSubKind, PersistedNavigationTrigger, PersistedNodeSelector,
     PersistedNodeSessionState, PersistedProvenanceSubKind, PersistedSemanticSubKind,
 };
+
+fn semantic_sub_kind(sub_kind: PersistedSemanticSubKind) -> SemanticSubKind {
+    match sub_kind {
+        PersistedSemanticSubKind::Hyperlink => SemanticSubKind::Hyperlink,
+        PersistedSemanticSubKind::UserGrouped => SemanticSubKind::UserGrouped,
+        PersistedSemanticSubKind::AgentDerived => SemanticSubKind::AgentDerived,
+        PersistedSemanticSubKind::Cites => SemanticSubKind::Cites,
+        PersistedSemanticSubKind::Quotes => SemanticSubKind::Quotes,
+        PersistedSemanticSubKind::Summarizes => SemanticSubKind::Summarizes,
+        PersistedSemanticSubKind::Elaborates => SemanticSubKind::Elaborates,
+        PersistedSemanticSubKind::ExampleOf => SemanticSubKind::ExampleOf,
+        PersistedSemanticSubKind::Supports => SemanticSubKind::Supports,
+        PersistedSemanticSubKind::Contradicts => SemanticSubKind::Contradicts,
+        PersistedSemanticSubKind::Questions => SemanticSubKind::Questions,
+        PersistedSemanticSubKind::SameEntityAs => SemanticSubKind::SameEntityAs,
+        PersistedSemanticSubKind::DuplicateOf => SemanticSubKind::DuplicateOf,
+        PersistedSemanticSubKind::CanonicalMirrorOf => SemanticSubKind::CanonicalMirrorOf,
+        PersistedSemanticSubKind::DependsOn => SemanticSubKind::DependsOn,
+        PersistedSemanticSubKind::Blocks => SemanticSubKind::Blocks,
+        PersistedSemanticSubKind::NextStep => SemanticSubKind::NextStep,
+    }
+}
 
 impl Graph {
     pub fn from_snapshot(snapshot: &GraphSnapshot) -> Self {
@@ -78,6 +100,9 @@ impl Graph {
                 if let Some(session) = &pnode.session_state {
                     node.session_scroll = session.scroll_x.zip(session.scroll_y);
                     node.session_form_draft = session.form_draft.clone();
+                    if let Some(last_visited_ms) = session.last_visited_ms {
+                        node.last_visited = UNIX_EPOCH + Duration::from_millis(last_visited_ms);
+                    }
                 }
             }
             // The node's restored current page comes from the shared nav history.
@@ -115,53 +140,45 @@ impl Graph {
                 .and_then(|id| graph.get_node_key_by_id(id));
             if let (Some(from), Some(to)) = (from_key, to_key) {
                 if let Some(semantic) = &pedge.semantic {
-                    for sub_kind in &semantic.sub_kinds {
-                        let assertion = EdgeAssertion::Semantic {
-                            sub_kind: match sub_kind {
-                                PersistedSemanticSubKind::Hyperlink => SemanticSubKind::Hyperlink,
-                                PersistedSemanticSubKind::UserGrouped => {
-                                    SemanticSubKind::UserGrouped
-                                }
-                                PersistedSemanticSubKind::AgentDerived => {
-                                    SemanticSubKind::AgentDerived
-                                }
-                                PersistedSemanticSubKind::Cites => SemanticSubKind::Cites,
-                                PersistedSemanticSubKind::Quotes => SemanticSubKind::Quotes,
-                                PersistedSemanticSubKind::Summarizes => SemanticSubKind::Summarizes,
-                                PersistedSemanticSubKind::Elaborates => SemanticSubKind::Elaborates,
-                                PersistedSemanticSubKind::ExampleOf => SemanticSubKind::ExampleOf,
-                                PersistedSemanticSubKind::Supports => SemanticSubKind::Supports,
-                                PersistedSemanticSubKind::Contradicts => {
-                                    SemanticSubKind::Contradicts
-                                }
-                                PersistedSemanticSubKind::Questions => SemanticSubKind::Questions,
-                                PersistedSemanticSubKind::SameEntityAs => {
-                                    SemanticSubKind::SameEntityAs
-                                }
-                                PersistedSemanticSubKind::DuplicateOf => {
-                                    SemanticSubKind::DuplicateOf
-                                }
-                                PersistedSemanticSubKind::CanonicalMirrorOf => {
-                                    SemanticSubKind::CanonicalMirrorOf
-                                }
-                                PersistedSemanticSubKind::DependsOn => SemanticSubKind::DependsOn,
-                                PersistedSemanticSubKind::Blocks => SemanticSubKind::Blocks,
-                                PersistedSemanticSubKind::NextStep => SemanticSubKind::NextStep,
-                            },
-                            label: semantic.label.clone(),
-                            decay_progress: semantic.agent_decay_progress,
-                        };
-                        let _ = graph.assert_relation(from, to, assertion);
-                    }
-                    // Restore the open predicate IRI. Create the edge when the
-                    // sub-kind loop above made none — a raw predicate-only
-                    // Semantic edge (linked-data ingest) has empty `sub_kinds`.
-                    if semantic.predicate.is_some() {
+                    if !semantic.statements.is_empty() {
                         let key = graph
                             .find_edge_key(from, to)
                             .unwrap_or_else(|| graph.inner.add_edge(from, to, EdgePayload::new()));
                         if let Some(payload) = graph.inner.edge_weight_mut(key) {
-                            payload.set_semantic_predicate(semantic.predicate.clone());
+                            for statement in &semantic.statements {
+                                let _ =
+                                    payload.push_persisted_semantic_statement(SemanticStatement {
+                                        statement_id: statement.statement_id.clone(),
+                                        predicate: statement.predicate.clone(),
+                                        recognized_sub_kind: statement
+                                            .recognized_sub_kind
+                                            .map(semantic_sub_kind),
+                                        label: statement.label.clone(),
+                                        graph_scope: statement.graph_scope.clone(),
+                                        provenance_iri: statement.provenance_iri.clone(),
+                                        asserted_at_ms: statement.asserted_at_ms,
+                                    });
+                            }
+                        }
+                    } else {
+                        for sub_kind in &semantic.sub_kinds {
+                            let assertion = EdgeAssertion::Semantic {
+                                sub_kind: semantic_sub_kind(sub_kind.clone()),
+                                label: semantic.label.clone(),
+                                decay_progress: semantic.agent_decay_progress,
+                            };
+                            let _ = graph.assert_relation(from, to, assertion);
+                        }
+                        // Restore the open predicate IRI. Create the edge when the
+                        // sub-kind loop above made none — a raw predicate-only
+                        // Semantic edge (linked-data ingest) has empty `sub_kinds`.
+                        if semantic.predicate.is_some() {
+                            let key = graph.find_edge_key(from, to).unwrap_or_else(|| {
+                                graph.inner.add_edge(from, to, EdgePayload::new())
+                            });
+                            if let Some(payload) = graph.inner.edge_weight_mut(key) {
+                                payload.set_semantic_predicate(semantic.predicate.clone());
+                            }
                         }
                     }
                 }

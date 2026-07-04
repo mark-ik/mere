@@ -371,9 +371,12 @@ pub(crate) const PREVIEW_BAND_PX: u32 = 6144;
 /// Render content straight to one scene for the synchronous snapshot/thumbnail path
 /// (dormant-node previews in the orrery) and the card unit tests. The live actor
 /// path uses [`render_content`] + per-band [`lower_window`]; here the document lane
-/// lowers a single band from the top, capped at [`PREVIEW_BAND_PX`], so a tall page
-/// still rasterizes for its preview. The returned `content_height` is the full
-/// height (the caller caps its own texture to the band).
+/// lowers a single band starting at `band_y`, capped at [`PREVIEW_BAND_PX`], so a
+/// tall page still rasterizes for its preview. The returned `content_height` is the
+/// full height (the caller caps its own texture to the band). `band_y` lets a caller
+/// reproduce the node's last-known scroll position instead of always the page top
+/// (node/card summoning design, §5's "exact last viewport" fix) — pass `0.0` for the
+/// page-top behaviour this function used to hardcode.
 pub fn render_content_scene(
     url: &str,
     state: Option<&ContentState>,
@@ -382,10 +385,13 @@ pub fn render_content_scene(
     loader: &impl ImageLoader,
     w: u32,
     h: u32,
+    band_y: f32,
     sheet: &DocumentStyleSheet,
 ) -> (Scene, u32, Vec<LinkHit>) {
-    // The snapshot/preview shows the page top: band_y = 0, one viewport tall.
-    match render_content(url, state, registry, policy, loader, w, h, 0, h, sheet) {
+    let band_y_px = band_y.max(0.0) as u32;
+    match render_content(
+        url, state, registry, policy, loader, w, h, band_y_px, h, sheet,
+    ) {
         RenderedContent::Html {
             scene,
             content_height,
@@ -397,9 +403,14 @@ pub fn render_content_scene(
             fonts,
             content_height,
         } => {
-            let band = content_height.min(PREVIEW_BAND_PX) as f32;
+            // Clamp to the actual content: a stale scroll position (the page shrank
+            // since it was recorded) must not window past the end into a blank band.
+            let clamped_y = band_y.max(0.0).min(content_height.saturating_sub(1) as f32);
+            let band = content_height
+                .saturating_sub(clamped_y as u32)
+                .min(PREVIEW_BAND_PX) as f32;
             (
-                lower_window(&packet, &fonts, 0.0, band, sheet.colors),
+                lower_window(&packet, &fonts, clamped_y, band, sheet.colors),
                 content_height,
                 Vec::new(),
             )

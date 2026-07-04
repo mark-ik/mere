@@ -91,12 +91,19 @@ impl Graph {
             };
             // The open predicate IRI (raw web predicate from ingest), or the
             // canonical IRI of a recognized sub-kind for a natively-asserted edge.
-            let iri = sem.predicate.clone().or_else(|| {
-                sem.sub_kinds
-                    .iter()
-                    .next()
-                    .map(|&sk| super::predicate_iri(sk).to_string())
-            })?;
+            let iri = sem
+                .statements()
+                .iter()
+                .map(|statement| statement.predicate.clone())
+                .next()
+                .or_else(|| {
+                    sem.predicate.clone().or_else(|| {
+                        sem.sub_kinds
+                            .iter()
+                            .next()
+                            .map(|&sk| super::predicate_iri(sk).to_string())
+                    })
+                })?;
             let term = iri_term(&iri);
             if term.is_empty() || term == "hyperlink" || term == "references" {
                 continue;

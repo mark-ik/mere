@@ -8,6 +8,8 @@
 //! WASM-clean: no platform I/O, no UI framework dependencies.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use rkyv::{Archive, Deserialize, Serialize};
 
@@ -59,6 +61,43 @@ pub enum DominantEdge {
     Right,
     Top,
     Bottom,
+}
+
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Default,
+    Archive,
+    Serialize,
+    Deserialize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+#[rkyv(derive(Debug, PartialEq, Eq))]
+pub enum GraphScope {
+    #[default]
+    Default,
+    Source,
+    User,
+    Agent,
+    Moot,
+    Custom(String),
+}
+
+static NEXT_LOCAL_STATEMENT_NONCE: AtomicU64 = AtomicU64::new(1);
+
+pub(crate) fn mint_local_statement_id() -> String {
+    let timestamp_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    let nonce = NEXT_LOCAL_STATEMENT_NONCE.fetch_add(1, Ordering::Relaxed);
+    format!("{timestamp_ms:016x}-{nonce:016x}")
 }
 
 #[derive(
@@ -340,10 +379,66 @@ pub struct NodeClassification {
     serde::Deserialize,
 )]
 pub struct NodeProperty {
+    /// Stable handle for this literal statement.
+    #[serde(default = "mint_local_statement_id")]
+    pub statement_id: String,
     /// The predicate IRI (e.g. `https://schema.org/datePublished`).
     pub predicate: String,
     /// The literal value.
     pub value: String,
+    /// Explicit datatype IRI when the literal is not the default `xsd:string`.
+    #[serde(default)]
+    pub datatype: Option<String>,
+    /// BCP47 language tag for an RDF language-tagged string.
+    #[serde(default)]
+    pub lang: Option<String>,
+    /// Named-graph scope for this literal statement.
+    #[serde(default)]
+    pub graph_scope: GraphScope,
+    /// Optional provenance agent/persona IRI for this assertion.
+    #[serde(default)]
+    pub provenance_iri: Option<String>,
+    /// Optional assertion time in unix epoch milliseconds.
+    #[serde(default)]
+    pub asserted_at_ms: Option<u64>,
+}
+
+impl NodeProperty {
+    pub fn new(predicate: String, value: String) -> Self {
+        Self {
+            statement_id: mint_local_statement_id(),
+            predicate,
+            value,
+            datatype: None,
+            lang: None,
+            graph_scope: GraphScope::Default,
+            provenance_iri: None,
+            asserted_at_ms: None,
+        }
+    }
+
+    pub fn with_graph_scope(mut self, graph_scope: GraphScope) -> Self {
+        self.graph_scope = graph_scope;
+        self
+    }
+
+    pub fn with_metadata(
+        mut self,
+        provenance_iri: Option<String>,
+        asserted_at_ms: Option<u64>,
+    ) -> Self {
+        self.provenance_iri = provenance_iri;
+        self.asserted_at_ms = asserted_at_ms;
+        self
+    }
+
+    pub fn content_eq(&self, other: &Self) -> bool {
+        self.predicate == other.predicate
+            && self.value == other.value
+            && self.datatype == other.datatype
+            && self.lang == other.lang
+            && self.graph_scope == other.graph_scope
+    }
 }
 
 // ---------------------------------------------------------------------------

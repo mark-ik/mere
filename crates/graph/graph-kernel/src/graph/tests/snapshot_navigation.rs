@@ -163,12 +163,38 @@ fn test_cold_restore_reapplies_scroll_offset() {
         scroll_x: Some(20.0),
         scroll_y: Some(640.0),
         form_draft: None,
+        last_visited_ms: None,
     });
     let snapshot = snapshot_with(node, SharedNavigationMemory::empty());
 
     let restored = Graph::from_snapshot(&snapshot);
     let (_, node) = restored.get_node_by_url("https://example.com").unwrap();
     assert_eq!(node.session_scroll, Some((20.0, 640.0)));
+}
+
+#[test]
+fn test_cold_restore_reapplies_last_visited() {
+    use crate::persistence::PersistedNodeSessionState;
+
+    let node_id = Uuid::new_v4();
+    let mut node = persisted_node(node_id, "https://example.com");
+    node.session_state = Some(PersistedNodeSessionState {
+        scroll_x: None,
+        scroll_y: None,
+        form_draft: None,
+        last_visited_ms: Some(1_763_573_400_123),
+    });
+    let snapshot = snapshot_with(node, SharedNavigationMemory::empty());
+
+    let restored = Graph::from_snapshot(&snapshot);
+    let (_, node) = restored.get_node_by_url("https://example.com").unwrap();
+    assert_eq!(
+        node.last_visited
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("last visited since epoch")
+            .as_millis() as u64,
+        1_763_573_400_123
+    );
 }
 
 #[test]

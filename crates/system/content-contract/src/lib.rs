@@ -13,6 +13,7 @@ use std::sync::Arc;
 use document_canvas::font_table::FontInterner;
 use document_canvas::{DocumentRenderPacket, DocumentStyleSheet, FontTable};
 use kernel::permissions::ResolvedPermission;
+use kernel::types::{GraphScope, NodeProperty};
 use linebender_resource_handle::Blob as ParleyBlob;
 use linked_data::{EdgeContribution, GraphContribution, NodeContribution};
 use netrender::{ImageKey, Scene, peniko};
@@ -36,6 +37,12 @@ pub enum ContentStateMessage {
 pub struct LinkHitMessage {
     pub rect: [f32; 4],
     pub url: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct TextSelectionMessage {
+    pub rects: Vec<[f32; 4]>,
+    pub text: String,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -125,6 +132,11 @@ pub enum ContentCommandMessage {
         query: String,
         viewport_gen: u64,
     },
+    SelectText {
+        anchor: (f32, f32),
+        focus: (f32, f32),
+        viewport_gen: u64,
+    },
     AttachScript {
         component_path: PathBuf,
         log: ResolvedPermission,
@@ -182,6 +194,11 @@ pub enum ContentUpdateMessage {
         nav: u64,
         viewport_gen: u64,
         matches: Vec<Vec<[f32; 4]>>,
+    },
+    TextSelection {
+        nav: u64,
+        viewport_gen: u64,
+        selection: Option<TextSelectionMessage>,
     },
     EngineStats {
         nav: u64,
@@ -369,6 +386,11 @@ enum ContentCommandWire {
         query: String,
         viewport_gen: u64,
     },
+    SelectText {
+        anchor: (f32, f32),
+        focus: (f32, f32),
+        viewport_gen: u64,
+    },
     AttachScript {
         component_path: std::path::PathBuf,
         log: kernel::permissions::ResolvedPermission,
@@ -444,6 +466,15 @@ impl ContentCommandWire {
                 viewport_gen,
             } => Self::Find {
                 query,
+                viewport_gen,
+            },
+            ContentCommandMessage::SelectText {
+                anchor,
+                focus,
+                viewport_gen,
+            } => Self::SelectText {
+                anchor,
+                focus,
                 viewport_gen,
             },
             ContentCommandMessage::AttachScript {
@@ -529,6 +560,15 @@ impl ContentCommandWire {
                 viewport_gen,
             } => ContentCommandMessage::Find {
                 query,
+                viewport_gen,
+            },
+            Self::SelectText {
+                anchor,
+                focus,
+                viewport_gen,
+            } => ContentCommandMessage::SelectText {
+                anchor,
+                focus,
                 viewport_gen,
             },
             Self::AttachScript {
@@ -660,6 +700,11 @@ enum ContentUpdateWire {
         viewport_gen: u64,
         matches: Vec<Vec<[f32; 4]>>,
     },
+    TextSelection {
+        nav: u64,
+        viewport_gen: u64,
+        selection: Option<TextSelectionMessage>,
+    },
     EngineStats {
         nav: u64,
         viewport_gen: u64,
@@ -730,6 +775,15 @@ impl ContentUpdateWire {
                 nav,
                 viewport_gen,
                 matches,
+            },
+            ContentUpdateMessage::TextSelection {
+                nav,
+                viewport_gen,
+                selection,
+            } => Self::TextSelection {
+                nav,
+                viewport_gen,
+                selection,
             },
             ContentUpdateMessage::EngineStats {
                 nav,
@@ -806,6 +860,15 @@ impl ContentUpdateWire {
                 nav,
                 viewport_gen,
                 matches,
+            },
+            Self::TextSelection {
+                nav,
+                viewport_gen,
+                selection,
+            } => ContentUpdateMessage::TextSelection {
+                nav,
+                viewport_gen,
+                selection,
             },
             Self::EngineStats {
                 nav,
@@ -1126,7 +1189,7 @@ struct NodeContributionWire {
     types: Vec<String>,
     title: Option<String>,
     tags: Vec<String>,
-    properties: Vec<(String, String)>,
+    properties: Vec<NodePropertyWire>,
 }
 
 impl From<NodeContribution> for NodeContributionWire {
@@ -1136,7 +1199,11 @@ impl From<NodeContribution> for NodeContributionWire {
             types: node.types,
             title: node.title,
             tags: node.tags,
-            properties: node.properties,
+            properties: node
+                .properties
+                .into_iter()
+                .map(NodePropertyWire::from)
+                .collect(),
         }
     }
 }
@@ -1148,7 +1215,60 @@ impl From<NodeContributionWire> for NodeContribution {
             types: node.types,
             title: node.title,
             tags: node.tags,
-            properties: node.properties,
+            properties: node
+                .properties
+                .into_iter()
+                .map(NodeProperty::from)
+                .collect(),
+        }
+    }
+}
+
+/// A literal property's wire encoding (statement id / predicate / value / datatype /
+/// lang / named-graph scope / provenance / assertion time), mirroring `NodeProperty`'s
+/// full typed-literal + statement-metadata fidelity (petgraph-RDF plan, Phase 1). Kept
+/// as its own struct rather than reusing `NodeProperty` directly, matching this file's
+/// convention of decoupling the wire schema from the domain schema for every
+/// contribution type it carries. `GraphScope` itself is reused as-is (already a plain
+/// serde-friendly enum, like `ResolvedPermission` elsewhere in this file).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct NodePropertyWire {
+    statement_id: String,
+    predicate: String,
+    value: String,
+    datatype: Option<String>,
+    lang: Option<String>,
+    graph_scope: GraphScope,
+    provenance_iri: Option<String>,
+    asserted_at_ms: Option<u64>,
+}
+
+impl From<NodeProperty> for NodePropertyWire {
+    fn from(property: NodeProperty) -> Self {
+        Self {
+            statement_id: property.statement_id,
+            predicate: property.predicate,
+            value: property.value,
+            datatype: property.datatype,
+            lang: property.lang,
+            graph_scope: property.graph_scope,
+            provenance_iri: property.provenance_iri,
+            asserted_at_ms: property.asserted_at_ms,
+        }
+    }
+}
+
+impl From<NodePropertyWire> for NodeProperty {
+    fn from(property: NodePropertyWire) -> Self {
+        Self {
+            statement_id: property.statement_id,
+            predicate: property.predicate,
+            value: property.value,
+            datatype: property.datatype,
+            lang: property.lang,
+            graph_scope: property.graph_scope,
+            provenance_iri: property.provenance_iri,
+            asserted_at_ms: property.asserted_at_ms,
         }
     }
 }
@@ -1158,6 +1278,7 @@ struct EdgeContributionWire {
     subject: String,
     predicate: String,
     object: String,
+    graph_scope: GraphScope,
 }
 
 impl From<EdgeContribution> for EdgeContributionWire {
@@ -1166,6 +1287,7 @@ impl From<EdgeContribution> for EdgeContributionWire {
             subject: edge.subject,
             predicate: edge.predicate,
             object: edge.object,
+            graph_scope: edge.graph_scope,
         }
     }
 }
@@ -1176,6 +1298,7 @@ impl From<EdgeContributionWire> for EdgeContribution {
             subject: edge.subject,
             predicate: edge.predicate,
             object: edge.object,
+            graph_scope: edge.graph_scope,
         }
     }
 }

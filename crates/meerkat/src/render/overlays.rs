@@ -299,17 +299,20 @@ impl crate::WindowCtx<'_> {
             };
             let mut dom = self.view.dom.borrow_mut();
             let root = dom.document();
-            if let Some(node) = first_with_class(&dom, root, "shellbar") {
-                let style = overlay_geometry_style(
-                    sr[0],
-                    sr[1],
-                    (sr[2] - sr[0]).max(0.0),
-                    (sr[3] - sr[1]).max(0.0),
-                    Some(flex_dir),
-                );
-                let attr = QualName::new(None, Namespace::from(""), LocalName::from("style"));
-                dom.set_attribute(node, attr, &style);
-            }
+            let style = overlay_geometry_style(
+                sr[0],
+                sr[1],
+                (sr[2] - sr[0]).max(0.0),
+                (sr[3] - sr[1]).max(0.0),
+                Some(flex_dir),
+            );
+            stamp_overlay_style_if_changed(
+                &mut self.view.shellbar_style,
+                &mut dom,
+                root,
+                "shellbar",
+                style,
+            );
         }
         // Position the chrome's comms overlay into its frame leaf (it's chrome-
         // rendered but laid out by the frame tree): set the geometry inline so it
@@ -317,18 +320,125 @@ impl crate::WindowCtx<'_> {
         if let Some(cr) = comms_rect {
             let mut dom = self.view.dom.borrow_mut();
             let root = dom.document();
-            if let Some(node) = first_with_class(&dom, root, "comms-pane") {
-                let style = overlay_geometry_style(
-                    cr[0],
-                    cr[1],
-                    (cr[2] - cr[0]).max(0.0),
-                    (cr[3] - cr[1]).max(0.0),
-                    None,
-                );
-                let attr = QualName::new(None, Namespace::from(""), LocalName::from("style"));
-                dom.set_attribute(node, attr, &style);
-            }
+            let style = overlay_geometry_style(
+                cr[0],
+                cr[1],
+                (cr[2] - cr[0]).max(0.0),
+                (cr[3] - cr[1]).max(0.0),
+                None,
+            );
+            stamp_overlay_style_if_changed(
+                &mut self.view.comms_style,
+                &mut dom,
+                root,
+                "comms-pane",
+                style,
+            );
+        } else {
+            self.view.comms_style = None;
         }
         chrome_scroll
+    }
+}
+
+fn stamp_overlay_style_if_changed(
+    cache: &mut Option<String>,
+    dom: &mut serval_scripted_dom::ScriptedDom,
+    root: NodeId,
+    class_name: &str,
+    style: String,
+) {
+    let Some(node) = first_with_class(dom, root, class_name) else {
+        *cache = None;
+        return;
+    };
+    if cache.as_deref() == Some(style.as_str()) {
+        return;
+    }
+    tracing::trace!(
+        target: "meerkat::profile",
+        class_name,
+        previous = cache.as_deref().unwrap_or("<none>"),
+        next = style.as_str(),
+        "overlay geometry style changed"
+    );
+    let attr = QualName::new(None, Namespace::from(""), LocalName::from("style"));
+    dom.set_attribute(node, attr, &style);
+    *cache = Some(style);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use layout_dom_api::LayoutDomMut;
+    use serval_scripted_dom::ScriptedDom;
+
+    fn qual(local: &str) -> QualName {
+        QualName::new(None, Namespace::from(""), LocalName::from(local))
+    }
+
+    #[test]
+    fn overlay_style_stamps_once_for_identical_values() {
+        let mut dom = ScriptedDom::new();
+        let root = dom.document();
+        let node = dom.create_element(qual("div"));
+        dom.set_attribute(node, qual("class"), "shellbar");
+        dom.append_child(root, node);
+        let mut drained = Vec::new();
+        dom.drain_mutations(&mut drained);
+        let mut cache = None;
+
+        stamp_overlay_style_if_changed(
+            &mut cache,
+            &mut dom,
+            root,
+            "shellbar",
+            "position:absolute; left: 0px; top: 0px;".to_string(),
+        );
+        let mut muts = Vec::new();
+        dom.drain_mutations(&mut muts);
+        assert_eq!(muts.len(), 1);
+
+        stamp_overlay_style_if_changed(
+            &mut cache,
+            &mut dom,
+            root,
+            "shellbar",
+            "position:absolute; left: 0px; top: 0px;".to_string(),
+        );
+        let mut again = Vec::new();
+        dom.drain_mutations(&mut again);
+        assert!(again.is_empty());
+    }
+
+    #[test]
+    fn overlay_style_cache_resets_when_node_leaves_the_document() {
+        let mut dom = ScriptedDom::new();
+        let root = dom.document();
+        let node = dom.create_element(qual("div"));
+        dom.set_attribute(node, qual("class"), "comms-pane");
+        dom.append_child(root, node);
+        let mut drained = Vec::new();
+        dom.drain_mutations(&mut drained);
+        let mut cache = None;
+        let style = "position:absolute; left: 10px; top: 20px;".to_string();
+
+        stamp_overlay_style_if_changed(&mut cache, &mut dom, root, "comms-pane", style.clone());
+        dom.drain_mutations(&mut drained);
+
+        dom.remove_child(node);
+        dom.drain_mutations(&mut drained);
+        stamp_overlay_style_if_changed(&mut cache, &mut dom, root, "comms-pane", style.clone());
+        assert!(cache.is_none());
+
+        let replacement = dom.create_element(qual("div"));
+        dom.set_attribute(replacement, qual("class"), "comms-pane");
+        dom.append_child(root, replacement);
+        dom.drain_mutations(&mut drained);
+
+        stamp_overlay_style_if_changed(&mut cache, &mut dom, root, "comms-pane", style);
+        let mut muts = Vec::new();
+        dom.drain_mutations(&mut muts);
+        assert_eq!(muts.len(), 1);
     }
 }

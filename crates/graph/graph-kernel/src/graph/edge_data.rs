@@ -10,6 +10,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use rkyv::{Archive, Deserialize, Serialize};
 
+use crate::types::{GraphScope, mint_local_statement_id};
+
 use super::edge_taxonomy::{
     ArrangementSubKind, ContainmentSubKind, ImportedSubKind, NavigationTrigger, ProvenanceSubKind,
     RelationDurability, SemanticSubKind,
@@ -71,16 +73,194 @@ impl Default for EdgeMetrics {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
+pub struct SemanticStatement {
+    pub statement_id: String,
+    pub predicate: String,
+    pub recognized_sub_kind: Option<SemanticSubKind>,
+    pub label: Option<String>,
+    pub graph_scope: GraphScope,
+    pub provenance_iri: Option<String>,
+    pub asserted_at_ms: Option<u64>,
+}
+
+impl SemanticStatement {
+    pub fn new(
+        predicate: String,
+        recognized_sub_kind: Option<SemanticSubKind>,
+        label: Option<String>,
+        graph_scope: GraphScope,
+        provenance_iri: Option<String>,
+        asserted_at_ms: Option<u64>,
+    ) -> Self {
+        Self {
+            statement_id: mint_local_statement_id(),
+            predicate,
+            recognized_sub_kind,
+            label,
+            graph_scope,
+            provenance_iri,
+            asserted_at_ms,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize, Default)]
 pub struct SemanticData {
+    /// Compatibility aggregate: kept during the bucket migration so existing
+    /// readers can keep asking the pair-local edge what semantic kinds it
+    /// carries. The statement list below is the durable truth.
     pub sub_kinds: BTreeSet<SemanticSubKind>,
+    /// Compatibility aggregate over the statement labels.
     pub label: Option<String>,
     /// Open predicate IRI (the statements-over-schema substrate, linked-data
     /// plan Phase 0). `None` when the edge's meaning is fully carried by
     /// `sub_kinds`; a canonical IRI ([`predicate_iri`]) for a recognized
     /// predicate, or a raw IRI for an unrecognized one. `sub_kinds` stays
     /// authoritative for behaviour; `predicate` carries identity + round-trip.
+    /// During the statement-bucket migration this is a compatibility view over
+    /// the statement predicates, not the durable truth.
     pub predicate: Option<String>,
+    /// The durable semantic facts carried between one node pair.
+    pub statements: Vec<SemanticStatement>,
+}
+
+impl SemanticData {
+    pub fn statements(&self) -> &[SemanticStatement] {
+        &self.statements
+    }
+
+    pub fn insert_statement(
+        &mut self,
+        recognized_sub_kind: Option<SemanticSubKind>,
+        predicate: String,
+        label: Option<String>,
+        graph_scope: GraphScope,
+        provenance_iri: Option<String>,
+        asserted_at_ms: Option<u64>,
+    ) -> bool {
+        if let Some(existing) = self.statements.iter_mut().find(|statement| {
+            statement.recognized_sub_kind == recognized_sub_kind
+                && statement.predicate == predicate
+                && statement.graph_scope == graph_scope
+        }) {
+            if existing.label != label
+                || existing.provenance_iri != provenance_iri
+                || existing.asserted_at_ms != asserted_at_ms
+            {
+                existing.label = label;
+                existing.provenance_iri = provenance_iri;
+                existing.asserted_at_ms = asserted_at_ms;
+                self.rebuild_compat();
+                return true;
+            }
+            return false;
+        }
+
+        self.statements.push(SemanticStatement::new(
+            predicate,
+            recognized_sub_kind,
+            label,
+            graph_scope,
+            provenance_iri,
+            asserted_at_ms,
+        ));
+        self.rebuild_compat();
+        true
+    }
+
+    pub fn push_persisted_statement(&mut self, statement: SemanticStatement) -> bool {
+        if self
+            .statements
+            .iter()
+            .any(|existing| existing.statement_id == statement.statement_id)
+        {
+            return false;
+        }
+        self.statements.push(statement);
+        self.rebuild_compat();
+        true
+    }
+
+    pub fn remove_statements_with_sub_kind(&mut self, sub_kind: SemanticSubKind) -> bool {
+        let before = self.statements.len();
+        self.statements
+            .retain(|statement| statement.recognized_sub_kind != Some(sub_kind));
+        if self.statements.len() == before {
+            return false;
+        }
+        self.rebuild_compat();
+        true
+    }
+
+    pub fn set_statement_predicate(&mut self, predicate: Option<String>) {
+        match predicate {
+            Some(predicate) => {
+                if self.statements.is_empty() {
+                    self.statements.push(SemanticStatement::new(
+                        predicate,
+                        None,
+                        self.label.clone(),
+                        GraphScope::Default,
+                        None,
+                        None,
+                    ));
+                } else {
+                    for statement in &mut self.statements {
+                        statement.predicate = predicate.clone();
+                    }
+                }
+            }
+            None => {
+                self.statements
+                    .retain(|statement| statement.recognized_sub_kind.is_some());
+                for statement in &mut self.statements {
+                    if let Some(sub_kind) = statement.recognized_sub_kind {
+                        statement.predicate = predicate_iri(sub_kind).to_string();
+                    }
+                }
+            }
+        }
+        self.rebuild_compat();
+    }
+
+    fn rebuild_compat(&mut self) {
+        self.sub_kinds = self
+            .statements
+            .iter()
+            .filter_map(|statement| statement.recognized_sub_kind)
+            .collect();
+
+        let mut labels = self
+            .statements
+            .iter()
+            .filter_map(|statement| statement.label.clone())
+            .collect::<Vec<_>>();
+        labels.sort();
+        labels.dedup();
+        self.label = match labels.len() {
+            0 => None,
+            1 => labels.into_iter().next(),
+            _ => self
+                .statements
+                .iter()
+                .rev()
+                .find_map(|statement| statement.label.clone()),
+        };
+
+        let mut predicates = self
+            .statements
+            .iter()
+            .map(|statement| statement.predicate.clone())
+            .collect::<Vec<_>>();
+        predicates.sort();
+        predicates.dedup();
+        self.predicate = if predicates.len() == 1 {
+            predicates.into_iter().next()
+        } else {
+            None
+        };
+    }
 }
 
 /// Base IRI for Mere's canonical relation vocabulary. Recognized

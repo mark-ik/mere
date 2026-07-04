@@ -54,12 +54,18 @@ mod error;
 mod keypair;
 pub mod passphrase_storage;
 mod provider;
+pub mod sealed_record_storage;
+pub mod startup_unlock;
 pub mod vault;
 
 pub use crate::error::IdentityError;
 pub use crate::keypair::{Ed25519Keypair, Ed25519PublicKey, Ed25519Signature};
 pub use crate::passphrase_storage::PassphraseEncryptedStorage;
 pub use crate::provider::{IdentityProvider, InMemoryProvider};
+pub use crate::sealed_record_storage::SealedRecordStorage;
+pub use crate::startup_unlock::{
+    StartupUnlockMode, auto_unlock_backend_available, load_or_create_auto_unlock_root,
+};
 pub use crate::vault::{
     CredentialLineage, IdentitySlot, IdentityStorage, IdentityVault, InMemoryStorage, Profile,
     ProfileId, ProfileSummary, ProtocolKey, SecretBytes, UnlockTier,

@@ -62,11 +62,9 @@ pub(crate) fn maybe_dump_chrome_capture(
     let _ = std::fs::remove_file(&request);
 }
 
-/// The node's favicon RGBA (straight-alpha RGBA8) encoded as a `data:image/png;base64,`
-/// URI, or `None` if it can't be encoded. The orrery card carries it as a leading
-/// `<img>` that serval decodes. PNG (not BMP) keeps alpha and stays compact. (Phase 2.)
-/// Also the sprite-import encoder (a downscaled dropped image to the face). (P2 sprite.)
-pub(crate) fn favicon_data_uri(rgba: &[u8], w: u32, h: u32) -> Option<String> {
+/// RGBA8 pixels encoded to PNG bytes. Used by the favicon path, sprite import, and preview
+/// thumbnails that persist to the graph. Returns `None` when the image is empty or invalid.
+pub(crate) fn png_bytes_from_rgba(rgba: &[u8], w: u32, h: u32) -> Option<Vec<u8>> {
     if w == 0 || h == 0 || rgba.len() < (w as usize) * (h as usize) * 4 {
         return None;
     }
@@ -74,7 +72,59 @@ pub(crate) fn favicon_data_uri(rgba: &[u8], w: u32, h: u32) -> Option<String> {
     image::codecs::png::PngEncoder::new(&mut png)
         .write_image(rgba, w, h, image::ExtendedColorType::Rgba8)
         .ok()?;
-    Some(format!("data:image/png;base64,{}", base64_encode(&png)))
+    Some(png)
+}
+
+/// Crop an RGBA image to `crop`, shrink it into a preview box, and encode it to PNG bytes.
+/// Returns the encoded bytes plus the final preview dimensions.
+pub(crate) fn thumbnail_png_bytes_from_rgba(
+    rgba: &[u8],
+    w: u32,
+    h: u32,
+    crop: Option<(u32, u32, u32, u32)>,
+    max_w: u32,
+    max_h: u32,
+) -> Option<(Vec<u8>, u32, u32)> {
+    if w == 0 || h == 0 || max_w == 0 || max_h == 0 || rgba.len() < (w as usize) * (h as usize) * 4
+    {
+        return None;
+    }
+    let image = image::RgbaImage::from_raw(w, h, rgba.to_vec())?;
+    let cropped = if let Some((x, y, cw, ch)) = crop {
+        let x = x.min(w.saturating_sub(1));
+        let y = y.min(h.saturating_sub(1));
+        let cw = cw.max(1).min(w.saturating_sub(x));
+        let ch = ch.max(1).min(h.saturating_sub(y));
+        image::imageops::crop_imm(&image, x, y, cw, ch).to_image()
+    } else {
+        image
+    };
+    let thumb = image::DynamicImage::ImageRgba8(cropped)
+        .thumbnail(max_w, max_h)
+        .to_rgba8();
+    let (tw, th) = thumb.dimensions();
+    let png = png_bytes_from_rgba(thumb.as_raw(), tw, th)?;
+    Some((png, tw, th))
+}
+
+/// The node's favicon RGBA (straight-alpha RGBA8) encoded as a `data:image/png;base64,`
+/// URI, or `None` if it can't be encoded. The orrery card carries it as a leading
+/// `<img>` that serval decodes. PNG (not BMP) keeps alpha and stays compact. (Phase 2.)
+/// Also the sprite-import encoder (a downscaled dropped image to the face). (P2 sprite.)
+pub(crate) fn favicon_data_uri(rgba: &[u8], w: u32, h: u32) -> Option<String> {
+    png_bytes_from_rgba(rgba, w, h).and_then(|png| png_data_uri(&png))
+}
+
+/// Pre-encoded PNG bytes wrapped as a `data:image/png;base64,` URI. Used for node thumbnails,
+/// which the graph already persists as PNG. Returns `None` for an empty payload.
+pub(crate) fn png_data_uri(png_bytes: &[u8]) -> Option<String> {
+    if png_bytes.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "data:image/png;base64,{}",
+        base64_encode(png_bytes)
+    ))
 }
 
 /// Read an `Rgba8Unorm` texture back to tightly-packed CPU RGBA bytes (width*height*4),
@@ -164,4 +214,32 @@ pub(crate) fn base64_encode(data: &[u8]) -> String {
         });
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn png_data_uri_wraps_existing_png_bytes_without_reencoding() {
+        let png = b"\x89PNG\r\n\x1a\n";
+        assert_eq!(
+            png_data_uri(png).as_deref(),
+            Some("data:image/png;base64,iVBORw0KGgo="),
+        );
+    }
+
+    #[test]
+    fn png_bytes_from_rgba_rejects_short_buffers() {
+        assert!(png_bytes_from_rgba(&[0, 1, 2], 1, 1).is_none());
+    }
+
+    #[test]
+    fn thumbnail_png_bytes_from_rgba_crops_and_bounds_output() {
+        let rgba = vec![255; 4 * 4 * 4];
+        let (_png, w, h) =
+            thumbnail_png_bytes_from_rgba(&rgba, 4, 4, Some((0, 1, 4, 2)), 2, 2).expect("png");
+        assert!(w <= 2);
+        assert!(h <= 2);
+    }
 }

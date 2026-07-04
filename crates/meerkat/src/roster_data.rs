@@ -34,7 +34,7 @@ impl WindowCtx<'_> {
 
     fn roster_node_rows(&self, input: &PaneInputSnapshot) -> Vec<roster::RosterRow> {
         let graph = self.orrery().graph();
-        let mut rows: Vec<roster::RosterRow> = graph
+        let rows: Vec<roster::NodeRowInput> = graph
             .nodes()
             .map(|(key, node)| {
                 let url = node.url().to_string();
@@ -44,7 +44,7 @@ impl WindowCtx<'_> {
                 };
                 let mut tags: Vec<String> = node.tags.iter().cloned().collect();
                 tags.sort();
-                roster::RosterRow {
+                roster::NodeRowInput {
                     member: node.id,
                     title: graph.node_display_label(key),
                     url,
@@ -52,30 +52,15 @@ impl WindowCtx<'_> {
                     tags,
                     selected: input.is_selected(node.id),
                     open: input.is_open(node.id),
-                    section_header: None,
                 }
             })
             .collect();
-        rows.sort_by(|a, b| {
-            let ba = roster::content_bucket(a.content_type.as_deref());
-            let bb = roster::content_bucket(b.content_type.as_deref());
-            ba.0.cmp(&bb.0)
-                .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
-        });
-        let mut current: Option<u8> = None;
-        for row in &mut rows {
-            let (ord, label) = roster::content_bucket(row.content_type.as_deref());
-            if current != Some(ord) {
-                current = Some(ord);
-                row.section_header = Some(label.to_string());
-            }
-        }
-        rows
+        roster::build_node_rows(rows)
     }
 
     fn roster_link_rows(&self, subject: Option<&roster::RosterSubject>) -> Vec<roster::LinkRow> {
         let graph = self.orrery().graph();
-        let mut rows: Vec<roster::LinkRow> = graph
+        let rows: Vec<roster::LinkRowInput> = graph
             .relations()
             .filter_map(|relation| {
                 let source = graph.get_node(relation.from)?;
@@ -99,43 +84,20 @@ impl WindowCtx<'_> {
                         && *to == target.id
                         && *family == relation.kind.family()
                 );
-                Some(roster::LinkRow {
+                Some(roster::LinkRowInput {
                     from: source.id,
                     to: target.id,
                     source_title: graph.node_display_label(relation.from),
                     source_url: source.url().to_string(),
                     target_title: graph.node_display_label(relation.to),
                     target_url: target.url().to_string(),
-                    direction_label: "->".to_string(),
-                    family: relation.kind.family(),
-                    family_label: roster::edge_family_label(relation.kind.family()).to_string(),
-                    kind_label: roster::relation_kind_label(relation.kind).to_string(),
+                    kind: relation.kind,
                     source_label: roster::relation_label(graph, relation.from, relation.to),
-                    selector,
                     selected,
-                    starts_bundle: false,
                 })
             })
             .collect();
-        rows.sort_by(|a, b| {
-            a.source_title
-                .to_lowercase()
-                .cmp(&b.source_title.to_lowercase())
-                .then_with(|| {
-                    a.target_title
-                        .to_lowercase()
-                        .cmp(&b.target_title.to_lowercase())
-                })
-                .then_with(|| a.family.cmp(&b.family))
-                .then_with(|| a.kind_label.cmp(&b.kind_label))
-        });
-        let mut last: Option<(GraphMemberId, GraphMemberId)> = None;
-        for row in &mut rows {
-            let bundle = (row.from, row.to);
-            row.starts_bundle = last != Some(bundle);
-            last = Some(bundle);
-        }
-        rows
+        roster::build_link_rows(rows)
     }
 
     fn roster_graphlet_rows(
@@ -146,61 +108,43 @@ impl WindowCtx<'_> {
             return Vec::new();
         };
         let graph = self.orrery().graph();
-        index
+        let rows: Vec<roster::GraphletRowInput> = index
             .graphlets()
             .iter()
             .map(|g| {
                 let delta = index.preview_reconcile(graph, g.id);
-                let drift_label = match delta {
-                    Some(delta) => format!("+{} -{}", delta.added.len(), delta.removed.len()),
-                    None if matches!(g.binding, GraphletBinding::Linked { .. }) => "clean".to_string(),
-                    None => "manual".to_string(),
-                };
-                roster::GraphletRow {
+                roster::GraphletRowInput {
                     id: g.id,
-                    kind_label: roster::graphlet_kind_label(g.kind.as_ref()),
-                    binding_label: roster::graphlet_binding_label(&g.binding).to_string(),
+                    kind: g.kind.clone(),
+                    binding: g.binding.clone(),
                     member_count: g.anchors.len(),
-                    selectors_label: roster::graphlet_selectors_label(g),
-                    drift_label,
+                    added_count: delta.as_ref().map(|delta| delta.added.len()).unwrap_or(0),
+                    removed_count: delta.as_ref().map(|delta| delta.removed.len()).unwrap_or(0),
                     selected: matches!(subject, Some(roster::RosterSubject::Graphlet(id)) if *id == g.id),
                 }
             })
-            .collect()
+            .collect();
+        roster::build_graphlet_rows(rows)
     }
 
     fn roster_field_rows(&self, subject: Option<&roster::RosterSubject>) -> Vec<roster::FieldRow> {
-        let mut out = Vec::new();
         let selected_field = roster::selected_field_id(subject);
-        for field in self.orrery().graph().fields() {
-            if !field.is_active() {
-                continue;
-            }
-            let id = field.id;
-            let uuid = id.as_uuid().to_string();
-            out.push(roster::FieldRow {
-                id,
-                name: field
-                    .name
-                    .clone()
-                    .unwrap_or_else(|| format!("Field {}", &uuid[..8.min(uuid.len())])),
-                rule_label: roster::field_definition_label(&field.definition).to_string(),
-                extent_label: roster::field_extent_label(&field.extent),
-                hidden: !self.orrery().field_visible(id),
-                selected: selected_field == Some(id),
-                strength: self.orrery().field_strength(id).unwrap_or(0.0),
-            });
-        }
-        out.sort_by(|a, b| {
-            a.name
-                .to_lowercase()
-                .cmp(&b.name.to_lowercase())
-                .then_with(|| a.id.as_uuid().cmp(&b.id.as_uuid()))
-        });
-        if let Some(selected) = selected_field {
-            out.sort_by_key(|row| row.id != selected);
-        }
-        out
+        let rows: Vec<roster::FieldRowInput> = self
+            .orrery()
+            .graph()
+            .fields()
+            .filter(|field| field.is_active())
+            .map(|field| roster::FieldRowInput {
+                id: field.id,
+                name: field.name.clone(),
+                definition: field.definition.clone(),
+                extent: field.extent.clone(),
+                hidden: !self.orrery().field_visible(field.id),
+                selected: selected_field == Some(field.id),
+                strength: self.orrery().field_strength(field.id).unwrap_or(0.0),
+            })
+            .collect();
+        roster::build_field_rows(rows)
     }
 
     fn roster_detail(
@@ -255,22 +199,16 @@ impl WindowCtx<'_> {
             .filter(|r| r.from == key || r.to == key)
             .count();
         let field_count = self.attached_field_names(member).len();
-        Some(roster::NodeDetail {
+        Some(roster::build_node_detail(roster::NodeDetailInput {
             member,
             title: graph.node_display_label(key),
             url,
-            content_type: content_type.clone(),
+            content_type,
             tags,
             relation_count,
+            field_count,
             open: input.is_open(member),
-            facets: roster::node_facets(
-                member,
-                content_type.as_deref(),
-                tag_count,
-                relation_count,
-                field_count,
-            ),
-        })
+        }))
     }
 
     pub(super) fn link_card(
@@ -282,20 +220,16 @@ impl WindowCtx<'_> {
         let graph = self.orrery().graph();
         let (from_key, source) = graph.get_node_by_id(from)?;
         let (to_key, target) = graph.get_node_by_id(to)?;
-        let mut relations: Vec<roster::LinkRelationRow> = graph
+        let relations: Vec<roster::LinkRelationInput> = graph
             .relations()
             .filter(|r| r.from == from_key && r.to == to_key)
             .map(|r| {
                 let selector = roster::relation_selector(r.kind);
-                roster::LinkRelationRow {
+                roster::LinkRelationInput {
                     from,
                     to,
-                    family: r.kind.family(),
-                    family_label: roster::edge_family_label(r.kind.family()).to_string(),
-                    kind_label: roster::relation_kind_label(r.kind).to_string(),
+                    kind: r.kind,
                     label: roster::relation_label(graph, r.from, r.to),
-                    selector,
-                    editable: matches!(selector, RelationSelector::Semantic(_)),
                     selected: selected_selector == Some(selector),
                     hidden: self
                         .orrery()
@@ -303,13 +237,7 @@ impl WindowCtx<'_> {
                 }
             })
             .collect();
-        relations.sort_by(|a, b| {
-            a.family
-                .cmp(&b.family)
-                .then_with(|| a.kind_label.cmp(&b.kind_label))
-        });
-        let facets = roster::link_facets(from, to, &relations);
-        Some(roster::LinkCard {
+        Some(roster::build_link_card(roster::LinkCardInput {
             from,
             to,
             source_title: graph.node_display_label(from_key),
@@ -318,8 +246,7 @@ impl WindowCtx<'_> {
             target_url: target.url().to_string(),
             hidden: self.orrery().edge_between_members_hidden(from, to),
             relations,
-            facets,
-        })
+        }))
     }
 
     fn graphlet_card(&self, id: GraphletId) -> Option<roster::GraphletCard> {
@@ -327,16 +254,6 @@ impl WindowCtx<'_> {
         let index = self.graphlets.get(&self.view.focused_graph)?;
         let graphlet = index.get(id)?;
         let delta = index.preview_reconcile(graph, id);
-        let drift_tracking = matches!(graphlet.binding, GraphletBinding::Linked { .. });
-        let drift_summary = match delta.as_ref() {
-            Some(delta) => format!(
-                "drift proposal: +{} -{}",
-                delta.added.len(),
-                delta.removed.len()
-            ),
-            None if drift_tracking => "drift proposal: clean".to_string(),
-            None => "drift proposal: not tracked".to_string(),
-        };
         let family_selectors = match &graphlet.binding {
             GraphletBinding::Linked { spec } => Some(
                 crate::graphlets::EDGE_FAMILIES
@@ -346,15 +263,12 @@ impl WindowCtx<'_> {
             ),
             _ => None,
         };
-        Some(roster::GraphletCard {
+        Some(roster::build_graphlet_card(roster::GraphletCardInput {
             id,
-            kind_label: roster::graphlet_kind_label(graphlet.kind.as_ref()),
-            binding_label: roster::graphlet_binding_label(&graphlet.binding).to_string(),
+            kind: graphlet.kind.clone(),
+            binding: graphlet.binding.clone(),
             members: roster::member_labels(graph, &graphlet.anchors),
-            selectors_label: roster::graphlet_selectors_label(graphlet),
             family_selectors,
-            drift_tracking,
-            drift_summary,
             added: delta
                 .as_ref()
                 .map(|d| roster::member_labels(graph, &d.added))
@@ -363,7 +277,7 @@ impl WindowCtx<'_> {
                 .as_ref()
                 .map(|d| roster::member_labels(graph, &d.removed))
                 .unwrap_or_default(),
-        })
+        }))
     }
 
     pub(super) fn field_detail(&self, id: kernel::graph::FieldId) -> Option<roster::FieldDetail> {
@@ -372,18 +286,13 @@ impl WindowCtx<'_> {
             .graph()
             .fields()
             .find(|field| field.id == id)?;
-        let uuid = id.as_uuid().to_string();
-        Some(roster::FieldDetail {
+        Some(roster::build_field_detail(roster::FieldDetailInput {
             id,
-            name: field
-                .name
-                .clone()
-                .unwrap_or_else(|| format!("Field {}", &uuid[..8.min(uuid.len())])),
-            rule_label: roster::field_definition_label(&field.definition).to_string(),
-            extent_label: roster::field_extent_label(&field.extent),
+            name: field.name.clone(),
+            definition: field.definition.clone(),
+            extent: field.extent.clone(),
             hidden: !self.orrery().field_visible(id),
             strength: self.orrery().field_strength(id).unwrap_or(0.0),
-            facets: roster::field_facets(id),
-        })
+        }))
     }
 }

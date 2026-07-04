@@ -1,16 +1,20 @@
 # petgraph-RDF plan — a losslessly RDF-projectable, SPARQL-queryable petgraph kernel
 
-Status: **planned.** Direction decided from the feasibility research + a perf
-benchmark: **petgraph stays the truth and the runtime; RDF is a lossless,
+Status: **Phase 1A partial.** Direction decided from the feasibility research + a
+perf benchmark: **petgraph stays the truth and the runtime; RDF is a lossless,
 on-demand projection plus a SPARQL query adapter, never a second held authority.**
 The target is not "the kernel stores all RDF" but a defined **Mere RDF projection
 profile**: the content subgraph is losslessly projectable, the experience/runtime
-layer stays native. The work is to (1) carry the profile in the content model
-(per-statement edges, typed literals, named-graph scope, statement provenance),
-(2) prove losslessness with a round-trip test, (3) run SPARQL over the kernel via a
-`QueryableDataset` adapter, and (4) — only if footprint demands — move storage to
-an interned slotmap kernel. (Merges the projection-profile take + the
-per-statement-edge decision, 2026-06-19.)
+layer stays native. The current landed slices are the semantic statement-bucket
+backbone, typed literal fidelity on `NodeProperty`, and graph-scope fields on
+semantic statements / node properties with dataset-query visibility. Full
+named-graph JSON-LD shaping, statement metadata, and the direct SPARQL adapter
+are still ahead. The work is to (1) carry the profile in the content model
+(statement records in pair-local edge buckets, typed literals, named-graph scope,
+statement provenance), (2) prove losslessness with a round-trip test, (3) run
+SPARQL over the kernel via a `QueryableDataset` adapter, and (4) — only if
+footprint demands — move storage to an interned slotmap kernel. (Merges the
+projection-profile take + the statement-bucket revision, 2026-07-04.)
 
 Cross-refs:
 
@@ -76,19 +80,50 @@ property rather than a claim.
 The content model must hold every construct the profile preserves, at the right
 granularity:
 
-- **Per-statement edges (the granularity fix).** Today `SemanticData { sub_kinds,
-  label, predicate }` is one *aggregate* payload per `(from,to)` pair, which cannot
-  carry distinct graph / provenance / time / label per predicate. Make the content
-  graph a true **multigraph: one petgraph edge per statement** (per predicate),
-  payload `SemanticStatement { predicate, graph_scope, provenance (agent/persona
-  IRI), asserted_at, label?, recognized sub_kind? }`. The petgraph `EdgeIndex` is
-  the statement handle (what reification needs), so no separate statement arena;
-  recognized sub-kinds become behavior flags on the statement, not the storage unit.
-  - **Multi-edge is the data-model truth; visual collapse is experience-layer.** The
-    orrery collapsing parallel edges into one drawn edge is a zoom/domain-dependent
-    LOD setting (like node clustering) that reveals the constituent statements on
-    hover/select. That logic is owned by node-representation / orrery, not here; the
-    kernel always stores the statements separately.
+- **Statement buckets inside `EdgePayload` (the granularity fix).** Today
+  `SemanticData { sub_kinds, label, predicate }` is one *aggregate* payload per
+  `(from,to)` pair, which cannot carry distinct graph / provenance / time / label
+  per predicate. Keep the petgraph edge as the pair-local adjacency bucket, but
+  make the bucket enumerate real content statements:
+  `SemanticStatement { statement_id, predicate, graph_scope, provenance
+  (agent/persona IRI), asserted_at, label?, recognized_sub_kind? }`. The petgraph
+  `EdgeIndex` identifies the bucket; `statement_id` identifies the fact. That id is
+  what reification, statement provenance, precise retract, snapshot migration, and
+  federation tombstones point at. This is a bigger win than tidiness: petgraph
+  `EdgeIndex` is unstable under removal and meaningless across serialization, so a
+  separate fact handle is what makes retract, migration, and federated tombstones
+  sound at all.
+  - **The multigraph is logical, not necessarily petgraph-native.** The data-model
+    truth is one statement per fact. The runtime representation can be one
+    `EdgePayload` per `(from,to)` carrying a statement list, because pair adjacency
+    is still the hot path. Pair-level APIs can keep returning "there is an edge from
+    A to B"; RDF projection and exact mutation use statement iterators.
+  - **Enumerating current `sub_kinds` is not enough.** The statement list must carry
+    per-statement metadata. A `BTreeSet<SemanticSubKind>` plus one `label` and one
+    `predicate` is still lossy as soon as two predicates on the same pair need
+    different graph scope, provenance, assertion time, label, or lifecycle.
+  - **Visual collapse stays the default view.** Orrery/node-representation render
+    the pair bucket as one visible relation unless the user asks for the constituent
+    statements. Collapse is a view over the statement bucket, not a repair for the
+    storage model.
+  - **`StatementId` allocation must be endpoint-independent and bucket-independent.**
+    Treat it as an opaque fact id minted at assert time, not a petgraph handle and
+    not a per-graph counter. The preferred direction is a random or ULID-style id
+    stable across snapshot, replay, and device boundaries; dedup still happens on
+    statement content, separately from id minting. Content-hash ids only work if
+    statement metadata is immutable, which this plan does not assume. The current
+    landed slice uses a local timestamp+nonce string as a temporary allocator; Phase
+    1 is not fully done until the federation-safe minting story is pinned.
+  - **Empty semantic buckets do not linger.** Retracting the last semantic statement
+    clears the semantic sidecar, and if that leaves the whole `EdgePayload` empty
+    the petgraph edge itself is removed. So pair-level APIs read "there is an edge
+    A -> B" only when at least one statement or some other edge-family payload still
+    exists on that pair.
+  - **Retract-by-id lookup stays bucket-local.** Exact retract scans the bucket's
+    statement list linearly to find `statement_id`. That is the intended default:
+    buckets are expected to stay small, dedup keeps multiplicity bounded, and a
+    global `StatementId -> location` index should wait for evidence rather than
+    arrive preemptively.
 - **Typed literals.** `NodeProperty` gains `datatype: Option<String>` (IRI),
   `lang: Option<String>`, `graph_scope`, and `provenance` (literals are statements
   too). `xsd:string` default, `rdf:langString` when lang set. Ingest captures
@@ -110,9 +145,9 @@ Keep the common case cheap: `provenance` is `Option` and `graph_scope` defaults 
 `Default`, so a human-asserted, now, default-graph statement carries nothing beyond
 its predicate.
 
-Done when: the content graph is per-statement multigraph edges + typed properties,
-each carrying `graph_scope` + optional provenance, and the model can represent the
-full profile construct set.
+Done when: the content graph has statement records inside pair-local `EdgePayload`
+buckets plus typed properties, each carrying `graph_scope` + optional provenance,
+and the model can represent the full profile construct set.
 
 ## Phase 2 — Lossless projection + the round-trip gate
 
@@ -132,15 +167,15 @@ full profile construct set.
 - Turtle / N-Quads I/O via `oxttl` (cheap interop win).
 
 Done when: the round-trip test is green across the full feature set (typed
-literals, lang tags, named graphs, reifier metadata, multi-predicate, raw + CiTO
-predicates).
+literals, lang tags, named graphs, reifier metadata, multiple statements on one
+node pair, raw + CiTO predicates).
 
 ## Phase 3 — `QueryableDataset` adapter (SPARQL over the kernel, no held quads)
 
 - Implement `spareval::QueryableDataset` over the kernel: `InternalTerm` = an
   **interned term-id** (a u32 into a kernel term dictionary, IRIs/literals interned
-  once); `internal_quads_for_pattern(s,p,o,g)` walks the kernel's edges /
-  properties / classifications / reifiers as quads matching the pattern;
+  once); `internal_quads_for_pattern(s,p,o,g)` walks the kernel's statement buckets
+  / properties / classifications / reifiers as quads matching the pattern;
   `internalize`/`externalize_term` via the dictionary.
 - **Keep the shipped ephemeral-Store path as the baseline** until the adapter
   passes (a) row-parity tests (same `SELECT`/`ASK` results) and (b) a perf
@@ -177,13 +212,20 @@ kernel directly, with no oxigraph Store in the path.
   `internalize_term` + `externalize_term`, `InternalTerm: Clone+Eq+Hash`
   (interned-id friendly), `Error`; oxrdf + spargebra only, no RocksDB. SPARQL over
   a custom backend is supported.
-- **Current lossy fields**: `NodeProperty { predicate, value }` (no datatype/lang,
-  types.rs); no named-graph tagging (default graph only); no statement metadata;
-  edge `label` dropped on export. `NodeClassification` already carries rich
+- **Current lossy fields**: full named-graph export/import is still incomplete;
+  `NodeClassification`, curated `title`/`tags`, and JSON-LD shaping are not yet
+  graph-scope-aware, so the dataset/SPARQL path is ahead of the JSON-LD shapers.
+  Statement metadata now round-trips in kernel snapshots and projects into the
+  dataset/SPARQL path as RDF 1.2 reifier nodes, but JSON-LD export still omits
+  that metadata and ingest still ignores triple-term reifier input. The older
+  literal-flattening gap is now partially retired:
+  `NodeProperty` carries datatype/lang, linked-data ingest keeps them, and
+  export/query projection emits them. `NodeClassification` already carries rich
   provenance/status and maps to `rdf:type`.
 - **Granularity**: `SemanticData` is one aggregate payload per `(from,to)` edge, so
-  it cannot hold per-predicate graph/provenance/time/label. Per-statement multigraph
-  edges (one edge per predicate) are the fix and the correct RDF granularity.
+  it cannot hold per-predicate graph/provenance/time/label. Statement records are
+  the fix. They can live inside the pair-local `EdgePayload` bucket; they do not
+  require one petgraph edge per statement as long as statement identity is explicit.
 - **`rdf-canon` is unstable** → skolemized deterministic compare for the round-trip
   now; full RDFC-1.0 deferred with federation.
 - **Library is a swappable index**; losslessness is the data model (petgraph now,
@@ -197,8 +239,14 @@ kernel directly, with no oxigraph Store in the path.
 - **Adapter query perf**: SPARQL over a kernel-walking `QueryableDataset` may trail
   an indexed store on complex queries; fine for ad-hoc/interop (not the hot path),
   measure if it bites.
-- **Write ergonomics/invariants**: enriching `SemanticData` + graph-tagging must
-  keep the typed assert API ergonomic and referentially integral (endpoints exist).
+- **Write ergonomics/invariants**: replacing aggregate `SemanticData` with a
+  statement bucket must keep the typed assert API ergonomic and referentially
+  integral (endpoints exist).
+- **Statement identity**: `EdgeIndex` is only the pair-bucket handle in this model.
+  `StatementId` must be stable enough for reification, retract, snapshot round-trip,
+  and federation tombstones. A local allocator is fine for the landed slice, but
+  Phase 1 completion needs a device-safe minting story that does not depend on edge
+  position or serialization order.
 - **Scope discipline**: Phase 4 is evidence-gated, not default; do not build the
   slotmap kernel unless the footprint demands it.
 - **Common-case bloat**: per-statement `provenance` + `graph_scope` on every
@@ -222,4 +270,37 @@ kernel directly, with no oxigraph Store in the path.
   experience-layer LOD setting (reveal on hover/select), owned by
   node-representation / orrery. One reifier encoding (defer JSON-LD-metadata compat);
   ephemeral Store stays the SPARQL baseline until the adapter proves parity + perf;
-  common-case-bloat guard added. No code written.
+  common-case-bloat guard added. Later superseded by the 2026-07-04 statement-bucket
+  representation. No code written.
+- **2026-07-04** — Revised the granularity decision: keep `EdgePayload` as the
+  pair-local adjacency bucket and enumerate statement records inside it. The logical
+  multigraph remains one statement per fact, but petgraph no longer needs one edge
+  per statement. `EdgeIndex` is the bucket handle; `StatementId` is the statement
+  handle for reification / provenance / precise retract / snapshot / federation.
+- **2026-07-04 (landed slice)** — Implemented the semantic statement-bucket
+  backbone in code. `SemanticData` now carries explicit statement records inside
+  the pair-local `EdgePayload`, snapshot persistence round-trips them, and
+  kernel/linked-data reads that care about semantic multiplicity now iterate the
+  statement list. The current `StatementId` allocator is a local timestamp+nonce
+  string; that is good enough for the landed slice but not yet the final
+  federation-safe id story.
+- **2026-07-04 (landed slice, typed literals)** — Extended `NodeProperty` with
+  datatype/lang fidelity, kept old JSON snapshots loadable via serde defaults,
+  preserved typed and language-tagged literals on JSON-LD ingest, and projected
+  them back out through `node_quads`, expanded/compacted JSON-LD export, and the
+  ephemeral SPARQL path. Still missing from Phase 1: named-graph scope, statement
+  provenance/time/metadata, and statement-aware write APIs beyond the legacy
+  edge-wide predicate stamp.
+- **2026-07-04 (landed slice, graph scope)** — Added `graph_scope` to semantic
+  statements and node properties, snapshot persistence round-trips it, linked-data
+  ingest preserves it for non-curated literal properties and semantic edges, and
+  the dataset/SPARQL path now emits named-graph quads from those scopes. The
+  JSON-LD shapers still deliberately stay default-graph-only, and curated
+  `title`/`tags` plus `rdf:type` classifications are not yet graph-scope-aware.
+- **2026-07-04 (landed slice, statement metadata)** — Added `provenance_iri` and
+  `asserted_at_ms` to semantic statements and node properties, kept older
+  snapshots loadable via serde defaults, round-tripped the richer statement
+  records through snapshot persistence, and projected statement metadata into the
+  dataset/SPARQL path as RDF 1.2 reifier nodes keyed by `StatementId`. The
+  JSON-LD shapers still stay on direct default-graph node quads, and ingest still
+  treats triple-term reifier metadata as a deferred gap.

@@ -23,6 +23,14 @@ fn user_grouped(label: Option<&str>) -> EdgeAssertion {
     }
 }
 
+fn cites() -> EdgeAssertion {
+    EdgeAssertion::Semantic {
+        sub_kind: SemanticSubKind::Cites,
+        label: None,
+        decay_progress: None,
+    }
+}
+
 #[test]
 fn assert_semantic_predicate_creates_open_predicate_edge() {
     let mut graph = Graph::new();
@@ -68,17 +76,68 @@ fn open_predicate_only_edge_survives_snapshot_roundtrip() {
 }
 
 #[test]
+fn statement_bucket_survives_snapshot_roundtrip() {
+    let mut graph = Graph::new();
+    let a = graph.add_node("https://a.test/".to_string(), Point2D::new(0.0, 0.0));
+    let b = graph.add_node("https://b.test/".to_string(), Point2D::new(0.0, 0.0));
+    graph.assert_relation(a, b, cites()).unwrap();
+    graph.assert_semantic_predicate_in_scope(
+        a,
+        b,
+        "https://schema.org/citation".to_string(),
+        crate::types::GraphScope::Source,
+    );
+    let edge_key = graph.find_edge_key(a, b).expect("edge key");
+    let payload = graph.get_edge_mut(edge_key).expect("payload");
+    let statements = &mut payload.semantic.as_mut().expect("semantic").statements;
+    statements[0].statement_id = "stmt-edge-1".to_string();
+    statements[0].provenance_iri = Some("https://people.test/alice".to_string());
+    statements[0].asserted_at_ms = Some(1_720_000_000_123);
+    statements[1].statement_id = "stmt-edge-2".to_string();
+    statements[1].provenance_iri = Some("https://people.test/bob".to_string());
+    statements[1].asserted_at_ms = Some(1_720_000_100_456);
+
+    let restored = Graph::from_snapshot(&graph.to_snapshot());
+
+    let (ra, _) = restored.get_node_by_url("https://a.test/").unwrap();
+    let (rb, _) = restored.get_node_by_url("https://b.test/").unwrap();
+    let key = restored.find_edge_key(ra, rb).expect("edge restored");
+    let payload = restored.get_edge(key).expect("payload");
+    assert_eq!(payload.semantic_statements().len(), 2);
+    assert!(payload.semantic_statements().iter().any(|statement| {
+        statement.recognized_sub_kind == Some(SemanticSubKind::Cites)
+            && statement.predicate == "https://mere.computer/ns/rel#cites"
+            && statement.graph_scope == crate::types::GraphScope::Default
+            && statement.statement_id == "stmt-edge-1"
+            && statement.provenance_iri.as_deref() == Some("https://people.test/alice")
+            && statement.asserted_at_ms == Some(1_720_000_000_123)
+    }));
+    assert!(payload.semantic_statements().iter().any(|statement| {
+        statement.recognized_sub_kind.is_none()
+            && statement.predicate == "https://schema.org/citation"
+            && statement.graph_scope == crate::types::GraphScope::Source
+            && statement.statement_id == "stmt-edge-2"
+            && statement.provenance_iri.as_deref() == Some("https://people.test/bob")
+            && statement.asserted_at_ms == Some(1_720_000_100_456)
+    }));
+}
+
+#[test]
 fn node_properties_survive_snapshot_roundtrip() {
     let mut graph = Graph::new();
     let a = graph.add_node("https://a.test/".to_string(), Point2D::new(0.0, 0.0));
-    graph
-        .get_node_mut(a)
-        .unwrap()
-        .properties
-        .push(crate::types::NodeProperty {
-            predicate: "https://schema.org/datePublished".to_string(),
-            value: "2026-06-02".to_string(),
-        });
+    let mut property = crate::types::NodeProperty::new(
+        "https://schema.org/datePublished".to_string(),
+        "2026-06-02".to_string(),
+    )
+    .with_graph_scope(crate::types::GraphScope::Source)
+    .with_metadata(
+        Some("https://people.test/alice".to_string()),
+        Some(1_720_000_000_123),
+    );
+    property.statement_id = "stmt-property-1".to_string();
+    property.datatype = Some("http://www.w3.org/2001/XMLSchema#date".to_string());
+    graph.get_node_mut(a).unwrap().properties.push(property);
 
     let restored = Graph::from_snapshot(&graph.to_snapshot());
 
@@ -89,6 +148,21 @@ fn node_properties_survive_snapshot_roundtrip() {
         "https://schema.org/datePublished"
     );
     assert_eq!(node.properties[0].value, "2026-06-02");
+    assert_eq!(
+        node.properties[0].datatype.as_deref(),
+        Some("http://www.w3.org/2001/XMLSchema#date")
+    );
+    assert_eq!(node.properties[0].lang.as_deref(), None);
+    assert_eq!(
+        node.properties[0].graph_scope,
+        crate::types::GraphScope::Source
+    );
+    assert_eq!(node.properties[0].statement_id, "stmt-property-1");
+    assert_eq!(
+        node.properties[0].provenance_iri.as_deref(),
+        Some("https://people.test/alice")
+    );
+    assert_eq!(node.properties[0].asserted_at_ms, Some(1_720_000_000_123));
 }
 
 #[test]
@@ -305,6 +379,7 @@ fn test_snapshot_edge_with_missing_url_is_dropped() {
                 label: None,
                 agent_decay_progress: None,
                 predicate: None,
+                statements: vec![],
             }),
             traversal: None,
             containment: None,

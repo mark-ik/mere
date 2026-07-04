@@ -3,6 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use super::*;
+use kernel::graph::Graph;
+use kernel::types::GraphScope;
 
 /// [`crate::to_jsonld`] emits. One recognized predicate (`rel#cites`) and one
 /// raw predicate (`schema:citation`).
@@ -106,11 +108,13 @@ fn from_jsonld_parses_nodes_literals_types_and_edges() {
         subject: "https://a.test/".into(),
         predicate: "https://mere.computer/ns/rel#cites".into(),
         object: "https://b.test/".into(),
+        graph_scope: GraphScope::Default,
     }));
     assert!(contribution.edges.contains(&EdgeContribution {
         subject: "https://a.test/".into(),
         predicate: "https://schema.org/citation".into(),
         object: "https://c.test/".into(),
+        graph_scope: GraphScope::Default,
     }));
 }
 
@@ -162,6 +166,45 @@ fn apply_materializes_recognized_and_raw_edges() {
 }
 
 #[test]
+fn from_jsonld_preserves_typed_and_language_tagged_literals() {
+    let doc = br#"{
+      "@id":"https://a.test/",
+      "https://schema.org/datePublished":[{"@value":"2026-06-02","@type":"http://www.w3.org/2001/XMLSchema#date"}],
+      "https://schema.org/headline":[{"@value":"Bonjour","@language":"fr"}]
+    }"#;
+    let contribution = from_jsonld(doc).expect("valid JSON-LD");
+    let node = contribution
+        .nodes
+        .iter()
+        .find(|n| n.id == "https://a.test/")
+        .expect("node a");
+    assert_eq!(node.properties.len(), 2);
+    assert_eq!(
+        node.properties[0].predicate,
+        "https://schema.org/datePublished"
+    );
+    assert_eq!(node.properties[0].value, "2026-06-02");
+    assert_eq!(
+        node.properties[0].datatype.as_deref(),
+        Some("http://www.w3.org/2001/XMLSchema#date")
+    );
+    assert_eq!(node.properties[0].lang, None);
+    assert_eq!(node.properties[0].graph_scope, GraphScope::Default);
+    assert!(!node.properties[0].statement_id.is_empty());
+    assert_eq!(node.properties[0].provenance_iri, None);
+    assert_eq!(node.properties[0].asserted_at_ms, None);
+
+    assert_eq!(node.properties[1].predicate, "https://schema.org/headline");
+    assert_eq!(node.properties[1].value, "Bonjour");
+    assert_eq!(node.properties[1].datatype, None);
+    assert_eq!(node.properties[1].lang.as_deref(), Some("fr"));
+    assert_eq!(node.properties[1].graph_scope, GraphScope::Default);
+    assert!(!node.properties[1].statement_id.is_empty());
+    assert_eq!(node.properties[1].provenance_iri, None);
+    assert_eq!(node.properties[1].asserted_at_ms, None);
+}
+
+#[test]
 fn a_harvested_hyperlink_records_extracted_from_provenance_on_the_target() {
     use kernel::graph::{Graph, ProvenanceSubKind};
 
@@ -176,6 +219,7 @@ fn a_harvested_hyperlink_records_extracted_from_provenance_on_the_target() {
             subject: "https://src.test/".to_string(),
             predicate: "https://mere.computer/ns/rel#hyperlink".to_string(),
             object: "https://dst.test/".to_string(),
+            graph_scope: GraphScope::Default,
         }],
     };
     let mut graph = Graph::new();
@@ -254,11 +298,12 @@ fn full_pack_resolves_a_schema_org_remote_context() {
         .find(|n| n.id == "https://a.test/")
         .expect("node a");
     assert_eq!(node.title.as_deref(), Some("Article A"));
-    assert!(
-        node.properties
-            .iter()
-            .any(|(p, v)| p == "https://schema.org/datePublished" && v == "2026-06-02")
-    );
+    assert!(node.properties.iter().any(|property| {
+        property.predicate == "https://schema.org/datePublished"
+            && property.value == "2026-06-02"
+            && property.datatype.as_deref() == Some("https://schema.org/Date")
+            && property.lang.is_none()
+    }));
 }
 
 #[cfg(feature = "bundled-contexts")]
@@ -370,6 +415,7 @@ fn bundled_context_expands_a_remote_context() {
         subject: "https://a.test/".into(),
         predicate: "https://mere.computer/ns/rel#cites".into(),
         object: "https://b.test/".into(),
+        graph_scope: GraphScope::Default,
     }));
 }
 

@@ -31,9 +31,10 @@
 //! so no caller has to invalidate it explicitly.
 
 use std::cell::RefCell;
+use std::fmt::Write as _;
 use std::rc::Rc;
 
-use layout_dom_api::{DomMutation, LayoutDomMut};
+use layout_dom_api::{DomMutation, LayoutDom, LayoutDomMut, NodeKind};
 use netrender::Scene;
 use serval_layout::{Applied, FragmentPlane, IncrementalLayout, ScrollOffsets};
 use serval_scripted_dom::{NodeId, ScriptedDom};
@@ -50,6 +51,12 @@ pub(crate) struct PaneSession {
     /// The stylesheet set the session's (fixed) Stylist was built from; a change
     /// (theme switch) forces a rebuild, since a session's sheets can't be swapped.
     sheet: Vec<String>,
+}
+
+pub(crate) struct PaneSessionRefresh {
+    pub(crate) rebuild: bool,
+    pub(crate) structural: bool,
+    pub(crate) mut_count: usize,
 }
 
 impl PaneSession {
@@ -71,50 +78,49 @@ impl PaneSession {
         cursor: Option<TextCursor>,
         scroll: &ScrollOffsets<NodeId>,
     ) -> Scene {
-        // Drain this frame's pane mutations. The session owns the drain (the pane's
-        // DOM is no longer drained by the frame-end `discard_dom_mutations`), so the
-        // batch reaches `apply`. `&mut` borrow is released before the read.
         let mut muts: Vec<DomMutation<NodeId>> = Vec::new();
         dom.borrow_mut().drain_mutations(&mut muts);
+        let dom_ref = dom.borrow();
+        Self::refresh(slot, &dom_ref, sheet, w, h, &muts);
+        let session = &slot.as_ref().expect("session built above").layout;
+        crate::serval_render::scene_from_session(session, &dom_ref, cursor, scroll, w, h)
+    }
+
+    pub(crate) fn refresh(
+        slot: &mut Option<PaneSession>,
+        dom: &ScriptedDom,
+        sheet: &[&str],
+        w: u32,
+        h: u32,
+        muts: &[DomMutation<NodeId>],
+    ) -> PaneSessionRefresh {
         let structural = muts
             .iter()
             .any(|m| !matches!(m, DomMutation::AttributeChanged { .. }));
-
-        let dom_ref = dom.borrow();
         let dims = (w, h);
         let rebuild = match slot.as_ref() {
             None => true,
             Some(s) => structural || s.dims != dims || !sheet_eq(&s.sheet, sheet),
         };
-        // Every `rebuild` frame pays a full cascade+layout — the same cost the old
-        // stateless-per-frame chrome render paid. `RUST_LOG=meerkat::profile=debug`
-        // surfaces this alongside `frame render profile` (render/paint.rs) so a slow
-        // session shows whether it's from rebuilds firing too often, or the cheap
-        // `rebuild=false` path itself costing more than expected (2026-07-02 perf
-        // investigation: found the latter — `chrome_us` stayed 100-145ms even on
-        // `rebuild=false` frames, pointing at paint-list emission scaling with total
-        // DOM size rather than the mutation delta; a `serval-layout` question, not
-        // fixed here).
+        let structural_summary = structural.then(|| summarize_structural_batch(dom, muts));
         tracing::debug!(
             target: "meerkat::profile",
             rebuild,
             mut_count = muts.len(),
             structural,
+            inserted = structural_summary.as_ref().map(|s| s.inserted),
+            removed = structural_summary.as_ref().map(|s| s.removed),
+            attr_changed = structural_summary.as_ref().map(|s| s.attr_changed),
+            text_changed = structural_summary.as_ref().map(|s| s.text_changed),
+            subtree_replaced = structural_summary.as_ref().map(|s| s.subtree_replaced),
+            structural_samples = structural_summary
+                .as_ref()
+                .map(|s| s.samples.as_str()),
             "chrome session rebuild decision"
         );
 
         if rebuild {
-            // Full cascade + layout — same cost as the old stateless frame, but
-            // only on a structural / resize / theme frame. The box-tree side-table
-            // is fresh, so `emit_paint_list` is valid and the Spliced path is never
-            // taken.
-            let mut layout = IncrementalLayout::new(&*dom_ref, sheet, w as f32, h as f32);
-            // Carry the panes' nested wheel scroll (`scroll_at` writes the retained
-            // `element_scroll`) across the rebuild. A pane whose content changes every frame
-            // (live timestamps) drives a rebuild each frame; without this the fresh layout's
-            // empty `element_scroll` would reset the scroll every frame, so a wheel never
-            // visibly moves. Offsets key by node, so a surviving container keeps its scroll.
-            // (Host-scroll P2.)
+            let mut layout = IncrementalLayout::new(dom, sheet, w as f32, h as f32);
             if let Some(prev) = slot.as_ref() {
                 layout.set_element_scroll(prev.layout.element_scroll().clone());
             }
@@ -124,13 +130,10 @@ impl PaneSession {
                 sheet: sheet.iter().map(|s| s.to_string()).collect(),
             });
         } else {
-            // Attribute-only batch → incremental restyle: RepaintOnly (layout
-            // skipped) unless an inline geometry write actually moved a box
-            // (Restyled re-lays-out). Either way the paint side stays valid.
             let s = slot
                 .as_mut()
                 .expect("not rebuilding implies an existing session");
-            let applied = s.layout.apply(&*dom_ref, sheet, &muts);
+            let applied = s.layout.apply(dom, sheet, muts);
             debug_assert!(
                 matches!(
                     applied,
@@ -140,8 +143,15 @@ impl PaneSession {
             );
         }
 
-        let session = &slot.as_ref().expect("session built above").layout;
-        crate::serval_render::scene_from_session(session, &dom_ref, cursor, scroll, w, h)
+        PaneSessionRefresh {
+            rebuild,
+            structural,
+            mut_count: muts.len(),
+        }
+    }
+
+    pub(crate) fn layout(&self) -> &IncrementalLayout<NodeId> {
+        &self.layout
     }
 
     /// Scroll the nearest nested `overflow: scroll/auto` container under scene point
@@ -264,4 +274,151 @@ impl PaneSession {
 /// avoids any caller having to invalidate the session on theme change.
 fn sheet_eq(stored: &[String], current: &[&str]) -> bool {
     stored.len() == current.len() && stored.iter().zip(current).all(|(a, b)| a == b)
+}
+
+struct StructuralBatchSummary {
+    inserted: usize,
+    removed: usize,
+    attr_changed: usize,
+    text_changed: usize,
+    subtree_replaced: usize,
+    samples: String,
+}
+
+fn summarize_structural_batch(
+    dom: &ScriptedDom,
+    muts: &[DomMutation<NodeId>],
+) -> StructuralBatchSummary {
+    let mut summary = StructuralBatchSummary {
+        inserted: 0,
+        removed: 0,
+        attr_changed: 0,
+        text_changed: 0,
+        subtree_replaced: 0,
+        samples: String::new(),
+    };
+    for (index, mutation) in muts.iter().enumerate() {
+        match mutation {
+            DomMutation::Inserted { node, parent } => {
+                summary.inserted += 1;
+                if index < 6 {
+                    push_sample(
+                        &mut summary.samples,
+                        format_args!(
+                            "insert {} -> {}",
+                            describe_node_brief(dom, *node),
+                            describe_node_brief(dom, *parent)
+                        ),
+                    );
+                }
+            }
+            DomMutation::Removed {
+                node,
+                former_parent,
+            } => {
+                summary.removed += 1;
+                if index < 6 {
+                    push_sample(
+                        &mut summary.samples,
+                        format_args!(
+                            "remove dead({node:?}) <- {}",
+                            describe_node_brief(dom, *former_parent)
+                        ),
+                    );
+                }
+            }
+            DomMutation::AttributeChanged { node, name, .. } => {
+                summary.attr_changed += 1;
+                if index < 6 {
+                    push_sample(
+                        &mut summary.samples,
+                        format_args!("attr {} @ {}", name.local, describe_node_brief(dom, *node)),
+                    );
+                }
+            }
+            DomMutation::CharacterDataChanged { node } => {
+                summary.text_changed += 1;
+                if index < 6 {
+                    push_sample(
+                        &mut summary.samples,
+                        format_args!("text {}", describe_node_brief(dom, *node)),
+                    );
+                }
+            }
+            DomMutation::SubtreeReplaced { node } => {
+                summary.subtree_replaced += 1;
+                if index < 6 {
+                    push_sample(
+                        &mut summary.samples,
+                        format_args!("subtree {}", describe_node_brief(dom, *node)),
+                    );
+                }
+            }
+        }
+    }
+    summary
+}
+
+fn push_sample(dst: &mut String, sample: std::fmt::Arguments<'_>) {
+    if !dst.is_empty() {
+        dst.push_str(" | ");
+    }
+    let _ = dst.write_fmt(sample);
+}
+
+fn describe_node_brief(dom: &ScriptedDom, node: NodeId) -> String {
+    // A batch entry may name a node already dropped within the same batch;
+    // the read accessors panic on dead ids by contract, so gate on `is_live`.
+    if !dom.is_live(node) {
+        return format!("#dead({node:?})");
+    }
+    match dom.kind(node) {
+        NodeKind::Text => return format!("#text({node:?})"),
+        NodeKind::Document => return format!("#document({node:?})"),
+        NodeKind::Comment => return format!("#comment({node:?})"),
+        NodeKind::Doctype => return format!("#doctype({node:?})"),
+        NodeKind::ProcessingInstruction => return format!("#pi({node:?})"),
+        NodeKind::DocumentFragment => return format!("#fragment({node:?})"),
+        NodeKind::Element => {}
+    }
+
+    let mut desc = dom
+        .element_name(node)
+        .map(|name| name.local.to_string())
+        .unwrap_or_else(|| format!("element({node:?})"));
+    let mut id_attr = None;
+    let mut class_attr = None;
+    let mut data_element = None;
+    let mut data_member = None;
+    for attr in dom.attributes(node) {
+        match attr.name.local.as_ref() {
+            "id" => id_attr = Some(attr.value.to_owned()),
+            "class" => class_attr = Some(attr.value.to_owned()),
+            "data-element" => data_element = Some(attr.value.to_owned()),
+            "data-member" => data_member = Some(attr.value.to_owned()),
+            _ => {}
+        }
+    }
+    if let Some(id_attr) = id_attr.filter(|s| !s.is_empty()) {
+        let _ = write!(desc, "#{id_attr}");
+    }
+    if let Some(class_attr) = class_attr.filter(|s| !s.is_empty()) {
+        let mut tokens = class_attr.split_ascii_whitespace();
+        if let Some(first) = tokens.next() {
+            let _ = write!(desc, ".{first}");
+        }
+        if let Some(second) = tokens.next() {
+            let _ = write!(desc, ".{second}");
+        }
+        if tokens.next().is_some() {
+            desc.push_str(".+");
+        }
+    }
+    if let Some(data_element) = data_element.filter(|s| !s.is_empty()) {
+        let _ = write!(desc, "[data-element={data_element}]");
+    }
+    if let Some(data_member) = data_member.filter(|s| !s.is_empty()) {
+        let _ = write!(desc, "[data-member={data_member}]");
+    }
+    desc
 }

@@ -22,6 +22,14 @@ fn user_grouped(label: Option<&str>) -> EdgeAssertion {
     }
 }
 
+fn cites() -> EdgeAssertion {
+    EdgeAssertion::Semantic {
+        sub_kind: SemanticSubKind::Cites,
+        label: None,
+        decay_progress: None,
+    }
+}
+
 #[test]
 fn test_graph_new() {
     let graph = Graph::new();
@@ -266,6 +274,31 @@ fn test_assert_relation_merges_semantics_on_single_stored_edge() {
     assert_eq!(payload.label(), Some("tab-group"));
     // Two semantic sub-kinds on the same stored edge → two relation rows.
     assert_eq!(graph.relations().count(), 2);
+}
+
+#[test]
+fn test_statement_bucket_keeps_multiple_predicates_on_one_stored_edge() {
+    let mut graph = Graph::new();
+    let a = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
+    let b = graph.add_node("https://b.com".to_string(), Point2D::new(1.0, 1.0));
+
+    graph.assert_relation(a, b, cites()).unwrap();
+    graph
+        .assert_semantic_predicate(a, b, "https://schema.org/citation".to_string())
+        .unwrap();
+
+    assert_eq!(graph.edge_count(), 1);
+    let edge_key = graph.find_edge_key(a, b).unwrap();
+    let payload = graph.get_edge(edge_key).unwrap();
+    assert_eq!(payload.semantic_statements().len(), 2);
+    assert!(payload.semantic_statements().iter().any(|statement| {
+        statement.recognized_sub_kind == Some(SemanticSubKind::Cites)
+            && statement.predicate == "https://mere.computer/ns/rel#cites"
+    }));
+    assert!(payload.semantic_statements().iter().any(|statement| {
+        statement.recognized_sub_kind.is_none()
+            && statement.predicate == "https://schema.org/citation"
+    }));
 }
 
 #[test]

@@ -107,6 +107,10 @@ struct Activation {
     /// and scrolls to the active one. Empty until a find query, on an empty query, or
     /// when a new document arrives (a stale match set must not survive). (Find-in-page.)
     find_matches: Vec<Vec<[f32; 4]>>,
+    /// The latest actor-resolved HTML page-text selection for this activation: full-
+    /// document rects plus plain text. `None` until a selection query lands, when the
+    /// query collapses, or after a navigation/resize invalidates it. (HTML selection.)
+    page_text_selection: Option<crate::content::TextSelectionMessage>,
     /// The most recent focused-document Serval observables the actor reported, when
     /// its active lane owns a real DOM/layout surface.
     engine_stats: Option<ContentEngineStats>,

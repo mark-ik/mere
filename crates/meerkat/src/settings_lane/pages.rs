@@ -20,8 +20,8 @@ impl WindowCtx<'_> {
     }
 
     /// The `pelt` (app) provider: each page's controls built from the host's current state via
-    /// the shared apparatus section builders, so the apparatus pane and the lane page never
-    /// drift. (Settings lane P1.)
+    /// the shared settings control builders, so the lane pages stay one source of truth.
+    /// (Settings lane P1.)
     pub(crate) fn pelt_settings_page(&self, page: &str) -> Option<SettingsPage> {
         let (title, items): (&str, Vec<PaneItem>) = match page {
             // Appearance carries the theme buttons plus the active-tab cap (migrated from the
@@ -40,6 +40,7 @@ impl WindowCtx<'_> {
             "scene" => ("Scene", scene_section_items()),
             "crawl" => ("Crawl", self.crawl_settings_items()),
             "scripts" => ("Scripts", self.script_settings_items()),
+            "wallet" => ("Wallet", self.wallet_settings_items()),
             "menu" => ("Menu", self.menu_settings_items()),
             _ => return None,
         };
@@ -601,6 +602,93 @@ impl WindowCtx<'_> {
                     format!("{}  →  {}{net}", b.origin, b.component_path.display()),
                 ));
             }
+        }
+        items
+    }
+
+    /// The `pelt/wallet` page: startup unlock policy for device-local wallet secrets.
+    /// Radios drain `wallet:startup:<mode>` and persist to `settings.json`. `auto_os`
+    /// is the current implemented path; `prompt` and `locked` are honest startup modes.
+    /// When startup stayed locked, an explicit `Unlock now with OS store` button can open the
+    /// local sealed records for this launch without changing the persisted startup policy.
+    pub(crate) fn wallet_settings_items(&self) -> Vec<PaneItem> {
+        let mode = self.view.wallet_unlock_mode.unwrap_or_default();
+        let locked = self.view.wallet_locked.unwrap_or(false);
+        let mut items = vec![
+            PaneItem::text("app-title", "Startup unlock"),
+            PaneItem::text(
+                "app-row-muted",
+                "Controls how this device opens its local wallet secrets at launch.",
+            ),
+            PaneItem::radio(
+                mode == session_runtime::StartupUnlockMode::AutoOs,
+                "Auto-unlock with OS store".to_string(),
+                "wallet:startup:auto_os".to_string(),
+            ),
+            PaneItem::text(
+                "app-row-muted",
+                "Windows uses DPAPI today. Other platforms stay locked until their OS backend lands.",
+            ),
+            PaneItem::radio(
+                mode == session_runtime::StartupUnlockMode::Prompt,
+                "Prompt at launch".to_string(),
+                "wallet:startup:prompt".to_string(),
+            ),
+            PaneItem::text(
+                "app-row-muted",
+                "Declared now; full passphrase prompt chrome is still pending.",
+            ),
+            PaneItem::radio(
+                mode == session_runtime::StartupUnlockMode::Locked,
+                "Stay locked".to_string(),
+                "wallet:startup:locked".to_string(),
+            ),
+            PaneItem::text(
+                "app-row-muted",
+                "Starts without unlocking local secret records. Sync/comms wait for a later unlock flow.",
+            ),
+        ];
+        items.push(PaneItem::text("app-title", "Current state"));
+        if locked {
+            items.push(PaneItem::text(
+                "app-row",
+                "Device-local sealed wallet records are still locked this launch.",
+            ));
+            if session_runtime::auto_unlock_backend_available() {
+                items.push(PaneItem::button(
+                    "app-btn",
+                    "Unlock now with OS store".to_string(),
+                    "wallet:unlock:auto_os".to_string(),
+                ));
+                items.push(PaneItem::text(
+                    "app-row-muted",
+                    "This is a one-shot unlock for the current launch. It does not rewrite the startup setting above.",
+                ));
+            } else {
+                items.push(PaneItem::text(
+                    "app-row-muted",
+                    "This build has no OS-store unlock backend on this platform yet.",
+                ));
+            }
+        } else {
+            items.push(PaneItem::text(
+                "app-row",
+                "Device-local wallet records are available this launch.",
+            ));
+            if mode != session_runtime::StartupUnlockMode::AutoOs {
+                items.push(PaneItem::button(
+                    "app-btn",
+                    "Lock now".to_string(),
+                    "wallet:lock".to_string(),
+                ));
+                items.push(PaneItem::text(
+                    "app-row-muted",
+                    "This drops back to the persisted prompt/locked startup policy for later reads in this launch.",
+                ));
+            }
+        }
+        if let Some(status) = &self.view.wallet_unlock_status {
+            items.push(PaneItem::text("app-row-muted", status.clone()));
         }
         items
     }

@@ -1,13 +1,15 @@
 # Persona Wallet — The Universal Carry Layer
 
-**Status (2026-07-03):** storage slice, first host-adoption slice, typed signed-grant
+**Status (2026-07-04):** storage slice, first host-adoption slice, typed signed-grant
 slice, remote-auth grant issuance slice, wrapped private-epoch crypto helper slice,
 pairing-transcript helper slice, pairing ticket/code helper slice, first Meerkat
 pairing-host slice, delegated-device response/SAS preview slice, enrollment-bundle
 slice plus delegatee enrollment-host/bootstrap-preservation slice, and the first
 `private.read` host/restore slice plus pairing-expiry/artifact-coherence hardening
 slice plus first capability-slot wiring slice plus first delegated-device
-revocation slice landed. Companion to the
+revocation slice landed, plus the encrypted-vault design slice and the first
+local sealed-record unlock/migration slice plus the startup-unlock setting /
+locked-startup flow slice. Companion to the
 [persona_transport_unlinkability_plan](2026-06-25_persona_transport_unlinkability_plan.md).
 The wallet is "Layer 0", the carry layer everything else references. Most of what sits
 under it exists or is named in code; the identity-level and persona-level wallet manifest
@@ -32,10 +34,12 @@ private epoch against that local delegated-device identity. Remote-auth revocati
 also mark a delegated device revoked, clear its persona wallet slot grants, block new
 enrollment-bundle export, rotate future-write private epochs when that device had
 `private.read`, and refresh the remaining pairing-backed delegated grants with new wrapped
-epoch material for the rotated head. The remaining gap is still the actual PAKE/QR chrome,
-transport UI around that shared secret, per-persona encryption-at-rest and epoch-history
-usage beyond the current epoch, copy-mode export/import, and replacing the temporary
-plaintext seed/epoch/device-identity/wrapping-key bridges with the encrypted vault path.
+epoch material for the rotated head. The identity seed, local delegated-device identity,
+owner-side wrapping-key bridge, and temporary persona epoch bridge now all have
+sealed-record migration paths under the new vault seam; the remaining gap is the actual
+PAKE/QR chrome, transport UI around that shared secret, per-persona encryption-at-rest and
+epoch-history usage beyond the current epoch, copy-mode export/import, and non-Windows
+startup unlock backends.
 
 This doc answers three questions that turned out to be one: how do you *carry* a persona
 across devices, is that mechanism the same for engrams and history, and is data private
@@ -332,6 +336,125 @@ Past ciphertext already handed to a revoked remote-auth device remains readable 
 the old epoch. That is not a flaw in the plan; it is the honest "no retroactive recall"
 boundary stated elsewhere in this doc.
 
+## The encrypted vault seam (designed 2026-07-04)
+
+The vault replaces the transitional plaintext bridges (`identity/master.seed`,
+`identity/local-device.json`, `identity/remote-auth-wrapping-keys.json`,
+`personas/<id>/private-epoch-bridge.json`). Design fixed here before the
+implementation slice; the shape is Firefox-like (typed metadata outside,
+key-protected secrets inside), with an Anytype-like key hierarchy and
+browser-like optional OS integration.
+
+### Boundary
+
+- `session-runtime::wallet_store` stays the typed clear-metadata layer:
+  manifests, roster, grant refs, paths. Manifests point at sealed records and
+  never contain secret bytes.
+- The sealed-record store is a separate concern owning secret material, unlock
+  policy, and record formats. **Decided (2026-07-04): it lands as a
+  sealed-record backend inside `crates/persona/identity`, beside the existing
+  slot vault, and `session-runtime` consumes it** (the dependency edge already
+  exists: `session-runtime` depends on `identity`). No new crate. The rule
+  this placement enforces: **one unlock ladder** — the record backend shares
+  identity's `PassphraseEncryptedStorage` substrate (Argon2id +
+  ChaCha20-Poly1305), `UnlockTier` vocabulary, and zeroize discipline. Two
+  parallel KDF/unlock stacks is the failure mode. One vault root, one unlock
+  ceremony, one KDF config; record classes reuse `UnlockTier`.
+- Small versioned sealed records, not one blob: `identity/vault/*.cbor` and
+  `personas/<id>/vault/*.cbor`, each AEAD-sealed (`xchacha20poly1305-v1`, as
+  `wallet_grant` already does) with typed AAD naming the record kind, owner,
+  and schema version. Epoch history is append-shaped from the start:
+  `personas/<id>/vault/epochs/<epoch_id>.cbor` per epoch, matching
+  `epoch_history_ref` and keeping revocation-driven rotation cheap. The
+  single-file whole-rewrite backend stays fine for credential slots; it is not
+  the shape for rotating history.
+
+### Two ladders, never entangled
+
+- **Identity ladder (unchanged):** persona signing keys derive from the master
+  seed via `BLAKE3("persona" || persona_id)`, and only from the seed. A fresh
+  device holding the seed re-derives identical personas. Nothing in the vault
+  participates in identity derivation.
+- **Encryption ladder (the vault):** passphrase (Argon2id) unlocks a
+  **per-device vault root key**; the vault root wraps the locally stored seed
+  and local-only device records; seed-derived subkeys seal everything that
+  syncs. The vault root never syncs and never derives identity.
+
+### The sync invariant
+
+Anything syncable is sealed under keys derived from the master seed, never
+under the vault root. Otherwise fresh-device restore is circular (the vault
+root needed to read the record only exists on the old device). Restore order
+on a fresh device: obtain the seed (recovery phrase or copy-mode pairing),
+re-derive wrap keys, read the synced sealed records, then mint a new local
+vault root from the new device's passphrase. Record classes:
+
+- **Syncable identity secrets** (seed-derived wrap): recovery wraps,
+  remote-auth wrapping keys the owner devices need for refresh/revoke.
+- **Syncable persona secrets** (seed-derived wrap): private epoch history,
+  future content-key history.
+- **Local-only device secrets** (vault-root wrap, never sync): this install's
+  delegated-device private key, cached pairing ticket, convenience-unlock
+  state. Syncing a delegated-device key would collapse remote-auth's
+  least-privilege story.
+
+Two distinct artifacts, distinct lifetimes: the **recovery phrase** encodes
+the master seed (BIP39-shaped, loss means master rotation); the **passphrase**
+unlocks one device's vault (loss means re-enrolling that device).
+
+### Unlock policy is the first implementation decision
+
+Meerkat's bootstrap currently reads `identity/master.seed` at startup to bring
+up sync/comms. Once sealed, every launch needs one of:
+
+1. **OS-keychain silent unlock** (DPAPI / Keychain / libsecret wraps the vault
+   root): convenience layer, never the root of trust; on Linux without a
+   secure store, fall back to prompting, never to plaintext.
+2. **Passphrase prompt in chrome**: does not exist yet; needs a locked-mode
+   startup state.
+3. **Locked degraded mode**: host runs, sync/comms/private-lane come up on
+   unlock.
+
+Exposed as a setting (auto-unlock via OS store / prompt at launch / stay
+locked), not a hardcoded pick. Choosing (1) as the shipped default makes the
+OS wrap effectively mandatory on day one; say that in the setting's own copy.
+First implementation slice landed 2026-07-04: `StartupUnlockMode` now exists
+in `persona/identity`, `session-runtime` currently defaults to `AutoOs`, and
+Windows DPAPI is the first implemented `AutoOs` backend. `Prompt` and
+`Locked` are now surfaced in Meerkat's `pelt/wallet` settings page as persisted
+startup policies. A follow-on slice now adds an explicit `Unlock now with OS store`
+action for the current launch; full passphrase prompt chrome is still pending.
+
+### Retention policy for the wrapping-key bridge
+
+The revocation-refresh slice retains pairing-derived wrapping keys so
+still-authorized grants can be re-signed with rotated epoch material. Retained
+wrapping keys are standing secrets: a machine compromised while unlocked can
+use them to mint enrollments. The vault must carry an explicit retention
+policy for them (indefinite / time-boxed / re-derive per ceremony) as a
+first-class field, not inherit the bridge's implicit indefinite retention.
+Default leans time-boxed; the tradeoff is silent grant refresh vs standing
+mint capability.
+
+### API sketch (typed and boring, illustrative signatures only)
+
+`unlock_identity_vault(..)`, `load_master_seed()`,
+`store_local_device_identity(..)`, `store_remote_auth_wrapping_key(..)`,
+`load_current_epoch(persona_id)`, `rotate_epoch(persona_id)`,
+`export_copy_bundle(..)`. Grant validation keeps riding the existing
+`wallet_grant` helpers (`private.read` requires wrapped epoch material).
+
+### Non-goals
+
+- No whole-wallet blob encryption: it breaks grant refresh, persona-scoped
+  export, and diffable recovery.
+- Local compromise of an unlocked machine stays a real attack surface
+  (Anytype states the same honestly); the vault narrows at-rest exposure, it
+  does not solve endpoint compromise.
+- Once the vault lands, the host stops reading plaintext `master.seed` and
+  `private-epoch-bridge.json`; the bridges become migration shims only, then
+  get deleted.
+
 ## Exists vs gap
 
 **Built, shipped, or already source-grounded:** persona identity (master Ed25519 +
@@ -351,8 +474,16 @@ both evaluated in the substrate spike.
    adoption landed 2026-07-02** in `session-runtime::wallet_store` and Meerkat startup:
    identity seed/path helpers, deterministic persona chain-root derivation, startup/session-load
    bootstrap of wallet + roster + persona wallet, and `sync`/`comms` now sharing the
-   identity root instead of separate ad hoc seed files. Still open: replacing the
-   transitional plaintext `identity/master.seed` bridge with the encrypted vault handoff.
+   identity root instead of separate ad hoc seed files. **First encrypted-vault host
+   adoption landed 2026-07-04**: `identity/master.seed` and
+   `identity/local-device.json` now auto-migrate into sealed local records when a local
+   vault root is available, `identity/remote-auth-wrapping-keys.json` now also
+   self-migrates into a seed-derived sealed record, the temporary
+   `personas/<id>/private-epoch-bridge.json` now migrates into a sealed record using the
+   seed-derived store on copy roots and the local vault-root store on delegated installs,
+   and `session-runtime` now has a typed startup unlock mode seam with a Windows-first
+   `AutoOs` backend. Still open: exposing unlock mode as a setting/chrome flow and
+   non-Windows `AutoOs` backends.
 2. **Per-persona encryption-at-rest for eidetic** — private-lane payloads sealed under a
    persona-owned private epoch history, with per-device wrapped copies for remote-auth
    devices. Today privacy is a metadata tag, encryption is wire-only.
@@ -602,6 +733,56 @@ current head, and replacement of the temporary plaintext bridges as the live sea
   metadata for the delegatee side. This keeps the manual/admin recovery path viable after
   revocation-triggered epoch rotation, without pretending the encrypted-vault replacement
   for that bridge is done.
+- **2026-07-04** — designed the encrypted vault seam (new section above), from an agent
+  design take reviewed against the code. Key fixes over the raw take: one unlock ladder
+  (decided with Mark same day: a sealed-record backend inside `persona/identity`, consumed
+  by `session-runtime`; no new crate), identity ladder vs encryption ladder kept strictly separate (persona
+  keys derive from the seed only; vault subkeys only seal), the sync invariant (per-device
+  vault root never syncs; syncable records sealed under seed-derived keys, which is what
+  makes fresh-device restore non-circular), startup unlock policy named as the first
+  implementation decision and exposed as a setting, and an explicit retention policy for
+  the pairing wrapping-key bridge. Record format: per-record CBOR AEAD
+  (`xchacha20poly1305-v1` + typed AAD), append-shaped epoch history. This was the design
+  checkpoint before the code slice below landed later the same day.
+- **2026-07-04** — landed the first encrypted-vault implementation slice:
+  `crates/persona/identity/src/sealed_record_storage.rs` now provides a typed sealed-record
+  backend, `crates/persona/identity/src/startup_unlock.rs` now declares
+  `StartupUnlockMode::{AutoOs, Prompt, Locked}` and implements a Windows DPAPI-backed
+  local vault root for `AutoOs`, and `session-runtime::wallet_store` now uses that local
+  secret store to auto-migrate `identity/master.seed` and `identity/local-device.json`
+  into sealed records on read/write. The owner-side
+  `identity/remote-auth-wrapping-keys.json` bridge now also migrates into the seed-derived
+  sealed-record path. Verified with focused `identity` tests plus `cargo check -p
+  session-runtime --lib` and `cargo check -p meerkat --bin meerkat`. Prompt/locked chrome,
+  non-Windows `AutoOs`, and the per-persona epoch bridge remain open.
+- **2026-07-04** — landed the next encrypted-vault migration slice:
+  `session-runtime::wallet_store` now also seals the temporary
+  `personas/<id>/private-epoch-bridge.json` record. Copy-seeded roots use the
+  seed-derived sealed-record store; delegated installs without the master seed fall back to
+  the local vault-root store so the currently granted private epoch still rests encrypted at
+  rest on the delegatee side. Legacy plaintext epoch-bridge JSON now auto-migrates on
+  read when a sealing backend is available. Verified with `cargo check -p session-runtime
+  --lib`, `cargo check -p meerkat --bin meerkat`, and focused `wallet_store` tests.
+- **2026-07-04** — landed the first startup-unlock flow slice:
+  `settings.json` now persists `StartupUnlockMode`, Meerkat now exposes that as the
+  `pelt/wallet` settings page (`auto_os` / `prompt` / `locked`), wallet bootstrap now
+  classifies sealed-but-unavailable local secrets as `Locked` instead of pretending they are
+  absent, and `sync` / `comms` now stay offline rather than silently minting an ephemeral
+  identity when the copy-root seed is sealed but locked. Full unlock-after-launch chrome
+  still remains open.
+- **2026-07-04** — landed the next unlock flow slice:
+  `session-runtime` now carries a session-scoped explicit unlock override, so a locked
+  launch can open device-local sealed records with the OS store without rewriting the
+  persisted startup policy. Meerkat's `pelt/wallet` page now shows current locked/unlocked
+  state plus an `Unlock now with OS store` action, and the long-lived `sync` / `comms`
+  actors now retry backend setup on `UnlockNow` instead of dying permanently at boot.
+- **2026-07-04** — landed the relock follow-on:
+  the session-scoped override can now be cleared again without touching the persisted startup
+  mode, Meerkat's wallet page now shows `Lock now` after a prompt/locked launch was explicitly
+  unlocked, and the sync/comms actors now publish an offline transition when that relock fires
+  so the toolbar chip and comms pane do not keep stale success state. Still open:
+  passphrase-entry chrome for `Prompt`, a real passphrase-wrapped local-root backend, and
+  delegated device follow-through beyond the seed-backed lanes.
 
 ## Findings (research, 2026-06-25)
 

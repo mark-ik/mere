@@ -9,7 +9,7 @@
 //! `apply_edited_theme` (re-derive + validate + persist + re-apply) path. Split
 //! from `frame_ops.rs` to keep files under the 600-LOC ceiling.
 
-use super::{WindowCtx, apparatus};
+use super::WindowCtx;
 
 impl WindowCtx<'_> {
     /// Switch the active theme: re-resolve from the registry, rebuild the chrome
@@ -46,9 +46,9 @@ impl WindowCtx<'_> {
         self.view.request_redraw();
     }
 
-    /// The registered themes as apparatus options (id + display name + active),
+    /// The registered themes as settings options (id + display name + active),
     /// listed from the registry — built-ins first, then user / mod themes.
-    pub(super) fn theme_options(&self) -> Vec<apparatus::ThemeOption> {
+    pub(super) fn theme_options(&self) -> Vec<crate::settings_lane::ThemeOption> {
         let active = self
             .shared
             .presentation
@@ -59,7 +59,7 @@ impl WindowCtx<'_> {
             .theme
             .list()
             .iter()
-            .map(|def| apparatus::ThemeOption {
+            .map(|def| crate::settings_lane::ThemeOption {
                 active: def.id.to_ascii_lowercase() == active,
                 id: def.id.clone(),
                 name: def.name.clone(),

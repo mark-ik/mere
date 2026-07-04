@@ -20,7 +20,7 @@
 //! construction shape; everything property-setter-shaped lives here.
 
 use std::collections::HashSet;
-use std::time::SystemTime;
+use std::time::{Duration, UNIX_EPOCH};
 
 use euclid::default::Point2D;
 
@@ -244,15 +244,27 @@ impl Graph {
         true
     }
 
-    /// Append an open literal property, deduplicating exact `(predicate, value)`
-    /// pairs. Returns whether the property was newly added. The sanctioned write
-    /// path for `Node::properties` — the linked-data ingest previously pushed
-    /// through `get_node_mut` (write-path migration, 2026-07-01).
+    /// Append an open literal property, deduplicating the full literal record
+    /// `(predicate, value, datatype, lang)`. Returns whether the property was
+    /// newly added. The sanctioned write path for `Node::properties` — the
+    /// linked-data ingest previously pushed through `get_node_mut` (write-path
+    /// migration, 2026-07-01).
     pub(crate) fn append_node_property(&mut self, key: NodeKey, property: NodeProperty) -> bool {
         let Some(node) = self.inner.node_weight_mut(key) else {
             return false;
         };
-        if node.properties.contains(&property) {
+        if let Some(existing) = node
+            .properties
+            .iter_mut()
+            .find(|existing| existing.content_eq(&property))
+        {
+            if existing.provenance_iri != property.provenance_iri
+                || existing.asserted_at_ms != property.asserted_at_ms
+            {
+                existing.provenance_iri = property.provenance_iri;
+                existing.asserted_at_ms = property.asserted_at_ms;
+                return true;
+            }
             return false;
         }
         node.properties.push(property);
@@ -467,10 +479,14 @@ impl Graph {
     }
 
     pub(crate) fn touch_node_last_visited_now(&mut self, key: NodeKey) -> bool {
+        self.set_node_last_visited_at_ms(key, Graph::epoch_ms())
+    }
+
+    pub(crate) fn set_node_last_visited_at_ms(&mut self, key: NodeKey, timestamp_ms: u64) -> bool {
         let Some(node) = self.inner.node_weight_mut(key) else {
             return false;
         };
-        node.last_visited = std::time::SystemTime::now();
+        node.last_visited = UNIX_EPOCH + Duration::from_millis(timestamp_ms);
         true
     }
 

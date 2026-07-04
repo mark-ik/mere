@@ -21,7 +21,6 @@ use register_theme::chrome::ChromeTheme;
 use session_runtime::settings_store;
 
 use crate::WindowCtx;
-use crate::apparatus::{engine_section_items, physics_section_items, theme_section_items};
 use crate::list_pane::PaneItem;
 use crate::scene_settings::scene_section_items;
 use crate::settings_pane_view::{SettingsPane, SettingsSpineEntry};
@@ -78,6 +77,10 @@ pub(crate) fn settings_index(namespace: &str) -> Vec<SettingsPageRef> {
                 title: "Scripts",
             },
             SettingsPageRef {
+                id: "wallet",
+                title: "Wallet",
+            },
+            SettingsPageRef {
                 id: "menu",
                 title: "Menu",
             },
@@ -88,6 +91,8 @@ pub(crate) fn settings_index(namespace: &str) -> Vec<SettingsPageRef> {
     }
 }
 
+mod controls;
 mod ops;
 mod pages;
+pub(crate) use controls::*;
 pub(crate) use ops::*;

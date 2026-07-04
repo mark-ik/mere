@@ -26,6 +26,7 @@ use std::hash::Hash;
 use layout_dom_api::LayoutDom;
 use netrender::Scene;
 use paint_list_api::{ColorF, DeviceIntSize};
+use rustc_hash::FxHashSet;
 use serval_layout::{
     FragmentPlane, ImageLoader, IncrementalLayout, ScrollOffsets, ServalPaintList,
 };
@@ -64,6 +65,7 @@ const FOCUS_RING_WIDTH: f32 = 2.0;
 /// What to paint for a focused text field's cursor: the element, the caret's byte
 /// offset, and an optional selected byte range. Byte offsets (the layer works in
 /// bytes); the host converts from its char-index model.
+#[derive(Clone, Copy)]
 pub(crate) struct TextCursor {
     pub node: NodeId,
     pub caret: usize,
@@ -92,6 +94,40 @@ pub(crate) fn scene_from_session(
     ))
 }
 
+pub(crate) fn scene_from_session_excluding_subtrees(
+    session: &IncrementalLayout<NodeId>,
+    dom: &ScriptedDom,
+    cursor: Option<TextCursor>,
+    scroll: &ScrollOffsets<NodeId>,
+    skipped_subtrees: &FxHashSet<NodeId>,
+    width: u32,
+    height: u32,
+) -> Scene {
+    paint_list_render::translate_paint_list(&paint_list_from_session_excluding_subtrees(
+        session,
+        dom,
+        cursor,
+        scroll,
+        skipped_subtrees,
+        width,
+        height,
+    ))
+}
+
+pub(crate) fn scene_from_session_subtree(
+    session: &IncrementalLayout<NodeId>,
+    dom: &ScriptedDom,
+    root: NodeId,
+    cursor: Option<TextCursor>,
+    scroll: &ScrollOffsets<NodeId>,
+    width: u32,
+    height: u32,
+) -> Option<Scene> {
+    Some(paint_list_render::translate_paint_list(
+        &paint_list_from_session_subtree(session, dom, root, cursor, scroll, width, height)?,
+    ))
+}
+
 /// The [`ServalPaintList`] half of [`scene_from_session`]: emit from the session,
 /// then append the focused-field selection (under) + caret (over) and scrollbar
 /// overlays, all sourced from the session's retained layout so they match the body.
@@ -103,15 +139,108 @@ fn paint_list_from_session(
     width: u32,
     height: u32,
 ) -> ServalPaintList {
+    let merged = merged_scroll_offsets(session, scroll);
     let mut plist =
         session.emit_paint_list(dom, scroll, DeviceIntSize::new(width as i32, height as i32));
-    // The cursor's node is `runner.focus()` (the host builds it from there), so the focus
-    // ring below reads it without a separate focus parameter threaded through.
-    let focus_node = cursor.as_ref().map(|c| c.node);
+    append_cursor_and_focus(&mut plist, session, dom, &merged, cursor);
+    serval_layout::push_scrollbars(&mut plist, dom, session.fragments(), &merged);
+    plist
+}
 
-    // Caret + selection are text-field overlays: paint them only for editable focus. The
-    // focus ring below still reads `focus_node`, so a focused button / orrery card rings
-    // without a spurious editing caret. (Phase 2a follow-up.)
+fn paint_list_from_session_excluding_subtrees(
+    session: &IncrementalLayout<NodeId>,
+    dom: &ScriptedDom,
+    cursor: Option<TextCursor>,
+    scroll: &ScrollOffsets<NodeId>,
+    skipped_subtrees: &FxHashSet<NodeId>,
+    width: u32,
+    height: u32,
+) -> ServalPaintList {
+    let merged = merged_scroll_offsets_excluding_subtrees(session, dom, scroll, skipped_subtrees);
+    let mut plist = session.emit_paint_list_excluding_subtrees(
+        dom,
+        scroll,
+        skipped_subtrees,
+        DeviceIntSize::new(width as i32, height as i32),
+    );
+    let cursor = cursor.filter(|c| {
+        !skipped_subtrees
+            .iter()
+            .any(|&root| node_under_root(dom, c.node, root))
+    });
+    append_cursor_and_focus(&mut plist, session, dom, &merged, cursor);
+    serval_layout::push_scrollbars(&mut plist, dom, session.fragments(), &merged);
+    plist
+}
+
+fn paint_list_from_session_subtree(
+    session: &IncrementalLayout<NodeId>,
+    dom: &ScriptedDom,
+    root: NodeId,
+    cursor: Option<TextCursor>,
+    scroll: &ScrollOffsets<NodeId>,
+    width: u32,
+    height: u32,
+) -> Option<ServalPaintList> {
+    let merged = merged_scroll_offsets_under_root(session, dom, scroll, root);
+    let mut plist = session.emit_subtree_paint_list(
+        dom,
+        root,
+        scroll,
+        DeviceIntSize::new(width as i32, height as i32),
+    )?;
+    let cursor = cursor.filter(|c| node_under_root(dom, c.node, root));
+    append_cursor_and_focus(&mut plist, session, dom, &merged, cursor);
+    serval_layout::push_scrollbars(&mut plist, dom, session.fragments(), &merged);
+    Some(plist)
+}
+
+fn merged_scroll_offsets(
+    session: &IncrementalLayout<NodeId>,
+    scroll: &ScrollOffsets<NodeId>,
+) -> ScrollOffsets<NodeId> {
+    let mut merged = session.element_scroll().clone();
+    for (k, v) in scroll {
+        merged.insert(*k, *v);
+    }
+    merged
+}
+
+fn merged_scroll_offsets_under_root(
+    session: &IncrementalLayout<NodeId>,
+    dom: &ScriptedDom,
+    scroll: &ScrollOffsets<NodeId>,
+    root: NodeId,
+) -> ScrollOffsets<NodeId> {
+    merged_scroll_offsets(session, scroll)
+        .into_iter()
+        .filter(|(node, _)| node_under_root(dom, *node, root))
+        .collect()
+}
+
+fn merged_scroll_offsets_excluding_subtrees(
+    session: &IncrementalLayout<NodeId>,
+    dom: &ScriptedDom,
+    scroll: &ScrollOffsets<NodeId>,
+    skipped_subtrees: &FxHashSet<NodeId>,
+) -> ScrollOffsets<NodeId> {
+    merged_scroll_offsets(session, scroll)
+        .into_iter()
+        .filter(|(node, _)| {
+            !skipped_subtrees
+                .iter()
+                .any(|&root| node_under_root(dom, *node, root))
+        })
+        .collect()
+}
+
+fn append_cursor_and_focus(
+    plist: &mut ServalPaintList,
+    session: &IncrementalLayout<NodeId>,
+    dom: &ScriptedDom,
+    merged_scroll: &ScrollOffsets<NodeId>,
+    cursor: Option<TextCursor>,
+) {
     if let Some(c) = cursor.filter(|c| c.editable) {
         if let Some((start, end)) = c.selection {
             let rects = session.selection_rects(dom, c.node, start, end);
@@ -127,9 +256,6 @@ fn paint_list_from_session(
             plist.push_selection(&rects, highlight);
         }
         if let Some(rect) = session.caret_rect(dom, c.node, c.caret, CARET_WIDTH) {
-            // The caret tracks the field's cascaded text colour (`caret-color:
-            // auto`), so it stays legible on every theme; fall back to the light
-            // default if the colour can't be resolved.
             let caret = session
                 .caret_color(dom, c.node)
                 .map(|[r, g, b, a]| ColorF { r, g, b, a })
@@ -137,18 +263,32 @@ fn paint_list_from_session(
             plist.push_caret(rect, caret);
         }
     }
+    push_focus_ring(
+        plist,
+        session,
+        dom,
+        merged_scroll,
+        cursor.as_ref().map(|c| c.node),
+    );
+}
 
-    // The body paint folds the session's retained `element_scroll` (the panes' wheel offsets)
-    // in via `emit_paint_list`; the scrollbar thumbs + focus ring read offsets explicitly, so
-    // merge `element_scroll` with the host's scroll-into-view targets for them (host wins on
-    // conflict, matching the engine's `merged_scroll`). (Host-scroll P2.)
-    let mut merged = session.element_scroll().clone();
-    for (k, v) in scroll {
-        merged.insert(*k, *v);
+pub(crate) fn node_under_root(dom: &ScriptedDom, node: NodeId, root: NodeId) -> bool {
+    let mut cursor = Some(node);
+    while let Some(id) = cursor {
+        if id == root {
+            return true;
+        }
+        // A drained mutation may reference a node already dropped later in the
+        // same batch (insert-then-remove churn); the read accessors panic on
+        // dead ids by contract, so gate on the never-panicking `is_live`.
+        // Unclassifiable counts as not-under-root: callers fold that into
+        // base-dirty, costing one base repaint, never a missed orrery repaint.
+        if !dom.is_live(id) {
+            return false;
+        }
+        cursor = dom.parent(id);
     }
-    serval_layout::push_scrollbars(&mut plist, dom, session.fragments(), &merged);
-    push_focus_ring(&mut plist, session, dom, &merged, focus_node);
-    plist
+    false
 }
 
 /// Any `LayoutDom` document (with image decode) → `netrender::Scene`, through

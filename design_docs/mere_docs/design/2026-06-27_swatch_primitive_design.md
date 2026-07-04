@@ -161,13 +161,14 @@ What flattens them is purely the orrery draw, "one undirected line per pair"
    per-edge selection the graphlet-wiring open item #1 deferred.
 
 This aligns with the [petgraph / RDF plan](../implementation_strategy/2026-06-18_petgraph_rdf_plan.md),
-which already rules that multi-edge is the data-model truth (one edge per predicate)
-and visual edge-collapse is an experience-layer LOD setting. Cells-as-edges is that
-experience layer: the swatch reads the per-relation cells and chooses, per instance,
-whether to fan or collapse them, whether storage stays one-payload-per-pair (today)
-or moves to one-edge-per-predicate (that plan's P1). True parallel instances (two
-distinct `Cites` between one pair with separate metadata) ride that plan's multigraph
-storage if and when it lands; the swatch model needs no storage change to start.
+which rules that the multigraph is logical (one statement per fact, enumerated as
+`SemanticStatement` records inside the pair-local `EdgePayload` bucket, each with its
+own `StatementId` — the statement-bucket revision 2026-07-04) and visual edge-collapse
+is an experience-layer LOD setting. Cells-as-edges is that experience layer: the
+swatch reads the per-relation cells and chooses, per instance, whether to fan or
+collapse them; storage stays one payload per pair either way. True parallel instances
+(two distinct `Cites` between one pair with separate metadata) ride those statement
+records if and when P1 lands; the swatch model needs no storage change to start.
 
 ## 8. Visibility: a default plus non-propagating override stack
 

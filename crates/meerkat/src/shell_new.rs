@@ -55,6 +55,11 @@ impl Shell {
             Ok(session_runtime::WalletBootstrapMode::DelegatedEnrolled) => {
                 tracing::info!("wallet bootstrap preserved delegated-device wallet state");
             }
+            Ok(session_runtime::WalletBootstrapMode::Locked) => {
+                tracing::info!(
+                    "wallet startup is locked; sealed local secrets will stay unavailable until unlock support lands"
+                );
+            }
             Ok(session_runtime::WalletBootstrapMode::CopySeeded) => {}
             Err(err) => {
                 tracing::warn!(
@@ -267,9 +272,12 @@ impl Shell {
         });
         let disable_network_actors = std::env::var_os("MEERKAT_DISABLE_NETWORK_ACTORS").is_some();
         let (sync_handle, sync_rx) = if disable_network_actors {
-            armillary::spawn(sync_wake, |commands: Receiver<sync::SyncCommand>, _out| {
-                while commands.recv().is_ok() {}
-            })
+            armillary::spawn(
+                sync_wake,
+                |commands: Receiver<sync::SyncCommand>, _out| {
+                    while commands.recv().is_ok() {}
+                },
+            )
         } else {
             sync::spawn_sync(sync_wake, mere_root.clone(), sync::DEMO_MOOT)
         };
@@ -476,6 +484,16 @@ impl Shell {
             orrery.set_physics_damping(saved_settings.physics_damping);
             orrery.set_current_session(current_session_count);
         }
+        // The idle-cadence snapshot refresh's per-session byte budget, resolved from
+        // `settings.json` (`snapshot_byte_cap_mb`) to bytes once at boot, mirroring how
+        // `retention_keep_n` resolves its own default above. (Node/card summoning
+        // design, §5 item 4.)
+        const DEFAULT_SNAPSHOT_BYTE_CAP_MB: u32 = 16;
+        let thumbnail_byte_cap = saved_settings
+            .snapshot_byte_cap_mb
+            .unwrap_or(DEFAULT_SNAPSHOT_BYTE_CAP_MB) as usize
+            * 1024
+            * 1024;
         let mut app = Self {
             shared: SharedState {
                 content: Content {
@@ -507,6 +525,8 @@ impl Shell {
                     host_text: text::HostText::new(),
                     current_session_count,
                     graph_delta_log,
+                    thumbnail_byte_cap,
+                    thumbnail_bytes_this_session: 0,
                 },
                 presentation: Presentation {
                     theme,
@@ -527,6 +547,7 @@ impl Shell {
                     command_usage,
                     eviction_policy,
                     pending_compose_engram: None,
+                    snapshot_idle_refresh: saved_settings.snapshot_idle_refresh,
                 },
                 comms_handle,
                 sync_handle,
@@ -562,6 +583,7 @@ impl Shell {
             // anything) with no recorded pass yet. (Alembic B1.)
             last_activity: std::time::Instant::now(),
             last_forgetting: None,
+            last_snapshot_refresh: None,
             _kernel: armillary::KernelThread::new(),
         };
         let pane_count = app

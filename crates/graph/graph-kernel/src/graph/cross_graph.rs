@@ -191,10 +191,10 @@ mod tests {
         let node = a.inner.node_weight_mut(key).unwrap();
         node.title = "An Article".to_string();
         node.tags = HashSet::from(["read-later".to_string(), "research".to_string()]);
-        node.properties = vec![crate::types::NodeProperty {
-            predicate: "https://schema.org/datePublished".to_string(),
-            value: "2026-01-01".to_string(),
-        }];
+        node.properties = vec![crate::types::NodeProperty::new(
+            "https://schema.org/datePublished".to_string(),
+            "2026-01-01".to_string(),
+        )];
         node.is_pinned = true;
         (a, key)
     }

@@ -475,4 +475,32 @@ impl Orrery {
             kernel::graph::apply::GraphDeltaResult::NodeMetadataUpdated(true)
         )
     }
+
+    /// Stamp a preview thumbnail PNG onto the node `member`, if it exists. This mirrors
+    /// [`set_node_favicon`](Self::set_node_favicon): metadata-only, no reconcile, no layout
+    /// disturbance. Used when the host already rendered a snapshot preview and wants to persist
+    /// that exact image onto the node rather than keeping it only in a window-local cache.
+    pub fn set_node_thumbnail(
+        &mut self,
+        member: uuid::Uuid,
+        png_bytes: Vec<u8>,
+        width: u32,
+        height: u32,
+    ) -> bool {
+        let Some((key, _)) = self.graph.get_node_by_id(member) else {
+            return false;
+        };
+        matches!(
+            kernel::graph::apply::apply_graph_delta(
+                &mut self.graph,
+                kernel::graph::apply::GraphDelta::SetNodeThumbnail {
+                    key,
+                    png_bytes,
+                    width,
+                    height
+                },
+            ),
+            kernel::graph::apply::GraphDeltaResult::NodeMetadataUpdated(true)
+        )
+    }
 }

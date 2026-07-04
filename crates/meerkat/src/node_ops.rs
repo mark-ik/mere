@@ -10,15 +10,260 @@
 //! the durable content cache load / save. Factored out of `frame_ops.rs` to keep
 //! files under the 600-LOC ceiling.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 use forme::GraphMemberId;
 use orrery::{NodeShape, NodeState};
 use session_runtime::content_store;
 
+use crate::fetch::{ContentState, Fetched};
+use crate::resources::{ResourceLoader, ResourceStore};
+
 use super::{WindowCtx, fetch};
 
 impl WindowCtx<'_> {
+    fn persist_node_thumbnail_png(
+        &mut self,
+        member: GraphMemberId,
+        png_bytes: Vec<u8>,
+        width: u32,
+        height: u32,
+        url_hint: Option<String>,
+    ) {
+        let cache_url = self
+            .orrery()
+            .graph()
+            .get_node_by_id(member)
+            .map(|(_, node)| node.url().to_string())
+            .or(url_hint);
+        if let (Some(url), Some(data_uri)) = (cache_url, crate::render::png_data_uri(&png_bytes)) {
+            self.view.snapshot_data_uris.insert(
+                member,
+                crate::window_view::SnapshotDataUri { url, data_uri },
+            );
+        }
+        // Tally against the per-session thumbnail byte budget the idle-refresh pass
+        // checks (node/card summoning design, §5 item 4). This funnel accounts for
+        // every deposit path here; only the idle pass actually gates on the total.
+        self.shared.session.thumbnail_bytes_this_session += png_bytes.len();
+        self.orrery_mut()
+            .set_node_thumbnail(member, png_bytes, width, height);
+    }
+
+    pub(super) fn persist_scrying_thumbnail(
+        &mut self,
+        member: GraphMemberId,
+        thumbnail: crate::scrying_host::CapturedThumbnail,
+    ) {
+        self.persist_node_thumbnail_png(
+            member,
+            thumbnail.png_bytes,
+            thumbnail.width,
+            thumbnail.height,
+            thumbnail.url,
+        );
+    }
+
+    pub(super) fn persist_scrying_thumbnails(
+        &mut self,
+        thumbnails: Vec<(GraphMemberId, crate::scrying_host::CapturedThumbnail)>,
+    ) {
+        for (member, thumbnail) in thumbnails {
+            self.persist_scrying_thumbnail(member, thumbnail);
+        }
+    }
+
+    pub(super) fn persist_workbench_tile_thumbnail(&mut self, member: GraphMemberId) {
+        const PEEK_W: u32 = 300;
+        const PEEK_H: u32 = 390;
+        const RENDER_H: u32 = 600;
+        let url = self
+            .orrery()
+            .graph()
+            .get_node_by_id(member)
+            .map(|(_, node)| node.url().to_string());
+        // Read once, up front: every fallback below (no cached texture, a zero-sized
+        // one, or a failed readback) needs it to reproduce the tile's last-known
+        // scroll position rather than always the page top. (Node/card summoning
+        // design, §5 — the "exact last viewport" fix.)
+        let scroll = self.view.scroll.get(&member).copied().unwrap_or(0.0);
+        let Some(core) = self.render_core else {
+            return;
+        };
+        let Some(cached) = self.view.tile_textures.get(&member) else {
+            if let Some(url) = url.as_deref() {
+                self.persist_synthesized_tile_thumbnail(
+                    member, url, core, PEEK_W, PEEK_H, RENDER_H, scroll,
+                );
+            }
+            return;
+        };
+        let (tex_w, tex_h) = cached.size;
+        if tex_w == 0 || tex_h == 0 {
+            if let Some(url) = url.as_deref() {
+                self.persist_synthesized_tile_thumbnail(
+                    member, url, core, PEEK_W, PEEK_H, RENDER_H, scroll,
+                );
+            }
+            return;
+        }
+        let band_y = self.view.tile_bands.get(&member).copied().unwrap_or(0.0);
+        let viewport_h = self
+            .view
+            .tile_rects
+            .iter()
+            .find(|(m, _)| *m == member)
+            .map(|(_, rect)| (rect[3] - rect[1]).round().max(1.0) as u32)
+            .unwrap_or(tex_h);
+        let crop_y = (scroll - band_y).floor().max(0.0) as u32;
+        let crop_h = viewport_h.max(1).min(tex_h.saturating_sub(crop_y).max(1));
+        let rgba = crate::render::read_texture_rgba(
+            core.device(),
+            core.queue(),
+            &cached.tex,
+            tex_w,
+            tex_h,
+        );
+        let Some((png_bytes, width, height)) = crate::render::thumbnail_png_bytes_from_rgba(
+            &rgba,
+            tex_w,
+            tex_h,
+            Some((0, crop_y.min(tex_h.saturating_sub(1)), tex_w, crop_h)),
+            PEEK_W,
+            PEEK_H,
+        ) else {
+            if let Some(url) = url.as_deref() {
+                self.persist_synthesized_tile_thumbnail(
+                    member, url, core, PEEK_W, PEEK_H, RENDER_H, scroll,
+                );
+            }
+            return;
+        };
+        self.persist_node_thumbnail_png(member, png_bytes, width, height, None);
+    }
+
+    /// Also the idle-cadence snapshot-refresh pass's call target, once per open
+    /// window: same deposit, triggered by "sat idle a while" rather than an actual
+    /// boundary crossing. (Node/card summoning design, §5 item 4.)
+    pub(super) fn persist_workbench_boundary_thumbnails(&mut self) {
+        let focused = if self.workbench_active() {
+            self.view.focused_tile
+        } else {
+            None
+        };
+        if let Some(member) = focused {
+            self.persist_live_tile_thumbnail(member);
+        }
+        let members: Vec<_> = self.view.workbench.open_members().to_vec();
+        for member in members {
+            if Some(member) != focused {
+                self.persist_workbench_tile_thumbnail(member);
+            }
+        }
+    }
+
+    pub(super) fn persist_live_tile_thumbnail(&mut self, member: GraphMemberId) {
+        let Some(url) = self
+            .orrery()
+            .graph()
+            .get_node_by_id(member)
+            .map(|(_, node)| node.url().to_string())
+        else {
+            return;
+        };
+        if self.is_surface_tier(member, &url) {
+            if let Some(thumbnail) = self.view.scrying.capture_thumbnail(member) {
+                self.persist_scrying_thumbnail(member, thumbnail);
+            }
+        } else {
+            self.persist_workbench_tile_thumbnail(member);
+        }
+    }
+
+    pub(super) fn persist_live_tile_thumbnail_before_navigation(&mut self, member: GraphMemberId) {
+        if !self.workbench_active() || self.view.focused_tile != Some(member) {
+            return;
+        }
+        self.persist_live_tile_thumbnail(member);
+    }
+
+    pub(super) fn set_focused_tile(&mut self, next: Option<GraphMemberId>) {
+        let current = self.view.focused_tile;
+        if current == next {
+            return;
+        }
+        if let Some(member) = current {
+            self.persist_live_tile_thumbnail(member);
+        }
+        self.view.focused_tile = next;
+    }
+
+    pub(super) fn focus_workbench_member(&mut self, member: GraphMemberId) {
+        self.view.workbench.activate(member);
+        self.set_focused_tile(Some(member));
+        self.view.active_content = crate::ContentPane::Workbench;
+    }
+
+    pub(super) fn focus_orrery_content(&mut self) {
+        if self.view.active_content == crate::ContentPane::Workbench {
+            if let Some(member) = self.view.focused_tile {
+                self.persist_live_tile_thumbnail(member);
+            }
+        }
+        self.view.active_content = crate::ContentPane::Orrery;
+    }
+
+    /// `band_y` is the tile's last-known scroll offset (`self.view.scroll`, or `0.0`
+    /// when never scrolled this session) — the durable-cache re-render windows from
+    /// there instead of the page top, so this fallback means "last seen viewport",
+    /// not "reconstructed page top". (Node/card summoning design, §5 — the "exact
+    /// last viewport" fix.)
+    fn persist_synthesized_tile_thumbnail(
+        &mut self,
+        member: GraphMemberId,
+        url: &str,
+        core: &serval_winit_host::RenderCore,
+        peek_w: u32,
+        peek_h: u32,
+        render_h: u32,
+        band_y: f32,
+    ) {
+        let Some(stored) = self.load_cached(url) else {
+            return;
+        };
+        let state = ContentState::Ready(Fetched {
+            content_type: stored.content_type,
+            body: String::from_utf8_lossy(&stored.body).into_owned(),
+        });
+        let store = RefCell::new(ResourceStore::default());
+        let wanted = RefCell::new(Vec::new());
+        let loader = ResourceLoader::new(&store, url, &wanted);
+        let (scene, _content_height, _links) = crate::card::render_content_scene(
+            url,
+            Some(&state),
+            &self.shared.content.engine_registry,
+            &self.shared.content.route_policy,
+            &loader,
+            peek_w,
+            render_h,
+            band_y,
+            &self.shared.presentation.document_sheet_composed(),
+        );
+        let (tex, _view) = core.rasterize(
+            &scene,
+            peek_w,
+            peek_h,
+            netrender::ColorLoad::Clear(crate::CARD_BG),
+        );
+        let rgba =
+            crate::render::read_texture_rgba(core.device(), core.queue(), &tex, peek_w, peek_h);
+        let Some(png_bytes) = crate::render::png_bytes_from_rgba(&rgba, peek_w, peek_h) else {
+            return;
+        };
+        self.persist_node_thumbnail_png(member, png_bytes, peek_w, peek_h, Some(url.to_string()));
+    }
+
     /// Delete the focused node from the graph and reap its activation (the actor
     /// winds down on drop). A no-op when zero or many nodes are focused. Deletion
     /// removes the node's data; deactivation just stops its actor — this does
@@ -203,7 +448,9 @@ impl WindowCtx<'_> {
             == Some(scrying)
         {
             self.shared.content.engine_pins.remove(&member);
-            self.view.scrying.reap(member);
+            if let Some(thumbnail) = self.view.scrying.reap(member) {
+                self.persist_scrying_thumbnail(member, thumbnail);
+            }
             false
         } else {
             self.shared
@@ -244,7 +491,7 @@ impl WindowCtx<'_> {
             self.shared.content.constellation.reap(member);
             self.open_workbench();
             self.view.workbench.open_tile(member);
-            self.view.focused_tile = Some(member);
+            self.set_focused_tile(Some(member));
         } else if self.view.scrying_input_focus == Some(member) {
             self.view.scrying_input_focus = None; // unpinned the tile that held the keyboard
         }
@@ -299,7 +546,7 @@ impl WindowCtx<'_> {
         // (Node-rep P4.)
         self.open_workbench();
         self.view.workbench.open_tile(member);
-        self.view.focused_tile = Some(member);
+        self.set_focused_tile(Some(member));
         let gid = self.view.focused_graph;
         let needed: Vec<_> = self
             .needed_members()
@@ -432,6 +679,10 @@ impl WindowCtx<'_> {
         if id == inker::routing::ENGINE_SERVAL_SCRIPTED {
             return true;
         }
+        #[cfg(feature = "scripted-nova")]
+        if id == inker::routing::ENGINE_SERVAL_SCRIPTED_NOVA {
+            return true;
+        }
         // Graft (Servo) / weld (CEF) surface engines: present when their cargo feature
         // is compiled in. The host pools (GraftHost / WeldHost) are no-op seams today —
         // the producer deps and the real frame-drive land in the follow-on — so with a
@@ -466,12 +717,12 @@ impl WindowCtx<'_> {
         self.shared.content.engine_activation.is_enabled(id)
     }
 
-    /// The engine rows for the apparatus manager: each present, user-facing engine
+    /// The engine rows for the settings manager: each present, user-facing engine
     /// (the surface / web engines headline, then the nematic document engines) with
     /// its active state. Host lanes are structural and not listed. (Phase 2.)
-    pub(super) fn engine_rows(&self) -> Vec<super::apparatus::EngineRow> {
+    pub(super) fn engine_rows(&self) -> Vec<crate::settings_lane::EngineRow> {
         use inker::routing::{ENGINE_SCRYING_WEB, ENGINE_SERVAL_WEB};
-        let row = |id: &str, name: String| super::apparatus::EngineRow {
+        let row = |id: &str, name: String| crate::settings_lane::EngineRow {
             id: id.to_string(),
             name,
             active: self.shared.content.engine_activation.is_enabled(id),
@@ -490,7 +741,14 @@ impl WindowCtx<'_> {
         {
             let id = inker::routing::ENGINE_SERVAL_SCRIPTED;
             if self.engine_present(id) {
-                rows.push(row(id, "Serval (scripted)".to_string()));
+                rows.push(row(id, "Serval (scripted, Boa)".to_string()));
+            }
+        }
+        #[cfg(feature = "scripted-nova")]
+        {
+            let id = inker::routing::ENGINE_SERVAL_SCRIPTED_NOVA;
+            if self.engine_present(id) {
+                rows.push(row(id, "Serval (scripted, Nova)".to_string()));
             }
         }
         // The nematic document engines (protocol renderers), sorted for a stable order.

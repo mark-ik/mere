@@ -33,7 +33,7 @@ impl WindowCtx<'_> {
         if self.is_surface_tier(member, &source_url) {
             self.open_workbench();
             self.view.workbench.open_tile(member);
-            self.view.focused_tile = Some(member);
+            self.set_focused_tile(Some(member));
             self.view.clip_picker = Some(member);
             self.view.request_redraw();
             return Some("clip: click an element to capture".to_string());
@@ -167,7 +167,7 @@ impl WindowCtx<'_> {
         self.ensure_content(&clip_url);
         self.open_workbench();
         self.view.workbench.open_tile(member);
-        self.view.focused_tile = Some(member);
+        self.set_focused_tile(Some(member));
         self.view.scrying_input_focus = None;
         self.save_session();
         self.view.request_redraw();

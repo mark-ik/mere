@@ -8,6 +8,8 @@
 
 use rkyv::{Archive, Deserialize, Serialize};
 
+use crate::types::GraphScope;
+
 // ---------------------------------------------------------------------------
 // Edge persistence types
 // ---------------------------------------------------------------------------
@@ -163,6 +165,25 @@ pub enum PersistedProvenanceSubKind {
 }
 
 #[derive(
+    Archive, Serialize, Deserialize, Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize,
+)]
+#[rkyv(derive(Debug, PartialEq))]
+pub struct PersistedSemanticStatement {
+    pub statement_id: String,
+    pub predicate: String,
+    #[serde(default)]
+    pub recognized_sub_kind: Option<PersistedSemanticSubKind>,
+    #[serde(default)]
+    pub label: Option<String>,
+    #[serde(default)]
+    pub graph_scope: GraphScope,
+    #[serde(default)]
+    pub provenance_iri: Option<String>,
+    #[serde(default)]
+    pub asserted_at_ms: Option<u64>,
+}
+
+#[derive(
     Archive,
     Serialize,
     Deserialize,
@@ -185,6 +206,10 @@ pub struct PersistedSemanticEdgeData {
     /// graphs load with `None`.
     #[serde(default)]
     pub predicate: Option<String>,
+    /// Pair-local semantic statement bucket. `#[serde(default)]` keeps old
+    /// snapshots loading through the aggregate compatibility fields above.
+    #[serde(default)]
+    pub statements: Vec<PersistedSemanticStatement>,
 }
 
 #[derive(

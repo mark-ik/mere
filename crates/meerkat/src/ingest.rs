@@ -19,6 +19,7 @@
 //! a no-op here and renders through the normal card pipeline instead.
 
 use kernel::graph::Graph;
+use kernel::types::{GraphScope, NodeProperty};
 use linked_data::{
     ContextCache, EdgeContribution, GraphContribution, NodeContribution, apply_contribution,
     from_html_with_contexts, from_jsonld_with_contexts,
@@ -92,15 +93,18 @@ pub fn contribution_from_page_extract(
     url: &str,
     extract: serval_extract::PageExtract,
 ) -> Option<GraphContribution> {
-    let mut properties: Vec<(String, String)> = Vec::new();
+    let mut properties: Vec<NodeProperty> = Vec::new();
     if let Some(description) = extract.metadata.description {
-        properties.push((SCHEMA_DESCRIPTION.to_string(), description));
+        properties.push(NodeProperty::new(
+            SCHEMA_DESCRIPTION.to_string(),
+            description,
+        ));
     }
     if let Some(canonical) = extract.metadata.canonical {
-        properties.push((SCHEMA_URL.to_string(), canonical));
+        properties.push(NodeProperty::new(SCHEMA_URL.to_string(), canonical));
     }
     for (key, value) in extract.metadata.open_graph {
-        properties.push((format!("https://ogp.me/ns#{key}"), value));
+        properties.push(NodeProperty::new(format!("https://ogp.me/ns#{key}"), value));
     }
 
     // Nothing declared → no enrichment (don't mint an empty contribution).
@@ -179,6 +183,7 @@ pub fn links_contribution(
             subject: seed_url.to_string(),
             predicate: predicate.to_string(),
             object: url.clone(),
+            graph_scope: GraphScope::Default,
         });
         nodes.push(NodeContribution {
             id: url,

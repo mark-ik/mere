@@ -136,6 +136,7 @@ impl WindowCtx<'_> {
             }
         }
         for (member, url) in self.view.take_settings_pane_nav() {
+            self.persist_live_tile_thumbnail_before_navigation(member);
             self.orrery_mut().navigate_member(member, &url);
             self.view.request_redraw();
         }
@@ -253,6 +254,26 @@ impl WindowCtx<'_> {
             // log/document/net through default → Allow → Prompt → Deny. (Tail 3.)
             k if k.starts_with("script:cap:") => {
                 self.set_script_cap(&k["script:cap:".len()..]);
+            }
+            k if k.starts_with("wallet:startup:") => {
+                let mode = match &k["wallet:startup:".len()..] {
+                    "auto_os" => Some(session_runtime::StartupUnlockMode::AutoOs),
+                    "prompt" => Some(session_runtime::StartupUnlockMode::Prompt),
+                    "locked" => Some(session_runtime::StartupUnlockMode::Locked),
+                    _ => None,
+                };
+                if let Some(mode) = mode {
+                    self.set_wallet_startup_unlock_mode(mode);
+                    self.view.request_redraw();
+                }
+            }
+            "wallet:unlock:auto_os" => {
+                self.unlock_wallet_now();
+                self.view.request_redraw();
+            }
+            "wallet:lock" => {
+                self.relock_wallet_now();
+                self.view.request_redraw();
             }
             // Theme editor (T5): fork / remove / mode-toggle / per-seed HSL nudge.
             // These must precede the theme-id fallback so they aren't read as ids.

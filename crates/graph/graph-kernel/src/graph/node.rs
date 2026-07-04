@@ -70,8 +70,9 @@ pub struct Node {
     /// for derivations whose source lives in a different graph.
     pub derivations: Vec<NodeDerivation>,
 
-    /// Open literal properties: non-curated `(predicate IRI, value)` pairs an
-    /// ingest preserves (`title` / `tags` are the curated fast-paths).
+    /// Open literal properties: non-curated literal statements an ingest
+    /// preserves (`title` / `tags` are the curated fast-paths), including
+    /// datatype and language-tag metadata when present.
     pub properties: Vec<NodeProperty>,
 
     /// Whether this node's position is pinned (doesn't move with physics)

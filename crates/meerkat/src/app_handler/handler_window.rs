@@ -36,7 +36,15 @@ impl Shell {
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 wc.set_dpi_scale(scale_factor as f32)
             }
-            WindowEvent::Focused(focused) => wc.update_a11y_window_focus(focused),
+            WindowEvent::Focused(focused) => {
+                if !focused
+                    && wc.view.active_content == crate::ContentPane::Workbench
+                    && let Some(member) = wc.view.focused_tile
+                {
+                    wc.persist_live_tile_thumbnail(member);
+                }
+                wc.update_a11y_window_focus(focused);
+            }
             // A dropped image file textures the node under it (else the focused node) as a
             // custom sprite face. (Node representation P2 — sprite drop.)
             WindowEvent::DroppedFile(path) => wc.import_sprite_from_file(&path),

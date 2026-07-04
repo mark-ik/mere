@@ -72,6 +72,7 @@ impl crate::WindowCtx<'_> {
     /// instead of treating it as a once-per-window constant.
     pub(crate) fn toolbar_height(&mut self) -> u32 {
         let fallback = self.toolbar_fallback_height();
+        let previous = self.view.toolbar_h;
         let sheet = self.shared.presentation.chrome_sheet_refs();
         let measured = measure_class_bottom(
             &self.view.dom.borrow(),
@@ -82,6 +83,16 @@ impl crate::WindowCtx<'_> {
         )
         .unwrap_or(fallback);
         self.view.toolbar_h = measured.max(1);
+        if previous != self.view.toolbar_h {
+            tracing::trace!(
+                target: "meerkat::profile",
+                previous,
+                next = self.view.toolbar_h,
+                width = self.view.width,
+                height = self.view.height,
+                "toolbar height changed"
+            );
+        }
         self.view.toolbar_h
     }
 
@@ -149,13 +160,13 @@ impl crate::WindowCtx<'_> {
             // The apparatus is read-only diagnostics now; its settings sections moved to the
             // pelt settings lane (Settings lane P2).
             let system_rows = self.apparatus_system_rows();
-            let table_rows = self.apparatus_table_rows();
+            let table_stats = self.apparatus_table_stats();
             let sync_rows = self.apparatus_sync_rows();
             let obs = self.apparatus_observability();
             let graph_metrics = glossary::graph_metrics(self.orrery().graph());
             let items = crate::apparatus::apparatus_items(
                 &system_rows,
-                &table_rows,
+                &table_stats,
                 &sync_rows,
                 &obs,
                 &graph_metrics,
@@ -208,8 +219,8 @@ impl crate::WindowCtx<'_> {
 
     /// The focused node's content-card descriptor for the shell document: its rect (local
     /// to the orrery element) and kind. A visited node gets a snapshot preview (the host
-    /// fills its external-texture from the url-cached scene); an unvisited node gets a
-    /// dashed placeholder. `None` when no node is focused, or the focused node is an open
+    /// shows the cached member/url preview image); an unvisited node gets a dashed
+    /// placeholder. `None` when no node is focused, or the focused node is an open
     /// workbench tile (the tile is the view; a card would contend for its content actor).
     /// The card is placed *after* the gnodes in document order, so it paints over them
     /// while the chrome overlays still paint over it. (Layering fix — card over nodes.)
@@ -265,10 +276,13 @@ impl crate::WindowCtx<'_> {
             // over the node, making the double-click-to-open flaky). `None` → no focus card
             // this frame; the readback below still builds + caches it for the next focus.
             // (Snapshot — no placeholder flash.)
+            let current_url = self.orrery().focused_url()?;
             let data_uri = self
-                .orrery()
-                .focused_url()
-                .and_then(|u| self.view.snapshot_data_uris.get(u).cloned())?;
+                .view
+                .snapshot_data_uris
+                .get(&member)
+                .filter(|snapshot| snapshot.url == current_url)
+                .map(|snapshot| snapshot.data_uri.clone())?;
             (
                 FocusCardKind::Snapshot { data_uri },
                 crate::card::SNAP_W,

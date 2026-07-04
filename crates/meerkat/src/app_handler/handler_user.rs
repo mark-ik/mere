@@ -125,6 +125,7 @@ impl Shell {
         // wanted subresources + harvested contributions come back for the host.
         let drained = wc.shared.content.constellation.drain();
         card_changed |= drained.any_scene;
+        wc.refresh_page_text_selection();
         if !drained.respawned.is_empty() {
             // A content tile's actor died (panic, isolated to its thread) and the
             // pool respawned it; redraw so the next frame re-Shows it (self-healing).
@@ -230,8 +231,8 @@ impl Shell {
                 "sync",
                 "status",
                 Some(format!(
-                    "syncing={};ops={}",
-                    update.status.syncing, update.status.ops_received
+                    "active={};syncing={};ops={}",
+                    update.active, update.status.syncing, update.status.ops_received
                 )),
             );
             latest_sync = Some(sync::to_indicator(&update, sync::LANE_LABEL));
@@ -329,6 +330,16 @@ impl Shell {
                     wc.view.chrome_update(|c| {
                         c.comms
                             .set_identity(misfin_address.clone(), cabal_ticket.clone())
+                    });
+                    comms_changed = true;
+                }
+                comms_host::CommsUpdate::Offline(line) => {
+                    wc.shared
+                        .observability
+                        .record_actor("comms", "offline", Some(line.clone()));
+                    wc.view.chrome_update(|c| {
+                        c.comms.clear_identity();
+                        c.comms.set_send_status(line.clone());
                     });
                     comms_changed = true;
                 }

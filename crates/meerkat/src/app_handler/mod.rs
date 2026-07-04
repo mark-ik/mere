@@ -106,6 +106,12 @@ fn apply_comms_to_chrome(
                     .set_identity(misfin_address.clone(), cabal_ticket.clone())
             });
         }
+        comms_host::CommsUpdate::Offline(line) => {
+            view.chrome_update(|c| {
+                c.comms.clear_identity();
+                c.comms.set_send_status(line.clone());
+            });
+        }
     }
 }
 
@@ -113,5 +119,6 @@ mod handler;
 mod handler_user;
 mod handler_window;
 mod idle_forgetting;
+mod idle_snapshot_refresh;
 mod shell_ops;
 mod window_ctx;

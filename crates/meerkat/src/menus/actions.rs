@@ -131,7 +131,7 @@ impl WindowCtx<'_> {
             // No tab context (card / Cartography): promote to a focused new tile.
             self.open_workbench();
             self.view.workbench.open_tile(new_member);
-            self.view.focused_tile = Some(new_member);
+            self.set_focused_tile(Some(new_member));
         }
         self.ensure_content(&url);
         self.save_session();
@@ -406,7 +406,7 @@ impl WindowCtx<'_> {
             let url = "mere://welcome";
             let member = self.orrery_mut().open_member_as_new_node(None, url);
             self.view.workbench.open_tile(member);
-            self.view.focused_tile = Some(member);
+            self.set_focused_tile(Some(member));
             self.ensure_content(url);
             self.save_session();
             self.view.request_redraw();

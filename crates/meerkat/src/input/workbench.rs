@@ -147,12 +147,12 @@ impl WindowCtx<'_> {
         match event {
             TileEvent::Activated(id) => {
                 if let Some(m) = self.tile_member(id) {
-                    self.view.workbench.activate(m);
-                    self.view.focused_tile = Some(m);
+                    self.focus_workbench_member(m);
                 }
             }
             TileEvent::Closed(id) => {
                 if let Some(m) = self.tile_member(id) {
+                    self.persist_workbench_tile_thumbnail(m);
                     self.view.workbench.close_tile(m);
                     self.shared.content.constellation.reap(m);
                     if self.view.workbench.open_members().is_empty() {
@@ -160,8 +160,7 @@ impl WindowCtx<'_> {
                         // (back to just the orrery). (Workbench-as-pane.)
                         self.close_workbench();
                     } else if self.view.focused_tile == Some(m) {
-                        self.view.focused_tile =
-                            self.view.workbench.open_members().first().copied();
+                        self.set_focused_tile(self.view.workbench.open_members().first().copied());
                     }
                 }
             }
@@ -188,7 +187,7 @@ impl WindowCtx<'_> {
                         let target = target_id.and_then(|tid| self.tile_member(tid));
                         if let Some(target) = target {
                             if self.view.workbench.move_to_slot_of(dragged, target) {
-                                self.view.focused_tile = Some(dragged);
+                                self.set_focused_tile(Some(dragged));
                             }
                         }
                     }
@@ -213,7 +212,7 @@ impl WindowCtx<'_> {
                                 .split_beside_axis(dragged, target, axis, after)
                         };
                         if moved {
-                            self.view.focused_tile = Some(dragged);
+                            self.set_focused_tile(Some(dragged));
                         }
                     }
                     DropTarget::Outside => {

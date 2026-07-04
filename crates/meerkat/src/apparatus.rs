@@ -2,35 +2,121 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! The apparatus pane (A1): the system pane — settings + host diagnostics — as a
-//! frame leaf. v0 carries a **Theme** section (the registered themes as buttons,
-//! the active one highlighted) and a **System** section (read-only diagnostics).
-//! Rendered as a view-driven [`ListPane`](crate::list_pane::ListPane) themed from
-//! the chrome tokens: each theme button is a clickable [`PaneItem`] whose activation
-//! key is its theme id, so a click dispatches through the runner DOM and the host
-//! drains the id to switch the theme — no `data-theme` rect cache.
-//! Settings beyond the theme (the tab cap) fold in here later (plan A3).
+//! The apparatus pane: the read-only diagnostics/system strip, rendered as a
+//! view-driven [`ListPane`](crate::list_pane::ListPane) themed from the chrome
+//! tokens.
 
 use register_theme::chrome::{ChromeTheme, Color32};
 
 use super::observability::{ObservabilitySnapshot, age, severity_label};
 use crate::list_pane::PaneItem;
 
-/// One theme option in the Theme section: its id (the hit-test key), display
-/// name, and whether it is the active theme.
-pub struct ThemeOption {
-    pub id: String,
-    pub name: String,
-    pub active: bool,
+/// One live apparatus table stat row, owned by Meerkat's apparatus surface rather than
+/// by `platen`.
+pub struct ApparatusTableStat {
+    pub label: String,
+    pub kind: &'static str,
+    pub count: Option<u64>,
+    pub count_unit: &'static str,
+    pub estimated_bytes: Option<u64>,
+    pub session_deltas: Option<u64>,
+    pub last_dirty_set_size: Option<u64>,
+    pub detail: Option<String>,
+    pub empty_state: Option<String>,
 }
 
-/// One engine in the Engines section: its id (carried in the toggle key), display
-/// name, and whether it is active (not deactivated) this session. (engine-picker
-/// Phase 2.)
-pub struct EngineRow {
-    pub id: String,
-    pub name: String,
-    pub active: bool,
+impl ApparatusTableStat {
+    pub fn present(
+        label: impl Into<String>,
+        kind: &'static str,
+        count: u64,
+        count_unit: &'static str,
+    ) -> Self {
+        Self {
+            label: label.into(),
+            kind,
+            count: Some(count),
+            count_unit,
+            estimated_bytes: None,
+            session_deltas: None,
+            last_dirty_set_size: None,
+            detail: None,
+            empty_state: None,
+        }
+    }
+
+    pub fn unavailable(
+        label: impl Into<String>,
+        kind: &'static str,
+        empty_state: impl Into<String>,
+    ) -> Self {
+        Self {
+            label: label.into(),
+            kind,
+            count: None,
+            count_unit: "rows",
+            estimated_bytes: None,
+            session_deltas: None,
+            last_dirty_set_size: None,
+            detail: None,
+            empty_state: Some(empty_state.into()),
+        }
+    }
+
+    pub fn with_estimated_bytes(mut self, estimated_bytes: u64) -> Self {
+        self.estimated_bytes = Some(estimated_bytes);
+        self
+    }
+
+    pub fn with_session_deltas(mut self, session_deltas: u64) -> Self {
+        self.session_deltas = Some(session_deltas);
+        self
+    }
+
+    pub fn with_last_dirty_set_size(mut self, last_dirty_set_size: u64) -> Self {
+        self.last_dirty_set_size = Some(last_dirty_set_size);
+        self
+    }
+
+    pub fn with_detail(mut self, detail: impl Into<String>) -> Self {
+        self.detail = Some(detail.into());
+        self
+    }
+}
+
+fn format_bytes(bytes: u64) -> String {
+    if bytes < 1024 {
+        format!("{bytes} bytes")
+    } else {
+        format!("{bytes} bytes (~{:.1} KiB)", bytes as f64 / 1024.0)
+    }
+}
+
+fn format_table_stat(stat: &ApparatusTableStat) -> String {
+    let mut metrics = Vec::new();
+    if let Some(count) = stat.count {
+        metrics.push(format!("{count} {}", stat.count_unit));
+    }
+    if let Some(bytes) = stat.estimated_bytes {
+        metrics.push(format_bytes(bytes));
+    }
+    if let Some(session_deltas) = stat.session_deltas {
+        metrics.push(format!("{session_deltas} session deltas"));
+    }
+    if let Some(last_dirty_set_size) = stat.last_dirty_set_size {
+        metrics.push(format!("last dirty set {last_dirty_set_size}"));
+    }
+    if let Some(detail) = &stat.detail {
+        metrics.push(detail.clone());
+    }
+    let body = if metrics.is_empty() {
+        stat.empty_state
+            .clone()
+            .unwrap_or_else(|| "unwired".to_string())
+    } else {
+        metrics.join("; ")
+    };
+    format!("{} ({}): {body}", stat.label, stat.kind)
 }
 
 /// The apparatus pane's author CSS, themed from the chrome tokens.
@@ -91,67 +177,13 @@ pub fn apparatus_sheet(c: &ChromeTheme) -> Vec<String> {
     ]
 }
 
-/// The Theme section's controls: one clickable button per option, its theme id the
-/// activation key the host drains to switch the theme. Shared by the apparatus pane and the
-/// settings lane's `pelt/appearance` page, so both stay one source of truth. (Settings lane.)
-pub fn theme_section_items(themes: &[ThemeOption]) -> Vec<PaneItem> {
-    themes
-        .iter()
-        .map(|theme| {
-            // The theme picker is a single-selection group (one active theme).
-            PaneItem::radio(theme.active, theme.name.clone(), theme.id.clone())
-        })
-        .collect()
-}
-
-/// The Engines section's controls: one toggle per present engine, the id riding the key as
-/// `engine:toggle:<id>` (clicking flips its activation). Shared by the apparatus pane and the
-/// settings lane's `pelt/engines` page. (Settings lane.)
-pub fn engine_section_items(engines: &[EngineRow]) -> Vec<PaneItem> {
-    engines
-        .iter()
-        .map(|engine| {
-            // Each engine is an independent on / off toggle, not a single-selection group.
-            let label = format!(
-                "{}  —  {}",
-                engine.name,
-                if engine.active { "active" } else { "off" }
-            );
-            PaneItem::switch(engine.active, label, format!("engine:toggle:{}", engine.id))
-        })
-        .collect()
-}
-
-/// The Physics section's controls: the node-damping readout plus the − / + step buttons
-/// (`phys:damping:down` / `:up`). Shared by the apparatus pane and the settings lane's
-/// `pelt/physics` page. (Settings lane.)
-pub fn physics_section_items(physics_damping: f32) -> Vec<PaneItem> {
-    vec![
-        PaneItem::text(
-            "app-row",
-            format!("Node damping (inertia): {physics_damping:.1}"),
-        ),
-        PaneItem::button(
-            "app-btn",
-            "− less damping (more drift)".to_string(),
-            "phys:damping:down".to_string(),
-        ),
-        PaneItem::button(
-            "app-btn",
-            "+ more damping (settle sooner)".to_string(),
-            "phys:damping:up".to_string(),
-        ),
-    ]
-}
-
 /// Build the apparatus pane's item list: the host observability sections as display rows.
-/// The interactive settings sections (Theme / Engines / Physics) moved to the pelt settings
-/// lane (`pelt/appearance` / `pelt/engines` / `pelt/physics`, via the shared section builders
-/// above), so the apparatus is read-only diagnostics now. The [`ListPane`](crate::list_pane::ListPane)
-/// renders these display rows. (Settings lane P2 — apparatus settings retired.)
+/// The interactive settings sections (Theme / Engines / Physics) live in the pelt
+/// settings lane, so the apparatus is read-only diagnostics now. The
+/// [`ListPane`](crate::list_pane::ListPane) renders these display rows.
 pub fn apparatus_items(
     system_rows: &[(String, String)],
-    table_rows: &[(String, String)],
+    table_stats: &[ApparatusTableStat],
     sync_rows: &[(String, String)],
     obs: &ObservabilitySnapshot,
     graph_metrics: &glossary::GraphMetrics,
@@ -172,7 +204,7 @@ pub fn apparatus_items(
     items.push(PaneItem::text(
         "app-row",
         format!(
-            "Nodes: {}; edges: {}",
+            "Nodes: {}; links: {}",
             graph_metrics.node_count, graph_metrics.edge_count
         ),
     ));
@@ -199,8 +231,13 @@ pub fn apparatus_items(
     }
 
     items.push(PaneItem::text("app-title", "Tables"));
-    for (label, value) in table_rows {
-        items.push(PaneItem::text("app-row", format!("{label}: {value}")));
+    for stat in table_stats {
+        let class = if stat.count.is_none() && stat.empty_state.is_some() {
+            "app-row-muted"
+        } else {
+            "app-row"
+        };
+        items.push(PaneItem::text(class, format_table_stat(stat)));
     }
 
     // The at-rest sync record (the record half of the static-vs-live split; Steward
@@ -383,7 +420,7 @@ mod tests {
         assert!(
             items
                 .iter()
-                .any(|i| i.text.contains("Nodes: 5") && i.text.contains("edges: 4"))
+                .any(|i| i.text.contains("Nodes: 5") && i.text.contains("links: 4"))
         );
         assert!(
             items
@@ -392,5 +429,37 @@ mod tests {
         );
         assert!(items.iter().any(|i| i.text == "Orphans: 1"));
         assert!(items.iter().any(|i| i.text == "Semantic: 3"));
+    }
+
+    #[test]
+    fn tables_section_renders_structured_stats_and_empty_state() {
+        let metrics = glossary::GraphMetrics::default();
+        let stats = vec![
+            ApparatusTableStat::present("Node table", "kernel", 5, "rows")
+                .with_session_deltas(12)
+                .with_detail("graph nodes"),
+            ApparatusTableStat::unavailable(
+                "Document scene",
+                "scene",
+                "awaiting first scene on current lane (serval.web)",
+            ),
+        ];
+        let items = apparatus_items(
+            &[],
+            &stats,
+            &[],
+            &ObservabilitySnapshot::default(),
+            &metrics,
+        );
+        assert!(items.iter().any(|i| {
+            i.text.contains("Node table (kernel): 5 rows")
+                && i.text.contains("12 session deltas")
+                && i.text.contains("graph nodes")
+        }));
+        assert!(items.iter().any(|i| {
+            i.class == "app-row-muted"
+                && i.text
+                    == "Document scene (scene): awaiting first scene on current lane (serval.web)"
+        }));
     }
 }

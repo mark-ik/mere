@@ -223,6 +223,7 @@ impl WindowCtx<'_> {
     /// stop and the Steward per-row stop. (Chrome bar P2.)
     pub(super) fn stop_operation(&mut self, member: GraphMemberId) {
         if self.workbench_active() {
+            self.persist_workbench_tile_thumbnail(member);
             self.view.workbench.close_tile(member);
             if self.view.workbench.open_members().is_empty() {
                 self.close_workbench();

@@ -179,8 +179,7 @@ impl WindowCtx<'_> {
                 if self.view.modifiers.ctrl {
                     self.open_link_in_new_tab(member, url);
                 } else {
-                    self.view.workbench.activate(member);
-                    self.view.focused_tile = Some(member);
+                    self.focus_workbench_member(member);
                     self.view.chrome_update(|c| c.follow_link(url));
                     self.sync_orrery();
                     self.view.request_redraw();

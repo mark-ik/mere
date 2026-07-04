@@ -56,7 +56,7 @@ pub fn gloss_outline_view(state: &GlossOutlineState) -> GlossOutlineView {
 fn metrics_header(m: &glossary::GraphMetrics) -> GlossOutlineView {
     let plural = |n: usize| if n == 1 { "" } else { "s" };
     let text = format!(
-        "{} node{} \u{b7} {} edge{} \u{b7} {} component{}",
+        "{} node{} \u{b7} {} link{} \u{b7} {} component{}",
         m.node_count,
         plural(m.node_count),
         m.edge_count,

@@ -19,8 +19,9 @@ use meerkat::CommsIntent;
 use meerkat::command::Command;
 use meerkat::shell_eval::{CommandShell, RemoteAuthPairingAcceptance, ShellContext};
 use session_runtime::{
-    DeviceId, PersonaId, PrivateEpochPlaintext, RemoteAuthPairingTicketRequest,
-    issue_remote_auth_device_grant_from_ticket, load_current_private_epoch,
+    DeviceExposure, DeviceId, DeviceMode, PersonaId, PrivateEpochPlaintext,
+    RemoteAuthPairingTicketRequest, issue_remote_auth_device_grant_from_ticket,
+    load_current_private_epoch, load_device_roster, load_signed_device_grant,
     revoke_remote_auth_device, settings_store, signed_device_grant_path,
 };
 use uuid::Uuid;
@@ -388,7 +389,7 @@ impl WindowCtx<'_> {
                     self.save_session();
                     self.view.request_redraw();
                 } else {
-                    note = Some("Select two nodes (or an edge) to unrelate".to_string());
+                    note = Some("Select two nodes (or a link) to unrelate".to_string());
                 }
             }
             Command::CloseGraphPane => {
@@ -531,6 +532,12 @@ impl WindowCtx<'_> {
         }
         if let Some(bundle_path) = &outcome.remote_auth_enrollment_install {
             note = Some(self.run_install_remote_auth_enrollment(bundle_path));
+        }
+        if let Some(device_id) = &outcome.remote_auth_enrollment_export {
+            note = Some(self.run_export_remote_auth_enrollment(device_id));
+        }
+        if outcome.remote_auth_devices {
+            note = Some(self.run_list_remote_auth_devices());
         }
         if let Some(device_id) = &outcome.remote_auth_device_revoke {
             note = Some(self.run_revoke_remote_auth_device(device_id));
@@ -862,6 +869,76 @@ impl WindowCtx<'_> {
                 format!("installed remote-auth enrollment {bundle_path}")
             }
             Err(err) => format!("remote-auth enrollment install failed: {err}"),
+        }
+    }
+
+    fn run_export_remote_auth_enrollment(&self, device_id: &str) -> String {
+        let device_id = match Uuid::parse_str(device_id.trim()) {
+            Ok(uuid) => DeviceId::from_uuid(uuid),
+            Err(err) => {
+                return format!("remote-auth enrollment export failed: invalid device id: {err}");
+            }
+        };
+        match super::wallet_pairing::export_remote_auth_enrollment_bundle_for_device(
+            &self.shared.session.mere_root,
+            device_id,
+        ) {
+            Ok(path) => format!("remote-auth enrollment: {}", path.display()),
+            Err(err) => format!("remote-auth enrollment export failed: {err}"),
+        }
+    }
+
+    fn run_list_remote_auth_devices(&self) -> String {
+        let roster = match load_device_roster(&self.shared.session.mere_root) {
+            Ok(Some(roster)) => roster,
+            Ok(None) => return "remote-auth devices: none".to_string(),
+            Err(err) => return format!("remote-auth devices failed: {err}"),
+        };
+        let mut shown = Vec::new();
+        for device in roster
+            .devices
+            .iter()
+            .filter(|device| device.mode == DeviceMode::RemoteAuth)
+        {
+            let state = if roster.revoked.contains(&device.device_id) {
+                "revoked"
+            } else {
+                "active"
+            };
+            let exposure = match device.exposure {
+                DeviceExposure::HiddenClient => "hidden",
+                DeviceExposure::ExposedEgress => "exposed",
+            };
+            let scopes =
+                match load_signed_device_grant(&self.shared.session.mere_root, device.device_id) {
+                    Ok(Some(grant)) => {
+                        if grant
+                            .payload
+                            .scopes
+                            .iter()
+                            .any(|scope| scope == "private.read")
+                        {
+                            "private.read"
+                        } else {
+                            "identity-only"
+                        }
+                    }
+                    Ok(None) => "grant-missing",
+                    Err(_) => "grant-error",
+                };
+            shown.push(format!(
+                "{} \"{}\" {} {} {}",
+                device.device_id.as_uuid(),
+                device.label,
+                state,
+                exposure,
+                scopes
+            ));
+        }
+        if shown.is_empty() {
+            "remote-auth devices: none".to_string()
+        } else {
+            format!("remote-auth devices: {}", shown.join(" | "))
         }
     }
 

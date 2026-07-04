@@ -172,11 +172,12 @@ A development pass grounded the plan against the live tree and settled the open 
    not community-to-ring: the edge channel is unoccupied (a clean end-to-end win), whereas the ring
    channel does not exist yet (selection is still colour; see below). Community-to-ring follows once
    the ring renderer + the selection-to-ring conversion land.
-2. **Multi-edges are the first edge signal.** The kernel is a **multigraph** (one petgraph edge per
-   statement / predicate, per the RDF kernel plan); the orrery collapses to one visual edge per pair
-   (`dedup_edges`, `build.rs:102`). Edge-weight rides the **collapsed per-pair edge**, and the
-   cheapest first weight is **multiplicity** — the number of `relations()` connecting a pair (more
-   statements = thicker edge), which makes the multigraph truth legible for free. The computed
+2. **Multi-edges are the first edge signal.** The kernel is a **logical multigraph** (statement
+   records enumerated inside the pair-local `EdgePayload` bucket, per the RDF kernel plan's
+   statement-bucket revision 2026-07-04); the orrery draws one visual edge per pair
+   (`dedup_edges`, `build.rs:102`). Edge-weight rides the **per-pair edge**, and the
+   cheapest first weight is **multiplicity** — the number of statements in the pair's bucket (more
+   statements = thicker edge), which makes the statement-bucket truth legible for free. The computed
    *affinity* weight (`semantic_edge_weight`) is the later, richer edge signal on the same channel.
 3. **Size precedence:** manual override > **importance signal** > size-by-degree > uniform default.
    You can always pin a node's size; unpinned nodes scale by computed importance; degree is the

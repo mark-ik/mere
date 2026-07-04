@@ -10,10 +10,10 @@ use super::*;
 /// every fetch, so a `Set-Cookie` on one page is still set on the next (logins
 /// survive navigation) and the verso flip can carry the session into a
 /// compatibility-view WebView. Without this each fetch built a throwaway jar, so no
-/// session ever persisted. v1 is a single unpartitioned jar; per-origin / per-persona
-/// partitioning + eidetic durability are later threads (the native session store
-/// plan). The jar is `Send + Sync` (a `Mutex` inside), so the fetch worker and the UI
-/// thread share the one `Arc`.
+/// session ever persisted. The in-memory jar is still process-global; durability is
+/// persona-keyed below, and a live per-persona jar registry is the remaining
+/// multi-persona step. The jar is `Send + Sync` (a `Mutex` inside), so the fetch
+/// worker, the UI thread, and the scripted rung share the one `Arc`.
 pub fn session_jar() -> &'static Arc<InMemoryCookieJar> {
     static JAR: OnceLock<Arc<InMemoryCookieJar>> = OnceLock::new();
     JAR.get_or_init(|| Arc::new(InMemoryCookieJar::new()))
