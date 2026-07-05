@@ -19,7 +19,7 @@ baseline for the next audit.
 ## 1. Where we're at
 
 The stack is live end to end: meerkat runs Mere chrome on serval as one shell
-document, themed from seed palettes ([theme system](../implementation_strategy/2026-06-22_seed_palette_theme_system_plan.md)
+document, themed from seed palettes ([theme system](../../archive_docs/2026-07-04_completed_plans/2026-06-22_seed_palette_theme_system_plan.md)
 complete), user zoom shipped, auto-DPI planned.
 
 - **Graph core.** Statement-shaped kernel on petgraph, six edge families,
@@ -65,7 +65,7 @@ complete), user zoom shipped, auto-DPI planned.
 - **The resource-coordination ring**: mesh M2, lease scheduler, kith
   capability sharing, bounty economy, commitment proofs (all scoped
   2026-06-30).
-- **Engine consolidation**: the [surface-engine contract fold](../../inker_docs/implementation_strategy/2026-06-28_surface_engine_contract_fold_plan.md)
+- **Engine consolidation**: the [surface-engine contract fold](../../archive_docs/2026-07-04_completed_plans/2026-06-28_surface_engine_contract_fold_plan.md)
   (scry / weld / graft onto one `SurfaceEngine`), the verso flip, the scripted
   rung integration, retained-text tiled render.
 - **Longer arcs**: browser-extension delivery (capture-first), federation

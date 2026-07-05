@@ -20,7 +20,7 @@ belongs to the notification/toast subsystem plus the pin-vs-drag-out gesture spl
 
 Both triggers queue the now-built `TearOut { node, from }`. Spun out of the
 now-closed
-[tearout_composability_plan](2026-06-19_tearout_composability_plan.md) (kept in place as the
+[tearout_composability_plan](../../archive_docs/2026-07-04_completed_plans/2026-06-19_tearout_composability_plan.md) (kept in place as the
 foundational record, like the unified-document-host plan), which finished the **foundation**
 (pooled-orrery authorities, per-pane focus, kernel cross-graph copy, camera-on-the-view,
 multi-window 5/6). This plan owns the **named purpose that remains**: the user-facing tear-out
@@ -35,7 +35,7 @@ Cross-refs:
 - [tearout_operations_brief](../research/2026-05-11_tearout_operations_brief.md) — the design
   source. Locks the trichotomy, the gesture model, the stability principle, and the cascade
   rules. Written 2026-05-11 (pre-host-pivot; its gpui-era file paths are stale, the model holds).
-- [tearout_composability_plan (closed)](2026-06-19_tearout_composability_plan.md)
+- [tearout_composability_plan (closed)](../../archive_docs/2026-07-04_completed_plans/2026-06-19_tearout_composability_plan.md)
   — the foundation this rests on; C1-C4-core + camera + MW3 done there.
 - [memory_tiers_brief](../research/2026-05-11_memory_tiers_brief.md) — branch/fork default to
   short-term memory; consolidation to engrams is a separate affirmative gesture.
@@ -145,7 +145,7 @@ Mint a forme graphlet with `GraphletBinding::Branched { parent_spec, reason: "te
 in the donor's graph (brief §4.2); the torn window's leaf carries the donor `GraphId` + the new
 `GraphletId`. Branch + donor share kernel nodes, diverge in the graphlet's lineage facet.
 
-**Status (2026-06-25): Phases 1 + 2 of the [graphlet wiring plan](2026-06-25_graphlet_wiring_plan.md)
+**Status (2026-06-25): Phases 1 + 2 of the [graphlet wiring plan](../../archive_docs/2026-07-04_completed_plans/2026-06-25_graphlet_wiring_plan.md)
 landed + driven.** Shift+drag dispatches `BranchNode` → `Shell::branch_graphlet_from`, which mints
 a persisted `Branched` graphlet anchored on the torn node (in the donor's `SessionGraphlets`
 sidecar, round-trips a restart) and opens a window on the donor's *same* graph carrying the new
@@ -171,7 +171,7 @@ a branch graphlet can group tiles + accumulate lineage in. Without that a branch
 orphan and branch collapses to leaf.
 
 **Decision (Mark, 2026-06-25): graphlet layer wired as its own plan** —
-[graphlet wiring](2026-06-25_graphlet_wiring_plan.md), with broader payoff (document groups,
+[graphlet wiring](../../archive_docs/2026-07-04_completed_plans/2026-06-25_graphlet_wiring_plan.md), with broader payoff (document groups,
 reconciliation, the relational-browse front-end all want it); branch is its first consumer.
 **Phase 1 has since landed** (Shift+drag mints + persists a `Branched` graphlet via
 `branch_graphlet_from`, driven), so branch is no longer a leaf-stub. Its **Phase 2** (the graphlet
@@ -265,7 +265,7 @@ deleting the session closed the leaf + switched to the survivor. The only unbuil
 allows).
 
 **Implementation seam (2026-06-25):** the branch-die half is scoped as **#3** in the
-[graphlet wiring plan](2026-06-25_graphlet_wiring_plan.md) — `close_session` already trashes
+[graphlet wiring plan](../../archive_docs/2026-07-04_completed_plans/2026-06-25_graphlet_wiring_plan.md) — `close_session` already trashes
 the session dir (so `graphlets.json` trashes with it), so the work is dropping the in-memory
 `graphlets` / `orreries` pool entries and closing windows on the deleted graph. Closing
 windows on session-delete is a *general* multi-window gap (not branch-specific); do this with
@@ -453,7 +453,7 @@ v0 (palette parent link suffices); auto-consolidation policy disabled by default
   section (toast, tile-tab leaf origin, G2 leaf content, G5 move, fork restore-into-switcher)
   with seams + a rough order, and pointed G6's branch-die half at the graphlet plan's #3. The
   graphlet subsystem's own open items (#1 per-window focus isolation, #3 donor-delete) live in
-  the [graphlet wiring plan](2026-06-25_graphlet_wiring_plan.md).
+  the [graphlet wiring plan](../../archive_docs/2026-07-04_completed_plans/2026-06-25_graphlet_wiring_plan.md).
 - **2026-06-27** — **Trailing items pass: G6 + fork-restore + G5 move + G2 content done; toast +
   tile-tab reframed.** Verified **G6 cascade** is met via the graphlet plan's #3 (close-windows +
   pool-drop; marked done). **Fork restore** turned out to be already working — `fork_session_from`

@@ -220,13 +220,13 @@ an ad-hoc list: the format *is* the editing + export path.
    where you go to actually diagnose.
 5. ~~**Scene -> DOM for minimap / recent**~~ **Spun out 2026-07-01:** the outline was P1's proof of
    path; the migration itself is now its own plan,
-   [gloss Scene-to-DOM migration](2026-07-01_gloss_scene_to_dom_migration_plan.md).
+   [gloss Scene-to-DOM migration](../../archive_docs/2026-07-04_completed_plans/2026-07-01_gloss_scene_to_dom_migration_plan.md).
 
 ---
 
 ## Cross-references (consume, do not duplicate)
 
-- [gloss Scene-to-DOM migration plan](2026-07-01_gloss_scene_to_dom_migration_plan.md) — the
+- [gloss Scene-to-DOM migration plan](../../archive_docs/2026-07-04_completed_plans/2026-07-01_gloss_scene_to_dom_migration_plan.md) — the
   minimap/recent migration this plan's Open Decision #5 deferred until P1 landed; spun out
   2026-07-01.
 - [gloss Navigator design](../design/2026-06-07_gloss_navigator_design.md) — the outline form
@@ -309,14 +309,14 @@ an ad-hoc list: the format *is* the editing + export path.
   no SVG-like tag exists in `xilem-serval`, so embedded Scene is the only viable option for edges,
   not just the chosen one) before it was committed to the new doc. P1a/P2-caps/Decision-4 land as
   updates to this doc; the Scene->DOM work is
-  [its own plan](2026-07-01_gloss_scene_to_dom_migration_plan.md). No code yet for any of the four;
+  [its own plan](../../archive_docs/2026-07-04_completed_plans/2026-07-01_gloss_scene_to_dom_migration_plan.md). No code yet for any of the four;
   implementation starts now.
 - **2026-07-02 (P1a, P2 caps, and Decision #4 landed; 247/247 tests green).**
   **P1a (a11y):** `gloss_outline_a11y_tree` builds an AccessKit `Role::ListItem`
   per real-node outline row (routing `SelectNodeByUrl`, identical to the mouse
   path) and a non-interactive `Role::Label` per structural row, bounds read off
   the live chrome layout (`dom_member_bounds`, added this pass and since reused
-  by the [Scene-to-DOM migration](2026-07-01_gloss_scene_to_dom_migration_plan.md)'s
+  by the [Scene-to-DOM migration](../../archive_docs/2026-07-04_completed_plans/2026-07-01_gloss_scene_to_dom_migration_plan.md)'s
   P3 for the minimap/recent groups too); `"gloss-outline-pane"` joined
   `FOLDED_PANE_WRAPPERS` so the generic a11y walk doesn't double-produce nodes
   for it. **P2 caps:** `gloss_outline_snapshot` takes the outline rect's live

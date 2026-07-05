@@ -270,7 +270,7 @@ The cards are the current arc; gloss is the next, and #5 staging feeds it.
 
 - **Where latent graphlets live** — **RESOLVED (2026-06-25): forme `GraphletRef`**,
   in a per-session `SessionGraphlets` index over kernel uuids, per the
-  [graphlet wiring plan](../implementation_strategy/2026-06-25_graphlet_wiring_plan.md)
+  [graphlet wiring plan](../../archive_docs/2026-07-04_completed_plans/2026-06-25_graphlet_wiring_plan.md)
   (decision B; the gloss-owned store and `GraphTree` paths are closed). The lean
   here was right. See the
   [scope model reconciliation](2026-06-27_scope_model_reconciliation.md) for the

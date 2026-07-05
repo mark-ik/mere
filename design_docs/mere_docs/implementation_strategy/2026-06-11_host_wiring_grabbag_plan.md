@@ -17,7 +17,7 @@ and tested one layer down with zero or stub meerkat callers. Each item lands
 separately; this plan phases them by what unblocks what, not by date.
 **Related**: the [host cheap-path plan](../../archive_docs/2026-06-15_completed_plans/2026-06-10_host_cheap_path_plan.md) (the
 parent; C6 lived there until it grew); the
-[tearout_composability_plan](2026-06-19_tearout_composability_plan.md) (its C-series
+[tearout_composability_plan](../../archive_docs/2026-07-04_completed_plans/2026-06-19_tearout_composability_plan.md) (its C-series
 pane-heavy phases build directly on Phase G1 below — G1 is the runway).
 *Out of scope (tracked elsewhere):* scrying X2's leftover host wiring (omnibar
 `load_url`, back/forward + `can_go_*`, `poll_navigation_event`,

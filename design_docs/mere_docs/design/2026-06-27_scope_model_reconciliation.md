@@ -20,7 +20,7 @@ latent rule-defined views, including the **chronological** chain (§3).
 - [gloss = the Navigator](2026-06-07_gloss_navigator_design.md) — the **model**.
 - [graphlet derivation from selection](2026-06-13_graphlet_derivation_from_selection.md)
   — the **selection UX** (reveal → classify → project → frontier → crystallize).
-- [graphlet wiring plan](../implementation_strategy/2026-06-25_graphlet_wiring_plan.md)
+- [graphlet wiring plan](../../archive_docs/2026-07-04_completed_plans/2026-06-25_graphlet_wiring_plan.md)
   — the **build** (branch + Linked graphlets, kernel derivation, drift, selectors).
 - [relational browse plan](../implementation_strategy/2026-06-23_relational_browse_graphlet_plan.md)
   — a **consumer** (link materializer + crawl).

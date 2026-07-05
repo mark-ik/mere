@@ -70,7 +70,7 @@ perf cost; (c) the secondary-orreries / side-by-side work (tearout) wants the cl
   its closing entry maps this and the other Phase-2-tail threads to their homes.
 - [node representation / arrangement plan](2026-06-18_node_representation_arrangement_plan.md) — owns
   the node body / sprite whose geometry cond 1 makes fragment-correct (the card is one sprite).
-- [tearout composability plan](2026-06-19_tearout_composability_plan.md) — the secondary-orreries
+- [tearout composability plan](../../archive_docs/2026-07-04_completed_plans/2026-06-19_tearout_composability_plan.md) — the secondary-orreries
   consumer that may want the element form.
 
 ## Progress

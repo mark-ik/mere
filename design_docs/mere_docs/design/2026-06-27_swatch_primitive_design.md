@@ -14,7 +14,7 @@ as the Navigator; this realizes it),
 (owns the node-body-editor swatch, B3),
 [object card plan](../implementation_strategy/2026-06-21_object_card_plan.md)
 (owns the focus-card-slot card),
-[graphlet wiring plan](../implementation_strategy/2026-06-25_graphlet_wiring_plan.md)
+[graphlet wiring plan](../../archive_docs/2026-07-04_completed_plans/2026-06-25_graphlet_wiring_plan.md)
 (owns the per-window instance machinery + graphlets),
 [graph signals layer plan](../implementation_strategy/2026-06-22_graph_signals_layer_plan.md)
 (owns the gloss swatch lens),
@@ -276,7 +276,7 @@ Fragments exist, each owned by a sibling plan; the unifying primitive does not.
 - **The instance machinery** exists for branches (per-window `WindowView` selection
   / camera / scope isolation, branch-scoped orrery), the substrate the
   swatch-as-instance generalizes. From the
-  [graphlet wiring plan](../implementation_strategy/2026-06-25_graphlet_wiring_plan.md).
+  [graphlet wiring plan](../../archive_docs/2026-07-04_completed_plans/2026-06-25_graphlet_wiring_plan.md).
 - **The shape classifier** (selection -> ranked graphlet kinds) is still unbuilt,
   the named gap from the 2026-06-13 doc and reconciliation ruling 6.
 

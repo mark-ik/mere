@@ -41,7 +41,7 @@ Sibling / converging docs:
   Unified-document-host owns the DOM-materialization mechanism its card/tile forms ride;
   field-regions owns localized/scripted arrangement; window-composition owns the
   external-texture-input bridge the textured-body form rides (P2).
-- [tearout_composability_plan](2026-06-19_tearout_composability_plan.md) (continuing the archived window-composition plan) — orrery (authority) vs
+- [tearout_composability_plan](../../archive_docs/2026-07-04_completed_plans/2026-06-19_tearout_composability_plan.md) (continuing the archived window-composition plan) — orrery (authority) vs
   panes (views); this plan is the *node-rendering* layer inside the orrery the pool holds.
 - [unified_document_host_plan](2026-06-17_unified_document_host_plan.md) — the DOM/document
   half; it owns the **node-as-container-in-the-document** (the a11y / tab / focus / automation
@@ -141,7 +141,7 @@ Architecture:
 - The orrery renders each node through its representation's renderer, **split by nature** (the
   compositing layering is owned by
   [native_surface_compositing_plan](../../archive_docs/2026-07-03_completed_plans/2026-06-19_native_surface_compositing_plan.md); the
-  external-texture *input* bridge by [tearout_composability_plan](2026-06-19_tearout_composability_plan.md)
+  external-texture *input* bridge by [tearout_composability_plan](../../archive_docs/2026-07-04_completed_plans/2026-06-19_tearout_composability_plan.md)
   per the spine, line 139 — name both, they are distinct):
   - **serval-rendered content** diffs into the shell document as a **real DOM subtree** (a11y /
     find-in-page / selection / true scroll hold).
@@ -330,7 +330,7 @@ bridge, and the DOM route for the other half needs the chrome image-decode gap c
   [native_surface_compositing_plan](../../archive_docs/2026-07-03_completed_plans/2026-06-19_native_surface_compositing_plan.md)) **PLUS** the
   `<external-texture>` element to **bear input** (forward a hit, in texture-local coords, to the
   producer behind it), the external-texture-input bridge owned by the
-  [tearout_composability_plan](2026-06-19_tearout_composability_plan.md) (the window-composition
+  [tearout_composability_plan](../../archive_docs/2026-07-04_completed_plans/2026-06-19_tearout_composability_plan.md) (the window-composition
   continuation). The compat-WebView-node case specifically rides native-surface-compositing's
   API-forwarding path; the DOM-textured-body case rides tearout's serval-hit-relay bridge — they
   are distinct routes, not duplicates. Blocked until the input bridge lands.

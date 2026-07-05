@@ -57,7 +57,7 @@ Sibling/converging docs:
   localized arrangement (node-representation / field-regions), or the input spine and
   external-texture-input bridge (window-composition); it owns Phase 1 (one shell-root document)
   and Phase 2 (the custom-layout `<orrery>` element and the DOM-vs-gyre two-hit-test).
-- [tearout_composability_plan](2026-06-19_tearout_composability_plan.md) (continuing the archived window-composition plan) — orrery
+- [tearout_composability_plan](../../archive_docs/2026-07-04_completed_plans/2026-06-19_tearout_composability_plan.md) (continuing the archived window-composition plan) — orrery
   (authority) vs panes (views); this plan is the rendering-engine half of that
   same reshape (one document vs many).
 - [host_wiring_grabbag_plan](2026-06-11_host_wiring_grabbag_plan.md) — G1
@@ -492,7 +492,7 @@ The biggest **next-phase** item is deliberately NOT among the five: the **N-seco
 side-by-side panes** slice (`secondary_orreries: Vec<(netrender::Scene, ...)>`, render.rs:625, with
 `set_render_as_cards(false)` keeping secondary panes as standalone scenes composited beside the
 document, the architecture-2 multi-surface-compositor shape Phase 2 exists to kill). It is large,
-co-owned with the [tearout plan](2026-06-19_tearout_composability_plan.md), and gated on slice 2's
+co-owned with the [tearout plan](../../archive_docs/2026-07-04_completed_plans/2026-06-19_tearout_composability_plan.md), and gated on slice 2's
 "card or container is the node" decision. cond 1 (the custom-layout `<orrery>` element) stays
 deferred (a genuine multi-subsystem serval feature, see its design above).
 
@@ -838,7 +838,7 @@ original four resolve or narrow; resolutions are reflected in the phase notes ab
     measurement gate, owned jointly with the parallelism research §0).
   - **N-secondary-orreries / side-by-side panes** (`secondary_orreries`, render.rs:785/793, still
     standalone Scenes via `set_render_as_cards(false)`) -> co-owned by the
-    [tearout composability plan](2026-06-19_tearout_composability_plan.md), gated on the
+    [tearout composability plan](../../archive_docs/2026-07-04_completed_plans/2026-06-19_tearout_composability_plan.md), gated on the
     card-or-container decision. Not this plan's to drive alone.
   - **Tiles -> `platen-view` migration** (workbench tile chrome) -> the composition-spine concern
     ([mere_composition_spine](../technical_architecture/2026-05-21_mere_composition_spine.md);

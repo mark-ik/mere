@@ -40,7 +40,7 @@ already tracked by an active plan are *not* repeated here.
 
 - **Gemtext/document-lane find — closed 2026-07-03.** The user-facing retained-text
   slice landed in the
-  [retained_text_tiled_render_plan](2026-06-15_retained_text_tiled_render_plan.md):
+  [retained_text_tiled_render_plan](../../archive_docs/2026-07-04_completed_plans/2026-06-15_retained_text_tiled_render_plan.md):
   Ctrl+F searches retained document blocks, paints block-scoped highlights, and
   page-text copy works from the retained packet. The precise glyph→char cluster
   map on `GlyphRun` remains only a fidelity follow-on, not an open backlog tail.
@@ -76,6 +76,52 @@ already tracked by an active plan are *not* repeated here.
   URL index + edge API) once the kernel is quiet — the snapshot-level merge was the
   non-colliding path, not the final shape.
 
+## 2026-07-04 archive pass (12 more plans → `archive_docs/2026-07-04_completed_plans/`)
+
+### From document_style_sheet (P0-P4 complete 2026-06-22, inker)
+
+- **Container + non-text roles** (Quote / List) — own plan when consumer
+  pressure appears; deliberately not built at the tail of P4.
+- **Visual arrow check** on document-lane sheet arrows was deferred at closeout.
+
+### From document_typography_surface (D1-D3 shipped 2026-06-22, inker)
+
+- **D4 — per-role + per-engine typography overrides** (advanced section) and
+  **full font enumeration**. The seed-palette plan's "surface per-role document
+  knobs in settings" deferral is the same item; do them together.
+
+### From surface_engine_contract_fold (complete 2026-07-04, inker)
+
+- **`SecondaryForward` rename** — the flip shim kept the old `ProducerSurface`
+  name while becoming generic over `WebSurface`; rename when touched (cosmetic).
+
+### From retained_text_tiled_render (acceptance met 2026-07-03)
+
+- **Image-only inline links** — an `<a>` wrapping only a replaced element
+  establishes no box and is not harvested.
+- **Per-band link re-harvest caching** — links re-harvest on every band
+  re-emit; cache once a tall many-link page measurably bites.
+- **Glyph→char cluster map on `GlyphRun`** — upgrades document-lane find/select
+  from block-scoped to exact intra-line geometry (fidelity, not function).
+
+### From seed_palette_theme_system (complete 2026-06-22)
+
+- **TOML swap** for the theme file format (kept format-agnostic); **rescan-on-
+  demand** for theme packs (startup-only today).
+
+### From gnode_pool (landed 2026-07-02, follow-ons resolved 2026-07-03)
+
+- No open gnode-pool debt. The residual (loaded-session `chrome_us` /
+  `chrome_raster_us` on legitimately-dirty frames) is owned by serval's
+  `docs/2026-07-03_shell_paint_emission_raster_plan.md`; the like-for-like
+  loaded-session capture is that plan's motivating measurement.
+
+No tails: chrome_bar_refinement (its deferred switcher cleanup was completed
+in-plan), ui_dpi_scaling, gloss_scene_to_dom (follow-ups owned by the active
+gloss_outline_lens plan), graphlet_wiring (cross-plan leftovers owned by the
+active relational_browse plan), tearout_composability (continuation is the
+active tearout_gestures plan).
+
 ## Progress
 
 - **2026-07-03** — created during the archive/reconcile pass; 11 completed plans
@@ -84,3 +130,6 @@ already tracked by an active plan are *not* repeated here.
 - **2026-07-04** — reconciled the find-in-page carry-over: the document-lane
   retained-text find/copy acceptance slice is now closed in the retained-text
   plan, while paste into the find field remains open.
+- **2026-07-04** — second archive pass: 11 more completed plans moved to
+  `archive_docs/2026-07-04_completed_plans/` (joining the concurrently-archived
+  misfin promotion plan); their tails added in the 2026-07-04 section above.

@@ -145,7 +145,7 @@ substrate owners are named; this plan owns the Representation variant + dispatch
   the node's rect. The compositing + input substrate is owned by
   [native_surface_compositing_plan](../../archive_docs/2026-07-03_completed_plans/2026-06-19_native_surface_compositing_plan.md). The
   canvas / arbitrary-producer-behind-an-`<external-texture>` subcase is the one genuine gap (the
-  texture-local input bridge), owned by [tearout_composability_plan](2026-06-19_tearout_composability_plan.md)
+  texture-local input bridge), owned by [tearout_composability_plan](../../archive_docs/2026-07-04_completed_plans/2026-06-19_tearout_composability_plan.md)
   C2.
 - **The decorative scripted form.** A custom-drawn / data-driven face is substrate-available now
   via DOM (the swatch proves node-scoped interactive chrome-DOM). The *behavioral* scripted form
@@ -164,7 +164,7 @@ Open representation threads, each with its home, so closing the predecessor plan
 - **Styling lens (Decision 3).** One styling lens over node shape + **edge style + field style**
   (the NODE_SHEET pattern widened), not three hardcoded paths. The node-shape half exists; the
   edge / field extension is tracked here as the node-appearance styling concern. Relates to but is
-  not owned by the theme system ([seed_palette_theme_system_plan](2026-06-22_seed_palette_theme_system_plan.md),
+  not owned by the theme system ([seed_palette_theme_system_plan](../../archive_docs/2026-07-04_completed_plans/2026-06-22_seed_palette_theme_system_plan.md),
   which owns color) or the command registry.
 - **Label density (Decision 4).** Off / terse / full as a per-scene setting, ellipsized to the
   face width at the current zoom. A node-appearance setting; surfaces via the settings-lane

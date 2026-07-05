@@ -109,7 +109,7 @@ testing the cursor against ~15 per-frame rect caches in `WindowView`, with no fa
 and `default_prevented()` never read. The model's job here is to **lift the orrery's contract up to
 the host**: one input spine (top-down dispatch with fall-through), one focus authority, geometry
 from the laid-out tree rather than re-derived rect caches.
-**Owner: [tearout_composability_plan](../implementation_strategy/2026-06-19_tearout_composability_plan.md)** (continuing the archived window-composition plan),
+**Owner: [tearout_composability_plan](../../archive_docs/2026-07-04_completed_plans/2026-06-19_tearout_composability_plan.md)** (continuing the archived window-composition plan),
 the one input spine + one focus authority (its P2-companion), over the shell-root document that
 unified-document-host Phase 1 consolidates.
 
