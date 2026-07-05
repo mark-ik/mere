@@ -276,3 +276,21 @@ overlay slot on the focused input, state host-side, invisible to the page.
   outright; Web Annotation Data Model recorded as the interchange projection
   for the one non-rendering layer. Every P0 test now cites the spec section
   it subsets.
+- **2026-07-05 — P0 first slice landed: the highlight slot (engine side).**
+  serval-layout gained `highlights.rs` (css-highlight-api-1 subset: named
+  registry, static byte ranges, engine-derived geometry; the v0 deviations —
+  translucent over-ink painting, name-order priority, per-node ranges — are
+  documented in the module header as deliberate cuts) and
+  `IncrementalLayout::set_highlight` / `clear_highlight`, painted by
+  `emit_paint_list` after content emission via the selection primitives, with
+  the document scroll applied so fills land in the emitted band. Registration
+  touches no style/layout state: repaint-only by construction. Two headless
+  tests prove the P0(e) conditions: a registered range paints with **zero DOM
+  mutations and zero relayout** (fragment plane + host rect bit-identical,
+  content emission unchanged, clear restores parity), and geometry
+  **re-derives across relayout** (a wrapped narrow layout moves the
+  highlighted word's fill down with no re-registration). 242/242
+  serval-layout lib tests green (serval `components/serval-layout`, one
+  commit). Next: P2 wires the find worker's matches onto `set_highlight` in
+  the content actor and deletes the render.rs match-rect compositing — or the
+  P0 top-layer/anchor probe, whichever lane is quiet.
