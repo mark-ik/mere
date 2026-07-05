@@ -189,3 +189,19 @@ currently quiet.
   strip same-frame, chips shifted cleanly (`s1-addclick-crop.png`). **Remaining S1
   item:** the thumbnail-only vs thumb+label variant as a settings-lane toggle
   (configurability rule) — deferred to its own small slice.
+- **2026-07-05 (S4 sweep run — original defect gone; a new narrow-window defect found).**
+  Driven matrix at 2x DPI: full width at user_zoom 1.0 / 1.4 / 2.0 all lay out cleanly —
+  chips ellipsize, the omnibar compresses, add group + window controls visible, no glyph
+  overlap (`C:\t\s4-*.png`); finding 4's controls-over-buttons overlap does not
+  reproduce. **New defect at narrow widths:** at a verified 1280x900 physical window
+  (640 logical), the toolbar row overflows off-window instead of shrinking — the
+  settings chip clips at the window edge and the add group, session overflow fold, and
+  window controls are all pushed off-screen/unreachable (`s4-narrow2-crop.png`;
+  identical minutes later, so settled). Chrome session rebuilds were confirmed firing
+  at the new dims (`meerkat::profile` rebuild entries at resize time), so this is real
+  flex layout, not a stale viewport: despite `min-width: 0` + default shrink on the
+  omnibar and chips, the row's items keep natural widths and overflow. Needs a minimal
+  serval-layout repro (fixed-width flex row + nowrap items + min-width:0) to determine
+  whether item shrink-below-min-content is an engine gap or a sheet gap, then the
+  plan's named levers (omnibar shrink priority, width-aware `SESSION_INLINE_CAP`).
+  Spun as the remaining S4 fix slice; not attempted blind.
