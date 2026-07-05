@@ -24,7 +24,7 @@
 use kernel::color::Color32;
 use register_lens::ThemeData;
 use tincture::oklch::Oklch;
-use tincture::{Seeds, Srgb, best_on, contrast, derive_palette, mix};
+use tincture::{ModeProfile, Seeds, Srgb, best_on, contrast, derive_palette_with, mix};
 
 use crate::chrome::ChromeTheme;
 use crate::edge_style::{
@@ -113,7 +113,19 @@ pub fn derive_token_set(
     seeds: &Seeds,
     profile: &ThemeProfile,
 ) -> ThemeTokenSet {
-    let p = derive_palette(seeds);
+    // The base palette derives mode-aware (tinct 0.1.1 `derive_palette_with`):
+    // hc modes widen the text/surface separation at the SOURCE, so the token
+    // tiers below start from hc-correct text/dim/disabled instead of forcing
+    // everything locally. The local hc branches that remain are the stricter
+    // meerkat choices (surfaces collapse to the pure extreme; disabled text
+    // keeps the old stroke treatment).
+    let p = derive_palette_with(
+        seeds,
+        ModeProfile {
+            dark: seeds.dark,
+            high_contrast: profile.high_contrast,
+        },
+    );
     let neutral = Oklch::from_srgb(seeds.neutral);
     let hc = profile.high_contrast;
     let dark = seeds.dark;

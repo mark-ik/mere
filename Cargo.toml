@@ -212,7 +212,7 @@ uuid = { version = "1", features = ["serde", "v4"] }
 # derives the full ThemeTokenSet from a few seed colours via this. Published as
 # `tinct` on crates.io; kept under the local alias `tincture` (Cargo `package =`)
 # so consumers and every `use tincture::` stay unchanged.
-tincture = { package = "tinct", version = "0.1" }
+tincture = { package = "tinct", version = "0.1.1" }
 
 # Off-grid mesh transport probe (optional, default-off). The `reticulum` crate
 # is a Rust implementation of the Reticulum Network Stack; keep the pin here so
