@@ -10,6 +10,12 @@ second window as **orrery (authority) vs panes (views that resolve to an orrery 
 forward and converged with far-B) after finding the shared constellation is UUID-keyed
 and graph-agnostic. The MW4–MW6 sections below are kept for history; read them through
 that plan. This plan carved the window seam and staged leaf → branch → fork.
+**Reframed 2026-07-05**: the N-runner/N-dom/N-ShellState shape this plan built is
+now the *current* state, not the target. The
+[one-state-N-windows design](../design/2026-07-05_one_state_n_windows_design.md)
+names the next architecture: one runner, one app state, one forest dom, windows as
+lenses; the chrome mirroring and spawn-time chip seeding this plan's machinery
+required become the thing to delete.
 **Related**: [tear-out operations brief](../research/2026-05-11_tearout_operations_brief.md) (the leaf/branch/fork model this implements), [multi-graph activation plan](2026-06-09_multi_graph_activation_plan.md) (MG6 lists this; far-B and multi-window share the per-window-view-over-shared-graph split), [peripheral panes architecture](../technical_architecture/2026-06-06_peripheral_panes_architecture.md) (panes are per-window). Code: `crates/meerkat/`, `crates/system/session-runtime/`, `crates/shell/frame/`.
 
 Drag a pane or tile out of its window into a new OS window that shares the backing

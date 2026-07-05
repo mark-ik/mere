@@ -1,7 +1,8 @@
 # Theme Modes Plan (light / dark / high-contrast / custom)
 
 **Date**: 2026-07-05
-**Status**: plan, from Mark's theme-model decision (2026-07-05), unblocking the W3C adoption
+**Status**: T1–T5 implemented 2026-07-05 (see Progress; T5 shipped the declarative lane, rhai
+graduation open). From Mark's theme-model decision (2026-07-05), unblocking the W3C adoption
 plan's P3 host half.
 **Related**: `repos/serval/docs/2026-07-05_w3c_mechanism_adoption_plan.md` (P3 engine half landed:
 `IncrementalLayout::set_prefers_color_scheme`), `repos/tincture` (tinct seed-to-palette
@@ -72,6 +73,16 @@ switch path).
   media axis (4-in-1 sheet) or route contrast switches through the sheet-swap path explicitly.
 - **Done when** hc modes are pickable, derive via T1, and the chosen mechanism is recorded here
   with receipts.
+- **RESOLVED 2026-07-05: sheet-swap path.** Stylo's servo-side media feature table at serval's
+  pinned rev (8bde0e9, `style/servo/media_features.rs`) evaluates only `width / scan /
+  resolution / device-pixel-ratio / -moz-device-pixel-ratio / prefers-color-scheme`;
+  `prefers-contrast` exists gecko-side only. So the 2x2 4-in-1 sheet is not expressible on the
+  servo Device today. Wired instead: `rebuild_chrome_sheet` bakes the pair AT the current
+  contrast level (`(Light, Dark)` or `(HcLight, HcDark)`); picking a mode across contrast
+  levels changes the sheet strings and takes the session-rebuild path (asserted in
+  `chrome_sheet_bakes_the_scheme_pair_and_mode_flip_keeps_it_fixed`). Acceptable at contrast-
+  switch frequency. Liftable later by adding `prefers-contrast` to the stylo servo table
+  (fork territory) or an upstream stylo change.
 
 ### T4. Per-mode custom stylesheets
 
@@ -99,3 +110,82 @@ T4 and T5 ride settings passes; T5 last.
 
 - 2026-07-05: decision recorded, plan written. Engine prerequisite (scheme flip) already landed
   serval-side.
+- 2026-07-05: **T1 landed.** tinct (repos/tincture, v0.1.1 NOT YET PUBLISHED — Mark's call):
+  `ModeProfile { dark, high_contrast }` with `LIGHT/DARK/HC_LIGHT/HC_DARK` consts +
+  `derive_palette_with`; hc ladders push surfaces toward the extremes, text past them, and
+  tighten the dim/disabled blend; `derive_palette(seeds)` unchanged as the degenerate form.
+  Test `four_canonical_modes_derive_distinct_wider_hc_palettes` (7:1 floor + wider-than-normal
+  assertions) green. Mere does NOT consume the new tinct API yet (crates.io pin at 0.1.0);
+  register-theme derives per-mode through its existing `(dark, hc)` profile machinery:
+  `theme::Mode { Light, Dark, HcLight, HcDark, Custom(id) }` (key/label/flags helpers),
+  `seed::derive_from_def_for_mode`, `seed::default_mode_for_def`,
+  `ThemeRegistry::mode_tokens`. Tests green (mode key roundtrip; four distinct palettes from
+  one theme with the hc 7:1 gate; legacy-builtin default modes).
+- 2026-07-05: **T2 landed.** `theme_sheets::bake_scheme_pair` (light rules base + dark-only
+  rules in one `@media (prefers-color-scheme: dark)` block); `rebuild_chrome_sheet` bakes the
+  pair at the current contrast level and refreshes a `chrome_theme_light/dark` token pair on
+  `Presentation`; `gather_chrome_css` (roster/apparatus/utility/gloss pane CSS appended to the
+  chrome sheet per frame) builds from the PAIR and pair-bakes too, so the chrome sheet identity
+  is scheme-invariant. `PaneSession::refresh/scene` take `scheme_dark`: sheet unchanged +
+  scheme changed rides `IncrementalLayout::set_prefers_color_scheme` (session + element scroll
+  survive); a rebuild seeds the scheme after `new` (engine builds light-default — a
+  `new`-with-scheme serval API would save that extra recascade, minor follow-up). Non-sheet
+  lanes re-key off the mode tokens via `theme_edit::apply_resolved_tokens` (shared by
+  `set_theme` / the new `set_mode`); the chrome base-raster cache folds the scheme into
+  `chrome_base_sig`. Mode picker radios on the Appearance page (`mode:set:<key>`); persisted
+  as `PersistedSettings::theme_mode`; boot restores it (unset re-seeds from the theme def, so
+  the legacy four built-ins keep their meaning — `set_theme` re-seeds the mode the same way).
+  Receipts: `chrome_sheet_bakes_the_scheme_pair_and_mode_flip_keeps_it_fixed` (sheet + token
+  pair fixed across a scheme flip; hc pick changes them) and
+  `scheme_flip_reuses_the_chrome_session_without_rebuild` (`rebuild == false` on the flip).
+  meerkat bin suite 220 pass / 3 pre-existing fails (graph_delta_log, roster_view links_tab,
+  wallet_pairing — fail at HEAD without these changes; meerkat LIB tests also red at HEAD in
+  `ingest.rs`, concurrent-work skew).
+  - CORRECTION (same day): the "list-pane pair-baking follow-up" is moot. The standalone
+    `ViewPane` panes (RosterPane / ListPane / the settings-pane harness) are TEST harnesses
+    only (`main.rs:134`); production roster / gloss / settings panes fold into the chrome
+    document and are covered by the pair-baked `gather_chrome_css`. The remaining single-mode
+    surfaces — the pelt tile CSS (`tile_sheet`, rebuilt when `pelt_theme != active tokens`) and
+    the note-card band bake (`note_sheet`, stateless per re-raster) — are self-invalidating on
+    a flip, same cost/behaviour as a theme switch. No further host work needed for the flip.
+- 2026-07-05: **T3 resolved** — see the RESOLVED note in T3 (sheet-swap path; stylo servo
+  Device has no `prefers-contrast` at the pinned rev).
+- 2026-07-05: **T4 landed.** `ThemeDef.mode_sheets: BTreeMap<String, Vec<String>>` (keyed by
+  `Mode::as_key`, `#[serde(default)]` so pre-T4 theme files parse; empty lists count as
+  absent via `ThemeDef::mode_sheet`; forks carry the overrides). Resolution in
+  `rebuild_chrome_sheet`: an override on either side of the scheme pair forces the swap path
+  — the sheet is the ACTIVE mode's resolution (custom rules as-is, px-scaled, syntax rules
+  appended; else the derived single-mode sheet); only a fully-derived pair bakes the cheap
+  flip. Persistence is the theme file itself (`theme_store` serializes `ThemeDef`).
+  Authoring surface today: hand-edit `<mere_root>/themes/<id>.json` (the mod-distribution
+  path); a settings-lane editor can ride a later settings pass. Receipts:
+  `mode_sheets_roundtrip_and_gate_on_non_empty` (register-theme),
+  `per_mode_custom_sheet_overrides_the_derived_dark_sheet` (meerkat, the done-when),
+  `theme_store::save_then_load_round_trips` extended with a mode-sheet entry (survives
+  restart). Suite: 221 pass / same 3 pre-existing fails.
+- 2026-07-05: **T5 landed, declarative lane** (the plan's own "start declarative" pick; the
+  rhai graduation stays open for when authors need logic — the file shape below is the
+  compatibility floor). A custom mode is `<mere_root>/modes/<id>.json`
+  (`register_theme::mode_calc::CustomModeDef`): id + name + declared `(dark, high_contrast)`
+  flags + a mapping table from every `ChromeTheme` role to a small OKLCH transform of one
+  seed (`seed`, optional `l` / `c` / `rotate` degrees / `alpha`, or `on: true` for the
+  contrast-picked text over the computed fill) — the same tinct maths as the built-in
+  derivation, tiny and reviewable like theme files. Load: `mode_store::load_custom_modes` at
+  boot (incomplete / malformed / duplicate files skipped + logged; completeness is proven by
+  a seed-independent dry run). Resolution: custom modes are sheet swaps by definition —
+  `rebuild_chrome_sheet` generates the sheet from the calculator's tokens (no baked pair);
+  the non-sheet lanes (orrery / document palettes) derive canonically with the mode's
+  declared flags, with the calculator's chrome overlaid (`set_mode` + boot mirror each
+  other); `scheme_dark()` presents the declared scheme to the engine. Picker: customs list
+  after the canonical four (`mode:set:custom:<id>`); persisted as `custom:<id>`, a missing
+  file at boot falls back to the theme default. Failure posture: unknown id / failed eval is
+  a logged no-op (pick) or canonical fallback (rebuild/boot) — a stale mode can't blank the
+  shell. Receipts: `mode_calc` unit tests (transforms, `on`, rejection-by-name, JSON
+  roundtrip), `mode_store` load test, and
+  `custom_mode_file_produces_a_working_shell_theme` (the done-when: authored file → boots →
+  listed → calculator palette renders → survives restart). Suite: 223 pass / same 3
+  pre-existing fails; register-theme 21 pass.
+- Remaining follow-ups: the rhai calculator lane (if declarative tables prove insufficient),
+  an in-app editor surface for T4 per-mode sheets and T5 mode files (a later settings pass),
+  the serval `new`-with-scheme micro-optimisation, and publishing tinct 0.1.1 (then
+  optionally migrating register-theme's derivation onto `tinct::derive_palette_with`).

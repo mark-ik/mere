@@ -38,14 +38,42 @@ Done when the crate builds in the workspace with focused tests for
 streaming order, max-token/stop handling, capability matching, and trait
 object safety.
 
-### P1 — Burn model body
+### P1 — Burn model body (own body, reference-vendored — decided 2026-07-05)
 
-A small instruct model on burn-wgpu behind a feature (embed's `bert`
-pattern): borrow the model body from tracel-ai/models rather than writing
-fresh; capability advertises the real context window and `burn-wgpu` loader.
-Opt-in GPU smoke mirroring the flip plan's timing tests. Done when a 1-3B
-model streams tokens through the seam natively with recorded tokens/sec on
-CPU vs GPU.
+Not an adaptation of llama-burn's crate: an **own, HF-config-driven
+llama-family decoder** in embed's `bert/` pattern, built from burn-nn's own
+primitives — `RmsNorm`, `RotaryEncoding`, `SwiGlu`, and the autoregressive
+KV cache all ship in burn-nn 0.21, so the framework already carries most of
+what llama-burn hand-rolls against its older pre-release pin. Mark's call:
+fit the model to our framework and conventions, not the framework to the
+example.
+
+- **Config**: read HF `config.json` (hidden/layers/heads/kv-heads/rope
+  theta + scaling/norm eps/vocab) into our own decoder config, so one body
+  runs the whole open llama-family class (TinyLlama, Llama 3.2, SmolLM)
+  from the HF layout directly. TinyLlama first (no license gate).
+- **Tokenizer**: the `tokenizers` crate only (HF `tokenizer.json`),
+  dropping llama-burn's tiktoken/sentencepiece duality — one tokenizer
+  stack across embed + infer, and one shared onig/wasm wall instead of
+  three.
+- **Loader**: safetensors → burn weight injection exactly as
+  `embed::bert::loader` does it (HF name map, transpose-at-boundary,
+  validation), feeding P2's eidetic byte path with no filesystem
+  convention.
+- **What llama-burn remains**: a reference implementation to read and diff
+  against (borrow technique, not structure) — chiefly the GQA attention
+  wiring and generation/sampling glue, which are the two parts burn-nn
+  does not hand us. Credit it in module docs where its technique is used.
+- **Correctness net**: we own the numerics, so mirror
+  `embed::bert::validation` — a fixture test against reference outputs for
+  a real checkpoint, plus the cross-backend parity pattern from the flip
+  plan.
+- **Owned module names** are a feature, not a cost: Lane 4's LoRA adapter
+  envelope needs stable target-module naming, which we control only in our
+  own body.
+
+Done when a 1-3B model streams tokens through the seam natively with
+recorded tokens/sec on CPU vs GPU, validated against reference outputs.
 
 ### P2 — Eidetic model loading
 
@@ -73,6 +101,31 @@ gets bound.
 - 2026-07-05: seam shape lifted from `embed::provider` (trait +
   error + vocabulary in one module, stub backend beside it, real backend
   feature-gated) — the pattern the harness brief says to extend.
+- 2026-07-05, **P1 borrow assessment**: tracel-ai/models (`llama-burn`,
+  MIT OR Apache-2.0, unpublished workspace crate) currently pins
+  `burn = "0.21.0-pre.4"` — a pre-release that does not unify with the
+  workspace's 0.21.0 final, so a git dependency would drag a second
+  incompatible burn tree in and its `Llama<B>` would be generic over the
+  wrong `Backend` trait. Route: vendor + adapt behind a feature (their
+  pre.4 API is essentially 0.21 final, so the adaptation is small), or
+  wait for their post-0.21 bump and re-check. Either way P1 is its own
+  focused pass (~2-3k lines across model/transformer/cache/rope/sampling/
+  tokenizer/pretrained, plus tokenizer deps: tiktoken-rs for llama3,
+  tokenizers for tiny). Preserve attribution when vendoring.
+- 2026-07-05, **P1 route decided (own body)**: burn-nn 0.21 ships
+  `RmsNorm`, `RotaryEncoding`, `SwiGlu`, and an autoregressive KV cache —
+  verified in the pinned crate source — so vendoring llama-burn's whole
+  structure would mean adopting hand-rolled copies of things our framework
+  already provides, shaped by their pre-release pin and their example
+  needs (Meta-checkpoint import, pretrained download, dual tokenizers).
+  Decision (Mark): own HF-native decoder body from burn-nn primitives;
+  llama-burn demoted from vendor-source to reference implementation. P1
+  section rewritten accordingly.
+- 2026-07-05, **P3 ordering note**: the actor landed before P1 — it is
+  provider-agnostic (runs today on `CannedProvider`, the real body drops
+  in unchanged) and it fixes the seam's consumer shape early. In-flight
+  cancellation is deferred until the provider callback grows a
+  `ControlFlow` return alongside P1 (noted in `actor.rs`).
 
 ## Progress
 
@@ -85,3 +138,48 @@ gets bound.
   `cargo test -p infer`: 11/11 green, including trait object safety and
   Send + Sync. No consumers yet by design; the actor (P3) is the intended
   first one.
+- 2026-07-05 — P1 slice 1 landed: `infer::decoder` behind the `decoder` /
+  `decoder-wgpu` features (burn optional dep mirroring embed's bert split).
+  `config.rs` parses real HF `config.json` (TinyLlama's actual config in
+  the test, unknown fields ignored, GQA fallback + divisibility
+  validation), `attention.rs` is the GQA + RoPE + causal-mask block built
+  on burn-nn's `RotaryEncoding`/mask helpers with `linear_no_bias`
+  injection, `layer.rs` the pre-norm residual block on `RmsNorm` + `SwiGlu`
+  with the HF weight-name mapping documented for the loader slice. Rope is
+  model-owned and passed into forwards (no per-layer duplication). Tests
+  19/19: config parse/validate, shape/determinism/finite, the causality
+  probe (perturbing the last token leaves earlier positions bit-stable —
+  catches a missing or inverted mask), GQA-equals-duplicated-kv-MHA
+  equivalence (locks the HF grouping convention), and ndarray↔wgpu layer
+  parity on the real GPU. Next slices: model stack + safetensors loader,
+  KV-cached generation loop (brings the `ControlFlow` callback change),
+  provider impl + validation fixture.
+- 2026-07-05 — P1 slice 2 landed: the model stack and the HF loader.
+  `model.rs` (embedding → layer stack → final RmsNorm → LM head, one
+  model-owned rope shared by all layers; tied-embeddings path uses the
+  transposed embedding matrix and is proven equal to an explicit
+  transposed head), `tensors.rs` (safetensors extraction widened with
+  BF16/F16 → f32 decode via `half` — TinyLlama ships bfloat16; quantized
+  dtypes rejected explicitly, not auto-cast), `loader.rs`
+  (`load_decoder_from_bytes`: full HF llama-family name map with
+  transpose-at-boundary; missing `lm_head.weight` accepted only when the
+  config says tied, rejected otherwise; byte-buffer API so eidetic's
+  `ModelComponents.weight_bytes` feeds it directly for P2). Loader tests
+  build synthetic safetensors checkpoints in-memory: f32 load → finite
+  logits, bf16 load stays within 0.05 of f32, tied/untied both paths,
+  missing tensors named in errors. Suite: 33/33 with
+  `--features actor,decoder-wgpu`. Remaining P1: KV-cached generation
+  loop + sampling (+ `ControlFlow` cancellation), `InferenceProvider`
+  impl, TinyLlama validation fixture + tokens/sec numbers.
+- 2026-07-05 — P3 landed ahead of P1 (see Findings for why). `infer::actor`
+  behind the `actor` feature (armillary optional dep, so the seam core
+  stays wasm-clean — `cargo check -p infer --target wasm32-unknown-unknown`
+  passes): `spawn_inference_actor` builds the provider on the actor thread,
+  emits `Ready { capability }` at startup, then
+  `Started`/`Fragment`.../`Finished`-or-`Failed` per request with
+  correlation ids. `cargo test -p infer --features actor`: 14/14 green
+  (streaming order, error path, id correlation). Remaining phases: P1
+  (vendored burn model body), P2 (eidetic `ManifestId` loading — corridor
+  already proven byte-faithful by the fixed round-trip test), P4
+  (measurements). The host wiring (meerkat kernel inbox + omnibar consumer)
+  rides P1/P2, since a canned-echo omnibar serves no one.
