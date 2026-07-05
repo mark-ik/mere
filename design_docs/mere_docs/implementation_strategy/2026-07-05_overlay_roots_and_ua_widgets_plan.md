@@ -326,7 +326,7 @@ overlay slot on the focused input, state host-side, invisible to the page.
   confirmed**: the engine-painted fills on screen — the loaded page body wasn't
   compositing visibly in the capture (a content-card display matter, unrelated to this
   change), so the in-band highlight paint needs one more headed pass once a page renders
-  visibly. The render.rs rect-compositing was **not deleted**, only demoted to the
+  visibly. **Closed headlessly 2026-07-05**: a `ContentLayout::emit_band` test proves both `"needle"` matches paint a fill in-band with zero DOM/no re-search, the fills band-shift with the content (a lower band moves them up by the band delta), and clearing restores the plain band's command count — a more durable proof than a screenshot (245/245 serval-layout lib tests green, committed). The on-screen confirm remains a nice-to-have once the content card renders visibly, but the engine paint itself is now test-covered. The render.rs rect-compositing was **not deleted**, only demoted to the
   fallback — deleting it waits on that visual confirm + the snapshot-lane decision (a
   snapshot card has no live layout to register highlights on, so the fallback stays for
   it). Concurrent-workstream note: 3 unrelated bin tests were red at commit time
