@@ -38,13 +38,30 @@ rebuilt control feeds AccessKit. Building the shadow content out of
 xilem_serval controls is the modern implementation shape with the contract
 documents already written.
 
-Both reduce to one engine capability: **a view subtree mounted inside a
-document the view layer does not own** — style-isolated from the page cascade,
-invisible to page scripts, laid out by the engine relative to a host node,
-painted in-band, hit-tested first, events routed to host app state. Directive 1
-mounts it *beside* content (anchored, out-of-flow); directive 2 mounts it *as*
-an element's rendering (in-flow, the element's box is the host box). Shadow-DOM
-semantics minus the authorial API.
+**Directive 1 decomposes into current specs too** (Mark, second follow-up):
+overlay-roots are not a new root category needing new architecture. Find
+highlights are the **CSS Custom Highlight API** plus `::target-text` — painted
+ranges, no per-match DOM at all. Floating chrome anchored to content nodes is
+**CSS Anchor Positioning** plus the **Popover API** and the **top layer** —
+exactly the machinery browsers now use for their own UI. Isolation of an
+overlay subtree from page styles is a **UA shadow root**. So the engine work
+is: serval implements top layer, anchor positioning, custom highlights, and UA
+shadow roots, with xilem_serval as their first and most demanding consumer.
+Only the annotation *data* layer goes beyond rendering specs, and the **W3C
+Web Annotation Data Model** exists there for interchange. Two dividends: the
+knockout-then-rebuild strategy pays out (chrome needs fund spec subsets that
+later serve page authors verbatim), and every engine piece has a conformance
+target instead of an invented contract.
+
+Both directives reduce to one engine capability: **a view subtree mounted
+inside a document the view layer does not own** — style-isolated from the page
+cascade, invisible to page scripts, laid out by the engine relative to a host
+node, painted in-band, hit-tested first, events routed to host app state.
+Directive 1 mounts it *beside* content (a UA-invoked popover in the top layer,
+anchor-positioned); directive 2 mounts it *as* an element's rendering (a UA
+shadow root; the element's box is the host box). "Satellite root" below is
+internal shorthand for the shared mount; each slot kind is a named spec
+subset, not bespoke machinery.
 
 ## Findings (code-grounded 2026-07-05)
 
@@ -89,15 +106,21 @@ semantics minus the authorial API.
 **Engine (serval): satellite roots.** A document can carry N satellite
 subtrees, each attached to a host node with a slot kind:
 
-- **Overlay slot** — out-of-flow, anchored: the satellite's containing block
-  derives from the anchor node's fragment (the CSS Anchor Positioning model,
-  subset). Painted above the anchor's stacking context, clipped and scrolled
-  with the anchor's scroll container. For document-wide surfaces (reader mode)
-  the anchor is the root element.
-- **UA shadow slot** — in-flow, replacing: the host element's box becomes the
-  satellite's containing block and the element's rendered content *is* the
-  satellite (a `<select>` renders its control view; its popup is an overlay
-  slot on the same element — the two slot kinds compose).
+- **Overlay slot** = top layer + Popover API semantics + CSS Anchor
+  Positioning (subset): the satellite is a UA-invoked popover whose containing
+  block derives from the anchor element per the anchor-positioning model,
+  promoted to the top layer, dismissal and nesting per popover semantics,
+  scroll-tracking the anchor. For document-wide surfaces (reader mode) the
+  anchor is the root element.
+- **UA shadow slot** = a UA shadow root: the host element's box is the
+  containing block and the element's rendered content *is* the satellite (a
+  `<select>` renders its control view; its popup is an overlay slot on the
+  same element — the two spec subsets compose, exactly as `appearance:
+  base-select` composes them).
+- **Highlight slot** = the CSS Custom Highlight API + `::target-text`: not a
+  subtree at all — host-registered ranges painted by the engine. Find
+  highlights, selection-adjacent decorations, and annotation underlines use
+  this; it is the cheapest tier and needs no runner.
 
 Invariants, both slots: own cascade scope (UA/overlay sheets only); invisible
 to page DOM APIs (the DocumentScript mirror and page-script reflectors never
@@ -126,13 +149,16 @@ overlay slot on the focused input, state host-side, invisible to the page.
 
 ## Phases (done-conditions, not dates)
 
-- **P0 — engine satellite-root probe.** serval-layout: attach a static
-  satellite subtree (overlay slot) to an anchor in a laid-out document.
-  Done when: headless tests prove (a) the page's own layout is byte-identical
-  with and without the satellite (no reflow leak), (b) the satellite's
-  position tracks the anchor across scroll and an anchor-moving mutation,
-  (c) page sheets do not restyle the satellite, (d) emission includes the
-  satellite in the correct band and paint order.
+- **P0 — engine spec-subset probe.** serval-layout grows the minimal slice of
+  each spec: a top-layer entry anchored per anchor-positioning to a host
+  element, carrying a UA-shadow-isolated subtree; plus a registered custom
+  highlight painted over a range. Done when: headless tests prove (a) the
+  page's own layout is byte-identical with and without the satellite (no
+  reflow leak), (b) anchor tracking across scroll and an anchor-moving
+  mutation, (c) page sheets do not restyle the satellite (shadow boundary),
+  (d) emission lands in the correct band and top-layer paint order, (e) a
+  registered highlight paints its range with zero DOM. Each test cites the
+  spec section it subsets.
 - **P1 — remote runner seam.** xilem_serval: runner-over-mutations against a
   mirror; content actor applies satellite batches via the graft path.
   Done when: a toy overlay view (counter chip anchored to a page node) runs
@@ -140,11 +166,13 @@ overlay slot on the focused input, state host-side, invisible to the page.
   mutations around it, and round-trips a click. The splice-safety analog test
   (page churn around a satellite; satellite churn beside page nodes) is the
   deliverable.
-- **P2 — first real feature: find-in-page highlights.** Replace the rect
-  pipeline with highlight overlay views; the find worker's matches become app
-  state. Done when: parity with today's highlights (count, stepping,
-  auto-scroll) with the render.rs match-rect compositing deleted, verified
-  headed on a tall page.
+- **P2 — first real feature: find-in-page highlights via Custom Highlights.**
+  The find worker's matches register as engine highlights (the highlight
+  slot); no overlay views, no per-match DOM. Done when: parity with today's
+  highlights (count, stepping via the active-highlight style, auto-scroll)
+  with the render.rs match-rect compositing deleted, verified headed on a
+  tall page. (This lands even cheaper than the overlay-view version first
+  drafted — the spec decomposition's immediate payoff.)
 - **P3 — UA shadow slot + the cheap widgets.** `<details>`/`<summary>` (pure
   toggle, no IME), `<input type=checkbox|radio>` via the existing control
   views. Done when: a fetched page's checkbox toggles, reflects into the
@@ -192,10 +220,11 @@ overlay slot on the focused input, state host-side, invisible to the page.
 
 ## Open questions
 
-- **OQ-1**: does the overlay slot adopt CSS Anchor Positioning's vocabulary
-  (`anchor()`, position-area) outright so page-authored anchors later share
-  the machinery, or a minimal internal contract first? Lean minimal-internal,
-  named to allow the later alignment.
+- **OQ-1 — resolved (2026-07-05, spec decomposition): adopt the spec
+  vocabularies outright.** Anchor Positioning, Popover/top-layer, Custom
+  Highlight API, UA shadow roots — subset per phase, but named and shaped as
+  the specs define them, so page-authored use later shares the machinery
+  verbatim.
 - **OQ-2**: satellite content in engrams/clips — when a user clips a region
   under an annotation pin, the satellite must be excluded from capture
   (provenance C-plans); where is that filter?
@@ -223,7 +252,14 @@ overlay slot on the focused input, state host-side, invisible to the page.
 - [petgraph_rdf_plan](2026-06-18_petgraph_rdf_plan.md) statement buckets — the
   annotation-pin backend.
 - Serval W3C knockout strategy (project memory) — P3-P5 is the first
-  knockout-then-rebuild rebuild, done in the cheap layer.
+  knockout-then-rebuild rebuild, done in the cheap layer; P0's spec subsets
+  (top layer, anchor positioning, custom highlights, UA shadow) are rebuilds
+  funded by chrome needs that later serve page authors verbatim.
+- **W3C Web Annotation Data Model** — the interchange format for the
+  annotation data layer (the one piece beyond rendering specs), when
+  annotations want portability; the statement-bucket kernel model is the
+  native store, the annotation model a projection (same posture as the RDF
+  profile).
 
 ## Progress
 
@@ -232,3 +268,11 @@ overlay slot on the focused input, state host-side, invisible to the page.
   confirmed complete, `host_pool`/`graft_subtree`/mutation-stream seams
   confirmed landed, root topology and the four-part cost of today's
   cross-root features (find-in-page as receipt) documented. No code.
+- **2026-07-05 (same session)** — restructured around Mark's spec decomposition:
+  overlay-roots dissolve into top layer + Popover semantics + Anchor
+  Positioning (overlay slot), UA shadow roots (isolation + UA widget slot),
+  and the Custom Highlight API + `::target-text` (a third, DOM-free highlight
+  slot — find-in-page got cheaper again). OQ-1 resolved to spec vocabulary
+  outright; Web Annotation Data Model recorded as the interchange projection
+  for the one non-rendering layer. Every P0 test now cites the spec section
+  it subsets.
