@@ -137,6 +137,10 @@ pub enum ContentCommandMessage {
         query: String,
         viewport_gen: u64,
     },
+    FindActive {
+        index: usize,
+        viewport_gen: u64,
+    },
     SelectText {
         anchor: (f32, f32),
         focus: (f32, f32),
@@ -395,6 +399,10 @@ enum ContentCommandWire {
         query: String,
         viewport_gen: u64,
     },
+    FindActive {
+        index: usize,
+        viewport_gen: u64,
+    },
     SelectText {
         anchor: (f32, f32),
         focus: (f32, f32),
@@ -478,6 +486,13 @@ impl ContentCommandWire {
                 viewport_gen,
             } => Self::Find {
                 query,
+                viewport_gen,
+            },
+            ContentCommandMessage::FindActive {
+                index,
+                viewport_gen,
+            } => Self::FindActive {
+                index,
                 viewport_gen,
             },
             ContentCommandMessage::SelectText {
@@ -575,6 +590,13 @@ impl ContentCommandWire {
                 viewport_gen,
             } => ContentCommandMessage::Find {
                 query,
+                viewport_gen,
+            },
+            Self::FindActive {
+                index,
+                viewport_gen,
+            } => ContentCommandMessage::FindActive {
+                index,
                 viewport_gen,
             },
             Self::SelectText {

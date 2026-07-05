@@ -405,6 +405,20 @@ impl Constellation {
         });
     }
 
+    /// Re-point the active find match on `member`'s actor: the engine re-registers
+    /// the stronger `find-active` highlight over match `index` and re-emits, so
+    /// stepping (Enter / Shift+Enter) re-tints in-band. No-op for an inactive
+    /// member. (Overlay-roots P2.)
+    pub fn request_find_active(&mut self, member: GraphMemberId, index: usize) {
+        let Some(activation) = self.active.get_mut(&member) else {
+            return;
+        };
+        activation.handle.command(ContentCommand::FindActive {
+            index,
+            viewport_gen: activation.gens.viewport,
+        });
+    }
+
     /// Ask `member`'s actor to resolve a point-drag text selection in its current
     /// HTML document. The host passes physical content-local points; the actor works
     /// in logical coords, so the query is converted through the current DPR. Results

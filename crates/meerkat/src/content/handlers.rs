@@ -179,6 +179,7 @@ pub(crate) fn deliver_event(
         // revert to the static page so the tile recovers instead of re-trapping.
         content.script = None;
         content.html = None;
+        content.find_ranges.clear();
     }
     // A script mutation may have re-laid-out (new nodes / images) and wanted new
     // subresources; ship them. (#3.)

@@ -119,9 +119,14 @@ impl WindowCtx<'_> {
         self.view.find_member = None;
     }
 
-    /// The focused member's find match rects, if they belong to `member`. The overlay
-    /// draws only when the composited member owns the current matches.
+    /// The focused member's find match rects, if they belong to `member`: a live
+    /// actor-backed page serves the constellation's rects (its actor searched the
+    /// retained layout and painted the highlights engine-side, overlay-roots P2);
+    /// a snapshot-only node serves the find worker's (the host-overlay fallback).
     pub(super) fn find_matches_for(&self, member: GraphMemberId) -> &[Vec<[f32; 4]>] {
+        if self.shared.content.constellation.is_active(member) {
+            return self.shared.content.constellation.find_matches(member);
+        }
         if self.view.find_member == Some(member) {
             &self.view.find_matches
         } else {

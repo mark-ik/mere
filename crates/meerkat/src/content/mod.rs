@@ -186,6 +186,15 @@ pub enum ContentCommand {
         query: String,
         viewport_gen: ViewportGeneration,
     },
+    /// Re-point the active find match (Enter / Shift+Enter stepping): the actor
+    /// re-registers the `find-active` engine highlight over the `index`-th match
+    /// from the last `Find` and re-emits the band, so the stronger tint paints
+    /// engine-side with the content. No-op when no find ranges are held.
+    /// (Overlay-roots P2 — find highlights via the custom-highlight registry.)
+    FindActive {
+        index: usize,
+        viewport_gen: ViewportGeneration,
+    },
     /// Resolve a point-drag text selection in the current HTML/serval document. The
     /// points are content-local document coords in device px (the host subtracts the
     /// card origin and adds scroll before calling); the actor maps them through its
@@ -423,6 +432,11 @@ pub(crate) struct Content {
     /// fresh. A `Retheme` keeps it (the serval lane themes through HTML_SHEET + the page CSS,
     /// not the document sheet). Built lazily by [`ensure_html_layout`].
     html: Option<(StaticDocument, ContentLayout<StaticNodeId>)>,
+    /// The last `Find`'s match ranges (HTML/serval lane), retained so
+    /// `FindActive` can re-register the active-match engine highlight without
+    /// re-searching. Cleared with `html` (a fresh layout invalidates leaf ids)
+    /// and on an empty query. (Overlay-roots P2.)
+    find_ranges: Vec<serval_layout::HighlightRange<StaticNodeId>>,
     /// An attached DocumentScript (P2.5c). When present, the tile renders from the
     /// script's mutable `ScriptedDom` (it supersedes the static `html` path), so the
     /// script's edits are live; cleared on a fresh `Show` and by `DetachScript`.

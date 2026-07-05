@@ -6,6 +6,25 @@
 
 use super::*;
 
+/// Engine-painted find-highlight fills (overlay-roots P2), mirroring the retired
+/// host overlay's amber tints: every match translucent, the active match stronger.
+const FIND_HIGHLIGHT: serval_layout::HighlightStyle = serval_layout::HighlightStyle {
+    color: paint_list_api::ColorF {
+        r: 1.0,
+        g: 0.82,
+        b: 0.20,
+        a: 0.38,
+    },
+};
+const FIND_ACTIVE_HIGHLIGHT: serval_layout::HighlightStyle = serval_layout::HighlightStyle {
+    color: paint_list_api::ColorF {
+        r: 1.0,
+        g: 0.55,
+        b: 0.10,
+        a: 0.55,
+    },
+};
+
 /// Build the scripted-rung document for a scripted Serval node: parse the already-
 /// fetched HTML body and run its scripts. With a `fetcher`, external `<script src>` is
 /// fetched through it (`from_body`, no document re-fetch); without one, inline scripts
@@ -275,6 +294,7 @@ impl ContentRuntime {
                     band_h: viewport.1,
                     sheet,
                     html: None,
+                    find_ranges: Vec::new(),
                     script: None,
                     #[cfg(feature = "scripted")]
                     scripted_doc,
@@ -297,6 +317,7 @@ impl ContentRuntime {
                     content.viewport_gen = viewport_gen;
                     content.band_y = 0;
                     content.html = None;
+                    content.find_ranges.clear();
                     relayout_script(content, &self.store, out, viewport.0, viewport.1);
                     render(content, &self.store, &self.registry, &self.policy, out);
                 }
@@ -319,6 +340,7 @@ impl ContentRuntime {
                 self.store.borrow_mut().insert(url, bytes);
                 if let Some(content) = self.current.as_mut() {
                     content.html = None;
+                    content.find_ranges.clear();
                     let (w, h) = content.viewport;
                     relayout_script(content, &self.store, out, w, h);
                     render(content, &self.store, &self.registry, &self.policy, out);
@@ -349,8 +371,29 @@ impl ContentRuntime {
                         &self.policy,
                         &wanted,
                     ) {
-                        let (doc, layout) = content.html.as_ref().expect("ensured");
-                        layout.find(doc, &query)
+                        // Engine-painted find (overlay-roots P2): register the
+                        // matches as the "find" custom highlight (the first as
+                        // "find-active") on the retained layout, so the next band
+                        // emit carries the fills in-band — scroll-locked, banded,
+                        // and zoomed with the content. Rects still ship, but only
+                        // as count/step/auto-scroll metadata. An empty query
+                        // clears both names (empty ranges remove).
+                        let (doc, layout) = content.html.as_mut().expect("ensured");
+                        let ranges = layout.find_ranges(doc, &query);
+                        let matches: Vec<Vec<[f32; 4]>> =
+                            ranges.iter().map(|r| layout.range_rects(doc, r)).collect();
+                        layout.set_highlight("find", ranges.clone(), FIND_HIGHLIGHT);
+                        layout.set_highlight(
+                            "find-active",
+                            ranges.first().copied().into_iter().collect(),
+                            FIND_ACTIVE_HIGHLIGHT,
+                        );
+                        content.find_ranges = ranges;
+                        // Highlights aren't in the scene fingerprint; bust it so the
+                        // re-render actually ships the freshly-highlighted band.
+                        content.last_scene_sig = None;
+                        render(content, &self.store, &self.registry, &self.policy, out);
+                        matches
                     } else {
                         Vec::new()
                     };
@@ -359,6 +402,20 @@ impl ContentRuntime {
                         viewport_gen,
                         matches,
                     });
+                }
+            }
+            ContentCommand::FindActive {
+                index,
+                viewport_gen,
+            } => {
+                if let Some(content) = self.current.as_mut() {
+                    content.viewport_gen = viewport_gen;
+                    let range = content.find_ranges.get(index).copied();
+                    if let (Some(range), Some((_, layout))) = (range, content.html.as_mut()) {
+                        layout.set_highlight("find-active", vec![range], FIND_ACTIVE_HIGHLIGHT);
+                        content.last_scene_sig = None;
+                        render(content, &self.store, &self.registry, &self.policy, out);
+                    }
                 }
             }
             ContentCommand::SelectText {
@@ -460,6 +517,7 @@ impl ContentRuntime {
                         None => "no script attached".to_string(),
                     };
                     content.html = None;
+                    content.find_ranges.clear();
                     content.viewport_gen = viewport_gen;
                     out.emit_update(ContentUpdate::ScriptOutcome {
                         nav: content.nav,

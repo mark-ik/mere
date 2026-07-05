@@ -466,6 +466,13 @@ impl WindowCtx<'_> {
             }
         } else {
             self.clear_find_matches();
+            // Engine-side clear: an empty query removes the actor's registered
+            // find highlights and re-emits (overlay-roots P2).
+            if let Some(member) = self.focused_member() {
+                if self.shared.content.constellation.is_active(member) {
+                    self.shared.content.constellation.request_find(member, "");
+                }
+            }
             self.focus_after_palette_close();
         }
         self.view.request_redraw();
@@ -497,12 +504,23 @@ impl WindowCtx<'_> {
 
     /// Push the edited find query to the content actor for the focused node, and
     /// reset the active match to the first. (The actor dedups and clears on empty.)
+    /// Routing: document lane → host packet search; live HTML actor → the actor's
+    /// retained layout, which also registers the engine-painted highlights
+    /// (overlay-roots P2); snapshot-only node → the find worker + host overlay.
     pub(crate) fn submit_find_query(&mut self) {
         let query = self.view.chrome().find_input.text().to_string();
         if let Some(member) = self.focused_member() {
             if let Some(matches) = self.recompute_document_find(member, &query) {
                 self.view.find_matches = matches;
                 self.view.find_member = Some(member);
+            } else if self.shared.content.constellation.is_active(member) {
+                // Clear any stale worker results so the snapshot fallback
+                // overlay doesn't paint beside the engine's fills.
+                self.clear_find();
+                self.shared
+                    .content
+                    .constellation
+                    .request_find(member, &query);
             } else {
                 self.recompute_find(&query);
             }
@@ -536,6 +554,14 @@ impl WindowCtx<'_> {
             .iter()
             .fold((f32::MAX, f32::MIN), |(t, b), r| (t.min(r[1]), b.max(r[3])));
         self.view.chrome_update(move |c| c.find_active = next);
+        // Live page: the engine re-tints the active match in-band (overlay-roots
+        // P2); the snapshot fallback overlay reads `find_active` directly.
+        if self.shared.content.constellation.is_active(member) {
+            self.shared
+                .content
+                .constellation
+                .request_find_active(member, next);
+        }
         if let Some((vis_h, content_h)) = self.find_member_viewport(member) {
             let scroll = self.view.scroll.get(&member).copied().unwrap_or(0.0);
             let out_of_view = match_top < scroll || match_bot > scroll + vis_h;

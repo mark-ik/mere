@@ -112,6 +112,13 @@ impl From<ContentCommand> for ContentCommandMessage {
                 query,
                 viewport_gen: viewport_gen.0,
             },
+            ContentCommand::FindActive {
+                index,
+                viewport_gen,
+            } => Self::FindActive {
+                index,
+                viewport_gen: viewport_gen.0,
+            },
             ContentCommand::SelectText {
                 anchor,
                 focus,
@@ -211,6 +218,13 @@ impl From<ContentCommandMessage> for ContentCommand {
                 viewport_gen,
             } => Self::Find {
                 query,
+                viewport_gen: ViewportGeneration(viewport_gen),
+            },
+            ContentCommandMessage::FindActive {
+                index,
+                viewport_gen,
+            } => Self::FindActive {
+                index,
                 viewport_gen: ViewportGeneration(viewport_gen),
             },
             ContentCommandMessage::SelectText {

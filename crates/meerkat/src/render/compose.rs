@@ -124,13 +124,17 @@ impl crate::WindowCtx<'_> {
                 ExternalTexturePlacement::new(*dest).with_uv(uv),
             );
         }
-        // Find-in-page highlights (S2): translucent rects over the focused node's
-        // match rects, mapped content-local -> window with the same scale + scroll
-        // the composite loop above used. The active match is tinted stronger. The
-        // host owns this overlay: the actor only ships rects (full-document px); the
-        // host knows the card's dest rect + scroll. HTML/serval lane only.
+        // Find-in-page highlight FALLBACK (snapshot-only nodes): translucent rects
+        // over the focused node's worker-searched match rects, mapped
+        // content-local -> window. A live actor-backed page paints its highlights
+        // engine-side instead (the actor registers them on its retained layout and
+        // re-emits the band — overlay-roots P2), so this overlay is skipped for
+        // it: the fills arrive baked into the band scene, scroll-locked for free.
         if self.view.chrome().find_open {
-            if let Some(focused) = self.focused_member() {
+            if let Some(focused) = self
+                .focused_member()
+                .filter(|m| !self.shared.content.constellation.is_active(*m))
+            {
                 let active = self.view.chrome().find_active;
                 let mut overlays: Vec<([f32; 4], bool)> = Vec::new();
                 for (dest, member) in &composite {
