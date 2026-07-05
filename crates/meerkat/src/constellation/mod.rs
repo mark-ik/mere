@@ -126,6 +126,11 @@ struct Activation {
     /// Keep the actor working even when the tab is not shown (headless background
     /// work), and exempt it from cap eviction.
     background: bool,
+    /// Last Page Visibility state commanded to this actor (W3C plan P1):
+    /// `true` = hidden (its scripted timer pump throttles to the spec clamp).
+    /// Deduped in [`Constellation::apply_presentation`] so holding a frame
+    /// composition steady re-commands nothing.
+    lifecycle_hidden: bool,
     /// The pool clock at this tab's last spawn / drive, for LRU eviction: the
     /// least-recently-touched evictable tab is reaped first over the cap.
     last_touched: u64,

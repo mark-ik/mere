@@ -123,6 +123,11 @@ pub enum ContentCommandMessage {
         url: String,
         bytes: Vec<u8>,
     },
+    /// Page Visibility / Page Lifecycle for the rendered card (W3C plan P1).
+    SetLifecycle {
+        hidden: bool,
+        frozen: bool,
+    },
     Scroll {
         band_y: u32,
         band_h: u32,
@@ -377,6 +382,10 @@ enum ContentCommandWire {
         url: String,
         bytes: Vec<u8>,
     },
+    SetLifecycle {
+        hidden: bool,
+        frozen: bool,
+    },
     Scroll {
         band_y: u32,
         band_h: u32,
@@ -452,6 +461,9 @@ impl ContentCommandWire {
                 viewport_gen,
             },
             ContentCommandMessage::Resource { url, bytes } => Self::Resource { url, bytes },
+            ContentCommandMessage::SetLifecycle { hidden, frozen } => {
+                Self::SetLifecycle { hidden, frozen }
+            }
             ContentCommandMessage::Scroll {
                 band_y,
                 band_h,
@@ -546,6 +558,9 @@ impl ContentCommandWire {
                 viewport_gen,
             },
             Self::Resource { url, bytes } => ContentCommandMessage::Resource { url, bytes },
+            Self::SetLifecycle { hidden, frozen } => {
+                ContentCommandMessage::SetLifecycle { hidden, frozen }
+            }
             Self::Scroll {
                 band_y,
                 band_h,

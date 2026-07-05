@@ -164,6 +164,12 @@ pub enum ContentCommand {
     /// A subresource the kernel fetched on the actor's behalf has arrived: cache
     /// its bytes and re-render so the demand loader now hits.
     Resource { url: String, bytes: Vec<u8> },
+    /// Page Visibility / Page Lifecycle for the card this actor renders (W3C
+    /// adoption plan P1). `hidden` throttles the scripted document's timer
+    /// pump to the spec clamp and fires `visibilitychange`; `frozen` stops
+    /// tasks entirely (`freeze`/`resume` events). No-op for non-scripted
+    /// lanes. Becoming visible re-renders once so a stale band refreshes.
+    SetLifecycle { hidden: bool, frozen: bool },
     /// Re-emit the current HTML/serval document at a new scroll band (the host's
     /// windowing of the flat serval scene). `band_y` is the document scroll offset,
     /// `band_h` the band height; the actor emits only that band so a tall dense page

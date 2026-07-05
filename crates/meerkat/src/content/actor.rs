@@ -482,6 +482,31 @@ impl ContentRuntime {
                     }
                 }
             }
+            ContentCommand::SetLifecycle { hidden, frozen } => {
+                // Scripted lane only: throttle/stop the page's task pump per
+                // Page Visibility / Page Lifecycle; becoming visible re-renders
+                // once so a band that went stale while hidden refreshes. The
+                // other lanes have no tasks to gate.
+                #[cfg(feature = "scripted")]
+                if let Some(content) = self.current.as_mut() {
+                    if let Some(doc) = content.scripted_doc.as_mut() {
+                        let was_presented = !doc.is_hidden() && !doc.is_frozen();
+                        if frozen {
+                            doc.set_hidden(hidden);
+                            doc.freeze();
+                        } else {
+                            doc.resume();
+                            doc.set_hidden(hidden);
+                        }
+                        let presented = !hidden && !frozen;
+                        if presented && !was_presented {
+                            render(content, &self.store, &self.registry, &self.policy, out);
+                        }
+                    }
+                }
+                #[cfg(not(feature = "scripted"))]
+                let _ = (hidden, frozen);
+            }
             #[cfg(feature = "scripted")]
             ContentCommand::ScriptedClick { x, y, viewport_gen } => {
                 if let Some(content) = self.current.as_mut() {

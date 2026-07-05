@@ -695,6 +695,14 @@ impl crate::WindowCtx<'_> {
                 composite.push((*dest, *member));
             }
         }
+        // Page Visibility (W3C plan P1): what this frame drew is visible;
+        // every other active member goes hidden (scripted timer pump clamps
+        // to 1/s). Deduped inside, so a steady composition sends nothing.
+        let presented: Vec<GraphMemberId> = cards.iter().map(|(m, _, _)| *m).collect();
+        self.shared
+            .content
+            .constellation
+            .apply_presentation(&presented);
         composite
     }
 }

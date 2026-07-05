@@ -24,11 +24,20 @@ burn = { version = "0.21", default-features = false, features = ["ndarray", "std
 # Rhai composition surface for fields, couplings, and edge-path rules.
 rhai = { version = "1.20", default-features = false, features = ["std"], optional = true }
 
+# The burn tree reaches getrandom on wasm; 0.4 needs its wasm_js backend
+# feature enabled by someone in the graph (compile_error! otherwise). Same
+# story for uuid's rng (its own getrandom wiring is disabled on
+# wasm-unknown, so the wasm-bindgen `js` path is the supported source).
+# These declarations exist only to switch those features on for wasm builds.
+[target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
+getrandom = { version = "0.4", features = ["wasm_js"], optional = true }
+uuid = { version = "1", default-features = false, features = ["js"] }
+
 [features]
 default = []
 field-burn = ["dep:burn"]
 # Adds the wgpu backend so consumers can target GPU evaluation.
-field-burn-wgpu = ["field-burn", "burn/wgpu"]
+field-burn-wgpu = ["field-burn", "burn/wgpu", "dep:getrandom"]
 field-rhai = ["dep:rhai"]
 
 [dev-dependencies]

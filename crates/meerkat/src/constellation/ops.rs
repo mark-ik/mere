@@ -146,6 +146,7 @@ impl Constellation {
                         background: false,
                         last_touched: touch,
                         respawns: 0,
+                        lifecycle_hidden: false,
                         graph_id,
                     },
                 );
@@ -358,6 +359,27 @@ impl Constellation {
             // re-emitted band is accepted at the current generation.
             viewport_gen: activation.gens.viewport,
         });
+    }
+
+    /// Drive Page Visibility from what the frame actually presented (W3C plan
+    /// P1): members drawn as content cards this frame are visible; every other
+    /// active member goes hidden, which throttles its scripted timer pump to
+    /// the spec clamp (1/s). Deduped per member, so a steady composition sends
+    /// nothing. Freeze is reserved for the per-site policy follow-up —
+    /// `background` members are explicitly kept working, and a hidden document
+    /// still ticks at the clamp.
+    pub fn apply_presentation(&mut self, presented: &[GraphMemberId]) {
+        for (member, activation) in self.active.iter_mut() {
+            let hidden = !presented.contains(member);
+            if activation.lifecycle_hidden == hidden {
+                continue;
+            }
+            activation.lifecycle_hidden = hidden;
+            activation.handle.command(ContentCommand::SetLifecycle {
+                hidden,
+                frozen: false,
+            });
+        }
     }
 
     /// Ask `member`'s actor to find `query` in its current document (find-in-page),

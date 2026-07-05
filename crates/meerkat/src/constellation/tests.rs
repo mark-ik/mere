@@ -55,6 +55,7 @@ fn fake_activation(rx: std::sync::mpsc::Receiver<ContentUpdate>, graph_id: Graph
         background: false,
         last_touched: 0,
         respawns: 0,
+        lifecycle_hidden: false,
         graph_id,
     }
 }

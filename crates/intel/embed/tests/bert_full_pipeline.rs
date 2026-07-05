@@ -36,8 +36,7 @@ use eidetic::{
 };
 use embed::bert::BertEmbeddingProvider;
 use embed::{
-    EmbeddingProvider, SemanticSearch, SimilarityMetric, VectorIndex,
-    register_query_similarity_field,
+    EmbeddingProvider, SemanticSearch, VectorIndex, register_query_similarity_field,
 };
 
 type B = burn::backend::NdArray<f32>;
@@ -318,7 +317,7 @@ fn minilm_round_trips_through_eidetic_and_inference_matches_direct_load() {
     .expect("save model through eidetic");
 
     // Resolve back — runs Layer 2 BLAKE3 verification on each blob.
-    let components = pollster::block_on(ModelLibrary::resolve_components(
+    let resolved_model = pollster::block_on(ModelLibrary::resolve_components(
         &mut store,
         &mut fetcher,
         manifest_id,
@@ -327,22 +326,28 @@ fn minilm_round_trips_through_eidetic_and_inference_matches_direct_load() {
     .expect("components present after save");
 
     assert_eq!(
-        components.manifest.model_id,
+        resolved_model.manifest.model_id,
         "sentence-transformers/all-MiniLM-L6-v2"
     );
-    assert_eq!(components.manifest.architecture, "bert");
-    assert_eq!(components.manifest.license, "Apache-2.0");
-    assert_eq!(components.weights, weights_bytes, "weight bytes preserved");
+    assert_eq!(resolved_model.manifest.architecture, "bert");
     assert_eq!(
-        components.tokenizer, tokenizer_bytes,
+        resolved_model.manifest.license.as_deref(),
+        Some("Apache-2.0")
+    );
+    assert_eq!(
+        resolved_model.components.weight_bytes, weights_bytes,
+        "weight bytes preserved"
+    );
+    assert_eq!(
+        resolved_model.components.tokenizer_bytes, tokenizer_bytes,
         "tokenizer bytes preserved"
     );
 
     // Build a provider from the eidetic-resolved bytes.
     let resolved: BertEmbeddingProvider<B> = BertEmbeddingProvider::from_bytes(
-        &components.config_bytes,
-        &components.tokenizer,
-        &components.weights,
+        &resolved_model.components.config_bytes,
+        &resolved_model.components.tokenizer_bytes,
+        &resolved_model.components.weight_bytes,
         Default::default(),
     )
     .expect("from_bytes via eidetic-resolved bytes");

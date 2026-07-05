@@ -93,6 +93,9 @@ impl From<ContentCommand> for ContentCommandMessage {
                 viewport_gen: viewport_gen.0,
             },
             ContentCommand::Resource { url, bytes } => Self::Resource { url, bytes },
+            ContentCommand::SetLifecycle { hidden, frozen } => {
+                Self::SetLifecycle { hidden, frozen }
+            }
             ContentCommand::Scroll {
                 band_y,
                 band_h,
@@ -191,6 +194,9 @@ impl From<ContentCommandMessage> for ContentCommand {
                 viewport_gen: ViewportGeneration(viewport_gen),
             },
             ContentCommandMessage::Resource { url, bytes } => Self::Resource { url, bytes },
+            ContentCommandMessage::SetLifecycle { hidden, frozen } => {
+                Self::SetLifecycle { hidden, frozen }
+            }
             ContentCommandMessage::Scroll {
                 band_y,
                 band_h,
