@@ -248,6 +248,46 @@ pub enum ContentCommand {
         y: f32,
         viewport_gen: ViewportGeneration,
     },
+    /// Register (or replace) a named overlay slot on the current HTML/serval
+    /// document: a host-laid-out satellite paint list anchored to a page node,
+    /// composited engine-side after content + highlights (top-layer order) and
+    /// tracking its anchor across scroll/relayout for free. The host's satellite
+    /// runner (an xilem_serval view over app state) produces `content` by laying
+    /// its own isolated `ScriptedDom` out; the actor only registers it on the
+    /// retained [`ContentLayout`] and re-emits the band. No-op off the HTML lane.
+    /// Desktop-host only in v1: the wasm content-worker lane does not carry
+    /// overlays yet (a `ServalPaintList` would need the Scene transfer's
+    /// font/image dedup to cross the serialized worker wire), so these variants
+    /// are gated off `wasm32` and never reach `ContentCommandMessage`.
+    /// (Overlay-roots P1 — the overlay slot's host seam.)
+    #[cfg(not(target_arch = "wasm32"))]
+    SetOverlay {
+        name: String,
+        anchor: OverlayAnchor,
+        content: serval_layout::ServalPaintList,
+        viewport_gen: ViewportGeneration,
+    },
+    /// Remove a named overlay slot and re-emit the band without it. (Overlay-roots P1.)
+    #[cfg(not(target_arch = "wasm32"))]
+    ClearOverlay {
+        name: String,
+        viewport_gen: ViewportGeneration,
+    },
+}
+
+/// Which page node an overlay slot anchors to. The actor resolves this against
+/// its own live document at emit time — the host cannot name the actor's node
+/// ids, so it names the anchor by role. v1 carries only `Root` (the document
+/// root element, i.e. document-wide / reader-mode surfaces); `FindMatch`,
+/// `LinkAt`, and friends slot in later without changing the command shape (a
+/// slot already carries its content's intrinsic size, which is all anchor
+/// resolution feeds). (Overlay-roots P1.)
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Clone, Copy, Debug)]
+pub enum OverlayAnchor {
+    /// The document root element (`<html>`) — the overlay tracks the top of the
+    /// page, scrolling and relaying-out with it.
+    Root,
 }
 
 /// An update from a content actor to the kernel. All variants are `Send`.

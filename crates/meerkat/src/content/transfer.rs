@@ -6,14 +6,28 @@
 
 use armillary::{NavGeneration, ViewportGeneration};
 use content_contract::{
-    ContentCommandMessage, ContentStateMessage, ContentUpdateMessage, FetchedMessage,
-    LinkHitMessage, SceneTransferDecoder, SceneTransferEncoder, TransferBuffer, TransferError,
+    ContentUpdateMessage, LinkHitMessage, SceneTransferDecoder, SceneTransferEncoder,
+    TransferBuffer, TransferError,
 };
 
-use super::{ContentCommand, ContentState, ContentUpdate};
+use super::ContentUpdate;
 use crate::card::LinkHit;
+
+// The command-transfer half (native `ContentCommand` <-> serialized worker
+// `ContentCommandMessage`) is exercised only on the wasm content-worker path;
+// on native, commands ride the in-process actor handle directly and never
+// serialize. Gating it to wasm32 keeps the overlay commands — desktop-host-only
+// and carrying a `ServalPaintList` the worker wire does not encode — out of the
+// message contract entirely, so they need no `ContentCommandMessage` variant.
+// (Overlay-roots P1.)
+#[cfg(target_arch = "wasm32")]
+use content_contract::{ContentCommandMessage, ContentStateMessage, FetchedMessage};
+#[cfg(target_arch = "wasm32")]
+use super::{ContentCommand, ContentState};
+#[cfg(target_arch = "wasm32")]
 use crate::fetch::Fetched;
 
+#[cfg(target_arch = "wasm32")]
 fn fetched_to_message(fetched: Fetched) -> FetchedMessage {
     FetchedMessage {
         content_type: fetched.content_type,
@@ -21,6 +35,7 @@ fn fetched_to_message(fetched: Fetched) -> FetchedMessage {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 fn fetched_from_message(fetched: FetchedMessage) -> Fetched {
     Fetched {
         content_type: fetched.content_type,
@@ -28,6 +43,7 @@ fn fetched_from_message(fetched: FetchedMessage) -> Fetched {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 fn content_state_to_message(state: ContentState) -> ContentStateMessage {
     match state {
         ContentState::Loading => ContentStateMessage::Loading,
@@ -36,6 +52,7 @@ fn content_state_to_message(state: ContentState) -> ContentStateMessage {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 fn content_state_from_message(state: ContentStateMessage) -> ContentState {
     match state {
         ContentStateMessage::Loading => ContentState::Loading,
@@ -58,6 +75,7 @@ fn link_hit_from_message(hit: LinkHitMessage) -> LinkHit {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 impl From<ContentCommand> for ContentCommandMessage {
     fn from(command: ContentCommand) -> Self {
         match command {
@@ -166,6 +184,7 @@ impl From<ContentCommand> for ContentCommandMessage {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 impl From<ContentCommandMessage> for ContentCommand {
     fn from(command: ContentCommandMessage) -> Self {
         match command {
@@ -449,6 +468,7 @@ impl ContentUpdate {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 impl ContentCommand {
     pub(crate) fn into_transfer_buffer(self) -> Result<TransferBuffer, TransferError> {
         ContentCommandMessage::from(self).into_transfer_buffer()

@@ -575,6 +575,67 @@ impl ContentRuntime {
                     }
                 }
             }
+            #[cfg(not(target_arch = "wasm32"))]
+            ContentCommand::SetOverlay {
+                name,
+                anchor,
+                content: overlay,
+                viewport_gen,
+            } => {
+                if let Some(content) = self.current.as_mut() {
+                    content.viewport_gen = viewport_gen;
+                    // The overlay slot lives on the retained HTML-lane layout, so
+                    // ensure it exists (same lazy build the Find arm relies on),
+                    // then register the host-laid-out satellite against the
+                    // resolved anchor and re-emit. `set_overlay` touches no
+                    // style/layout state (the satellite is a pre-emitted paint
+                    // list composited after content), so this is repaint-only —
+                    // the page never reflows. (Overlay-roots P1.)
+                    let wanted = RefCell::new(Vec::new());
+                    if ensure_html_layout(
+                        content,
+                        &self.store,
+                        &self.registry,
+                        &self.policy,
+                        &wanted,
+                    ) {
+                        let (doc, layout) = content.html.as_mut().expect("ensured");
+                        if let Some(anchor_node) = resolve_overlay_anchor(doc, anchor) {
+                            layout.set_overlay(&name, anchor_node, overlay);
+                            // Overlays aren't in the scene fingerprint; bust it so
+                            // the re-render ships the freshly-composited band.
+                            content.last_scene_sig = None;
+                            render(content, &self.store, &self.registry, &self.policy, out);
+                        }
+                    }
+                }
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            ContentCommand::ClearOverlay {
+                name,
+                viewport_gen,
+            } => {
+                if let Some(content) = self.current.as_mut() {
+                    content.viewport_gen = viewport_gen;
+                    if let Some((_, layout)) = content.html.as_mut() {
+                        layout.clear_overlay(&name);
+                        content.last_scene_sig = None;
+                        render(content, &self.store, &self.registry, &self.policy, out);
+                    }
+                }
+            }
         }
+    }
+}
+
+/// Resolve an [`OverlayAnchor`] to a live page node id in the actor's HTML-lane
+/// document. The host names the anchor by role (it cannot know the actor's node
+/// ids); the actor maps that role to a concrete node with a box. v1 resolves
+/// `Root` to the document element (`<html>`), whose fragment rect is the top of
+/// the page. (Overlay-roots P1.)
+#[cfg(not(target_arch = "wasm32"))]
+fn resolve_overlay_anchor(doc: &StaticDocument, anchor: OverlayAnchor) -> Option<StaticNodeId> {
+    match anchor {
+        OverlayAnchor::Root => doc.document_element(),
     }
 }

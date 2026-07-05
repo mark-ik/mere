@@ -159,6 +159,101 @@ fn show_harvests_embedded_jsonld_into_a_contribution() {
     assert!(harvested, "embedded JSON-LD harvested into a Contribution");
 }
 
+/// The overlay-slot host seam end to end through the content actor (overlay-roots
+/// P1): a host-laid-out satellite paint list registered on a live page via
+/// `SetOverlay` composites engine-side into the emitted band, the page does **not**
+/// reflow around it (its own text is byte-stable), and `ClearOverlay` restores the
+/// exact baseline band. This is the meerkat integration proof; the geometric
+/// survival half — an overlay re-deriving its position across scroll bands and an
+/// anchor-moving mutation — is proven headless engine-side by serval-layout's
+/// `overlay_slot_tracks_its_anchor_across_bands` (the retained layout the actor
+/// re-emits per band is the same one those tests exercise).
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn overlay_slot_composites_over_a_live_page_without_reflow() {
+    let (handle, updates) = spawn_content(
+        &Pool::new(),
+        noop_wake(),
+        std::collections::HashSet::new(),
+        false,
+    );
+    handle.command(show(
+        "https://example.com/",
+        "text/html",
+        "<h1>Hi</h1><p>There</p>",
+    ));
+    // A satellite "chip": a single distinctly-coloured fill, laid out host-side
+    // (here built directly — the actor is oblivious to how the host produced it).
+    let mut chip = serval_layout::ServalPaintList::new(paint_list_api::DeviceIntSize::new(40, 20));
+    chip.push_fill(
+        0.0,
+        0.0,
+        40.0,
+        20.0,
+        paint_list_api::ColorF {
+            r: 1.0,
+            g: 0.55,
+            b: 0.10,
+            a: 0.9,
+        },
+    );
+    handle.command(ContentCommand::SetOverlay {
+        name: "counter".to_string(),
+        anchor: OverlayAnchor::Root,
+        content: chip,
+        viewport_gen: ViewportGeneration::default(),
+    });
+    handle.command(ContentCommand::ClearOverlay {
+        name: "counter".to_string(),
+        viewport_gen: ViewportGeneration::default(),
+    });
+    handle.join();
+
+    let scenes: Vec<Scene> = updates
+        .iter()
+        .filter_map(|u| match u {
+            ContentUpdate::Scene { scene, .. } => Some(scene),
+            _ => None,
+        })
+        .collect();
+    // Show, SetOverlay, ClearOverlay each ship a scene (the arms bust the band
+    // fingerprint so the overlay change is not deduped away).
+    assert!(
+        scenes.len() >= 3,
+        "Show + SetOverlay + ClearOverlay each emit a scene (got {})",
+        scenes.len()
+    );
+    let base = &scenes[0];
+    let with_overlay = &scenes[1];
+    let cleared = scenes.last().unwrap();
+    // No reflow leak: the page's own text lowers to the same glyph runs with the
+    // overlay registered, with it re-emitted, and after it clears.
+    assert_eq!(
+        glyph_runs(base),
+        glyph_runs(with_overlay),
+        "registering the overlay did not reflow the page's text",
+    );
+    assert_eq!(
+        glyph_runs(base),
+        glyph_runs(cleared),
+        "clearing the overlay left the page's text unchanged",
+    );
+    // The overlay composites: the satellite adds paint ops in-band, and clearing
+    // returns the band to exactly its pre-overlay op count (top-layer append +
+    // removal, no residue).
+    assert!(
+        with_overlay.ops.len() > base.ops.len(),
+        "the overlay composited extra paint ops in-band ({} vs {})",
+        with_overlay.ops.len(),
+        base.ops.len(),
+    );
+    assert_eq!(
+        cleared.ops.len(),
+        base.ops.len(),
+        "clearing the overlay restored the exact baseline band",
+    );
+}
+
 /// A `<body>` whose only text is injected by an inline `<script>`. Proves the
 /// scripted render rung runs page JS end to end through the content actor: the
 /// mutated DOM renders glyph runs the markup alone would not. (Render ladder 2a.)

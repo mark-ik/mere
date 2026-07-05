@@ -419,6 +419,46 @@ impl Constellation {
         });
     }
 
+    /// Register (or replace) a named overlay slot on `member`'s live page: the
+    /// host's satellite runner laid `content` out (an isolated `ScriptedDom` over
+    /// app state), and the actor composites it engine-side at `anchor`, tracking
+    /// the anchor across scroll/relayout. The overlay-slot host seam — the
+    /// counterpart of [`request_find`](Self::request_find) for a laid-out
+    /// satellite rather than a painted range. No-op for an inactive member.
+    /// Desktop-host only: the wasm content-worker lane does not carry overlays
+    /// (the command does not serialize). (Overlay-roots P1.)
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn request_set_overlay(
+        &self,
+        member: GraphMemberId,
+        name: &str,
+        anchor: crate::content::OverlayAnchor,
+        content: serval_layout::ServalPaintList,
+    ) {
+        let Some(activation) = self.active.get(&member) else {
+            return;
+        };
+        activation.handle.command(ContentCommand::SetOverlay {
+            name: name.to_string(),
+            anchor,
+            content,
+            viewport_gen: activation.gens.viewport,
+        });
+    }
+
+    /// Remove the named overlay slot from `member`'s live page (the satellite
+    /// unmounts). No-op for an inactive member. (Overlay-roots P1.)
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn request_clear_overlay(&self, member: GraphMemberId, name: &str) {
+        let Some(activation) = self.active.get(&member) else {
+            return;
+        };
+        activation.handle.command(ContentCommand::ClearOverlay {
+            name: name.to_string(),
+            viewport_gen: activation.gens.viewport,
+        });
+    }
+
     /// Ask `member`'s actor to resolve a point-drag text selection in its current
     /// HTML document. The host passes physical content-local points; the actor works
     /// in logical coords, so the query is converted through the current DPR. Results
