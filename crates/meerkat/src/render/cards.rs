@@ -377,6 +377,37 @@ impl crate::WindowCtx<'_> {
                     .map(|(x0, y0, x1, y1, _, _)| (member, [x0, y0, x1, y1]));
             }
         }
+        // Content-card collection health: why the focused node did or did not
+        // summon a card. The rasterize-level health check only sees cards that were
+        // collected; this catches the upstream miss — a focused, loaded page that
+        // produces no card at all (live tile, snapshot, or unvisited placeholder).
+        // DEBUG so it's free until enabled. (Content-card health.)
+        let focused = self.focused_member();
+        tracing::debug!(
+            target: "meerkat::content_card",
+            focused = ?focused,
+            selected = self.orrery().selected_members().len(),
+            card_member = ?card_member,
+            focused_url = ?self.orrery().focused_url(),
+            visited = card_member.map(|m| self.orrery().member_visited(m)),
+            active = focused.map(|m| self.shared.content.constellation.is_active(m)),
+            open_tile = focused
+                .map(|m| self.view.workbench.open_members().contains(&m)),
+            snapshot = snapshot_card.is_some(),
+            unvisited = unvisited_card.is_some(),
+            // `snap_rerendered` = the snapshot is a re-render of the cached body
+            // (its op count), vs `false`/absent when it paints the persisted
+            // thumbnail PNG instead; `snap_data_uri` = a persisted thumbnail is
+            // cached for this member. Together they name the snapshot's source, so a
+            // blank snapshot is attributable to an empty re-render vs a dropped
+            // thumbnail image.
+            snap_rerendered = snapshot_card
+                .as_ref()
+                .and_then(|(_, _, _, b)| b.as_ref().map(|(s, _)| s.ops.len()))
+                .unwrap_or(0),
+            snap_data_uri = focused.map(|m| self.view.snapshot_data_uris.contains_key(&m)),
+            "focused card resolution",
+        );
         (snapshot_card, unvisited_card)
     }
 
