@@ -17,18 +17,18 @@
 //! serves the pane's point queries (hit-test, fragment rects) off that one retained
 //! layout rather than re-laying-out per query.
 //!
-//! **Why rebuild-on-structural rather than the session's own splice path.** A
-//! structural batch (palette rows / suggestion lists / tile changes insert or
-//! remove nodes) drives `IncrementalLayout::apply` to `Spliced`, which invalidates
-//! the box-tree side-table (`emit_paint_list` then can't run). Panes splice often,
-//! so rather than thread the splice's stale-paint recovery, [`PaneSession::scene`]
-//! rebuilds the session whenever the drained batch is structural (or the size /
-//! sheet changed) — a full cascade+layout, the *same* cost as the old stateless
-//! frame, but only on those frames. Attribute-only frames (the common case: a
-//! geometry write, hover-class toggles, an idle pane) take the cheap path. The
-//! session is therefore always left on an emittable path; it never observes
-//! `Spliced`. Resize and theme switch self-heal through the dims / sheet compare,
-//! so no caller has to invalidate it explicitly.
+//! **Structural batches ride the session's splice path now.** A structural
+//! batch (palette rows / suggestion lists / tile changes / a text write) drives
+//! `IncrementalLayout::apply` to `Spliced`, and since the paint-side graft
+//! landed (serval `BoxTree::graft_subtree`, shell paint plan 2026-07-03) a
+//! splice keeps the box-tree side-table + shaped text valid, so the session
+//! stays emittable and the pane no longer rebuilds it per structural frame
+//! (P0 receipts: 34ms of stylist + full cascade + layout per batch, paid even
+//! for one text mutation). The rebuild triggers that remain are the ones a
+//! retained session genuinely can't absorb: no session yet, a resize (relayout
+//! width/height are fixed per session here), a theme switch (the persistent
+//! Stylist's sheets are fixed for the session's life), or — belt and braces —
+//! an apply that somehow left the paint side stale (`paint_ready` false).
 
 use std::cell::RefCell;
 use std::fmt::Write as _;
@@ -61,10 +61,11 @@ pub(crate) struct PaneSessionRefresh {
 
 impl PaneSession {
     /// Produce this pane's scene for the frame: drain the pane DOM's mutations,
-    /// rebuild the session on a structural / resize / theme change (else apply the
-    /// attribute-only batch on the cheap `RepaintOnly` path), emit, and lower to a
-    /// `netrender::Scene` with the focused field's caret/selection + scrollbar
-    /// overlays. Replaces the per-frame `scene_from_scripted_dom` call.
+    /// rebuild the session on a resize / theme change (else apply the batch —
+    /// attribute-only rides `RepaintOnly`, structural rides the splice + paint
+    /// graft), emit, and lower to a `netrender::Scene` with the focused field's
+    /// caret/selection + scrollbar overlays. Replaces the per-frame
+    /// `scene_from_scripted_dom` call.
     ///
     /// `slot` is the pane's session field (replaced on rebuild); `dom` is the
     /// shared pane-DOM handle; `sheet` the resolved pane stylesheet; `cursor` the
@@ -100,7 +101,7 @@ impl PaneSession {
         let dims = (w, h);
         let rebuild = match slot.as_ref() {
             None => true,
-            Some(s) => structural || s.dims != dims || !sheet_eq(&s.sheet, sheet),
+            Some(s) => s.dims != dims || !sheet_eq(&s.sheet, sheet),
         };
         let structural_summary = structural.then(|| summarize_structural_batch(dom, muts));
         tracing::debug!(
@@ -120,10 +121,16 @@ impl PaneSession {
         );
 
         if rebuild {
+            let t = std::time::Instant::now();
             let mut layout = IncrementalLayout::new(dom, sheet, w as f32, h as f32);
             if let Some(prev) = slot.as_ref() {
                 layout.set_element_scroll(prev.layout.element_scroll().clone());
             }
+            tracing::debug!(
+                target: "meerkat::profile",
+                rebuild_us = t.elapsed().as_micros() as u64,
+                "chrome session rebuilt (stylist + full cascade + layout)"
+            );
             *slot = Some(PaneSession {
                 layout,
                 dims,
@@ -133,14 +140,33 @@ impl PaneSession {
             let s = slot
                 .as_mut()
                 .expect("not rebuilding implies an existing session");
+            let t = std::time::Instant::now();
             let applied = s.layout.apply(dom, sheet, muts);
-            debug_assert!(
-                matches!(
-                    applied,
-                    Applied::Unchanged | Applied::RepaintOnly | Applied::Restyled
-                ),
-                "chrome session left the emittable path on an attribute-only batch: {applied:?}",
+            tracing::debug!(
+                target: "meerkat::profile",
+                apply_us = t.elapsed().as_micros() as u64,
+                ?applied,
+                "chrome session applied"
             );
+            debug_assert!(
+                s.layout.paint_ready(),
+                "chrome session left the emittable path: {applied:?}",
+            );
+            // Belt and braces for release builds: the splice graft leaves every
+            // apply path emittable, but if that contract ever breaks, heal with
+            // the old full rebuild instead of tripping the emit assert.
+            if !s.layout.paint_ready() {
+                let t = std::time::Instant::now();
+                let mut layout = IncrementalLayout::new(dom, sheet, w as f32, h as f32);
+                layout.set_element_scroll(s.layout.element_scroll().clone());
+                tracing::warn!(
+                    target: "meerkat::profile",
+                    rebuild_us = t.elapsed().as_micros() as u64,
+                    ?applied,
+                    "chrome session healed by rebuild (paint side stale after apply)"
+                );
+                s.layout = layout;
+            }
         }
 
         PaneSessionRefresh {

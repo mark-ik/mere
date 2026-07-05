@@ -222,7 +222,7 @@ impl<'a> Builder<'a> {
         self.next_font_key += 1;
         self.fonts.push(FontResource {
             key,
-            data: font.data.data().to_vec(),
+            data: font.data.data().to_vec().into(),
             index: font.index,
         });
         self.face_keys.insert(face, key);

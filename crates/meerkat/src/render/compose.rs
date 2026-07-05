@@ -183,12 +183,22 @@ impl crate::WindowCtx<'_> {
                     // divider overlay idiom.
                     let mut normal = netrender::Scene::new(1, 1);
                     normal.push_rect(0.0, 0.0, 1.0, 1.0, [1.0, 0.82, 0.20, 0.38]);
-                    let (_n, normal_view) =
-                        core.rasterize(&normal, 1, 1, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
+                    let (_n, normal_view) = core.rasterize_for(
+                        super::surface_keys::FIND_OVERLAY_NORMAL,
+                        &normal,
+                        1,
+                        1,
+                        ColorLoad::Clear(wgpu::Color::TRANSPARENT),
+                    );
                     let mut act = netrender::Scene::new(1, 1);
                     act.push_rect(0.0, 0.0, 1.0, 1.0, [1.0, 0.55, 0.10, 0.55]);
-                    let (_a, active_view) =
-                        core.rasterize(&act, 1, 1, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
+                    let (_a, active_view) = core.rasterize_for(
+                        super::surface_keys::FIND_OVERLAY_ACTIVE,
+                        &act,
+                        1,
+                        1,
+                        ColorLoad::Clear(wgpu::Color::TRANSPARENT),
+                    );
                     for (rect, is_active) in &overlays {
                         let view = if *is_active {
                             &active_view
@@ -237,8 +247,13 @@ impl crate::WindowCtx<'_> {
                         .clamp(0.0, (content_h - visible_h).max(0.0));
                     let mut fill = netrender::Scene::new(1, 1);
                     fill.push_rect(0.0, 0.0, 1.0, 1.0, [0.24, 0.47, 0.98, 0.28]);
-                    let (_t, fill_view) =
-                        core.rasterize(&fill, 1, 1, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
+                    let (_t, fill_view) = core.rasterize_for(
+                        super::surface_keys::SELECTION_FILL,
+                        &fill,
+                        1,
+                        1,
+                        ColorLoad::Clear(wgpu::Color::TRANSPARENT),
+                    );
                     for r in &selection.rects {
                         let (r0, r1, r2, r3) = (r[0] * dpr, r[1] * dpr, r[2] * dpr, r[3] * dpr);
                         let wy0 = dest[1] + (r1 - scroll) * s;

@@ -36,6 +36,7 @@ mod orrery_scene;
 mod overlays;
 mod paint;
 mod setup;
+pub(crate) mod surface_keys;
 mod textures;
 mod workbench;
 use paint::PaintInputs;

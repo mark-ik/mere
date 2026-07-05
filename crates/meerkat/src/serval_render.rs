@@ -89,9 +89,8 @@ pub(crate) fn scene_from_session(
     width: u32,
     height: u32,
 ) -> Scene {
-    paint_list_render::translate_paint_list(&paint_list_from_session(
-        session, dom, cursor, scroll, width, height,
-    ))
+    let plist = paint_list_from_session(session, dom, cursor, scroll, width, height);
+    lower_timed("full", &plist)
 }
 
 pub(crate) fn scene_from_session_excluding_subtrees(
@@ -103,7 +102,7 @@ pub(crate) fn scene_from_session_excluding_subtrees(
     width: u32,
     height: u32,
 ) -> Scene {
-    paint_list_render::translate_paint_list(&paint_list_from_session_excluding_subtrees(
+    let plist = paint_list_from_session_excluding_subtrees(
         session,
         dom,
         cursor,
@@ -111,7 +110,8 @@ pub(crate) fn scene_from_session_excluding_subtrees(
         skipped_subtrees,
         width,
         height,
-    ))
+    );
+    lower_timed("base", &plist)
 }
 
 pub(crate) fn scene_from_session_subtree(
@@ -123,9 +123,27 @@ pub(crate) fn scene_from_session_subtree(
     width: u32,
     height: u32,
 ) -> Option<Scene> {
-    Some(paint_list_render::translate_paint_list(
-        &paint_list_from_session_subtree(session, dom, root, cursor, scroll, width, height)?,
-    ))
+    let plist = paint_list_from_session_subtree(session, dom, root, cursor, scroll, width, height)?;
+    Some(lower_timed("orrery", &plist))
+}
+
+/// Lower a paint list to a `netrender::Scene`, logging the P0 attribution spans
+/// (emission is timed by the callers of `paint_list_from_session*`; this logs the
+/// lowering half plus the command count so a loaded-session frame can say how much
+/// of `chrome_us` was scene production vs paint-list -> Scene translation).
+/// (2026-07-03 shell paint emission plan, P0.)
+fn lower_timed(lane: &str, plist: &ServalPaintList) -> Scene {
+    use paint_list_api::PaintList;
+    let t = std::time::Instant::now();
+    let scene = paint_list_render::translate_paint_list(plist);
+    tracing::debug!(
+        target: "meerkat::profile",
+        lane,
+        lower_us = t.elapsed().as_micros() as u64,
+        cmds = plist.commands().len(),
+        "paint list lowered"
+    );
+    scene
 }
 
 /// The [`ServalPaintList`] half of [`scene_from_session`]: emit from the session,
@@ -140,8 +158,15 @@ fn paint_list_from_session(
     height: u32,
 ) -> ServalPaintList {
     let merged = merged_scroll_offsets(session, scroll);
+    let t = std::time::Instant::now();
     let mut plist =
         session.emit_paint_list(dom, scroll, DeviceIntSize::new(width as i32, height as i32));
+    tracing::debug!(
+        target: "meerkat::profile",
+        lane = "full",
+        emit_us = t.elapsed().as_micros() as u64,
+        "paint list emitted"
+    );
     append_cursor_and_focus(&mut plist, session, dom, &merged, cursor);
     serval_layout::push_scrollbars(&mut plist, dom, session.fragments(), &merged);
     plist
@@ -157,11 +182,18 @@ fn paint_list_from_session_excluding_subtrees(
     height: u32,
 ) -> ServalPaintList {
     let merged = merged_scroll_offsets_excluding_subtrees(session, dom, scroll, skipped_subtrees);
+    let t = std::time::Instant::now();
     let mut plist = session.emit_paint_list_excluding_subtrees(
         dom,
         scroll,
         skipped_subtrees,
         DeviceIntSize::new(width as i32, height as i32),
+    );
+    tracing::debug!(
+        target: "meerkat::profile",
+        lane = "base",
+        emit_us = t.elapsed().as_micros() as u64,
+        "paint list emitted"
     );
     let cursor = cursor.filter(|c| {
         !skipped_subtrees
@@ -183,12 +215,20 @@ fn paint_list_from_session_subtree(
     height: u32,
 ) -> Option<ServalPaintList> {
     let merged = merged_scroll_offsets_under_root(session, dom, scroll, root);
-    let mut plist = session.emit_subtree_paint_list(
+    let t = std::time::Instant::now();
+    let plist = session.emit_subtree_paint_list(
         dom,
         root,
         scroll,
         DeviceIntSize::new(width as i32, height as i32),
-    )?;
+    );
+    tracing::debug!(
+        target: "meerkat::profile",
+        lane = "orrery",
+        emit_us = t.elapsed().as_micros() as u64,
+        "paint list emitted"
+    );
+    let mut plist = plist?;
     let cursor = cursor.filter(|c| node_under_root(dom, c.node, root));
     append_cursor_and_focus(&mut plist, session, dom, &merged, cursor);
     serval_layout::push_scrollbars(&mut plist, dom, session.fragments(), &merged);

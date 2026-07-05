@@ -250,7 +250,8 @@ impl WindowCtx<'_> {
             band_y,
             &self.shared.presentation.document_sheet_composed(),
         );
-        let (tex, _view) = core.rasterize(
+        let (tex, _view) = core.rasterize_for(
+            crate::render::surface_keys::NODE_THUMBNAIL,
             &scene,
             peek_w,
             peek_h,

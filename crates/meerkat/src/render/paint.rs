@@ -93,7 +93,8 @@ impl WindowCtx<'_> {
             Option<(wgpu::TextureView, [f32; 4])>,
         ) = match chrome {
             ChromeRasterPlan::Full(chrome_scene) => {
-                let (tex, view) = core.rasterize(
+                let (tex, view) = core.rasterize_for(
+                    super::surface_keys::CHROME_FULL,
                     &chrome_scene,
                     w,
                     h,
@@ -112,8 +113,13 @@ impl WindowCtx<'_> {
                     let scene = base_scene
                         .as_ref()
                         .expect("base scene when rerastering chrome base");
-                    let (tex, view) =
-                        core.rasterize(scene, w, h, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
+                    let (tex, view) = core.rasterize_for(
+                        super::surface_keys::CHROME_BASE,
+                        scene,
+                        w,
+                        h,
+                        ColorLoad::Clear(wgpu::Color::TRANSPARENT),
+                    );
                     self.view.chrome_base_tex = Some(crate::CachedTile {
                         version: 0,
                         size: (w, h),
@@ -130,8 +136,13 @@ impl WindowCtx<'_> {
                 let sw = (orrery_rect[2] - orrery_rect[0]).round().max(1.0) as u32;
                 let sh = (orrery_rect[3] - orrery_rect[1]).round().max(1.0) as u32;
                 if let Some(scene) = orrery_scene.as_ref() {
-                    let (subtree_tex, subtree_view) =
-                        core.rasterize(scene, sw, sh, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
+                    let (subtree_tex, subtree_view) = core.rasterize_for(
+                        super::surface_keys::CHROME_ORRERY,
+                        scene,
+                        sw,
+                        sh,
+                        ColorLoad::Clear(wgpu::Color::TRANSPARENT),
+                    );
                     self.view.chrome_orrery_tex = Some(crate::CachedTile {
                         version: 0,
                         size: (sw, sh),
@@ -164,7 +175,8 @@ impl WindowCtx<'_> {
             a: 1.0,
         };
         let orrery_raster_t = std::time::Instant::now();
-        let (_orrery_tex, orrery_view) = core.rasterize(
+        let (_orrery_tex, orrery_view) = core.rasterize_for(
+            super::surface_keys::ORRERY_CANVAS,
             &orrery_scene,
             orrery_w,
             orrery_h,
@@ -178,8 +190,15 @@ impl WindowCtx<'_> {
         let secondary_textures: Vec<(wgpu::Texture, wgpu::TextureView, [f32; 4])> =
             secondary_orreries
                 .iter()
-                .map(|(scene, rect, sw, sh)| {
-                    let (tex, view) = core.rasterize(scene, *sw, *sh, ColorLoad::Clear(backdrop));
+                .enumerate()
+                .map(|(i, (scene, rect, sw, sh))| {
+                    let (tex, view) = core.rasterize_for(
+                        super::surface_keys::secondary_orrery(i),
+                        scene,
+                        *sw,
+                        *sh,
+                        ColorLoad::Clear(backdrop),
+                    );
                     (tex, view, *rect)
                 })
                 .collect();
@@ -189,7 +208,13 @@ impl WindowCtx<'_> {
         let workbench_raster_t = std::time::Instant::now();
         let (_workbench_tex, workbench_view) = match workbench_scene.as_ref() {
             Some((scene, ww, wh)) => {
-                let (tex, view) = core.rasterize(scene, *ww, *wh, ColorLoad::Clear(backdrop));
+                let (tex, view) = core.rasterize_for(
+                    super::surface_keys::WORKBENCH,
+                    scene,
+                    *ww,
+                    *wh,
+                    ColorLoad::Clear(backdrop),
+                );
                 (Some(tex), Some(view))
             }
             None => (None, None),
@@ -210,7 +235,13 @@ impl WindowCtx<'_> {
         let gloss_minimap_raster_t = std::time::Instant::now();
         let (_gloss_minimap_tex, gloss_minimap_view) = match gloss_minimap_scene.as_ref() {
             Some((scene, mw, mh)) => {
-                let (tex, view) = core.rasterize(scene, *mw, *mh, ColorLoad::Clear(gloss_clear));
+                let (tex, view) = core.rasterize_for(
+                    super::surface_keys::GLOSS_MINIMAP,
+                    scene,
+                    *mw,
+                    *mh,
+                    ColorLoad::Clear(gloss_clear),
+                );
                 (Some(tex), Some(view))
             }
             None => (None, None),
@@ -265,8 +296,13 @@ impl WindowCtx<'_> {
                 // external-texture could not give. (Layering fix.)
                 const PEEK_W: u32 = 300;
                 const PEEK_H: u32 = 390;
-                let (tex, _view) =
-                    core.rasterize(&scene, PEEK_W, PEEK_H, ColorLoad::Clear(CARD_BG));
+                let (tex, _view) = core.rasterize_for(
+                    super::surface_keys::SNAPSHOT_PEEK,
+                    &scene,
+                    PEEK_W,
+                    PEEK_H,
+                    ColorLoad::Clear(CARD_BG),
+                );
                 let rgba = read_texture_rgba(core.device(), core.queue(), &tex, PEEK_W, PEEK_H);
                 if let Some(png_bytes) = png_bytes_from_rgba(&rgba, PEEK_W, PEEK_H) {
                     if let Some(uri) = png_data_uri(&png_bytes) {
@@ -326,7 +362,13 @@ impl WindowCtx<'_> {
                     rh,
                     self.shared.presentation.document_palette,
                 );
-                let (_t, view) = core.rasterize(&scene, rw, rh, ColorLoad::Clear(card_bg));
+                let (_t, view) = core.rasterize_for(
+                    super::surface_keys::SNAPSHOT_CARD,
+                    &scene,
+                    rw,
+                    rh,
+                    ColorLoad::Clear(card_bg),
+                );
                 core.renderer().compose_external_texture(
                     &view,
                     &target_view,
@@ -339,8 +381,13 @@ impl WindowCtx<'_> {
             if *background {
                 let mut scene = netrender::Scene::new(1, 1);
                 scene.push_rect(0.0, 0.0, 1.0, 1.0, [0.88, 0.66, 0.27, 1.0]);
-                let (_t, view) =
-                    core.rasterize(&scene, 1, 1, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
+                let (_t, view) = core.rasterize_for(
+                    super::surface_keys::KEPT_WARM_BADGE,
+                    &scene,
+                    1,
+                    1,
+                    ColorLoad::Clear(wgpu::Color::TRANSPARENT),
+                );
                 let bs = 10.0;
                 let bx1 = rect[2] - 6.0;
                 let by0 = rect[1] + 6.0;
@@ -364,8 +411,13 @@ impl WindowCtx<'_> {
             if self.view.divider_tex.as_ref().map(|c| c.size) != Some((1, 1)) {
                 let mut scene = netrender::Scene::new(1, 1);
                 scene.push_rect(0.0, 0.0, 1.0, 1.0, [0.04, 0.05, 0.07, 1.0]);
-                let (tex, view) =
-                    core.rasterize(&scene, 1, 1, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
+                let (tex, view) = core.rasterize_for(
+                    super::surface_keys::DIVIDER,
+                    &scene,
+                    1,
+                    1,
+                    ColorLoad::Clear(wgpu::Color::TRANSPARENT),
+                );
                 self.view.divider_tex = Some(crate::CachedTile {
                     version: 0,
                     size: (1, 1),
@@ -395,7 +447,8 @@ impl WindowCtx<'_> {
         {
             let gw_px = gw.round().max(1.0) as u32;
             let gh_px = gh.round().max(1.0) as u32;
-            let (_t, view) = core.rasterize(
+            let (_t, view) = core.rasterize_for(
+                super::surface_keys::WORKBENCH_GHOST,
                 scene,
                 gw_px,
                 gh_px,
@@ -459,7 +512,8 @@ impl WindowCtx<'_> {
                 &self.shared.presentation.chrome_theme,
                 ctl_scale,
             );
-            let (tex, view) = core.rasterize(
+            let (tex, view) = core.rasterize_for(
+                super::surface_keys::WINDOW_CONTROLS,
                 &scene,
                 strip_w,
                 band_h,
@@ -496,8 +550,13 @@ impl WindowCtx<'_> {
                 &self.shared.presentation.chrome_theme,
                 &mut self.shared.session.host_text,
             );
-            let (_t, view) =
-                core.rasterize(&scene, pw, ph, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
+            let (_t, view) = core.rasterize_for(
+                super::surface_keys::EMPTY_STATE_PANEL,
+                &scene,
+                pw,
+                ph,
+                ColorLoad::Clear(wgpu::Color::TRANSPARENT),
+            );
             let x0 = ((w as f32) - pw as f32) * 0.5;
             let y0 = toolbar_h as f32 + 16.0;
             core.renderer().compose_external_texture(

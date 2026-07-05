@@ -499,7 +499,8 @@ impl crate::WindowCtx<'_> {
                             .insert(*member, band.content_height);
                         let note_bg =
                             crate::chrome_to_wgpu(self.shared.presentation.chrome_theme.surface_bg);
-                        let (tex, view) = core.rasterize_scaled(
+                        let (tex, view) = core.rasterize_scaled_for(
+                            super::surface_keys::card(*member),
                             &band.scene,
                             *cw,
                             band_px,
@@ -573,7 +574,8 @@ impl crate::WindowCtx<'_> {
                                 m.invert,
                             );
                         }
-                        let (tex, view) = core.rasterize_scaled(
+                        let (tex, view) = core.rasterize_scaled_for(
+                            super::surface_keys::card(*member),
                             scene,
                             *cw,
                             band_px,
@@ -628,7 +630,8 @@ impl crate::WindowCtx<'_> {
                                 )
                             });
                     if let Some(scene) = doc_scene {
-                        let (tex, view) = core.rasterize_scaled(
+                        let (tex, view) = core.rasterize_scaled_for(
+                            super::surface_keys::card(*member),
                             &scene,
                             *cw,
                             band_px,
