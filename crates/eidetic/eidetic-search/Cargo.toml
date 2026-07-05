@@ -27,11 +27,12 @@ tempfile = "3"
 # The eidetic-recall example (the browsing-derivation rehearsal bin, moved
 # here so one bin carries ingest → index → recall → report): import supplies
 # the bookmark parser + history interchange types; fjall the on-disk store;
-# embed (BERT over burn's CPU backend) the vector half of fused recall —
-# burn is here only to name the backend type, pinned as embed pins it.
+# embed (BERT over burn, `--backend cpu|wgpu` at runtime) the vector half of
+# fused recall — burn is here only to name the backend types, pinned as embed
+# pins it.
 import = { workspace = true }
 eidetic-fjall = { workspace = true }
-embed = { workspace = true, features = ["bert"] }
+embed = { workspace = true, features = ["bert", "bert-wgpu"] }
 burn = { version = "0.21", default-features = false, features = ["ndarray", "std"] }
 
 # `test = true` runs the example's embedded mapper tests under `cargo test`.

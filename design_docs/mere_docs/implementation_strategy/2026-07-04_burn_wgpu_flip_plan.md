@@ -170,5 +170,22 @@ harness brief.
   fugue/baroque/Bach above the Rust pages on the vector half. Model load
   ~1.4-2.6s on wgpu debug. Note: the in-repo model checkout also means
   `MERE_MINILM_DIR` for the ignored real-model tests is available locally —
-  4 of 5 pass; the eidetic round-trip one is being root-caused (runtime
-  failure, post-compile-fix).
+  4 of 5 passed on first run; the fifth exposed a real eidetic-core bug
+  (next entry).
+- 2026-07-05 — eidetic round-trip bug found by the un-rotted test, fixed in
+  eidetic-core. `save_model_with_components` stored weights/tokenizer as
+  `OpaqueBlob` through `TypedPayload`'s serde_json default (87MB safetensors
+  → a giant JSON integer array), while `resolve_components` →
+  `resolve_blob` returns stored bytes raw — so the resolved "weights" were
+  the JSON envelope, not the payload. Fix: `OpaqueBlob` now overrides
+  `serialize_to_bytes`/`deserialize_from_bytes` to identity (the exact
+  override the `TypedPayload` docs name for weight-class payloads); stored
+  form = payload, BLAKE3 id = hash of the raw bytes, round-trip
+  byte-faithful, and no JSON blow-up. No other consumer existed
+  (`resolve_blob` was the only read path). Receipts: eidetic-core 73/73;
+  real-model suite 5/5 including
+  `minilm_round_trips_through_eidetic_and_inference_matches_direct_load`
+  (real MiniLM through the store and back, embeddings match direct load).
+  One capture caveat: with the pre-fix failing test, the release test
+  binary hung after the panic and needed a kill (wgpu-linked harness
+  teardown on the failure path); the passing suite exits cleanly.

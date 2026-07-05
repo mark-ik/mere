@@ -138,6 +138,7 @@ mod scrying_host;
 mod serval_a11y;
 mod serval_render;
 mod session_ops;
+mod session_thumbs;
 mod shell_command;
 mod shellbar;
 mod steward;

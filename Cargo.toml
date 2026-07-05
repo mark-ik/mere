@@ -59,6 +59,7 @@ members = [
     "crates/import",
     "crates/crawl",
     "crates/intel/embed",
+    "crates/intel/infer",
     "crates/intel/signals",
     "crates/murm/murm",
     "crates/murm/murmuring",
@@ -157,6 +158,7 @@ import = { path = "crates/import" }
 crawl = { path = "crates/crawl" }
 
 embed = { path = "crates/intel/embed" }
+infer = { path = "crates/intel/infer" }
 signals = { path = "crates/intel/signals" }
 
 # Standalone spec-B misfin implementation (promoted out of this workspace

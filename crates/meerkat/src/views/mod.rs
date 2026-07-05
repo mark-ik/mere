@@ -363,7 +363,9 @@ fn session_strip(c: &Chrome) -> ChromeView {
     Box::new(el::<_, Chrome, ()>("div", children).attr("class", "session-strip")) as ChromeView
 }
 
-/// One session chip: a label that activates the session and a × that closes it.
+/// One session chip: an optional mini-graph thumbnail plus a label (both activate
+/// the session) and a × that closes it. The thumbnail is a pre-painted data URI
+/// (`session_thumbs`, refreshed on session/graph change, never per frame).
 fn session_chip(chip: &crate::SessionChip) -> ChromeView {
     let class = if chip.active {
         "session-chip session-chip-active"
@@ -371,21 +373,24 @@ fn session_chip(chip: &crate::SessionChip) -> ChromeView {
         "session-chip"
     };
     let id = chip.id;
-    let label = on_click(
+    let mut children: Vec<ChromeView> = Vec::new();
+    if let Some(uri) = &chip.thumb {
+        children.push(Box::new(on_click(
+            el::<_, Chrome, ()>("img", ())
+                .attr("src", uri.clone())
+                .attr("class", "session-chip-thumb"),
+            move |c: &mut Chrome, _: PointerClick| c.pick_session(id),
+        )) as ChromeView);
+    }
+    children.push(Box::new(on_click(
         el::<_, Chrome, ()>("div", chip.label.clone()).attr("class", "session-chip-label"),
         move |c: &mut Chrome, _: PointerClick| c.pick_session(id),
-    );
-    let close = on_click(
+    )) as ChromeView);
+    children.push(Box::new(on_click(
         el::<_, Chrome, ()>("div", "\u{00d7}").attr("class", "session-chip-close"),
         move |c: &mut Chrome, _: PointerClick| c.request_close_session(id),
-    );
-    Box::new(
-        el::<_, Chrome, ()>(
-            "div",
-            vec![Box::new(label) as ChromeView, Box::new(close) as ChromeView],
-        )
-        .attr("class", class),
-    ) as ChromeView
+    )) as ChromeView);
+    Box::new(el::<_, Chrome, ()>("div", children).attr("class", class)) as ChromeView
 }
 
 /// The session overflow dropdown: the sessions past the inline cap, one clickable row

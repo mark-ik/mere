@@ -522,6 +522,7 @@ impl Shell {
                     session_dir,
                     mere_root,
                     session_labels: HashMap::new(),
+                    session_thumbs: HashMap::new(),
                     host_text: text::HostText::new(),
                     current_session_count,
                     graph_delta_log,

@@ -4,6 +4,8 @@
 
 //! WindowCtx session ops: save/restore, rename, thumbnails.
 
+use kernel::geometry::PortablePoint;
+
 use super::*;
 
 impl WindowCtx<'_> {
@@ -212,12 +214,13 @@ impl WindowCtx<'_> {
         }
     }
 
-    /// Rebuild the per-session display **labels**: the active/pooled session from its
-    /// live orrery graph, each cold session from its `graph.json`. A user-set display
-    /// name wins; otherwise one derived from the graph. Drops entries for closed
-    /// sessions. Called on every session or graph change. (The switcher thumbnails this
-    /// once also rasterized are retired — sessions are toolbar chips now, so only the
-    /// label survives. Chrome bar P4 cleanup.)
+    /// Rebuild the per-session display **labels and chip thumbnails**: the
+    /// active/pooled session from its live orrery graph, each cold session from its
+    /// `graph.json` (positions from the cartography sidecar). A user-set display name
+    /// wins the label; otherwise one derived from the graph. Drops entries for closed
+    /// sessions. Called on every session or graph change — event-driven, so the chip
+    /// `<img>` is never repainted per frame. (Chrome bar P4 labels; ui_polish S1
+    /// revived the thumbnails into the chips.)
     pub(crate) fn refresh_session_labels(&mut self) {
         let ids: Vec<SessionId> = self
             .shared
@@ -231,6 +234,22 @@ impl WindowCtx<'_> {
             .session
             .session_labels
             .retain(|id, _| live.contains(id));
+        self.shared
+            .session
+            .session_thumbs
+            .retain(|id, _| live.contains(id));
+        let theme = self.shared.presentation.chrome_theme;
+        let (thumb_bg, thumb_edge, thumb_node) = (
+            theme.control_bg.to_array(),
+            theme.muted_text.to_array(),
+            theme.strong_text.to_array(),
+        );
+        let opts = session_runtime::SwitcherThumbnailOptions {
+            width: crate::session_thumbs::THUMB_W,
+            height: crate::session_thumbs::THUMB_H,
+            node_radius: 2.5,
+            ..Default::default()
+        };
         for id in ids {
             // A user-set display name wins; otherwise derive a short label from the
             // graph — live orrery if pooled, else a cold `graph.json` load.
@@ -241,17 +260,22 @@ impl WindowCtx<'_> {
                 .get(id)
                 .and_then(|m| m.display_name.clone())
                 .filter(|n| !n.trim().is_empty());
-            let label = if let Some(name) = display_name {
-                name
-            } else if let Some(orrery) = self
+            let pooled = self
                 .shared
                 .session
                 .manifests
                 .get(id)
                 .map(|m| m.root_graph_id)
-                .and_then(|gid| self.orreries.get(&gid))
-            {
-                derive_session_label(orrery.graph())
+                .and_then(|gid| self.orreries.get(&gid));
+            let (label, thumb) = if let Some(orrery) = pooled {
+                let label = display_name
+                    .unwrap_or_else(|| derive_session_label(orrery.graph()));
+                let thumb = session_runtime::build_switcher_thumbnail_with(
+                    orrery.graph(),
+                    |k| orrery.node_position(k),
+                    opts,
+                );
+                (label, thumb)
             } else {
                 let dir = self
                     .shared
@@ -263,8 +287,36 @@ impl WindowCtx<'_> {
                     .ok()
                     .flatten()
                     .unwrap_or_else(Graph::new);
-                derive_session_label(&graph)
+                let label = display_name.unwrap_or_else(|| derive_session_label(&graph));
+                // Positions are not graph truth; a cold session's thumbnail reads
+                // them from its cartography sidecar (origin when absent).
+                let present: std::collections::HashSet<forme::GraphMemberId> =
+                    graph.nodes().map(|(_, n)| n.id).collect();
+                let positions: std::collections::HashMap<forme::GraphMemberId, PortablePoint> =
+                    super::load_cartography(&dir, &present)
+                        .map(|g| {
+                            g.iter()
+                                .map(|(m, (x, y))| (m, PortablePoint::new(x, y)))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                let thumb = session_runtime::build_switcher_thumbnail_with(
+                    &graph,
+                    |k| {
+                        graph
+                            .nodes()
+                            .find(|(key, _)| *key == k)
+                            .and_then(|(_, n)| positions.get(&n.id).copied())
+                    },
+                    opts,
+                );
+                (label, thumb)
             };
+            if let Some(uri) =
+                crate::session_thumbs::thumb_data_uri(&thumb, thumb_bg, thumb_edge, thumb_node)
+            {
+                self.shared.session.session_thumbs.insert(id, uri);
+            }
             self.shared.session.session_labels.insert(id, label);
         }
     }

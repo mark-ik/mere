@@ -37,7 +37,7 @@ mod overlays;
 mod paint;
 mod setup;
 pub(crate) mod surface_keys;
-mod textures;
+pub(crate) mod textures;
 mod workbench;
 use paint::PaintInputs;
 pub(crate) use setup::*;

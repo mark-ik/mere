@@ -415,6 +415,7 @@ impl crate::WindowCtx<'_> {
                         id: *id,
                         label,
                         active: Some(*id) == focused,
+                        thumb: self.shared.session.session_thumbs.get(id).cloned(),
                     }
                 })
                 .collect()

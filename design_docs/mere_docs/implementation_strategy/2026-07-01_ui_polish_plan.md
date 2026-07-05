@@ -172,3 +172,20 @@ currently quiet.
   instead of hanging off the toolbar's underside. Headed-verified
   (`C:\t\s3-inset-crop2.png`; sampled strip vs toolbar colors distinct). Next: S1
   (chip thumbnails + identity).
+- **2026-07-05 (S1 substantially done — chip thumbnails + ring landed + headed-verified).**
+  The retired rasterizer's geometry half survived at HEAD
+  (`session_runtime::switcher_thumbnail`, typed nodes/edges); only the painter was
+  gone. New `session_thumbs.rs` (bin module) paints that geometry into a 60x36 RGBA
+  buffer (dependency-free segment/dot raster) and wraps it via the existing
+  `png_bytes_from_rgba` + `png_data_uri` helpers; 2 unit tests. `refresh_session_labels`
+  (already event-driven: boot + every session/graph change) now also paints per-session
+  thumbnails — live orrery positions when pooled, cartography-sidecar positions for cold
+  sessions — into `shared.session.session_thumbs`; `SessionChip` gained `thumb`, the chip
+  view mounts it as a data-URI `<img>` (30x18 logical, crisp at 2x), and the active chip
+  moved from full-bleed fill to a 2px accent ring (constant border width so activation
+  never shifts layout). Headed-verified: a multi-node session shows its constellation in
+  the chip, the active chip rings (`C:\t\s1-chips-crop.png`). The stale-layout overlap
+  (finding 3's tail) no longer reproduces: creating a session mid-run re-measured the
+  strip same-frame, chips shifted cleanly (`s1-addclick-crop.png`). **Remaining S1
+  item:** the thumbnail-only vs thumb+label variant as a settings-lane toggle
+  (configurability rule) — deferred to its own small slice.

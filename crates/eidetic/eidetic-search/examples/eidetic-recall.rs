@@ -27,7 +27,8 @@
 //!
 //! `embed-index` and `recall` load the sentence-embedding model from
 //! `--model-dir` (default `models/all-MiniLM-L6-v2`, the checkout the repo
-//! carries) on burn's CPU backend; the minted `VectorIndex` engram persists
+//! carries) on burn's CPU backend, or the wgpu GPU backend with
+//! `--backend wgpu`; the minted `VectorIndex` engram persists
 //! through eidetic's typed layer, and `recall` fuses the lexical and vector
 //! rankings by reciprocal rank (the E4 seam, both engines live).
 //!
@@ -77,8 +78,12 @@ use import::{
     parse_bookmark_items,
 };
 
-/// The CPU backend the rehearsal bin embeds on.
+/// The CPU backend the rehearsal bin embeds on by default.
 type CpuBackend = burn::backend::NdArray<f32>;
+
+/// The GPU backend behind `--backend wgpu` (burn brief Lane 1's first
+/// consumer wiring; ~38x on batch embedding at MiniLM dims).
+type GpuBackend = burn::backend::Wgpu<f32, i32>;
 
 /// Texts per embedding batch (CPU-friendly).
 const EMBED_BATCH: usize = 16;
@@ -208,9 +213,24 @@ fn url_ranking(hits: &[eidetic_search::Hit]) -> Vec<String> {
         .collect()
 }
 
-fn load_provider(model_dir: &str) -> Result<BertEmbeddingProvider<CpuBackend>, String> {
-    BertEmbeddingProvider::<CpuBackend>::load(model_dir, Default::default())
-        .map_err(|e| format!("load embedding model from {model_dir}: {e}"))
+fn load_provider(model_dir: &str, backend: &str) -> Result<Box<dyn EmbeddingProvider>, String> {
+    let t = std::time::Instant::now();
+    let provider: Box<dyn EmbeddingProvider> = match backend {
+        "cpu" => Box::new(
+            BertEmbeddingProvider::<CpuBackend>::load(model_dir, Default::default())
+                .map_err(|e| format!("load embedding model from {model_dir}: {e}"))?,
+        ),
+        "wgpu" => Box::new(
+            BertEmbeddingProvider::<GpuBackend>::load(model_dir, Default::default())
+                .map_err(|e| format!("load embedding model from {model_dir}: {e}"))?,
+        ),
+        other => return Err(format!("--backend must be cpu or wgpu, got {other:?}")),
+    };
+    println!(
+        "embedding backend: {backend} (model loaded in {} ms)",
+        t.elapsed().as_millis()
+    );
+    Ok(provider)
 }
 
 /// The newest stored vector-index engram, if any.
@@ -252,6 +272,7 @@ async fn run() -> Result<(), String> {
     let mut db = "eidetic-recall.db".to_string();
     let mut index_dir: Option<String> = None;
     let mut model_dir = "models/all-MiniLM-L6-v2".to_string();
+    let mut backend = "cpu".to_string();
     let mut owner = String::new();
     let mut rest: Vec<String> = Vec::new();
     let mut i = 0;
@@ -269,6 +290,10 @@ async fn run() -> Result<(), String> {
                 i += 1;
                 model_dir = args.get(i).cloned().ok_or("--model-dir needs a path")?;
             }
+            "--backend" => {
+                i += 1;
+                backend = args.get(i).cloned().ok_or("--backend needs cpu|wgpu")?;
+            }
             "--owner" => {
                 i += 1;
                 owner = args.get(i).cloned().ok_or("--owner needs a tag")?;
@@ -279,7 +304,7 @@ async fn run() -> Result<(), String> {
     }
     let index_dir = index_dir.unwrap_or_else(|| format!("{db}.index"));
     let usage = "usage: eidetic-recall [--db <dir>] [--index <dir>] [--model-dir <dir>] \
-                 [--owner <tag>] \
+                 [--backend cpu|wgpu] [--owner <tag>] \
                  ingest-bookmarks <file> | ingest-history <jsonl> | index | \
                  search <query> [n] | embed-index | recall <query> [n] | report | \
                  corridor [n] | window <start_ms> <end_ms> | co <a> <b> | stats";
@@ -356,7 +381,7 @@ async fn run() -> Result<(), String> {
             }
         }
         Some("embed-index") => {
-            let provider = load_provider(&model_dir)?;
+            let provider = load_provider(&model_dir, &backend)?;
             let memory = load(&mut store).await?;
             let pages = distinct_pages(&memory);
             if pages.is_empty() {
@@ -421,7 +446,7 @@ async fn run() -> Result<(), String> {
             let Some(vector_index) = load_vector_index(&mut store).await? else {
                 return Err("no vector index yet — run `embed-index` first".to_string());
             };
-            let provider = load_provider(&model_dir)?;
+            let provider = load_provider(&model_dir, &backend)?;
             let query_vector = provider
                 .embed_one(query)
                 .map_err(|e| format!("embed query: {e}"))?;

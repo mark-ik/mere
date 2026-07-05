@@ -136,6 +136,10 @@ pub(crate) struct Session {
     /// read by the toolbar session chips. (The switcher thumbnails this once sat beside
     /// are retired — sessions are toolbar chips now. Chrome bar P4 cleanup.)
     pub(crate) session_labels: HashMap<SessionId, String>,
+    /// Cached mini-graph thumbnail per session as a PNG data URI, painted beside the
+    /// labels by `refresh_session_labels` (live orrery or cold sidecar positions) and
+    /// shown in the toolbar chips. Event-driven, never per frame. (ui_polish S1.)
+    pub(crate) session_thumbs: HashMap<SessionId, String>,
     /// Host text shaping for host-drawn labels (the switcher tile names). Holds the
     /// parley contexts so they aren't rebuilt per frame. (Host text path.)
     pub(crate) host_text: text::HostText,

@@ -385,21 +385,30 @@ pub(crate) fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
             rgb(c.active_bg)
         ),
         // The toolbar session strip (Chrome bar P4): chips for the open sessions, the
-        // overflow `+N ⌄`, and the add `+`. The active chip takes the selection fill so
-        // the focused session reads at a glance (representation-identity).
+        // overflow `+N ⌄`, and the add `+`. The active chip takes a thin accent ring
+        // (not a full-bleed fill) so the focused session reads at a glance without a
+        // solid pill dominating the row (ui_polish S1). Every chip carries a
+        // transparent-width border so activation never shifts layout.
         ".session-strip { display: flex; align-items: center; min-width: 0; }".to_string(),
         format!(
             ".session-chip {{ display: flex; align-items: center; background-color: {}; \
                 color: {}; border-radius: 13px; margin: 4px 2px; padding: 2px 2px 2px 4px; \
-                min-width: 0; max-width: 190px; flex-shrink: 1; }}",
+                min-width: 0; max-width: 190px; flex-shrink: 1; \
+                border: 2px solid {}; }}",
             rgb(c.control_bg),
-            rgb(c.control_text)
+            rgb(c.control_text),
+            rgb(c.control_bg)
         ),
         format!(
-            ".session-chip-active {{ background-color: {}; color: {}; }}",
+            ".session-chip-active {{ border: 2px solid {}; color: {}; }}",
             rgb(c.active_bg),
             rgb(c.strong_text)
         ),
+        // The chip's mini-graph thumbnail: half the raster size in logical px (the
+        // 60x36 backing PNG stays crisp at 2x), rounded to sit inside the pill.
+        ".session-chip-thumb { width: 30px; height: 18px; margin: 2px 0 2px 2px; \
+            border-radius: 8px; flex-shrink: 0; }"
+            .to_string(),
         ".session-chip-label { font-size: 12px; padding: 4px 5px; min-width: 0; \
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }"
             .to_string(),

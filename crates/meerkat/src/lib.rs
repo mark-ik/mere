@@ -249,13 +249,16 @@ pub struct ShellbarPaneStates {
 }
 
 /// One open graph session as a toolbar chip: its id (carried in the gesture the host
-/// drains), a short label, and whether it is the focused session (the active
-/// highlight). (Chrome bar P4 — sessions in the toolbar.)
+/// drains), a short label, whether it is the focused session (the active highlight),
+/// and its mini-graph thumbnail as a PNG data URI when painted (ui_polish S1; absent
+/// until the first `refresh_session_labels` pass). (Chrome bar P4 — sessions in the
+/// toolbar.)
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SessionChip {
     pub id: SessionId,
     pub label: String,
     pub active: bool,
+    pub thumb: Option<String>,
 }
 
 /// A session gesture a toolbar chip captured, drained by the host into the matching

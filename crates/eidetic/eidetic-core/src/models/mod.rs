@@ -65,4 +65,19 @@ impl TypedPayload for OpaqueBlob {
     fn schema_ref() -> SchemaRef {
         *OPAQUE_BLOB_SCHEMA_REF
     }
+
+    /// Raw-bytes serializer (the override the `TypedPayload` docs name for
+    /// weight-class payloads). The JSON default would turn an opaque buffer
+    /// into a giant integer array, and — the actual bug this fixes — the
+    /// resolve side (`resolve_blob`) hands back stored bytes raw, so the
+    /// stored form must BE the payload for the round-trip to be
+    /// byte-faithful. The blob's BLAKE3 id is likewise the hash of the raw
+    /// payload.
+    fn serialize_to_bytes(&self) -> crate::Result<Vec<u8>> {
+        Ok(self.0.clone())
+    }
+
+    fn deserialize_from_bytes(bytes: &[u8]) -> crate::Result<Self> {
+        Ok(OpaqueBlob(bytes.to_vec()))
+    }
 }

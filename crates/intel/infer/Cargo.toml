@@ -1,0 +1,17 @@
+[package]
+name = "infer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Inference-provider seam for Mere's statistical-intelligence tier — the InferenceProvider trait, capability descriptors, and a deterministic canned provider for tests; model-backed providers (burn-wgpu first) land behind features, mirroring embed's bert pattern."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1.0"
