@@ -303,6 +303,7 @@ impl WindowView {
             find_gen: 0,
             page_selection: None,
             tile_textures: Default::default(),
+            content_card_unhealthy: Default::default(),
             tile_bands: Default::default(),
             note_content_heights: Default::default(),
             snapshot_data_uris: Default::default(),

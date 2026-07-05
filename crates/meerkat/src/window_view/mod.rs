@@ -265,6 +265,14 @@ pub(crate) struct WindowView {
     //    across frames while their version + size hold. ────────────────────────
     /// Cached rasterized texture per tile, keyed by member; evicted on close.
     pub(crate) tile_textures: HashMap<GraphMemberId, CachedTile>,
+    /// Members whose content card is carded this frame but will not paint visibly —
+    /// either no tile texture despite ready content, or a texture built from a
+    /// zero-op scene (blank). The durable health invariant for the content lane:
+    /// `rasterize_cards` warns once when a member enters this set and once when it
+    /// leaves, so the silent "a card should paint but doesn't" failure is loud
+    /// instead of undiagnosable. Not a render input — purely the dedup latch for
+    /// the diagnostic. (Content-card health.)
+    pub(crate) content_card_unhealthy: std::collections::HashSet<GraphMemberId>,
     /// The document-y the cached document-lane texture was rasterized at (the top of
     /// its band). The composite UV-windows within `[band_y, band_y + tex_h]`; absent
     /// (or 0) for HTML-lane / full textures. (Retained-text / tiled render.)

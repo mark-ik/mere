@@ -400,6 +400,11 @@ impl crate::WindowCtx<'_> {
         self.view
             .tile_textures
             .retain(|m, _| cards.iter().any(|(cm, _, _)| cm == m));
+        // Drop the no-texture latch for members no longer carded this frame (a
+        // closed tile isn't a "recovered" card, so no recovery log for it).
+        self.view
+            .content_card_unhealthy
+            .retain(|m| cards.iter().any(|(cm, _, _)| cm == m));
         self.view
             .tile_bands
             .retain(|m, _| cards.iter().any(|(cm, _, _)| cm == m));
@@ -428,6 +433,28 @@ impl crate::WindowCtx<'_> {
         // (Render-target clamp.)
         const MAX_CARD_TEX_AREA: u32 = 30 * 1024 * 1024;
         let mut composite: Vec<([f32; 4], GraphMemberId)> = Vec::with_capacity(cards.len());
+        // Per-card render inputs (content-card health). DEBUG, so it's off by
+        // default and its field reads cost nothing until enabled
+        // (`RUST_LOG=meerkat::content_card=debug` or the Apparatus ring); it names
+        // exactly what the rasterizer sees per card — the scene/packet presence,
+        // op count, and band — so a blank or missing card is attributable without
+        // a bespoke trace session.
+        for (member, dest, sz) in cards {
+            tracing::debug!(
+                target: "meerkat::content_card",
+                %member,
+                dest = ?dest,
+                size = ?sz,
+                scene = self.shared.content.constellation.scene(*member).is_some(),
+                packet = self.shared.content.constellation.packet(*member).is_some(),
+                active = self.shared.content.constellation.is_active(*member),
+                version = self.shared.content.constellation.scene_version(*member),
+                ops = self.shared.content.constellation.scene_stats(*member).map(|s| s.op_count),
+                band = ?self.shared.content.constellation.scene_band(*member),
+                content_h = self.shared.content.constellation.content_height(*member),
+                "content card inputs",
+            );
+        }
         for (member, dest, (cw, ch)) in cards {
             // A live tile/preview bumps scene_version each render; a static snapshot
             // has version 0, so its band rasterizes once and stays cached until scroll.
@@ -696,6 +723,56 @@ impl crate::WindowCtx<'_> {
             if self.view.tile_textures.contains_key(member) {
                 composite.push((*dest, *member));
             }
+            // Content-card health invariant: a card in this frame's list must
+            // result in *visible paint*. It fails two ways, both silent until now:
+            // (1) **no texture** despite ready content (a scene/packet arrived but
+            // nothing rasterized — missing lane / rasterize bailout), and (2) a
+            // texture built from a **zero-op scene** (it composites, but paints only
+            // the background clear — the "card is there but blank" case, exactly
+            // what a `composite=1` yet empty card is). A member still loading (no
+            // texture *and* no scene/packet yet) is healthy, not alarmed. The render
+            // path measured re-raster *cost* but never this presence invariant,
+            // which is how "cards don't show" stayed invisible to telemetry. Latched
+            // per member so the alarm fires once on entry and once on recovery.
+            // (Content-card health.)
+            let has_texture = self.view.tile_textures.contains_key(member);
+            let scene_present = self.shared.content.constellation.scene(*member).is_some();
+            let ops = self
+                .shared
+                .content
+                .constellation
+                .scene_stats(*member)
+                .map(|s| s.op_count);
+            let ready = scene_present || self.shared.content.constellation.packet(*member).is_some();
+            let blank_scene = scene_present && ops.unwrap_or(0) == 0;
+            let unhealthy = if has_texture { blank_scene } else { ready };
+            if unhealthy {
+                if self.view.content_card_unhealthy.insert(*member) {
+                    tracing::warn!(
+                        target: "meerkat::content_card",
+                        %member,
+                        active = self.shared.content.constellation.is_active(*member),
+                        has_texture,
+                        scene = scene_present,
+                        packet = self.shared.content.constellation.packet(*member).is_some(),
+                        ops,
+                        band = ?self.shared.content.constellation.scene_band(*member),
+                        content_h = self.shared.content.constellation.content_height(*member),
+                        reason = if has_texture {
+                            "composited a zero-op scene (card paints only its background — blank)"
+                        } else {
+                            "content is ready but produced no tile texture (no render lane matched / rasterize bailed)"
+                        },
+                        "content card will not be visible",
+                    );
+                }
+            } else if self.view.content_card_unhealthy.remove(member) {
+                tracing::info!(
+                    target: "meerkat::content_card",
+                    %member,
+                    "content card recovered: producing visible paint again",
+                );
+            }
         }
         // Page Visibility (W3C plan P1): what this frame drew is visible;
         // every other active member goes hidden (scripted timer pump clamps
@@ -705,6 +782,14 @@ impl crate::WindowCtx<'_> {
             .content
             .constellation
             .apply_presentation(&presented);
+        // Frame summary (content-card health): expected vs composited. A divergence
+        // is already alarmed per-member above; this is the at-a-glance count.
+        tracing::debug!(
+            target: "meerkat::content_card",
+            cards = cards.len(),
+            composited = composite.len(),
+            "content cards rasterized",
+        );
         composite
     }
 }
