@@ -35,6 +35,69 @@ At user_zoom 1.4 on the 2x panel (ui-02) the window-controls strip (minimize/max
 
 From the 2026-07-02 diagnostics session: `chrome_us` (cascade+layout+paint of the shell document) runs 100-145ms/frame even on the RepaintOnly path, nearly independent of mutation count (203 vs 16 mutations, same cost). `RepaintOnly` skips layout but `emit_paint_list` re-walks and re-encodes the whole box tree into a fresh `netrender::Scene` every frame, so cost tracks total DOM size (roster + gloss + orrery cards + panes), not the changed delta. That lives in `serval-layout` (`repos/serval/components/serval-layout/`), out of scope for a meerkat-side fix. Needs its own serval-side plan: retained or fragment-keyed paint lists patched by mutation, or partitioning the shell document's paint emission. This plan only relieves pressure (P1 keeps thumbnails off the per-frame path; smaller chip DOM). Enable diagnostics with `RUST_LOG=meerkat=info,meerkat::profile=debug` (permanent probes in `pane_session.rs` + `render/paint.rs`).
 
+## Scoping pass (2026-07-05, code-reground)
+
+The tree moved between the 07-01 findings and this scoping; each phase's real
+remaining scope, verified against today's code:
+
+- **P1 is half done by other plans.** The chrome-bar P4 session strip already
+  ships one-row chips with `nowrap + ellipsis + max-width:190px`, an inline cap
+  with a `+N ⌄` overflow fold, and the 07-03 gnode-pool confounder pass clamped
+  the wrap-to-two-lines case. Remaining P1 scope: thumbnails, identity styling
+  (ring not fill), the variant setting, and the stale-layout overlap check.
+- **P3 may already be fixed.** `tile_surface.rs` DEFAULT_TILE_CSS now reads
+  tabbar 44px with `.tile-tab { line-height: 1.2; font-size: 15px }` (was 36px,
+  no line-height at the 07-01 finding). P3 starts as verification, not code.
+- **P4's reserved-gap math is sound now.** The toolbar sheet pads by
+  `CONTROLS_W` and rides `scale_px(ui_scale)`; the drawn strip is
+  `CONTROLS_W × ui_scale` (paint.rs:508). `flex-wrap: nowrap` + `min-width: 0`
+  landed with the chrome-bar robustness pass. P4 reduces to a driven sweep plus
+  fixing only what the sweep surfaces.
+- **P2 is unchanged**: no scale seam exists in pelt-desktop; DEFAULT_TILE_CSS
+  is fixed px.
+
+### Slices (build order: S2 → S3 → S1 → S4)
+
+- **S2 (P2) — pelt tile scale seam.** `TileShell::set_scale(f32)` in
+  pelt-desktop: store the structural sheet's base px values, re-emit scaled
+  (pelt-local equivalent of meerkat's `scale_px`); meerkat calls it beside the
+  existing `set_theme` call (render/workbench.rs) on startup and every
+  `ui_scale` change. Also scale the drag ghost, divider thickness, and pointer
+  px thresholds. Guard: the tile *content* already scales via D2 auto-DPI; only
+  the shell strip scales here, or text double-scales. Done when tab bar + tab
+  text visually match the toolbar at 1x and 2x DPI and Ctrl+zoom moves both
+  together (headed shots 1.0 / 1.4 / 2.2).
+- **S3 (P3) — tab clip verification, then root-cause only if it persists.**
+  Fresh headed crops at 1x and 2x of a tab label's ascenders. If clipped even
+  with the new 44px + line-height CSS, minimal serval-layout repro
+  (fixed-height flex + centered inline text) and fix in the engine
+  (standards-correct rule); else close P3 citing the CSS change. Either way add
+  the small top inset so tabs stop abutting the toolbar underside.
+- **S1 (P1) — chip thumbnails + identity.** Revive the rasterizer from git
+  history (`build_switcher_thumbnail_with`, removed at chrome-bar closeout;
+  the switcher_scene pipeline removal commit has the full shape). Render each
+  session's mini-graph to a small texture on session/graph change (hook the
+  same generation counter the gloss minimap uses), encode once to a data-URI
+  `<img>` in the chip (the established chrome-DOM texture pattern: gnode faces,
+  snapshot cards; cache per (session, generation), capped like
+  `snapshot_data_uris`). Never per-frame. Chip becomes thumbnail + ellipsized
+  label; a `thumbnail-only` variant rides a settings-lane toggle
+  (configurability rule). Active-session styling moves from filled pill to
+  accent ring/underline. Verify the stale-layout overlap: drive a chip-list
+  change and confirm the toolbar re-measures (fix = route chip-list changes
+  through the resize re-measure path only if the drive shows the overlap).
+- **S4 (P4) — overflow sweep.** Driven matrix: zoom 1.0 / 1.4 / 2.0 at widths
+  1280 / 1920 / 2560 (drive harness notes from 07-04: DPI-halved SetCursorPos
+  coords, SendKeys paren escaping). Assert no glyph overlap between window
+  controls, chips, add group, and omnibar. Fix only what the sweep surfaces;
+  likely levers if needed: omnibar flex-shrink priority, width-aware
+  `SESSION_INLINE_CAP`. Done per the original P4 condition.
+
+Risk note: S1 touches `render/textures.rs` + views only; keep out of
+`render/cards.rs`/`render/mod.rs` while the shell-paint workstream is hot in
+those files. S2/S3 live in the serval repo (pelt-desktop / serval-layout),
+currently quiet.
+
 ## Phases
 
 ### P1: Session chips carry graph thumbnails
@@ -79,4 +142,9 @@ From the 2026-07-02 diagnostics session: `chrome_us` (cascade+layout+paint of th
 
 ## Progress
 
+- **2026-07-05**: P1-P4 scoped against the current tree (section above). Half of P1
+  and most of P4 turned out to be already delivered by the chrome-bar P4 strip, the
+  07-03 chip clamp, and the scale_px coverage; P3 opens as a verify (the tile CSS
+  gained 44px + line-height since the finding); P2 confirmed untouched. Build order
+  set S2 → S3 → S1 → S4 with the shell-paint-workstream collision guard noted.
 - **2026-07-01**: plan written from a driven verification session (launch, load `https://example.com` into a tile, Ctrl+= x3, Ctrl+0, Ctrl+wheel x5; ddagrab captures ui-01/02/03 + full-res tab crops) plus code trace across meerkat, orrery, and pelt-desktop. All four defects reproduced; findings 1-4 grounded to file/line above. Finding 5 absorbed from the 2026-07-02 diagnostics session's memory so it is documented in design_docs.

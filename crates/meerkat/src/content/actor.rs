@@ -280,6 +280,7 @@ impl ContentRuntime {
                     scripted_doc,
                     #[cfg(feature = "smolweb")]
                     smolweb: None,
+                    last_scene_sig: None,
                 };
                 if let Some(old) = self.current.as_mut().and_then(|c| c.script.take()) {
                     let _ = old.detach();

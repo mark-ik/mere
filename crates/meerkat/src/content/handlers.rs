@@ -6,8 +6,10 @@
 
 use super::*;
 
+#[allow(clippy::too_many_arguments)]
 fn emit_scene(
     out: &impl ContentUpdateSink,
+    last_sig: &mut Option<u64>,
     nav: NavGeneration,
     viewport_gen: ViewportGeneration,
     scene: Scene,
@@ -17,6 +19,41 @@ fn emit_scene(
     links: Vec<LinkHit>,
     masks: Vec<paint_list_render::BoxShadowMaskRequest>,
 ) {
+    // Identical-scene suppression (see `Content::last_scene_sig`): fingerprint
+    // the outgoing band and skip the ship when nothing the host could see
+    // changed. Streamed through a hashing writer (no buffer); serde_json's
+    // float formatting is deterministic, and this runs only after the actor
+    // already paid a full re-layout + emit.
+    struct HashWriter(rustc_hash::FxHasher);
+    impl std::io::Write for HashWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            std::hash::Hasher::write(&mut self.0, buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut w = HashWriter(rustc_hash::FxHasher::default());
+    std::hash::Hasher::write_u64(&mut w.0, nav.0 as u64);
+    std::hash::Hasher::write_u64(&mut w.0, viewport_gen.0 as u64);
+    std::hash::Hasher::write_u32(&mut w.0, content_height);
+    std::hash::Hasher::write_u32(&mut w.0, band_y);
+    std::hash::Hasher::write_u32(&mut w.0, band_h);
+    let sig = match serde_json::to_writer(&mut w, &scene) {
+        Ok(()) => Some(std::hash::Hasher::finish(&w.0)),
+        Err(_) => None,
+    };
+    if sig.is_some() && *last_sig == sig {
+        tracing::debug!(
+            target: "meerkat::profile",
+            band_y,
+            band_h,
+            "identical band scene suppressed"
+        );
+        return;
+    }
+    *last_sig = sig;
     let stats = scene_stats(&scene);
     out.emit_update(ContentUpdate::Scene {
         nav,
@@ -286,6 +323,7 @@ pub(crate) fn render(
             .collect();
         emit_scene(
             out,
+            &mut content.last_scene_sig,
             content.nav,
             content.viewport_gen,
             scene,
@@ -343,6 +381,7 @@ pub(crate) fn render(
             .collect();
         emit_scene(
             out,
+            &mut content.last_scene_sig,
             content.nav,
             content.viewport_gen,
             scene,
@@ -431,6 +470,7 @@ pub(crate) fn render(
             .collect();
         emit_scene(
             out,
+            &mut content.last_scene_sig,
             content.nav,
             content.viewport_gen,
             scene,
@@ -479,6 +519,7 @@ pub(crate) fn render(
                 masks,
             } => emit_scene(
                 out,
+                &mut content.last_scene_sig,
                 content.nav,
                 content.viewport_gen,
                 scene,

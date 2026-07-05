@@ -61,6 +61,8 @@ pub mod provider;
 pub mod safetensors_io;
 pub mod tokenizer;
 pub mod validation;
+#[cfg(all(test, feature = "bert-wgpu"))]
+mod wgpu_parity;
 
 pub use attention::{BertAttention, BertSelfAttention, BertSelfOutput};
 pub use config::{BGE_MICRO_V2, BertConfig, MINILM_L6_V2, SNOWFLAKE_ARCTIC_EMBED_XS};

@@ -436,6 +436,13 @@ pub(crate) struct Content {
     /// so a resize needs no explicit clear. (Smolweb host lane P1.)
     #[cfg(feature = "smolweb")]
     smolweb: Option<pelt_desktop::SmolwebDocument>,
+    /// Fingerprint of the last band scene shipped (gens + band + content
+    /// height + the serialized scene), so a re-render that converges to an
+    /// IDENTICAL band is not re-shipped: no version bump host-side, no wake,
+    /// no re-raster. The scripted Wikipedia card re-emitted an unchanged band
+    /// every ~7s cycle forever, costing 90-260ms of raster each (shell paint
+    /// plan, focused-card churn). Real changes always differ and ship.
+    last_scene_sig: Option<u64>,
 }
 
 /// The scripted rung's external `<script src>` fetcher

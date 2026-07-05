@@ -52,6 +52,12 @@ before binding.
 recorded CPU-vs-GPU numbers, a wasm embed runs via WebGPU, and D1 is decided
 from those receipts.
 
+**Status 2026-07-05**: landed and measured except the wasm receipt; see the
+[burn_wgpu_flip_plan](../implementation_strategy/2026-07-04_burn_wgpu_flip_plan.md).
+Headline: BERT is decisively GPU (3.2x at batch 1 up to 38x at 32×128);
+field eval stays CPU-default (ndarray wins through 100k positions on a
+cheap program; GPU needs resident data or heavier programs to pay).
+
 ## Lane 2: burn-remote over iroh as the fleet compute protocol
 
 The mesh lease scheduler's compute half, ready-made (prior art recorded in the
@@ -140,7 +146,12 @@ at a measured node count.
 - **D1 device policy**: shared wgpu device with netrender (zero-copy, but
   inference and the renderer contend for one queue) vs a separate device
   (isolation, copy boundary). Verify burn 0.21's existing-device init seam as
-  part of Lane 1.
+  part of Lane 1. **Receipt 2026-07-05**: seam verified —
+  `init_device(WgpuSetup{instance, adapter, device, queue, ..}, options)`
+  registers an existing device, and burn's cubecl-wgpu pins the same
+  `wgpu = "29"` the workspace pins, so sharing is mechanically possible
+  today (one burn device per adapter). The scheduling half of the decision
+  stays open until a resident-data consumer exists.
 - **D2 wasm model-size ceiling**: inherited from the harness brief; empirical;
   sets the in-browser inference tier.
 - **D3 burn-remote release timing**: Lane 2 waits on the post-0.21 release;
