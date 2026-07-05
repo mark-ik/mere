@@ -331,3 +331,30 @@ overlay slot on the focused input, state host-side, invisible to the page.
   snapshot card has no live layout to register highlights on, so the fallback stays for
   it). Concurrent-workstream note: 3 unrelated bin tests were red at commit time
   (graph_delta_log, wallet_pairing, a serval keyed.rs panic), none in touched files.
+- **2026-07-05 — P0 overlay-slot probe landed (engine side; all 4 done-conditions
+  headless-proven).** `serval-layout/overlays.rs` (top-layer + anchor-positioning +
+  UA-shadow subset), `ServalPaintList::push_sublist(origin, sub)` (compose a satellite
+  paint list under one transform to the anchor — fill-only in the probe; a text/image
+  satellite adds the font/image side-table merge here later), and an `OverlayRegistry`
+  on `ContentLayout` with `set_overlay(name, anchor, content)` / `clear_overlay`,
+  appended in `emit_band` after content + highlights at the anchor's live
+  `absolute_origin` (band-shifted). A satellite is produced by its *own*
+  `lay_out_content` call with its own sheet, so isolation is structural. Four tests, one
+  per P0 done-condition, all green (248/248 lib):
+  - **(a) no reflow leak** — registering a satellite leaves the page's fragment count +
+    the anchor's rect byte-identical; `clear_overlay` restores the exact pre-overlay
+    command count.
+  - **(b) anchor tracking** — the overlay's wrap transform sits at the anchor's top on a
+    tall page, and a lower band shifts it up by the band delta (tracks content, not the
+    viewport).
+  - **(c) style isolation** — a page carrying `.card { color: red }` cannot recolor a
+    satellite whose own `.card` cascade set a different colour (the page sheet was never
+    handed to the satellite).
+  - **(d) top-layer order** — the satellite's fill is the *last* rect in the composed
+    stream, painting over every page stacking context.
+  With the highlight slot (find-in-page, P2) and now the overlay slot, **P0 is complete
+  on the engine side** for both slot kinds the plan defines. Remaining before real
+  features: two small accessors added to `ContentLayout` (`fragment_count`, `node_rect`)
+  for the anchor geometry a host needs; and P1's remote runner (host view diffs a
+  satellite subtree over the actor channel) is the next architectural piece — the probe
+  proves the engine seam it targets is sound.
