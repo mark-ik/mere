@@ -91,6 +91,11 @@ on burn-wgpu, native and wasm, and the harness brief's two open measurements
 (wasm model-size ceiling; burn-wgpu vs native-runtime competitiveness) have
 recorded answers.
 
+**Status 2026-07-05**: the seam exists — `crates/intel/infer` (trait +
+capability matching + deterministic `CannedProvider`), per the
+[inference_provider_plan](../implementation_strategy/2026-07-05_inference_provider_plan.md).
+Model body, eidetic loading, and the actor are that plan's next phases.
+
 ## Lane 4: training and LoRA on-device
 
 Burn's moat relative to candle/ort: the same code trains and infers, on wgpu,

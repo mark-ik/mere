@@ -159,3 +159,16 @@ harness brief.
   uuid `js`, both target-gated in the manifest); embed wasm deferred with its
   two remaining walls named in Findings. Native rechecked clean after the
   manifest edits.
+- 2026-07-05 — first consumer wired: the `eidetic-recall` example gained
+  `--backend cpu|wgpu` (provider behind `Box<dyn EmbeddingProvider>`; the
+  backend and model-load time print at load). Headed rehearsal ran end to
+  end on wgpu with the in-repo MiniLM checkout (`models/all-MiniLM-L6-v2`,
+  real safetensors): ingest 6 bookmarks → mint trail index → `embed-index
+  --backend wgpu` (384-dim engram minted) → fused recall. Ranking sanity
+  held both ways: a Rust query put ownership/lifetimes first, and a
+  semantic-only music query ("classical composers counterpoint") ranked
+  fugue/baroque/Bach above the Rust pages on the vector half. Model load
+  ~1.4-2.6s on wgpu debug. Note: the in-repo model checkout also means
+  `MERE_MINILM_DIR` for the ignored real-model tests is available locally —
+  4 of 5 pass; the eidetic round-trip one is being root-caused (runtime
+  failure, post-compile-fix).

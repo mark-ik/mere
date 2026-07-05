@@ -160,3 +160,15 @@ currently quiet.
   (`C:\t\s2-zoom100.png` / `s2-zoom140.png`). Both sheets ride the same scale
   transform by construction, so finding 1's tabs-at-half-chrome-scale is gone. Next
   slice: S3 (tab-clip verification at 1x/2x).
+- **2026-07-05 (S3 done — tab clip resolved, inset landed).** Verification first, per
+  the scoping: full-res crops at user_zoom 1.0 and 1.2 (both on the 2x panel) show tab
+  labels fully rendered, ascenders and descenders intact, vertically centered
+  (`C:\t\s3-tabs-z100.png` / `s3-tabs-z120.png`) — the 44px + `line-height: 1.2` CSS
+  that landed since the 07-01 finding resolved finding 2; no serval-layout line-box
+  investigation needed. The breathing-room half landed both-sheets: `.tile-tabbar`
+  gains `padding: 4px 2px 0 2px` (pelt DEFAULT_TILE_CSS + the meerkat theme
+  restatement, so it scales via scale_px_in) and the meerkat theme now paints the
+  tabbar strip at `darken(toolbar_bg, 0.72)`, so tabs sit on a visibly distinct band
+  instead of hanging off the toolbar's underside. Headed-verified
+  (`C:\t\s3-inset-crop2.png`; sampled strip vs toolbar colors distinct). Next: S1
+  (chip thumbnails + identity).

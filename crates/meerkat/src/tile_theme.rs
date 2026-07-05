@@ -26,6 +26,7 @@ pub(crate) fn tile_sheet(c: &ChromeTheme, scale: f32) -> String {
     crate::theme_sheets::scale_px_in(
         &format!(
             ".tile-tabbar {{ background: {tabbar}; }} \
+         .tile-tabbar {{ padding: 4px 2px 0 2px; }} \
          .tile-tab {{ color: {tab_text}; background: {tab_bg}; font-size: 15px; padding: 8px 14px; }} \
          .tile-label {{ font-size: inherit; }} \
          .tile-tab.active {{ color: {active_text}; background: {active_bg}; }} \
@@ -35,7 +36,7 @@ pub(crate) fn tile_sheet(c: &ChromeTheme, scale: f32) -> String {
          .tile-content {{ background: {content}; }} \
          .tile-divider {{ flex-basis: 10px; background: {divider}; }} \
          .tile-ghost {{ color: {active_text}; background: {active_bg}; border: 1px solid {ghost_border}; font-size: 15px; padding: 8px 14px; }}",
-            tabbar = rgb(c.toolbar_bg),
+            tabbar = darken(c.toolbar_bg, 0.72),
             tab_text = rgb(c.muted_text),
             tab_bg = rgb(c.control_bg),
             active_text = rgb(c.strong_text),
