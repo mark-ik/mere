@@ -427,7 +427,11 @@ impl Constellation {
     /// satellite rather than a painted range. No-op for an inactive member.
     /// Desktop-host only: the wasm content-worker lane does not carry overlays
     /// (the command does not serialize). (Overlay-roots P1.)
+    //
+    // The host command seam; the live caller is the first real overlay feature
+    // (overlay-roots P6). The P1 end-to-end proof drives the actor path directly.
     #[cfg(not(target_arch = "wasm32"))]
+    #[allow(dead_code)]
     pub fn request_set_overlay(
         &self,
         member: GraphMemberId,
@@ -449,6 +453,7 @@ impl Constellation {
     /// Remove the named overlay slot from `member`'s live page (the satellite
     /// unmounts). No-op for an inactive member. (Overlay-roots P1.)
     #[cfg(not(target_arch = "wasm32"))]
+    #[allow(dead_code)]
     pub fn request_clear_overlay(&self, member: GraphMemberId, name: &str) {
         let Some(activation) = self.active.get(&member) else {
             return;

@@ -108,6 +108,8 @@ mod nav_sync;
 mod node_ops;
 mod note_sheet;
 mod observability;
+#[cfg(test)]
+mod overlay_probe;
 mod pane_data;
 mod pane_geom;
 mod pane_input_snapshot;

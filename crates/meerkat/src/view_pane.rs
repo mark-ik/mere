@@ -19,7 +19,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use netrender::Scene;
-use serval_layout::{FragmentPlane, ScrollOffsets};
+use serval_layout::{FragmentPlane, ScrollOffsets, ServalPaintList};
 use serval_scripted_dom::{NodeId, ScriptedDom};
 use xilem_serval::{PointerClick, ServalAppRunner, ServalCtx, ServalElement, View};
 
@@ -76,6 +76,22 @@ where
         // via the rebuild path. Pair-baking these sheets so they ride the
         // cheap flip too is the theme-modes follow-up.
         PaneSession::scene(&mut self.session, &dom, &sheet, false, w, h, None, scroll)
+    }
+
+    /// The pane's engine-agnostic [`ServalPaintList`] at `w`×`h` (pre-lowering),
+    /// for composing this pane as an overlay-slot satellite into *another*
+    /// document instead of rasterizing it standalone. The overlay-roots host
+    /// seam: a satellite `ViewPane` produces its paint list here, the host ships
+    /// it via `Constellation::request_set_overlay`, and the content actor
+    /// composites it under a page anchor. Same cached-layout reuse as
+    /// [`frame`](Self::frame). (Overlay-roots P1.)
+    // Exercised by the overlay_probe end-to-end test today; the live caller is the
+    // first real overlay feature (overlay-roots P6 — WindowView placement).
+    #[allow(dead_code)]
+    pub fn paint_list(&mut self, w: u32, h: u32, scroll: &ScrollOffsets<NodeId>) -> ServalPaintList {
+        let sheet: Vec<&str> = self.sheets.iter().map(String::as_str).collect();
+        let dom = self.runner.dom();
+        PaneSession::paint_list(&mut self.session, &dom, &sheet, false, w, h, scroll)
     }
 
     /// Hit-test pane-local `(x, y)` against the cached layout, or `None` if the pane

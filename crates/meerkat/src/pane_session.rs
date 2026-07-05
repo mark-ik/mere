@@ -36,7 +36,7 @@ use std::rc::Rc;
 
 use layout_dom_api::{DomMutation, LayoutDom, LayoutDomMut, NodeKind};
 use netrender::Scene;
-use serval_layout::{Applied, FragmentPlane, IncrementalLayout, ScrollOffsets};
+use serval_layout::{Applied, FragmentPlane, IncrementalLayout, ScrollOffsets, ServalPaintList};
 use serval_scripted_dom::{NodeId, ScriptedDom};
 
 use crate::serval_render::TextCursor;
@@ -94,6 +94,31 @@ impl PaneSession {
         Self::refresh(slot, &dom_ref, sheet, scheme_dark, w, h, &muts);
         let session = &slot.as_ref().expect("session built above").layout;
         crate::serval_render::scene_from_session(session, &dom_ref, cursor, scroll, w, h)
+    }
+
+    /// Like [`scene`](Self::scene) but stops at the engine-agnostic
+    /// [`ServalPaintList`] instead of lowering to a `netrender::Scene` — for a
+    /// caller that composes the pane's paint list into *another* document rather
+    /// than rasterizing it standalone. The overlay-slot satellite path uses this:
+    /// a host `ViewPane` produces its paint list here, and the content actor
+    /// composites it under an anchor via `ContentLayout::set_overlay`. Same
+    /// refresh cadence as `scene` (drain → rebuild-or-apply → emit). No caret
+    /// overlay (a satellite chip has no editable field yet). (Overlay-roots P1.)
+    pub(crate) fn paint_list(
+        slot: &mut Option<PaneSession>,
+        dom: &Rc<RefCell<ScriptedDom>>,
+        sheet: &[&str],
+        scheme_dark: bool,
+        w: u32,
+        h: u32,
+        scroll: &ScrollOffsets<NodeId>,
+    ) -> ServalPaintList {
+        let mut muts: Vec<DomMutation<NodeId>> = Vec::new();
+        dom.borrow_mut().drain_mutations(&mut muts);
+        let dom_ref = dom.borrow();
+        Self::refresh(slot, &dom_ref, sheet, scheme_dark, w, h, &muts);
+        let session = &slot.as_ref().expect("session built above").layout;
+        crate::serval_render::paint_list_from_session(session, &dom_ref, None, scroll, w, h)
     }
 
     pub(crate) fn refresh(

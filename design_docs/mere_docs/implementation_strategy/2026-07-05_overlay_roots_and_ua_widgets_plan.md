@@ -378,3 +378,41 @@ overlay slot on the focused input, state host-side, invisible to the page.
   end. **Both slot kinds are now feature-ready on the engine side**: highlights consume
   in find-in-page today; overlays can carry a real laid-out, text-bearing, isolated,
   anchor-tracked, top-layer subtree.
+- **2026-07-05 — P1 landed meerkat-side: the overlay-slot host seam, proven end to
+  end.** The full pipeline now runs host app state → engine-composited overlay on a
+  live page. Pieces:
+  - **Actor seam** (`meerkat/src/content`): `ContentCommand::SetOverlay { name, anchor,
+    content: ServalPaintList, .. }` / `ClearOverlay`, native-desktop-only
+    (`#[cfg(not(target_arch = "wasm32"))]`). The actor arms `ensure_html_layout`, resolve
+    the `OverlayAnchor` against the live document (`Root` → `document_element()`),
+    register the satellite via `ContentLayout::set_overlay`, bust the scene fingerprint,
+    and re-emit. Repaint-only by construction (the satellite is a pre-emitted list
+    composited after content), so the page never reflows. The wasm content-worker
+    command-transfer half gates to `wasm32` (overlays don't cross the serialized worker
+    wire in v1 — a `ServalPaintList` would need the Scene transfer's font/image dedup),
+    so the overlay commands need no `ContentCommandMessage` variant.
+  - **Constellation seam**: `request_set_overlay` / `request_clear_overlay`, the
+    overlay-slot counterpart of `request_find` (the host command API; live caller is P6).
+  - **Host satellite runner**: `ViewPane::paint_list` (+ `PaneSession::paint_list`) —
+    the reusable runner already used by every list pane now also emits the pre-lowering
+    `ServalPaintList` an overlay wants (it rode `IncrementalLayout::emit_paint_list`,
+    which also hit-tests, so the same primitive serves render + input). No new runner
+    architecture: `ServalAppRunner` → `ScriptedDom` → `IncrementalLayout` → paint list,
+    exactly the chrome path.
+  - **Proof** (`meerkat/src/overlay_probe.rs`, the P1 done-condition end to end): a
+    `CounterChip` satellite `ViewPane` over app state mounts as an overlay on a live page
+    in a real content actor; a click round-trips through the full pipeline (host runner →
+    `SetOverlay` → the actor's `set_overlay` → the band) — count 0→1 changes the composed
+    glyph sequence — and clearing restores the exact baseline band. A companion actor
+    test (`content/tests.rs`) isolates the pure no-reflow property (a text-free chip
+    composites with the page's glyph runs byte-stable; clear restores the exact op count).
+    All green (`cargo test -p meerkat --bin meerkat overlay`, 4/4).
+  - **Deferred (by design):** the *live* placement of an overlay satellite into a
+    `WindowView` frame — which page node it anchors to on screen, on-screen click
+    hit-testing against the composited rect — lands with the **first real overlay feature
+    (P6)**: a link preview or annotation pin supplies a real view + anchor, rather than
+    wiring throwaway demo scaffolding for the toy chip now. The geometric survival half
+    (anchor tracking across scroll bands + an anchor-moving mutation) is already the
+    serval-layout P0 test's territory; the meerkat tests prove the actor integration and
+    the host round-trip. `OverlayAnchor` is deliberately a role-named enum (v1: `Root`)
+    so P6 adds `FindMatch` / `LinkAt` / a node handle without changing the command shape.

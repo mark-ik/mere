@@ -149,7 +149,7 @@ fn lower_timed(lane: &str, plist: &ServalPaintList) -> Scene {
 /// The [`ServalPaintList`] half of [`scene_from_session`]: emit from the session,
 /// then append the focused-field selection (under) + caret (over) and scrollbar
 /// overlays, all sourced from the session's retained layout so they match the body.
-fn paint_list_from_session(
+pub(crate) fn paint_list_from_session(
     session: &IncrementalLayout<NodeId>,
     dom: &ScriptedDom,
     cursor: Option<TextCursor>,
