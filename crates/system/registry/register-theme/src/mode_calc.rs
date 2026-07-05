@@ -140,6 +140,82 @@ pub const CHROME_ROLES: [&str; 16] = [
     "error_bg",
 ];
 
+impl CustomModeDef {
+    /// A complete starter definition — the "+ New custom mode" seed file. A
+    /// neutral surface ladder in the declared direction, contrast-picked text
+    /// over each computed fill, and primary/danger accents: the same shape the
+    /// built-in derivation uses, expressed in the calculator vocabulary so the
+    /// authored file is immediately valid AND immediately editable. `dark`
+    /// flips the ladder; `high_contrast` pushes it to the extremes.
+    pub fn template(id: &str, name: &str, dark: bool, high_contrast: bool) -> Self {
+        let l = |dark_l: f64, light_l: f64| -> f64 {
+            let (d, li) = if high_contrast {
+                (dark_l * 0.4, 1.0 - (1.0 - light_l) * 0.4)
+            } else {
+                (dark_l, light_l)
+            };
+            if dark { d } else { li }
+        };
+        let surface = |dark_l: f64, light_l: f64| RoleSpec {
+            seed: SeedRef::Neutral,
+            l: Some(l(dark_l, light_l)),
+            c: None,
+            rotate: None,
+            on: false,
+            alpha: None,
+        };
+        let on_surface = |dark_l: f64, light_l: f64| RoleSpec {
+            on: true,
+            ..surface(dark_l, light_l)
+        };
+        let accent = |seed: SeedRef| RoleSpec {
+            seed,
+            l: None,
+            c: None,
+            rotate: None,
+            on: false,
+            alpha: None,
+        };
+        let mut chrome = BTreeMap::new();
+        chrome.insert("toolbar_bg".into(), surface(0.205, 0.945));
+        chrome.insert("control_bg".into(), surface(0.260, 0.900));
+        chrome.insert("control_text".into(), on_surface(0.260, 0.900));
+        chrome.insert("field_bg".into(), surface(0.185, 0.985));
+        chrome.insert("field_text".into(), on_surface(0.185, 0.985));
+        chrome.insert("panel_bg".into(), surface(0.190, 0.965));
+        chrome.insert("surface_bg".into(), surface(0.225, 0.975));
+        chrome.insert("body_text".into(), on_surface(0.225, 0.975));
+        chrome.insert("strong_text".into(), on_surface(0.190, 0.965));
+        chrome.insert(
+            "muted_text".into(),
+            RoleSpec {
+                alpha: Some(200),
+                ..on_surface(0.225, 0.975)
+            },
+        );
+        chrome.insert("active_bg".into(), accent(SeedRef::Primary));
+        chrome.insert(
+            "disabled_text".into(),
+            RoleSpec {
+                alpha: Some(140),
+                ..on_surface(0.225, 0.975)
+            },
+        );
+        chrome.insert("disabled_bg".into(), surface(0.185, 0.915));
+        chrome.insert("menu_bg".into(), surface(0.215, 0.935));
+        chrome.insert("error_text".into(), accent(SeedRef::Danger));
+        chrome.insert("error_bg".into(), surface(0.185, 0.915));
+        debug_assert!(CHROME_ROLES.iter().all(|r| chrome.contains_key(*r)));
+        Self {
+            id: id.to_string(),
+            name: name.to_string(),
+            dark,
+            high_contrast,
+            chrome,
+        }
+    }
+}
+
 /// Run the calculator: every chrome role evaluated against `seeds`. Errors
 /// (naming the missing / unknown roles) rather than half-rendering — a mode
 /// file is rejected at load, and the host keeps the prior mode.
@@ -236,6 +312,24 @@ mod tests {
             dark: true,
             high_contrast: false,
             chrome,
+        }
+    }
+
+    #[test]
+    fn template_is_complete_and_valid_for_all_flag_combos() {
+        for (dark, hc) in [(false, false), (true, false), (false, true), (true, true)] {
+            let def = CustomModeDef::template("t", "T", dark, hc);
+            chrome_from_custom_mode(&def, &seeds())
+                .unwrap_or_else(|e| panic!("template (dark={dark}, hc={hc}) invalid: {e}"));
+            let json = serde_json::to_string(&def).expect("serializes");
+            let back: CustomModeDef = serde_json::from_str(&json).expect("roundtrips");
+            // Semantic roundtrip (f64 shortest-repr wobbles exact bits): the
+            // reloaded def must still be a complete, valid calculator with the
+            // same identity + flags + role set.
+            assert_eq!((back.id.as_str(), back.name.as_str(), back.dark, back.high_contrast),
+                       (def.id.as_str(), def.name.as_str(), def.dark, def.high_contrast));
+            assert_eq!(back.chrome.len(), def.chrome.len());
+            chrome_from_custom_mode(&back, &seeds()).expect("reloaded template still valid");
         }
     }
 

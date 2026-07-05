@@ -189,3 +189,18 @@ T4 and T5 ride settings passes; T5 last.
   an in-app editor surface for T4 per-mode sheets and T5 mode files (a later settings pass),
   the serval `new`-with-scheme micro-optimisation, and publishing tinct 0.1.1 (then
   optionally migrating register-theme's derivation onto `tinct::derive_palette_with`).
+- 2026-07-05 (follow-ups pass): **tinct migration landed** — 0.1.1 published (Mark), pin bumped,
+  `derive_token_set` bases on `derive_palette_with(seeds, ModeProfile)` (hc widens at the source;
+  the stricter local hc branches stay). register-theme 22/22, meerkat theme tests green.
+  **T4/T5 editors landed** (Appearance page): per-mode stylesheet rows for the active USER theme
+  ("derived — copy to theme file" materializes the derived sheet into `mode_sheets` /
+  "custom sheet — clear to derived"; built-ins show the fork hint); custom-mode management
+  ("+ New custom mode (from current)" seeds a complete `CustomModeDef::template` file — valid for
+  all four flag combos by test — plus per-mode Remove and "Reload modes from disk" for
+  hand-edits; active removed mode falls back to the theme default). `mode_store` gained
+  save/delete. The FILES stay the authoring surface (mod-distribution path); the editor
+  materializes, removes, reloads. Receipts: `mode_sheet_editor_materializes_and_clears`,
+  `custom_mode_editor_creates_removes_and_reloads`,
+  `template_is_complete_and_valid_for_all_flag_combos`; suite 225 pass / same 3 pre-existing
+  fails. Still open: serval `new`-with-scheme (deferred while moveBefore edits serval-layout)
+  and the rhai calculator graduation.

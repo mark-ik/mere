@@ -231,6 +231,132 @@ impl WindowCtx<'_> {
         self.apply_edited_theme(&active, def);
     }
 
+    /// T4 editor: materialize the ACTIVE user theme's derived sheet for `mode`
+    /// into its per-mode override (`ThemeDef.mode_sheets`), so the theme file
+    /// becomes the editing surface (hand-edit the JSON; the shell re-applies on
+    /// theme reload). Unscaled rules — the rebuild path px-scales overrides
+    /// like any sheet. No-op for built-ins (fork first, same as seed edits).
+    pub(super) fn materialize_mode_sheet(&mut self, mode_key: &str) {
+        use register_theme::theme::{Mode, ThemeSource};
+        let Some(mode) = Mode::from_key(mode_key) else {
+            return;
+        };
+        let active = self.shared.presentation.active_theme_id.clone();
+        let Some(mut def) = self.shared.presentation.theme.theme_def(&active).cloned() else {
+            return;
+        };
+        if def.source != ThemeSource::User {
+            return;
+        }
+        let tokens = register_theme::seed::derive_from_def_for_mode(&def, &mode).chrome;
+        let sheet = crate::theme_sheets::chrome_sheet(&tokens);
+        def.mode_sheets.insert(mode.as_key().to_string(), sheet);
+        self.apply_edited_theme(&active, def);
+    }
+
+    /// T4 editor: drop the active user theme's per-mode override for `mode`,
+    /// returning that mode to the derived palette.
+    pub(super) fn clear_mode_sheet(&mut self, mode_key: &str) {
+        use register_theme::theme::{Mode, ThemeSource};
+        let Some(mode) = Mode::from_key(mode_key) else {
+            return;
+        };
+        let active = self.shared.presentation.active_theme_id.clone();
+        let Some(mut def) = self.shared.presentation.theme.theme_def(&active).cloned() else {
+            return;
+        };
+        if def.source != ThemeSource::User {
+            return;
+        }
+        if def.mode_sheets.remove(&mode.as_key()).is_none() {
+            return;
+        }
+        self.apply_edited_theme(&active, def);
+    }
+
+    /// T5 editor: seed a new custom-mode file from the active mode's flags
+    /// (`CustomModeDef::template` — complete and immediately valid), persist it
+    /// to `<mere_root>/modes/`, and register it in the picker. The FILE is the
+    /// authoring surface, same as theme files.
+    pub(super) fn new_custom_mode(&mut self) {
+        let existing = &self.shared.presentation.custom_modes;
+        let n = (1..)
+            .find(|i| !existing.iter().any(|m| m.id == format!("custom-{i}")))
+            .expect("unbounded id space");
+        let mode = &self.shared.presentation.mode;
+        let def = register_theme::mode_calc::CustomModeDef::template(
+            &format!("custom-{n}"),
+            &format!("Custom {n}"),
+            mode.dark(),
+            mode.high_contrast(),
+        );
+        match crate::mode_store::save_custom_mode(&self.shared.session.mere_root, &def) {
+            Ok(path) => {
+                tracing::info!(path = %path.display(), "custom mode created");
+                self.shared.presentation.custom_modes.push(def);
+                self.shared
+                    .presentation
+                    .custom_modes
+                    .sort_by(|a, b| a.name.cmp(&b.name));
+                self.view.request_redraw();
+            }
+            Err(err) => tracing::warn!(%err, "failed to create custom mode"),
+        }
+    }
+
+    /// T5 editor: delete a custom mode's file + registration. If it was the
+    /// active mode, fall back to the theme's default mode (the same posture as
+    /// a missing file at boot).
+    pub(super) fn remove_custom_mode(&mut self, id: &str) {
+        use register_theme::theme::Mode;
+        if let Err(err) =
+            crate::mode_store::delete_custom_mode(&self.shared.session.mere_root, id)
+        {
+            tracing::warn!(%err, "failed to remove custom mode file");
+        }
+        self.shared.presentation.custom_modes.retain(|m| m.id != id);
+        let active_removed =
+            matches!(&self.shared.presentation.mode, Mode::Custom(cid) if cid == id);
+        if active_removed {
+            let fallback = self
+                .shared
+                .presentation
+                .theme
+                .theme_def(&self.shared.presentation.active_theme_id)
+                .map(register_theme::seed::default_mode_for_def)
+                .unwrap_or(Mode::Light);
+            self.set_mode(fallback);
+        } else {
+            self.view.request_redraw();
+        }
+    }
+
+    /// T5 editor: re-scan `<mere_root>/modes/` so hand-edits land without a
+    /// restart. An active custom mode re-applies from its reloaded calculator;
+    /// one whose file disappeared falls back to the theme default.
+    pub(super) fn reload_custom_modes(&mut self) {
+        use register_theme::theme::Mode;
+        self.shared.presentation.custom_modes =
+            crate::mode_store::load_custom_modes(&self.shared.session.mere_root);
+        if let Mode::Custom(id) = self.shared.presentation.mode.clone() {
+            if self.shared.presentation.custom_mode(&id).is_some() {
+                // Re-apply through the sheet rebuild (the calculator may have
+                // changed); tokens re-resolve inside.
+                self.shared.presentation.rebuild_chrome_sheet();
+            } else {
+                let fallback = self
+                    .shared
+                    .presentation
+                    .theme
+                    .theme_def(&self.shared.presentation.active_theme_id)
+                    .map(register_theme::seed::default_mode_for_def)
+                    .unwrap_or(Mode::Light);
+                self.set_mode(fallback);
+            }
+        }
+        self.view.request_redraw();
+    }
+
     /// Register an edited user-theme def (re-deriving + validating), persist its
     /// file, and re-apply it live. If the edit fails validation (e.g. text
     /// contrast), the prior valid theme is kept and the edit is dropped. (T5.)

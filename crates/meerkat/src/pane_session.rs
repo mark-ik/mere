@@ -124,6 +124,7 @@ impl PaneSession {
             attr_changed = structural_summary.as_ref().map(|s| s.attr_changed),
             text_changed = structural_summary.as_ref().map(|s| s.text_changed),
             subtree_replaced = structural_summary.as_ref().map(|s| s.subtree_replaced),
+            moved = structural_summary.as_ref().map(|s| s.moved),
             structural_samples = structural_summary
                 .as_ref()
                 .map(|s| s.samples.as_str()),
@@ -341,6 +342,7 @@ struct StructuralBatchSummary {
     attr_changed: usize,
     text_changed: usize,
     subtree_replaced: usize,
+    moved: usize,
     samples: String,
 }
 
@@ -354,6 +356,7 @@ fn summarize_structural_batch(
         attr_changed: 0,
         text_changed: 0,
         subtree_replaced: 0,
+        moved: 0,
         samples: String::new(),
     };
     for (index, mutation) in muts.iter().enumerate() {
@@ -410,6 +413,24 @@ fn summarize_structural_batch(
                     push_sample(
                         &mut summary.samples,
                         format_args!("subtree {}", describe_node_brief(dom, *node)),
+                    );
+                }
+            }
+            DomMutation::Moved {
+                node,
+                from_parent,
+                to_parent,
+            } => {
+                summary.moved += 1;
+                if index < 6 {
+                    push_sample(
+                        &mut summary.samples,
+                        format_args!(
+                            "move {} : {} -> {}",
+                            describe_node_brief(dom, *node),
+                            describe_node_brief(dom, *from_parent),
+                            describe_node_brief(dom, *to_parent)
+                        ),
                     );
                 }
             }

@@ -134,6 +134,7 @@ mod web_clip;
 // `ViewPane` is the shared base for the `RosterPane` / `ListPane` test harnesses only;
 // every product pane now folds into the shell document, so the module is test-gated.
 // (Phase 1, step 2.)
+mod mode_store;
 mod scrying_host;
 mod serval_a11y;
 mod serval_render;
@@ -147,7 +148,6 @@ mod tags;
 mod test_support;
 mod text;
 mod theme_edit;
-mod mode_store;
 mod theme_store;
 mod tile_theme;
 mod titlebar;

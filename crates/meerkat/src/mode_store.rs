@@ -9,8 +9,9 @@
 //! `<mere_root>/modes/<id>.json` — authored by hand today, tiny and
 //! reviewable, the same mod-distribution shape as theme files. Loaded once at
 //! boot into the presentation state; a malformed or incomplete file is
-//! skipped + logged, never fatal. There is no save path yet (no in-app
-//! editor) — hand-edit and restart.
+//! skipped + logged, never fatal. The in-app editor surface writes through
+//! [`save_custom_mode`] / [`delete_custom_mode`]; hand-edits still work
+//! (Reload modes on the Appearance page, or restart).
 
 use std::path::{Path, PathBuf};
 
@@ -98,5 +99,26 @@ mod tests {
         assert_eq!(modes[0].id, "dusk");
         assert!(modes[0].dark);
         let _ = std::fs::remove_dir_all(&root);
+    }
+}
+
+/// Persist a custom mode to `<mere_root>/modes/<id>.json` (pretty JSON — the
+/// file is the authoring surface; the in-app editor only seeds and removes).
+pub fn save_custom_mode(mere_root: &Path, def: &CustomModeDef) -> Result<PathBuf, String> {
+    let dir = modes_dir(mere_root);
+    std::fs::create_dir_all(&dir).map_err(|e| format!("create modes dir: {e}"))?;
+    let path = dir.join(format!("{}.json", def.id));
+    let json = serde_json::to_string_pretty(def).map_err(|e| format!("serialize mode: {e}"))?;
+    std::fs::write(&path, json).map_err(|e| format!("write {}: {e}", path.display()))?;
+    Ok(path)
+}
+
+/// Remove a custom mode's file. Missing file counts as removed.
+pub fn delete_custom_mode(mere_root: &Path, id: &str) -> Result<(), String> {
+    let path = modes_dir(mere_root).join(format!("{id}.json"));
+    match std::fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(format!("remove {}: {e}", path.display())),
     }
 }

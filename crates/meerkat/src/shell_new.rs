@@ -363,10 +363,8 @@ impl Shell {
                     .iter()
                     .find(|m| m.id == *id)
                     .expect("validated above");
-                let canonical = register_theme::theme::Mode::from_flags(
-                    custom.dark,
-                    custom.high_contrast,
-                );
+                let canonical =
+                    register_theme::theme::Mode::from_flags(custom.dark, custom.high_contrast);
                 let mut tokens = theme
                     .mode_tokens(&active_theme_id, &canonical)
                     .unwrap_or_else(|| resolution.tokens.clone());

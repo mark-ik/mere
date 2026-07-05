@@ -280,10 +280,30 @@ impl WindowCtx<'_> {
             // current contrast level rides the cheap scheme flip; a contrast
             // change re-bakes the sheet pair.
             k if k.starts_with("mode:set:") => {
-                if let Some(mode) =
-                    register_theme::theme::Mode::from_key(&k["mode:set:".len()..])
-                {
+                if let Some(mode) = register_theme::theme::Mode::from_key(&k["mode:set:".len()..]) {
                     self.set_mode(mode);
+                }
+            }
+            // Custom-mode management (T5 editor): seed a new mode file from the
+            // active mode, remove one (file + registration), or re-scan the
+            // modes dir so hand-edits land without a restart.
+            "mode:new" => self.new_custom_mode(),
+            "mode:reload" => self.reload_custom_modes(),
+            k if k.starts_with("mode:remove:") => {
+                let id = k["mode:remove:".len()..].to_string();
+                self.remove_custom_mode(&id);
+            }
+            // Per-mode stylesheet overrides (T4 editor): materialize the derived
+            // sheet into the active user theme's override, or clear it back to
+            // derived. The theme FILE is the editing surface.
+            k if k.starts_with("theme:modesheet:") => {
+                let rest = &k["theme:modesheet:".len()..];
+                if let Some((mode_key, action)) = rest.rsplit_once(':') {
+                    match action {
+                        "materialize" => self.materialize_mode_sheet(mode_key),
+                        "clear" => self.clear_mode_sheet(mode_key),
+                        _ => {}
+                    }
                 }
             }
             // Theme editor (T5): fork / remove / mode-toggle / per-seed HSL nudge.

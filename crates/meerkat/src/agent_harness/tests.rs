@@ -915,6 +915,125 @@ fn per_mode_custom_sheet_overrides_the_derived_dark_sheet() {
 }
 
 #[test]
+fn mode_sheet_editor_materializes_and_clears() {
+    // T4 editor: materialize copies the derived sheet for a mode into the
+    // active USER theme's override (persisted in the theme file, disabling the
+    // scheme baking while present); clear returns it to derived (baking back).
+    use register_theme::theme::Mode;
+    let mut app = test_app();
+    let mut wc = app.ctx();
+    let mut def = wc
+        .shared
+        .presentation
+        .theme
+        .theme_def(&wc.shared.presentation.active_theme_id)
+        .expect("active def")
+        .clone();
+    def.id = "user:t4edit".into();
+    def.name = "T4 Edit".into();
+    def.source = register_theme::theme::ThemeSource::User;
+    wc.shared
+        .presentation
+        .theme
+        .add_user_theme(def)
+        .expect("user theme registers");
+    wc.set_theme("user:t4edit");
+    assert!(
+        wc.shared
+            .presentation
+            .chrome_sheet
+            .iter()
+            .any(|r| r.contains("prefers-color-scheme")),
+        "fully-derived pair bakes before the override"
+    );
+
+    wc.materialize_mode_sheet("dark");
+    let def = wc
+        .shared
+        .presentation
+        .theme
+        .theme_def("user:t4edit")
+        .expect("def")
+        .clone();
+    let sheet = def.mode_sheet(&Mode::Dark).expect("dark override materialized");
+    assert!(!sheet.is_empty(), "materialized sheet carries the derived rules");
+    assert!(
+        !wc.shared
+            .presentation
+            .chrome_sheet
+            .iter()
+            .any(|r| r.contains("prefers-color-scheme")),
+        "an override on one side disables the scheme baking"
+    );
+
+    wc.clear_mode_sheet("dark");
+    let def = wc
+        .shared
+        .presentation
+        .theme
+        .theme_def("user:t4edit")
+        .expect("def")
+        .clone();
+    assert!(def.mode_sheet(&Mode::Dark).is_none(), "override cleared");
+    assert!(
+        wc.shared
+            .presentation
+            .chrome_sheet
+            .iter()
+            .any(|r| r.contains("prefers-color-scheme")),
+        "the scheme pair bakes again after the clear"
+    );
+}
+
+#[test]
+fn custom_mode_editor_creates_removes_and_reloads() {
+    // T5 editor: "+ New custom mode" seeds a complete file + registers it;
+    // remove deletes both and falls back off an active custom mode; reload
+    // picks up hand-authored files without a restart.
+    use register_theme::theme::Mode;
+    let mut app = test_app();
+    let mut wc = app.ctx();
+
+    wc.new_custom_mode();
+    assert_eq!(wc.shared.presentation.custom_modes.len(), 1);
+    let id = wc.shared.presentation.custom_modes[0].id.clone();
+    let path = crate::mode_store::modes_dir(&wc.shared.session.mere_root)
+        .join(format!("{id}.json"));
+    assert!(path.exists(), "mode file persisted");
+
+    wc.set_mode(Mode::Custom(id.clone()));
+    assert_eq!(wc.shared.presentation.mode, Mode::Custom(id.clone()));
+    assert!(!wc.shared.presentation.chrome_sheet.is_empty());
+
+    wc.remove_custom_mode(&id);
+    assert!(!path.exists(), "mode file removed");
+    assert!(wc.shared.presentation.custom_modes.is_empty());
+    assert_ne!(
+        wc.shared.presentation.mode,
+        Mode::Custom(id.clone()),
+        "an active removed mode falls back"
+    );
+
+    // Hand-author a file (the mod-distribution path) and reload it in-app.
+    let def = register_theme::mode_calc::CustomModeDef::template(
+        "hand-made",
+        "Hand Made",
+        true,
+        false,
+    );
+    crate::mode_store::save_custom_mode(&wc.shared.session.mere_root, &def).expect("save");
+    wc.reload_custom_modes();
+    assert!(
+        wc.shared
+            .presentation
+            .custom_modes
+            .iter()
+            .any(|m| m.id == "hand-made"),
+        "reload registers the hand-authored mode"
+    );
+}
+
+#[test]
 fn custom_mode_file_produces_a_working_shell_theme() {
     // T5 done-when: a custom mode authored WITHOUT rebuilding the app (a
     // hand-written `modes/<id>.json` declarative calculator) produces a
@@ -945,11 +1064,14 @@ fn custom_mode_file_produces_a_working_shell_theme() {
 
     let derived_toolbar = {
         let (_tx, rx) = std::sync::mpsc::channel();
-        let mut app =
-            Shell::new_with_session_dir(test_proxy(), rx, mere_root.path().to_path_buf());
+        let mut app = Shell::new_with_session_dir(test_proxy(), rx, mere_root.path().to_path_buf());
         let mut wc = app.ctx();
         assert!(
-            wc.shared.presentation.custom_modes.iter().any(|m| m.id == "dusk"),
+            wc.shared
+                .presentation
+                .custom_modes
+                .iter()
+                .any(|m| m.id == "dusk"),
             "the authored mode loads at boot"
         );
         let derived_toolbar = wc.shared.presentation.chrome_theme.toolbar_bg;
@@ -966,7 +1088,10 @@ fn custom_mode_file_produces_a_working_shell_theme() {
                 .any(|r| r.contains("prefers-color-scheme")),
             "a custom mode is a sheet swap — no baked scheme pair"
         );
-        assert!(wc.shared.presentation.scheme_dark(), "presents as its declared scheme");
+        assert!(
+            wc.shared.presentation.scheme_dark(),
+            "presents as its declared scheme"
+        );
         derived_toolbar
     };
 
@@ -978,7 +1103,10 @@ fn custom_mode_file_produces_a_working_shell_theme() {
         app2.shared.presentation.mode,
         Mode::Custom("dusk".to_string())
     );
-    assert_ne!(app2.shared.presentation.chrome_theme.toolbar_bg, derived_toolbar);
+    assert_ne!(
+        app2.shared.presentation.chrome_theme.toolbar_bg,
+        derived_toolbar
+    );
 }
 
 #[test]

@@ -720,6 +720,18 @@ fn mutation_is_under_root(
         DomMutation::AttributeChanged { node, .. } => node,
         DomMutation::CharacterDataChanged { node } => node,
         DomMutation::SubtreeReplaced { node } => node,
+        // A move dirties both ends: the subtree left `from_parent` and arrived
+        // under `to_parent`, so this mutation is "under" the root when either
+        // side is — a cross-subtree move must invalidate the source partition
+        // too, not only the destination. (moveBefore plan S1.)
+        DomMutation::Moved {
+            from_parent,
+            to_parent,
+            ..
+        } => {
+            return crate::serval_render::node_under_root(dom, to_parent, root)
+                || crate::serval_render::node_under_root(dom, from_parent, root);
+        }
     };
     crate::serval_render::node_under_root(dom, anchor, root)
 }

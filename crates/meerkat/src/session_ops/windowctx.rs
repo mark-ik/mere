@@ -268,8 +268,7 @@ impl WindowCtx<'_> {
                 .map(|m| m.root_graph_id)
                 .and_then(|gid| self.orreries.get(&gid));
             let (label, thumb) = if let Some(orrery) = pooled {
-                let label = display_name
-                    .unwrap_or_else(|| derive_session_label(orrery.graph()));
+                let label = display_name.unwrap_or_else(|| derive_session_label(orrery.graph()));
                 let thumb = session_runtime::build_switcher_thumbnail_with(
                     orrery.graph(),
                     |k| orrery.node_position(k),

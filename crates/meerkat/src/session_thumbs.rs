@@ -36,14 +36,7 @@ pub(crate) fn thumb_data_uri(
         px.copy_from_slice(&bg);
     }
     for e in &thumb.edges {
-        draw_segment(
-            &mut buf,
-            w,
-            h,
-            (e.from.x, e.from.y),
-            (e.to.x, e.to.y),
-            edge,
-        );
+        draw_segment(&mut buf, w, h, (e.from.x, e.from.y), (e.to.x, e.to.y), edge);
     }
     for n in &thumb.nodes {
         draw_dot(&mut buf, w, h, (n.position.x, n.position.y), n.radius, node);

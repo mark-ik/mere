@@ -30,6 +30,7 @@ impl WindowCtx<'_> {
                 let mut items = theme_section_items(&self.theme_options());
                 items.extend(self.mode_section_items());
                 items.extend(self.theme_editor_items());
+                items.extend(self.mode_sheet_items());
                 items.push(PaneItem::text("app-title", "Tabs"));
                 items.extend(tab_cap_items(self.view.chrome().settings.tab_cap));
                 ("Appearance", items)
@@ -131,7 +132,10 @@ impl WindowCtx<'_> {
             ));
         }
         // Registered custom modes (declarative calculators from
-        // `<mere_root>/modes/`) list alongside the canonical four. (T5.)
+        // `<mere_root>/modes/`) list alongside the canonical four, each with
+        // its remove action; below them the T5 editor entries: seed a new mode
+        // file from the active mode, and re-scan the dir so hand-edits land
+        // without a restart.
         for custom in &self.shared.presentation.custom_modes {
             let mode = Mode::Custom(custom.id.clone());
             items.push(PaneItem::radio(
@@ -139,7 +143,70 @@ impl WindowCtx<'_> {
                 custom.name.clone(),
                 format!("mode:set:{}", mode.as_key()),
             ));
+            items.push(PaneItem::button(
+                "app-btn",
+                format!("Remove \"{}\"", custom.name),
+                format!("mode:remove:{}", custom.id),
+            ));
         }
+        items.push(PaneItem::button(
+            "app-btn",
+            "+ New custom mode (from current)".to_string(),
+            "mode:new".to_string(),
+        ));
+        items.push(PaneItem::button(
+            "app-btn",
+            "Reload modes from disk".to_string(),
+            "mode:reload".to_string(),
+        ));
+        items.push(PaneItem::text(
+            "app-row-muted",
+            "Custom modes are files in <mere root>/modes/ — edit the JSON, then reload."
+                .to_string(),
+        ));
+        items
+    }
+
+    /// The per-mode STYLESHEET overrides for the active USER theme (T4
+    /// editor): each mode shows whether it renders the derived palette or a
+    /// custom sheet, with one action — materialize the derived sheet into the
+    /// theme file (then hand-edit it there) or clear back to derived.
+    /// Built-ins show the fork hint instead (same posture as seed edits).
+    pub(crate) fn mode_sheet_items(&self) -> Vec<PaneItem> {
+        use register_theme::theme::{Mode, ThemeSource};
+        let mut items = vec![PaneItem::text("app-title", "Mode stylesheets")];
+        let active = &self.shared.presentation.active_theme_id;
+        let Some(def) = self.shared.presentation.theme.theme_def(active) else {
+            return items;
+        };
+        if def.source != ThemeSource::User {
+            items.push(PaneItem::text(
+                "app-row-muted",
+                "Fork a built-in to attach per-mode stylesheets.".to_string(),
+            ));
+            return items;
+        }
+        for mode in [Mode::Light, Mode::Dark, Mode::HcLight, Mode::HcDark] {
+            let key = mode.as_key();
+            if def.mode_sheet(&mode).is_some() {
+                items.push(PaneItem::button(
+                    "app-btn",
+                    format!("{}: custom sheet — clear to derived", mode.label()),
+                    format!("theme:modesheet:{key}:clear"),
+                ));
+            } else {
+                items.push(PaneItem::button(
+                    "app-btn",
+                    format!("{}: derived — copy to theme file", mode.label()),
+                    format!("theme:modesheet:{key}:materialize"),
+                ));
+            }
+        }
+        items.push(PaneItem::text(
+            "app-row-muted",
+            "A copied sheet lives in the theme's JSON — edit it there; it replaces the derived palette for that mode."
+                .to_string(),
+        ));
         items
     }
 
