@@ -275,6 +275,17 @@ impl WindowCtx<'_> {
                 self.relock_wallet_now();
                 self.view.request_redraw();
             }
+            // The presentation MODE picker (theme-modes T2): the derivation
+            // profile over the active theme's seeds. Light/dark within the
+            // current contrast level rides the cheap scheme flip; a contrast
+            // change re-bakes the sheet pair.
+            k if k.starts_with("mode:set:") => {
+                if let Some(mode) =
+                    register_theme::theme::Mode::from_key(&k["mode:set:".len()..])
+                {
+                    self.set_mode(mode);
+                }
+            }
             // Theme editor (T5): fork / remove / mode-toggle / per-seed HSL nudge.
             // These must precede the theme-id fallback so they aren't read as ids.
             "theme:fork" => self.fork_active_theme(),

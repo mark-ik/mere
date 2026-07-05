@@ -28,6 +28,7 @@ impl WindowCtx<'_> {
             // retired settings overlay), so global look-and-feel lives on one page. (P2.)
             "appearance" => {
                 let mut items = theme_section_items(&self.theme_options());
+                items.extend(self.mode_section_items());
                 items.extend(self.theme_editor_items());
                 items.push(PaneItem::text("app-title", "Tabs"));
                 items.extend(tab_cap_items(self.view.chrome().settings.tab_cap));
@@ -110,6 +111,35 @@ impl WindowCtx<'_> {
             "Reset to default menu".to_string(),
             "menu:reset".to_string(),
         ));
+        items
+    }
+
+    /// The MODE picker on the Appearance page: the derivation profile applied
+    /// to the active theme's seeds (theme-modes T2) — light / dark /
+    /// high-contrast light / high-contrast dark. A light/dark pick within the
+    /// current contrast level rides the cheap scheme flip; a contrast change
+    /// re-bakes the sheet pair. Radios drain `mode:set:<key>`.
+    pub(crate) fn mode_section_items(&self) -> Vec<PaneItem> {
+        use register_theme::theme::Mode;
+        let active = &self.shared.presentation.mode;
+        let mut items = vec![PaneItem::text("app-title", "Mode")];
+        for mode in [Mode::Light, Mode::Dark, Mode::HcLight, Mode::HcDark] {
+            items.push(PaneItem::radio(
+                *active == mode,
+                mode.label(),
+                format!("mode:set:{}", mode.as_key()),
+            ));
+        }
+        // Registered custom modes (declarative calculators from
+        // `<mere_root>/modes/`) list alongside the canonical four. (T5.)
+        for custom in &self.shared.presentation.custom_modes {
+            let mode = Mode::Custom(custom.id.clone());
+            items.push(PaneItem::radio(
+                *active == mode,
+                custom.name.clone(),
+                format!("mode:set:{}", mode.as_key()),
+            ));
+        }
         items
     }
 

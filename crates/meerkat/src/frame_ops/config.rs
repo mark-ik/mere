@@ -177,6 +177,7 @@ impl WindowCtx<'_> {
         let settings = PersistedSettings {
             tab_cap: self.shared.presentation.saved_tab_cap,
             theme_id: Some(self.shared.presentation.active_theme_id.clone()),
+            theme_mode: Some(self.shared.presentation.mode.as_key()),
             shellbar_edge: self.shared.presentation.shellbar_edge,
             shellbar_hidden: self.shared.presentation.shellbar_hidden,
             physics_damping: self.shared.presentation.physics_damping,

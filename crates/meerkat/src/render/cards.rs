@@ -108,10 +108,12 @@ impl crate::WindowCtx<'_> {
         let orrery_dirty = orrery_root
             .is_some_and(|root| muts.iter().any(|m| mutation_is_under_root(&dom, m, root)));
         let base_dirty = !muts.is_empty() && !orrery_only;
+        let scheme_dark = self.shared.presentation.scheme_dark();
         let refresh = PaneSession::refresh(
             &mut self.view.chrome_session,
             &dom,
             &chrome_sheet,
+            scheme_dark,
             w,
             h,
             &muts,
@@ -122,7 +124,7 @@ impl crate::WindowCtx<'_> {
             .as_ref()
             .expect("chrome session refreshed");
         let chrome = if let Some(root) = orrery_root {
-            let base_sig = chrome_base_sig(&chrome_sheet);
+            let base_sig = chrome_base_sig(&chrome_sheet, scheme_dark);
             let base_stale = self.view.chrome_base_tex.as_ref().map(|c| c.size) != Some((w, h))
                 || self.view.chrome_base_sig != base_sig;
             let orrery_size = (
@@ -722,8 +724,13 @@ fn mutation_is_under_root(
     crate::serval_render::node_under_root(dom, anchor, root)
 }
 
-fn chrome_base_sig(sheet: &[&str]) -> u64 {
+/// Signature of the (sheet, scheme) pair the chrome base texture renders from.
+/// The scheme folds in because the pair-baked sheet's strings do NOT change on
+/// a light/dark mode flip — only the media evaluation does — and the cached
+/// raster must still invalidate. (Theme-modes T2.)
+fn chrome_base_sig(sheet: &[&str], scheme_dark: bool) -> u64 {
     let mut hasher = DefaultHasher::new();
+    scheme_dark.hash(&mut hasher);
     for rule in sheet {
         rule.hash(&mut hasher);
     }

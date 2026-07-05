@@ -74,6 +74,12 @@ pub struct PersistedSettings {
     /// registry's default theme.
     #[serde(default)]
     pub theme_id: Option<String>,
+    /// The active theme MODE — the derivation profile over the theme's seeds —
+    /// as a stable key (`light` / `dark` / `hc_light` / `hc_dark` /
+    /// `custom:<id>`). `None` re-seeds from the active theme's own def at
+    /// boot. (Theme-modes plan.)
+    #[serde(default)]
+    pub theme_mode: Option<String>,
     /// Which window edge the shellbar is docked to. Defaults to Left.
     #[serde(default)]
     pub shellbar_edge: ShellbarEdge,
@@ -179,6 +185,7 @@ impl Default for PersistedSettings {
         Self {
             tab_cap: default_tab_cap(),
             theme_id: None,
+            theme_mode: None,
             shellbar_edge: ShellbarEdge::default(),
             shellbar_hidden: false,
             physics_damping: default_physics_damping(),
@@ -261,6 +268,7 @@ mod tests {
         let original = PersistedSettings {
             tab_cap: 7,
             theme_id: None,
+            theme_mode: Some("dark".to_string()),
             shellbar_edge: ShellbarEdge::Left,
             shellbar_hidden: false,
             physics_damping: 2.5,
@@ -316,6 +324,7 @@ mod tests {
             &PersistedSettings {
                 tab_cap: 3,
                 theme_id: None,
+                theme_mode: None,
                 shellbar_edge: ShellbarEdge::Left,
                 shellbar_hidden: false,
                 physics_damping: 2.5,
@@ -340,6 +349,7 @@ mod tests {
             &PersistedSettings {
                 tab_cap: 24,
                 theme_id: None,
+                theme_mode: None,
                 shellbar_edge: ShellbarEdge::Right,
                 shellbar_hidden: false,
                 physics_damping: 2.5,

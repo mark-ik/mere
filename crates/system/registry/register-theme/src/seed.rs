@@ -351,6 +351,26 @@ pub fn derive_from_def(def: &ThemeDef) -> ThemeTokenSet {
     )
 }
 
+/// Derive a [`ThemeTokenSet`] from a [`ThemeDef`] under an explicit
+/// [`Mode`](crate::theme::Mode) — the theme-modes derivation entry point. The
+/// mode, not the def's own `seeds.dark` / `high_contrast`, decides the ladder
+/// direction + contrast spread, so one theme derives all four canonical modes.
+/// `Custom` modes are not derivable here (they are sheet calculators, T5);
+/// they fall back to the dark canonical derivation via [`Mode::dark`].
+pub fn derive_from_def_for_mode(def: &ThemeDef, mode: &crate::theme::Mode) -> ThemeTokenSet {
+    let mut seeds = harmonized_seeds(def);
+    seeds.dark = mode.dark();
+    let hc = mode.high_contrast();
+    derive_token_set(&def.id, &def.name, &seeds, &profile_for(seeds.dark, hc))
+}
+
+/// The mode a def encodes as authored — what the pre-modes registry derived.
+/// Activating a theme re-seeds the presentation mode from this, so the four
+/// legacy built-ins (Default/Dark/Light/High Contrast) keep their meaning.
+pub fn default_mode_for_def(def: &ThemeDef) -> crate::theme::Mode {
+    crate::theme::Mode::from_flags(def.seeds.dark, def.high_contrast)
+}
+
 /// The def's seeds after applying its [`Harmony`] — the *effective* triad (the
 /// accents possibly hue-locked to the primary). The derivation and the editor's
 /// colour display both read this, so what you see matches what renders.
@@ -420,6 +440,7 @@ pub fn builtin_defs() -> Vec<ThemeDef> {
             },
             high_contrast: false,
             harmony: Harmony::Custom,
+            mode_sheets: Default::default(),
         },
         ThemeDef {
             id: THEME_ID_DARK.to_string(),
@@ -438,6 +459,7 @@ pub fn builtin_defs() -> Vec<ThemeDef> {
             },
             high_contrast: false,
             harmony: Harmony::Custom,
+            mode_sheets: Default::default(),
         },
         ThemeDef {
             id: THEME_ID_LIGHT.to_string(),
@@ -456,6 +478,7 @@ pub fn builtin_defs() -> Vec<ThemeDef> {
             },
             high_contrast: false,
             harmony: Harmony::Custom,
+            mode_sheets: Default::default(),
         },
         ThemeDef {
             id: THEME_ID_HIGH_CONTRAST.to_string(),
@@ -474,6 +497,7 @@ pub fn builtin_defs() -> Vec<ThemeDef> {
             },
             high_contrast: true,
             harmony: Harmony::Custom,
+            mode_sheets: Default::default(),
         },
     ]
 }

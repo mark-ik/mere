@@ -138,6 +138,78 @@ pub struct ThemeResolution {
     pub tokens: ThemeTokenSet,
 }
 
+/// A presentation MODE: a derivation profile applied to the active theme's
+/// seeds (theme-modes plan, decision record 2026-07-05). The canonical four
+/// pick a ladder direction + contrast spread; `Custom` names a registered
+/// custom mode (a calculator producing a stylesheet from the seeds — T5, not
+/// yet wired). A THEME stays a seed set; light/dark/high-contrast are no
+/// longer distinct themes but derivations of the current one.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum Mode {
+    Light,
+    Dark,
+    HcLight,
+    HcDark,
+    Custom(String),
+}
+
+impl Mode {
+    /// Ladder direction: dark surfaces + light text. `Custom` reports dark so
+    /// an unresolved custom mode degrades to the dark canonical derivation.
+    pub fn dark(&self) -> bool {
+        matches!(self, Mode::Dark | Mode::HcDark | Mode::Custom(_))
+    }
+
+    /// Whether this is a high-contrast derivation.
+    pub fn high_contrast(&self) -> bool {
+        matches!(self, Mode::HcLight | Mode::HcDark)
+    }
+
+    /// The canonical mode for a `(dark, high_contrast)` flag pair.
+    pub fn from_flags(dark: bool, high_contrast: bool) -> Self {
+        match (dark, high_contrast) {
+            (false, false) => Mode::Light,
+            (true, false) => Mode::Dark,
+            (false, true) => Mode::HcLight,
+            (true, true) => Mode::HcDark,
+        }
+    }
+
+    /// Stable settings key (`light` / `dark` / `hc_light` / `hc_dark` /
+    /// `custom:<id>`).
+    pub fn as_key(&self) -> String {
+        match self {
+            Mode::Light => "light".to_string(),
+            Mode::Dark => "dark".to_string(),
+            Mode::HcLight => "hc_light".to_string(),
+            Mode::HcDark => "hc_dark".to_string(),
+            Mode::Custom(id) => format!("custom:{id}"),
+        }
+    }
+
+    /// Parse a settings key back to a mode. `None` for an unknown key.
+    pub fn from_key(key: &str) -> Option<Self> {
+        match key {
+            "light" => Some(Mode::Light),
+            "dark" => Some(Mode::Dark),
+            "hc_light" => Some(Mode::HcLight),
+            "hc_dark" => Some(Mode::HcDark),
+            _ => key.strip_prefix("custom:").map(|id| Mode::Custom(id.to_string())),
+        }
+    }
+
+    /// The user-facing label.
+    pub fn label(&self) -> String {
+        match self {
+            Mode::Light => "Light".to_string(),
+            Mode::Dark => "Dark".to_string(),
+            Mode::HcLight => "High contrast light".to_string(),
+            Mode::HcDark => "High contrast dark".to_string(),
+            Mode::Custom(id) => format!("Custom ({id})"),
+        }
+    }
+}
+
 /// Where a theme came from.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ThemeSource {
@@ -184,6 +256,26 @@ pub struct ThemeDef {
     /// How the accents relate to the primary (default `Custom` = independent).
     #[serde(default)]
     pub harmony: Harmony,
+    /// Per-mode CUSTOM STYLESHEET overrides (theme-modes T4): CSS rule lists
+    /// keyed by [`Mode::as_key`] (`"dark"`, `"hc_light"`, …). When a mode has
+    /// an entry, the host renders that sheet for (theme, mode) instead of the
+    /// palette-derived one; modes without an entry keep deriving. Authored by
+    /// hand in the theme file today (the mod-distribution path); empty = fully
+    /// derived. The host's scheme-pair baking only applies when BOTH scheme
+    /// counterparts are derived — an override on either side of the pair
+    /// routes that theme through the sheet-swap path (correctness first).
+    #[serde(default)]
+    pub mode_sheets: std::collections::BTreeMap<String, Vec<String>>,
+}
+
+impl ThemeDef {
+    /// This theme's custom stylesheet for `mode`, if one is attached. Empty
+    /// rule lists count as absent (a stray empty entry can't blank the shell).
+    pub fn mode_sheet(&self, mode: &Mode) -> Option<&Vec<String>> {
+        self.mode_sheets
+            .get(&mode.as_key())
+            .filter(|rules| !rules.is_empty())
+    }
 }
 
 pub struct ThemeRegistry {
@@ -294,6 +386,9 @@ impl ThemeRegistry {
             seeds: src.seeds,
             high_contrast: src.high_contrast,
             harmony: src.harmony,
+            // A fork carries the source's per-mode custom sheets (they are
+            // part of the theme's look; remove them by editing the fork).
+            mode_sheets: src.mode_sheets,
         };
         self.add_user_theme(def.clone()).ok()?;
         Some(def)
@@ -358,6 +453,14 @@ impl ThemeRegistry {
             fallback_used: resolution.fallback_used,
             display_name: resolution.tokens.display_name,
         }
+    }
+
+    /// The active-or-named theme's tokens derived under an explicit [`Mode`]
+    /// (theme-modes plan): the def's seeds re-derived with the mode's ladder
+    /// direction + contrast spread. `None` when the id resolves to no def.
+    pub fn mode_tokens(&self, theme_id: &str, mode: &Mode) -> Option<ThemeTokenSet> {
+        self.theme_def(theme_id)
+            .map(|def| crate::seed::derive_from_def_for_mode(def, mode))
     }
 
     pub fn set_active_theme(&mut self, theme_id: &str) -> ThemeResolution {

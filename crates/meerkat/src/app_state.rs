@@ -174,13 +174,33 @@ pub(crate) struct Presentation {
     pub(crate) theme: ThemeRegistry,
     /// The active theme's chrome tokens — kept beside the baked `chrome_sheet` for
     /// the host-drawn surfaces the CSS can't reach (the window-control glyphs).
+    /// Resolved for the ACTIVE mode; a mode flip replaces it.
     pub(crate) chrome_theme: ChromeTheme,
+    /// The light/dark chrome-token pair at the current contrast level — the
+    /// inputs the sheet builders bake the scheme pair from (`chrome_sheet` and
+    /// the per-frame pane CSS alike), so those strings stay identical across a
+    /// light/dark mode flip. Refreshed by `rebuild_chrome_sheet`. (Theme-modes
+    /// T2.)
+    pub(crate) chrome_theme_light: ChromeTheme,
+    pub(crate) chrome_theme_dark: ChromeTheme,
     /// The active theme's chrome CSS (built from a resolved [`ChromeTheme`] at
     /// startup). The render / measure / hit-test paths read it instead of a const,
     /// so a theme switch rebuilds it and the whole shell re-themes. (Theming pass.)
     pub(crate) chrome_sheet: Vec<String>,
     /// The active theme's id (e.g. `theme:dark`), persisted in settings.
     pub(crate) active_theme_id: String,
+    /// The active MODE — the derivation profile applied to the active theme's
+    /// seeds (theme-modes plan). Light/dark within the current contrast level
+    /// flips cheap (the scheme pair is baked into one sheet; sessions ride
+    /// `set_prefers_color_scheme`); a contrast change re-bakes the pair (sheet
+    /// swap). Persisted in settings; re-seeded from the theme's own def when
+    /// the theme itself is switched.
+    pub(crate) mode: register_theme::theme::Mode,
+    /// The registered CUSTOM modes (declarative palette calculators, loaded
+    /// from `<mere_root>/modes/*.json` at boot — see `mode_store`). Listed in
+    /// the mode picker after the canonical four; `Mode::Custom(id)` resolves
+    /// against this. (Theme-modes T5.)
+    pub(crate) custom_modes: Vec<register_theme::mode_calc::CustomModeDef>,
     /// The active-tab cap last written to the settings sidecar. Guards the persist
     /// path so an unchanged value isn't re-written on every chrome click.
     pub(crate) saved_tab_cap: usize,
@@ -258,19 +278,130 @@ impl Presentation {
         (self.dpi_scale * self.user_zoom).clamp(0.5, 4.0)
     }
 
-    /// Rebuild the chrome sheet from the active theme tokens at the current
-    /// [`ui_scale`](Self::ui_scale), re-adding the syntax-highlight rules. Called
-    /// after a zoom (Ctrl +/-/0) or a display DPI change; the theme switcher has its
-    /// own rebuild in `theme_edit`. (UI scale.)
+    /// Whether the active mode's `prefers-color-scheme` is dark — the value the
+    /// pane sessions evaluate the baked scheme pair at. A custom mode presents
+    /// as the scheme its def declares. (Theme-modes T2/T5.)
+    pub(crate) fn scheme_dark(&self) -> bool {
+        if let register_theme::theme::Mode::Custom(id) = &self.mode {
+            if let Some(custom) = self.custom_mode(id) {
+                return custom.dark;
+            }
+        }
+        self.mode.dark()
+    }
+
+    /// The registered custom mode with `id`, if loaded. (Theme-modes T5.)
+    pub(crate) fn custom_mode(
+        &self,
+        id: &str,
+    ) -> Option<&register_theme::mode_calc::CustomModeDef> {
+        self.custom_modes.iter().find(|m| m.id == id)
+    }
+
+    /// Rebuild the chrome sheet from the active theme at the current
+    /// [`ui_scale`](Self::ui_scale), re-adding the syntax-highlight rules.
+    /// The light/dark pair WITHIN the current contrast level bakes as ONE sheet
+    /// (`bake_scheme_pair`): base rules from the light derivation, the dark
+    /// derivation in a `@media (prefers-color-scheme: dark)` block. The sheet
+    /// is therefore identical for both schemes, so a light/dark mode flip
+    /// leaves the pane sessions' sheets untouched and rides the cheap
+    /// `set_prefers_color_scheme` path; only a zoom / DPI / theme / contrast
+    /// change produces different strings (rebuild). (UI scale; theme-modes T2.)
     pub(crate) fn rebuild_chrome_sheet(&mut self) {
-        let seeds = self
-            .theme
-            .theme_def(&self.active_theme_id)
-            .map(|d| d.seeds)
-            .unwrap_or_else(meerkat::knot_highlight::fallback_seeds);
-        let mut sheet = scale_px(chrome_sheet(&self.chrome_theme), self.ui_scale());
-        sheet.extend(meerkat::knot_highlight::syntax_css(&seeds));
-        self.chrome_sheet = sheet;
+        use register_theme::theme::Mode;
+        let scale = self.ui_scale();
+        self.chrome_sheet = match self.theme.theme_def(&self.active_theme_id).cloned() {
+            Some(def) => {
+                let (light, dark) = if self.mode.high_contrast() {
+                    (Mode::HcLight, Mode::HcDark)
+                } else {
+                    (Mode::Light, Mode::Dark)
+                };
+                let light_tokens =
+                    register_theme::seed::derive_from_def_for_mode(&def, &light).chrome;
+                let dark_tokens =
+                    register_theme::seed::derive_from_def_for_mode(&def, &dark).chrome;
+                self.chrome_theme_light = light_tokens;
+                self.chrome_theme_dark = dark_tokens;
+                let side = |tokens: &ChromeTheme, mode: &Mode| {
+                    let mut seeds = def.seeds;
+                    seeds.dark = mode.dark();
+                    let mut sheet = scale_px(chrome_sheet(tokens), scale);
+                    sheet.extend(meerkat::knot_highlight::syntax_css(&seeds));
+                    sheet
+                };
+                // CUSTOM MODES (T5): a registered calculator produces the
+                // shell palette from the active theme's seeds, and the sheet
+                // generates from those tokens — a sheet swap by definition
+                // (different rule set, not media applicability). An unknown id
+                // or a failed evaluation logs and falls through to the
+                // canonical pair, so a stale saved mode can't blank the shell.
+                if let register_theme::theme::Mode::Custom(id) = &self.mode {
+                    let custom_chrome = self.custom_mode(id).map(|custom| {
+                        let seeds = register_theme::seed::harmonized_seeds(&def);
+                        (
+                            custom.dark,
+                            register_theme::mode_calc::chrome_from_custom_mode(custom, &seeds),
+                        )
+                    });
+                    match custom_chrome {
+                        Some((custom_dark, Ok(tokens))) => {
+                            self.chrome_theme_light = tokens;
+                            self.chrome_theme_dark = tokens;
+                            let mut seeds = def.seeds;
+                            seeds.dark = custom_dark;
+                            let mut sheet = scale_px(chrome_sheet(&tokens), scale);
+                            sheet.extend(meerkat::knot_highlight::syntax_css(&seeds));
+                            self.chrome_sheet = sheet;
+                            return;
+                        }
+                        Some((_, Err(err))) => {
+                            tracing::warn!(mode = %id, %err, "custom mode failed; using canonical pair");
+                        }
+                        None => {
+                            tracing::warn!(mode = %id, "unknown custom mode; using canonical pair");
+                        }
+                    }
+                }
+                // Per-mode CUSTOM STYLESHEETS (T4): an override on either side
+                // of the scheme pair forces the swap path for this theme — the
+                // sheet is the ACTIVE mode's resolution (custom sheet as-is,
+                // px-scaled, syntax rules appended; else the derived
+                // single-mode sheet), so a mode flip changes the strings and
+                // the sessions rebuild. Only a fully-derived pair bakes as one
+                // scheme-invariant sheet (the cheap flip).
+                if def.mode_sheet(&light).is_some() || def.mode_sheet(&dark).is_some() {
+                    let (active_mode, active_tokens) = if self.mode.dark() {
+                        (&dark, &dark_tokens)
+                    } else {
+                        (&light, &light_tokens)
+                    };
+                    match def.mode_sheet(active_mode) {
+                        Some(rules) => {
+                            let mut seeds = def.seeds;
+                            seeds.dark = active_mode.dark();
+                            let mut sheet = scale_px(rules.clone(), scale);
+                            sheet.extend(meerkat::knot_highlight::syntax_css(&seeds));
+                            sheet
+                        }
+                        None => side(active_tokens, active_mode),
+                    }
+                } else {
+                    bake_scheme_pair(side(&light_tokens, &light), side(&dark_tokens, &dark))
+                }
+            }
+            // No def (shouldn't happen — the registry always resolves): fall
+            // back to the single-scheme sheet from the resolved tokens.
+            None => {
+                self.chrome_theme_light = self.chrome_theme;
+                self.chrome_theme_dark = self.chrome_theme;
+                let mut sheet = scale_px(chrome_sheet(&self.chrome_theme), scale);
+                sheet.extend(meerkat::knot_highlight::syntax_css(
+                    &meerkat::knot_highlight::fallback_seeds(),
+                ));
+                sheet
+            }
+        };
     }
 
     /// The composed document style sheet the content actors lay out with: the

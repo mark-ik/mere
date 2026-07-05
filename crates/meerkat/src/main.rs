@@ -147,6 +147,7 @@ mod tags;
 mod test_support;
 mod text;
 mod theme_edit;
+mod mode_store;
 mod theme_store;
 mod tile_theme;
 mod titlebar;

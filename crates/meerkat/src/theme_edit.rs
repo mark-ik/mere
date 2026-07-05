@@ -19,18 +19,101 @@ impl WindowCtx<'_> {
     pub(super) fn set_theme(&mut self, theme_id: &str) {
         let resolution = self.shared.presentation.theme.set_active_theme(theme_id);
         self.shared.presentation.active_theme_id = resolution.resolved_id;
-        self.shared.presentation.chrome_theme = resolution.tokens.chrome;
+        // Switching THEME re-seeds the mode from the theme's own def (what the
+        // def encodes as authored), so the legacy built-ins — Dark, Light,
+        // High Contrast — keep their meaning; switching MODE keeps the theme.
+        // (Theme-modes plan.)
+        if let Some(def) = self
+            .shared
+            .presentation
+            .theme
+            .theme_def(&self.shared.presentation.active_theme_id)
+        {
+            self.shared.presentation.mode = register_theme::seed::default_mode_for_def(def);
+        }
+        self.apply_resolved_tokens(resolution.tokens);
+        self.shared
+            .observability
+            .record_theme_activated(&self.shared.presentation.active_theme_id);
+    }
+
+    /// Switch the active MODE — the derivation profile over the current theme's
+    /// seeds (theme-modes T2). Within the current contrast level the baked
+    /// scheme pair means the chrome sheet's strings do not change, so the pane
+    /// sessions ride `set_prefers_color_scheme` (media re-evaluation, session
+    /// survives) instead of rebuilding; a contrast-level change re-bakes the
+    /// pair and takes the sheet-swap path. Non-sheet theming (orrery palette,
+    /// document palette, host-drawn caches) re-keys off the resolved mode
+    /// tokens on the same flip.
+    pub(super) fn set_mode(&mut self, mode: register_theme::theme::Mode) {
+        use register_theme::theme::Mode;
+        if self.shared.presentation.mode == mode {
+            return;
+        }
+        let active = self.shared.presentation.active_theme_id.clone();
+        let tokens = match &mode {
+            // A custom mode (T5): the non-sheet lanes derive canonically with
+            // the mode's declared (dark, hc) flags; the shell palette comes
+            // from the declarative calculator over the theme's seeds. A bad
+            // pick (unknown id / failed evaluation) is a logged no-op — the
+            // prior mode stays.
+            Mode::Custom(id) => {
+                let Some(custom) = self.shared.presentation.custom_mode(id).cloned() else {
+                    tracing::warn!(mode = %id, "unknown custom mode; keeping the current mode");
+                    return;
+                };
+                let canonical = Mode::from_flags(custom.dark, custom.high_contrast);
+                let Some(mut tokens) = self
+                    .shared
+                    .presentation
+                    .theme
+                    .mode_tokens(&active, &canonical)
+                else {
+                    return;
+                };
+                let Some(def) = self.shared.presentation.theme.theme_def(&active) else {
+                    return;
+                };
+                let seeds = register_theme::seed::harmonized_seeds(def);
+                match register_theme::mode_calc::chrome_from_custom_mode(&custom, &seeds) {
+                    Ok(chrome) => tokens.chrome = chrome,
+                    Err(err) => {
+                        tracing::warn!(mode = %id, %err, "custom mode failed; keeping the current mode");
+                        return;
+                    }
+                }
+                tokens
+            }
+            _ => {
+                let Some(tokens) = self.shared.presentation.theme.mode_tokens(&active, &mode)
+                else {
+                    return;
+                };
+                tokens
+            }
+        };
+        self.shared.presentation.mode = mode;
+        self.apply_resolved_tokens(tokens);
+        self.shared.observability.record_theme_activated(&active);
+    }
+
+    /// Re-theme every lane from a freshly resolved token set — the shared tail
+    /// of a theme switch and a mode switch.
+    fn apply_resolved_tokens(&mut self, tokens: register_theme::theme::ThemeTokenSet) {
+        self.shared.presentation.chrome_theme = tokens.chrome;
         // Rebuild at the current UI scale (and re-add syntax rules); shared with the
-        // zoom / DPI rebuild path. (UI scale.)
+        // zoom / DPI rebuild path. On a scheme-only mode flip this produces the
+        // identical pair-baked strings, which is what keeps the sessions on the
+        // cheap path. (UI scale; theme-modes T2.)
         self.shared.presentation.rebuild_chrome_sheet();
         // Re-theme the orrery's backdrop + edges to match. (A2.)
-        let (backdrop, edge) = crate::orrery_palette(&resolution.tokens);
+        let (backdrop, edge) = crate::orrery_palette(&tokens);
         self.orrery_mut().set_palette(backdrop, edge);
         // Re-theme the document lane: rebuild the content-card palette and
         // broadcast the composed sheet (new colours + the user's typography) to the
         // live content actors so already-open cards re-lay + re-bake their glyph
         // colors (and re-rasterize on the new background). (P3; typography D2.)
-        self.shared.presentation.document_palette = crate::document_palette(&resolution.tokens);
+        self.shared.presentation.document_palette = crate::document_palette(&tokens);
         let sheet = self.shared.presentation.document_sheet_composed();
         self.shared.content.constellation.retheme(sheet);
         // Focus-card snapshots are cached data-URIs rendered through the old
@@ -40,9 +123,6 @@ impl WindowCtx<'_> {
         self.view.window_controls_tex = None;
         self.view.divider_tex = None;
         self.persist_settings();
-        self.shared
-            .observability
-            .record_theme_activated(&self.shared.presentation.active_theme_id);
         self.view.request_redraw();
     }
 

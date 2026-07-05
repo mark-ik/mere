@@ -104,12 +104,21 @@ mod tests {
             seeds: def.seeds,
             high_contrast: false,
             harmony: Default::default(),
+            // A per-mode custom sheet rides the same file (theme-modes T4) —
+            // this is what "survives restart" in the T4 done-when.
+            mode_sheets: [(
+                "dark".to_string(),
+                vec![".toolbar { background-color: rgb(9, 8, 7); }".to_string()],
+            )]
+            .into_iter()
+            .collect(),
         };
         save_user_theme(&root, &user).expect("save");
         let loaded = load_user_themes(&root);
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].id, "user:roundtrip");
         assert_eq!(loaded[0].name, "Round Trip");
+        assert_eq!(loaded[0].mode_sheets, user.mode_sheets);
         delete_user_theme(&root, "user:roundtrip").expect("delete");
         assert!(load_user_themes(&root).is_empty());
         let _ = std::fs::remove_dir_all(&root);

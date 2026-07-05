@@ -51,6 +51,12 @@ pub(crate) struct PaneSession {
     /// The stylesheet set the session's (fixed) Stylist was built from; a change
     /// (theme switch) forces a rebuild, since a session's sheets can't be swapped.
     sheet: Vec<String>,
+    /// The `prefers-color-scheme` the session last evaluated its media rules at.
+    /// With the scheme pair baked into one sheet (`bake_scheme_pair`), a
+    /// light/dark mode flip changes only this — the session survives via
+    /// `IncrementalLayout::set_prefers_color_scheme` (media re-evaluation over
+    /// the persistent Stylist), not a rebuild. (Theme-modes T2.)
+    scheme_dark: bool,
 }
 
 pub(crate) struct PaneSessionRefresh {
@@ -68,12 +74,15 @@ impl PaneSession {
     /// `scene_from_scripted_dom` call.
     ///
     /// `slot` is the pane's session field (replaced on rebuild); `dom` is the
-    /// shared pane-DOM handle; `sheet` the resolved pane stylesheet; `cursor` the
-    /// focused field's caret/selection (`None` for a pane with no editable field).
+    /// shared pane-DOM handle; `sheet` the resolved pane stylesheet;
+    /// `scheme_dark` the active `prefers-color-scheme` (the mode flip's cheap
+    /// axis); `cursor` the focused field's caret/selection (`None` for a pane
+    /// with no editable field).
     pub(crate) fn scene(
         slot: &mut Option<PaneSession>,
         dom: &Rc<RefCell<ScriptedDom>>,
         sheet: &[&str],
+        scheme_dark: bool,
         w: u32,
         h: u32,
         cursor: Option<TextCursor>,
@@ -82,7 +91,7 @@ impl PaneSession {
         let mut muts: Vec<DomMutation<NodeId>> = Vec::new();
         dom.borrow_mut().drain_mutations(&mut muts);
         let dom_ref = dom.borrow();
-        Self::refresh(slot, &dom_ref, sheet, w, h, &muts);
+        Self::refresh(slot, &dom_ref, sheet, scheme_dark, w, h, &muts);
         let session = &slot.as_ref().expect("session built above").layout;
         crate::serval_render::scene_from_session(session, &dom_ref, cursor, scroll, w, h)
     }
@@ -91,6 +100,7 @@ impl PaneSession {
         slot: &mut Option<PaneSession>,
         dom: &ScriptedDom,
         sheet: &[&str],
+        scheme_dark: bool,
         w: u32,
         h: u32,
         muts: &[DomMutation<NodeId>],
@@ -126,6 +136,13 @@ impl PaneSession {
             if let Some(prev) = slot.as_ref() {
                 layout.set_element_scroll(prev.layout.element_scroll().clone());
             }
+            // A fresh session evaluates media at the engine default (light);
+            // seed the active scheme so a session built while dark mode is on
+            // lands the dark rules. (An extra recascade over the just-built
+            // session; a `new`-time scheme would save it — serval follow-up.)
+            if scheme_dark {
+                layout.set_prefers_color_scheme(dom, true);
+            }
             tracing::debug!(
                 target: "meerkat::profile",
                 rebuild_us = t.elapsed().as_micros() as u64,
@@ -135,6 +152,7 @@ impl PaneSession {
                 layout,
                 dims,
                 sheet: sheet.iter().map(|s| s.to_string()).collect(),
+                scheme_dark,
             });
         } else {
             let s = slot
@@ -142,6 +160,21 @@ impl PaneSession {
                 .expect("not rebuilding implies an existing session");
             let t = std::time::Instant::now();
             let applied = s.layout.apply(dom, sheet, muts);
+            // The mode flip's cheap axis: sheet unchanged + scheme changed
+            // rides the engine's media re-evaluation over the persistent
+            // Stylist — the session (and its element scroll) survives, no
+            // rebuild. (Theme-modes T2, the W3C adoption plan's P3 host half.)
+            if s.scheme_dark != scheme_dark {
+                let flip = std::time::Instant::now();
+                s.layout.set_prefers_color_scheme(dom, scheme_dark);
+                s.scheme_dark = scheme_dark;
+                tracing::debug!(
+                    target: "meerkat::profile",
+                    flip_us = flip.elapsed().as_micros() as u64,
+                    scheme_dark,
+                    "chrome session scheme flipped (media re-evaluation)"
+                );
+            }
             tracing::debug!(
                 target: "meerkat::profile",
                 apply_us = t.elapsed().as_micros() as u64,

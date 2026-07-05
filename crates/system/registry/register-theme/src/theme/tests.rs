@@ -100,6 +100,7 @@ fn user_theme_crud_fork_rename_remove_add() {
         },
         high_contrast: false,
         harmony: Default::default(),
+        mode_sheets: Default::default(),
     };
     reg.add_user_theme(def)
         .expect("user theme passes validation");
@@ -131,6 +132,7 @@ fn locked_harmony_rotates_accents_to_primary_plus_offset_and_validates() {
             secondary_deg: 120.0,
             tertiary_deg: 240.0,
         },
+        mode_sheets: Default::default(),
     };
 
     // The accents' hue is the primary's hue plus the locked offset; each accent
@@ -185,4 +187,113 @@ fn user_theme_edit_helpers_only_mutate_user_defs() {
         0.5
     ));
     assert!(set_user_theme_harmony(&mut built_in, "triadic"));
+}
+
+#[test]
+fn mode_key_roundtrips() {
+    for mode in [
+        Mode::Light,
+        Mode::Dark,
+        Mode::HcLight,
+        Mode::HcDark,
+        Mode::Custom("solar".to_string()),
+    ] {
+        assert_eq!(Mode::from_key(&mode.as_key()), Some(mode.clone()));
+    }
+    assert_eq!(Mode::from_key("nope"), None);
+}
+
+#[test]
+fn mode_tokens_derive_four_distinct_palettes_from_one_theme() {
+    // Theme-modes T1: one theme (one seed set), four canonical modes, four
+    // distinct derivations; hc modes clear the 7:1 body-text gate and are
+    // wider than their normal-contrast counterpart.
+    let registry = ThemeRegistry::default();
+    let tokens = |mode: &Mode| {
+        registry
+            .mode_tokens(THEME_ID_DEFAULT, mode)
+            .expect("default theme resolves")
+    };
+    let light = tokens(&Mode::Light);
+    let dark = tokens(&Mode::Dark);
+    let hc_light = tokens(&Mode::HcLight);
+    let hc_dark = tokens(&Mode::HcDark);
+
+    let panels = [
+        light.chrome.panel_bg,
+        dark.chrome.panel_bg,
+        hc_light.chrome.panel_bg,
+        hc_dark.chrome.panel_bg,
+    ];
+    for i in 0..panels.len() {
+        for j in (i + 1)..panels.len() {
+            assert_ne!(panels[i], panels[j], "modes {i} and {j} share a panel bg");
+        }
+    }
+
+    for (label, hc, normal) in [
+        ("hc_light", &hc_light, &light),
+        ("hc_dark", &hc_dark, &dark),
+    ] {
+        let hc_ratio = contrast_ratio(hc.chrome.body_text, hc.chrome.panel_bg);
+        let normal_ratio = contrast_ratio(normal.chrome.body_text, normal.chrome.panel_bg);
+        assert!(hc_ratio >= 7.0, "{label} body/panel {hc_ratio:.2} < 7.0");
+        assert!(
+            hc_ratio > normal_ratio,
+            "{label} {hc_ratio:.2} not wider than {normal_ratio:.2}"
+        );
+    }
+}
+
+#[test]
+fn default_mode_for_def_matches_legacy_builtins() {
+    // Activating a legacy built-in re-seeds the mode from its def, so the
+    // four pre-modes themes keep their meaning.
+    let registry = ThemeRegistry::default();
+    let mode_of = |id: &str| {
+        crate::seed::default_mode_for_def(registry.theme_def(id).expect("builtin def"))
+    };
+    assert_eq!(mode_of(THEME_ID_DEFAULT), Mode::Dark);
+    assert_eq!(mode_of(THEME_ID_DARK), Mode::Dark);
+    assert_eq!(mode_of(THEME_ID_LIGHT), Mode::Light);
+    assert_eq!(mode_of(THEME_ID_HIGH_CONTRAST), Mode::HcDark);
+}
+
+#[test]
+fn mode_sheets_roundtrip_and_gate_on_non_empty() {
+    // T4: per-mode custom sheets ride the ThemeDef serde (the theme-file
+    // persistence path), old files without the field still parse, and an
+    // empty rule list counts as no override.
+    let mut def = crate::seed::builtin_defs().swap_remove(0);
+    def.id = "user:t4-override".to_string();
+    def.mode_sheets.insert(
+        Mode::Dark.as_key(),
+        vec![".toolbar { background-color: rgb(1, 2, 3); }".to_string()],
+    );
+    def.mode_sheets.insert(Mode::Light.as_key(), Vec::new());
+
+    let json = serde_json::to_string(&def).unwrap();
+    let back: ThemeDef = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, def, "mode_sheets survive the theme-file roundtrip");
+    assert!(back.mode_sheet(&Mode::Dark).is_some());
+    assert!(
+        back.mode_sheet(&Mode::Light).is_none(),
+        "an empty entry is treated as absent"
+    );
+    assert!(back.mode_sheet(&Mode::HcDark).is_none());
+
+    // A pre-T4 file (no mode_sheets field) parses with no overrides.
+    let legacy: ThemeDef = serde_json::from_str(
+        &serde_json::to_string(&crate::seed::builtin_defs().swap_remove(0)).unwrap(),
+    )
+    .unwrap();
+    assert!(legacy.mode_sheets.is_empty());
+
+    // A fork carries the overrides.
+    let mut registry = ThemeRegistry::default();
+    registry.add_user_theme(def.clone()).unwrap();
+    let fork = registry
+        .fork(&def.id, "user:fork-t4", "Fork")
+        .expect("fork succeeds");
+    assert_eq!(fork.mode_sheets, def.mode_sheets);
 }

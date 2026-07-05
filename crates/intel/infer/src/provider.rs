@@ -87,6 +87,10 @@ pub enum InferError {
     Backend(String),
     /// The request itself is invalid (empty prompt, zero max_tokens, ...).
     InvalidRequest(String),
+    /// A model config could not be parsed or is internally inconsistent.
+    InvalidConfig(String),
+    /// Model weights were missing, malformed, or shape-mismatched.
+    InvalidWeights(String),
 }
 
 impl std::fmt::Display for InferError {
@@ -98,6 +102,8 @@ impl std::fmt::Display for InferError {
             InferError::ModelNotLoaded => write!(f, "model not loaded"),
             InferError::Backend(msg) => write!(f, "backend: {msg}"),
             InferError::InvalidRequest(msg) => write!(f, "invalid request: {msg}"),
+            InferError::InvalidConfig(msg) => write!(f, "invalid config: {msg}"),
+            InferError::InvalidWeights(msg) => write!(f, "invalid weights: {msg}"),
         }
     }
 }

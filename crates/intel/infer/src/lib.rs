@@ -19,9 +19,15 @@
 //! armillary inference actor forwards fragments as messages);
 //! [`InferenceProvider::generate`] is the provided collect-it-all wrapper.
 
+#[cfg(feature = "actor")]
+pub mod actor;
 pub mod canned;
+#[cfg(feature = "decoder")]
+pub mod decoder;
 pub mod provider;
 
+#[cfg(feature = "actor")]
+pub use actor::{InferCommand, InferUpdate, spawn_inference_actor};
 pub use canned::CannedProvider;
 pub use provider::{
     CapabilityQuery, GenerationRequest, InferError, InferenceProvider, ModelCapability,

@@ -476,6 +476,30 @@ pub(crate) fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
     ]
 }
 
+/// Bake a light/dark stylesheet pair into ONE fixed sheet (theme-modes T2):
+/// the light rules stay as the base, and every dark rule that differs joins a
+/// single `@media (prefers-color-scheme: dark)` block appended after them —
+/// same selectors, later in source order, so the dark values win exactly when
+/// the media query matches. Flipping light/dark is then the engine's cheap
+/// path (`IncrementalLayout::set_prefers_color_scheme`: media re-evaluation
+/// over the persistent Stylist) instead of a sheet swap + session rebuild.
+/// Structural rules (identical in both palettes) are dropped from the dark
+/// block, so only the colour-bearing rules double.
+pub(crate) fn bake_scheme_pair(mut light: Vec<String>, dark: Vec<String>) -> Vec<String> {
+    let base: std::collections::HashSet<&str> = light.iter().map(String::as_str).collect();
+    let dark_only: Vec<&String> = dark.iter().filter(|r| !base.contains(r.as_str())).collect();
+    if !dark_only.is_empty() {
+        let mut block = String::from("@media (prefers-color-scheme: dark) {\n");
+        for rule in &dark_only {
+            block.push_str(rule);
+            block.push('\n');
+        }
+        block.push('}');
+        light.push(block);
+    }
+    light
+}
+
 /// Scale every `<number>px` length in a built CSS sheet by `scale`, so one
 /// `ui_scale` (display DPI × the user's zoom) resizes the whole chrome without
 /// threading a factor through each of the ~37 rules. A no-op at 1.0. Only a digit

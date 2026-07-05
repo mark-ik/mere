@@ -70,7 +70,12 @@ where
     pub fn frame(&mut self, w: u32, h: u32, scroll: &ScrollOffsets<NodeId>) -> Scene {
         let sheet: Vec<&str> = self.sheets.iter().map(String::as_str).collect();
         let dom = self.runner.dom();
-        PaneSession::scene(&mut self.session, &dom, &sheet, w, h, None, scroll)
+        // List-pane sheets are single-mode (built from the ACTIVE mode's
+        // tokens, no baked scheme pair yet), so they always evaluate at the
+        // base scheme; a mode flip changes their sheet strings and re-themes
+        // via the rebuild path. Pair-baking these sheets so they ride the
+        // cheap flip too is the theme-modes follow-up.
+        PaneSession::scene(&mut self.session, &dom, &sheet, false, w, h, None, scroll)
     }
 
     /// Hit-test pane-local `(x, y)` against the cached layout, or `None` if the pane

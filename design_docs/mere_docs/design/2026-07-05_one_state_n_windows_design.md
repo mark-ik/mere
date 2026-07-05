@@ -96,19 +96,35 @@ incremental path once.
 
 ## 5. The one genuinely new mechanism
 
-Everything above is generalization of existing machinery. The one new piece is
-**cross-parent keyed adoption**. `keyed.rs` exists, but its own doc states the
-limit: keys are sibling-scoped, and even an in-parent reorder degrades to
-teardown + build under the `ElementSplice` cursor contract. A cross-window move
-crosses parents by definition.
+**Reframed 2026-07-05 (same day, Mark): the execution half is a web standard.**
+The WHATWG DOM grew `Node.moveBefore()` (shipped in Chromium early 2025): an
+atomic move that preserves what `removeChild`/`insertBefore` destroys (iframe
+documents, animations, focus; custom elements get `connectedMoveCallback`).
+That is the splice/graft contract as a standard, and its own constraint
+ratifies §3's topology: `moveBefore` throws across documents, so same-document
+is the only case, which is the case the forest dom creates. Chrome tear-out and
+a page reparenting a live iframe become the same engine code path. Serval keeps
+the full WPT suite on disk (`tests/wpt/tests/dom/nodes/moveBefore/`) wired into
+`ports/serval-wpt` with expectations currently `"fail"`, so done conditions are
+expectation flips. Plan and slices:
+`repos/serval/docs/2026-07-05_movebefore_dom_standard_plan.md`.
 
-The concrete mechanism: a runner-level nursery. At rebuild start, teardown of a
-keyed subtree marked **portable** parks its (element, view_state) in the nursery
-keyed by K instead of destroying it. A build during the same rebuild with the
-same K adopts the parked pair and re-parents the existing DOM node rather than
-creating fresh ones. At rebuild end, unclaimed parked entries get real teardown.
-Scope it to portable subtrees only (tiles, cards); ordinary keyed rows keep the
-current contract.
+The mechanism therefore splits in two:
+
+- **Execution (engine, standard)**: `ScriptedDom::move_before` emitting a
+  `DomMutation::Moved { node, from_parent, to_parent }`, with serval-layout
+  handling `Moved` via the splice/graft path. Also fixes a live defect this
+  design would have hit: today's `insert_before` already moves an in-tree node
+  but emits only `Inserted`, so the source parent's session never learns the
+  child left; a cross-window move would fail to invalidate the source window.
+- **Recognition (view layer, still ours)**: `keyed.rs` is sibling-scoped, and
+  even an in-parent reorder degrades to teardown + build under the
+  `ElementSplice` cursor contract. A portable keyed subtree surviving a rebuild
+  under a different parent still needs nursery-style bookkeeping so the view
+  layer knows not to tear down; what the bookkeeping *does* on a match is now
+  one `move_before` call rather than a bespoke park/adopt element protocol.
+  Scope it to portable subtrees (tiles, cards); ordinary keyed rows keep the
+  current contract.
 
 ## 6. The trichotomy as state operations
 
@@ -146,19 +162,24 @@ between `shared` and `view`.
 3. **Forest dom.** One ScriptedDom, N window roots, per-window sessions rooted
    per window element, mutation routing by root containment. Done when two
    windows at different sizes and DPIs lay out and rasterize from one dom.
-4. **Portable keyed adoption.** The nursery protocol; tiles/cards marked
-   portable; tear-out as re-parent. Done when dragging a tile to another window
-   preserves its DOM nodes (scroll position observably survives) and the target
-   window's apply is scoped rather than a full recompute, with the trichotomy
-   expressed as state mutations.
+4. **Portable keyed adoption over moveBefore.** Engine slices first (the serval
+   plan's S1/S2: the `Moved` mutation vocabulary, `move_before` semantics, the
+   splice fast path), then the view-layer recognition (S5) lowering a portable
+   keyed move to one `move_before` call. Done when dragging a tile to another
+   window preserves its DOM nodes (same NodeId, scroll position observably
+   survives), the target window's apply is scoped rather than a full recompute,
+   and the trichotomy is expressed as state mutations. WPT expectation flips in
+   `ports/serval-wpt` gate the engine slices.
 
 ## 9. Open questions
 
 - **OQ-1 Input routing**: runner dispatch takes a hit NodeId today; per-window
   focus and capture need the dispatch entry points to carry the window (or
   resolve it from the root chain).
-- **OQ-2 Where adoption lives**: in xilem-serval core (a `portable_keyed`
-  wrapper) or as runner-level machinery outside the view contract.
+- **OQ-2 Where recognition lives**: in xilem-serval core (a `portable_keyed`
+  wrapper) or as runner-level machinery outside the view contract. Execution is
+  settled (moveBefore, per the serval plan); only the recognition bookkeeping
+  is still a placement question.
 - **OQ-3 A11y**: per-window AccessKit bridges currently read per-window doms;
   under a forest they read per-window subtrees of one dom. The bridge split by
   window root needs its own look.

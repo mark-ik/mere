@@ -813,6 +813,218 @@ fn agent_can_open_apparatus_switch_theme_and_open_roster() {
 }
 
 #[test]
+fn chrome_sheet_bakes_the_scheme_pair_and_mode_flip_keeps_it_fixed() {
+    // Theme-modes T2: the chrome sheet carries the light palette as base rules
+    // plus the dark palette in ONE `@media (prefers-color-scheme: dark)` block,
+    // and a light/dark mode flip does not change the sheet's strings (the flip
+    // rides the media evaluation, not a sheet swap). A contrast-level change
+    // re-bakes the pair (sheet swap path).
+    use register_theme::theme::Mode;
+    let mut app = test_app();
+    let mut wc = app.ctx();
+    let before = wc.shared.presentation.chrome_sheet.clone();
+    assert!(
+        before
+            .iter()
+            .any(|r| r.contains("prefers-color-scheme: dark")),
+        "the baked sheet carries the dark media block"
+    );
+
+    let pair_before = (
+        wc.shared.presentation.chrome_theme_light,
+        wc.shared.presentation.chrome_theme_dark,
+    );
+    wc.set_mode(Mode::Light);
+    assert_eq!(wc.shared.presentation.mode, Mode::Light);
+    assert_eq!(
+        wc.shared.presentation.chrome_sheet, before,
+        "a scheme-only mode flip leaves the sheet strings untouched"
+    );
+    assert_eq!(
+        (
+            wc.shared.presentation.chrome_theme_light,
+            wc.shared.presentation.chrome_theme_dark,
+        ),
+        pair_before,
+        "the token pair feeding the per-frame pane CSS is flip-invariant too"
+    );
+
+    wc.set_mode(Mode::HcDark);
+    assert_ne!(
+        wc.shared.presentation.chrome_sheet, before,
+        "a contrast-level change re-bakes the pair (sheet swap path)"
+    );
+}
+
+#[test]
+fn per_mode_custom_sheet_overrides_the_derived_dark_sheet() {
+    // T4: a theme with a custom DARK stylesheet renders that sheet for
+    // (theme, dark) instead of the derived palette, and the override forces
+    // the sheet-swap path (no baked scheme pair; a flip changes the strings).
+    use register_theme::theme::Mode;
+    let mut app = test_app();
+    let mut wc = app.ctx();
+    let mut def = wc
+        .shared
+        .presentation
+        .theme
+        .theme_def(&wc.shared.presentation.active_theme_id)
+        .expect("active def")
+        .clone();
+    def.id = "user:t4".into();
+    def.name = "T4".into();
+    def.mode_sheets.insert(
+        Mode::Dark.as_key(),
+        vec![".toolbar { background-color: rgb(9, 8, 7); }".to_string()],
+    );
+    wc.shared
+        .presentation
+        .theme
+        .add_user_theme(def)
+        .expect("override theme registers");
+    wc.set_theme("user:t4");
+    wc.set_mode(Mode::Dark);
+
+    let dark_sheet = wc.shared.presentation.chrome_sheet.clone();
+    assert!(
+        dark_sheet.iter().any(|r| r.contains("rgb(9, 8, 7)")),
+        "the custom dark sheet renders instead of the derived palette"
+    );
+    assert!(
+        !dark_sheet
+            .iter()
+            .any(|r| r.contains("prefers-color-scheme")),
+        "an override on one side of the pair disables the scheme baking"
+    );
+
+    // The light side has no override: it derives, and the flip is a sheet
+    // swap (different strings), not the cheap media re-evaluation.
+    wc.set_mode(Mode::Light);
+    assert!(
+        !wc.shared
+            .presentation
+            .chrome_sheet
+            .iter()
+            .any(|r| r.contains("rgb(9, 8, 7)")),
+        "the light mode derives (no override attached)"
+    );
+    assert_ne!(
+        wc.shared.presentation.chrome_sheet, dark_sheet,
+        "the override routes this theme through the sheet-swap path"
+    );
+}
+
+#[test]
+fn custom_mode_file_produces_a_working_shell_theme() {
+    // T5 done-when: a custom mode authored WITHOUT rebuilding the app (a
+    // hand-written `modes/<id>.json` declarative calculator) produces a
+    // working shell theme from the active seeds, lists in the picker, and
+    // survives a restart via the persisted mode key.
+    use register_theme::theme::Mode;
+    let mere_root = temp_session_dir();
+    let dir = mere_root.path().join("modes");
+    std::fs::create_dir_all(&dir).unwrap();
+    let roles: Vec<String> = register_theme::mode_calc::CHROME_ROLES
+        .iter()
+        .map(|r| {
+            if r.ends_with("_text") {
+                format!(r#""{r}": {{ "seed": "neutral", "l": 0.95 }}"#)
+            } else {
+                format!(r#""{r}": {{ "seed": "primary", "l": 0.30 }}"#)
+            }
+        })
+        .collect();
+    std::fs::write(
+        dir.join("dusk.json"),
+        format!(
+            r#"{{ "id": "dusk", "name": "Dusk", "dark": true, "chrome": {{ {} }} }}"#,
+            roles.join(", ")
+        ),
+    )
+    .unwrap();
+
+    let derived_toolbar = {
+        let (_tx, rx) = std::sync::mpsc::channel();
+        let mut app =
+            Shell::new_with_session_dir(test_proxy(), rx, mere_root.path().to_path_buf());
+        let mut wc = app.ctx();
+        assert!(
+            wc.shared.presentation.custom_modes.iter().any(|m| m.id == "dusk"),
+            "the authored mode loads at boot"
+        );
+        let derived_toolbar = wc.shared.presentation.chrome_theme.toolbar_bg;
+        wc.set_mode(Mode::Custom("dusk".into()));
+        assert_ne!(
+            wc.shared.presentation.chrome_theme.toolbar_bg, derived_toolbar,
+            "the calculator's palette replaced the derived one"
+        );
+        assert!(
+            !wc.shared
+                .presentation
+                .chrome_sheet
+                .iter()
+                .any(|r| r.contains("prefers-color-scheme")),
+            "a custom mode is a sheet swap — no baked scheme pair"
+        );
+        assert!(wc.shared.presentation.scheme_dark(), "presents as its declared scheme");
+        derived_toolbar
+    };
+
+    // Restart on the same root: the persisted `custom:dusk` mode restores and
+    // resolves through the calculator again.
+    let (_tx, rx) = std::sync::mpsc::channel();
+    let app2 = Shell::new_with_session_dir(test_proxy(), rx, mere_root.path().to_path_buf());
+    assert_eq!(
+        app2.shared.presentation.mode,
+        Mode::Custom("dusk".to_string())
+    );
+    assert_ne!(app2.shared.presentation.chrome_theme.toolbar_bg, derived_toolbar);
+}
+
+#[test]
+fn scheme_flip_reuses_the_chrome_session_without_rebuild() {
+    // The T2 done-when, host side: with the pair baked into one sheet, a
+    // light/dark flip refreshes the retained chrome session via
+    // `set_prefers_color_scheme` — `rebuild` stays false, the session object
+    // survives.
+    use serval_layout::ScrollOffsets;
+    let mut app = test_app();
+    let wc = app.ctx();
+    let sheet = wc.shared.presentation.chrome_sheet_refs();
+    let scroll = ScrollOffsets::default();
+    crate::pane_session::PaneSession::scene(
+        &mut wc.view.chrome_session,
+        &wc.view.dom,
+        &sheet,
+        false,
+        1024,
+        600,
+        None,
+        &scroll,
+    );
+    assert!(wc.view.chrome_session.is_some(), "session built");
+
+    // Same sheet, flipped scheme, no structural mutations: the cheap path.
+    use layout_dom_api::LayoutDomMut as _;
+    let mut muts = Vec::new();
+    wc.view.dom.borrow_mut().drain_mutations(&mut muts);
+    let dom = wc.view.dom.borrow();
+    let refresh = crate::pane_session::PaneSession::refresh(
+        &mut wc.view.chrome_session,
+        &dom,
+        &sheet,
+        true,
+        1024,
+        600,
+        &muts,
+    );
+    assert!(
+        !refresh.rebuild,
+        "a scheme flip with an unchanged sheet must not rebuild the session"
+    );
+}
+
+#[test]
 fn agent_can_open_inspector_and_steward_as_d8_panes() {
     let mut app = test_app();
     let step = app.apply_agent_action(AgentAction::OpenPane(AgentPane::Inspector));
@@ -982,6 +1194,7 @@ fn knot_editor_close_button_is_small_and_right_of_the_title() {
         &mut wc.view.chrome_session,
         &wc.view.dom,
         &sheet,
+        wc.shared.presentation.scheme_dark(),
         1024,
         600,
         None,
@@ -1036,6 +1249,7 @@ fn knot_editor_uses_bound_tile_rect_when_available() {
         &mut wc.view.chrome_session,
         &wc.view.dom,
         &sheet,
+        wc.shared.presentation.scheme_dark(),
         1024,
         600,
         None,
@@ -1729,6 +1943,7 @@ fn accesskit_focus_on_a_chrome_control_routes_to_the_runner() {
         &mut wc.view.chrome_session,
         &wc.view.dom,
         &sheet,
+        wc.shared.presentation.scheme_dark(),
         1200,
         80,
         None,

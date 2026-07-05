@@ -325,23 +325,74 @@ impl Shell {
             .unwrap_or_else(|| theme.active_theme().resolved_id);
         let resolution = theme.set_active_theme(&active_theme_id);
         let active_theme_id = resolution.resolved_id;
-        let chrome_theme = resolution.tokens.chrome;
-        // Build the chrome at the user's persisted zoom (the display DPI factor folds in
-        // once the window exists and `app_handler` rebuilds). (UI scale.)
-        let mut chrome_sheet = scale_px(chrome_sheet(&chrome_theme), saved_settings.ui_zoom);
-        // The knot editor's syntax highlighting: colour the `syntax-*` classes the
-        // styled field emits, derived perceptually from the active theme's seeds by
-        // tinct (so they track a theme switch), falling back to a dark triad.
-        let syntax_seeds = theme
-            .theme_def(&active_theme_id)
-            .map(|d| d.seeds)
-            .unwrap_or_else(meerkat::knot_highlight::fallback_seeds);
-        chrome_sheet.extend(meerkat::knot_highlight::syntax_css(&syntax_seeds));
-        // Theme the orrery's backdrop + edges from the same resolved theme. (A2.)
-        let (orrery_backdrop, orrery_edge) = orrery_palette(&resolution.tokens);
+        // The saved MODE (the derivation profile over the theme's seeds), or the
+        // mode the theme's own def encodes when unset / stale. Tokens for the
+        // non-sheet lanes (host-drawn chrome, orrery, document palette) resolve
+        // through it; the chrome sheet itself bakes the light/dark pair below.
+        // (Theme-modes plan.)
+        let default_mode = || {
+            theme
+                .theme_def(&active_theme_id)
+                .map(register_theme::seed::default_mode_for_def)
+                .unwrap_or(register_theme::theme::Mode::Dark)
+        };
+        // The registered custom modes (`<mere_root>/modes/*.json`, T5); a saved
+        // custom mode whose file is gone falls back to the theme's own mode.
+        let custom_modes = mode_store::load_custom_modes(&mere_root);
+        let mode = match saved_settings
+            .theme_mode
+            .as_deref()
+            .and_then(register_theme::theme::Mode::from_key)
+        {
+            Some(register_theme::theme::Mode::Custom(id))
+                if !custom_modes.iter().any(|m| m.id == id) =>
+            {
+                tracing::warn!(mode = %id, "saved custom mode not found; using the theme default");
+                default_mode()
+            }
+            Some(mode) => mode,
+            None => default_mode(),
+        };
+        let mode_tokens = match &mode {
+            // Custom: non-sheet lanes derive canonically with the mode's
+            // declared flags; the shell palette overlays from the calculator
+            // (mirrors `set_mode`; the sheet itself bakes in
+            // `rebuild_chrome_sheet` below).
+            register_theme::theme::Mode::Custom(id) => {
+                let custom = custom_modes
+                    .iter()
+                    .find(|m| m.id == *id)
+                    .expect("validated above");
+                let canonical = register_theme::theme::Mode::from_flags(
+                    custom.dark,
+                    custom.high_contrast,
+                );
+                let mut tokens = theme
+                    .mode_tokens(&active_theme_id, &canonical)
+                    .unwrap_or_else(|| resolution.tokens.clone());
+                if let Some(def) = theme.theme_def(&active_theme_id) {
+                    match register_theme::mode_calc::chrome_from_custom_mode(
+                        custom,
+                        &register_theme::seed::harmonized_seeds(def),
+                    ) {
+                        Ok(chrome) => tokens.chrome = chrome,
+                        Err(err) => {
+                            tracing::warn!(mode = %id, %err, "custom mode failed at boot")
+                        }
+                    }
+                }
+                tokens
+            }
+            _ => theme
+                .mode_tokens(&active_theme_id, &mode)
+                .unwrap_or_else(|| resolution.tokens.clone()),
+        };
+        let chrome_theme = mode_tokens.chrome;
+        // Theme the orrery's backdrop + edges from the mode-resolved tokens. (A2.)
+        let (orrery_backdrop, orrery_edge) = orrery_palette(&mode_tokens);
         orrery.set_palette(orrery_backdrop, orrery_edge);
-        // The document-lane palette for content cards, from the same theme. (P3.)
-        let document_palette = document_palette(&resolution.tokens);
+        // The document-lane palette for content cards, from the same tokens. (P3.)
+        let document_palette = document_palette(&mode_tokens);
         // The user's persisted document typography (embedded JSON in settings),
         // or the built-in look. Composed with the palette per render. (Typography.)
         let document_sheet = saved_settings
@@ -532,8 +583,15 @@ impl Shell {
                 presentation: Presentation {
                     theme,
                     chrome_theme,
-                    chrome_sheet,
+                    // The pair (and the sheet) are baked right after
+                    // construction via `rebuild_chrome_sheet` (the scheme pair
+                    // needs the registry + mode in place).
+                    chrome_theme_light: chrome_theme,
+                    chrome_theme_dark: chrome_theme,
+                    chrome_sheet: Vec::new(),
                     active_theme_id,
+                    mode,
+                    custom_modes,
                     saved_tab_cap: saved_settings.tab_cap,
                     shellbar_edge: saved_settings.shellbar_edge,
                     shellbar_hidden: saved_settings.shellbar_hidden,
@@ -587,6 +645,10 @@ impl Shell {
             last_snapshot_refresh: None,
             _kernel: armillary::KernelThread::new(),
         };
+        // Bake the chrome sheet (the light/dark scheme pair at the user's
+        // persisted zoom; the display DPI factor folds in once the window
+        // exists and `app_handler` rebuilds). (UI scale; theme-modes T2.)
+        app.shared.presentation.rebuild_chrome_sheet();
         let pane_count = app
             .pending_view
             .as_ref()

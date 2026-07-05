@@ -541,6 +541,7 @@ fn folded_roster_renders_visible_tab_buttons_in_shell_document() {
             &mut wc.view.chrome_session,
             &wc.view.dom,
             &sheet,
+            wc.shared.presentation.scheme_dark(),
             1024,
             600,
             None,

@@ -446,14 +446,24 @@ impl crate::WindowCtx<'_> {
     /// document, so every pane's sheet can be unconditional. (Extracted from
     /// `render()`; gloss sheets added by the gloss-outline plan P1 / Scene-to-DOM P1.)
     pub(super) fn gather_chrome_css(&self) -> Vec<String> {
-        let theme = &self.shared.presentation.chrome_theme;
-        let mut css = crate::roster::roster_sheet(theme);
-        css.extend(crate::apparatus::apparatus_sheet(theme));
-        css.extend(crate::utility_panes::utility_pane_sheet(theme));
-        css.extend(crate::gloss_outline_view::gloss_outline_sheet(theme));
-        css.extend(crate::gloss_view::gloss_recent_sheet(theme));
-        css.extend(crate::gloss_view::gloss_minimap_sheet(theme));
-        css
+        // Built from the light/dark chrome-token PAIR (not the active mode's
+        // tokens) and pair-baked, so these strings — appended to the chrome
+        // sheet each frame — stay identical across a light/dark mode flip and
+        // the chrome session keeps its cheap `set_prefers_color_scheme` path.
+        // (Theme-modes T2.)
+        let side = |theme: &register_theme::chrome::ChromeTheme| {
+            let mut css = crate::roster::roster_sheet(theme);
+            css.extend(crate::apparatus::apparatus_sheet(theme));
+            css.extend(crate::utility_panes::utility_pane_sheet(theme));
+            css.extend(crate::gloss_outline_view::gloss_outline_sheet(theme));
+            css.extend(crate::gloss_view::gloss_recent_sheet(theme));
+            css.extend(crate::gloss_view::gloss_minimap_sheet(theme));
+            css
+        };
+        crate::bake_scheme_pair(
+            side(&self.shared.presentation.chrome_theme_light),
+            side(&self.shared.presentation.chrome_theme_dark),
+        )
     }
 
     /// Lay this frame's content band out into pane rects: carve the shellbar strip, lay
