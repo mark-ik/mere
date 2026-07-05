@@ -171,6 +171,45 @@ gets bound.
   `--features actor,decoder-wgpu`. Remaining P1: KV-cached generation
   loop + sampling (+ `ControlFlow` cancellation), `InferenceProvider`
   impl, TinyLlama validation fixture + tokens/sec numbers.
+- 2026-07-05 — P1 slice 3 landed: generation, cancellation, and the
+  provider. The seam's callback now returns `ControlFlow` (Break = stop
+  after the delivered fragment); `CannedProvider` honors it and the
+  **actor gained real cancellation**: `InferCommand::Cancel` is drained
+  from inside the streaming callback via `try_recv` (mid-stream cancel
+  stops the provider and suppresses the in-flight fragment; queued
+  cancels drop the request before it starts; `Generate`s seen mid-stream
+  queue rather than vanish; `InferUpdate::Cancelled` reports it — one
+  actor-loop bug found by the tests: a channel disconnect during the
+  drain must not discard pending work). `decoder::attention` grew the
+  KV-cached path (`LayerKvCache` stored pre-GQA-expansion; rectangular
+  tril mask for prefill, maskless single-token decode; the uncached
+  forward is now a delegation, so all prior tests re-validate the cached
+  code). `generate.rs` is the greedy prefill-then-decode loop whose
+  correctness lock is **cached-equals-full-recompute** over the same
+  synthetic model, plus eos-stop and Break-stop tests. `provider.rs` is
+  `DecoderProvider`: tokenizers-crate encode, streaming detokenization by
+  prefix-delta with held-back non-prefix decodes (BPE boundary safety),
+  stop-string truncation before emission, `PromptTooLong` against the
+  real context window, greedy-only with explicit rejection of nonzero
+  temperature until sampling lands, and `from_bytes` over the artifact
+  triple — the eidetic P2 constructor. `eos_token_id` parses HF's
+  int-or-list form. Suite: 46/46 with `--features actor,decoder-wgpu`
+  (incl. GPU parity). Remaining P1: the TinyLlama real-checkpoint
+  validation fixture + tokens/sec CPU-vs-GPU numbers; temperature/top-p
+  sampling as its own follow-up.
+- 2026-07-05 — **P1 validated on the real checkpoint.** TinyLlama-1.1B-
+  Chat-v1.0 downloaded to `C:\t\models\TinyLlama-1.1B-Chat-v1.0` (outside
+  the repo, deliberately — 2.2GB must not ride a working-tree commit
+  sweep); its real `config.json` parses with our field set unchanged.
+  `tests/tinyllama_real.rs` (all `#[ignore]`d behind `MERE_TINYLLAMA_DIR`)
+  loads through `DecoderProvider::from_bytes` — the full chain: bf16
+  safetensors decode, HF name map, GQA, RoPE, KV cache, real BPE
+  tokenizer. The semantic fixture passed first try: greedy continuation
+  of "The capital of France is" → `"Paris, which is the capital of
+  France"` (release, burn-ndarray; model load 1.5s; ~13s/token CPU —
+  single-threaded ndarray, the number the wgpu lane exists to beat).
+  Streaming-equals-collected and the CPU-vs-GPU tokens/sec receipts in
+  the same file; numbers recorded below as they land.
 - 2026-07-05 — P3 landed ahead of P1 (see Findings for why). `infer::actor`
   behind the `actor` feature (armillary optional dep, so the seam core
   stays wasm-clean — `cargo check -p infer --target wasm32-unknown-unknown`

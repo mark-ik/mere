@@ -294,3 +294,17 @@ overlay slot on the focused input, state host-side, invisible to the page.
   commit). Next: P2 wires the find worker's matches onto `set_highlight` in
   the content actor and deletes the render.rs match-rect compositing — or the
   P0 top-layer/anchor probe, whichever lane is quiet.
+- **2026-07-05 — P2 engine prep landed; the rest paused on a live collision.**
+  `find_text_ranges` split out of `find_text_rects` (caret.rs): find matches
+  now exist as `HighlightRange`s before any rect conversion, the shape the
+  registry registers directly (244/244 green, committed). The remaining P2
+  engine piece — a `HighlightRegistry` on **`ContentLayout`** (the actor's
+  HTML-lane retained layout is `ContentLayout`, not `IncrementalLayout`; the
+  registry must live on both, appended band-shifted in `emit_band`) — plus the
+  actor wiring (`Find` registers "find" + re-renders; a new
+  `FindActive { index }` command re-registers the active-match highlight) and
+  the render.rs match-rect deletion are **deferred**: lib.rs / paint_emit.rs /
+  invalidate.rs are being concurrently rewritten (the `DomMutation::Moved`
+  lane) and lib.rs changed underneath the edit. Resume when that settles; the
+  design above is the resume map. Rects keep shipping as scroll/step metadata
+  either way (the host still needs count + auto-scroll targets).

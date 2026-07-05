@@ -325,6 +325,10 @@ a surface.
 
 # Part II — chrome and product families
 
+(The product ideas that motivated several of these families, including the
+three that deliberately go beyond the platform, are recorded in the
+companion [xilem_serval directions brief](2026-07-05_xilem_serval_directions_brief.md).)
+
 ## C1. State-preserving reparenting — ADOPT (already converged)
 
 DOM `moveBefore()` (Chrome 133, Firefox 144; Safari is the Baseline
