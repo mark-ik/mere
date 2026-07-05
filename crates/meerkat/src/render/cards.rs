@@ -430,6 +430,14 @@ impl crate::WindowCtx<'_> {
             // A live tile/preview bumps scene_version each render; a static snapshot
             // has version 0, so its band rasterizes once and stays cached until scroll.
             let version = self.shared.content.constellation.scene_version(*member);
+            // Focused-card audit (shell paint plan P4 tail): when a settled
+            // session re-rasters a card, name WHY (version churn vs size vs
+            // band coverage) so the churn source is attributable from a log.
+            let cached_tile = self
+                .view
+                .tile_textures
+                .get(member)
+                .map(|c| (c.version, c.size));
             let dest_w = (dest[2] - dest[0]).max(1.0);
             let dest_h = (dest[3] - dest[1]).max(1.0);
             // Document-px shown in the dest rect (= ch for a 1:1 live card; less for a
@@ -476,6 +484,15 @@ impl crate::WindowCtx<'_> {
                     .is_some_and(|c| c.version == version && c.size == (*cw, band_px))
                     && covers;
                 if !fresh {
+                    tracing::debug!(
+                        target: "meerkat::profile",
+                        lane = "knot",
+                        member = %member,
+                        version,
+                        ?cached_tile,
+                        covers,
+                        "card re-raster"
+                    );
                     let new_band_y = (scroll - (band_h - visible_h) * 0.5)
                         .clamp(0.0, (content_h - band_h).max(0.0));
                     let state = self.shared.content.pages.get(&url).cloned();
@@ -549,6 +566,20 @@ impl crate::WindowCtx<'_> {
                     .get(member)
                     .is_some_and(|c| c.version == version && c.size == (*cw, band_px));
                 if !fresh {
+                    tracing::debug!(
+                        target: "meerkat::profile",
+                        lane = "html",
+                        member = %member,
+                        version,
+                        ?cached_tile,
+                        url = self
+                            .orrery()
+                            .graph()
+                            .get_node_by_id(*member)
+                            .map(|(_, n)| n.url().to_string())
+                            .as_deref(),
+                        "card re-raster"
+                    );
                     if let Some(scene) = self.shared.content.constellation.scene(*member) {
                         // Build + register the page's blurred box-shadow masks (GPU)
                         // before rasterizing, so the shadow image ops resolve to a
@@ -610,6 +641,15 @@ impl crate::WindowCtx<'_> {
                     .is_some_and(|c| c.version == version && c.size == (*cw, band_px))
                     && covers;
                 if !fresh {
+                    tracing::debug!(
+                        target: "meerkat::profile",
+                        lane = "doc",
+                        member = %member,
+                        version,
+                        ?cached_tile,
+                        covers,
+                        "card re-raster"
+                    );
                     let new_band_y = (scroll - (band_h - visible_h) * 0.5)
                         .clamp(0.0, (content_h - band_h).max(0.0));
                     // The packet is in the actor's logical coords; window it with the band

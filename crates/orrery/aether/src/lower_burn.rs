@@ -289,3 +289,7 @@ fn expect_const_vec(v: &VectorField, msg: &'static str) -> Result<(f32, f32), Lo
 #[cfg(feature = "field-burn")]
 #[cfg(test)]
 mod tests;
+
+#[cfg(feature = "field-burn-wgpu")]
+#[cfg(test)]
+mod tests_wgpu;

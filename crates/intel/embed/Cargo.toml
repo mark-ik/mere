@@ -30,6 +30,10 @@ default = []
 # implementations and safetensors loading land in a follow-up slice).
 # Pulls in burn (ndarray backend) + tokenizers.
 bert = ["dep:burn", "dep:tokenizers", "dep:safetensors"]
+# GPU execution for the BERT provider: adds burn's wgpu backend so callers
+# can instantiate `BertEmbeddingProvider<Wgpu>`. Mirrors aether's
+# `field-burn-wgpu` naming. (burn brief Lane 1.)
+bert-wgpu = ["bert", "burn/wgpu"]
 # Continuous validation against a reference inference engine (candle-
 # transformers, ort, etc.). Gates an expensive end-to-end comparison test
 # that loads the same model in two frameworks and checks output divergence.

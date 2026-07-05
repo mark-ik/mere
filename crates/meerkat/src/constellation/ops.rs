@@ -343,6 +343,13 @@ impl Constellation {
         if activation.requested_band == (band_y, band_h) {
             return;
         }
+        tracing::debug!(
+            target: "meerkat::profile",
+            member = %member,
+            prev = ?activation.requested_band,
+            next = ?(band_y, band_h),
+            "scroll band re-command"
+        );
         activation.requested_band = (band_y, band_h);
         activation.handle.command(ContentCommand::Scroll {
             band_y,
