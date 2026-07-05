@@ -308,3 +308,26 @@ overlay slot on the focused input, state host-side, invisible to the page.
   lane) and lib.rs changed underneath the edit. Resume when that settles; the
   design above is the resume map. Rects keep shipping as scroll/step metadata
   either way (the host still needs count + auto-scroll targets).
+- **2026-07-05 — P2 landed (engine-painted find-in-page), count-path verified live;
+  visual paint pending a content-render confirm.** Full chain wired: `ContentLayout`
+  gained the `HighlightRegistry` + `set_highlight`/`clear_highlight`/`find_ranges`/
+  `range_rects`, appended band-shifted in `emit_band` (serval, one commit). The content
+  actor's `Find` arm now registers the matches as the `"find"` engine highlight (first as
+  `"find-active"`) on its retained layout and re-emits; a new `FindActive { index }`
+  command (threaded through the content-contract wire enums both directions) re-registers
+  the active-match highlight on Enter/Shift+Enter. Host routing (`submit_find_query`,
+  `step_find_match`, `toggle_find` close, `find_matches_for`) sends live actor-backed
+  pages down the engine path and keeps the find worker + `render/compose.rs` rect overlay
+  as the **snapshot-only fallback**; the compose block is now gated
+  `!is_active(member)`. Rects still ship as `FindMatches` metadata for the count +
+  auto-scroll. **Verified**: builds, find + contract unit tests green, and a headed run
+  returned a live **1/25** match count through the actor path (proving request→
+  find_ranges→range_rects→FindMatches→chrome count end to end). **Not yet visually
+  confirmed**: the engine-painted fills on screen — the loaded page body wasn't
+  compositing visibly in the capture (a content-card display matter, unrelated to this
+  change), so the in-band highlight paint needs one more headed pass once a page renders
+  visibly. The render.rs rect-compositing was **not deleted**, only demoted to the
+  fallback — deleting it waits on that visual confirm + the snapshot-lane decision (a
+  snapshot card has no live layout to register highlights on, so the fallback stays for
+  it). Concurrent-workstream note: 3 unrelated bin tests were red at commit time
+  (graph_delta_log, wallet_pairing, a serval keyed.rs panic), none in touched files.

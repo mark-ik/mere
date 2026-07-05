@@ -91,10 +91,14 @@ on burn-wgpu, native and wasm, and the harness brief's two open measurements
 (wasm model-size ceiling; burn-wgpu vs native-runtime competitiveness) have
 recorded answers.
 
-**Status 2026-07-05**: the seam exists — `crates/intel/infer` (trait +
-capability matching + deterministic `CannedProvider`), per the
-[inference_provider_plan](../implementation_strategy/2026-07-05_inference_provider_plan.md).
-Model body, eidetic loading, and the actor are that plan's next phases.
+**Status 2026-07-05 (end of day)**: the lane is real. `crates/intel/infer`
+carries the seam, the actor (with mid-stream cancellation), and the own
+llama-family decoder body — validated on the actual TinyLlama-1.1B
+checkpoint ("The capital of France is" → "Paris, …") at **9.95 tok/s on
+burn-wgpu vs 0.09 on ndarray CPU (110x)**, greedy output byte-identical
+across backends. Remaining per the
+[inference_provider_plan](../implementation_strategy/2026-07-05_inference_provider_plan.md):
+sampling, eidetic loading (P2), the wasm half of the done-condition.
 
 ## Lane 4: training and LoRA on-device
 

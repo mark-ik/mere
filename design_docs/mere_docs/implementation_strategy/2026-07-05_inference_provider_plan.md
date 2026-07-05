@@ -1,7 +1,7 @@
 # Inference Provider Plan (burn brief, Lane 3)
 
 **Date**: 2026-07-05
-**Status**: in progress. P0 (the seam + deterministic stub) this session; model body, eidetic wiring, and the actor follow.
+**Status**: P0 (seam + stub), P1 (own decoder body, greedy; validated on the real TinyLlama checkpoint, 9.95 tok/s on wgpu vs 0.09 on ndarray), and P3 (actor with cancellation) landed. Remaining: temperature/top-p sampling, P2 eidetic loading (the `from_bytes` constructor is ready for it), P4 measurements beyond tokens/sec.
 **Related**: [burn_utilization_brief](../research/2026-07-04_burn_utilization_brief.md) (Lane 3), [local_models_harness_brief](../research/2026-06-24_local_models_harness_brief.md) (§2 defines this seam; §3 the actor harness; §4 the wasm/native split), [geist_models_brief](../research/2026-05-10_geist_models_brief.md) (adapter envelope, deferred to Lane 4), [burn_wgpu_flip_plan](2026-07-04_burn_wgpu_flip_plan.md) (the GPU receipts motivating burn-first).
 
 ## Scope
@@ -210,6 +210,18 @@ gets bound.
   single-threaded ndarray, the number the wgpu lane exists to beat).
   Streaming-equals-collected and the CPU-vs-GPU tokens/sec receipts in
   the same file; numbers recorded below as they land.
+- 2026-07-05 — **tokens/sec receipt (P4's first number).**
+  Streaming-equals-collected passed on the real BPE tokenizer. The timing
+  run surfaced one genericity bug (argmax read as i64; the wgpu
+  instantiation's int element is i32 — fixed with `into_scalar().elem()`),
+  then: **CPU 16 tokens in 180.0s (0.09 tok/s) vs wgpu 16 tokens in 1.6s
+  (9.95 tok/s) — 110x**, with byte-identical greedy output across
+  backends (a strong whole-model numerics check at 1.1B scale). ~10 tok/s
+  on this laptop's GPU is interactive-usable; the brief's Lane-3 premise
+  (burn-wgpu as the local inference default) now has its number. CPU
+  ndarray is confirmed non-viable for generation (it is single-threaded;
+  even so, the gap is architectural, not a build artifact — both runs
+  release).
 - 2026-07-05 — P3 landed ahead of P1 (see Findings for why). `infer::actor`
   behind the `actor` feature (armillary optional dep, so the seam core
   stays wasm-clean — `cargo check -p infer --target wasm32-unknown-unknown`
