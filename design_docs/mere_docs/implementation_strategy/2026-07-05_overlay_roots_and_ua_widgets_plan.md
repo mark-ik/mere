@@ -358,3 +358,23 @@ overlay slot on the focused input, state host-side, invisible to the page.
   for the anchor geometry a host needs; and P1's remote runner (host view diffs a
   satellite subtree over the actor channel) is the next architectural piece — the probe
   proves the engine seam it targets is sound.
+- **2026-07-05 — P1 compose layer landed (text-capable overlays; the runner seam
+  already exists).** The blocker between the probe and a *real* overlay feature was
+  that link previews / autofill chips / the counter chip all carry **text**, and
+  `push_sublist` was fill-only. Fixed: `push_sublist` now merges the satellite's
+  font/image side-tables into the parent, and the merge is **index-free** — `DrawText`/
+  `DrawImage` reference resources by key (`FontInstanceKey`/`ImageKey`), not by Vec
+  index, so the satellite's commands stay valid verbatim and only unseen resources are
+  appended (dedup by key). A P1 test composes a text satellite (`count: 7` chip) into a
+  page that has its own text and asserts both faces survive and every composed glyph
+  run's font resolves in the merged table (249/249 lib green, serval `d20c06d`). The
+  runner half is **already in hand**: `xilem-serval::ServalAppRunner` builds a view into
+  a `ScriptedDom` and `update(f)` re-diffs it against new state emitting `DomMutation`s —
+  a live host runner over a satellite DOM. So the remaining P1 work is integration, not
+  new architecture: a host `WindowView` satellite runner whose emitted `ScriptedDom`
+  feeds `set_overlay(anchor, ...)` each state change, anchored to a page node. That
+  integration lands meerkat-side (where the concurrent workstream is active), so it is
+  the natural next session; the engine + compose seams it targets are now proven end to
+  end. **Both slot kinds are now feature-ready on the engine side**: highlights consume
+  in find-in-page today; overlays can carry a real laid-out, text-bearing, isolated,
+  anchor-tracked, top-layer subtree.
