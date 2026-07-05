@@ -148,3 +148,15 @@ currently quiet.
   gained 44px + line-height since the finding); P2 confirmed untouched. Build order
   set S2 → S3 → S1 → S4 with the shell-paint-workstream collision guard noted.
 - **2026-07-01**: plan written from a driven verification session (launch, load `https://example.com` into a tile, Ctrl+= x3, Ctrl+0, Ctrl+wheel x5; ddagrab captures ui-01/02/03 + full-res tab crops) plus code trace across meerkat, orrery, and pelt-desktop. All four defects reproduced; findings 1-4 grounded to file/line above. Finding 5 absorbed from the 2026-07-02 diagnostics session's memory so it is documented in design_docs.
+- **2026-07-05 (S2 done — pelt tile scale verified; the seam already existed).** Scoping
+  found S2 mostly landed by the concurrent workstream: `tile_sheet(theme, ui_scale)`
+  restates the structural px and rides `scale_px_in`, `TileShell::set_ui_scale` scales
+  the drag-ghost geometry, and workbench.rs rebuilds both on theme or scale change
+  (epsilon-tracked). The one real gap: the tab-drag arm threshold was a fixed 6.0 px
+  (3 logical px on a 2x panel — accidental drags); now `6.0 * ui_scale`
+  (serval `tile_shell.rs`). Headed-verified: captures at user_zoom 1.0 vs 1.2 measure
+  the tile-tab band at 83 px vs 98 px (expected 99.6 at exactly 1.2x — within a
+  rounding pixel), toolbar and tabs moving together under Ctrl+zoom
+  (`C:\t\s2-zoom100.png` / `s2-zoom140.png`). Both sheets ride the same scale
+  transform by construction, so finding 1's tabs-at-half-chrome-scale is gone. Next
+  slice: S3 (tab-clip verification at 1x/2x).

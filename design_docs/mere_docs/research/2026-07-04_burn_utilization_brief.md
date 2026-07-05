@@ -52,7 +52,9 @@ before binding.
 recorded CPU-vs-GPU numbers, a wasm embed runs via WebGPU, and D1 is decided
 from those receipts.
 
-**Status 2026-07-05**: landed and measured except the wasm receipt; see the
+**Status 2026-07-05**: landed and measured; aether's wasm build receipt is
+green (getrandom 0.4 `wasm_js` + uuid `js`), embed's wasm receipt is a named
+follow-on slice (ahash-pulled getrandom 0.3 + tokenizers/onig); see the
 [burn_wgpu_flip_plan](../implementation_strategy/2026-07-04_burn_wgpu_flip_plan.md).
 Headline: BERT is decisively GPU (3.2x at batch 1 up to 38x at 32×128);
 field eval stays CPU-default (ndarray wins through 100k positions on a

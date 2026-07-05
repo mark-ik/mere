@@ -1,7 +1,7 @@
 # Burn Wgpu Flip Plan (burn brief, Lane 1)
 
 **Date**: 2026-07-04
-**Status**: P0-P3 landed and measured (2026-07-05). P4 (wasm receipt) blocked on the getrandom `wasm_js` porting tax; see Findings.
+**Status**: P0-P3 landed and measured; P4 aether wasm receipt green (2026-07-05). embed's wasm receipt is its own follow-on slice (getrandom-0.3-via-ahash + the tokenizers/onig C dependency); see Findings.
 **Related**: [burn_utilization_brief](../research/2026-07-04_burn_utilization_brief.md) (Lane 1 + decision D1; this plan is its first spin-out), [local_models_harness_brief](../research/2026-06-24_local_models_harness_brief.md) (D2, the wasm ceiling, starts after this), `crates/intel/embed`, `crates/orrery/aether`.
 
 ## Scope
@@ -113,12 +113,23 @@ harness brief.
   mechanically possible today; whether to share stays a scheduling question
   (queue contention vs the frame budget), revisit when the first resident-
   data consumer lands.
-- 2026-07-05, **P4 wall**: `cargo check -p aether --features field-burn-wgpu
-  --target wasm32-unknown-unknown` fails in `getrandom 0.4` ("enable the
-  wasm_js feature") — the known wasm porting tax the
-  cross_platform_parallelism_strategy brief catalogued. Needs a target-gated
-  getrandom feature (and burn's fusion feature may need disabling on wasm
-  per burn-wgpu's own docs). Deferred to its own pass; not a Lane-1 gate.
+- 2026-07-05, **P4 aether receipt green**: `cargo check -p aether --features
+  field-burn-wgpu --target wasm32-unknown-unknown` passes after two
+  target-gated feature switches in aether's manifest (no code changes):
+  `getrandom = { version = "0.4", features = ["wasm_js"] }` (0.4 needs only
+  the feature, not the 0.3-era RUSTFLAGS cfg) and
+  `uuid = { features = ["js"] }` (uuid's own getrandom wiring is disabled on
+  wasm-unknown; wasm-bindgen `js` is its supported source there). The known
+  getrandom porting tax, resolved the current-idiom way.
+- 2026-07-05, **P4 embed receipt deferred — walls named**: embed's wasm graph
+  additionally contains `getrandom 0.3.4` via `ahash` (something in the
+  eidetic/tokenizers side of the graph enables ahash's runtime RNG; aether's
+  wasm graph has no getrandom 0.3 at all, so it is not the burn tree per se),
+  and behind that waits `tokenizers`' `onig` C dependency, which will not
+  build for wasm32-unknown-unknown. Fixing embed-wasm means an ahash feature
+  audit plus swapping the tokenizer regex backend — a real slice, deferred
+  (harness-brief D2 territory), not a Lane-1 gate. embed's manifest already
+  carries the getrandom-0.4 switch so that wall is pre-cleared.
 
 ## Progress
 
@@ -133,3 +144,18 @@ harness brief.
   needs `--lib` — the pre-existing `tests/bert_full_pipeline.rs` is broken
   against eidetic's changed `ResolvedModel` API (concurrent work, not this
   plan's scope).
+- 2026-07-05 — the bert_full_pipeline break root-caused and fixed. Not
+  concurrent work after all: the test was written against a flat
+  `ResolvedModel` field draft, while the real struct has nested
+  `components.{config,tokenizer,weight}_bytes` and `license: Option<String>`
+  since its creation (2026-06-05, `3964f04`). It rotted silently because the
+  whole file is behind the non-default `bert` feature, so plain
+  `cargo test -p embed` never compiles it. Test-side fix applied
+  (field paths + `license.as_deref()` + unused import); full suite green:
+  126 lib tests pass, integration tests compile (5 stay `#[ignore]`d pending
+  `MERE_MINILM_DIR`), semantic_search 5/5. The `--lib` caveat above is
+  retired.
+- 2026-07-05 — P4 pass: aether wasm receipt green (getrandom 0.4 `wasm_js` +
+  uuid `js`, both target-gated in the manifest); embed wasm deferred with its
+  two remaining walls named in Findings. Native rechecked clean after the
+  manifest edits.
