@@ -30,6 +30,18 @@ impl crate::WindowCtx<'_> {
         actor_h.max(note_h).max(visible_h)
     }
 
+    /// The uncommitted knot-editor buffer to render `member`'s note tile from, when the
+    /// editor is open and bound to that member. `Some` drives the live-on-change preview:
+    /// the tile re-renders from the buffer as you type, before any Save writes `Node.body`.
+    /// `None` for every other tile (and while the editor is closed), so they keep rendering
+    /// the committed body from `shared.content.pages` and stay cached. (Djot editor — Phase 2
+    /// live-on-change render refresh.)
+    pub(crate) fn knot_editor_live_body(&self, member: GraphMemberId) -> Option<String> {
+        let chrome = self.view.chrome();
+        (chrome.knot_editor_open && chrome.knot_target == Some(member))
+            .then(|| chrome.knot_source.text().to_string())
+    }
+
     /// Record each card's on-screen content rect into `self.view.content_rects` for this
     /// frame, so a wheel over a card scrolls the card rather than panning the orrery: the
     /// live tiles, the unvisited placeholder, the (cached-and-shown) snapshot card, and
@@ -547,16 +559,22 @@ impl crate::WindowCtx<'_> {
                 .map(|(_, n)| n.url().to_string())
                 .filter(|u| u.starts_with("knot://"));
             if let Some(url) = knot_url {
+                // While the knot editor is open on this note, render the tile from its live
+                // (uncommitted) buffer and force a re-raster every frame, so the note updates
+                // as you type. Otherwise the committed body from `pages` renders and caches.
+                // (Djot editor — Phase 2 live-on-change render refresh.)
+                let live_body = self.knot_editor_live_body(*member);
                 let max_h_for_width = (MAX_CARD_TEX_AREA / (*cw).max(1)) as f32;
                 let band_h = content_h.min(BAND_CAP as f32).min(max_h_for_width).max(1.0);
                 let band_px = band_h.ceil() as u32;
                 let band_y = self.view.tile_bands.get(member).copied().unwrap_or(0.0);
                 let covers = band_y <= scroll && scroll + visible_h <= band_y + band_h + 0.5;
-                let fresh = self
-                    .view
-                    .tile_textures
-                    .get(member)
-                    .is_some_and(|c| c.version == version && c.size == (*cw, band_px))
+                let fresh = live_body.is_none()
+                    && self
+                        .view
+                        .tile_textures
+                        .get(member)
+                        .is_some_and(|c| c.version == version && c.size == (*cw, band_px))
                     && covers;
                 if !fresh {
                     tracing::debug!(
@@ -570,7 +588,14 @@ impl crate::WindowCtx<'_> {
                     );
                     let new_band_y = (scroll - (band_h - visible_h) * 0.5)
                         .clamp(0.0, (content_h - band_h).max(0.0));
-                    let state = self.shared.content.pages.get(&url).cloned();
+                    // The live editor buffer wins over the committed page while editing.
+                    let state = match &live_body {
+                        Some(body) => Some(ContentState::Ready(Fetched {
+                            content_type: Some("text/x-knot".to_string()),
+                            body: body.clone(),
+                        })),
+                        None => self.shared.content.pages.get(&url).cloned(),
+                    };
                     if let Some(doc) = crate::card::engine_document_for(
                         &url,
                         state.as_ref(),
