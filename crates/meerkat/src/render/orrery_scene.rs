@@ -105,6 +105,24 @@ impl crate::WindowCtx<'_> {
                     .note_strategy_computed(&id, orrery_w, orrery_h, focus);
             }
         }
+        // Content-embedding arrangement (burn brief Lane 5, P4): while "cluster by affinity" is on,
+        // derive the affinity signal from node *content* (embeddings) instead of structural Jaccard,
+        // and inject it so this frame's `sync_affinity_force` installs it. Recompute is throttled +
+        // revision-gated inside `maybe_recompute`, so a settled graph costs nothing. The arrangement
+        // is `take`n out to break the self-borrow (it lives on `content`, the graph on the pane) —
+        // the gnode-pool idiom. Focused pane only for now; secondaries keep structural. Burn stays
+        // out of the orrery: it receives plain `(NodeKey, NodeKey, f32)` triples.
+        #[cfg(feature = "content-affinity")]
+        if self.pane_orrery(orrery_gid).cluster_by_affinity() {
+            if let Some(mut arrangement) = self.shared.content.content_arrangement.take() {
+                let pairs = arrangement.maybe_recompute(self.pane_orrery(orrery_gid).graph());
+                self.shared.content.content_arrangement = Some(arrangement);
+                if let Some(pairs) = pairs {
+                    self.pane_orrery_mut(orrery_gid)
+                        .set_content_affinity(Some(pairs));
+                }
+            }
+        }
         let (orrery_scene, orrery_redraw) =
             self.pane_orrery_mut(orrery_gid).frame(orrery_w, orrery_h);
 

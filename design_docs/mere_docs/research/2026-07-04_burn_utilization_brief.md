@@ -135,6 +135,29 @@ lands; D1's shared device is what would make that lift zero-copy.
 and a large-graph force pass through the aether burn path beats the CPU path
 at a measured node count.
 
+**Status 2026-07-06**: both halves have their mechanism, per the
+[orrery_graph_intelligence_plan](../implementation_strategy/2026-07-06_orrery_graph_intelligence_plan.md).
+
+- **Force pass (P1-P3)**: `aether::forces::repulsion` (N-body on burn,
+  ndarray/wgpu) is wired into gyre via a burn-free `RepulsionSolver` closure
+  seam. Isolated it beats naive CPU up to 17×, **but in the real gyre tick the
+  win is 1.4-2×** at 2k-16k nodes — gyre's cutoff + rapier's step floor, an
+  important honest correction. Only activates above ~1000 nodes, so it is a
+  niche large-graph win; live meerkat injection held.
+- **Semantic arrangement (P4)**: `embed::affinity::affinity_pairs` bridges an
+  embedding index to gyre's existing `AffinitySpring` clustering signal, tested
+  end-to-end at the seam. Helps at any graph size.
+- **Live wiring (P5, landed 2026-07-06)**: P4 now runs end-to-end in meerkat's
+  focused orrery behind an off-by-default `content-affinity` feature. A burn-free
+  `Orrery::set_content_affinity` seam takes host-computed `(NodeKey, NodeKey, f32)`
+  triples that supersede structural Jaccard under the existing toggle; a new
+  burn-free `embed::LexicalEmbeddingProvider` (feature-hashing, the honest light
+  default) embeds each node's title + tags; the meerkat driver recomputes on graph
+  mutation (revision + throttle gate) and injects. gyre/orrery stay tensor-free.
+  **Lexical today; the deep-semantic BERT provider (`semantic-embeddings`) is the
+  upgrade** — a separate slice wanting an embed boxed loader (mirroring
+  `infer::decoder::load_wgpu_provider`) plus the D1 device decision for wgpu.
+
 ## Commitments (what "shaped around burn" means)
 
 1. **Hot data stays columnar.** The

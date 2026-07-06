@@ -35,6 +35,8 @@ pub use kernel::graph::field_ast as ast;
 pub mod coupling;
 pub mod eval;
 #[cfg(feature = "field-burn")]
+pub mod forces;
+#[cfg(feature = "field-burn")]
 pub mod lower_burn;
 pub mod projection;
 pub mod registry;

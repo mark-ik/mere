@@ -1237,6 +1237,115 @@ fn cluster_by_affinity_installs_and_clears_the_affinity_force() {
 }
 
 #[test]
+fn content_affinity_supersedes_structural_and_reverts() {
+    // Two triangles + a bridge: structural affinity yields several intra-triangle pairs. A host
+    // content-embedding signal (one cross-triangle pair here) supersedes structural while set;
+    // clearing it (None) reverts to structural. (burn brief Lane 5 — P4, content source.)
+    let mut graph = Graph::new();
+    let n: Vec<NodeKey> = (0..6)
+        .map(|i| {
+            graph.add_node(
+                format!("https://{i}.example"),
+                PortablePoint::new(i as f32, 0.0),
+            )
+        })
+        .collect();
+    for &(a, b) in &[(0, 1), (1, 2), (2, 0), (3, 4), (4, 5), (5, 3), (2, 3)] {
+        graph.assert_semantic_predicate(n[a], n[b], "links".to_string());
+    }
+    let mut orrery = Orrery::with_graph(graph);
+    orrery.set_cluster_by_affinity(true);
+    let _ = orrery.frame(800, 600);
+    let structural = orrery.affinity_pair_count();
+    assert!(
+        structural >= 2,
+        "the structural signal installs several pairs, got {structural}"
+    );
+
+    // Inject a one-pair content signal: it supersedes structural (the live count is exactly the
+    // injected 1, not the several structural pairs).
+    orrery.set_content_affinity(Some(vec![(n[0], n[3], 0.9)]));
+    assert!(orrery.has_content_affinity(), "content is now the source");
+    let _ = orrery.frame(800, 600);
+    assert_eq!(
+        orrery.affinity_pair_count(),
+        1,
+        "content (1 pair) supersedes structural ({structural} pairs)"
+    );
+
+    // Clear it: structural returns on the next frame.
+    orrery.set_content_affinity(None);
+    assert!(!orrery.has_content_affinity(), "back to the structural source");
+    let _ = orrery.frame(800, 600);
+    assert_eq!(
+        orrery.affinity_pair_count(),
+        structural,
+        "clearing content reverts to the structural signal"
+    );
+}
+
+#[test]
+fn empty_content_affinity_is_authoritative_but_inert() {
+    // A host that ran embeddings and found no pairs above its threshold injects `Some(empty)`: that
+    // is authoritative — it clears the force rather than falling back to structural (pass `None` for
+    // that). (burn brief Lane 5 — P4.)
+    let mut graph = Graph::new();
+    let n: Vec<NodeKey> = (0..3)
+        .map(|i| {
+            graph.add_node(
+                format!("https://{i}.example"),
+                PortablePoint::new(i as f32, 0.0),
+            )
+        })
+        .collect();
+    for &(a, b) in &[(0, 1), (1, 2), (2, 0)] {
+        graph.assert_semantic_predicate(n[a], n[b], "links".to_string());
+    }
+    let mut orrery = Orrery::with_graph(graph);
+    orrery.set_cluster_by_affinity(true);
+    let _ = orrery.frame(800, 600);
+    assert!(
+        orrery.affinity_pair_count() > 0,
+        "the structural triangle installs pairs"
+    );
+
+    orrery.set_content_affinity(Some(Vec::new()));
+    let _ = orrery.frame(800, 600);
+    assert_eq!(
+        orrery.affinity_pair_count(),
+        0,
+        "empty content clears the force — no structural fallback"
+    );
+}
+
+#[test]
+fn content_affinity_reinstalls_after_a_toggle_cycle() {
+    // The dirty flag is consumed at install, so a toggle off→on must still reinstall the persisted
+    // content signal (the off branch re-arms it). Two edgeless nodes: structural is empty, so the
+    // count `1` can only come from the content signal. (burn brief Lane 5 — P4.)
+    let mut graph = Graph::new();
+    let a = graph.add_node("https://a.example".to_string(), PortablePoint::new(0.0, 0.0));
+    let b = graph.add_node("https://b.example".to_string(), PortablePoint::new(1.0, 0.0));
+    let mut orrery = Orrery::with_graph(graph);
+    orrery.set_content_affinity(Some(vec![(a, b, 0.8)]));
+    orrery.set_cluster_by_affinity(true);
+    let _ = orrery.frame(800, 600);
+    assert_eq!(orrery.affinity_pair_count(), 1, "content installed on enable");
+
+    orrery.set_cluster_by_affinity(false);
+    let _ = orrery.frame(800, 600);
+    assert_eq!(orrery.affinity_pair_count(), 0, "toggle off clears the force");
+
+    orrery.set_cluster_by_affinity(true);
+    let _ = orrery.frame(800, 600);
+    assert_eq!(
+        orrery.affinity_pair_count(),
+        1,
+        "toggle back on reinstalls the persisted content signal"
+    );
+}
+
+#[test]
 fn affinity_force_refreshes_on_a_topology_change() {
     // With clustering on, a structural mutation must refresh the installed signal (the cache is
     // revision-gated, not frozen at first compute). An edgeless start has no affinity pairs; wiring

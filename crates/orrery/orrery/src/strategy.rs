@@ -253,6 +253,27 @@ impl Orrery {
         self.cluster_by_affinity
     }
 
+    /// Inject a host-computed **content-affinity** signal — semantic similarity from node
+    /// embeddings, as `(a, b, weight)` triples (`weight` in `0..=1`) — to drive the affinity force,
+    /// superseding the internal structural-Jaccard signal while set. `None` reverts to structural.
+    ///
+    /// The host owns the embedding provider (so burn stays out of the orrery), recomputes this when
+    /// node *content* changes, and re-injects; the orrery installs it on the next [`frame`](Self::frame)
+    /// under the [`cluster_by_affinity`](Self::set_cluster_by_affinity) toggle, with a settle so the
+    /// new clustering takes. `Some(empty)` is authoritative-but-inert (the host ran embeddings and
+    /// found no pairs above its threshold) — it clears the force rather than falling back to
+    /// structural; pass `None` to opt back into structural. (burn brief Lane 5 — P4.)
+    pub fn set_content_affinity(&mut self, pairs: Option<Vec<(NodeKey, NodeKey, f32)>>) {
+        self.content_affinity = pairs;
+        self.content_affinity_dirty = true;
+    }
+
+    /// Whether a host content-affinity signal is currently the affinity source (vs the internal
+    /// structural one). `Some(empty)` still counts as content-sourced. (burn brief Lane 5 — P4.)
+    pub fn has_content_affinity(&self) -> bool {
+        self.content_affinity.is_some()
+    }
+
     /// The number of affinity pairs in the live affinity force (`0` when off). Test introspection
     /// for the P4 wiring (inline backend). (Graph signals — P4.)
     #[cfg(test)]
@@ -282,22 +303,50 @@ impl Orrery {
     /// new equilibrium takes. (Graph signals — P4.)
     pub(crate) fn sync_affinity_force(&mut self) {
         if self.cluster_by_affinity {
-            self.ensure_affinity_fresh();
-            let revision = self.graph.revision();
-            if self.installed_affinity_revision != Some(revision) {
-                let force = self
-                    .affinity_cache
-                    .as_ref()
-                    .map(build_affinity_spring)
-                    .filter(|f| !f.is_empty());
-                self.physics.set_affinity_force(force);
-                self.physics.settle(SETTLE_TICKS / 2);
-                self.installed_affinity_revision = Some(revision);
+            if self.content_affinity.is_some() {
+                // A host content-embedding signal is authoritative while set. Install on the host's
+                // dirty flag (a fresh recompute), not per graph revision — it tracks node *content*,
+                // which the host recomputes and re-injects; a topology-only change must not force a
+                // (stale) reinstall here. (burn brief Lane 5 — P4, content source.)
+                if self.content_affinity_dirty {
+                    let force = self
+                        .content_affinity
+                        .as_ref()
+                        .map(|pairs| AffinitySpring::new(pairs.iter().copied()))
+                        .filter(|f| !f.is_empty());
+                    self.affinity_force_installed = force.is_some();
+                    self.physics.set_affinity_force(force);
+                    self.physics.settle(SETTLE_TICKS / 2);
+                    self.content_affinity_dirty = false;
+                    // The structural memo is not what's live; re-arm it so a later revert to
+                    // structural (content set to `None`) reinstalls from the current revision.
+                    self.installed_affinity_revision = None;
+                }
+            } else {
+                // Structural Jaccard (the default source), revision-gated (recompute the signal if
+                // stale, reinstall only when the revision moved since the live force was built).
+                self.ensure_affinity_fresh();
+                let revision = self.graph.revision();
+                if self.installed_affinity_revision != Some(revision) {
+                    let force = self
+                        .affinity_cache
+                        .as_ref()
+                        .map(build_affinity_spring)
+                        .filter(|f| !f.is_empty());
+                    self.affinity_force_installed = force.is_some();
+                    self.physics.set_affinity_force(force);
+                    self.physics.settle(SETTLE_TICKS / 2);
+                    self.installed_affinity_revision = Some(revision);
+                }
             }
-        } else if self.installed_affinity_revision.is_some() {
+        } else if self.affinity_force_installed {
             self.physics.set_affinity_force(None);
             self.physics.settle(SETTLE_TICKS / 2);
+            self.affinity_force_installed = false;
             self.installed_affinity_revision = None;
+            // Re-arm the content signal so re-enabling the toggle reinstalls it (the dirty flag was
+            // consumed at install; without this a toggle off→on would leave content uninstalled).
+            self.content_affinity_dirty = true;
         }
     }
 

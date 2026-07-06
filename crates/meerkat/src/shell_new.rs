@@ -563,6 +563,11 @@ impl Shell {
                     infer_handle,
                     ask_id: 0,
                     ask_answer: String::new(),
+                    ask_last_paint: None,
+                    #[cfg(feature = "content-affinity")]
+                    content_arrangement: Some(
+                        crate::content_affinity::ContentArrangement::new(),
+                    ),
                     engine_registry,
                     engine_pins: HashMap::new(),
                     route_policy: inker::routing::EngineRoutePolicy::default(),

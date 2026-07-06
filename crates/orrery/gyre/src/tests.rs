@@ -23,6 +23,123 @@ fn graph_with_two_nodes() -> Graph {
     g
 }
 
+fn graph_with_n_nodes(n: usize) -> Graph {
+    let mut g = Graph::new();
+    for i in 0..n {
+        g.add_node_with_id(
+            uuid::Uuid::from_u128(1 + i as u128),
+            format!("mere://n{i}"),
+            Point2D::new(i as f32 * 10.0, 0.0),
+        );
+    }
+    g
+}
+
+/// A mock `RepulsionSolver` that records its call count and pushes every node a
+/// fixed amount in +x — a force the symmetric naive scan can never produce, so
+/// its footprint proves the solver's output reached the bodies.
+fn recording_push_solver(calls: std::sync::Arc<std::sync::atomic::AtomicUsize>) -> RepulsionSolver {
+    std::sync::Arc::new(move |xs: &[f32], _ys: &[f32], _s: f32, _m: f32| {
+        calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        (vec![1_000_000.0; xs.len()], vec![0.0; xs.len()])
+    })
+}
+
+#[test]
+fn repulsion_solver_routes_only_above_threshold() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    // Below the threshold: the solver is installed but never consulted (naive path).
+    let mut sim = Simulation::new();
+    sim.add_force(NodeExclusion::default());
+    sim.sync_with_graph(&graph_with_n_nodes(3));
+    let calls = Arc::new(AtomicUsize::new(0));
+    sim.set_repulsion_solver(Some(recording_push_solver(calls.clone())), 10);
+    for _ in 0..5 {
+        sim.tick(1.0 / 60.0);
+    }
+    assert_eq!(calls.load(Ordering::SeqCst), 0, "below threshold stays naive");
+
+    // At/above the threshold: the solver is consulted every tick, and its
+    // distinctive +x push moves the whole layout's center of mass right —
+    // something the symmetric naive repulsion could never do.
+    let mut sim = Simulation::new();
+    sim.add_force(NodeExclusion::default());
+    let graph = graph_with_n_nodes(3);
+    sim.sync_with_graph(&graph);
+    let calls = Arc::new(AtomicUsize::new(0));
+    sim.set_repulsion_solver(Some(recording_push_solver(calls.clone())), 3);
+    for _ in 0..10 {
+        sim.tick(1.0 / 60.0);
+    }
+    let keys: Vec<_> = graph.nodes().map(|(k, _)| k).collect();
+    let mean_x: f32 = keys
+        .iter()
+        .filter_map(|&k| sim.position_of(k).map(|p| p.x))
+        .sum::<f32>()
+        / keys.len() as f32;
+    assert!(calls.load(Ordering::SeqCst) >= 10, "solver consulted each tick");
+    assert!(mean_x > 0.0, "the solver's +x push moved the layout right: {mean_x}");
+}
+
+/// End-to-end settle timing: naive CPU repulsion vs the aether wgpu solver,
+/// at a large node count. Times whole ticks — rapier's step is identical both
+/// ways, so the delta is the repulsion step moving off the CPU. Ignored + behind
+/// `gpu-bench` (the only path that compiles burn into gyre's build). Run:
+/// `cargo test -p gyre --features gpu-bench --release -- --ignored settle_timing --nocapture`
+#[cfg(feature = "gpu-bench")]
+#[test]
+#[ignore]
+fn settle_timing_naive_vs_gpu_solver() {
+    use std::sync::Arc;
+
+    const TICKS: usize = 20;
+    let solver: RepulsionSolver = Arc::new(|xs: &[f32], ys: &[f32], strength: f32, min_d: f32| {
+        aether::forces::repulsion_wgpu(
+            xs,
+            ys,
+            aether::forces::RepulsionParams {
+                strength,
+                softening: min_d,
+            },
+        )
+    });
+
+    for n in [2_000usize, 4_000, 8_000, 16_000] {
+        let graph = graph_with_n_nodes(n);
+        let build = || {
+            let mut sim = Simulation::new();
+            sim.add_force(NodeExclusion::default());
+            sim.add_force(EdgeSpring::default());
+            sim.add_force(Boundary::default());
+            sim.sync_with_graph(&graph);
+            sim
+        };
+
+        let mut cpu = build();
+        let t = std::time::Instant::now();
+        for _ in 0..TICKS {
+            cpu.tick(1.0 / 60.0);
+        }
+        let cpu_ms = t.elapsed().as_millis() as f64 / TICKS as f64;
+
+        let mut gpu = build();
+        gpu.set_repulsion_solver(Some(solver.clone()), 0);
+        gpu.tick(1.0 / 60.0); // warm the wgpu kernel
+        let t = std::time::Instant::now();
+        for _ in 0..TICKS {
+            gpu.tick(1.0 / 60.0);
+        }
+        let gpu_ms = t.elapsed().as_millis() as f64 / TICKS as f64;
+
+        println!(
+            "N={n}: naive-cpu={cpu_ms:.2}ms/tick gpu-solver={gpu_ms:.2}ms/tick ({:.2}x)",
+            cpu_ms / gpu_ms
+        );
+    }
+}
+
 #[test]
 fn sync_with_graph_creates_bodies_for_new_nodes() {
     let mut sim = Simulation::new();

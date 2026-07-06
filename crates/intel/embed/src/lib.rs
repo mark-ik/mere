@@ -40,12 +40,14 @@
 //! # fn main() {}
 //! ```
 
+pub mod affinity;
 #[cfg(feature = "bert")]
 pub mod bert;
 pub mod canvas_search;
 pub mod field_bridge;
 pub mod hashed;
 pub mod index;
+pub mod lexical;
 pub mod persistence;
 pub mod provider;
 pub mod search;
@@ -54,10 +56,12 @@ pub mod search;
 pub use bert::{
     BGE_MICRO_V2, BertConfig, BertEmbeddingProvider, MINILM_L6_V2, SNOWFLAKE_ARCTIC_EMBED_XS,
 };
+pub use affinity::affinity_pairs;
 pub use canvas_search::CanvasSearchSurface;
 pub use field_bridge::{build_query_similarity_field, register_query_similarity_field};
 pub use hashed::HashedEmbeddingProvider;
 pub use index::{IndexError, VectorIndex};
+pub use lexical::LexicalEmbeddingProvider;
 pub use persistence::{load_from_eidetic, save_to_eidetic};
 pub use provider::{EmbedError, EmbeddingProvider, SimilarityMetric};
 pub use search::SemanticSearch;

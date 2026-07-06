@@ -69,6 +69,25 @@ impl Force for NodeExclusion {
             .filter_map(|&handle| ctx.bodies.get(handle).map(|b| (handle, b.translation())))
             .collect();
 
+        // Above the threshold, route the all-pairs repulsion to the host's GPU
+        // solver (aether's burn N-body pass); gyre stays burn-free. The solver
+        // computes a softened inverse-square repulsion over all pairs — the same
+        // shape as the naive scan below, minus the `cutoff` optimisation (the GPU
+        // sums every pair anyway; far pairs contribute negligibly at this scale).
+        if let Some(solver) = ctx.repulsion_solver {
+            if nodes.len() >= ctx.gpu_repulsion_threshold {
+                let xs: Vec<f32> = nodes.iter().map(|(_, p)| p.x).collect();
+                let ys: Vec<f32> = nodes.iter().map(|(_, p)| p.y).collect();
+                let (fx, fy) = solver(&xs, &ys, self.strength, self.min_distance);
+                for (idx, (handle, _)) in nodes.iter().enumerate() {
+                    if let Some(body) = ctx.bodies.get_mut(*handle) {
+                        body.add_force(Vector::new(fx[idx], fy[idx]), true);
+                    }
+                }
+                return;
+            }
+        }
+
         // All-pairs inverse-square repulsion within `cutoff`. The rapier spatial
         // index this once narrowed against went ephemeral in rapier 0.33, so the
         // O(n^2) scan is the version-clean replacement; at the orrery's scale

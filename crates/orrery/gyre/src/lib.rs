@@ -209,6 +209,21 @@ pub trait Force: Send {
     fn apply(&self, ctx: &mut ForceContext<'_>, dt: f32);
 }
 
+/// A host-injected pairwise-repulsion solver: node positions in, per-node forces
+/// out, computed however the host likes. gyre stays **burn-free** — it only holds
+/// and calls this closure; the burn/wgpu N-body pass lives in `aether`. Args are
+/// `(xs, ys, strength, min_distance) -> (fx, fy)`, all rank-1 in node order.
+/// [`NodeExclusion`] routes to it above [`Simulation::set_repulsion_solver`]'s
+/// threshold, falling back to its naive O(n²) scan below. (burn brief Lane 5.)
+pub type RepulsionSolver =
+    std::sync::Arc<dyn Fn(&[f32], &[f32], f32, f32) -> (Vec<f32>, Vec<f32>) + Send + Sync>;
+
+/// Default node count above which [`NodeExclusion`] uses an installed
+/// [`RepulsionSolver`]. Chosen from the aether force-pass timing (GPU beats the
+/// naive CPU scan from ~500-1000 nodes); the host can override per
+/// [`Simulation::set_repulsion_solver`].
+pub const DEFAULT_GPU_REPULSION_THRESHOLD: usize = 1_000;
+
 /// Per-tick view a [`Force`] sees: mutable access to the rapier body
 /// store plus the NodeKey ↔ handle bimap so forces can reason about
 /// pairs / topology when they need to.
@@ -221,6 +236,11 @@ pub struct ForceContext<'a> {
     /// pairs, set via [`Simulation::sync_edges`]; gyre stays relation-taxonomy
     /// agnostic, so the caller decides which edge families feed the layout.
     pub edges: &'a [(NodeKey, NodeKey)],
+    /// Host-injected GPU repulsion solver + the threshold above which
+    /// [`NodeExclusion`] routes to it, threaded from the [`Simulation`]. `None`
+    /// = always the naive scan. (burn brief Lane 5 — P3.)
+    pub repulsion_solver: Option<&'a RepulsionSolver>,
+    pub gpu_repulsion_threshold: usize,
 }
 
 /// One rapier world + bookkeeping. The host owns one of these per
@@ -253,6 +273,12 @@ pub struct Simulation {
     /// affinity signal recomputes — and it applies in the same reset window as the built-ins.
     /// `None` = off (the default). (Graph signals — P4.)
     affinity_force: Option<AffinitySpring>,
+    /// Optional host-injected GPU repulsion solver + the node count above which
+    /// [`NodeExclusion`] routes to it instead of its naive O(n²) scan. `None` =
+    /// always naive (the default). The host builds this from aether's burn pass;
+    /// gyre stays burn-free. (burn brief Lane 5 — P3.)
+    repulsion_solver: Option<RepulsionSolver>,
+    gpu_repulsion_threshold: usize,
     /// Linear damping applied to every node body — runtime-tunable (the "inertia"
     /// the physics settings expose): lower keeps more drift after a settle, higher
     /// brings nodes to rest sooner. New bodies take this; [`set_linear_damping`]
@@ -322,6 +348,8 @@ impl Simulation {
             forces: Vec::new(),
             coupling_forces: Vec::new(),
             affinity_force: None,
+            repulsion_solver: None,
+            gpu_repulsion_threshold: DEFAULT_GPU_REPULSION_THRESHOLD,
             linear_damping: DEFAULT_LINEAR_DAMPING,
             scene_bodies: HashMap::new(),
             scene_sprites: HashMap::new(),
@@ -371,6 +399,16 @@ impl Simulation {
     /// Number of field-coupling forces currently applied.
     pub fn coupling_force_count(&self) -> usize {
         self.coupling_forces.len()
+    }
+
+    /// Install (or clear, with `None`) the host's GPU repulsion solver, and the
+    /// node count above which [`NodeExclusion`] routes to it instead of its naive
+    /// O(n²) scan. gyre stays burn-free — the solver is a plain closure the host
+    /// builds from `aether`'s burn pass. Position-preserving. See
+    /// [`RepulsionSolver`]. (burn brief Lane 5 — P3.)
+    pub fn set_repulsion_solver(&mut self, solver: Option<RepulsionSolver>, threshold: usize) {
+        self.repulsion_solver = solver;
+        self.gpu_repulsion_threshold = threshold.max(1);
     }
 
     /// Install (or clear, with `None`) the pairwise **affinity** force wholesale — the rebuild a
@@ -497,6 +535,8 @@ impl Simulation {
                 joints: &mut self.impulse_joints,
                 bodies_by_node: &self.bodies_by_node,
                 edges: &self.edges,
+                repulsion_solver: self.repulsion_solver.as_ref(),
+                gpu_repulsion_threshold: self.gpu_repulsion_threshold,
             };
             for force in &self.forces {
                 force.apply(&mut ctx, dt);

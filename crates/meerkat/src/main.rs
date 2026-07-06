@@ -87,6 +87,8 @@ mod agent_harness;
 mod app_handler;
 mod apparatus;
 mod command_drain;
+#[cfg(feature = "content-affinity")]
+mod content_affinity;
 mod engine_activation;
 mod export;
 mod find;

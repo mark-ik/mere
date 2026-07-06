@@ -336,6 +336,20 @@ pub struct Orrery {
     /// rebuild the force only when the signal actually changed (or the toggle flips), not per frame.
     /// (Graph signals — P4.)
     installed_affinity_revision: Option<u64>,
+    /// A host-injected **content-affinity** signal (semantic similarity from node embeddings),
+    /// superseding the internal structural-Jaccard one while `Some`. `None` = use structural. The
+    /// host owns the embedding provider (burn stays out of the orrery) and re-injects on node-content
+    /// change; the orrery installs it under the `cluster_by_affinity` toggle. `Some(empty)` is
+    /// authoritative-but-inert (clusters found nothing). (burn brief Lane 5 — P4, content source.)
+    content_affinity: Option<Vec<(NodeKey, NodeKey, f32)>>,
+    /// Set when the host injects a fresh content signal; drives a single (re)install on the next
+    /// frame. The content signal is host-fresh (it tracks node *content*), so it is dirty-gated
+    /// rather than graph-revision-gated like the structural one. (burn brief Lane 5 — P4.)
+    content_affinity_dirty: bool,
+    /// Whether *any* affinity force is currently installed in the sim (structural or content), so
+    /// the toggle-off branch clears exactly once regardless of which source was live. (Graph
+    /// signals — P4.)
+    affinity_force_installed: bool,
     /// The gloss swatch's own layout strategy id, or `None` to mirror the main view (a minimap).
     /// `Some` makes the gloss an independent lens (e.g. spectral while the main view is force-
     /// directed). (Graph signals — P6, the independent gloss projection.)

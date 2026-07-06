@@ -89,6 +89,23 @@ pub(crate) struct Content {
     pub(crate) ask_id: u64,
     /// The current `>ask` answer as tokens stream in, echoed in the omnibar.
     pub(crate) ask_answer: String,
+    /// When the omnibar last repainted a streamed `>ask` fragment. Repaints are
+    /// coalesced to a modest cadence: a full chrome redraw per token contends
+    /// with burn's generation on the shared GPU (co-resident inference + render),
+    /// so streaming every token is both janky and slower. The final answer always
+    /// paints regardless. (burn brief Lane 3; D1 contention.)
+    pub(crate) ask_last_paint: Option<std::time::Instant>,
+    /// Content-embedding graph arrangement (burn brief Lane 5, P4): the embedding
+    /// provider + recompute gate that derives the orrery's affinity signal from node
+    /// content. Recomputed (throttled, revision-gated) while "cluster by affinity" is
+    /// on and injected via `Orrery::set_content_affinity`. Behind the `content-affinity`
+    /// feature so the default build's affinity toggle stays structural.
+    ///
+    /// `Option` only so the render path can `take()` it out to break the self-borrow
+    /// while recomputing against a pane's graph (the gnode-pool idiom); always `Some`
+    /// except transiently mid-recompute.
+    #[cfg(feature = "content-affinity")]
+    pub(crate) content_arrangement: Option<crate::content_affinity::ContentArrangement>,
     /// The nematic engine registry, for rendering "last visit" snapshot cards
     /// host-side from the durable content cache (no actor). (Card #4.)
     pub(crate) engine_registry: EngineRegistry,

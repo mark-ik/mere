@@ -50,6 +50,15 @@ smolweb = ["pelt-desktop/smolweb"]
 # llama-family model (TinyLlama today) when `MERE_TINYLLAMA_DIR` points at a
 # checkpoint. (burn brief Lane 3 — meerkat host wiring.)
 local-inference = ["infer/decoder-wgpu"]
+# Content-embedding graph arrangement for the orrery's affinity force (burn brief
+# Lane 5, P4): embeds each node's text and clusters content-similar nodes, driving
+# the "cluster by affinity" force from node content instead of structural Jaccard.
+# Off by default so the shipped build's affinity toggle stays structural. Pulls the
+# `embed` crate at its default (pure-Rust, burn-free) — the lexical feature-hashing
+# provider (clusters by shared vocabulary). A later `semantic-embeddings` feature
+# upgrades the provider to a Burn-backed BERT model. Mirrors `local-inference`'s
+# opt-in shape.
+content-affinity = ["dep:embed"]
 
 [lib]
 name = "meerkat"
@@ -186,6 +195,11 @@ fetch = { workspace = true }
 # `actor`-only here: light (armillary + the CannedProvider stub, no burn). The
 # `local-inference` meerkat feature adds `infer/decoder-wgpu` for real models.
 infer = { workspace = true, features = ["actor"] }
+# Content-embedding graph arrangement (burn brief Lane 5, P4). Optional — only the
+# `content-affinity` feature compiles it. embed's default is pure-Rust (the lexical
+# feature-hashing provider), so this stays burn-free until a later `semantic-
+# embeddings` feature adds `embed/bert`.
+embed = { workspace = true, optional = true }
 content-contract = { workspace = true }
 crawl = { workspace = true }
 import = { workspace = true }
