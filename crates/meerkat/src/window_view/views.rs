@@ -291,9 +291,14 @@ pub(crate) fn focus_card_view(fc: &FocusCard) -> ShellView {
             // `overlay_rect` owns the geometry (and the hit-test class); the card's visuals
             // (clip, radius, shadow) ride the inner div, which fills the positioned box —
             // adding a `style` to the overlay element would clobber its geometry. (Overlay P2.)
+            // A page-like light background so the card is a visible surface even if the
+            // peek `<img>` has not painted (its own bg is transparent — without this the
+            // card reads as just its shadow over the dark orrery). The img fills over it
+            // when it renders. (Card legibility.)
             let card: ShellView = Box::new(el::<_, ShellState, ()>("div", vec![img]).attr(
                 "style",
                 "width:100%;height:100%;box-sizing:border-box;overflow:hidden;\
+                     background-color:rgb(250,250,252);\
                      border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,0.55)",
             ));
             Box::new(

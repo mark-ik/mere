@@ -328,12 +328,22 @@ impl WindowCtx<'_> {
                 // external-texture could not give. (Layering fix.)
                 const PEEK_W: u32 = 300;
                 const PEEK_H: u32 = 390;
+                // Clear the peek to a page-like light, not the dark chrome CARD_BG:
+                // web content renders faithfully (HTML_SHEET's light body), so a short
+                // page's uncovered area should read as page whitespace, not a dark
+                // slab. A genuinely dark site paints its own bg over this. (Card legibility.)
+                const PEEK_BG: wgpu::Color = wgpu::Color {
+                    r: 0.980,
+                    g: 0.980,
+                    b: 0.988,
+                    a: 1.0,
+                };
                 let (tex, _view) = core.rasterize_for(
                     super::surface_keys::SNAPSHOT_PEEK,
                     &scene,
                     PEEK_W,
                     PEEK_H,
-                    ColorLoad::Clear(CARD_BG),
+                    ColorLoad::Clear(PEEK_BG),
                 );
                 let rgba = read_texture_rgba(core.device(), core.queue(), &tex, PEEK_W, PEEK_H);
                 if let Some(png_bytes) = png_bytes_from_rgba(&rgba, PEEK_W, PEEK_H) {
