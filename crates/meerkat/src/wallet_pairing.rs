@@ -584,10 +584,12 @@ mod tests {
     #[test]
     fn minted_offer_round_trips_from_cbor_and_summary_json() {
         let dir = tempdir().expect("tempdir");
+        let persona = PersonaId::new();
+        ensure_wallet_state(dir.path(), persona, "Delegator").expect("wallet");
         let request = RemoteAuthPairingTicketRequest {
             issued_at_ms: 1234,
             expires_at_ms: Some(5678),
-            personas: vec![PersonaId::new()],
+            personas: vec![persona],
             scopes: vec!["identity.act".into()],
             attenuations: vec!["no-subdelegation".into()],
         };
