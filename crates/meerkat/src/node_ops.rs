@@ -31,6 +31,17 @@ impl WindowCtx<'_> {
         height: u32,
         url_hint: Option<String>,
     ) {
+        // Never deposit a blank/uniform thumbnail. A blank peek compresses to a few
+        // hundred bytes while a real content capture is kilobytes; depositing a blank
+        // sticks a dead preview the snapshot card then serves as truth (§5 item 1
+        // reads thumbnails first). This is the funnel every capture-based deposit
+        // routes through — scrying, live band, idle refresh — so one guard keeps them
+        // all honest. The synthesized-peek path is gated at its own source (an empty
+        // scene never rasterizes). (Honest deposit — summoning design §4.)
+        const BLANK_THUMBNAIL_MAX: usize = 1024;
+        if png_bytes.len() <= BLANK_THUMBNAIL_MAX {
+            return;
+        }
         let cache_url = self
             .orrery()
             .graph()

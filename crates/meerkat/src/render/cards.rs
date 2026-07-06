@@ -309,17 +309,23 @@ impl crate::WindowCtx<'_> {
                         .snapshot_data_uris
                         .get(&member)
                         .is_some_and(|snapshot| snapshot.url == url);
-                    // Only fall back to the persisted thumbnail when the current url
-                    // has no cached body to re-render from. A persisted thumbnail can
-                    // be stale or blank (captured before the body was fetched), and
-                    // trusting it over an available body sticks a blank card — the
-                    // re-render below produces real content instead. (Blank-snapshot fix.)
-                    if !cached && self.load_cached(&url).is_none() {
+                    // Prefer the node's persisted thumbnail PNG — the deposited last-seen
+                    // pixels, the summoning design's §5 item 1 priority — falling through
+                    // to a synthesized re-render below only when there is no usable
+                    // thumbnail. Blank-guard: a blank/uniform peek compresses to a few
+                    // hundred bytes while a real content peek is kilobytes, so a
+                    // suspiciously-small PNG is treated as absent (a legacy blank from
+                    // before deposits were gated non-blank) and falls through to a fresh
+                    // re-render, which then deposits honest content over it.
+                    // (Reconcile to thumbnail-first + blank-guard.)
+                    const BLANK_THUMBNAIL_MAX: usize = 1024;
+                    if !cached {
                         let persisted = self
                             .orrery()
                             .graph()
                             .get_node_by_id(member)
                             .and_then(|(_, node)| node.thumbnail_png.as_deref())
+                            .filter(|png| png.len() > BLANK_THUMBNAIL_MAX)
                             .and_then(crate::render::png_data_uri);
                         if let Some(data_uri) = persisted {
                             if self.view.snapshot_data_uris.len() >= 256 {
