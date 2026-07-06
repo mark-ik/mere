@@ -271,15 +271,73 @@ gets bound.
   (adds the burn tree, ~5.5min cold). Headed launch with the model
   confirmed burn-wgpu and netrender's wgpu **coexist in one process**
   (app ran + rendered, infer actor started) — the practical D1 check.
-  Runtime `>ask`-answer capture pending a release build (debug burn
-  tensor upload is too slow to time), and blocked from CI-style
-  verification only by an **unrelated pre-existing break**:
-  `crates/meerkat/src/ingest.rs`'s own `#[cfg(test)]` block is stale
-  against a committed `NodeProperty` refactor (asserts `(String, String)`
-  tuples where the type is now a struct), so `cargo test -p meerkat --lib`
-  will not compile until that file's owner fixes it — not this plan's
-  scope. The `>ask` shell_eval unit test is written (mirrors the
-  recall/scene tests) and will pass once the lib test target compiles.
+  The `>ask` shell_eval unit test is written (mirrors the recall/scene
+  tests) and now passes: the lib test target was blocked from compiling by
+  an unrelated stale test — `crates/meerkat/src/ingest.rs`'s `#[cfg(test)]`
+  asserted `(String, String)` property tuples against the committed
+  `NodeProperty` struct refactor — fixed here (match `predicate`/`value`
+  fields; `page_extract_enriches…` + `ask_records…` both green). Three
+  further lib tests failed, all pre-existing regressions from other
+  concurrent work surfaced (not caused) by unblocking the compile; Mark
+  authorized fixing them (the owning agent is mid-plan on wallet/persona).
+  All three now pass — full meerkat lib suite green, 302 tests:
+  - `graph_delta_log_round_trips_and_replays`: two parts. (a) The captured
+    count is 53, not 55 — the statement-aware-writes refactor folds each
+    semantic-predicate statement into the predicate write, so the two
+    predicate deltas capture once each instead of twice; verified by
+    tracing every `apply_graph_delta` call to its single capture, and the
+    replay reconstructs the graph, so nothing is dropped. (b) The snapshot
+    round-trip compared minted `statement_id`s (device + time + sequence)
+    and wall-clock `last_visited_ms` (`TouchNodeLastVisited` carries no
+    timestamp, so replay re-stamps) — both non-deterministic across a
+    replay, so the normalizer now blanks them, exactly as it already zeroes
+    `timestamp_secs`. **Open question flagged to the delta owner**: whether
+    replay *should* preserve `last_visited_ms` for crash-recovery fidelity
+    (else every node reads "visited just now" after recovery) — a
+    delta-capture design call, not a test bug.
+  - `roster_view::links_tab_lists_relation_families_distinctly`: the test
+    helper built three same-endpoint rows all flagged `starts_bundle`,
+    which production's `build_link_rows` never does (it sets the flag once
+    per `(from, to)` group). Tolerated until the concurrent `Keyed` work
+    added `assert_unique_keys`; now a duplicate-key panic. Fixed the test to
+    use three distinct endpoint pairs (three real bundles → three sections),
+    keeping its assertions with realistic data.
+  - `wallet_pairing::minted_offer_round_trips…`: passed once graph_delta_log
+    was fixed, untouched — a cascade. The panicking graph_delta_log test
+    leaked the process-global delta-capture hook (it panicked before its
+    `set_captured_delta_hook(None)` cleanup), and cargo runs tests in
+    parallel, so a concurrently-running test that minted graph state saw the
+    stale hook. Fixing graph_delta_log's cleanup path removed the pollution.
+- 2026-07-06 — **`>ask` proven end-to-end headed on the real model.**
+  Release build of meerkat + `local-inference`; drove the real window
+  (Ctrl+L to focus the omnibar, SendKeys `>ask The capital of France is`,
+  Enter). Receipt from the `meerkat::infer` trace:
+  `ask received prompt="The capital of France is"` →
+  `ask finished answer=Paris, which is the capital of France.` — the exact
+  continuation the standalone real-model test produced, now through the
+  real omnibar → classify → shell_eval → `start_ask` → actor → drain →
+  chrome path. Model load in-process: read 2.2GB (~1.8s) + burn-wgpu
+  device-init & tensor upload (~5s) = **~7s**, alongside netrender's own
+  wgpu device, app rendering throughout (the D1 coexistence proof, real
+  model resident).
+  - **D1 contention, observed and mitigated.** First headed run streamed a
+    full chrome repaint per token; with burn's matmuls and vello's raster
+    sharing the GPU in one process, per-token cost ~doubled and a
+    200-token answer ran >40s. Added a repaint coalesce (omnibar updates
+    at most ~every 150ms while streaming; the final answer always paints):
+    the same answer now finishes in ~18s. In-app throughput is well below
+    the standalone 9.95 tok/s because inference and rendering serialize on
+    one queue — the concrete cost of *not* isolating burn's device, a real
+    input to the eventual D1 decision.
+  - Instrumentation kept (not scaffolding): structured `meerkat::infer`
+    tracing for model-load progress and the ask lifecycle (received /
+    finished), matching the fetch/content actor startup traces.
+  - **Follow-ups** (noted, not blocking): a raw question like "what is the
+    capital of France" greedy-decodes to "…France?" because TinyLlama-Chat
+    wants its chat template and the provider treats templating as
+    above-the-seam — a per-model prompt-template config would make `>ask`
+    answer questions well. The omnibar is a cramped surface for a
+    multi-sentence answer; a dedicated answer card is the natural home.
 - 2026-07-05 — P3 landed ahead of P1 (see Findings for why). `infer::actor`
   behind the `actor` feature (armillary optional dep, so the seam core
   stays wasm-clean — `cargo check -p infer --target wasm32-unknown-unknown`

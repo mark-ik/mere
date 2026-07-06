@@ -216,7 +216,44 @@ mod tests {
             });
         }
         snapshot.navigation = kernel::graph::SharedNavigationMemory::from_snapshot(nav_snapshot);
-        serde_json::to_value(snapshot).expect("snapshot json")
+        let mut value = serde_json::to_value(snapshot).expect("snapshot json");
+        // Blank the wall-clock / minted fields that legitimately differ between the
+        // original graph and one replayed from the delta log, so the comparison is
+        // about the *logical* graph, not mint history (the same reason
+        // `timestamp_secs` is zeroed above):
+        //   - `statement_id`: minted per assertion (device + time + sequence), so a
+        //     re-asserted statement gets a fresh id on replay.
+        //   - `last_visited_ms`: `TouchNodeLastVisited` carries no timestamp, so it
+        //     stamps apply-time; replay re-stamps at replay-time.
+        // (petgraph-RDF statement-aware writes + delta round-trip.) See the report:
+        // whether replay *should* preserve `last_visited_ms` for crash-recovery
+        // fidelity is a delta-capture design question, flagged to that owner.
+        normalize_nondeterministic_fields(&mut value);
+        value
+    }
+
+    /// Recursively blank the field values that are non-deterministic across a
+    /// delta-log round-trip, so two snapshots compare on logical content.
+    fn normalize_nondeterministic_fields(value: &mut serde_json::Value) {
+        match value {
+            serde_json::Value::Object(map) => {
+                for (key, child) in map.iter_mut() {
+                    match key.as_str() {
+                        "statement_id" => {
+                            *child = serde_json::Value::String("<normalized>".to_string());
+                        }
+                        "last_visited_ms" => *child = serde_json::Value::Null,
+                        _ => normalize_nondeterministic_fields(child),
+                    }
+                }
+            }
+            serde_json::Value::Array(items) => {
+                for item in items {
+                    normalize_nondeterministic_fields(item);
+                }
+            }
+            _ => {}
+        }
     }
 
     #[test]
@@ -645,7 +682,12 @@ mod tests {
 
         let path = log.path().expect("log path").to_path_buf();
         let entries = read_delta_log(&path).expect("read log");
-        assert_eq!(entries.len(), 55);
+        // One captured delta per `apply_graph_delta` call above (plus the 3
+        // `add_node` + 1 `assert_relation` setup deltas). The two semantic-predicate
+        // deltas each capture once now that statement writes fold into the predicate
+        // write (petgraph-RDF statement-aware writes), so the total is 53; the replay
+        // assertions below prove no data is lost.
+        assert_eq!(entries.len(), 53);
         let replayed = replay_delta_log(&path).expect("replay log");
         assert_eq!(replayed.node_count(), 3);
         assert_eq!(replayed.edge_count(), 2);

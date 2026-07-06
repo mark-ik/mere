@@ -301,18 +301,17 @@ mod tests {
         let node = &c.nodes[0];
         assert_eq!(node.id, "https://x.test/page");
         assert_eq!(node.title.as_deref(), Some("The Page"));
-        assert!(node.properties.contains(&(
-            SCHEMA_DESCRIPTION.to_string(),
-            "What it is about.".to_string()
-        )));
-        assert!(
+        // `properties` is `Vec<NodeProperty>` (a literal statement per entry, with
+        // a minted `statement_id`), so match on the (predicate, value) pair rather
+        // than whole-struct equality.
+        let has_prop = |predicate: &str, value: &str| {
             node.properties
-                .contains(&(SCHEMA_URL.to_string(), "https://x.test/canon".to_string()))
-        );
-        assert!(node.properties.contains(&(
-            "https://ogp.me/ns#image".to_string(),
-            "https://x.test/og.png".to_string()
-        )));
+                .iter()
+                .any(|p| p.predicate == predicate && p.value == value)
+        };
+        assert!(has_prop(SCHEMA_DESCRIPTION, "What it is about."));
+        assert!(has_prop(SCHEMA_URL, "https://x.test/canon"));
+        assert!(has_prop("https://ogp.me/ns#image", "https://x.test/og.png"));
         // Links are NOT contributed as edges here (the crawl frontier owns the link graph).
         assert!(c.edges.is_empty(), "no link edges from a single visit");
     }

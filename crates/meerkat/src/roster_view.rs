@@ -247,7 +247,11 @@ mod tests {
             family_label: format!("{family:?}"),
             kind_label: kind.to_string(),
             source_label: None,
-            selector: RelationSelector::Semantic(SemanticSubKind::Cites),
+            // A distinct selector per family, matching how real relations between the
+            // same pair differ (see `link_card_groups_relations_by_family`). Rows in
+            // the link table are keyed by (from, to, selector), so identical selectors
+            // across families would collide — a `Keyed` duplicate-key panic.
+            selector: RelationSelector::Family(family),
             selected: false,
             starts_bundle: true,
         }
@@ -348,13 +352,22 @@ mod tests {
 
     #[test]
     fn links_tab_lists_relation_families_distinctly() {
+        // Three relations, each a distinct bundle (own endpoint pair), so each
+        // starts its own section — matching production, where `build_link_rows`
+        // marks `starts_bundle` once per (from, to) group. Rows and bundles are
+        // keyed by their endpoints, so distinct pairs also keep the `Keyed` view's
+        // keys unique.
+        let mut rows = vec![
+            link_row("Cites", EdgeFamily::Semantic),
+            link_row("Traversal", EdgeFamily::Traversal),
+            link_row("Copied", EdgeFamily::Provenance),
+        ];
+        for (i, row) in rows.iter_mut().enumerate() {
+            row.to = GraphMemberId::from_u128(2 + i as u128);
+        }
         with_rendered(
             RosterSnapshot {
-                link_rows: vec![
-                    link_row("Cites", EdgeFamily::Semantic),
-                    link_row("Traversal", EdgeFamily::Traversal),
-                    link_row("Copied", EdgeFamily::Provenance),
-                ],
+                link_rows: rows,
                 ..Default::default()
             },
             RosterTab::Links,

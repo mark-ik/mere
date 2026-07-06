@@ -645,6 +645,7 @@ impl WindowCtx<'_> {
         }
         self.shared.content.ask_id += 1;
         self.shared.content.ask_answer.clear();
+        self.shared.content.ask_last_paint = None;
         let id = self.shared.content.ask_id;
         let request = infer::GenerationRequest {
             prompt: prompt.to_string(),
@@ -662,6 +663,7 @@ impl WindowCtx<'_> {
             "asked",
             Some(prompt.to_string()),
         );
+        tracing::info!(target: "meerkat::infer", id, prompt, "ask received");
         format!("thinking: {prompt}")
     }
 
@@ -685,9 +687,21 @@ impl WindowCtx<'_> {
             InferUpdate::Started { id } if matches_current(id) => {}
             InferUpdate::Fragment { id, text } if matches_current(id) => {
                 self.shared.content.ask_answer.push_str(&text);
-                let shown = self.shared.content.ask_answer.clone();
-                self.view.chrome_update(move |c| c.show_location(&shown));
-                self.view.request_redraw();
+                // Coalesce repaints: a full chrome redraw per token contends with
+                // generation on the shared GPU. Paint at most ~every 150ms while
+                // streaming; the final `Finished` always paints the whole answer.
+                const MIN_PAINT_GAP: std::time::Duration = std::time::Duration::from_millis(150);
+                let due = self
+                    .shared
+                    .content
+                    .ask_last_paint
+                    .is_none_or(|t| t.elapsed() >= MIN_PAINT_GAP);
+                if due {
+                    self.shared.content.ask_last_paint = Some(std::time::Instant::now());
+                    let shown = self.shared.content.ask_answer.clone();
+                    self.view.chrome_update(move |c| c.show_location(&shown));
+                    self.view.request_redraw();
+                }
             }
             InferUpdate::Finished { id, text } if matches_current(id) => {
                 self.shared.content.ask_answer = text.clone();
@@ -701,6 +715,7 @@ impl WindowCtx<'_> {
                 self.shared
                     .observability
                     .record_actor("infer", "finished", None);
+                tracing::info!(target: "meerkat::infer", answer = %self.shared.content.ask_answer, "ask finished");
             }
             InferUpdate::Failed { id, error } if matches_current(id) => {
                 let shown = format!("ask failed: {error}");
