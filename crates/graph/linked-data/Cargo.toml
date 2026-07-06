@@ -32,6 +32,7 @@ query = ["dep:spareval", "dep:spargebra", "dep:oxigraph"]
 kernel.workspace = true
 serde_json.workspace = true
 oxjsonld = "0.2"
+oxttl = { version = "0.2", features = ["rdf-12"] }
 oxrdf = { version = "0.3", features = ["rdf-12"] }
 oxigraph = { version = "0.5", default-features = false, optional = true, features = ["rdf-12"] }
 spareval = { version = "0.2", optional = true, features = ["sparql-12"] }

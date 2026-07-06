@@ -383,6 +383,14 @@ impl crate::WindowCtx<'_> {
         // produces no card at all (live tile, snapshot, or unvisited placeholder).
         // DEBUG so it's free until enabled. (Content-card health.)
         let focused = self.focused_member();
+        // Whether the focused node's *current* url has a cached body (the snapshot
+        // re-render's content source). Cloned to a String first so the orrery borrow
+        // releases before `load_cached`.
+        let cached_body = self
+            .orrery()
+            .focused_url()
+            .map(|u| u.to_string())
+            .map(|u| self.load_cached(&u).is_some());
         tracing::debug!(
             target: "meerkat::content_card",
             focused = ?focused,
@@ -395,17 +403,19 @@ impl crate::WindowCtx<'_> {
                 .map(|m| self.view.workbench.open_members().contains(&m)),
             snapshot = snapshot_card.is_some(),
             unvisited = unvisited_card.is_some(),
-            // `snap_rerendered` = the snapshot is a re-render of the cached body
-            // (its op count), vs `false`/absent when it paints the persisted
-            // thumbnail PNG instead; `snap_data_uri` = a persisted thumbnail is
-            // cached for this member. Together they name the snapshot's source, so a
-            // blank snapshot is attributable to an empty re-render vs a dropped
-            // thumbnail image.
-            snap_rerendered = snapshot_card
-                .as_ref()
-                .and_then(|(_, _, _, b)| b.as_ref().map(|(s, _)| s.ops.len()))
-                .unwrap_or(0),
+            // Unambiguous snapshot source: `thumbnail` = paints the persisted
+            // data-URI PNG (`built=None`); `empty-rerender` = re-rendered the
+            // current url but got a 0-op scene (no cached body -> blank card);
+            // `rerender(N)` = a real re-rendered scene. This distinguishes a blank
+            // card from a dropped thumbnail vs a bodyless re-render.
+            snapshot_source = match &snapshot_card {
+                Some((_, _, _, None)) => "thumbnail".to_string(),
+                Some((_, _, _, Some((s, _)))) if s.ops.is_empty() => "empty-rerender".to_string(),
+                Some((_, _, _, Some((s, _)))) => format!("rerender({})", s.ops.len()),
+                None => "none".to_string(),
+            },
             snap_data_uri = focused.map(|m| self.view.snapshot_data_uris.contains_key(&m)),
+            cached_body = ?cached_body,
             "focused card resolution",
         );
         (snapshot_card, unvisited_card)

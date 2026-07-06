@@ -90,17 +90,18 @@ pub struct GraphContribution {
     pub edges: Vec<EdgeContribution>,
 }
 
-/// JSON-LD ingest failure.
+/// RDF ingest failure (JSON-LD, N-Quads, or TriG).
 #[derive(Debug)]
 pub enum IngestError {
-    /// The bytes were not valid JSON-LD (oxjsonld parse/expansion error).
+    /// The bytes were not valid for their RDF syntax (oxjsonld / oxttl
+    /// parse/expansion error).
     Parse(String),
 }
 
 impl std::fmt::Display for IngestError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            IngestError::Parse(msg) => write!(f, "JSON-LD parse error: {msg}"),
+            IngestError::Parse(msg) => write!(f, "RDF parse error: {msg}"),
         }
     }
 }

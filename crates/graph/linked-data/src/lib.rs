@@ -41,6 +41,14 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 /// JSON-LD ingest (Phase 2): `application/ld+json` → a graph contribution.
 pub mod ingest;
 
+/// Standard-vocabulary alignment for Mere's recognized relations: the 3-category
+/// (exact / approximate / Mere-only) mapping projected as `owl:equivalentProperty`
+/// / `rdfs:subPropertyOf` quads.
+pub mod vocab;
+
+/// Turtle-family file I/O (N-Quads / TriG) for the RDF projection, via `oxttl`.
+pub mod serialize;
+
 /// SPARQL query over the graph via spareval evaluating directly over the
 /// projected dataset (the `query` feature). Consumes [`dataset_quads`] as its
 /// projection.
@@ -51,9 +59,11 @@ pub mod query;
 pub use ingest::{ApplyOutcome, apply_contribution};
 pub use ingest::{
     ContextCache, EdgeContribution, GraphContribution, IngestError, NodeContribution, from_html,
-    from_html_with_contexts, from_jsonld, from_jsonld_with_contexts, is_bundled_context,
+    from_html_with_contexts, from_jsonld, from_jsonld_with_contexts, from_quads, is_bundled_context,
     referenced_context_urls,
 };
+pub use serialize::{from_nquads, from_trig, to_nquads, to_trig};
+pub use vocab::{Alignment, alignment, vocabulary_alignment_quads};
 
 /// `schema:name` — the curated mapping target for a node's title.
 pub(crate) const SCHEMA_NAME: &str = "https://schema.org/name";

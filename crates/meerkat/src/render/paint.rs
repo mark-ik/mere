@@ -312,7 +312,13 @@ impl WindowCtx<'_> {
         // per member+url cache entry, then composite uniform-scaled into the small dest with
         // the same vertical-scroll UV window as the other cards.
         if let Some((member, url, _, built)) = snapshot_card {
-            if let Some((scene, _content_h)) = built {
+            // Never cache/persist a BLANK peek. A snapshot re-rendered before its body
+            // is fetched (or with no cached body) produces a 0-op scene; caching it
+            // sticks a blank thumbnail that later frames reuse (`built=None` on the
+            // cache hit) even after the body arrives — the blank-card bug. Filtering
+            // the empty scene out here means the next frame re-renders and caches only
+            // once there is real content. (Blank-snapshot fix.)
+            if let Some((scene, _content_h)) = built.filter(|(s, _)| !s.ops.is_empty()) {
                 let snapshot_cache_fill_t = std::time::Instant::now();
                 // Render the page's top peek, read it back, and encode a PNG data-URI for the
                 // snapshot card's chrome `<img>`. The card shows only its top band, so a fixed

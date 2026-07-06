@@ -384,6 +384,15 @@ pub fn sub_kind_from_iri(iri: &str) -> Option<SemanticSubKind> {
     SemanticSubKind::iter().find(|&sub_kind| predicate_iri(sub_kind) == iri)
 }
 
+/// Every recognized semantic sub-kind, in declaration order. The kernel owns the
+/// enumeration of its recognized relation vocabulary; downstream projection code
+/// (e.g. linked-data's standard-vocabulary alignment) maps over it without
+/// re-deriving the list or pulling in `strum`.
+pub fn all_semantic_sub_kinds() -> impl Iterator<Item = SemanticSubKind> {
+    use strum::IntoEnumIterator;
+    SemanticSubKind::iter()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize, Default)]
 pub struct TraversalData {
     pub traversals: Vec<Traversal>,

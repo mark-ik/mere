@@ -158,13 +158,21 @@ and the model can represent the full profile construct set.
   *exact* standard predicate (cites → `cito:cites`, same-entity → `owl:sameAs`),
   *approximate* via `rdfs:subPropertyOf` to a standard term, and *Mere-only*
   (`mere:ns`) for the genuinely novel (`Blocks`, `NextStep`). Per the compliance
-  audit.
+  audit. **Landed 2026-07-06** (`vocab::vocabulary_alignment_quads`): alignment
+  quads about the *properties* (not rewritten instances) in a `mere:graph#vocabulary`
+  named graph — `owl:equivalentProperty` for exact, `rdfs:subPropertyOf` for
+  approximate, nothing for Mere-only.
 - **Round-trip test = the losslessness gate.** `RDF → kernel (ingest) →
   dataset_quads → RDF` must be equal as a **normalized dataset compare** (sorted
   N-Quads), not raw byte equality. Skolemized blanks make it exact (no isomorphism
   dance). Full RDFC-1.0 is deferred with federation/signing (`rdf-canon` is unstable
   today).
-- Turtle / N-Quads I/O via `oxttl` (cheap interop win).
+- Turtle / N-Quads I/O via `oxttl` (cheap interop win). **Landed 2026-07-06**
+  (`serialize::{to,from}_{nquads,trig}`): N-Quads (canonical) and TriG (both carry
+  named graphs; plain Turtle would flatten the scopes). Each serialization appends
+  the vocabulary alignment so a file is self-describing; ingest drops that graph
+  (re-derivable schema) so a round trip through a file stays lossless. RDF 1.2
+  triple terms (reifier metadata) ride through both via oxttl's `rdf-12` feature.
 
 Done when: the round-trip test is green across the full feature set (typed
 literals, lang tags, named graphs, reifier metadata, multiple statements on one
@@ -252,7 +260,16 @@ kernel directly, with no oxigraph Store in the path.
 - **Common-case bloat**: per-statement `provenance` + `graph_scope` on every
   statement/property must not tax the 99% case (human-asserted, now, default graph).
   Keep `provenance` `Option` and the default graph_scope free, and keep a
-  snapshot-size before/after test as a gate.
+  snapshot-size before/after test as a gate. **Gate landed 2026-07-06**
+  (`kernel graph::tests::snapshot_size`): a common-case property is pinned at
+  ~229 B in the compact-JSON snapshot (ceiling 280), and populating the metadata
+  must cost strictly more (pay-per-use). **Finding**: the metadata fields are
+  `Option`-typed but not `#[serde(skip_serializing_if)]`, so a common-case
+  property still emits ~90 B of `null`/default keys — bounded, but not literally
+  "free". A follow-up could add `skip_serializing_if` to
+  `PersistedSemanticStatement` / `PersistedNodeProperty` (backward-compatible via
+  the existing `#[serde(default)]`) to reclaim it; the gate would then lock in the
+  cheaper baseline.
 
 ## Progress
 
@@ -297,6 +314,24 @@ kernel directly, with no oxigraph Store in the path.
   the dataset/SPARQL path now emits named-graph quads from those scopes. The
   JSON-LD shapers still deliberately stay default-graph-only, and curated
   `title`/`tags` plus `rdf:type` classifications are not yet graph-scope-aware.
+- **2026-07-06 (Phase 2 completion: vocab alignment + Turtle/N-Quads I/O + bloat gate)** —
+  The three Phase 2 tail items landed. (1) **Standard-vocabulary alignment**
+  (`vocab.rs`): each recognized `SemanticSubKind` is categorized exact / approximate /
+  Mere-only (CiTO / OWL / RDFS / Dublin Core anchors from the stance doc; the rest
+  conservative), published as `owl:equivalentProperty` / `rdfs:subPropertyOf` quads
+  *about the properties* in a `mere:graph#vocabulary` named graph. Instance data keeps
+  canonical `mere:rel#` IRIs, so the round trip is untouched; a consumer bridges via a
+  reasoner. The kernel now owns the relation enumeration (`all_semantic_sub_kinds`); the
+  exhaustive `alignment` match forces any new sub-kind to be categorized. (2) **Turtle /
+  N-Quads file I/O** (`serialize.rs`, via `oxttl` 0.2, `rdf-12`): `to_nquads` / `to_trig`
+  serialize `dataset_quads` + the alignment (self-describing files); `from_nquads` /
+  `from_trig` parse back, dropping the re-derivable vocabulary graph so a file round trip
+  is lossless (reifier triple terms survive both formats — tested). (3) **Snapshot-size
+  gate** (`kernel graph::tests::snapshot_size`): pins the common-case property at ~229 B
+  and asserts metadata is pay-per-use; surfaced that the `Option` metadata still emits
+  ~90 B of `null` keys (see the common-case-bloat risk for the `skip_serializing_if`
+  follow-up). linked-data 36/36 (`--features query`), kernel 281/281. Still ahead in the
+  plan: the JSON-LD shaper gaps (deliberately unchanged) and Phase 4 (gated).
 - **2026-07-06 (Phase 3 landed: `>sparql` on spareval)** — The query path now evaluates
   directly over the projection: `sparql()` collects `dataset_quads` into an
   `oxrdf::Dataset` and runs `spareval::QueryEvaluator` (spargebra parse, `sparql-12`
