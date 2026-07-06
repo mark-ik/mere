@@ -484,7 +484,7 @@ impl WindowCtx<'_> {
                 .get_node_by_id(member)
                 .map(|(_, node)| node.url().to_string())
             {
-                let scroll_y = self.view.scroll.get(&member).copied().unwrap_or(0.0);
+                let scroll_y = self.member_scroll_y(member);
                 let cookies = super::fetch::session_cookies_for(&url);
                 self.view.scrying.begin_flip(
                     member,
