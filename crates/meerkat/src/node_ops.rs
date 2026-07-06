@@ -266,7 +266,9 @@ impl WindowCtx<'_> {
             &scene,
             peek_w,
             peek_h,
-            netrender::ColorLoad::Clear(crate::CARD_BG),
+            // Page-like light, matching the on-demand peek (the same faithful-web
+            // reasoning): a synthesized deposit must not bake a dark slab. (Honest deposit.)
+            netrender::ColorLoad::Clear(crate::THUMBNAIL_BG),
         );
         let rgba =
             crate::render::read_texture_rgba(core.device(), core.queue(), &tex, peek_w, peek_h);

@@ -606,3 +606,16 @@ pub(crate) const CARD_BG: wgpu::Color = wgpu::Color {
     b: 0.145,
     a: 1.0,
 };
+
+/// Background a page thumbnail/peek clears to before its scene paints. Page-like
+/// light, not the dark `CARD_BG`: web content renders faithfully (HTML_SHEET's
+/// light body), so a short page's uncovered area should read as page whitespace,
+/// not a dark slab; a genuinely dark site paints its own bg over it. Shared by the
+/// on-demand snapshot peek and the synthesized-tile deposit so every thumbnail
+/// producer agrees. (Card legibility — honest deposits.)
+pub(crate) const THUMBNAIL_BG: wgpu::Color = wgpu::Color {
+    r: 0.980,
+    g: 0.980,
+    b: 0.988,
+    a: 1.0,
+};
