@@ -226,7 +226,8 @@ kernel directly, with no oxigraph Store in the path.
   unique and intrinsically un-internable. So interning targets the wrong whale.
   The footprint levers in ROI order are: (1) **externalize image blobs**
   (content-addressed store, keep a hash in the node) — reclaims ~64% and is a
-  bigger, simpler win than Phase 4; (2) **slim `EdgePayload`** (box the rare edge
+  bigger, simpler win than Phase 4, now scoped in
+  [node_image_externalization_plan](2026-07-06_node_image_externalization_plan.md); (2) **slim `EdgePayload`** (box the rare edge
   families / a compact statement record) — chips the 28%; (3) the term dictionary
   / slotmap kernel — last, ~1%, and only meaningful *after* (1) makes strings the
   dominant remaining cost. Phase 4 stays gated, and its Phase 3 on-ramp (a
