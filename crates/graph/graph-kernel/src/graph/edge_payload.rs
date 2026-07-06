@@ -22,7 +22,8 @@ use crate::types::GraphScope;
 
 use super::edge_data::{
     ArrangementData, ContainmentData, EdgeMetrics, ImportedData, ProvenanceData, SemanticData,
-    SemanticStatement, Traversal, TraversalData, predicate_iri,
+    SemanticStatement, SemanticStatementSpec, StatementAssert, Traversal, TraversalData,
+    predicate_iri,
 };
 use super::edge_taxonomy::{
     ArrangementSubKind, EdgeAssertion, EdgeFamily, RelationSelector, SemanticSubKind,
@@ -273,6 +274,33 @@ impl EdgePayload {
         self.semantic
             .get_or_insert_with(SemanticData::default)
             .insert_statement(None, predicate, None, graph_scope, None, None)
+    }
+
+    /// Statement-aware assert on this pair bucket (creates the semantic
+    /// sidecar if absent). Returns the fact handle + whether anything changed.
+    pub(crate) fn assert_semantic_statement(
+        &mut self,
+        spec: SemanticStatementSpec,
+    ) -> StatementAssert {
+        self.semantic
+            .get_or_insert_with(SemanticData::default)
+            .assert_statement(spec)
+    }
+
+    /// Precise retract by fact handle. Clears the semantic sidecar when its
+    /// last statement goes (the caller removes the petgraph edge when the
+    /// whole payload empties, same as `retract_relation`).
+    pub(crate) fn retract_semantic_statement(&mut self, statement_id: &str) -> bool {
+        let Some(data) = self.semantic.as_mut() else {
+            return false;
+        };
+        if !data.retract_statement(statement_id) {
+            return false;
+        }
+        if data.statements().is_empty() {
+            self.semantic = None;
+        }
+        true
     }
 
     pub(crate) fn push_persisted_semantic_statement(

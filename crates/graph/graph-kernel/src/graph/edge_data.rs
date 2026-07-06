@@ -125,9 +125,92 @@ pub struct SemanticData {
     pub statements: Vec<SemanticStatement>,
 }
 
+/// A statement to assert: everything a [`SemanticStatement`] carries except
+/// its id, which the kernel mints (device-safe) at assert time. The
+/// statement-aware write API's input — the petgraph-RDF plan's Phase 1
+/// requirement that interactive writes can carry per-statement metadata, not
+/// just the legacy edge-wide predicate stamp.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SemanticStatementSpec {
+    pub predicate: String,
+    pub recognized_sub_kind: Option<SemanticSubKind>,
+    pub label: Option<String>,
+    pub graph_scope: GraphScope,
+    pub provenance_iri: Option<String>,
+    pub asserted_at_ms: Option<u64>,
+}
+
+/// What [`SemanticData::assert_statement`] did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StatementAssert {
+    /// The asserted fact's handle — freshly minted, or the existing
+    /// statement's id when content-dedup matched.
+    pub statement_id: String,
+    /// Whether anything changed (a new statement, or metadata updated on the
+    /// deduped one). `false` = the exact statement already existed.
+    pub changed: bool,
+}
+
 impl SemanticData {
     pub fn statements(&self) -> &[SemanticStatement] {
         &self.statements
+    }
+
+    /// Statement-aware assert: content-dedup on
+    /// `(recognized_sub_kind, predicate, graph_scope)` (same key as
+    /// [`insert_statement`](Self::insert_statement)), updating the deduped
+    /// statement's metadata in place; a miss mints a device-safe id and
+    /// appends. Always returns the fact handle.
+    pub fn assert_statement(&mut self, spec: SemanticStatementSpec) -> StatementAssert {
+        if let Some(existing) = self.statements.iter_mut().find(|statement| {
+            statement.recognized_sub_kind == spec.recognized_sub_kind
+                && statement.predicate == spec.predicate
+                && statement.graph_scope == spec.graph_scope
+        }) {
+            let changed = existing.label != spec.label
+                || existing.provenance_iri != spec.provenance_iri
+                || existing.asserted_at_ms != spec.asserted_at_ms;
+            let statement_id = existing.statement_id.clone();
+            if changed {
+                existing.label = spec.label;
+                existing.provenance_iri = spec.provenance_iri;
+                existing.asserted_at_ms = spec.asserted_at_ms;
+                self.rebuild_compat();
+            }
+            return StatementAssert {
+                statement_id,
+                changed,
+            };
+        }
+        let statement = SemanticStatement::new(
+            spec.predicate,
+            spec.recognized_sub_kind,
+            spec.label,
+            spec.graph_scope,
+            spec.provenance_iri,
+            spec.asserted_at_ms,
+        );
+        let statement_id = statement.statement_id.clone();
+        self.statements.push(statement);
+        self.rebuild_compat();
+        StatementAssert {
+            statement_id,
+            changed: true,
+        }
+    }
+
+    /// Precise retract by fact handle. Bucket-local linear scan by design
+    /// (buckets stay small; a global id index waits for evidence). Returns
+    /// whether a statement was removed.
+    pub fn retract_statement(&mut self, statement_id: &str) -> bool {
+        let before = self.statements.len();
+        self.statements
+            .retain(|statement| statement.statement_id != statement_id);
+        if self.statements.len() == before {
+            return false;
+        }
+        self.rebuild_compat();
+        true
     }
 
     pub fn insert_statement(

@@ -19,6 +19,7 @@ use uuid::Uuid;
 
 use crate::types::GraphScope;
 
+use super::edge_data::{SemanticStatementSpec, StatementAssert};
 use super::edge_data::Traversal;
 use super::edge_payload::EdgePayload;
 use super::edge_taxonomy::{EdgeAssertion, RelationSelector, SemanticSubKind};
@@ -282,6 +283,63 @@ impl Graph {
         }
 
         Some(records)
+    }
+
+    /// Statement-aware assert (petgraph-RDF Phase 1 write API): assert one
+    /// semantic statement with full per-statement metadata on the `(from, to)`
+    /// pair bucket, creating the bucket edge if absent. Content-dedup returns
+    /// the EXISTING fact handle (updating its metadata in place); a genuine
+    /// change bumps the revision. `None` only when an endpoint is missing.
+    pub fn assert_semantic_statement(
+        &mut self,
+        from: NodeKey,
+        to: NodeKey,
+        spec: SemanticStatementSpec,
+    ) -> Option<(EdgeKey, StatementAssert)> {
+        if !self.inner.contains_node(from) || !self.inner.contains_node(to) {
+            return None;
+        }
+        let edge_key = self
+            .find_edge_key(from, to)
+            .unwrap_or_else(|| self.inner.add_edge(from, to, EdgePayload::new()));
+        let outcome = {
+            let payload = self.inner.edge_weight_mut(edge_key)?;
+            payload.assert_semantic_statement(spec)
+        };
+        if outcome.changed {
+            self.bump_revision();
+        }
+        Some((edge_key, outcome))
+    }
+
+    /// Precise retract by fact handle (the id `assert_semantic_statement`
+    /// returned, also carried on every projected reifier). Removes the
+    /// statement from the pair bucket; an emptied payload removes the petgraph
+    /// edge itself, so "there is an edge A -> B" keeps meaning "at least one
+    /// fact or other family payload exists on the pair".
+    pub fn retract_semantic_statement(
+        &mut self,
+        from: NodeKey,
+        to: NodeKey,
+        statement_id: &str,
+    ) -> bool {
+        let Some(edge_key) = self.find_edge_key(from, to) else {
+            return false;
+        };
+        let (removed, now_empty) = {
+            let Some(payload) = self.inner.edge_weight_mut(edge_key) else {
+                return false;
+            };
+            let removed = payload.retract_semantic_statement(statement_id);
+            (removed, removed && payload.is_empty())
+        };
+        if now_empty {
+            let _ = self.inner.remove_edge(edge_key);
+        }
+        if removed {
+            self.bump_revision();
+        }
+        removed
     }
 
     pub(crate) fn retract_relations(

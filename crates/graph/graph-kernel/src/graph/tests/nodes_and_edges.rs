@@ -255,6 +255,71 @@ fn test_retract_relation_by_sub_kind_between_nodes() {
     assert!(!payload.has_relation(RelationSelector::Semantic(SemanticSubKind::UserGrouped)));
 }
 
+/// The statement-aware write API (petgraph-RDF Phase 1): assert returns a
+/// device-safe fact handle; content-dedup returns the SAME handle (updating
+/// metadata in place); retract-by-id removes exactly that fact, clears the
+/// bucket, and removes the petgraph edge when the payload empties.
+#[test]
+fn statement_assert_dedups_by_content_and_retracts_by_id() {
+    use crate::graph::SemanticStatementSpec;
+    use crate::types::GraphScope;
+
+    let mut graph = Graph::new();
+    let a = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
+    let b = graph.add_node("https://b.com".to_string(), Point2D::new(1.0, 1.0));
+
+    let cites = SemanticStatementSpec {
+        predicate: "http://purl.org/spar/cito/cites".to_string(),
+        graph_scope: GraphScope::User,
+        provenance_iri: Some("mere://persona/mark".to_string()),
+        asserted_at_ms: Some(1_000),
+        ..Default::default()
+    };
+    let (edge, first) = graph.assert_semantic_statement(a, b, cites.clone()).unwrap();
+    assert!(first.changed, "fresh statement asserts");
+
+    // Same content on a different scope = a SECOND fact on the same pair.
+    let source_scope = SemanticStatementSpec {
+        graph_scope: GraphScope::Source,
+        ..cites.clone()
+    };
+    let (edge2, second) = graph
+        .assert_semantic_statement(a, b, source_scope)
+        .unwrap();
+    assert_eq!(edge, edge2, "one pair bucket");
+    assert!(second.changed);
+    assert_ne!(first.statement_id, second.statement_id);
+    assert_eq!(graph.get_edge(edge).unwrap().semantic_statements().len(), 2);
+
+    // Exact re-assert dedups to the same handle, no change.
+    let (_, again) = graph.assert_semantic_statement(a, b, cites.clone()).unwrap();
+    assert_eq!(again.statement_id, first.statement_id);
+    assert!(!again.changed, "identical statement is a no-op");
+
+    // Metadata update on the deduped statement keeps the handle, reports change.
+    let relabeled = SemanticStatementSpec {
+        label: Some("cited in the intro".to_string()),
+        ..cites
+    };
+    let (_, updated) = graph.assert_semantic_statement(a, b, relabeled).unwrap();
+    assert_eq!(updated.statement_id, first.statement_id);
+    assert!(updated.changed);
+
+    // Precise retract: the other statement survives; retracting the last
+    // semantic statement (with no other family payload) removes the edge.
+    assert!(graph.retract_semantic_statement(a, b, &first.statement_id));
+    assert_eq!(graph.get_edge(edge).unwrap().semantic_statements().len(), 1);
+    assert!(
+        !graph.retract_semantic_statement(a, b, &first.statement_id),
+        "retract is idempotent per id"
+    );
+    assert!(graph.retract_semantic_statement(a, b, &second.statement_id));
+    assert!(
+        graph.find_edge_key(a, b).is_none(),
+        "an emptied payload removes the petgraph edge"
+    );
+}
+
 #[test]
 fn test_assert_relation_merges_semantics_on_single_stored_edge() {
     let mut graph = Graph::new();

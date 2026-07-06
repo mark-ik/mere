@@ -90,14 +90,76 @@ pub enum GraphScope {
 }
 
 static NEXT_LOCAL_STATEMENT_NONCE: AtomicU64 = AtomicU64::new(1);
+static STATEMENT_MINTER_SALT: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
 
+/// Seed the statement-id minter's per-process salt. The kernel's identity
+/// doctrine: OS randomness is native-only, wasm hosts supply theirs — a wasm
+/// host should call this once at boot with 64 host-random bits (unseeded wasm
+/// falls back to `0`, i.e. the pre-salt time+nonce behaviour, and loses the
+/// cross-device guarantee). Native self-seeds from `Uuid::new_v4()` on first
+/// mint; a later seed call is a no-op.
+pub fn seed_statement_minter(salt: u64) {
+    let _ = STATEMENT_MINTER_SALT.set(salt);
+}
+
+fn statement_minter_salt() -> u64 {
+    *STATEMENT_MINTER_SALT.get_or_init(|| {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let bytes = uuid::Uuid::new_v4();
+            u64::from_le_bytes(bytes.as_bytes()[..8].try_into().expect("8 bytes"))
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            0
+        }
+    })
+}
+
+/// Mint a [`SemanticStatement`](crate::graph::SemanticStatement) id — the
+/// FEDERATION-SAFE story the petgraph-RDF plan's Phase 1 required (the fact
+/// handle reification, precise retract, snapshot migration, and federation
+/// tombstones point at):
+///
+/// `{unix_ms:012x}-{process_salt:016x}-{counter:016x}`
+///
+/// - Device-safe: two devices collide only on a 64-bit salt collision
+///   (2^-64 per process pair), independent of clocks and counters.
+/// - Time-sortable by prefix (12 hex ms digits reach year ~10889).
+/// - Opaque to consumers: dedup happens on statement CONTENT, never by
+///   parsing this id, so legacy `{ts:016x}-{nonce:016x}` ids already in
+///   snapshots remain valid handles forever.
 pub(crate) fn mint_local_statement_id() -> String {
     let timestamp_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0);
+    let salt = statement_minter_salt();
     let nonce = NEXT_LOCAL_STATEMENT_NONCE.fetch_add(1, Ordering::Relaxed);
-    format!("{timestamp_ms:016x}-{nonce:016x}")
+    format!("{timestamp_ms:012x}-{salt:016x}-{nonce:016x}")
+}
+
+#[cfg(test)]
+mod minting_tests {
+    use super::*;
+
+    /// The minted id is device-safe in shape: time prefix + a non-zero
+    /// process salt (native self-seeds) + a monotonic counter, all distinct
+    /// across consecutive mints.
+    #[test]
+    fn statement_ids_carry_salt_and_stay_unique() {
+        let a = mint_local_statement_id();
+        let b = mint_local_statement_id();
+        assert_ne!(a, b);
+        let parts: Vec<&str> = a.split('-').collect();
+        assert_eq!(parts.len(), 3, "ts-salt-counter shape: {a}");
+        assert_eq!(parts[0].len(), 12);
+        assert_eq!(parts[1].len(), 16);
+        assert_eq!(parts[2].len(), 16);
+        assert_ne!(parts[1], "0000000000000000", "native salt self-seeds");
+        let b_parts: Vec<&str> = b.split('-').collect();
+        assert_eq!(parts[1], b_parts[1], "salt is per-process stable");
+    }
 }
 
 #[derive(

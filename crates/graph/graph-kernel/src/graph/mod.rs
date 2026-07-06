@@ -113,7 +113,8 @@ pub use capture::{
 };
 pub use edge_data::{
     ArrangementData, ContainmentData, EdgeMetrics, ImportedData, ProvenanceData, REL_VOCAB,
-    SemanticData, SemanticStatement, Traversal, TraversalData, predicate_iri, sub_kind_from_iri,
+    SemanticData, SemanticStatement, SemanticStatementSpec, StatementAssert, Traversal,
+    TraversalData, predicate_iri, sub_kind_from_iri,
 };
 pub use edge_payload::EdgePayload;
 pub use edge_taxonomy::{
