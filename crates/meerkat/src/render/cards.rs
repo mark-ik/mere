@@ -30,6 +30,28 @@ impl crate::WindowCtx<'_> {
         actor_h.max(note_h).max(visible_h)
     }
 
+    /// The member's vertical scroll (document px) for the synthesized snapshot peek
+    /// and the verso-flip restore: the live in-session offset if it was scrolled
+    /// this session, else the node's persisted `session_scroll` (loaded from the
+    /// durable snapshot at boot), else page top. Closes the summoning design's §5
+    /// gap — `self.view.scroll` is in-session-only and cleared on session switch, so
+    /// a node not opened this session always fell back to page top even though its
+    /// last scroll was recorded on the node. (Cross-restart last-viewport.)
+    pub(crate) fn member_scroll_y(&self, member: GraphMemberId) -> f32 {
+        self.view
+            .scroll
+            .get(&member)
+            .copied()
+            .or_else(|| {
+                self.orrery()
+                    .graph()
+                    .get_node_by_id(member)
+                    .and_then(|(_, node)| node.session_scroll)
+                    .map(|(_, y)| y)
+            })
+            .unwrap_or(0.0)
+    }
+
     /// The uncommitted knot-editor buffer to render `member`'s note tile from, when the
     /// editor is open and bound to that member. `Some` drives the live-on-change preview:
     /// the tile re-renders from the buffer as you type, before any Save writes `Node.body`.
@@ -362,11 +384,11 @@ impl crate::WindowCtx<'_> {
                         // A snapshot is a non-interactive peek (no actor, no
                         // content_rects entry), so its link map is dropped here —
                         // link nav rides the live actor cards. (Inline-link nav.)
-                        // Reproduce the node's last-known scroll position (if it was
-                        // ever an open tile this session) rather than always the page
-                        // top — same "exact last viewport" fix as the workbench-tile
-                        // fallback. (Node/card summoning design, §5.)
-                        let scroll = self.view.scroll.get(&member).copied().unwrap_or(0.0);
+                        // Reproduce the node's last-known scroll position — the live
+                        // in-session offset, or the persisted `session_scroll` for a node
+                        // not opened this session, rather than always the page top.
+                        // (Node/card summoning design, §5; cross-restart last-viewport.)
+                        let scroll = self.member_scroll_y(member);
                         let (scene, content_height, _links) = crate::card::render_content_scene(
                             &url,
                             state.as_ref(),

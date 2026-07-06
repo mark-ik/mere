@@ -59,6 +59,13 @@ pub(crate) struct SharedState {
     pub(crate) inbox: KernelInbox,
     /// Bounded observation cache backing the Apparatus diagnostics pane.
     pub(crate) observability: HostObservability,
+    /// The window-invariant chrome chips (p2p sync + crawl progress) that every window
+    /// renders identically. The host folds a status change in **once** here; each
+    /// window's shell view (crawl chip) and Steward/Apparatus panes (sync rows) read it,
+    /// so there is no per-window mirror and no fan-out. Every window's `ShellState` holds
+    /// a clone of this same `Rc`, so a write is seen everywhere on the next render. (One
+    /// state, N windows — Slice 0; Slice 3 lifts this into `AppState.shared`.)
+    pub(crate) shared_chrome: std::rc::Rc<std::cell::RefCell<SharedChrome>>,
 }
 
 /// The `content` subsystem: the active-node pool and the page-content cache that

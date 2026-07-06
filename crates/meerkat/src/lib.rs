@@ -112,12 +112,9 @@ pub struct Chrome {
     /// The live match count for the focused node, synced host-side from the
     /// constellation each frame the bar is open so the bar can show "active/total".
     pub find_count: usize,
-    /// The p2p sync-status chip's view-model (S5.0). The host folds the joined
-    /// lane's real `SyncStatus` in here; default reads "p2p off".
-    pub sync: SyncIndicator,
-    /// The crawl-progress chip's view-model (relational-browse V2). The host folds the
-    /// crawl actor's progress in each frame it drains; empty (hidden) when none ran.
-    pub crawl: CrawlIndicator,
+    // The sync + crawl chips are identical across every window, so they no longer live
+    // on the per-window `Chrome`; they moved to the one shared [`SharedChrome`] (read in
+    // the shell view + the Steward/Apparatus panes). One state, N windows — Slice 0.
     /// A pending "connect to peer" request the host must execute (S5.1): the
     /// ticket string captured from the address bar when the verb ran. The chrome
     /// records the intent; the host drains it, drives the sync actor, and clears
@@ -231,6 +228,24 @@ pub struct Chrome {
     /// A one-shot session gesture a chip captured, for the host to drain into the
     /// matching `ShellCommand` (the chrome can't reach the session pool). (Chrome bar P4.)
     pub session_intent: Option<SessionIntent>,
+}
+
+/// Chrome truths that are identical across every window: the p2p sync-status chip and
+/// the crawl-progress chip. One `SharedChrome` is shared by all windows behind an
+/// `Rc<RefCell<…>>`, so the host folds a status change in **once** and every window's
+/// next render reflects it — there is no per-window copy to keep in step and no
+/// fan-out. The shell view reads `crawl` for the toolbar chip; the Steward (live) and
+/// Apparatus (record) panes read `sync` host-side. (One state, N windows — Slice 0; the
+/// seam Slice 3 lifts into `AppState.shared`, owned by the multi-runner rather than
+/// shared by `Rc`.)
+#[derive(Clone, Debug, Default)]
+pub struct SharedChrome {
+    /// The p2p sync-status chip's view-model (S5.0). The host folds the joined lane's
+    /// real `SyncStatus` in here; default reads "p2p off".
+    pub sync: SyncIndicator,
+    /// The crawl-progress chip's view-model (relational-browse V2). The host folds the
+    /// crawl actor's progress in each frame it drains; empty (hidden) when none ran.
+    pub crawl: CrawlIndicator,
 }
 
 /// Which panes are currently open in the frame tree. The host syncs this into

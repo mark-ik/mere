@@ -36,8 +36,6 @@ impl Chrome {
             find_input: TextInput::new(""),
             find_active: 0,
             find_count: 0,
-            sync: SyncIndicator::default(),
-            crawl: CrawlIndicator::default(),
             pending_connect: None,
             pending_command: None,
             settings: Settings::default(),

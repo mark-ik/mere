@@ -17,7 +17,10 @@ use comms::{Direction, ProtocolKind};
 use super::command::Command;
 use super::nav;
 use super::suggest;
-use super::{Chrome, ContextAction, ContextItem, ContextMenu, HistoryStep, ShellbarPaneStates};
+use super::{
+    Chrome, ContextAction, ContextItem, ContextMenu, CrawlIndicator, HistoryStep,
+    ShellbarPaneStates,
+};
 
 /// The erased view type meerkat's logic produces, so the toolbar's concrete
 /// `El<…>` tuple need not be spelled (it grows as the chrome does).
@@ -84,7 +87,11 @@ pub(super) fn sync_chrome_from_history(c: &mut Chrome, submitted: bool) {
 ///
 /// The chrome-as-DOM seam — meerkat is the next host widget over the graphshell
 /// chrome domain, after the egui and iced toolbars.
-pub fn chrome_view(c: &Chrome) -> ChromeView {
+///
+/// `crawl` is passed in rather than read off `Chrome`: the crawl chip is a
+/// window-invariant truth that lives once in [`SharedChrome`](crate::SharedChrome), so
+/// the shell view threads the shared value in. (One state, N windows — Slice 0.)
+pub fn chrome_view(c: &Chrome, crawl: &CrawlIndicator) -> ChromeView {
     // Reflect the reused nav-capability flags onto the buttons: a spent
     // direction carries a `disabled` class (the host sheet greys it; the
     // handler is already a no-op at the history's edge).
@@ -134,7 +141,7 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     // class rather than rely on `:empty` — an empty-string text view still leaves an
     // empty text node child, so `:empty` never matches and the chip would paint as a
     // bare pill while idle.
-    let crawl_summary = c.crawl.summary();
+    let crawl_summary = crawl.summary();
     let crawl_class = if crawl_summary.is_empty() {
         "crawl-chip crawl-chip-hidden"
     } else {
@@ -448,6 +455,14 @@ fn shellbar_view(panes: &ShellbarPaneStates) -> ChromeView {
     Box::new(el::<_, Chrome, ()>("div", buttons).attr("class", "shellbar"))
 }
 
+/// Chrome logic for the standalone chrome runner (tests + the bare chrome-widget path):
+/// the crawl chip reads a default idle indicator, since there is no shared chrome cell
+/// here. The windowed app uses `shell_view`, which threads the live shared crawl in.
+/// (One state, N windows — Slice 0.)
+pub(crate) fn chrome_view_standalone(c: &Chrome) -> ChromeView {
+    chrome_view(c, &CrawlIndicator::default())
+}
+
 /// Build the chrome via a [`ServalAppRunner`] over a fresh [`ScriptedDom`] — the
 /// same diff path the windowed host will drive, minus layout / paint. Returns the
 /// runner so callers (and tests) can inspect the DOM, dispatch input, and rebuild.
@@ -455,7 +470,7 @@ pub fn runner(initial_location: &str) -> ServalAppRunner<Chrome, ChromeLogic, Ch
     let dom: Rc<RefCell<ScriptedDom>> = Rc::new(RefCell::new(ScriptedDom::new()));
     ServalAppRunner::new(
         dom,
-        chrome_view as ChromeLogic,
+        chrome_view_standalone as ChromeLogic,
         Chrome::new(initial_location),
     )
 }
