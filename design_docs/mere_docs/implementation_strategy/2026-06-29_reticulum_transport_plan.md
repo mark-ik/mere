@@ -29,6 +29,43 @@ limited to bilateral stream connectivity: one `connect(peer, alpn)` and one
 - Serial / RNode / LoRa hardware interfaces for the first probe.
 - Meshtastic / MeshCore bridges (a different integration shape).
 
+## Direction (2026-07-06): own implementation when this lane gets investment
+
+Decided with Mark: if the Reticulum lane graduates beyond this probe, Mere stewards
+its **own Rust implementation** rather than adopting Beechat or FreeTAK as the
+long-term dependency (the misfin posture, applied again). Grounding, from the
+[LXMF research brief](../research/2026-07-06_lxmf_key_addressed_mail_research.md)
+plus a stewardship check the same day:
+
+- The Beechat `reticulum` crate (MIT) has sat at 0.1.0 since 2025-10; FreeTAK's
+  `reticulum-rs` (EPL-2.0) is active but daemon/enterprise-shaped and days-old at
+  0.6.x. Neither optimizes for a library embed behind Mere's `Transport` trait.
+- Upstream itself is in flux: the reference implementation's license changed in
+  April 2025 (MIT plus an anti-AI clause, the "Reticulum License"), Mark Qvist
+  stepped back from RNS development in December 2025, and community forks exist
+  (RetiNet, Reticulum_CE). The **protocol is public domain**, which makes a
+  spec-based implementation the cleanest ownership path.
+- Reference discipline: implement from the public-domain protocol spec + manual;
+  read Beechat (MIT) freely; read FreeTAK (EPL-2.0) for technique only, never
+  copied text; treat the Python reference as a black-box interop oracle
+  (mixed-runtime smoke tests against `rnsd`) rather than a code reference, given
+  its license posture.
+- Scope: **endpoint-first**, wire-compatible with RNS 1.3.x — identity, announce,
+  link, resource, TCP interface first; transport-node routing and RNode/LoRa
+  interfaces later; LXMF-wire optional on top. A Mere node needs to be a
+  Reticulum endpoint, not a router, to interoperate.
+- Trigger unchanged: the probe stays pinned to Beechat 0.1.0 (it works) until the
+  lane gets real investment; the own-impl replaces it behind the same trait when
+  that day comes.
+- **Named (Mark, 2026-07-06): `retinue`** — the company that travels with a
+  person, which is what a persona's transport is; echoes "reticulum" while
+  staying a plain word. **Scaffolded + reserved same day**: repo at
+  `repos/retinue` (dual MIT/Apache-2.0), `retinue` 0.0.1 published to
+  crates.io as the name reservation, v0 plan at
+  `repos/retinue/design_docs/2026-07-06_retinue_v0_plan.md` (phases R0
+  oracle-harness/primitives → R5 Mere adoption). Standalone-sibling shape:
+  own repo, crates.io-only dep, one-way (Mere consumes it).
+
 ## Findings
 
 ### From source reading (`reticulum` v0.1.0)
