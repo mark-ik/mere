@@ -91,6 +91,7 @@ mod engine_activation;
 mod export;
 mod find;
 mod find_worker;
+mod infer_host;
 mod frame_a11y;
 mod frame_a11y_panes;
 mod frame_ops;
@@ -372,6 +373,9 @@ struct KernelInbox {
     fetch: Receiver<fetch::FetchUpdate>,
     /// Find-in-page worker replies (match rects per query generation). (Find.)
     find: Receiver<find_worker::FindResult>,
+    /// Inference actor updates for the `>ask` verb (Ready / streamed
+    /// fragments / finished / failed). (burn brief Lane 3.)
+    infer: Receiver<infer::InferUpdate>,
     sync: Receiver<sync::SyncUpdate>,
     comms: Receiver<comms_host::CommsUpdate>,
     /// Portable diagnostics emitted through `register_diagnostics::emit`.

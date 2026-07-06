@@ -96,6 +96,11 @@ pub struct ShellOutcome {
     /// rebuilds the lexical trail index from the browsing corpus (titles, URLs,
     /// and page text) and echoes the top BM25 hits. `None` when not called. (C5.)
     pub recall_query: Option<String>,
+    /// A prompt passed to `ask("…")` (or the `>ask …` sugar) — the host sends it
+    /// to the inference actor and streams the answer into the omnibar. `None`
+    /// when not called. Recorded, not run here: the shell can't reach the actor.
+    /// (burn brief Lane 3.)
+    pub ask_prompt: Option<String>,
     /// A consent level passed to `capture("off"|"corridor"|"full")` (or the
     /// `>capture …` sugar) — the host sets + persists the browse-capture consent
     /// (plan C4). `Some("")` is a bare `>capture` (report the current level); `None`
@@ -193,6 +198,7 @@ impl CommandShell {
         let relation_kind: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
         let sparql_query: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
         let recall_query: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+        let ask_prompt: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
         let capture_consent: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
         let forget_url: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
         let attach_script: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
@@ -277,6 +283,15 @@ impl CommandShell {
         let rq = recall_query.clone();
         engine.register_fn("recall", move |query: &str| {
             *rq.borrow_mut() = Some(query.to_string());
+        });
+
+        // `ask("…")` (or the `>ask …` sugar) — record a prompt for the host to send
+        // to the inference actor. Like `recall`: recorded here, run host-side (the
+        // shell can't reach the actor, and generation is off-thread anyway).
+        // (burn brief Lane 3.)
+        let ap = ask_prompt.clone();
+        engine.register_fn("ask", move |prompt: &str| {
+            *ap.borrow_mut() = Some(prompt.to_string());
         });
 
         // `capture("off"|"corridor"|"full")` (or the `>capture …` sugar) — record a
@@ -424,6 +439,7 @@ impl CommandShell {
         let relation_kind = relation_kind.borrow().clone();
         let sparql_query = sparql_query.borrow().clone();
         let recall_query = recall_query.borrow().clone();
+        let ask_prompt = ask_prompt.borrow().clone();
         let capture_consent = capture_consent.borrow().clone();
         let forget_url = forget_url.borrow().clone();
         let attach_script = attach_script.borrow().clone();
@@ -446,6 +462,7 @@ impl CommandShell {
                 relation_kind,
                 sparql_query,
                 recall_query,
+                ask_prompt,
                 capture_consent,
                 forget_url,
                 attach_script,
@@ -469,6 +486,7 @@ impl CommandShell {
                 relation_kind,
                 sparql_query,
                 recall_query,
+                ask_prompt,
                 capture_consent,
                 forget_url,
                 attach_script,
@@ -513,6 +531,7 @@ pub fn complete(prefix: &str) -> Option<&'static str> {
         .chain([
             "sparql",
             "recall",
+            "ask",
             "capture",
             "forget",
             "attach_script",
@@ -556,6 +575,15 @@ fn desugar(source: &str) -> String {
         let arg = rest.trim().replace('"', "");
         if !arg.is_empty() {
             return format!("recall(\"{arg}\")");
+        }
+    }
+    // `ask <prompt>` sugar: the rest of the line is the prompt, so `>ask what is
+    // rust` works without rhai quoting. Escapes `"` and `\` so a prompt with a
+    // quote stays one valid string literal. (burn brief Lane 3.)
+    if let Some(rest) = trimmed.strip_prefix("ask ") {
+        let arg = rest.trim().replace('\\', "\\\\").replace('"', "\\\"");
+        if !arg.is_empty() {
+            return format!("ask(\"{arg}\")");
         }
     }
     // `capture <level>` sugar: `>capture off` → `capture("off")`; a bare `>capture`
@@ -732,6 +760,30 @@ mod tests {
         assert!(bare.error.is_none());
         // `complete` ghosts the verb so a user discovers it.
         assert_eq!(complete("sce"), Some("scene"));
+    }
+
+    #[test]
+    fn ask_records_the_prompt_and_the_bare_form_is_sugared() {
+        // The arg-bearing call records the prompt for the host to send to the
+        // inference actor; no command, no error.
+        let call = CommandShell::new().eval(r#"ask("what is rust")"#, &ctx());
+        assert_eq!(call.ask_prompt.as_deref(), Some("what is rust"));
+        assert!(call.commands.is_empty());
+        assert!(call.error.is_none());
+        // `ask <prompt>` sugar: the rest of the line is the prompt, unquoted.
+        let bare = CommandShell::new().eval("ask what is the capital of France", &ctx());
+        assert_eq!(
+            bare.ask_prompt.as_deref(),
+            Some("what is the capital of France"),
+            "the bare form takes the whole line as the prompt"
+        );
+        assert!(bare.error.is_none());
+        // A prompt containing a quote stays one valid literal (escaped in desugar).
+        let quoted = CommandShell::new().eval(r#"ask say "hi" back"#, &ctx());
+        assert_eq!(quoted.ask_prompt.as_deref(), Some(r#"say "hi" back"#));
+        assert!(quoted.error.is_none());
+        // The verb ghost-completes so a user discovers it.
+        assert_eq!(complete("as"), Some("ask"));
     }
 
     #[test]

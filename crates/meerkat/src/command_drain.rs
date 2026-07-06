@@ -506,6 +506,13 @@ impl WindowCtx<'_> {
         if let Some(query) = &outcome.recall_query {
             note = Some(self.run_recall_query(query));
         }
+        // An `ask("…")` call sends the prompt to the inference actor and streams
+        // the answer back into the omnibar (folded in `on_user_event`). Unlike
+        // the queries above, generation is off-thread: we only kick it off and
+        // show a placeholder; the tokens arrive over `inbox.infer`. (Lane 3.)
+        if let Some(prompt) = &outcome.ask_prompt {
+            note = Some(self.start_ask(prompt));
+        }
         // A `capture(…)` call sets + persists the browse-capture consent (plan C4);
         // a bare `capture()` reports the current level.
         if let Some(level) = &outcome.capture_consent {
@@ -623,6 +630,90 @@ impl WindowCtx<'_> {
             Err(err) => format!("SPARQL error: {err}"),
             Ok(rows) if rows.rows.is_empty() => "0 results".to_string(),
             Ok(rows) => format_sparql_rows(&rows),
+        }
+    }
+
+    /// Kick off an `ask("…")` generation (burn brief Lane 3): bump the ask id
+    /// (so a superseded ask's late tokens are dropped), clear the accumulator,
+    /// and command the inference actor. Returns the placeholder shown while the
+    /// first token is on its way; the streamed answer replaces it in
+    /// `on_user_event`.
+    fn start_ask(&mut self, prompt: &str) -> String {
+        let prompt = prompt.trim();
+        if prompt.is_empty() {
+            return "ask: empty prompt".to_string();
+        }
+        self.shared.content.ask_id += 1;
+        self.shared.content.ask_answer.clear();
+        let id = self.shared.content.ask_id;
+        let request = infer::GenerationRequest {
+            prompt: prompt.to_string(),
+            // A bounded answer for an omnibar echo — generation is greedy and
+            // stops on the model's eos.
+            max_tokens: 200,
+            ..Default::default()
+        };
+        self.shared
+            .content
+            .infer_handle
+            .command(infer::InferCommand::Generate { id, request });
+        self.shared.observability.record_actor(
+            "infer",
+            "asked",
+            Some(prompt.to_string()),
+        );
+        format!("thinking: {prompt}")
+    }
+
+    /// Fold one `InferUpdate` for the in-flight `>ask` into the omnibar: append
+    /// a streamed fragment (and echo the growing answer), show the final text,
+    /// or report a failure. Updates carrying a stale id (a superseded ask) are
+    /// dropped. (burn brief Lane 3.)
+    pub(crate) fn apply_infer_update(&mut self, update: infer::InferUpdate) {
+        use infer::InferUpdate;
+        // Every per-request update carries the ask id; ignore anything that is
+        // not the current ask. `Ready` (startup, no id) is recorded only.
+        let matches_current = |id: u64| id == self.shared.content.ask_id;
+        match update {
+            InferUpdate::Ready { capability } => {
+                self.shared.observability.record_actor(
+                    "infer",
+                    "ready",
+                    Some(format!("{} ({})", capability.model_id, capability.loader)),
+                );
+            }
+            InferUpdate::Started { id } if matches_current(id) => {}
+            InferUpdate::Fragment { id, text } if matches_current(id) => {
+                self.shared.content.ask_answer.push_str(&text);
+                let shown = self.shared.content.ask_answer.clone();
+                self.view.chrome_update(move |c| c.show_location(&shown));
+                self.view.request_redraw();
+            }
+            InferUpdate::Finished { id, text } if matches_current(id) => {
+                self.shared.content.ask_answer = text.clone();
+                let shown = if text.trim().is_empty() {
+                    "(empty answer)".to_string()
+                } else {
+                    text
+                };
+                self.view.chrome_update(move |c| c.show_location(&shown));
+                self.view.request_redraw();
+                self.shared
+                    .observability
+                    .record_actor("infer", "finished", None);
+            }
+            InferUpdate::Failed { id, error } if matches_current(id) => {
+                let shown = format!("ask failed: {error}");
+                self.shared.observability.record_diagnostic(
+                    "meerkat.actor.infer.failed",
+                    Severity::Warn,
+                    error.to_string(),
+                );
+                self.view.chrome_update(move |c| c.show_location(&shown));
+                self.view.request_redraw();
+            }
+            // Stale-id updates and Cancelled land here and are ignored.
+            _ => {}
         }
     }
 

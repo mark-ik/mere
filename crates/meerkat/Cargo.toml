@@ -43,6 +43,13 @@ scripted-nova = ["scripted", "pelt-desktop/scripted-nova", "dep:script-engine-no
 # ScriptedDom -> serval-layout), the serval lane rather than the block card. Off by
 # default so the base build stays clear of the smolweb transport/parse stack.
 smolweb = ["pelt-desktop/smolweb"]
+# Local LLM inference for the `>ask` omnibar verb. Off by default: it pulls the
+# burn-wgpu tree (cubecl), a multi-minute cold build. Without it, `>ask` still
+# exists and answers through infer's deterministic `CannedProvider` stub (the
+# light `actor`-only infer dep is always compiled); with it, `>ask` runs a real
+# llama-family model (TinyLlama today) when `MERE_TINYLLAMA_DIR` points at a
+# checkpoint. (burn brief Lane 3 — meerkat host wiring.)
+local-inference = ["infer/decoder-wgpu"]
 
 [lib]
 name = "meerkat"
@@ -175,6 +182,10 @@ roster = { workspace = true }
 # actors; the kernel context is pinned to the UI thread by type.
 armillary = { workspace = true }
 fetch = { workspace = true }
+# The inference-provider seam + armillary inference actor (burn brief Lane 3).
+# `actor`-only here: light (armillary + the CannedProvider stub, no burn). The
+# `local-inference` meerkat feature adds `infer/decoder-wgpu` for real models.
+infer = { workspace = true, features = ["actor"] }
 content-contract = { workspace = true }
 crawl = { workspace = true }
 import = { workspace = true }

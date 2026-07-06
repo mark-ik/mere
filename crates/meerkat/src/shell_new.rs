@@ -212,6 +212,15 @@ impl Shell {
             let _ = find_proxy.send_event(());
         });
         let (find_worker, find_rx) = find_worker::spawn_find_worker(find_wake);
+        // The inference actor answers `>ask`: it builds its provider (a real
+        // llama model under `local-inference` + `MERE_TINYLLAMA_DIR`, else the
+        // canned stub) on its own thread and streams tokens back through this
+        // proxy. (burn brief Lane 3.)
+        let infer_proxy = proxy.clone();
+        let infer_wake: armillary::Wake = Arc::new(move || {
+            let _ = infer_proxy.send_event(());
+        });
+        let (infer_handle, infer_rx) = crate::infer_host::spawn_inference(infer_wake);
         // The content actor renders the focused card off the UI thread (it owns the
         // serval cascade + nematic engines + a per-tile subresource cache on its own
         // thread) and ships scenes / wanted subresources / harvested linked data
@@ -551,6 +560,9 @@ impl Shell {
                     store,
                     fetch_handle,
                     find_worker,
+                    infer_handle,
+                    ask_id: 0,
+                    ask_answer: String::new(),
                     engine_registry,
                     engine_pins: HashMap::new(),
                     route_policy: inker::routing::EngineRoutePolicy::default(),
@@ -611,6 +623,7 @@ impl Shell {
                 inbox: KernelInbox {
                     fetch: fetch_rx,
                     find: find_rx,
+                    infer: infer_rx,
                     sync: sync_rx,
                     comms: comms_rx,
                     diagnostics: diagnostics_rx,

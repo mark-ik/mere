@@ -192,7 +192,12 @@ node pair, raw + CiTO predicates).
   oxigraph Store per query.
 - The term dictionary introduced here is a derived index over the kernel — and is
   exactly the structure the Phase 4 endgame would make canonical, so this is also
-  the on-ramp to compact memory.
+  the on-ramp to compact memory. **Deferred** (2026-07-06): the shipped
+  spareval-over-`dataset_quads` path already satisfies the done-condition below,
+  and the footprint measurement (Phase 4 gate) shows the term dictionary reclaims
+  ~1% of live memory, so building the kernel-owned dictionary now would be an
+  on-ramp to a gate that is not close. Reconsider once image blobs are
+  externalized and RDF strings become the dominant remaining cost.
 
 Done when: `>sparql` and the seed-graph SPARQL tests run via the adapter over the
 kernel directly, with no oxigraph Store in the path.
@@ -208,14 +213,39 @@ kernel directly, with no oxigraph Store in the path.
   path. RDF-lossless **and** compact (interning) **and** petgraph-speed.
 - Gate: re-run the benchmark probe with interning and the real oxigraph in-memory
   Store for comparison; decide on the measured footprint, not on vibes.
+- **Gate measured 2026-07-06 — Phase 4 is not close, and its premise is wrong.**
+  `crates/probes/rdf-kernel-footprint/` (a counting global allocator over a
+  realistic enriched-kernel graph; the old `rdf-kernel-bench` measured the
+  rejected held-RDF-truth axis, not this one) decomposes live heap at 50k nodes /
+  100k statements / 2 props: **images 352 MiB (64%)** (`thumbnail_png` +
+  `favicon_rgba`, held inline in every Node), **RDF content 154 MiB (28%)**
+  (dominated by `EdgePayload` / statement *struct* overhead + unique strings —
+  ids, values — not repeated IRIs), **structure/adjacency 48 MiB (8%)**, total
+  553 MiB. A term dictionary — Phase 4's whole mechanism — reclaims the repeated
+  predicate IRIs only: **6 MiB, ~1% of total**. The 46-byte per-statement ids are
+  unique and intrinsically un-internable. So interning targets the wrong whale.
+  The footprint levers in ROI order are: (1) **externalize image blobs**
+  (content-addressed store, keep a hash in the node) — reclaims ~64% and is a
+  bigger, simpler win than Phase 4; (2) **slim `EdgePayload`** (box the rare edge
+  families / a compact statement record) — chips the 28%; (3) the term dictionary
+  / slotmap kernel — last, ~1%, and only meaningful *after* (1) makes strings the
+  dominant remaining cost. Phase 4 stays gated, and its Phase 3 on-ramp (a
+  kernel-owned term dictionary) is correspondingly deferred: the shipped
+  spareval-over-`dataset_quads` path already meets the Phase 3 done-condition.
 - Lower-risk default is Phases 1-3 on petgraph, which already deliver lossless RDF
   + SPARQL. Phase 4 is the "kernel is a lean RDF store" endgame, not a prerequisite.
 
 ## Findings (research backing)
 
-- **Benchmark**: held-RDF-truth ≈ 11x memory / 19x load / 18x mutate vs
-  petgraph-truth (lower-bound proxy); hot path identical. Probe at
-  `crates/probes/rdf-kernel-bench/`.
+- **Benchmark (held-RDF-truth axis)**: held-RDF-truth ≈ 11x memory / 19x load /
+  18x mutate vs petgraph-truth (lower-bound proxy); hot path identical. The
+  original `crates/probes/rdf-kernel-bench/` (now gone from the tree) measured
+  this — the *rejected* design's cost, not the enriched kernel's footprint.
+- **Footprint decomposition (Phase 4 axis, 2026-07-06)**:
+  `crates/probes/rdf-kernel-footprint/` measures where the enriched kernel's live
+  heap goes — images 64% / RDF content 28% (mostly struct, not strings) /
+  structure 8% at 50k nodes; a term dictionary reclaims ~1%. See the Phase 4
+  gate note. Re-runnable (`cargo run --release`).
 - **`QueryableDataset`** (spareval): `internal_quads_for_pattern` +
   `internalize_term` + `externalize_term`, `InternalTerm: Clone+Eq+Hash`
   (interned-id friendly), `Error`; oxrdf + spargebra only, no RocksDB. SPARQL over
@@ -314,6 +344,16 @@ kernel directly, with no oxigraph Store in the path.
   the dataset/SPARQL path now emits named-graph quads from those scopes. The
   JSON-LD shapers still deliberately stay default-graph-only, and curated
   `title`/`tags` plus `rdf:type` classifications are not yet graph-scope-aware.
+- **2026-07-06 (Phase 4 gate measured — deferred on evidence)** — Built
+  `crates/probes/rdf-kernel-footprint/` (a counting global allocator decomposing the
+  enriched kernel's live heap; the cited `rdf-kernel-bench` was gone and had measured
+  the rejected held-RDF-truth axis anyway). At 50k nodes / 100k statements: images
+  64% / RDF content 28% (mostly `EdgePayload` + statement struct, not repeated
+  strings) / structure 8%, total 553 MiB; a term dictionary reclaims ~1%. Verdict:
+  Phase 4's interning targets the wrong whale — the footprint levers in ROI order are
+  image-blob externalization (~64%), `EdgePayload` slimming, then interning (~1%,
+  last). Phase 4 stays gated; the Phase 3 kernel-dictionary on-ramp is deferred (the
+  shipped spareval path already meets the done-condition). See the Phase 4 gate note.
 - **2026-07-06 (Phase 2 completion: vocab alignment + Turtle/N-Quads I/O + bloat gate)** —
   The three Phase 2 tail items landed. (1) **Standard-vocabulary alignment**
   (`vocab.rs`): each recognized `SemanticSubKind` is categorized exact / approximate /

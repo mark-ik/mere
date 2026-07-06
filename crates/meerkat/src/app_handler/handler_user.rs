@@ -121,6 +121,17 @@ impl Shell {
         for result in find_results {
             card_changed |= wc.apply_find_result(result);
         }
+        // The inference actor's `>ask` stream: fold each token into the current
+        // answer and echo the growing text in the omnibar. A stale update (from a
+        // superseded ask) is dropped by id mismatch. Collected first so the
+        // receiver borrow ends before the `&mut` chrome writes. (Lane 3.)
+        let mut infer_updates = Vec::new();
+        while let Ok(update) = wc.shared.inbox.infer.try_recv() {
+            infer_updates.push(update);
+        }
+        for update in infer_updates {
+            wc.apply_infer_update(update);
+        }
         // Drain every active node's actor in one pass: scenes land in the pool, the
         // wanted subresources + harvested contributions come back for the host.
         let drained = wc.shared.content.constellation.drain();

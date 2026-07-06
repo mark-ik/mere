@@ -1,7 +1,7 @@
 # Inference Provider Plan (burn brief, Lane 3)
 
 **Date**: 2026-07-05
-**Status**: P0 (seam + stub), P1 (own decoder body incl. seeded temperature/top-p sampling; validated on the real TinyLlama checkpoint, 9.95 tok/s on wgpu vs 0.09 on ndarray), P2 (eidetic loading; corridor proven transparent), and P3 (actor with cancellation) landed. Remaining: P4's wasm half (gated on the embed-wasm dependency slice) and the meerkat host wiring (deferred until the concurrent omnibar polish lands).
+**Status**: P0 (seam + stub), P1 (own decoder body incl. seeded temperature/top-p sampling; validated on the real TinyLlama checkpoint, 9.95 tok/s on wgpu vs 0.09 on ndarray), P2 (eidetic loading; corridor proven transparent), P3 (actor with cancellation), and the meerkat host wiring (`>ask` omnibar verb) all landed. Remaining: P4's wasm half (gated on the embed-wasm dependency slice).
 **Related**: [burn_utilization_brief](../research/2026-07-04_burn_utilization_brief.md) (Lane 3), [local_models_harness_brief](../research/2026-06-24_local_models_harness_brief.md) (§2 defines this seam; §3 the actor harness; §4 the wasm/native split), [geist_models_brief](../research/2026-05-10_geist_models_brief.md) (adapter envelope, deferred to Lane 4), [burn_wgpu_flip_plan](2026-07-04_burn_wgpu_flip_plan.md) (the GPU receipts motivating burn-first).
 
 ## Scope
@@ -249,6 +249,37 @@ gets bound.
   Also re-checked Lane 2's gate while closing out: burn-remote's latest
   crates.io release is still 0.21.0 (2026-05-07); the iroh transport
   remains unreleased, mesh plan status unchanged.
+- 2026-07-06 — **meerkat host wiring: the `>ask` omnibar verb.** The
+  inference actor now runs inside meerkat, wired the same shape as
+  fetch/find/sync: spawned in `shell_new` with a winit-proxy wake, handle
+  in `Content`, receiver in `KernelInbox`, drained in `on_user_event`.
+  `crates/meerkat/src/infer_host.rs` builds the provider on the actor
+  thread — a real `DecoderProvider<Wgpu>` (TinyLlama) under the new
+  `local-inference` feature when `MERE_TINYLLAMA_DIR` is set, else infer's
+  `CannedProvider` stub, so the shell runs with or without a model.
+  Dependency discipline: infer is an `actor`-only dep by default (light —
+  armillary + the stub, no burn); `local-inference` adds
+  `infer/decoder-wgpu` (the cubecl tree), so ordinary meerkat builds stay
+  lean and don't pay the burn compile. meerkat never names `burn` — it
+  calls `infer::decoder::load_wgpu_provider`, a new `decoder-wgpu`-gated
+  convenience constructor. `>ask <prompt>` (shell_eval verb + bare-line
+  sugar, quote-escaped) records an `ask_prompt`; `command_drain::start_ask`
+  bumps a correlation id, clears the accumulator, and commands the actor;
+  `apply_infer_update` folds streamed fragments into the omnibar location
+  echo, dropping stale-id updates from a superseded ask. Builds green both
+  ways: default `cargo check` clean, `--features local-inference` builds
+  (adds the burn tree, ~5.5min cold). Headed launch with the model
+  confirmed burn-wgpu and netrender's wgpu **coexist in one process**
+  (app ran + rendered, infer actor started) — the practical D1 check.
+  Runtime `>ask`-answer capture pending a release build (debug burn
+  tensor upload is too slow to time), and blocked from CI-style
+  verification only by an **unrelated pre-existing break**:
+  `crates/meerkat/src/ingest.rs`'s own `#[cfg(test)]` block is stale
+  against a committed `NodeProperty` refactor (asserts `(String, String)`
+  tuples where the type is now a struct), so `cargo test -p meerkat --lib`
+  will not compile until that file's owner fixes it — not this plan's
+  scope. The `>ask` shell_eval unit test is written (mirrors the
+  recall/scene tests) and will pass once the lib test target compiles.
 - 2026-07-05 — P3 landed ahead of P1 (see Findings for why). `infer::actor`
   behind the `actor` feature (armillary optional dep, so the seam core
   stays wasm-clean — `cargo check -p infer --target wasm32-unknown-unknown`

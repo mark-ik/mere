@@ -81,6 +81,14 @@ pub(crate) struct Content {
     /// The find-in-page worker's command handle: the kernel ships it the focused page +
     /// query off the UI thread, and its match rects arrive on `inbox.find`. (Find.)
     pub(crate) find_worker: armillary::ActorHandle<find_worker::FindCommand>,
+    /// The inference actor's command handle: `>ask` sends it a `Generate`; its
+    /// streamed tokens arrive on `inbox.infer`. (burn brief Lane 3.)
+    pub(crate) infer_handle: armillary::ActorHandle<infer::InferCommand>,
+    /// Correlation id of the in-flight `>ask` (a monotonic counter); a stale
+    /// `InferUpdate` from a superseded ask is dropped by id mismatch.
+    pub(crate) ask_id: u64,
+    /// The current `>ask` answer as tokens stream in, echoed in the omnibar.
+    pub(crate) ask_answer: String,
     /// The nematic engine registry, for rendering "last visit" snapshot cards
     /// host-side from the durable content cache (no actor). (Card #4.)
     pub(crate) engine_registry: EngineRegistry,

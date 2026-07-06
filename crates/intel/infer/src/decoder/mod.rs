@@ -40,6 +40,30 @@ pub use model::{DecoderModel, KvCache, LoadedDecoder};
 pub use provider::DecoderProvider;
 pub use sample::Sampler;
 
+/// The decoder on the wgpu backend — the concrete inference lane hosts use
+/// so they never name `burn` themselves.
+#[cfg(feature = "decoder-wgpu")]
+pub type WgpuDecoderProvider = DecoderProvider<burn::backend::Wgpu<f32, i32>>;
+
+/// Load a llama-family checkpoint (HF artifact triple as bytes) on the wgpu
+/// backend. The host-facing entry point for real local inference.
+#[cfg(feature = "decoder-wgpu")]
+pub fn load_wgpu_provider(
+    config_bytes: &[u8],
+    tokenizer_bytes: &[u8],
+    weights_bytes: &[u8],
+    model_id: impl Into<String>,
+) -> Result<WgpuDecoderProvider, crate::provider::InferError> {
+    DecoderProvider::from_bytes(
+        config_bytes,
+        tokenizer_bytes,
+        weights_bytes,
+        model_id,
+        "burn-wgpu",
+        &Default::default(),
+    )
+}
+
 /// Deterministic-weight helpers shared by the decoder tests: same values
 /// on every backend by construction (the `embed::bert::wgpu_parity`
 /// pattern).

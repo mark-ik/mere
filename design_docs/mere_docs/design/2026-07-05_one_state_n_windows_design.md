@@ -159,6 +159,22 @@ between `shared` and `view`.
 2. **Multi-projection runner.** One runner owns the state and N projections
    (still N doms at this step). Done when one `update` diffs every window's
    lens and no host-side mirroring remains.
+   **Framework half landed 2026-07-06**: `ServalAppRunner`'s per-tree guts
+   (dom, ctx, retained view, focus, capture) moved into a crate-internal
+   `RunnerTree` with state + logic threaded per call — public API unchanged,
+   every consumer untouched — and `ServalMultiRunner` (`multi.rs`) owns one
+   state plus N `(logic, tree)` projections with stable `ProjectionId`s.
+   One `update` rebuilds every projection; a dispatch into any window routes
+   through that window's tree then rebuilds the others, so a click in window
+   A updates window B in the same pass. Focus/capture stay per-window.
+   Projections rebuild in insertion order (the portable parking order); the
+   per-tree nursery drain confines parked elements to their own dom, so a
+   cross-window move safely degrades to fresh-build until the forest dom
+   (step 3). Receipts in `tests.rs::multi`: one-update-projects-everywhere,
+   dispatch-in-A-updates-B, per-window focus, remove-projection teardown.
+   The remaining half of this step is meerkat's migration onto it (the
+   ShellState/Chrome split into AppState vs WindowLocal, deleting the
+   `chrome_update` fan-outs and spawn-time chip seeding).
 3. **Forest dom.** One ScriptedDom, N window roots, per-window sessions rooted
    per window element, mutation routing by root containment. Done when two
    windows at different sizes and DPIs lay out and rasterize from one dom.
@@ -170,6 +186,14 @@ between `shared` and `view`.
    survives), the target window's apply is scoped rather than a full recompute,
    and the trichotomy is expressed as state mutations. WPT expectation flips in
    `ports/serval-wpt` gate the engine slices.
+   **Framework half done 2026-07-06** (serval plan S1-S5 all landed:
+   `PortableKeyed` + ctx nursery + `(node, path)` handler reconciliation; a
+   cross-parent keyed move preserves element, DOM node, view state, and live
+   handlers, with one atomic `Moved`). What remains here is the consumer half:
+   meerkat tiles as `PortableKeyed` children, which needs steps 1-3 above —
+   in particular the forest dom, since cross-window is only same-document
+   there, and the source-first rebuild order the multi-projection runner
+   makes host-controllable.
 
 ## 9. Open questions
 
