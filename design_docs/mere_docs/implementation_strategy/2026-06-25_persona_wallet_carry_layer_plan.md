@@ -781,8 +781,25 @@ current head, and replacement of the temporary plaintext bridges as the live sea
   mode, Meerkat's wallet page now shows `Lock now` after a prompt/locked launch was explicitly
   unlocked, and the sync/comms actors now publish an offline transition when that relock fires
   so the toolbar chip and comms pane do not keep stale success state. Still open:
-  passphrase-entry chrome for `Prompt`, a real passphrase-wrapped local-root backend, and
-  delegated device follow-through beyond the seed-backed lanes.
+  passphrase-entry chrome for `Prompt` and delegated device follow-through beyond the
+  seed-backed lanes.
+- **2026-07-06** — landed the passphrase-wrapped vault-root backend in
+  `crates/persona/identity/src/passphrase_root.rs`: an Argon2id-KEK + ChaCha20-Poly1305
+  seal over the same 32-byte vault root the DPAPI `AutoOs` wrapper produces, reusing
+  `passphrase_storage::derive_kek` (one unlock ladder, one KDF config). Public API is
+  `wrap`/`unwrap_vault_root`, `save`/`load_passphrase_root`, `change_passphrase`,
+  `passphrase_root_exists`; the root is an explicit input so enrollment re-wraps an
+  existing root rather than minting a new one (the dual-wrapper model: OS store and
+  passphrase over one root, so a device can carry both). 9 tests including a round-trip
+  proving a passphrase-unlocked root opens a `SealedRecordStorage` and seals
+  `identity/master.seed`. This is the cross-platform root of trust (DPAPI is Windows-only)
+  and the backend the dead `Prompt` / `Locked` modes needed. Deliberately isolated to
+  `persona/identity` (untouched by the in-flight one-state migration). Still open and
+  deferred behind that migration: the passphrase-entry chrome, and the `session-runtime`
+  wiring that routes `StartupUnlockMode::Prompt` through `load_passphrase_root` plus the
+  enrollment path that re-wraps an existing `AutoOs` root under a new passphrase (both
+  touch meerkat UI files the migration currently holds). Verified `cargo test -p identity`
+  green + clippy clean.
 
 ## Findings (research, 2026-06-25)
 

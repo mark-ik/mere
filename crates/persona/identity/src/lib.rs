@@ -52,6 +52,7 @@
 
 mod error;
 mod keypair;
+pub mod passphrase_root;
 pub mod passphrase_storage;
 mod provider;
 pub mod sealed_record_storage;
@@ -60,6 +61,10 @@ pub mod vault;
 
 pub use crate::error::IdentityError;
 pub use crate::keypair::{Ed25519Keypair, Ed25519PublicKey, Ed25519Signature};
+pub use crate::passphrase_root::{
+    PassphraseWrappedRoot, change_passphrase, load_passphrase_root, passphrase_root_exists,
+    save_passphrase_root, unwrap_vault_root, wrap_vault_root,
+};
 pub use crate::passphrase_storage::PassphraseEncryptedStorage;
 pub use crate::provider::{IdentityProvider, InMemoryProvider};
 pub use crate::sealed_record_storage::SealedRecordStorage;

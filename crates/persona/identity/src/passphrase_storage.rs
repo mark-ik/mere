@@ -162,7 +162,12 @@ fn plaintext_to_slot(p: &PlaintextSlot) -> (ProtocolKey, IdentitySlot) {
 }
 
 /// Argon2id-derived KEK.
-fn derive_kek(passphrase: &[u8], salt: &[u8]) -> Result<Zeroizing<[u8; 32]>, IdentityError> {
+///
+/// Shared with [`crate::passphrase_root`] so the passphrase profile vault and
+/// the passphrase-wrapped vault root derive their key-encryption keys through
+/// one KDF configuration (the "one unlock ladder" rule): same Argon2id
+/// parameters, same zeroize discipline.
+pub(crate) fn derive_kek(passphrase: &[u8], salt: &[u8]) -> Result<Zeroizing<[u8; 32]>, IdentityError> {
     let argon = Argon2::default();
     let mut kek = Zeroizing::new([0u8; 32]);
     argon
