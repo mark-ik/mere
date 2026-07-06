@@ -93,6 +93,21 @@ pub(crate) fn scene_from_session(
     lower_timed("full", &plist)
 }
 
+/// [`scene_from_session`] that also returns the scene's box-shadow mask requests
+/// (the chrome's non-partitioned lane). The caller builds the masks before
+/// rasterizing. (Box-shadow — chrome masks.)
+pub(crate) fn scene_from_session_with_masks(
+    session: &IncrementalLayout<NodeId>,
+    dom: &ScriptedDom,
+    cursor: Option<TextCursor>,
+    scroll: &ScrollOffsets<NodeId>,
+    width: u32,
+    height: u32,
+) -> (Scene, Vec<paint_list_render::BoxShadowMaskRequest>) {
+    let plist = paint_list_from_session(session, dom, cursor, scroll, width, height);
+    lower_with_masks("full", &plist)
+}
+
 pub(crate) fn scene_from_session_excluding_subtrees(
     session: &IncrementalLayout<NodeId>,
     dom: &ScriptedDom,
@@ -101,7 +116,7 @@ pub(crate) fn scene_from_session_excluding_subtrees(
     skipped_subtrees: &FxHashSet<NodeId>,
     width: u32,
     height: u32,
-) -> Scene {
+) -> (Scene, Vec<paint_list_render::BoxShadowMaskRequest>) {
     let plist = paint_list_from_session_excluding_subtrees(
         session,
         dom,
@@ -111,7 +126,7 @@ pub(crate) fn scene_from_session_excluding_subtrees(
         width,
         height,
     );
-    lower_timed("base", &plist)
+    lower_with_masks("base", &plist)
 }
 
 pub(crate) fn scene_from_session_subtree(
@@ -122,9 +137,9 @@ pub(crate) fn scene_from_session_subtree(
     scroll: &ScrollOffsets<NodeId>,
     width: u32,
     height: u32,
-) -> Option<Scene> {
+) -> Option<(Scene, Vec<paint_list_render::BoxShadowMaskRequest>)> {
     let plist = paint_list_from_session_subtree(session, dom, root, cursor, scroll, width, height)?;
-    Some(lower_timed("orrery", &plist))
+    Some(lower_with_masks("orrery", &plist))
 }
 
 /// Lower a paint list to a `netrender::Scene`, logging the P0 attribution spans
@@ -144,6 +159,36 @@ fn lower_timed(lane: &str, plist: &ServalPaintList) -> Scene {
         "paint list lowered"
     );
     scene
+}
+
+/// Like [`lower_timed`] but via `translate_paint_cmd_stream`, which *returns* the
+/// scene's box-shadow mask requests instead of discarding them (the scene-only
+/// `translate_paint_list` drops them). The caller must build each mask
+/// (`Renderer::build_box_shadow_mask`) before rasterizing, or the blurred shadows
+/// reference unbuilt mask images and paint black. The chrome scene lanes use this
+/// so gnode / pane box-shadows render — the content-card path already does the
+/// same. (Box-shadow — chrome masks.)
+fn lower_with_masks(
+    lane: &str,
+    plist: &ServalPaintList,
+) -> (Scene, Vec<paint_list_render::BoxShadowMaskRequest>) {
+    use paint_list_api::PaintList;
+    let t = std::time::Instant::now();
+    let tdl = paint_list_render::translate_paint_cmd_stream(
+        plist.viewport(),
+        plist.commands(),
+        plist.fonts(),
+        plist.images(),
+    );
+    tracing::debug!(
+        target: "meerkat::profile",
+        lane,
+        lower_us = t.elapsed().as_micros() as u64,
+        cmds = plist.commands().len(),
+        masks = tdl.box_shadow_masks.len(),
+        "paint list lowered (masks kept)"
+    );
+    (tdl.scene, tdl.box_shadow_masks)
 }
 
 /// The [`ServalPaintList`] half of [`scene_from_session`]: emit from the session,

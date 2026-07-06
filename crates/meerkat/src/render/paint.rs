@@ -9,14 +9,41 @@
 
 use super::*;
 
+/// A chrome scene plus the box-shadow mask requests it references. The masks must
+/// be built (`build_box_shadow_mask`) immediately before this scene rasterizes, or
+/// its blurred shadows reference unbuilt mask images and paint black. (Box-shadow.)
+type ChromeScene = (netrender::Scene, Vec<paint_list_render::BoxShadowMaskRequest>);
+
 pub(super) enum ChromeRasterPlan {
-    Full(netrender::Scene),
+    Full(ChromeScene),
     Partitioned {
-        base_scene: Option<netrender::Scene>,
-        orrery_scene: Option<netrender::Scene>,
+        base_scene: Option<ChromeScene>,
+        orrery_scene: Option<ChromeScene>,
         orrery_rect: [f32; 4],
         base_sig: u64,
     },
+}
+
+/// Build every box-shadow mask a chrome scene references, immediately before it
+/// rasterizes. Chrome scenes rasterize 1:1 (`rasterize_for`, not the content
+/// lane's `rasterize_scaled_for`), so the mask geometry is used verbatim — no DPR
+/// scaling, unlike the per-card build. Masks for the base and orrery sub-scenes
+/// reuse the same key range, so each must be built right before its own rasterize
+/// (they rasterize sequentially, so the registry holds the right masks each time).
+fn build_chrome_masks(
+    core: &serval_winit_host::RenderCore,
+    masks: &[paint_list_render::BoxShadowMaskRequest],
+) {
+    for m in masks {
+        core.renderer().build_box_shadow_mask(
+            m.key,
+            m.dim,
+            m.bounds,
+            m.corner_radius,
+            m.blur_radius_px,
+            m.invert,
+        );
+    }
 }
 
 /// All the per-frame build-up outputs the paint pass consumes, bundled so
@@ -92,7 +119,8 @@ impl WindowCtx<'_> {
             wgpu::TextureView,
             Option<(wgpu::TextureView, [f32; 4])>,
         ) = match chrome {
-            ChromeRasterPlan::Full(chrome_scene) => {
+            ChromeRasterPlan::Full((chrome_scene, masks)) => {
+                build_chrome_masks(core, &masks);
                 let (tex, view) = core.rasterize_for(
                     super::surface_keys::CHROME_FULL,
                     &chrome_scene,
@@ -108,11 +136,8 @@ impl WindowCtx<'_> {
                 orrery_rect,
                 base_sig,
             } => {
-                let reraster_base = base_scene.is_some();
-                if reraster_base {
-                    let scene = base_scene
-                        .as_ref()
-                        .expect("base scene when rerastering chrome base");
+                if let Some((scene, masks)) = base_scene.as_ref() {
+                    build_chrome_masks(core, masks);
                     let (tex, view) = core.rasterize_for(
                         super::surface_keys::CHROME_BASE,
                         scene,
@@ -135,7 +160,8 @@ impl WindowCtx<'_> {
                     .expect("chrome base texture cached");
                 let sw = (orrery_rect[2] - orrery_rect[0]).round().max(1.0) as u32;
                 let sh = (orrery_rect[3] - orrery_rect[1]).round().max(1.0) as u32;
-                if let Some(scene) = orrery_scene.as_ref() {
+                if let Some((scene, masks)) = orrery_scene.as_ref() {
+                    build_chrome_masks(core, masks);
                     let (subtree_tex, subtree_view) = core.rasterize_for(
                         super::surface_keys::CHROME_ORRERY,
                         scene,

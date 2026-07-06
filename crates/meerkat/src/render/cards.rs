@@ -169,7 +169,7 @@ impl crate::WindowCtx<'_> {
                     base_sig,
                 }
             } else {
-                super::paint::ChromeRasterPlan::Full(crate::serval_render::scene_from_session(
+                super::paint::ChromeRasterPlan::Full(crate::serval_render::scene_from_session_with_masks(
                     session.layout(),
                     &dom,
                     cursor,
@@ -179,7 +179,7 @@ impl crate::WindowCtx<'_> {
                 ))
             }
         } else {
-            super::paint::ChromeRasterPlan::Full(crate::serval_render::scene_from_session(
+            super::paint::ChromeRasterPlan::Full(crate::serval_render::scene_from_session_with_masks(
                 session.layout(),
                 &dom,
                 cursor,
