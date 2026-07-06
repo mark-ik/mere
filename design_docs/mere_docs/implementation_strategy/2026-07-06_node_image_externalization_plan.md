@@ -64,31 +64,76 @@ Cross-refs:
 
 Today (per node, held for the whole session in the kernel truth):
 
-```
+```rust
 Node { … thumbnail_png: Option<Vec<u8>>, thumbnail_width/height: u32,
           favicon_rgba:  Option<Vec<u8>>, favicon_width/height:  u32, … }
 ```
 
-After:
+After — the node holds a small **role-keyed set** of references, no pixels:
 
-```
-Node { … thumbnail: Option<ImageRef>, favicon: Option<ImageRef>, … }
-ImageRef { hash: Hash, width: u32, height: u32 }   // ~40 B, no pixels
+```rust
+Node { … images: BTreeMap<ImageRole, ImageRef>, … }
+ImageRef  { hash: Hash, width: u32, height: u32 }   // ~40 B, no pixels
+ImageRole { Favicon, Preview, Snapshot(lane) }      // extensible; deterministic order
 
 // pixels live once, content-addressed, in the eidetic blob store:
 //   content/image/<blake3-hex>  ->  PNG bytes
 ```
 
+**A role-keyed map, not two fixed slots.** Preview imagery is three roles, not two:
+the **favicon** (site icon on the node face), the **preview** (the small default
+thumbnail), and the **snapshot** (the last-rendered peek the preview card shows) —
+and snapshots want to key by render lane (last rasterized band for serval lanes,
+last captured frame for scry tiles), so a node can hold more than one. Today
+`thumbnail_png` conflates preview and snapshot into one slot: depositing a snapshot
+*overwrites* the thumbnail, so a node cannot hold both a tiny orrery-face sprite and
+a larger last-render peek. The content-addressed store already holds N images per
+node trivially, so only the node's *reference shape* has to generalize — from two
+`Option` fields to a small `BTreeMap<ImageRole, ImageRef>` (deterministic order for
+stable snapshots). New roles (per-lane snapshots) are added by extending the key,
+touching no storage.
+
 The kernel holds references (a few MB across 50k nodes). The pixels live once each
-in the durable store (dedup collapses shared favicons). The render layer decodes
-only what it is about to show, into a bounded cache.
+in the durable store (dedup collapses shared favicons *and* repeated snapshots of an
+unchanged page). The render layer decodes only what it is about to show, into a
+bounded cache.
 
 **Unify on PNG-in-blob.** The favicon is stored raw RGBA today but the render path
 already re-encodes it to a PNG data URI (`textures.rs` `favicon_data_uri` →
-`png_bytes_from_rgba`). Storing both thumbnail and favicon as PNG in the blob lets
-the render path treat them identically (`png_data_uri` over the loaded bytes, no
-re-encode), shrinks on-disk size, and keeps `ImageRef` format-free (the blob is
-always PNG; the reference just carries the decoded dimensions).
+`png_bytes_from_rgba`). Storing every role as PNG in the blob lets the render path
+treat them identically (`png_data_uri` over the loaded bytes, no re-encode), shrinks
+on-disk size, and keeps `ImageRef` format-free (the blob is always PNG; the
+reference just carries the decoded dimensions).
+
+## Snapshots and preview cards ride the same store
+
+This is not a bolt-on: the preview / snapshot card **already** stores its pixels in
+`Node::thumbnail_png`, so externalizing that field externalizes snapshots for free,
+and the connection tightens the plan in three ways (verified in `render/cards.rs`,
+card design §4):
+
+- **The deposit path is already a thumbnail write.** A snapshot deposit is
+  `GraphDelta::SetNodeThumbnail { png_bytes, width, height }` (compat-view tiles
+  capture a WebView frame on teardown and persist it as the node thumbnail); the
+  card *prefers* `node.thumbnail_png` as its source ("the deposited last-seen
+  pixels", summoning design §5), re-rendering only on absence. Under this plan a
+  deposit becomes `save_image → ImageRef` under the `Snapshot`/`Preview` role.
+- **The bounded decoded cache already exists.** `window_view::snapshot_data_uris`
+  (member-keyed, URL-guarded so in-place nav invalidates, capped at 256 with a crude
+  clear-all-on-full) *is* the Phase 4 cache. The resolver generalizes it: keep the
+  member/url guard, replace clear-all-on-full with a real byte-bounded LRU, and key
+  by `ImageRef` hash so identical snapshots share a decode.
+- **Content-addressing makes re-deposit idempotent.** Today every `SetNodeThumbnail`
+  rewrites the bytes and dirties the graph even when the page is unchanged. Under
+  content-addressing an unchanged page re-deposits to the same BLAKE3 hash → same
+  blob → and if the `ImageRef` is unchanged, no graph-dirty churn. It also lets the
+  crude `BLANK_THUMBNAIL_MAX` blank-guard (treat a suspiciously-small PNG as absent)
+  stay a render-time heuristic rather than something baked into storage.
+
+Retention, though, differs by role — see Phase 5. A favicon is trivially
+re-fetchable; a scry-tier snapshot may be the *only* offline representation of
+content that cannot be cheaply re-rendered, so the two are stored the same way but
+forgotten under different rules.
 
 ## Phases
 
@@ -100,11 +145,13 @@ Each phase states its done-condition (a checkable property), not a duration.
   `save_image(store, png_bytes) -> Hash` (content-addressed via `eidetic::Hash::of`,
   written under `content/image/<hash>`), `load_image(store, hash) -> Option<Vec<u8>>`,
   `delete_image(store, hash) -> bool`. Saving the same bytes twice is one blob.
-- `ImageRef { hash, width, height }` as the small handle. Home: the kernel
-  (`kernel::types`) since `Node` holds it and `PersistedNode` persists it, with the
-  hash stored as bytes/hex so the kernel does not take an eidetic dependency it
-  should not (mirror the existing `UuidAsBytes` treatment; a plain 32-byte array +
-  hex is enough — the kernel never hashes, it only carries the handle).
+- `ImageRef { hash, width, height }` as the small handle, plus `ImageRole`
+  (`Favicon`, `Preview`, `Snapshot(lane)` — a flat enum now, the snapshot lane a
+  minimal `Default` to start, extensible later). Home: the kernel (`kernel::types`)
+  since `Node` holds them and `PersistedNode` persists them, with the hash stored as
+  bytes/hex so the kernel takes no eidetic dependency it should not (mirror the
+  existing `UuidAsBytes` treatment; a plain 32-byte array + hex is enough — the
+  kernel never hashes, it only carries the handle).
 - **Done when:** a round-trip unit test over an in-memory `Store` (the `MemStore`
   pattern already in `content_store` / `athanor` tests) shows save→load returns the
   bytes, two saves of identical bytes produce one blob at one key, and distinct
@@ -113,15 +160,18 @@ Each phase states its done-condition (a checkable property), not a duration.
 ### Phase 2 — Kernel `Node` swap + persistence + migration
 
 - Replace the six inline fields (`thumbnail_png`, `thumbnail_width`,
-  `thumbnail_height`, `favicon_rgba`, `favicon_width`, `favicon_height`) with
-  `thumbnail: Option<ImageRef>` and `favicon: Option<ImageRef>` on `Node` and
-  `PersistedNode`; update `snapshot/to.rs`, `snapshot/from.rs`, and the accessor
-  sites listed in Findings.
+  `thumbnail_height`, `favicon_rgba`, `favicon_width`, `favicon_height`) with the
+  `images: BTreeMap<ImageRole, ImageRef>` map on `Node` and `PersistedNode`; update
+  `snapshot/to.rs`, `snapshot/from.rs`, and the accessor sites listed in Findings.
+  Accessor ergonomics: small helpers (`node.favicon()`, `node.image(role)`) so call
+  sites read a role rather than index the map directly.
 - **Migration.** Existing `graph.json` snapshots carry inline PNG/RGBA. On load,
-  detect the legacy fields (keep them as `#[serde(default)]` deserialize-only
-  shadow fields), write their bytes to the image store, and populate the new
-  `ImageRef`. One-time, lossless, and it runs through the same host that already
-  holds the store at load. A snapshot with no images migrates trivially.
+  detect the legacy fields (keep them as `#[serde(default)]` deserialize-only shadow
+  fields), write their bytes to the image store, and populate the map: `favicon_rgba`
+  → `Favicon`, `thumbnail_png` → `Preview` (the legacy slot was the deposited
+  preview/snapshot; the preview/snapshot split begins post-migration). One-time,
+  lossless, runs through the same host that already holds the store at load. A
+  snapshot with no images migrates trivially.
 - **Done when:** a graph with a thumbnail and a favicon survives
   snapshot→load→re-render with the images intact; a legacy snapshot (inline bytes)
   loads, externalizes, and re-saves with references only and no pixels in the JSON;
@@ -133,39 +183,59 @@ Each phase states its done-condition (a checkable property), not a duration.
 - The capture / import / favicon paths that set image bytes today
   (`browse_capture.rs`, `import/web_clip.rs`, favicon fetch, `node_ops.rs`,
   `graph_engram.rs` — see Findings) call `save_image` and set the returned
-  `ImageRef` on the node instead of moving `Vec<u8>` inline. Favicon capture
+  `ImageRef` under its role instead of moving `Vec<u8>` inline. Favicon capture
   encodes RGBA→PNG once at store time (reusing `png_bytes_from_rgba`).
-- **Done when:** capturing a thumbnail or favicon writes one blob and leaves only a
-  reference on the node; no write path constructs an inline image `Vec<u8>` on a
-  `Node` anymore (enforced by the field simply no longer existing).
+- **Snapshot deposit is one of these write sites.** `GraphDelta::SetNodeThumbnail`
+  (the compat-view teardown-capture path, card design §4) becomes a `save_image`
+  under the `Snapshot`/`Preview` role that sets an `ImageRef` — so the deposit no
+  longer carries `Vec<u8>` through the delta, and an unchanged re-deposit is a
+  content-addressed no-op instead of a graph-dirtying byte rewrite.
+- **Done when:** capturing a favicon, a preview, or a snapshot writes one blob and
+  leaves only a reference on the node; no write path (deposit included) constructs
+  an inline image `Vec<u8>` on a `Node` anymore (enforced by the field no longer
+  existing).
 
 ### Phase 4 — Render resolver + bounded decoded-image cache
 
 - The card builder (`render/cards.rs`, `render/paint.rs`) resolves an `ImageRef`
-  to a data URI through a new resolver that: checks a bounded in-memory cache keyed
-  by hash; on a miss, `block_on(load_image(store, hash))` (the ready-fjall-future
-  pattern `load_cached` already uses), wraps via `png_data_uri`, and inserts into
-  the cache. The cache holds the encoded data URI (or PNG bytes) for recently shown
-  nodes, evicted LRU under a byte bound.
+  to a data URI through a resolver that checks a bounded in-memory cache keyed by
+  hash; on a miss, `block_on(load_image(store, hash))` (the ready-fjall-future
+  pattern `load_cached` already uses), wraps via `png_data_uri`, and inserts.
+- **This generalizes the cache that already exists.** `window_view::snapshot_data_uris`
+  (member-keyed, URL-guarded, capped at 256 with clear-all-on-full) is today's
+  version for the snapshot card. The resolver *is* this cache, upgraded: keyed by
+  `ImageRef` hash (so identical images across nodes share one decode), evicted LRU
+  under a byte bound instead of cleared wholesale, and serving every role rather than
+  just snapshots. Keep its member/url guard so in-place navigation still invalidates.
 - This is the one perf-sensitive seam: the bound replaces "every node's pixels,
   forever" with "the visible working set." It composes with the existing per-surface
   netrender tile caches (render perf plan) rather than replacing them.
-- **Done when:** visible cards render their imagery identically to today; the
-  meerkat render-perf harness shows no regression on the steady-state card-raster
-  path; the cache respects its byte bound (an eviction test).
+- **Done when:** visible cards render their favicon / preview / snapshot identically
+  to today; the meerkat render-perf harness shows no regression on the steady-state
+  card-raster path; the cache respects its byte bound (an eviction test).
 
 ### Phase 5 — Orphan GC as an Athanor pass
 
-- Image blobs are shared (content-addressed), so eviction is **mark-sweep against
-  live references**, not per-URL drop: an image blob is droppable only when no live
-  node's `ImageRef` names its hash. Add `propose_image_gc` (pure: diff the store's
-  `content/image/*` keys against the set of hashes referenced by the snapshot's
-  nodes) and `apply_image_gc` (drop the unreferenced blobs) alongside Athanor's
-  existing forgetting pass, honoring the same R0 propose/apply split and the same
-  "never drop what a long-term node references" guard.
-- **Done when:** a blob referenced by any node (short- or long-term) is never
-  proposed; a blob no node references is proposed and dropped; re-running the pass
-  is a safe no-op.
+- **Orphan sweep (structural).** Image blobs are shared (content-addressed), so
+  eviction is **mark-sweep against live references**, not per-URL drop: a blob is
+  droppable only when no live node's `ImageRef` names its hash. Add `propose_image_gc`
+  (pure: diff the store's `content/image/*` keys against the set of hashes referenced
+  across the snapshot's nodes) and `apply_image_gc` (drop the unreferenced blobs)
+  alongside Athanor's existing forgetting pass, same R0 propose/apply split.
+- **Retention differs by role (policy).** Orphaning happens when a node drops a
+  reference — and *which* references a forgotten node drops is role-dependent, the
+  point the snapshot convergence surfaced. When Athanor forgets a short-term stale
+  node's cached content today, it can also drop that node's **favicon** reference
+  (trivially re-fetchable) but should keep a **snapshot** of content that cannot be
+  cheaply re-rendered (a scry-tier last-frame is the only offline copy — "don't drop
+  what you can't re-derive"). Promoted (long-term) nodes keep all their imagery.
+  Encode this as a per-role rule on the existing `memory_levels` axis, not a new
+  policy surface: favicon = disposable cache, snapshot = node-precious. The favicon
+  then re-materializes on next visit; the snapshot would be gone for good.
+- **Done when:** a blob referenced by any node is never orphan-proposed; a blob no
+  node references is proposed and dropped; a forgotten short-term node drops its
+  favicon reference but retains an un-refetchable snapshot; a promoted node retains
+  all imagery; re-running the pass is a safe no-op.
 
 ### Phase 6 — Re-measure (the receipt)
 
@@ -193,6 +263,10 @@ Per the "expose design choices as settings, track the full space" discipline:
 - **Thumbnail capture policy** — which nodes get a thumbnail at all (all fetched
   pages vs a subset) is an upstream capture setting that this plan does not decide;
   it only changes where the bytes land.
+- **Image roles** — the `ImageRole` set (favicon / preview / snapshot) is extensible
+  without a storage change: per-lane snapshots (serval band vs scry frame) are new
+  keys, not new fields. Which roles a given node populates, and at what resolution a
+  snapshot is captured, are capture-side policies this plan leaves open.
 
 ## Risks
 
@@ -243,6 +317,14 @@ Verified against the code, 2026-07-06:
 - **Consumer path.** `render/textures.rs` turns image bytes into `data:image/png`
   URIs embedded as `<img>` in the orrery card that serval renders
   (`favicon_data_uri`, `png_data_uri`). The resolver slots in right here.
+- **Snapshots already ride `thumbnail_png`.** The preview / snapshot card prefers
+  `node.thumbnail_png` (the deposited last-seen pixels) and re-renders only on
+  absence (`render/cards.rs`); the deposit path is `GraphDelta::SetNodeThumbnail`
+  (compat-view teardown-capture, card design §4). `window_view::snapshot_data_uris`
+  (member-keyed, url-guarded, cap 256, clear-all-on-full) is the window-local decoded
+  cache derived from that thumbnail — i.e. the bounded cache this plan formalizes.
+  So externalizing `thumbnail_png` externalizes snapshots for free; the role-keyed
+  map is what un-conflates preview from snapshot going forward.
 - **Field / accessor sites to change (23 files touch the image fields).** Kernel:
   `graph/node.rs`, `graph/node_props.rs`, `graph/mod.rs`, `persistence.rs`,
   `graph/snapshot/{to,from}.rs`, `graph/cross_graph.rs`, `graph/capture.rs`, plus
@@ -259,3 +341,12 @@ Verified against the code, 2026-07-06:
   content-address / forgetting substrate already exists (eidetic `Store`,
   `content_store`, Athanor, BLAKE3), so this is a reuse-and-reference change, not a
   new subsystem. No code written yet.
+- **2026-07-06 (refinement)** — Folded in the snapshot / preview-card convergence
+  (Mark's prompt): snapshots already ride `Node::thumbnail_png`, and
+  `snapshot_data_uris` is already the bounded decoded cache, so the store, resolver,
+  and GC cover snapshots at no extra cost. Generalized the node's image references
+  from two fixed `Option<ImageRef>` fields to a role-keyed `BTreeMap<ImageRole,
+  ImageRef>` (favicon / preview / per-lane snapshot), un-conflating the preview and
+  snapshot that share `thumbnail_png` today, and added per-role retention (favicon =
+  disposable/re-fetchable, snapshot = node-precious for un-refetchable content) on
+  the existing `memory_levels` axis.
