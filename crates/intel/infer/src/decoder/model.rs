@@ -83,6 +83,11 @@ impl<B: Backend> DecoderModel<B> {
         &self.config
     }
 
+    /// The device this model's weights live on.
+    pub fn device(&self) -> B::Device {
+        self.embed.weight.device()
+    }
+
     /// Hidden states after the final norm.
     /// `input_ids: [batch, seq]`; `start` = absolute position of the
     /// first token (0 for full-sequence prefill).
@@ -98,10 +103,49 @@ impl<B: Backend> DecoderModel<B> {
     pub fn logits(&self, input_ids: Tensor<B, 2, Int>, start: usize) -> Tensor<B, 3> {
         self.lm_head.forward(self.forward_hidden(input_ids, start))
     }
+
+    /// A fresh, empty KV cache sized to this model's layer count.
+    pub fn new_cache(&self) -> KvCache<B> {
+        KvCache {
+            layers: (0..self.layers.len())
+                .map(|_| super::attention::LayerKvCache::default())
+                .collect(),
+            position: 0,
+        }
+    }
+
+    /// Cached forward: consumes `input_ids` as the tokens at absolute
+    /// positions `cache.position..`, extends the cache, and returns
+    /// logits `[batch, seq, vocab]` for the block. Prefill = first call
+    /// with the whole prompt; decode = subsequent single-token calls.
+    pub fn forward_cached(&self, input_ids: Tensor<B, 2, Int>, cache: &mut KvCache<B>) -> Tensor<B, 3> {
+        let seq = input_ids.dims()[1];
+        let start = cache.position;
+        let mut h = self.embed.forward(input_ids);
+        for (layer, layer_cache) in self.layers.iter().zip(cache.layers.iter_mut()) {
+            h = layer.forward_cached(h, &self.rope, layer_cache, start);
+        }
+        cache.position += seq;
+        self.lm_head.forward(self.final_norm.forward(h))
+    }
+}
+
+/// Model-level KV cache: one [`super::attention::LayerKvCache`] per layer
+/// plus the absolute position of the next token.
+pub struct KvCache<B: Backend> {
+    layers: Vec<super::attention::LayerKvCache<B>>,
+    position: usize,
+}
+
+impl<B: Backend> KvCache<B> {
+    /// Absolute position of the next token (== tokens consumed so far).
+    pub fn position(&self) -> usize {
+        self.position
+    }
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::super::test_support::{t1_ones, t2, tiny_config};
     use super::*;
     use burn::backend::NdArray;

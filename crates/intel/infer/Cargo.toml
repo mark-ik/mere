@@ -12,6 +12,7 @@ path = "src/lib.rs"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
+tracing = "0.1"
 # The inference actor (harness §3) rides armillary's thread-actor harness.
 # Optional so the seam's core stays thread-free and wasm-clean; hosts that
 # spawn the actor enable `actor`.
@@ -25,12 +26,20 @@ safetensors = { version = "0.4", optional = true }
 # BF16/F16 → f32 decode at the safetensors boundary (TinyLlama and most
 # HF llama-family checkpoints ship bfloat16).
 half = { version = "2", optional = true }
+# HF tokenizer.json — the ONE tokenizer stack (shared shape with embed's
+# bert; no tiktoken/sentencepiece duality).
+tokenizers = { version = "0.20", default-features = false, features = ["onig"], optional = true }
 
 [features]
 default = []
 actor = ["dep:armillary"]
-decoder = ["dep:burn", "dep:serde_json", "dep:safetensors", "dep:half"]
+decoder = ["dep:burn", "dep:serde_json", "dep:safetensors", "dep:half", "dep:tokenizers"]
 decoder-wgpu = ["decoder", "burn/wgpu"]
 
 [dev-dependencies]
 serde_json = "1.0"
+# The P2 corridor test: model artifacts through eidetic's typed store and
+# back into a working provider (embed's bert_full_pipeline pattern).
+eidetic = { workspace = true }
+pollster = "0.4"
+async-trait = "0.1"

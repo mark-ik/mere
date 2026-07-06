@@ -41,8 +41,9 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 /// JSON-LD ingest (Phase 2): `application/ld+json` → a graph contribution.
 pub mod ingest;
 
-/// SPARQL query over the graph via an in-memory Oxigraph store (the `query`
-/// feature). Consumes [`node_quads`] as its projection.
+/// SPARQL query over the graph via spareval evaluating directly over the
+/// projected dataset (the `query` feature). Consumes [`dataset_quads`] as its
+/// projection.
 #[cfg(feature = "query")]
 pub mod query;
 

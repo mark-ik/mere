@@ -71,7 +71,7 @@ impl InferenceProvider for CannedProvider {
     fn generate_streaming(
         &self,
         request: &GenerationRequest,
-        on_token: &mut dyn FnMut(&str),
+        on_token: &mut dyn FnMut(&str) -> std::ops::ControlFlow<()>,
     ) -> Result<String, InferError> {
         if request.prompt.is_empty() {
             return Err(InferError::InvalidRequest("empty prompt".to_string()));
@@ -104,14 +104,16 @@ impl InferenceProvider for CannedProvider {
                 format!(" {word}")
             };
             let candidate = format!("{out}{fragment}");
-            if let Some(stop) = request.stop.iter().find(|s| candidate.contains(s.as_str())) {
+            if request.stop.iter().any(|s| candidate.contains(s.as_str())) {
                 // Stop before emitting the fragment that completes the
                 // stop sequence, matching real-runtime stop semantics.
-                let _ = stop;
                 break;
             }
-            on_token(&fragment);
+            let flow = on_token(&fragment);
             out = candidate;
+            if flow.is_break() {
+                break;
+            }
         }
         Ok(out)
     }
@@ -131,7 +133,10 @@ mod tests {
                     prompt: "hello world".to_string(),
                     ..Default::default()
                 },
-                &mut |t| fragments.push(t.to_string()),
+                &mut |t| {
+                    fragments.push(t.to_string());
+                    std::ops::ControlFlow::Continue(())
+                },
             )
             .unwrap();
         assert_eq!(full, "echo: hello world");
@@ -175,11 +180,38 @@ mod tests {
                     stop: vec!["STOP".to_string()],
                     ..Default::default()
                 },
-                &mut |t| fragments.push(t.to_string()),
+                &mut |t| {
+                    fragments.push(t.to_string());
+                    std::ops::ControlFlow::Continue(())
+                },
             )
             .unwrap();
         assert_eq!(out, "alpha beta");
         assert!(!fragments.iter().any(|f| f.contains("STOP")));
+    }
+
+    #[test]
+    fn callback_break_stops_after_current_fragment() {
+        let p = CannedProvider::new().with_response("q", "one two three four");
+        let mut fragments = Vec::new();
+        let out = p
+            .generate_streaming(
+                &GenerationRequest {
+                    prompt: "q".to_string(),
+                    ..Default::default()
+                },
+                &mut |t| {
+                    fragments.push(t.to_string());
+                    if fragments.len() == 2 {
+                        std::ops::ControlFlow::Break(())
+                    } else {
+                        std::ops::ControlFlow::Continue(())
+                    }
+                },
+            )
+            .unwrap();
+        assert_eq!(out, "one two", "generation stops after the Break fragment");
+        assert_eq!(fragments.len(), 2);
     }
 
     #[test]

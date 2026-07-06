@@ -33,6 +33,14 @@ OS window, each window's view function a lens over shared state.
 - **Divergence on the record:** the platform has atomic moves only within
   a document (`moveBefore`). Cross-window state-preserving moves are ours
   alone; the runner-projection architecture is what makes them tractable.
+- **Graduated (same day):** the design landed as
+  [one_state_n_windows_design](../design/2026-07-05_one_state_n_windows_design.md),
+  which resolves the divergence by dissolving it — one forest dom makes a
+  cross-window move same-document, so the platform primitive covers it.
+  Engine side: `serval/docs/2026-07-05_movebefore_dom_standard_plan.md`,
+  S1-S3 landed 2026-07-05 (`DomMutation::Moved` + `ScriptedDom::move_before`
+  + splice-path verification + `Node.prototype.moveBefore`); S5 there is
+  this idea's keyed-view half.
 
 ## 2. LOD as a style axis — absorbed into the standards review (C2)
 

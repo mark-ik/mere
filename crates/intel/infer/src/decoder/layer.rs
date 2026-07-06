@@ -89,7 +89,21 @@ impl<B: Backend> DecoderLayer<B> {
 
     /// `x: [batch, seq, hidden]` → same shape.
     pub fn forward(&self, x: Tensor<B, 3>, rope: &RotaryEncoding<B>, start: usize) -> Tensor<B, 3> {
-        let h = x.clone() + self.attention.forward(self.input_norm.forward(x), rope, start);
+        self.forward_cached(x, rope, &mut super::attention::LayerKvCache::default(), start)
+    }
+
+    /// Cached variant: threads the layer's KV cache through attention.
+    pub fn forward_cached(
+        &self,
+        x: Tensor<B, 3>,
+        rope: &RotaryEncoding<B>,
+        cache: &mut super::attention::LayerKvCache<B>,
+        start: usize,
+    ) -> Tensor<B, 3> {
+        let h = x.clone()
+            + self
+                .attention
+                .forward_cached(self.input_norm.forward(x), rope, cache, start);
         let mlp = self.down.forward(self.mlp.forward(self.post_norm.forward(h.clone())));
         h + mlp
     }

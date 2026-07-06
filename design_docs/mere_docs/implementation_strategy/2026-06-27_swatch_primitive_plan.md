@@ -12,7 +12,9 @@ cards plan](2026-06-29_graph_object_roster_detail_cards_plan.md)'s 2026-07-01
 entry), but P4/P5's full done conditions (per-cell edge *thickness*, one shared
 element-model edge renderer between the orrery and the connections swatch, and
 the P5 `GraphDefault < GraphViewOverride < SelectionOverride` layered stack)
-remain open. P6/P7 remain unstarted. Sequence:
+remain open. **P6 did not land as scoped** (see Progress 2026-07-05): the gloss
+minimap migrated Scene->DOM through a separate, parallel implementation, not
+this plan's component; P7 remains unstarted. Sequence:
 **primitive-first** (Mark, 2026-06-27): P1 extract the
 generic component, P2 the connections swatch, P3 the classifier + strip, then the
 edge enrichment (P4/P5), the gloss migration (P6), and templates (P7).
@@ -231,6 +233,15 @@ and that the element-model / rasterization split holds at whole-graph density.
 fill is the high-density LOD backend under the element model, not a parallel render;
 click-to-focus and theme sourcing are unchanged.
 
+**Status (2026-07-05): shipped differently, not through this component — see
+Progress.** The [gloss_scene_to_dom_migration_plan](../../archive_docs/2026-07-04_completed_plans/2026-07-01_gloss_scene_to_dom_migration_plan.md)
+(archived, complete, headed-verified 2026-07-01/02) converted the minimap to
+DOM node squares + an embedded-Scene edges backdrop, but via its own bespoke
+`gloss_view.rs`, not `swatch_view<S>`/`Scope::Graph`. Reconciled and accepted
+as a deliberate divergence, not an open gap to close later — see Progress for
+the reasoning. This phase's done-condition as literally written will not be
+pursued unless a third swatch consumer emerges.
+
 ### P7 — Templates
 
 A template is a named preset over `(scope, layout, lens, projection, mode)` plus a
@@ -431,3 +442,35 @@ template renders a purpose-built UI over its own subgraph.
   in `serval_render.rs`/`pane_session.rs`, logged in the surface-engine fold plan), not a
   swatch issue. Still unverified headed: the P5 hide/show spring relaxation (focused
   tests cover it) and the P4 fan/pick on a multi-relation pair.
+- **2026-07-05 — Reconciled against code; P6 marked shipped-differently, retrofit
+  scoped and declined.** Code check found the plan's own P2 "Findings" claim was
+  never actually true in full: `Scope`/`SwatchInstance`/the element-model unification
+  (P2b) still does not exist anywhere in the tree (`grep` for `enum Scope`, `struct
+  SwatchInstance` — no hits). What exists is two concrete render fns, `swatch_view<S>`
+  and `connections_swatch_view<S>`, sharing only the `SwatchView<S>` type alias and DOM
+  conventions — not a real generic component a third scope could plug into. Separately,
+  the gloss minimap *was* migrated Scene->DOM (the now-archived gloss-scene-to-dom
+  plan, P1-P3, 247/247 tests, headed-verified 2026-07-01/02) but through its own
+  `gloss_view.rs` (`minimap_view`/`recent_view`), not this plan's component — confirmed
+  by grep, zero references to `swatch_view`/`SwatchInstance`/`Scope::` in that file.
+  DOC_README's swatch-primitive-plan entry still read "P6 ... remain unstarted" even
+  after the archive/reconcile pass added the gloss-migration entry beside it (same
+  commit, 048e225-era docs note never updated) — fixed alongside this entry.
+  **Retrofit scoped, on request, before deciding**: `swatch_view`/`connections_swatch_view`
+  are generic over embedder state precisely *because* they carry no state-bound
+  callbacks — clicks route through the host's external `data-subject`/`data-element`
+  hit-test. `gloss_view.rs`'s minimap/recent instead use direct `clickable(...)`
+  closures over a concrete state type + a local intent queue, the same convention
+  `gloss_outline_view.rs` and the roster views already share. These are two
+  deliberately different, each locally-correct answers to click dispatch, not
+  duplicate work; unifying them means either ripping the intent-queue convention out
+  of the whole DOM-folded gloss/roster/outline family, or bolting stateful callbacks
+  onto `swatch_view` and losing the property that makes it generic over `S` at all.
+  Actual DOM duplication between the two node-rendering paths is small (~30-40
+  lines: a positioned square/dot + a color lookup). **Declined for now**: the payoff
+  (one shared render path) doesn't fully materialize with only two real consumers,
+  and doing it now means re-deriving and re-verifying an already-shipped, tested
+  feature to satisfy this phase's letter rather than a functional gap. Revisit if a
+  third swatch consumer appears — at that point the real `Scope`/`SwatchInstance`
+  abstraction pays for itself across 3+ call sites instead of being bespoke-built for
+  one.

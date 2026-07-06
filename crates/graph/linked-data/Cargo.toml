@@ -19,10 +19,14 @@ default = ["bundled-contexts"]
 # `@context` resolves offline via `ContextCache::full()`. Disable for a slimmer
 # binary — `full()` then equals `minimal()`. See `assets/NOTICE` for licensing.
 bundled-contexts = []
-# SPARQL query over the graph via an in-memory Oxigraph store (no RocksDB, so it
-# stays wasm-viable). Off by default: base linked-data stays slim, only consumers
-# that want SPARQL pull Oxigraph.
-query = ["dep:oxigraph"]
+# SPARQL query over the graph via spareval's `QueryableDataset` evaluated
+# directly over the projected quads (no store copy, no RocksDB, wasm-viable).
+# Off by default: base linked-data stays slim, only consumers that want SPARQL
+# pull the evaluator. `dep:oxigraph` remains only as the test-side parity
+# oracle (the retired copy-into-Store path); it compiles but ships no code
+# outside tests, and can be dropped from this feature once the oracle has
+# earned retirement.
+query = ["dep:spareval", "dep:spargebra", "dep:oxigraph"]
 
 [dependencies]
 kernel.workspace = true
@@ -30,6 +34,8 @@ serde_json.workspace = true
 oxjsonld = "0.2"
 oxrdf = { version = "0.3", features = ["rdf-12"] }
 oxigraph = { version = "0.5", default-features = false, optional = true, features = ["rdf-12"] }
+spareval = { version = "0.2", optional = true, features = ["sparql-12"] }
+spargebra = { version = "0.4", optional = true, features = ["sparql-12"] }
 time = { version = "0.3", features = ["formatting", "parsing"] }
 
 [dev-dependencies]

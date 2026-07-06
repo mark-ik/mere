@@ -1,7 +1,7 @@
 # Inference Provider Plan (burn brief, Lane 3)
 
 **Date**: 2026-07-05
-**Status**: P0 (seam + stub), P1 (own decoder body, greedy; validated on the real TinyLlama checkpoint, 9.95 tok/s on wgpu vs 0.09 on ndarray), and P3 (actor with cancellation) landed. Remaining: temperature/top-p sampling, P2 eidetic loading (the `from_bytes` constructor is ready for it), P4 measurements beyond tokens/sec.
+**Status**: P0 (seam + stub), P1 (own decoder body incl. seeded temperature/top-p sampling; validated on the real TinyLlama checkpoint, 9.95 tok/s on wgpu vs 0.09 on ndarray), P2 (eidetic loading; corridor proven transparent), and P3 (actor with cancellation) landed. Remaining: P4's wasm half (gated on the embed-wasm dependency slice) and the meerkat host wiring (deferred until the concurrent omnibar polish lands).
 **Related**: [burn_utilization_brief](../research/2026-07-04_burn_utilization_brief.md) (Lane 3), [local_models_harness_brief](../research/2026-06-24_local_models_harness_brief.md) (§2 defines this seam; §3 the actor harness; §4 the wasm/native split), [geist_models_brief](../research/2026-05-10_geist_models_brief.md) (adapter envelope, deferred to Lane 4), [burn_wgpu_flip_plan](2026-07-04_burn_wgpu_flip_plan.md) (the GPU receipts motivating burn-first).
 
 ## Scope
@@ -222,6 +222,33 @@ gets bound.
   ndarray is confirmed non-viable for generation (it is single-threaded;
   even so, the gap is architectural, not a build artifact — both runs
   release).
+- 2026-07-05 — **P2 landed.** `tests/eidetic_corridor.rs` (always-run,
+  tiny synthetic checkpoint, no GPU): the artifact triple saved through
+  `ModelLibrary::save_model_with_components`, resolved by `ManifestId`,
+  fed to `DecoderProvider::from_bytes` — generation is byte-identical to
+  a direct load, streaming included, and the resolved weight bytes equal
+  the saved ones (consuming the OpaqueBlob raw-bytes fix). Model loading
+  has no filesystem convention: a `ManifestId` is the address. eidetic +
+  pollster + async-trait joined infer's dev-deps for this test only.
+- 2026-07-05 — **sampling landed** (closes P1's last sub-item).
+  `decoder/sample.rs`: temperature + optional top-p over the host-side
+  logits row, on a dependency-free splitmix64 RNG. The seeding policy is
+  deliberate and documented: `GenerationRequest.seed: Some` gives a
+  bit-reproducible stream; `None` draws one fresh seed per generation
+  from `RandomState` entropy and traces it (`infer` target, debug) so an
+  unseeded run is reproducible after the fact. `generate.rs` generalized
+  to a `TokenPicker` (Greedy | Sampled) with the greedy wrapper intact,
+  so all prior greedy tests keep validating the shared cached path;
+  provider maps `temperature == 0.0` → greedy, `> 0` → sampler (invalid
+  temperatures rejected), `top_p`/`seed` are new request fields (serde
+  defaults, so stored requests stay parseable). Tests: same-seed
+  same-stream (sampler and end-to-end through the provider), tiny-top-p
+  collapses to argmax, low temperature effectively greedy,
+  frequency-ordering over 2000 seeded draws, invalid temps rejected.
+  Suite: 53 lib + 1 corridor green with `--features actor,decoder-wgpu`.
+  Also re-checked Lane 2's gate while closing out: burn-remote's latest
+  crates.io release is still 0.21.0 (2026-05-07); the iroh transport
+  remains unreleased, mesh plan status unchanged.
 - 2026-07-05 — P3 landed ahead of P1 (see Findings for why). `infer::actor`
   behind the `actor` feature (armillary optional dep, so the seam core
   stays wasm-clean — `cargo check -p infer --target wasm32-unknown-unknown`

@@ -297,6 +297,24 @@ kernel directly, with no oxigraph Store in the path.
   the dataset/SPARQL path now emits named-graph quads from those scopes. The
   JSON-LD shapers still deliberately stay default-graph-only, and curated
   `title`/`tags` plus `rdf:type` classifications are not yet graph-scope-aware.
+- **2026-07-06 (Phase 3 landed: `>sparql` on spareval)** — The query path now evaluates
+  directly over the projection: `sparql()` collects `dataset_quads` into an
+  `oxrdf::Dataset` and runs `spareval::QueryEvaluator` (spargebra parse, `sparql-12`
+  feature for triple terms). spareval ships `QueryableDataset for &Dataset` — interned
+  terms + (s,p,o,g) indexes, which is the plan's term-dictionary adapter — and pins
+  the same oxrdf 0.3 this crate builds quads with, so the projection feeds the
+  evaluator with zero cross-model conversion. Receipts: row parity vs the old
+  copy-into-Oxigraph-`Store` path across a 9-query battery (full-dataset scan, GRAPH
+  patterns, reifier metadata, lang FILTER, COUNT, ASK true/false) as a green test
+  (`spareval_rows_match_store_baseline`), and perf 96.7ms vs 151.3ms (spareval ~36%
+  faster, debug, battery x20; tripwire test keeps 3x headroom). The Store path is
+  retired from the mainline and survives only as the in-test parity oracle;
+  `dep:oxigraph` still sits in the `query` feature solely for that oracle and is the
+  one remaining candidate drop. No RocksDB, wasm-viable. A custom kernel-walking
+  `QueryableDataset` (skipping quad materialization) stays an option if profiling
+  ever demands it; today `dataset_quads` materializes for both paths. Consumer API
+  unchanged (`QueryRows`); `EdgeContributionWire` (content-contract) grew the four
+  statement-metadata fields with serde defaults so old wire payloads still parse.
 - **2026-07-05 (Phase 1 closed + Phase 2 gate green)** — The review-ordered tail landed:
   (1) **StatementId minting is federation-safe**: `{unix_ms}-{process_salt}-{counter}` with a
   64-bit per-process salt (OS randomness native; wasm hosts seed via

@@ -61,6 +61,15 @@ pub struct GenerationRequest {
     /// Sampling temperature; `0.0` = deterministic/greedy. Stub providers
     /// ignore it (they are deterministic by construction).
     pub temperature: f32,
+    /// Nucleus (top-p) cutoff for sampled generation; `None` = no cut.
+    /// Ignored when `temperature` is `0.0`.
+    #[serde(default)]
+    pub top_p: Option<f32>,
+    /// RNG seed for sampled generation: `Some` = bit-reproducible token
+    /// stream, `None` = the provider draws a fresh seed. Ignored when
+    /// `temperature` is `0.0`.
+    #[serde(default)]
+    pub seed: Option<u64>,
     /// Generation stops before emitting any of these sequences.
     pub stop: Vec<String>,
 }
@@ -71,6 +80,8 @@ impl Default for GenerationRequest {
             prompt: String::new(),
             max_tokens: 256,
             temperature: 0.0,
+            top_p: None,
+            seed: None,
             stop: Vec::new(),
         }
     }
@@ -115,24 +126,28 @@ impl std::error::Error for InferError {}
 /// Implementations must be `Send + Sync` so one loaded instance can be
 /// shared across threads (the armillary inference actor holds one).
 /// Streaming is primary: fragments go through `on_token` in production
-/// order, and the assembled full text is returned at the end. Callers that
-/// only want the final text use [`generate`](Self::generate).
+/// order, and the assembled full text is returned at the end. The
+/// callback's `ControlFlow` return is the cancellation channel: `Break`
+/// stops generation after the current fragment (the fragment has been
+/// delivered; whether the caller surfaces it is the caller's choice).
+/// Callers that only want the final text use [`generate`](Self::generate).
 pub trait InferenceProvider: Send + Sync {
     /// What this provider's loaded model/runtime pair can do.
     fn capability(&self) -> &ModelCapability;
 
-    /// Generate to completion, pushing each fragment through `on_token`
-    /// as it is produced. Returns the full generated text (the
-    /// concatenation of everything pushed).
+    /// Generate, pushing each fragment through `on_token` as it is
+    /// produced; stop early when the callback returns
+    /// [`ControlFlow::Break`]. Returns the full generated text (the
+    /// concatenation of every delivered fragment).
     fn generate_streaming(
         &self,
         request: &GenerationRequest,
-        on_token: &mut dyn FnMut(&str),
+        on_token: &mut dyn FnMut(&str) -> std::ops::ControlFlow<()>,
     ) -> Result<String, InferError>;
 
     /// Generate and return only the final text.
     fn generate(&self, request: &GenerationRequest) -> Result<String, InferError> {
-        self.generate_streaming(request, &mut |_| {})
+        self.generate_streaming(request, &mut |_| std::ops::ControlFlow::Continue(()))
     }
 }
 

@@ -184,6 +184,10 @@ pub fn links_contribution(
             predicate: predicate.to_string(),
             object: url.clone(),
             graph_scope: GraphScope::Default,
+            statement_id: None,
+            label: None,
+            provenance_iri: None,
+            asserted_at_ms: None,
         });
         nodes.push(NodeContribution {
             id: url,

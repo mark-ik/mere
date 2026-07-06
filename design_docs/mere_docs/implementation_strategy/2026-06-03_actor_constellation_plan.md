@@ -912,5 +912,7 @@ what is most likely to break, the mitigation, and a pointer.
   spec-level data, decoupled from the process): bind `EventLoopId` to an armillary
   actor (native) or a Web Worker (wasm), and carry the `can_block` flag (workers may
   block, windows may not). Trace validation of the event loop (NDJSON tap on the
-  task boundaries, replayed against a TLA+ spec) is the deferred rigor capability,
-  spun out to serval's `2026-06-24_event_loop_rigor_plan.md`.
+  task boundaries, replayed against a TLA+ spec) was spun out to serval's
+  `archive/2026-06-24_event_loop_rigor_plan.md` and landed there (E4 completed
+  2026-07-02; plan archived 2026-07-05, residuals in serval's
+  `2026-07-05_event_loop_rigor_followups.md`).

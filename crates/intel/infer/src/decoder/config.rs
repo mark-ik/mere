@@ -36,6 +36,25 @@ pub struct DecoderConfig {
     /// false; Llama 3.2 1B and SmolLM: true).
     #[serde(default)]
     pub tie_word_embeddings: bool,
+    /// End-of-sequence token id(s). HF configs carry either one int
+    /// (TinyLlama: 2) or a list (Llama 3.2); both parse.
+    #[serde(default, deserialize_with = "one_or_many")]
+    pub eos_token_id: Vec<u32>,
+}
+
+/// Accept `2`, `[2, 3]`, or absent.
+fn one_or_many<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<u32>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OneOrMany {
+        One(u32),
+        Many(Vec<u32>),
+    }
+    Ok(match Option::<OneOrMany>::deserialize(d)? {
+        None => Vec::new(),
+        Some(OneOrMany::One(id)) => vec![id],
+        Some(OneOrMany::Many(ids)) => ids,
+    })
 }
 
 fn default_rms_norm_eps() -> f64 {
@@ -115,6 +134,7 @@ mod tests {
         "rope_theta": 10000.0,
         "tie_word_embeddings": false,
         "torch_dtype": "bfloat16",
+        "eos_token_id": 2,
         "vocab_size": 32000
     }"#;
 
@@ -127,6 +147,18 @@ mod tests {
         assert_eq!(c.head_dim(), 64);
         assert_eq!(c.kv_group_size(), 8);
         assert!(!c.tie_word_embeddings);
+        assert_eq!(c.eos_token_id, vec![2]);
+    }
+
+    #[test]
+    fn eos_list_form_parses() {
+        let json = r#"{
+            "vocab_size": 32, "hidden_size": 8, "intermediate_size": 16,
+            "num_hidden_layers": 2, "num_attention_heads": 4,
+            "max_position_embeddings": 16, "eos_token_id": [128001, 128008]
+        }"#;
+        let c = DecoderConfig::from_json_bytes(json.as_bytes()).unwrap();
+        assert_eq!(c.eos_token_id, vec![128001, 128008]);
     }
 
     #[test]

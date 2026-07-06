@@ -1316,6 +1316,14 @@ struct EdgeContributionWire {
     predicate: String,
     object: String,
     graph_scope: GraphScope,
+    #[serde(default)]
+    statement_id: Option<String>,
+    #[serde(default)]
+    label: Option<String>,
+    #[serde(default)]
+    provenance_iri: Option<String>,
+    #[serde(default)]
+    asserted_at_ms: Option<u64>,
 }
 
 impl From<EdgeContribution> for EdgeContributionWire {
@@ -1325,6 +1333,10 @@ impl From<EdgeContribution> for EdgeContributionWire {
             predicate: edge.predicate,
             object: edge.object,
             graph_scope: edge.graph_scope,
+            statement_id: edge.statement_id,
+            label: edge.label,
+            provenance_iri: edge.provenance_iri,
+            asserted_at_ms: edge.asserted_at_ms,
         }
     }
 }
@@ -1336,6 +1348,10 @@ impl From<EdgeContributionWire> for EdgeContribution {
             predicate: edge.predicate,
             object: edge.object,
             graph_scope: edge.graph_scope,
+            statement_id: edge.statement_id,
+            label: edge.label,
+            provenance_iri: edge.provenance_iri,
+            asserted_at_ms: edge.asserted_at_ms,
         }
     }
 }

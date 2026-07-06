@@ -23,16 +23,22 @@
 
 pub mod attention;
 pub mod config;
+pub mod generate;
 pub mod layer;
 pub mod loader;
 pub mod model;
+pub mod provider;
+pub mod sample;
 pub mod tensors;
 
-pub use attention::DecoderAttention;
+pub use attention::{DecoderAttention, LayerKvCache};
 pub use config::DecoderConfig;
+pub use generate::{TokenPicker, generate_ids, generate_ids_with};
 pub use layer::{DecoderLayer, LoadedDecoderLayer};
 pub use loader::load_decoder_from_bytes;
-pub use model::{DecoderModel, LoadedDecoder};
+pub use model::{DecoderModel, KvCache, LoadedDecoder};
+pub use provider::DecoderProvider;
+pub use sample::Sampler;
 
 /// Deterministic-weight helpers shared by the decoder tests: same values
 /// on every backend by construction (the `embed::bert::wgpu_parity`
@@ -76,6 +82,7 @@ pub(crate) mod test_support {
             rms_norm_eps: 1.0e-5,
             rope_theta: 10_000.0,
             tie_word_embeddings: false,
+            eos_token_id: Vec::new(),
         }
     }
 }
