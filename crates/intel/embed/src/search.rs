@@ -136,10 +136,10 @@ impl<K: Hash + Eq + Clone, P: EmbeddingProvider> SemanticSearch<K, P> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::HashedEmbeddingProvider;
+    use crate::StubEmbeddingProvider;
 
-    fn provider() -> HashedEmbeddingProvider {
-        HashedEmbeddingProvider::new(64).unwrap()
+    fn provider() -> StubEmbeddingProvider {
+        StubEmbeddingProvider::new(64).unwrap()
     }
 
     #[test]
@@ -207,7 +207,7 @@ mod tests {
 
     #[test]
     fn with_index_dimension_mismatch_errors() {
-        let p = HashedEmbeddingProvider::new(64).unwrap();
+        let p = StubEmbeddingProvider::new(64).unwrap();
         let bad_index = VectorIndex::<u32>::new(32, p.metric());
         let result = SemanticSearch::with_index(p, bad_index);
         assert!(matches!(result, Err(SearchError::Index(_))));

@@ -7,8 +7,9 @@ vector index for Mere's statistical-intelligence tier. Target topology:
 This crate provides:
 
 - `EmbeddingProvider` — the trait every embedding source implements (text → fixed-dimension vector).
-- `HashedEmbeddingProvider` — a deterministic hash-based provider. Same input always produces the same vector; different inputs produce different but uncorrelated vectors. Useful for testing pipelines and demos that want stable embeddings without loading a model.
-- `VectorIndex<K>` — a flat (dense) cosine/euclidean/dot-product index keyed by node identifiers. `O(N)` per query — fine for graphs up to ~10k nodes; HNSW comes in a follow-up slice.
+- `LexicalEmbeddingProvider` — pure-Rust, burn-free feature-hashing (the "hashing trick"). Texts that share vocabulary get correlated vectors, so it is a real (if shallow) lexical similarity signal with no model. The right default when you want clustering/recall without loading weights.
+- `StubEmbeddingProvider` — a deterministic **test double** (formerly `HashedEmbeddingProvider`, now a deprecated alias). Same input → same vector, but different inputs → *uncorrelated* vectors, so cosine over it is meaningless except for exact-string matches. For exercising the pipeline in tests/demos only, never for real clustering or recall — reach for `LexicalEmbeddingProvider` (lexical) or the BERT provider (semantic) instead.
+- `VectorIndex<K>` — a flat (dense) cosine/euclidean/dot-product index keyed by node identifiers. `O(N)` per query — fine for graphs up to ~10k nodes; the burn-batched-cosine and HNSW lifts are scoped in `design_docs/.../2026-07-06_intel_vector_index_burn_lift_plan.md`.
 - `SimilarityMetric` enum.
 
 Pure Rust, no GPU required. Compiles to `wasm32-unknown-unknown` for browser/PWA delivery.

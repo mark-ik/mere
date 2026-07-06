@@ -11,12 +11,12 @@
 //! mechanics; semantic-quality tests arrive with the BERT provider in a
 //! follow-up slice.
 
-use embed::{EmbeddingProvider, HashedEmbeddingProvider, VectorIndex};
+use embed::{EmbeddingProvider, StubEmbeddingProvider, VectorIndex};
 
 #[test]
 fn semantic_search_pipeline_roundtrip() {
     // 1. Provider — same shape a real BERT provider will have.
-    let provider = HashedEmbeddingProvider::new(64).unwrap();
+    let provider = StubEmbeddingProvider::new(64).unwrap();
 
     // 2. Corpus of node-text pairs. NodeKey here is a u32 stand-in.
     let nodes: Vec<(u32, &str)> = vec![
@@ -49,7 +49,7 @@ fn semantic_search_pipeline_roundtrip() {
 
 #[test]
 fn empty_corpus_returns_no_results() {
-    let provider = HashedEmbeddingProvider::new(32).unwrap();
+    let provider = StubEmbeddingProvider::new(32).unwrap();
     let index = VectorIndex::<u32>::new(provider.dimensions(), provider.metric());
     let query = provider.embed_one("anything").unwrap();
     let result = index.nearest(&query, 5).unwrap();
@@ -58,7 +58,7 @@ fn empty_corpus_returns_no_results() {
 
 #[test]
 fn updating_a_node_overwrites_its_vector() {
-    let provider = HashedEmbeddingProvider::new(32).unwrap();
+    let provider = StubEmbeddingProvider::new(32).unwrap();
     let mut index = VectorIndex::<u32>::new(provider.dimensions(), provider.metric());
 
     let v1 = provider.embed_one("first version").unwrap();
@@ -75,7 +75,7 @@ fn updating_a_node_overwrites_its_vector() {
 
 #[test]
 fn removing_a_node_excludes_it_from_search() {
-    let provider = HashedEmbeddingProvider::new(32).unwrap();
+    let provider = StubEmbeddingProvider::new(32).unwrap();
     let mut index = VectorIndex::<u32>::new(provider.dimensions(), provider.metric());
     index
         .insert(1, provider.embed_one("alpha").unwrap())
@@ -99,7 +99,7 @@ fn removing_a_node_excludes_it_from_search() {
 
 #[test]
 fn batch_embed_then_insert_matches_one_by_one() {
-    let provider = HashedEmbeddingProvider::new(32).unwrap();
+    let provider = StubEmbeddingProvider::new(32).unwrap();
     let texts = ["a", "b", "c", "d"];
 
     let batch = provider.embed(&texts).unwrap();

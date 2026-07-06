@@ -8,7 +8,7 @@
 //! vector (signed, to cancel some hash collisions), then L2-normalizes so
 //! cosine similarity is well-defined. Pure Rust, no model, allocation-light.
 //!
-//! The distinction from [`HashedEmbeddingProvider`](crate::HashedEmbeddingProvider)
+//! The distinction from [`StubEmbeddingProvider`](crate::StubEmbeddingProvider)
 //! is the whole point: that one hashes the *entire string* to a seed, so two
 //! texts that differ by a single character get unrelated vectors (deterministic
 //! but **semantically meaningless** — good only as a test double). This one
@@ -85,7 +85,7 @@ fn tokenize(text: &str) -> impl Iterator<Item = String> + '_ {
 }
 
 /// FNV-1a 64-bit hash. Deterministic, allocation-free, byte-stable — the same
-/// hash the whole-string [`HashedEmbeddingProvider`](crate::HashedEmbeddingProvider)
+/// hash the whole-string [`StubEmbeddingProvider`](crate::StubEmbeddingProvider)
 /// uses, applied here per token.
 fn fnv1a_64(text: &str) -> u64 {
     const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
@@ -145,7 +145,7 @@ mod tests {
 
     #[test]
     fn shared_tokens_are_more_similar_than_disjoint_ones() {
-        // The core property the HashedEmbeddingProvider lacks: shared vocabulary →
+        // The core property the StubEmbeddingProvider lacks: shared vocabulary →
         // higher cosine. "async rust" overlaps "rust runtime" (share "rust") more
         // than it overlaps "italian dinner recipes" (no shared token).
         let p = LexicalEmbeddingProvider::new(512).unwrap();

@@ -1238,9 +1238,10 @@ fn cluster_by_affinity_installs_and_clears_the_affinity_force() {
 
 #[test]
 fn content_affinity_supersedes_structural_and_reverts() {
-    // Two triangles + a bridge: structural affinity yields several intra-triangle pairs. A host
-    // content-embedding signal (one cross-triangle pair here) supersedes structural while set;
-    // clearing it (None) reverts to structural. (burn brief Lane 5 — P4, content source.)
+    // Two triangles + a bridge: structural affinity yields several intra-triangle pairs. Under the
+    // `ContentOnly` blend mode, a host content-embedding signal (one cross-triangle pair here)
+    // supersedes structural while set; clearing it (None) reverts to structural. (burn brief Lane 5
+    // — P4/P6, content source under ContentOnly.)
     let mut graph = Graph::new();
     let n: Vec<NodeKey> = (0..6)
         .map(|i| {
@@ -1254,6 +1255,7 @@ fn content_affinity_supersedes_structural_and_reverts() {
         graph.assert_semantic_predicate(n[a], n[b], "links".to_string());
     }
     let mut orrery = Orrery::with_graph(graph);
+    orrery.set_affinity_blend(AffinityBlend::ContentOnly);
     orrery.set_cluster_by_affinity(true);
     let _ = orrery.frame(800, 600);
     let structural = orrery.affinity_pair_count();
@@ -1286,9 +1288,9 @@ fn content_affinity_supersedes_structural_and_reverts() {
 
 #[test]
 fn empty_content_affinity_is_authoritative_but_inert() {
-    // A host that ran embeddings and found no pairs above its threshold injects `Some(empty)`: that
-    // is authoritative — it clears the force rather than falling back to structural (pass `None` for
-    // that). (burn brief Lane 5 — P4.)
+    // Under `ContentOnly`, a host that ran embeddings and found no pairs above its threshold injects
+    // `Some(empty)`: that is authoritative — it clears the force rather than falling back to
+    // structural (pass `None` for that). (burn brief Lane 5 — P4/P6.)
     let mut graph = Graph::new();
     let n: Vec<NodeKey> = (0..3)
         .map(|i| {
@@ -1302,6 +1304,7 @@ fn empty_content_affinity_is_authoritative_but_inert() {
         graph.assert_semantic_predicate(n[a], n[b], "links".to_string());
     }
     let mut orrery = Orrery::with_graph(graph);
+    orrery.set_affinity_blend(AffinityBlend::ContentOnly);
     orrery.set_cluster_by_affinity(true);
     let _ = orrery.frame(800, 600);
     assert!(
@@ -1343,6 +1346,70 @@ fn content_affinity_reinstalls_after_a_toggle_cycle() {
         1,
         "toggle back on reinstalls the persisted content signal"
     );
+}
+
+#[test]
+fn blend_unions_structural_and_content_pairs() {
+    // Default mode is Blend. Structural yields the triangle's pairs; a content signal adds one pair
+    // between an otherwise-unconnected node and the triangle. The live force is the *union*
+    // (structural pairs + the new content pair), not one superseding the other. (burn brief Lane 5
+    // — P6, blended affinity.)
+    let mut graph = Graph::new();
+    let n: Vec<NodeKey> = (0..4)
+        .map(|i| {
+            graph.add_node(
+                format!("https://{i}.example"),
+                PortablePoint::new(i as f32, 0.0),
+            )
+        })
+        .collect();
+    // A triangle over 0,1,2 (structural pairs); node 3 shares no edge (no structural pair).
+    for &(a, b) in &[(0, 1), (1, 2), (2, 0)] {
+        graph.assert_semantic_predicate(n[a], n[b], "links".to_string());
+    }
+    let mut orrery = Orrery::with_graph(graph);
+    assert_eq!(orrery.affinity_blend(), AffinityBlend::Blend, "Blend is the default");
+    orrery.set_cluster_by_affinity(true);
+
+    // Structural-only baseline (no content injected yet): the triangle's pairs.
+    let _ = orrery.frame(800, 600);
+    let structural = orrery.affinity_pair_count();
+    assert!(structural >= 3, "the triangle's structural pairs, got {structural}");
+
+    // Inject one content pair structural does not have (node 3 → node 0, no shared edge).
+    orrery.set_content_affinity(Some(vec![(n[3], n[0], 0.9)]));
+    let _ = orrery.frame(800, 600);
+    assert_eq!(
+        orrery.affinity_pair_count(),
+        structural + 1,
+        "Blend unions the structural pairs with the new content pair"
+    );
+}
+
+#[test]
+fn blend_affinity_pairs_noisy_ors_shared_weights() {
+    // The merge math directly: a pair in only one signal passes through at its weight; a pair in
+    // both is noisy-OR'd (0.8 with 0.8 → 0.96 = 1 − 0.2·0.2). (burn brief Lane 5 — P6.)
+    let mut graph = Graph::new();
+    let a = graph.add_node("https://a.example".to_string(), PortablePoint::new(0.0, 0.0));
+    let b = graph.add_node("https://b.example".to_string(), PortablePoint::new(1.0, 0.0));
+    let c = graph.add_node("https://c.example".to_string(), PortablePoint::new(2.0, 0.0));
+    let structural = signals::AffinityScores {
+        pairs: vec![((a, b), 0.8)],
+    };
+    let content = vec![(a, b, 0.8), (a, c, 0.5)];
+    let blended = blend_affinity_pairs(Some(&structural), Some(&content));
+    let weight = |x: NodeKey, y: NodeKey| {
+        blended
+            .iter()
+            .find(|&&(p, q, _)| (p == x && q == y) || (p == y && q == x))
+            .map(|&(_, _, w)| w)
+    };
+    let ab = weight(a, b).expect("a-b present");
+    assert!((ab - 0.96).abs() < 1e-5, "noisy-or 0.8,0.8 -> 0.96, got {ab}");
+    let ac = weight(a, c).expect("a-c present");
+    assert!((ac - 0.5).abs() < 1e-5, "content-only pair passes through, got {ac}");
+    assert_eq!(blended.len(), 2, "two distinct unordered pairs");
 }
 
 #[test]

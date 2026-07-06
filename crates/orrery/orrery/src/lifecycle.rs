@@ -158,6 +158,7 @@ impl Orrery {
             content_affinity: None,
             content_affinity_dirty: false,
             affinity_force_installed: false,
+            affinity_blend: AffinityBlend::default(),
             gloss_strategy: None,
             gloss_positions: None,
             gloss_cache_inputs: None,

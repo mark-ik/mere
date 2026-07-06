@@ -171,7 +171,7 @@ fn semantic_search_with_real_minilm_clusters_similar_topics() {
 
 /// **Field-bridge with real BERT** — proves the trait abstraction holds:
 /// `register_query_similarity_field` (which the `field_bridge` unit tests
-/// already exercise with `HashedEmbeddingProvider`) produces a field that
+/// already exercise with `StubEmbeddingProvider`) produces a field that
 /// peaks at semantically-similar nodes when fed real BERT embeddings.
 ///
 /// Setup: 6 nodes, 3 about rust (left side of canvas) + 3 about cooking

@@ -274,6 +274,24 @@ impl Orrery {
         self.content_affinity.is_some()
     }
 
+    /// Set how the structural and content affinity signals combine ([`AffinityBlend`]). Default is
+    /// [`Blend`](AffinityBlend::Blend) (noisy-OR of both). Forces a rebuild of the affinity force on
+    /// the next [`frame`](Self::frame) so the mode change takes. (burn brief Lane 5 — P6.)
+    pub fn set_affinity_blend(&mut self, mode: AffinityBlend) {
+        if self.affinity_blend == mode {
+            return;
+        }
+        self.affinity_blend = mode;
+        // The contributing source set changed; re-arm both gates so the next sync reinstalls.
+        self.installed_affinity_revision = None;
+        self.content_affinity_dirty = true;
+    }
+
+    /// How the structural and content affinity signals currently combine. (burn brief Lane 5 — P6.)
+    pub fn affinity_blend(&self) -> AffinityBlend {
+        self.affinity_blend
+    }
+
     /// The number of affinity pairs in the live affinity force (`0` when off). Test introspection
     /// for the P4 wiring (inline backend). (Graph signals — P4.)
     #[cfg(test)]
@@ -303,41 +321,40 @@ impl Orrery {
     /// new equilibrium takes. (Graph signals — P4.)
     pub(crate) fn sync_affinity_force(&mut self) {
         if self.cluster_by_affinity {
-            if self.content_affinity.is_some() {
-                // A host content-embedding signal is authoritative while set. Install on the host's
-                // dirty flag (a fresh recompute), not per graph revision — it tracks node *content*,
-                // which the host recomputes and re-injects; a topology-only change must not force a
-                // (stale) reinstall here. (burn brief Lane 5 — P4, content source.)
-                if self.content_affinity_dirty {
-                    let force = self
-                        .content_affinity
-                        .as_ref()
-                        .map(|pairs| AffinitySpring::new(pairs.iter().copied()))
-                        .filter(|f| !f.is_empty());
-                    self.affinity_force_installed = force.is_some();
-                    self.physics.set_affinity_force(force);
-                    self.physics.settle(SETTLE_TICKS / 2);
-                    self.content_affinity_dirty = false;
-                    // The structural memo is not what's live; re-arm it so a later revert to
-                    // structural (content set to `None`) reinstalls from the current revision.
-                    self.installed_affinity_revision = None;
-                }
-            } else {
-                // Structural Jaccard (the default source), revision-gated (recompute the signal if
-                // stale, reinstall only when the revision moved since the live force was built).
+            let revision = self.graph.revision();
+            let has_content = self.content_affinity.is_some();
+            // Which sources feed the force under the current blend mode. `ContentOnly` with no
+            // injected signal falls back to structural, so the toggle always does something.
+            let (use_structural, use_content) = match self.affinity_blend {
+                AffinityBlend::StructuralOnly => (true, false),
+                AffinityBlend::ContentOnly => (!has_content, has_content),
+                AffinityBlend::Blend => (true, has_content),
+            };
+            // Structural is revision-gated (recompute the Jaccard memo if stale); content is
+            // host-fresh (dirty-gated). Reinstall when a *contributing* source changed, or when
+            // nothing is installed yet.
+            if use_structural {
                 self.ensure_affinity_fresh();
-                let revision = self.graph.revision();
-                if self.installed_affinity_revision != Some(revision) {
-                    let force = self
-                        .affinity_cache
-                        .as_ref()
-                        .map(build_affinity_spring)
-                        .filter(|f| !f.is_empty());
-                    self.affinity_force_installed = force.is_some();
-                    self.physics.set_affinity_force(force);
-                    self.physics.settle(SETTLE_TICKS / 2);
-                    self.installed_affinity_revision = Some(revision);
-                }
+            }
+            let structural_changed =
+                use_structural && self.installed_affinity_revision != Some(revision);
+            let content_changed = use_content && self.content_affinity_dirty;
+            if self.affinity_force_installed && !structural_changed && !content_changed {
+                // Nothing that feeds the live force moved; leave it (no per-frame rebuild).
+            } else {
+                let structural = use_structural.then(|| self.affinity_cache.as_ref()).flatten();
+                let content = use_content
+                    .then(|| self.content_affinity.as_deref())
+                    .flatten();
+                let pairs = blend_affinity_pairs(structural, content);
+                let force = (!pairs.is_empty()).then(|| AffinitySpring::new(pairs));
+                self.affinity_force_installed = force.is_some();
+                self.physics.set_affinity_force(force);
+                self.physics.settle(SETTLE_TICKS / 2);
+                // Structural is what the revision gate tracks; content-only installs leave it `None`
+                // so a later switch back to structural/blend reinstalls from the current revision.
+                self.installed_affinity_revision = use_structural.then_some(revision);
+                self.content_affinity_dirty = false;
             }
         } else if self.affinity_force_installed {
             self.physics.set_affinity_force(None);

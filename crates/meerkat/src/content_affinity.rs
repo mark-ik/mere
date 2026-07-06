@@ -135,23 +135,34 @@ pub(crate) fn compute_content_affinity(
 }
 
 /// The text a node contributes to its embedding: its title (always present — the
-/// URL when a page has no title), followed by its curated tags (semantic labels,
-/// a strong clustering signal). Tags are sorted for a stable string across runs
-/// (bag-of-words is order-free, but a future order-sensitive provider benefits).
-/// Full page body via eidetic is a richer follow-on.
+/// URL when a page has no title), its curated tags (semantic labels), and its
+/// literal **property values** — the `schema:description` / `og:description` and
+/// kin that ingest extracts from the page and stores on the node. Those are the
+/// page's own summary of its content: real *content text*, already on the node,
+/// so no cache read and no capture-consent gate (they are graph data, not the
+/// browsing trail). URL-valued properties (`schema:url`, `og:image`) are dropped —
+/// they tokenize to scheme/host noise, not meaning.
+///
+/// Tags and values are sorted for a stable string across runs (bag-of-words is
+/// order-free, but a future order-sensitive provider benefits). The full raw page
+/// body (the eidetic content cache) is a richer but noisier source whose per-node
+/// parse over the whole graph wants the off-thread embedding actor; deferred.
 fn node_text(node: &Node) -> String {
-    if node.tags.is_empty() {
-        return node.title.clone();
-    }
+    let mut parts: Vec<&str> = vec![node.title.as_str()];
     let mut tags: Vec<&str> = node.tags.iter().map(String::as_str).collect();
     tags.sort_unstable();
-    let mut text = String::with_capacity(node.title.len() + tags.iter().map(|t| t.len() + 1).sum::<usize>());
-    text.push_str(&node.title);
-    for tag in tags {
-        text.push(' ');
-        text.push_str(tag);
-    }
-    text
+    parts.extend(tags);
+    let mut values: Vec<&str> = node
+        .properties
+        .iter()
+        .map(|p| p.value.as_str())
+        // Skip URL-valued properties: their tokens (https, the host) are noise, and
+        // several nodes sharing a scheme would spuriously cluster.
+        .filter(|v| !v.contains("://"))
+        .collect();
+    values.sort_unstable();
+    parts.extend(values);
+    parts.join(" ")
 }
 
 /// Build the embedding provider. Default: the lexical feature-hashing provider

@@ -181,12 +181,12 @@ impl<K: Hash + Eq + Clone, P: EmbeddingProvider> CanvasSearchSurface<K, P> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::HashedEmbeddingProvider;
+    use crate::StubEmbeddingProvider;
     use aether::eval::eval_scalar;
     use aether::registry::{FieldDef, FieldRegistry};
 
-    fn provider() -> HashedEmbeddingProvider {
-        HashedEmbeddingProvider::new(64).unwrap()
+    fn provider() -> StubEmbeddingProvider {
+        StubEmbeddingProvider::new(64).unwrap()
     }
 
     #[test]

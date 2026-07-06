@@ -108,7 +108,7 @@ fn euclidean(a: &[f32], b: &[f32]) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::HashedEmbeddingProvider;
+    use crate::StubEmbeddingProvider;
     use crate::provider::EmbeddingProvider;
     use aether::eval::eval_scalar;
     use aether::registry::FieldRegistry;
@@ -118,7 +118,7 @@ mod tests {
     }
 
     fn populate(
-        provider: &HashedEmbeddingProvider,
+        provider: &StubEmbeddingProvider,
         nodes: &[(u32, &str, (f32, f32))],
     ) -> (VectorIndex<u32>, HashMap<u32, (f32, f32)>) {
         let mut index = VectorIndex::<u32>::new(provider.dimensions(), provider.metric());
@@ -144,7 +144,7 @@ mod tests {
 
     #[test]
     fn peak_lies_at_matching_node_position() {
-        let provider = HashedEmbeddingProvider::new(32).unwrap();
+        let provider = StubEmbeddingProvider::new(32).unwrap();
         let nodes = [
             (1, "rust async", (100.0, 100.0)),
             (2, "python typing", (500.0, 500.0)),
@@ -171,7 +171,7 @@ mod tests {
 
     #[test]
     fn missing_node_position_skipped() {
-        let provider = HashedEmbeddingProvider::new(16).unwrap();
+        let provider = StubEmbeddingProvider::new(16).unwrap();
         let mut index = VectorIndex::<u32>::new(provider.dimensions(), provider.metric());
         index.insert(1, provider.embed_one("a").unwrap()).unwrap();
         index.insert(2, provider.embed_one("b").unwrap()).unwrap();
@@ -191,7 +191,7 @@ mod tests {
 
     #[test]
     fn register_returns_id_and_inserts_field() {
-        let provider = HashedEmbeddingProvider::new(16).unwrap();
+        let provider = StubEmbeddingProvider::new(16).unwrap();
         let nodes = [(1, "a", (0.0, 0.0)), (2, "b", (100.0, 0.0))];
         let (index, positions) = populate(&provider, &nodes);
 

@@ -1,10 +1,11 @@
 # Orrery Graph Intelligence Plan (burn brief, Lane 5)
 
 **Date**: 2026-07-06
-**Status**: P1-P5 landed (2026-07-06). Force pass (P1-P3) + semantic-arrangement
-bridge (P4) + live meerkat content-affinity wiring (P5) are all in and tested. Open:
-the `semantic-embeddings` BERT-provider upgrade (a separate slice) and the P3 live
-force-pass injection (held — niche, large-graph only).
+**Status**: P1-P6 landed (2026-07-06). Force pass (P1-P3) + semantic-arrangement
+bridge (P4) + live meerkat content-affinity wiring (P5) + blended affinity and
+content-text enrichment (P6) are all in and tested. Open: the `semantic-embeddings`
+BERT-provider upgrade (a separate slice), the off-thread embedding actor (raw-body
+text + the intel-index lift), and the P3 live force-pass injection (held — niche).
 **Related**: [burn_utilization_brief](../research/2026-07-04_burn_utilization_brief.md) (Lane 5), [burn_wgpu_flip_plan](2026-07-04_burn_wgpu_flip_plan.md) (L1: shipped burn-wgpu embeddings + aether field lowering + the CPU-vs-GPU timing methodology this reuses), [graph_signals_layer_plan](2026-06-22_graph_signals_layer_plan.md) (the consumer for similarity edges), `crates/orrery/aether` (the burn-lowering home; gyre stays burn-free), `crates/intel/embed` (`field_bridge` / `canvas_search`: the embedding→field seam already built).
 
 ## Scope
@@ -173,8 +174,45 @@ stays structural). Three pieces, each tested:
   BERT-scale or large-graph embedding wants an off-thread actor (the infer actor is
   the template). Noted, not built.
 - **Focused pane only.** Secondary orreries keep structural affinity this slice.
-- **Node text = title + tags.** The cheap, always-present content; full page body
-  (via eidetic) is a richer follow-on.
+- **Node text = title + tags** (+ literal property descriptions as of P6). The
+  cheap, always-present content; the full raw page body is a P6-noted follow-on.
+
+### P6 — Blended affinity + content-text enrichment (landed 2026-07-06)
+
+Two refinements to the P4/P5 signal, both landed and tested.
+
+**Blended affinity.** Structural (Jaccard) and content (embedding) affinity were
+mutually exclusive under P5 (content superseded structural). They are genuinely
+different signals — two nodes can share neighbours, share meaning, or both — so
+they now *combine*. A new `AffinityBlend` mode on the orrery selects how:
+
+- `Blend` (default): a **noisy-OR** of the two weights, `w = 1 − (1−s)(1−c)`. A
+  pair is drawn together if either signal likes it, harder if both (0.8 with 0.8 →
+  0.96). Degrades to whichever signal is present, so it is structural-only when no
+  content is injected — the default meerkat build is unchanged.
+- `ContentOnly`: the P5 supersede behaviour (content wins when present).
+- `StructuralOnly`: ignore any injected content.
+
+`set_affinity_blend` forces a rebuild; the merge is a pure `blend_affinity_pairs`
+over the two pair lists, keyed by unordered pair. gyre still receives one
+`AffinitySpring` (the single force slot) — the blend happens before install. The
+affinity seam now has 5 orrery tests (supersede+revert and empty-inert under
+`ContentOnly`, reinstall-across-toggle, blend-unions-the-pairs, and the noisy-OR
+weight math); full orrery suite 90/90.
+
+**Content-text enrichment.** `node_text` (the meerkat embedding input) now folds
+in each node's literal **property values** — the `schema:description` /
+`og:description` and kin that ingest already extracts and stores on the node —
+alongside title + tags. That is the page's own summary of its content: real
+content text, already on the node, so no cache read and no capture-consent gate
+(properties are graph data, not the browsing trail). URL-valued properties are
+dropped (scheme/host tokens are noise). The full **raw page body** (the eidetic
+content cache — on by default, gated only on the store opening, *not*
+consent-gated) is a richer but noisier source; its per-node `engine_document_for`
+parse over the whole graph is O(N) on the UI thread, so it rides the off-thread
+embedding actor (the same actor the P3/P5 scaling notes call for), not this slice.
+The intel-tier index lift that actor would also want is scoped in
+[intel_vector_index_burn_lift_plan](2026-07-06_intel_vector_index_burn_lift_plan.md).
 
 ## Findings
 
@@ -207,6 +245,18 @@ stays structural). Three pieces, each tested:
 
 ## Progress
 
+- 2026-07-06 — **P6 landed (blended affinity + content-text enrichment)**. Structural
+  and content affinity now combine via an `AffinityBlend` mode (default `Blend` = a
+  noisy-OR `1−(1−s)(1−c)` of the two weights; `ContentOnly`/`StructuralOnly` retained),
+  the merge a pure `blend_affinity_pairs` before the single gyre force install; orrery
+  suite 90/90 (2 new blend tests + the 2 supersede tests moved to `ContentOnly`).
+  `node_text` folds in each node's literal property descriptions (schema/OG), the
+  page's own content summary already on the node — no cache read, no consent gate. The
+  raw page body (eidetic content cache, on by default, not consent-gated) is the
+  richer-but-noisier follow-on that wants the off-thread embedding actor (O(N) parse).
+  Also this session: the meaningless-by-design `HashedEmbeddingProvider` renamed to
+  `StubEmbeddingProvider` (deprecated alias kept) so it stops reading like a usable
+  provider, and D1 re-scoped in the brief now that embedding is a third GPU consumer.
 - 2026-07-06 — **P5 landed (live meerkat wiring, content-affinity half)**. The P4
   bridge is now driven end-to-end in the focused orrery behind an off-by-default
   `content-affinity` feature. Three verified pieces: (1) `Orrery::set_content_affinity`

@@ -157,6 +157,18 @@ at a measured node count.
   **Lexical today; the deep-semantic BERT provider (`semantic-embeddings`) is the
   upgrade** — a separate slice wanting an embed boxed loader (mirroring
   `infer::decoder::load_wgpu_provider`) plus the D1 device decision for wgpu.
+- **Blended affinity + enrichment (P6, landed 2026-07-06)**: structural (Jaccard)
+  and content (embedding) affinity now *combine* rather than one superseding the
+  other — an `AffinityBlend` mode on the orrery, default a noisy-OR of the two
+  weights, so topology and meaning are complementary clustering forces. Node
+  embedding text folds in the node's extracted property descriptions (schema/OG),
+  the page's own content summary already on the node. Two intelligence-tier
+  hygiene items rode along: `HashedEmbeddingProvider` (semantically meaningless by
+  design) renamed to `StubEmbeddingProvider` so it stops reading like a usable
+  provider, and a cross-cutting scaling plan for the O(N²) flat vector index (the
+  affinity scan is the same kernel shape as the L5 force pass; one burn lift raises
+  arrangement + recall + canvas-search together) —
+  [intel_vector_index_burn_lift_plan](../implementation_strategy/2026-07-06_intel_vector_index_burn_lift_plan.md).
 
 ## Commitments (what "shaped around burn" means)
 
@@ -186,6 +198,32 @@ at a measured node count.
   `wgpu = "29"` the workspace pins, so sharing is mechanically possible
   today (one burn device per adapter). The scheduling half of the decision
   stays open until a resident-data consumer exists.
+  **Scoping 2026-07-06 — the forcing function arrived.** D1 was framed as
+  hypothetical contention; it is now measured, and a *third* GPU consumer is
+  materializing:
+  - **Consumers.** netrender (vello raster, per-frame), infer (`>ask`
+    generation, bursty), and now embed (content-affinity node embedding under
+    `semantic-embeddings`/`bert-wgpu`, bursty on graph mutation). Three burn +
+    render clients, one adapter.
+  - **Measured contention.** The first headed `>ask` streamed a full chrome
+    repaint per token; with burn's matmuls and vello's raster sharing one queue
+    in one process, a 200-token answer ran >40s and per-token cost ~doubled. A
+    repaint coalesce (≤~150ms) brought the same answer to ~18s, and in-app
+    throughput sat well below the standalone 9.95 tok/s — inference and render
+    serialize on the shared queue (inference_provider_plan, 2026-07-06). That is
+    the concrete cost of *not* isolating burn's device.
+  - **The decision, now actionable.** Two shapes: (a) a **separate burn compute
+    device/queue** from the render device — isolation, a copy boundary at any
+    render handoff, but the frame budget stops paying for inference/embedding
+    spikes; or (b) **one shared device with a scheduler** — zero-copy potential,
+    but burn work must yield to the frame budget (priority/time-slicing/
+    submission gating) or it janks the UI, as observed. The repaint coalesce is
+    a host-side band-aid over (b)'s absence, not the decision.
+  - **What to measure next.** Frame-time impact of a burst embed/generate on the
+    shared device (is a yield/priority knob enough?) vs the copy-boundary cost of
+    a separate device at the one place tensors meet pixels (the Lane 5 cond-1
+    `<orrery>` element, if it lands). Until then no lane hard-codes either; the
+    coalesce holds the UI usable on the shared device.
 - **D2 wasm model-size ceiling**: inherited from the harness brief; empirical;
   sets the in-browser inference tier.
 - **D3 burn-remote release timing**: Lane 2 waits on the post-0.21 release;

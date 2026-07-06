@@ -63,6 +63,50 @@ fn build_affinity_spring(scores: &signals::AffinityScores) -> AffinitySpring {
     AffinitySpring::new(scores.pairs.iter().map(|&((a, b), w)| (a, b, w)))
 }
 
+/// How the affinity force combines its two signals — **structural** (Jaccard over topology) and
+/// **content** (cosine over node embeddings) — when both are available under the
+/// [`cluster_by_affinity`](Orrery::set_cluster_by_affinity) toggle. (burn brief Lane 5 — P6,
+/// blended affinity.)
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AffinityBlend {
+    /// Draw a pair together if *either* signal likes it, harder if both — a noisy-OR of the two
+    /// weights (`1 − (1−s)(1−c)`, bounded to `0..=1`). Topology and meaning as complementary
+    /// clustering forces; degrades to whichever signal is present (structural alone when no content
+    /// is injected). The default.
+    #[default]
+    Blend,
+    /// The injected content signal supersedes structural whenever present (the original P5
+    /// behavior); structural is the fallback when no content is injected.
+    ContentOnly,
+    /// Structural Jaccard only; ignore any injected content signal.
+    StructuralOnly,
+}
+
+/// Merge the structural and content affinity signals into one `(a, b, weight)` pair list by a
+/// **noisy-OR** of their weights: a pair present in either signal is emitted, and one present in
+/// both is boosted (`w = 1 − (1−s)(1−c)`, so 0.8 with 0.8 → 0.96). Either `None` means that source
+/// does not contribute. Weights are clamped to `0..=1` first. (burn brief Lane 5 — P6.)
+fn blend_affinity_pairs(
+    structural: Option<&signals::AffinityScores>,
+    content: Option<&[(NodeKey, NodeKey, f32)]>,
+) -> Vec<(NodeKey, NodeKey, f32)> {
+    let canon = |a: NodeKey, b: NodeKey| if a <= b { (a, b) } else { (b, a) };
+    let mut weights: std::collections::HashMap<(NodeKey, NodeKey), f32> =
+        std::collections::HashMap::new();
+    if let Some(s) = structural {
+        for &((a, b), w) in &s.pairs {
+            weights.insert(canon(a, b), w.clamp(0.0, 1.0));
+        }
+    }
+    if let Some(c) = content {
+        for &(a, b, w) in c {
+            let slot = weights.entry(canon(a, b)).or_insert(0.0);
+            *slot = 1.0 - (1.0 - *slot) * (1.0 - w.clamp(0.0, 1.0));
+        }
+    }
+    weights.into_iter().map(|((a, b), w)| (a, b, w)).collect()
+}
+
 mod types;
 pub use signals::{BridgeMetric, ImportanceMetric};
 pub use types::{CameraView, EdgeCell, Face, NodeShape, NodeState, PointerButton, Viewport};
@@ -350,6 +394,10 @@ pub struct Orrery {
     /// the toggle-off branch clears exactly once regardless of which source was live. (Graph
     /// signals — P4.)
     affinity_force_installed: bool,
+    /// How the structural and content affinity signals combine ([`AffinityBlend`]). Default
+    /// [`Blend`](AffinityBlend::Blend) — a noisy-OR of the two, degrading to structural alone when
+    /// no content is injected. (burn brief Lane 5 — P6, blended affinity.)
+    affinity_blend: AffinityBlend,
     /// The gloss swatch's own layout strategy id, or `None` to mirror the main view (a minimap).
     /// `Some` makes the gloss an independent lens (e.g. spectral while the main view is force-
     /// directed). (Graph signals — P6, the independent gloss projection.)

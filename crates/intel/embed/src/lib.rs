@@ -45,9 +45,9 @@ pub mod affinity;
 pub mod bert;
 pub mod canvas_search;
 pub mod field_bridge;
-pub mod hashed;
 pub mod index;
 pub mod lexical;
+pub mod stub;
 pub mod persistence;
 pub mod provider;
 pub mod search;
@@ -59,9 +59,19 @@ pub use bert::{
 pub use affinity::affinity_pairs;
 pub use canvas_search::CanvasSearchSurface;
 pub use field_bridge::{build_query_similarity_field, register_query_similarity_field};
-pub use hashed::HashedEmbeddingProvider;
 pub use index::{IndexError, VectorIndex};
 pub use lexical::LexicalEmbeddingProvider;
+pub use stub::StubEmbeddingProvider;
+
+/// Deprecated alias for [`StubEmbeddingProvider`]. The old name read like a usable
+/// provider; it is a test double whose vectors are not semantically meaningful (see
+/// its docs). Use [`LexicalEmbeddingProvider`] for a real burn-free similarity
+/// signal, or the BERT provider for semantic similarity.
+#[deprecated(
+    since = "0.0.1",
+    note = "renamed to StubEmbeddingProvider (it is a test double); use LexicalEmbeddingProvider for a real burn-free signal"
+)]
+pub type HashedEmbeddingProvider = StubEmbeddingProvider;
 pub use persistence::{load_from_eidetic, save_to_eidetic};
 pub use provider::{EmbedError, EmbeddingProvider, SimilarityMetric};
 pub use search::SemanticSearch;
