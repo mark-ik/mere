@@ -64,13 +64,21 @@ impl NodeContribution {
     }
 }
 
-/// A predicate edge: `subject —predicate→ object`, all IRIs.
+/// A predicate edge: `subject —predicate→ object`, all IRIs. Statement
+/// metadata (fact handle, label, provenance, assertion time) arrives via an
+/// RDF 1.2 reifier over the triple; absent for plain edges.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EdgeContribution {
     pub subject: String,
     pub predicate: String,
     pub object: String,
     pub graph_scope: GraphScope,
+    /// The fact handle a `urn:mere:statement:<id>` reifier carried; preserving
+    /// it through apply is what makes the dataset round trip id-stable.
+    pub statement_id: Option<String>,
+    pub label: Option<String>,
+    pub provenance_iri: Option<String>,
+    pub asserted_at_ms: Option<u64>,
 }
 
 /// The result of parsing a JSON-LD document: the nodes it describes and the
@@ -184,6 +192,10 @@ fn route_resource(
             predicate: predicate.to_string(),
             object,
             graph_scope,
+            statement_id: None,
+            label: None,
+            provenance_iri: None,
+            asserted_at_ms: None,
         });
     }
 }
@@ -209,6 +221,20 @@ fn scope_from_graph_name(graph_name: &oxrdf::GraphName, namespace: &str) -> Grap
 /// remote `@context` is not fetched (a bundled-context loader is a later step).
 pub fn from_jsonld(bytes: &[u8]) -> Result<GraphContribution, IngestError> {
     collect_contribution(JsonLdParser::new().for_slice(bytes), &doc_namespace(bytes))
+}
+
+/// Ingest a set of RDF quads directly — the dataset path (`dataset_quads` /
+/// Turtle / N-Quads), and the half of the Phase 2 round-trip gate that JSON-LD
+/// cannot carry: RDF 1.2 reifier metadata (triple terms) is recognized here
+/// and attached to the matching edge / property contributions.
+pub fn from_quads(
+    quads: impl IntoIterator<Item = Quad>,
+    namespace: &str,
+) -> Result<GraphContribution, IngestError> {
+    collect_contribution(
+        quads.into_iter().map(Ok::<Quad, std::convert::Infallible>),
+        namespace,
+    )
 }
 
 /// Like [`from_jsonld`], but a remote `@context` is resolved from `contexts`
@@ -325,6 +351,43 @@ pub fn from_html_with_contexts(html: &str, contexts: ContextCache) -> Vec<GraphC
     out
 }
 
+/// The reifier-IRI prefix `dataset_quads` mints fact handles under.
+const STATEMENT_REIFIER_PREFIX: &str = "urn:mere:statement:";
+const RDF_REIFIES: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies";
+const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
+const PROV_WAS_ATTRIBUTED_TO: &str = "http://www.w3.org/ns/prov#wasAttributedTo";
+const PROV_GENERATED_AT_TIME: &str = "http://www.w3.org/ns/prov#generatedAtTime";
+
+/// One lifted RDF 1.2 reifier: the fact it names + the metadata its other
+/// quads carried.
+struct ReifiedStatement {
+    subject: String,
+    predicate: String,
+    object: ReifiedObject,
+    graph_scope: GraphScope,
+    label: Option<String>,
+    provenance_iri: Option<String>,
+    asserted_at_ms: Option<u64>,
+}
+
+enum ReifiedObject {
+    Resource(String),
+    Literal {
+        value: String,
+        datatype: String,
+        lang: Option<String>,
+    },
+}
+
+/// Parse an `xsd:dateTime` lexical back to unix ms — the inverse of the
+/// export's `prov:generatedAtTime` formatting.
+fn parse_xsd_datetime_ms(lexical: &str) -> Option<u64> {
+    let parsed =
+        time::OffsetDateTime::parse(lexical, &time::format_description::well_known::Rfc3339)
+            .ok()?;
+    u64::try_from(parsed.unix_timestamp_nanos() / 1_000_000).ok()
+}
+
 /// Group a stream of RDF quads into a [`GraphContribution`] — shared by the
 /// network-free and bundled-context parsers. `namespace` scopes blank-node
 /// skolemization to the source document.
@@ -335,8 +398,81 @@ fn collect_contribution<E: std::fmt::Display>(
     let mut nodes: BTreeMap<String, NodeContribution> = BTreeMap::new();
     let mut edges: Vec<EdgeContribution> = Vec::new();
 
+    // Pass A: materialize the stream and lift out RDF 1.2 reifiers. A subject
+    // that `rdf:reifies` a triple term is statement METADATA, not a node: its
+    // reified (s, p, o, g) names the fact, its other quads carry the fact's
+    // label / provenance / assertion time, and a `urn:mere:statement:<id>`
+    // IRI carries the fact handle itself. Everything else flows to pass B.
+    let mut plain: Vec<Quad> = Vec::new();
+    let mut reified: std::collections::HashMap<String, ReifiedStatement> =
+        std::collections::HashMap::new();
+    let mut reifier_meta: Vec<Quad> = Vec::new();
     for quad in quads {
         let quad = quad.map_err(|err| IngestError::Parse(err.to_string()))?;
+        if quad.predicate.as_str() == RDF_REIFIES
+            && let Term::Triple(triple) = &quad.object
+        {
+            let reifier = subject_iri(&quad.subject, namespace);
+            let object = match &triple.object {
+                Term::NamedNode(node) => ReifiedObject::Resource(node.as_str().to_string()),
+                Term::BlankNode(node) => {
+                    ReifiedObject::Resource(skolemize(namespace, node.as_str()))
+                }
+                Term::Literal(literal) => ReifiedObject::Literal {
+                    value: literal.value().to_string(),
+                    datatype: literal.datatype().as_str().to_string(),
+                    lang: literal.language().map(str::to_string),
+                },
+                Term::Triple(_) => continue, // nested triple terms: out of profile
+            };
+            reified.insert(
+                reifier,
+                ReifiedStatement {
+                    subject: subject_iri(&triple.subject.clone().into(), namespace),
+                    predicate: normalize_schema_org(triple.predicate.as_str()),
+                    object,
+                    graph_scope: scope_from_graph_name(&quad.graph_name, namespace),
+                    label: None,
+                    provenance_iri: None,
+                    asserted_at_ms: None,
+                },
+            );
+            continue;
+        }
+        plain.push(quad);
+    }
+    if !reified.is_empty() {
+        // Split off the reifier-subject metadata quads; the rest stay plain.
+        let mut rest = Vec::with_capacity(plain.len());
+        for quad in plain {
+            if reified.contains_key(&subject_iri(&quad.subject, namespace)) {
+                reifier_meta.push(quad);
+            } else {
+                rest.push(quad);
+            }
+        }
+        plain = rest;
+        for quad in &reifier_meta {
+            let reifier = subject_iri(&quad.subject, namespace);
+            let Some(statement) = reified.get_mut(&reifier) else {
+                continue;
+            };
+            match (quad.predicate.as_str(), &quad.object) {
+                (RDFS_LABEL, Term::Literal(literal)) => {
+                    statement.label = Some(literal.value().to_string());
+                }
+                (PROV_WAS_ATTRIBUTED_TO, Term::NamedNode(agent)) => {
+                    statement.provenance_iri = Some(agent.as_str().to_string());
+                }
+                (PROV_GENERATED_AT_TIME, Term::Literal(literal)) => {
+                    statement.asserted_at_ms = parse_xsd_datetime_ms(literal.value());
+                }
+                _ => {}
+            }
+        }
+    }
+
+    for quad in plain {
         let subject = subject_iri(&quad.subject, namespace);
         let predicate_norm = normalize_schema_org(quad.predicate.as_str());
         let predicate = predicate_norm.as_str();
@@ -386,6 +522,80 @@ fn collect_contribution<E: std::fmt::Display>(
                 graph_scope,
             ),
             Term::Triple(_) => {}
+        }
+    }
+
+    // Attach the lifted reifier metadata to the matching contributions:
+    // resource-object statements to edges (by subject + predicate + object +
+    // scope), literal-object statements to node properties (by predicate +
+    // value + typing + scope). A `urn:mere:statement:<id>` reifier also hands
+    // over the fact id, keeping the round trip id-stable; a foreign reifier
+    // leaves the id to the kernel's minter.
+    for (reifier, statement) in reified {
+        let statement_id = reifier
+            .strip_prefix(STATEMENT_REIFIER_PREFIX)
+            .map(str::to_string);
+        match &statement.object {
+            ReifiedObject::Resource(object) => {
+                let matched = edges.iter_mut().find(|edge| {
+                    edge.subject == statement.subject
+                        && edge.predicate == statement.predicate
+                        && &edge.object == object
+                        && edge.graph_scope == statement.graph_scope
+                });
+                if let Some(edge) = matched {
+                    edge.statement_id = statement_id;
+                    edge.label = statement.label;
+                    edge.provenance_iri = statement.provenance_iri;
+                    edge.asserted_at_ms = statement.asserted_at_ms;
+                } else {
+                    // A reifier without its base triple still names a fact:
+                    // materialize the edge (RDF 1.2 allows unasserted
+                    // reification, but the Mere profile projects asserted
+                    // facts, so ingest treats it as one).
+                    nodes
+                        .entry(statement.subject.clone())
+                        .or_insert_with(|| NodeContribution::new(&statement.subject));
+                    edges.push(EdgeContribution {
+                        subject: statement.subject,
+                        predicate: statement.predicate,
+                        object: object.clone(),
+                        graph_scope: statement.graph_scope,
+                        statement_id,
+                        label: statement.label,
+                        provenance_iri: statement.provenance_iri,
+                        asserted_at_ms: statement.asserted_at_ms,
+                    });
+                }
+            }
+            ReifiedObject::Literal {
+                value,
+                datatype,
+                lang,
+            } => {
+                let Some(node) = nodes.get_mut(&statement.subject) else {
+                    continue;
+                };
+                let wanted_datatype = if lang.is_some() {
+                    None
+                } else {
+                    (datatype != XSD_STRING).then(|| normalize_schema_org(datatype))
+                };
+                let matched = node.properties.iter_mut().find(|property| {
+                    property.predicate == statement.predicate
+                        && &property.value == value
+                        && property.datatype == wanted_datatype
+                        && &property.lang == lang
+                        && property.graph_scope == statement.graph_scope
+                });
+                if let Some(property) = matched {
+                    if let Some(id) = statement_id {
+                        property.statement_id = id;
+                    }
+                    property.provenance_iri = statement.provenance_iri;
+                    property.asserted_at_ms = statement.asserted_at_ms;
+                }
+            }
         }
     }
 

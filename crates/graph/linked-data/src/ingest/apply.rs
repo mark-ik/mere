@@ -5,7 +5,10 @@
 #[cfg(not(target_arch = "wasm32"))]
 use kernel::graph::apply::{self as graph_apply, GraphDelta, apply_graph_delta};
 #[cfg(not(target_arch = "wasm32"))]
-use kernel::graph::{Graph, NodeKey, ProvenanceSubKind, SemanticSubKind, sub_kind_from_iri};
+use kernel::graph::{
+    Graph, NodeKey, ProvenanceSubKind, SemanticStatement, SemanticStatementSpec, SemanticSubKind,
+    sub_kind_from_iri,
+};
 #[cfg(not(target_arch = "wasm32"))]
 use kernel::types::{
     ClassificationProvenance, ClassificationScheme, ClassificationStatus, NodeClassification,
@@ -118,7 +121,53 @@ pub fn apply_contribution(graph: &mut Graph, contribution: &GraphContribution) -
             outcome.edges_skipped += 1;
             continue;
         };
-        let asserted = if let Some(sub_kind) = sub_kind_from_iri(&edge.predicate) {
+        let sub_kind = sub_kind_from_iri(&edge.predicate);
+        let has_statement_metadata = edge.statement_id.is_some()
+            || edge.label.is_some()
+            || edge.provenance_iri.is_some()
+            || edge.asserted_at_ms.is_some();
+        if has_statement_metadata {
+            // A reified statement: write it statement-aware so the fact handle
+            // and metadata survive (the Phase 2 round-trip contract). A carried
+            // id is preserved verbatim; a foreign reifier's fact gets a fresh
+            // kernel-minted id.
+            let asserted = match &edge.statement_id {
+                Some(id) => graph
+                    .assert_persisted_semantic_statement(
+                        from,
+                        to,
+                        SemanticStatement {
+                            statement_id: id.clone(),
+                            predicate: edge.predicate.clone(),
+                            recognized_sub_kind: sub_kind,
+                            label: edge.label.clone(),
+                            graph_scope: edge.graph_scope.clone(),
+                            provenance_iri: edge.provenance_iri.clone(),
+                            asserted_at_ms: edge.asserted_at_ms,
+                        },
+                    )
+                    .is_some(),
+                None => graph
+                    .assert_semantic_statement(
+                        from,
+                        to,
+                        SemanticStatementSpec {
+                            predicate: edge.predicate.clone(),
+                            recognized_sub_kind: sub_kind,
+                            label: edge.label.clone(),
+                            graph_scope: edge.graph_scope.clone(),
+                            provenance_iri: edge.provenance_iri.clone(),
+                            asserted_at_ms: edge.asserted_at_ms,
+                        },
+                    )
+                    .is_some(),
+            };
+            if asserted {
+                outcome.edges_asserted += 1;
+            }
+            continue;
+        }
+        let asserted = if let Some(sub_kind) = sub_kind {
             // Recognized: typed Semantic statement in the supplied graph scope.
             let semantic_ok = graph_apply::assert_semantic_relation_in_scope(
                 graph,

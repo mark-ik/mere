@@ -946,6 +946,129 @@ mod tests {
     /// Both export forms must ingest back to the same logical content: A's curated
     /// literals, the recognized `cites` edge (canonical IRI), and the raw
     /// `schema:citation` edge.
+    /// THE Phase 2 losslessness gate (petgraph-RDF plan): a graph exercising
+    /// the full profile construct matrix — typed + language-tagged literals,
+    /// named graph scopes, statement metadata (label / provenance / assertion
+    /// time via RDF 1.2 reifiers), two differently-scoped statements on one
+    /// pair, a recognized (CiTO-mapped) and a raw predicate, `rdf:type`,
+    /// curated title/tags — projects to quads, re-ingests through the quad
+    /// path into a FRESH graph, and projects identically: a normalized
+    /// (sorted N-Quads) dataset compare, id-stable through the reifier
+    /// handles. "Lossless under the profile" as a checked property.
+    #[test]
+    fn dataset_round_trip_is_lossless_under_the_profile() {
+        use kernel::graph::SemanticStatementSpec;
+
+        let mut graph = Graph::new();
+        let a = graph.add_node("https://a.test/".to_string(), Default::default());
+        let b = graph.add_node("https://b.test/".to_string(), Default::default());
+        let c = graph.add_node("https://c.test/".to_string(), Default::default());
+
+        // Curated fast-path literals.
+        graph.get_node_mut(a).expect("a").title = "Article A".to_string();
+        graph.get_node_mut(a).expect("a").tags =
+            std::collections::HashSet::from(["research".to_string()]);
+
+        // A recognized predicate with full statement metadata, plus a second
+        // statement on the SAME pair in a different named graph.
+        graph
+            .assert_semantic_statement(
+                a,
+                b,
+                SemanticStatementSpec {
+                    predicate: "https://mere.computer/ns/rel#cites".to_string(),
+                    recognized_sub_kind: Some(SemanticSubKind::Cites),
+                    label: Some("cited in the intro".to_string()),
+                    graph_scope: GraphScope::User,
+                    provenance_iri: Some("https://persona.test/mark".to_string()),
+                    asserted_at_ms: Some(1_720_000_000_000),
+                    ..Default::default()
+                },
+            )
+            .expect("cites statement");
+        graph
+            .assert_semantic_statement(
+                a,
+                b,
+                SemanticStatementSpec {
+                    predicate: "https://mere.computer/ns/rel#cites".to_string(),
+                    recognized_sub_kind: Some(SemanticSubKind::Cites),
+                    graph_scope: GraphScope::Source,
+                    ..Default::default()
+                },
+            )
+            .expect("source-scoped statement");
+        // A raw (unrecognized) predicate.
+        graph
+            .assert_semantic_statement(
+                a,
+                c,
+                SemanticStatementSpec {
+                    predicate: "https://example.test/vocab#inspiredBy".to_string(),
+                    asserted_at_ms: Some(1_720_000_100_000),
+                    ..Default::default()
+                },
+            )
+            .expect("raw predicate statement");
+
+        // Typed + language-tagged + scoped literals with metadata.
+        let node_a = graph.get_node_mut(a).expect("a");
+        let mut published = NodeProperty::new(
+            "https://schema.org/datePublished".to_string(),
+            "2026-07-04".to_string(),
+        )
+        .with_graph_scope(GraphScope::User);
+        published.datatype = Some("http://www.w3.org/2001/XMLSchema#date".to_string());
+        published.provenance_iri = Some("https://persona.test/mark".to_string());
+        published.asserted_at_ms = Some(1_720_000_200_000);
+        node_a.properties.push(published);
+        let mut greeting = NodeProperty::new(
+            "https://schema.org/description".to_string(),
+            "bonjour".to_string(),
+        );
+        greeting.lang = Some("fr".to_string());
+        node_a.properties.push(greeting);
+
+        // rdf:type via classification (through the delta, the public write).
+        let _ = kernel::graph::apply::apply_graph_delta(
+            &mut graph,
+            kernel::graph::apply::GraphDelta::AddNodeClassification {
+                key: a,
+                classification: kernel::types::NodeClassification {
+                    scheme: kernel::types::ClassificationScheme::Custom("rdf:type".to_string()),
+                    value: "https://schema.org/Article".to_string(),
+                    label: None,
+                    confidence: 1.0,
+                    provenance: kernel::types::ClassificationProvenance::Imported,
+                    status: kernel::types::ClassificationStatus::Imported,
+                    primary: false,
+                },
+            },
+        );
+
+        let normalized = |graph: &Graph| -> Vec<String> {
+            let mut lines: Vec<String> = crate::dataset_quads(graph)
+                .iter()
+                .map(|quad| format!("{quad} ."))
+                .collect();
+            lines.sort();
+            lines
+        };
+        let exported = normalized(&graph);
+
+        let contribution = crate::ingest::from_quads(crate::dataset_quads(&graph), "gate")
+            .expect("quad ingest");
+        let mut reimported = Graph::new();
+        let outcome = crate::ingest::apply_contribution(&mut reimported, &contribution);
+        assert!(outcome.edges_skipped == 0, "self-contained contribution");
+
+        let reexported = normalized(&reimported);
+        assert_eq!(
+            exported, reexported,
+            "RDF -> kernel -> RDF is byte-stable as a normalized dataset"
+        );
+    }
+
     fn assert_round_trip(contribution: &GraphContribution) {
         let a = contribution
             .nodes
@@ -959,12 +1082,20 @@ mod tests {
             predicate: "https://mere.computer/ns/rel#cites".into(),
             object: "https://b.test/".into(),
             graph_scope: GraphScope::Default,
+            statement_id: None,
+            label: None,
+            provenance_iri: None,
+            asserted_at_ms: None,
         }));
         assert!(contribution.edges.contains(&EdgeContribution {
             subject: "https://a.test/".into(),
             predicate: "https://schema.org/citation".into(),
             object: "https://c.test/".into(),
             graph_scope: GraphScope::Default,
+            statement_id: None,
+            label: None,
+            provenance_iri: None,
+            asserted_at_ms: None,
         }));
     }
 

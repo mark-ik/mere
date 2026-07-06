@@ -109,12 +109,20 @@ fn from_jsonld_parses_nodes_literals_types_and_edges() {
         predicate: "https://mere.computer/ns/rel#cites".into(),
         object: "https://b.test/".into(),
         graph_scope: GraphScope::Default,
+        statement_id: None,
+        label: None,
+        provenance_iri: None,
+        asserted_at_ms: None,
     }));
     assert!(contribution.edges.contains(&EdgeContribution {
         subject: "https://a.test/".into(),
         predicate: "https://schema.org/citation".into(),
         object: "https://c.test/".into(),
         graph_scope: GraphScope::Default,
+        statement_id: None,
+        label: None,
+        provenance_iri: None,
+        asserted_at_ms: None,
     }));
 }
 
@@ -220,6 +228,10 @@ fn a_harvested_hyperlink_records_extracted_from_provenance_on_the_target() {
             predicate: "https://mere.computer/ns/rel#hyperlink".to_string(),
             object: "https://dst.test/".to_string(),
             graph_scope: GraphScope::Default,
+            statement_id: None,
+            label: None,
+            provenance_iri: None,
+            asserted_at_ms: None,
         }],
     };
     let mut graph = Graph::new();
@@ -416,6 +428,10 @@ fn bundled_context_expands_a_remote_context() {
         predicate: "https://mere.computer/ns/rel#cites".into(),
         object: "https://b.test/".into(),
         graph_scope: GraphScope::Default,
+        statement_id: None,
+        label: None,
+        provenance_iri: None,
+        asserted_at_ms: None,
     }));
 }
 

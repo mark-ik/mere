@@ -297,6 +297,28 @@ kernel directly, with no oxigraph Store in the path.
   the dataset/SPARQL path now emits named-graph quads from those scopes. The
   JSON-LD shapers still deliberately stay default-graph-only, and curated
   `title`/`tags` plus `rdf:type` classifications are not yet graph-scope-aware.
+- **2026-07-05 (Phase 1 closed + Phase 2 gate green)** — The review-ordered tail landed:
+  (1) **StatementId minting is federation-safe**: `{unix_ms}-{process_salt}-{counter}` with a
+  64-bit per-process salt (OS randomness native; wasm hosts seed via
+  `kernel::types::seed_statement_minter`, per the kernel identity doctrine). Legacy ids stay
+  valid opaque handles; dedup remains content-based. (2) **Statement-aware writes**:
+  `SemanticStatementSpec` + `Graph::assert_semantic_statement` (content-dedup returns the
+  existing handle, metadata updates in place) / `Graph::retract_semantic_statement` (precise
+  retract; emptied bucket clears the sidecar, emptied payload removes the petgraph edge) /
+  `Graph::assert_persisted_semantic_statement` (id-preserving re-ingest path). (3) **The Phase 2
+  round-trip gate is a green test** (`dataset_round_trip_is_lossless_under_the_profile`):
+  quad-level ingest (`ingest::from_quads`) now lifts RDF 1.2 reifiers — triple-term `rdf:reifies`
+  recognized, reifier subjects excluded from node contributions, `rdfs:label` /
+  `prov:wasAttributedTo` / `prov:generatedAtTime` parsed back (xsd:dateTime -> ms) and attached
+  to the matching edge (by s/p/o/scope) or node property (by p/value/typing/scope), with
+  `urn:mere:statement:<id>` handles preserved through apply — so
+  `RDF -> kernel -> dataset_quads -> RDF` compares byte-equal as sorted N-Quads across typed +
+  lang literals, named scopes, two differently-scoped statements on one pair, statement
+  metadata, recognized + raw predicates, rdf:type, and curated title/tags. "Lossless under the
+  profile" is now a checked property. kernel 279/279, linked-data 26/26. Still ahead: Phase 3
+  (`QueryableDataset` adapter; the ephemeral-Store `>sparql` stays the baseline until adapter
+  parity + perf receipts) and the JSON-LD shaper gaps (deliberately unchanged; N-Quads/Turtle is
+  the canonical lossless projection since JSON-LD cannot carry triple terms).
 - **2026-07-04 (landed slice, statement metadata)** — Added `provenance_iri` and
   `asserted_at_ms` to semantic statements and node properties, kept older
   snapshots loadable via serde defaults, round-tripped the richer statement

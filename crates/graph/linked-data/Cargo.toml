@@ -30,7 +30,7 @@ serde_json.workspace = true
 oxjsonld = "0.2"
 oxrdf = { version = "0.3", features = ["rdf-12"] }
 oxigraph = { version = "0.5", default-features = false, optional = true, features = ["rdf-12"] }
-time = { version = "0.3", features = ["formatting"] }
+time = { version = "0.3", features = ["formatting", "parsing"] }
 
 [dev-dependencies]
 kernel = { workspace = true, features = ["fixtures"] }

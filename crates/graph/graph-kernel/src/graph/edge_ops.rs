@@ -19,7 +19,7 @@ use uuid::Uuid;
 
 use crate::types::GraphScope;
 
-use super::edge_data::{SemanticStatementSpec, StatementAssert};
+use super::edge_data::{SemanticStatementSpec, StatementAssert, SemanticStatement};
 use super::edge_data::Traversal;
 use super::edge_payload::EdgePayload;
 use super::edge_taxonomy::{EdgeAssertion, RelationSelector, SemanticSubKind};
@@ -310,6 +310,32 @@ impl Graph {
             self.bump_revision();
         }
         Some((edge_key, outcome))
+    }
+
+    /// Assert a semantic statement whose id is ALREADY minted — the re-ingest /
+    /// round-trip path (a reifier carried the fact handle, and preserving it is
+    /// what makes `RDF -> kernel -> RDF` id-stable). Same content-dedup as the
+    /// persisted-snapshot load; endpoints must exist.
+    pub fn assert_persisted_semantic_statement(
+        &mut self,
+        from: NodeKey,
+        to: NodeKey,
+        statement: SemanticStatement,
+    ) -> Option<EdgeKey> {
+        if !self.inner.contains_node(from) || !self.inner.contains_node(to) {
+            return None;
+        }
+        let edge_key = self
+            .find_edge_key(from, to)
+            .unwrap_or_else(|| self.inner.add_edge(from, to, EdgePayload::new()));
+        let changed = {
+            let payload = self.inner.edge_weight_mut(edge_key)?;
+            payload.push_persisted_semantic_statement(statement)
+        };
+        if changed {
+            self.bump_revision();
+        }
+        Some(edge_key)
     }
 
     /// Precise retract by fact handle (the id `assert_semantic_statement`
