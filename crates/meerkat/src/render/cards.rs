@@ -297,7 +297,12 @@ impl crate::WindowCtx<'_> {
                         .snapshot_data_uris
                         .get(&member)
                         .is_some_and(|snapshot| snapshot.url == url);
-                    if !cached {
+                    // Only fall back to the persisted thumbnail when the current url
+                    // has no cached body to re-render from. A persisted thumbnail can
+                    // be stale or blank (captured before the body was fetched), and
+                    // trusting it over an available body sticks a blank card — the
+                    // re-render below produces real content instead. (Blank-snapshot fix.)
+                    if !cached && self.load_cached(&url).is_none() {
                         let persisted = self
                             .orrery()
                             .graph()
