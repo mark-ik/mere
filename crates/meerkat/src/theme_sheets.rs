@@ -79,6 +79,15 @@ pub(crate) fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
             rgb(c.field_text),
             rgb(c.field_bg)
         ),
+        // The omnibar keeps a stable minimum width so clearing the address does not
+        // collapse it to nothing and snap the session strip wider (the "shrinks
+        // oddly" reflow). The `.toolbar input` selector is more specific than the
+        // shared `input` rule above, so it floors only the omnibar — panel inputs
+        // (palette / find / context search) keep their `min-width: 0`. Long URLs
+        // still clip: the shared rule's `overflow`/`text-overflow` is unchanged, and
+        // the field flex-grows past this floor to fill the toolbar.
+        // (Chrome bar — omnibar width floor.)
+        ".toolbar input { min-width: 220px; }".to_string(),
         // The crawl-progress chip (relational-browse V2), a small muted pill;
         // hidden when empty (no crawl has run) via `:empty`.
         format!(
