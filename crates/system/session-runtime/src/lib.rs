@@ -42,6 +42,10 @@
 // the concrete backend). Persists fetched pages / subresources so a reload need
 // not re-fetch.
 pub mod content_store;
+// Durable content-addressed store for node preview imagery (favicons, previews,
+// snapshots) — the sibling of content_store, keyed by BLAKE3 digest so identical
+// images dedup. The pixels live here; the kernel Node holds only an ImageRef.
+pub mod image_store;
 pub mod engine_profile_store;
 // Freeze/thaw a live graph into an immutable, content-addressed graph engram over
 // an eidetic Store (the Alembic memory spine; wasm-clean — store-agnostic, not

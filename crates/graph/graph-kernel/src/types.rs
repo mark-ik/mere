@@ -504,6 +504,125 @@ impl NodeProperty {
 }
 
 // ---------------------------------------------------------------------------
+// Preview imagery references (node image externalization plan)
+// ---------------------------------------------------------------------------
+
+/// Which preview-image role a reference fills. A node holds at most one image per
+/// role. `Favicon` is the site icon on the node face; `Preview` the default
+/// thumbnail; `Snapshot` the last-rendered peek the preview card shows. The set
+/// is extensible (per-lane snapshots) by adding variants, which is why the node
+/// keys images by role rather than holding fixed fields. `Ord` so it can key a
+/// `BTreeMap` with a deterministic iteration order.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    Archive,
+    Serialize,
+    Deserialize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+#[rkyv(compare(PartialEq, PartialOrd), derive(Debug, PartialEq, Eq, PartialOrd, Ord))]
+pub enum ImageRole {
+    Favicon,
+    Preview,
+    Snapshot,
+}
+
+/// A content-addressed reference to a preview image held in the durable blob
+/// store (node image externalization plan): the BLAKE3-256 digest of the stored
+/// PNG bytes plus the decoded dimensions. ~40 bytes and no pixels, so a graph of
+/// 50k nodes carries references, not image data. The kernel only *carries* the
+/// handle; `session-runtime::image_store` computes the digest and owns the blob
+/// under `content/image/<hex>`, which is why the digest is a plain `[u8; 32]`
+/// here (no eidetic dependency in the kernel).
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Archive,
+    Serialize,
+    Deserialize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+#[rkyv(derive(Debug, PartialEq, Eq))]
+pub struct ImageRef {
+    /// BLAKE3-256 digest of the stored PNG bytes — the blob key. Rendered as hex
+    /// in JSON snapshots (compact + hand-inspectable); rkyv archives the raw bytes.
+    #[serde(with = "digest_hex")]
+    pub digest: [u8; 32],
+    /// Decoded pixel width.
+    pub width: u32,
+    /// Decoded pixel height.
+    pub height: u32,
+}
+
+impl ImageRef {
+    pub fn new(digest: [u8; 32], width: u32, height: u32) -> Self {
+        Self {
+            digest,
+            width,
+            height,
+        }
+    }
+
+    /// Lowercase hex of the digest — the `content/image/<hex>` blob-key suffix.
+    /// Matches `eidetic::Hash::to_hex` so a ref built from a saved blob's hash
+    /// reads that same blob back.
+    pub fn hex(&self) -> String {
+        use std::fmt::Write;
+        let mut out = String::with_capacity(64);
+        for byte in &self.digest {
+            let _ = write!(out, "{byte:02x}");
+        }
+        out
+    }
+}
+
+/// Serde helpers rendering a 32-byte digest as a hex string in JSON snapshots.
+mod digest_hex {
+    use serde::{Deserialize, Deserializer, Serializer, de::Error};
+
+    pub fn serialize<S: Serializer>(digest: &[u8; 32], serializer: S) -> Result<S::Ok, S::Error> {
+        use std::fmt::Write;
+        let mut hex = String::with_capacity(64);
+        for byte in digest {
+            let _ = write!(hex, "{byte:02x}");
+        }
+        serializer.serialize_str(&hex)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<[u8; 32], D::Error> {
+        let hex = String::deserialize(deserializer)?;
+        let bytes = hex.as_bytes();
+        if bytes.len() != 64 {
+            return Err(D::Error::invalid_length(bytes.len(), &"64 hex characters"));
+        }
+        let nibble = |b: u8| -> Result<u8, D::Error> {
+            (b as char)
+                .to_digit(16)
+                .map(|d| d as u8)
+                .ok_or_else(|| D::Error::custom("digest is not valid hex"))
+        };
+        let mut out = [0u8; 32];
+        for (i, pair) in bytes.chunks_exact(2).enumerate() {
+            out[i] = (nibble(pair[0])? << 4) | nibble(pair[1])?;
+        }
+        Ok(out)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Badge / tag presentation types (from badge.rs carve-out)
 // ---------------------------------------------------------------------------
 
