@@ -20,4 +20,4 @@ canned stub; the decoder, endpoint, and actor backends are the porting roadmap
 in [`design_docs/`](design_docs/). Latin *vates*, the poet-prophet: it both
 voices (speaks as characters) and foretells (inference).
 
-License: MPL-2.0 (see the proposal's licensing note; the final choice is open).
+License: dual MIT OR Apache-2.0, at your option.
