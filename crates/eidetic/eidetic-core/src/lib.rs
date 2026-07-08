@@ -68,6 +68,7 @@ pub mod manifest;
 pub mod models;
 pub mod schema;
 pub mod schema_def;
+pub mod seal;
 pub mod typed;
 
 pub use browsing::{
@@ -91,6 +92,10 @@ pub use schema_def::{
     MereNativeSchemaBody, MereNativeSchemaBuilder, MereNativeValidator, SchemaDefinition,
     SchemaFormat, SchemaValidator, bootstrap_meta_schema, find_schema_by_id, load_schema,
     meta_schema_engram, meta_schema_ref, save_schema, validate_against_schema, validate_payload,
+};
+pub use seal::{
+    PayloadSealer, SealEpochId, SealedBlobRef, is_private_lane, resolve_sealed_blob, seal_marker,
+    seal_payload_for_store,
 };
 pub use typed::{TypedPayload, list_typed, load_typed, save_typed};
 

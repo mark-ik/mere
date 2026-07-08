@@ -253,6 +253,14 @@ pub async fn resolve_blob(
     fetcher: &mut dyn BlobFetcher,
     manifest: &BlobManifest,
 ) -> Result<Vec<u8>> {
+    // A sealed-at-rest blob cannot be resolved through the cleartext path: its
+    // stored bytes are ciphertext and would fail the content-hash check with a
+    // confusing mismatch. Fail loudly and point at the sealer-aware resolver.
+    if crate::seal::seal_marker(manifest)?.is_some() {
+        return Err(Error::new(
+            "manifest blob is sealed at rest; use seal::resolve_sealed_blob with a PayloadSealer",
+        ));
+    }
     let mut last_error: Option<Error> = None;
     for source in &manifest.sources {
         let candidate = match source {

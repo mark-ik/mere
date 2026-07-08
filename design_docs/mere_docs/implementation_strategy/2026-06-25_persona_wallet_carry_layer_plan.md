@@ -486,7 +486,13 @@ both evaluated in the substrate spike.
    non-Windows `AutoOs` backends.
 2. **Per-persona encryption-at-rest for eidetic** — private-lane payloads sealed under a
    persona-owned private epoch history, with per-device wrapped copies for remote-auth
-   devices. Today privacy is a metadata tag, encryption is wire-only.
+   devices. Today privacy is a metadata tag, encryption is wire-only. **The eidetic-core
+   seal seam landed 2026-07-08** (`eidetic::seal`): a `PayloadSealer` boundary, seal-on-
+   write / unseal-on-read helpers keyed on `PrivacyClass`, and a `resolve_sealed_blob`
+   that unseals before the content-hash check. Still open: the host `PayloadSealer` impl
+   over the wallet epoch keys (`session-runtime`) and the meerkat wiring at the store-open
+   / ingest sites (both held by the one-state migration), plus migrating existing cleartext
+   private blobs.
 3. **The capability-token layer** — typed signed device-grant storage, remote-auth grant
    issuance, wrapped private-epoch crypto helpers, pairing-transcript derivation, and a
    typed pairing ticket/response seam landed 2026-07-02 in `session-runtime::wallet_grant`
@@ -800,6 +806,25 @@ current head, and replacement of the temporary plaintext bridges as the live sea
   enrollment path that re-wraps an existing `AutoOs` root under a new passphrase (both
   touch meerkat UI files the migration currently holds). Verified `cargo test -p identity`
   green + clippy clean.
+- **2026-07-08** — landed the eidetic-core encrypt-at-rest seam (gap #2's foundation) in
+  `crates/eidetic/eidetic-core/src/seal.rs`: a `PayloadSealer` trait (seal/unseal, the host
+  owns the key so the private-memory core stays crypto-free and wasm-friendly, mirroring the
+  `BlobFetcher` split), `seal_payload_for_store` (seals `LocalOnly` / `TrustedPeersOnly`,
+  passes `MootScoped` / `PublicPortable` through cleartext for the public lane's dedup/pin/
+  verify), and `resolve_sealed_blob` (unseals a marked blob before the content-hash check;
+  a sealed manifest with no sealer is a hard error, and `resolve_blob` now rejects sealed
+  manifests loudly instead of a confusing hash mismatch). Kept purely additive: the seal
+  marker (`SealedBlobRef { epoch, format }`) rides the existing `schema_metadata` under a
+  reserved key rather than a new `BlobManifest` field, because a field fans out to
+  construction sites in migration-held `ingest.rs`; access is encapsulated so promoting it
+  to a typed field later is one spot. `SealEpochId` is eidetic's own 16-byte epoch id
+  (maps to the wallet's `KeyEpochId` without depending upward). 10 tests incl. private
+  round-trip, public-stays-cleartext, pre-rotation read from epoch history, tamper/wrong-key
+  rejection, and back-compat (unmarked = cleartext). chacha20poly1305 is a dev-dep only (the
+  reference test sealer); the production impl is the host's. Still open and deferred behind
+  the one-state migration: the host `PayloadSealer` over the wallet epochs, the meerkat
+  store-open/ingest wiring, and migrating existing cleartext private blobs. Verified
+  `cargo test -p eidetic` (83) green + new code clippy-clean.
 
 ## Findings (research, 2026-06-25)
 

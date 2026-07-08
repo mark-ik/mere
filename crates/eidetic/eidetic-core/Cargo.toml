@@ -30,3 +30,7 @@ lineage = ["dep:node-lineage"]
 
 [dev-dependencies]
 pollster = "0.4"
+# Reference sealer for the encrypt-at-rest seam tests (`seal` module). Runtime
+# stays crypto-free: the production PayloadSealer lives in the host, which owns
+# the wallet epoch keys.
+chacha20poly1305 = "0.10"
