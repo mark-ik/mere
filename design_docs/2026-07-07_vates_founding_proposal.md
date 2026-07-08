@@ -128,6 +128,14 @@ over the trait, and keeping it in vates means consumers get streaming off the
 main thread for free without pulling a mere harness. Revisit option 2 only if
 armillary proves broadly wanted across the ecosystem.
 
+**Update (2026-07-07): resolved as option 2.** armillary was read (732 LOC, one
+external dep `tracing`, host-neutral) and promoted to a standalone crate the same
+day at `repos/armillary`. Three consumers cleared the bar: mere/meerkat, this
+crate's actor (P2), and Isometry's serval host. So vates's actor depends on
+armillary rather than reimplementing a primitive; consumers still get streaming
+off the main thread for free, now from a shared crate. See
+`repos/armillary/design_docs/2026-07-07_armillary_founding_proposal.md`.
+
 ## 6. Backend selection
 
 One trait, many loaders, chosen by `CapabilityQuery`:
@@ -163,8 +171,9 @@ hardcodes a runtime.
 
 ## 8. Open questions
 
-1. **armillary** (section 5): portable primitive (recommended), promote, or
-   keep mere-side.
+1. **armillary** (section 5): RESOLVED 2026-07-07 as promote. armillary is now a
+   standalone crate (`repos/armillary`); vates's actor depends on it. (Was:
+   portable primitive vs promote vs keep mere-side.)
 2. **License** (section 7): MPL-2.0 or relicense to MIT/Apache before publish.
 3. **embed promotion:** a separate `vates`-sibling crate for the embedder, or
    fold embeddings into vates as a second provider family.
