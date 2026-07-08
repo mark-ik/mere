@@ -19,14 +19,17 @@
 //!   vector, but unrelated texts → unrelated vectors), for exercising the
 //!   embed-to-index-to-search pipeline with no GPU and no model.
 //!
-//! The default build is `serde` only and wasm-clean. The burn-wgpu BERT provider
-//! (the strategic in-process semantic embedder) lands behind `bert` / `bert-wgpu`
-//! features; see `design_docs/`.
+//! The default build is `serde` only and wasm-clean. Two compute backends ride
+//! features: the batched-cosine index kernel ([`index_burn`], `index-burn`), and
+//! the Burn-backed [`BertEmbeddingProvider`](bert::BertEmbeddingProvider) — the
+//! in-process semantic embedder (MiniLM-class) — behind `bert` / `bert-wgpu`.
 //!
 //! Sibling to vates (generation). Where vates voices and foretells, sibylla is
 //! the consulted corpus: it embeds and returns what is asked for.
 
 pub mod affinity;
+#[cfg(feature = "bert")]
+pub mod bert;
 pub mod index;
 #[cfg(feature = "index-burn")]
 pub mod index_burn;
@@ -36,6 +39,10 @@ pub mod search;
 pub mod stub;
 
 pub use affinity::affinity_pairs;
+#[cfg(feature = "bert")]
+pub use bert::{
+    BGE_MICRO_V2, BertConfig, BertEmbeddingProvider, MINILM_L6_V2, SNOWFLAKE_ARCTIC_EMBED_XS,
+};
 pub use index::{IndexError, VectorIndex};
 #[cfg(feature = "index-burn")]
 pub use index_burn::cosine_top_k;

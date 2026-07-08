@@ -3,32 +3,50 @@ name = "sibylla"
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-description = "A local-embedding and semantic-retrieval seam: the EmbeddingProvider trait, similarity metrics, a deterministic stub, a pure-Rust vector index, a SemanticSearch facade, a burn-free lexical embedder, and an affinity-pairs helper — serde-only and wasm-clean. A burn-wgpu BERT backend is the porting roadmap. Sibling to vates (generation)."
+description = "A local-embedding and semantic-retrieval seam: the EmbeddingProvider trait, similarity metrics, a deterministic stub, a pure-Rust vector index, a SemanticSearch facade, a burn-free lexical embedder, an affinity-pairs helper, a batched-cosine GPU index kernel, and a Burn-backed BERT embedder (behind features). Sibling to vates (generation)."
 repository = "https://github.com/mark-ik/sibylla"
 keywords = ["embeddings", "vector-search", "semantic", "retrieval", "rag"]
 categories = ["science", "data-structures"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
-# Burn-backed batched-cosine index kernel (the `index-burn` feature). ndarray for
-# portable CPU compute; `index-burn-wgpu` adds the wgpu backend for GPU execution.
-# Optional — the default build stays serde-only and wasm-clean.
+# Burn: the batched-cosine index kernel (`index-burn`) and the BERT embedder
+# (`bert`). ndarray for portable CPU compute; the `-wgpu` features add burn's wgpu
+# backend. Optional — the default build stays serde-only and wasm-clean.
 burn = { version = "0.21", default-features = false, features = ["ndarray", "std"], optional = true }
+# The BERT provider's word-piece tokenizer + safetensors weight loading, and
+# serde_json for parsing HuggingFace `config.json` (`bert`).
+tokenizers = { version = "0.20", default-features = false, features = ["onig"], optional = true }
+safetensors = { version = "0.4", optional = true }
+serde_json = { version = "1", optional = true }
+
+# The burn tree reaches getrandom on wasm; 0.4 needs its wasm_js backend switched
+# on by someone in the graph (only the `-wgpu` features pull it).
+[target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
+getrandom = { version = "0.4", features = ["wasm_js"], optional = true }
 
 [dev-dependencies]
 serde_json = "1"
+pollster = "0.4"
 
 # The portable retrieval core (index / search / lexical / affinity), ported from
-# mere's intel/embed (see design_docs/2026-07-07_sibylla_founding_proposal.md), is
-# serde-only, so it ships in the default build with no feature gate. Only the
-# model-backed backend rides features:
-#   bert / bert-wgpu — the burn-wgpu BERT backend (MiniLM, BGE-micro, arctic-xs),
-#                      pulling burn / tokenizers / safetensors / half. (Roadmap P2.)
-# The default build stays wasm-clean.
+# mere's intel/embed, is serde-only and ships in the default build. The compute
+# backends ride features:
+#   index-burn / -wgpu — the batched-cosine index kernel (ndarray / +GPU)
+#   bert / bert-wgpu   — the Burn-backed BERT embedder (MiniLM, BGE-micro, arctic-xs)
+# The default build stays serde-only and wasm-clean.
 [features]
 default = []
 # The batched-cosine index kernel: all-pairs / query-vs-all cosine as one matmul
 # on burn (the heavy O(Q·N·d) work), CPU top-k over the readback. ndarray backend.
 index-burn = ["dep:burn"]
 # Adds burn's wgpu backend so the kernel runs on the GPU.
-index-burn-wgpu = ["index-burn", "burn/wgpu"]
+index-burn-wgpu = ["index-burn", "burn/wgpu", "dep:getrandom"]
+# The Burn-backed BERT embedding provider (attention / encoder / feed-forward /
+# safetensors loader / word-piece tokenizer / validation). Pulls burn + tokenizers
+# + safetensors.
+bert = ["dep:burn", "dep:tokenizers", "dep:safetensors", "dep:serde_json"]
+# GPU execution for the BERT provider — instantiate `BertEmbeddingProvider<Wgpu>`.
+bert-wgpu = ["bert", "burn/wgpu", "dep:getrandom"]
+# Continuous validation against a reference engine (an ignored end-to-end test).
+bert-validation = ["bert"]
