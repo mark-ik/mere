@@ -1,15 +1,22 @@
 # Illume: the text lexer / highlighter, its tinct + serval pairing, and the omnibar legibility goal
 
 **Date**: 2026-06-26
-**Status**: Points 1-6 done and headed-verified. Point 7 part-shipped 2026-06-27:
-**tinct 0.1.0 and illume 0.0.1 are live on crates.io**, the github repo renamed
-tincture → tinct, mere sourcing tinct from crates.io via a `package` alias. Only illume's
-extraction to its own sibling repo (and a stable release past the 0.0.1 name-reserve)
-remains, held until the API settles. Captures the decisions and the build of the illume
-promotion across the 2026-06-26 / 27 sessions: the knot editor's highlight core promoted
-to a standalone sibling crate (**illume**), paired with tincture (published as **tinct**)
-for themed colours and serval's styled field for rendering, aimed at making mere/meerkat
-operable and legible from the omnibar.
+**Status**: Points 1-6 done and headed-verified. Point 7 part-shipped 2026-06-27
+(tinct 0.1.0 + illume 0.0.1 published). **Point 8 landed 2026-07-08: illume extracted
+to its own repo and the bridge dissolved into serval.** illume is now a standalone
+public repo (`github.com/mark-ik/illume`, MIT OR Apache-2.0, edition 2024), and the
+`SyntaxKind → SyntaxRole → class` bridge that had lived host-side in
+`meerkat/knot_highlight.rs` moved *into* xilem-serval behind a `highlight` feature
+(optional illume + tinct deps). So the highlighter is no longer a per-host concern: any
+serval host flips `xilem-serval/highlight` and gets `highlighted_textarea` /
+`highlighted_text_field` / `syntax_css` for free (the omnibar, a note editor, a chat
+line, and — when serval gains a TUI backend — terminal text too). meerkat's bridge is
+deleted; Isometry (which already consumes xilem-serval) can adopt highlighting with a
+single feature flag. See the 2026-07-08 Progress entry. Captures the decisions and the
+build of the illume promotion across the 2026-06-26 / 27 / 07-08 sessions: the knot
+editor's highlight core promoted to a standalone sibling crate (**illume**), paired with
+tincture (published as **tinct**) for themed colours and serval's styled field for
+rendering, aimed at making mere/meerkat operable and legible from the omnibar.
 
 ## The idea
 
@@ -124,6 +131,15 @@ illume's first non-editor consumer.
    `package = "tinct"` alias (no src churn — the Woodshed consumer turned out not to exist).
    illume **published 0.0.1** as a name-reserve straight from the workspace. Remaining:
    illume's extraction to its own sibling repo + a stable release once the API settles.
+8. **Extraction + serval-owns-the-bridge — LANDED** (2026-07-08). illume extracted to its
+   own public repo (`github.com/mark-ik/illume`, MIT OR Apache-2.0, edition 2024, 32
+   tests); mere consumes it by git dep + local override, the in-workspace copy deleted.
+   The `SyntaxKind → SyntaxRole → class` bridge moved from `meerkat/knot_highlight.rs`
+   into **xilem-serval** behind a `highlight` feature (optional illume + tinct deps),
+   exposing `highlighted_textarea` / `highlighted_text_field` / `syntax_css`. This
+   **revises Decision 5**: the seam is no longer host-owned (that was a single-host
+   premise), it is owned by the shared toolkit, so every serval host inherits highlighting
+   for free and none re-writes the map. meerkat's bridge deleted; 230 bin tests green.
 
 ## Decisions
 
@@ -139,7 +155,10 @@ illume's first non-editor consumer.
    the buffer. The portable derivations (highlight / outline / folds / render) take text;
    the registry is built once and held, fixing the per-keystroke rebuild.
 5. **The `SyntaxKind` → `SyntaxRole` seam is the host's**, keeping illume and tinct
-   independent of each other.
+   independent of each other. *(Revised 2026-07-08 — see Decision 8: with two consumers
+   (meerkat, Isometry) the map is shared infrastructure, not host glue, so it moved into
+   xilem-serval's `highlight` feature. illume and tinct stay mutually independent — the
+   toolkit is the one place that knows both.)*
 
 ## Cross-references
 
@@ -270,3 +289,28 @@ illume's first non-editor consumer.
   extraction to its own sibling repo + a stable (0.1) release, both held until the API
   settles. Cosmetic loose end: the local checkout is still `repos/tincture` (crate + remote
   are tinct); rename the dir whenever convenient.
+- **2026-07-08, point 8: illume extracted + the bridge dissolved into serval.** Prompted
+  by Mark asking whether the editor should promote to a standalone that Isometry could
+  consume. The dep-graph check reframed it: Isometry already consumes `xilem-serval` (git
+  dep), and illume + tinct are already standalone, so the widget + lexer + palette are
+  *already* shared; the one un-shared piece was the `SyntaxKind → SyntaxRole → class`
+  bridge, duplicated per host. Rather than a third bridge crate (Mark: "right back at
+  making two crates three... nah"), the bridge moved into serval's toolkit, where it can
+  see both libs: **xilem-serval owns highlighted text, every serval host inherits it for
+  free.** Landed across three repos: (1) **illume extracted** to its own public repo
+  (`github.com/mark-ik/illume`, MIT OR Apache-2.0 relicense off mere's MPL, edition 2024,
+  MPL per-file headers stripped, 32 tests, pushed to `main`); (2) **mere repointed** —
+  git dep + local `.cargo/config` override in meerkat + knot-editor-host, illume dropped
+  from workspace members, the in-workspace copy deleted; (3) **xilem-serval** gained a
+  `highlight` feature (optional illume + tinct deps) with `src/highlight.rs`: the kind→role
+  map, `role_class`, `note_styles` / `entity_styles`, the `Highlight` mode enum,
+  `highlighted_textarea` / `highlighted_text_field`, and `syntax_css` — emitting serval's
+  native `StyleRange`, 3 tests, 96 total green; (4) **meerkat** deleted `knot_highlight.rs`,
+  repointed the editor field to `highlighted_textarea(t, Highlight::Note)` and the
+  stylesheet to `xilem_serval::syntax_css` (with a small host-side `fallback_seeds`),
+  dropped its direct illume dep; 230 bin tests green. Revised Decision 5 (the seam is the
+  toolkit's now, not each host's), keeping illume and tinct mutually independent. Not yet
+  committed across the three repos; the github push of illume was the one gated action.
+  Follow-on: Isometry can adopt highlighting with a single `xilem-serval/highlight` flag;
+  omnibar entity highlighting (lost in concurrent churn) re-wires as one
+  `highlighted_text_field(omnibar, Highlight::Entities)` call.

@@ -1251,3 +1251,16 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   Phase 1's ergonomics row (click-to-place, drag-select) is now fully landed;
   remaining editor UI work is live-on-change render refresh, autosave/history, undo
   grouping, and the Phase 3 structural/authoring layers.
+- **2026-07-08, highlight bridge moved to serval (+ Phase 2 live-refresh/toggle in flight).**
+  While starting the Phase 2 tail, Mark raised promoting the editor for Isometry to
+  consume. Outcome (tracked in the [illume plan](2026-06-26_illume_text_lexer_plan.md)
+  point 8): illume extracted to its own public repo, and the highlight bridge
+  (`meerkat/knot_highlight.rs`) dissolved *into* xilem-serval's new `highlight` feature —
+  so the editor field is now `xilem_serval::highlighted_textarea(t, Highlight::Note)` and
+  the stylesheet `xilem_serval::syntax_css`, and every serval host (Isometry included)
+  gets highlighted text for free. Also landed this session, ahead of that: live-on-change
+  render refresh (the note tile renders from the uncommitted editor buffer,
+  `knot_editor_live_body` in render/cards.rs) and the toggle source/preview view
+  (`knot_editor_preview` + a header toggle; preview drops the opaque overlay to a compact
+  strip so the live tile shows through). Still open in the Phase 2 tail: Ctrl+E keybinding
+  for the toggle, undo/redo grouping, autosave/history, and `.md`/`.txt` saveback.

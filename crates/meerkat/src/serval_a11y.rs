@@ -2,24 +2,18 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! `ScriptedDom` → [`UxTree`]: the chrome's accessibility subtree, derived from
-//! the DOM that renders (cheap-path plan C4c).
+//! `ScriptedDom` → [`UxTree`]: the chrome's accessibility subtree.
 //!
-//! The chrome a11y used to be a single hand-built placeholder node covering the
-//! toolbar band, so a screen reader saw one opaque "Chrome" application node. This
-//! walks the live chrome `ScriptedDom` instead, mapping each element to an
-//! accessibility [`Role`] by tag, taking its accessible name from its direct text,
-//! and reading its bounds from the chrome session's retained [`FragmentPlane`] (the
-//! same layout that rendered the frame). The a11y bridge stitches the result under
-//! the host window beside the content-pane subtrees.
-//!
-//! Adapted from the former `pelt-live` a11y builder, retargeted from
-//! `accesskit::TreeUpdate` to meerkat's `UxTree` (which the bridge converts to a
-//! `TreeUpdate` once, after stitching). Each control also declares the host action
-//! a screen reader can invoke (a button a `Click`, a field a `Focus`), so the
-//! chrome advertises its affordances, and [`chrome_a11y_tree`] hands back the
-//! actionable nodes so the host can route a screen reader's request to the chrome's
-//! activation paths. (Grab-bag G2.4.)
+//! The projection itself is the engine's — [`serval_layout::build_subtree`] walks
+//! the live chrome `ScriptedDom`, mapping each element to a [`Role`] by ARIA
+//! `role=` then tag, folding its direct text into the accessible name, reading
+//! bounds from the chrome session's retained [`FragmentPlane`], and declaring the
+//! host action each control accepts (a button a `Click`, a field a `Focus`). This
+//! module supplies only the chrome *policy*: the salted id scheme, the folded-pane
+//! skip list, and the [`UxTree`] wrap the bridge stitches under the host window
+//! beside the content-pane subtrees. Sharing the engine walk keeps the chrome from
+//! drifting behind on standards support (it used to miss ARIA roles and toggled
+//! state a forked copy never grew). (Grab-bag G2.4.)
 //!
 //! The route stores the whole `NodeId` (`A11yHostAction::ChromeNode`, keyed by
 //! `chrome_a11y_id(node)`), the way the orrery's `SelectNodeByUrl` routes do —
@@ -29,8 +23,8 @@
 //! uses, so `& !SALT` cannot recover the tag (it works only in release, where the
 //! doc-tag fence compiles out). Storing the node whole sidesteps the id entirely.
 
-use accesskit::{Action, Node, NodeId as AccessNodeId, Rect, Role};
-use layout_dom_api::{LayoutDom, NodeKind};
+use accesskit::NodeId as AccessNodeId;
+use layout_dom_api::LayoutDom;
 use serval_layout::FragmentPlane;
 use serval_scripted_dom::{NodeId, ScriptedDom};
 use uxtree::UxTree;
@@ -46,37 +40,6 @@ const CHROME_A11Y_SALT: u64 = 0xC04E_0000_0000_0000;
 /// range. The bridge's focus points at this for the focused chrome field.
 pub(crate) fn chrome_a11y_id(node: NodeId) -> AccessNodeId {
     AccessNodeId(CHROME_A11Y_SALT | node.raw() as u64)
-}
-
-/// The accessibility [`Role`] for a chrome DOM node, by kind / element tag. Text
-/// nodes never reach here (their content folds into the owner's label).
-fn chrome_role(dom: &ScriptedDom, node: NodeId) -> Role {
-    match dom.kind(node) {
-        NodeKind::Document => Role::Window,
-        NodeKind::Element => match dom.element_name(node).map(|q| q.local.as_ref()) {
-            Some("button") => Role::Button,
-            Some("input") => Role::TextInput,
-            Some("p") => Role::Paragraph,
-            Some("label") => Role::Label,
-            Some("html") => Role::Document,
-            _ => Role::GenericContainer,
-        },
-        _ => Role::GenericContainer,
-    }
-}
-
-/// The concatenated direct text-child content of `node` — its accessible name (so
-/// a `<button>Go</button>` is named `"Go"`, an `<input>` by its buffer).
-fn chrome_direct_text(dom: &ScriptedDom, node: NodeId) -> String {
-    let mut name = String::new();
-    for child in dom.dom_children(node) {
-        if dom.kind(child) == NodeKind::Text {
-            if let Some(text) = dom.text(child) {
-                name.push_str(text);
-            }
-        }
-    }
-    name
 }
 
 /// The CSS classes of the shell document's folded-pane wrappers — the positioned subtrees
@@ -109,96 +72,32 @@ fn is_folded_pane(dom: &ScriptedDom, node: NodeId) -> bool {
     })
 }
 
-/// Build the a11y node for `node` (whose parent sits at `parent_origin` in
-/// absolute coords), append it + its element descendants to `out`, record it in
-/// `actionable` if it advertises a host action, and return its id. Bounds
-/// accumulate down the tree (taffy locations are parent-relative).
-fn build(
-    dom: &ScriptedDom,
-    fragments: &FragmentPlane<NodeId>,
-    node: NodeId,
-    parent_origin: (f64, f64),
-    out: &mut Vec<(AccessNodeId, Node)>,
-    actionable: &mut Vec<NodeId>,
-) -> AccessNodeId {
-    let id = chrome_a11y_id(node);
-    let role = chrome_role(dom, node);
-    let mut access = Node::new(role);
-    // Declare the host action a screen reader can invoke on this control, so the
-    // chrome is *actionable*: a button takes a `Click`, a text field a `Focus`. The
-    // node is recorded in `actionable` so the host can route the request back to
-    // the chrome's activation paths (`A11yHostAction::ChromeNode`, keyed by this
-    // node's `chrome_a11y_id`). (G2.4.)
-    let action = match role {
-        Role::Button => Some(Action::Click),
-        Role::TextInput => Some(Action::Focus),
-        _ => None,
-    };
-    if let Some(action) = action {
-        access.add_action(action);
-        actionable.push(node);
-    }
-
-    let name = chrome_direct_text(dom, node);
-    if !name.is_empty() {
-        access.set_label(name);
-    }
-
-    // Absolute bounds from the retained layout; a node with no fragment passes its
-    // parent's origin through and contributes no bounds.
-    let origin = match fragments.rect_of(node) {
-        Some(layout) => {
-            let x0 = parent_origin.0 + layout.location.x as f64;
-            let y0 = parent_origin.1 + layout.location.y as f64;
-            access.set_bounds(Rect::new(
-                x0,
-                y0,
-                x0 + layout.size.width as f64,
-                y0 + layout.size.height as f64,
-            ));
-            (x0, y0)
-        }
-        None => parent_origin,
-    };
-
-    let mut children = Vec::new();
-    for child in dom.dom_children(node) {
-        if dom.kind(child) == NodeKind::Element && !is_folded_pane(dom, child) {
-            children.push(build(dom, fragments, child, origin, out, actionable));
-        }
-    }
-    access.set_children(children);
-
-    out.push((id, access));
-    id
-}
-
 /// Project the chrome `dom` into a [`UxTree`] using `fragments` (the chrome
 /// session's retained layout) for node geometry, returning the tree paired with
-/// the chrome nodes that advertise a host action (buttons, fields). The document
-/// is the subtree root ([`Role::Window`]); every element below becomes a node with
-/// a role, accessible name, bounds, and its element children. The a11y bridge
-/// stitches the tree under the host window; the host turns each actionable node
-/// into an [`A11yHostAction::ChromeNode`](crate::A11yHostAction::ChromeNode) route
-/// keyed by its [`chrome_a11y_id`].
+/// the chrome nodes that advertise a host action (buttons, fields). The engine
+/// walk ([`serval_layout::build_subtree`]) does the projection; the chrome supplies
+/// the salted id scheme ([`chrome_a11y_id`], so ids stay disjoint from the
+/// path-hashed content/host ids) and the folded-pane skip ([`is_folded_pane`], so
+/// each pane appears once via its own richer frame-tree projection). The document
+/// is the subtree root ([`accesskit::Role::Window`]). The a11y bridge stitches the
+/// tree under the host window; the host turns each actionable node into an
+/// [`A11yHostAction::ChromeNode`](crate::A11yHostAction::ChromeNode) route keyed by
+/// its [`chrome_a11y_id`].
 pub(crate) fn chrome_a11y_tree(
     dom: &ScriptedDom,
     fragments: &FragmentPlane<NodeId>,
 ) -> (UxTree, Vec<NodeId>) {
     let root = dom.document();
-    let mut nodes = Vec::new();
-    let mut actionable = Vec::new();
-    build(
+    let (nodes, root_id, actionable) = serval_layout::build_subtree(
         dom,
         fragments,
         root,
-        (0.0, 0.0),
-        &mut nodes,
-        &mut actionable,
+        &|_dom: &ScriptedDom, node: NodeId| chrome_a11y_id(node),
+        &|dom: &ScriptedDom, node: NodeId| is_folded_pane(dom, node),
     );
     (
         UxTree {
-            root: chrome_a11y_id(root),
+            root: root_id,
             nodes,
         },
         actionable,
@@ -208,6 +107,7 @@ pub(crate) fn chrome_a11y_tree(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use accesskit::{Action, Role};
     use layout_dom_api::{LayoutDomMut, LocalName, Namespace, QualName};
 
     fn html(local: &str) -> QualName {

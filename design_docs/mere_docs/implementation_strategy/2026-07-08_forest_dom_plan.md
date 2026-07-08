@@ -24,10 +24,23 @@ across documents** (the standard's own guarantee, which is why the design chose 
 topology). That is the sticky-note and rekey arms of the tear-out trichotomy; the plain leaf
 arm (fresh content in a new window) needs none of it.
 
-**So decide first**: is "the tile you grabbed is the tile that lands" a must-have soon? If
-fresh-build-on-move is acceptable for a while, this plan can wait behind other work. If the
-distinctive feel of tear-out *is* identity survival, the forest dom is the next piece. The
-rest of this plan assumes yes.
+**So decide first**: is "the tile you grabbed is the tile that lands" a must-have soon?
+
+**Three options, not the binary a first draft implied** (sharpened 2026-07-08): (a) accept
+**fresh-build** on move — N doms, nothing survives, the status quo; (b) the **forest dom**,
+this plan, full DOM-identity survival; or (c) a **middle path** on N doms — surface-lane
+content tiles (the pelt/external-texture workbench tiles) already move by member→window
+reassignment, so a web tile keeps its live page and (with the scroll carry) its scroll
+position **today, without the forest dom**, while a new cross-tree key registry could carry
+*view-side* state for DOM-lane tiles but never their DOM node / scroll / layout. The middle
+path is detailed in [portable_tiles_plan](2026-07-08_portable_tiles_plan.md).
+
+The sharpened read: most of the *felt* tear-out payoff (a web tile keeping its live state) is
+reachable on N doms via the surface lane, so the forest dom earns its cost **specifically for
+DOM-lane identity survival** (settings panes, document-lane cards, chrome subtrees). If that
+narrower prize is wanted, the forest dom is the next piece and the rest of this plan assumes
+yes; if not, the surface-lane path (portable_tiles P0) banks the common case first and this
+waits.
 
 ## The leverage: the runner API already anticipates it
 
@@ -103,11 +116,12 @@ before committing.
     never-pop; this slice churns that wiring, so add the debug assert now.
 - **F4 (multi-DPI).** Per-window DPI/viewport/cascade. **Deferred** until a real multi-monitor
   case wants it — do not gold-plate the per-window cascade before F3 banks the topology.
-- **Step 4 (portable tiles)** then becomes a same-document `move_before` and is finally
-  reachable. **Done when** a torn-out tile keeps its scroll offset (`view.scroll[member]`,
-  the one WindowView bit that must follow the move — rects self-heal per frame, textures are
-  perf) and its DOM NodeId across the window boundary, with the target's apply scoped, not a
-  full recompute.
+- **Step 4 (portable tiles)** then becomes a same-document `move_before` for **DOM-lane** tiles
+  and is finally reachable — now its own plan:
+  [portable_tiles_plan](2026-07-08_portable_tiles_plan.md) (which also carries the surface-lane
+  P0 that needs no forest dom). **Done when** a torn-out DOM-lane tile keeps its DOM NodeId +
+  scroll (`view.scroll[member]`, the one WindowView bit that must follow the move — rects
+  self-heal per frame, textures are perf) across the window boundary, target apply scoped.
 
 ## Risks / watch-items
 

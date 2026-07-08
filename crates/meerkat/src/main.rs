@@ -81,7 +81,14 @@ mod resources;
 mod sync;
 mod wallet_pairing;
 
-mod a11y_bridge;
+/// The platform AccessKit bridge moved into the shared serval host
+/// ([`serval_winit_host`]); any serval-on-winit host now shares the same OS a11y
+/// plumbing. Re-exported under the old module path so the `a11y_bridge` field and
+/// its call sites read unchanged — meerkat keeps only the routing
+/// (`apply_a11y_request`) that maps a drained request back to its host verbs.
+mod a11y_bridge {
+    pub(crate) use serval_winit_host::{A11yActionRequest, AccessKitBridge, BridgeStatus};
+}
 #[cfg(any(test, feature = "agent-harness"))]
 mod agent_harness;
 mod app_handler;

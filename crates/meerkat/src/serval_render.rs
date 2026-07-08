@@ -562,8 +562,9 @@ pub(crate) fn hit_test_node(
 /// Accumulate each laid-out node's absolute origin into `out`, walking from `node`
 /// whose parent sits at `parent_origin`. Taffy fragment locations are parent-
 /// relative, so absolute coords require summing the chain — mirrors the a11y
-/// tree's bounds accumulation (`serval_a11y::build`). Shared with the roster a11y
-/// row bounds, which face the same nested-pane offset.
+/// tree's bounds accumulation (the engine's `serval_layout::build_subtree`, which
+/// the chrome a11y now shares). Shared with the roster a11y row bounds, which face
+/// the same nested-pane offset.
 pub(crate) fn accumulate_origins(
     dom: &ScriptedDom,
     fragments: &FragmentPlane<NodeId>,

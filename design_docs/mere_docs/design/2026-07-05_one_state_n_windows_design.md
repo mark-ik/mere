@@ -201,6 +201,11 @@ between `shared` and `view`.
    in particular the forest dom, since cross-window is only same-document
    there, and the source-first rebuild order the multi-projection runner
    makes host-controllable.
+   **Plan (2026-07-08): [portable_tiles_plan](../implementation_strategy/2026-07-08_portable_tiles_plan.md)**
+   — the meerkat consumer half. Key finding: meerkat's tiles split into a **DOM lane**
+   (folded panes / document-lane cards → `move_before`, needs the forest dom) and a
+   **surface lane** (pelt/external-texture workbench tiles → member→window reassignment,
+   needs no forest dom), so much of the felt payoff is reachable before step 3.
 
 ## 9. Open questions
 
