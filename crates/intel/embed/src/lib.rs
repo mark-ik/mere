@@ -7,10 +7,10 @@
 //!
 //! The portable retrieval core — the [`EmbeddingProvider`] trait, [`VectorIndex`],
 //! [`SemanticSearch`], the [`LexicalEmbeddingProvider`] + [`StubEmbeddingProvider`]
-//! embedders, and [`affinity_pairs`] — lives in `sibylla` and is re-exported here
-//! at the same paths. This crate keeps only the pieces coupled to mere:
+//! embedders, [`affinity_pairs`], and (behind the `bert` feature) the Burn-backed
+//! BERT provider — lives in `sibylla` and is re-exported here at the same paths.
+//! This crate keeps only the pieces coupled to mere's own subsystems:
 //!
-//! - `bert` — the Burn-backed BERT provider (moves to sibylla at its roadmap P2).
 //! - `persistence` — save/load a `VectorIndex` through eidetic's typed-payload API.
 //! - `field_bridge` / `canvas_search` — project query similarity into aether's
 //!   field algebra over the graph canvas.
@@ -55,7 +55,7 @@
 pub use sibylla::{affinity, index, lexical, provider, search, stub};
 
 #[cfg(feature = "bert")]
-pub mod bert;
+pub use sibylla::bert;
 pub mod canvas_search;
 pub mod field_bridge;
 pub mod persistence;

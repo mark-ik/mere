@@ -585,7 +585,6 @@ mod chrome_comms;
 mod chrome_menu;
 mod chrome_nav;
 
-pub mod knot_highlight;
 pub mod note_view;
 mod views;
 use views::sync_chrome_from_history;

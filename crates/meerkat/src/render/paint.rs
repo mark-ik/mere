@@ -636,6 +636,29 @@ impl WindowCtx<'_> {
                 ExternalTexturePlacement::new([x0, y0, x0 + pw as f32, y0 + ph as f32]),
             );
         }
+        // The chisel status cluster (frame-time meter + recent-trail glyph),
+        // composited top-right as a host overlay — outside the cached chrome
+        // base, so the live meter re-rasters only its own tiny texture.
+        {
+            let (scene, rect) = self.status_cluster_scene(w);
+            let cw = (rect[2] - rect[0]).round().max(1.0) as u32;
+            let ch = (rect[3] - rect[1]).round().max(1.0) as u32;
+            let (_ct, cview) = core.rasterize_for(
+                super::surface_keys::STATUS_CLUSTER,
+                &scene,
+                cw,
+                ch,
+                ColorLoad::Clear(wgpu::Color::TRANSPARENT),
+            );
+            core.renderer().compose_external_texture(
+                &cview,
+                &target_view,
+                format,
+                w,
+                h,
+                ExternalTexturePlacement::new(rect),
+            );
+        }
         let overlay_compose_us = overlay_compose_t.elapsed().as_micros();
         let present_t = std::time::Instant::now();
         frame.present();
@@ -643,6 +666,9 @@ impl WindowCtx<'_> {
         let a11y_refresh_t = std::time::Instant::now();
         self.refresh_a11y_summary();
         let a11y_refresh_us = a11y_refresh_t.elapsed().as_micros();
+
+        // Store this frame's total wall time for next frame's status-cluster meter.
+        self.view.last_frame_us = frame_t.elapsed().as_micros() as f32;
 
         // C0 baseline: one line per rendered frame (gated by the `meerkat::profile`
         // target). `total_us` is the whole `render()`; `chrome_us` is the chrome

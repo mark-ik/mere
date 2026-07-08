@@ -352,7 +352,7 @@ impl Presentation {
                     let mut seeds = def.seeds;
                     seeds.dark = mode.dark();
                     let mut sheet = scale_px(chrome_sheet(tokens), scale);
-                    sheet.extend(meerkat::knot_highlight::syntax_css(&seeds));
+                    sheet.extend(xilem_serval::syntax_css(&seeds));
                     sheet
                 };
                 // CUSTOM MODES (T5): a registered calculator produces the
@@ -376,7 +376,7 @@ impl Presentation {
                             let mut seeds = def.seeds;
                             seeds.dark = custom_dark;
                             let mut sheet = scale_px(chrome_sheet(&tokens), scale);
-                            sheet.extend(meerkat::knot_highlight::syntax_css(&seeds));
+                            sheet.extend(xilem_serval::syntax_css(&seeds));
                             self.chrome_sheet = sheet;
                             return;
                         }
@@ -406,7 +406,7 @@ impl Presentation {
                             let mut seeds = def.seeds;
                             seeds.dark = active_mode.dark();
                             let mut sheet = scale_px(rules.clone(), scale);
-                            sheet.extend(meerkat::knot_highlight::syntax_css(&seeds));
+                            sheet.extend(xilem_serval::syntax_css(&seeds));
                             sheet
                         }
                         None => side(active_tokens, active_mode),
@@ -421,9 +421,7 @@ impl Presentation {
                 self.chrome_theme_light = self.chrome_theme;
                 self.chrome_theme_dark = self.chrome_theme;
                 let mut sheet = scale_px(chrome_sheet(&self.chrome_theme), scale);
-                sheet.extend(meerkat::knot_highlight::syntax_css(
-                    &meerkat::knot_highlight::fallback_seeds(),
-                ));
+                sheet.extend(xilem_serval::syntax_css(&fallback_seeds()));
                 sheet
             }
         };
@@ -438,5 +436,23 @@ impl Presentation {
             colors: self.document_palette,
             ..self.document_sheet.clone()
         }
+    }
+}
+
+/// Brand-coherent dark seed triad the syntax palette falls back to when no theme
+/// def resolves (the shouldn't-happen `None` arm). Matches the default chrome; the
+/// syntax colours derive from it via `xilem_serval::syntax_css`. (Kept host-side
+/// because it is mere's brand default, not a serval concern.)
+fn fallback_seeds() -> tincture::Seeds {
+    tincture::Seeds {
+        primary: tincture::Srgb::rgb(0x33, 0x66, 0xC8),
+        secondary: tincture::Srgb::rgb(0x2E, 0x9D, 0xA6),
+        tertiary: tincture::Srgb::rgb(0xE0, 0xA8, 0x46),
+        neutral: tincture::Srgb::rgb(0x10, 0x14, 0x22),
+        text_header: None,
+        text_body: None,
+        success: tincture::Srgb::rgb(0x4F, 0xB3, 0x6E),
+        danger: tincture::Srgb::rgb(0xD5, 0x4E, 0x4E),
+        dark: true,
     }
 }

@@ -13,7 +13,7 @@ categories = ["text-processing"]
 path = "src/lib.rs"
 
 [dependencies]
-illume = { path = "../illume" }
+illume = { git = "https://github.com/mark-ik/illume.git", branch = "main" }
 # A parser the app already ships (nematic uses it for CommonMark knots). Its
 # offset-iter event stream maps to highlight spans the same way jotdown does.
 pulldown-cmark = { version = "0.13", default-features = false }

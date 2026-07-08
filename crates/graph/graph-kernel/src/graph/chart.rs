@@ -16,9 +16,11 @@
 //! through its own cache, not a muniment blob, so adopting `muniment::Hash` for
 //! node content is a later re-base step.
 
-use chartulary::{Address, Addressed, Identified, Labeled};
+use chartulary::{Address, Addressed, Classified, Identified, Labeled, Predicated, RelationClass};
 use uuid::Uuid;
 
+use super::edge_data::predicate_iri;
+use super::edge_payload::EdgePayload;
 use super::node::Node;
 
 impl Identified for Node {
@@ -64,9 +66,45 @@ impl Labeled for Node {
     }
 }
 
+/// The single predicate IRI a semantic edge projects, or `None` if the edge
+/// carries no semantic relation (an experience-layer edge: Traversal, Containment,
+/// Arrangement, Imported). Precedence matches linked-data: an explicit statement or
+/// open predicate wins, else the first recognized sub-kind's canonical IRI.
+fn edge_predicate(payload: &EdgePayload) -> Option<&str> {
+    let semantic = payload.semantic.as_ref()?;
+    if let Some(statement) = semantic.statements.first() {
+        Some(statement.predicate.as_str())
+    } else if let Some(predicate) = &semantic.predicate {
+        Some(predicate.as_str())
+    } else if let Some(&sub_kind) = semantic.sub_kinds.iter().next() {
+        Some(predicate_iri(sub_kind))
+    } else {
+        None
+    }
+}
+
+impl Predicated for EdgePayload {
+    fn predicate(&self) -> Option<&str> {
+        edge_predicate(self)
+    }
+}
+
+impl Classified for EdgePayload {
+    fn class(&self) -> RelationClass {
+        match edge_predicate(self) {
+            // A semantic edge joins the shared ring as an open predicate (its IRI),
+            // so it projects to RDF.
+            Some(iri) => RelationClass::open(iri.to_string()),
+            // An experience-layer edge is mere's private family: it does not project.
+            None => RelationClass::app("mere", 0),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::edge_taxonomy::{EdgeAssertion, SemanticSubKind};
 
     #[test]
     fn web_node_satisfies_the_container_capabilities() {
@@ -90,5 +128,32 @@ mod tests {
         );
         assert_eq!(Labeled::title(&node), Some("A Paper"));
         assert_eq!(Labeled::tags(&node), vec!["research".to_string()]);
+    }
+
+    #[test]
+    fn semantic_edges_project_experience_edges_do_not() {
+        // A semantic edge carries a predicate IRI and joins the RDF-projecting ring.
+        let mut cites = EdgePayload::new();
+        cites.assert_relation(EdgeAssertion::Semantic {
+            sub_kind: SemanticSubKind::Cites,
+            label: None,
+            decay_progress: None,
+        });
+        assert_eq!(
+            Predicated::predicate(&cites),
+            Some(predicate_iri(SemanticSubKind::Cites))
+        );
+        assert!(
+            Classified::class(&cites).predicate().is_some(),
+            "a semantic edge projects"
+        );
+
+        // An edge with no semantic relation is experience-layer: it does not project.
+        let experience = EdgePayload::new();
+        assert_eq!(Predicated::predicate(&experience), None);
+        assert!(
+            Classified::class(&experience).predicate().is_none(),
+            "an experience edge stays private"
+        );
     }
 }

@@ -31,6 +31,8 @@ pub(crate) const NODE_THUMBNAIL: u64 = 15;
 pub(crate) const UNVISITED_CARD: u64 = 16;
 pub(crate) const KEPT_WARM_BADGE: u64 = 17;
 pub(crate) const EMPTY_STATE_PANEL: u64 = 18;
+/// The chisel status cluster overlay (frame-time meter + recent-trail glyph).
+pub(crate) const STATUS_CLUSTER: u64 = 19;
 
 /// Secondary orrery `i` (multi-window / secondary panes).
 pub(crate) fn secondary_orrery(i: usize) -> u64 {

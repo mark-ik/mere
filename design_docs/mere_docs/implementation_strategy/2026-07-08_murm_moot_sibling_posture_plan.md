@@ -1,0 +1,126 @@
+# Murm/Moot Sibling Posture Plan
+
+**Status**: Active plan.
+**Date**: 2026-07-08.
+**Scope**: Reorganize the comms families so `murm` and `moot` sit as sibling service families (the netfetcher/netrender posture), consolidate the triplicated log-sync substrate by aligning on upstream p2panda, define the store substrate over muniment (desktop redb, wasm IndexedDB + OPFS), execute the naming payload (gazette, cabal, gerund law), and gate promotion to standalone repos on a purity check.
+**Related**:
+
+- [`../../murm_docs/technical_architecture/MURM_AS_BILATERAL.md`](../../murm_docs/technical_architecture/MURM_AS_BILATERAL.md) (role spec; the charter this plan narrows and sharpens)
+- [`../research/2026-05-31_murm_p2p_landscape_brief.md`](../research/2026-05-31_murm_p2p_landscape_brief.md) (landscape; p2panda adopt call)
+- [`2026-07-06_comms_gating_and_key_addressing_plan.md`](2026-07-06_comms_gating_and_key_addressing_plan.md) (comms G-phases; G1-G4 hold on the one-state migration)
+- `repos/muniment` (the Backend seam this plan's store substrate rides)
+- [`2026-07-08_generic_graph_substrate_plan.md`](2026-07-08_generic_graph_substrate_plan.md) (chartulary precedent: fresh core proven standalone, mere re-bases last)
+
+---
+
+## 1. Decision record
+
+Settled in the 2026-07-08 session, in force for this plan:
+
+1. **Sibling posture.** `murm` and `moot` are peer service families, shaped like netfetcher and netrender relative to serval: murm talks to remote endpoints (iroh, p2panda-net, the sync pump), moot materializes the durable artifact (log grammar, stores, folds, tiers). Neither depends on the other. The host composes them, exactly as serval composes fetch and render.
+2. **The shared substrate is upstream p2panda.** No new neutral crate. The triplicated glue (murm `gossip_sync`, tessera `sync`, mesh sync) retires into upstream reliance plus one pump. Every crate takes `p2panda-store` with `default-features = false` (traits only); murmuring already does.
+3. **One pump, folds stay home.** The LogSync/gossip drive loop lives once in the murm family, generic over the p2panda store traits, endpoint injected. Each domain keeps its own `Ext`, wire bridge, and fold (PostKind/channel_history, TesseraEvent/fold_moot, MeshEvent/JobBoard).
+4. **Stores ride muniment.** The p2panda store traits get one shared implementation over muniment's Backend seam, living in the moot family (logs are press-side). murm never depends on moot: murm stays generic over the traits and the **host injects** the concrete store, same as it injects the endpoint.
+5. **sqlx demotes.** The `sqlite` feature of p2panda-store pulls sqlx + libsqlite3-sys (a C dependency plus the sqlx driver family) into the tree. Target state removes it. This is a dependency removal and waits on Mark's sign-off (see open questions).
+6. **wasm store splits by physics.** Records (operations, log index, topics) go to IndexedDB: transactions and ordered cursors are native, multi-tab isolation is built in. Blobs go to OPFS: iroh-blobs-shaped content needs ranged reads, which IndexedDB structurally cannot do. The worker requirement stays quarantined to the blob path.
+7. **Naming payload.** gazette relocates to the persona tier as `gazetteer`; the `cabal` noun family migrates toward `murmur` by edge-to-link discipline (product copy first, identifiers opportunistically); the gerund law (murmuring:murm :: mooting:moothold) is codified in TERMINOLOGY.md.
+8. **Promotion is gated, then follows the ecosystem playbook.** Standalone repos only after the purity check passes. MIT OR Apache-2.0, edition 2024, MPL per-file headers stripped on the way out (accretion, not Servo derivation). Consumption via git `branch=` deps, gitignored `.cargo/config.toml` local overrides, Cargo.lock gitignored, mere re-bases last.
+
+## 2. Current state (receipts)
+
+- The murm trio is live and tested: murmuring ~3,600 LOC / 76 tests (posts are signed BLAKE3/CBOR p2panda Operations), transport ~2,600 LOC / 31 tests (P2pandaTransport over iroh QUIC + blobs + gossip; reticulum feature default-off), murm ~1,350 LOC / 15 tests (SyncedCabal runs gossip + LogSync). `meerkat/src/comms_host.rs` wires a networked cabal into the docked pane: ticket, connect, live drain.
+- The substrate is triplicated: `murm/murm/src/gossip_sync.rs`, `moothold/src/tessera/sync.rs`, and mesh carry near-identical pump loops (same `now_ms`, same 30x100ms quiet>=3 resync, same drain arms); murm and tessera duplicate a redb LogStore/TopicStore; tessera and mesh duplicate the Event/Operation bridge. tessera's module docs cite murm as the template. The moot-object lane would be copy four.
+- mesh proved upstream sufficiency: p2panda-store's SqliteStore satisfies the LogSync bounds with zero custom code. The cost, visible in Cargo.lock: sqlx-core/macros/sqlite plus libsqlite3-sys.
+- p2panda-store 0.6.1 traits are native `impl Future` with **no Send bounds** (verified in traits source). muniment's Backend is `#[async_trait(?Send)]` by design. The two are compatible as-is; Send pressure exists only at desktop spawn sites, and the pump does not run on wasm.
+- gazette is an orphan: workspace member, absent from `[workspace.dependencies]`, zero `.rs` consumers, blocking reqwest, WebFinger only despite a multi-resolver charter.
+- All three main READMEs are stale (BLAKE2b/varint/IrohTransport/snapshot-push against a BLAKE3/CBOR/P2pandaTransport/send-subscribe reality). Inline module docs are accurate.
+
+## 3. Target architecture
+
+| serval family | comms family | owns | never owns |
+|---|---|---|---|
+| netfetcher | **murm** | transport (iroh + p2panda-net), the sync pump, gossip lanes, tickets/blobs, chat domain (murmuring: PostKind, fold, MurmurExt), Murm facade | a store of record |
+| netrender | **moot** | log grammar + the muniment-backed p2panda store adapter (mooting), tessera events + folds, tiers/federation (moothold) | a socket |
+| serval (host) | meerkat comms host | composition: constructs backends, injects endpoint + store into the pump, stitches adapters | protocol logic |
+
+Dependency rules (the purity contract):
+
+- moot family builds with no `iroh` and no `p2panda-net` in its tree.
+- murm family builds with no concrete store-of-record; `p2panda-store` traits only, in-memory for tests.
+- both may depend on `p2panda-core`, `p2panda-store` (traits), `personae`, and (moot only, for the adapter) `muniment`.
+- `mesh` stays mere-side glue, composed by the host like everything else.
+- the only place murm's pump meets moot's store is a host construction site.
+
+## 4. Phases
+
+### Phase R: in-workspace re-sort
+
+- **R0 doc hygiene.** Rewrite the murm/murmuring/transport READMEs from the accurate inline docs. Done when: no README claims BLAKE2b, varint wire, IrohTransport, or snapshot-push.
+- **R1 pump consolidation (murm + mesh).** Extract the shared drain half into `transport::SyncedSpace` via a `drive(subscription, accept)` seam: the caller keeps its own `LogSync` session + `SyncHandle` (for liveness and any live publish) and hands `SyncedSpace` the subscribed stream plus an async `accept` closure (`FnMut(Operation<E>) -> impl Future<Output = bool>`) that absorbs the per-consumer verify + insert (sync redb or async sqlite). `SyncedSpace` owns the drain loop, the `SyncStatus`/`SyncRound` counters, `resync`, and the drop-aborts-the-task lifetime — the ~90 near-identical lines. Migrate murm's `gossip_sync` and mesh's `sync` onto it and delete their copies. **tessera is excluded here**: its pump cannot be deduped without removing p2panda-net from moot, which is R2's purity operation. Chose the `drive` seam over a store-generic `join<S>` because it needs only `E: Extensions` (no `LogStore`/`TopicStore`/`LogId` bounds, no `p2panda-store` dep in transport) while still deduping the meaty drain. Done when: `SyncedSpace` is the one drain impl, murm + mesh consume it, and the two-peer convergence tests pass in murm and mesh.
+- **R2 purity gate (+ tessera pump move).** Move tessera off its in-crate `SyncedMoot`: moot provides `TesseraStore` + `verify` + `fold_moot`, and the **host** drives the pump over `transport::SyncedSpace` (the "only place murm's pump meets moot's store is a host construction site" rule). Then drop `p2panda-net` (and the iroh it pulls) from moothold. Enforce the §3 dependency rules. Done when: `cargo tree` for the moot family shows no iroh/p2panda-net, murm-family shows no redb/muniment, tessera's two-peer convergence test passes from its new (host-side) home, and the meerkat comms slice still converges two peers at runtime.
+
+### Phase S: store substrate
+
+The bar is three traits; murm's hand-rolled `PersistentCabalStore` is the living reference for the exact bounds LogSync needs. The `Transaction` trait and `_tx` variants are not required (murm ships without them); do not gold-plate.
+
+| p2panda-store trait | needs | muniment primitive |
+|---|---|---|
+| `OperationStore` | insert/get/has/delete by hash; `delete_operation_payload` | BlobStore; store header and payload under separate keys so payload prune keeps the header |
+| `LogStore` | latest entry, heights, size, `get_log_entries` range, `prune_entries`, per (author, log-id) | ordered scan over encoded keys (the seam gap) |
+| `TopicStore` | associate/remove/resolve | SlotStore |
+
+- **S1 muniment seam growth.** Add to `Backend`: `scan(prefix, range)` returning lexicographically ordered keys (default impl: `list` + sort; real backends override), and `apply(batch)` for multi-key atomic commit (default impl: sequential puts with the blob-then-index recovery discipline documented; transactional backends override). Key schema (illustrative only, not compile-ready): `op/<hash>` header, `op/<hash>/payload` body, `log/<pubkey>/<logid>/<seq as 016x>` index entries, `topic/<topic>` maps. Done when: both methods exist with defaults, MemoryBackend passes an ordered-scan and an atomic-batch test, and a batch-spanning-await regression test exists.
+- **S2 shared adapter.** Implement the three traits once over muniment stores, in the moot family (mooting). Retire the hand-rolled redb LogStore/TopicStore in murm and tessera. Done when: murm's cable engine, tessera, and mesh two-peer LogSync tests pass on the muniment-backed store over MemoryBackend.
+- **S3 desktop backend.** A redb `Backend` in muniment (feature-gated). Done when: the meerkat comms slice runs end to end on muniment-redb, two real peers converging.
+- **S4 wasm backends.** `IdbBackend` (records: real IDB transactions for `apply`, cursors for `scan`) and `OpfsBackend` (blobs: worker-hosted sync access handles for ranged reads, `createWritable` fallback on the main thread). Done when: the batch-spanning-await test passes on IDB (transactions auto-commit on event-loop yield; all requests of a batch must issue in one tick), a two-tab test shows IDB isolation plus Web Locks guarding OPFS blob writes (content-addressed writes are idempotent; the losing tab skips), a ranged blob read is exercised, and `navigator.storage.persist()` is requested at init with its outcome surfaced honestly in the UI (no placebo status).
+
+wasm scope note: S4 is store-only. Whether iroh/p2panda-net run in the browser is an unverified separate probe; nothing here assumes browser sync. A PWA reading its logs offline needs the store regardless. The higher-ceiling OPFS append-only log store remains available later as a backend swap under the same adapter, priced at hand-rolled crash-consistency testing.
+
+### Phase N: naming payload
+
+- **N1 gazette.** Relocate to `crates/persona/gazetteer`: rename (a gazetteer is an index; a gazette is a newspaper), add to `[workspace.dependencies]`, label incubating (WebFinger only today; blocking reqwest needs an async port before real consumers). Zero consumers, so the move breaks nothing. Done when: workspace builds and the crate is depend-able.
+- **N2 cabal to murmur.** Product and UI copy adopt "murmur" now; code identifiers (open_cabal, CabalKey/Id/Handle, SyncedCabal, CabalExt) migrate opportunistically, never as a breaking sweep of the live slice. Done when: no user-facing surface says cabal, and TERMINOLOGY.md records the identifier migration as open.
+- **N3 gerund law.** Codify murmuring:murm :: mooting:moothold (gerund names the plumbing, singular names the user artifact) in TERMINOLOGY.md, noting that the substrate consolidation is what keeps murmuring honestly chat-scoped.
+
+### Phase P: promotion to standalone repos
+
+Gate: R1 and S2 landed, R2 purity check green. Do not found repos around the pre-consolidation shape.
+
+- **P1 names.** `murm`/`murmuring`/`moothold`/`mooting` are reserved on crates.io (2026-05-04). The bare `moot` crate name was taken; the repo can still be `repos/moot`. Confirm before founding.
+- **P2 founding.** Fresh repos `repos/murm` and `repos/moot`; MIT OR Apache-2.0, edition 2024; strip MPL per-file headers (their MPL is workspace accretion, these are not Servo-derived; do not cargo-cult netrender's license); port cores with tests; proposal doc in each repo.
+- **P3 consumption posture.** mere pulls both via git deps on the mark-ik remotes tracked by `branch=`; workspace pins at the root; machine-local path overrides via the gitignored `.cargo/config.toml`; Cargo.lock gitignored; no local paths in committed manifests.
+- **P4 mere re-bases last**, per the chartulary discipline. Done when: a fresh clone of each repo builds and tests standalone, and mere builds green on the git deps.
+
+## 5. Deferred, with owners named
+
+- **Mail convergence** (one native sealed mail object, two delivery modes; misfin / LXMF-via-retinue / nostr as edge bridges): the stated north star for a slice gated on the one-state migration. Not this plan's cargo.
+- **Presence/here-ness under murmur**: claim the ambient register only after the carillon boundary is written (murmur: ambient liveness; carillon: active coordinated notification).
+- **Transport floor for isometry/strophe**: stays unextracted. Trigger: strophe starts its net crate and converges with isometry-net on the same tickets/blobs slice. Cheap insurance now: keep mere and isometry on the same iroh pin (both 0.98 today).
+- **Browser sync probe**: verify iroh/p2panda-net wasm viability before any browser peer design.
+
+## 6. Open questions (Mark's calls)
+
+1. Drop the p2panda-store `sqlite` feature from moothold and the full crate from mesh once S2 lands (removes sqlx + libsqlite3-sys). Dependency removal: needs explicit sign-off.
+2. `InMemoryCabalStore`: retire, or document as a supported public test fixture.
+3. Timing of the cabal-to-murmur identifier sweep (N2 keeps it opportunistic; a dedicated pass is available once the slice is quieter).
+4. redb long-term: S3 keeps it as muniment's desktop backend; whether it remains the store of record after the muniment convergence proves out is open.
+5. Final repo name for the moot family if `repos/moot` reads wrong against the taken crate name.
+
+---
+
+## Findings
+
+### 2026-07-08 (plan creation)
+
+- Multi-agent audit (9 facets/proposals/critique) plus direct verification established: murm trio live and wired (comms_host.rs), substrate triplicated with tessera citing murm as template, gazette orphaned, READMEs stale, mesh proving upstream store sufficiency.
+- Cargo.lock shows the sqlite feature's real price: sqlx-core/macros/mysql/postgres/sqlite plus libsqlite3-sys in the tree of an otherwise pure-Rust workspace.
+- p2panda-store 0.6.1 trait futures carry no Send bounds; muniment's `?Send` Backend implements them without friction. The wasm compatibility question is a consumer-side (spawn-site) concern only.
+- The IndexedDB/OPFS split follows the physics: IDB cannot do partial reads of stored values (structured clone), which iroh-blobs-shaped ranged verification requires; OPFS sync access handles are worker-only and exclusive by default, which IDB's transaction model sidesteps for records. IDB transactions auto-commit on event-loop yield, so batches must issue in one tick; `apply(batch)` in the seam enforces the safe shape by construction.
+- Sibling posture dissolves the earlier "neutral substrate crate" recommendation: with the pump consolidated in murm and stores adapted once over muniment in moot, upstream p2panda plus the host composition point covers what the neutral crate would have owned, and no new crate is minted.
+
+## Progress
+
+### 2026-07-08
+
+- Plan created from the murm audit workflow (map/propose/critique), the sibling-posture discussion, and the store-substrate analysis. DOC_README indexed same session.
+- **R0 landed.** Rewrote the murm / murmuring / transport READMEs from the accurate inline module docs. murmuring + murm rewritten wholesale; transport by targeted edits (its design/blobs/peer_id sections were already accurate). Removed every stale claim (BLAKE2b, varint wire, IrohTransport, snapshot-push, `local_node_id`, MereEvent, `dial`, the planned-Veilid section) and reframed each crate to code reality: posts are signed p2panda-core Operations (BLAKE3/CBOR), `P2pandaTransport` with gossip + LogSync, the `reticulum` off-grid feature (default-off, retinue as durable home). Verified by grep: zero forbidden terms (the sole `NodeId` match is the intentional PeerID-vs-NodeId disambiguation note). Docs-only, no compile. `cabal` identifiers left intact (rename is N2). Next: R1 pump consolidation.

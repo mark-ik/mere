@@ -13,10 +13,10 @@ consumes generically.
   A peer's `PeerID` is derived from its master Ed25519 public key. Transport
   never holds the master secret; it consumes the public key for addressing.
 - **Streams are byte-oriented.** `Transport::Stream: AsyncRead + AsyncWrite`.
-  Higher protocols layer their own framing on top — `murmuring` carries a
-  CBOR-encoded MereEvent stream; co-op sessions carry their own format.
+  Higher protocols layer their own framing on top — `murmuring` carries
+  signed p2panda-core Operations; co-op sessions carry their own format.
 - **ALPNs are explicit.** Each protocol registers its own ALPN string
-  (`mere/coop/v1`, `mere/moot/v1`, …) so multiple protocols share one peer
+  (`mere/cable/v1`, `mere/coop/v1`, …) so multiple protocols share one peer
   connection without ambiguity. ALPNs are versioned and tracked in the
   workspace's protocol architecture plan.
 - **Generic over implementation.** Consumers take `T: Transport` rather than
@@ -26,20 +26,21 @@ consumes generically.
 ## What's in the crate
 
 - **`transport`** — the public contract.
-  - `Transport` trait — `dial(PeerID, Alpn) -> Stream`, `accept() -> Stream`,
-    PeerID / capability surface. Generic associated types for the stream
-    type.
+  - `Transport` trait — `connect(PeerID, Alpn) -> Stream`,
+    `accept(Alpn) -> Stream`, `local_peer_id()`. Generic associated type for
+    the stream.
 - **`p2panda_transport`** — the production implementation.
   - `P2pandaTransport` — backed by `p2panda-net`'s `Endpoint` (the endpoint
     authority). Real QUIC, with p2panda-net discovery, relay/hole-punching,
     and actor supervision. Replaced a hand-rolled iroh `Router`.
   - `P2pandaStream` — the QUIC stream type implementing `AsyncRead + AsyncWrite`.
-  - **Gossip space sync** — `builder().gossip()` enables a gossip overlay;
-    `subscribe(topic) -> GossipHandle` joins a space topic to broadcast / receive
-    operations (live convergence for online peers); `set_topics(peer, …)`
-    bootstraps the overlay (discovery does this in production). RBSR offline
-    catch-up via `LogSync` is the heavier follow-on (needs `p2panda-store`
-    `LogStore`/`TopicStore` adopted for the post store).
+  - **Gossip + LogSync** — `builder().gossip()` enables a gossip overlay;
+    `subscribe(topic) -> GossipHandle` joins a space topic to broadcast /
+    receive operations (live convergence for online peers); `set_topics(peer,
+    …)` bootstraps the overlay (discovery does this in production). RBSR
+    offline catch-up over `p2panda-net`'s `LogSync` is wired: a consumer's
+    `p2panda-store` `LogStore` / `TopicStore` reconciles the log with peers
+    (murm's cabal store is the first consumer).
 - **`memory`** — the in-memory test fixture.
   - `MemoryTransport` — paired channels, no network. Used for unit tests of
     higher-level protocols without booting iroh.
@@ -82,8 +83,9 @@ the substrate.
   derives the transport's peer identity from the identity trust root. No
   separate transport key is generated.
 - [`murm`](https://crates.io/crates/murm) — opens a stream per cabal
-  conversation, layered with the Mere-native event DAG (CBOR-encoded
-  MereEvents) on top of the byte stream. Each cabal claims an ALPN.
+  conversation, carrying signed p2panda-core Operations over the byte
+  stream, and reconciles the cabal log over gossip + LogSync. Each cabal
+  claims an ALPN.
 - [`moothold`](https://crates.io/crates/moothold) (planned) — uses transport
   streams + iroh-gossip topics for moot-scoped event sync.
 - [`eidetic`](https://crates.io/crates/eidetic) — large local-memory
@@ -94,28 +96,28 @@ the substrate.
   above transport when their foreign protocol can ride iroh; otherwise
   they bring their own transport.
 
-## Privacy transport (planned)
+## Off-grid transport (feature-gated)
 
-Per the [event-DAG substrate brief](../../../design_docs/mere_docs/implementation_strategy/2026-05-07_event_dag_substrate_brief.md),
-transport will gain an optional [Veilid](https://veilid.com/) backend
-behind a `veilid` feature flag, for moots that declare a
-privacy-required transport policy. iroh stays the default; Veilid is opt-in
-for communities where membership-graph leakage is unacceptable.
+A `reticulum` feature (default-off) adds a
+[Reticulum](https://reticulum.network/) backend for the bilateral stream
+lane, so a murmur can ride LoRa / packet-radio / serial links where there is
+no IP network. It is the bilateral stream lane only: sync (gossip / LogSync)
+and blob transfer stay iroh-only, since Reticulum's small MTU cannot carry
+them. The feature contributes zero compile surface to the default build; the
+durable Reticulum implementation is tracked in the external `retinue` repo.
 
 ## Status
 
 Pre-1.0. The `Transport` trait, `MemoryTransport` (in-memory test fixture),
-and `P2pandaTransport` (production, p2panda-net `Endpoint` as the endpoint
-authority) are in place; the hand-rolled iroh `Router` was retired. Production
-discovery wiring and a persistent `BlobStore` backend continue to land. Veilid
-backend is planned but not yet wired.
+and `P2pandaTransport` (production, `p2panda-net`'s `Endpoint` as the
+endpoint authority, with gossip + LogSync served off the same endpoint) are
+in place. The `reticulum` off-grid backend is present behind its feature,
+default-off. Production discovery wiring and a persistent `BlobStore` backend
+continue to land.
 
-Forward direction is tracked in the
-[event-DAG substrate brief](https://github.com/mark-ik/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-05-07_event_dag_substrate_brief.md):
-transport stays the iroh wrapper; the substrate-level decisions
-(Mere-native event DAG over iroh streams, BLAKE3 unification, Veilid as a
-per-moot privacy policy, bridges-only for foreign protocols) drive what
-lands here.
+transport stays the pipe: authenticated QUIC streams, ALPN multiplexing,
+content-addressed blobs, and the p2panda-net endpoint the sync lanes ride.
+Protocol semantics (the cabal log, folds, tiers) live above it, never here.
 
 ## License
 

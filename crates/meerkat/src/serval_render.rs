@@ -28,9 +28,76 @@ use netrender::Scene;
 use paint_list_api::{ColorF, DeviceIntSize};
 use rustc_hash::FxHashSet;
 use serval_layout::{
-    FragmentPlane, ImageLoader, IncrementalLayout, ScrollOffsets, ServalPaintList,
+    FragmentPlane, ImageLoader, IncrementalLayout, LeafPaintSource, ScrollOffsets, ServalPaintList,
 };
 use serval_scripted_dom::{NodeId, ScriptedDom};
+
+/// Adapts chisel's rendered leaf buffers to serval-layout's paint-list source
+/// (the orphan-rule-legal home: this crate owns the newtype). See the chisel
+/// toolbar cluster — `<chisel-leaf>` elements in the chrome DOM.
+struct LeafSource<'a>(&'a chisel::RenderedLeaves);
+
+impl LeafPaintSource for LeafSource<'_> {
+    fn leaf_commands(&self, key: u64) -> Option<&[paint_list_api::PaintCmd]> {
+        self.0.get(key)
+    }
+}
+
+/// Render every registered chisel leaf at its laid-out `<chisel-leaf>` box size
+/// (from `session`), re-painting only the dirty / resized ones, then splice each
+/// leaf's Path-A commands into the session's paint list. The chrome cluster's
+/// Meter + GraphGlyph ride this. Returns the leaf-spliced paint list.
+pub(crate) fn paint_list_from_session_with_leaves(
+    session: &IncrementalLayout<NodeId>,
+    dom: &ScriptedDom,
+    cursor: Option<TextCursor>,
+    scroll: &ScrollOffsets<NodeId>,
+    width: u32,
+    height: u32,
+    registry: &mut chisel::LeafRegistry<u64>,
+    cache: &mut chisel::RenderedLeaves,
+) -> ServalPaintList {
+    let sizes: std::collections::HashMap<u64, (f32, f32)> =
+        session.chisel_leaf_boxes().into_iter().collect();
+    registry.render_into(
+        |key| {
+            sizes
+                .get(&key)
+                .map(|&(w, h)| chisel::Size { width: w, height: h })
+        },
+        cache,
+    );
+    let merged = merged_scroll_offsets(session, scroll);
+    let source = LeafSource(cache);
+    let mut plist = session.emit_paint_list_with_leaves(
+        dom,
+        scroll,
+        DeviceIntSize::new(width as i32, height as i32),
+        &source,
+    );
+    append_cursor_and_focus(&mut plist, session, dom, &merged, cursor);
+    serval_layout::push_scrollbars(&mut plist, dom, session.fragments(), &merged);
+    plist
+}
+
+/// [`scene_from_session_with_masks`] with chisel leaves spliced in — the chrome
+/// path when the toolbar cluster is present. Keeps the box-shadow mask requests.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn scene_from_session_with_leaves_and_masks(
+    session: &IncrementalLayout<NodeId>,
+    dom: &ScriptedDom,
+    cursor: Option<TextCursor>,
+    scroll: &ScrollOffsets<NodeId>,
+    width: u32,
+    height: u32,
+    registry: &mut chisel::LeafRegistry<u64>,
+    cache: &mut chisel::RenderedLeaves,
+) -> (Scene, Vec<paint_list_render::BoxShadowMaskRequest>) {
+    let plist = paint_list_from_session_with_leaves(
+        session, dom, cursor, scroll, width, height, registry, cache,
+    );
+    lower_with_masks("full", &plist)
+}
 
 /// Caret bar thickness, device px.
 pub(crate) const CARET_WIDTH: f32 = 2.0;

@@ -76,7 +76,12 @@ path = "src/main.rs"
 # tree into serval's mutable ScriptedDom. Cross-repo path dep on the sibling
 # serval checkout — mere and serval share the vello 0.9 / wgpu 29 pins, so there
 # is no renderer-stack reconciliation (serval-as-host flip plan, Findings).
-xilem-serval = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+xilem-serval = { git = "https://github.com/mark-ik/serval.git", branch = "main", features = ["highlight"] }
+# Chisel widget leaves: the toolbar status cluster (frame-time Meter + recent
+# GraphGlyph) as `<chisel-leaf>` elements in the chrome DOM, plus the grid
+# widget (GridSpec) for the nodes/recent table. The chrome emit splices leaf
+# commands via IncrementalLayout::emit_paint_list_with_leaves.
+chisel = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 serval-scripted-dom = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 # The content card parses fetched pages as full HTML documents (keeping <head>,
 # so head <style> / <link> are seen) and renders them through the shared serval
@@ -337,7 +342,7 @@ postcard = { version = "1", features = ["alloc"] }
 tincture = { workspace = true }
 # The illume text lexer: djot/code highlight + prose-entity spans for the knot
 # editor and any host text surface (the omnibar, comms).
-illume = { path = "../inker/illume" }
+illume = { git = "https://github.com/mark-ik/illume.git", branch = "main" }
 # Unique ids for forked user themes.
 uuid = { workspace = true }
 

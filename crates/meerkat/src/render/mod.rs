@@ -29,6 +29,7 @@ use crate::window_view::OrreryRender;
 use meerkat::ShellbarPaneStates;
 
 mod cards;
+mod cluster;
 mod compose;
 mod connections;
 mod gloss_scene;

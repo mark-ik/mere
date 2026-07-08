@@ -269,7 +269,7 @@ pub(crate) fn knot_editor_pane(c: &Chrome) -> ChromeView {
     // A multi-line styled textarea (Enter inserts a newline, Up/Down move between lines),
     // with illume's highlight + entity spans painted as `syntax-*` classes tinct colours.
     let make: fn(&mut TextInput) -> TextField =
-        |t: &mut TextInput| styled_textarea(t, &crate::knot_highlight::knot_styles(t.text()));
+        |t: &mut TextInput| xilem_serval::highlighted_textarea(t, xilem_serval::Highlight::Note);
     let to_source: fn(&mut Chrome) -> &mut TextInput = |c: &mut Chrome| &mut c.knot_source;
     let field = lens(make, to_source);
     let source = el::<_, Chrome, ()>("div", field)

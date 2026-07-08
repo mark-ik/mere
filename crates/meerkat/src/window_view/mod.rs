@@ -216,6 +216,18 @@ pub(crate) struct WindowView {
     /// Value: `(texture, view, dims)`.
     pub(crate) scene_textures:
         std::collections::HashMap<u64, (wgpu::Texture, wgpu::TextureView, (u32, u32))>,
+    /// The chrome status cluster's chisel leaves (a frame-time `Meter` + a
+    /// recent-trail `GraphGlyph`), rendered to a small overlay scene composited
+    /// top-right each frame — a host overlay, so the live meter never dirties
+    /// the cached chrome base. (Chisel toolbar cluster.)
+    pub(crate) chrome_cluster: chisel::LeafRegistry<u64>,
+    /// Last frame's total wall time (micros), fed to the cluster meter next frame.
+    pub(crate) last_frame_us: f32,
+    /// Rolling, slowly-decaying frame-time peak for the meter's peak tick.
+    pub(crate) cluster_frame_peak: f32,
+    /// Hash of the recent-visited trail last fed to the cluster glyph, so it is
+    /// re-fed (and `node_states` requeried) only when the trail actually changed.
+    pub(crate) cluster_recent_sig: u64,
     /// The chrome theme last applied to `pelt_shell` (via `set_theme`), so the tile
     /// theme is rebuilt only when the active theme actually changes, not every frame.
     pub(crate) pelt_theme: Option<register_theme::chrome::ChromeTheme>,

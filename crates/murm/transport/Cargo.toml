@@ -40,6 +40,11 @@ bytes = "1"
 # pins iroh 0.98, unifying with the iroh/iroh-blobs deps above.
 p2panda-net = "0.6.1"
 p2panda-core = "0.6.1"
+# `SyncedSpace` names `TopicLogSyncEvent` (the LogSync drain event) and drains
+# the `SyncSubscription` stream; p2panda-sync supplies the event type, tokio-stream
+# the `StreamExt::next`. Both are already in the tree via p2panda-net.
+p2panda-sync = "0.6.1"
+tokio-stream = "0.1"
 # Reticulum mesh-networking backend (optional, see [features]).
 reticulum = { workspace = true, optional = true }
 x25519-dalek = { workspace = true, optional = true }

@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Embedding-provider trait and vector index for Mere's statistical-intelligence tier — pure-Rust, browser-friendly, with a deterministic hash-based provider for tests and a slot for a future Burn-backed BERT provider."
+description = "Mere's statistical-intelligence glue over the standalone sibylla retrieval crate: eidetic persistence and the aether field-algebra / canvas-search bridge, re-exporting sibylla's embedding + retrieval core (incl. the Burn-backed BERT provider behind features)."
 readme = "README.md"
 keywords = ["embeddings", "vector-search", "intelligence", "mere"]
 categories = ["data-structures"]
@@ -13,45 +13,34 @@ categories = ["data-structures"]
 path = "src/lib.rs"
 
 [dependencies]
-# The promoted retrieval core (provider / stub / index / search / lexical /
-# affinity), now owned by the standalone sibylla crate. embed re-exports it and
-# keeps only the mere glue (persistence / field_bridge / canvas_search) + the bert
-# provider over it. Git sibling consumed one-way; a local checkout is picked up via
-# the gitignored `.cargo/config.toml` patch (mirrors netfetcher / errand).
+# The promoted embedding + retrieval core (provider / stub / index / search /
+# lexical / affinity, and the bert provider behind features), owned by the
+# standalone sibylla crate. embed re-exports it and keeps only the mere glue
+# (persistence / field_bridge / canvas_search). Git sibling consumed one-way; a
+# local checkout is picked up via the gitignored `.cargo/config.toml` patch
+# (mirrors netfetcher / errand).
 sibylla = { git = "https://github.com/mark-ik/sibylla.git" }
 async-trait = "0.1"
-burn = { version = "0.21", default-features = false, features = ["ndarray", "std"], optional = true }
 eidetic.workspace = true
 # The field algebra (FieldProjection / FieldId / eval) the embedding→field
 # bridge builds onto — extracted from graph-canvas into its own crate.
 aether.workspace = true
-safetensors = { version = "0.4", optional = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tokenizers = { version = "0.20", default-features = false, features = ["onig"], optional = true }
-
-# Same wasm getrandom story as aether: the burn tree reaches getrandom on
-# wasm and 0.4 needs its wasm_js backend switched on by someone in the graph.
-[target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
-getrandom = { version = "0.4", features = ["wasm_js"], optional = true }
+# Test-support only: the `bert_full_pipeline` integration test (the mere-side
+# eidetic↔BERT loading check) names `burn::backend::NdArray` for the provider's
+# backend. The BERT model tree itself lives in sibylla; this is just the backend
+# type the test instantiates. Pulled only by the `bert` feature.
+burn = { version = "0.21", default-features = false, features = ["ndarray", "std"], optional = true }
 
 [features]
 default = []
-# Burn-backed BERT embedding provider (currently scaffold; layer
-# implementations and safetensors loading land in a follow-up slice).
-# Pulls in burn (ndarray backend) + tokenizers.
-bert = ["dep:burn", "dep:tokenizers", "dep:safetensors"]
-# GPU execution for the BERT provider: adds burn's wgpu backend so callers
-# can instantiate `BertEmbeddingProvider<Wgpu>`. Mirrors aether's
-# `field-burn-wgpu` naming. (burn brief Lane 1.)
-bert-wgpu = ["bert", "burn/wgpu", "dep:getrandom"]
-# Continuous validation against a reference inference engine (candle-
-# transformers, ort, etc.). Gates an expensive end-to-end comparison test
-# that loads the same model in two frameworks and checks output divergence.
-# Currently structural — the reference-engine dep wires in alongside the
-# safetensors loader sub-slice. Run with:
-#   cargo test --features bert,bert-validation -- --ignored validation
-bert-validation = ["bert"]
+# The Burn-backed BERT embedding provider, re-exported from sibylla — which now
+# owns the burn / tokenizers / safetensors tree (BERT moved there at sibylla's
+# founding P2). `dep:burn` is for the mere-side integration test's backend type.
+bert = ["sibylla/bert", "dep:burn"]
+# GPU execution for the BERT provider (`BertEmbeddingProvider<Wgpu>`).
+bert-wgpu = ["bert", "sibylla/bert-wgpu"]
 
 [dev-dependencies]
 pollster = "0.4"
