@@ -97,7 +97,9 @@ pub use seal::{
     PayloadSealer, SealEpochId, SealedBlobRef, is_private_lane, resolve_sealed_blob, seal_marker,
     seal_payload_for_store,
 };
-pub use typed::{TypedPayload, list_typed, load_typed, save_typed};
+pub use typed::{
+    TypedPayload, list_typed, load_typed, load_typed_sealed, save_typed, save_typed_sealed,
+};
 
 /// Request emitted by reducers and routed to a [`Store`].
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

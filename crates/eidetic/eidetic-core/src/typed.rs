@@ -26,12 +26,12 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 use crate::manifest::{
-    BlobFetcher, BlobManifest, BlobSource, list_manifests, load_manifest, resolve_blob,
-    save_manifest,
+    BlobFetcher, BlobManifest, BlobSource, list_manifests, load_manifest, save_manifest,
 };
 use crate::schema::{
     Hash, ManifestId, PrivacyClass, ProvenanceRecord, SchemaRef, Timestamp, TrustEnvelope,
 };
+use crate::seal::{PayloadSealer, resolve_sealed_blob, seal_payload_for_store};
 use crate::{Error, Result, Store};
 
 /// A Rust type that binds to a known schema.
@@ -80,18 +80,51 @@ pub async fn save_typed<T: TypedPayload>(
     trust: TrustEnvelope,
     created_at: Timestamp,
 ) -> Result<ManifestId> {
+    save_typed_sealed(
+        store,
+        None,
+        value,
+        additional_sources,
+        privacy,
+        provenance,
+        trust,
+        created_at,
+    )
+    .await
+}
+
+/// Save a typed payload, sealing the private lane at rest.
+///
+/// As [`save_typed`], but with a [`PayloadSealer`]: when `sealer` is `Some` and
+/// the payload's `privacy` is a private-lane class (`LocalOnly` /
+/// `TrustedPeersOnly`), the stored blob bytes are sealed under the sealer's epoch
+/// and the manifest is stamped with the seal marker. The public lane and the
+/// no-sealer case store cleartext. The blob key and `content_hash` stay the
+/// cleartext hash, so addressing and integrity are unchanged; only the bytes on
+/// disk differ. Read back with [`load_typed_sealed`].
+#[allow(clippy::too_many_arguments)] // mirrors save_typed + the sealer.
+pub async fn save_typed_sealed<T: TypedPayload>(
+    store: &mut dyn Store,
+    sealer: Option<&dyn PayloadSealer>,
+    value: &T,
+    additional_sources: Vec<BlobSource>,
+    privacy: PrivacyClass,
+    provenance: ProvenanceRecord,
+    trust: TrustEnvelope,
+    created_at: Timestamp,
+) -> Result<ManifestId> {
     let bytes = value.serialize_to_bytes()?;
     let hash = Hash::of(&bytes);
     let id = ManifestId::from_hash(hash);
     let local_key = format!("blob:{}", hash.to_hex());
 
-    store.save_blob(&local_key, &bytes).await?;
-
     let mut sources = Vec::with_capacity(1 + additional_sources.len());
-    sources.push(BlobSource::Local { key: local_key });
+    sources.push(BlobSource::Local {
+        key: local_key.clone(),
+    });
     sources.extend(additional_sources);
 
-    let manifest = BlobManifest {
+    let mut manifest = BlobManifest {
         id,
         schema: T::schema_ref(),
         content_hash: hash,
@@ -105,6 +138,12 @@ pub async fn save_typed<T: TypedPayload>(
         schema_metadata: serde_json::Value::Null,
         manifest_version: BlobManifest::CURRENT_VERSION,
     };
+
+    // Seals + stamps the manifest marker for the private lane; passthrough
+    // otherwise. The stored bytes may be sealed; the manifest's content_hash
+    // stays the cleartext hash for the post-unseal integrity check.
+    let stored = seal_payload_for_store(sealer, &mut manifest, &bytes)?;
+    store.save_blob(&local_key, &stored).await?;
     save_manifest(store, &manifest).await?;
     Ok(id)
 }
@@ -128,6 +167,21 @@ pub async fn load_typed<T: TypedPayload>(
     fetcher: &mut dyn BlobFetcher,
     id: ManifestId,
 ) -> Result<Option<T>> {
+    load_typed_sealed(store, fetcher, None, id).await
+}
+
+/// Load a typed payload, unsealing the private lane at rest.
+///
+/// As [`load_typed`], but with a [`PayloadSealer`]: a manifest whose blob is
+/// sealed (written via [`save_typed_sealed`]) is unsealed with `sealer` before
+/// the hash check. A sealed blob loaded with `sealer = None` is a hard error
+/// (never a silent hash mismatch); an unsealed blob reads cleartext either way.
+pub async fn load_typed_sealed<T: TypedPayload>(
+    store: &mut dyn Store,
+    fetcher: &mut dyn BlobFetcher,
+    sealer: Option<&dyn PayloadSealer>,
+    id: ManifestId,
+) -> Result<Option<T>> {
     let Some(manifest) = load_manifest(store, id).await? else {
         return Ok(None);
     };
@@ -141,7 +195,7 @@ pub async fn load_typed<T: TypedPayload>(
         )));
     }
 
-    let bytes = resolve_blob(store, fetcher, &manifest).await?;
+    let bytes = resolve_sealed_blob(store, fetcher, sealer, &manifest).await?;
     let value = T::deserialize_from_bytes(&bytes)?;
     Ok(Some(value))
 }
@@ -438,6 +492,78 @@ mod tests {
             let result: Result<Option<Greeting>> = load_typed(&mut store, &mut fetcher, id).await;
             assert!(result.is_err());
             assert!(format!("{}", result.unwrap_err()).contains("content hash mismatch"));
+        });
+    }
+
+    /// Trivial reversible sealer for wiring tests (XOR). Real AEAD crypto is
+    /// tested in the `seal` module and in session-runtime's `WalletEpochSealer`;
+    /// here we only prove the `save_typed_sealed` / `load_typed_sealed` plumbing.
+    struct XorSealer;
+
+    impl PayloadSealer for XorSealer {
+        fn seal(
+            &self,
+            _content_hash: &Hash,
+            cleartext: &[u8],
+        ) -> Result<(Vec<u8>, crate::seal::SealedBlobRef)> {
+            Ok((
+                cleartext.iter().map(|b| b ^ 0xAA).collect(),
+                crate::seal::SealedBlobRef {
+                    epoch: crate::seal::SealEpochId([1u8; 16]),
+                    format: "xor-test".to_string(),
+                },
+            ))
+        }
+
+        fn unseal(
+            &self,
+            _content_hash: &Hash,
+            _marker: &crate::seal::SealedBlobRef,
+            sealed: &[u8],
+        ) -> Result<Vec<u8>> {
+            Ok(sealed.iter().map(|b| b ^ 0xAA).collect())
+        }
+    }
+
+    #[test]
+    fn sealed_typed_round_trips_and_stores_non_cleartext() {
+        pollster::block_on(async {
+            let mut store = InMemoryStore::default();
+            let original = Greeting {
+                salutation: "secret".to_string(),
+                recipient: "you".to_string(),
+            };
+            let id = save_typed_sealed(
+                &mut store,
+                Some(&XorSealer),
+                &original,
+                Vec::new(),
+                PrivacyClass::LocalOnly,
+                test_provenance(),
+                test_trust(),
+                Timestamp(0),
+            )
+            .await
+            .unwrap();
+
+            // On disk the bytes are sealed, not the cleartext serialization.
+            let blob_key = format!("blob:{}", id.0.to_hex());
+            let stored = store.blobs.get(&blob_key).unwrap();
+            assert_ne!(stored, &original.serialize_to_bytes().unwrap());
+
+            // The sealed read round-trips through the same sealer.
+            let mut fetcher = NoFetcher;
+            let got: Greeting = load_typed_sealed(&mut store, &mut fetcher, Some(&XorSealer), id)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(got, original);
+
+            // A keyless read is a hard error, not a silent hash mismatch.
+            let err = load_typed::<Greeting>(&mut store, &mut fetcher, id)
+                .await
+                .unwrap_err();
+            assert!(err.to_string().contains("sealed"), "got: {err}");
         });
     }
 }

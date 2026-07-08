@@ -50,6 +50,7 @@ pub mod engine_profile_store;
 // Freeze/thaw a live graph into an immutable, content-addressed graph engram over
 // an eidetic Store (the Alembic memory spine; wasm-clean — store-agnostic, not
 // filesystem). Save redacts private fields by default; open thaws read-only.
+pub mod engram_seal;
 pub mod graph_engram;
 // Snapshot-level merge for engram compose (Alembic tail B7): union two graph
 // snapshots by URL identity, retaining per-member provenance. Pure; the engram
@@ -162,3 +163,4 @@ pub use wallet_store::{
     save_remote_auth_wrapping_key_bridge, stage_persona_private_epoch, unlock_wallet_with_auto_os,
     wallet_local_secrets_locked,
 };
+pub use engram_seal::WalletEpochSealer;

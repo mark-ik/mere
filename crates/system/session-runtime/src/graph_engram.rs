@@ -20,9 +20,9 @@
 //! `graph.json` sidecar — a wasm host's OPFS store works the same way.
 
 use eidetic::{
-    BlobManifest, BlobSource, ManifestId, NoFetcher, PrivacyClass, ProvenanceOrigin,
+    BlobManifest, BlobSource, ManifestId, NoFetcher, PayloadSealer, PrivacyClass, ProvenanceOrigin,
     ProvenanceRecord, Result, SchemaRef, Store, Timestamp, TrustEnvelope, TypedPayload, list_typed,
-    load_typed, save_typed,
+    load_typed, load_typed_sealed, save_typed, save_typed_sealed,
 };
 use kernel::graph::Graph;
 use kernel::persistence::GraphSnapshot;
@@ -146,7 +146,24 @@ pub async fn save_graph_engram(
     redaction: RedactionPolicy,
     created_at: Timestamp,
 ) -> Result<ManifestId> {
-    save_graph_snapshot_engram(store, graph.to_snapshot(), redaction, created_at).await
+    save_graph_engram_sealed(store, None, graph, redaction, created_at).await
+}
+
+/// As [`save_graph_engram`], but sealing the engram at rest under `sealer`.
+///
+/// A graph engram is `LocalOnly` (the private lane), so with a `Some(sealer)` its
+/// stored bytes are sealed under the persona epoch and unreadable at rest without
+/// the wallet. `None` keeps the cleartext behavior. Read back with
+/// [`open_engram_as_session_sealed`].
+pub async fn save_graph_engram_sealed(
+    store: &mut dyn Store,
+    sealer: Option<&dyn PayloadSealer>,
+    graph: &Graph,
+    redaction: RedactionPolicy,
+    created_at: Timestamp,
+) -> Result<ManifestId> {
+    save_graph_snapshot_engram_sealed(store, sealer, graph.to_snapshot(), redaction, created_at)
+        .await
 }
 
 /// As [`save_graph_engram`], but from an already-materialized [`GraphSnapshot`].
@@ -158,13 +175,26 @@ pub async fn save_graph_engram(
 /// in place per `redaction`.
 pub async fn save_graph_snapshot_engram(
     store: &mut dyn Store,
+    snapshot: GraphSnapshot,
+    redaction: RedactionPolicy,
+    created_at: Timestamp,
+) -> Result<ManifestId> {
+    save_graph_snapshot_engram_sealed(store, None, snapshot, redaction, created_at).await
+}
+
+/// As [`save_graph_snapshot_engram`], but sealing the engram at rest under
+/// `sealer` (private-lane encrypt-at-rest for the graph snapshot).
+pub async fn save_graph_snapshot_engram_sealed(
+    store: &mut dyn Store,
+    sealer: Option<&dyn PayloadSealer>,
     mut snapshot: GraphSnapshot,
     redaction: RedactionPolicy,
     created_at: Timestamp,
 ) -> Result<ManifestId> {
     redaction.apply(&mut snapshot);
-    save_typed(
+    save_typed_sealed(
         store,
+        sealer,
         &GraphEngram(snapshot),
         Vec::<BlobSource>::new(),
         PrivacyClass::LocalOnly,
@@ -185,8 +215,20 @@ pub async fn open_engram_as_session(
     store: &mut dyn Store,
     id: ManifestId,
 ) -> Result<Option<Graph>> {
+    open_engram_as_session_sealed(store, None, id).await
+}
+
+/// As [`open_engram_as_session`], but unsealing a sealed engram with `sealer`.
+/// A sealed engram opened with `sealer = None` is a hard error (from the eidetic
+/// seal seam), never a silent failure.
+pub async fn open_engram_as_session_sealed(
+    store: &mut dyn Store,
+    sealer: Option<&dyn PayloadSealer>,
+    id: ManifestId,
+) -> Result<Option<Graph>> {
     let mut fetcher = NoFetcher;
-    let payload: Option<GraphEngram> = load_typed::<GraphEngram>(store, &mut fetcher, id).await?;
+    let payload: Option<GraphEngram> =
+        load_typed_sealed::<GraphEngram>(store, &mut fetcher, sealer, id).await?;
     Ok(payload.map(|engram| Graph::from_snapshot(&engram.0)))
 }
 

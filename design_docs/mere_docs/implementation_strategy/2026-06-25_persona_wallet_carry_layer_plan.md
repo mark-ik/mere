@@ -489,10 +489,13 @@ both evaluated in the substrate spike.
    devices. Today privacy is a metadata tag, encryption is wire-only. **The eidetic-core
    seal seam landed 2026-07-08** (`eidetic::seal`): a `PayloadSealer` boundary, seal-on-
    write / unseal-on-read helpers keyed on `PrivacyClass`, and a `resolve_sealed_blob`
-   that unseals before the content-hash check. Still open: the host `PayloadSealer` impl
-   over the wallet epoch keys (`session-runtime`) and the meerkat wiring at the store-open
-   / ingest sites (both held by the one-state migration), plus migrating existing cleartext
-   private blobs.
+   that unseals before the content-hash check. **The host sealer + write/read path landed
+   2026-07-08 too**: `session-runtime::WalletEpochSealer` (the concrete `PayloadSealer` over
+   the wallet epoch), non-breaking `save_typed_sealed` / `load_typed_sealed`, and
+   `save_graph_engram_sealed` / `open_engram_as_session_sealed`. Still open: the meerkat
+   call-site adoption (deferred behind the one-state-successor churn, ~2 lines per save
+   site), a sealed `compose_graph_engrams` variant, and migrating existing cleartext private
+   blobs.
 3. **The capability-token layer** — typed signed device-grant storage, remote-auth grant
    issuance, wrapped private-epoch crypto helpers, pairing-transcript derivation, and a
    typed pairing ticket/response seam landed 2026-07-02 in `session-runtime::wallet_grant`
@@ -825,6 +828,30 @@ current head, and replacement of the temporary plaintext bridges as the live sea
   the one-state migration: the host `PayloadSealer` over the wallet epochs, the meerkat
   store-open/ingest wiring, and migrating existing cleartext private blobs. Verified
   `cargo test -p eidetic` (83) green + new code clippy-clean.
+
+- **2026-07-08** — wired the seal seam through the engram write/read path (host side of
+  gap #2), all in clean crates (eidetic + session-runtime, untouched by the meerkat
+  one-state-successor churn): `eidetic::save_typed_sealed` / `load_typed_sealed`
+  (non-breaking sealed variants; the existing `save_typed` / `load_typed` delegate with
+  `None`, so no caller breaks and nothing seals until a sealer is passed),
+  `session-runtime::graph_engram::save_graph_engram_sealed` / `open_engram_as_session_sealed`
+  (the `LocalOnly` graph engram now has a sealed-at-rest path), and
+  `session-runtime::WalletEpochSealer` — the concrete `PayloadSealer` over the wallet epoch
+  (`for_persona(data_root, persona)` off `load_current_private_epoch`; XChaCha20-Poly1305
+  under a BLAKE3-derived per-epoch key; content-hash + persona + epoch bound as AEAD AAD;
+  unseals any epoch it holds, so pre-rotation reads work once history is loaded). 7 new tests
+  (6 sealer incl. persona-binding, pre-rotation, tamper; 1 typed-wiring) on top of the seal
+  seam's 10. Verified: eidetic 84 green, session-runtime `engram_seal` 6/6, clippy clean on
+  the new code. **Deferred (not blocked by design, blocked by tree state):** the meerkat
+  call-site adoption is a ~2-line change per save site (build
+  `WalletEpochSealer::for_persona(active persona)`, call the `_sealed` variant), but meerkat
+  is mid one-state-successor refactor (30+ dirty files, crate does not build) and the main
+  save site `command_drain.rs` is itself dirty, so adoption waits rather than editing a
+  non-building crate blind. Also deferred: `compose_graph_engrams` needs a sealed variant (it
+  would error on sealed sources), and existing cleartext private blobs need a migration pass.
+  Unrelated: 2 pre-existing `wallet_grant` pairing-ticket tests fail on HEAD (fixed
+  `expires_at_ms` now past vs real clock; confirmed pre-existing by a stash test), not touched
+  here.
 
 ## Findings (research, 2026-06-25)
 
