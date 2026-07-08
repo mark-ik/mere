@@ -1,9 +1,8 @@
 [package]
 name = "chartulary"
 version = "0.1.0"
-edition = "2021"
-rust-version = "1.80"
-license = "MPL-2.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
 description = "The generic content-addressed container graph (aka chart). Graph<N, E> on petgraph with capability traits (Identified, Addressed, ContentBearing, Labeled, Classified, Predicated) and default Container/Relation payloads. The substrate that binds muniment's blobs and codicil's log into an app-agnostic graph."
 repository = "https://github.com/mark-ik/chartulary"
 keywords = ["graph", "content-addressed", "knowledge-graph", "petgraph"]

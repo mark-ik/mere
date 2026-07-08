@@ -38,4 +38,4 @@ are later phases. Canonical plan: mere's
 `design_docs/mere_docs/technical_architecture/2026-07-08_generic_graph_substrate_plan.md`.
 See [`design_docs/`](design_docs/).
 
-License: MPL-2.0 (family default; the final choice is open).
+License: dual MIT OR Apache-2.0, at your option.
