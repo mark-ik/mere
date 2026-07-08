@@ -1,7 +1,3 @@
-/* This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
-
 //! codicil — an append-only, replayable log.
 //!
 //! A codicil is an amendment appended to a document, never a rewrite of it. This

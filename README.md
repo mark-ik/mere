@@ -36,4 +36,4 @@ The name: a codicil is an amendment appended to a document, never a rewrite of i
 Built alongside muniment from a survey of four consumers (woodshed, strophe,
 isometry, mere). See [`design_docs/`](design_docs/).
 
-License: MPL-2.0 (see the proposal's licensing note; the final choice is open).
+License: dual MIT OR Apache-2.0, at your option.
