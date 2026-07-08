@@ -1,0 +1,19 @@
+[package]
+name = "codicil"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+license = "MPL-2.0"
+description = "An append-only, replayable log: immutable ordered entries you append and replay to rebuild state, persisted through muniment. The event-source and nondestructive-history primitive. Sibling to muniment (the store)."
+repository = "https://github.com/mark-ik/codicil"
+keywords = ["append-only", "log", "event-sourcing", "history", "persistence"]
+categories = ["data-structures"]
+
+[dependencies]
+# The store codicil persists through. Path dep to the sibling repo during local
+# development; becomes a git dep on publish (see the founding proposal).
+muniment = { path = "../muniment" }
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+pollster = "0.4"
