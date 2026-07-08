@@ -27,4 +27,4 @@ traits. Compact JSON-LD with `@context`, ingest and round-trip, named-graph scop
 RDF 1.2 reified statement metadata, standard-vocabulary alignment, and SPARQL (via
 an `oxrdf`/`spareval` backend) are the roadmap. See [`design_docs/`](design_docs/).
 
-License: MPL-2.0.
+License: dual MIT OR Apache-2.0, at your option.
