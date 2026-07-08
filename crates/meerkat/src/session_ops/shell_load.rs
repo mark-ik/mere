@@ -322,12 +322,24 @@ impl crate::Shell {
         else {
             return;
         };
+        // Build the persona sealer before the store borrow so a sealed engram thaws
+        // (None when no wallet epoch is staged: a cleartext engram thaws either way).
+        let sealer = session_runtime::WalletEpochSealer::for_persona(
+            &self.shared.session.mere_root,
+            self.shared.session.active_persona,
+        )
+        .ok()
+        .flatten();
         // Thaw off the private store; the borrow ends here, before the orrery-pool borrow.
         let Some(store) = self.shared.content.store.as_mut() else {
             return;
         };
         let Some(graph) = pollster::block_on(
-            session_runtime::graph_engram::open_engram_as_session(store, id),
+            session_runtime::graph_engram::open_engram_as_session_sealed(
+                store,
+                sealer.as_ref().map(|s| s as &dyn eidetic::PayloadSealer),
+                id,
+            ),
         )
         .ok()
         .flatten() else {

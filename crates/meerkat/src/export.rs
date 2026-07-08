@@ -44,7 +44,8 @@ impl WindowCtx<'_> {
     /// the omnibar. fjall resolves synchronously, so the `block_on` does not stall
     /// the UI — the same shape as the deleted-node tombstone path.
     pub(super) fn save_graph_engram(&mut self) -> String {
-        use session_runtime::graph_engram::{RedactionPolicy, save_graph_snapshot_engram};
+        use session_runtime::WalletEpochSealer;
+        use session_runtime::graph_engram::{RedactionPolicy, save_graph_snapshot_engram_sealed};
 
         // Snapshot first (ends the borrow of the live graph) so the store borrow
         // that follows does not conflict.
@@ -57,11 +58,22 @@ impl WindowCtx<'_> {
                 .unwrap_or(0),
         );
 
+        // Seal the private-lane engram under the active persona's wallet epoch when
+        // one is staged; `None` (no epoch yet) keeps the cleartext lane. Built before
+        // the store borrow so the session read does not overlap it.
+        let sealer = WalletEpochSealer::for_persona(
+            &self.shared.session.mere_root,
+            self.shared.session.active_persona,
+        )
+        .ok()
+        .flatten();
+
         let Some(store) = self.shared.content.store.as_mut() else {
             return "Save engram failed: no private memory store is open".to_string();
         };
-        match pollster::block_on(save_graph_snapshot_engram(
+        match pollster::block_on(save_graph_snapshot_engram_sealed(
             store,
+            sealer.as_ref().map(|s| s as &dyn eidetic::PayloadSealer),
             snapshot,
             RedactionPolicy::default(),
             created_at,
@@ -80,7 +92,8 @@ impl WindowCtx<'_> {
     /// the same shape as `save_graph_engram`. Returns a one-line note (new engram id, or the
     /// error) for the caller to surface.
     pub(super) fn compose_engrams(&mut self, id_a: &str, id_b: &str) -> String {
-        use session_runtime::graph_engram::{RedactionPolicy, compose_graph_engrams};
+        use session_runtime::WalletEpochSealer;
+        use session_runtime::graph_engram::{RedactionPolicy, compose_graph_engrams_sealed};
 
         let Some(a) = eidetic::Hash::parse(id_a)
             .ok()
@@ -101,11 +114,18 @@ impl WindowCtx<'_> {
                 .unwrap_or(0),
         );
 
+        let sealer = WalletEpochSealer::for_persona(
+            &self.shared.session.mere_root,
+            self.shared.session.active_persona,
+        )
+        .ok()
+        .flatten();
         let Some(store) = self.shared.content.store.as_mut() else {
             return "Compose failed: no private memory store is open".to_string();
         };
-        match pollster::block_on(compose_graph_engrams(
+        match pollster::block_on(compose_graph_engrams_sealed(
             store,
+            sealer.as_ref().map(|s| s as &dyn eidetic::PayloadSealer),
             &[a, b],
             RedactionPolicy::default(),
             created_at,

@@ -240,4 +240,36 @@ mod tests {
         let sealer = WalletEpochSealer::for_persona(&dir, PersonaId::new()).unwrap();
         assert!(sealer.is_none());
     }
+
+    #[test]
+    fn for_persona_builds_a_working_sealer_from_a_staged_epoch() {
+        // The path the meerkat wiring relies on: real wallet state -> for_persona
+        // -> a sealer that actually seals and unseals.
+        use crate::wallet_store::{
+            ensure_wallet_state, load_persona_wallet, stage_persona_private_epoch,
+        };
+
+        let dir = std::env::temp_dir().join(format!(
+            "mere-engram-seal-forpersona-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let persona = PersonaId::new();
+        ensure_wallet_state(&dir, persona, "Test PC").unwrap();
+        let head = load_persona_wallet(&dir, persona)
+            .unwrap()
+            .unwrap()
+            .private_epoch_head;
+        stage_persona_private_epoch(&dir, persona, head, b"staged-epoch-secret").unwrap();
+
+        let sealer = WalletEpochSealer::for_persona(&dir, persona)
+            .unwrap()
+            .expect("a staged epoch yields a sealer");
+        let cleartext = b"round-trip via for_persona";
+        let hash = Hash::of(cleartext);
+        let (sealed, marker) = sealer.seal(&hash, cleartext).unwrap();
+        assert_ne!(sealed.as_slice(), cleartext);
+        assert_eq!(sealer.unseal(&hash, &marker, &sealed).unwrap(), cleartext);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

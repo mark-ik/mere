@@ -492,10 +492,10 @@ both evaluated in the substrate spike.
    that unseals before the content-hash check. **The host sealer + write/read path landed
    2026-07-08 too**: `session-runtime::WalletEpochSealer` (the concrete `PayloadSealer` over
    the wallet epoch), non-breaking `save_typed_sealed` / `load_typed_sealed`, and
-   `save_graph_engram_sealed` / `open_engram_as_session_sealed`. Still open: the meerkat
-   call-site adoption (deferred behind the one-state-successor churn, ~2 lines per save
-   site), a sealed `compose_graph_engrams` variant, and migrating existing cleartext private
-   blobs.
+   `save_graph_engram_sealed` / `open_engram_as_session_sealed`. **The meerkat call-site
+   adoption + sealed compose landed 2026-07-08**, so gap #2 is wired end to end. Still open:
+   a migration pass for pre-existing cleartext private blobs (they still read fine — unmarked
+   = cleartext — just not sealed retroactively).
 3. **The capability-token layer** — typed signed device-grant storage, remote-auth grant
    issuance, wrapped private-epoch crypto helpers, pairing-transcript derivation, and a
    typed pairing ticket/response seam landed 2026-07-02 in `session-runtime::wallet_grant`
@@ -852,6 +852,19 @@ current head, and replacement of the temporary plaintext bridges as the live sea
   Unrelated: 2 pre-existing `wallet_grant` pairing-ticket tests fail on HEAD (fixed
   `expires_at_ms` now past vs real clock; confirmed pre-existing by a stash test), not touched
   here.
+
+- **2026-07-08** — finished the gap #2 tail once the tree was committed and meerkat built
+  again. Added `compose_graph_engrams_sealed`, and adopted the sealed variants at all three
+  meerkat engram sites: save and compose (`export.rs`) and thaw
+  (`session_ops/shell_load.rs`), each building
+  `WalletEpochSealer::for_persona(active_persona, mere_root)` and threading it through (`None`
+  when no epoch is staged, so cleartext until the wallet has an epoch — no behavior change for
+  existing users). meerkat builds; 58 agent_harness tests green (they drive save + compose
+  through the sealed path); a new session-runtime integration test proves `for_persona` builds
+  a working sealer from real staged wallet state (`ensure_wallet_state` → stage epoch → seal →
+  unseal). **Gap #2 is now wired end to end**: a graph engram saved with a staged persona epoch
+  is sealed at rest and thaws only with that persona's sealer. Remaining: a migration pass for
+  pre-existing cleartext private blobs (a genuine follow-on, not a blocker — they still read).
 
 ## Findings (research, 2026-06-25)
 

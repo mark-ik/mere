@@ -22,7 +22,7 @@
 use eidetic::{
     BlobManifest, BlobSource, ManifestId, NoFetcher, PayloadSealer, PrivacyClass, ProvenanceOrigin,
     ProvenanceRecord, Result, SchemaRef, Store, Timestamp, TrustEnvelope, TypedPayload, list_typed,
-    load_typed, load_typed_sealed, save_typed, save_typed_sealed,
+    load_typed_sealed, save_typed_sealed,
 };
 use kernel::graph::Graph;
 use kernel::persistence::GraphSnapshot;
@@ -255,13 +255,29 @@ pub async fn compose_graph_engrams(
     redaction: RedactionPolicy,
     created_at: Timestamp,
 ) -> Result<Option<ManifestId>> {
+    compose_graph_engrams_sealed(store, None, ids, redaction, created_at).await
+}
+
+/// As [`compose_graph_engrams`], but sealer-aware: unseals sealed sources on read
+/// and seals the composed result at rest. All source engrams must be readable
+/// with `sealer` (they share the persona's epoch history); without this variant a
+/// compose over sealed sources would fail at the first sealed read.
+pub async fn compose_graph_engrams_sealed(
+    store: &mut dyn Store,
+    sealer: Option<&dyn PayloadSealer>,
+    ids: &[ManifestId],
+    redaction: RedactionPolicy,
+    created_at: Timestamp,
+) -> Result<Option<ManifestId>> {
     if ids.is_empty() {
         return Ok(None);
     }
     let mut fetcher = NoFetcher;
     let mut acc: Option<GraphSnapshot> = None;
     for id in ids {
-        let Some(engram) = load_typed::<GraphEngram>(store, &mut fetcher, *id).await? else {
+        let Some(engram) =
+            load_typed_sealed::<GraphEngram>(store, &mut fetcher, sealer, *id).await?
+        else {
             return Ok(None);
         };
         acc = Some(match acc {
@@ -283,8 +299,9 @@ pub async fn compose_graph_engrams(
         ),
         generated_at: created_at,
     };
-    let id = save_typed(
+    let id = save_typed_sealed(
         store,
+        sealer,
         &GraphEngram(snapshot),
         Vec::<BlobSource>::new(),
         PrivacyClass::LocalOnly,
