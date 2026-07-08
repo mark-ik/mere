@@ -213,14 +213,91 @@ impl WindowCtx<'_> {
             b: 0.100,
             a: 1.0,
         };
+        // The gloss backdrop clear (panel tone), needed by the slot pass below.
+        let pb = self.shared.presentation.chrome_theme.panel_bg.to_array();
+        let gloss_clear = wgpu::Color {
+            r: pb[0] as f64 / 255.0,
+            g: pb[1] as f64 / 255.0,
+            b: pb[2] as f64 / 255.0,
+            a: 1.0,
+        };
+        // Chisel scene slots (Path B): push this frame's scenes into their
+        // slots only when the producer changed (the orrery's own redraw flag;
+        // first frame always), so stable epochs skip the rasterize below
+        // entirely — the leaf-tier retention gate extended through the GPU.
         let orrery_raster_t = std::time::Instant::now();
-        let (_orrery_tex, orrery_view) = core.rasterize_for(
-            super::surface_keys::ORRERY_CANVAS,
-            &orrery_scene,
-            orrery_w,
-            orrery_h,
-            ColorLoad::Clear(backdrop),
-        );
+        let orrery_key = crate::window_view::ORRERY_SCENE_KEY;
+        let gloss_key = crate::gloss_view::GLOSS_MINIMAP_SCENE_KEY;
+        {
+            let slots = &mut self.view.chisel_slots;
+            let orrery_size =
+                chisel::Size { width: orrery_w as f32, height: orrery_h as f32 };
+            if !slots.contains(&orrery_key) {
+                slots.insert(orrery_key, Box::new(chisel::SceneSlot::new(orrery_size)));
+            }
+            if orrery_redraw || !self.view.chisel_slot_textures.contains_key(&orrery_key) {
+                if let Some(slot) = slots.get_mut_as::<chisel::SceneSlot>(&orrery_key) {
+                    slot.set_scene(orrery_scene);
+                }
+            }
+            let gloss_size = gloss_minimap_scene
+                .as_ref()
+                .map(|(_, mw, mh)| chisel::Size { width: *mw as f32, height: *mh as f32 });
+            if let Some((scene, _, _)) = gloss_minimap_scene {
+                if !slots.contains(&gloss_key) {
+                    slots.insert(
+                        gloss_key,
+                        Box::new(chisel::SceneSlot::new(gloss_size.unwrap())),
+                    );
+                }
+                // No change flag from the gloss producer yet: push per frame
+                // (epoch bumps, raster runs — the pre-slot behavior, now on
+                // the uniform path; a producer flag is the later refinement).
+                if let Some(slot) = slots.get_mut_as::<chisel::SceneSlot>(&gloss_key) {
+                    slot.set_scene(scene);
+                }
+            }
+            let cache = &mut self.view.chisel_slot_cache;
+            slots.render_into(
+                |key| {
+                    if key == orrery_key {
+                        Some(orrery_size)
+                    } else if key == gloss_key {
+                        gloss_size
+                    } else {
+                        None
+                    }
+                },
+                cache,
+            );
+        }
+        // The slot rasterize loop: one pass over every scene awaiting a
+        // texture, skipped wholesale when its (epoch, size) did not move.
+        for (key, scene, epoch, size) in self.view.chisel_slot_cache.scenes() {
+            let (w_px, h_px) = (size.width.round().max(1.0) as u32, size.height.round().max(1.0) as u32);
+            let stale = self
+                .view
+                .chisel_slot_textures
+                .get(&key)
+                .is_none_or(|(_, _, e, s)| *e != epoch || *s != (w_px, h_px));
+            if !stale {
+                continue;
+            }
+            let (surface, clear) = if key == orrery_key {
+                (super::surface_keys::ORRERY_CANVAS, backdrop)
+            } else {
+                (super::surface_keys::GLOSS_MINIMAP, gloss_clear)
+            };
+            let (tex, view) = core.rasterize_for(surface, scene, w_px, h_px, ColorLoad::Clear(clear));
+            self.view
+                .chisel_slot_textures
+                .insert(key, (tex, view, epoch, (w_px, h_px)));
+        }
+        // Drop textures for slots whose scenes are gone (gloss pane closed).
+        {
+            let live: Vec<u64> = self.view.chisel_slot_cache.scenes().map(|(k, ..)| k).collect();
+            self.view.chisel_slot_textures.retain(|k, _| live.contains(k));
+        }
         let orrery_raster_us = orrery_raster_t.elapsed().as_micros();
         // Rasterize each secondary graph-pane's scene. The textures must outlive
         // the composite below (they back the views), so they are held in this Vec

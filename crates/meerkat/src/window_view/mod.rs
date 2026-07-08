@@ -206,6 +206,17 @@ pub(crate) struct WindowView {
     /// all flow through one seam, and the surface stays a driven view. `None` until the
     /// workbench pane first renders.
     pub(crate) pelt_shell: Option<pelt_desktop::TileShell>,
+    /// Chisel scene slots (Path B): the orrery + gloss-minimap scenes ride the
+    /// leaf contract. Producers push a scene only when their own dirt says it
+    /// changed; `chisel_slot_cache` epochs then gate the host rasterize loop
+    /// (render::paint), and compose looks textures up by the same key the
+    /// `<external-texture>` element carries.
+    pub(crate) chisel_slots: chisel::LeafRegistry<u64>,
+    pub(crate) chisel_slot_cache: chisel::RenderedLeaves,
+    /// Rasterized slot textures keyed by scene key: `(texture, view, epoch,
+    /// size)`; re-rasterized only when the cache's `(epoch, size)` moved.
+    pub(crate) chisel_slot_textures:
+        std::collections::HashMap<u64, (wgpu::Texture, wgpu::TextureView, u64, (u32, u32))>,
     /// The chrome theme last applied to `pelt_shell` (via `set_theme`), so the tile
     /// theme is rebuilt only when the active theme actually changes, not every frame.
     pub(crate) pelt_theme: Option<register_theme::chrome::ChromeTheme>,
