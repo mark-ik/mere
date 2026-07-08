@@ -1,10 +1,12 @@
 # sibylla Founding Proposal
 
 **Date:** 2026-07-07
-**Status:** founding proposal. This repo's first doc. Scaffolds sibylla as a
-standalone crate by promoting mere's `intel/embed` seam, and plans the porting
-of its retrieval and model-backed pieces. The seam plus the deterministic stub
-are ported and green in this commit; everything below the seam is roadmap.
+**Status:** founding proposal + **P1 landed (2026-07-08)**. Scaffolds sibylla as a
+standalone crate by promoting mere's `intel/embed` seam, and plans the porting of
+its retrieval and model-backed pieces. P0 (the seam + the deterministic stub) and
+**P1 (the portable retrieval core: `index`, `search`, `lexical`, `affinity`)** are
+ported and green; the burn-wgpu BERT backend (P2) is the remaining roadmap. See
+the Progress section.
 
 ## 1. What sibylla is
 
@@ -202,6 +204,24 @@ wgpu execution land behind features, mirroring vates.
    it in mere's `intel/embed` and move the finished body over. Same question
    vates faces for its decoder; answer both the same way. The former keeps
    sibylla the source of truth.
+
+## Progress
+
+- **2026-07-08 — P1 landed: the portable retrieval core.** Ported `index`
+  (`VectorIndex` / `IndexError`), `search` (`SemanticSearch` / `SearchError`),
+  `lexical` (`LexicalEmbeddingProvider`), and `affinity` (`affinity_pairs`) from
+  mere's `intel/embed`, verbatim but for genericized doc references (the eidetic
+  persistence pointer in `index`, and `affinity`'s gyre/canvas/force-directed
+  framing reworded to a layout-neutral description). All four are serde-only, so
+  they ship in the **default build** rather than behind features — the Cargo
+  comment's earlier "index/search/lexical behind features" note is superseded by
+  §6 / open-Q4 (the burn-free core is default; only BERT rides features), which is
+  what makes the P1 done-condition — a working `SemanticSearch` over the lexical
+  embedder in the base build — actually hold. `cargo test` green, **49 tests** (up
+  from 13). The done-condition is met: a caller ingests text through
+  `SemanticSearch` over `LexicalEmbeddingProvider` and gets sensible top-k with
+  serde only, no model (see the README example). Next: P2 (BERT backend) or P3
+  (mere reconciliation); P1 and P2 are independent.
 
 ## Provenance
 

@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.80"
 license = "MPL-2.0"
-description = "A local-embedding and semantic-retrieval seam: the EmbeddingProvider trait, similarity metrics, and a deterministic stub. A pure-Rust vector index, a search facade, a burn-free lexical embedder, and a burn-wgpu BERT backend are the porting roadmap. Sibling to vates (generation)."
+description = "A local-embedding and semantic-retrieval seam: the EmbeddingProvider trait, similarity metrics, a deterministic stub, a pure-Rust vector index, a SemanticSearch facade, a burn-free lexical embedder, and an affinity-pairs helper — serde-only and wasm-clean. A burn-wgpu BERT backend is the porting roadmap. Sibling to vates (generation)."
 repository = "https://github.com/mark-ik/sibylla"
 keywords = ["embeddings", "vector-search", "semantic", "retrieval", "rag"]
 categories = ["science", "data-structures"]
@@ -15,13 +15,12 @@ serde = { version = "1", features = ["derive"] }
 [dev-dependencies]
 serde_json = "1"
 
-# As the portable core is ported from mere's intel/embed (see
-# design_docs/2026-07-07_sibylla_founding_proposal.md), the retrieval and
-# model-backed pieces land behind features:
-#   index / search   — the pure-Rust vector index and SemanticSearch facade
-#   lexical          — a burn-free real similarity signal (shared vocabulary)
-#   bert / bert-wgpu — the burn-wgpu BERT backend (MiniLM, BGE-micro, arctic-xs)
-# The default build is the seam plus the deterministic stub: serde only,
-# wasm-clean.
+# The portable retrieval core (index / search / lexical / affinity), ported from
+# mere's intel/embed (see design_docs/2026-07-07_sibylla_founding_proposal.md), is
+# serde-only, so it ships in the default build with no feature gate. Only the
+# model-backed backend rides features:
+#   bert / bert-wgpu — the burn-wgpu BERT backend (MiniLM, BGE-micro, arctic-xs),
+#                      pulling burn / tokenizers / safetensors / half. (Roadmap P2.)
+# The default build stays wasm-clean.
 [features]
 default = []
