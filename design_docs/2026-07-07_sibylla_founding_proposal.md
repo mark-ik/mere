@@ -207,6 +207,15 @@ wgpu execution land behind features, mirroring vates.
 
 ## Progress
 
+- **2026-07-08 — index burn-lift (P1 kernel).** Added `index_burn::cosine_top_k`
+  behind `index-burn` / `index-burn-wgpu`: batched cosine as one matmul on burn
+  (`queries · corpusᵀ`), CPU top-k over the readback — the same tensor-program
+  shape as a tensorized N-body force pass, lifting the flat index's `O(N·d)`
+  per-query scan onto the GPU. Verified against `VectorIndex::nearest` and
+  ndarray↔wgpu parity green on the real GPU (54 tests). Exact, not HNSW. Its own
+  doc + roadmap (P2 crossover, P3 route search/affinity) is
+  `2026-07-08_index_burn_lift_plan.md`. This is orthogonal to the founding roadmap
+  below (it accelerates the ported `index`, independent of the BERT P2).
 - **2026-07-08 — P1 landed: the portable retrieval core.** Ported `index`
   (`VectorIndex` / `IndexError`), `search` (`SemanticSearch` / `SearchError`),
   `lexical` (`LexicalEmbeddingProvider`), and `affinity` (`affinity_pairs`) from
