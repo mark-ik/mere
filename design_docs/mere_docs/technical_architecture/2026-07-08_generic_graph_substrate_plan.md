@@ -20,13 +20,17 @@ will be a standalone repo (the muniment/codicil pattern), not a mere crate.
    second history); node-level lineage is a projection over the spine, promoted
    from `node-lineage`. Fork/copy/duplicate handling flows from lineage's model
    into codicil's roadmap.
-4. **Names.** `stemma` (crates.io-free) for the lineage crate. Substrate
-   candidates, all free: `chartulary`, `pandect`, `matricula` (section 8).
-   `scholia` (free) reserved for the RDF projection harvest.
+4. **Names (locked 2026-07-08).** The substrate is **chartulary**, aliased
+   `chart` in consumer workspaces (`chart = { package = "chartulary" }`, the
+   tinct/tincture pattern in reverse) and called "chart" colloquially. The
+   lineage crate is **stemma**; the RDF projection harvest is **scholia**. All
+   three checked free on crates.io; `chart` itself is also free but reads as a
+   plotting library on a shelf, so the long form is the published identity
+   (section 8).
 
 ## 2. The stack
 
-```
+```text
 muniment    bytes: content-addressed blobs (node content) + slots (snapshots)
 codicil     the ordered edit log (graph-level authority)
 substrate   Graph<N, E> on petgraph: ops, filter, capability traits,
@@ -155,37 +159,40 @@ Done-conditions, not durations.
 
 G5 is the long tail and deliberately last; G0 through G4 never block on it.
 
-## 8. The name
+## 8. The name: chartulary, "chart" for short
 
-Taken: cartulary, trellis, tela, rete, catena is free but implies a linear
-chain (wrong shape). Free candidates:
+**Decided 2026-07-08: chartulary.** The attested variant spelling of cartulary
+(cartulary itself is taken on crates.io): the register book into which a house
+copied its charters and muniments. The meaning is exact: the thing that
+organizes muniments and their relations is literally a chartulary. Considered
+and passed over: pandect, matricula (free; less muniment-tied), catena (free;
+implies a linear chain, the wrong shape), cartulary/trellis/tela/rete (taken).
 
-- **chartulary** (recommended): the attested variant spelling of cartulary, the
-  register book into which a house copied its charters and muniments. The
-  meaning is exact: the thing that organizes muniments and their relations is
-  literally a chartulary. Unlike a coined clip, it is a real historical word.
-- **pandect**: a complete, organized digest of a whole subject (Justinian's
-  Pandects). Connotes the comprehensive body of knowledge; slightly grander,
-  less muniment-tied.
-- **matricula**: a register or roll of members. Register-of-nodes flavor,
-  lighter weight.
+**The short form.** `chart` is free on crates.io and is the same root (charta:
+the charter, the paper), but published under that name the crate would read as
+a plotting library, and it would sit confusingly near mere's `cartography`. So
+the published identity is `chartulary`; consumer workspaces alias it
+(`chart = { package = "chartulary" }`, the tinct/tincture pattern in reverse)
+so code reads `use chart::Graph`, and "chart" is the colloquial name in docs
+and conversation.
 
 Family read: muniment (the kept records), codicil (the appended amendment),
-chartulary/pandect/matricula (the register that binds them), stemma (the
-descent of copies), scholia (the commentary in the margins).
+chartulary (the register that binds them), stemma (the descent of copies),
+scholia (the commentary in the margins).
 
 ## 9. Open questions
 
-1. The substrate name (section 8): Mark's pick.
-2. Family-registry mechanics (section 4): compact-tag hybrid vs string-keyed.
-3. Edge multiplicity: mere holds one edge per node pair carrying multiple
+1. Family-registry mechanics (section 4): compact-tag hybrid vs string-keyed.
+2. Edge multiplicity: mere holds one edge per node pair carrying multiple
    statements; petgraph supports true multigraphs. Pick one semantics at G0.
-4. Serialization: core is serde-first; mere's snapshots use rkyv. rkyv as an
+3. Serialization: core is serde-first; mere's snapshots use rkyv. rkyv as an
    optional feature at G1, or mere-side only at G5?
-5. Crate granularity: core + defaults in one crate, or a taxonomy split. Bias
+4. Crate granularity: core + defaults in one crate, or a taxonomy split. Bias
    to one crate until a consumer proves the split.
-6. Stemma wiring: does the spine feed stemma automatically (every edit emits a
+5. Stemma wiring: does the spine feed stemma automatically (every edit emits a
    visit-shaped event) or is wiring consumer-side? Decide at G2 with real use.
+
+(Resolved: the substrate name, section 8.)
 
 ## Provenance
 
