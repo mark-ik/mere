@@ -207,6 +207,18 @@ wgpu execution land behind features, mirroring vates.
 
 ## Progress
 
+- **2026-07-08 — P3 mere reconciliation landed** (mere `1fe6a82`). mere's
+  `intel/embed` now consumes sibylla for the portable core: it re-exports sibylla's
+  modules (`provider` / `stub` / `index` / `search` / `lexical` / `affinity`) at the
+  same paths and deletes its six duplicated files, keeping only the glue (`bert` /
+  `persistence` / `field_bridge` / `canvas_search`). The one real edge was §5's
+  persistence coupling: `impl eidetic::TypedPayload for VectorIndex` became an
+  orphan-rule violation once `VectorIndex` was sibylla's, resolved with a local
+  `#[serde(transparent)]` newtype (byte-identical persisted format). This is mere's
+  first promoted-crate git-dep reconciliation. Verified: embed default + `bert` +
+  the eidetic-search consumer. The founding-P3 done-condition (mere builds against
+  sibylla, glue works over the promoted core) is met. P4 (Isometry) and sibylla's
+  own P2 (BERT — mere still holds `bert` until then) remain.
 - **2026-07-08 — index burn-lift (P1 kernel).** Added `index_burn::cosine_top_k`
   behind `index-burn` / `index-burn-wgpu`: batched cosine as one matmul on burn
   (`queries · corpusᵀ`), CPU top-k over the readback — the same tensor-program
