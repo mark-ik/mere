@@ -1,0 +1,18 @@
+[package]
+name = "armillary"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+license = "MPL-2.0"
+description = "A host-neutral actor-kernel runtime: a !Send host-kernel boundary, a Send actor harness (thread-per-actor or pooled), generation counters for backpressure, and a growable reusing worker pool. GPUI's kernel/actor discipline made structural."
+repository = "https://github.com/mark-ik/armillary"
+keywords = ["actor", "concurrency", "threading", "runtime", "gpui"]
+categories = ["concurrency", "rust-patterns"]
+
+[dependencies]
+# Host-neutral instrumentation facade: the actor harness emits lifecycle
+# spans/events; the host installs the subscriber, so this stays host-neutral.
+tracing = "0.1"
+
+[dev-dependencies]
+tracing-subscriber = "0.3"
