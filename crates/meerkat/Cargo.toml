@@ -337,12 +337,10 @@ hex = "0.4"
 # Transferable content-update envelope; scenes themselves use netrender's
 # postcard encoder, but the update wrapper needs its own flat byte envelope.
 postcard = { version = "1", features = ["alloc"] }
-# Seed colour manipulation for the in-app theme editor (HSL nudges on seeds), plus
-# the perceptual syntax palette its `syntax` module derives for the editor.
+# Seed colour manipulation for the in-app theme editor (HSL nudges on seeds). The
+# perceptual syntax palette now derives inside xilem-serval's `highlight` feature
+# (illume + tinct), so meerkat no longer maps kinds to roles itself.
 tincture = { workspace = true }
-# The illume text lexer: djot/code highlight + prose-entity spans for the knot
-# editor and any host text surface (the omnibar, comms).
-illume = { git = "https://github.com/mark-ik/illume.git", branch = "main" }
 # Unique ids for forked user themes.
 uuid = { workspace = true }
 

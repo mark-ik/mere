@@ -8,8 +8,7 @@ use std::rc::Rc;
 use serval_scripted_dom::ScriptedDom;
 use xilem_serval::{
     AnyView, El, OnClick, OptionalAction, PointerClick, ServalAppRunner, ServalCtx, ServalElement,
-    TextField, TextInput, el, lens, memoize, on_click, overlay_at, styled_textarea,
-    text_field_typed,
+    TextField, TextInput, el, lens, memoize, on_click, overlay_at, text_field_typed,
 };
 
 use comms::{Direction, ProtocolKind};
