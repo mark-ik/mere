@@ -16,8 +16,8 @@ was the first app to need both:
 - **Data plane (the charter family):** muniment (bytes) → codicil (edit log) →
   chartulary (the `Graph<N, E>`) → stemma (lineage) → scholia (RDF). *What things
   are and how they relate.* Owned by the graph substrate plan.
-- **Trust plane (this plan):** identity (root of trust) → **signet** (the carry
-  spine) → murm / retinue / misfin (wire + comms) → moot / tessera / kith
+- **Trust plane (this plan):** **personae** (root of trust) → **signet** (the
+  carry spine) → murm / retinue / misfin (wire + comms) → moot / tessera / kith
   (standing + membership). *Who you are, who may read, who it syncs to.*
 
 The planes are orthogonal. muniment "moves bytes and does not model what they
@@ -61,8 +61,8 @@ if preferred: `signetum`. Both free 2026-07-08.)
 ## 3. The trust-plane stack
 
 ```text
-identity    master Ed25519 + BLAKE3 derivation + vault + sealed records +
-            passphrase / OS-store unlock. The root of trust.
+personae    master Ed25519 + BLAKE3 derivation + vault + sealed records +
+            passphrase / OS-store unlock; the register of your faces. Root of trust.
 signet      the carry spine: seed carry, device roster, grants, epoch history,
             root refs. Portable persona. (published: signaculum)
 murm        bilateral comms: cabals (murmuring) + misfin mail
@@ -111,8 +111,10 @@ the data plane never learns about keys, the trust plane never learns graph shape
 
 ## 5. Promotion map (mere crate → trust-plane crate)
 
-- `persona/identity` → **identity** (promotes near-as-is; already generic key +
-  derivation + vault + sealed-record + unlock machinery).
+- `persona/identity` → **personae** (promotes near-as-is; already generic key +
+  derivation + vault + sealed-record + unlock machinery). `persona` on crates.io
+  is a Mozilla inside-joke reservation; `personae` (the plural, the register of a
+  user's faces) is free and truer — "your signet carries your personae."
 - `session-runtime::wallet_store` + `wallet_grant` + identity's vault/epoch parts
   → **signet** (the spine; the one genuinely new consolidation).
 - `murm/*` (transport, murmuring, murm, misfin) → **murm** family + **retinue**
