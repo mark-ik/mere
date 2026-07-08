@@ -183,7 +183,7 @@ impl<N: Identified, E: Classified> Graph<N, E> {
         class: &'a RelationClass,
     ) -> impl Iterator<Item = (EdgeKey, NodeKey)> + 'a {
         self.out_edges(key)
-            .filter(move |(_, _, edge)| edge.class() == class)
+            .filter(move |(_, _, edge)| &edge.class() == class)
             .map(|(edge, target, _)| (edge, target))
     }
 }

@@ -76,8 +76,8 @@ impl Identified for Container {
 }
 
 impl Addressed for Container {
-    fn addresses(&self) -> &[Address] {
-        &self.addresses
+    fn addresses(&self) -> Vec<Address> {
+        self.addresses.clone()
     }
 }
 
@@ -94,8 +94,8 @@ impl Labeled for Container {
     fn title(&self) -> Option<&str> {
         self.title.as_deref()
     }
-    fn tags(&self) -> &[String] {
-        &self.tags
+    fn tags(&self) -> Vec<String> {
+        self.tags.clone()
     }
 }
 
@@ -122,8 +122,8 @@ impl Relation {
 }
 
 impl Classified for Relation {
-    fn class(&self) -> &RelationClass {
-        &self.class
+    fn class(&self) -> RelationClass {
+        self.class.clone()
     }
 }
 

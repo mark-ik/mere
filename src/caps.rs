@@ -62,13 +62,17 @@ impl Address {
 
 /// A node that carries one or more addresses across schemes. The first is the
 /// primary (canonical) address; the rest are aliases.
+///
+/// Returns owned [`Address`] values rather than a borrowed slice, so a node whose
+/// own storage differs (mere's `WebNode` holds `AddressClaim`s, not `Address`es)
+/// can map into them. A node that already stores `Address`es clones cheaply.
 pub trait Addressed {
     /// Every address, primary first.
-    fn addresses(&self) -> &[Address];
+    fn addresses(&self) -> Vec<Address>;
 
     /// The canonical address, or `None` if the node has none.
-    fn primary_address(&self) -> Option<&Address> {
-        self.addresses().first()
+    fn primary_address(&self) -> Option<Address> {
+        self.addresses().into_iter().next()
     }
 }
 
@@ -83,19 +87,27 @@ pub trait ContentBearing {
 }
 
 /// A node with a human-facing title and semantic tags.
+///
+/// `tags` returns owned strings rather than a borrowed slice, so a node that
+/// stores tags in a set (mere's `WebNode` holds a `HashSet`) can implement it; a
+/// node with a `Vec` clones cheaply.
 pub trait Labeled {
     /// The display title, if any.
     fn title(&self) -> Option<&str>;
 
     /// The node's tags.
-    fn tags(&self) -> &[String];
+    fn tags(&self) -> Vec<String>;
 }
 
 /// An edge classified by its relation ([`RelationClass`]), for filtering and
 /// render policy without touching the edge payload.
+///
+/// Returns an owned `RelationClass` rather than a borrowed one, so an edge that
+/// stores its relation in another form (mere's edge holds a `RelationKind`) can map
+/// into it; an edge that already stores a `RelationClass` clones cheaply.
 pub trait Classified {
     /// This edge's relation class.
-    fn class(&self) -> &RelationClass;
+    fn class(&self) -> RelationClass;
 }
 
 /// An edge that projects to an RDF predicate. Returns the predicate IRI for a
