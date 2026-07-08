@@ -77,12 +77,11 @@ impl WindowCtx<'_> {
         // hit-tests, and projects a11y through the shell runner (its CSS rides the shell
         // stylesheet below). Replaces the separate RosterPane frame + composite. (Phase 1.)
         if roster_rect.is_some() {
-            let subject = self.view.roster_subject();
+            let subject = self.roster_subject();
             let snapshot = self.roster_snapshot(subject.as_ref());
-            self.view.set_roster(snapshot, roster_rect);
-        } else if self.view.roster_open() {
-            self.view
-                .set_roster(crate::roster::RosterSnapshot::default(), None);
+            self.set_roster(snapshot, roster_rect);
+        } else if self.roster_open() {
+            self.set_roster(crate::roster::RosterSnapshot::default(), None);
         }
         // Fold all three gloss lenses into the same shell document: outline (middle
         // third), recent (bottom third), and now the minimap's DOM node squares (top
@@ -96,18 +95,15 @@ impl WindowCtx<'_> {
             let (_, outline_rect, recent_rect) = gloss::gloss_sections(grect);
             let available_height = outline_rect[3] - outline_rect[1];
             let snapshot = self.gloss_outline_snapshot(available_height);
-            self.view.set_gloss_outline(snapshot, Some(outline_rect));
+            self.set_gloss_outline(snapshot, Some(outline_rect));
             let recent_snapshot = self.gloss_recent_snapshot();
-            self.view
-                .set_gloss_recent(recent_snapshot, Some(recent_rect));
+            self.set_gloss_recent(recent_snapshot, Some(recent_rect));
         } else {
-            if self.view.gloss_outline_open() {
-                self.view
-                    .set_gloss_outline(gloss::GlossOutlineSnapshot::default(), None);
+            if self.gloss_outline_open() {
+                self.set_gloss_outline(gloss::GlossOutlineSnapshot::default(), None);
             }
-            if self.view.gloss_recent_open() {
-                self.view
-                    .set_gloss_recent(crate::gloss_view::GlossRecentSnapshot::default(), None);
+            if self.gloss_recent_open() {
+                self.set_gloss_recent(crate::gloss_view::GlossRecentSnapshot::default(), None);
             }
         }
         let gloss_minimap_scene = self.render_gloss_minimap(gloss_rect);

@@ -142,10 +142,10 @@ impl WindowCtx<'_> {
     /// the ticket the verb captured from the address bar and drive the sync actor.
     /// The chrome records the intent; this is the host executing it.
     pub(super) fn drain_pending_connect(&mut self) {
-        let Some(ticket) = self.view.chrome().pending_connect.clone() else {
+        let Some(ticket) = self.chrome().pending_connect.clone() else {
             return;
         };
-        self.view.chrome_update(|c| {
+        self.chrome_update(|c| {
             c.pending_connect = None;
         });
         if ticket.is_empty() {
@@ -224,8 +224,8 @@ impl WindowCtx<'_> {
     /// Toggle the source editor for the focused local knot note. The editor stays in
     /// chrome, but the command is host-drained because the target is a graph member.
     pub(super) fn toggle_focused_knot_editor(&mut self) -> Option<String> {
-        if self.view.chrome().knot_editor_open {
-            self.view.chrome_update(|c| c.close_knot_editor());
+        if self.chrome().knot_editor_open {
+            self.chrome_update(|c| c.close_knot_editor());
             self.view.request_redraw();
             return None;
         }
@@ -253,8 +253,7 @@ impl WindowCtx<'_> {
             })
             .unwrap_or_else(|| Self::starter_knot_body(&url));
         let note = format!("Editing {url}");
-        self.view
-            .chrome_update(move |c| c.open_knot_editor_for(member, url, source));
+        self.chrome_update(move |c| c.open_knot_editor_for(member, url, source));
         self.view.request_redraw();
         Some(note)
     }
@@ -263,8 +262,7 @@ impl WindowCtx<'_> {
     /// authored body and refresh the live note-rendering cache.
     pub(super) fn drain_knot_editor_save(&mut self) -> Option<String> {
         let mut request = None;
-        self.view
-            .chrome_update(|c| request = c.take_knot_editor_save());
+        self.chrome_update(|c| request = c.take_knot_editor_save());
         let Some((member, body)) = request else {
             return None;
         };
@@ -325,10 +323,10 @@ impl WindowCtx<'_> {
     /// note for commands that want to report why they no-opped (the omnibar echoes
     /// it; other callers ignore the return). `None` means "nothing to say".
     pub(super) fn drain_pending_command(&mut self) -> Option<String> {
-        let Some(cmd) = self.view.chrome().pending_command else {
+        let Some(cmd) = self.chrome().pending_command else {
             return None;
         };
-        self.view.chrome_update(|c| c.pending_command = None);
+        self.chrome_update(|c| c.pending_command = None);
         // Audit every host command through the one observability spine, by its registry id
         // (the same id the palette / agent / script address) — the "everything observable"
         // half of the one seam. (Command registry P3.)
@@ -455,8 +453,7 @@ impl WindowCtx<'_> {
         // `chrome_activate` runs.
         let mut note: Option<String> = None;
         for &cmd in &outcome.commands {
-            self.view
-                .chrome_update(move |c| c.run_command_and_close(cmd));
+            self.chrome_update(move |c| c.run_command_and_close(cmd));
             self.drain_pending_connect();
             if let Some(n) = self.drain_pending_command() {
                 note = Some(n);
@@ -618,7 +615,7 @@ impl WindowCtx<'_> {
         let shown = note
             .or(if echo.is_empty() { None } else { Some(echo) })
             .unwrap_or_else(|| self.current_focus_url().unwrap_or_default());
-        self.view.chrome_update(move |c| c.show_location(&shown));
+        self.chrome_update(move |c| c.show_location(&shown));
         self.view.request_redraw();
     }
 
@@ -658,11 +655,9 @@ impl WindowCtx<'_> {
             .content
             .infer_handle
             .command(infer::InferCommand::Generate { id, request });
-        self.shared.observability.record_actor(
-            "infer",
-            "asked",
-            Some(prompt.to_string()),
-        );
+        self.shared
+            .observability
+            .record_actor("infer", "asked", Some(prompt.to_string()));
         tracing::info!(target: "meerkat::infer", id, prompt, "ask received");
         format!("thinking: {prompt}")
     }
@@ -699,7 +694,7 @@ impl WindowCtx<'_> {
                 if due {
                     self.shared.content.ask_last_paint = Some(std::time::Instant::now());
                     let shown = self.shared.content.ask_answer.clone();
-                    self.view.chrome_update(move |c| c.show_location(&shown));
+                    self.chrome_update(move |c| c.show_location(&shown));
                     self.view.request_redraw();
                 }
             }
@@ -710,7 +705,7 @@ impl WindowCtx<'_> {
                 } else {
                     text
                 };
-                self.view.chrome_update(move |c| c.show_location(&shown));
+                self.chrome_update(move |c| c.show_location(&shown));
                 self.view.request_redraw();
                 self.shared
                     .observability
@@ -724,7 +719,7 @@ impl WindowCtx<'_> {
                     Severity::Warn,
                     error.to_string(),
                 );
-                self.view.chrome_update(move |c| c.show_location(&shown));
+                self.chrome_update(move |c| c.show_location(&shown));
                 self.view.request_redraw();
             }
             // Stale-id updates and Cancelled land here and are ignored.
@@ -1085,7 +1080,7 @@ impl WindowCtx<'_> {
         let state = node.and_then(|node| self.shared.content.pages.get(node.url()));
         let inspect = super::inspector::inspector_rows(node, state);
 
-        let chrome = self.view.chrome();
+        let chrome = self.chrome();
         ShellContext {
             current_url: self.current_focus_url().unwrap_or_default(),
             history: chrome.history.entries().to_vec(),
@@ -1107,10 +1102,10 @@ impl WindowCtx<'_> {
     /// chrome can't reach the actor, so it records the intent and the host drains
     /// it here (mirrors [`drain_pending_command`](Self::drain_pending_command)).
     pub(super) fn drain_comms_intent(&mut self) {
-        let Some(intent) = self.view.chrome().comms_intent.clone() else {
+        let Some(intent) = self.chrome().comms_intent.clone() else {
             return;
         };
-        self.view.chrome_update(|c| c.comms_intent = None);
+        self.chrome_update(|c| c.comms_intent = None);
         self.shared
             .observability
             .record_actor("comms", "started", Some(format!("{intent:?}")));
@@ -1143,10 +1138,10 @@ impl WindowCtx<'_> {
     /// current one when Shift is held (the old switcher's Shift+click), else switches
     /// to it. (Chrome bar P4 — sessions in the toolbar.)
     pub(super) fn drain_session_intent(&mut self) {
-        let Some(intent) = self.view.chrome().session_intent else {
+        let Some(intent) = self.chrome().session_intent else {
             return;
         };
-        self.view.chrome_update(|c| c.session_intent = None);
+        self.chrome_update(|c| c.session_intent = None);
         match intent {
             meerkat::SessionIntent::Activate(id) => {
                 if self.view.modifiers.shift {

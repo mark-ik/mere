@@ -132,7 +132,13 @@ impl crate::WindowCtx<'_> {
                 }
                 let shell = self.view.pelt_shell.as_mut().unwrap();
                 shell.resize(ww, wh);
+                // Feed the tile status bar's meter the pane's own production
+                // cost (this `frame()` call, measured last time around): real
+                // data, scoped to what the meter sits inside. The tree glyph
+                // rides `set_tree` above for free.
+                let frame_t0 = std::time::Instant::now();
                 let frame = shell.frame();
+                shell.note_frame_millis(frame_t0.elapsed().as_secs_f32() * 1000.0);
                 workbench_external = frame.external_tiles;
                 workbench_scene = Some((frame.frame_scene, ww, wh));
                 // A tab drag carries a ghost of the dragged tab at the cursor; composite
@@ -295,15 +301,14 @@ impl crate::WindowCtx<'_> {
         &mut self,
         cards: &[(GraphMemberId, [f32; 4], (u32, u32))],
     ) {
-        let target = self.view.chrome().knot_target;
+        let target = self.chrome().knot_target;
         let rect = target.and_then(|member| {
             cards
                 .iter()
                 .find_map(|(m, rect, _)| (*m == member).then_some(*rect))
         });
-        if self.view.chrome().knot_editor_rect != rect {
-            self.view
-                .chrome_update(move |c| c.set_knot_editor_rect(rect));
+        if self.chrome().knot_editor_rect != rect {
+            self.chrome_update(move |c| c.set_knot_editor_rect(rect));
         }
     }
 }

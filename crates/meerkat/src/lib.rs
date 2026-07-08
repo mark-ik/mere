@@ -192,9 +192,11 @@ pub struct Chrome {
     /// Which panes are currently open — mirrored from Shell's frame_layout each
     /// frame so the shellbar buttons show the correct active state.
     pub shellbar_panes: ShellbarPaneStates,
-    /// Which window edge the shellbar is docked to — mirrored from Shell so the
-    /// view builds the right flex direction.
-    pub shellbar_edge: ShellbarEdge,
+    // `shellbar_edge` no longer lives here: the shellbar's dock geometry (flex direction)
+    // is applied host-side each render via `set_attribute` from `presentation.shellbar_edge`,
+    // so the view never read this mirror and its only effect was a no-op chrome rebuild on
+    // redock. (One state, N windows — Slice 1; the remaining shellbar_hidden / sessions /
+    // comms projections separate at Slice 3's AppState lens.)
     /// Whether the shellbar is hidden by the user's toggle — mirrored from Shell so the
     /// chrome view omits the strip. Distinct from `slim` (a leaf's chrome): this hides
     /// the shellbar on a full-chrome window. (Hide-shellbar.)
@@ -217,6 +219,11 @@ pub struct Chrome {
     pub knot_editor_rect: Option<[f32; 4]>,
     /// One-shot save request captured by the editor's chrome button.
     pub knot_save_requested: bool,
+    /// Whether the editor is in preview mode: the opaque source overlay is dropped so
+    /// the note tile behind (which renders live from the same buffer) shows through, a
+    /// read-only rendered view. `false` is the source-edit mode. Toggled by the header
+    /// button / Ctrl+E. (Djot editor — Phase 2 toggle source/preview.)
+    pub knot_editor_preview: bool,
     /// The open graph sessions, as toolbar chips (Chrome bar P4 — sessions moved out
     /// of the shellbar). Host-synced each frame from the session pool, ordered like
     /// `cycle_session`; the active one carries `active`. Rendered inline up to a cap,

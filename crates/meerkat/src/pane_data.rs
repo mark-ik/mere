@@ -189,7 +189,7 @@ impl WindowCtx<'_> {
     /// long since the last sync activity. Drawn from the same `SyncIndicator` the
     /// host folds each frame, so it stays honest (no placebo). (Chrome bar P1.)
     pub(super) fn apparatus_sync_rows(&self) -> Vec<(String, String)> {
-        let indicator = &self.view.chrome().sync;
+        let indicator = &self.multi.state().shared.sync;
         build_apparatus_sync_rows(ApparatusSyncInput {
             active: indicator.active,
             label: indicator.label.clone(),

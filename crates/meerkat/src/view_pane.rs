@@ -88,7 +88,12 @@ where
     // Exercised by the overlay_probe end-to-end test today; the live caller is the
     // first real overlay feature (overlay-roots P6 — WindowView placement).
     #[allow(dead_code)]
-    pub fn paint_list(&mut self, w: u32, h: u32, scroll: &ScrollOffsets<NodeId>) -> ServalPaintList {
+    pub fn paint_list(
+        &mut self,
+        w: u32,
+        h: u32,
+        scroll: &ScrollOffsets<NodeId>,
+    ) -> ServalPaintList {
         let sheet: Vec<&str> = self.sheets.iter().map(String::as_str).collect();
         let dom = self.runner.dom();
         PaneSession::paint_list(&mut self.session, &dom, &sheet, false, w, h, scroll)

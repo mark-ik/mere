@@ -212,25 +212,62 @@ pub(crate) fn knot_editor_pane(c: &Chrome) -> ChromeView {
         c.knot_editor_label.clone()
     };
     let title_text = el::<_, Chrome, ()>("div", title).attr("class", "knot-editor-title-text");
-    let save = button(
+    // The action buttons: an optional preview toggle (flips the opaque source overlay off,
+    // revealing the live-rendered note tile behind — only bound notes have a tile, so it is
+    // hidden without a target; the label names the view you switch *to*), then Save + close.
+    // (Phase 2 toggle.)
+    let mut actions_children: Vec<ChromeView> = Vec::new();
+    if c.knot_target.is_some() {
+        let toggle_label = if c.knot_editor_preview {
+            "Edit"
+        } else {
+            "Preview"
+        };
+        actions_children.push(Box::new(button(
+            toggle_label,
+            "knot-editor-btn knot-editor-preview",
+            |c: &mut Chrome, _: PointerClick| c.toggle_knot_editor_preview(),
+        )));
+    }
+    actions_children.push(Box::new(button(
         "Save",
         "knot-editor-btn knot-editor-save",
         |c: &mut Chrome, _: PointerClick| c.request_knot_editor_save(),
-    );
-    let close_x = button(
+    )));
+    actions_children.push(Box::new(button(
         "\u{00d7}",
         "knot-editor-btn knot-editor-close",
         |c: &mut Chrome, _: PointerClick| c.close_knot_editor(),
-    );
-    let actions = el::<_, Chrome, ()>("div", (save, close_x)).attr("class", "knot-editor-actions");
+    )));
+    let actions = el::<_, Chrome, ()>("div", actions_children).attr("class", "knot-editor-actions");
     let header =
         el::<_, Chrome, ()>("div", (title_text, actions)).attr("class", "knot-editor-title");
 
-    // The source field: a `text_field` lensed onto the knot buffer, exactly the
-    // comms-draft pattern. Its class is the focus key (see ime.rs / input.rs).
-    // A multi-line styled textarea: the `edit_multiline` handler + a `<textarea>` tag
-    // (Enter inserts a newline, Up/Down move between lines), with illume's highlight +
-    // entity spans painted as `syntax-*` classes that tinct's palette colours.
+    let (x0, y0, w, h) = match c.knot_editor_rect {
+        Some([x0, y0, x1, y1]) => (x0, y0, (x1 - x0).max(1.0), (y1 - y0).max(1.0)),
+        None => (160.0, 72.0, 640.0, 520.0),
+    };
+
+    if c.knot_editor_preview {
+        // Preview: a compact transparent header strip only, so the live-rendered note tile
+        // behind (rendered from the same buffer, see render/cards.rs) shows through and stays
+        // scrollable — the pane's laid-out rect shrinks to the header, so `knot_editor_pane_at`
+        // routes only header clicks to chrome and lets tile presses fall through.
+        let style = format!(
+            "position: absolute; left: {x0}px; top: {y0}px; width: {w}px; \
+             box-sizing: border-box; z-index: 90;"
+        );
+        return Box::new(
+            el::<_, Chrome, ()>("div", header)
+                .attr("class", "knot-editor-pane knot-editor-preview-mode")
+                .attr("style", style),
+        );
+    }
+
+    // Edit: the opaque source field over the tile. A `text_field` lensed onto the knot
+    // buffer (the comms-draft pattern); its class is the focus key (see ime.rs / input.rs).
+    // A multi-line styled textarea (Enter inserts a newline, Up/Down move between lines),
+    // with illume's highlight + entity spans painted as `syntax-*` classes tinct colours.
     let make: fn(&mut TextInput) -> TextField =
         |t: &mut TextInput| styled_textarea(t, &crate::knot_highlight::knot_styles(t.text()));
     let to_source: fn(&mut Chrome) -> &mut TextInput = |c: &mut Chrome| &mut c.knot_source;
@@ -241,23 +278,12 @@ pub(crate) fn knot_editor_pane(c: &Chrome) -> ChromeView {
             "style",
             "display: block; min-height: 360px; font-family: monospace; white-space: pre-wrap;",
         );
-    let style = if let Some([x0, y0, x1, y1]) = c.knot_editor_rect {
-        let w = (x1 - x0).max(1.0);
-        let h = (y1 - y0).max(1.0);
-        format!(
-            "position: absolute; left: {x0}px; top: {y0}px; width: {w}px; height: {h}px; \
-             box-sizing: border-box; background: #1b1b1f; color: #e6e6e6; \
-             border: 1px solid #3a3a42; border-radius: 6px; padding: 12px; \
-             overflow: auto; z-index: 90;"
-        )
-    } else {
-        "position: absolute; left: 160px; top: 72px; width: 640px; height: 520px; \
+    let style = format!(
+        "position: absolute; left: {x0}px; top: {y0}px; width: {w}px; height: {h}px; \
          box-sizing: border-box; background: #1b1b1f; color: #e6e6e6; \
          border: 1px solid #3a3a42; border-radius: 6px; padding: 12px; \
          overflow: auto; z-index: 90;"
-            .to_string()
-    };
-
+    );
     Box::new(
         el::<_, Chrome, ()>("div", (header, source))
             .attr("class", "knot-editor-pane")

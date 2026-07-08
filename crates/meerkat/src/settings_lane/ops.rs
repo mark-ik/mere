@@ -184,8 +184,8 @@ impl WindowCtx<'_> {
             self.view.wallet_unlock_status = None;
         }
         if tiles.is_empty() {
-            if self.view.settings_panes_open() {
-                self.view.set_settings_panes(Vec::new(), String::new());
+            if self.settings_panes_open() {
+                self.set_settings_panes(Vec::new(), String::new());
             }
             return;
         }
@@ -218,7 +218,7 @@ impl WindowCtx<'_> {
             })
             .collect();
         let panel_bg = panel_bg_rgb(&self.shared.presentation.chrome_theme);
-        self.view.set_settings_panes(panes, panel_bg);
+        self.set_settings_panes(panes, panel_bg);
     }
 
     /// Build the node shape-editor swatch for a `node:<id>/appearance` page: the subject node's

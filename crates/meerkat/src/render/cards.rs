@@ -59,7 +59,7 @@ impl crate::WindowCtx<'_> {
     /// the committed body from `shared.content.pages` and stay cached. (Djot editor — Phase 2
     /// live-on-change render refresh.)
     pub(crate) fn knot_editor_live_body(&self, member: GraphMemberId) -> Option<String> {
-        let chrome = self.view.chrome();
+        let chrome = self.chrome();
         (chrome.knot_editor_open && chrome.knot_target == Some(member))
             .then(|| chrome.knot_source.text().to_string())
     }
@@ -203,24 +203,28 @@ impl crate::WindowCtx<'_> {
                     base_sig,
                 }
             } else {
-                super::paint::ChromeRasterPlan::Full(crate::serval_render::scene_from_session_with_masks(
+                super::paint::ChromeRasterPlan::Full(
+                    crate::serval_render::scene_from_session_with_masks(
+                        session.layout(),
+                        &dom,
+                        cursor,
+                        chrome_scroll,
+                        w,
+                        h,
+                    ),
+                )
+            }
+        } else {
+            super::paint::ChromeRasterPlan::Full(
+                crate::serval_render::scene_from_session_with_masks(
                     session.layout(),
                     &dom,
                     cursor,
                     chrome_scroll,
                     w,
                     h,
-                ))
-            }
-        } else {
-            super::paint::ChromeRasterPlan::Full(crate::serval_render::scene_from_session_with_masks(
-                session.layout(),
-                &dom,
-                cursor,
-                chrome_scroll,
-                w,
-                h,
-            ))
+                ),
+            )
         };
         if matches!(chrome, super::paint::ChromeRasterPlan::Full(_)) {
             self.view.chrome_base_tex = None;
@@ -842,7 +846,8 @@ impl crate::WindowCtx<'_> {
                 .constellation
                 .scene_stats(*member)
                 .map(|s| s.op_count);
-            let ready = scene_present || self.shared.content.constellation.packet(*member).is_some();
+            let ready =
+                scene_present || self.shared.content.constellation.packet(*member).is_some();
             let blank_scene = scene_present && ops.unwrap_or(0) == 0;
             let unhealthy = if has_texture { blank_scene } else { ready };
             if unhealthy {

@@ -309,8 +309,7 @@ impl WindowCtx<'_> {
     /// a missing file at boot).
     pub(super) fn remove_custom_mode(&mut self, id: &str) {
         use register_theme::theme::Mode;
-        if let Err(err) =
-            crate::mode_store::delete_custom_mode(&self.shared.session.mere_root, id)
+        if let Err(err) = crate::mode_store::delete_custom_mode(&self.shared.session.mere_root, id)
         {
             tracing::warn!(%err, "failed to remove custom mode file");
         }

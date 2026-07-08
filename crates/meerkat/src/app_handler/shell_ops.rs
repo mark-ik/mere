@@ -132,8 +132,10 @@ impl Shell {
                             let mut view = self.build_window_view_for(from);
                             view.branch_graphlet = Some(graphlet_id);
                             if let Some(label) = anchor_label {
-                                view.chrome_update(|c| {
-                                    c.branch_label = Some(format!("\u{2387} {label}"))
+                                let pid = view.projection_id;
+                                self.multi.update_local(pid, |app| {
+                                    app.windows[pid.0].chrome.branch_label =
+                                        Some(format!("\u{2387} {label}"))
                                 });
                             }
                             self.spawn_window_with_view(event_loop, view);
@@ -166,7 +168,10 @@ impl Shell {
                             let mut view = self.build_window_view_for(graph);
                             view.branch_graphlet = Some(branch_id);
                             if let Some(label) = label {
-                                view.chrome_update(|c| c.branch_label = Some(label));
+                                let pid = view.projection_id;
+                                self.multi.update_local(pid, |app| {
+                                    app.windows[pid.0].chrome.branch_label = Some(label)
+                                });
                             }
                             self.spawn_window_with_view(event_loop, view);
                         }
@@ -184,7 +189,10 @@ impl Shell {
                         let mut view = self.build_window_view_for(graph);
                         view.branch_graphlet = Some(graphlet);
                         if let Some(label) = label {
-                            view.chrome_update(|c| c.branch_label = Some(label));
+                            let pid = view.projection_id;
+                            self.multi.update_local(pid, |app| {
+                                app.windows[pid.0].chrome.branch_label = Some(label)
+                            });
                         }
                         self.spawn_window_with_view(event_loop, view);
                     }
@@ -210,8 +218,10 @@ impl Shell {
                             let mut view = self.build_window_view_for(from);
                             view.branch_graphlet = Some(graphlet_id);
                             if let Some(label) = anchor_label {
-                                view.chrome_update(|c| {
-                                    c.branch_label = Some(format!("\u{25ce} {chip}: {label}"))
+                                let pid = view.projection_id;
+                                self.multi.update_local(pid, |app| {
+                                    app.windows[pid.0].chrome.branch_label =
+                                        Some(format!("\u{25ce} {chip}: {label}"))
                                 });
                             }
                             self.spawn_window_with_view(event_loop, view);
@@ -415,7 +425,15 @@ impl Shell {
         if let Some(mut wc) = self.window_ctx(id) {
             wc.persist_workbench_boundary_thumbnails();
         }
+        let projection = self.windows.get(&id).map(|v| v.projection_id);
         if self.windows.remove(&id).is_some() {
+            // Tear down this window's projection in the shared runner (its view tree +
+            // document detach). Its `WindowLocal` slot stays in place — tombstoned, never
+            // popped — so the surviving windows' `ProjectionId`s keep indexing
+            // `AppState.windows`. (One state, N windows — Slice 3.)
+            if let Some(projection) = projection {
+                self.multi.remove_projection(projection);
+            }
             // Drop this secondary's AccessKit bridge with its window (MW3 step 6) — its
             // adapter is subclassed onto the now-gone OS window. The primary's bridge is
             // the separate `a11y_bridge` field and is untouched.

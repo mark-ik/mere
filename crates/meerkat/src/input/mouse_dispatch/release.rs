@@ -72,7 +72,7 @@ impl WindowCtx<'_> {
                 };
                 self.commands.push(cmd);
             }
-            self.view.chrome_update(|c| c.tear_ghost = None);
+            self.chrome_update(|c| c.tear_ghost = None);
             self.view.request_redraw();
             return;
         }
@@ -163,7 +163,7 @@ impl WindowCtx<'_> {
         if button == MouseButton::Left {
             if let Some((base, href)) = self.card_link_at(x, y) {
                 let url = nav::resolve_href(&base, &href);
-                self.view.chrome_update(|c| c.follow_link(url));
+                self.chrome_update(|c| c.follow_link(url));
                 self.sync_orrery();
                 self.view.request_redraw();
                 return;
@@ -180,7 +180,7 @@ impl WindowCtx<'_> {
                     self.open_link_in_new_tab(member, url);
                 } else {
                     self.focus_workbench_member(member);
-                    self.view.chrome_update(|c| c.follow_link(url));
+                    self.chrome_update(|c| c.follow_link(url));
                     self.sync_orrery();
                     self.view.request_redraw();
                 }

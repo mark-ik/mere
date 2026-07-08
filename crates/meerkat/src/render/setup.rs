@@ -171,49 +171,39 @@ impl crate::WindowCtx<'_> {
                 &obs,
                 &graph_metrics,
             );
-            self.view
-                .set_list_pane(Apparatus, "apparatus", items, Some(rect));
-        } else if self.view.list_pane_open(Apparatus) {
-            self.view
-                .set_list_pane(Apparatus, "apparatus", Vec::new(), None);
+            self.set_list_pane(Apparatus, "apparatus", items, Some(rect));
+        } else if self.list_pane_open(Apparatus) {
+            self.set_list_pane(Apparatus, "apparatus", Vec::new(), None);
         }
         // Steward + Inspector: display-only `label: value` rows under a unique utility root.
         if let Some(rect) = rects[1] {
             // Steward builds its own items (status rows + clickable action buttons),
             // mirroring Alembic, so the focused-op verbs are reachable by click. (A2.)
             let items = self.steward_items();
-            self.view
-                .set_list_pane(Steward, "utility-pane steward", items, Some(rect));
-        } else if self.view.list_pane_open(Steward) {
-            self.view
-                .set_list_pane(Steward, "utility-pane steward", Vec::new(), None);
+            self.set_list_pane(Steward, "utility-pane steward", items, Some(rect));
+        } else if self.list_pane_open(Steward) {
+            self.set_list_pane(Steward, "utility-pane steward", Vec::new(), None);
         }
         if let Some(rect) = rects[2] {
             let rows = self.utility_pane_rows(&PaneContent::Inspector);
             let items = crate::utility_panes::utility_pane_items(&PaneContent::Inspector, &rows);
-            self.view
-                .set_list_pane(Inspector, "utility-pane inspector", items, Some(rect));
-        } else if self.view.list_pane_open(Inspector) {
-            self.view
-                .set_list_pane(Inspector, "utility-pane inspector", Vec::new(), None);
+            self.set_list_pane(Inspector, "utility-pane inspector", items, Some(rect));
+        } else if self.list_pane_open(Inspector) {
+            self.set_list_pane(Inspector, "utility-pane inspector", Vec::new(), None);
         }
         // Trail: its own sectioned items (history / recent / removed); a Removed row recovers.
         if let Some(rect) = rects[3] {
             let items = self.trail_items();
-            self.view
-                .set_list_pane(Trail, "utility-pane trail", items, Some(rect));
-        } else if self.view.list_pane_open(Trail) {
-            self.view
-                .set_list_pane(Trail, "utility-pane trail", Vec::new(), None);
+            self.set_list_pane(Trail, "utility-pane trail", items, Some(rect));
+        } else if self.list_pane_open(Trail) {
+            self.set_list_pane(Trail, "utility-pane trail", Vec::new(), None);
         }
         // Alembic: memory — Recent / Saved / Engrams sections (the Engrams list reads eidetic).
         if let Some(rect) = rects[4] {
             let items = self.alembic_items();
-            self.view
-                .set_list_pane(Alembic, "utility-pane alembic", items, Some(rect));
-        } else if self.view.list_pane_open(Alembic) {
-            self.view
-                .set_list_pane(Alembic, "utility-pane alembic", Vec::new(), None);
+            self.set_list_pane(Alembic, "utility-pane alembic", items, Some(rect));
+        } else if self.list_pane_open(Alembic) {
+            self.set_list_pane(Alembic, "utility-pane alembic", Vec::new(), None);
         }
     }
 
@@ -336,8 +326,9 @@ impl crate::WindowCtx<'_> {
         // before laying the panes out, so the other panes make room for it. (Comms.)
         self.sync_comms_pane();
 
-        // Sync shellbar pane-open states + edge into Chrome before the runner so
-        // the view rebuilds with current active states. (Shellbar F2.1.)
+        // Sync shellbar pane-open states + hidden flag into Chrome before the runner so
+        // the view rebuilds with current active states. (Shellbar F2.1.) The dock edge is
+        // applied host-side from `presentation` each render, so it is not mirrored here.
         let sb_panes = ShellbarPaneStates {
             workbench: self.pane_of_content(&PaneContent::Workbench).is_some(),
             roster: self.pane_of_content(&PaneContent::Roster).is_some(),
@@ -349,15 +340,10 @@ impl crate::WindowCtx<'_> {
             steward: self.pane_of_content(&PaneContent::Steward).is_some(),
             comms: self.pane_of_content(&PaneContent::Comms).is_some(),
         };
-        let sb_edge = self.shared.presentation.shellbar_edge;
         let sb_hidden = self.shared.presentation.shellbar_hidden;
-        if self.view.chrome().shellbar_panes != sb_panes
-            || self.view.chrome().shellbar_edge != sb_edge
-            || self.view.chrome().shellbar_hidden != sb_hidden
-        {
-            self.view.chrome_update(move |c| {
+        if self.chrome().shellbar_panes != sb_panes || self.chrome().shellbar_hidden != sb_hidden {
+            self.chrome_update(move |c| {
                 c.shellbar_panes = sb_panes;
-                c.shellbar_edge = sb_edge;
                 c.shellbar_hidden = sb_hidden;
             });
         }
@@ -420,19 +406,19 @@ impl crate::WindowCtx<'_> {
                 })
                 .collect()
         };
-        if self.view.chrome().sessions != chips {
-            self.view.chrome_update(move |c| c.sessions = chips);
+        if self.chrome().sessions != chips {
+            self.chrome_update(move |c| c.sessions = chips);
         }
 
         // Sync the focused node's live find-match count into Chrome so the find bar
         // shows "active/total" before the chrome is rasterized this frame. (Find S2.)
-        if self.view.chrome().find_open {
+        if self.chrome().find_open {
             let find_count = self
                 .focused_member()
                 .map(|m| self.find_matches_for(m).len())
                 .unwrap_or(0);
-            if self.view.chrome().find_count != find_count {
-                self.view.chrome_update(move |c| c.find_count = find_count);
+            if self.chrome().find_count != find_count {
+                self.chrome_update(move |c| c.find_count = find_count);
             }
         }
         let toolbar_h = self.toolbar_height().min(h);
@@ -559,7 +545,7 @@ impl crate::WindowCtx<'_> {
         // Chrome scene over the full window. Paint the caret / selection of the
         // focused field — the palette query when open, else the omnibar (byte
         // offsets from the field's char model).
-        let cursor = self.view.runner.focus().map(|node| {
+        let cursor = self.multi.focus(self.view.projection_id).map(|node| {
             let field = self.caret_field(node);
             let byte_of = |i: usize| {
                 field

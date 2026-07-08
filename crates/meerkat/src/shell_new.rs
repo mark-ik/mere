@@ -99,8 +99,19 @@ impl Shell {
         }
         let mut chrome = Chrome::new("mere://welcome");
         chrome.settings.tab_cap = saved_settings.tab_cap;
-        let runner = window_view::shell_runner(dom.clone(), chrome);
-        let content_location = runner.state().chrome.content_location().to_string();
+        let content_location = chrome.content_location().to_string();
+        // Build the one runner: `AppState` (the shared chrome chips + the primary's
+        // `WindowLocal`) projected into the primary window. The multi-runner owns the shared
+        // chrome now — Slice 0's `Rc<RefCell<SharedChrome>>` cell is gone. Every window minted
+        // later pushes another projection over this same state, so a status write is seen
+        // everywhere with no fan-out; the primary is `ProjectionId(0)`. (One state, N windows
+        // — Slice 3.)
+        let mut multi = window_view::ShellMultiRunner::new(window_view::AppState {
+            shared: meerkat::SharedChrome::default(),
+            windows: vec![window_view::WindowLocal::new(chrome)],
+        });
+        let primary_projection =
+            multi.push_projection(dom.clone(), Box::new(|app| window_view::shell_view(app, 0)));
         // Durable content cache (S3.2c), shared (persona-scoped) under the mere root
         // so sessions don't re-fetch each other's pages; `None` disables caching.
         let store = match FjallStore::open(mere_root.join("content")) {
@@ -456,7 +467,7 @@ impl Shell {
             window_view::WindowKind::Primary,
             active_graph,
             dom,
-            runner,
+            primary_projection,
             Workbench::new(),
         );
         view.centered = restored_camera.is_some();
@@ -565,9 +576,7 @@ impl Shell {
                     ask_answer: String::new(),
                     ask_last_paint: None,
                     #[cfg(feature = "content-affinity")]
-                    content_arrangement: Some(
-                        crate::content_affinity::ContentArrangement::new(),
-                    ),
+                    content_arrangement: Some(crate::content_affinity::ContentArrangement::new()),
                     engine_registry,
                     engine_pins: HashMap::new(),
                     route_policy: inker::routing::EngineRoutePolicy::default(),
@@ -635,6 +644,7 @@ impl Shell {
                 },
                 observability: HostObservability::new(),
             },
+            multi,
             orreries,
             orrery_lru,
             graphlets: HashMap::new(),

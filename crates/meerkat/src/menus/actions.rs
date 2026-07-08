@@ -68,7 +68,7 @@ impl WindowCtx<'_> {
         self.view.context_set.clear();
         self.view.context_origin = None;
         self.view.context_link = None;
-        self.view.chrome_update(Chrome::close_context_menu);
+        self.chrome_update(Chrome::close_context_menu);
         self.view.request_redraw();
     }
 
@@ -166,8 +166,7 @@ impl WindowCtx<'_> {
             // can't be right-clicked, so this row only ever hides. (Hide-shellbar.)
             ContextItem::new("Hide shellbar", ContextAction::ShellbarToggleVisibility),
         ];
-        self.view
-            .chrome_update(move |c| c.open_context_menu(x, y, items));
+        self.chrome_update(move |c| c.open_context_menu(x, y, items));
         self.view.request_redraw();
     }
 
@@ -179,21 +178,20 @@ impl WindowCtx<'_> {
     /// and move the queued action into `pending_context` for [`drain_pending_context`]
     /// (called right after this) to run over the selection. (Command registry P2.)
     pub(crate) fn drain_palette_context_action(&mut self) {
-        let Some(action) = self.view.chrome().pending_palette_action else {
+        let Some(action) = self.chrome().pending_palette_action else {
             return;
         };
-        self.view.chrome_update(|c| c.pending_palette_action = None);
+        self.chrome_update(|c| c.pending_palette_action = None);
         self.view.context_set = self.selection_working_set();
         self.view.context_origin = None;
-        self.view
-            .chrome_update(move |c| c.pending_context = Some(action));
+        self.chrome_update(move |c| c.pending_context = Some(action));
     }
 
     pub(crate) fn drain_pending_context(&mut self) {
-        let Some(action) = self.view.chrome().pending_context else {
+        let Some(action) = self.chrome().pending_context else {
             return;
         };
-        self.view.chrome_update(|c| c.pending_context = None);
+        self.chrome_update(|c| c.pending_context = None);
         // A submenu-parent sentinel never picks an action (it expands its children via the
         // press-gate intercept / `open_submenu`); a stray dispatch is a harmless no-op, returned
         // before any audit so it emits no diagnostic noise. (Submenus.)
@@ -226,7 +224,7 @@ impl WindowCtx<'_> {
         // as a chrome command intent; the per-frame command drain executes it. No member set.
         if let ContextAction::RunCommand(verb) = action {
             if let Some(cmd) = meerkat::command::Command::from_id(verb) {
-                self.view.chrome_update(move |c| c.run_command_intent(cmd));
+                self.chrome_update(move |c| c.run_command_intent(cmd));
             }
             self.view.request_redraw();
             return;
@@ -500,7 +498,7 @@ impl WindowCtx<'_> {
         // These open tiles, so summon the workbench pane (closing the suggestions
         // dropdown on the way in, like Ctrl+T does).
         if !self.workbench_open() {
-            self.view.chrome_update(Chrome::close_suggestions);
+            self.chrome_update(Chrome::close_suggestions);
         }
         self.open_workbench();
         match action {

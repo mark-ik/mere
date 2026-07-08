@@ -611,10 +611,7 @@ impl ContentRuntime {
                 }
             }
             #[cfg(not(target_arch = "wasm32"))]
-            ContentCommand::ClearOverlay {
-                name,
-                viewport_gen,
-            } => {
+            ContentCommand::ClearOverlay { name, viewport_gen } => {
                 if let Some(content) = self.current.as_mut() {
                     content.viewport_gen = viewport_gen;
                     if let Some((_, layout)) = content.html.as_mut() {

@@ -711,7 +711,8 @@ fn shell_container_hosts_chrome_and_pane_under_one_runner() {
     // The state arg is unused: the lenses pull each surface's sub-state from the
     // runner at build/rebuild time, so the root view is pure structure.
     fn shell_view(_s: &ShellState) -> ShellView {
-        let make_chrome: fn(&mut Chrome) -> ChromeView = |c: &mut Chrome| chrome_view(c);
+        let make_chrome: fn(&mut Chrome) -> ChromeView =
+            |c: &mut Chrome| chrome_view(c, &crate::CrawlIndicator::default());
         let to_chrome: fn(&mut ShellState) -> &mut Chrome = |s: &mut ShellState| &mut s.chrome;
         let make_pane: fn(&mut DemoPane) -> DemoView = |p: &mut DemoPane| demo_pane_view(p);
         let to_pane: fn(&mut ShellState) -> &mut DemoPane = |s: &mut ShellState| &mut s.pane;

@@ -231,9 +231,9 @@ impl crate::WindowCtx<'_> {
         // each frame, so this skips the per-frame view re-run + diff entirely. (Perf.)
         let mut view_rerun = false;
         let mut view_rerun_us = 0;
-        if &orrery_render != self.view.orrery_render() {
+        if &orrery_render != self.orrery_render() {
             let view_rerun_t = std::time::Instant::now();
-            self.view.set_orrery(orrery_render);
+            self.set_orrery(orrery_render);
             view_rerun = true;
             view_rerun_us = view_rerun_t.elapsed().as_micros();
         }

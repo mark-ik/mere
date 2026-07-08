@@ -12,7 +12,10 @@ use super::*;
 /// A chrome scene plus the box-shadow mask requests it references. The masks must
 /// be built (`build_box_shadow_mask`) immediately before this scene rasterizes, or
 /// its blurred shadows reference unbuilt mask images and paint black. (Box-shadow.)
-type ChromeScene = (netrender::Scene, Vec<paint_list_render::BoxShadowMaskRequest>);
+type ChromeScene = (
+    netrender::Scene,
+    Vec<paint_list_render::BoxShadowMaskRequest>,
+);
 
 pub(super) enum ChromeRasterPlan {
     Full(ChromeScene),
@@ -189,7 +192,17 @@ impl WindowCtx<'_> {
             }
         };
         let chrome_raster_us = chrome_raster_t.elapsed().as_micros();
-        if let Some(tex) = _chrome_tex.as_ref() {
+        // Self-capture works in both raster plans: `Full` exposes the whole chrome as
+        // `_chrome_tex`; `Partitioned` (the settled-frame path) keeps the chrome-minus-orrery
+        // in `chrome_base_tex` — the orrery subtree it omits is the gnodes/focus card, which
+        // this chrome-layer capture drops anyway. Falling back to the base texture keeps the
+        // headed-verify capture alive on settled frames instead of silently no-opping (it was
+        // dead whenever the shell settled into the partitioned path). (Capture in partitioned
+        // mode.)
+        let capture_tex = _chrome_tex
+            .as_ref()
+            .or_else(|| self.view.chrome_base_tex.as_ref().map(|t| &t.tex));
+        if let Some(tex) = capture_tex {
             maybe_dump_chrome_capture(core.device(), core.queue(), tex, w, h);
         }
         // The orrery paints its own opaque backdrop, but clear to the same dark

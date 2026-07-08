@@ -27,6 +27,7 @@ impl Shell {
         let pool_count = self.orreries.len();
         let mut wc = WindowCtx {
             view,
+            multi: &mut self.multi,
             shared: &mut self.shared,
             orreries: &mut self.orreries,
             graphlets: &self.graphlets,
@@ -59,6 +60,14 @@ impl Shell {
                 .as_ref()
                 .expect("a primary or pending view"),
         }
+    }
+
+    /// This window's local view-state, read-only, resolved from the shared multi-runner by
+    /// the focused (primary/pending) view's `projection_id` — the read path for the
+    /// harness's `&Shell` assertions, which can't build a `WindowCtx`. (Slice 3.)
+    #[cfg(any(test, feature = "agent-harness"))]
+    pub(crate) fn window_local(&self) -> &window_view::WindowLocal {
+        &self.multi.state().windows[self.view().projection_id.0]
     }
 
     /// The focused window's orrery resolved from the pool — for the read/write paths
@@ -103,6 +112,7 @@ impl Shell {
         };
         let mut wc = WindowCtx {
             view,
+            multi: &mut self.multi,
             shared: &mut self.shared,
             orreries: &mut self.orreries,
             graphlets: &self.graphlets,
@@ -158,7 +168,7 @@ impl Shell {
     /// start at rest (no restored camera / frame); a spawned window opens on the
     /// shared graph the way the primary first did. The caller (`SpawnWindow`) creates
     /// the OS window + surface around it. (Multi-window MW3.)
-    pub(crate) fn build_window_view(&self) -> window_view::WindowView {
+    pub(crate) fn build_window_view(&mut self) -> window_view::WindowView {
         let active_graph = self
             .shared
             .session
@@ -173,25 +183,32 @@ impl Shell {
     /// `bind_graph` rather than the active session's root graph — a **fork** opens its
     /// window onto a freshly pooled graph while the active session stays on the donor.
     /// (Tear-out gestures G4.)
-    pub(crate) fn build_window_view_for(&self, bind_graph: GraphId) -> window_view::WindowView {
+    pub(crate) fn build_window_view_for(&mut self, bind_graph: GraphId) -> window_view::WindowView {
         let dom: Rc<RefCell<ScriptedDom>> = Rc::new(RefCell::new(ScriptedDom::new()));
         let mut chrome = Chrome::new("mere://welcome");
         chrome.settings.tab_cap = self.shared.presentation.saved_tab_cap;
         chrome.slim = true; // a spawned window is a leaf: slim chrome (no shellbar / switcher)
-        // Seed the leaf's sync chip from the primary's current state so it shows real
-        // standing immediately, not a stale "p2p off" until the next status change. The
-        // fan-out keeps it current after. (MW3 step 5; real-sync-feedback.)
-        chrome.sync = self.focused_view().chrome().sync.clone();
-        // Likewise seed the crawl chip: one crawl is shared kernel state, so a new leaf
-        // should show the same "crawling: N pages" immediately. (Crawl controls; MW3.)
-        chrome.crawl = self.focused_view().chrome().crawl.clone();
-        let runner = window_view::shell_runner(dom.clone(), chrome);
-        let content_location = runner.state().chrome.content_location().to_string();
+        let content_location = chrome.content_location().to_string();
+        // Mint this window's local view-state and push its projection into the shared
+        // multi-runner: append the `WindowLocal` first (so `windows[i]` exists for the
+        // projection's logic to read), then push a projection whose logic lenses `shell_view`
+        // onto index `i`. The leaf reads the one shared chrome (crawl chip) with no
+        // per-window copy and no fan-out — a second window is a second projection over the
+        // one state. `push_projection` returns `ProjectionId(i)` since both vecs only ever
+        // append (a close tombstones, never pops), keeping the index aligned. (One state, N
+        // windows — Slice 3.)
+        let i = self.multi.state().windows.len();
+        let local = window_view::WindowLocal::new(chrome);
+        self.multi.update(|app| app.windows.push(local));
+        let projection_id = self.multi.push_projection(
+            dom.clone(),
+            Box::new(move |app| window_view::shell_view(app, i)),
+        );
         let mut view = window_view::WindowView::new(
             window_view::WindowKind::Leaf,
             bind_graph,
             dom,
-            runner,
+            projection_id,
             Workbench::new(),
         );
         view.content_location = content_location;
@@ -206,7 +223,7 @@ impl Shell {
     /// propagate both ways and closing the leaf does not delete the node (brief §4.1).
     /// (Tear-out gestures G2.)
     pub(crate) fn build_leaf_view_for(
-        &self,
+        &mut self,
         bind_graph: GraphId,
         node: uuid::Uuid,
     ) -> window_view::WindowView {

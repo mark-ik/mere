@@ -21,11 +21,11 @@ use crate::card::LinkHit;
 // message contract entirely, so they need no `ContentCommandMessage` variant.
 // (Overlay-roots P1.)
 #[cfg(target_arch = "wasm32")]
-use content_contract::{ContentCommandMessage, ContentStateMessage, FetchedMessage};
-#[cfg(target_arch = "wasm32")]
 use super::{ContentCommand, ContentState};
 #[cfg(target_arch = "wasm32")]
 use crate::fetch::Fetched;
+#[cfg(target_arch = "wasm32")]
+use content_contract::{ContentCommandMessage, ContentStateMessage, FetchedMessage};
 
 #[cfg(target_arch = "wasm32")]
 fn fetched_to_message(fetched: Fetched) -> FetchedMessage {

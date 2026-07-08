@@ -140,8 +140,7 @@ impl WindowCtx<'_> {
             ContextItem::new("Open link in new tab", ContextAction::OpenLinkNewTab),
             ContextItem::new("Copy link address", ContextAction::CopyLink),
         ];
-        self.view
-            .chrome_update(move |c| c.open_context_menu(x, y, items));
+        self.chrome_update(move |c| c.open_context_menu(x, y, items));
         self.view.request_redraw();
         true
     }

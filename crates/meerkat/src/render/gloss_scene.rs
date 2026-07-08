@@ -25,9 +25,8 @@ impl WindowCtx<'_> {
         gloss_rect: Option<[f32; 4]>,
     ) -> Option<(netrender::Scene, u32, u32)> {
         let Some(grect) = gloss_rect else {
-            if self.view.gloss_minimap_open() {
-                self.view
-                    .set_gloss_minimap(GlossMinimapSnapshot::default(), None);
+            if self.gloss_minimap_open() {
+                self.set_gloss_minimap(GlossMinimapSnapshot::default(), None);
             }
             return None;
         };
@@ -92,8 +91,7 @@ impl WindowCtx<'_> {
             mw,
             mh,
         ) else {
-            self.view
-                .set_gloss_minimap(GlossMinimapSnapshot::default(), Some(minimap_rect));
+            self.set_gloss_minimap(GlossMinimapSnapshot::default(), Some(minimap_rect));
             return None;
         };
 
@@ -123,7 +121,7 @@ impl WindowCtx<'_> {
                 }
             })
             .collect();
-        self.view.set_gloss_minimap(
+        self.set_gloss_minimap(
             GlossMinimapSnapshot {
                 nodes: dom_nodes,
                 w: mw,

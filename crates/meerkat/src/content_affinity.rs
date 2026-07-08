@@ -75,7 +75,10 @@ impl ContentArrangement {
     /// and the throttle floor has elapsed. Returns `None` when nothing changed or
     /// the throttle blocks (a later frame retries), so the caller injects only on a
     /// real change.
-    pub(crate) fn maybe_recompute(&mut self, graph: &Graph) -> Option<Vec<(NodeKey, NodeKey, f32)>> {
+    pub(crate) fn maybe_recompute(
+        &mut self,
+        graph: &Graph,
+    ) -> Option<Vec<(NodeKey, NodeKey, f32)>> {
         let revision = graph.revision();
         if self.last_revision == Some(revision) {
             return None; // already current for this revision
@@ -235,7 +238,10 @@ mod tests {
             "same revision does not recompute"
         );
 
-        graph.add_node("https://c.example".to_string(), PortablePoint::new(2.0, 0.0));
+        graph.add_node(
+            "https://c.example".to_string(),
+            PortablePoint::new(2.0, 0.0),
+        );
         assert!(
             arr.maybe_recompute(&graph).is_some(),
             "a new revision recomputes"
@@ -250,7 +256,10 @@ mod tests {
         let mut graph = graph_with_urls(&["https://a.example", "https://b.example"]);
         assert!(arr.maybe_recompute(&graph).is_some(), "first pass computes");
 
-        graph.add_node("https://c.example".to_string(), PortablePoint::new(2.0, 0.0));
+        graph.add_node(
+            "https://c.example".to_string(),
+            PortablePoint::new(2.0, 0.0),
+        );
         assert!(
             arr.maybe_recompute(&graph).is_none(),
             "a fresh revision within the throttle gap is blocked"

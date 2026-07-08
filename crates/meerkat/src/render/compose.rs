@@ -130,12 +130,12 @@ impl crate::WindowCtx<'_> {
         // engine-side instead (the actor registers them on its retained layout and
         // re-emits the band — overlay-roots P2), so this overlay is skipped for
         // it: the fills arrive baked into the band scene, scroll-locked for free.
-        if self.view.chrome().find_open {
+        if self.chrome().find_open {
             if let Some(focused) = self
                 .focused_member()
                 .filter(|m| !self.shared.content.constellation.is_active(*m))
             {
-                let active = self.view.chrome().find_active;
+                let active = self.chrome().find_active;
                 let mut overlays: Vec<([f32; 4], bool)> = Vec::new();
                 for (dest, member) in &composite {
                     if *member != focused {

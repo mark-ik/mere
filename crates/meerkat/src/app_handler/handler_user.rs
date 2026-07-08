@@ -211,31 +211,25 @@ impl Shell {
             });
         }
         // Fold the crawl's progress into its toolbar chip, but only when it changed (the
-        // drain runs on every wake; the chip update should not churn the chrome). The
-        // chip reads "crawling/crawled: N pages", or hides when no crawl has run. Captured
-        // for the MW3 chrome fan-out below, since one crawl is shared kernel state and
-        // every window's toolbar should show the same chip.
-        let mut latest_crawl = None;
+        // drain runs on every wake; the chip update should not churn the chrome). The chip
+        // reads "crawling/crawled: N pages", or hides when no crawl has run. One crawl is
+        // shared kernel state, so it lives in the one shared chrome; on a change `multi.update`
+        // rebuilds every window's shell view so each diffs the new chip in — one pass, no
+        // per-window fan-out. (One state, N windows — Slice 3.)
         {
             let progress = wc.shared.content.crawl.progress();
             let (running, fetched) = (progress.running, progress.fetched);
-            let current = wc.view.chrome().crawl.clone();
+            let current = wc.multi.state().shared.crawl.clone();
             if current.running != running || current.fetched != fetched {
-                let indicator = meerkat::CrawlIndicator { running, fetched };
-                wc.view.chrome_update(|c| c.crawl = indicator.clone());
-                latest_crawl = Some(indicator);
+                wc.multi
+                    .update(|app| app.shared.crawl = meerkat::CrawlIndicator { running, fetched });
             }
         }
-        // P2P sync status (S5.0): the same wake also carries lane-status changes.
-        // Fold the latest into the chrome chip (the host owns the mutation).
-        //
-        // MW2 (d2) deferred to MW3: the sync-chip + comms writes below target the
-        // primary's chrome (`wc.view.runner`). At N>1 they fan out to every window
-        // whose template carries that chrome — a two-phase restructure (drain +
-        // collect here, then replay per `self.windows.values_mut()` after the ctx
-        // borrow ends). Done when the second window exists to test it against, so the
-        // fan-out isn't an untested loop over one element through the actor-drain
-        // hot path. (Multi-window plan MW3.)
+        // P2P sync status (S5.0): the same wake also carries lane-status changes. Fold the
+        // latest into the one shared chrome cell (the host owns the mutation). Every
+        // window's Steward (live) / Apparatus (record) panes read it host-side and
+        // re-rasterize on this wake's redraws, so there is no per-window write and no
+        // fan-out. (One state, N windows — Slice 0.)
         let mut latest_sync = None;
         while let Ok(update) = wc.shared.inbox.sync.try_recv() {
             wc.shared.observability.record_actor(
@@ -248,11 +242,12 @@ impl Shell {
             );
             latest_sync = Some(sync::to_indicator(&update, sync::LANE_LABEL));
         }
-        // Apply to the primary inline; `latest_sync` is replayed onto chrome-bearing
-        // secondaries after the ctx borrow ends (step-5 fan-out below), so borrow it
-        // here rather than moving it out.
         if let Some(indicator) = &latest_sync {
-            wc.view.chrome_update(|c| c.sync = indicator.clone());
+            // Sync is read host-side by the Steward / Apparatus panes (not the DOM), so this
+            // write only needs to reach the shared state; the panes re-rasterize on the redraw
+            // below. `multi.update` rebuilds the (sync-free) shell views to zero diffs — an
+            // accepted rare cost at wake cadence. (One state, N windows — Slice 3.)
+            wc.multi.update(|app| app.shared.sync = indicator.clone());
             wc.view.request_redraw();
         }
         // Comms (P6c): the comms actor delivers conversation lists + threads here;
@@ -274,7 +269,7 @@ impl Shell {
                         "succeeded",
                         Some("inbox".to_string()),
                     );
-                    wc.view.chrome_update(|c| c.comms.set_inbox(inbox.clone()));
+                    wc.chrome_update(|c| c.comms.set_inbox(inbox.clone()));
                     comms_changed = true;
                 }
                 comms_host::CommsUpdate::Thread(id, messages) => {
@@ -288,7 +283,7 @@ impl Shell {
                         "succeeded",
                         Some("thread".to_string()),
                     );
-                    wc.view.chrome_update(|c| {
+                    wc.chrome_update(|c| {
                         if c.comms.selected() == Some(&id) {
                             c.comms.set_thread(messages.clone());
                         }
@@ -302,7 +297,7 @@ impl Shell {
                         "succeeded",
                         Some("sent".to_string()),
                     );
-                    wc.view.chrome_update(|c| c.clear_comms_draft());
+                    wc.chrome_update(|c| c.clear_comms_draft());
                     comms_changed = true;
                 }
                 comms_host::CommsUpdate::SendOutcome(line) => {
@@ -316,8 +311,7 @@ impl Shell {
                         "succeeded",
                         Some("send_outcome".to_string()),
                     );
-                    wc.view
-                        .chrome_update(|c| c.comms.set_send_status(line.clone()));
+                    wc.chrome_update(|c| c.comms.set_send_status(line.clone()));
                     comms_changed = true;
                 }
                 comms_host::CommsUpdate::Identity {
@@ -338,7 +332,7 @@ impl Shell {
                         "succeeded",
                         Some("identity".to_string()),
                     );
-                    wc.view.chrome_update(|c| {
+                    wc.chrome_update(|c| {
                         c.comms
                             .set_identity(misfin_address.clone(), cabal_ticket.clone())
                     });
@@ -348,7 +342,7 @@ impl Shell {
                     wc.shared
                         .observability
                         .record_actor("comms", "offline", Some(line.clone()));
-                    wc.view.chrome_update(|c| {
+                    wc.chrome_update(|c| {
                         c.comms.clear_identity();
                         c.comms.set_send_status(line.clone());
                     });
@@ -379,28 +373,31 @@ impl Shell {
         // the redraw out now the ctx borrow has ended (the two-phase shape the d2 note
         // called for).
         self.redraw_secondary_windows();
-        // MW3 step 5 chrome fan-out: the sync chip + comms updates were applied to the
-        // primary's chrome inline above; replay them onto every *other* window now the
-        // ctx borrow has ended. Note a slim leaf is NOT skipped: "slim" omits the
-        // *shellbar*, but the leaf keeps the toolbar (where the sync chip lives) and can
-        // open the comms pane, so it must see these updates too — driving caught a leaf
-        // showing a stale "p2p off" while the primary showed real standing. (MW3 step 5.)
-        if latest_sync.is_some() || latest_crawl.is_some() || !comms_updates.is_empty() {
+        // Crawl + sync were written to the one shared state above (each `multi.update` there
+        // rebuilt every window), so there is no per-window nudge here anymore. (One state, N
+        // windows — Slice 3 folds Slice 0's fan-out into one pass.)
+        //
+        // Comms is still per-window chrome state, applied to the primary inline above; replay
+        // each update onto every *other* window now the primary's ctx borrow has ended. A slim
+        // leaf is NOT skipped: it keeps the toolbar and can open the comms pane, so it must see
+        // these too. Collect the secondaries' projection ids first (a shared read of
+        // `windows`), then write each through `multi` — `windows` and `multi` are disjoint
+        // `Shell` fields but can't both be borrowed inside one `windows.iter_mut()`. (Slice 3.)
+        if !comms_updates.is_empty() {
             let primary = self.primary;
-            for (id, view) in self.windows.iter_mut() {
-                if Some(*id) == primary {
-                    continue;
-                }
-                if let Some(indicator) = &latest_sync {
-                    view.chrome_update(|c| c.sync = indicator.clone());
-                }
-                if let Some(indicator) = &latest_crawl {
-                    view.chrome_update(|c| c.crawl = indicator.clone());
-                }
+            let secondaries: Vec<_> = self
+                .windows
+                .iter()
+                .filter(|(id, _)| Some(**id) != primary)
+                .map(|(id, view)| (*id, view.projection_id))
+                .collect();
+            for (id, pid) in secondaries {
                 for update in &comms_updates {
-                    apply_comms_to_chrome(view, update);
+                    apply_comms_to_chrome(&mut self.multi, pid, update);
                 }
-                view.request_redraw();
+                if let Some(view) = self.windows.get(&id) {
+                    view.request_redraw();
+                }
             }
         }
     }

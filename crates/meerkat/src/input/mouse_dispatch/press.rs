@@ -25,7 +25,7 @@ impl WindowCtx<'_> {
             MouseButton::Forward => Some(HistoryStep::Forward),
             _ => None,
         } {
-            self.view.chrome_update(|c| c.history_step = Some(step));
+            self.chrome_update(|c| c.history_step = Some(step));
             self.drain_history_step();
             return;
         }
@@ -68,7 +68,7 @@ impl WindowCtx<'_> {
         // anywhere else just dismisses it. Exception: a pin toggle (the cursor
         // palette's search results) keeps the menu open so several can be pinned
         // in a row — the host rebuilds it in place. (Searchable context menu S2.)
-        if self.view.chrome().context_menu.is_some() {
+        if self.chrome().context_menu.is_some() {
             if button == MouseButton::Left {
                 // A press on a submenu-parent row expands its child panel instead of
                 // dismissing the menu — resolved by a dedicated hit-test, independent of
@@ -77,13 +77,12 @@ impl WindowCtx<'_> {
                     // Toggle: clicking the already-open parent collapses it; otherwise
                     // expand (or switch to) it — mouse parity with ArrowLeft. (Submenus.)
                     let already_open = self
-                        .view
                         .chrome()
                         .context_menu
                         .as_ref()
                         .and_then(|m| m.submenu.as_ref())
                         .is_some_and(|s| s.parent == parent);
-                    self.view.chrome_update(move |c| {
+                    self.chrome_update(move |c| {
                         if already_open {
                             c.close_submenu();
                         } else {
@@ -96,10 +95,10 @@ impl WindowCtx<'_> {
                 self.chrome_click(x, y);
             }
             let pinning = matches!(
-                self.view.chrome().pending_context,
+                self.chrome().pending_context,
                 Some(meerkat::ContextAction::PinToMenu(_))
             );
-            if self.view.chrome().context_menu.is_some() && !pinning {
+            if self.chrome().context_menu.is_some() && !pinning {
                 self.close_context_menu();
             }
             return;
@@ -111,11 +110,11 @@ impl WindowCtx<'_> {
             if button == MouseButton::Left {
                 if self.view.clip_picker == Some(member) {
                     let shown = self.finish_clip_pick(member, lx, ly);
-                    self.view.chrome_update(move |c| c.show_location(&shown));
+                    self.chrome_update(move |c| c.show_location(&shown));
                     self.view.request_redraw();
                     return;
                 } else if let Some(shown) = self.cancel_clip_picker() {
-                    self.view.chrome_update(move |c| c.show_location(&shown));
+                    self.chrome_update(move |c| c.show_location(&shown));
                     self.view.request_redraw();
                     return;
                 }
@@ -135,7 +134,7 @@ impl WindowCtx<'_> {
         }
         if button == MouseButton::Left {
             if let Some(shown) = self.cancel_clip_picker() {
-                self.view.chrome_update(move |c| c.show_location(&shown));
+                self.chrome_update(move |c| c.show_location(&shown));
                 self.view.request_redraw();
                 return;
             }
@@ -187,9 +186,11 @@ impl WindowCtx<'_> {
             // away" from the omnibar: blur the chrome caret and close the
             // suggestion dropdown, so focus actually leaves the omnibar
             // instead of the caret + dropdown lingering over the content.
-            if self.view.runner.focus().is_some() || !self.view.chrome().suggest.is_empty() {
-                self.view.runner.set_focus(None);
-                self.view.chrome_update(Chrome::close_suggestions);
+            if self.multi.focus(self.view.projection_id).is_some()
+                || !self.chrome().suggest.is_empty()
+            {
+                self.multi.set_focus(self.view.projection_id, None);
+                self.chrome_update(Chrome::close_suggestions);
                 self.view.request_redraw();
             }
             // A press on a frame divider starts a pane-resize drag. (F1.)
@@ -396,7 +397,7 @@ impl WindowCtx<'_> {
                             op,
                             origin: (x, y),
                         });
-                        self.view.chrome_update(|c| c.tear_ghost = Some(label));
+                        self.chrome_update(|c| c.tear_ghost = Some(label));
                         self.view.request_redraw();
                     } else if !self.point_over_card(x, y)
                         && self.orrery_mut().pointer_down(b, ox, oy)

@@ -172,9 +172,14 @@ between `shared` and `view`.
    cross-window move safely degrades to fresh-build until the forest dom
    (step 3). Receipts in `tests.rs::multi`: one-update-projects-everywhere,
    dispatch-in-A-updates-B, per-window focus, remove-projection teardown.
-   The remaining half of this step is meerkat's migration onto it (the
-   ShellState/Chrome split into AppState vs WindowLocal, deleting the
-   `chrome_update` fan-outs and spawn-time chip seeding).
+   **Consumer half done 2026-07-07** — meerkat's migration (Slices 0-3; the plan is
+   archived to `archive_docs/2026-07-07_one_state_migration/`): the ShellState/Chrome split
+   into `AppState` (owned `shared: SharedChrome`) vs one `WindowLocal` per window;
+   `Shell.multi: ServalMultiRunner`; `WindowView.projection_id` replaced `runner`; the
+   `chrome_update` fan-outs + spawn-time chip seeding deleted; `shell_view(app, i)` is the
+   per-window lens (`ProjectionId(pub usize)` added serval-side for index alignment).
+   Verified headless (302 meerkat + 89 xilem-serval tests) and headed (primary + slim leaf
+   render from the one runner, no crash). **Step 2 is complete; steps 3-4 below remain.**
 3. **Forest dom.** One ScriptedDom, N window roots, per-window sessions rooted
    per window element, mutation routing by root containment. Done when two
    windows at different sizes and DPIs lay out and rasterize from one dom.
@@ -197,16 +202,45 @@ between `shared` and `view`.
 
 ## 9. Open questions
 
-- **OQ-1 Input routing**: runner dispatch takes a hit NodeId today; per-window
-  focus and capture need the dispatch entry points to carry the window (or
-  resolve it from the root chain).
-- **OQ-2 Where recognition lives**: in xilem-serval core (a `portable_keyed`
-  wrapper) or as runner-level machinery outside the view contract. Execution is
-  settled (moveBefore, per the serval plan); only the recognition bookkeeping
-  is still a placement question.
-- **OQ-3 A11y**: per-window AccessKit bridges currently read per-window doms;
-  under a forest they read per-window subtrees of one dom. The bridge split by
-  window root needs its own look.
-- **OQ-4 Content actors**: unaffected in principle (external textures composite
-  per window), but tile rects and scroll maps in WindowLocal must follow the
-  moved subtree.
+- **OQ-1 Input routing — RESOLVED (2026-07-07 migration).** The multi-runner carries the
+  window explicitly: every dispatch entry point takes `ProjectionId` first
+  (`dispatch_click(pid, node, event)` / `dispatch_key(pid, event)` / `focus(pid)` /
+  `set_focus(pid, node)` / `pointer_target(pid, hit)` / `wheel_target(pid, hit)`), and focus
+  and pointer capture both live per-`RunnerTree`. meerkat drives them through
+  `self.multi.<m>(self.view.projection_id, …)`. Carrying the window beats the root-chain
+  alternative the OQ floated: no root walk today, and still correct under the forest dom.
+- **OQ-2 Where recognition lives — framework RESOLVED; the rest is a step-4 build.** serval's
+  moveBefore S1–S5 landed the answer as a hybrid, not an either/or: recognition is a **View
+  wrapper** (`PortableKeyed`) in xilem-serval, backed by **runner-level nursery** machinery for
+  the cross-tree parking. What remains is not a placement question but the meerkat consumer:
+  express a tile as a portable child and map the leaf / sticky-note / rekey trichotomy onto it
+  (step 4, gated on the forest dom).
+- **OQ-3 A11y — open, and it carries an id-collision risk the earlier note skipped.** The
+  bridge lifecycle is settled (one AccessKit bridge per window, unchanged). Two real pieces:
+  (1) scope each bridge's read to its **window-root subtree** of the one dom, mechanical once
+  `render_chrome_scene`'s root-partition logic generalizes; and (2) **a11y node ids must stay
+  window-unique** — chrome a11y ids are salted today, but `NodeId::raw()` packs a per-*doc* tag
+  on debug builds, so collapsing to one dom shares that tag and two windows on the same graph
+  could mint colliding ids. The salt must fold in the `ProjectionId`.
+- **OQ-4 Content actors — unaffected; the work reduces to carrying the scroll.** Actors are
+  genuinely untouched (per-member, external-texture composited per window). Correction to the
+  earlier phrasing: this per-window host state lives on **`WindowView`** (host bookkeeping),
+  not `WindowLocal` (the projected view-state). And only some of it must follow a cross-window
+  move: tile rects **self-heal** (recomputed every frame) and the tile texture cache is a
+  **perf nicety** (rebuild in the target), but **`view.scroll[member]` must move with the
+  tile** or a torn-out tile jumps to the top in its new window. So OQ-4 is really "carry the
+  scroll offset across the tear-out."
+
+### Watch-items surfaced by the landed migration (2026-07-07)
+
+- **Dual-collection alignment is a load-bearing invariant.** `Shell.windows` (HashMap, host
+  bookkeeping) and `AppState.windows` (Vec, projected view-state) are kept index-aligned by
+  append-together / tombstone-on-close / never-pop, so `ProjectionId(i) == windows[i]`. The
+  forest-dom + portable-tile work churns this area; a debug assert (`pid.0 < windows.len()`
+  plus a spawn/close parity check) would stop a future refactor from silently desyncing it.
+- **Shared-state edits rebuild every projection.** A change to `AppState.shared` (the crawl
+  chip) rebuilds all N windows via `multi.update`; a per-window snapshot uses `update_local`
+  and rebuilds one. Correct and cheap at N=1–3 (an unchanged window diffs to zero DOM
+  mutations), but it is O(N) per shared tick — worth knowing the crawl actor drives N rebuilds
+  when many windows are open. If it ever bites, dirty-flag the shared reads so an unchanged
+  value skips the rebuild.

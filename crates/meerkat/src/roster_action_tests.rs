@@ -32,7 +32,9 @@ fn push_roster_intent_with_shift(
 ) {
     let mut wc = app.ctx();
     wc.view.modifiers.shift = shift;
-    wc.view.runner.update(|s| s.roster.pending.push(intent));
+    let pid = wc.view.projection_id;
+    wc.multi
+        .update_local(pid, |app| app.windows[pid.0].roster.pending.push(intent));
     wc.drain_roster_intents();
 }
 
@@ -90,7 +92,7 @@ fn roster_action_relate_as_asserts_relation() {
         "Roster RelateAs should assert the selected semantic relation"
     );
     assert_eq!(
-        app.ctx().view.roster_subject(),
+        app.ctx().roster_subject(),
         Some(RosterSubject::RelationCell {
             from,
             to,
@@ -114,7 +116,6 @@ fn roster_action_retract_relation_targets_one_relation_cell() {
             .assert_relation_between_members(from, to, SemanticSubKind::Quotes)
     );
     app.ctx()
-        .view
         .set_roster_subject(Some(RosterSubject::RelationCell {
             from,
             to,
@@ -147,7 +148,7 @@ fn roster_action_retract_relation_targets_one_relation_cell() {
         "other semantic relation cells in the bundle should remain"
     );
     assert_eq!(
-        app.ctx().view.roster_subject(),
+        app.ctx().roster_subject(),
         Some(RosterSubject::LinkBundle { from, to }),
         "after retracting the selected cell, keep the remaining endpoint bundle open"
     );
@@ -163,7 +164,6 @@ fn roster_action_retract_last_relation_clears_link_subject() {
             .assert_relation_between_members(from, to, SemanticSubKind::Cites)
     );
     app.ctx()
-        .view
         .set_roster_subject(Some(RosterSubject::RelationCell {
             from,
             to,
@@ -180,7 +180,7 @@ fn roster_action_retract_last_relation_clears_link_subject() {
     );
 
     assert_eq!(
-        app.ctx().view.roster_subject(),
+        app.ctx().roster_subject(),
         None,
         "the detail subject clears when the endpoint bundle has no remaining relations"
     );
@@ -531,9 +531,8 @@ fn folded_roster_renders_visible_tab_buttons_in_shell_document() {
         wc.roster_snapshot(None)
     };
     {
-        let wc = app.ctx();
-        wc.view
-            .set_roster(snapshot, Some([740.0, 150.0, 1020.0, 590.0]));
+        let mut wc = app.ctx();
+        wc.set_roster(snapshot, Some([740.0, 150.0, 1020.0, 590.0]));
         let roster_css = crate::roster::roster_sheet(&wc.shared.presentation.chrome_theme);
         let mut sheet = wc.shared.presentation.chrome_sheet_refs();
         sheet.extend(roster_css.iter().map(String::as_str));

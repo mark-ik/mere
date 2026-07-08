@@ -52,17 +52,16 @@ impl WindowCtx<'_> {
         }
         // An open context menu eats Escape to dismiss (other keys fall through). With a submenu
         // open, Escape collapses it one level first, keeping the root menu up. (Nested submenus.)
-        if self.view.chrome().context_menu.is_some()
+        if self.chrome().context_menu.is_some()
             && matches!(key, WinitKey::Named(WinitNamedKey::Escape))
         {
             if self
-                .view
                 .chrome()
                 .context_menu
                 .as_ref()
                 .is_some_and(|m| m.submenu.is_some())
             {
-                self.view.chrome_update(Chrome::close_submenu);
+                self.chrome_update(Chrome::close_submenu);
                 self.view.request_redraw();
             } else {
                 self.close_context_menu();
@@ -94,8 +93,8 @@ impl WindowCtx<'_> {
             && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("l"))
         {
             let omnibar = self.input_under_class("toolbar");
-            self.view.runner.set_focus(omnibar);
-            self.view.chrome_update(|c| c.omnibar.select_all());
+            self.multi.set_focus(self.view.projection_id, omnibar);
+            self.chrome_update(|c| c.omnibar.select_all());
             self.view.request_redraw();
             return;
         }
@@ -109,14 +108,12 @@ impl WindowCtx<'_> {
         // then drain it this pass so the revealed page loads at once. A no-op when
         // nothing is focused or the node is at a history end.
         if self.view.modifiers.alt && matches!(key, WinitKey::Named(WinitNamedKey::ArrowLeft)) {
-            self.view
-                .chrome_update(|c| c.history_step = Some(HistoryStep::Back));
+            self.chrome_update(|c| c.history_step = Some(HistoryStep::Back));
             self.drain_history_step();
             return;
         }
         if self.view.modifiers.alt && matches!(key, WinitKey::Named(WinitNamedKey::ArrowRight)) {
-            self.view
-                .chrome_update(|c| c.history_step = Some(HistoryStep::Forward));
+            self.chrome_update(|c| c.history_step = Some(HistoryStep::Forward));
             self.drain_history_step();
             return;
         }
@@ -159,7 +156,7 @@ impl WindowCtx<'_> {
         if self.view.modifiers.ctrl
             && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("k"))
         {
-            self.view.chrome_update(Chrome::toggle_comms);
+            self.chrome_update(Chrome::toggle_comms);
             self.drain_comms_intent();
             self.view.request_redraw();
             return;
@@ -262,16 +259,16 @@ impl WindowCtx<'_> {
         if self.handle_clipboard_shortcut(key) {
             return;
         }
-        if self.view.chrome().palette_open {
+        if self.chrome().palette_open {
             self.on_palette_key(key);
             return;
         }
         // An open context menu owns the keyboard (arrow nav + Enter/Escape), like the palette.
-        if self.view.chrome().context_menu.is_some() {
+        if self.chrome().context_menu.is_some() {
             self.on_context_menu_key(key);
             return;
         }
-        if self.view.chrome().find_open {
+        if self.chrome().find_open {
             self.on_find_key(key);
             return;
         }
@@ -301,7 +298,7 @@ impl WindowCtx<'_> {
             self.on_comms_key(key);
         } else if self.omnibar_focused() {
             self.on_omnibar_key(key);
-        } else if self.view.runner.focus().is_some()
+        } else if self.multi.focus(self.view.projection_id).is_some()
             || matches!(key, WinitKey::Named(WinitNamedKey::Tab))
         {
             // A non-field focusable holds focus (a pane button/row reached via Tab), or Tab
@@ -310,7 +307,7 @@ impl WindowCtx<'_> {
             // focusable set, so focus moves on through the chrome and folded panes and the
             // focused control activates. (Phase 1, step 3c.)
             if let Some(key_event) = key_event_from_winit(key, self.view.modifiers) {
-                self.view.runner.dispatch_key(key_event);
+                self.multi.dispatch_key(self.view.projection_id, key_event);
                 // Enter/Space synthesizes a click on the focused control, queuing its intent
                 // the same way a pointer click does, so drain + apply it. (Phase 1, step 3c.)
                 self.drain_chrome_intents();

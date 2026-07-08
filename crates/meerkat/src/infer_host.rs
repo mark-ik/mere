@@ -24,9 +24,7 @@ use infer::{CannedProvider, InferCommand, InferUpdate, InferenceProvider};
 /// Spawn the inference actor. Returns the kernel's command handle and the
 /// update receiver, folded into `Content` / `KernelInbox` beside the other
 /// actors.
-pub(crate) fn spawn_inference(
-    wake: Wake,
-) -> (ActorHandle<InferCommand>, Receiver<InferUpdate>) {
+pub(crate) fn spawn_inference(wake: Wake) -> (ActorHandle<InferCommand>, Receiver<InferUpdate>) {
     infer::spawn_inference_actor(wake, build_provider)
 }
 

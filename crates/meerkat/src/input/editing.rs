@@ -11,7 +11,7 @@ impl WindowCtx<'_> {
     /// cleared selection), and dispatch the activation keys its widget controls queued.
     /// (Object card — P1.)
     pub(crate) fn drain_object_card(&mut self) {
-        let keys = self.view.take_object_card_keys();
+        let keys = self.take_object_card_keys();
         if self.view.object_card.is_some() && self.view.object_card != self.focused_member() {
             self.view.object_card = None;
             self.view.request_redraw();
@@ -76,13 +76,12 @@ impl WindowCtx<'_> {
         let Some((from, to, selector)) = self.connection_relation_at(x, y) else {
             return false;
         };
-        self.view.set_roster_tab(crate::roster::RosterTab::Links);
-        self.view
-            .set_roster_subject(Some(crate::roster::RosterSubject::RelationCell {
-                from,
-                to,
-                selector,
-            }));
+        self.set_roster_tab(crate::roster::RosterTab::Links);
+        self.set_roster_subject(Some(crate::roster::RosterSubject::RelationCell {
+            from,
+            to,
+            selector,
+        }));
         self.view.request_redraw();
         true
     }

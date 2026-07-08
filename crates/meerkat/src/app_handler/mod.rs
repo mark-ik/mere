@@ -73,46 +73,46 @@ fn scrying_vk(event: &winit::event::KeyEvent) -> u32 {
     }
 }
 
-/// Apply one comms actor update to a window's chrome — the per-window half of the
-/// MW3 step-5 fan-out. Mirrors the inline mutations the primary's actor-drain does, so a
-/// chrome-bearing secondary stays in sync with the primary. (MW3 step 5.)
+/// Apply one comms actor update to one window's chrome — the per-window half of the MW3
+/// step-5 fan-out. Mirrors the inline mutations the primary's actor-drain does, so a
+/// chrome-bearing secondary stays in sync with the primary. Routes through the shared
+/// multi-runner by the window's `projection_id`, rebuilding just that window. (MW3 step 5;
+/// one state, N windows — Slice 3.)
 fn apply_comms_to_chrome(
-    view: &mut super::window_view::WindowView,
+    multi: &mut super::window_view::ShellMultiRunner,
+    pid: xilem_serval::ProjectionId,
     update: &comms_host::CommsUpdate,
 ) {
-    match update {
-        comms_host::CommsUpdate::Inbox(inbox) => {
-            view.chrome_update(|c| c.comms.set_inbox(inbox.clone()));
-        }
-        comms_host::CommsUpdate::Thread(id, messages) => {
-            view.chrome_update(|c| {
+    multi.update_local(pid, |app| {
+        let c = &mut app.windows[pid.0].chrome;
+        match update {
+            comms_host::CommsUpdate::Inbox(inbox) => {
+                c.comms.set_inbox(inbox.clone());
+            }
+            comms_host::CommsUpdate::Thread(id, messages) => {
                 if c.comms.selected() == Some(id) {
                     c.comms.set_thread(messages.clone());
                 }
-            });
-        }
-        comms_host::CommsUpdate::Sent(_) => {
-            view.chrome_update(|c| c.clear_comms_draft());
-        }
-        comms_host::CommsUpdate::SendOutcome(line) => {
-            view.chrome_update(|c| c.comms.set_send_status(line.clone()));
-        }
-        comms_host::CommsUpdate::Identity {
-            misfin_address,
-            cabal_ticket,
-        } => {
-            view.chrome_update(|c| {
+            }
+            comms_host::CommsUpdate::Sent(_) => {
+                c.clear_comms_draft();
+            }
+            comms_host::CommsUpdate::SendOutcome(line) => {
+                c.comms.set_send_status(line.clone());
+            }
+            comms_host::CommsUpdate::Identity {
+                misfin_address,
+                cabal_ticket,
+            } => {
                 c.comms
-                    .set_identity(misfin_address.clone(), cabal_ticket.clone())
-            });
-        }
-        comms_host::CommsUpdate::Offline(line) => {
-            view.chrome_update(|c| {
+                    .set_identity(misfin_address.clone(), cabal_ticket.clone());
+            }
+            comms_host::CommsUpdate::Offline(line) => {
                 c.comms.clear_identity();
                 c.comms.set_send_status(line.clone());
-            });
+            }
         }
-    }
+    });
 }
 
 mod handler;

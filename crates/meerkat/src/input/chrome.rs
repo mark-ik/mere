@@ -69,7 +69,7 @@ impl WindowCtx<'_> {
     /// press below the toolbar fails the `y < chrome_h` band and falls through to the graph,
     /// leaving the editor unclickable (no close, no focus). (Knot editor.)
     pub(crate) fn knot_editor_pane_at(&self, x: f32, y: f32) -> bool {
-        if !self.view.chrome().knot_editor_open {
+        if !self.chrome().knot_editor_open {
             return false;
         }
         let dom = self.view.dom.borrow();
@@ -143,7 +143,7 @@ impl WindowCtx<'_> {
     /// since that tail is shared with the a11y activation path, which has no real
     /// click point to place from.
     fn place_caret_from_click(&mut self, x: f32, y: f32, arm_drag: bool) {
-        let Some(node) = self.view.runner.focus() else {
+        let Some(node) = self.multi.focus(self.view.projection_id) else {
             return;
         };
         if !self.is_text_input(node) {
@@ -197,10 +197,11 @@ impl WindowCtx<'_> {
     /// a11y path passes `(0.0, 0.0)` (the node's own origin) — a valid synthetic
     /// activation point, ignored by the chrome's position-agnostic button handlers.
     pub(crate) fn chrome_activate(&mut self, node: NodeId, at: (f32, f32)) {
-        let palette_was_open = self.view.chrome().palette_open;
-        self.view.runner.dispatch_click(node, PointerClick::at(at));
+        let palette_was_open = self.chrome().palette_open;
+        self.multi
+            .dispatch_click(self.view.projection_id, node, PointerClick::at(at));
         self.drain_chrome_intents();
-        if palette_was_open && !self.view.chrome().palette_open {
+        if palette_was_open && !self.chrome().palette_open {
             self.focus_after_palette_close();
         }
         self.view.request_redraw();

@@ -23,15 +23,15 @@ use std::time::Instant;
 use armillary::Generations;
 use forme::GraphMemberId;
 use frame::{FrameLayout, GraphId, PaneId, SessionId, SplitAxis, SplitChoice};
-use meerkat::{Chrome, ChromeView, chrome_view};
+use meerkat::{Chrome, ChromeView, CrawlIndicator, SharedChrome, chrome_view};
 use platen::Workbench;
 use serval_scripted_dom::{NodeId, ScriptedDom};
 use serval_winit_host::WindowSurface;
 use session_runtime::{StartupUnlockMode, settings_store::ScriptPermissionPrefs};
 use winit::window::CursorIcon;
 use xilem_serval::{
-    AnyView, Modifiers, PointerClick, ServalAppRunner, ServalCtx, ServalElement, WheelEvent, el,
-    external_texture, host_pool, lens, on_click, on_wheel, overlay_rect,
+    AnyView, Modifiers, PointerClick, ProjectionId, ServalCtx, ServalElement, ServalMultiRunner,
+    WheelEvent, el, external_texture, host_pool, lens, on_click, on_wheel, overlay_rect,
 };
 
 use super::{CachedTile, ContentPane, ResizeDrag};
@@ -175,10 +175,14 @@ pub(crate) struct WindowView {
     // ── Chrome authority: this window's two serval document roots and the runners
     //    that drive them — the toolbar / omnibar / dropdowns (chrome) and the tiled
     //    workbench. Separate roots by discipline; both per-window. (MW2.) ──────────
-    /// The chrome DOM the runner mutates and the render path reads.
+    /// The chrome DOM this window's projection mutates and the render path reads. The
+    /// shared [`ShellMultiRunner`] renders `projection_id`'s view tree into this same `Rc`.
     pub(crate) dom: Rc<RefCell<ScriptedDom>>,
-    /// The chrome runner: this window's toolbar / omnibar / dropdown authority.
-    pub(crate) runner: ShellRunner,
+    /// This window's projection in the shared [`ShellMultiRunner`] (`Shell.multi`): the
+    /// handle the per-window dispatch / focus and the [`WindowCtx`] view-state accessors key
+    /// by. The window's view-state itself lives in `AppState.windows[projection_id]`, not
+    /// here — a second window is a second projection over the one state. (Slice 3.)
+    pub(crate) projection_id: ProjectionId,
     /// The chrome DOM's incremental cascade+layout session (cheap-path C3). `None`
     /// until the first render builds it; rebuilt on a structural / resize / theme
     /// change, else the per-frame attribute batch applies on the `RepaintOnly` path.
@@ -564,10 +568,13 @@ pub(crate) enum CardWidget {
     Face { is_favicon: bool },
 }
 
-/// The window shell's composed view-state: the chrome plus the orrery-as-element's
-/// render snapshot (and later the document panes), all one document under one runner.
-/// (Unified document host.)
-pub(crate) struct ShellState {
+/// The per-window half of the shell's composed view-state: this window's chrome, the
+/// orrery-as-element snapshot, and the folded document panes. Everything here is
+/// genuinely local to one OS window (chrome buffers, pane rects, gloss lenses, drained
+/// intents). The window-invariant chrome (the sync/crawl chips) lives in the shared cell
+/// beside it, not here. This is the type Slice 3's multi-runner holds one-per-window in
+/// `AppState.windows`. (One state, N windows — Slice 2.)
+pub(crate) struct WindowLocal {
     pub(crate) chrome: Chrome,
     /// The focused orrery's render snapshot (rect + cards), refreshed each frame. Empty
     /// until the host wires the snapshot. (Orrery-as-element — Phase 2.)
@@ -618,7 +625,7 @@ pub(crate) struct ShellState {
     pub(crate) object_card_keys: Vec<String>,
 }
 
-/// Index into [`ShellState::panes`] / `pane_rects` for the four folded list panes; the
+/// Index into [`WindowLocal::panes`] / `pane_rects` for the four folded list panes; the
 /// order is the array order and [`idx`](Self::idx) is the array index. (Phase 1, step 2.)
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ShellListPane {
@@ -645,9 +652,11 @@ const PANE_WRAPPER_CLASS: [&str; 5] = [
     "alembic-pane",
 ];
 
-/// Constant-index field accessors into [`ShellState::panes`], one per list pane, so each
-/// lensed subtree targets its own slot. Non-capturing, so they coerce to `fn`. (Phase 1.)
-const PANE_TO: [fn(&mut ShellState) -> &mut ListPaneState; 5] = [
+/// Constant-index field accessors into [`WindowLocal::panes`], one per list pane, so each
+/// lensed subtree targets its own slot. Non-capturing, so they coerce to `fn`. The shell
+/// view builds over [`WindowLocal`] (one window), then [`shell_view`] lenses that up to the
+/// whole `AppState`, so these route into the local directly. (Phase 1; Slice 3.)
+const PANE_TO: [fn(&mut WindowLocal) -> &mut ListPaneState; 5] = [
     |s| &mut s.panes[0],
     |s| &mut s.panes[1],
     |s| &mut s.panes[2],
@@ -655,18 +664,12 @@ const PANE_TO: [fn(&mut ShellState) -> &mut ListPaneState; 5] = [
     |s| &mut s.panes[4],
 ];
 
-/// The erased shell root view, like [`ChromeView`] but over [`ShellState`].
-pub(crate) type ShellView = Box<dyn AnyView<ShellState, (), ServalCtx, ServalElement>>;
-
-/// The runner logic: shell state to shell view.
-pub(crate) type ShellLogic = fn(&ShellState) -> ShellView;
-
-/// The runner type the window holds: one document over the composed shell state.
-pub(crate) type ShellRunner = ServalAppRunner<ShellState, ShellLogic, ShellView>;
-
+mod ctx_accessors;
 mod gnode_pool;
+mod projection;
 mod state_impl;
 mod views;
 
 pub(crate) use gnode_pool::*;
+pub(crate) use projection::*;
 pub(crate) use views::*;

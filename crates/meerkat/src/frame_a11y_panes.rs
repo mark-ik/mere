@@ -267,7 +267,7 @@ impl WindowCtx<'_> {
             }
             out
         };
-        let items = &self.view.runner.state().panes[which.idx()].items;
+        let items = &self.multi.state().windows[self.view.projection_id.0].panes[which.idx()].items;
         let mut nodes = Vec::new();
         let mut children = Vec::new();
         for (i, item) in items.iter().enumerate() {
@@ -428,10 +428,7 @@ impl WindowCtx<'_> {
         // it reads the same live outline rect the last render's fold-in stored, rather
         // than an independent height — falling back generously (effectively uncapped)
         // before the first render has set one. (gloss-outline plan P2.)
-        let available_height = self
-            .view
-            .gloss_outline_rect()
-            .map_or(10_000.0, |r| r[3] - r[1]);
+        let available_height = self.gloss_outline_rect().map_or(10_000.0, |r| r[3] - r[1]);
         let snapshot = self.gloss_outline_snapshot(available_height);
         let mut nodes = Vec::new();
         let mut children = Vec::new();
@@ -474,7 +471,7 @@ impl WindowCtx<'_> {
     fn comms_a11y_tree(&self, pane_id: PaneId) -> UxTree {
         let root_path = pane_content_root_path(&self.view.frame_layout, pane_id, "comms");
         let root = node_id_for_path(&root_path);
-        let comms = &self.view.chrome().comms;
+        let comms = &self.chrome().comms;
         let mut nodes = Vec::new();
         let mut children = Vec::new();
 
@@ -520,7 +517,7 @@ impl WindowCtx<'_> {
         let draft_root = node_id_for_path(&format!("{root_path}/draft"));
         let mut draft = Node::new(Role::TextInput);
         draft.set_label("Draft");
-        draft.set_value(self.view.chrome().comms_draft.text().to_string());
+        draft.set_value(self.chrome().comms_draft.text().to_string());
         nodes.push((draft_root, draft));
         children.push(draft_root);
 

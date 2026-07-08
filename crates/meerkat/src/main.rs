@@ -93,7 +93,6 @@ mod engine_activation;
 mod export;
 mod find;
 mod find_worker;
-mod infer_host;
 mod frame_a11y;
 mod frame_a11y_panes;
 mod frame_ops;
@@ -103,6 +102,7 @@ mod gloss_outline_view;
 mod gloss_view;
 mod graph_delta_log;
 mod ime;
+mod infer_host;
 mod input;
 mod inspector;
 mod list_pane;
@@ -198,6 +198,14 @@ const MAX_POOLED_ORRERIES: usize = 8;
 struct Shell {
     /// Session + app state shared across every window. (Multi-window MW2.)
     shared: SharedState,
+    /// The one runner behind every window: [`AppState`](window_view::AppState) projected
+    /// into N windows. It owns the shared chrome chips + every window's `WindowLocal`;
+    /// each OS window in `windows` carries the `ProjectionId` keying into it. One
+    /// `multi.update` rebuilds every window from the single state, and a per-window
+    /// setter uses `update_local` — so synced panels are not a sync feature, there is one
+    /// state. A sibling `Shell` field (not in `SharedState`) so it borrows disjointly
+    /// from `shared` / `windows` in a `WindowCtx`. (One state, N windows — Slice 3.)
+    multi: window_view::ShellMultiRunner,
     /// The pooled orrery authorities, keyed by graph. Each is a whole [`Orrery`]
     /// (graph + physics + camera) — the source of every pane's content for that graph.
     /// Panes resolve to one by `graph_id`; the ctx bundles the window's focused-graph
@@ -302,6 +310,12 @@ struct Shell {
 /// composition P2.)
 struct WindowCtx<'a> {
     view: &'a mut window_view::WindowView,
+    /// The shared multi-runner, borrowed whole. This window's view-state accessors (chrome,
+    /// orrery snapshot, folded panes) read `multi.state().windows[view.projection_id]` and
+    /// write via `multi.update_local(view.projection_id, …)`; the per-window dispatch /
+    /// focus route through it by the same id. A disjoint `Shell` field from `view`
+    /// (`Shell.multi` vs `Shell.windows[id]`), so both borrow mutably here. (Slice 3.)
+    multi: &'a mut window_view::ShellMultiRunner,
     shared: &'a mut SharedState,
     /// The orrery pool (every live graph's authority), borrowed whole so render
     /// and input can resolve *any* pane's orrery by `graph_id`, not just the

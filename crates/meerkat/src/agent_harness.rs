@@ -272,7 +272,7 @@ impl Shell {
 
     fn agent_invoke_command(&mut self, cmd: Command) -> (bool, String, String) {
         let action_id = format!("command.{cmd:?}").to_ascii_lowercase();
-        self.ctx().view.chrome_update(move |chrome| {
+        self.ctx().chrome_update(move |chrome| {
             chrome.run_command_and_close(cmd);
         });
         self.ctx().drain_pending_command();
@@ -311,9 +311,7 @@ impl Shell {
         let set = self.ctx().selection_working_set();
         self.ctx().view.context_set = set;
         self.ctx().view.context_origin = None;
-        self.ctx()
-            .view
-            .chrome_update(move |c| c.pick_context(action));
+        self.ctx().chrome_update(move |c| c.pick_context(action));
         self.ctx().drain_pending_context();
         (true, action_id, detail)
     }
@@ -341,9 +339,8 @@ impl Shell {
 
     fn agent_activate_focused_action(&mut self) -> (bool, String, String) {
         let action_id = "focus.activate".to_string();
-        if self.ctx().view.chrome().palette_open {
+        if self.ctx().chrome().palette_open {
             self.ctx()
-                .view
                 .chrome_update(meerkat::Chrome::run_palette_selection);
             self.ctx().drain_pending_command();
             return (true, action_id, "palette selection activated".to_string());

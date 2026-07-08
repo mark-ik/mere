@@ -56,9 +56,8 @@ impl WindowCtx<'_> {
             Ime::Commit(text) => {
                 self.set_focused_preedit(String::new());
                 if !text.is_empty() {
-                    self.view
-                        .runner
-                        .dispatch_key(KeyEvent::new(Key::Character(text)));
+                    self.multi
+                        .dispatch_key(self.view.projection_id, KeyEvent::new(Key::Character(text)));
                 }
                 self.update_ime_cursor_area();
                 self.view.request_redraw();
@@ -76,7 +75,7 @@ impl WindowCtx<'_> {
     /// The focused chrome field, by the same mapping as
     /// [`caret_field`](Self::caret_field). `None` when nothing is focused.
     fn focused_field_kind(&self) -> Option<FocusedField> {
-        let focus = Some(self.view.runner.focus()?);
+        let focus = Some(self.multi.focus(self.view.projection_id)?);
         Some(if focus == self.input_under_class("comms-new-to") {
             FocusedField::CommsTo
         } else if focus == self.input_under_class("comms-new-body") {
@@ -85,7 +84,7 @@ impl WindowCtx<'_> {
             FocusedField::CommsDraft
         } else if focus == self.input_under_class("knot-editor-source") {
             FocusedField::KnotEditor
-        } else if self.view.chrome().palette_open {
+        } else if self.chrome().palette_open {
             FocusedField::Palette
         } else {
             FocusedField::Omnibar
@@ -98,7 +97,7 @@ impl WindowCtx<'_> {
         let Some(kind) = self.focused_field_kind() else {
             return;
         };
-        self.view.chrome_update(move |c| {
+        self.chrome_update(move |c| {
             let field = match kind {
                 FocusedField::Omnibar => &mut c.omnibar,
                 FocusedField::Palette => &mut c.palette_input,
@@ -118,7 +117,7 @@ impl WindowCtx<'_> {
         let Some(kind) = self.focused_field_kind() else {
             return;
         };
-        self.view.chrome_update(move |c| {
+        self.chrome_update(move |c| {
             let field = match kind {
                 FocusedField::Omnibar => &mut c.omnibar,
                 FocusedField::Palette => &mut c.palette_input,
@@ -145,7 +144,7 @@ impl WindowCtx<'_> {
         if !matches!(self.focused_field_kind(), Some(FocusedField::KnotEditor)) {
             return false;
         }
-        let Some(node) = self.view.runner.focus() else {
+        let Some(node) = self.multi.focus(self.view.projection_id) else {
             return false;
         };
         let caret_byte = self.caret_field(node).caret_byte_in_render();
@@ -173,8 +172,10 @@ impl WindowCtx<'_> {
     /// same rect the painted caret uses, so the popup sits exactly under it. No-op
     /// without a focused field or a built chrome session.
     fn update_ime_cursor_area(&self) {
-        let (Some(window), Some(node)) = (self.view.window.as_ref(), self.view.runner.focus())
-        else {
+        let (Some(window), Some(node)) = (
+            self.view.window.as_ref(),
+            self.multi.focus(self.view.projection_id),
+        ) else {
             return;
         };
         // Caret byte within the field's *rendered* text (after any preedit), so the

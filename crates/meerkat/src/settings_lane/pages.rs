@@ -32,7 +32,7 @@ impl WindowCtx<'_> {
                 items.extend(self.theme_editor_items());
                 items.extend(self.mode_sheet_items());
                 items.push(PaneItem::text("app-title", "Tabs"));
-                items.extend(tab_cap_items(self.view.chrome().settings.tab_cap));
+                items.extend(tab_cap_items(self.chrome().settings.tab_cap));
                 ("Appearance", items)
             }
             "reading" => ("Reading", self.reading_settings_items()),

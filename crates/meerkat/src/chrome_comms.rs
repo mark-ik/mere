@@ -29,6 +29,7 @@ impl Chrome {
         self.knot_editor_label = "Editor".to_string();
         self.knot_editor_rect = None;
         self.knot_save_requested = false;
+        self.knot_editor_preview = false;
     }
 
     /// Open the docked knot editor against a graph member's authored body.
@@ -44,6 +45,7 @@ impl Chrome {
         self.knot_editor_label = label.into();
         self.knot_editor_rect = None;
         self.knot_save_requested = false;
+        self.knot_editor_preview = false;
     }
 
     /// Close the knot editor.
@@ -52,6 +54,17 @@ impl Chrome {
         self.knot_target = None;
         self.knot_editor_rect = None;
         self.knot_save_requested = false;
+        self.knot_editor_preview = false;
+    }
+
+    /// Flip between the source-edit and rendered-preview views of the open note. A
+    /// no-op when the editor is closed. Preview only makes sense over a bound tile
+    /// (an unbound scratch note has no tile behind to reveal), so it stays on edit
+    /// when there is no `knot_target`. (Djot editor — Phase 2 toggle source/preview.)
+    pub fn toggle_knot_editor_preview(&mut self) {
+        if self.knot_editor_open && self.knot_target.is_some() {
+            self.knot_editor_preview = !self.knot_editor_preview;
+        }
     }
 
     /// Toggle the knot editor: open a fresh note, or close it.

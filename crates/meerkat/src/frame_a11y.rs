@@ -62,7 +62,7 @@ impl WindowCtx<'_> {
                 // Focus the chrome control directly — the same as a programmatic
                 // `element.focus()` (the omnibar field, a palette row).
                 Action::Focus => {
-                    self.view.runner.set_focus(Some(node));
+                    self.multi.set_focus(self.view.projection_id, Some(node));
                     self.shared.observability.record_diagnostic(
                         "meerkat.agent.action_applied",
                         super::observability::Severity::Info,
@@ -185,7 +185,7 @@ impl WindowCtx<'_> {
         ));
         let mut tree = uxtree::stitch("meerkat/window", host, vec![chrome_tree, frame_tree]);
         attach_link_actions(&mut tree, &mut action_routes);
-        let (requested_focus, fallback_focus) = match self.view.runner.focus() {
+        let (requested_focus, fallback_focus) = match self.multi.focus(self.view.projection_id) {
             // The focused chrome DOM node (the omnibar field) when the DOM-derived
             // subtree is in use; the chrome subtree root in the placeholder fallback.
             Some(focused) if self.view.chrome_session.is_some() => {

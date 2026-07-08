@@ -147,7 +147,7 @@ impl WindowCtx<'_> {
     /// other panes make room, and the render positions the chrome overlay into it.
     /// (Comms pane.)
     pub(crate) fn sync_comms_pane(&mut self) {
-        let open = self.view.chrome().comms.is_open();
+        let open = self.chrome().comms.is_open();
         match (open, self.pane_of_content(&PaneContent::Comms)) {
             (true, None) => {
                 let id = PaneId(self.view.next_pane_id);

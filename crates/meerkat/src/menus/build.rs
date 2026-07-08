@@ -27,8 +27,7 @@ impl WindowCtx<'_> {
         // resolve against it. The menu opens with an empty query (curated rows; typing searches).
         self.view.context_set = set;
         let items = self.build_curated_menu_items();
-        self.view
-            .chrome_update(move |c| c.open_context_menu(x, y, items));
+        self.chrome_update(move |c| c.open_context_menu(x, y, items));
         self.view.request_redraw();
     }
 
@@ -204,13 +203,7 @@ impl WindowCtx<'_> {
     /// results otherwise. Resets the highlight (the list changed). Called on each query edit.
     /// (Searchable context menu S1.)
     pub(crate) fn rebuild_context_menu(&mut self) {
-        let Some(query) = self
-            .view
-            .chrome()
-            .context_menu
-            .as_ref()
-            .map(|m| m.query.clone())
-        else {
+        let Some(query) = self.chrome().context_menu.as_ref().map(|m| m.query.clone()) else {
             return;
         };
         let items = if query.trim().is_empty() {
@@ -218,7 +211,7 @@ impl WindowCtx<'_> {
         } else {
             self.search_menu_items(&query)
         };
-        self.view.chrome_update(move |c| {
+        self.chrome_update(move |c| {
             if let Some(menu) = &mut c.context_menu {
                 menu.items = items;
                 menu.selected = None;

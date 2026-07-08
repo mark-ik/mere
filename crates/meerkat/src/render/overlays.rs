@@ -27,7 +27,7 @@ impl crate::WindowCtx<'_> {
         // their selection); the panes' wheel scroll lives in the session's `element_scroll`
         // now, which `emit_paint_list` folds in, so this carries only the targets. (P2.)
         let mut chrome_scroll = ScrollOffsets::<NodeId>::default();
-        if self.view.chrome().palette_open {
+        if self.chrome().palette_open {
             // Bound the list to the window so a long palette can't overflow it. The
             // overlay floats the panel ~56px down with an input + paddings above the
             // list, so leave generous headroom + a bottom margin — otherwise a small
@@ -90,7 +90,7 @@ impl crate::WindowCtx<'_> {
         // pointer, not under it). The pill exists in the DOM only while a tear-out drag is
         // active; the stylesheet `.tear-ghost` rule carries its look, this sets left/top.
         // (Tear-out gestures, GA-5.)
-        if self.view.chrome().tear_ghost.is_some() {
+        if self.chrome().tear_ghost.is_some() {
             let (gx, gy) = (self.view.cursor.0 + 12.0, self.view.cursor.1 + 12.0);
             let mut dom = self.view.dom.borrow_mut();
             let root = dom.document();
@@ -106,7 +106,7 @@ impl crate::WindowCtx<'_> {
         // The context menu follows its keyboard selection like the palette: bound the panel to the
         // window so a tall menu (the layout submenu) can't spill past the bottom edge, and scroll
         // the highlighted row into view. (Context-menu keyboard nav.)
-        if let Some((mx, my)) = self.view.chrome().context_menu.as_ref().map(|m| (m.x, m.y)) {
+        if let Some((mx, my)) = self.chrome().context_menu.as_ref().map(|m| (m.x, m.y)) {
             // Open away from whichever edge the panel would overflow: placed down-right of
             // the cursor by default, it flips left / up when that would spill past the
             // right / bottom edge, so the menu never goes offscreen. The panel size comes
@@ -121,7 +121,6 @@ impl crate::WindowCtx<'_> {
             // panel's 4px padding top+bottom. Width uses the measured natural width (not
             // height-clamped) when available, else a sane default. (Context-menu edge-flip.)
             let rows = self
-                .view
                 .chrome()
                 .context_menu
                 .as_ref()
@@ -189,7 +188,6 @@ impl crate::WindowCtx<'_> {
         // the parent's right (frame-1 correct — RightOf ignores the popup size), flipping left when
         // it would overflow the window. (Nested submenus.)
         let submenu_pos = if self
-            .view
             .chrome()
             .context_menu
             .as_ref()
@@ -256,7 +254,6 @@ impl crate::WindowCtx<'_> {
         // `context-item-active`, so this targets the submenu and the root block targets the root.
         // (Nested submenus.)
         if self
-            .view
             .chrome()
             .context_menu
             .as_ref()

@@ -27,14 +27,15 @@ impl WindowCtx<'_> {
                 .chrome_session
                 .as_ref()
                 .and_then(|s| s.hit_test(&dom, cx, cy, &offsets))
-                .and_then(|hit| self.view.runner.wheel_target(hit))
+                .and_then(|hit| self.multi.wheel_target(self.view.projection_id, hit))
         };
         if let Some(node) = target {
             // The orrery element's handler reads only `delta`; `local` / `size` are unused here.
             let event = xilem_serval::WheelEvent::new((dx, dy), (0.0, 0.0), (0.0, 0.0));
-            self.view.runner.dispatch_wheel(node, event);
+            self.multi
+                .dispatch_wheel(self.view.projection_id, node, event);
         }
-        match self.view.take_orrery_wheel() {
+        match self.take_orrery_wheel() {
             Some((wdx, wdy)) => self.pane_orrery_mut(gid).wheel(wdx, wdy),
             None => false,
         }
@@ -48,10 +49,10 @@ impl WindowCtx<'_> {
     /// `on_mouse_input`. (Phase 1, step 2.)
     pub(crate) fn drain_list_pane_activations(&mut self) {
         use crate::window_view::ShellListPane::{Alembic, Apparatus, Steward, Trail};
-        for key in self.view.take_list_pane_activations(Apparatus) {
+        for key in self.take_list_pane_activations(Apparatus) {
             self.apply_pelt_activation(&key);
         }
-        for key in self.view.take_list_pane_activations(Trail) {
+        for key in self.take_list_pane_activations(Trail) {
             if let Some(id) = key.strip_prefix("recover:") {
                 self.recover_deleted_node(id);
             }
@@ -59,7 +60,7 @@ impl WindowCtx<'_> {
         // Alembic: a clicked engram row thaws that engram into an Orrery pane beside. Pooling a
         // fresh graph re-keys the orrery pool, which a WindowCtx can't do (it holds one orrery
         // borrowed out), so queue it as a ShellCommand the Shell drains — like OpenGraphBeside. (B2.)
-        for key in self.view.take_list_pane_activations(Alembic) {
+        for key in self.take_list_pane_activations(Alembic) {
             if let Some(id) = key.strip_prefix("engram:open:") {
                 self.commands
                     .push(crate::ShellCommand::OpenEngramBeside(id.to_string()));
@@ -87,7 +88,7 @@ impl WindowCtx<'_> {
         // Steward: the focused-operation action buttons (retry / stop / background-pin)
         // queue `steward:*` keys; route each to its node-ops verb so the row is a real
         // action, not a typed-verb hint. (Audit A2 — Steward rows clickable.)
-        for key in self.view.take_list_pane_activations(Steward) {
+        for key in self.take_list_pane_activations(Steward) {
             // Per-row keys carry the member id (`steward:<verb>:<uuid>`) so the verb
             // acts on that specific live operation; the bare keys act on the focused
             // op. (Chrome bar P2 — Steward process list.)
@@ -126,7 +127,7 @@ impl WindowCtx<'_> {
         // a page control drives the host identically; a spine entry navigates the tile's node
         // to the chosen page (`navigate_member` retargets its url, which the next frame's
         // settings dispatch re-resolves). (Settings lane P1.)
-        for (_member, key) in self.view.take_settings_pane_keys() {
+        for (_member, key) in self.take_settings_pane_keys() {
             // `node:<id>` facets controls carry the subject node in the key; the rest are the
             // pelt pages' shared keys (theme / engine toggle / physics / orrery). (Registry P3.)
             if let Some(facet) = key.strip_prefix("nodefacet:") {
@@ -135,7 +136,7 @@ impl WindowCtx<'_> {
                 self.apply_pelt_activation(&key);
             }
         }
-        for (member, url) in self.view.take_settings_pane_nav() {
+        for (member, url) in self.take_settings_pane_nav() {
             self.persist_live_tile_thumbnail_before_navigation(member);
             self.orrery_mut().navigate_member(member, &url);
             self.view.request_redraw();
@@ -151,8 +152,8 @@ impl WindowCtx<'_> {
             "phys:damping:up" => self.adjust_physics_damping(0.5),
             // The active-tab cap (migrated from the settings overlay): edit the chrome cap;
             // the per-frame `sync_settings` applies it to the actor pool + persists. (P2.)
-            "tiles:cap:down" => self.view.chrome_update(Chrome::dec_tab_cap),
-            "tiles:cap:up" => self.view.chrome_update(Chrome::inc_tab_cap),
+            "tiles:cap:down" => self.chrome_update(Chrome::dec_tab_cap),
+            "tiles:cap:up" => self.chrome_update(Chrome::inc_tab_cap),
             // The `pelt/orrery` scene toggles, driving the same methods the context menu does
             // (so the page and the menu stay one source of truth). (Settings lane P2b.)
             "orrery:sizebydegree" => self.toggle_orrery_size_by_degree(),
@@ -390,7 +391,7 @@ impl WindowCtx<'_> {
     /// `chrome_activate`; this drains + applies them (Shift = additive selection).
     /// Replaces the old roster-pane branch in `on_mouse_input`. (Phase 1.)
     pub(crate) fn drain_roster_intents(&mut self) {
-        let intents = self.view.take_roster_intents();
+        let intents = self.take_roster_intents();
         if intents.is_empty() {
             return;
         }
@@ -398,12 +399,12 @@ impl WindowCtx<'_> {
         for intent in intents {
             match intent {
                 crate::roster_view::RosterIntent::SetTab(tab) => {
-                    self.view.set_roster_tab(tab);
+                    self.set_roster_tab(tab);
                     self.view.request_redraw();
                 }
                 crate::roster_view::RosterIntent::OpenDetail(subject) => {
-                    self.view.set_roster_tab(subject.natural_tab());
-                    self.view.set_roster_subject(Some(subject));
+                    self.set_roster_tab(subject.natural_tab());
+                    self.set_roster_subject(Some(subject));
                     self.view.request_redraw();
                 }
                 crate::roster_view::RosterIntent::Select(member) => {
@@ -427,14 +428,12 @@ impl WindowCtx<'_> {
                     {
                         self.save_session();
                     }
-                    self.view.set_roster_tab(crate::roster::RosterTab::Links);
-                    self.view.set_roster_subject(Some(
-                        crate::roster::RosterSubject::RelationCell {
-                            from,
-                            to,
-                            selector: kernel::graph::RelationSelector::Semantic(kind),
-                        },
-                    ));
+                    self.set_roster_tab(crate::roster::RosterTab::Links);
+                    self.set_roster_subject(Some(crate::roster::RosterSubject::RelationCell {
+                        from,
+                        to,
+                        selector: kernel::graph::RelationSelector::Semantic(kind),
+                    }));
                     self.view.request_redraw();
                 }
                 crate::roster_view::RosterIntent::RetractRelation { from, to, selector } => {
@@ -549,7 +548,7 @@ impl WindowCtx<'_> {
     /// roster's non-additive click (`Orrery::select_by_url`, the shared primitive).
     /// (gloss-outline plan P1.)
     pub(crate) fn drain_gloss_outline_intents(&mut self) {
-        for intent in self.view.take_gloss_outline_intents() {
+        for intent in self.take_gloss_outline_intents() {
             match intent {
                 gloss::GlossRowIntent::Select(url) => {
                     self.orrery_mut().select_by_url(&url);
@@ -562,7 +561,7 @@ impl WindowCtx<'_> {
     /// Apply the gloss recent lens's row intents, mirroring `drain_gloss_outline_intents`.
     /// (Scene-to-DOM migration P1.)
     pub(crate) fn drain_gloss_recent_intents(&mut self) {
-        for intent in self.view.take_gloss_recent_intents() {
+        for intent in self.take_gloss_recent_intents() {
             match intent {
                 gloss::GlossRowIntent::Select(url) => {
                     self.orrery_mut().select_by_url(&url);
@@ -575,7 +574,7 @@ impl WindowCtx<'_> {
     /// Apply the gloss minimap's node-square intents, mirroring the outline/recent
     /// drains. (Scene-to-DOM migration P2.)
     pub(crate) fn drain_gloss_minimap_intents(&mut self) {
-        for intent in self.view.take_gloss_minimap_intents() {
+        for intent in self.take_gloss_minimap_intents() {
             match intent {
                 gloss::GlossRowIntent::Select(url) => {
                     self.orrery_mut().select_by_url(&url);
@@ -591,7 +590,7 @@ impl WindowCtx<'_> {
         to: forme::GraphMemberId,
         selector: kernel::graph::RelationSelector,
     ) {
-        let Some(subject) = self.view.roster_subject() else {
+        let Some(subject) = self.roster_subject() else {
             return;
         };
         let selected_retracted = matches!(
@@ -613,12 +612,11 @@ impl WindowCtx<'_> {
             return;
         }
         if self.relation_bundle_exists(from, to) {
-            self.view
-                .set_roster_subject(Some(crate::roster::RosterSubject::LinkBundle { from, to }));
+            self.set_roster_subject(Some(crate::roster::RosterSubject::LinkBundle { from, to }));
         } else {
-            self.view.set_roster_subject(None);
+            self.set_roster_subject(None);
         }
-        self.view.set_roster_tab(crate::roster::RosterTab::Links);
+        self.set_roster_tab(crate::roster::RosterTab::Links);
     }
 
     fn relation_bundle_exists(&self, from: forme::GraphMemberId, to: forme::GraphMemberId) -> bool {

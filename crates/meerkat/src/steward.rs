@@ -272,7 +272,7 @@ impl WindowCtx<'_> {
     /// whether a round is in flight, the earned standing (the point of tessera), and
     /// the dialable ticket. (Chrome bar P1.)
     fn steward_sync_rows(&self) -> Vec<(String, String)> {
-        let indicator = &self.view.chrome().sync;
+        let indicator = &self.multi.state().shared.sync;
         if !indicator.active {
             return vec![("Sync lane".to_string(), "off".to_string())];
         }

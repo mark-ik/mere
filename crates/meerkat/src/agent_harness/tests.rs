@@ -550,17 +550,17 @@ fn ime_preedit_and_commit_route_to_the_focused_field() {
         omnibar.is_some(),
         "the omnibar input exists in the chrome DOM"
     );
-    wc.view.runner.set_focus(omnibar);
+    wc.multi.set_focus(wc.view.projection_id, omnibar);
 
-    let committed = wc.view.chrome().omnibar.text().to_string();
+    let committed = wc.chrome().omnibar.text().to_string();
     wc.handle_ime(Ime::Preedit("ni".to_string(), None));
     assert_eq!(
-        wc.view.chrome().omnibar.preedit(),
+        wc.chrome().omnibar.preedit(),
         "ni",
         "preedit routed to the omnibar"
     );
     assert_eq!(
-        wc.view.chrome().omnibar.text().to_string(),
+        wc.chrome().omnibar.text().to_string(),
         committed,
         "preedit stays out of the committed buffer",
     );
@@ -568,14 +568,14 @@ fn ime_preedit_and_commit_route_to_the_focused_field() {
     // 你好 — commit clears the preedit and inserts the composed text.
     wc.handle_ime(Ime::Commit("\u{4f60}\u{597d}".to_string()));
     assert_eq!(
-        wc.view.chrome().omnibar.preedit(),
+        wc.chrome().omnibar.preedit(),
         "",
         "commit clears the preedit"
     );
     assert!(
-        wc.view.chrome().omnibar.text().contains("\u{4f60}\u{597d}"),
+        wc.chrome().omnibar.text().contains("\u{4f60}\u{597d}"),
         "commit inserts the composed text into the omnibar, got {:?}",
-        wc.view.chrome().omnibar.text(),
+        wc.chrome().omnibar.text(),
     );
 }
 
@@ -583,13 +583,16 @@ fn ime_preedit_and_commit_route_to_the_focused_field() {
 fn a_spawned_window_is_a_slim_leaf() {
     // A second window (Cmd/Ctrl+Shift+N → build_window_view) is a leaf: slim
     // chrome (no shellbar / switcher). The primary stays full chrome. (MW3 step 4.)
-    let app = test_app();
+    let mut app = test_app();
     let leaf = app.build_window_view();
     assert_eq!(leaf.kind, crate::window_view::WindowKind::Leaf);
-    assert!(leaf.runner.state().chrome.slim, "a leaf's chrome is slim");
+    assert!(
+        app.multi.state().windows[leaf.projection_id.0].chrome.slim,
+        "a leaf's chrome is slim"
+    );
     assert_eq!(app.view().kind, crate::window_view::WindowKind::Primary);
     assert!(
-        !app.view().runner.state().chrome.slim,
+        !app.window_local().chrome.slim,
         "the primary's chrome is full"
     );
 }
@@ -955,8 +958,13 @@ fn mode_sheet_editor_materializes_and_clears() {
         .theme_def("user:t4edit")
         .expect("def")
         .clone();
-    let sheet = def.mode_sheet(&Mode::Dark).expect("dark override materialized");
-    assert!(!sheet.is_empty(), "materialized sheet carries the derived rules");
+    let sheet = def
+        .mode_sheet(&Mode::Dark)
+        .expect("dark override materialized");
+    assert!(
+        !sheet.is_empty(),
+        "materialized sheet carries the derived rules"
+    );
     assert!(
         !wc.shared
             .presentation
@@ -997,8 +1005,8 @@ fn custom_mode_editor_creates_removes_and_reloads() {
     wc.new_custom_mode();
     assert_eq!(wc.shared.presentation.custom_modes.len(), 1);
     let id = wc.shared.presentation.custom_modes[0].id.clone();
-    let path = crate::mode_store::modes_dir(&wc.shared.session.mere_root)
-        .join(format!("{id}.json"));
+    let path =
+        crate::mode_store::modes_dir(&wc.shared.session.mere_root).join(format!("{id}.json"));
     assert!(path.exists(), "mode file persisted");
 
     wc.set_mode(Mode::Custom(id.clone()));
@@ -1015,12 +1023,8 @@ fn custom_mode_editor_creates_removes_and_reloads() {
     );
 
     // Hand-author a file (the mod-distribution path) and reload it in-app.
-    let def = register_theme::mode_calc::CustomModeDef::template(
-        "hand-made",
-        "Hand Made",
-        true,
-        false,
-    );
+    let def =
+        register_theme::mode_calc::CustomModeDef::template("hand-made", "Hand Made", true, false);
     crate::mode_store::save_custom_mode(&wc.shared.session.mere_root, &def).expect("save");
     wc.reload_custom_modes();
     assert!(
@@ -1266,14 +1270,12 @@ fn omnibar_ctrl_a_selects_all() {
         let omnibar = wc
             .input_under_class("toolbar")
             .expect("the omnibar input exists in the chrome DOM");
-        wc.view.runner.set_focus(Some(omnibar));
-        wc.view
-            .runner
-            .update(|c| c.chrome.omnibar = xilem_serval::TextInput::new("hello world"));
+        wc.multi.set_focus(wc.view.projection_id, Some(omnibar));
+        wc.chrome_update(|c| c.omnibar = xilem_serval::TextInput::new("hello world"));
         wc.view.modifiers.ctrl = true;
         wc.on_key_pressed(&winit::keyboard::Key::Character("a".into()));
     }
-    let state = &app.view().runner.state().chrome;
+    let state = &app.window_local().chrome;
     assert!(
         state.omnibar.has_selection(),
         "Ctrl+A selected the omnibar text"
@@ -1289,7 +1291,7 @@ fn omnibar_ctrl_a_selects_all() {
 fn soft_wrap_nav_declines_outside_the_knot_editor() {
     let mut app = test_app();
     let mut wc = app.ctx();
-    wc.view.runner.set_focus(None);
+    wc.multi.set_focus(wc.view.projection_id, None);
     assert!(
         !wc.soft_wrap_nav(-1, false),
         "no focus: soft-wrap nav declines"
@@ -1297,7 +1299,7 @@ fn soft_wrap_nav_declines_outside_the_knot_editor() {
     let omnibar = wc
         .input_under_class("toolbar")
         .expect("the omnibar input exists");
-    wc.view.runner.set_focus(Some(omnibar));
+    wc.multi.set_focus(wc.view.projection_id, Some(omnibar));
     assert!(
         !wc.soft_wrap_nav(1, false),
         "single-line omnibar: soft-wrap nav declines"
@@ -1313,8 +1315,8 @@ fn knot_editor_close_button_is_small_and_right_of_the_title() {
     use layout_dom_api::LayoutDom;
     use serval_layout::ScrollOffsets;
     let mut app = test_app();
-    let wc = app.ctx();
-    wc.view.chrome_update(|c| c.open_knot_editor("a note"));
+    let mut wc = app.ctx();
+    wc.chrome_update(|c| c.open_knot_editor("a note"));
 
     let sheet = wc.shared.presentation.chrome_sheet_refs();
     let scroll = ScrollOffsets::default();
@@ -1365,8 +1367,8 @@ fn knot_editor_uses_bound_tile_rect_when_available() {
     use layout_dom_api::LayoutDom;
     use serval_layout::ScrollOffsets;
     let mut app = test_app();
-    let wc = app.ctx();
-    wc.view.chrome_update(|c| {
+    let mut wc = app.ctx();
+    wc.chrome_update(|c| {
         c.open_knot_editor("a note");
         c.set_knot_editor_rect(Some([40.0, 90.0, 360.0, 290.0]));
     });
@@ -1436,7 +1438,7 @@ fn knot_editor_saves_the_focused_note_body() {
 
     let step = app.apply_agent_action(AgentAction::InvokeCommand(Command::ToggleKnotEditor));
     assert!(step.result.applied);
-    let chrome = &app.view().runner.state().chrome;
+    let chrome = &app.window_local().chrome;
     assert!(chrome.knot_editor_open, "the editor opens");
     assert_eq!(chrome.knot_target, Some(member));
     assert_eq!(chrome.knot_source.text(), "# Original\n\nbody");
@@ -1444,7 +1446,7 @@ fn knot_editor_saves_the_focused_note_body() {
     let updated = "# Updated\n\nSaved.";
     {
         let mut wc = app.ctx();
-        wc.view.chrome_update(|c| {
+        wc.chrome_update(|c| {
             c.knot_source = xilem_serval::TextInput::new(updated);
             c.request_knot_editor_save();
         });
@@ -1476,22 +1478,18 @@ fn omnibar_right_arrow_accepts_the_ghost_completion() {
         let omnibar = wc
             .input_under_class("toolbar")
             .expect("the omnibar input exists in the chrome DOM");
-        wc.view.runner.set_focus(Some(omnibar));
-        wc.view.chrome_update(|c| {
+        wc.multi.set_focus(wc.view.projection_id, Some(omnibar));
+        wc.chrome_update(|c| {
             c.omnibar = xilem_serval::TextInput::new(">ros");
             c.refresh_suggestions();
         });
-        assert_eq!(
-            wc.view.chrome().omnibar.ghost(),
-            "ter",
-            "the ghost is shown"
-        );
+        assert_eq!(wc.chrome().omnibar.ghost(), "ter", "the ghost is shown");
         wc.on_key_pressed(&winit::keyboard::Key::Named(
             winit::keyboard::NamedKey::ArrowRight,
         ));
     }
     assert_eq!(
-        app.view().runner.state().chrome.omnibar.text(),
+        app.window_local().chrome.omnibar.text(),
         ">roster",
         "Right arrow accepted the ghost into the buffer"
     );
@@ -1536,18 +1534,16 @@ fn ctrl_l_focuses_and_selects_the_omnibar() {
         .input_under_class("toolbar")
         .expect("the omnibar input exists in the chrome DOM");
     // Seed the bar with a shown location and put the caret at its end (focused).
-    wc.view
-        .runner
-        .update(|c| c.chrome.omnibar = xilem_serval::TextInput::new("gemini://shown.example/"));
-    wc.view.runner.set_focus(None);
+    wc.chrome_update(|c| c.omnibar = xilem_serval::TextInput::new("gemini://shown.example/"));
+    wc.multi.set_focus(wc.view.projection_id, None);
     wc.view.modifiers.ctrl = true;
     wc.on_key_pressed(&winit::keyboard::Key::Character("l".into()));
     assert_eq!(
-        wc.view.runner.focus(),
+        wc.multi.focus(wc.view.projection_id),
         Some(omnibar),
         "Ctrl+L focused the omnibar"
     );
-    let state = wc.view.chrome();
+    let state = wc.chrome();
     assert!(
         state.omnibar.has_selection(),
         "Ctrl+L selected the omnibar text"
@@ -1668,7 +1664,7 @@ fn shellbar_roster_button_toggles_the_roster() {
     assert!(!has_roster(&app), "no roster before");
     let roster_btn = {
         use layout_dom_api::LayoutDom;
-        let dom = app.view().runner.dom();
+        let dom = app.view().dom.clone();
         let dom = dom.borrow();
         let buttons = crate::all_with_class(&dom, dom.document(), "shellbar-btn");
         assert!(
@@ -1698,8 +1694,7 @@ fn empty_space_right_click_adds_a_node() {
             wc.view.context_origin.is_some(),
             "the empty-space menu captured a cursor anchor"
         );
-        wc.view
-            .chrome_update(|c| c.pick_context(meerkat::ContextAction::AddNode));
+        wc.chrome_update(|c| c.pick_context(meerkat::ContextAction::AddNode));
         wc.drain_pending_context();
     }
     assert_eq!(
@@ -1726,8 +1721,7 @@ fn workbench_new_tile_mints_and_opens_a_tile() {
     let tiles_before = app.view().workbench.open_members().len();
     {
         let mut wc = app.ctx();
-        wc.view
-            .chrome_update(|c| c.pick_context(meerkat::ContextAction::AddTile));
+        wc.chrome_update(|c| c.pick_context(meerkat::ContextAction::AddTile));
         wc.drain_pending_context();
     }
     assert_eq!(
@@ -1815,7 +1809,7 @@ fn delete_key_removes_the_focused_node() {
     let before = app.orrery().graph().nodes().count();
     {
         let mut wc = app.ctx();
-        wc.view.runner.set_focus(None); // graph has the keyboard
+        wc.multi.set_focus(wc.view.projection_id, None); // graph has the keyboard
         wc.on_key_pressed(&winit::keyboard::Key::Named(
             winit::keyboard::NamedKey::Delete,
         ));
@@ -1837,8 +1831,8 @@ fn omnibar_relate_without_a_pair_reports_a_note() {
         let omnibar = wc
             .input_under_class("toolbar")
             .expect("the omnibar input exists in the chrome DOM");
-        wc.view.runner.set_focus(Some(omnibar));
-        wc.view.chrome_update(|c| {
+        wc.multi.set_focus(wc.view.projection_id, Some(omnibar));
+        wc.chrome_update(|c| {
             c.omnibar = xilem_serval::TextInput::new(">relate");
             c.refresh_suggestions();
         });
@@ -1847,15 +1841,13 @@ fn omnibar_relate_without_a_pair_reports_a_note() {
         ));
     }
     assert!(
-        app.view()
-            .runner
-            .state()
+        app.window_local()
             .chrome
             .omnibar
             .text()
             .contains("two nodes"),
         "the bar reports the no-op, got {:?}",
-        app.view().runner.state().chrome.omnibar.text()
+        app.window_local().chrome.omnibar.text()
     );
 }
 
@@ -1873,15 +1865,15 @@ fn omnibar_command_expression_drives_the_command_spine() {
     };
     let mut app = test_app();
     assert!(!has_roster(&app), "no roster pane before the command");
-    let entries_before = app.view().runner.state().chrome.history.entries().len();
+    let entries_before = app.window_local().chrome.history.entries().len();
 
     {
         let mut wc = app.ctx();
         let omnibar = wc
             .input_under_class("toolbar")
             .expect("the omnibar input exists in the chrome DOM");
-        wc.view.runner.set_focus(Some(omnibar));
-        wc.view.chrome_update(|c| c.show_location(">roster"));
+        wc.multi.set_focus(wc.view.projection_id, Some(omnibar));
+        wc.chrome_update(|c| c.show_location(">roster"));
         wc.on_key_pressed(&winit::keyboard::Key::Named(
             winit::keyboard::NamedKey::Enter,
         ));
@@ -1892,7 +1884,7 @@ fn omnibar_command_expression_drives_the_command_spine() {
         "the `>roster` command toggled the roster pane through the host drain"
     );
     assert_eq!(
-        app.view().runner.state().chrome.history.entries().len(),
+        app.window_local().chrome.history.entries().len(),
         entries_before,
         "a command runs without navigating (no new history entry)"
     );
@@ -1900,15 +1892,9 @@ fn omnibar_command_expression_drives_the_command_spine() {
     // pure action restores the location), never stranded behind a command that
     // already ran.
     assert!(
-        !app.view()
-            .runner
-            .state()
-            .chrome
-            .omnibar
-            .text()
-            .starts_with('>'),
+        !app.window_local().chrome.omnibar.text().starts_with('>'),
         "the omnibar no longer shows the run command, got {:?}",
-        app.view().runner.state().chrome.omnibar.text()
+        app.window_local().chrome.omnibar.text()
     );
 }
 
@@ -2090,13 +2076,13 @@ fn accesskit_focus_on_a_chrome_control_routes_to_the_runner() {
 
     // Apply a `Focus` request at that id: the runner's focus lands on the
     // omnibar, proving the projection id and the route key round-trip.
-    wc.view.runner.set_focus(None);
+    wc.multi.set_focus(wc.view.projection_id, None);
     wc.apply_a11y_request(crate::a11y_bridge::A11yActionRequest {
         action: Action::Focus,
         target_node: target,
     });
     assert_eq!(
-        wc.view.runner.focus(),
+        wc.multi.focus(wc.view.projection_id),
         Some(omnibar),
         "Focus routed through the ChromeNode route to the omnibar node",
     );
