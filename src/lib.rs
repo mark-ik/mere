@@ -44,3 +44,7 @@ pub use edit::{DerivationKind, DerivationRecord, EdgeId, GraphEdit};
 pub use graph::{EdgeKey, Graph, NodeKey};
 pub use spine::GraphLog;
 pub use taxonomy::{Recognized, RelationClass, Semantic, REL_NS};
+
+// Re-exported so a consumer can fork and inspect provenance without depending on
+// codicil directly.
+pub use codicil::{LogId, Provenance};

@@ -73,6 +73,14 @@ impl<N: Identified, E> GraphLog<N, E> {
         Self::default()
     }
 
+    /// A fresh, empty log-backed graph with a stable log identity, so it can later
+    /// be forked with provenance pointing back at it.
+    pub fn with_id(id: LogId) -> Self {
+        let mut this = Self::new();
+        this.log = Codicil::with_id(id);
+        this
+    }
+
     /// The materialized graph (read-only; mutate through the edit methods).
     pub fn graph(&self) -> &Graph<N, E> {
         &self.graph
