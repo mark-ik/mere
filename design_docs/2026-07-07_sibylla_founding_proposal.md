@@ -207,6 +207,19 @@ wgpu execution land behind features, mirroring vates.
 
 ## Progress
 
+- **2026-07-08 — P2 BERT backend landed** (sibylla `c06932b`, mere reconciled
+  `fc5b8db`). The full Burn-backed BERT embedder moved from mere's intel/embed into
+  sibylla behind `bert` / `bert-wgpu` — 16 modules (config, embeddings, attention,
+  feed-forward, layer, encoder, model, word-piece tokenizer, safetensors loader,
+  provider, validation). Ported verbatim but for stripped MPL headers (MIT/Apache),
+  genericized eidetic doc refs ("a host store"), a rewritten mod doc (it is a real
+  working embedder, not the stale "scaffold"), and a `bert`-gated `serde_json` for
+  config parsing. sibylla `--features bert` is green (113 tests: 55 core + the bert
+  unit suite on random weights; 1 ignored dir-load validation via
+  `SIBYLLA_MINILM_DIR`). mere re-exports it (`pub use sibylla::bert`) and keeps its
+  eidetic↔BERT integration test mere-side (that one is app-coupled). This resolves
+  open-Q5 (develop-in-mere-then-move, same as vates's decoder). Remaining: P4
+  (Isometry adoption).
 - **2026-07-08 — P3 mere reconciliation landed** (mere `1fe6a82`). mere's
   `intel/embed` now consumes sibylla for the portable core: it re-exports sibylla's
   modules (`provider` / `stub` / `index` / `search` / `lexical` / `affinity`) at the
