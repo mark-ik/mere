@@ -1,7 +1,8 @@
 # Index burn-lift: batched cosine as a matmul
 
 **Date:** 2026-07-08
-**Status:** P1 (kernel + parity) landing this commit; P2/P3 are roadmap.
+**Status:** P1 (kernel + parity) + P2 (crossover measured, see Findings) landed;
+P3 (route `SemanticSearch` / `affinity_pairs` above the crossover) is roadmap.
 **Related:** the founding proposal (`2026-07-07_sibylla_founding_proposal.md`) for
 the crate shape; re-homes the scoping first written mere-side as
 `intel_vector_index_burn_lift_plan` now that the `VectorIndex` lives here.
@@ -51,6 +52,42 @@ ndarray↔wgpu parity test gated on `index-burn-wgpu`.
 - **P3 — route the consumers.** `SemanticSearch::search` and `affinity_pairs` gain
   the burn fast-path above the measured crossover, behind the feature; the flat
   path stays the default below it and when the feature is off.
+
+## Findings
+
+**2026-07-08 — P2 crossover** (release, real GPU, `d=384`, `k=10`, readback
+included, GPU warmed; CPU = `VectorIndex::nearest` per query, GPU =
+`cosine_top_k::<Wgpu>`):
+
+| shape | N | Q | CPU flat | GPU batched | speedup |
+| --- | --- | --- | --- | --- | --- |
+| all-pairs | 256 | 256 | 45 ms | 170 ms | 0.27× (CPU wins) |
+| all-pairs | 1024 | 1024 | 738 ms | 320 ms | 2.31× |
+| all-pairs | 4096 | 4096 | 13,144 ms | 646 ms | **20.3×** |
+| few-query | 1024 | 8 | 6.4 ms | 186 ms\* | 0.03× (CPU wins) |
+| few-query | 4096 | 8 | 26 ms | 8.3 ms | 3.14× |
+| few-query | 16384 | 8 | 114 ms | 25 ms | 4.52× |
+
+- **All-pairs (arrangement / affinity): crossover ~500-1000.** Below it the GPU
+  dispatch + the `[N,N]` readback dominate the small `O(N²)` and the CPU scan wins;
+  above it the GPU pulls away hard — at 4k the CPU is an unusable 13 s against the
+  GPU's 0.65 s. This matches the mere Lane-5 **force-pass** crossover almost
+  exactly: the same `O(N²)` shape crosses at the same ~1k node count. This is the
+  number that matters for routing `affinity_pairs`.
+- **Few-query (recall / search): GPU pays from a few thousand corpus entries.** 8
+  queries is little CPU work, so the flat scan wins at N=1024; by 4k the GPU is 3×,
+  by 16k 4.5×.
+- **\*The N=1024 few-query GPU time (186 ms) is a one-time artifact, not steady
+  state.** cubecl compiles a kernel per matmul *shape* on first dispatch, and the
+  few-query shape (`[8,d]·[d,N]`) was cold — the warmup ran the all-pairs *square*
+  shape. That ~180 ms is compilation; it amortizes once the shape recurs. The
+  honest warm few-query crossover is ~2-4k corpus. A per-shape warm-on-first-use
+  pass is the mitigation, and a real production consideration: the first query of a
+  new shape pays compilation.
+
+**P3 routing thresholds (conservative):** GPU above ~1000 for all-pairs
+(affinity), above ~4000 corpus for few-query (search); the flat CPU scan stays the
+default below those and when the feature is off.
 
 ## Honest bounds
 

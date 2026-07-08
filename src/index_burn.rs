@@ -193,4 +193,77 @@ mod tests {
             }
         }
     }
+
+    /// P2 crossover: the CPU flat scan (`VectorIndex::nearest` per query) vs the
+    /// GPU batched kernel, across `N` and query shape. Ignored + wgpu-gated; run in
+    /// **release** (debug burn is far too slow to time honestly):
+    ///
+    /// ```text
+    /// cargo test --release --features index-burn-wgpu -- --ignored crossover --nocapture
+    /// ```
+    #[cfg(feature = "index-burn-wgpu")]
+    #[test]
+    #[ignore = "timing sweep; run in release with --ignored --nocapture (see the doc comment)"]
+    fn crossover_cpu_flat_vs_gpu_batched() {
+        use std::time::Instant;
+        type Gpu = burn::backend::Wgpu<f32, i32>;
+        let device = Default::default();
+        let d = 384; // a realistic embedding dimension (MiniLM-class)
+        let k = 10;
+
+        // Deterministic pseudo-random vectors in [-1, 1] (splitmix64).
+        fn corpus(n: usize, d: usize, seed: u64) -> Vec<Vec<f32>> {
+            let mut s = seed;
+            let mut next = move || {
+                s = s.wrapping_add(0x9E37_79B9_7F4A_7C15);
+                let mut z = s;
+                z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+                z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+                z ^= z >> 31;
+                (z as f64 / u64::MAX as f64) as f32 * 2.0 - 1.0
+            };
+            (0..n).map(|_| (0..d).map(|_| next()).collect()).collect()
+        }
+
+        // Warm the GPU: the first dispatch pays device/pipeline init.
+        let w = corpus(64, d, 1);
+        let _ = cosine_top_k::<Gpu>(&w, &w, k, &device);
+
+        let run = |label: &str, corpus_v: &[Vec<f32>], queries: &[Vec<f32>]| {
+            let n = corpus_v.len();
+            let mut idx = VectorIndex::<usize>::new(d, SimilarityMetric::Cosine);
+            for (i, v) in corpus_v.iter().enumerate() {
+                idx.insert(i, v.clone()).unwrap();
+            }
+            let t = Instant::now();
+            for q in queries {
+                let _ = idx.nearest(q, k).unwrap();
+            }
+            let cpu = t.elapsed().as_secs_f64() * 1000.0;
+
+            let t = Instant::now();
+            let _ = cosine_top_k::<Gpu>(queries, corpus_v, k, &device);
+            let gpu = t.elapsed().as_secs_f64() * 1000.0;
+
+            println!(
+                "{label},{n},{},{d},{cpu:.2},{gpu:.2},{:.2}x",
+                queries.len(),
+                cpu / gpu
+            );
+        };
+
+        println!("shape,N,Q,d,cpu_flat_ms,gpu_batched_ms,speedup");
+        // All-pairs (Q = N): the arrangement / affinity shape. Capped at 4096 —
+        // the CPU side is O(N²·d) and the GPU readback is O(N²).
+        for &n in &[256usize, 1024, 4096] {
+            let c = corpus(n, d, 7);
+            run("all-pairs", &c, &c);
+        }
+        // Few-query (Q = 8): the recall / search shape.
+        for &n in &[1024usize, 4096, 16384] {
+            let c = corpus(n, d, 9);
+            let q: Vec<Vec<f32>> = c.iter().take(8).cloned().collect();
+            run("few-query", &c, &q);
+        }
+    }
 }
