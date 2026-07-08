@@ -23,7 +23,22 @@
 //! moves to the GPU. For very large `Q·N` a GPU top-k (returning only `[Q,k]`)
 //! would shrink the readback; that is a refinement, not this cut.
 
+use std::collections::HashSet;
+use std::hash::Hash;
+
 use burn::tensor::{Tensor, TensorData, backend::Backend};
+
+use crate::index::VectorIndex;
+
+/// Entry count at or above which the GPU batched kernel beats the CPU flat scan
+/// for **all-pairs** work (arrangement / affinity), from the P2 crossover
+/// measurement. Below it the dispatch + `[N,N]` readback dominate the small
+/// `O(N²)`, so [`crate::affinity_pairs`] (CPU) wins; a consumer routes on this.
+pub const AFFINITY_GPU_MIN_ENTRIES: usize = 1024;
+
+/// Entry count at or above which the GPU kernel beats the CPU flat scan for
+/// **few-query** work (recall / search), from the P2 crossover measurement.
+pub const SEARCH_GPU_MIN_ENTRIES: usize = 4096;
 
 /// For each query row, the `k` corpus entries most similar by **cosine**, as
 /// `(corpus_index, score)` pairs sorted best-first. Rows of `queries` and `corpus`
@@ -87,6 +102,77 @@ fn l2_normalize_rows<B: Backend>(t: Tensor<B, 2>) -> Tensor<B, 2> {
     let sq_sum = (t.clone() * t.clone()).sum_dim(1); // [R, 1]
     let inv_norm = sq_sum.sqrt().add_scalar(1e-12).recip(); // [R, 1]
     t * inv_norm // [R, d] * [R, 1] broadcasts over the row
+}
+
+/// [`cosine_top_k`] over a [`VectorIndex`]'s entries, returning results keyed by
+/// the index's own `K` (not corpus positions). The GPU path for recall / search;
+/// a consumer routes to it when the index has at least [`SEARCH_GPU_MIN_ENTRIES`].
+/// Cosine only.
+pub fn nearest_over_index<K, B>(
+    index: &VectorIndex<K>,
+    queries: &[Vec<f32>],
+    k: usize,
+    device: &B::Device,
+) -> Vec<Vec<(K, f32)>>
+where
+    K: Hash + Eq + Clone,
+    B: Backend,
+{
+    let entries: Vec<(K, Vec<f32>)> = index.iter().map(|(key, v)| (key.clone(), v.clone())).collect();
+    let corpus: Vec<Vec<f32>> = entries.iter().map(|(_, v)| v.clone()).collect();
+    cosine_top_k::<B>(queries, &corpus, k, device)
+        .into_iter()
+        .map(|row| {
+            row.into_iter()
+                .map(|(pos, score)| (entries[pos].0.clone(), score))
+                .collect()
+        })
+        .collect()
+}
+
+/// The GPU all-pairs analog of [`affinity_pairs`](crate::affinity_pairs): each
+/// entry's `top_k` nearest above `min_similarity`, symmetric-deduped, weight =
+/// clamped cosine. Drop-in equivalent to the CPU version (same pairs, weights
+/// within float tolerance) but with the all-pairs step on burn. The GPU path for
+/// arrangement / affinity; a consumer routes to it when the index has at least
+/// [`AFFINITY_GPU_MIN_ENTRIES`]. Cosine only — the index metric is assumed
+/// [`Cosine`](crate::SimilarityMetric::Cosine), as `affinity_pairs` intends.
+pub fn affinity_pairs_over_index<K, B>(
+    index: &VectorIndex<K>,
+    top_k: usize,
+    min_similarity: f32,
+    device: &B::Device,
+) -> Vec<(K, K, f32)>
+where
+    K: Hash + Eq + Clone,
+    B: Backend,
+{
+    let entries: Vec<(K, Vec<f32>)> = index.iter().map(|(key, v)| (key.clone(), v.clone())).collect();
+    if entries.len() < 2 {
+        return Vec::new();
+    }
+    let vectors: Vec<Vec<f32>> = entries.iter().map(|(_, v)| v.clone()).collect();
+    // `+1` because each entry's nearest set includes itself at the top.
+    let neighbours = cosine_top_k::<B>(&vectors, &vectors, top_k + 1, device);
+
+    // Identical filter/dedup to `affinity_pairs`, over the GPU-computed neighbours.
+    let mut seen: HashSet<(K, K)> = HashSet::new();
+    let mut pairs: Vec<(K, K, f32)> = Vec::new();
+    for (i, (key, _)) in entries.iter().enumerate() {
+        for &(pos, similarity) in &neighbours[i] {
+            let neighbour = &entries[pos].0;
+            if neighbour == key || similarity < min_similarity {
+                continue;
+            }
+            if seen.contains(&(neighbour.clone(), key.clone())) {
+                continue;
+            }
+            if seen.insert((key.clone(), neighbour.clone())) {
+                pairs.push((key.clone(), neighbour.clone(), similarity.clamp(0.0, 1.0)));
+            }
+        }
+    }
+    pairs
 }
 
 #[cfg(test)]
@@ -170,6 +256,58 @@ mod tests {
         let got = cosine_top_k::<B>(&[vec![0.0, 0.0, 0.0]], &corpus, 2, &Default::default());
         for (_, s) in &got[0] {
             assert!(s.abs() < 1e-6, "zero query scores ~0, got {s}");
+        }
+    }
+
+    #[test]
+    fn nearest_over_index_matches_cpu_nearest() {
+        type B = burn::backend::NdArray<f32>;
+        let mut index = VectorIndex::<u32>::new(3, SimilarityMetric::Cosine);
+        index.insert(10, vec![1.0, 0.0, 0.0]).unwrap();
+        index.insert(20, vec![0.9, 0.1, 0.0]).unwrap();
+        index.insert(30, vec![0.0, 1.0, 0.0]).unwrap();
+        let queries = vec![vec![1.0, 0.0, 0.0]];
+
+        let got = nearest_over_index::<u32, B>(&index, &queries, 2, &Default::default());
+        let want = index.nearest(&queries[0], 2).unwrap(); // the CPU path it accelerates
+        assert_eq!(got[0].len(), want.len());
+        for ((gk, gs), (wk, ws)) in got[0].iter().zip(&want) {
+            assert_eq!(gk, wk, "same key ranked");
+            assert!((gs - ws).abs() < 1e-5, "score {gs} vs reference {ws}");
+        }
+    }
+
+    #[test]
+    fn affinity_pairs_over_index_matches_cpu() {
+        use crate::affinity::affinity_pairs;
+        use std::collections::HashMap;
+        type B = burn::backend::NdArray<f32>;
+        // Two clean clusters (A near axis 0, B near axis 1) — the affinity fixture.
+        let mut index = VectorIndex::<u32>::new(4, SimilarityMetric::Cosine);
+        for (key, v) in [
+            (1u32, vec![1.0, 0.0, 0.0, 0.0]),
+            (2, vec![0.95, 0.05, 0.0, 0.0]),
+            (3, vec![0.9, 0.1, 0.0, 0.0]),
+            (4, vec![0.0, 1.0, 0.0, 0.0]),
+            (5, vec![0.05, 0.95, 0.0, 0.0]),
+            (6, vec![0.1, 0.9, 0.0, 0.0]),
+        ] {
+            index.insert(key, v).unwrap();
+        }
+        let cpu = affinity_pairs(&index, 3, 0.8).unwrap();
+        let gpu = affinity_pairs_over_index::<u32, B>(&index, 3, 0.8, &Default::default());
+
+        // Compare as canonical (min,max) → weight maps (pair order is not defined).
+        let canon = |v: &[(u32, u32, f32)]| -> HashMap<(u32, u32), f32> {
+            v.iter()
+                .map(|&(a, b, w)| (if a < b { (a, b) } else { (b, a) }, w))
+                .collect()
+        };
+        let (cm, gm) = (canon(&cpu), canon(&gpu));
+        assert_eq!(cm.len(), gm.len(), "same pair count: cpu {} gpu {}", cm.len(), gm.len());
+        for (pair, cw) in &cm {
+            let gw = gm.get(pair).unwrap_or_else(|| panic!("gpu missing pair {pair:?}"));
+            assert!((cw - gw).abs() < 1e-5, "weight {cw} vs {gw} for {pair:?}");
         }
     }
 

@@ -1,8 +1,9 @@
 # Index burn-lift: batched cosine as a matmul
 
 **Date:** 2026-07-08
-**Status:** P1 (kernel + parity) + P2 (crossover measured, see Findings) landed;
-P3 (route `SemanticSearch` / `affinity_pairs` above the crossover) is roadmap.
+**Status:** P1 (kernel + parity) + P2 (crossover measured, see Findings) + P3
+(keyed GPU accelerators over `VectorIndex` + routing thresholds) landed. The
+burn-lift is complete for the flat index; HNSW is the separate algorithmic path.
 **Related:** the founding proposal (`2026-07-07_sibylla_founding_proposal.md`) for
 the crate shape; re-homes the scoping first written mere-side as
 `intel_vector_index_burn_lift_plan` now that the `VectorIndex` lives here.
@@ -49,9 +50,21 @@ ndarray↔wgpu parity test gated on `index-burn-wgpu`.
   (readback included, GPU warmed), for both all-pairs (`Q=N`, arrangement) and
   few-query (recall) shapes — different crossovers, both matter. Record where the
   matmul path overtakes the flat scan.
-- **P3 — route the consumers.** `SemanticSearch::search` and `affinity_pairs` gain
-  the burn fast-path above the measured crossover, behind the feature; the flat
-  path stays the default below it and when the feature is off.
+- **P3 — accelerators over the index (landed 2026-07-08).** The extraction
+  discipline shaped this: `search.rs` and `affinity.rs` stay **pure and
+  serde-only** (sibylla is the source of truth the mere copies reconcile onto), so
+  the burn fast-paths live entirely in the feature-gated `index_burn` module as
+  *keyed* entry points over the portable `VectorIndex`:
+  - `nearest_over_index<K, B>` — `cosine_top_k` over an index, results keyed by the
+    index's own `K` (the search / recall accelerator).
+  - `affinity_pairs_over_index<K, B>` — the GPU all-pairs analog of
+    `affinity_pairs`, drop-in equivalent (same pairs, weights within 1e-5, tested).
+  - `AFFINITY_GPU_MIN_ENTRIES` (1024) and `SEARCH_GPU_MIN_ENTRIES` (4096) — the
+    measured crossovers a consumer routes on (`if index.len() >= … { gpu } else
+    { cpu }`). Routing is the caller's one-line check, not hidden fallback — single
+    -responsibility functions compose cleanly, and the caller can override the
+    threshold. When mere / Isometry adopt sibylla they enable `index-burn(-wgpu)`
+    and route large graphs to these; nothing couples the pure facade to burn.
 
 ## Findings
 
