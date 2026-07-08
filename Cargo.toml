@@ -1,0 +1,25 @@
+[package]
+name = "vates"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+license = "MPL-2.0"
+description = "A local-model inference seam: the InferenceProvider trait, capability descriptors, and a deterministic canned provider. Model-backed backends (burn-wgpu, external llama.cpp/Ollama endpoints, mistral.rs) land behind features, selected by capability, never bound as universal."
+repository = "https://github.com/mark-ik/vates"
+keywords = ["inference", "llm", "local", "seam", "streaming"]
+categories = ["science", "api-bindings"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"
+
+# Model-backed backends land behind these features as they are ported from
+# mere's intel/infer (see design_docs/2026-07-07_vates_founding_proposal.md):
+#   decoder       — the own burn-wgpu llama-family decoder (ndarray + wgpu)
+#   endpoint      — an external OpenAI-compatible endpoint (Ollama, llama.cpp)
+#   actor         — a threaded streaming actor over any provider
+# The default build is the seam plus the canned stub: no GPU, no model, wasm-clean.
+[features]
+default = []
