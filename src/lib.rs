@@ -40,7 +40,7 @@ pub use caps::{
     Address, Addressed, Classified, ContentBearing, Identified, Labeled, Predicated,
 };
 pub use container::{Container, Relation};
-pub use edit::{EdgeId, GraphEdit};
+pub use edit::{DerivationKind, DerivationRecord, EdgeId, GraphEdit};
 pub use graph::{EdgeKey, Graph, NodeKey};
 pub use spine::GraphLog;
 pub use taxonomy::{Recognized, RelationClass, Semantic, REL_NS};

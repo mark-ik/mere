@@ -20,12 +20,12 @@
 
 use std::collections::HashMap;
 
-use codicil::{Codicil, Seq};
+use codicil::{Codicil, LogId, Provenance, Seq};
 use muniment::{Backend, Codec, SlotStore, StoreError};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::caps::Identified;
-use crate::edit::{EdgeId, GraphEdit};
+use crate::edit::{DerivationRecord, EdgeId, GraphEdit};
 use crate::graph::{EdgeKey, Graph, NodeKey};
 
 /// An event-sourced graph: a materialized [`Graph`] plus the [`Codicil`] of edits
@@ -35,6 +35,7 @@ pub struct GraphLog<N: Identified, E> {
     log: Codicil<GraphEdit<N, E>>,
     by_edge_id: HashMap<EdgeId, EdgeKey>,
     by_edge_key: HashMap<EdgeKey, EdgeId>,
+    derivations: HashMap<N::Id, Vec<DerivationRecord<N::Id>>>,
     next_edge: u64,
 }
 
@@ -47,6 +48,7 @@ pub struct GraphLog<N: Identified, E> {
 struct Snapshot<N: Identified, E> {
     nodes: Vec<N>,
     edges: Vec<(EdgeId, N::Id, N::Id, E)>,
+    derivations: Vec<(N::Id, DerivationRecord<N::Id>)>,
     next_edge: u64,
     /// The number of log entries baked into this snapshot; replay resumes here.
     at_seq: u64,
@@ -59,6 +61,7 @@ impl<N: Identified, E> Default for GraphLog<N, E> {
             log: Codicil::new(),
             by_edge_id: HashMap::new(),
             by_edge_key: HashMap::new(),
+            derivations: HashMap::new(),
             next_edge: 0,
         }
     }
@@ -84,6 +87,25 @@ impl<N: Identified, E> GraphLog<N, E> {
     pub fn edge_key(&self, id: EdgeId) -> Option<EdgeKey> {
         self.by_edge_id.get(&id).copied()
     }
+
+    /// This graph's log identity, if any.
+    pub fn id(&self) -> Option<&LogId> {
+        self.log.id()
+    }
+
+    /// Where this graph forked from, if it is a fork.
+    pub fn provenance(&self) -> Option<&Provenance> {
+        self.log.provenance()
+    }
+
+    /// The derivation records for a node: the other-graph nodes it was derived
+    /// from. Empty for a natively-minted node.
+    pub fn derivations(&self, node: &N::Id) -> &[DerivationRecord<N::Id>] {
+        self.derivations
+            .get(node)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
 }
 
 impl<N: Identified + Clone, E: Clone> GraphLog<N, E> {
@@ -103,6 +125,7 @@ impl<N: Identified + Clone, E: Clone> GraphLog<N, E> {
                     }
                     self.graph.remove(key);
                 }
+                self.derivations.remove(id);
             }
             GraphEdit::Connect { id, from, to, edge } => {
                 if let (Some(from_key), Some(to_key)) =
@@ -121,6 +144,12 @@ impl<N: Identified + Clone, E: Clone> GraphLog<N, E> {
                     self.by_edge_key.remove(&edge_key);
                     self.graph.disconnect(edge_key);
                 }
+            }
+            GraphEdit::Derive { node, from } => {
+                self.derivations
+                    .entry(node.clone())
+                    .or_default()
+                    .push(from.clone());
             }
         }
     }
@@ -175,6 +204,24 @@ impl<N: Identified + Clone, E: Clone> GraphLog<N, E> {
         true
     }
 
+    /// Record that `node` derives from a node in another graph.
+    pub fn derive(&mut self, node: &N::Id, from: DerivationRecord<N::Id>) {
+        let edit = GraphEdit::Derive {
+            node: node.clone(),
+            from,
+        };
+        self.apply_edit(&edit);
+        self.log.append(edit);
+    }
+
+    /// Fork this graph under a new log identity. The fork is self-contained: it
+    /// copies the whole edit history and carries a provenance header pointing back
+    /// at the source (see [`provenance`](GraphLog::provenance)), then diverges
+    /// independently.
+    pub fn fork(&self, new_id: LogId) -> Self {
+        Self::replay(self.log.fork(new_id))
+    }
+
     /// Rebuild a graph by replaying an edit log from empty.
     pub fn replay(log: Codicil<GraphEdit<N, E>>) -> Self {
         let mut this = Self::new();
@@ -198,6 +245,9 @@ impl<N: Identified + Clone, E: Clone> GraphLog<N, E> {
                 this.by_edge_id.insert(id, edge_key);
                 this.by_edge_key.insert(edge_key, id);
             }
+        }
+        for (node, record) in snapshot.derivations {
+            this.derivations.entry(node).or_default().push(record);
         }
         this.next_edge = snapshot.next_edge;
         (this, snapshot.at_seq)
@@ -238,9 +288,17 @@ where
                 }
             }
         }
+        let derivations: Vec<(N::Id, DerivationRecord<N::Id>)> = self
+            .derivations
+            .iter()
+            .flat_map(|(node, records)| {
+                records.iter().map(move |record| (node.clone(), record.clone()))
+            })
+            .collect();
         let snapshot = Snapshot {
             nodes,
             edges,
+            derivations,
             next_edge: self.next_edge,
             at_seq: self.log.len() as u64,
         };
@@ -399,6 +457,65 @@ mod tests {
             assert!(reloaded.edge_key(e).is_some(), "the pre-reload id resolves");
             assert!(reloaded.disconnect(e), "retract by the stable id works");
             assert_eq!(reloaded.graph().edge_count(), 0);
+        });
+    }
+
+    #[test]
+    fn fork_carries_history_and_provenance_then_diverges() {
+        use codicil::{LogId, Seq};
+
+        let mut source = GraphLog::new();
+        // The source needs an identity for the fork to point back at it.
+        source = GraphLog::replay(source.log().clone().fork(LogId::new("source")));
+        source.insert_node(Container::new("a"));
+        source.insert_node(Container::new("b"));
+        source.connect(&"a".to_string(), &"b".to_string(), cites());
+
+        let mut fork = source.fork(LogId::new("fork"));
+        // The fork is a self-contained copy.
+        assert_eq!(fingerprint(fork.graph()), fingerprint(source.graph()));
+        // And it knows where it came from.
+        let provenance = fork.provenance().expect("a fork has provenance");
+        assert_eq!(provenance.source, Some(LogId::new("source")));
+        assert_eq!(provenance.at, Seq(source.log().len() as u64));
+
+        // Diverging the fork leaves the source untouched.
+        fork.insert_node(Container::new("c"));
+        fork.connect(&"a".to_string(), &"c".to_string(), cites());
+        assert_eq!(source.graph().node_count(), 2, "source unchanged");
+        assert_eq!(fork.graph().node_count(), 3);
+    }
+
+    #[test]
+    fn derivation_records_survive_round_trip() {
+        use crate::edit::DerivationKind;
+        use codicil::LogId;
+
+        pollster::block_on(async {
+            let slots = JsonSlots::new(MemoryBackend::new());
+
+            let mut live: GraphLog<Container, Relation> = GraphLog::new();
+            live.insert_node(Container::new("clip"));
+            // The node was copied from node "orig" in another graph, "source".
+            live.derive(
+                &"clip".to_string(),
+                DerivationRecord {
+                    source_log: LogId::new("source"),
+                    source_node: "orig".to_string(),
+                    kind: DerivationKind::CopiedFrom,
+                },
+            );
+            live.save_log(&slots, "log").await.unwrap();
+
+            let reloaded = GraphLog::<Container, Relation>::load_full(&slots, "log")
+                .await
+                .unwrap();
+            let derivations = reloaded.derivations(&"clip".to_string());
+            assert_eq!(derivations.len(), 1, "the derivation survived reload");
+            assert_eq!(derivations[0].source_node, "orig");
+            assert_eq!(derivations[0].kind, DerivationKind::CopiedFrom);
+            // Natively-minted nodes have none.
+            assert!(reloaded.derivations(&"absent".to_string()).is_empty());
         });
     }
 }

@@ -11,6 +11,7 @@
 //! [`EdgeId`] at connect time (assigned by the [`GraphLog`](crate::GraphLog) and
 //! carried in the edit) so a specific edge can be retracted across replay.
 
+use codicil::LogId;
 use serde::{Deserialize, Serialize};
 
 use crate::caps::Identified;
@@ -20,6 +21,34 @@ use crate::caps::Identified;
 /// edge for retraction.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct EdgeId(pub u64);
+
+/// How a node was derived from another graph's node.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DerivationKind {
+    /// A verbatim copy (tear-out): the content is unchanged, only the identity and
+    /// host graph differ.
+    CopiedFrom,
+    /// An excerpt or clip of the source.
+    ClippedFrom,
+    /// Generated from the source (a summary, an answer).
+    GeneratedFrom,
+    /// A translation of the source.
+    TranslatedFrom,
+}
+
+/// A record that a node in this graph derives from a node in another graph. The
+/// node-level provenance that tracks duplicates across graphs, rather than
+/// deduplicating them (the whole-graph fork provenance lives on the log; see
+/// [`codicil::Provenance`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DerivationRecord<Id> {
+    /// The identity of the graph (log) the source node lives in.
+    pub source_log: LogId,
+    /// The source node's identity within that graph.
+    pub source_node: Id,
+    /// How this node relates to the source.
+    pub kind: DerivationKind,
+}
 
 /// One mutation of a graph. The unit stored in the edit spine.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -45,4 +74,11 @@ pub enum GraphEdit<N: Identified, E> {
     },
     /// Retract the edge with this stable id.
     Disconnect(EdgeId),
+    /// Record that a node derives from a node in another graph.
+    Derive {
+        /// The node in this graph.
+        node: N::Id,
+        /// Where it came from.
+        from: DerivationRecord<N::Id>,
+    },
 }
