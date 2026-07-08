@@ -32,6 +32,8 @@
 
 pub mod affinity;
 pub mod index;
+#[cfg(feature = "index-burn")]
+pub mod index_burn;
 pub mod lexical;
 pub mod provider;
 pub mod search;
@@ -39,6 +41,8 @@ pub mod stub;
 
 pub use affinity::affinity_pairs;
 pub use index::{IndexError, VectorIndex};
+#[cfg(feature = "index-burn")]
+pub use index_burn::cosine_top_k;
 pub use lexical::LexicalEmbeddingProvider;
 pub use provider::{EmbedError, EmbeddingProvider, SimilarityMetric};
 pub use search::{SearchError, SemanticSearch};

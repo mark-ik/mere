@@ -11,6 +11,10 @@ categories = ["science", "data-structures"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
+# Burn-backed batched-cosine index kernel (the `index-burn` feature). ndarray for
+# portable CPU compute; `index-burn-wgpu` adds the wgpu backend for GPU execution.
+# Optional — the default build stays serde-only and wasm-clean.
+burn = { version = "0.21", default-features = false, features = ["ndarray", "std"], optional = true }
 
 [dev-dependencies]
 serde_json = "1"
@@ -24,3 +28,8 @@ serde_json = "1"
 # The default build stays wasm-clean.
 [features]
 default = []
+# The batched-cosine index kernel: all-pairs / query-vs-all cosine as one matmul
+# on burn (the heavy O(Q·N·d) work), CPU top-k over the readback. ndarray backend.
+index-burn = ["dep:burn"]
+# Adds burn's wgpu backend so the kernel runs on the GPU.
+index-burn-wgpu = ["index-burn", "burn/wgpu"]
