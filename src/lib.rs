@@ -22,19 +22,25 @@
 //! Relations come in two rings: a shared [`Semantic`] ring that projects to RDF,
 //! and app-private families that do not (see [`taxonomy`]).
 //!
-//! This is the **G0** cut: the generic core, the capability traits, the default
-//! payloads, and the two-ring taxonomy. The edit spine (codicil), lineage
-//! (stemma), and the RDF projection (scholia) are later phases. The canonical plan
-//! is mere's `design_docs/.../2026-07-08_generic_graph_substrate_plan.md`.
+//! G0 is the generic core, the capability traits, the default payloads, and the
+//! two-ring taxonomy. **G1** adds the edit spine ([`GraphLog`]): graph mutations
+//! are [`GraphEdit`] entries in a codicil, the graph is the replay, and muniment
+//! snapshots give checkpoint-plus-tail loading. Lineage (stemma) and the RDF
+//! projection (scholia) are later phases. The canonical plan is mere's
+//! `design_docs/.../2026-07-08_generic_graph_substrate_plan.md`.
 
 pub mod caps;
 pub mod container;
+pub mod edit;
 pub mod graph;
+pub mod spine;
 pub mod taxonomy;
 
 pub use caps::{
     Address, Addressed, Classified, ContentBearing, Identified, Labeled, Predicated,
 };
 pub use container::{Container, Relation};
+pub use edit::{EdgeId, GraphEdit};
 pub use graph::{EdgeKey, Graph, NodeKey};
+pub use spine::GraphLog;
 pub use taxonomy::{Recognized, RelationClass, Semantic, REL_NS};

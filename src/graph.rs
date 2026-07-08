@@ -152,6 +152,21 @@ impl<N: Identified, E> Graph<N, E> {
     {
         self.nodes().filter(move |(_, node)| pred(node))
     }
+
+    /// Every edge incident to `key`, in either direction, deduplicated (a self-loop
+    /// appears once). Used by the edit spine to reap edge bookkeeping when a node is
+    /// removed.
+    pub fn incident_edges(&self, key: NodeKey) -> Vec<EdgeKey> {
+        let mut edges: Vec<EdgeKey> = self
+            .inner
+            .edges_directed(key, Direction::Outgoing)
+            .chain(self.inner.edges_directed(key, Direction::Incoming))
+            .map(|edge| edge.id())
+            .collect();
+        edges.sort();
+        edges.dedup();
+        edges
+    }
 }
 
 // Queries unlocked by node capabilities.

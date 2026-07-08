@@ -15,6 +15,9 @@ serde = { version = "1", features = ["derive"] }
 # For the content reference in ContentBearing (the blake3 Hash). default-features
 # off so chartulary does not pull muniment's JSON/postcard codecs, only its Hash.
 muniment = { path = "../muniment", default-features = false }
+# The edit spine (G1): graph edits are a codicil log, persisted through muniment.
+codicil = { path = "../codicil" }
 
 [dev-dependencies]
+pollster = "0.4"
 serde_json = "1"
