@@ -52,7 +52,20 @@ pub fn vector_index_schema_ref() -> SchemaRef {
 pub static VECTOR_INDEX_SCHEMA_REF: std::sync::LazyLock<SchemaRef> =
     std::sync::LazyLock::new(vector_index_schema_ref);
 
-impl<K> TypedPayload for VectorIndex<K>
+/// A local newtype carrying the [`TypedPayload`] schema for a [`VectorIndex`].
+///
+/// `VectorIndex` (sibylla) and `TypedPayload` (eidetic) are both foreign to this
+/// crate, so the impl cannot sit on `VectorIndex` directly — the orphan rule
+/// forbids it. `TypedPayload` requires `Serialize + DeserializeOwned`, so the
+/// wrapper owns its index (a borrowing form cannot deserialize). It is
+/// `#[serde(transparent)]`, so it serializes byte-identically to the raw index —
+/// the persisted format and its schema are unchanged. Save clones into it (saves
+/// are infrequent; the bytes are identical).
+#[derive(Serialize, serde::Deserialize)]
+#[serde(transparent)]
+struct PersistedIndex<K: Hash + Eq + Clone>(VectorIndex<K>);
+
+impl<K> TypedPayload for PersistedIndex<K>
 where
     K: Hash + Eq + Clone + Serialize + DeserializeOwned,
 {
@@ -77,7 +90,7 @@ where
 {
     save_typed(
         store,
-        index,
+        &PersistedIndex(index.clone()),
         Vec::<BlobSource>::new(),
         privacy,
         provenance,
@@ -99,7 +112,9 @@ pub async fn load_from_eidetic<K>(
 where
     K: Hash + Eq + Clone + Serialize + DeserializeOwned,
 {
-    load_typed::<VectorIndex<K>>(store, fetcher, id).await
+    Ok(load_typed::<PersistedIndex<K>>(store, fetcher, id)
+        .await?
+        .map(|persisted| persisted.0))
 }
 
 #[cfg(test)]

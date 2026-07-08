@@ -2,12 +2,21 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Embedding-provider trait, deterministic test provider, Burn-backed BERT
-//! provider, pure-Rust flat vector index, and field-algebra bridge for
-//! Mere's statistical-intelligence tier.
+//! Mere's statistical-intelligence glue over the standalone `sibylla` retrieval
+//! crate.
+//!
+//! The portable retrieval core — the [`EmbeddingProvider`] trait, [`VectorIndex`],
+//! [`SemanticSearch`], the [`LexicalEmbeddingProvider`] + [`StubEmbeddingProvider`]
+//! embedders, and [`affinity_pairs`] — lives in `sibylla` and is re-exported here
+//! at the same paths. This crate keeps only the pieces coupled to mere:
+//!
+//! - `bert` — the Burn-backed BERT provider (moves to sibylla at its roadmap P2).
+//! - `persistence` — save/load a `VectorIndex` through eidetic's typed-payload API.
+//! - `field_bridge` / `canvas_search` — project query similarity into aether's
+//!   field algebra over the graph canvas.
 //!
 //! See `repos/mere/design_docs/mere_docs/research/2026-05-08_local_intelligence_integration_research.md`
-//! for the architectural anchor.
+//! for the architectural anchor, and sibylla's founding proposal for the split.
 //!
 //! ## Quick start (with the `bert` feature)
 //!
@@ -40,17 +49,16 @@
 //! # fn main() {}
 //! ```
 
-pub mod affinity;
+// The portable retrieval core is owned by sibylla; re-export its modules at the
+// same paths so the mere glue below (`use crate::index::…`, `crate::provider::…`,
+// `crate::search::…`) and the `bert` provider bind to sibylla's types with no churn.
+pub use sibylla::{affinity, index, lexical, provider, search, stub};
+
 #[cfg(feature = "bert")]
 pub mod bert;
 pub mod canvas_search;
 pub mod field_bridge;
-pub mod index;
-pub mod lexical;
-pub mod stub;
 pub mod persistence;
-pub mod provider;
-pub mod search;
 
 #[cfg(feature = "bert")]
 pub use bert::{

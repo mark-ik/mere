@@ -77,9 +77,6 @@ path = "src/main.rs"
 # serval checkout — mere and serval share the vello 0.9 / wgpu 29 pins, so there
 # is no renderer-stack reconciliation (serval-as-host flip plan, Findings).
 xilem-serval = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
-# Chisel scene slots (Path B): the orrery + gloss-minimap scenes ride the leaf
-# contract — epoch-gated host rasterize loop, uniform key->texture compose.
-chisel = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 serval-scripted-dom = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 # The content card parses fetched pages as full HTML documents (keeping <head>,
 # so head <style> / <link> are seen) and renders them through the shared serval

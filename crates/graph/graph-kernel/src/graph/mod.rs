@@ -66,6 +66,8 @@ pub mod identity;
 pub mod import_records;
 pub mod node;
 pub mod node_props;
+// chartulary capability-trait impls for `Node` (graph re-base, G5).
+mod chart;
 
 // Field system (2026-05-31, field-system step 3): Field/Coupling kernel-truth
 // primitives + the portable field AST. A parallel keyed store on `Graph` lands

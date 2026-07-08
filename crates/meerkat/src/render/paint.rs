@@ -213,7 +213,7 @@ impl WindowCtx<'_> {
             b: 0.100,
             a: 1.0,
         };
-        // The gloss backdrop clear (panel tone), needed by the slot pass below.
+        // The gloss backdrop clear (panel tone).
         let pb = self.shared.presentation.chrome_theme.panel_bg.to_array();
         let gloss_clear = wgpu::Color {
             r: pb[0] as f64 / 255.0,
@@ -221,82 +221,47 @@ impl WindowCtx<'_> {
             b: pb[2] as f64 / 255.0,
             a: 1.0,
         };
-        // Chisel scene slots (Path B): push this frame's scenes into their
-        // slots only when the producer changed (the orrery's own redraw flag;
-        // first frame always), so stable epochs skip the rasterize below
-        // entirely — the leaf-tier retention gate extended through the GPU.
+        // Orrery + gloss-minimap backdrops: rasterize each netrender scene to a
+        // texture keyed by the scene key its `<external-texture>` element
+        // carries, then `compose_surfaces` looks each up uniformly at the
+        // element's laid-out rect (no per-key branch). Re-rasterize only when
+        // the producer changed (`orrery_redraw`) or the box resized — the
+        // retention gate, host-side (the scenes are netrender-native, so a host
+        // registry, not a chisel vello scene leaf). (Orrery Path-B port.)
         let orrery_raster_t = std::time::Instant::now();
         let orrery_key = crate::window_view::ORRERY_SCENE_KEY;
         let gloss_key = crate::gloss_view::GLOSS_MINIMAP_SCENE_KEY;
-        {
-            let slots = &mut self.view.chisel_slots;
-            let orrery_size =
-                chisel::Size { width: orrery_w as f32, height: orrery_h as f32 };
-            if !slots.contains(&orrery_key) {
-                slots.insert(orrery_key, Box::new(chisel::SceneSlot::new(orrery_size)));
-            }
-            if orrery_redraw || !self.view.chisel_slot_textures.contains_key(&orrery_key) {
-                if let Some(slot) = slots.get_mut_as::<chisel::SceneSlot>(&orrery_key) {
-                    slot.set_scene(orrery_scene);
-                }
-            }
-            let gloss_size = gloss_minimap_scene
-                .as_ref()
-                .map(|(_, mw, mh)| chisel::Size { width: *mw as f32, height: *mh as f32 });
-            if let Some((scene, _, _)) = gloss_minimap_scene {
-                if !slots.contains(&gloss_key) {
-                    slots.insert(
-                        gloss_key,
-                        Box::new(chisel::SceneSlot::new(gloss_size.unwrap())),
-                    );
-                }
-                // No change flag from the gloss producer yet: push per frame
-                // (epoch bumps, raster runs — the pre-slot behavior, now on
-                // the uniform path; a producer flag is the later refinement).
-                if let Some(slot) = slots.get_mut_as::<chisel::SceneSlot>(&gloss_key) {
-                    slot.set_scene(scene);
-                }
-            }
-            let cache = &mut self.view.chisel_slot_cache;
-            slots.render_into(
-                |key| {
-                    if key == orrery_key {
-                        Some(orrery_size)
-                    } else if key == gloss_key {
-                        gloss_size
-                    } else {
-                        None
-                    }
-                },
-                cache,
+        let orrery_dims = (orrery_w, orrery_h);
+        let orrery_stale = orrery_redraw
+            || self.view.scene_textures.get(&orrery_key).map(|(_, _, d)| *d) != Some(orrery_dims);
+        if orrery_stale {
+            let (tex, view) = core.rasterize_for(
+                super::surface_keys::ORRERY_CANVAS,
+                &orrery_scene,
+                orrery_w,
+                orrery_h,
+                ColorLoad::Clear(backdrop),
             );
-        }
-        // The slot rasterize loop: one pass over every scene awaiting a
-        // texture, skipped wholesale when its (epoch, size) did not move.
-        for (key, scene, epoch, size) in self.view.chisel_slot_cache.scenes() {
-            let (w_px, h_px) = (size.width.round().max(1.0) as u32, size.height.round().max(1.0) as u32);
-            let stale = self
-                .view
-                .chisel_slot_textures
-                .get(&key)
-                .is_none_or(|(_, _, e, s)| *e != epoch || *s != (w_px, h_px));
-            if !stale {
-                continue;
-            }
-            let (surface, clear) = if key == orrery_key {
-                (super::surface_keys::ORRERY_CANVAS, backdrop)
-            } else {
-                (super::surface_keys::GLOSS_MINIMAP, gloss_clear)
-            };
-            let (tex, view) = core.rasterize_for(surface, scene, w_px, h_px, ColorLoad::Clear(clear));
             self.view
-                .chisel_slot_textures
-                .insert(key, (tex, view, epoch, (w_px, h_px)));
+                .scene_textures
+                .insert(orrery_key, (tex, view, orrery_dims));
         }
-        // Drop textures for slots whose scenes are gone (gloss pane closed).
-        {
-            let live: Vec<u64> = self.view.chisel_slot_cache.scenes().map(|(k, ..)| k).collect();
-            self.view.chisel_slot_textures.retain(|k, _| live.contains(k));
+        // The gloss minimap has no producer change flag yet, so re-rasterize per
+        // frame while its pane is open (the pre-port behavior); a change flag is
+        // the later retention refinement. When the pane closes, drop its texture.
+        if let Some((scene, mw, mh)) = gloss_minimap_scene.as_ref() {
+            let (tex, view) = core.rasterize_for(
+                super::surface_keys::GLOSS_MINIMAP,
+                scene,
+                *mw,
+                *mh,
+                ColorLoad::Clear(gloss_clear),
+            );
+            self.view
+                .scene_textures
+                .insert(gloss_key, (tex, view, (*mw, *mh)));
+        } else {
+            self.view.scene_textures.remove(&gloss_key);
         }
         let orrery_raster_us = orrery_raster_t.elapsed().as_micros();
         // Rasterize each secondary graph-pane's scene. The textures must outlive
@@ -336,33 +301,14 @@ impl WindowCtx<'_> {
             None => (None, None),
         };
         let workbench_raster_us = workbench_raster_t.elapsed().as_micros();
-        // The gloss minimap's edges/rings backdrop, embedded via `<external-texture>`
-        // inside the shell document (its node squares are DOM, already folded into
-        // `chrome_scene`) — composited generically below by `compose_surfaces`'s
-        // `external_texture_placements` loop, not a manual rect. (Scene-to-DOM
-        // migration P2.)
-        let pb = self.shared.presentation.chrome_theme.panel_bg.to_array();
-        let gloss_clear = wgpu::Color {
-            r: pb[0] as f64 / 255.0,
-            g: pb[1] as f64 / 255.0,
-            b: pb[2] as f64 / 255.0,
-            a: 1.0,
-        };
-        let gloss_minimap_raster_t = std::time::Instant::now();
-        let (_gloss_minimap_tex, gloss_minimap_view) = match gloss_minimap_scene.as_ref() {
-            Some((scene, mw, mh)) => {
-                let (tex, view) = core.rasterize_for(
-                    super::surface_keys::GLOSS_MINIMAP,
-                    scene,
-                    *mw,
-                    *mh,
-                    ColorLoad::Clear(gloss_clear),
-                );
-                (Some(tex), Some(view))
-            }
-            None => (None, None),
-        };
-        let gloss_minimap_raster_us = gloss_minimap_raster_t.elapsed().as_micros();
+        // The gloss minimap's edges/rings backdrop (its node squares are DOM,
+        // already folded into `chrome_scene`) is rasterized above through the
+        // chisel scene-slot pass, alongside the orrery, and composited by
+        // `compose_surfaces`'s uniform key -> `chisel_slot_textures` lookup — no
+        // per-key branch, and skipped when the slot's (epoch, size) held. Its
+        // raster cost is folded into `orrery_raster_us` (the slot pass timing).
+        // (Scene-to-DOM migration P2; orrery Path-B port.)
+        let gloss_minimap_raster_us = 0u128;
         let cards_raster_t = std::time::Instant::now();
         let composite = self.rasterize_cards(core, dpr, &cards);
         let cards_raster_us = cards_raster_t.elapsed().as_micros();
@@ -387,11 +333,9 @@ impl WindowCtx<'_> {
             w,
             h,
             dpr,
-            orrery_view,
             secondary_textures,
             workbench_view,
             workbench_rect,
-            gloss_minimap_view,
             composite,
             external_texture_placements,
             &scrying_surfaces,
@@ -599,10 +543,10 @@ impl WindowCtx<'_> {
         // The gloss pane (the Navigator): all three sections — minimap, outline,
         // recent — are folded into the shell document now. The outline + recent +
         // minimap-node-squares are already part of the chrome DOM textures above; the minimap's
-        // edges/rings backdrop was rasterized above (`gloss_minimap_view`) and
-        // composites generically below via `compose_surfaces`'s
-        // `external_texture_placements` loop, like the orrery's own backdrop. Nothing
-        // left to do here. (gloss-outline plan P1; Scene-to-DOM migration P1/P2.)
+        // edges/rings backdrop rode the chisel scene-slot pass above and composites generically
+        // below via `compose_surfaces`'s uniform `chisel_slot_textures` lookup, like the orrery's
+        // own backdrop. Nothing left to do here. (gloss-outline plan P1; Scene-to-DOM migration
+        // P1/P2; orrery Path-B port.)
         core.renderer().compose_external_texture(
             &chrome_view,
             &target_view,
