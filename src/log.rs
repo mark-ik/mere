@@ -6,6 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::fork::{LogId, Provenance};
 use crate::seq::Seq;
 
 /// A linear, append-only log of immutable entries.
@@ -25,12 +26,21 @@ use crate::seq::Seq;
 /// through a [`muniment`] slot (see the crate's persistence methods).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Codicil<T> {
+    /// This log's stable identity, if it has one. Set by [`with_id`](Codicil::with_id)
+    /// or [`fork`](Codicil::fork); `None` for an anonymous log.
+    #[serde(default)]
+    id: Option<LogId>,
+    /// Where this log forked from, if it is a fork.
+    #[serde(default)]
+    provenance: Option<Provenance>,
     entries: Vec<T>,
 }
 
 impl<T> Default for Codicil<T> {
     fn default() -> Self {
         Self {
+            id: None,
+            provenance: None,
             entries: Vec::new(),
         }
     }
@@ -40,6 +50,24 @@ impl<T> Codicil<T> {
     /// A fresh, empty log.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// A fresh, empty log with a stable identity.
+    pub fn with_id(id: LogId) -> Self {
+        Self {
+            id: Some(id),
+            ..Self::default()
+        }
+    }
+
+    /// This log's identity, if any.
+    pub fn id(&self) -> Option<&LogId> {
+        self.id.as_ref()
+    }
+
+    /// Where this log forked from, if it is a fork.
+    pub fn provenance(&self) -> Option<&Provenance> {
+        self.provenance.as_ref()
     }
 
     /// Append `entry`, returning the [`Seq`] it was stamped with.
@@ -102,6 +130,23 @@ impl<T> Codicil<T> {
     }
 }
 
+impl<T: Clone> Codicil<T> {
+    /// Fork this log under a new identity. The fork copies the current entries and
+    /// records where it branched from (the source's id and the seq at the fork
+    /// point), then diverges independently. Duplication across the fork is tracked
+    /// by this provenance, never by deduplication.
+    pub fn fork(&self, new_id: LogId) -> Self {
+        Self {
+            id: Some(new_id),
+            provenance: Some(Provenance {
+                source: self.id.clone(),
+                at: self.next_seq(),
+            }),
+            entries: self.entries.clone(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -124,6 +169,27 @@ mod tests {
         assert_eq!(log.get(Seq(0)), Some(&10));
         assert_eq!(log.get(Seq(1)), Some(&20));
         assert_eq!(log.get(Seq(2)), None);
+    }
+
+    #[test]
+    fn fork_copies_history_and_records_provenance() {
+        let mut source = Codicil::with_id(LogId::new("source"));
+        source.append("a");
+        source.append("b");
+
+        let mut fork = source.fork(LogId::new("fork"));
+        // The fork carries the source's history so far.
+        assert_eq!(fork.entries(), source.entries());
+        // And records where it branched from.
+        let provenance = fork.provenance().expect("a fork has provenance");
+        assert_eq!(provenance.source, Some(LogId::new("source")));
+        assert_eq!(provenance.at, Seq(2), "forked at the source's length");
+        assert_eq!(fork.id(), Some(&LogId::new("fork")));
+
+        // Diverging the fork does not touch the source.
+        fork.append("c");
+        assert_eq!(source.len(), 2, "the source is unchanged");
+        assert_eq!(fork.len(), 3);
     }
 
     #[test]

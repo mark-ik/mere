@@ -21,9 +21,11 @@
 //! replayable sequence; shipping it to peers is the consumer's job) and linear
 //! (a branching edit-tree is a later shape), by deliberate scope.
 
+pub mod fork;
 pub mod log;
 pub mod persist;
 pub mod seq;
 
+pub use fork::{LogId, Provenance};
 pub use log::Codicil;
 pub use seq::Seq;
