@@ -43,4 +43,4 @@ dependency is `tracing`). The concrete `Command` / `Update` taxonomy and the
 kernel inbox belong to the host; this crate is generic over them. See
 [`design_docs/`](design_docs/) for the founding proposal.
 
-License: MPL-2.0 (see the proposal's licensing note; the final choice is open).
+License: dual MIT OR Apache-2.0, at your option.
