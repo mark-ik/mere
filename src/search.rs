@@ -1,7 +1,3 @@
-/* This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
-
 //! `SemanticSearch` — thin facade combining a [`crate::EmbeddingProvider`]
 //! and a [`crate::VectorIndex`]. Hosts wire the facade into command palettes,
 //! search bars, focus pickers, etc. without re-implementing the

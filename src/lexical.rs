@@ -1,7 +1,3 @@
-/* This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
-
 //! Lexical feature-hashing [`EmbeddingProvider`] — the "hashing trick".
 //!
 //! Tokenizes text and hashes each token into a fixed-dimension bag-of-words

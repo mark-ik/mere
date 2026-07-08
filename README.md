@@ -30,4 +30,4 @@ retrieval core (P0 + P1); the burn-wgpu BERT backend is the roadmap in
 foretells, sibylla is the consulted corpus — it embeds and returns what is asked
 for.
 
-License: MPL-2.0 (see the proposal's licensing note; the final choice is open).
+License: dual MIT OR Apache-2.0, at your option.
