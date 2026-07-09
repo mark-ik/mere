@@ -25,10 +25,11 @@
 //! session syncs exactly that mesh's log.
 
 use identity::Ed25519Keypair;
+use mooting::MunimentStore;
+use muniment::Backend;
 use p2panda_core::{Operation, SigningKey, Topic};
 use p2panda_net::sync::SyncHandle;
 use p2panda_net::{Endpoint, Gossip, LogSync};
-use p2panda_store::SqliteStore;
 use p2panda_sync::protocols::TopicLogSyncEvent;
 use transport::SyncedSpace;
 
@@ -40,9 +41,10 @@ use crate::wire::{MeshEvent, MeshExt, to_operation, verify};
 // public surface (`mesh::SyncStatus` / `mesh::SyncRound`) stays stable.
 pub use transport::{SyncRound, SyncStatus};
 
-/// The mesh's LogSync session type: the SQLite store, one log per author per
-/// mesh (the log id is the mesh id), mesh extensions on every operation.
-type MeshLogSync = LogSync<SqliteStore, [u8; 32], MeshExt>;
+/// The mesh's LogSync session type: the muniment-backed store, one log per
+/// author per mesh (the log id is the mesh id), mesh extensions on every
+/// operation.
+type MeshLogSync<B> = LogSync<MunimentStore<B, MeshExt>, [u8; 32], MeshExt>;
 type MeshSyncHandle = SyncHandle<Operation<MeshExt>, TopicLogSyncEvent<MeshExt>>;
 
 /// A mesh sync failure (LogSync session setup, publish, or the store).
@@ -59,8 +61,8 @@ pub enum MeshSyncError {
 /// Holds the store, the live publish lane, the session (kept alive), and the
 /// shared [`SyncedSpace`] draining reconciled operations into the store.
 /// Dropping it stops the drain and ends the session.
-pub struct SyncedMesh {
-    store: MeshStore,
+pub struct SyncedMesh<B> {
+    store: MeshStore<B>,
     mesh_id: [u8; 32],
     /// The shared LogSync drain: reconciled operations flow through the
     /// `accept` closure below into the store. Dropped first (aborts the task).
@@ -69,10 +71,10 @@ pub struct SyncedMesh {
     /// peers receive them without waiting for a reconciliation round.
     handle: MeshSyncHandle,
     /// Keeps the session actor alive; dropped with the struct (ends the session).
-    _log_sync: MeshLogSync,
+    _log_sync: MeshLogSync<B>,
 }
 
-impl SyncedMesh {
+impl<B: Backend + Clone + Send + 'static> SyncedMesh<B> {
     /// Join a mesh's LogSync session over `store`, driven by the host's
     /// `endpoint` + `gossip` (from its transport's `sync_parts`).
     ///
@@ -83,10 +85,10 @@ impl SyncedMesh {
     pub async fn join(
         endpoint: Endpoint,
         gossip: Gossip,
-        store: MeshStore,
+        store: MeshStore<B>,
         mesh_id: [u8; 32],
     ) -> Result<Self, MeshSyncError> {
-        let log_sync = MeshLogSync::builder(store.sqlite(), endpoint, gossip)
+        let log_sync = MeshLogSync::builder(store.sync_store(), endpoint, gossip)
             .spawn()
             .await
             .map_err(|e| MeshSyncError::Backend(format!("logsync spawn: {e}")))?;
@@ -123,7 +125,7 @@ impl SyncedMesh {
     }
 
     /// The mesh's operation store.
-    pub fn store(&self) -> &MeshStore {
+    pub fn store(&self) -> &MeshStore<B> {
         &self.store
     }
 
@@ -190,6 +192,7 @@ mod tests {
     use crate::wire::JobKind;
     use crate::worker::{WorkerAction, execute, next_action};
     use identity::{IdentityProvider, InMemoryProvider};
+    use muniment::MemoryBackend;
     use std::sync::Arc as StdArc;
     use std::time::Duration;
     use transport::P2pandaTransport;
@@ -229,16 +232,20 @@ mod tests {
         (alice_t, bob_t)
     }
 
-    async fn join(t: &P2pandaTransport) -> SyncedMesh {
+    async fn join(t: &P2pandaTransport) -> SyncedMesh<MemoryBackend> {
         let (ep, gossip) = t.sync_parts().expect("sync parts");
-        let store = MeshStore::in_memory().await.expect("store");
+        let store = MeshStore::in_memory();
         SyncedMesh::join(ep, gossip, store, MESH)
             .await
             .expect("join")
     }
 
     /// Poll `mesh`'s board until `pred` holds (or the timeout trips).
-    async fn wait_for_board(mesh: &SyncedMesh, pred: impl Fn(&JobBoard) -> bool, what: &str) {
+    async fn wait_for_board(
+        mesh: &SyncedMesh<MemoryBackend>,
+        pred: impl Fn(&JobBoard) -> bool,
+        what: &str,
+    ) {
         let outcome = tokio::time::timeout(Duration::from_secs(30), async {
             loop {
                 if pred(&mesh.board().await.unwrap()) {
@@ -360,7 +367,7 @@ mod tests {
         let alice_kp = InMemoryProvider::from_seed([60; 32])
             .derive_keypair(b"mesh-author")
             .unwrap();
-        let alice_store = MeshStore::in_memory().await.unwrap();
+        let alice_store = MeshStore::in_memory();
         let posted = to_operation(
             &alice_kp,
             MESH,

@@ -18,13 +18,16 @@ p2panda-core = "0.6.1"
 identity = { workspace = true }
 serde = { version = "1", features = ["derive"] }
 thiserror = "1"
-# The mesh store rides p2panda-store's own SQLite implementation of the three
-# traits LogSync reconciles (`LogStore` + `TopicStore`, plus `OperationStore`
-# for the rows themselves) — the M1 plan's step-0 outcome: no custom redb
-# mirror, the in-memory default for tests and a file URL for real devices.
-# (moothold went `default-features = false` because its ops already lived in
-# redb; the mesh has no prior store, so the sqlite backend IS the store.)
-p2panda-store = "0.6.1"
+# The three sync traits LogSync reconciles against (`LogStore` + `TopicStore`,
+# plus `OperationStore`). Default features off: the mesh brings muniment through
+# the mooting adapter instead of p2panda-store's bundled SQLite backend.
+p2panda-store = { version = "0.6.1", default-features = false }
+# The muniment-backed store adapter (`MunimentStore`) implementing those traits,
+# plus muniment's backends: an in-memory floor for tests, redb for a durable
+# device. The store-substrate convergence — mesh, murm and tessera ride one
+# store family now.
+mooting = { workspace = true }
+muniment = { path = "../../../../muniment", features = ["redb"] }
 # The sync lane (`sync::SyncedMesh`): LogSync over the store. `p2panda-net`
 # is the protocol — its `Endpoint`/`Gossip` still come injected from the host
 # (endpoint-decoupled), so the lib never builds a `P2pandaTransport`.

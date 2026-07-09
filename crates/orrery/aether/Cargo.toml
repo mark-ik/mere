@@ -11,12 +11,15 @@ description = "Field algebra for Mere's graph canvas — scalar/vector fields ov
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 # The field-primitive definitions (the portable AST, FieldId/CouplingId, Field,
-# Coupling/CouplingResponse/NodeSelector) live in the portable `numen` crate; aether
-# is the runtime algebra over them: it evaluates the definitions and derives forces.
+# Coupling/CouplingResponse/NodeSelector) live in the portable `numen` crate; aether is
+# the runtime algebra over them: it evaluates the definitions and derives forces. This
+# is aether's only hard substrate dependency — aether's default build is portable.
 numen = { path = "../../../../numen" }
-# kernel still supplies the mere Graph + apply-delta glue the projection module uses
-# to author fields/couplings into a live graph. One-way dep; kernel never pulls aether.
-kernel.workspace = true
+# kernel is OPTIONAL, behind `kernel-bridge`: it supplies only the mere Graph +
+# apply-delta glue that `FieldProjection::commit_to_graph` uses to write an authored
+# projection into a live graph. Off by default so aether stays kernel-free (portable);
+# a mere host that wants the commit bridge enables the feature. One-way dep.
+kernel = { workspace = true, optional = true }
 # For minting registry-local FieldIds (from_u128, WASM-safe) and serde of the
 # UUID-backed kernel FieldId embedded in FieldRegistry.
 uuid = { version = "1", default-features = false, features = ["serde"] }
@@ -37,6 +40,10 @@ uuid = { version = "1", default-features = false, features = ["js"] }
 
 [features]
 default = []
+# The graph-commit bridge: `FieldProjection::commit_to_graph`, which writes an authored
+# projection's fields/couplings into a mere `kernel::graph::Graph`. Opt-in so aether's
+# default build stays kernel-free and portable; a mere host enables it.
+kernel-bridge = ["dep:kernel"]
 field-burn = ["dep:burn"]
 # Adds the wgpu backend so consumers can target GPU evaluation.
 field-burn-wgpu = ["field-burn", "burn/wgpu", "dep:getrandom"]

@@ -2,91 +2,94 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! The mesh's store of record — p2panda-store's SQLite backend, wrapped.
+//! The mesh's store of record — muniment behind the p2panda-store adapter.
 //!
-//! One store, one write path: [`MeshStore::insert`] persists an operation
-//! *and* indexes it for sync in a single transaction (the op row via
-//! `OperationStore`, the topic → author/log association via `TopicStore`),
-//! so everything inserted — authored locally or drained from a LogSync
-//! session — is served to peers on the next reconciliation. Reads ride the
-//! pool without transactions.
+//! [`MeshStore`] wraps [`mooting::MunimentStore`]: one operation store that both
+//! the [`JobBoard`] fold and the LogSync session read, backed by muniment — an
+//! in-memory backend for tests, redb on a real device. [`MeshStore::insert`]
+//! persists an operation *and* indexes it for sync (the topic → author/log
+//! association, then the op with its log entry), so everything inserted, authored
+//! locally or drained from a session, is served to peers on the next round.
 //!
-//! This is the M1 plan's step-0 outcome: tessera built its own redb store
-//! because its operations already lived in redb; the mesh has no prior
-//! store, so p2panda-store's own `SqliteStore` (which implements all three
-//! traits LogSync's bounds ask for) is the store, behind this thin seam.
-//! M2 swaps durability or schema here without touching wire/board/sync.
+//! This is the M1 plan's step-0 seam, now over the shared substrate: where the
+//! mesh once carried p2panda-store's own SQLite store, it rides the same
+//! muniment-backed adapter murm and tessera converge on, so all three share one
+//! store family (redb desktop, IndexedDB + OPFS in the browser).
 //!
-//! A mesh log is one append-only log per author per mesh: the log id *is*
-//! the mesh id (`[u8; 32]`), exactly as the moot id keys tessera's logs.
+//! A mesh log is one append-only log per author per mesh: the log id *is* the
+//! mesh id (`[u8; 32]`), exactly as the moot id keys tessera's logs. The topic is
+//! `Topic::from(mesh_id)`.
 
 use std::collections::BTreeMap;
+use std::path::Path;
 
+use mooting::MunimentStore;
+use muniment::{Backend, MemoryBackend, RedbBackend, StoreError};
 use p2panda_core::{Operation, Topic, VerifyingKey};
 use p2panda_store::logs::LogStore;
 use p2panda_store::operations::OperationStore;
 use p2panda_store::topics::TopicStore;
-use p2panda_store::{SqliteError, SqliteStore, SqliteStoreBuilder, Transaction};
 
 use crate::board::JobBoard;
 use crate::wire::MeshExt;
 
-/// A mesh store failure (the underlying SQLite store).
+/// A mesh store failure (the underlying muniment backend).
 #[derive(Debug, thiserror::Error)]
 pub enum MeshStoreError {
     #[error("mesh store: {0}")]
-    Backend(#[from] SqliteError),
+    Backend(#[from] StoreError),
 }
 
-/// The mesh's operation store: insert once, serve to both the board fold and
-/// the LogSync session. Clone-cheap (shares the connection pool).
-#[derive(Clone, Debug)]
-pub struct MeshStore {
-    sqlite: SqliteStore,
+/// The mesh's operation store: insert once, serve to both the board fold and the
+/// LogSync session. Clone-cheap (the muniment handle is shared). Generic over the
+/// backend — [`MemoryBackend`] for tests and rehearsals, [`RedbBackend`] for a
+/// durable device.
+#[derive(Clone)]
+pub struct MeshStore<B> {
+    store: MunimentStore<B, MeshExt>,
 }
 
-impl MeshStore {
+impl MeshStore<MemoryBackend> {
     /// An ephemeral in-memory store (tests, the `mesh-peer` rehearsal).
+    pub fn in_memory() -> Self {
+        Self {
+            store: MunimentStore::new(MemoryBackend::new()),
+        }
+    }
+}
+
+impl MeshStore<RedbBackend> {
+    /// A durable store backed by a redb database at `path`, created if missing.
+    pub fn at_path(path: impl AsRef<Path>) -> Result<Self, MeshStoreError> {
+        Ok(Self {
+            store: MunimentStore::new(RedbBackend::open(path)?),
+        })
+    }
+}
+
+impl<B: Backend> MeshStore<B> {
+    /// A clone of the underlying store, for `LogSync::builder` (which takes the
+    /// store by value and reconciles through its trait surface).
+    pub fn sync_store(&self) -> MunimentStore<B, MeshExt> {
+        self.store.clone()
+    }
+
+    /// Persist + index one operation. Returns `true` when the operation is new,
+    /// `false` when it was already present (idempotent on the hash — re-delivery
+    /// during sync is normal, not an error).
     ///
-    /// Pinned to a single connection: with `sqlite::memory:` every pooled
-    /// connection opens its *own* empty database, so one connection is what
-    /// makes the store coherent.
-    pub async fn in_memory() -> Result<Self, MeshStoreError> {
-        let sqlite = SqliteStoreBuilder::new().max_connections(1).build().await?;
-        Ok(Self { sqlite })
-    }
-
-    /// A store at a SQLite URL (`sqlite://path/to/mesh.db`); the database and
-    /// schema are created if missing. Use forward slashes in the path.
-    pub async fn at_url(url: &str) -> Result<Self, MeshStoreError> {
-        let sqlite = SqliteStoreBuilder::new().database_url(url).build().await?;
-        Ok(Self { sqlite })
-    }
-
-    /// A clone of the underlying SQLite store, for `LogSync::builder` (which
-    /// takes the store by value and reconciles through its trait surface).
-    pub fn sqlite(&self) -> SqliteStore {
-        self.sqlite.clone()
-    }
-
-    /// Persist + index one operation, atomically. Returns `true` when the
-    /// operation is new, `false` when it was already present (idempotent on
-    /// the hash — re-delivery during sync is normal, not an error).
+    /// Associates the topic first, then inserts the op: a crash in between leaves
+    /// at worst a topic pointing at an empty log (harmless — `ops` finds nothing
+    /// there, and re-inserting completes it), never an op the topic can't reach.
     ///
-    /// The caller verifies signatures first ([`crate::wire::verify`]); the
-    /// store is the dumb of-record layer.
+    /// The caller verifies signatures first ([`crate::wire::verify`]); the store
+    /// is the dumb of-record layer.
     pub async fn insert(&self, op: &Operation<MeshExt>) -> Result<bool, MeshStoreError> {
         let mesh_id = op.header.extensions.mesh_id;
-        let permit = self.sqlite.begin().await?;
-        // An error before commit drops the permit, which rolls the
-        // transaction back — the op row and its index entry land together or
-        // not at all.
-        let fresh = self.sqlite.insert_operation(&op.hash, op, &mesh_id).await?;
-        self.sqlite
+        self.store
             .associate(&Topic::from(mesh_id), &op.header.verifying_key, &mesh_id)
             .await?;
-        self.sqlite.commit(permit).await?;
-        Ok(fresh)
+        Ok(self.store.insert_operation(&op.hash, op, &mesh_id).await?)
     }
 
     /// The latest operation in `author`'s log on this mesh — the seq/backlink
@@ -96,19 +99,19 @@ impl MeshStore {
         author: &VerifyingKey,
         mesh_id: [u8; 32],
     ) -> Result<Option<Operation<MeshExt>>, MeshStoreError> {
-        Ok(self.sqlite.get_latest_entry(author, &mesh_id).await?)
+        Ok(self.store.get_latest_entry(author, &mesh_id).await?)
     }
 
-    /// Every operation on `mesh_id`, across all known authors' logs — the
-    /// board fold's input.
+    /// Every operation on `mesh_id`, across all known authors' logs — the board
+    /// fold's input.
     pub async fn ops(&self, mesh_id: [u8; 32]) -> Result<Vec<Operation<MeshExt>>, MeshStoreError> {
         let logs: BTreeMap<VerifyingKey, Vec<[u8; 32]>> =
-            self.sqlite.resolve(&Topic::from(mesh_id)).await?;
+            self.store.resolve(&Topic::from(mesh_id)).await?;
         let mut out = Vec::new();
         for (author, log_ids) in logs {
             for log_id in log_ids {
                 if let Some(entries) = self
-                    .sqlite
+                    .store
                     .get_log_entries(&author, &log_id, None, None)
                     .await?
                 {
@@ -158,7 +161,7 @@ mod tests {
 
     #[tokio::test]
     async fn insert_is_idempotent_and_feeds_the_board() {
-        let store = MeshStore::in_memory().await.unwrap();
+        let store = MeshStore::in_memory();
         let kp = keypair(1);
         let op = posted(&kp);
 
@@ -176,7 +179,7 @@ mod tests {
 
     #[tokio::test]
     async fn latest_walks_the_author_log() {
-        let store = MeshStore::in_memory().await.unwrap();
+        let store = MeshStore::in_memory();
         let kp = keypair(1);
         let author = {
             use p2panda_core::SigningKey;
@@ -206,8 +209,8 @@ mod tests {
 
     #[tokio::test]
     async fn two_in_memory_stores_do_not_share_state() {
-        let a = MeshStore::in_memory().await.unwrap();
-        let b = MeshStore::in_memory().await.unwrap();
+        let a = MeshStore::in_memory();
+        let b = MeshStore::in_memory();
         a.insert(&posted(&keypair(1))).await.unwrap();
         assert_eq!(a.ops(MESH).await.unwrap().len(), 1);
         assert!(b.ops(MESH).await.unwrap().is_empty());
@@ -216,16 +219,13 @@ mod tests {
     #[tokio::test]
     async fn a_file_store_survives_reopen() {
         let dir = tempfile::tempdir().unwrap();
-        let url = format!(
-            "sqlite://{}/mesh.db",
-            dir.path().to_string_lossy().replace('\\', "/")
-        );
+        let path = dir.path().join("mesh.redb");
         let op = posted(&keypair(1));
         {
-            let store = MeshStore::at_url(&url).await.unwrap();
+            let store = MeshStore::at_path(&path).unwrap();
             store.insert(&op).await.unwrap();
         }
-        let reopened = MeshStore::at_url(&url).await.unwrap();
+        let reopened = MeshStore::at_path(&path).unwrap();
         let ops = reopened.ops(MESH).await.unwrap();
         assert_eq!(ops.len(), 1, "the op survives a close + reopen");
         assert_eq!(ops[0], op);

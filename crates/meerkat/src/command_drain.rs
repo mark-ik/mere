@@ -225,7 +225,10 @@ impl WindowCtx<'_> {
     /// chrome, but the command is host-drained because the target is a graph member.
     pub(super) fn toggle_focused_knot_editor(&mut self) -> Option<String> {
         if self.chrome().knot_editor_open {
-            self.chrome_update(|c| c.close_knot_editor());
+            // Autosave on close (same path as the × button): request the close, then drain
+            // it, so a bound note's edits write before the editor clears. (Phase 2.)
+            self.chrome_update(|c| c.request_knot_editor_close());
+            self.drain_knot_editor_save();
             self.view.request_redraw();
             return None;
         }
@@ -258,14 +261,32 @@ impl WindowCtx<'_> {
         Some(note)
     }
 
-    /// Apply the editor's one-shot Save request to the focused graph member's
-    /// authored body and refresh the live note-rendering cache.
+    /// Drain the editor's one-shot Save request (explicit Save button, or the autosave a
+    /// close queues) into the focused note's body, then honour a deferred close. Writing
+    /// before the close is what makes closing autosave rather than drop edits. (Phase 2.)
     pub(super) fn drain_knot_editor_save(&mut self) -> Option<String> {
         let mut request = None;
-        self.chrome_update(|c| request = c.take_knot_editor_save());
-        let Some((member, body)) = request else {
-            return None;
-        };
+        let mut close_after = false;
+        self.chrome_update(|c| {
+            request = c.take_knot_editor_save();
+            close_after = std::mem::take(&mut c.knot_close_after_save);
+        });
+        let note = request.and_then(|(member, body)| self.write_focused_knot_body(member, body));
+        if close_after {
+            self.chrome_update(|c| c.close_knot_editor());
+            self.view.request_redraw();
+        }
+        note
+    }
+
+    /// Write `body` to `member`'s node body + live content cache, invalidating the note tile
+    /// so it re-renders the saved text, and persist the session. Returns a user-facing note.
+    /// Shared by the explicit Save and the autosave-on-close path.
+    fn write_focused_knot_body(
+        &mut self,
+        member: forme::GraphMemberId,
+        body: String,
+    ) -> Option<String> {
         let Some((_, node)) = self.orrery().graph().get_node_by_id(member) else {
             return Some("The edited note no longer exists".to_string());
         };

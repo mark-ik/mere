@@ -219,6 +219,11 @@ pub struct Chrome {
     pub knot_editor_rect: Option<[f32; 4]>,
     /// One-shot save request captured by the editor's chrome button.
     pub knot_save_requested: bool,
+    /// A close deferred to the host so it autosaves first: the × button / toggle sets this
+    /// (with `knot_save_requested`) while the target is still bound, and the host's save
+    /// drain writes the body, then closes. So closing the editor never silently drops
+    /// unsaved edits. (Djot editor — Phase 2 autosave-on-close.)
+    pub knot_close_after_save: bool,
     /// Whether the editor is in preview mode: the opaque source overlay is dropped so
     /// the note tile behind (which renders live from the same buffer) shows through, a
     /// read-only rendered view. `false` is the source-edit mode. Toggled by the header

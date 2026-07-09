@@ -18,8 +18,8 @@
 //!   MESH_SPACE  shared passphrase naming the mesh (hashed to the mesh id);
 //!               every participating device sets the same value
 //!   MESH_SEED   this device's identity seed string; distinct per device
-//!   MESH_DB     optional sqlite URL (e.g. sqlite://C:/mesh/mesh.db) for a
-//!               durable store; defaults to in-memory
+//!   MESH_DB     optional redb path (e.g. C:/mesh/mesh.redb) for a durable
+//!               store; defaults to in-memory
 //! ```
 //!
 //! Both modes print the live board and the real sync status (rounds, ops
@@ -30,6 +30,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
 use mesh::{JobState, MeshEvent, MeshStore, SyncedMesh, WorkerAction, execute, next_action};
+use muniment::Backend;
 use p2panda_core::Hash;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use transport::P2pandaTransport;
@@ -180,12 +181,28 @@ async fn main() -> Result<(), String> {
         }
     });
 
-    let store = match std::env::var("MESH_DB") {
-        Ok(url) => MeshStore::at_url(&url).await,
-        Err(_) => MeshStore::in_memory().await,
-    }
-    .map_err(|e| format!("store: {e}"))?;
+    // The backend is a runtime choice (a redb file when MESH_DB is set, else
+    // in-memory), so the two arms produce different `MeshStore<B>` types; `run`
+    // is generic over the backend and each arm monomorphizes it.
+    return match std::env::var("MESH_DB") {
+        Ok(path) => {
+            let store = MeshStore::at_path(&path).map_err(|e| format!("store: {e}"))?;
+            run(store, transport, author, me, mesh_id, args.mode).await
+        }
+        Err(_) => run(MeshStore::in_memory(), transport, author, me, mesh_id, args.mode).await,
+    };
+}
 
+/// Join the mesh over `store` and run the requested mode. Generic over the
+/// backend so the same loop drives an in-memory or a redb-backed store.
+async fn run<B: Backend + Clone + Send + 'static>(
+    store: MeshStore<B>,
+    transport: Arc<P2pandaTransport>,
+    author: Ed25519Keypair,
+    me: [u8; 32],
+    mesh_id: [u8; 32],
+    mode: Mode,
+) -> Result<(), String> {
     let (endpoint, gossip) = transport
         .sync_parts()
         .ok_or_else(|| "transport has no sync parts (gossip not enabled?)".to_string())?;
@@ -193,7 +210,7 @@ async fn main() -> Result<(), String> {
         .await
         .map_err(|e| format!("join mesh: {e}"))?;
 
-    match args.mode {
+    match mode {
         Mode::Post(text) => {
             let posted = synced
                 .author(

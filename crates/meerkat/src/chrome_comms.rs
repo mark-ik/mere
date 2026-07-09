@@ -33,6 +33,7 @@ impl Chrome {
         self.knot_editor_label = "Editor".to_string();
         self.knot_editor_rect = None;
         self.knot_save_requested = false;
+        self.knot_close_after_save = false;
         self.knot_editor_preview = false;
         self.reset_knot_history();
     }
@@ -50,6 +51,7 @@ impl Chrome {
         self.knot_editor_label = label.into();
         self.knot_editor_rect = None;
         self.knot_save_requested = false;
+        self.knot_close_after_save = false;
         self.knot_editor_preview = false;
         self.reset_knot_history();
     }
@@ -60,8 +62,23 @@ impl Chrome {
         self.knot_target = None;
         self.knot_editor_rect = None;
         self.knot_save_requested = false;
+        self.knot_close_after_save = false;
         self.knot_editor_preview = false;
         self.reset_knot_history();
+    }
+
+    /// Request a close that autosaves first. For a bound note, queue a save and defer the
+    /// actual close to the host (which drains the save while the target is still bound, then
+    /// closes) — so closing never drops unsaved edits. An unbound scratch note (no tile to
+    /// write) closes immediately. This is what the × button and the editor toggle call.
+    /// (Djot editor — Phase 2 autosave-on-close.)
+    pub fn request_knot_editor_close(&mut self) {
+        if self.knot_editor_open && self.knot_target.is_some() {
+            self.knot_save_requested = true;
+            self.knot_close_after_save = true;
+        } else {
+            self.close_knot_editor();
+        }
     }
 
     /// Flip between the source-edit and rendered-preview views of the open note. A

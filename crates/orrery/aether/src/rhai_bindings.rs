@@ -498,6 +498,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "kernel-bridge")]
     #[test]
     fn authored_open_coupling_commits_to_the_graph() {
         // The full author → commit → graph path: a script authors a visual

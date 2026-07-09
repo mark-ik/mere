@@ -237,7 +237,7 @@ pub(crate) fn knot_editor_pane(c: &Chrome) -> ChromeView {
     actions_children.push(Box::new(button(
         "\u{00d7}",
         "knot-editor-btn knot-editor-close",
-        |c: &mut Chrome, _: PointerClick| c.close_knot_editor(),
+        |c: &mut Chrome, _: PointerClick| c.request_knot_editor_close(),
     )));
     let actions = el::<_, Chrome, ()>("div", actions_children).attr("class", "knot-editor-actions");
     let header =

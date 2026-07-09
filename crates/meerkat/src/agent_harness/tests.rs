@@ -1468,6 +1468,48 @@ fn knot_editor_saves_the_focused_note_body() {
 }
 
 #[test]
+fn knot_editor_close_autosaves_the_note_body() {
+    // Closing the editor (the × button / toggle) autosaves a bound note: the host drains
+    // the queued save while the target is still bound, writes the body, then closes — so
+    // closing without an explicit Save never drops edits. (Phase 2 autosave-on-close.)
+    let mut app = test_app();
+    let url = "knot://autosave-note";
+    let key = app.orrery_mut().visit(url);
+    app.orrery_mut().ingest_graph(|graph| {
+        let node = graph.get_node_mut(key).expect("note node exists");
+        node.body = Some("# Original\n\nbody".to_string());
+        node.mime_hint = Some("text/x-knot".to_string());
+        true
+    });
+
+    let step = app.apply_agent_action(AgentAction::InvokeCommand(Command::ToggleKnotEditor));
+    assert!(step.result.applied);
+    assert!(app.window_local().chrome.knot_editor_open, "the editor opens");
+
+    let updated = "# Updated\n\nAutosaved on close.";
+    {
+        let mut wc = app.ctx();
+        wc.chrome_update(|c| {
+            c.knot_source = xilem_serval::TextInput::new(updated);
+            // The × button's action: request a close, which autosaves first (no Save click).
+            c.request_knot_editor_close();
+        });
+        wc.drain_chrome_intents();
+    }
+
+    // The editor closed, and the edit persisted without an explicit Save.
+    let chrome = &app.window_local().chrome;
+    assert!(!chrome.knot_editor_open, "requesting close closes the editor");
+    assert_eq!(chrome.knot_target, None);
+    let node = app
+        .orrery()
+        .graph()
+        .get_node(key)
+        .expect("note node still exists");
+    assert_eq!(node.body.as_deref(), Some(updated));
+}
+
+#[test]
 fn omnibar_right_arrow_accepts_the_ghost_completion() {
     // The driven half of ghost autocomplete: with `>ros` typed and the omnibar
     // focused, Right arrow at the buffer end splices the ghost in, giving

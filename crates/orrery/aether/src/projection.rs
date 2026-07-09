@@ -13,7 +13,9 @@
 
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "kernel-bridge")]
 use kernel::graph::Graph;
+#[cfg(feature = "kernel-bridge")]
 use numen::Field;
 
 use crate::ast::{ScalarField, VectorField};
@@ -59,6 +61,7 @@ impl FieldProjection {
         self.edge_path_rules.push(rule);
     }
 
+    #[cfg(feature = "kernel-bridge")]
     /// Commit this projection's fields and couplings into a kernel [`Graph`]'s
     /// field layer — the inverse of the read path `gyre` and `platen` use, and the
     /// bridge that lets an authored projection (e.g. one built by the Rhai surface)
@@ -175,6 +178,7 @@ mod tests {
         assert_eq!(p, back);
     }
 
+    #[cfg(feature = "kernel-bridge")]
     #[test]
     fn commit_to_graph_writes_fields_and_couplings() {
         let mut p = FieldProjection::new();

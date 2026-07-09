@@ -58,6 +58,7 @@ impl Chrome {
             knot_editor_label: String::new(),
             knot_editor_rect: None,
             knot_save_requested: false,
+            knot_close_after_save: false,
             knot_editor_preview: false,
             knot_undo: Vec::new(),
             knot_redo: Vec::new(),
