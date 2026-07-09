@@ -63,6 +63,7 @@ impl Chrome {
             knot_undo: Vec::new(),
             knot_redo: Vec::new(),
             knot_coalescing: false,
+            knot_expand_stack: Vec::new(),
             sessions: Vec::new(),
             sessions_overflow_open: false,
             session_intent: None,

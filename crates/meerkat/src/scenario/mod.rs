@@ -166,13 +166,16 @@ impl std::fmt::Display for ScenarioError {
 ///
 /// ```text
 /// # a comment
-/// invoke  settings          # open the settings lane on the primary
-/// spawn                     # open a second window
-/// settle  2                 # let it apply + render
-/// invoke  roster @1         # act in window 1
-/// assert  windows == 2
-/// capture both @1           # self-capture window 1's chrome
-/// log     done
+/// invoke   settings              # open the settings lane on the primary
+/// navigate https://example.com   # omnibar-submit path (async; settle after)
+/// settle   8
+/// key      ctrl+f                # a chord, not a registry command
+/// spawn                          # open a second window
+/// settle   2                     # let it apply + render
+/// invoke   roster @1             # act in window 1
+/// assert   windows == 2
+/// capture  both @1               # self-capture window 1's chrome
+/// log      done
 /// ```
 pub(crate) fn parse(src: &str) -> Result<Vec<Step>, ScenarioError> {
     let mut steps = Vec::new();

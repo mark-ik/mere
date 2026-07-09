@@ -1,10 +1,11 @@
 # Meerkat automation: two subsystems, one vocabulary
 
 **Date**: 2026-07-07 (self-drive mode landed 2026-07-08)
-**Status**: Assessment + the unification, now built. The "what ails it" fixes landed with the
-Slice 3 headed check; the `MEERKAT_SCENARIO` self-drive mode + shared scenario vocabulary
-landed 2026-07-08 and verified headed (multi-window + settings, `RESULT ok`). Remaining: the
-chord/navigate verbs for flows outside the registry (Migration item 3).
+**Status**: Assessment + the unification, now built and complete for the whole session. The
+"what ails it" fixes landed with the Slice 3 headed check; the `MEERKAT_SCENARIO` self-drive
+mode + shared scenario vocabulary landed 2026-07-08 (multi-window + settings verified headed),
+and the `navigate` + `key` verbs for flows outside the registry landed the same day (find
+verified headed). Only pointer gestures remain outside a scenario (Migration item 4).
 **Scope**: the two ways meerkat is driven under automation, what ails the headed one, and a
 scheme to let one *scenario* run either way.
 **Related**: the [meerkat one-state migration (archived)](../../archive_docs/2026-07-07_one_state_migration/2026-07-06_meerkat_one_state_migration_plan.md)
@@ -99,10 +100,12 @@ that also delivers the unification: let the app **drive itself** from a scenario
 of receiving OS input. This shipped 2026-07-08.
 
 - **The vocabulary** (`crates/meerkat/src/scenario/mod.rs`): a line-oriented format over the
-  registry-id space plus the host verbs and harness markers a driven session needs —
-  `invoke <id>`, `theme <id>`, `spawn`, `capture <name>`, `settle [<frames>]`, `assert windows
-  <op> <n>`, `log <text>`. A trailing `@<n>` on a windowed verb targets a specific window (0 =
-  primary). Pure data + parser, unit-tested; no `Shell` dependency.
+  registry-id space plus the host verbs, the two non-registry-flow verbs, and the harness
+  markers a driven session needs — `invoke <id>`, `navigate <url>`, `key <chord>`,
+  `theme <id>`, `spawn`, `capture <name>`, `settle [<frames>]`, `assert windows <op> <n>`,
+  `log <text>`. A trailing `@<n>` on a windowed verb targets a specific window (0 = primary).
+  Pure data + parser, unit-tested; no `Shell` dependency. (`navigate` / `key` detailed under
+  Migration item 3.)
 - **`MEERKAT_SCENARIO=<path>`** at boot loads a scenario (`ScenarioRunner::from_env`); the
   shell then runs it on the event loop, one step per `about_to_wait` tick (`pump_scenario`),
   under `ControlFlow::Poll` so ticks progress without OS input. Each `invoke` routes through
@@ -148,14 +151,22 @@ race.
    (above); the `mk-harness` `Run-Scenario` launch+collect; two seed scenarios
    (`crates/meerkat/scenarios/multi_window.scn`, `settings.scn`), both verified headed
    (`RESULT ok`).
-3. **Next**: port the remaining high-value one-offs (find, navigate) from `_archive\scripts\`
-   to scenarios. These need two vocabulary extensions the seed set did not: a `navigate <url>`
-   verb (the omnibar-submit path + an async settle) and a `key <chord>` verb for the flows
-   that are chords not registry commands (Ctrl+F find, the omnibar). Both are additive; the
-   registry-id core does not change.
+3. **Landed 2026-07-08**: the two verbs for flows outside the registry, so the vocabulary now
+   covers the whole session, not just registry commands:
+   - **`navigate <url>`** routes through the omnibar-submit path (`WindowCtx::scenario_navigate`
+     -> seed the address bar -> `submit_omnibar` classify/resolve/history -> the host's
+     `sync_orrery` load), the same route Enter in the omnibar takes. Async, so follow with
+     `settle`. URL `#fragments` survive parsing (only a whitespace-preceded `#` is a comment).
+   - **`key <chord>`** (`ctrl+f`, `ctrl+shift+n`, `enter`, `f5`, `escape`, a bare char)
+     dispatches through the real `on_key_pressed` path (`WindowCtx::scenario_key` sets the
+     modifier state the handler reads, presses, restores). This reaches the chords that are
+     not registry commands: Ctrl+F find, and typing into the find bar / omnibar char by char.
+     Verified headed: `scenarios/find.scn` opens find with `key ctrl+f` and types a query.
 4. **Cleanup**: the orphaned `C:\t\meerkat-target` build tree can still be deleted.
 
-The end state, now reached for the registry-id core: one scenario vocabulary (registry ids),
-two runners (headless assert / headed self-drive+capture), one PS base (`mk-harness`) that only
-launches and collects. The chord/navigate verbs (item 3) extend it to the flows outside the
-registry.
+The end state is now reached across the whole session, not just the registry-id core: one
+scenario vocabulary (registry ids + `navigate` + `key`), two runners (headless assert / headed
+self-drive+capture), one PS base (`mk-harness`) that only launches and collects. The only
+things still outside a scenario are pointer gestures (drag / click-at-coord); those remain the
+`Click`/`Dda-Capture` province of `mk-harness` and are a later verb if a scenario ever needs
+them.

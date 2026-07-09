@@ -154,6 +154,39 @@ impl Chrome {
         self.knot_undo.clear();
         self.knot_redo.clear();
         self.knot_coalescing = false;
+        self.knot_expand_stack.clear();
+    }
+
+    /// Grow the selection to the smallest enclosing djot container (Alt-Up), pushing the
+    /// current range so [`shrink_selection`](Self::shrink_selection) can step back. A no-op
+    /// (returns `false`) when nothing encloses the current selection any further. (Djot
+    /// editor — Phase 3 structural selection.)
+    pub fn grow_selection(&mut self) -> bool {
+        let text = self.knot_source.text().to_string();
+        let (clo, chi) = self.knot_source.selection();
+        let blo = byte_of_char(&text, clo);
+        let bhi = byte_of_char(&text, chi);
+        let Some(range) = illume::expand_selection(&text, blo..bhi) else {
+            return false;
+        };
+        if range.start == blo && range.end == bhi {
+            return false;
+        }
+        self.knot_expand_stack.push((blo, bhi));
+        self.knot_source.set_caret_byte(range.start, false);
+        self.knot_source.set_caret_byte(range.end, true);
+        true
+    }
+
+    /// Shrink the selection back to the range the last [`grow_selection`](Self::grow_selection)
+    /// expanded from (Alt-Down). A no-op when the expand chain is empty.
+    pub fn shrink_selection(&mut self) -> bool {
+        let Some((blo, bhi)) = self.knot_expand_stack.pop() else {
+            return false;
+        };
+        self.knot_source.set_caret_byte(blo, false);
+        self.knot_source.set_caret_byte(bhi, true);
+        true
     }
 
     /// Record the pre-edit source on the undo stack, before a mutating edit applies.
@@ -172,12 +205,16 @@ impl Chrome {
         }
         self.knot_redo.clear();
         self.knot_coalescing = coalesce_insert;
+        // An edit invalidates the structural expand chain (the ranges no longer align).
+        self.knot_expand_stack.clear();
     }
 
     /// End the current insert-coalescing run without snapshotting — for a caret move, so
-    /// the next insert starts a fresh undo group even though nothing was deleted.
+    /// the next insert starts a fresh undo group even though nothing was deleted. A caret
+    /// move also breaks the structural expand chain.
     pub fn knot_break_coalesce(&mut self) {
         self.knot_coalescing = false;
+        self.knot_expand_stack.clear();
     }
 
     /// Undo the last edit: restore the top undo snapshot, moving the current source onto
@@ -474,5 +511,20 @@ mod tests {
         let mut c = editor_with("hello", 5);
         assert!(!c.wrap_selection_if_pair('*'));
         assert_eq!(c.knot_source.text(), "hello");
+    }
+
+    #[test]
+    fn grow_then_shrink_returns_to_the_start() {
+        // A collapsed caret inside a paragraph grows to enclose more text; shrink steps back
+        // to exactly the original range. (Structural selection over illume's container tree.)
+        let mut c = editor_with("# Title\n\nhello world\n", 15); // caret inside "world"
+        let before = c.knot_source.selection();
+        assert!(c.grow_selection(), "grow expands from the caret");
+        let grown = c.knot_source.selection();
+        assert_ne!(grown, before, "the selection expanded");
+        assert!(grown.1 - grown.0 > before.1 - before.0, "the range got wider");
+        assert!(c.shrink_selection(), "shrink steps back");
+        assert_eq!(c.knot_source.selection(), before, "back to the original range");
+        assert!(!c.shrink_selection(), "nothing left to shrink");
     }
 }

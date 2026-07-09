@@ -242,6 +242,11 @@ pub struct Chrome {
     /// a burst of typing undoes as a unit. Reset by any non-insert edit, a caret move, or
     /// undo/redo.
     pub knot_coalescing: bool,
+    /// Prior selection byte-ranges for structural expand/shrink (Alt-Up / Alt-Down): each
+    /// grow pushes the pre-grow range; a shrink pops back to it. Cleared by any edit or
+    /// ordinary caret move, so the chain only lives across an uninterrupted Alt-arrow run.
+    /// (Djot editor — Phase 3 structural selection.)
+    pub knot_expand_stack: Vec<(usize, usize)>,
     /// The open graph sessions, as toolbar chips (Chrome bar P4 — sessions moved out
     /// of the shellbar). Host-synced each frame from the session pool, ordered like
     /// `cycle_session`; the active one carries `active`. Rendered inline up to a cap,

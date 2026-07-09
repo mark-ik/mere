@@ -290,13 +290,15 @@ impl WindowCtx<'_> {
         // handler's hard-`\n`-line move, before the field handlers route the key. A no-op for
         // any other focus, so omnibar suggestion nav / comms field moves fall through. (Soft-
         // wrap caret nav.)
+        // (Alt+Up/Down is structural expand/shrink, handled in `on_knot_editor_key`, so it
+        // is excluded here.)
         if let WinitKey::Named(named) = key {
             let delta = match named {
                 WinitNamedKey::ArrowUp => Some(-1),
                 WinitNamedKey::ArrowDown => Some(1),
                 _ => None,
             };
-            if let Some(delta) = delta {
+            if let Some(delta) = delta.filter(|_| !self.view.modifiers.alt) {
                 if self.soft_wrap_nav(delta, self.view.modifiers.shift) {
                     return;
                 }
@@ -365,6 +367,26 @@ impl WindowCtx<'_> {
             });
             self.view.request_redraw();
             return;
+        }
+        // Structural selection: Alt+Up grows the selection to the enclosing container,
+        // Alt+Down shrinks back. (Phase 3.)
+        if self.view.modifiers.alt {
+            let grow = match key {
+                WinitKey::Named(WinitNamedKey::ArrowUp) => Some(true),
+                WinitKey::Named(WinitNamedKey::ArrowDown) => Some(false),
+                _ => None,
+            };
+            if let Some(grow) = grow {
+                self.chrome_update(|c| {
+                    if grow {
+                        c.grow_selection();
+                    } else {
+                        c.shrink_selection();
+                    }
+                });
+                self.view.request_redraw();
+                return;
+            }
         }
         // Smart list continuation: Enter in a list item continues (or ends) the list; a
         // non-list Enter falls through to a plain newline. (Phase 3.)
