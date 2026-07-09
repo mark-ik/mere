@@ -35,8 +35,8 @@ use std::time::Duration;
 use armillary::{ActorHandle, Emitter, Wake, spawn};
 use identity::{IdentityProvider, InMemoryProvider};
 use moothold::tessera::{
-    ChainRoot, CommitmentId, Ledger, Scope, TesseraConfig, TesseraEvent, TesseraStore,
-    TesseraStoreError, to_operation, verify,
+    ChainRoot, CommitmentId, Ledger, Scope, TesseraConfig, TesseraEvent, TesseraExt,
+    TesseraFileStore, TesseraStoreError, to_operation, verify,
 };
 use p2panda_core::Topic;
 use p2panda_net::LogSync;
@@ -56,9 +56,10 @@ pub const LANE_LABEL: &str = "tessera";
 /// is receive-only, so nothing publishes on the handle.
 struct TesseraSync {
     space: SyncedSpace,
-    store: TesseraStore,
+    store: TesseraFileStore,
     moot_id: [u8; 32],
-    _keepalive: Box<dyn std::any::Any + Send>,
+    // Send + Sync so the poll task can hold `&self` across the async ledger fold.
+    _keepalive: Box<dyn std::any::Any + Send + Sync>,
 }
 
 impl TesseraSync {
@@ -66,8 +67,8 @@ impl TesseraSync {
         self.space.sync_status()
     }
 
-    fn ledger(&self, config: TesseraConfig) -> Result<Ledger, TesseraStoreError> {
-        self.store.fold_moot(self.moot_id, config)
+    async fn ledger(&self, config: TesseraConfig) -> Result<Ledger, TesseraStoreError> {
+        self.store.fold_moot(self.moot_id, config).await
     }
 }
 
@@ -234,10 +235,10 @@ async fn build_sync_lane(
         .ok_or_else(|| "transport has no gossip overlay".to_string())?;
     let moots = dir.join("moots");
     let _ = std::fs::create_dir_all(&moots);
-    let store = TesseraStore::open(moots.join(format!("{}.redb", hex32(&moot_id))))
+    let store = TesseraFileStore::open(moots.join(format!("{}.redb", hex32(&moot_id))))
         .map_err(|e| format!("tessera store: {e}"))?;
-    if store.is_empty().unwrap_or(true) {
-        author_starter_log(&provider, moot_id, &store);
+    if store.is_empty().await.unwrap_or(true) {
+        author_starter_log(&provider, moot_id, &store).await;
     }
     let host_root = provider
         .derive_keypair(b"tessera-host-author")
@@ -247,10 +248,14 @@ async fn build_sync_lane(
     // drain it via the shared `SyncedSpace`, and keep the session + handle alive.
     // The tessera lane is receive-only (authoring is a direct store.insert), so
     // nothing publishes on the handle.
-    let log_sync = LogSync::builder(store.clone(), endpoint, gossip)
-        .spawn()
-        .await
-        .map_err(|e| format!("logsync spawn: {e}"))?;
+    // The muniment-backed store impls `LogStore` for every log-id type, so pin
+    // tessera's (`u64`) here — the type-erased keepalive gives inference nothing
+    // to work back from.
+    let log_sync: LogSync<_, u64, TesseraExt> =
+        LogSync::builder(store.sync_store(), endpoint, gossip)
+            .spawn()
+            .await
+            .map_err(|e| format!("logsync spawn: {e}"))?;
     let handle = log_sync
         .stream(Topic::from(moot_id), true)
         .await
@@ -261,7 +266,8 @@ async fn build_sync_lane(
         .map_err(|e| format!("logsync subscribe: {e}"))?;
     let accept_store = store.clone();
     let space = SyncedSpace::drive(sub, move |op| {
-        std::future::ready(verify(&op) && matches!(accept_store.insert(&op), Ok(true)))
+        let store = accept_store.clone();
+        async move { verify(&op) && matches!(store.insert(&op).await, Ok(true)) }
     });
     let moot = TesseraSync {
         space,
@@ -298,11 +304,14 @@ fn activate_sync_lane(
             }
             let status = moot.sync_status();
             if last.as_ref() != Some(&status) {
-                let standing = host_root.as_ref().and_then(|root| {
+                let standing = if let Some(root) = host_root.as_ref() {
                     moot.ledger(TesseraConfig::default())
+                        .await
                         .ok()
                         .map(|ledger| ledger.score(root, now_ms()))
-                });
+                } else {
+                    None
+                };
                 poll_out.emit(SyncUpdate {
                     active: true,
                     status: status.clone(),
@@ -320,7 +329,11 @@ fn activate_sync_lane(
 /// Author a small `commit -> fulfil -> govern` tessera log for this host's own
 /// persona (derived from its identity) into `store`, so a peer that connects has
 /// a real log to catch up. Best-effort: a derivation / insert failure is skipped.
-fn author_starter_log(provider: &InMemoryProvider, moot_id: [u8; 32], store: &TesseraStore) {
+async fn author_starter_log(
+    provider: &InMemoryProvider,
+    moot_id: [u8; 32],
+    store: &TesseraFileStore,
+) {
     let Ok(kp) = provider.derive_keypair(b"tessera-host-author") else {
         return;
     };
