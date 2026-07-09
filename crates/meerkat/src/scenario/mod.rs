@@ -29,6 +29,14 @@ pub(crate) enum Step {
     /// `roster`, `relate`, ...) on window `win` (0 = primary). The one by-id seam
     /// the palette, menu, agent harness, and a11y already share.
     Invoke { id: String, win: usize },
+    /// Navigate window `win` to `url` through the omnibar-submit path (classify +
+    /// resolve + history + load), the same route Enter in the address bar takes. For
+    /// flows that are *not* registry commands. Async: follow with `settle` for the load.
+    Navigate { url: String, win: usize },
+    /// Dispatch a key chord (`ctrl+f`, `enter`, `f5`, `escape`, a bare char) to window
+    /// `win` through the real `on_key_pressed` path, reading the same modifier state OS
+    /// input sets. For the chords that are not registry commands (find, omnibar typing).
+    Key { chord: KeyChord, win: usize },
     /// Set the active theme by id on window `win`.
     Theme { id: String, win: usize },
     /// Spawn a new window over the shared session (the Ctrl+Shift+N chord, as a verb).
@@ -51,6 +59,45 @@ pub(crate) enum Step {
 pub(crate) enum Assertion {
     /// The live window count compares `op` against `n`.
     Windows { op: Cmp, n: usize },
+}
+
+/// A parsed key chord: the modifier flags plus the key. Winit-free so the parser stays
+/// pure; the runner maps [`KeySym`] onto `winit::keyboard::Key` at dispatch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct KeyChord {
+    pub ctrl: bool,
+    pub shift: bool,
+    pub alt: bool,
+    pub meta: bool,
+    pub key: KeySym,
+}
+
+/// The key half of a chord: a literal character, or a named key.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum KeySym {
+    Char(char),
+    Named(NamedKey),
+}
+
+/// The named (non-character) keys a scenario can dispatch. `F(n)` is a function key,
+/// validated `1..=12` at parse.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum NamedKey {
+    Enter,
+    Escape,
+    Tab,
+    Backspace,
+    Delete,
+    Space,
+    Up,
+    Down,
+    Left,
+    Right,
+    Home,
+    End,
+    PageUp,
+    PageDown,
+    F(u8),
 }
 
 /// A comparison operator, shared by every numeric assertion.
@@ -131,16 +178,25 @@ pub(crate) fn parse(src: &str) -> Result<Vec<Step>, ScenarioError> {
     let mut steps = Vec::new();
     for (i, raw) in src.lines().enumerate() {
         let line = i + 1;
-        let content = match raw.split('#').next() {
-            Some(c) => c.trim(),
-            None => "",
-        };
+        let content = strip_comment(raw).trim();
         if content.is_empty() {
             continue;
         }
         steps.push(parse_line(content, line)?);
     }
     Ok(steps)
+}
+
+/// Strip a trailing `#` comment, but only when the `#` starts the line or follows
+/// whitespace — so a `#fragment` inside a `navigate` URL is not mistaken for a comment.
+fn strip_comment(line: &str) -> &str {
+    let bytes = line.as_bytes();
+    for (i, &b) in bytes.iter().enumerate() {
+        if b == b'#' && (i == 0 || bytes[i - 1].is_ascii_whitespace()) {
+            return &line[..i];
+        }
+    }
+    line
 }
 
 fn parse_line(content: &str, line: usize) -> Result<Step, ScenarioError> {
@@ -164,6 +220,15 @@ fn parse_line(content: &str, line: usize) -> Result<Step, ScenarioError> {
         "invoke" => {
             let id = single_operand(rest, "invoke", line)?;
             Ok(Step::Invoke { id, win })
+        }
+        "navigate" => {
+            let url = single_operand(rest, "navigate", line)?;
+            Ok(Step::Navigate { url, win })
+        }
+        "key" => {
+            let spec = single_operand(rest, "key", line)?;
+            let chord = parse_chord(&spec, line)?;
+            Ok(Step::Key { chord, win })
         }
         "theme" => {
             let id = single_operand(rest, "theme", line)?;
@@ -210,6 +275,66 @@ fn parse_assert(rest: &[&str], line: usize) -> Result<Step, ScenarioError> {
         [target, ..] => Err(err(format!("unknown assert target `{target}`"))),
         [] => Err(err("assert expects a target".to_string())),
     }
+}
+
+/// Parse a chord like `ctrl+shift+n`, `enter`, `f5`, or a bare `f`: the last `+`-part is
+/// the key, the earlier ones are modifiers.
+fn parse_chord(spec: &str, line: usize) -> Result<KeyChord, ScenarioError> {
+    let err = |message: String| ScenarioError { line, message };
+    let parts: Vec<&str> = spec.split('+').collect();
+    if parts.iter().any(|p| p.is_empty()) {
+        return Err(err(format!("malformed chord `{spec}`")));
+    }
+    let (mods, last) = parts.split_at(parts.len() - 1);
+    let (mut ctrl, mut shift, mut alt, mut meta) = (false, false, false, false);
+    for m in mods {
+        match m.to_ascii_lowercase().as_str() {
+            "ctrl" | "control" => ctrl = true,
+            "shift" => shift = true,
+            "alt" | "option" => alt = true,
+            "meta" | "cmd" | "super" | "win" => meta = true,
+            other => return Err(err(format!("unknown modifier `{other}` in chord `{spec}`"))),
+        }
+    }
+    let key = parse_key_sym(last[0])
+        .ok_or_else(|| err(format!("unknown key `{}` in chord `{spec}`", last[0])))?;
+    Ok(KeyChord {
+        ctrl,
+        shift,
+        alt,
+        meta,
+        key,
+    })
+}
+
+/// Resolve one key token to a [`KeySym`]: a named key, an `f1`..`f12`, or a single char.
+fn parse_key_sym(tok: &str) -> Option<KeySym> {
+    let named = match tok.to_ascii_lowercase().as_str() {
+        "enter" | "return" => NamedKey::Enter,
+        "escape" | "esc" => NamedKey::Escape,
+        "tab" => NamedKey::Tab,
+        "backspace" => NamedKey::Backspace,
+        "delete" | "del" => NamedKey::Delete,
+        "space" => NamedKey::Space,
+        "up" => NamedKey::Up,
+        "down" => NamedKey::Down,
+        "left" => NamedKey::Left,
+        "right" => NamedKey::Right,
+        "home" => NamedKey::Home,
+        "end" => NamedKey::End,
+        "pageup" | "pgup" => NamedKey::PageUp,
+        "pagedown" | "pgdn" => NamedKey::PageDown,
+        other => {
+            // f1..f12, else a single character (case preserved for typing into a field).
+            if let Some(n) = other.strip_prefix('f').and_then(|d| d.parse::<u8>().ok()) {
+                return (1..=12).contains(&n).then_some(KeySym::Named(NamedKey::F(n)));
+            }
+            let mut chars = tok.chars();
+            let c = chars.next()?;
+            return chars.next().is_none().then_some(KeySym::Char(c));
+        }
+    };
+    Some(KeySym::Named(named))
 }
 
 fn single_operand(rest: &[&str], verb: &str, line: usize) -> Result<String, ScenarioError> {
@@ -322,6 +447,87 @@ log all done
         assert!(parse("assert windows =? 2").is_err());
         assert!(parse("assert windows ==").is_err());
         assert!(parse("assert nodes == 2").is_err());
+    }
+
+    #[test]
+    fn parses_navigate_and_preserves_url_fragments() {
+        // The `#frag` must survive: only a whitespace-preceded `#` is a comment.
+        let steps = parse("navigate https://example.com/a#frag  # go there").expect("parses");
+        assert_eq!(
+            steps,
+            vec![Step::Navigate {
+                url: "https://example.com/a#frag".into(),
+                win: 0
+            }]
+        );
+    }
+
+    #[test]
+    fn parses_key_chords() {
+        let steps = parse("key ctrl+f\nkey ctrl+shift+n @1\nkey enter\nkey f5\nkey a").unwrap();
+        assert_eq!(
+            steps,
+            vec![
+                Step::Key {
+                    chord: KeyChord {
+                        ctrl: true,
+                        shift: false,
+                        alt: false,
+                        meta: false,
+                        key: KeySym::Char('f')
+                    },
+                    win: 0
+                },
+                Step::Key {
+                    chord: KeyChord {
+                        ctrl: true,
+                        shift: true,
+                        alt: false,
+                        meta: false,
+                        key: KeySym::Char('n')
+                    },
+                    win: 1
+                },
+                Step::Key {
+                    chord: KeyChord {
+                        ctrl: false,
+                        shift: false,
+                        alt: false,
+                        meta: false,
+                        key: KeySym::Named(NamedKey::Enter)
+                    },
+                    win: 0
+                },
+                Step::Key {
+                    chord: KeyChord {
+                        ctrl: false,
+                        shift: false,
+                        alt: false,
+                        meta: false,
+                        key: KeySym::Named(NamedKey::F(5))
+                    },
+                    win: 0
+                },
+                Step::Key {
+                    chord: KeyChord {
+                        ctrl: false,
+                        shift: false,
+                        alt: false,
+                        meta: false,
+                        key: KeySym::Char('a')
+                    },
+                    win: 0
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn rejects_bad_chords() {
+        assert!(parse("key ctrl+").is_err()); // empty key part
+        assert!(parse("key hyper+f").is_err()); // unknown modifier
+        assert!(parse("key f13").is_err()); // out-of-range function key
+        assert!(parse("key wiggle").is_err()); // multi-char, not a known name
     }
 
     #[test]

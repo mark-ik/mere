@@ -10,6 +10,63 @@ use super::*;
 /// whole-buffer clone, so a bounded stack keeps memory flat without limiting real use.
 const KNOT_UNDO_CAP: usize = 200;
 
+/// The byte offset of char index `ci` in `text` (the buffer end when past the last char),
+/// bridging `TextInput`'s char-index caret to its byte-offset selection setters.
+fn byte_of_char(text: &str, ci: usize) -> usize {
+    text.char_indices().nth(ci).map(|(b, _)| b).unwrap_or(text.len())
+}
+
+/// The list marker `after` (a line past its indent) begins with, if any: an unordered /
+/// task bullet, or an ordered `N.` / `N)`. The returned string includes the trailing space.
+fn list_marker(after: &str) -> Option<String> {
+    for m in ["- [ ] ", "- [x] ", "- ", "* ", "+ "] {
+        if after.starts_with(m) {
+            return Some(m.to_string());
+        }
+    }
+    let digits: String = after.chars().take_while(|c| c.is_ascii_digit()).collect();
+    if !digits.is_empty() {
+        let rest = &after[digits.len()..];
+        if rest.starts_with(". ") {
+            return Some(format!("{digits}. "));
+        }
+        if rest.starts_with(") ") {
+            return Some(format!("{digits}) "));
+        }
+    }
+    None
+}
+
+/// The marker that continues `marker` on the next line: an ordered number increments; a
+/// task item resets to unchecked; an unordered bullet repeats.
+fn next_list_marker(marker: &str) -> String {
+    let digits: String = marker.chars().take_while(|c| c.is_ascii_digit()).collect();
+    if let Ok(n) = digits.parse::<usize>() {
+        return format!("{}{}", n + 1, &marker[digits.len()..]);
+    }
+    match marker {
+        "- [ ] " | "- [x] " => "- [ ] ".to_string(),
+        other => other.to_string(),
+    }
+}
+
+/// The closing delimiter that pairs with `open` for auto-pair wrap, or `None` if `open` is
+/// not a wrapping delimiter.
+fn pair_close(open: char) -> Option<char> {
+    Some(match open {
+        '(' => ')',
+        '[' => ']',
+        '{' => '}',
+        '"' => '"',
+        '\'' => '\'',
+        '`' => '`',
+        '*' => '*',
+        '_' => '_',
+        '~' => '~',
+        _ => return None,
+    })
+}
+
 impl Chrome {
     /// Toggle the docked comms pane open/closed. Opening records a `Refresh` so
     /// the host loads the latest conversation list.
@@ -149,6 +206,65 @@ impl Chrome {
             }
             None => false,
         }
+    }
+
+    /// Smart list continuation on Enter: in a list item, insert a newline that keeps the
+    /// same indent and marker (ordered markers increment, task items reset to unchecked);
+    /// on an *empty* item (just the marker) end the list instead by clearing that marker.
+    /// Returns whether it handled the Enter — `false` means the caller inserts a plain
+    /// newline. (Djot editor — Phase 3 smart list continuation.)
+    pub fn continue_list_on_enter(&mut self) -> bool {
+        let text = self.knot_source.text().to_string();
+        let caret_byte = byte_of_char(&text, self.knot_source.caret());
+        let line_start = text[..caret_byte].rfind('\n').map(|i| i + 1).unwrap_or(0);
+        let line = &text[line_start..caret_byte];
+        let indent: String = line.chars().take_while(|c| *c == ' ' || *c == '\t').collect();
+        let after = &line[indent.len()..];
+        let Some(marker) = list_marker(after) else {
+            return false;
+        };
+        if after[marker.len()..].trim().is_empty() {
+            // Empty item: exit the list by clearing this line's indent + marker.
+            self.knot_source.set_caret_byte(line_start, false);
+            self.knot_source.set_caret_byte(caret_byte, true);
+            self.knot_source.insert_str("");
+            return true;
+        }
+        self.knot_source
+            .insert_str(&format!("\n{indent}{}", next_list_marker(&marker)));
+        true
+    }
+
+    /// Auto-pair a wrapping delimiter over a selection: with text selected, typing `(`, `[`,
+    /// `{`, `*`, `_`, `` ` ``, `~`, `"` or `'` wraps it (open + selection + close) and keeps
+    /// the inner text selected, so wraps nest (e.g. `*`-then-`*` gives `**bold**`). Returns
+    /// whether it wrapped; `false` (no selection, or not a pair char) falls through to a
+    /// normal insert. (Djot editor — Phase 3 auto-pairs.)
+    pub fn wrap_selection_if_pair(&mut self, open: char) -> bool {
+        let Some(close) = pair_close(open) else {
+            return false;
+        };
+        if !self.knot_source.has_selection() {
+            return false;
+        }
+        self.knot_edit_snapshot(false);
+        let (lo, hi) = self.knot_source.selection();
+        let inner: String = self
+            .knot_source
+            .text()
+            .chars()
+            .skip(lo)
+            .take(hi - lo)
+            .collect();
+        self.knot_source
+            .insert_str(&format!("{open}{inner}{close}"));
+        // Re-select the inner text (between the new delimiters), so a repeat wrap nests.
+        let text = self.knot_source.text().to_string();
+        let start = byte_of_char(&text, lo + 1);
+        let end = byte_of_char(&text, lo + 1 + (hi - lo));
+        self.knot_source.set_caret_byte(start, false);
+        self.knot_source.set_caret_byte(end, true);
+        true
     }
 
     /// Toggle the knot editor: open a fresh note, or close it.
@@ -299,5 +415,64 @@ impl Chrome {
         } else {
             &self.omnibar
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn editor_with(source: &str, caret_byte: usize) -> Chrome {
+        let mut c = Chrome::new("mere://test");
+        c.open_knot_editor(source);
+        c.knot_source.set_caret_byte(caret_byte, false);
+        c
+    }
+
+    #[test]
+    fn enter_continues_an_unordered_list() {
+        let mut c = editor_with("- one", 5);
+        assert!(c.continue_list_on_enter());
+        assert_eq!(c.knot_source.text(), "- one\n- ");
+    }
+
+    #[test]
+    fn enter_increments_an_ordered_list() {
+        let mut c = editor_with("1. first", 8);
+        assert!(c.continue_list_on_enter());
+        assert_eq!(c.knot_source.text(), "1. first\n2. ");
+    }
+
+    #[test]
+    fn enter_on_an_empty_item_ends_the_list() {
+        let mut c = editor_with("- one\n- ", 8);
+        assert!(c.continue_list_on_enter());
+        assert_eq!(c.knot_source.text(), "- one\n");
+    }
+
+    #[test]
+    fn enter_outside_a_list_is_not_handled() {
+        let mut c = editor_with("plain text", 10);
+        assert!(!c.continue_list_on_enter());
+        assert_eq!(c.knot_source.text(), "plain text");
+    }
+
+    #[test]
+    fn wrap_selection_wraps_and_nests() {
+        let mut c = editor_with("hello world", 0);
+        c.knot_source.set_caret_byte(0, false);
+        c.knot_source.set_caret_byte(5, true); // select "hello"
+        assert!(c.wrap_selection_if_pair('*'));
+        assert_eq!(c.knot_source.text(), "*hello* world");
+        // The inner text stays selected, so a repeat wrap nests.
+        assert!(c.wrap_selection_if_pair('_'));
+        assert_eq!(c.knot_source.text(), "*_hello_* world");
+    }
+
+    #[test]
+    fn wrap_without_selection_is_declined() {
+        let mut c = editor_with("hello", 5);
+        assert!(!c.wrap_selection_if_pair('*'));
+        assert_eq!(c.knot_source.text(), "hello");
     }
 }

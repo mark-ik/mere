@@ -26,10 +26,13 @@
 use std::path::{Path, PathBuf};
 
 use meerkat::command::{Command, context_action_from_id};
+use meerkat::submit_omnibar;
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
+use winit::keyboard::{Key as WinitKey, NamedKey as WinitNamedKey};
 use winit::window::WindowId;
+use xilem_serval::TextInput;
 
-use super::{Assertion, Step, parse};
+use super::{Assertion, KeyChord, KeySym, NamedKey, Step, parse};
 use crate::observability::Severity;
 use crate::{Shell, WindowCtx};
 
@@ -212,6 +215,33 @@ impl Shell {
                 self.scenario_mut().cursor += 1;
                 false
             }
+            Step::Navigate { url, win } => {
+                let ok = self.scenario_navigate(&url, win);
+                self.scenario_log(format!(
+                    "navigate {url} @{win}: {}",
+                    if ok { "submitted" } else { "no window" }
+                ));
+                if !ok {
+                    self.scenario_mut().failed = true;
+                }
+                self.request_window_redraw(win);
+                self.scenario_mut().cursor += 1;
+                false
+            }
+            Step::Key { chord, win } => {
+                let ok = self.scenario_key(chord, win);
+                self.scenario_log(format!(
+                    "key {} @{win}: {}",
+                    chord_label(&chord),
+                    if ok { "dispatched" } else { "no window" }
+                ));
+                if !ok {
+                    self.scenario_mut().failed = true;
+                }
+                self.request_window_redraw(win);
+                self.scenario_mut().cursor += 1;
+                false
+            }
             Step::Theme { id, win } => {
                 let ok = self.scenario_theme(&id, win);
                 self.scenario_log(format!("theme {id} @{win}: {}", if ok { "set" } else { "no window" }));
@@ -321,6 +351,44 @@ impl Shell {
         }
     }
 
+    /// Navigate window `win` to `url` through the omnibar-submit path. `false` if the
+    /// target window does not exist.
+    pub(crate) fn scenario_navigate(&mut self, url: &str, win: usize) -> bool {
+        match self.window_id_for_projection(win) {
+            Some(wid) => match self.window_ctx(wid) {
+                Some(mut wc) => {
+                    wc.scenario_navigate(url);
+                    true
+                }
+                None => false,
+            },
+            None if win == 0 => {
+                self.ctx().scenario_navigate(url);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Dispatch a key chord to window `win` through the real key path. `false` if the
+    /// target window does not exist.
+    pub(crate) fn scenario_key(&mut self, chord: KeyChord, win: usize) -> bool {
+        match self.window_id_for_projection(win) {
+            Some(wid) => match self.window_ctx(wid) {
+                Some(mut wc) => {
+                    wc.scenario_key(chord);
+                    true
+                }
+                None => false,
+            },
+            None if win == 0 => {
+                self.ctx().scenario_key(chord);
+                true
+            }
+            None => false,
+        }
+    }
+
     /// Set the active theme on window `win`. `false` if the target window does not exist.
     pub(crate) fn scenario_theme(&mut self, id: &str, win: usize) -> bool {
         match self.window_id_for_projection(win) {
@@ -408,6 +476,123 @@ impl WindowCtx<'_> {
             false
         }
     }
+
+    /// Navigate this window to `url` through the omnibar-submit path: seed the address
+    /// bar, submit (classify + resolve + history), and run the host's `sync_orrery` apply
+    /// (mint / navigate the node, load). The same route Enter in the omnibar takes.
+    pub(crate) fn scenario_navigate(&mut self, url: &str) {
+        let url = url.to_string();
+        self.chrome_update(move |c| {
+            c.omnibar = TextInput::new(&url);
+            submit_omnibar(c);
+        });
+        self.sync_orrery();
+        self.view.request_redraw();
+    }
+
+    /// Dispatch a key chord to this window through the real `on_key_pressed` path: set the
+    /// modifier state the handler reads (as an OS `ModifiersChanged` would), press the key,
+    /// then restore the modifiers so nothing leaks to the next step.
+    pub(crate) fn scenario_key(&mut self, chord: KeyChord) {
+        let (c, s, a, m) = (
+            self.view.modifiers.ctrl,
+            self.view.modifiers.shift,
+            self.view.modifiers.alt,
+            self.view.modifiers.meta,
+        );
+        self.view.modifiers.ctrl = chord.ctrl;
+        self.view.modifiers.shift = chord.shift;
+        self.view.modifiers.alt = chord.alt;
+        self.view.modifiers.meta = chord.meta;
+        self.on_key_pressed(&winit_key(chord.key));
+        self.view.modifiers.ctrl = c;
+        self.view.modifiers.shift = s;
+        self.view.modifiers.alt = a;
+        self.view.modifiers.meta = m;
+        self.view.request_redraw();
+    }
+}
+
+/// Map a scenario [`KeySym`] onto the `winit` key `on_key_pressed` matches against.
+fn winit_key(sym: KeySym) -> WinitKey {
+    match sym {
+        KeySym::Char(c) => WinitKey::Character(c.to_string().into()),
+        KeySym::Named(n) => WinitKey::Named(match n {
+            NamedKey::Enter => WinitNamedKey::Enter,
+            NamedKey::Escape => WinitNamedKey::Escape,
+            NamedKey::Tab => WinitNamedKey::Tab,
+            NamedKey::Backspace => WinitNamedKey::Backspace,
+            NamedKey::Delete => WinitNamedKey::Delete,
+            NamedKey::Space => WinitNamedKey::Space,
+            NamedKey::Up => WinitNamedKey::ArrowUp,
+            NamedKey::Down => WinitNamedKey::ArrowDown,
+            NamedKey::Left => WinitNamedKey::ArrowLeft,
+            NamedKey::Right => WinitNamedKey::ArrowRight,
+            NamedKey::Home => WinitNamedKey::Home,
+            NamedKey::End => WinitNamedKey::End,
+            NamedKey::PageUp => WinitNamedKey::PageUp,
+            NamedKey::PageDown => WinitNamedKey::PageDown,
+            NamedKey::F(n) => f_key(n),
+        }),
+    }
+}
+
+/// `1..=12` to the corresponding `winit` function key. The parser bounds `n` to that
+/// range, so the fallback is unreachable.
+fn f_key(n: u8) -> WinitNamedKey {
+    match n {
+        1 => WinitNamedKey::F1,
+        2 => WinitNamedKey::F2,
+        3 => WinitNamedKey::F3,
+        4 => WinitNamedKey::F4,
+        5 => WinitNamedKey::F5,
+        6 => WinitNamedKey::F6,
+        7 => WinitNamedKey::F7,
+        8 => WinitNamedKey::F8,
+        9 => WinitNamedKey::F9,
+        10 => WinitNamedKey::F10,
+        11 => WinitNamedKey::F11,
+        _ => WinitNamedKey::F12,
+    }
+}
+
+/// Render a chord back to its `ctrl+shift+f` form for the step log.
+fn chord_label(chord: &KeyChord) -> String {
+    let mut s = String::new();
+    if chord.ctrl {
+        s.push_str("ctrl+");
+    }
+    if chord.shift {
+        s.push_str("shift+");
+    }
+    if chord.alt {
+        s.push_str("alt+");
+    }
+    if chord.meta {
+        s.push_str("meta+");
+    }
+    match chord.key {
+        KeySym::Char(c) => s.push(c),
+        KeySym::Named(NamedKey::F(n)) => s.push_str(&format!("f{n}")),
+        KeySym::Named(named) => s.push_str(match named {
+            NamedKey::Enter => "enter",
+            NamedKey::Escape => "escape",
+            NamedKey::Tab => "tab",
+            NamedKey::Backspace => "backspace",
+            NamedKey::Delete => "delete",
+            NamedKey::Space => "space",
+            NamedKey::Up => "up",
+            NamedKey::Down => "down",
+            NamedKey::Left => "left",
+            NamedKey::Right => "right",
+            NamedKey::Home => "home",
+            NamedKey::End => "end",
+            NamedKey::PageUp => "pageup",
+            NamedKey::PageDown => "pagedown",
+            NamedKey::F(_) => "f",
+        }),
+    }
+    s
 }
 
 /// Write the self-capture request the render hook polls: the target PNG path, then the
@@ -439,6 +624,21 @@ impl Shell {
                     log.push(format!(
                         "invoke {id} @{win}: {}",
                         if ok { "applied" } else { "unknown id" }
+                    ));
+                }
+                Step::Navigate { url, win } => {
+                    let ok = self.scenario_navigate(url, *win);
+                    log.push(format!(
+                        "navigate {url} @{win}: {}",
+                        if ok { "submitted" } else { "no window" }
+                    ));
+                }
+                Step::Key { chord, win } => {
+                    let ok = self.scenario_key(*chord, *win);
+                    log.push(format!(
+                        "key {} @{win}: {}",
+                        chord_label(chord),
+                        if ok { "dispatched" } else { "no window" }
                     ));
                 }
                 Step::Theme { id, win } => {
@@ -520,5 +720,29 @@ log fin
         app.run_scenario_headless(&steps);
         let opened_after = app.ctx().pane_of_content(&frame::PaneContent::Roster).is_some();
         assert_ne!(opened_before, opened_after, "roster pane toggled");
+    }
+
+    #[test]
+    fn key_ctrl_f_toggles_the_find_bar() {
+        // Ctrl+F is a chord, not a registry command; the `key` verb reaches the same
+        // `on_key_pressed` -> `toggle_find` path the real keyboard does.
+        let steps = parse("key ctrl+f").expect("parses");
+        let mut app = test_app();
+        let before = app.ctx().chrome().find_open;
+        app.run_scenario_headless(&steps);
+        let after = app.ctx().chrome().find_open;
+        assert_ne!(before, after, "find bar toggled by the chord");
+    }
+
+    #[test]
+    fn navigate_drives_the_omnibar_submit_path() {
+        let steps = parse("navigate https://example.com").expect("parses");
+        let mut app = test_app();
+        app.run_scenario_headless(&steps);
+        assert_eq!(
+            app.ctx().chrome().content_location(),
+            "https://example.com",
+            "navigate resolved + submitted the URL through the omnibar path"
+        );
     }
 }

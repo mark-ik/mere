@@ -366,6 +366,37 @@ impl WindowCtx<'_> {
             self.view.request_redraw();
             return;
         }
+        // Smart list continuation: Enter in a list item continues (or ends) the list; a
+        // non-list Enter falls through to a plain newline. (Phase 3.)
+        if !ctrl && matches!(key, WinitKey::Named(WinitNamedKey::Enter)) {
+            let mut handled = false;
+            self.chrome_update(|c| {
+                c.knot_edit_snapshot(false);
+                handled = c.continue_list_on_enter();
+            });
+            if !handled {
+                if let Some(ev) = key_event_from_winit(key, self.view.modifiers) {
+                    self.multi.dispatch_key(self.view.projection_id, ev);
+                }
+            }
+            self.view.request_redraw();
+            return;
+        }
+        // Auto-pair: a wrapping delimiter typed over a selection wraps it (kept selected, so
+        // wraps nest). No selection / not a pair char falls through to a normal insert. (Phase 3.)
+        if !ctrl {
+            if let WinitKey::Character(s) = key {
+                let mut ch = s.chars();
+                if let (Some(open), None) = (ch.next(), ch.next()) {
+                    let mut wrapped = false;
+                    self.chrome_update(|c| wrapped = c.wrap_selection_if_pair(open));
+                    if wrapped {
+                        self.view.request_redraw();
+                        return;
+                    }
+                }
+            }
+        }
         // Snapshot before a mutating edit, classifying for undo grouping. A caret move ends
         // the coalescing run (so the next insert is a fresh group) without snapshotting.
         match key {
@@ -374,9 +405,9 @@ impl WindowCtx<'_> {
             WinitKey::Character(_) | WinitKey::Named(WinitNamedKey::Space) => {
                 self.chrome_update(|c| c.knot_edit_snapshot(true));
             }
-            WinitKey::Named(
-                WinitNamedKey::Enter | WinitNamedKey::Backspace | WinitNamedKey::Delete,
-            ) => self.chrome_update(|c| c.knot_edit_snapshot(false)),
+            WinitKey::Named(WinitNamedKey::Backspace | WinitNamedKey::Delete) => {
+                self.chrome_update(|c| c.knot_edit_snapshot(false))
+            }
             WinitKey::Named(
                 WinitNamedKey::ArrowLeft
                 | WinitNamedKey::ArrowRight

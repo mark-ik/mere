@@ -1,0 +1,13 @@
+# find-in-page: the Ctrl+F bar is a chord, not a registry command, so the `key` verb
+# reaches it (the flow the registry-id core could not express). Open the find bar, type
+# a query, capture it. Network-free: searches the built-in welcome page already loaded.
+log      open find
+key      ctrl+f
+settle   2
+key      m
+key      e
+key      r
+key      e
+settle   2
+capture  find-bar
+log      find query typed
