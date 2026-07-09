@@ -70,7 +70,7 @@ impl Graph {
         };
         let url = source.primary_address().as_url_str().to_string();
 
-        let key = self.inner.add_node(Node {
+        let key = self.inner.insert(Node {
             id,
             // --- content: cloned from the source ---
             cached_host: source.cached_host.clone(),
@@ -109,7 +109,6 @@ impl Graph {
         });
 
         self.url_to_nodes.entry(url).or_default().push(key);
-        self.id_to_node.insert(id, key);
         self.bump_revision();
         key
     }
@@ -158,7 +157,7 @@ impl Graph {
             std::collections::HashMap::with_capacity(component.len());
         let mut new_keys = Vec::with_capacity(component.len());
         for old_key in component {
-            if let Some(node) = source.inner.node_weight(old_key) {
+            if let Some(node) = source.inner.node(old_key) {
                 let new_key = self.copy_node_from(node, source_graph.clone(), node.position);
                 remap.insert(old_key, new_key);
                 new_keys.push(new_key);
@@ -166,10 +165,10 @@ impl Graph {
         }
         // Re-point the component's internal edges (both endpoints copied): clone each
         // edge's payload verbatim onto the new node pair.
-        for edge in source.inner.edge_references() {
+        for edge in source.inner.inner().edge_references() {
             if let (Some(&from), Some(&to)) = (remap.get(&edge.source()), remap.get(&edge.target()))
             {
-                self.inner.add_edge(from, to, edge.weight().clone());
+                self.inner.connect(from, to, edge.weight().clone());
             }
         }
         self.bump_revision();
@@ -188,7 +187,7 @@ mod tests {
             "https://example.com/article".to_string(),
             Point2D::new(1.0, 2.0),
         );
-        let node = a.inner.node_weight_mut(key).unwrap();
+        let node = a.inner.node_mut(key).unwrap();
         node.title = "An Article".to_string();
         node.tags = HashSet::from(["read-later".to_string(), "research".to_string()]);
         node.properties = vec![crate::types::NodeProperty::new(
@@ -240,7 +239,7 @@ mod tests {
     #[test]
     fn copy_does_not_carry_the_donor_import_provenance() {
         let (mut a, src_key) = donor_with_content();
-        a.inner.node_weight_mut(src_key).unwrap().import_provenance =
+        a.inner.node_mut(src_key).unwrap().import_provenance =
             vec![crate::types::NodeImportProvenance {
                 source_id: "firefox".to_string(),
                 source_label: "Firefox bookmarks".to_string(),

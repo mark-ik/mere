@@ -63,7 +63,7 @@ members = [
     "crates/murm/murm",
     "crates/murm/murmuring",
     "crates/murm/transport",
-    "crates/murm/gazette",
+    "crates/persona/gazetteer",
     "crates/moot/moothold",
     "crates/moot/mooting",
     "crates/mesh/mesh",
@@ -175,6 +175,11 @@ mooting = { path = "crates/moot/mooting" }
 mesh = { path = "crates/mesh/mesh" }
 
 identity = { path = "crates/persona/identity" }
+# Handle-resolution index (WebFinger today; NIP-05 / atproto-did / moot
+# web-of-trust to come). Incubating, promoted out of the murm supercrate
+# 2026-07-08 (a gazetteer is a directory, not a broadcast gazette); no consumer
+# yet, and its blocking reqwest needs an async port before one wires it.
+gazetteer = { path = "crates/persona/gazetteer" }
 
 # Rhai backend for the knot block-evaluator lane (the thin BlockEvaluator
 # slice, distinct from serval's full ScriptEngine seam). Pure Rust, sandboxed.

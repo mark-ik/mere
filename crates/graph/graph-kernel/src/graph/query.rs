@@ -28,12 +28,12 @@ use super::{ArrangementEdgeView, ContainmentEdgeView, Graph, RelationView, Seman
 impl Graph {
     /// Get a node by key
     pub fn get_node(&self, key: NodeKey) -> Option<&Node> {
-        self.inner.node_weight(key)
+        self.inner.node(key)
     }
 
     /// Get a mutable node by key.
     pub(crate) fn get_node_mut(&mut self, key: NodeKey) -> Option<&mut Node> {
-        self.inner.node_weight_mut(key)
+        self.inner.node_mut(key)
     }
 
     /// Find a node whose AddressClaims include the given address (any
@@ -51,7 +51,7 @@ impl Graph {
     ) -> Option<(NodeKey, &Node)> {
         let url = address.as_url_str();
         let key = self.url_to_nodes.get(url)?.last().copied()?;
-        Some((key, self.inner.node_weight(key)?))
+        Some((key, self.inner.node(key)?))
     }
 
     /// Convenience wrapper over [`Graph::find_node_by_address`] for
@@ -73,20 +73,18 @@ impl Graph {
 
     /// Get a node by UUID.
     pub fn get_node_by_id(&self, id: Uuid) -> Option<(NodeKey, &Node)> {
-        let key = *self.id_to_node.get(&id)?;
-        Some((key, self.inner.node_weight(key)?))
+        let key = self.inner.key_of(&id)?;
+        Some((key, self.inner.node(key)?))
     }
 
     /// Get node key by UUID.
     pub fn get_node_key_by_id(&self, id: Uuid) -> Option<NodeKey> {
-        self.id_to_node.get(&id).copied()
+        self.inner.key_of(&id)
     }
 
     /// Iterate over all nodes as (key, node) pairs
     pub fn nodes(&self) -> impl Iterator<Item = (NodeKey, &Node)> {
-        self.inner
-            .node_indices()
-            .map(move |idx| (idx, &self.inner[idx]))
+        self.inner.nodes()
     }
 
     /// Iterate over all stored relations, one row per recognized
@@ -99,7 +97,7 @@ impl Graph {
     /// `edges()` iterator that this replaces.
     pub fn relations(&self) -> impl Iterator<Item = RelationView> + '_ {
         use super::edge_taxonomy::RelationKind;
-        self.inner.edge_references().flat_map(|edge| {
+        self.inner.inner().edge_references().flat_map(|edge| {
             let from = edge.source();
             let to = edge.target();
             let payload = edge.weight();
@@ -167,7 +165,7 @@ impl Graph {
     }
 
     pub fn semantic_edges(&self) -> impl Iterator<Item = SemanticEdgeView> + '_ {
-        self.inner.edge_references().flat_map(|edge| {
+        self.inner.inner().edge_references().flat_map(|edge| {
             let from = edge.source();
             let to = edge.target();
             let payload = edge.weight();
@@ -190,7 +188,7 @@ impl Graph {
     }
 
     pub fn arrangement_edges(&self) -> impl Iterator<Item = ArrangementEdgeView> + '_ {
-        self.inner.edge_references().flat_map(|e| {
+        self.inner.inner().edge_references().flat_map(|e| {
             let from = e.source();
             let to = e.target();
             e.weight()
@@ -207,7 +205,7 @@ impl Graph {
     }
 
     pub fn containment_edges(&self) -> impl Iterator<Item = ContainmentEdgeView> + '_ {
-        self.inner.edge_references().flat_map(|e| {
+        self.inner.inner().edge_references().flat_map(|e| {
             let from = e.source();
             let to = e.target();
             e.weight()
@@ -227,14 +225,14 @@ impl Graph {
     ///
     /// Derived relations are additive/read-only and are never persisted.
     pub(crate) fn rebuild_derived_containment_relations(&mut self) {
-        let edge_ids: Vec<EdgeKey> = self.inner.edge_indices().collect();
+        let edge_ids: Vec<EdgeKey> = self.inner.inner().edge_indices().collect();
         let mut empty_edges = Vec::new();
         // This rebuild retracts containment relations and removes empty edges directly on `inner`
         // (bypassing the bumping API), so track the structural change and bump once. The
         // `assert_relation` calls below bump on their own when they re-derive the edges.
         let mut changed = false;
         for edge_id in edge_ids {
-            if let Some(payload) = self.inner.edge_weight_mut(edge_id) {
+            if let Some(payload) = self.inner.edge_mut(edge_id) {
                 let mut removed_any = false;
                 removed_any |= payload
                     .retract_relation(RelationSelector::Containment(ContainmentSubKind::UrlPath));
@@ -249,7 +247,7 @@ impl Graph {
             }
         }
         for edge_id in empty_edges {
-            let _ = self.inner.remove_edge(edge_id);
+            let _ = self.inner.disconnect(edge_id);
         }
         if changed {
             self.bump_revision();
@@ -327,17 +325,17 @@ impl Graph {
 
     /// Iterate outgoing neighbor keys for a node
     pub fn out_neighbors(&self, key: NodeKey) -> impl Iterator<Item = NodeKey> + '_ {
-        self.inner.neighbors_directed(key, Direction::Outgoing)
+        self.inner.inner().neighbors_directed(key, Direction::Outgoing)
     }
 
     /// Iterate incoming neighbor keys for a node
     pub fn in_neighbors(&self, key: NodeKey) -> impl Iterator<Item = NodeKey> + '_ {
-        self.inner.neighbors_directed(key, Direction::Incoming)
+        self.inner.inner().neighbors_directed(key, Direction::Incoming)
     }
 
     /// Iterate undirected neighbor keys for a node.
     pub fn neighbors_undirected(&self, key: NodeKey) -> impl Iterator<Item = NodeKey> + '_ {
-        self.inner.neighbors_undirected(key)
+        self.inner.inner().neighbors_undirected(key)
     }
 
     /// Undirected neighbors sorted by stable node-key order.
@@ -416,22 +414,22 @@ impl Graph {
         if self.get_node(source).is_none() {
             return HashMap::new();
         }
-        dijkstra(&UndirectedAdaptor(&self.inner), source, None, |_| 1_usize)
+        dijkstra(&UndirectedAdaptor(self.inner.inner()), source, None, |_| 1_usize)
             .into_iter()
             .collect()
     }
 
     /// Nodes with no incoming or outgoing edges.
     pub fn orphan_node_keys(&self) -> Vec<NodeKey> {
-        self.inner
+        let inner = self.inner.inner();
+        inner
             .node_indices()
             .filter(|&key| {
-                self.inner
+                inner
                     .edges_directed(key, Direction::Outgoing)
                     .next()
                     .is_none()
-                    && self
-                        .inner
+                    && inner
                         .edges_directed(key, Direction::Incoming)
                         .next()
                         .is_none()
@@ -445,7 +443,7 @@ impl Graph {
             return None;
         }
         astar(
-            &UndirectedAdaptor(&self.inner),
+            &UndirectedAdaptor(self.inner.inner()),
             from,
             |node| node == to,
             |_| 1_usize,
@@ -459,14 +457,14 @@ impl Graph {
         if self.get_node(from).is_none() || self.get_node(to).is_none() {
             return false;
         }
-        has_path_connecting(&UndirectedAdaptor(&self.inner), from, to, None)
+        has_path_connecting(&UndirectedAdaptor(self.inner.inner()), from, to, None)
     }
 
     /// Weakly connected components (undirected projection).
     pub fn weakly_connected_components(&self) -> Vec<Vec<NodeKey>> {
         let mut visited = HashSet::new();
         let mut components = Vec::new();
-        for start in self.inner.node_indices() {
+        for start in self.inner.inner().node_indices() {
             if !visited.insert(start) {
                 continue;
             }
@@ -562,18 +560,18 @@ impl Graph {
     ) -> bool {
         self.find_edge_key(a, b)
             .or_else(|| self.find_edge_key(b, a))
-            .and_then(|k| self.inner.edge_weight(k))
+            .and_then(|k| self.inner.edge(k))
             .is_some_and(|payload| selectors.iter().any(|&s| payload.has_relation(s)))
     }
 
     /// Strongly connected components in the directed graph.
     pub fn strongly_connected_components(&self) -> Vec<Vec<NodeKey>> {
-        kosaraju_scc(&self.inner)
+        kosaraju_scc(self.inner.inner())
     }
 
     /// Check if a directed edge exists from `from` to `to`
     pub fn has_edge_between(&self, from: NodeKey, to: NodeKey) -> bool {
-        self.inner.find_edge(from, to).is_some()
+        self.inner.inner().find_edge(from, to).is_some()
     }
 
     /// Count of nodes in the graph

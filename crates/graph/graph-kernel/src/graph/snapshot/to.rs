@@ -100,6 +100,7 @@ impl Graph {
 
         let edges = self
             .inner
+            .inner()
             .edge_references()
             .map(|edge| {
                 let from_node_id = self

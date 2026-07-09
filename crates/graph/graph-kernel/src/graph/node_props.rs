@@ -34,7 +34,7 @@ use crate::types::{
 
 impl Graph {
     pub(crate) fn set_node_title(&mut self, key: NodeKey, title: String) -> bool {
-        let Some(node) = self.inner.node_weight_mut(key) else {
+        let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
         if node.title == title {
@@ -51,7 +51,7 @@ impl Graph {
         width: u32,
         height: u32,
     ) -> bool {
-        let Some(node) = self.inner.node_weight_mut(key) else {
+        let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
         if node.thumbnail_png.as_ref() == Some(&png_bytes)
@@ -73,7 +73,7 @@ impl Graph {
         width: u32,
         height: u32,
     ) -> bool {
-        let Some(node) = self.inner.node_weight_mut(key) else {
+        let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
         if node.favicon_rgba.as_ref() == Some(&rgba)
@@ -89,7 +89,7 @@ impl Graph {
     }
 
     pub(crate) fn set_node_mime_hint(&mut self, key: NodeKey, mime_hint: Option<String>) -> bool {
-        let Some(node) = self.inner.node_weight_mut(key) else {
+        let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
         if node.mime_hint == mime_hint {
@@ -104,7 +104,7 @@ impl Graph {
         key: NodeKey,
         viewer_override: Option<String>,
     ) -> bool {
-        let Some(node) = self.inner.node_weight_mut(key) else {
+        let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
         if node.viewer_override == viewer_override {
@@ -115,7 +115,7 @@ impl Graph {
     }
 
     pub(crate) fn set_node_pinned(&mut self, key: NodeKey, is_pinned: bool) -> bool {
-        let Some(node) = self.inner.node_weight_mut(key) else {
+        let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
         if node.is_pinned == is_pinned {
@@ -126,7 +126,7 @@ impl Graph {
     }
 
     pub(crate) fn set_node_compat_mode(&mut self, key: NodeKey, compat_mode: bool) -> bool {
-        let Some(node) = self.inner.node_weight_mut(key) else {
+        let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
         if node.compat_mode == compat_mode {
@@ -141,7 +141,7 @@ impl Graph {
     }
 
     pub(crate) fn append_frame_layout_hint(&mut self, key: NodeKey, hint: FrameLayoutHint) -> bool {
-        let Some(node) = self.inner.node_weight_mut(key) else {
+        let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
         node.frame_layout_hints.push(hint);
@@ -149,7 +149,7 @@ impl Graph {
     }
 
     pub(crate) fn remove_frame_layout_hint_at(&mut self, key: NodeKey, hint_index: usize) -> bool {
-        let Some(node) = self.inner.node_weight_mut(key) else {
+        let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
         if hint_index >= node.frame_layout_hints.len() {
@@ -165,7 +165,7 @@ impl Graph {
         from_index: usize,
         to_index: usize,
     ) -> bool {
-        let Some(node) = self.inner.node_weight_mut(key) else {
+        let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
         if from_index >= node.frame_layout_hints.len()
@@ -184,7 +184,7 @@ impl Graph {
         key: NodeKey,
         suppressed: bool,
     ) -> bool {
-        let Some(node) = self.inner.node_weight_mut(key) else {
+        let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
         if node.frame_split_offer_suppressed == suppressed {
@@ -205,7 +205,7 @@ impl Graph {
     }
 
     pub(crate) fn insert_node_tag(&mut self, key: NodeKey, tag: String) -> bool {
-        let Some(node) = self.inner.node_weight_mut(key) else {
+        let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
         let inserted = node.tags.insert(tag.clone());
@@ -216,7 +216,7 @@ impl Graph {
     }
 
     pub(crate) fn remove_node_tag(&mut self, key: NodeKey, tag: &str) -> bool {
-        let Some(node) = self.inner.node_weight_mut(key) else {
+        let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
         let removed = node.tags.remove(tag);
@@ -234,7 +234,7 @@ impl Graph {
     /// `Node::body` — the note editor and web-clip previously reached it through
     /// `get_node_mut` (write-path migration, 2026-07-01).
     pub(crate) fn set_node_body(&mut self, key: NodeKey, body: Option<String>) -> bool {
-        let Some(node) = self.inner.node_weight_mut(key) else {
+        let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
         if node.body == body {
@@ -250,7 +250,7 @@ impl Graph {
     /// linked-data ingest previously pushed through `get_node_mut` (write-path
     /// migration, 2026-07-01).
     pub(crate) fn append_node_property(&mut self, key: NodeKey, property: NodeProperty) -> bool {
-        let Some(node) = self.inner.node_weight_mut(key) else {
+        let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
         if let Some(existing) = node
@@ -299,7 +299,7 @@ impl Graph {
         key: NodeKey,
         classification: NodeClassification,
     ) -> bool {
-        let Some(node) = self.inner.node_weight_mut(key) else {
+        let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
         let already_exists = node
@@ -324,7 +324,7 @@ impl Graph {
         key: NodeKey,
         derivation: crate::types::NodeDerivation,
     ) -> bool {
-        let Some(node) = self.inner.node_weight_mut(key) else {
+        let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
         if node.derivations.contains(&derivation) {
@@ -343,7 +343,7 @@ impl Graph {
         scheme: &ClassificationScheme,
         value: &str,
     ) -> bool {
-        let Some(node) = self.inner.node_weight_mut(key) else {
+        let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
         let before = node.classifications.len();
@@ -362,7 +362,7 @@ impl Graph {
         value: &str,
         status: ClassificationStatus,
     ) -> bool {
-        let Some(node) = self.inner.node_weight_mut(key) else {
+        let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
         let mut found = false;
@@ -384,7 +384,7 @@ impl Graph {
         scheme: &ClassificationScheme,
         value: &str,
     ) -> bool {
-        let Some(node) = self.inner.node_weight_mut(key) else {
+        let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
         let mut found = false;
@@ -405,7 +405,7 @@ impl Graph {
         tag: &str,
         icon: Option<crate::types::BadgeIcon>,
     ) -> bool {
-        let Some(node) = self.inner.node_weight_mut(key) else {
+        let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
         if !node.tags.contains(tag) || tag.starts_with('#') || tag.starts_with("udc:") {
@@ -426,7 +426,7 @@ impl Graph {
     }
 
     pub fn set_node_position(&mut self, key: NodeKey, position: Point2D<f32>) -> bool {
-        let Some(node) = self.inner.node_weight_mut(key) else {
+        let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
         if node.position == position {
@@ -437,7 +437,7 @@ impl Graph {
     }
 
     pub fn set_node_projected_position(&mut self, key: NodeKey, position: Point2D<f32>) -> bool {
-        let Some(node) = self.inner.node_weight_mut(key) else {
+        let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
         if node.position == position {
@@ -468,7 +468,7 @@ impl Graph {
     }
 
     pub(crate) fn set_node_form_draft(&mut self, key: NodeKey, form_draft: Option<String>) -> bool {
-        let Some(node) = self.inner.node_weight_mut(key) else {
+        let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
         if node.session_form_draft == form_draft {
@@ -483,7 +483,7 @@ impl Graph {
     }
 
     pub(crate) fn set_node_last_visited_at_ms(&mut self, key: NodeKey, timestamp_ms: u64) -> bool {
-        let Some(node) = self.inner.node_weight_mut(key) else {
+        let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
         node.last_visited = UNIX_EPOCH + Duration::from_millis(timestamp_ms);
@@ -500,7 +500,7 @@ impl Graph {
         history_entries: Vec<String>,
         history_index: usize,
     ) -> bool {
-        let Some(id) = self.inner.node_weight(key).map(|n| n.id) else {
+        let Some(id) = self.inner.node(key).map(|n| n.id) else {
             return false;
         };
         let clamped_index = if history_entries.is_empty() {
@@ -524,7 +524,7 @@ impl Graph {
         key: NodeKey,
         session_scroll: Option<(f32, f32)>,
     ) -> bool {
-        let Some(node) = self.inner.node_weight_mut(key) else {
+        let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
         if node.session_scroll == session_scroll {
@@ -535,7 +535,7 @@ impl Graph {
     }
 
     pub fn set_node_lifecycle(&mut self, key: NodeKey, lifecycle: NodeLifecycle) -> bool {
-        let Some(node) = self.inner.node_weight_mut(key) else {
+        let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
         if node.lifecycle == lifecycle {

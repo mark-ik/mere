@@ -54,7 +54,7 @@ impl Graph {
             // Existing edge: assert onto its payload. A real change (a new relation on the pair —
             // a multiplicity bump a weighted signal reads) advances the revision.
             let changed = {
-                let payload = self.inner.edge_weight_mut(edge_key)?;
+                let payload = self.inner.edge_mut(edge_key)?;
                 payload.assert_relation(assertion)
             };
             if changed {
@@ -67,7 +67,7 @@ impl Graph {
         if !payload.assert_relation(assertion) {
             return None;
         }
-        let edge_key = self.inner.add_edge(from, to, payload);
+        let edge_key = self.inner.connect(from, to, payload);
         self.bump_revision();
         Some(edge_key)
     }
@@ -85,9 +85,9 @@ impl Graph {
         }
         let edge_key = self
             .find_edge_key(from, to)
-            .unwrap_or_else(|| self.inner.add_edge(from, to, EdgePayload::new()));
+            .unwrap_or_else(|| self.inner.connect(from, to, EdgePayload::new()));
         let changed = {
-            let payload = self.inner.edge_weight_mut(edge_key)?;
+            let payload = self.inner.edge_mut(edge_key)?;
             payload.assert_semantic_relation_in_scope(sub_kind, label, graph_scope)
         };
         if changed {
@@ -125,9 +125,9 @@ impl Graph {
         }
         let edge_key = self
             .find_edge_key(from, to)
-            .unwrap_or_else(|| self.inner.add_edge(from, to, EdgePayload::new()));
+            .unwrap_or_else(|| self.inner.connect(from, to, EdgePayload::new()));
         let changed = {
-            let payload = self.inner.edge_weight_mut(edge_key)?;
+            let payload = self.inner.edge_mut(edge_key)?;
             payload.assert_semantic_predicate_in_scope(predicate, graph_scope)
         };
         if changed {
@@ -237,10 +237,10 @@ impl Graph {
         let _ = self.get_node(key)?;
 
         let mut records = Vec::new();
-        for edge in self
-            .inner
+        let inner = self.inner.inner();
+        for edge in inner
             .edges_directed(key, Direction::Outgoing)
-            .chain(self.inner.edges_directed(key, Direction::Incoming))
+            .chain(inner.edges_directed(key, Direction::Incoming))
         {
             if edge.weight().traversals().is_empty() {
                 continue;
@@ -264,10 +264,10 @@ impl Graph {
         let _ = self.get_node(key)?;
 
         let mut records = Vec::new();
-        for edge in self
-            .inner
+        let inner = self.inner.inner();
+        for edge in inner
             .edges_directed(key, Direction::Outgoing)
-            .chain(self.inner.edges_directed(key, Direction::Incoming))
+            .chain(inner.edges_directed(key, Direction::Incoming))
         {
             if edge.weight().traversals().is_empty() {
                 continue;
@@ -301,9 +301,9 @@ impl Graph {
         }
         let edge_key = self
             .find_edge_key(from, to)
-            .unwrap_or_else(|| self.inner.add_edge(from, to, EdgePayload::new()));
+            .unwrap_or_else(|| self.inner.connect(from, to, EdgePayload::new()));
         let outcome = {
-            let payload = self.inner.edge_weight_mut(edge_key)?;
+            let payload = self.inner.edge_mut(edge_key)?;
             payload.assert_semantic_statement(spec)
         };
         if outcome.changed {
@@ -327,9 +327,9 @@ impl Graph {
         }
         let edge_key = self
             .find_edge_key(from, to)
-            .unwrap_or_else(|| self.inner.add_edge(from, to, EdgePayload::new()));
+            .unwrap_or_else(|| self.inner.connect(from, to, EdgePayload::new()));
         let changed = {
-            let payload = self.inner.edge_weight_mut(edge_key)?;
+            let payload = self.inner.edge_mut(edge_key)?;
             payload.push_persisted_semantic_statement(statement)
         };
         if changed {
@@ -353,14 +353,14 @@ impl Graph {
             return false;
         };
         let (removed, now_empty) = {
-            let Some(payload) = self.inner.edge_weight_mut(edge_key) else {
+            let Some(payload) = self.inner.edge_mut(edge_key) else {
                 return false;
             };
             let removed = payload.retract_semantic_statement(statement_id);
             (removed, removed && payload.is_empty())
         };
         if now_empty {
-            let _ = self.inner.remove_edge(edge_key);
+            let _ = self.inner.disconnect(edge_key);
         }
         if removed {
             self.bump_revision();
@@ -376,6 +376,7 @@ impl Graph {
     ) -> usize {
         let edge_ids: Vec<EdgeKey> = self
             .inner
+            .inner()
             .edge_references()
             .filter(|edge| {
                 edge.source() == from && edge.target() == to && edge.weight().has_relation(selector)
@@ -386,7 +387,7 @@ impl Graph {
         let mut removed = 0usize;
         let mut edges_to_delete = Vec::new();
         for edge_id in edge_ids {
-            if let Some(payload) = self.inner.edge_weight_mut(edge_id)
+            if let Some(payload) = self.inner.edge_mut(edge_id)
                 && payload.retract_relation(selector)
             {
                 removed += 1;
@@ -396,7 +397,7 @@ impl Graph {
             }
         }
         for edge_id in edges_to_delete {
-            let _ = self.inner.remove_edge(edge_id);
+            let _ = self.inner.disconnect(edge_id);
         }
         if removed > 0 {
             self.bump_revision();
@@ -406,7 +407,7 @@ impl Graph {
 
     /// Get a mutable edge payload by key.
     pub(crate) fn get_edge_mut(&mut self, key: EdgeKey) -> Option<&mut EdgePayload> {
-        self.inner.edge_weight_mut(key)
+        self.inner.edge_mut(key)
     }
 
     /// Set (or clear) the canonical semantic-predicate IRI on an existing edge.
@@ -420,7 +421,7 @@ impl Graph {
         key: EdgeKey,
         predicate: Option<String>,
     ) -> bool {
-        let Some(payload) = self.inner.edge_weight_mut(key) else {
+        let Some(payload) = self.inner.edge_mut(key) else {
             return false;
         };
         payload.set_semantic_predicate(predicate);
@@ -429,12 +430,12 @@ impl Graph {
 
     /// Get an edge payload by key.
     pub fn get_edge(&self, key: EdgeKey) -> Option<&EdgePayload> {
-        self.inner.edge_weight(key)
+        self.inner.edge(key)
     }
 
     /// Find the first directed edge key between two nodes.
     pub fn find_edge_key(&self, from: NodeKey, to: NodeKey) -> Option<EdgeKey> {
-        self.inner.find_edge(from, to)
+        self.inner.inner().find_edge(from, to)
     }
 
     /// Append a traversal event to an existing edge, or create an edge carrying the traversal.
@@ -448,7 +449,7 @@ impl Graph {
             return false;
         }
         if let Some(edge_key) = self.find_edge_key(from, to)
-            && let Some(payload) = self.inner.edge_weight_mut(edge_key)
+            && let Some(payload) = self.inner.edge_mut(edge_key)
         {
             // Existing edge: a re-visit appends a traversal but does not change the structure, so
             // the revision holds (navigation re-visits must not churn the structural caches).
@@ -457,7 +458,7 @@ impl Graph {
         }
         let mut payload = EdgePayload::new();
         payload.push_traversal(traversal);
-        let _ = self.inner.add_edge(from, to, payload);
+        let _ = self.inner.connect(from, to, payload);
         self.bump_revision();
         true
     }

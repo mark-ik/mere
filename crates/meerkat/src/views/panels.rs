@@ -353,7 +353,7 @@ pub(crate) fn comms_pane(c: &Chrome) -> ChromeView {
             if message.direction == Direction::Incoming {
                 if let Some(ticket) = cabal_ticket_in(message.body.text()) {
                     let join = button(
-                        "Join this cabal",
+                        "Join this murmur",
                         "comms-new-btn",
                         move |c: &mut Chrome, _: PointerClick| c.connect_cabal(ticket.clone()),
                     );
@@ -400,7 +400,7 @@ pub(crate) fn comms_pane(c: &Chrome) -> ChromeView {
         if c.comms.cabal_ticket.is_some() {
             // Mails the cabal join ticket to a peer (pre-fills a misfin message).
             let share = button(
-                "Share cabal invite",
+                "Share murmur invite",
                 "comms-new-btn",
                 |c: &mut Chrome, _: PointerClick| c.share_cabal_invite(),
             );
@@ -493,7 +493,7 @@ pub(crate) fn new_message_form(form: &comms::NewMessageForm) -> ChromeView {
         ));
     } else {
         rows.push(Box::new(
-            el::<_, Chrome, ()>("div", "To — the Project cabal").attr("class", "comms-field-label"),
+            el::<_, Chrome, ()>("div", "To — the Project murmur").attr("class", "comms-field-label"),
         ));
     }
 

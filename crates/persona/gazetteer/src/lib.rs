@@ -2,7 +2,11 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Gazette: Mere's handle-resolution layer.
+//! Gazetteer: Mere's handle-resolution index (incubating; WebFinger only today).
+//!
+//! A gazetteer is an index / directory, not a broadcast *gazette*: it lives on
+//! the persona / identity tier (beside `identity`), not under the bilateral
+//! `murm` supercrate where it used to sit.
 //!
 //! Turns a name, handle, or key into the set of reachable, trust-stated
 //! endpoints Mere can navigate to or message. **Today** it implements

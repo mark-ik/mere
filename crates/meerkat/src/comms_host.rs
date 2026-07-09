@@ -309,7 +309,7 @@ fn connect_cabal(
     ticket: &str,
 ) -> String {
     let (Some(murm), Some(cabal_id)) = (backends.murm.as_ref(), backends.cabal_id) else {
-        return "Cabal is not networked".to_string();
+        return "Murmur is not networked".to_string();
     };
     let result = runtime.block_on(async {
         let peer = murm
@@ -324,8 +324,8 @@ fn connect_cabal(
         Ok::<(), String>(())
     });
     match result {
-        Ok(()) => "Joining cabal — syncing with the peer…".to_string(),
-        Err(err) => format!("Cabal connect failed: {err}"),
+        Ok(()) => "Joining murmur — syncing with the peer…".to_string(),
+        Err(err) => format!("Murmur connect failed: {err}"),
     }
 }
 
@@ -470,7 +470,7 @@ async fn build_cabal(
         .map_err(|e| format!("subscribe cabal: {e}"))?;
     if synced.history("session").is_empty() {
         let _ = synced
-            .send_text("session", "Welcome to the Project cabal.")
+            .send_text("session", "Welcome to the Project murmur.")
             .await;
     }
     let rx = synced
@@ -480,7 +480,7 @@ async fn build_cabal(
     let conversation = ConversationId::new(ProtocolKind::Murm, hex(&cabal_id));
     let adapter: Box<dyn ProtocolAdapter> = Box::new(
         MurmAdapter::new(Identity::new(ProtocolKind::Murm, "me"))
-            .with_cabal("Project cabal", Box::new(synced)),
+            .with_cabal("Project murmur", Box::new(synced)),
     );
     Ok((murm, adapter, rx, conversation, ticket, cabal_id))
 }

@@ -73,7 +73,7 @@ impl Graph {
             .flat_map(|record| record.memberships.iter())
             .filter(|membership| !membership.suppressed)
             .filter_map(|membership| Uuid::parse_str(&membership.node_id).ok())
-            .filter_map(|node_id| self.id_to_node.get(&node_id).copied())
+            .filter_map(|node_id| self.inner.key_of(&node_id))
             .collect::<Vec<_>>();
         member_keys.sort_by_key(|key| key.index());
         member_keys.dedup();
@@ -142,7 +142,7 @@ impl Graph {
                 let Ok(node_id) = Uuid::parse_str(&membership.node_id) else {
                     continue;
                 };
-                let Some(&node_key) = self.id_to_node.get(&node_id) else {
+                let Some(node_key) = self.inner.key_of(&node_id) else {
                     continue;
                 };
                 provenance_by_node
@@ -155,9 +155,9 @@ impl Graph {
             }
         }
 
-        let node_keys = self.inner.node_indices().collect::<Vec<_>>();
+        let node_keys = self.inner.inner().node_indices().collect::<Vec<_>>();
         for node_key in node_keys {
-            let Some(node) = self.inner.node_weight_mut(node_key) else {
+            let Some(node) = self.inner.node_mut(node_key) else {
                 continue;
             };
             let mut provenance = provenance_by_node.remove(&node_key).unwrap_or_default();
@@ -222,7 +222,7 @@ impl Graph {
         key: NodeKey,
         import_provenance: Vec<NodeImportProvenance>,
     ) -> bool {
-        let node = match self.inner.node_weight_mut(key) {
+        let node = match self.inner.node_mut(key) {
             Some(node) => node,
             None => return false,
         };

@@ -73,9 +73,10 @@ pub fn facet_projection_for_node(graph: &Graph, key: NodeKey) -> Option<FacetPro
 
     // --- Energy (edge-derived) ---
 
-    let out_edges: Vec<_> = graph.inner.edges(key).collect();
+    let out_edges: Vec<_> = graph.inner.inner().edges(key).collect();
     let in_edges: Vec<_> = graph
         .inner
+        .inner()
         .edges_directed(key, Direction::Incoming)
         .collect();
 
@@ -113,6 +114,7 @@ pub fn facet_projection_for_node(graph: &Graph, key: NodeKey) -> Option<FacetPro
     // Traversal count from outgoing TraversalDerived edges
     let traversal_count: usize = graph
         .inner
+        .inner()
         .edges(key)
         .filter_map(|e| e.weight().traversal.as_ref())
         .map(|t| t.metrics.total_navigations as usize)
@@ -129,6 +131,7 @@ pub fn facet_projection_for_node(graph: &Graph, key: NodeKey) -> Option<FacetPro
     // Represented as the source node keys (frame anchors).
     let frame_memberships: Vec<FacetScalar> = graph
         .inner
+        .inner()
         .edges_directed(key, Direction::Incoming)
         .filter(|e| {
             e.weight()

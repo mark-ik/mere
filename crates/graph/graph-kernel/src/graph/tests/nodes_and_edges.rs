@@ -455,7 +455,7 @@ fn test_relations_iterator() {
     let relation_count = graph.relations().count();
     assert_eq!(relation_count, 2);
 
-    assert!(graph.inner.edge_references().all(|edge| {
+    assert!(graph.inner.inner().edge_references().all(|edge| {
         edge.weight()
             .has_relation(RelationSelector::Semantic(SemanticSubKind::Hyperlink))
     }));

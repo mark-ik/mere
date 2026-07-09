@@ -112,8 +112,8 @@ impl Graph {
         &'a self,
         selector: &'a NodeSelector,
     ) -> impl Iterator<Item = NodeKey> + 'a {
-        self.inner.node_indices().filter(move |&key| {
-            let Some(node) = self.inner.node_weight(key) else {
+        self.inner.inner().node_indices().filter(move |&key| {
+            let Some(node) = self.inner.node(key) else {
                 return false;
             };
             match selector {
@@ -216,7 +216,7 @@ mod tests {
             "mere://b".into(),
             Point2D::new(10.0, 0.0),
         );
-        if let Some(node) = g.inner.node_weight_mut(a) {
+        if let Some(node) = g.inner.node_mut(a) {
             node.tags.insert("important".to_string());
         }
 

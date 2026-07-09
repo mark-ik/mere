@@ -1077,7 +1077,7 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
                 .nav
                 .record_visit(node_id, &url, TransitionKind::UrlTyped, timestamp_ms);
             let last_session_visited = graph.current_session;
-            if let Some(node) = graph.inner.node_weight_mut(key) {
+            if let Some(node) = graph.inner.node_mut(key) {
                 node.last_session_visited = last_session_visited;
             }
             let _ = graph.update_node_url(key, url.clone());
@@ -1215,7 +1215,7 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
                 graph
                     .nav
                     .record_visit(node_id, &url, transition, timestamp_ms);
-                if let Some(node) = graph.inner.node_weight_mut(key) {
+                if let Some(node) = graph.inner.node_mut(key) {
                     node.last_session_visited = last_session_visited;
                 }
                 let _ = graph.update_node_url(key, url.clone());
@@ -1533,6 +1533,7 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
         GraphDelta::SetEdgeSemanticPredicate { edge, predicate } => {
             let endpoints = graph
                 .inner
+                .inner()
                 .edge_endpoints(edge)
                 .and_then(|(from, to)| Some((graph.get_node(from)?.id, graph.get_node(to)?.id)));
             let capture_predicate = predicate.clone();

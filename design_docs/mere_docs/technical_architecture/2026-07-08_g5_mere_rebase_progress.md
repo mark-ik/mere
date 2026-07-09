@@ -1,10 +1,10 @@
 # G5: mere re-base onto chartulary — progress
 
 **Date:** 2026-07-08
-**Status:** started. The first step landed (mere's `Node` implements the chartulary
-capability traits) and it surfaced and fixed a real trait-API friction. The full
-re-base (graph adoption, history re-derivation, node-lineage retirement,
-aether/signals retarget) is the remaining, larger work. Canonical plan:
+**Status:** graph adoption landed. mere's `Graph` now *is* a
+`chartulary::Graph<Node, EdgePayload>` under the hood. Three steps are done: the node
+capabilities, the edge capabilities, and the graph swap itself (all 284 kernel tests
+green). What remains is history-over-spine and the analytics retarget. Canonical plan:
 `2026-07-08_generic_graph_substrate_plan.md`.
 
 ## What landed (committed under 1fe6a82)
@@ -29,6 +29,46 @@ aether/signals retarget) is the remaining, larger work. Canonical plan:
   cache, not a `muniment` blob, so adopting `muniment::Hash` for node content is a
   later re-base step, not this one.
 
+## Edge capabilities (committed under fc5b8db)
+
+- **mere's `EdgePayload` implements `Classified` / `Predicated` (kernel).** The
+  single-predicate helper picks an explicit statement or open predicate first, else
+  the first recognized `SemanticSubKind`'s canonical `urn:chart:rel:*` IRI. A
+  semantic edge joins the shared ring as an open predicate (so it projects to RDF); an
+  experience-layer edge (Traversal, Containment, Arrangement, Imported) reports
+  `RelationClass::app("mere", 0)` and stays private. This is the two-ring split
+  realized on mere's real edge type.
+
+## Graph adoption — the big invasive middle (this step)
+
+mere's `Graph.inner` is no longer a bare `petgraph::StableGraph`; it is a
+`chartulary::Graph<Node, EdgePayload>`. The change:
+
+- **The substrate owns topology and identity.** mere's hand-rolled `id_to_node`
+  index is retired; chartulary's built-in `by_id` is the single identity index. Node
+  add/remove route through `insert` / `remove` (which maintain the index); edge
+  add/remove through `connect` / `disconnect`. Weight mutation uses `node_mut` /
+  `edge_mut`.
+- **Algorithms read through one seam.** chartulary grew a read-only
+  [`inner()`](../../../chartulary/src/graph.rs) accessor returning the underlying
+  `&StableGraph`, plus `contains_node` and `node_weights_mut`. mere's graph queries
+  (shortest path, SCC, connectivity, structural iteration) run petgraph's own
+  functions over `inner()`. Topology mutation cannot go through it (the borrow is
+  immutable by design), so the identity index cannot drift.
+- **Persistence untouched.** mere's rkyv `Archive`/`Serialize`/`Deserialize` for
+  `Graph` delegate through `to_snapshot` / `from_snapshot` (`GraphSnapshot`), which
+  never serialize `inner` directly. Swapping the field type left the on-disk format
+  and the whole persistence path unchanged.
+- **Proof.** All 284 kernel unit tests pass unchanged — snapshot round-trips,
+  derivation, cross-graph copy, node history, fields/couplings, and the chart
+  capability tests. The single-write-path revision boundary still holds (every
+  mutator still bumps `revision`).
+
+This is the load-bearing move of the two-layer vision: chartulary is the portable
+topology-plus-identity engine; mere's `Graph` is the orrery wrapper that keeps its
+app-specific sidecars (nav history, fields, couplings, import records, url index,
+revision, session) around the substrate.
+
 ## What this proves
 
 The generic substrate can hold mere's real web node. scholia's projector, being a
@@ -36,25 +76,25 @@ pure function of the traits, can already emit RDF for a `Graph<Node, ...>` with 
 new projection code. The two-ring split, the fork lineage, and the RDF projection
 all apply to mere's node the moment mere adopts `chartulary::Graph`.
 
-## What remains (the larger re-base, each its own step)
+## What remains (each its own step)
 
-1. **Edge capabilities.** Implement `Classified` / `Predicated` on mere's edge
-   payload, mapping its recognized `SemanticSubKind` to `urn:chart:rel:*` (or the
-   eventual standard IRIs) and its experience families (Traversal, Arrangement,
-   Imported) to app-private relations. This lets mere's semantic edges project and
-   keeps its experience edges private, matching linked-data's existing behaviour.
-2. **Graph adoption.** Introduce a `chartulary::Graph<Node, WebEdge>` alongside
-   mere's concrete `Graph`, or parameterize the concrete one, and route reads
-   through the generic surface. This is the big, invasive middle; do it behind a
-   seam so meerkat keeps building throughout.
-3. **History over the spine.** Re-derive mere's `graph/history.rs` and
-   `capture.rs` snapshots over codicil, retiring the bespoke machinery, and retire
-   the in-tree `node-lineage` copy in favour of `stemma`.
+1. **Edit spine over the substrate.** Route mere's durable mutations through a
+   `GraphLog<Node, EdgePayload>` (chartulary's spine over codicil) so the graph
+   becomes the replay of an append-only log, then retire `graph/capture.rs`'s
+   bespoke delta-capture. The single-write-path funnel (`apply::apply_graph_delta`)
+   is already the one place to instrument.
+2. **History over the spine + stemma.** Re-derive mere's `graph/history.rs`
+   snapshots over codicil and retire the in-tree `node-lineage` copy in favour of
+   `stemma` (node-level lineage) alongside the graph-level log.
+3. **Content over muniment.** Implement `ContentBearing` on `Node` by moving node
+   content behind a `muniment` blob (`muniment::Hash`), retiring the bespoke cache
+   path for stored bodies.
 4. **Analytics retarget.** Point aether (fields) and signals (centrality,
    community) at the generic graph, at which point they become promotable, closing
    the loop opened by the 2026-07-08 survey.
 5. **Done-condition.** meerkat runs on the substrate graph with no behaviour change.
+   The graph swap already meets this at the kernel level (284 tests unchanged); the
+   remaining steps deepen the adoption (log, lineage, content) rather than gate it.
 
-Steps 2 through 5 are large and touch mere's live tree; they want their own focused
-sessions rather than being rushed. Step 1 (edge capabilities) is the natural next
-increment and is additive like step 0.
+The graph swap (the big invasive middle) is done. The remaining steps are additive
+deepenings, each its own focused increment.

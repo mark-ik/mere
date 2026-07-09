@@ -19,10 +19,7 @@ use euclid::default::{Point2D, Vector2D};
 use petgraph::algo::{astar, dijkstra, has_path_connecting, kosaraju_scc};
 #[cfg(test)]
 use petgraph::stable_graph::NodeIndex;
-use petgraph::stable_graph::StableGraph;
-use petgraph::visit::UndirectedAdaptor;
 use petgraph::visit::{EdgeRef, IntoEdgeReferences};
-use petgraph::{Directed, Direction};
 use rkyv::{Archive, Archived, Deserialize, Place, Resolver, Serialize, rancor::Fallible};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -255,17 +252,19 @@ pub struct ContainmentEdgeView {
 /// Main graph structure backed by petgraph::StableGraph
 #[derive(Clone)]
 pub struct Graph {
-    /// The underlying petgraph stable graph. `pub(crate)` to enforce the single-write-path boundary
-    /// at the type level: every topology mutation must go through a `Graph` method so it advances
-    /// [`revision`](Self::revision); direct `inner` mutation from outside the kernel would bypass the
-    /// bump and stale the structural caches. No external code accesses it (verified). (Graph signals.)
-    pub(crate) inner: StableGraph<Node, EdgePayload, Directed>,
+    /// The substrate graph: a [`chartulary::Graph`] over mere's [`Node`] and
+    /// [`EdgePayload`] (the G5 re-base — mere's graph *is* a chartulary graph).
+    /// It owns the petgraph topology and the stable id-to-key index (mere's old
+    /// hand-rolled `id_to_node` is retired in its favor). `pub(crate)` to enforce
+    /// the single-write-path boundary at the type level: every topology mutation
+    /// goes through a `Graph` method so it advances [`revision`](Self::revision);
+    /// direct mutation from outside the kernel would bypass the bump and stale the
+    /// structural caches. Reads reach petgraph algorithms through
+    /// [`chartulary::Graph::inner`]. (Graph signals.)
+    pub(crate) inner: chartulary::Graph<Node, EdgePayload>,
 
     /// URL to node mapping for lookup (supports duplicate URLs).
     pub(crate) url_to_nodes: HashMap<String, Vec<NodeKey>>,
-
-    /// Stable UUID to node mapping.
-    pub(crate) id_to_node: HashMap<Uuid, NodeKey>,
 
     /// Durable imported relation truth; node provenance is derived from this.
     pub(crate) import_records: Vec<ImportRecord>,
@@ -304,9 +303,8 @@ impl Graph {
     /// Create a new empty graph
     pub fn new() -> Self {
         Self {
-            inner: StableGraph::new(),
+            inner: chartulary::Graph::new(),
             url_to_nodes: HashMap::new(),
-            id_to_node: HashMap::new(),
             import_records: Vec::new(),
             fields: HashMap::new(),
             couplings: HashMap::new(),
@@ -390,7 +388,7 @@ impl Graph {
     ) -> NodeKey {
         let now = std::time::SystemTime::now();
         let primary_address = address_from_url(&url);
-        let key = self.inner.add_node(Node {
+        let key = self.inner.insert(Node {
             id,
             title: url.clone(),
             cached_host: cached_host_from_url(&url),
@@ -424,15 +422,13 @@ impl Graph {
         });
 
         self.url_to_nodes.entry(url).or_default().push(key);
-        self.id_to_node.insert(id, key);
         self.bump_revision();
         key
     }
 
     /// Remove a node and all its connected edges
     pub(crate) fn remove_node(&mut self, key: NodeKey) -> bool {
-        if let Some(node) = self.inner.remove_node(key) {
-            self.id_to_node.remove(&node.id);
+        if let Some(node) = self.inner.remove(key) {
             // The node's navigation owner is intentionally *kept* in the shared
             // visit space: a node branched from it still anchors to its visits, so
             // erasing the lineage on node removal would orphan those anchors. The
@@ -465,7 +461,7 @@ impl Graph {
     /// Operates on the Primary claim only; aliases (when supported) stay
     /// attached. To mutate aliases, use dedicated alias methods (future).
     pub(crate) fn update_node_url(&mut self, key: NodeKey, new_url: String) -> Option<String> {
-        let node = self.inner.node_weight_mut(key)?;
+        let node = self.inner.node_mut(key)?;
         let old_url = node.primary_address().as_url_str().to_string();
         node.cached_host = cached_host_from_url(&new_url);
         // A navigation to a different host invalidates the favicon (it was the old
@@ -497,11 +493,11 @@ impl Graph {
     /// (the navigated-from relation) is a separate, explicit edge.
     pub(crate) fn navigate_node(&mut self, key: NodeKey, url: &str) {
         let at_ms = Self::epoch_ms();
-        if let Some(id) = self.inner.node_weight(key).map(|n| n.id) {
+        if let Some(id) = self.inner.node(key).map(|n| n.id) {
             self.nav
                 .record_visit(id, url, node_lineage::TransitionKind::UrlTyped, at_ms);
         }
-        if let Some(node) = self.inner.node_weight_mut(key) {
+        if let Some(node) = self.inner.node_mut(key) {
             node.last_session_visited = self.current_session;
         }
         self.update_node_url(key, url.to_string());
@@ -513,8 +509,8 @@ impl Graph {
     /// the shared lineage tree (the (b) cross-node anchor; the branch-mint path).
     pub(crate) fn branch_history(&mut self, child: NodeKey, parent: NodeKey) {
         let (Some(child_id), Some(parent_id)) = (
-            self.inner.node_weight(child).map(|n| n.id),
-            self.inner.node_weight(parent).map(|n| n.id),
+            self.inner.node(child).map(|n| n.id),
+            self.inner.node(parent).map(|n| n.id),
         ) else {
             return;
         };
@@ -525,7 +521,7 @@ impl Graph {
     /// the revealed page. Returns the new URL, or `None` if already at the root.
     pub(crate) fn node_history_back(&mut self, key: NodeKey) -> Option<String> {
         let at_ms = Self::epoch_ms();
-        let id = self.inner.node_weight(key)?.id;
+        let id = self.inner.node(key)?.id;
         let url = self.nav.back(id, at_ms)?;
         self.update_node_url(key, url.clone());
         Some(url)
@@ -535,7 +531,7 @@ impl Graph {
     /// `None` if already at the tip.
     pub(crate) fn node_history_forward(&mut self, key: NodeKey) -> Option<String> {
         let at_ms = Self::epoch_ms();
-        let id = self.inner.node_weight(key)?.id;
+        let id = self.inner.node(key)?.id;
         let url = self.nav.forward(id, at_ms)?;
         self.update_node_url(key, url.clone());
         Some(url)
@@ -544,26 +540,26 @@ impl Graph {
     /// Whether `key`'s within-node history can step back (toolbar gating).
     pub fn node_can_back(&self, key: NodeKey) -> bool {
         self.inner
-            .node_weight(key)
+            .node(key)
             .is_some_and(|n| self.nav.can_back(n.id))
     }
 
     /// Whether `key`'s within-node history can step forward (toolbar gating).
     pub fn node_can_forward(&self, key: NodeKey) -> bool {
         self.inner
-            .node_weight(key)
+            .node(key)
             .is_some_and(|n| self.nav.can_forward(n.id))
     }
 
     /// `key`'s current page (its history cursor's URL), if any.
     pub fn node_current_url(&self, key: NodeKey) -> Option<String> {
-        let id = self.inner.node_weight(key)?.id;
+        let id = self.inner.node(key)?.id;
         self.nav.current_url(id)
     }
 
     /// `key`'s linear-history projection (active path + cursor).
     pub fn node_history_projection(&self, key: NodeKey) -> NodeHistoryProjection {
-        match self.inner.node_weight(key) {
+        match self.inner.node(key) {
             Some(node) => self.nav.projection(node.id),
             None => NodeHistoryProjection {
                 entries: Vec::new(),
@@ -575,7 +571,7 @@ impl Graph {
     /// `key`'s branching-history projection (visit tree with alternates).
     pub fn node_history_branch_projection(&self, key: NodeKey) -> NodeHistoryBranchProjection {
         self.inner
-            .node_weight(key)
+            .node(key)
             .map(|node| self.nav.branch_projection(node.id))
             .unwrap_or_default()
     }
@@ -583,7 +579,7 @@ impl Graph {
     /// A coarse semantic summary of `key`'s history.
     pub fn node_history_semantic_summary(&self, key: NodeKey) -> NodeHistorySemanticSummary {
         self.inner
-            .node_weight(key)
+            .node(key)
             .map(|node| self.nav.semantic_summary(node.id))
             .unwrap_or_default()
     }

@@ -72,7 +72,7 @@ impl Graph {
             // let the sidecar override on load. (Position gut.)
             let key = graph.add_node_with_id(node_id, node_url, Point2D::new(0.0, 0.0));
             let mut restore_url_from_session: Option<String> = None;
-            if let Some(node) = graph.inner.node_weight_mut(key) {
+            if let Some(node) = graph.inner.node_mut(key) {
                 node.title = pnode.title.clone();
                 node.cached_host = pnode
                     .cached_host
@@ -110,14 +110,14 @@ impl Graph {
             if let Some(current_url) = restore_url_from_session
                 && !current_url.is_empty()
             {
-                let preserve_route_identity = graph.inner.node_weight(key).is_some_and(|node| {
+                let preserve_route_identity = graph.inner.node(key).is_some_and(|node| {
                     node.primary_address().address_kind() == AddressKind::GraphshellClip
                 });
                 if !preserve_route_identity {
                     // Recompute MIME hint and Primary address from the
                     // restored URL. update_node_url then reindexes the
                     // url_to_nodes map.
-                    if let Some(node) = graph.inner.node_weight_mut(key) {
+                    if let Some(node) = graph.inner.node_mut(key) {
                         node.mime_hint = detect_mime(&current_url, None);
                         for claim in node.addresses.iter_mut() {
                             if claim.is_primary() {
@@ -143,8 +143,8 @@ impl Graph {
                     if !semantic.statements.is_empty() {
                         let key = graph
                             .find_edge_key(from, to)
-                            .unwrap_or_else(|| graph.inner.add_edge(from, to, EdgePayload::new()));
-                        if let Some(payload) = graph.inner.edge_weight_mut(key) {
+                            .unwrap_or_else(|| graph.inner.connect(from, to, EdgePayload::new()));
+                        if let Some(payload) = graph.inner.edge_mut(key) {
                             for statement in &semantic.statements {
                                 let _ =
                                     payload.push_persisted_semantic_statement(SemanticStatement {
@@ -174,9 +174,9 @@ impl Graph {
                         // Semantic edge (linked-data ingest) has empty `sub_kinds`.
                         if semantic.predicate.is_some() {
                             let key = graph.find_edge_key(from, to).unwrap_or_else(|| {
-                                graph.inner.add_edge(from, to, EdgePayload::new())
+                                graph.inner.connect(from, to, EdgePayload::new())
                             });
-                            if let Some(payload) = graph.inner.edge_weight_mut(key) {
+                            if let Some(payload) = graph.inner.edge_mut(key) {
                                 payload.set_semantic_predicate(semantic.predicate.clone());
                             }
                         }
@@ -301,8 +301,8 @@ impl Graph {
                     // events + metrics.
                     let edge_key = graph
                         .find_edge_key(from, to)
-                        .unwrap_or_else(|| graph.inner.add_edge(from, to, EdgePayload::new()));
-                    if let Some(payload) = graph.inner.edge_weight_mut(edge_key) {
+                        .unwrap_or_else(|| graph.inner.connect(from, to, EdgePayload::new()));
+                    if let Some(payload) = graph.inner.edge_mut(edge_key) {
                         let data = payload.traversal.get_or_insert_with(TraversalData::default);
                         data.traversals = traversal
                             .traversals
