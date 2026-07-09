@@ -142,6 +142,14 @@ impl<N: Identified, E> Graph<N, E> {
         self.inner.neighbors_directed(key, Direction::Outgoing)
     }
 
+    /// The neighbors of `key` in either direction (the undirected view). One entry
+    /// per incident edge, so parallel edges repeat and a self-loop appears per its
+    /// endpoints. The basis for structural analytics (degree, community, betweenness)
+    /// that read the graph as undirected.
+    pub fn neighbors_undirected<'a>(&'a self, key: NodeKey) -> impl Iterator<Item = NodeKey> + 'a {
+        self.inner.neighbors_undirected(key)
+    }
+
     /// Every outgoing edge from `key`, as `(edge, target, payload)`.
     pub fn out_edges<'a>(
         &'a self,
