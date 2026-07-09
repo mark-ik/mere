@@ -597,6 +597,32 @@ impl WindowCtx<'_> {
         first_tag(&dom, container, "input").or_else(|| first_tag(&dom, container, "textarea"))
     }
 
+    /// Graph nodes matching `query` for `[[` completion: each titled node whose title
+    /// contains the query (case-insensitive), sorted, deduped by title, capped. The item
+    /// inserts the wikilink `[[Title]]`. (Phase 3 `[[` node-link completion.)
+    pub(crate) fn wikilink_items(&self, query: &str) -> Vec<meerkat::knot_completion::KnotCompletionItem> {
+        let q = query.to_lowercase();
+        let mut items: Vec<meerkat::knot_completion::KnotCompletionItem> = self
+            .orrery()
+            .graph()
+            .nodes()
+            .filter_map(|(_, n)| {
+                let title = n.title.trim();
+                if title.is_empty() || (!q.is_empty() && !title.to_lowercase().contains(&q)) {
+                    return None;
+                }
+                Some(meerkat::knot_completion::KnotCompletionItem {
+                    label: title.to_string(),
+                    insert: format!("[[{title}]]"),
+                })
+            })
+            .collect();
+        items.sort_by(|a, b| a.label.to_lowercase().cmp(&b.label.to_lowercase()));
+        items.dedup_by(|a, b| a.label.eq_ignore_ascii_case(&b.label));
+        items.truncate(20);
+        items
+    }
+
     /// Window-space anchor for the completion popup: just below the knot-editor caret, from
     /// the session's laid-out `caret_rect`. `None` in preview mode / before the first render.
     pub(crate) fn knot_caret_anchor(&self) -> Option<(f32, f32)> {
@@ -633,8 +659,7 @@ impl WindowCtx<'_> {
         };
         let items = match kind {
             KnotCompletionKind::Slash => slash_items(&query),
-            // Wikilink candidates land in the next increment.
-            KnotCompletionKind::Wikilink => Vec::new(),
+            KnotCompletionKind::Wikilink => self.wikilink_items(&query),
         };
         if items.is_empty() {
             clear(self);

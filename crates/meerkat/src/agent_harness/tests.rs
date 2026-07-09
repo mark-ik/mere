@@ -1560,6 +1560,32 @@ fn knot_editor_edits_a_markdown_note_and_saves_as_markdown() {
 }
 
 #[test]
+fn wikilink_completion_lists_matching_nodes() {
+    // `[[` completion candidates are titled graph nodes filtered by the query, inserting the
+    // wikilink form. (Phase 3 node-link completion.)
+    let mut app = test_app();
+    for (i, title) in ["Notebook", "Note taking", "Graph theory"].iter().enumerate() {
+        let key = app.orrery_mut().visit(&format!("knot://n{i}"));
+        app.orrery_mut().ingest_graph(|g| {
+            g.get_node_mut(key).unwrap().title = title.to_string();
+            true
+        });
+    }
+    let items = {
+        let wc = app.ctx();
+        wc.wikilink_items("note")
+    };
+    let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+    assert!(labels.contains(&"Notebook"), "{labels:?}");
+    assert!(labels.contains(&"Note taking"), "{labels:?}");
+    assert!(!labels.contains(&"Graph theory"), "{labels:?}");
+    assert!(
+        items.iter().any(|i| i.insert == "[[Notebook]]"),
+        "inserts the wikilink form"
+    );
+}
+
+#[test]
 fn omnibar_right_arrow_accepts_the_ghost_completion() {
     // The driven half of ghost autocomplete: with `>ros` typed and the omnibar
     // focused, Right arrow at the buffer end splices the ghost in, giving
