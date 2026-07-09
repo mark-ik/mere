@@ -46,6 +46,10 @@ use crate::types::{
 
 pub mod apply;
 pub mod capture;
+/// The edit spine: mere's captured-delta stream as a `codicil` log, replayed into
+/// the graph (the substrate's append-only-log primitive over mere's own edit
+/// vocabulary). See `graph/journal.rs`.
+pub mod journal;
 /// Cross-graph node copy (tear-out fork): mints a node in this graph from a
 /// donor node in another graph, recording cross-graph derivation provenance.
 pub mod cross_graph;
@@ -108,8 +112,10 @@ pub use history::{
 // `EdgeKind`; reads go through [`RelationKind`] + [`RelationSelector`], writes
 // through [`EdgeAssertion`].
 pub use capture::{
-    CapturedDelta, GraphTableStats, replay_captured_deltas, set_captured_delta_hook,
+    CapturedDelta, GraphTableStats, replay_captured_deltas, replay_captured_deltas_onto,
+    set_captured_delta_hook,
 };
+pub use journal::{GraphJournal, journal_capture_hook};
 pub use edge_data::{
     ArrangementData, ContainmentData, EdgeMetrics, ImportedData, ProvenanceData, REL_VOCAB,
     SemanticData, SemanticStatement, SemanticStatementSpec, StatementAssert, Traversal,

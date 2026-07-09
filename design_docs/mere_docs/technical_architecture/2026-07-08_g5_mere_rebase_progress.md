@@ -39,7 +39,7 @@ green). What remains is history-over-spine and the analytics retarget. Canonical
   `RelationClass::app("mere", 0)` and stays private. This is the two-ring split
   realized on mere's real edge type.
 
-## Graph adoption — the big invasive middle (this step)
+## Graph adoption — the big invasive middle (committed 5918d70)
 
 mere's `Graph.inner` is no longer a bare `petgraph::StableGraph`; it is a
 `chartulary::Graph<Node, EdgePayload>`. The change:
@@ -69,6 +69,35 @@ topology-plus-identity engine; mere's `Graph` is the orrery wrapper that keeps i
 app-specific sidecars (nav history, fields, couplings, import records, url index,
 revision, session) around the substrate.
 
+## Edit spine — the codicil-backed journal (this step)
+
+mere's durable mutations already exist as a stream of `CapturedDelta`s (stable-id,
+serializable), emitted through the capture hook as each live `GraphDelta` applies.
+This step gives that stream its principled home over the substrate: a
+`codicil::Codicil<CapturedDelta>`, wrapped as `graph::GraphJournal`.
+
+- **The graph is the replay of the journal.** `GraphJournal::replay` rebuilds the
+  graph by folding the log through `apply_graph_delta`; `replay_from(seq, &mut graph)`
+  advances a checkpoint (a restored `GraphSnapshot`) by only the newer entries. Live
+  editing and replay share `apply_graph_delta`, so they cannot diverge, proven by a
+  test that builds a graph by live mutation and asserts a journal replay reconstructs
+  it identically.
+- **Why mere's own vocabulary, not chartulary's `GraphLog`.** chartulary's `GraphLog`
+  is topology-only (insert/remove/connect/disconnect) with a read-only `graph()`, so
+  it cannot express mere's in-place content edits (title, tags, body, navigation,
+  traversal). mere keeps its rich `CapturedDelta` vocabulary and takes only codicil,
+  the append-only log primitive, beneath it. This is the two-layer split at the log
+  level: codicil is the portable primitive, mere's journal is the orrery's edit
+  language over it.
+- **Ordered, forkable, persistable.** A journal stamps a monotonic `Seq` (a durable
+  cursor for replication and tail-replay), forks with provenance (the log-level mirror
+  of a graph fork), and saves/loads whole through a muniment slot.
+  `journal_capture_hook` installs a hook feeding a shared journal, the host's
+  codicil-backed persistence path.
+- **Proof.** Four tests green (record+replay, fork+diverge, muniment round-trip, and
+  the live-vs-replay invariant); all 288 kernel tests pass. codicil and muniment were
+  already in the tree via chartulary, so the direct deps add no new crates.
+
 ## What this proves
 
 The generic substrate can hold mere's real web node. scholia's projector, being a
@@ -78,11 +107,14 @@ all apply to mere's node the moment mere adopts `chartulary::Graph`.
 
 ## What remains (each its own step)
 
-1. **Edit spine over the substrate.** Route mere's durable mutations through a
-   `GraphLog<Node, EdgePayload>` (chartulary's spine over codicil) so the graph
-   becomes the replay of an append-only log, then retire `graph/capture.rs`'s
-   bespoke delta-capture. The single-write-path funnel (`apply::apply_graph_delta`)
-   is already the one place to instrument.
+1. **Retire the bespoke capture persistence.** The journal primitive is landed
+   (`graph::GraphJournal`, a `codicil::Codicil<CapturedDelta>`). The remaining work is
+   host-side: point the app's persistence at a `GraphJournal` (via
+   `journal_capture_hook`) and retire the ad-hoc capture-hook plumbing, so codicil is
+   the one durable history. `graph/capture.rs`'s `CapturedDelta` vocabulary stays (it
+   is mere's edit language); only its bespoke storage goes. Note the discovered
+   constraint: chartulary's `GraphLog` is topology-only, so mere's spine is codicil
+   under mere's own vocabulary, not `GraphLog<Node, EdgePayload>` as first sketched.
 2. **History over the spine + stemma.** Re-derive mere's `graph/history.rs`
    snapshots over codicil and retire the in-tree `node-lineage` copy in favour of
    `stemma` (node-level lineage) alongside the graph-level log.

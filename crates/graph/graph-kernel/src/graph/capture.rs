@@ -694,10 +694,23 @@ where
     I: IntoIterator<Item = CapturedDelta>,
 {
     let mut graph = Graph::new();
-    for delta in deltas {
-        let _ = apply_graph_delta(&mut graph, delta.replay_delta());
-    }
+    replay_captured_deltas_onto(&mut graph, deltas);
     graph
+}
+
+/// Replay a captured-delta stream against an existing graph, advancing it in
+/// place. The incremental twin of [`replay_captured_deltas`]: materialize a
+/// checkpoint (a `GraphSnapshot`), then apply only the journal entries recorded
+/// after it. Live editing and replay both funnel through `apply_graph_delta`, so a
+/// replayed graph cannot diverge from the one the edits were captured from — the
+/// edit-spine invariant. (See `graph/journal.rs`.)
+pub fn replay_captured_deltas_onto<I>(graph: &mut Graph, deltas: I)
+where
+    I: IntoIterator<Item = CapturedDelta>,
+{
+    for delta in deltas {
+        let _ = apply_graph_delta(graph, delta.replay_delta());
+    }
 }
 
 type CaptureHook = dyn Fn(&CapturedDelta) + Send + Sync + 'static;
