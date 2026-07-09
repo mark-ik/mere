@@ -35,10 +35,12 @@ use std::time::Duration;
 use armillary::{ActorHandle, Emitter, Wake, spawn};
 use identity::{IdentityProvider, InMemoryProvider};
 use moothold::tessera::{
-    ChainRoot, CommitmentId, Scope, SyncStatus, SyncedMoot, TesseraConfig, TesseraEvent,
-    TesseraStore, to_operation,
+    ChainRoot, CommitmentId, Ledger, Scope, TesseraConfig, TesseraEvent, TesseraStore,
+    TesseraStoreError, to_operation, verify,
 };
-use transport::{P2pandaTransport, sync_overlay_topic};
+use p2panda_core::Topic;
+use p2panda_net::LogSync;
+use transport::{P2pandaTransport, SyncStatus, SyncedSpace, sync_overlay_topic};
 
 use meerkat::SyncIndicator;
 
@@ -46,6 +48,28 @@ use meerkat::SyncIndicator;
 pub const DEMO_MOOT: [u8; 32] = [0x7e; 32];
 /// The chip label for the tessera lane.
 pub const LANE_LABEL: &str = "tessera";
+
+/// The host-composed tessera sync session: the shared [`SyncedSpace`] drain (for
+/// status), the [`TesseraStore`] to fold, the moot it syncs, and the `LogSync`
+/// session + handle held for liveness. moothold owns no p2panda-net after the
+/// sibling-posture purity split, so the host builds the pump; the tessera lane
+/// is receive-only, so nothing publishes on the handle.
+struct TesseraSync {
+    space: SyncedSpace,
+    store: TesseraStore,
+    moot_id: [u8; 32],
+    _keepalive: Box<dyn std::any::Any + Send>,
+}
+
+impl TesseraSync {
+    fn sync_status(&self) -> SyncStatus {
+        self.space.sync_status()
+    }
+
+    fn ledger(&self, config: TesseraConfig) -> Result<Ledger, TesseraStoreError> {
+        self.store.fold_moot(self.moot_id, config)
+    }
+}
 
 /// A change in a synced lane's status, delivered to the UI loop. Carries the raw
 /// reconciliation `status` plus the two things the chip actually wants to show: this
@@ -192,7 +216,7 @@ fn sync_offline_update() -> SyncUpdate {
 async fn build_sync_lane(
     dir: &Path,
     moot_id: [u8; 32],
-) -> Result<(P2pandaTransport, SyncedMoot, Option<ChainRoot>), String> {
+) -> Result<(P2pandaTransport, TesseraSync, Option<ChainRoot>), String> {
     let Some(seed) = load_wallet_seed(dir) else {
         return Err(
             "wallet startup is locked; sync stays offline until unlock support lands".to_string(),
@@ -219,9 +243,32 @@ async fn build_sync_lane(
         .derive_keypair(b"tessera-host-author")
         .ok()
         .map(|kp| ChainRoot(kp.public_key().to_bytes()));
-    let moot = SyncedMoot::join(endpoint, gossip, store, moot_id)
+    // Host-composed pump: build the tessera LogSync session over the store,
+    // drain it via the shared `SyncedSpace`, and keep the session + handle alive.
+    // The tessera lane is receive-only (authoring is a direct store.insert), so
+    // nothing publishes on the handle.
+    let log_sync = LogSync::builder(store.clone(), endpoint, gossip)
+        .spawn()
         .await
-        .map_err(|e| format!("join moot: {e}"))?;
+        .map_err(|e| format!("logsync spawn: {e}"))?;
+    let handle = log_sync
+        .stream(Topic::from(moot_id), true)
+        .await
+        .map_err(|e| format!("logsync stream: {e}"))?;
+    let sub = handle
+        .subscribe()
+        .await
+        .map_err(|e| format!("logsync subscribe: {e}"))?;
+    let accept_store = store.clone();
+    let space = SyncedSpace::drive(sub, move |op| {
+        std::future::ready(verify(&op) && matches!(accept_store.insert(&op), Ok(true)))
+    });
+    let moot = TesseraSync {
+        space,
+        store,
+        moot_id,
+        _keepalive: Box::new((log_sync, handle)),
+    };
     Ok((transport, moot, host_root))
 }
 

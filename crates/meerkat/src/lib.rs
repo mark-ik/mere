@@ -224,6 +224,19 @@ pub struct Chrome {
     /// read-only rendered view. `false` is the source-edit mode. Toggled by the header
     /// button / Ctrl+E. (Djot editor — Phase 2 toggle source/preview.)
     pub knot_editor_preview: bool,
+    /// Undo stack for the knot source: whole-buffer snapshots (`TextInput` is `Clone`, so
+    /// this captures text + caret + selection). A run of consecutive character inserts
+    /// coalesces into one entry ([`knot_coalescing`](Self::knot_coalescing)); deletes,
+    /// newlines, and undo/redo start a fresh group. Cleared on open/close.
+    /// (Djot editor — Phase 2 undo/redo.)
+    pub knot_undo: Vec<TextInput>,
+    /// Redo stack, filled by [`knot_undo_apply`](Self::knot_undo_apply) and cleared by
+    /// the next fresh edit (the standard undo/redo contract).
+    pub knot_redo: Vec<TextInput>,
+    /// Whether the current run of character inserts is coalescing into one undo entry, so
+    /// a burst of typing undoes as a unit. Reset by any non-insert edit, a caret move, or
+    /// undo/redo.
+    pub knot_coalescing: bool,
     /// The open graph sessions, as toolbar chips (Chrome bar P4 — sessions moved out
     /// of the shellbar). Host-synced each frame from the session pool, ordered like
     /// `cycle_session`; the active one carries `active`. Rendered inline up to a cap,

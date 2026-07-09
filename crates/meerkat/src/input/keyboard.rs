@@ -256,6 +256,19 @@ impl WindowCtx<'_> {
             self.delete_focused_node();
             return;
         }
+        // Ctrl+E flips the open knot editor between source-edit and rendered-preview
+        // (the preview drops the opaque overlay so the live-rendered tile shows through).
+        // Only while the editor is open on a bound note; otherwise it falls through.
+        // (Djot editor — Phase 2 toggle source/preview.)
+        if self.view.modifiers.ctrl
+            && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("e"))
+            && self.chrome().knot_editor_open
+            && self.chrome().knot_target.is_some()
+        {
+            self.chrome_update(|c| c.toggle_knot_editor_preview());
+            self.view.request_redraw();
+            return;
+        }
         if self.handle_clipboard_shortcut(key) {
             return;
         }
@@ -298,6 +311,13 @@ impl WindowCtx<'_> {
             self.on_comms_key(key);
         } else if self.omnibar_focused() {
             self.on_omnibar_key(key);
+        } else if matches!(
+            self.focused_field_kind(),
+            Some(crate::ime::FocusedField::KnotEditor)
+        ) {
+            // The knot editor's source field wraps every edit with undo/redo bookkeeping,
+            // so it gets its own handler rather than the generic field dispatch below.
+            self.on_knot_editor_key(key);
         } else if self.multi.focus(self.view.projection_id).is_some()
             || matches!(key, WinitKey::Named(WinitNamedKey::Tab))
         {
@@ -317,6 +337,59 @@ impl WindowCtx<'_> {
             // No chrome field or focusable element holds focus: graph-level keys act on
             // the orrery selection.
             self.on_graph_key(key);
+        }
+    }
+
+    /// Route a key to the focused knot-editor source field, wrapping the buffer edit with
+    /// undo/redo bookkeeping. Ctrl+Z undoes and Ctrl+Y / Ctrl+Shift+Z redo; a mutating key
+    /// first snapshots the pre-edit source (a typing run coalesced into one entry), then the
+    /// key dispatches to the field like any other. (Djot editor — Phase 2 undo/redo.)
+    fn on_knot_editor_key(&mut self, key: &WinitKey) {
+        let ctrl = self.view.modifiers.ctrl || self.view.modifiers.meta;
+        // Undo / redo take the key before it can edit the buffer.
+        if ctrl && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("z")) {
+            let redo = self.view.modifiers.shift;
+            self.chrome_update(|c| {
+                if redo {
+                    c.knot_redo_apply();
+                } else {
+                    c.knot_undo_apply();
+                }
+            });
+            self.view.request_redraw();
+            return;
+        }
+        if ctrl && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("y")) {
+            self.chrome_update(|c| {
+                c.knot_redo_apply();
+            });
+            self.view.request_redraw();
+            return;
+        }
+        // Snapshot before a mutating edit, classifying for undo grouping. A caret move ends
+        // the coalescing run (so the next insert is a fresh group) without snapshotting.
+        match key {
+            // Ctrl+<char> (e.g. select-all) is not a text edit; just break the run + dispatch.
+            WinitKey::Character(_) if ctrl => self.chrome_update(|c| c.knot_break_coalesce()),
+            WinitKey::Character(_) | WinitKey::Named(WinitNamedKey::Space) => {
+                self.chrome_update(|c| c.knot_edit_snapshot(true));
+            }
+            WinitKey::Named(
+                WinitNamedKey::Enter | WinitNamedKey::Backspace | WinitNamedKey::Delete,
+            ) => self.chrome_update(|c| c.knot_edit_snapshot(false)),
+            WinitKey::Named(
+                WinitNamedKey::ArrowLeft
+                | WinitNamedKey::ArrowRight
+                | WinitNamedKey::Home
+                | WinitNamedKey::End,
+            ) => self.chrome_update(|c| c.knot_break_coalesce()),
+            _ => {}
+        }
+        // Apply the key to the field (mutating knot_source), the same dispatch the generic
+        // focusable path uses. Live-on-change render refresh then re-renders the tile.
+        if let Some(key_event) = key_event_from_winit(key, self.view.modifiers) {
+            self.multi.dispatch_key(self.view.projection_id, key_event);
+            self.view.request_redraw();
         }
     }
 

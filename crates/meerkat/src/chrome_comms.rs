@@ -6,6 +6,10 @@
 
 use super::*;
 
+/// Undo-history depth for the knot editor. A note is short and each entry is a
+/// whole-buffer clone, so a bounded stack keeps memory flat without limiting real use.
+const KNOT_UNDO_CAP: usize = 200;
+
 impl Chrome {
     /// Toggle the docked comms pane open/closed. Opening records a `Refresh` so
     /// the host loads the latest conversation list.
@@ -30,6 +34,7 @@ impl Chrome {
         self.knot_editor_rect = None;
         self.knot_save_requested = false;
         self.knot_editor_preview = false;
+        self.reset_knot_history();
     }
 
     /// Open the docked knot editor against a graph member's authored body.
@@ -46,6 +51,7 @@ impl Chrome {
         self.knot_editor_rect = None;
         self.knot_save_requested = false;
         self.knot_editor_preview = false;
+        self.reset_knot_history();
     }
 
     /// Close the knot editor.
@@ -55,6 +61,7 @@ impl Chrome {
         self.knot_editor_rect = None;
         self.knot_save_requested = false;
         self.knot_editor_preview = false;
+        self.reset_knot_history();
     }
 
     /// Flip between the source-edit and rendered-preview views of the open note. A
@@ -64,6 +71,66 @@ impl Chrome {
     pub fn toggle_knot_editor_preview(&mut self) {
         if self.knot_editor_open && self.knot_target.is_some() {
             self.knot_editor_preview = !self.knot_editor_preview;
+        }
+    }
+
+    /// Clear the editor's undo/redo history (on open/close, so a fresh note never
+    /// undoes into the previous one).
+    fn reset_knot_history(&mut self) {
+        self.knot_undo.clear();
+        self.knot_redo.clear();
+        self.knot_coalescing = false;
+    }
+
+    /// Record the pre-edit source on the undo stack, before a mutating edit applies.
+    /// `coalesce_insert` is true for a character/space insert: a run of them coalesces
+    /// into one undo entry (so a burst of typing undoes as a unit), by skipping the push
+    /// while already coalescing. A non-insert edit (delete, newline) passes `false`, so it
+    /// is its own undo step and ends any insert run. Any push clears the redo stack and
+    /// caps the history. (Djot editor — Phase 2 undo/redo.)
+    pub fn knot_edit_snapshot(&mut self, coalesce_insert: bool) {
+        if coalesce_insert && self.knot_coalescing {
+            return;
+        }
+        self.knot_undo.push(self.knot_source.clone());
+        if self.knot_undo.len() > KNOT_UNDO_CAP {
+            self.knot_undo.remove(0);
+        }
+        self.knot_redo.clear();
+        self.knot_coalescing = coalesce_insert;
+    }
+
+    /// End the current insert-coalescing run without snapshotting — for a caret move, so
+    /// the next insert starts a fresh undo group even though nothing was deleted.
+    pub fn knot_break_coalesce(&mut self) {
+        self.knot_coalescing = false;
+    }
+
+    /// Undo the last edit: restore the top undo snapshot, moving the current source onto
+    /// the redo stack. Returns whether anything was undone.
+    pub fn knot_undo_apply(&mut self) -> bool {
+        match self.knot_undo.pop() {
+            Some(prev) => {
+                self.knot_redo
+                    .push(std::mem::replace(&mut self.knot_source, prev));
+                self.knot_coalescing = false;
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Redo the last undone edit: restore the top redo snapshot, moving the current
+    /// source back onto the undo stack. Returns whether anything was redone.
+    pub fn knot_redo_apply(&mut self) -> bool {
+        match self.knot_redo.pop() {
+            Some(next) => {
+                self.knot_undo
+                    .push(std::mem::replace(&mut self.knot_source, next));
+                self.knot_coalescing = false;
+                true
+            }
+            None => false,
         }
     }
 

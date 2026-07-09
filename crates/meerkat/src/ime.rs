@@ -28,8 +28,8 @@ use super::WindowCtx;
 /// Which chrome text field currently holds focus — mirrors the field mapping in
 /// [`WindowCtx::caret_field`], so the IME preedit and the painted caret target the
 /// same input.
-#[derive(Clone, Copy)]
-enum FocusedField {
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FocusedField {
     Omnibar,
     Palette,
     CommsTo,
@@ -74,7 +74,7 @@ impl WindowCtx<'_> {
 
     /// The focused chrome field, by the same mapping as
     /// [`caret_field`](Self::caret_field). `None` when nothing is focused.
-    fn focused_field_kind(&self) -> Option<FocusedField> {
+    pub(crate) fn focused_field_kind(&self) -> Option<FocusedField> {
         let focus = Some(self.multi.focus(self.view.projection_id)?);
         Some(if focus == self.input_under_class("comms-new-to") {
             FocusedField::CommsTo

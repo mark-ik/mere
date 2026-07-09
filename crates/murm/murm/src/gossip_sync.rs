@@ -151,7 +151,11 @@ impl Murm<P2pandaTransport> {
                 let space = SyncedSpace::drive(sub, move |op| {
                     std::future::ready(accept_engine.ingest_operation(&cabal_id, &op).is_ok())
                 });
-                let keepalive: Box<dyn std::any::Any + Send> = Box::new((log_sync, sync_handle));
+                // `Send + Sync`: `SyncedCabal` must stay `Sync` for comms's
+                // `CabalSink: Send + Sync` bound. The LogSync session + handle are
+                // `Sync`, so the erased box keeps that.
+                let keepalive: Box<dyn std::any::Any + Send + Sync> =
+                    Box::new((log_sync, sync_handle));
                 (Some(space), Some(keepalive))
             }
             None => (None, None),
@@ -192,7 +196,8 @@ pub struct SyncedCabal {
     /// Holds the `LogSync` session + `SyncHandle` alive for the drain's lifetime
     /// (murm publishes on the gossip lane, not the handle). Type-erased to avoid
     /// naming the cabal store / extension here; dropping it ends the session.
-    _logsync_keepalive: Option<Box<dyn std::any::Any + Send>>,
+    /// `Send + Sync` so `SyncedCabal` stays `Sync` (comms's `CabalSink` bound).
+    _logsync_keepalive: Option<Box<dyn std::any::Any + Send + Sync>>,
 }
 
 impl SyncedCabal {

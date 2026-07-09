@@ -264,15 +264,20 @@ url = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "time", "io-util", "sync"] }
 
 # ─── P2P sync (S5.0 foundation) ──────────────────────────────────────────────
-# The host stands up one p2panda transport and joins a tessera moot's LogSync
+# The host stands up one p2panda transport and drives a tessera moot's LogSync
 # session, surfacing real sync status in the chrome. The sync subsystem mirrors
 # the netfetcher seam (background tokio work -> mpsc channel -> EventLoopProxy
 # wake -> user_event drain) — see the host p2p wiring plan. `transport` is the
-# P2pandaTransport adapter; `moothold` supplies the tessera SyncedMoot + store;
-# `identity` the (ephemeral, for now) signing keypair.
+# P2pandaTransport adapter + the shared `SyncedSpace` drain; `moothold` supplies
+# the tessera store + fold + `verify`; `identity` the (ephemeral) signing keypair.
+# After the sibling-posture purity split moothold owns no p2panda-net, so the
+# host builds the `LogSync` pump directly — hence the p2panda-net / p2panda-core
+# deps here.
 identity = { workspace = true }
 transport = { workspace = true }
 moothold = { workspace = true }
+p2panda-net = "0.6.1"
+p2panda-core = "0.6.1"
 
 # Shell-chrome theme tokens (theming pass): the toolbar / omnibar / palette /
 # pane palette comes from a resolved `ChromeTheme` rather than hardcoded CSS, so
