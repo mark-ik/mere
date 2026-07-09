@@ -480,6 +480,45 @@ impl Orrery {
         )
     }
 
+    /// Stamp a fetched page `<title>` onto the node currently at `url`, if one
+    /// exists and the title actually changes. Unlike the favicon stamp below,
+    /// the caption is static DOM text (built once in `build_pool_dom`), so a
+    /// changed title rebuilds the node-children pool via `reconcile_derived` —
+    /// positions and selection are kept, no re-settle. (Fetch enrichment: the
+    /// display label prefers a real title over the host fallback.)
+    pub fn set_node_title(&mut self, url: &str, title: String) -> bool {
+        let Some(key) = self.graph.get_node_by_url(url).map(|(k, _)| k) else {
+            return false;
+        };
+        let updated = matches!(
+            kernel::graph::apply::apply_graph_delta(
+                &mut self.graph,
+                kernel::graph::apply::GraphDelta::SetNodeTitle { key, title },
+            ),
+            kernel::graph::apply::GraphDeltaResult::NodeMetadataUpdated(true)
+        );
+        if updated {
+            self.reconcile_derived();
+        }
+        updated
+    }
+
+    /// Stamp a more precise MIME hint (e.g. a fetch's Content-Type) onto the
+    /// node currently at `url`. Metadata-only, like the favicon stamp: no
+    /// reconcile, no layout disturbance. (Fetch enrichment.)
+    pub fn set_node_mime_hint(&mut self, url: &str, mime_hint: Option<String>) -> bool {
+        let Some(key) = self.graph.get_node_by_url(url).map(|(k, _)| k) else {
+            return false;
+        };
+        matches!(
+            kernel::graph::apply::apply_graph_delta(
+                &mut self.graph,
+                kernel::graph::apply::GraphDelta::SetNodeMimeHint { key, mime_hint },
+            ),
+            kernel::graph::apply::GraphDeltaResult::NodeMetadataUpdated(true)
+        )
+    }
+
     /// Stamp a preview thumbnail PNG onto the node `member`, if it exists. This mirrors
     /// [`set_node_favicon`](Self::set_node_favicon): metadata-only, no reconcile, no layout
     /// disturbance. Used when the host already rendered a snapshot preview and wants to persist

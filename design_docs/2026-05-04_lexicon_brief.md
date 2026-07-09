@@ -13,7 +13,7 @@
 | Name | What it labels | Notes |
 |------|----------------|-------|
 | **Mere** | Product / app — the browser itself | Triple-meaning positioning: *merely* (humble — "merely a browser!"), *mere* (a small lake — still-water surface where things accrue and reflect), slant-rhyme with *mirror*. Disambiguates from Māori weapon by intentional framing. Replaces *Graphshell-as-product-name* and *Verse-as-network-layer*. |
-| **Strophos** | Parent brand / company-name layer | Greek στρόφος, "twist/turn." Sits next to Verso (Latin "turned") etymologically. Strophalos (Hekate's Wheel) available as evocative long-form. |
+| **Merely** | Parent brand / company-name layer | Adopted 2026-07-09, replacing *Strophos*. The umbrella takes its name from the product's own positioning: Mere is *merely a browser*, so the parent is that adverb. Humility as a house style. |
 | **Verso** | Brand-level concept name for the rendering-surface layer | Crate family is `verso` (`verso-core`, `tile-state`). |
 
 ## 2. The printing-press metaphor
@@ -105,7 +105,8 @@ Do not revive:
 | Retired | Replacement | Why |
 |---------|-------------|-----|
 | **Graphshell** *(as product brand)* | **Mere** | Demoted to crate name (the shell layer within Mere) |
-| **Strophos** *(as product brand)* | **Mere** | Strophos retained at parent-brand level only |
+| **Strophos** *(as product brand)* | **Mere** | Strophos retained at parent-brand level only — itself retired 2026-07-09, see below |
+| **Strophos** *(as parent brand)* | **Merely** | Retired 2026-07-09. The umbrella now derives from the product ("merely a browser!") rather than from a separate Greek root. Strophos survives only in this brief's history sections and in `archive_docs/`; do not reintroduce it. |
 | **Lemni** / **Lemniscate** | — | Lemni Inc. (Sequoia-backed AI-agent SaaS, Class 9 mark) |
 | **Verse** *(network layer)* | folded into Mere-at-network-scope | The Navigator handles networked-community as a form-factor |
 | **Murmuration** *(community layer)* | **Moothold** + count noun *moot* | TESS wall (Murmuration, Inc., civic-tech) |
@@ -117,12 +118,33 @@ Do not revive:
 | **Astroid** *(as product brand)* | preserved as internal UX vocab | Asteroid-confusion problem at brand level |
 | **Orrery** *(as product brand)* | preserved as internal term of art | crates.io collision + namespace dilution at brand level |
 
-## 6. Naming history (this session)
+## 6. Naming history
+
+*Statements in this section are historical and are deliberately **not** rewritten
+when a name changes; the retired-terms table above carries the current mapping.*
 
 The product name went through several commits during the 2026-05-03 / 2026-05-04 sessions:
 
 1. **Strophos** (parent) + **Orrery** (product) — initial commit, Orrery rejected when user found it weak as a product brand
 2. **Mere** — final commit. Replaces Strophos+Orrery as product brand. Strophos retained at parent-brand level. Orrery preserved as internal term of art for the root graph view.
+
+Then, on 2026-07-09:
+
+3. **Merely** (parent). Strophos retired at the parent level too, and the umbrella
+   is taken from the product instead of standing beside it: Mere is *merely a
+   browser*, so the family is Merely. The parent no longer carries an independent
+   etymology, which removes the Strophos/Verso twist-and-turn pairing as a brand
+   device (Verso keeps its own meaning as the rendering-surface layer). Swept
+   through every living doc, README, and crate description in one pass; archived
+   docs and the history sections above were left as written.
+
+   **Known trade-off, accepted:** *Merely* is a common English adverb. It is
+   weakly distinctive as a mark (the trademark literature's own phrase for the
+   failure mode is "merely descriptive"), it is hard to search for, and a short
+   dictionary word is unlikely to be free as an org slug. That is the opposite
+   problem from the collisions that killed Carta, Camino, Tela, and Lemni: not a
+   conflict, a distinctiveness cost. Recorded here so it is a decision rather
+   than an oversight.
 
 Other rejected candidates (with reason): Carta (Carta, Inc. wall), Camino (Mozilla Camino® + camino crate), Tela (Schlumberger + tela.com), Waystone (Waystone Group financial), Almagest (Almagest Space Corp.), Holon (Holon Solutions/Platform), Duende (Duende Software/IdentityServer), Synoche (user reported conflict), Snicket (Snicket Labs Feb 2026 rebrand same metaphor), Holloway (Holloway.com publishing platform), Postern (dead Android proxifier ghost), Foundry (Foundry VTT + Foundry FX), Caster (`caster` crate taken), Motif (X11 Motif® + motif.io VC + crate), Syzygy (WPP-owned digital agency), Lemni (Sequoia-backed AI-agent), and others (see [`project_naming_state.md`](C:\Users\mark_\.claude\projects\c--Users-mark--Code\memory\project_naming_state.md) for the full list).
 

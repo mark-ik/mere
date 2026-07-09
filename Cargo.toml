@@ -213,7 +213,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["serde", "v4"] }
-# Shared Strophos seed-palette derivation engine (OKLCH). register-theme
+# Shared Merely seed-palette derivation engine (OKLCH). register-theme
 # derives the full ThemeTokenSet from a few seed colours via this. Published as
 # `tinct` on crates.io; kept under the local alias `tincture` (Cargo `package =`)
 # so consumers and every `use tincture::` stay unchanged.

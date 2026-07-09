@@ -10,7 +10,7 @@
 //! ladder, text hierarchy, contrast-picked `on_*`) comes from
 //! [`tincture::derive_palette`]; the long-tail (chrome surface tiers, radial
 //! menu, graph-node chrome) is refined from that base via the OKLCH
-//! primitives. Role intent (from the shared Strophos theme doc):
+//! primitives. Role intent (from the shared Merely theme doc):
 //!
 //! - **primary** — brand anchor: accent, primary actions, focus.
 //! - **secondary** — sympathetic support hue (badge/nav tints).

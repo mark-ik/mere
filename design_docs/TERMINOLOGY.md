@@ -7,7 +7,7 @@ For terms not addressed here, see the donor harvest indexes ([full harvest](mere
 ## Top-level
 
 - **Mere** — the product. The browser itself. Triple-meaning positioning: *merely* (humble) + *mere* (a small lake — still-water surface) + slant-rhyme with *mirror*.
-- **Strophos** — parent brand / company-name layer. Greek στρόφος, "twist/turn." Sits next to Verso (Latin "turned") etymologically.
+- **Merely** — parent brand / company-name layer (adopted 2026-07-09, replacing *Strophos*). Takes the umbrella from the product rather than the reverse: Mere's own positioning already leads with *merely* ("merely a browser!"), so the parent is the adverb the product was named for. Humility as a house style. The prior *Strophos* (Greek στρόφος, "twist/turn," chosen to sit beside Verso's Latin "turned") is retired at every level; the twist/turn etymology no longer carries brand weight, though Verso keeps its own.
 
 ## Architectural roles (printing-press metaphor)
 

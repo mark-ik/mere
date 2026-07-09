@@ -8,7 +8,7 @@
 //! (stable-id, serializable), emitted through the capture hook as each live
 //! [`GraphDelta`](super::apply::GraphDelta) applies (see `capture.rs`). This module
 //! gives that stream its principled home: a [`codicil::Codicil`] of captured
-//! deltas, the append-only log primitive shared across the Strophos apps. The
+//! deltas, the append-only log primitive shared across the Merely apps. The
 //! materialized graph is the *replay* of the journal, and because live editing and
 //! replay both funnel through `apply_graph_delta`, the two cannot diverge.
 //!
