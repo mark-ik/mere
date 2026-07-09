@@ -1510,6 +1510,56 @@ fn knot_editor_close_autosaves_the_note_body() {
 }
 
 #[test]
+fn knot_editor_edits_a_markdown_note_and_saves_as_markdown() {
+    // Format-aware editing: a non-knot markdown note opens in the editor and saves back as
+    // text/markdown, not forced to knot. The editor writes raw source; only the preserved
+    // content-type differs. (Phase 2 .md/.txt saveback.)
+    let mut app = test_app();
+    let url = "https://example.com/note.md";
+    let key = app.orrery_mut().visit(url);
+    app.orrery_mut().ingest_graph(|graph| {
+        let node = graph.get_node_mut(key).expect("note node exists");
+        node.body = Some("# Original\n\nmarkdown body".to_string());
+        node.mime_hint = Some("text/markdown".to_string());
+        true
+    });
+
+    let step = app.apply_agent_action(AgentAction::InvokeCommand(Command::ToggleKnotEditor));
+    assert!(step.result.applied);
+    assert!(
+        app.window_local().chrome.knot_editor_open,
+        "the editor opens for a markdown note, not only knot://"
+    );
+    assert_eq!(
+        app.window_local().chrome.knot_source.text(),
+        "# Original\n\nmarkdown body"
+    );
+
+    let updated = "# Updated\n\nStill markdown.";
+    {
+        let mut wc = app.ctx();
+        wc.chrome_update(|c| {
+            c.knot_source = xilem_serval::TextInput::new(updated);
+            c.request_knot_editor_save();
+        });
+        wc.drain_chrome_intents();
+    }
+
+    let node = app
+        .orrery()
+        .graph()
+        .get_node(key)
+        .expect("note node still exists");
+    assert_eq!(node.body.as_deref(), Some(updated));
+    // Saved back as markdown, not converted to knot.
+    assert_eq!(node.mime_hint.as_deref(), Some("text/markdown"));
+    let Some(crate::fetch::ContentState::Ready(fetched)) = app.shared.content.pages.get(url) else {
+        panic!("saved note updates the live content cache");
+    };
+    assert_eq!(fetched.content_type.as_deref(), Some("text/markdown"));
+}
+
+#[test]
 fn omnibar_right_arrow_accepts_the_ghost_completion() {
     // The driven half of ghost autocomplete: with `>ros` typed and the omnibar
     // focused, Right arrow at the buffer end splices the ghost in, giving

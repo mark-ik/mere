@@ -221,8 +221,37 @@ impl WindowCtx<'_> {
         format!("# {name}\n\nA new knot note. Start writing.\n")
     }
 
-    /// Toggle the source editor for the focused local knot note. The editor stays in
-    /// chrome, but the command is host-drained because the target is a graph member.
+    /// The content-type to edit + save a focused note's body as, or `None` if the node is
+    /// not an editable local note. A `knot://` note is always knot; otherwise the node's mime
+    /// hint (or a sniff of its body) must name one of the editable text formats (knot /
+    /// markdown / plain). The editor writes raw source, so "format" is just which content-type
+    /// the body is preserved as. (Phase 2 format-aware editing.)
+    pub(crate) fn note_edit_format(
+        url: &str,
+        mime_hint: Option<&str>,
+        body: Option<&str>,
+    ) -> Option<&'static str> {
+        fn editable(ct: &str) -> Option<&'static str> {
+            match ct {
+                "text/x-knot" => Some("text/x-knot"),
+                "text/markdown" => Some("text/markdown"),
+                "text/plain" => Some("text/plain"),
+                _ => None,
+            }
+        }
+        if url.starts_with("knot://") {
+            return Some("text/x-knot");
+        }
+        if let Some(ct) = mime_hint.and_then(editable) {
+            return Some(ct);
+        }
+        body.and_then(|b| inker::sniff_content_type(b.as_bytes()))
+    }
+
+    /// Toggle the source editor for the focused local note. knot:// notes always qualify;
+    /// a markdown / plain-text note with a local body qualifies too (edited + saved in its
+    /// own format). The editor stays in chrome, but the command is host-drained because the
+    /// target is a graph member.
     pub(super) fn toggle_focused_knot_editor(&mut self) -> Option<String> {
         if self.chrome().knot_editor_open {
             // Autosave on close (same path as the × button): request the close, then drain
@@ -233,28 +262,32 @@ impl WindowCtx<'_> {
             return None;
         }
         let Some(member) = self.nav_target_member() else {
-            return Some("Select a knot:// note to edit".to_string());
+            return Some("Select a note to edit".to_string());
         };
         let Some((_, node)) = self.orrery().graph().get_node_by_id(member) else {
-            return Some("Select a knot:// note to edit".to_string());
+            return Some("Select a note to edit".to_string());
         };
         let url = node.url().to_string();
-        if !url.starts_with("knot://") {
-            return Some("Focused node is not a knot:// note".to_string());
+        if Self::note_edit_format(&url, node.mime_hint.as_deref(), node.body.as_deref()).is_none() {
+            return Some("Focused node is not an editable note".to_string());
         }
+        // The buffer is the note's raw source: its own body if authored, else the cached
+        // fetched body (any format), else — for a fresh knot:// note — the starter.
         let source = node
             .body
             .clone()
             .filter(|body| !body.is_empty())
             .or_else(|| match self.shared.content.pages.get(&url) {
-                Some(ContentState::Ready(fetched))
-                    if fetched.content_type.as_deref() == Some("text/x-knot") =>
-                {
-                    Some(fetched.body.clone())
-                }
+                Some(ContentState::Ready(fetched)) => Some(fetched.body.clone()),
                 _ => None,
             })
-            .unwrap_or_else(|| Self::starter_knot_body(&url));
+            .unwrap_or_else(|| {
+                if url.starts_with("knot://") {
+                    Self::starter_knot_body(&url)
+                } else {
+                    String::new()
+                }
+            });
         let note = format!("Editing {url}");
         self.chrome_update(move |c| c.open_knot_editor_for(member, url, source));
         self.view.request_redraw();
@@ -291,9 +324,13 @@ impl WindowCtx<'_> {
             return Some("The edited note no longer exists".to_string());
         };
         let url = node.url().to_string();
-        if !url.starts_with("knot://") {
-            return Some("The edited node is not a knot:// note".to_string());
-        }
+        // Preserve the note's own format (knot / markdown / plain), so a .md or .txt note
+        // saves back as itself rather than being forced to knot. (Phase 2 format-aware save.)
+        let Some(format) =
+            Self::note_edit_format(&url, node.mime_hint.as_deref(), node.body.as_deref())
+        else {
+            return Some("The edited node is not an editable note".to_string());
+        };
         let body_for_graph = body.clone();
         let changed = self.orrery_mut().ingest_graph(|graph| {
             use kernel::graph::apply::{GraphDelta, GraphDeltaResult, apply_graph_delta};
@@ -315,7 +352,7 @@ impl WindowCtx<'_> {
                     graph,
                     GraphDelta::SetNodeMimeHint {
                         key,
-                        mime_hint: Some("text/x-knot".to_string()),
+                        mime_hint: Some(format.to_string()),
                     },
                 ),
                 GraphDeltaResult::NodeMetadataUpdated(true)
@@ -325,7 +362,7 @@ impl WindowCtx<'_> {
         self.shared.content.pages.insert(
             url.clone(),
             ContentState::Ready(Fetched {
-                content_type: Some("text/x-knot".to_string()),
+                content_type: Some(format.to_string()),
                 body,
             }),
         );

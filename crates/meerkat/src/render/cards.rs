@@ -58,10 +58,23 @@ impl crate::WindowCtx<'_> {
     /// `None` for every other tile (and while the editor is closed), so they keep rendering
     /// the committed body from `shared.content.pages` and stay cached. (Djot editor — Phase 2
     /// live-on-change render refresh.)
-    pub(crate) fn knot_editor_live_body(&self, member: GraphMemberId) -> Option<String> {
+    pub(crate) fn knot_editor_live_body(&self, member: GraphMemberId) -> Option<(String, &'static str)> {
         let chrome = self.chrome();
-        (chrome.knot_editor_open && chrome.knot_target == Some(member))
-            .then(|| chrome.knot_source.text().to_string())
+        if !(chrome.knot_editor_open && chrome.knot_target == Some(member)) {
+            return None;
+        }
+        let body = chrome.knot_source.text().to_string();
+        // Render the preview in the note's own format (knot / markdown / plain), so editing a
+        // .md or .txt note previews as itself. (Phase 2 format-aware editing.)
+        let format = self
+            .orrery()
+            .graph()
+            .get_node_by_id(member)
+            .and_then(|(_, n)| {
+                Self::note_edit_format(n.url(), n.mime_hint.as_deref(), n.body.as_deref())
+            })
+            .unwrap_or("text/x-knot");
+        Some((body, format))
     }
 
     /// Record each card's on-screen content rect into `self.view.content_rects` for this
@@ -584,18 +597,25 @@ impl crate::WindowCtx<'_> {
             // B: a knot note tile renders through serval (note_view -> ScriptedDom ->
             // netrender), the reframe's native path — not document-canvas. Re-derive the
             // EngineDocument from the node's body and lay it out with note_scene. (Slice B.)
-            let knot_url = self
+            // While the editor is live on this member, render its tile from the uncommitted
+            // buffer regardless of scheme (a .md / .txt note previews here too); otherwise only
+            // knot:// notes use this native serval note lane, as before. (Phase 2.)
+            let live_body = self.knot_editor_live_body(*member);
+            let node_url = self
                 .orrery()
                 .graph()
                 .get_node_by_id(*member)
-                .map(|(_, n)| n.url().to_string())
-                .filter(|u| u.starts_with("knot://"));
-            if let Some(url) = knot_url {
-                // While the knot editor is open on this note, render the tile from its live
+                .map(|(_, n)| n.url().to_string());
+            let note_url = match (&node_url, &live_body) {
+                (Some(u), Some(_)) => Some(u.clone()),
+                (Some(u), None) if u.starts_with("knot://") => Some(u.clone()),
+                _ => None,
+            };
+            if let Some(url) = note_url {
+                // While the editor is open on this note, render the tile from its live
                 // (uncommitted) buffer and force a re-raster every frame, so the note updates
                 // as you type. Otherwise the committed body from `pages` renders and caches.
                 // (Djot editor — Phase 2 live-on-change render refresh.)
-                let live_body = self.knot_editor_live_body(*member);
                 let max_h_for_width = (MAX_CARD_TEX_AREA / (*cw).max(1)) as f32;
                 let band_h = content_h.min(BAND_CAP as f32).min(max_h_for_width).max(1.0);
                 let band_px = band_h.ceil() as u32;
@@ -620,10 +640,11 @@ impl crate::WindowCtx<'_> {
                     );
                     let new_band_y = (scroll - (band_h - visible_h) * 0.5)
                         .clamp(0.0, (content_h - band_h).max(0.0));
-                    // The live editor buffer wins over the committed page while editing.
+                    // The live editor buffer wins over the committed page while editing, in the
+                    // note's own format (so a .md preview parses as markdown, not knot).
                     let state = match &live_body {
-                        Some(body) => Some(ContentState::Ready(Fetched {
-                            content_type: Some("text/x-knot".to_string()),
+                        Some((body, format)) => Some(ContentState::Ready(Fetched {
+                            content_type: Some((*format).to_string()),
                             body: body.clone(),
                         })),
                         None => self.shared.content.pages.get(&url).cloned(),
