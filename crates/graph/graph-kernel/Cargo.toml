@@ -24,14 +24,15 @@ store = []
 # Navigation lineage over the substrate: stemma (the promoted, MIT/Apache lineage
 # crate) is the kernel's visit-history authority, replacing the retired in-tree MPL
 # node-lineage copy (all consumers migrated). stemma is node-lineage promoted
-# near-verbatim (GraphMemory -> Stemma), so the nav model is unchanged. Path dep to
-# the sibling repo during development.
-stemma = { path = "../../../../stemma" }
+# near-verbatim (GraphMemory -> Stemma), so the nav model is unchanged. Git
+# sibling; local checkout via the gitignored `.cargo/config.toml` patch.
+stemma = { git = "https://github.com/mark-ik/stemma.git", branch = "main" }
 # The portable field-primitive definitions (Field / Coupling / the scalar & vector
 # field AST / EdgePath) that the kernel's field store and quint both consume.
 # Promoted out of this kernel so the third graph primitive sits at the portable tier
-# beside chartulary's nodes/edges. Path dep to the sibling repo.
-numen = { path = "../../../../numen" }
+# beside chartulary's nodes/edges. Git sibling; local checkout via the
+# gitignored `.cargo/config.toml` patch.
+numen = { git = "https://github.com/mark-ik/numen.git", branch = "main" }
 forme.workspace = true
 crossbeam-channel = "0.5"
 futures-util = "0.3"
@@ -53,14 +54,16 @@ accesskit = { workspace = true, features = ["serde"] }
 strum = { version = "0.28", features = ["derive"] }
 # The generic container-graph substrate. mere's Node implements its capability
 # traits (Identified / Addressed / Labeled), the first step of the graph re-base
-# onto chartulary. Path dep to the sibling repo during development.
-chartulary = { path = "../../../../chartulary" }
+# onto chartulary. Git sibling; local checkout via the gitignored
+# `.cargo/config.toml` patch.
+chartulary = { git = "https://github.com/mark-ik/chartulary.git", branch = "main" }
 # The append-only log primitive (codicil) and its store (muniment): mere's
 # captured-delta stream persists as a codicil, the edit spine over the substrate
 # (see graph/journal.rs). Both already build in the tree via chartulary; these are
-# direct deps so the journal can name them. Path deps to the sibling repos.
-codicil = { path = "../../../../codicil" }
-muniment = { path = "../../../../muniment" }
+# direct deps so the journal can name them. Git siblings; local checkouts via
+# the gitignored `.cargo/config.toml` patches.
+codicil = { git = "https://github.com/mark-ik/codicil.git", branch = "main" }
+muniment = { git = "https://github.com/mark-ik/muniment.git", branch = "main" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 uuid = { version = "1", features = ["serde", "v4"] }

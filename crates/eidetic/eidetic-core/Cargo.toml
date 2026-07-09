@@ -23,8 +23,9 @@ serde_json = "1.0"
 # projects stemma's live visit authority into durable BrowsingTrace engrams.
 # Optional so wasm/OPFS consumers that only read memory skip the lineage crate.
 # stemma is the promoted (MIT/Apache) successor to the retired in-tree
-# node-lineage. Path dep to the sibling repo during development.
-stemma = { path = "../../../../stemma", optional = true }
+# node-lineage. Git sibling; local checkout via the gitignored
+# `.cargo/config.toml` patch.
+stemma = { git = "https://github.com/mark-ik/stemma.git", branch = "main", optional = true }
 
 [features]
 lineage = ["dep:stemma"]

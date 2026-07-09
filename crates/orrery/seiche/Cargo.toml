@@ -24,7 +24,7 @@ petgraph = "0.8"
 # no rhai/burn) is the portable field source, seiche the integrator. numen supplies
 # the field-definition types the CouplingForce carries.
 quint.workspace = true
-numen = { path = "../../../../numen" }
+numen = { git = "https://github.com/mark-ik/numen.git", branch = "main" }
 euclid = "0.22"
 tracing = "0.1"
 # kernel is OPTIONAL, behind `kernel-bridge`: only the convenience wrappers that read
