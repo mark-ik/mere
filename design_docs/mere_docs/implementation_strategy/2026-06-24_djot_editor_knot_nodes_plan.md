@@ -1264,3 +1264,27 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   (`knot_editor_preview` + a header toggle; preview drops the opaque overlay to a compact
   strip so the live tile shows through). Still open in the Phase 2 tail: Ctrl+E keybinding
   for the toggle, undo/redo grouping, autosave/history, and `.md`/`.txt` saveback.
+- **2026-07-09, Phase 2 tail complete.** Landed and committed the remaining Phase 2
+  editor items, each with regression coverage (242 meerkat bin tests green): (1)
+  **Ctrl+E** toggles source/preview (keyboard.rs, gated to an open bound note). (2)
+  **Undo/redo** — `Chrome` snapshot stacks (`knot_undo`/`knot_redo`, whole-`TextInput`
+  clones so text+caret+selection restore), coalescing a typing run into one entry
+  (`knot_coalescing`), driven by a dedicated `on_knot_editor_key` handler routed on
+  `FocusedField::KnotEditor`; Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z, history reset on
+  open/close, capped at 200. (3) **Autosave-on-close** — the × button + the editor
+  toggle route close through the host (`request_knot_editor_close` + a
+  `knot_close_after_save` flag), so the host writes `Node.body` before clearing;
+  closing never drops edits. The save path factored into a shared
+  `write_focused_knot_body`. (4) **Format-aware editing** — the editor is no longer
+  knot://-only: `WindowCtx::note_edit_format` derives a note's content-type from
+  scheme / mime hint / a body sniff (knot / markdown / plain), and the open gate, the
+  save (mime + live cache preserved, not forced to knot), and the live-preview lane all
+  key off it, so a .md / .txt note opens, saves back as itself, and previews in its own
+  format. Since the buffer is raw source, format-aware = content-type preservation, no
+  conversion. New tests: `knot_editor_close_autosaves_the_note_body`,
+  `knot_editor_edits_a_markdown_note_and_saves_as_markdown`. Also this session (see the
+  illume plan point 8): the highlight bridge moved into serval's `highlight` feature and
+  illume was extracted to its own repo. **Remaining editor work is Phase 3** (container-
+  tree folds / outline wiring into the host, injection highlight in the live field, and
+  the authoring affordances: smart lists, auto-pairs, slash menu, `[[` completion) and
+  the query-block / agent-node wave.
