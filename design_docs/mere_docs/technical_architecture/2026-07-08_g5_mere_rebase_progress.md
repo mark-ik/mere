@@ -124,20 +124,36 @@ all apply to mere's node the moment mere adopts `chartulary::Graph`.
   (288 kernel tests pass). eidetic's `browsing::lineage` bridge migrated the same way,
   so `node-lineage` has zero consumers and the crate is removed from the workspace.
 
+## Content-bearing nodes (this step)
+
+mere's `Node` now implements `ContentBearing`, completing the node capability set
+(Identified + Addressed + Labeled + ContentBearing; the edge has Predicated +
+Classified). `content()` is the blake3 `muniment::Hash` of the node's inline authored
+body (`Node::body`, a knot note's djot), the address that body would have in a muniment
+`BlobStore`, computed with `Hash::of` (sync, no store needed). So a node names its
+content's identity while the bytes still live inline. `media_type()` is the node's
+`mime_hint`. A bare web tab with no authored body has no graph-owned content (its
+fetched page lives in mere's cache, off the node). 289 kernel tests pass. This unlocks
+scholia projecting content identity and the cross-vault content-addressing story.
+
 ## What remains
 
-1. **Content over muniment.** Implement `ContentBearing` on `Node` by moving node
-   content behind a `muniment` blob (`muniment::Hash`), retiring the bespoke cache
-   path for stored bodies.
-2. **Analytics retarget.** Point aether (fields) and signals (centrality,
-   community) at the generic graph, at which point they become promotable, closing
-   the loop opened by the 2026-07-08 survey.
-3. **Production journal persistence (follow-on).** A persisted tail journal
-   alongside the `GraphSnapshot` checkpoint for crash recovery, once codicil grows
-   append-friendly persistence. A deliberate design, not a rush.
-4. **Done-condition.** meerkat runs on the substrate graph with no behaviour change.
-   The graph swap already meets this at the kernel level (288 tests unchanged); the
-   remaining steps deepen the adoption (content, analytics) rather than gate it.
+1. **Content bytes out-of-line (follow-on).** Move `Node::body` bytes into an actual
+   `muniment::BlobStore` (store only the `Hash` on the node) and content-address fetched
+   web pages that live in mere's cache. `ContentBearing` already names the identity; this
+   moves the storage. A data-model migration, its own deliberate step.
+2. **Analytics retarget.** Point aether (fields) and signals (centrality, community) at
+   the generic `chartulary::Graph<N, E>` rather than mere's concrete `Graph`, at which
+   point they become promotable, closing the loop opened by the 2026-07-08 survey. A real
+   genericization (each structural algorithm re-bounded on the substrate's node/edge
+   capabilities), possibly growing chartulary's read surface.
+3. **Production journal persistence (follow-on).** A persisted tail journal alongside the
+   `GraphSnapshot` checkpoint for crash recovery, once codicil grows append-friendly
+   persistence. A deliberate design, not a rush.
+4. **Done-condition.** meerkat runs on the substrate graph with no behaviour change. The
+   graph swap already meets this at the kernel level (289 tests unchanged); the remaining
+   steps deepen the adoption rather than gate it.
 
-The graph swap (the big invasive middle), the edit spine, host adoption, and the
-lineage migration are done. The remaining steps are additive deepenings.
+The graph swap (the big invasive middle), the edit spine, host adoption, the lineage
+migration, and content-bearing nodes are done. The remaining steps are additive
+deepenings.

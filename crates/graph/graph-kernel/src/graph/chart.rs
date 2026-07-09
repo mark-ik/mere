@@ -12,11 +12,17 @@
 //! browser-runtime facets (favicon, viewer routing, session restore, lifecycle)
 //! stay on `Node` and simply do not participate in the generic capabilities.
 //!
-//! `ContentBearing` is deliberately not implemented yet: mere addresses content
-//! through its own cache, not a muniment blob, so adopting `muniment::Hash` for
-//! node content is a later re-base step.
+//! `ContentBearing` reports the node's inline authored body (`Node::body`, a knot
+//! note's djot) as content: `content()` is the blake3 `muniment::Hash` of the body
+//! bytes, the address that body would have in a muniment `BlobStore`. So the node
+//! names its content's identity even though the bytes still live inline. Moving the
+//! bytes out-of-line into an actual blob store (and content-addressing fetched web
+//! pages, which live in mere's own cache, not on the node) is the follow-on step.
 
-use chartulary::{Address, Addressed, Classified, Identified, Labeled, Predicated, RelationClass};
+use chartulary::{
+    Address, Addressed, Classified, ContentBearing, Identified, Labeled, Predicated, RelationClass,
+};
+use muniment::Hash;
 use uuid::Uuid;
 
 use super::edge_data::predicate_iri;
@@ -66,6 +72,21 @@ impl Labeled for Node {
     }
 }
 
+impl ContentBearing for Node {
+    fn content(&self) -> Option<Hash> {
+        // The inline authored body, content-addressed. This is the hash a muniment
+        // `BlobStore::put` would return for the same bytes, so the node names its
+        // content's identity; storing the bytes out-of-line is the follow-on step.
+        // A node with no body (a bare web tab whose content lives in the cache) has
+        // no graph-owned content.
+        self.body.as_ref().map(|body| Hash::of(body.as_bytes()))
+    }
+
+    fn media_type(&self) -> Option<&str> {
+        self.mime_hint.as_deref()
+    }
+}
+
 /// The single predicate IRI a semantic edge projects, or `None` if the edge
 /// carries no semantic relation (an experience-layer edge: Traversal, Containment,
 /// Arrangement, Imported). Precedence matches linked-data: an explicit statement or
@@ -110,7 +131,7 @@ mod tests {
     fn web_node_satisfies_the_container_capabilities() {
         // A compile-time proof that mere's Node implements the substrate's node
         // capability traits.
-        fn assert_caps<N: Identified<Id = Uuid> + Addressed + Labeled>() {}
+        fn assert_caps<N: Identified<Id = Uuid> + Addressed + Labeled + ContentBearing>() {}
         assert_caps::<Node>();
     }
 
@@ -128,6 +149,25 @@ mod tests {
         );
         assert_eq!(Labeled::title(&node), Some("A Paper"));
         assert_eq!(Labeled::tags(&node), vec!["research".to_string()]);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn a_web_node_reports_its_body_as_content() {
+        let mut node = Node::test_stub("mere://note/x");
+        assert_eq!(
+            ContentBearing::content(&node),
+            None,
+            "no body: no graph-owned content (a bare web tab's content lives in the cache)"
+        );
+        node.body = Some("# A note".to_string());
+        node.mime_hint = Some("text/markdown".to_string());
+        assert_eq!(
+            ContentBearing::content(&node),
+            Some(Hash::of(b"# A note")),
+            "content is the body's blake3 hash, the muniment blob address"
+        );
+        assert_eq!(ContentBearing::media_type(&node), Some("text/markdown"));
     }
 
     #[test]
