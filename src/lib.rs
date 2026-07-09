@@ -14,13 +14,20 @@
 //! a callback as it is produced; [`InferenceProvider::generate`] is the
 //! provided collect-it-all wrapper.
 //!
-//! Promoted from mere's `intel/infer` seam. This founding cut is the seam plus
-//! the canned stub; the decoder, endpoint, and actor backends are the porting
-//! roadmap in `design_docs/`.
+//! Promoted from mere's `intel/infer` seam. The decoder (own burn llama-family
+//! decoder, `decoder` / `decoder-wgpu`) and the streaming actor (`actor`, on
+//! armillary threads) landed 2026-07-09; the external-endpoint backend
+//! (`endpoint`) remains the roadmap in `design_docs/`.
 
+#[cfg(feature = "actor")]
+pub mod actor;
 pub mod canned;
+#[cfg(feature = "decoder")]
+pub mod decoder;
 pub mod provider;
 
+#[cfg(feature = "actor")]
+pub use actor::{InferCommand, InferUpdate, spawn_inference_actor};
 pub use canned::CannedProvider;
 pub use provider::{
     CapabilityQuery, GenerationRequest, InferError, InferenceProvider, ModelCapability,
