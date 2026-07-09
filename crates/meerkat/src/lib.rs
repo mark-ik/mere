@@ -229,19 +229,11 @@ pub struct Chrome {
     /// read-only rendered view. `false` is the source-edit mode. Toggled by the header
     /// button / Ctrl+E. (Djot editor — Phase 2 toggle source/preview.)
     pub knot_editor_preview: bool,
-    /// Undo stack for the knot source: whole-buffer snapshots (`TextInput` is `Clone`, so
-    /// this captures text + caret + selection). A run of consecutive character inserts
-    /// coalesces into one entry ([`knot_coalescing`](Self::knot_coalescing)); deletes,
-    /// newlines, and undo/redo start a fresh group. Cleared on open/close.
-    /// (Djot editor — Phase 2 undo/redo.)
-    pub knot_undo: Vec<TextInput>,
-    /// Redo stack, filled by [`knot_undo_apply`](Self::knot_undo_apply) and cleared by
-    /// the next fresh edit (the standard undo/redo contract).
-    pub knot_redo: Vec<TextInput>,
-    /// Whether the current run of character inserts is coalescing into one undo entry, so
-    /// a burst of typing undoes as a unit. Reset by any non-insert edit, a caret move, or
-    /// undo/redo.
-    pub knot_coalescing: bool,
+    /// Undo/redo history for the knot source — the generic [`EditHistory`] serval provides
+    /// for any `TextInput` field (snapshot + coalesced typing + undo/redo). The buffer stays
+    /// [`knot_source`](Self::knot_source); this drives it. Cleared on open/close.
+    /// (Djot editor — Phase 2 undo/redo; promoted to serval.)
+    pub knot_history: xilem_serval::EditHistory,
     /// Prior selection byte-ranges for structural expand/shrink (Alt-Up / Alt-Down): each
     /// grow pushes the pre-grow range; a shrink pops back to it. Cleared by any edit or
     /// ordinary caret move, so the chain only lives across an uninterrupted Alt-arrow run.

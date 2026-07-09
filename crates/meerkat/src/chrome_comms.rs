@@ -6,10 +6,6 @@
 
 use super::*;
 
-/// Undo-history depth for the knot editor. A note is short and each entry is a
-/// whole-buffer clone, so a bounded stack keeps memory flat without limiting real use.
-const KNOT_UNDO_CAP: usize = 200;
-
 /// The byte offset of char index `ci` in `text` (the buffer end when past the last char),
 /// bridging `TextInput`'s char-index caret to its byte-offset selection setters.
 fn byte_of_char(text: &str, ci: usize) -> usize {
@@ -48,23 +44,6 @@ fn next_list_marker(marker: &str) -> String {
         "- [ ] " | "- [x] " => "- [ ] ".to_string(),
         other => other.to_string(),
     }
-}
-
-/// The closing delimiter that pairs with `open` for auto-pair wrap, or `None` if `open` is
-/// not a wrapping delimiter.
-fn pair_close(open: char) -> Option<char> {
-    Some(match open {
-        '(' => ')',
-        '[' => ']',
-        '{' => '}',
-        '"' => '"',
-        '\'' => '\'',
-        '`' => '`',
-        '*' => '*',
-        '_' => '_',
-        '~' => '~',
-        _ => return None,
-    })
 }
 
 impl Chrome {
@@ -149,11 +128,9 @@ impl Chrome {
     }
 
     /// Clear the editor's undo/redo history (on open/close, so a fresh note never
-    /// undoes into the previous one).
+    /// undoes into the previous one), plus the structural expand chain.
     fn reset_knot_history(&mut self) {
-        self.knot_undo.clear();
-        self.knot_redo.clear();
-        self.knot_coalescing = false;
+        self.knot_history.clear();
         self.knot_expand_stack.clear();
     }
 
@@ -196,15 +173,7 @@ impl Chrome {
     /// is its own undo step and ends any insert run. Any push clears the redo stack and
     /// caps the history. (Djot editor — Phase 2 undo/redo.)
     pub fn knot_edit_snapshot(&mut self, coalesce_insert: bool) {
-        if coalesce_insert && self.knot_coalescing {
-            return;
-        }
-        self.knot_undo.push(self.knot_source.clone());
-        if self.knot_undo.len() > KNOT_UNDO_CAP {
-            self.knot_undo.remove(0);
-        }
-        self.knot_redo.clear();
-        self.knot_coalescing = coalesce_insert;
+        self.knot_history.snapshot(&self.knot_source, coalesce_insert);
         // An edit invalidates the structural expand chain (the ranges no longer align).
         self.knot_expand_stack.clear();
     }
@@ -213,36 +182,20 @@ impl Chrome {
     /// the next insert starts a fresh undo group even though nothing was deleted. A caret
     /// move also breaks the structural expand chain.
     pub fn knot_break_coalesce(&mut self) {
-        self.knot_coalescing = false;
+        self.knot_history.break_coalesce();
         self.knot_expand_stack.clear();
     }
 
-    /// Undo the last edit: restore the top undo snapshot, moving the current source onto
-    /// the redo stack. Returns whether anything was undone.
+    /// Undo the last edit: restore the top undo snapshot into the source. Returns whether
+    /// anything was undone.
     pub fn knot_undo_apply(&mut self) -> bool {
-        match self.knot_undo.pop() {
-            Some(prev) => {
-                self.knot_redo
-                    .push(std::mem::replace(&mut self.knot_source, prev));
-                self.knot_coalescing = false;
-                true
-            }
-            None => false,
-        }
+        self.knot_history.undo(&mut self.knot_source)
     }
 
-    /// Redo the last undone edit: restore the top redo snapshot, moving the current
-    /// source back onto the undo stack. Returns whether anything was redone.
+    /// Redo the last undone edit: restore the top redo snapshot into the source. Returns
+    /// whether anything was redone.
     pub fn knot_redo_apply(&mut self) -> bool {
-        match self.knot_redo.pop() {
-            Some(next) => {
-                self.knot_undo
-                    .push(std::mem::replace(&mut self.knot_source, next));
-                self.knot_coalescing = false;
-                true
-            }
-            None => false,
-        }
+        self.knot_history.redo(&mut self.knot_source)
     }
 
     /// Smart list continuation on Enter: in a list item, insert a newline that keeps the
@@ -278,30 +231,12 @@ impl Chrome {
     /// whether it wrapped; `false` (no selection, or not a pair char) falls through to a
     /// normal insert. (Djot editor — Phase 3 auto-pairs.)
     pub fn wrap_selection_if_pair(&mut self, open: char) -> bool {
-        let Some(close) = pair_close(open) else {
-            return false;
-        };
-        if !self.knot_source.has_selection() {
-            return false;
+        if self.knot_source.has_selection() && xilem_serval::pair_close(open).is_some() {
+            self.knot_edit_snapshot(false);
+            xilem_serval::wrap_selection(&mut self.knot_source, open)
+        } else {
+            false
         }
-        self.knot_edit_snapshot(false);
-        let (lo, hi) = self.knot_source.selection();
-        let inner: String = self
-            .knot_source
-            .text()
-            .chars()
-            .skip(lo)
-            .take(hi - lo)
-            .collect();
-        self.knot_source
-            .insert_str(&format!("{open}{inner}{close}"));
-        // Re-select the inner text (between the new delimiters), so a repeat wrap nests.
-        let text = self.knot_source.text().to_string();
-        let start = byte_of_char(&text, lo + 1);
-        let end = byte_of_char(&text, lo + 1 + (hi - lo));
-        self.knot_source.set_caret_byte(start, false);
-        self.knot_source.set_caret_byte(end, true);
-        true
     }
 
     /// Toggle the knot editor: open a fresh note, or close it.
