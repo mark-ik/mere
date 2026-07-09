@@ -669,6 +669,9 @@ impl Shell {
             last_activity: std::time::Instant::now(),
             last_forgetting: None,
             last_snapshot_refresh: None,
+            // A scenario launch (`MEERKAT_SCENARIO=<path>`) loads here; an ordinary launch
+            // leaves this `None` and the pump is inert. (Headed automation self-drive.)
+            scenario: scenario::ScenarioRunner::from_env(),
             _kernel: armillary::KernelThread::new(),
         };
         // Bake the chrome sheet (the light/dark scheme pair at the user's

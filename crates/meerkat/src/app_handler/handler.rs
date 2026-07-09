@@ -97,6 +97,10 @@ impl ApplicationHandler for Shell {
         // Apply the cross-window commands queued during this event batch (spawn /
         // close a window), now that every per-window ctx borrow has ended. (MW3.)
         self.apply(event_loop);
+        // Advance an active automation scenario one step (after `apply`, so a spawn it
+        // queued last tick has already opened its window). Inert without a scenario.
+        // (Headed automation self-drive.)
+        self.pump_scenario(event_loop);
         // Steady-heat forgetting: a no-op check on every tick, a real pass only once
         // the app has sat idle a while. (Alembic B1 — athanor idle cadence, Path A.)
         self.maybe_run_idle_forgetting_pass();

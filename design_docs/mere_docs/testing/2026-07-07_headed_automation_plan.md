@@ -1,8 +1,10 @@
 # Meerkat automation: two subsystems, one vocabulary
 
-**Date**: 2026-07-07
-**Status**: Assessment + proposal. Some of the "what ails it" fixes landed this session
-(prompted by the Slice 3 headed check); the unification is proposed, not yet built.
+**Date**: 2026-07-07 (self-drive mode landed 2026-07-08)
+**Status**: Assessment + the unification, now built. The "what ails it" fixes landed with the
+Slice 3 headed check; the `MEERKAT_SCENARIO` self-drive mode + shared scenario vocabulary
+landed 2026-07-08 and verified headed (multi-window + settings, `RESULT ok`). Remaining: the
+chord/navigate verbs for flows outside the registry (Migration item 3).
 **Scope**: the two ways meerkat is driven under automation, what ails the headed one, and a
 scheme to let one *scenario* run either way.
 **Related**: the [meerkat one-state migration (archived)](../../archive_docs/2026-07-07_one_state_migration/2026-07-06_meerkat_one_state_migration_plan.md)
@@ -90,45 +92,70 @@ The same scenario can run **headless** (agent_harness executes each `invoke`, ev
 description, two layers — that is the unification, and it does not collapse the layers that
 genuinely differ.
 
-## Proposed: a self-driven headed scenario mode
+## Landed: the self-driven headed scenario mode
 
 The headed layer's real fragility is **OS synthetic input** (focus races, timing). The fix
 that also delivers the unification: let the app **drive itself** from a scenario file instead
-of receiving OS input.
+of receiving OS input. This shipped 2026-07-08.
 
-- **`MEERKAT_SCENARIO=<path>`** (env or arg): at boot, the shell reads a scenario of registry
-  command ids + capture markers and runs it on the event loop (each step on a frame boundary),
-  invoking the **same registry seam** `agent_invoke` uses and writing captures through the
-  existing `MEERKAT_CAPTURE_DIR` hook. No `SendKeys`, no cursor warping, no focus race — the
-  app injects its own commands and captures its own frames. Deterministic, headed, and
-  expressed in the same vocabulary as the headless harness.
-- **Scenario source of truth**: a small scenario format (or Rhai, reusing the mod-authoring
-  loop's snapshot-in/action-out shape) that both `agent_harness` (assert mode) and the headed
-  app (drive+capture mode) consume. A regression scenario is written once and gives both a
-  headless assertion and a headed screenshot.
-- **`mk-harness` shrinks to launch + capture-collection**: it launches with `MEERKAT_SCENARIO`
-  set, waits for the app to finish the scenario (a sentinel file / log line), and collects the
-  PNGs. The 130 one-off drivers become ~N scenario files; the broken boilerplate is retired.
+- **The vocabulary** (`crates/meerkat/src/scenario/mod.rs`): a line-oriented format over the
+  registry-id space plus the host verbs and harness markers a driven session needs —
+  `invoke <id>`, `theme <id>`, `spawn`, `capture <name>`, `settle [<frames>]`, `assert windows
+  <op> <n>`, `log <text>`. A trailing `@<n>` on a windowed verb targets a specific window (0 =
+  primary). Pure data + parser, unit-tested; no `Shell` dependency.
+- **`MEERKAT_SCENARIO=<path>`** at boot loads a scenario (`ScenarioRunner::from_env`); the
+  shell then runs it on the event loop, one step per `about_to_wait` tick (`pump_scenario`),
+  under `ControlFlow::Poll` so ticks progress without OS input. Each `invoke` routes through
+  the **same** registry seam the palette / menu / `agent_invoke` use
+  (`WindowCtx::scenario_invoke`, the twin of `agent_invoke_command` / `agent_invoke_context`);
+  each `capture` writes the target through the existing `MEERKAT_CAPTURE_DIR` self-capture
+  hook. No `SendKeys`, no cursor warping, no focus race. On completion the runner writes a
+  `scenario.done` sentinel (first line `RESULT ok` / `RESULT fail`, then the step log) and
+  exits.
+- **Per-window capture** is deterministic: the capture request carries an optional projection
+  index, and the self-capture hook (`maybe_dump_chrome_capture`, now passed
+  `self.view.projection_id.0`) only fires on the matching window, leaving the request in place
+  for the intended one. So `capture leaf @1` captures the spawned leaf even while the primary
+  is also rendering — verified: the leaf shot is slim chrome, the primary shot is full, not a
+  re-capture.
+- **The executors are shared** so headless and headed run the *same* step through the *same*
+  code: `Shell::scenario_invoke` / `scenario_theme` / `scenario_window_count` are always
+  compiled and drive the real host seams. The genuinely-differing layers diverge only where
+  they must — spawn needs the event loop, capture needs the GPU. A `#[cfg(test)]`
+  `run_scenario_headless` consumes the identical parsed steps and asserts state, proving the
+  claim (`scenario/runner.rs` tests).
+- **`mk-harness` shrank to launch + collect** (`Run-Scenario`): it launches with
+  `MEERKAT_SCENARIO` + `MEERKAT_CAPTURE_DIR` set, waits for the sentinel, and collects the
+  PNGs. No synthetic input in the path.
 
-Multi-window is the immediate motivator: a headed multi-window scenario (spawn, act in window
-A, assert it reflects in window B) is exactly what the Slice 3 flip wants to keep honest, and
-OS-input drivers make that especially racy across two windows — a self-driven scenario does
-not.
+Multi-window was the immediate motivator, and it verified clean: the shipped
+`scenarios/multi_window.scn` self-drives `capture primary` -> `invoke roster` (roster pane
+opens on the primary) -> `spawn` -> `assert windows == 2` (PASS, two live OS windows) ->
+`capture leaf @1` (the slim leaf), all from one `ServalMultiRunner`, no OS input, no focus
+race.
 
 ## Migration / next
 
-1. **Landed**: `mk-harness.ps1` base; the partitioned-mode capture fix; target-dir back to
-   `repos/mere/target`; the Slice 3 headed check on the new base. **Also landed 2026-07-07**:
-   the three media folders (`screenshots\` / `screenrecordings\` / `scry-shots\`) were unified
-   into `Code\testing\<repo>\{images,videos,scripts}` (repo = `mere` / `isometry` / `serval`;
+1. **Landed 2026-07-07**: `mk-harness.ps1` base; the partitioned-mode capture fix; target-dir
+   back to `repos/mere/target`; the Slice 3 headed check on the new base. The three media
+   folders (`screenshots\` / `screenrecordings\` / `scry-shots\`) were unified into
+   `Code\testing\<repo>\{images,videos,scripts}` (repo = `mere` / `isometry` / `serval`;
    `_unsorted\` = the ~700 untagged raw captures + recordings; `_archive\scripts\` = the ~138
    retired one-off drivers). `mk-harness` + `drive-s3c` moved to `testing\mere\scripts\` and
    write shots to `testing\mere\images\`; the ephemeral cruft (448 logs, the `forget-profile`
    test DB, capture working dirs, locks) was purged.
-2. **Near-term (proposed, needs sign-off)**: the `MEERKAT_SCENARIO` self-drive mode + a
-   scenario format shared with `agent_harness`; port a handful of the highest-value one-offs
-   (settings, find, multi-window) from `_archive\scripts\` to scenarios as the pattern.
-3. **Cleanup**: the orphaned `C:\t\meerkat-target` build tree can still be deleted.
+2. **Landed 2026-07-08**: the `MEERKAT_SCENARIO` self-drive mode + the shared scenario format
+   (above); the `mk-harness` `Run-Scenario` launch+collect; two seed scenarios
+   (`crates/meerkat/scenarios/multi_window.scn`, `settings.scn`), both verified headed
+   (`RESULT ok`).
+3. **Next**: port the remaining high-value one-offs (find, navigate) from `_archive\scripts\`
+   to scenarios. These need two vocabulary extensions the seed set did not: a `navigate <url>`
+   verb (the omnibar-submit path + an async settle) and a `key <chord>` verb for the flows
+   that are chords not registry commands (Ctrl+F find, the omnibar). Both are additive; the
+   registry-id core does not change.
+4. **Cleanup**: the orphaned `C:\t\meerkat-target` build tree can still be deleted.
 
-The end state: one scenario vocabulary (registry ids), two runners (headless assert / headed
-self-drive+capture), one PS base (`mk-harness`) that only launches and collects.
+The end state, now reached for the registry-id core: one scenario vocabulary (registry ids),
+two runners (headless assert / headed self-drive+capture), one PS base (`mk-harness`) that only
+launches and collects. The chord/navigate verbs (item 3) extend it to the flows outside the
+registry.

@@ -26,10 +26,9 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use p2panda_core::Topic;
 use p2panda_net::LogSync;
-use p2panda_sync::protocols::TopicLogSyncEvent;
 use tokio::task::JoinHandle;
 use tokio_stream::StreamExt;
-use transport::{GossipHandle, P2pandaTransport};
+use transport::{GossipHandle, P2pandaTransport, SyncedSpace};
 
 use crate::{CabalHandle, CabalKey, Murm, MurmError, Post, PostId, decode_post, encode_post};
 
@@ -70,6 +69,16 @@ pub struct SyncRound {
     pub items_received: u64,
 }
 
+/// The gossip live lane's own counters (posts received + last activity), merged
+/// with the shared LogSync drain's [`transport::SyncStatus`] in
+/// [`SyncedCabal::sync_status`]. The LogSync side has no notion of gossip posts,
+/// so murm tracks them here.
+#[derive(Default)]
+struct GossipCounters {
+    posts_received: u64,
+    last_activity_ms: Option<u64>,
+}
+
 impl Murm<P2pandaTransport> {
     /// Open a cabal and join its gossip overlay for live sync.
     ///
@@ -84,17 +93,17 @@ impl Murm<P2pandaTransport> {
     pub async fn subscribe_cabal(&self, cabal_key: &CabalKey) -> Result<SyncedCabal, MurmError> {
         let handle = self.open_cabal(cabal_key)?;
         let cabal_id = *handle.id().as_bytes();
-        let status = Arc::new(Mutex::new(SyncStatus::default()));
 
         // ── Live lane: the cabal's gossip overlay (topic = cabal_id) ──
         //
         // Background task ingests posts peers broadcast. `ingest_post` verifies
         // the signature, the self-describing cabal id, and the per-author log
         // rule, and is idempotent — duplicate, foreign, or malformed posts are
-        // rejected and dropped. Successful ingests bump the sync status.
+        // rejected and dropped. Successful ingests bump the gossip counters.
         let gossip = self.transport().subscribe(cabal_id).await?;
         let engine = Arc::clone(self.cable());
-        let gossip_status = Arc::clone(&status);
+        let gossip_counters = Arc::new(Mutex::new(GossipCounters::default()));
+        let task_counters = Arc::clone(&gossip_counters);
         let mut received = gossip.subscribe();
         let gossip_task = tokio::spawn(async move {
             while let Some(item) = received.next().await {
@@ -103,21 +112,24 @@ impl Murm<P2pandaTransport> {
                     continue;
                 };
                 if engine.ingest_post(&cabal_id, post).is_ok() {
-                    let mut s = gossip_status.lock().unwrap();
-                    s.posts_received += 1;
-                    s.last_activity_ms = Some(now_ms());
+                    let mut c = task_counters.lock().unwrap();
+                    c.posts_received += 1;
+                    c.last_activity_ms = Some(now_ms());
                 }
             }
         });
 
         // ── Offline catch-up lane: a LogSync (RBSR) session over the cabal's
-        // redb store ──
+        // redb store, drained by the shared [`SyncedSpace`] ──
         //
-        // Reconciles operations missed while a peer was away; each received
-        // operation is ingested (idempotent with the gossip lane) and recorded in
-        // the sync status. Only spawned when the transport has a gossip overlay,
-        // which LogSync rides for peer-sampling. The same parts power `resync`.
-        let logsync_task = match self.transport().sync_parts() {
+        // Reconciles operations missed while a peer was away; the injected
+        // `accept` closure ingests each received operation (idempotent with the
+        // gossip lane, so a post arriving on both lands once). Only built when
+        // the transport has a gossip overlay, which LogSync rides for
+        // peer-sampling. murm keeps the `LogSync` session + its `SyncHandle`
+        // alive here purely for liveness — it publishes on the gossip lane, not
+        // the handle — so they are type-erased into a keepalive box.
+        let (space, keepalive) = match self.transport().sync_parts() {
             Some((endpoint, gossip_actor)) => {
                 let store = self
                     .cable()
@@ -131,52 +143,27 @@ impl Murm<P2pandaTransport> {
                     .stream(Topic::from(cabal_id), true)
                     .await
                     .map_err(|e| MurmError::Backend(format!("logsync stream: {e}")))?;
-                let mut sub = sync_handle
+                let sub = sync_handle
                     .subscribe()
                     .await
                     .map_err(|e| MurmError::Backend(format!("logsync subscribe: {e}")))?;
-                let engine = Arc::clone(self.cable());
-                let logsync_status = Arc::clone(&status);
-                Some(tokio::spawn(async move {
-                    // Hold the session handles for the task's lifetime; dropping
-                    // them ends the LogSync session.
-                    let _log_sync = log_sync;
-                    let _sync_handle = sync_handle;
-                    while let Some(item) = sub.next().await {
-                        let Ok(from_sync) = item else { continue };
-                        match from_sync.event {
-                            TopicLogSyncEvent::SyncStarted { .. } => {
-                                let mut s = logsync_status.lock().unwrap();
-                                s.syncing = true;
-                                s.last_activity_ms = Some(now_ms());
-                            }
-                            TopicLogSyncEvent::OperationReceived { operation, .. } => {
-                                if engine.ingest_operation(&cabal_id, &operation).is_ok() {
-                                    let mut s = logsync_status.lock().unwrap();
-                                    s.ops_received += 1;
-                                    s.last_activity_ms = Some(now_ms());
-                                }
-                            }
-                            TopicLogSyncEvent::SyncFinished { .. } => {
-                                let mut s = logsync_status.lock().unwrap();
-                                s.syncing = false;
-                                s.sync_rounds += 1;
-                                s.last_activity_ms = Some(now_ms());
-                            }
-                            _ => {}
-                        }
-                    }
-                }))
+                let accept_engine = Arc::clone(self.cable());
+                let space = SyncedSpace::drive(sub, move |op| {
+                    std::future::ready(accept_engine.ingest_operation(&cabal_id, &op).is_ok())
+                });
+                let keepalive: Box<dyn std::any::Any + Send> = Box::new((log_sync, sync_handle));
+                (Some(space), Some(keepalive))
             }
-            None => None,
+            None => (None, None),
         };
 
         Ok(SyncedCabal {
             handle,
             gossip,
             gossip_task,
-            logsync_task,
-            status,
+            gossip_counters,
+            space,
+            _logsync_keepalive: keepalive,
         })
     }
 }
@@ -195,13 +182,17 @@ pub struct SyncedCabal {
     gossip: GossipHandle,
     /// Live lane: ingests posts peers broadcast over the gossip overlay.
     gossip_task: JoinHandle<()>,
-    /// Offline-catch-up lane: drains operations a LogSync session reconciles.
-    /// `None` if the transport has no gossip overlay (LogSync needs it).
-    logsync_task: Option<JoinHandle<()>>,
-    /// Live sync activity, both lanes write here; read via [`sync_status`].
-    ///
-    /// [`sync_status`]: SyncedCabal::sync_status
-    status: Arc<Mutex<SyncStatus>>,
+    /// Live-lane counters (`posts_received` + last activity), merged with the
+    /// LogSync side in [`sync_status`](Self::sync_status).
+    gossip_counters: Arc<Mutex<GossipCounters>>,
+    /// Offline-catch-up lane: the shared LogSync drain. `None` if the transport
+    /// has no gossip overlay (LogSync needs it). Declared before the keepalive
+    /// so the drain task aborts before the session ends on drop.
+    space: Option<SyncedSpace>,
+    /// Holds the `LogSync` session + `SyncHandle` alive for the drain's lifetime
+    /// (murm publishes on the gossip lane, not the handle). Type-erased to avoid
+    /// naming the cabal store / extension here; dropping it ends the session.
+    _logsync_keepalive: Option<Box<dyn std::any::Any + Send>>,
 }
 
 impl SyncedCabal {
@@ -240,8 +231,27 @@ impl SyncedCabal {
     /// A snapshot of this cabal's sync activity, for a real sync indicator:
     /// whether a round is in progress, rounds finished, operations caught up via
     /// LogSync, posts received live over gossip, and when activity last happened.
+    /// Merges the shared LogSync drain's status (rounds, ops caught up, whether a
+    /// round is in progress) with the gossip lane's `posts_received`, taking the
+    /// most recent activity timestamp across both.
     pub fn sync_status(&self) -> SyncStatus {
-        self.status.lock().unwrap().clone()
+        let logsync = self
+            .space
+            .as_ref()
+            .map(|s| s.sync_status())
+            .unwrap_or_default();
+        let gossip = self.gossip_counters.lock().unwrap();
+        let last_activity_ms = match (logsync.last_activity_ms, gossip.last_activity_ms) {
+            (Some(a), Some(b)) => Some(a.max(b)),
+            (a, b) => a.or(b),
+        };
+        SyncStatus {
+            syncing: logsync.syncing,
+            sync_rounds: logsync.sync_rounds,
+            ops_received: logsync.ops_received,
+            posts_received: gossip.posts_received,
+            last_activity_ms,
+        }
     }
 
     /// Run a manual "sync now" checkpoint and report what arrived.
@@ -254,8 +264,9 @@ impl SyncedCabal {
     /// quiet, already-synced cabal reports `0` quickly rather than spinning.
     pub async fn resync(&self) -> Result<SyncRound, MurmError> {
         let received = || {
-            let s = self.status.lock().unwrap();
-            s.ops_received + s.posts_received
+            let ops = self.space.as_ref().map(|s| s.ops_received()).unwrap_or(0);
+            let posts = self.gossip_counters.lock().unwrap().posts_received;
+            ops + posts
         };
         let start = received();
         let mut last = start;
@@ -282,11 +293,9 @@ impl SyncedCabal {
 
 impl Drop for SyncedCabal {
     fn drop(&mut self) {
-        // Stop both sync lanes when the synced cabal goes away.
+        // Stop the gossip lane; the LogSync drain task and its session stop via
+        // `space` and `_logsync_keepalive`'s own drops (in field order).
         self.gossip_task.abort();
-        if let Some(task) = &self.logsync_task {
-            task.abort();
-        }
     }
 }
 

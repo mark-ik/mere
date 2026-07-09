@@ -25,12 +25,19 @@ fn capture_dir() -> Option<&'static PathBuf> {
 /// instead, with no error). This reads the same already-rasterized texture the frame just
 /// composited from (the pattern `read_texture_rgba` already proves out for the snapshot
 /// card), so it needs no new render path and is exactly as correct as the shell document
-/// itself. Polls for a `request.txt` (the target PNG path) in `MEERKAT_CAPTURE_DIR` each
-/// frame — a single `Path::exists` stat when unset, so idle cost is negligible; only a
-/// driver script that wrote a request pays the readback + encode cost. Captures the chrome
-/// layer only (toolbar/shellbar/roster/outline/minimap-nodes/recent/list-panes/settings —
-/// everything folded into the shell document); the orrery canvas and any
-/// `<external-texture>` backdrop (the gloss minimap's edges/rings) composite separately
+/// itself. Polls for a `request.txt` in `MEERKAT_CAPTURE_DIR` each frame — a single
+/// `Path::exists` stat when unset, so idle cost is negligible; only a driver script (or the
+/// self-drive scenario runner) that wrote a request pays the readback + encode cost.
+///
+/// The request's first line is the target PNG path. An optional second line is a target
+/// **projection index**: when present, only the window whose `projection` matches captures,
+/// and the others leave the request in place for it (so a scenario can capture a specific
+/// leaf even while the primary is also rendering). The legacy single-line form (path only)
+/// captures on whichever window renders first, unchanged.
+///
+/// Captures the chrome layer only (toolbar/shellbar/roster/outline/minimap-nodes/recent/
+/// list-panes/settings — everything folded into the shell document); the orrery canvas and
+/// any `<external-texture>` backdrop (the gloss minimap's edges/rings) composite separately
 /// onto the swap-chain target and are not part of this texture.
 pub(crate) fn maybe_dump_chrome_capture(
     device: &wgpu::Device,
@@ -38,16 +45,25 @@ pub(crate) fn maybe_dump_chrome_capture(
     tex: &wgpu::Texture,
     w: u32,
     h: u32,
+    projection: usize,
 ) {
     let Some(dir) = capture_dir() else {
         return;
     };
     let request = dir.join("request.txt");
-    let Ok(target) = std::fs::read_to_string(&request) else {
+    let Ok(body) = std::fs::read_to_string(&request) else {
         return;
     };
-    let target = target.trim();
+    let mut lines = body.lines();
+    let target = lines.next().unwrap_or("").trim();
     if target.is_empty() {
+        return;
+    }
+    // A second line names the window this capture is for; a different window leaves the
+    // request untouched so the intended one consumes it.
+    if let Some(want) = lines.next().and_then(|s| s.trim().parse::<usize>().ok())
+        && want != projection
+    {
         return;
     }
     let rgba = read_texture_rgba(device, queue, tex, w, h);

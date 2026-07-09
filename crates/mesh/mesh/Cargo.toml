@@ -25,23 +25,26 @@ thiserror = "1"
 # (moothold went `default-features = false` because its ops already lived in
 # redb; the mesh has no prior store, so the sqlite backend IS the store.)
 p2panda-store = "0.6.1"
-# The sync lane (`sync::SyncedMesh`): LogSync over the store, mirroring
-# tessera's `sync.rs`. `p2panda-net` is the protocol (its `Endpoint`/`Gossip`
-# come from the host's transport via `sync_parts`, keeping the lib decoupled
-# from the `transport` crate), `p2panda-sync` its event types; `rt` runs the
-# drain task, `time` bounds the manual `resync` checkpoint, `tokio-stream`
-# reads the subscription.
+# The sync lane (`sync::SyncedMesh`): LogSync over the store. `p2panda-net`
+# is the protocol — its `Endpoint`/`Gossip` still come injected from the host
+# (endpoint-decoupled), so the lib never builds a `P2pandaTransport`.
+# `p2panda-sync` supplies the event types; `rt` runs the session, `time`
+# bounds the manual `resync`.
 p2panda-net = "0.6.1"
 p2panda-sync = "0.6.1"
 tokio = { version = "1", features = ["rt", "time"] }
-tokio-stream = "0.1"
+# `transport::SyncedSpace` is the shared LogSync drain (the R1 dedup: one drain
+# loop + sync-status + resync, murm and mesh both consume it). This makes
+# `transport` a normal dep, reversing the earlier "lib decoupled from transport"
+# stance — deliberate under the sibling posture, where mesh is host-composed glue
+# consuming murm's p2panda-net home. The lib is still endpoint-decoupled (takes
+# raw `Endpoint`/`Gossip`); it just no longer re-rolls the drain.
+transport = { workspace = true }
 
 [dev-dependencies]
-# `transport` (dev-only) builds the real p2panda-net peers for the two-peer
-# convergence test and the `mesh-peer` example bin — the library itself takes
-# raw `Endpoint`/`Gossip`. `macros` + `rt-multi-thread` run the async tests;
-# `io-std`/`io-util` read pasted peer tickets in the example; tempfile backs
-# the file-store reopen test.
-transport = { workspace = true }
+# `transport` (now a normal dep, above) builds the real p2panda-net peers for
+# the two-peer convergence test and the `mesh-peer` example bin. `macros` +
+# `rt-multi-thread` run the async tests; `io-std`/`io-util` read pasted peer
+# tickets in the example; tempfile backs the file-store reopen test.
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time", "io-std", "io-util"] }
 tempfile = "3"

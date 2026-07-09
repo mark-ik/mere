@@ -203,7 +203,14 @@ impl WindowCtx<'_> {
             .as_ref()
             .or_else(|| self.view.chrome_base_tex.as_ref().map(|t| &t.tex));
         if let Some(tex) = capture_tex {
-            maybe_dump_chrome_capture(core.device(), core.queue(), tex, w, h);
+            maybe_dump_chrome_capture(
+                core.device(),
+                core.queue(),
+                tex,
+                w,
+                h,
+                self.view.projection_id.0,
+            );
         }
         // The orrery paints its own opaque backdrop, but clear to the same dark
         // tone so a resize frame cannot flash white before the backdrop lands.

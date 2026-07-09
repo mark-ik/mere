@@ -135,6 +135,10 @@ mod roster_view;
 mod roster_view_graphlets;
 mod roster_view_links;
 mod roster_view_parts;
+/// The scenario automation subsystem: one registry-id vocabulary both the headless
+/// agent path and the headed self-drive consume. Always compiled; inert unless
+/// `MEERKAT_SCENARIO` is set (like the `MEERKAT_CAPTURE_DIR` self-capture hook).
+mod scenario;
 mod scene_settings;
 mod settings_lane;
 mod settings_node;
@@ -297,6 +301,11 @@ struct Shell {
     /// passes share the same idle signal (`last_activity`) but are otherwise
     /// unrelated verbs. (Node/card summoning design, §5 item 4.)
     last_snapshot_refresh: Option<Instant>,
+    /// The active automation scenario, or `None` for an ordinary interactive launch.
+    /// Built at boot from `MEERKAT_SCENARIO`; `pump_scenario` advances it one step per
+    /// `about_to_wait` tick, self-driving the registry seam and self-capturing frames,
+    /// then exits. (Headed automation: the self-driven scenario mode.)
+    scenario: Option<scenario::ScenarioRunner>,
     /// Marks this struct as the kernel-thread context: `!Send` by construction
     /// (armillary's typed boundary), so kernel authority cannot be moved onto an
     /// actor thread — the attempt is a compile error, not a review catch.

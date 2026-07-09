@@ -5,27 +5,24 @@
 //! Mesh sync over LogSync — the personal space's job log, replicated.
 //!
 //! [`SyncedMesh`] runs the offline-catch-up + live lane for one mesh's job
-//! log, mirroring tessera's `SyncedMoot`: a `LogSync` (RBSR) session over the
-//! [`MeshStore`], reconciling operations a device missed while away and
-//! draining each received operation into the store (verified + idempotent).
-//! Where the tessera session only *receives* (scores are read-side), a mesh
-//! peer also *speaks*: [`author`](SyncedMesh::author) signs an event at the
-//! device's next log position, persists it, and pushes it onto the live
-//! gossip lane so connected peers see it now — RBSR covers whoever was away.
+//! log: a `LogSync` (RBSR) session over the [`MeshStore`], reconciling
+//! operations a device missed while away and draining each received operation
+//! into the store (verified + idempotent). Where a receive-only consumer just
+//! folds, a mesh peer also *speaks*: [`author`](SyncedMesh::author) signs an
+//! event at the device's next log position, persists it, and pushes it onto
+//! the live lane so connected peers see it now — RBSR covers whoever was away.
 //!
-//! It is **decoupled from the host transport**: `join` takes the raw
-//! p2panda-net [`Endpoint`] + [`Gossip`] (the host pulls them from its
-//! `P2pandaTransport` via `sync_parts`). The mesh id is the LogSync topic
-//! (and the operation's signed addressing extension), so a session syncs
-//! exactly that mesh's log.
+//! The drain half (the loop, the [`SyncStatus`] counters, `resync`, the
+//! task lifetime) is [`transport::SyncedSpace`], shared with murm's cabal
+//! sync. This module keeps only the mesh-specific parts: building the session
+//! over the [`MeshStore`], the `accept` closure (verify + addressed-mesh guard
+//! + async insert), the authoring path, and the [`JobBoard`] fold.
 //!
-//! [`board`](SyncedMesh::board) folds the synced store into the
-//! [`JobBoard`] every peer agrees on; [`sync_status`](SyncedMesh::sync_status)
-//! is real (non-placebo) feedback: rounds finished, operations caught up,
-//! last activity.
-
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+//! It is **endpoint-decoupled**: `join` takes the raw p2panda-net [`Endpoint`]
+//! + [`Gossip`] (the host pulls them from its `P2pandaTransport` via
+//! `sync_parts`), so the lib never builds a transport. The mesh id is the
+//! LogSync topic (and the operation's signed addressing extension), so a
+//! session syncs exactly that mesh's log.
 
 use identity::Ed25519Keypair;
 use p2panda_core::{Operation, SigningKey, Topic};
@@ -33,25 +30,20 @@ use p2panda_net::sync::SyncHandle;
 use p2panda_net::{Endpoint, Gossip, LogSync};
 use p2panda_store::SqliteStore;
 use p2panda_sync::protocols::TopicLogSyncEvent;
-use tokio::task::JoinHandle;
-use tokio_stream::StreamExt;
+use transport::SyncedSpace;
 
 use crate::board::JobBoard;
 use crate::store::{MeshStore, MeshStoreError};
 use crate::wire::{MeshEvent, MeshExt, to_operation, verify};
 
+// The shared drain's status + checkpoint types are re-exported so the mesh
+// public surface (`mesh::SyncStatus` / `mesh::SyncRound`) stays stable.
+pub use transport::{SyncRound, SyncStatus};
+
 /// The mesh's LogSync session type: the SQLite store, one log per author per
 /// mesh (the log id is the mesh id), mesh extensions on every operation.
 type MeshLogSync = LogSync<SqliteStore, [u8; 32], MeshExt>;
 type MeshSyncHandle = SyncHandle<Operation<MeshExt>, TopicLogSyncEvent<MeshExt>>;
-
-/// Unix-epoch milliseconds, for stamping the last sync activity.
-fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
-}
 
 /// A mesh sync failure (LogSync session setup, publish, or the store).
 #[derive(Debug, thiserror::Error)]
@@ -62,48 +54,22 @@ pub enum MeshSyncError {
     Store(#[from] MeshStoreError),
 }
 
-/// A snapshot of a mesh's sync activity, for a real sync indicator.
-///
-/// Counters accumulate over the mesh's subscription; read a snapshot with
-/// [`SyncedMesh::sync_status`].
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct SyncStatus {
-    /// A LogSync reconciliation round is currently in progress.
-    pub syncing: bool,
-    /// LogSync rounds that have finished (a peer's catch-up completing).
-    pub sync_rounds: u64,
-    /// Mesh operations received over the session (catch-up and live alike).
-    pub ops_received: u64,
-    /// Unix-epoch milliseconds of the most recent sync activity, or `None`
-    /// if nothing has arrived yet.
-    pub last_activity_ms: Option<u64>,
-}
-
-/// The result of a manual [`SyncedMesh::resync`] checkpoint.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct SyncRound {
-    /// New operations that landed during the checkpoint window. `0` means
-    /// already up to date.
-    pub items_received: u64,
-}
-
 /// A device joined to a mesh's LogSync session.
 ///
-/// Holds the store, the live publish lane, and a background task draining the
-/// session into the store. Dropping it ends the session and stops the task.
+/// Holds the store, the live publish lane, the session (kept alive), and the
+/// shared [`SyncedSpace`] draining reconciled operations into the store.
+/// Dropping it stops the drain and ends the session.
 pub struct SyncedMesh {
     store: MeshStore,
     mesh_id: [u8; 32],
-    /// Keeps the session actor alive; dropped with the struct.
-    _log_sync: MeshLogSync,
+    /// The shared LogSync drain: reconciled operations flow through the
+    /// `accept` closure below into the store. Dropped first (aborts the task).
+    space: SyncedSpace,
     /// The live lane: newly authored operations are pushed here so connected
     /// peers receive them without waiting for a reconciliation round.
     handle: MeshSyncHandle,
-    /// Drains operations the session reconciles (or gossips) into the store.
-    logsync_task: JoinHandle<()>,
-    /// Live sync activity, written by the drain task; read via
-    /// [`sync_status`](Self::sync_status).
-    status: Arc<Mutex<SyncStatus>>,
+    /// Keeps the session actor alive; dropped with the struct (ends the session).
+    _log_sync: MeshLogSync,
 }
 
 impl SyncedMesh {
@@ -120,8 +86,6 @@ impl SyncedMesh {
         store: MeshStore,
         mesh_id: [u8; 32],
     ) -> Result<Self, MeshSyncError> {
-        let status = Arc::new(Mutex::new(SyncStatus::default()));
-
         let log_sync = MeshLogSync::builder(store.sqlite(), endpoint, gossip)
             .spawn()
             .await
@@ -130,55 +94,31 @@ impl SyncedMesh {
             .stream(Topic::from(mesh_id), true)
             .await
             .map_err(|e| MeshSyncError::Backend(format!("logsync stream: {e}")))?;
-        let mut sub = handle
+        let sub = handle
             .subscribe()
             .await
             .map_err(|e| MeshSyncError::Backend(format!("logsync subscribe: {e}")))?;
 
-        let task_store = store.clone();
-        let task_status = Arc::clone(&status);
-        let logsync_task = tokio::spawn(async move {
-            while let Some(item) = sub.next().await {
-                let Ok(from_sync) = item else { continue };
-                match from_sync.event {
-                    TopicLogSyncEvent::SyncStarted { .. } => {
-                        let mut s = task_status.lock().unwrap();
-                        s.syncing = true;
-                        s.last_activity_ms = Some(now_ms());
-                    }
-                    TopicLogSyncEvent::OperationReceived { operation, .. } => {
-                        let op = *operation;
-                        // Verify the signature and the addressed mesh
-                        // (defence in depth behind the protocol's header
-                        // validation) before folding it in; count only ops
-                        // that verify and are new.
-                        if verify(&op)
-                            && op.header.extensions.mesh_id == mesh_id
-                            && matches!(task_store.insert(&op).await, Ok(true))
-                        {
-                            let mut s = task_status.lock().unwrap();
-                            s.ops_received += 1;
-                            s.last_activity_ms = Some(now_ms());
-                        }
-                    }
-                    TopicLogSyncEvent::SyncFinished { .. } => {
-                        let mut s = task_status.lock().unwrap();
-                        s.syncing = false;
-                        s.sync_rounds += 1;
-                        s.last_activity_ms = Some(now_ms());
-                    }
-                    _ => {}
-                }
+        // Drain each reconciled op into the store: verify the signature and the
+        // addressed mesh (defence in depth behind the protocol's header
+        // validation), then insert (idempotent on the hash). `accept` counts an
+        // op only when it verifies and is new.
+        let accept_store = store.clone();
+        let space = SyncedSpace::drive(sub, move |op: Operation<MeshExt>| {
+            let store = accept_store.clone();
+            async move {
+                verify(&op)
+                    && op.header.extensions.mesh_id == mesh_id
+                    && matches!(store.insert(&op).await, Ok(true))
             }
         });
 
         Ok(Self {
             store,
             mesh_id,
-            _log_sync: log_sync,
+            space,
             handle,
-            logsync_task,
-            status,
+            _log_sync: log_sync,
         })
     }
 
@@ -230,44 +170,16 @@ impl SyncedMesh {
     /// whether a round is in progress, rounds finished, operations received,
     /// and when activity last happened.
     pub fn sync_status(&self) -> SyncStatus {
-        self.status.lock().unwrap().clone()
+        self.space.sync_status()
     }
 
-    /// Run a manual "sync now" checkpoint and report what arrived.
-    ///
-    /// LogSync already reconciles **continuously**, so this is not a fake
-    /// spinner and not a forced re-fetch (p2panda 0.6.1 exposes no public
-    /// "re-initiate" hook): it watches the live session until it goes quiet
-    /// and returns the real count of operations that landed during the
-    /// window. A quiet, already-synced mesh reports `0` quickly.
+    /// Run a manual "sync now" checkpoint and report what arrived. Delegates to
+    /// the shared drain's settle-based checkpoint: not a fake spinner and not a
+    /// forced re-fetch (p2panda 0.6.1 exposes no "re-initiate" hook), it watches
+    /// the live session until it goes quiet and returns the real count of
+    /// operations that landed during the window. A quiet mesh reports `0` fast.
     pub async fn resync(&self) -> Result<SyncRound, MeshSyncError> {
-        let received = || self.status.lock().unwrap().ops_received;
-        let start = received();
-        let mut last = start;
-        let mut quiet = 0u8;
-        // Poll up to ~3s; stop after ~300ms with nothing new (settled).
-        for _ in 0..30 {
-            tokio::time::sleep(Duration::from_millis(100)).await;
-            let now = received();
-            if now == last {
-                quiet += 1;
-                if quiet >= 3 {
-                    break;
-                }
-            } else {
-                last = now;
-                quiet = 0;
-            }
-        }
-        Ok(SyncRound {
-            items_received: last.saturating_sub(start),
-        })
-    }
-}
-
-impl Drop for SyncedMesh {
-    fn drop(&mut self) {
-        self.logsync_task.abort();
+        Ok(self.space.resync().await)
     }
 }
 
@@ -279,6 +191,7 @@ mod tests {
     use crate::worker::{WorkerAction, execute, next_action};
     use identity::{IdentityProvider, InMemoryProvider};
     use std::sync::Arc as StdArc;
+    use std::time::Duration;
     use transport::P2pandaTransport;
 
     const MESH: [u8; 32] = [0x77; 32];

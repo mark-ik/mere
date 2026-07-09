@@ -1,0 +1,8 @@
+# settings-lane smoke: open the consolidated settings surface as a workbench tile and
+# capture it. A single-window scenario (no spawn), the simplest self-drive shape.
+
+log      opening settings
+invoke   settings
+settle   3
+capture  settings
+log      settings shown
