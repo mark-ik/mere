@@ -61,7 +61,7 @@ pub enum MeshSyncError {
 /// Holds the store, the live publish lane, the session (kept alive), and the
 /// shared [`SyncedSpace`] draining reconciled operations into the store.
 /// Dropping it stops the drain and ends the session.
-pub struct SyncedMesh<B> {
+pub struct SyncedMesh<B: Backend + Clone + Send + 'static> {
     store: MeshStore<B>,
     mesh_id: [u8; 32],
     /// The shared LogSync drain: reconciled operations flow through the
@@ -74,7 +74,7 @@ pub struct SyncedMesh<B> {
     _log_sync: MeshLogSync<B>,
 }
 
-impl<B: Backend + Clone + Send + 'static> SyncedMesh<B> {
+impl<B: Backend + Clone + Send + Sync + 'static> SyncedMesh<B> {
     /// Join a mesh's LogSync session over `store`, driven by the host's
     /// `endpoint` + `gossip` (from its transport's `sync_parts`).
     ///

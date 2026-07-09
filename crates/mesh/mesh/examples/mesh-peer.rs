@@ -195,7 +195,7 @@ async fn main() -> Result<(), String> {
 
 /// Join the mesh over `store` and run the requested mode. Generic over the
 /// backend so the same loop drives an in-memory or a redb-backed store.
-async fn run<B: Backend + Clone + Send + 'static>(
+async fn run<B: Backend + Clone + Send + Sync + 'static>(
     store: MeshStore<B>,
     transport: Arc<P2pandaTransport>,
     author: Ed25519Keypair,

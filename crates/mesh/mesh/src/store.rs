@@ -67,7 +67,7 @@ impl MeshStore<RedbBackend> {
     }
 }
 
-impl<B: Backend> MeshStore<B> {
+impl<B: Backend + Clone> MeshStore<B> {
     /// A clone of the underlying store, for `LogSync::builder` (which takes the
     /// store by value and reconciles through its trait surface).
     pub fn sync_store(&self) -> MunimentStore<B, MeshExt> {
