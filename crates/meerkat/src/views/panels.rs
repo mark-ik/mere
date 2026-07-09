@@ -205,6 +205,17 @@ pub(crate) fn find_bar(c: &Chrome) -> ChromeView {
 /// The docked knot editor: a source field (a `text_field` over the knot buffer) in
 /// a panel, mirroring the comms pane's structure. Highlighting and the rendered
 /// preview layer on in later slices.
+/// The in-editor completion popup (`/` slash menu, `[[` node link) as a positioned overlay
+/// menu at the caret. Rows accept on click; the keyboard drives navigation. Rendered as a
+/// sibling of the editor pane so it floats over the tile. (Phase 3 completion.)
+pub(crate) fn knot_completion_menu(comp: &crate::knot_completion::KnotCompletion) -> ChromeView {
+    let labels: Vec<String> = comp.items.iter().map(|it| it.label.clone()).collect();
+    let (x, y) = comp.anchor;
+    Box::new(xilem_serval::menu(x, y, labels, comp.selected, |c: &mut Chrome, i| {
+        c.accept_knot_completion(i)
+    }))
+}
+
 pub(crate) fn knot_editor_pane(c: &Chrome) -> ChromeView {
     let title = if c.knot_editor_label.is_empty() {
         "Editor".to_string()

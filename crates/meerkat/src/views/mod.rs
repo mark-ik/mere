@@ -224,6 +224,9 @@ pub fn chrome_view(c: &Chrome, crawl: &CrawlIndicator) -> ChromeView {
     if c.knot_editor_open {
         children.push(knot_editor_pane(c));
     }
+    if let Some(comp) = &c.knot_completion {
+        children.push(knot_completion_menu(comp));
+    }
     // Shellbar: a pane-toggle strip docked to one window edge (F2.1). Its geometry is
     // set inline each frame by the host via `set_attribute` on the `.shellbar` class
     // node, following the comms-pane pattern. A slim (leaf) window omits it, and the

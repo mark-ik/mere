@@ -239,6 +239,10 @@ pub struct Chrome {
     /// ordinary caret move, so the chain only lives across an uninterrupted Alt-arrow run.
     /// (Djot editor — Phase 3 structural selection.)
     pub knot_expand_stack: Vec<(usize, usize)>,
+    /// The open in-editor completion popup (`/` slash menu, `[[` node link), or `None`. The
+    /// host refreshes it after each edit and the chrome renders it as an overlay `menu`.
+    /// (Djot editor — Phase 3 completion.)
+    pub knot_completion: Option<knot_completion::KnotCompletion>,
     /// The open graph sessions, as toolbar chips (Chrome bar P4 — sessions moved out
     /// of the shellbar). Host-synced each frame from the session pool, ordered like
     /// `cycle_session`; the active one carries `active`. Rendered inline up to a cap,
@@ -601,6 +605,7 @@ mod chrome_menu;
 mod chrome_nav;
 
 pub mod note_view;
+pub mod knot_completion;
 mod views;
 use views::sync_chrome_from_history;
 pub use views::{ChromeLogic, ChromeView, chrome_view, runner, submit_omnibar};

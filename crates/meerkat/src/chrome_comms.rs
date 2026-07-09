@@ -132,6 +132,7 @@ impl Chrome {
     fn reset_knot_history(&mut self) {
         self.knot_history.clear();
         self.knot_expand_stack.clear();
+        self.knot_completion = None;
     }
 
     /// Grow the selection to the smallest enclosing djot container (Alt-Up), pushing the

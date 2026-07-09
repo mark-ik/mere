@@ -596,4 +596,66 @@ impl WindowCtx<'_> {
         let container = first_with_class(&dom, dom.document(), class)?;
         first_tag(&dom, container, "input").or_else(|| first_tag(&dom, container, "textarea"))
     }
+
+    /// Window-space anchor for the completion popup: just below the knot-editor caret, from
+    /// the session's laid-out `caret_rect`. `None` in preview mode / before the first render.
+    pub(crate) fn knot_caret_anchor(&self) -> Option<(f32, f32)> {
+        let node = self.input_under_class("knot-editor-source")?;
+        let byte = self.chrome().knot_source.caret_byte_in_render();
+        let dom = self.view.dom.borrow();
+        let session = self.view.chrome_session.as_ref()?;
+        let (x, y, _w, h) = session.caret_rect(&dom, node, byte, 1.0)?;
+        Some((x, y + h))
+    }
+
+    /// Refresh the in-editor completion popup after an edit / caret move: detect a `/` slash
+    /// or `[[` context at the caret, build + filter its candidates, and set (or clear) the
+    /// chrome's `knot_completion`. Called after every knot-editor key. (Phase 3 completion.)
+    pub(crate) fn refresh_knot_completion(&mut self) {
+        use meerkat::knot_completion::{KnotCompletionKind, detect_completion, slash_items};
+        let open = self.chrome().knot_editor_open && !self.chrome().knot_editor_preview;
+        let clear = |wc: &mut Self| {
+            if wc.chrome().knot_completion.is_some() {
+                wc.chrome_update(|c| c.knot_completion = None);
+            }
+        };
+        if !open {
+            clear(self);
+            return;
+        }
+        let (text, caret) = {
+            let c = self.chrome();
+            (c.knot_source.text().to_string(), c.knot_source.caret())
+        };
+        let Some((kind, trigger_byte, query)) = detect_completion(&text, caret) else {
+            clear(self);
+            return;
+        };
+        let items = match kind {
+            KnotCompletionKind::Slash => slash_items(&query),
+            // Wikilink candidates land in the next increment.
+            KnotCompletionKind::Wikilink => Vec::new(),
+        };
+        if items.is_empty() {
+            clear(self);
+            return;
+        }
+        let anchor = self.knot_caret_anchor().unwrap_or((0.0, 0.0));
+        self.chrome_update(move |c| {
+            let selected = c
+                .knot_completion
+                .as_ref()
+                .filter(|k| k.kind == kind)
+                .map(|k| k.selected.min(items.len().saturating_sub(1)))
+                .unwrap_or(0);
+            c.knot_completion = Some(meerkat::knot_completion::KnotCompletion {
+                kind,
+                trigger_byte,
+                query,
+                items,
+                selected,
+                anchor,
+            });
+        });
+    }
 }

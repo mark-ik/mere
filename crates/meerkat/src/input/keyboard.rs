@@ -298,7 +298,10 @@ impl WindowCtx<'_> {
                 WinitNamedKey::ArrowDown => Some(1),
                 _ => None,
             };
-            if let Some(delta) = delta.filter(|_| !self.view.modifiers.alt) {
+            // Also excluded while a completion popup is open (Up/Down navigate it instead).
+            let vertical_free =
+                !self.view.modifiers.alt && self.chrome().knot_completion.is_none();
+            if let Some(delta) = delta.filter(|_| vertical_free) {
                 if self.soft_wrap_nav(delta, self.view.modifiers.shift) {
                     return;
                 }
@@ -320,6 +323,8 @@ impl WindowCtx<'_> {
             // The knot editor's source field wraps every edit with undo/redo bookkeeping,
             // so it gets its own handler rather than the generic field dispatch below.
             self.on_knot_editor_key(key);
+            // Re-detect / re-filter the `/` slash + `[[` completion popup after every key.
+            self.refresh_knot_completion();
         } else if self.multi.focus(self.view.projection_id).is_some()
             || matches!(key, WinitKey::Named(WinitNamedKey::Tab))
         {
@@ -348,6 +353,40 @@ impl WindowCtx<'_> {
     /// key dispatches to the field like any other. (Djot editor — Phase 2 undo/redo.)
     fn on_knot_editor_key(&mut self, key: &WinitKey) {
         let ctrl = self.view.modifiers.ctrl || self.view.modifiers.meta;
+        // While a completion popup is open, arrows navigate it, Enter/Tab accept the
+        // highlighted item, Escape closes; anything else edits (and re-filters after).
+        // (Phase 3 completion.)
+        if self.chrome().knot_completion.is_some() {
+            match key {
+                WinitKey::Named(WinitNamedKey::ArrowDown) => {
+                    self.chrome_update(|c| c.move_knot_completion(1));
+                    self.view.request_redraw();
+                    return;
+                }
+                WinitKey::Named(WinitNamedKey::ArrowUp) => {
+                    self.chrome_update(|c| c.move_knot_completion(-1));
+                    self.view.request_redraw();
+                    return;
+                }
+                WinitKey::Named(WinitNamedKey::Enter | WinitNamedKey::Tab) => {
+                    let sel = self
+                        .chrome()
+                        .knot_completion
+                        .as_ref()
+                        .map(|k| k.selected)
+                        .unwrap_or(0);
+                    self.chrome_update(|c| c.accept_knot_completion(sel));
+                    self.view.request_redraw();
+                    return;
+                }
+                WinitKey::Named(WinitNamedKey::Escape) => {
+                    self.chrome_update(|c| c.close_knot_completion());
+                    self.view.request_redraw();
+                    return;
+                }
+                _ => {}
+            }
+        }
         // Undo / redo take the key before it can edit the buffer.
         if ctrl && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("z")) {
             let redo = self.view.modifiers.shift;

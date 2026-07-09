@@ -175,6 +175,24 @@ pub(crate) fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
             rgb(c.strong_text),
             rgb(c.active_bg)
         ),
+        // The generic serval overlay `menu` (the editor's `/` slash + `[[` completion popup):
+        // a small floated list at the caret. `overlay_at` sets its absolute position; these
+        // give it a surface, a lift above the editor pane (z 100 > the pane's 90), and a row
+        // highlight. (Phase 3 completion.)
+        format!(
+            ".menu {{ background-color: {}; padding: 4px; z-index: 100; min-width: 180px; \
+             box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35); }}",
+            rgb(c.surface_bg)
+        ),
+        format!(
+            ".menu-row {{ font-size: 15px; color: {}; padding: 5px 10px; }}",
+            rgb(c.body_text)
+        ),
+        format!(
+            ".menu-row-active {{ font-size: 15px; color: {}; background-color: {}; padding: 5px 10px; }}",
+            rgb(c.strong_text),
+            rgb(c.active_bg)
+        ),
         // Find-in-page bar: docked top-right under the toolbar (flex end), a small
         // panel with a label + the query field.
         ".find-overlay { display: flex; justify-content: flex-end; padding-top: 56px; padding-right: 12px; }"
