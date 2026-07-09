@@ -20,13 +20,13 @@
 //!   `infer::decoder::load_wgpu_provider`, plus the D1 device decision.
 //!
 //! Burn stays out of the orrery: the orrery takes plain `(NodeKey, NodeKey, f32)`
-//! triples through [`Orrery::set_content_affinity`](orrery::Orrery::set_content_affinity);
+//! triples through [`mere::orrery::set_content_affinity`](mere::orrery::Orrery::set_content_affinity);
 //! this module (behind the feature) owns the provider.
 
 use std::time::{Duration, Instant};
 
 use embed::{EmbeddingProvider, LexicalEmbeddingProvider, VectorIndex, affinity_pairs};
-use kernel::graph::{Graph, Node, NodeKey};
+use mere::kernel::graph::{Graph, Node, NodeKey};
 
 /// Output dimension (hash buckets) for the lexical provider — enough to keep
 /// token collisions low for short texts (titles + tag sets).
@@ -183,10 +183,10 @@ fn build_embedding_provider() -> Box<dyn EmbeddingProvider> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kernel::geometry::PortablePoint;
+    use mere::kernel::geometry::PortablePoint;
     // The public `add_node(url, position) -> NodeKey` used to stage test graphs comes from the
     // kernel `fixtures` feature's trait (the inherent one is `pub(crate)`); meerkat dev-deps it.
-    use kernel::graph::fixtures::GraphFixtures;
+    use mere::kernel::graph::fixtures::GraphFixtures;
 
     fn graph_with_urls(urls: &[&str]) -> Graph {
         let mut graph = Graph::new();

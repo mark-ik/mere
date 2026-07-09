@@ -163,7 +163,7 @@ impl crate::WindowCtx<'_> {
             let table_stats = self.apparatus_table_stats();
             let sync_rows = self.apparatus_sync_rows();
             let obs = self.apparatus_observability();
-            let graph_metrics = glossary::graph_metrics(self.orrery().graph());
+            let graph_metrics = mere::glossary::graph_metrics(self.orrery().graph());
             let items = crate::apparatus::apparatus_items(
                 &system_rows,
                 &table_stats,
@@ -249,7 +249,7 @@ impl crate::WindowCtx<'_> {
                             tier: self.orrery().node_size_tier(k),
                         },
                         CardWidget::Face {
-                            is_favicon: self.orrery().node_face(k) == orrery::Face::Favicon,
+                            is_favicon: self.orrery().node_face(k) == mere::orrery::Face::Favicon,
                         },
                     ]
                 })

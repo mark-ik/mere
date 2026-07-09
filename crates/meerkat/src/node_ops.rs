@@ -13,8 +13,8 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use forme::GraphMemberId;
-use orrery::{NodeShape, NodeState};
+use mere::forme::GraphMemberId;
+use mere::orrery::{NodeShape, NodeState};
 use session_runtime::content_store;
 
 use crate::fetch::{ContentState, Fetched};

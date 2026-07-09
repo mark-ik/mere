@@ -91,8 +91,8 @@ mod tests {
     use super::*;
     use session_runtime::{ThumbnailEdge, ThumbnailNode};
 
-    fn pt(x: f32, y: f32) -> kernel::geometry::PortablePoint {
-        kernel::geometry::PortablePoint::new(x, y)
+    fn pt(x: f32, y: f32) -> mere::kernel::geometry::PortablePoint {
+        mere::kernel::geometry::PortablePoint::new(x, y)
     }
 
     #[test]

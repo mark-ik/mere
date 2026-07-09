@@ -17,7 +17,7 @@ impl WindowCtx<'_> {
     }
 
     /// The layout-strategy rows for the focused orrery pane: "Force-directed" (the
-    /// seiche default) plus each wired cartography strategy ([`platen::ORRERY_LAYOUT_STRATEGIES`]),
+    /// seiche default) plus each wired cartography strategy ([`mere::platen::ORRERY_LAYOUT_STRATEGIES`]),
     /// with the pane's current choice ✓-marked. A pane-level choice, so it rides the
     /// no-selection right-click beside "Add node". (Layout picker.)
     pub(crate) fn layout_picker_items(&self) -> Vec<ContextItem> {
@@ -33,7 +33,7 @@ impl WindowCtx<'_> {
             mark("Force-directed", active.is_none()),
             ContextAction::SetLayoutStrategy(""),
         )];
-        for &(id, label) in platen::ORRERY_LAYOUT_STRATEGIES {
+        for &(id, label) in mere::platen::ORRERY_LAYOUT_STRATEGIES {
             items.push(ContextItem::new(
                 mark(label, active == Some(id)),
                 ContextAction::SetLayoutStrategy(id),
@@ -312,15 +312,15 @@ impl WindowCtx<'_> {
         // window), so it queues a command. (Graphlet wiring Phase 3 slice 2 / 2+.)
         let projection = match action {
             ContextAction::OpenComponentGraphlet => {
-                Some((forme::GraphletKind::Component, Vec::new(), "component"))
+                Some((mere::forme::GraphletKind::Component, Vec::new(), "component"))
             }
             ContextAction::OpenNeighborhoodGraphlet => Some((
-                forme::GraphletKind::Ego { radius: 2 },
+                mere::forme::GraphletKind::Ego { radius: 2 },
                 Vec::new(),
                 "neighborhood",
             )),
             ContextAction::OpenLinkWebGraphlet => Some((
-                forme::GraphletKind::Component,
+                mere::forme::GraphletKind::Component,
                 vec!["Semantic".to_string()],
                 "link web",
             )),

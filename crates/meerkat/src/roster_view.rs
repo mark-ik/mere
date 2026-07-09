@@ -6,8 +6,8 @@
 //! in-roster detail-card region. Row handlers queue intents through the shell
 //! runner; the host applies graph mutations and graphlet window commands.
 
-use forme::{GraphMemberId, GraphletId};
-use kernel::graph::{EdgeFamily, FieldId, RelationSelector, SemanticSubKind};
+use mere::forme::{GraphMemberId, GraphletId};
+use mere::kernel::graph::{EdgeFamily, FieldId, RelationSelector, SemanticSubKind};
 #[cfg(test)]
 use layout_dom_api::LayoutDom;
 #[cfg(test)]
@@ -208,8 +208,8 @@ mod action_tests;
 
 #[cfg(test)]
 mod tests {
-    use forme::GraphMemberId;
-    use kernel::graph::{EdgeFamily, RelationSelector, SemanticSubKind};
+    use mere::forme::GraphMemberId;
+    use mere::kernel::graph::{EdgeFamily, RelationSelector, SemanticSubKind};
     use layout_dom_api::LayoutDom;
     use register_theme::chrome::ChromeTheme;
     use serval_scripted_dom::{NodeId, ScriptedDom};
@@ -517,7 +517,7 @@ mod tests {
 
     #[test]
     fn facet_card_action_queues_host_intent() {
-        let field = kernel::graph::FieldId::new();
+        let field = mere::kernel::graph::FieldId::new();
         let mut pane = RosterPane::new();
         pane.set_snapshot(
             &ChromeTheme::default(),

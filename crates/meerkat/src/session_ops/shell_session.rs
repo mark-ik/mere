@@ -77,7 +77,7 @@ impl crate::Shell {
             &session_dir.join(session_graph_store::GRAPH_FILE),
             &fork_graph,
         );
-        let mut fork_orrery = orrery::Orrery::with_graph(fork_graph);
+        let mut fork_orrery = mere::orrery::Orrery::with_graph(fork_graph);
         fork_orrery.set_current_session(self.shared.session.current_session_count);
         self.orreries.insert(graph_id, fork_orrery);
         self.shared.observability.record_probe(
@@ -100,15 +100,15 @@ impl crate::Shell {
         &mut self,
         node: uuid::Uuid,
         from: GraphId,
-    ) -> Option<forme::GraphletId> {
+    ) -> Option<mere::forme::GraphletId> {
         let session_dir = self.graph_session_dir(from)?;
         // Load-or-default the donor's graphlet index into the pool, mint the branch,
         // persist. The window carries the returned id.
         let graphlets = self
             .graphlets
             .entry(from)
-            .or_insert_with(|| crate::graphlets::SessionGraphlets::load(&session_dir));
-        let id = graphlets.record_branch(node, crate::graphlets::default_spec_for(node));
+            .or_insert_with(|| mere::graphlets::SessionGraphlets::load(&session_dir));
+        let id = graphlets.record_branch(node, mere::graphlets::default_spec_for(node));
         if let Err(err) = graphlets.save(&session_dir) {
             tracing::warn!(%err, dir = ?session_dir, "failed to persist the branch graphlet");
         }
@@ -130,14 +130,14 @@ impl crate::Shell {
         &mut self,
         node: uuid::Uuid,
         from: GraphId,
-        kind: forme::GraphletKind,
+        kind: mere::forme::GraphletKind,
         selectors: Vec<String>,
-    ) -> Option<forme::GraphletId> {
+    ) -> Option<mere::forme::GraphletId> {
         let session_dir = self.graph_session_dir(from)?;
         // Clone the graph as the derivation source (a borrow-split is a refinement; the
         // BFS derivation is cheap).
         let graph = self.orreries.get(&from)?.graph().clone();
-        let spec = forme::GraphletSpec {
+        let spec = mere::forme::GraphletSpec {
             kind,
             anchors: vec![node.to_string()],
             primary_anchor: Some(node.to_string()),
@@ -146,7 +146,7 @@ impl crate::Shell {
         let graphlets = self
             .graphlets
             .entry(from)
-            .or_insert_with(|| crate::graphlets::SessionGraphlets::load(&session_dir));
+            .or_insert_with(|| mere::graphlets::SessionGraphlets::load(&session_dir));
         let id = graphlets.record_linked(&graph, spec);
         if let Err(err) = graphlets.save(&session_dir) {
             tracing::warn!(%err, dir = ?session_dir, "failed to persist the linked graphlet");
@@ -167,7 +167,7 @@ impl crate::Shell {
     pub(crate) fn crystallize_selection(
         &mut self,
         from: GraphId,
-    ) -> Option<(forme::GraphletKind, usize)> {
+    ) -> Option<(mere::forme::GraphletKind, usize)> {
         let session_dir = self.graph_session_dir(from)?;
         // Selection + dominant shape (a read-only borrow, dropped before the mutations below).
         let (members, kind) = {
@@ -186,7 +186,7 @@ impl crate::Shell {
         let graphlets = self
             .graphlets
             .entry(from)
-            .or_insert_with(|| crate::graphlets::SessionGraphlets::load(&session_dir));
+            .or_insert_with(|| mere::graphlets::SessionGraphlets::load(&session_dir));
         let id = graphlets.record_session(kind.clone(), members.clone());
         if let Err(err) = graphlets.save(&session_dir) {
             tracing::warn!(%err, dir = ?session_dir, "failed to persist the crystallized graphlet");
@@ -226,7 +226,7 @@ impl crate::Shell {
     pub(crate) fn reconcile_linked_graphlet(
         &mut self,
         graph: GraphId,
-        graphlet: forme::GraphletId,
+        graphlet: mere::forme::GraphletId,
     ) {
         let Some(session_dir) = self.graph_session_dir(graph) else {
             return;
@@ -243,7 +243,7 @@ impl crate::Shell {
         }
     }
 
-    pub(crate) fn keep_graphlet_as_session(&mut self, graph: GraphId, graphlet: forme::GraphletId) {
+    pub(crate) fn keep_graphlet_as_session(&mut self, graph: GraphId, graphlet: mere::forme::GraphletId) {
         let Some(session_dir) = self.graph_session_dir(graph) else {
             return;
         };
@@ -258,8 +258,8 @@ impl crate::Shell {
     pub(crate) fn toggle_graphlet_family_selector(
         &mut self,
         graph: GraphId,
-        graphlet: forme::GraphletId,
-        family: kernel::graph::EdgeFamily,
+        graphlet: mere::forme::GraphletId,
+        family: mere::kernel::graph::EdgeFamily,
     ) {
         let Some(session_dir) = self.graph_session_dir(graph) else {
             return;
@@ -275,13 +275,13 @@ impl crate::Shell {
     pub(crate) fn branch_existing_graphlet(
         &mut self,
         graph: GraphId,
-        graphlet: forme::GraphletId,
-    ) -> Option<forme::GraphletId> {
+        graphlet: mere::forme::GraphletId,
+    ) -> Option<mere::forme::GraphletId> {
         let session_dir = self.graph_session_dir(graph)?;
         let idx = self
             .graphlets
             .entry(graph)
-            .or_insert_with(|| crate::graphlets::SessionGraphlets::load(&session_dir));
+            .or_insert_with(|| mere::graphlets::SessionGraphlets::load(&session_dir));
         let id = idx.branch_from_graphlet(graphlet)?;
         if let Err(err) = idx.save(&session_dir) {
             tracing::warn!(%err, dir = ?session_dir, "failed to persist branched graphlet");
@@ -296,7 +296,7 @@ impl crate::Shell {
     pub(crate) fn record_branch_member(
         &mut self,
         graph: GraphId,
-        graphlet: forme::GraphletId,
+        graphlet: mere::forme::GraphletId,
         node: uuid::Uuid,
     ) {
         let Some(session_dir) = self.graph_session_dir(graph) else {

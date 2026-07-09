@@ -6,7 +6,7 @@
 //! from `main.rs` to keep files under the workspace 600-LOC ceiling.
 
 use crate::serval_render::TextCursor;
-use forme::GraphMemberId;
+use mere::forme::GraphMemberId;
 use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
 use netrender::ColorLoad;
 use netrender::external_texture::{ExternalTexturePlacement, SourceAlpha};
@@ -93,7 +93,7 @@ impl WindowCtx<'_> {
         // `gloss_minimap_scene` threaded through `PaintInputs`). (gloss-outline plan
         // P1; recent + minimap DOM-ified by the Scene-to-DOM migration P1 / P2.)
         if let Some(grect) = gloss_rect {
-            let (_, outline_rect, recent_rect) = gloss::gloss_sections(grect);
+            let (_, outline_rect, recent_rect) = mere::gloss::gloss_sections(grect);
             let available_height = outline_rect[3] - outline_rect[1];
             let snapshot = self.gloss_outline_snapshot(available_height);
             self.set_gloss_outline(snapshot, Some(outline_rect));
@@ -101,7 +101,7 @@ impl WindowCtx<'_> {
             self.set_gloss_recent(recent_snapshot, Some(recent_rect));
         } else {
             if self.gloss_outline_open() {
-                self.set_gloss_outline(gloss::GlossOutlineSnapshot::default(), None);
+                self.set_gloss_outline(mere::gloss::GlossOutlineSnapshot::default(), None);
             }
             if self.gloss_recent_open() {
                 self.set_gloss_recent(crate::gloss_view::GlossRecentSnapshot::default(), None);

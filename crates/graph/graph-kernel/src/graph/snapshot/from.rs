@@ -21,7 +21,7 @@ use crate::persistence::{
     GraphSnapshot, PersistedArrangementSubKind, PersistedContainmentSubKind,
     PersistedCouplingResponse, PersistedEdgeFamily, PersistedFieldExtent, PersistedFieldLifecycle,
     PersistedImportedSubKind, PersistedNavigationTrigger, PersistedNodeSelector,
-    PersistedNodeSessionState, PersistedProvenanceSubKind, PersistedSemanticSubKind,
+    PersistedProvenanceSubKind, PersistedSemanticSubKind,
 };
 
 fn semantic_sub_kind(sub_kind: PersistedSemanticSubKind) -> SemanticSubKind {
@@ -98,8 +98,10 @@ impl Graph {
                 node.body = pnode.body.clone();
                 node.last_session_visited = pnode.last_session_visited;
                 if let Some(session) = &pnode.session_state {
-                    node.session_scroll = session.scroll_x.zip(session.scroll_y);
-                    node.session_form_draft = session.form_draft.clone();
+                    // Legacy scroll / form draft stay on the PersistedNode for
+                    // the host's one-time BrowserNodeState migration (the host
+                    // reads them off the snapshot it loaded; the kernel no
+                    // longer carries them — boundary pass slice C).
                     if let Some(last_visited_ms) = session.last_visited_ms {
                         node.last_visited = UNIX_EPOCH + Duration::from_millis(last_visited_ms);
                     }

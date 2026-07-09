@@ -7,12 +7,14 @@
 use inker::{
     Block, DocumentDiagnostic, DocumentTrustState, EngineDocument, EngineInput, EngineRegistry,
 };
-use kernel::graph::Node;
+use mere::kernel::graph::Node;
+use session_runtime::browser_node_state::BrowserNodeState;
 
 use crate::fetch::{ContentState, Fetched};
 
 pub(super) fn inspector_rows(
     node: Option<&Node>,
+    browser: Option<&BrowserNodeState>,
     state: Option<&ContentState>,
 ) -> Vec<(String, String)> {
     let mut rows = Vec::new();
@@ -35,13 +37,17 @@ pub(super) fn inspector_rows(
                 "Classifications".to_string(),
                 summarize_classifications(node),
             ));
+            // Viewer override + compat mode come from the browser-state
+            // sidecar (boundary pass slice C); mime stays graph metadata.
             rows.push((
                 "Node metadata".to_string(),
                 format!(
                     "mime_hint={}; viewer={}; compat={}",
                     node.mime_hint.as_deref().unwrap_or("none"),
-                    node.viewer_override.as_deref().unwrap_or("auto"),
-                    node.compat_mode
+                    browser
+                        .and_then(|b| b.viewer_override.as_deref())
+                        .unwrap_or("auto"),
+                    browser.is_some_and(|b| b.compat_mode)
                 ),
             ));
         }

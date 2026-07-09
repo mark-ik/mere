@@ -11,7 +11,7 @@
 //! overlay. Because the worker searches the cached body directly, find works whatever the
 //! node's activation state — a snapshot card with no actor searches the same as a live one.
 
-use forme::GraphMemberId;
+use mere::forme::GraphMemberId;
 
 use super::WindowCtx;
 use super::fetch::ContentState;

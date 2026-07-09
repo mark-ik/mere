@@ -5,7 +5,7 @@
 //! Web clip host wrapper: drive capture from the current node, load the best
 //! available document body, and hand the host-neutral clip core off to `import`.
 
-use forme::GraphMemberId;
+use mere::forme::GraphMemberId;
 use import::web_clip::{clip_title, fragment_from_body, write_clip_node};
 
 pub(crate) use import::web_clip::{

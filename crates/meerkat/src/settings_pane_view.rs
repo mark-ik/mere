@@ -18,7 +18,7 @@
 //! containers carry inline geometry + the host-resolved panel background. See
 //! `2026-06-21_settings_lane_consolidation_plan` (P1 render arm).
 
-use forme::GraphMemberId;
+use mere::forme::GraphMemberId;
 use xilem_serval::{AnyView, PointerClick, ServalCtx, ServalElement, clickable, el, on_click};
 
 use crate::list_pane::{PaneItem, ReorderSpec, SliderSpec};

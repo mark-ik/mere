@@ -452,7 +452,7 @@ fn context_menu_renders_and_captures_an_action() {
 /// (Nested submenus.)
 #[test]
 fn submenu_renders_expands_and_picks() {
-    use kernel::graph::SemanticSubKind;
+    use mere::kernel::graph::SemanticSubKind;
     let mut runner = runner("mere://welcome");
     runner.update(|c| {
         c.open_context_menu(

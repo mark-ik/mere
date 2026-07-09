@@ -206,7 +206,7 @@ impl Orrery {
             self.node_dom.drain_mutations(&mut discard);
             self.node_layout = Some(IncrementalLayout::new(
                 &self.node_dom,
-                NODE_SHEET,
+                &NODE_SHEET,
                 w as f32,
                 h as f32,
             ));
@@ -297,7 +297,7 @@ impl Orrery {
             .node_layout
             .as_mut()
             .unwrap()
-            .apply(&self.node_dom, NODE_SHEET, &muts);
+            .apply(&self.node_dom, &NODE_SHEET, &muts);
         if !matches!(applied, Applied::RepaintOnly | Applied::Unchanged) {
             tracing::warn!(
                 ?applied,

@@ -5,7 +5,7 @@
 //! Drag-and-drop sprite import (node-rep P2 — sprite): a dropped image file becomes a node's
 //! custom sprite face. The `image` crate decodes the file (png / jpeg / gif / bmp), it is
 //! downscaled to a face-sized thumbnail, encoded to a PNG data-URI (the favicon encoder), and
-//! stored on the node under the cursor (else the focused node) via [`Orrery::set_node_sprite`].
+//! stored on the node under the cursor (else the focused node) via [`mere::orrery::set_node_sprite`].
 //! Wired by the `WindowEvent::DroppedFile` arm in `app_handler`. See the
 //! `2026-06-18_node_representation_arrangement_plan` (P2 — sprite).
 

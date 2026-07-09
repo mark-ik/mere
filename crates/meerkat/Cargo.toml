@@ -148,13 +148,6 @@ layout_dom_api = { package = "layout-dom-api", git = "https://github.com/mark-ik
 # / acquire, + winit->serval key & modifier mapping), shared with the orrery host.
 serval-winit-host = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 
-# The orrery content-root: the graph's spatial presentation (graph + seiche physics
-# + camera + abs-pos node pool), as a window-agnostic `Orrery` exposing
-# `frame(w, h) -> (Scene, needs_redraw)` + semantic input. meerkat hosts it as the
-# content-root below the chrome band; the `orrery` bin is the same `Orrery` on
-# its own window. (Modular integration plan, S1.)
-orrery.workspace = true
-
 # The content-card pipeline: a focused node's media as a document. inker supplies
 # the portable EngineDocument model; document-canvas lays it out (parley) and,
 # behind its `netrender` feature, lowers it to a netrender::Scene the host
@@ -175,21 +168,11 @@ script-rhai = { workspace = true }
 # [workspace.dependencies]); pulls wasmtime, hence the 1.93 toolchain.
 document-host = { path = "../script/document-host" }
 
-# The graph kernel (the `Graph` type) and the linked-data bridge: a fetched
-# JSON-LD document (or JSON-LD embedded in HTML) merges into the session graph,
-# remote `@context`s resolved offline against the bundled full pack (schema.org /
-# ActivityStreams / Dublin Core). The merge rides `Orrery::ingest_graph`.
-kernel = { workspace = true }
-# `query` enables the `>sparql("…")` omnibar verb (an in-memory Oxigraph store
-# over the focused graph; no RocksDB, so the wasm target stays viable).
-linked-data = { workspace = true, features = ["query"] }
-# The graph digest projection (djot outline + cheap metrics): the gloss outline
-# lens's `Graph -> view` backend. Pure, host-free — meerkat builds the DOM rows
-# from its output. (gloss-outline plan P1.)
-glossary = { workspace = true }
-graphlets = { workspace = true }
-gloss = { workspace = true }
-roster = { workspace = true }
+# The composed graph library: a fetched JSON-LD document (or JSON-LD embedded
+# in HTML) merges into the session graph, and the graph projections feed host
+# views. This is the extraction seam: the browser reaches graph truth through
+# `mere`, not its constituent graph crates.
+mere = { workspace = true, features = ["query"] }
 
 # The actor-kernel runtime: the !Send host-kernel boundary + the Send actor
 # harness. meerkat's I/O subsystems (fetch, ...) are expressed as armillary
@@ -221,11 +204,6 @@ import = { workspace = true }
 # each leaf's rect from the split ratios (the frame crate is geometry-free).
 frame = { workspace = true }
 
-forme = { workspace = true }
-platen = { workspace = true }
-# Domain a11y projections for panes hosted by the frame tree.
-apparatus-domain = { package = "apparatus", path = "../domain/apparatus" }
-workbench-domain = { package = "workbench", path = "../platen/domain/workbench" }
 # Pelt's tile-tree contract + the GPU-free tile surface (V6): meerkat hosts the
 # standalone pelt `TileSurface` as its workbench pane, driven entirely through the
 # contract (`Workbench::to_tile_tree` projects forme's tiling onto it). The
@@ -388,7 +366,7 @@ wasm-bindgen = "0.2"
 web-sys = { version = "0.3", features = ["DedicatedWorkerGlobalScope", "ErrorEvent", "MessageEvent", "Worker"] }
 
 [dev-dependencies]
-kernel = { workspace = true, features = ["fixtures"] }
+mere = { workspace = true, features = ["fixtures"] }
 # Workbench-composition tests mint graph-member ids (kernel node UUIDs) and
 # build small session graphs to resolve tiles against.
 uuid = { workspace = true }

@@ -12,7 +12,7 @@
 
 use eidetic::{BlobManifest, DeletedNode};
 use frame::PaneContent;
-use kernel::graph::Node;
+use mere::kernel::graph::Node;
 
 use super::WindowCtx;
 
@@ -67,7 +67,10 @@ impl WindowCtx<'_> {
         match content {
             PaneContent::Inspector => {
                 let input = self.inspector_pane_input();
-                super::inspector::inspector_rows(input.node, input.state)
+                let browser = input
+                    .node
+                    .and_then(|node| self.shared.content.browser_nodes.get(node.id));
+                super::inspector::inspector_rows(input.node, browser, input.state)
             }
             PaneContent::Steward => self.steward_rows(),
             _ => Vec::new(),

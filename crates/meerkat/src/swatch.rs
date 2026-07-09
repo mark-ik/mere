@@ -20,7 +20,7 @@
 //! for the connections swatch (P2). Generalizing was a type-parameterization, since the swatch
 //! carries no state-bound view callbacks. (Node body & face — the shape editor; swatch template #1.)
 
-use kernel::graph::{EdgeFamily, RelationKind};
+use mere::kernel::graph::{EdgeFamily, RelationKind};
 use xilem_serval::{AnyView, ServalCtx, ServalElement, el};
 
 /// What a node swatch shows: the sprite face (a PNG data-URI) and its collider hull (the
@@ -401,7 +401,7 @@ mod tests {
             vec![(
                 a,
                 b,
-                RelationKind::Semantic(kernel::graph::SemanticSubKind::Cites),
+                RelationKind::Semantic(mere::kernel::graph::SemanticSubKind::Cites),
             )],
         );
         assert_eq!(spec.nodes.len(), 2, "both selected nodes are placed");
@@ -443,7 +443,7 @@ mod tests {
                 (
                     a,
                     b,
-                    RelationKind::Semantic(kernel::graph::SemanticSubKind::Cites),
+                    RelationKind::Semantic(mere::kernel::graph::SemanticSubKind::Cites),
                 ),
                 (a, b, RelationKind::Traversal),
             ],

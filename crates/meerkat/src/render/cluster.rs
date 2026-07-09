@@ -13,7 +13,7 @@
 //! node identity.)
 
 use chisel::{ColorF, GraphGlyph, GraphGlyphNode, Leaf, Meter, PaintCx, Size};
-use orrery::NodeState;
+use mere::orrery::NodeState;
 use paint_list_api::specs::{TransformKind, TransformSpec};
 use paint_list_api::{DeviceIntSize, LayoutPoint, LayoutTransform, PaintCmd};
 
@@ -28,14 +28,12 @@ const PAD: f32 = 6.0;
 /// Full meter bar = two missed 60hz frames.
 const FRAME_FULL_MS: f32 = 33.3;
 
-/// The NODE_SHEET activation palette, as `ColorF` (mirrors `accent_rgb` in
-/// `gloss_outline_view`): open green / closed red / idle blue.
+/// The shared node palette as `ColorF`. A chisel leaf paints outside the cascade,
+/// so it cannot `var()` the `--node-*` properties the DOM representations use; it
+/// reads the same table directly instead. (Representations carry node identity.)
 fn state_color(state: NodeState) -> ColorF {
-    match state {
-        NodeState::Open => ColorF { r: 0.227, g: 0.549, b: 0.369, a: 1.0 },
-        NodeState::Closed => ColorF { r: 0.651, g: 0.282, b: 0.282, a: 1.0 },
-        NodeState::Idle => ColorF { r: 0.212, g: 0.361, b: 0.612, a: 1.0 },
-    }
+    let [r, g, b] = mere::orrery::palette::unit(mere::orrery::palette::accent(false, state).bg);
+    ColorF { r, g, b, a: 1.0 }
 }
 
 impl crate::WindowCtx<'_> {

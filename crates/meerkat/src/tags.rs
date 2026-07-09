@@ -6,7 +6,7 @@
 //!
 //! A context-menu "Add tag…" opens the prompt (`view.tagging`); keystrokes edit
 //! the buffer (the `on_key_pressed` tagging branch); Enter inserts the typed tag
-//! on every selected node via `Orrery::tag_selected` (which calls the kernel's
+//! on every selected node via `mere::orrery::tag_selected` (which calls the kernel's
 //! `Graph::insert_node_tag`) and persists; Escape cancels. Mirrors the switcher
 //! rename's host-text path, kept here so the host god-files stay off the 600-LOC
 //! ceiling.

@@ -25,7 +25,7 @@
 //! directly rather than going through the engine registry (recorded in the
 //! plan's Findings).
 
-use forme::GraphMemberId;
+use mere::forme::GraphMemberId;
 
 /// A captured live-surface thumbnail ready to persist onto the node when a WebView goes away.
 pub struct CapturedThumbnail {

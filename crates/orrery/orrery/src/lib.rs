@@ -111,6 +111,9 @@ mod types;
 pub use signals::{BridgeMetric, ImportanceMetric};
 pub use types::{CameraView, EdgeCell, Face, NodeShape, NodeState, PointerButton, Viewport};
 
+/// The node accent palette every representation of a node tints from.
+pub mod palette;
+
 mod edge_cells;
 mod fields;
 mod frame;

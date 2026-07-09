@@ -98,7 +98,7 @@ pub(crate) struct Content {
     /// Content-embedding graph arrangement (burn brief Lane 5, P4): the embedding
     /// provider + recompute gate that derives the orrery's affinity signal from node
     /// content. Recomputed (throttled, revision-gated) while "cluster by affinity" is
-    /// on and injected via `Orrery::set_content_affinity`. Behind the `content-affinity`
+    /// on and injected via `mere::orrery::set_content_affinity`. Behind the `content-affinity`
     /// feature so the default build's affinity toggle stays structural.
     ///
     /// `Option` only so the render path can `take()` it out to break the self-borrow
@@ -117,6 +117,14 @@ pub(crate) struct Content {
     /// pin, the recipient spawns a fresh WebView. (Replaces the `compat_pins` bool;
     /// engine-picker Phase 0. The durable per-node graph field takes over later.)
     pub(crate) engine_pins: HashMap<GraphMemberId, String>,
+    /// Per-node browser state (scroll / form draft / viewer override / compat
+    /// mode), keyed by node UUID: the host-owned sidecar that replaced the
+    /// kernel `Node`'s browser-runtime fields (boundary pass slice C). Loaded
+    /// (with one-time legacy migration off graph.json) at boot and on session
+    /// switch; saved beside graph.json in `save_session`, scoped there to the
+    /// focused graph's nodes. Node UUIDs are globally unique, so entries from
+    /// two live graphs coexist in this one map.
+    pub(crate) browser_nodes: session_runtime::browser_node_state::BrowserNodeStates,
     /// The engine routing policy: scheme / content-type / per-host / pin → engine
     /// id. Consulted at nav time (scheme + pin) to choose the tier (surface engine
     /// vs the document/constellation lane); the document-engine re-route by
@@ -170,7 +178,7 @@ pub(crate) struct Session {
     pub(crate) host_text: text::HostText,
     /// This persona's app-launch counter, incremented and persisted once at boot
     /// (`PersonaSettings::session_count`). Pushed into every pooled orrery via
-    /// `Orrery::set_current_session` so in-place navigation stamps
+    /// `mere::orrery::set_current_session` so in-place navigation stamps
     /// `last_session_visited`; `run_forgetting_pass` reads it back for
     /// `EvictionPolicy::KeepSessions`. (Alembic B5 — by-sessions eviction.)
     pub(crate) current_session_count: u64,

@@ -5,10 +5,10 @@
 //! View state on the view: per-window viewport **and selection** install / readback
 //! around a ctx pass.
 //!
-//! The pooled [`Orrery`](orrery::Orrery) is the *authority* (graph + physics + node
+//! The pooled [`Orrery`](mere::orrery::Orrery) is the *authority* (graph + physics + node
 //! positions) and is shared across every window showing its graph. Two pieces of
 //! *view* state live on the [`WindowView`] instead, one entry per shown graph: the
-//! camera ([`Viewport`](orrery::Viewport), `WindowView::viewports`) and the node
+//! camera ([`Viewport`](mere::orrery::Viewport), `WindowView::viewports`) and the node
 //! **selection** (and thus focus, `WindowView::selections`). This module is the seam
 //! that keeps them consistent: when a [`WindowCtx`] is built for a window's render or
 //! input pass it installs that window's stored viewports + selection into the shared
@@ -43,7 +43,7 @@ impl WindowCtx<'_> {
             .collect()
     }
 
-    /// Install each shown pane's stored [`Viewport`](orrery::Viewport) into its pooled
+    /// Install each shown pane's stored [`Viewport`](mere::orrery::Viewport) into its pooled
     /// orrery before this ctx's render / input pass, so the orrery projects *this*
     /// window's camera, not whichever window touched the shared orrery last. The first
     /// time this window shows a graph it has no stored viewport, so it adopts the
@@ -126,8 +126,8 @@ impl WindowCtx<'_> {
                 return;
             };
             match &graphlet.binding {
-                forme::GraphletBinding::Linked { spec } => match self.orreries.get(&graph) {
-                    Some(o) => crate::graphlets::derive_members(o.graph(), spec),
+                mere::forme::GraphletBinding::Linked { spec } => match self.orreries.get(&graph) {
+                    Some(o) => mere::graphlets::derive_members(o.graph(), spec),
                     None => return,
                 },
                 _ => graphlet.anchors.clone(),

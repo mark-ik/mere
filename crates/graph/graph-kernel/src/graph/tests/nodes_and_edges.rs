@@ -89,7 +89,6 @@ fn test_add_node() {
     assert_eq!(node.velocity.x, 0.0);
     assert_eq!(node.velocity.y, 0.0);
     assert!(!node.is_pinned);
-    assert_eq!(node.lifecycle, NodeLifecycle::Cold);
 }
 
 #[test]
@@ -459,15 +458,6 @@ fn test_relations_iterator() {
         edge.weight()
             .has_relation(RelationSelector::Semantic(SemanticSubKind::Hyperlink))
     }));
-}
-
-#[test]
-fn test_node_lifecycle_default() {
-    let mut graph = Graph::new();
-    let key = graph.add_node("https://example.com".to_string(), Point2D::new(0.0, 0.0));
-
-    let node = graph.get_node(key).unwrap();
-    assert_eq!(node.lifecycle, NodeLifecycle::Cold);
 }
 
 #[test]

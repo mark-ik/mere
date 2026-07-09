@@ -4,7 +4,7 @@
 
 //! Native frame import for WebView-backed scrying surfaces.
 
-use forme::GraphMemberId;
+use mere::forme::GraphMemberId;
 use grafting::{
     Dx12SharedTexture, EpochCachedImporter, EpochFrame, ImportOptions, NativeFrame, SyncMechanism,
 };

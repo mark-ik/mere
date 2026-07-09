@@ -3,17 +3,18 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 //! The gloss outline lens: a DOM section listing the graph as a URL-structure
-//! outline ([`glossary::outline_rows`]) plus a compact metrics readout — the first
+//! outline ([`mere::glossary::outline_rows`]) plus a compact metrics readout — the first
 //! DOM gloss section (gloss-outline plan P1). Folded into the shell document like
 //! the roster, so its rows hit-test and dispatch through the one shell runner
 //! instead of a bespoke Scene hit-test.
 
-use forme::GraphMemberId;
-use orrery::NodeState;
+use mere::forme::GraphMemberId;
+use mere::orrery::NodeState;
+use mere::orrery::palette;
 use register_theme::chrome::{ChromeTheme, Color32};
 use xilem_serval::{AnyView, PointerClick, ServalCtx, ServalElement, clickable, el};
 
-use gloss::{
+use mere::gloss::{
     GlossOutlineNode, GlossOutlineRow, GlossOutlineSnapshot, GlossRowIntent, OUTLINE_HEADER_H,
     OUTLINE_ROW_H, cap_outline_rows,
 };
@@ -23,7 +24,7 @@ pub type GlossOutlineView = Box<dyn AnyView<GlossOutlineState, (), ServalCtx, Se
 #[derive(Default)]
 pub struct GlossOutlineState {
     pub rows: Vec<GlossOutlineRow>,
-    pub metrics: glossary::GraphMetrics,
+    pub metrics: mere::glossary::GraphMetrics,
     pub pending: Vec<GlossRowIntent>,
 }
 
@@ -53,7 +54,7 @@ pub fn gloss_outline_view(state: &GlossOutlineState) -> GlossOutlineView {
 /// apparatus's "Graph" section instead — gloss answers "where am I, how big, is it
 /// fragmented" at a glance beside the minimap; apparatus is where you go to diagnose.
 /// (gloss-outline plan, metrics surface split settled 2026-07-01.)
-fn metrics_header(m: &glossary::GraphMetrics) -> GlossOutlineView {
+fn metrics_header(m: &mere::glossary::GraphMetrics) -> GlossOutlineView {
     let plural = |n: usize| if n == 1 { "" } else { "s" };
     let text = format!(
         "{} node{} \u{b7} {} link{} \u{b7} {} component{}",
@@ -106,11 +107,7 @@ fn outline_row_children(row: &GlossOutlineRow) -> Vec<GlossOutlineView> {
     if let Some(node) = &row.node {
         children.push(Box::new(
             el::<_, GlossOutlineState, ()>("span", ())
-                .attr("class", "gloss-outline-dot")
-                .attr(
-                    "style",
-                    format!("background-color:{}", accent_rgb(node.selected, node.state)),
-                ),
+                .attr("class", dot_class(node.selected, node.state)),
         ));
     }
     children.push(Box::new(
@@ -120,19 +117,17 @@ fn outline_row_children(row: &GlossOutlineRow) -> Vec<GlossOutlineView> {
     children
 }
 
-/// The row's accent dot color: the same NODE_SHEET palette every node
-/// representation (gnode, workbench tab, minimap square) tints from — selection
-/// wins (amber), else the activation state (open green / closed red / idle blue).
+/// The row's accent dot classes: the base dot plus the state modifier whose rule
+/// `var()`s the shared `--node-*` palette. No color is named here, so the dot
+/// inherits node identity through the cascade like every other representation
+/// (gnode, workbench tab, minimap square). Selection wins over activation state,
+/// which `palette::state_slug` enforces once for everyone.
 /// (Representations carry node identity.)
-fn accent_rgb(selected: bool, state: NodeState) -> &'static str {
-    if selected {
-        return "rgb(232, 150, 40)";
-    }
-    match state {
-        NodeState::Open => "rgb(58, 140, 94)",
-        NodeState::Closed => "rgb(166, 72, 72)",
-        NodeState::Idle => "rgb(54, 92, 156)",
-    }
+fn dot_class(selected: bool, state: NodeState) -> String {
+    format!(
+        "gloss-outline-dot gloss-outline-dot-{}",
+        palette::state_slug(selected, state)
+    )
 }
 
 /// The outline's author CSS, themed from the chrome tokens — mirrors `roster_sheet`.
@@ -142,9 +137,12 @@ pub fn gloss_outline_sheet(c: &ChromeTheme) -> Vec<String> {
         format!("rgb({r}, {g}, {b})")
     };
     vec![
+        // The panel root carries the `--node-*` palette, so every row's dot below
+        // resolves its fill from the cascade rather than an inline color.
         format!(
-            ".gloss-outline {{ position: relative; overflow: hidden; height: 100%; box-sizing: border-box; background-color: {}; }}",
-            rgb(c.panel_bg)
+            ".gloss-outline {{ position: relative; overflow: hidden; height: 100%; box-sizing: border-box; background-color: {}; {} }}",
+            rgb(c.panel_bg),
+            palette::custom_property_declarations()
         ),
         format!(
             ".gloss-outline-metrics {{ display: block; font-size: 10px; color: {}; padding: 4px 10px; }}",
@@ -165,6 +163,10 @@ pub fn gloss_outline_sheet(c: &ChromeTheme) -> Vec<String> {
             rgb(c.body_text)
         ),
         ".gloss-outline-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }".to_string(),
+        ".gloss-outline-dot-idle { background-color: var(--node-idle-bg); }".to_string(),
+        ".gloss-outline-dot-open { background-color: var(--node-open-bg); }".to_string(),
+        ".gloss-outline-dot-closed { background-color: var(--node-closed-bg); }".to_string(),
+        ".gloss-outline-dot-selected { background-color: var(--node-selected-bg); }".to_string(),
         format!(
             ".gloss-outline-empty {{ display: block; font-size: 12px; color: {}; padding: 8px 10px; }}",
             rgb(c.muted_text)
@@ -181,7 +183,7 @@ mod tests {
 
     use super::*;
     use crate::view_pane::ViewPane;
-    use kernel::graph::fixtures::GraphFixtures;
+    use mere::kernel::graph::fixtures::GraphFixtures;
 
     type GlossOutlineLogic = fn(&GlossOutlineState) -> GlossOutlineView;
 
@@ -288,7 +290,7 @@ mod tests {
 
     #[test]
     fn cap_never_touches_glossary_rows_uncapped_export_stays_whole() {
-        use kernel::graph::Graph;
+        use mere::kernel::graph::Graph;
         let mut g = Graph::new();
         for i in 0..50 {
             g.add_node(
@@ -299,8 +301,8 @@ mod tests {
         // `outline_rows`/`outline_djot` never see a pane height; they always return the
         // complete tree regardless of how small the gloss pane's cap would be. 51 = the
         // one shared "site.test" host row (structural) + the 50 leaves under it.
-        assert_eq!(glossary::outline_rows(&g).len(), 51);
-        assert_eq!(glossary::outline_djot(&g).lines().count(), 51);
+        assert_eq!(mere::glossary::outline_rows(&g).len(), 51);
+        assert_eq!(mere::glossary::outline_djot(&g).lines().count(), 51);
     }
 
     #[test]
@@ -331,7 +333,7 @@ mod tests {
                         node: Some(node(1, "https://site.test/guide", NodeState::Idle, false)),
                     },
                 ],
-                metrics: glossary::GraphMetrics {
+                metrics: mere::glossary::GraphMetrics {
                     node_count: 1,
                     ..Default::default()
                 },
@@ -359,7 +361,7 @@ mod tests {
                     label: "Guide".to_string(),
                     node: Some(node(1, "https://site.test/guide", NodeState::Open, false)),
                 }],
-                metrics: glossary::GraphMetrics::default(),
+                metrics: mere::glossary::GraphMetrics::default(),
             },
         );
         let _ = pane.pane.frame(280, 240, &Default::default());

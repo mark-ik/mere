@@ -67,10 +67,14 @@ impl Graph {
                 favicon_rgba: node.favicon_rgba.clone(),
                 favicon_width: node.favicon_width,
                 favicon_height: node.favicon_height,
+                // Scroll / form draft left for the host's BrowserNodeState
+                // sidecar (boundary pass slice C); the snapshot now carries
+                // only the last-visited clock here. `session_state` itself
+                // stays for legacy readers and the one-time load migration.
                 session_state: Some(PersistedNodeSessionState {
-                    scroll_x: node.session_scroll.map(|(x, _)| x),
-                    scroll_y: node.session_scroll.map(|(_, y)| y),
-                    form_draft: node.session_form_draft.clone(),
+                    scroll_x: None,
+                    scroll_y: None,
+                    form_draft: None,
                     last_visited_ms: node
                         .last_visited
                         .duration_since(std::time::UNIX_EPOCH)

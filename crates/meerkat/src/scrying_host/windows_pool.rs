@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
 
-use forme::GraphMemberId;
+use mere::forme::GraphMemberId;
 use grafting::{Dx12FenceSynchronizer, EpochCachedImporter, HostWgpuContext};
 use inker::{
     FocusReason, KeyboardEvent, KeyboardModifiers, MouseButton, MouseEvent, MouseEventKind,

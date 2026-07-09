@@ -45,13 +45,28 @@ impl crate::Shell {
         // stays in the pool.
         let old_gid = self.focused_view().focused_graph;
         self.pool_orrery(target_graph, graph, empty);
+        // Fold the incoming session's per-node browser state into the shared
+        // sidecar map (node UUIDs are global, so entries from two live graphs
+        // coexist; the incoming file only seeds nodes the live map hasn't
+        // touched this run). Legacy pre-split graph.json state migrates here
+        // the same way it does at boot. (Boundary pass slice C.)
+        let (incoming, _migrated) =
+            session_runtime::browser_node_state::load_or_migrate_browser_node_states(&session_dir);
+        for (id, state) in incoming.nodes {
+            self.shared
+                .content
+                .browser_nodes
+                .nodes
+                .entry(id)
+                .or_insert(state);
+        }
         // Pool this session's graphlet index alongside its orrery (load-or-default from
         // the sidecar; a fresh session gets the default whole-session graphlet). Kept
         // warm like the orrery — a switch-back reuses the live index. Eviction parity
         // with the orrery LRU is a refinement (the index is tiny). (Graphlet wiring P1.)
         self.graphlets
             .entry(target_graph)
-            .or_insert_with(|| crate::graphlets::SessionGraphlets::load(&session_dir));
+            .or_insert_with(|| mere::graphlets::SessionGraphlets::load(&session_dir));
         self.focused_view_mut().focused_graph = target_graph;
 
         // Park the outgoing graph's physics (OQ2 park): a switched-away graph stays
@@ -122,7 +137,7 @@ impl crate::Shell {
         // Restore the orrery's settled layout from the cartography sidecar, overriding
         // the graph's load-time seed so the spatial view comes back as it was left
         // rather than re-scrambling. (Position sidecar.)
-        let present: std::collections::HashSet<forme::GraphMemberId> = ctx
+        let present: std::collections::HashSet<mere::forme::GraphMemberId> = ctx
             .orrery()
             .graph()
             .nodes()
@@ -203,7 +218,7 @@ impl crate::Shell {
     /// through here. (Window composition P2.)
     pub(crate) fn pool_orrery(&mut self, graph_id: GraphId, graph: Graph, empty: bool) {
         if let std::collections::hash_map::Entry::Vacant(slot) = self.orreries.entry(graph_id) {
-            let mut orrery = orrery::Orrery::with_graph(graph);
+            let mut orrery = mere::orrery::Orrery::with_graph(graph);
             if empty {
                 orrery.visit("mere://welcome");
             }

@@ -6,7 +6,7 @@
 
 use super::*;
 use accesskit::Action;
-use kernel::graph::fixtures::GraphFixtures;
+use mere::kernel::graph::fixtures::GraphFixtures;
 use register_theme::theme::{THEME_ID_DARK, THEME_ID_LIGHT};
 use winit::event_loop::EventLoopProxy;
 
@@ -373,7 +373,7 @@ fn relate_picker_offers_the_semantic_kinds_as_actions() {
         .find(|i| {
             matches!(
                 i.action,
-                meerkat::ContextAction::RelateAs(kernel::graph::SemanticSubKind::Cites)
+                meerkat::ContextAction::RelateAs(mere::kernel::graph::SemanticSubKind::Cites)
             )
         })
         .expect("Cites is offered as a relation kind");
@@ -619,7 +619,7 @@ fn a_pane_camera_lives_on_the_view_and_round_trips_through_the_ctx() {
 
     // A camera move made within a ctx is captured back onto the view on drop,
     // including the pan inertia (per-view, so one window's fling can't drift another).
-    let moved = orrery::Viewport {
+    let moved = mere::orrery::Viewport {
         offset: (123.0, 45.0),
         zoom: 2.0,
         yaw: 0.0,

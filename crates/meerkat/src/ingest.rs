@@ -12,15 +12,15 @@
 //! Dublin Core). [`harvest_contributions`] is the pure producer (the content
 //! actor runs it off-thread, owning no graph, and ships the result); [`harvest`]
 //! is the fused producer + applier for the host's own fetch drain, applying
-//! through `Orrery::ingest_graph` so the spatial view reconciles around the new
+//! through `mere::orrery::ingest_graph` so the spatial view reconciles around the new
 //! nodes.
 //!
 //! Anything that is not linked data (markdown, plain HTML with no JSON-LD, …) is
 //! a no-op here and renders through the normal card pipeline instead.
 
-use kernel::graph::Graph;
-use kernel::types::{GraphScope, NodeProperty};
-use linked_data::{
+use mere::kernel::graph::Graph;
+use mere::kernel::types::{GraphScope, NodeProperty};
+use mere::linked_data::{
     ContextCache, EdgeContribution, GraphContribution, NodeContribution, apply_contribution,
     from_html_with_contexts, from_jsonld_with_contexts,
 };
@@ -145,7 +145,7 @@ pub fn links_contribution(
     seed_url: &str,
     links: Vec<serval_extract::Link>,
 ) -> Option<GraphContribution> {
-    let predicate = kernel::graph::predicate_iri(kernel::graph::SemanticSubKind::Hyperlink);
+    let predicate = mere::kernel::graph::predicate_iri(mere::kernel::graph::SemanticSubKind::Hyperlink);
     // Dedup by resolved URL, keeping the first non-empty anchor text. BTreeMap for a
     // deterministic node/edge order (tests, and a stable graph apply).
     let mut targets: std::collections::BTreeMap<String, Option<String>> =

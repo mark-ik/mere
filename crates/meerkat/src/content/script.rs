@@ -21,7 +21,7 @@ use std::sync::Arc;
 use document_host::{
     CapPermission, DocumentScript, Grant, NetFetcher, NetResponse, Quota, TurnOutcome,
 };
-use kernel::permissions::{
+use mere::kernel::permissions::{
     Permission, ResolvedPermission, ScopedPermission, SettingScope, resolve_permission,
 };
 use layout_dom_api::{LayoutDom, LayoutDomMut, NodeKind};
@@ -200,7 +200,7 @@ fn resolve_cap(session: Option<Permission>, default: Permission) -> ResolvedPerm
 }
 
 /// Build a document-host [`Grant`] from the host-resolved permissions for the three
-/// application capabilities (`log`, `document`, `net`). The `kernel::permissions` ->
+/// application capabilities (`log`, `document`, `net`). The `mere::kernel::permissions` ->
 /// `Grant` seam (§11.4): the grant *policy* lives in document-host, the five-scope
 /// *resolution* is the host's input. A `Deny`/`Prompt` on a capability the component
 /// *requires* makes instantiation fail — the boundary. (So a `net`-importing script

@@ -5,36 +5,28 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "Inference-provider seam for Mere's statistical-intelligence tier — the InferenceProvider trait, capability descriptors, and a deterministic canned provider for tests; model-backed providers (burn-wgpu first) land behind features, mirroring embed's bert pattern."
+description = "Mere's statistical-intelligence glue over the standalone vates inference crate: re-exports the InferenceProvider seam, the burn llama-family decoder, and the armillary streaming actor under the established infer:: paths, keeping only the mere-side eidetic model corridor."
 
 [lib]
 path = "src/lib.rs"
 
 [dependencies]
-serde = { version = "1.0", features = ["derive"] }
-tracing = "0.1"
-# The inference actor (harness §3) rides armillary's thread-actor harness.
-# Optional so the seam's core stays thread-free and wasm-clean; hosts that
-# spawn the actor enable `actor`.
-armillary = { workspace = true, optional = true }
-# The own llama-family decoder body (P1) — burn-nn primitives (RmsNorm,
-# RotaryEncoding, SwiGlu, autoregressive cache), ndarray baseline, wgpu via
-# `decoder-wgpu`, mirroring embed's bert/bert-wgpu split.
+# The seam, decoder, and actor bodies moved to the standalone vates crate
+# (boundary pass slice B, 2026-07-09). infer re-exports the surface and keeps
+# the mere glue. Git sibling consumed one-way; a local checkout is picked up
+# via the gitignored `.cargo/config.toml` patch (mirrors sibylla / netfetcher).
+vates = { git = "https://github.com/mark-ik/vates.git", branch = "main" }
+# The mere-side corridor test's backend/tensor types (embed's `dep:burn`
+# pattern: the model tree lives in vates; these are only what the test
+# instantiates). Pulled only by the `decoder` feature.
 burn = { version = "0.21", default-features = false, features = ["ndarray", "std"], optional = true }
-serde_json = { version = "1.0", optional = true }
 safetensors = { version = "0.4", optional = true }
-# BF16/F16 → f32 decode at the safetensors boundary (TinyLlama and most
-# HF llama-family checkpoints ship bfloat16).
-half = { version = "2", optional = true }
-# HF tokenizer.json — the ONE tokenizer stack (shared shape with embed's
-# bert; no tiktoken/sentencepiece duality).
-tokenizers = { version = "0.20", default-features = false, features = ["onig"], optional = true }
 
 [features]
 default = []
-actor = ["dep:armillary"]
-decoder = ["dep:burn", "dep:serde_json", "dep:safetensors", "dep:half", "dep:tokenizers"]
-decoder-wgpu = ["decoder", "burn/wgpu"]
+actor = ["vates/actor"]
+decoder = ["vates/decoder", "dep:burn", "dep:safetensors"]
+decoder-wgpu = ["decoder", "vates/decoder-wgpu"]
 
 [dev-dependencies]
 serde_json = "1.0"

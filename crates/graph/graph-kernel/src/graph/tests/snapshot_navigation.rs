@@ -153,8 +153,13 @@ fn navigate_forward_fork_preserves_the_alternate_branch() {
     );
 }
 
+/// Scroll left the kernel Node for the host's BrowserNodeState sidecar
+/// (boundary pass slice C). What the kernel guarantees now: a legacy
+/// snapshot's `session_state` scroll/draft stay readable on the
+/// `PersistedNode` (the host's one-time migration source) and loading
+/// one neither fails nor resurrects the fields as graph state.
 #[test]
-fn test_cold_restore_reapplies_scroll_offset() {
+fn test_legacy_session_state_stays_readable_for_host_migration() {
     use crate::persistence::PersistedNodeSessionState;
 
     let node_id = Uuid::new_v4();
@@ -162,14 +167,29 @@ fn test_cold_restore_reapplies_scroll_offset() {
     node.session_state = Some(PersistedNodeSessionState {
         scroll_x: Some(20.0),
         scroll_y: Some(640.0),
-        form_draft: None,
+        form_draft: Some("draft body".to_string()),
         last_visited_ms: None,
     });
     let snapshot = snapshot_with(node, SharedNavigationMemory::empty());
 
+    // The host reads the legacy fields off the snapshot it loaded.
+    let legacy = snapshot.nodes[0]
+        .session_state
+        .as_ref()
+        .expect("legacy session state present");
+    assert_eq!(legacy.scroll_x.zip(legacy.scroll_y), Some((20.0, 640.0)));
+    assert_eq!(legacy.form_draft.as_deref(), Some("draft body"));
+
+    // The kernel loads the snapshot without them.
     let restored = Graph::from_snapshot(&snapshot);
-    let (_, node) = restored.get_node_by_url("https://example.com").unwrap();
-    assert_eq!(node.session_scroll, Some((20.0, 640.0)));
+    assert!(restored.get_node_by_url("https://example.com").is_some());
+
+    // A re-save carries no scroll/draft: the sidecar is the only home now.
+    let resaved = restored.to_snapshot();
+    let session = resaved.nodes[0].session_state.as_ref().unwrap();
+    assert_eq!(session.scroll_x, None);
+    assert_eq!(session.scroll_y, None);
+    assert_eq!(session.form_draft, None);
 }
 
 #[test]
@@ -212,5 +232,4 @@ fn test_restore_fallback_without_session_state() {
         vec!["https://legacy-one.example".to_string()]
     );
     assert_eq!(history.current_index, 0);
-    assert_eq!(restored.get_node(key).unwrap().session_scroll, None);
 }

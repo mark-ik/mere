@@ -1,9 +1,9 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/mere",
     "crates/meerkat-browser-worker",
     "crates/meerkat",
-    "crates/armillary",
     "crates/orrery/orrery",
     "crates/persona/identity",
     "crates/orrery/quint",
@@ -106,8 +106,11 @@ orrery = { path = "crates/orrery/orrery" }
 glossary = { path = "crates/graph/glossary" }
 
 # The actor-kernel runtime (host-neutral): the !Send host-kernel boundary + the
-# Send actor harness the constellation is built on.
-armillary = { path = "crates/armillary" }
+# Send actor harness the constellation is built on. Promoted to its standalone
+# repo (code-identical cutover 2026-07-09, boundary pass slice A); git sibling
+# consumed one-way, local checkout via the gitignored `.cargo/config.toml` patch.
+armillary = { git = "https://github.com/mark-ik/armillary.git", branch = "main" }
+mere = { path = "crates/mere" }
 meerkat-browser-worker = { path = "crates/meerkat-browser-worker" }
 
 fetch = { path = "crates/system/fetch" }

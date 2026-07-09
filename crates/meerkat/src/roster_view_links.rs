@@ -6,8 +6,8 @@
 //! (family grouping, relate/retract/hide/show). Split out of
 //! `roster_view_parts.rs` per the 600-LOC ceiling.
 
-use forme::GraphMemberId;
-use kernel::graph::EdgeFamily;
+use mere::forme::GraphMemberId;
+use mere::kernel::graph::EdgeFamily;
 use xilem_serval::{Keyed, PointerClick, clickable, el};
 
 use crate::roster::{LinkCard, LinkRelationRow, LinkRow, RELATE_PICKER_KINDS, RosterSubject};
@@ -23,7 +23,7 @@ enum LinkTableKey {
     Row {
         from: GraphMemberId,
         to: GraphMemberId,
-        selector: kernel::graph::RelationSelector,
+        selector: mere::kernel::graph::RelationSelector,
     },
 }
 

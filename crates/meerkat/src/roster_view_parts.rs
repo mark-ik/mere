@@ -18,13 +18,13 @@ use crate::roster_view::{RosterIntent, RosterState, RosterView};
 #[derive(Clone, PartialEq, Eq, Hash)]
 enum NodeTableKey {
     Header(String),
-    Row(forme::GraphMemberId),
+    Row(mere::forme::GraphMemberId),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum FieldTableKey {
     Header,
-    Row(kernel::graph::FieldId),
+    Row(mere::kernel::graph::FieldId),
 }
 
 pub(crate) fn tab_strip(state: &RosterState) -> RosterView {
@@ -185,7 +185,7 @@ fn field_header() -> RosterView {
     )
 }
 
-fn field_visibility_cell(id: kernel::graph::FieldId, hidden: bool) -> RosterView {
+fn field_visibility_cell(id: mere::kernel::graph::FieldId, hidden: bool) -> RosterView {
     let status = if hidden { "hidden" } else { "visible" };
     let toggle_label = if hidden { "show" } else { "hide" };
     let cells: Vec<RosterView> = vec![
@@ -201,7 +201,7 @@ fn field_visibility_cell(id: kernel::graph::FieldId, hidden: bool) -> RosterView
     Box::new(el::<_, RosterState, ()>("span", cells).attr("class", "roster-field-visibility"))
 }
 
-fn field_strength_cell(id: kernel::graph::FieldId, strength: f32) -> RosterView {
+fn field_strength_cell(id: mere::kernel::graph::FieldId, strength: f32) -> RosterView {
     let cells: Vec<RosterView> = vec![
         Box::new(field_step(id, "-", -1000.0)),
         Box::new(
@@ -266,7 +266,7 @@ fn field_card(card: &FieldDetail) -> RosterView {
 }
 
 fn field_step(
-    id: kernel::graph::FieldId,
+    id: mere::kernel::graph::FieldId,
     label: &'static str,
     delta: f32,
 ) -> impl xilem_serval::View<RosterState, (), ServalCtx, Element = ServalElement> {

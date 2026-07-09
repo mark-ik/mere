@@ -49,13 +49,13 @@ use std::time::Instant;
 use crate::serval_render::fragments_from_scripted_dom;
 use accesskit::NodeId as AccessNodeId;
 use eidetic_fjall::FjallStore;
-use forme::GraphMemberId;
+use mere::forme::GraphMemberId;
 use frame::{FrameId, FrameLayout, GraphId, PaneContent, PaneId, PaneNode, SessionId};
 use inker::EngineRegistry;
 use layout_dom_api::LayoutDom;
 use meerkat::{Chrome, ChromeLogic, chrome_view};
-use orrery::{CameraView, Orrery};
-use platen::Workbench;
+use mere::orrery::{CameraView, Orrery};
+use mere::platen::Workbench;
 use register_diagnostics::{DiagnosticEvent, install_global_sender};
 use register_theme::chrome::{ChromeTheme, Color32};
 use register_theme::theme::ThemeRegistry;
@@ -175,8 +175,8 @@ mod window_view;
 
 use constellation::Constellation;
 pub use fetch;
-pub use graphlets;
-pub use graphlets::classifier as graphlet_classifier;
+pub use mere::graphlets;
+pub use mere::graphlets::classifier as graphlet_classifier;
 use observability::HostObservability;
 pub(crate) use shell_command::ShellCommand;
 
@@ -236,7 +236,7 @@ struct Shell {
     /// **branch** graphlet, later document-groups / relational-browse neighborhoods.
     /// Loaded lazily from the `graphlets.json` sidecar; mutated + persisted on branch.
     /// (Graphlet-wiring Phase 1; reuses forme's `GraphletRef`, not its `GraphTree`.)
-    graphlets: HashMap<GraphId, graphlets::SessionGraphlets>,
+    graphlets: HashMap<GraphId, mere::graphlets::SessionGraphlets>,
     /// All live windows, keyed by OS `WindowId` — the registry. Every per-window
     /// handler is dispatched by resolving the event's id to its view here. At N=1
     /// it holds just the primary; tear-out (MW3+) inserts more. (Multi-window MW2 (d).)
@@ -343,7 +343,7 @@ struct WindowCtx<'a> {
     /// The per-session graphlet pool (read-only here), so a **branch** window's render
     /// can scope its orrery to its graphlet's live roster. (Graphlet wiring Phase 2
     /// slice 3.)
-    graphlets: &'a HashMap<GraphId, graphlets::SessionGraphlets>,
+    graphlets: &'a HashMap<GraphId, mere::graphlets::SessionGraphlets>,
     clipboard: &'a mut Option<arboard::Clipboard>,
     a11y_bridge: &'a mut a11y_bridge::AccessKitBridge,
     a11y_action_routes: &'a mut HashMap<AccessNodeId, A11yHostAction>,

@@ -9,7 +9,7 @@
 //! R2: edge rows (kind + direction + other node title) for the focused row.
 //! R3: sort/filter by content type; content-type shapes in the orrery.
 
-pub use ::roster::*;
+pub use ::mere::roster::*;
 use register_theme::chrome::{ChromeTheme, Color32};
 
 /// The roster's author CSS, themed from the chrome tokens.

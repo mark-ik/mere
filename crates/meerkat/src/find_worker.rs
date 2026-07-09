@@ -23,7 +23,7 @@ use std::cell::RefCell;
 use std::sync::mpsc::Receiver;
 
 use armillary::{ActorHandle, Emitter, Wake, spawn};
-use forme::GraphMemberId;
+use mere::forme::GraphMemberId;
 use inker::{EngineRegistry, EngineRoutePolicy};
 
 use crate::fetch::{ContentState, Fetched};

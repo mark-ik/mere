@@ -8,7 +8,7 @@
 //! in the focus-card slot. The pure spec-building lives in `swatch.rs`; this is the host extraction
 //! glue (the untestable orrery / graph reads), kept out of the near-full `setup.rs`.
 
-use kernel::graph::{EdgeFamily, RelationKind, RelationSelector};
+use mere::kernel::graph::{EdgeFamily, RelationKind, RelationSelector};
 
 use crate::swatch::connections_spec_from;
 use crate::window_view::{FocusCard, FocusCardKind};
@@ -47,7 +47,7 @@ impl crate::WindowCtx<'_> {
         // Inter-edges: one entry per selected relation cell. The swatch fans cells that share the
         // same endpoints, and its DOM carries the relation kind for Link Card routing. Hidden
         // relation cells stay hidden here too, matching the canvas edge pass.
-        let mut edges: Vec<(uuid::Uuid, uuid::Uuid, kernel::graph::RelationKind)> = Vec::new();
+        let mut edges: Vec<(uuid::Uuid, uuid::Uuid, mere::kernel::graph::RelationKind)> = Vec::new();
         for r in graph.relations() {
             let (Some(&a), Some(&b)) = (keys_to_id.get(&r.from), keys_to_id.get(&r.to)) else {
                 continue;

@@ -5,8 +5,8 @@
 //! Data builders for the graph-object Roster: node/link/graphlet/field tables
 //! plus the selected subject's in-roster detail card.
 
-use forme::{GraphMemberId, GraphletBinding, GraphletId};
-use kernel::graph::RelationSelector;
+use mere::forme::{GraphMemberId, GraphletBinding, GraphletId};
+use mere::kernel::graph::RelationSelector;
 
 use super::{WindowCtx, fetch};
 use crate::pane_input_snapshot::PaneInputSnapshot;
@@ -15,10 +15,10 @@ use crate::roster;
 impl WindowCtx<'_> {
     pub(super) fn roster_snapshot(
         &self,
-        subject: Option<&roster::RosterSubject>,
-    ) -> roster::RosterSnapshot {
+        subject: Option<&mere::roster::RosterSubject>,
+    ) -> mere::roster::RosterSnapshot {
         let input = self.pane_input_snapshot();
-        roster::RosterSnapshot {
+        mere::roster::RosterSnapshot {
             node_rows: self.roster_node_rows(&input),
             link_rows: self.roster_link_rows(subject),
             graphlet_rows: self.roster_graphlet_rows(subject),
@@ -27,14 +27,14 @@ impl WindowCtx<'_> {
         }
     }
 
-    pub(super) fn roster_rows(&self) -> Vec<roster::RosterRow> {
+    pub(super) fn roster_rows(&self) -> Vec<mere::roster::RosterRow> {
         let input = self.pane_input_snapshot();
         self.roster_node_rows(&input)
     }
 
-    fn roster_node_rows(&self, input: &PaneInputSnapshot) -> Vec<roster::RosterRow> {
+    fn roster_node_rows(&self, input: &PaneInputSnapshot) -> Vec<mere::roster::RosterRow> {
         let graph = self.orrery().graph();
-        let rows: Vec<roster::NodeRowInput> = graph
+        let rows: Vec<mere::roster::NodeRowInput> = graph
             .nodes()
             .map(|(key, node)| {
                 let url = node.url().to_string();
@@ -44,7 +44,7 @@ impl WindowCtx<'_> {
                 };
                 let mut tags: Vec<String> = node.tags.iter().cloned().collect();
                 tags.sort();
-                roster::NodeRowInput {
+                mere::roster::NodeRowInput {
                     member: node.id,
                     title: graph.node_display_label(key),
                     url,
@@ -55,28 +55,28 @@ impl WindowCtx<'_> {
                 }
             })
             .collect();
-        roster::build_node_rows(rows)
+        mere::roster::build_node_rows(rows)
     }
 
-    fn roster_link_rows(&self, subject: Option<&roster::RosterSubject>) -> Vec<roster::LinkRow> {
+    fn roster_link_rows(&self, subject: Option<&mere::roster::RosterSubject>) -> Vec<mere::roster::LinkRow> {
         let graph = self.orrery().graph();
-        let rows: Vec<roster::LinkRowInput> = graph
+        let rows: Vec<mere::roster::LinkRowInput> = graph
             .relations()
             .filter_map(|relation| {
                 let source = graph.get_node(relation.from)?;
                 let target = graph.get_node(relation.to)?;
-                let selector = roster::relation_selector(relation.kind);
+                let selector = mere::roster::relation_selector(relation.kind);
                 let selected = matches!(
                     subject,
-                    Some(roster::RosterSubject::LinkBundle { from, to })
+                    Some(mere::roster::RosterSubject::LinkBundle { from, to })
                         if *from == source.id && *to == target.id
                 ) || matches!(
                     subject,
-                    Some(roster::RosterSubject::RelationCell { from, to, selector: s })
+                    Some(mere::roster::RosterSubject::RelationCell { from, to, selector: s })
                         if *from == source.id && *to == target.id && *s == selector
                 ) || matches!(
                     subject,
-                    Some(roster::RosterSubject::Facet(roster::FacetSubject::LinkFamily {
+                    Some(mere::roster::RosterSubject::Facet(mere::roster::FacetSubject::LinkFamily {
                         from,
                         to,
                         family,
@@ -84,7 +84,7 @@ impl WindowCtx<'_> {
                         && *to == target.id
                         && *family == relation.kind.family()
                 );
-                Some(roster::LinkRowInput {
+                Some(mere::roster::LinkRowInput {
                     from: source.id,
                     to: target.id,
                     source_title: graph.node_display_label(relation.from),
@@ -92,49 +92,49 @@ impl WindowCtx<'_> {
                     target_title: graph.node_display_label(relation.to),
                     target_url: target.url().to_string(),
                     kind: relation.kind,
-                    source_label: roster::relation_label(graph, relation.from, relation.to),
+                    source_label: mere::roster::relation_label(graph, relation.from, relation.to),
                     selected,
                 })
             })
             .collect();
-        roster::build_link_rows(rows)
+        mere::roster::build_link_rows(rows)
     }
 
     fn roster_graphlet_rows(
         &self,
-        subject: Option<&roster::RosterSubject>,
-    ) -> Vec<roster::GraphletRow> {
+        subject: Option<&mere::roster::RosterSubject>,
+    ) -> Vec<mere::roster::GraphletRow> {
         let Some(index) = self.graphlets.get(&self.view.focused_graph) else {
             return Vec::new();
         };
         let graph = self.orrery().graph();
-        let rows: Vec<roster::GraphletRowInput> = index
+        let rows: Vec<mere::roster::GraphletRowInput> = index
             .graphlets()
             .iter()
             .map(|g| {
                 let delta = index.preview_reconcile(graph, g.id);
-                roster::GraphletRowInput {
+                mere::roster::GraphletRowInput {
                     id: g.id,
                     kind: g.kind.clone(),
                     binding: g.binding.clone(),
                     member_count: g.anchors.len(),
                     added_count: delta.as_ref().map(|delta| delta.added.len()).unwrap_or(0),
                     removed_count: delta.as_ref().map(|delta| delta.removed.len()).unwrap_or(0),
-                    selected: matches!(subject, Some(roster::RosterSubject::Graphlet(id)) if *id == g.id),
+                    selected: matches!(subject, Some(mere::roster::RosterSubject::Graphlet(id)) if *id == g.id),
                 }
             })
             .collect();
-        roster::build_graphlet_rows(rows)
+        mere::roster::build_graphlet_rows(rows)
     }
 
-    fn roster_field_rows(&self, subject: Option<&roster::RosterSubject>) -> Vec<roster::FieldRow> {
-        let selected_field = roster::selected_field_id(subject);
-        let rows: Vec<roster::FieldRowInput> = self
+    fn roster_field_rows(&self, subject: Option<&mere::roster::RosterSubject>) -> Vec<mere::roster::FieldRow> {
+        let selected_field = mere::roster::selected_field_id(subject);
+        let rows: Vec<mere::roster::FieldRowInput> = self
             .orrery()
             .graph()
             .fields()
             .filter(|field| field.is_active())
-            .map(|field| roster::FieldRowInput {
+            .map(|field| mere::roster::FieldRowInput {
                 id: field.id,
                 name: field.name.clone(),
                 definition: field.definition.clone(),
@@ -144,37 +144,37 @@ impl WindowCtx<'_> {
                 strength: self.orrery().field_strength(field.id).unwrap_or(0.0),
             })
             .collect();
-        roster::build_field_rows(rows)
+        mere::roster::build_field_rows(rows)
     }
 
     fn roster_detail(
         &self,
-        subject: &roster::RosterSubject,
+        subject: &mere::roster::RosterSubject,
         input: &PaneInputSnapshot,
-    ) -> Option<roster::RosterDetail> {
+    ) -> Option<mere::roster::RosterDetail> {
         match subject {
-            roster::RosterSubject::Node(member) => self
+            mere::roster::RosterSubject::Node(member) => self
                 .node_detail_with_input(*member, input)
-                .map(roster::RosterDetail::Node),
-            roster::RosterSubject::LinkBundle { from, to } => self
+                .map(mere::roster::RosterDetail::Node),
+            mere::roster::RosterSubject::LinkBundle { from, to } => self
                 .link_card(*from, *to, None)
-                .map(roster::RosterDetail::Link),
-            roster::RosterSubject::RelationCell { from, to, selector } => self
+                .map(mere::roster::RosterDetail::Link),
+            mere::roster::RosterSubject::RelationCell { from, to, selector } => self
                 .link_card(*from, *to, Some(*selector))
-                .map(roster::RosterDetail::Link),
-            roster::RosterSubject::Graphlet(id) => {
-                self.graphlet_card(*id).map(roster::RosterDetail::Graphlet)
+                .map(mere::roster::RosterDetail::Link),
+            mere::roster::RosterSubject::Graphlet(id) => {
+                self.graphlet_card(*id).map(mere::roster::RosterDetail::Graphlet)
             }
-            roster::RosterSubject::Field(id) => {
-                self.field_detail(*id).map(roster::RosterDetail::Field)
+            mere::roster::RosterSubject::Field(id) => {
+                self.field_detail(*id).map(mere::roster::RosterDetail::Field)
             }
-            roster::RosterSubject::Facet(facet) => {
-                self.facet_card(facet).map(roster::RosterDetail::Facet)
+            mere::roster::RosterSubject::Facet(facet) => {
+                self.facet_card(facet).map(mere::roster::RosterDetail::Facet)
             }
         }
     }
 
-    pub(super) fn node_detail(&self, member: GraphMemberId) -> Option<roster::NodeDetail> {
+    pub(super) fn node_detail(&self, member: GraphMemberId) -> Option<mere::roster::NodeDetail> {
         let input = self.pane_input_snapshot();
         self.node_detail_with_input(member, &input)
     }
@@ -183,7 +183,7 @@ impl WindowCtx<'_> {
         &self,
         member: GraphMemberId,
         input: &PaneInputSnapshot,
-    ) -> Option<roster::NodeDetail> {
+    ) -> Option<mere::roster::NodeDetail> {
         let graph = self.orrery().graph();
         let (key, node) = graph.get_node_by_id(member)?;
         let url = node.url().to_string();
@@ -199,7 +199,7 @@ impl WindowCtx<'_> {
             .filter(|r| r.from == key || r.to == key)
             .count();
         let field_count = self.attached_field_names(member).len();
-        Some(roster::build_node_detail(roster::NodeDetailInput {
+        Some(mere::roster::build_node_detail(mere::roster::NodeDetailInput {
             member,
             title: graph.node_display_label(key),
             url,
@@ -216,20 +216,20 @@ impl WindowCtx<'_> {
         from: GraphMemberId,
         to: GraphMemberId,
         selected_selector: Option<RelationSelector>,
-    ) -> Option<roster::LinkCard> {
+    ) -> Option<mere::roster::LinkCard> {
         let graph = self.orrery().graph();
         let (from_key, source) = graph.get_node_by_id(from)?;
         let (to_key, target) = graph.get_node_by_id(to)?;
-        let relations: Vec<roster::LinkRelationInput> = graph
+        let relations: Vec<mere::roster::LinkRelationInput> = graph
             .relations()
             .filter(|r| r.from == from_key && r.to == to_key)
             .map(|r| {
-                let selector = roster::relation_selector(r.kind);
-                roster::LinkRelationInput {
+                let selector = mere::roster::relation_selector(r.kind);
+                mere::roster::LinkRelationInput {
                     from,
                     to,
                     kind: r.kind,
-                    label: roster::relation_label(graph, r.from, r.to),
+                    label: mere::roster::relation_label(graph, r.from, r.to),
                     selected: selected_selector == Some(selector),
                     hidden: self
                         .orrery()
@@ -237,7 +237,7 @@ impl WindowCtx<'_> {
                 }
             })
             .collect();
-        Some(roster::build_link_card(roster::LinkCardInput {
+        Some(mere::roster::build_link_card(mere::roster::LinkCardInput {
             from,
             to,
             source_title: graph.node_display_label(from_key),
@@ -249,44 +249,44 @@ impl WindowCtx<'_> {
         }))
     }
 
-    fn graphlet_card(&self, id: GraphletId) -> Option<roster::GraphletCard> {
+    fn graphlet_card(&self, id: GraphletId) -> Option<mere::roster::GraphletCard> {
         let graph = self.orrery().graph();
         let index = self.graphlets.get(&self.view.focused_graph)?;
         let graphlet = index.get(id)?;
         let delta = index.preview_reconcile(graph, id);
         let family_selectors = match &graphlet.binding {
             GraphletBinding::Linked { spec } => Some(
-                crate::graphlets::EDGE_FAMILIES
+                mere::graphlets::EDGE_FAMILIES
                     .iter()
-                    .map(|&family| (family, crate::graphlets::spec_has_family(spec, family)))
+                    .map(|&family| (family, mere::graphlets::spec_has_family(spec, family)))
                     .collect(),
             ),
             _ => None,
         };
-        Some(roster::build_graphlet_card(roster::GraphletCardInput {
+        Some(mere::roster::build_graphlet_card(mere::roster::GraphletCardInput {
             id,
             kind: graphlet.kind.clone(),
             binding: graphlet.binding.clone(),
-            members: roster::member_labels(graph, &graphlet.anchors),
+            members: mere::roster::member_labels(graph, &graphlet.anchors),
             family_selectors,
             added: delta
                 .as_ref()
-                .map(|d| roster::member_labels(graph, &d.added))
+                .map(|d| mere::roster::member_labels(graph, &d.added))
                 .unwrap_or_default(),
             removed: delta
                 .as_ref()
-                .map(|d| roster::member_labels(graph, &d.removed))
+                .map(|d| mere::roster::member_labels(graph, &d.removed))
                 .unwrap_or_default(),
         }))
     }
 
-    pub(super) fn field_detail(&self, id: kernel::graph::FieldId) -> Option<roster::FieldDetail> {
+    pub(super) fn field_detail(&self, id: mere::kernel::graph::FieldId) -> Option<mere::roster::FieldDetail> {
         let field = self
             .orrery()
             .graph()
             .fields()
             .find(|field| field.id == id)?;
-        Some(roster::build_field_detail(roster::FieldDetailInput {
+        Some(mere::roster::build_field_detail(mere::roster::FieldDetailInput {
             id,
             name: field.name.clone(),
             definition: field.definition.clone(),

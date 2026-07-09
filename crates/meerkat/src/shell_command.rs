@@ -34,14 +34,14 @@ pub(crate) enum ShellCommand {
     /// Grow a branch graphlet's roster after scoped navigation.
     RecordBranchMember {
         graph: GraphId,
-        graphlet: forme::GraphletId,
+        graphlet: mere::forme::GraphletId,
         node: uuid::Uuid,
     },
     /// Mint and open a Linked graphlet over the donor graph.
     OpenLinkedGraphlet {
         node: uuid::Uuid,
         from: GraphId,
-        kind: forme::GraphletKind,
+        kind: mere::forme::GraphletKind,
         selectors: Vec<String>,
         chip: &'static str,
     },
@@ -52,29 +52,29 @@ pub(crate) enum ShellCommand {
     /// Reconcile one Linked graphlet from the Roster Graphlet Card.
     ReconcileGraphlet {
         graph: GraphId,
-        graphlet: forme::GraphletId,
+        graphlet: mere::forme::GraphletId,
     },
     /// Convert a graphlet to an unlinked session grouping.
     KeepGraphletAsSession {
         graph: GraphId,
-        graphlet: forme::GraphletId,
+        graphlet: mere::forme::GraphletId,
     },
     /// Toggle a relation-family selector on a Linked graphlet's spec, from the
     /// Roster Graphlet Card (selector/family editing).
     ToggleGraphletFamilySelector {
         graph: GraphId,
-        graphlet: forme::GraphletId,
-        family: kernel::graph::EdgeFamily,
+        graphlet: mere::forme::GraphletId,
+        family: mere::kernel::graph::EdgeFamily,
     },
     /// Branch an existing graphlet and open the branch.
     BranchGraphlet {
         graph: GraphId,
-        graphlet: forme::GraphletId,
+        graphlet: mere::forme::GraphletId,
     },
     /// Open an existing graphlet in a scoped window.
     OpenExistingGraphlet {
         graph: GraphId,
-        graphlet: forme::GraphletId,
+        graphlet: mere::forme::GraphletId,
     },
     /// Close a secondary window.
     #[allow(dead_code)]

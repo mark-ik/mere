@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use forme::GraphMemberId;
+use mere::forme::GraphMemberId;
 use inker::routing::{
     ENGINE_SCRYING_WEB, EngineRouteDecision, SurfaceContract, SurfaceContractMode, SurfaceTargetId,
 };

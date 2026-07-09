@@ -29,11 +29,11 @@ impl WindowCtx<'_> {
                         }
                         "face:favicon" => {
                             self.orrery_mut()
-                                .set_node_face(member, orrery::Face::Favicon);
+                                .set_node_face(member, mere::orrery::Face::Favicon);
                             face_changed = true;
                         }
                         "face:bare" => {
-                            self.orrery_mut().set_node_face(member, orrery::Face::Bare);
+                            self.orrery_mut().set_node_face(member, mere::orrery::Face::Bare);
                             face_changed = true;
                         }
                         _ => {}
@@ -90,7 +90,7 @@ impl WindowCtx<'_> {
         &self,
         x: f32,
         y: f32,
-    ) -> Option<(uuid::Uuid, uuid::Uuid, kernel::graph::RelationSelector)> {
+    ) -> Option<(uuid::Uuid, uuid::Uuid, mere::kernel::graph::RelationSelector)> {
         let session = self.view.chrome_session.as_ref()?;
         let dom = self.view.dom.borrow();
         let offsets = ScrollOffsets::<NodeId>::default();
@@ -100,7 +100,7 @@ impl WindowCtx<'_> {
                 let from = attr_value(&dom, node, "data-from")?.parse().ok()?;
                 let to = attr_value(&dom, node, "data-to")?.parse().ok()?;
                 let tag = attr_value(&dom, node, "data-relation-tag")?.parse().ok()?;
-                let kind = kernel::graph::RelationKind::from_tag(tag)?;
+                let kind = mere::kernel::graph::RelationKind::from_tag(tag)?;
                 return Some((from, to, selector_for_relation_kind(kind)));
             }
             node = dom.parent(node)?;
@@ -394,26 +394,26 @@ fn attr_value(dom: &serval_scripted_dom::ScriptedDom, node: NodeId, name: &str) 
 }
 
 fn selector_for_relation_kind(
-    kind: kernel::graph::RelationKind,
-) -> kernel::graph::RelationSelector {
+    kind: mere::kernel::graph::RelationKind,
+) -> mere::kernel::graph::RelationSelector {
     match kind {
-        kernel::graph::RelationKind::Semantic(sub) => {
-            kernel::graph::RelationSelector::Semantic(sub)
+        mere::kernel::graph::RelationKind::Semantic(sub) => {
+            mere::kernel::graph::RelationSelector::Semantic(sub)
         }
-        kernel::graph::RelationKind::Traversal => {
-            kernel::graph::RelationSelector::Family(kernel::graph::EdgeFamily::Traversal)
+        mere::kernel::graph::RelationKind::Traversal => {
+            mere::kernel::graph::RelationSelector::Family(mere::kernel::graph::EdgeFamily::Traversal)
         }
-        kernel::graph::RelationKind::Containment(sub) => {
-            kernel::graph::RelationSelector::Containment(sub)
+        mere::kernel::graph::RelationKind::Containment(sub) => {
+            mere::kernel::graph::RelationSelector::Containment(sub)
         }
-        kernel::graph::RelationKind::Arrangement(sub) => {
-            kernel::graph::RelationSelector::Arrangement(sub)
+        mere::kernel::graph::RelationKind::Arrangement(sub) => {
+            mere::kernel::graph::RelationSelector::Arrangement(sub)
         }
-        kernel::graph::RelationKind::Imported(sub) => {
-            kernel::graph::RelationSelector::Imported(sub)
+        mere::kernel::graph::RelationKind::Imported(sub) => {
+            mere::kernel::graph::RelationSelector::Imported(sub)
         }
-        kernel::graph::RelationKind::Provenance(sub) => {
-            kernel::graph::RelationSelector::Provenance(sub)
+        mere::kernel::graph::RelationKind::Provenance(sub) => {
+            mere::kernel::graph::RelationSelector::Provenance(sub)
         }
     }
 }

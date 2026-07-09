@@ -13,10 +13,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use kernel::graph::GraphJournal;
-use kernel::graph::capture::{CapturedDelta, set_captured_delta_hook};
+use mere::kernel::graph::GraphJournal;
+use mere::kernel::graph::capture::{CapturedDelta, set_captured_delta_hook};
 #[cfg(test)]
-use kernel::graph::Graph;
+use mere::kernel::graph::Graph;
 
 #[derive(Clone, Default)]
 pub(crate) struct GraphDeltaLog {
@@ -182,14 +182,14 @@ mod tests {
     use super::*;
 
     use euclid::default::Point2D;
-    use kernel::graph::Graph;
-    use kernel::graph::apply::{GraphDelta, add_node, apply_graph_delta, assert_relation};
-    use kernel::graph::{
+    use mere::kernel::graph::Graph;
+    use mere::kernel::graph::apply::{GraphDelta, add_node, apply_graph_delta, assert_relation};
+    use mere::kernel::graph::{
         Coupling, CouplingId, CouplingResponse, EdgeAssertion, Field, FieldDefinition, FieldExtent,
         FieldId, NavigationTrigger, NodeSelector, ProvenanceSubKind, ScalarField, SemanticSubKind,
     };
-    use kernel::persistence::GraphSnapshot;
-    use kernel::types::{
+    use mere::kernel::persistence::GraphSnapshot;
+    use mere::kernel::types::{
         BadgeIcon, ClassificationProvenance, ClassificationScheme, ClassificationStatus,
         FrameLayoutHint, NodeClassification, NodeDerivation, NodeImportProvenance, NodeProperty,
         SplitOrientation,
@@ -240,7 +240,7 @@ mod tests {
                 )
             });
         }
-        snapshot.navigation = kernel::graph::SharedNavigationMemory::from_snapshot(nav_snapshot);
+        snapshot.navigation = mere::kernel::graph::SharedNavigationMemory::from_snapshot(nav_snapshot);
         let mut value = serde_json::to_value(snapshot).expect("snapshot json");
         // Blank the wall-clock / minted fields that legitimately differ between the
         // original graph and one replayed from the delta log, so the comparison is
@@ -369,23 +369,9 @@ mod tests {
         );
         let _ = apply_graph_delta(
             &mut graph,
-            GraphDelta::SetNodeViewerOverride {
-                key: a,
-                viewer_override: Some("viewer:note".into()),
-            },
-        );
-        let _ = apply_graph_delta(
-            &mut graph,
             GraphDelta::SetNodePinned {
                 key: a,
                 is_pinned: true,
-            },
-        );
-        let _ = apply_graph_delta(
-            &mut graph,
-            GraphDelta::SetNodeCompatMode {
-                key: a,
-                compat_mode: true,
             },
         );
         let _ = apply_graph_delta(
@@ -407,20 +393,6 @@ mod tests {
             GraphDelta::SetNodeBody {
                 key: a,
                 body: Some("body".into()),
-            },
-        );
-        let _ = apply_graph_delta(
-            &mut graph,
-            GraphDelta::SetNodeFormDraft {
-                key: a,
-                form_draft: Some("draft body".into()),
-            },
-        );
-        let _ = apply_graph_delta(
-            &mut graph,
-            GraphDelta::SetNodeSessionScroll {
-                key: a,
-                session_scroll: Some((20.0, 640.0)),
             },
         );
         let _ = apply_graph_delta(&mut graph, GraphDelta::TouchNodeLastVisited { key: a });
@@ -710,9 +682,10 @@ mod tests {
         // One captured delta per `apply_graph_delta` call above (plus the 3
         // `add_node` + 1 `assert_relation` setup deltas). The two semantic-predicate
         // deltas each capture once now that statement writes fold into the predicate
-        // write (petgraph-RDF statement-aware writes), so the total is 53; the replay
-        // assertions below prove no data is lost.
-        assert_eq!(entries.len(), 53);
+        // write (petgraph-RDF statement-aware writes), so the total is 49 (the four
+        // browser-state deltas left with the BrowserNodeState sidecar, boundary pass
+        // slice C); the replay assertions below prove no data is lost.
+        assert_eq!(entries.len(), 49);
         let replayed = replay_delta_log(&path).expect("replay log");
         assert_eq!(replayed.node_count(), 3);
         assert_eq!(replayed.edge_count(), 2);
@@ -745,12 +718,8 @@ mod tests {
         assert_eq!(node.favicon_width, 1);
         assert_eq!(node.favicon_height, 1);
         assert_eq!(node.mime_hint.as_deref(), Some("text/html"));
-        assert_eq!(node.viewer_override.as_deref(), Some("viewer:note"));
         assert!(node.is_pinned);
-        assert!(node.compat_mode);
         assert_eq!(node.body.as_deref(), Some("body"));
-        assert_eq!(node.session_form_draft.as_deref(), Some("draft body"));
-        assert_eq!(node.session_scroll, Some((20.0, 640.0)));
         assert!(!node.tags.contains("research"));
         assert!(node.tags.contains("paper"));
         assert_eq!(

@@ -15,8 +15,8 @@
 //! open settings tile, and [`WindowCtx::snapshot_settings_panes`] resolves them through this
 //! seam into the shell document's settings panes each frame.
 
-use forme::GraphMemberId;
-use kernel::permissions::Permission;
+use mere::forme::GraphMemberId;
+use mere::kernel::permissions::Permission;
 use register_theme::chrome::ChromeTheme;
 use session_runtime::settings_store;
 

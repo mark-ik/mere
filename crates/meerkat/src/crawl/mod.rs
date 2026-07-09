@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use fetch::Fetched;
 use frame::GraphId;
-use linked_data::GraphContribution;
+use mere::linked_data::GraphContribution;
 
 pub use ::crawl::{CrawlPolicy, CrawlProgress, HostScope};
 

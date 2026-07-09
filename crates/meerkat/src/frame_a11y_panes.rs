@@ -11,7 +11,7 @@
 use std::collections::HashMap;
 
 use accesskit::{Action, Node, NodeId as AccessNodeId, Role};
-use forme::GraphMemberId;
+use mere::forme::GraphMemberId;
 use frame::{PaneContent, PaneId};
 use layout_dom_api::{LayoutDom, Namespace, NodeKind};
 use serval_scripted_dom::NodeId;
@@ -30,7 +30,7 @@ impl WindowCtx<'_> {
         use crate::window_view::ShellListPane;
         match content {
             PaneContent::Orrery => self.orrery_a11y_tree(pane_id),
-            PaneContent::Workbench => workbench_domain::project_workbench(&self.view.workbench),
+            PaneContent::Workbench => mere::workbench::project_workbench(&self.view.workbench),
             PaneContent::Apparatus => self.list_pane_a11y_tree(
                 ShellListPane::Apparatus,
                 "apparatus",

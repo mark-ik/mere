@@ -436,7 +436,7 @@ impl WindowCtx<'_> {
             active.is_none(),
             "orrery:layout:".to_string(),
         ));
-        for &(id, label) in platen::ORRERY_LAYOUT_STRATEGIES {
+        for &(id, label) in mere::platen::ORRERY_LAYOUT_STRATEGIES {
             items.push(pick(
                 label.to_string(),
                 active == Some(id),
@@ -467,7 +467,7 @@ impl WindowCtx<'_> {
         // When size-by-importance is on, pick the metric it reads: degree (cheap) or betweenness
         // (structural brokerage — a bridge node stands out beyond its degree). (Graph signals.)
         if sbi {
-            let by_degree = self.orrery().importance_metric() == orrery::ImportanceMetric::Degree;
+            let by_degree = self.orrery().importance_metric() == mere::orrery::ImportanceMetric::Degree;
             items.push(pick(
                 check("  by degree", by_degree),
                 by_degree,
@@ -497,7 +497,7 @@ impl WindowCtx<'_> {
             "orrery:bridgerings".to_string(),
         ));
         if bridges {
-            let by_between = self.orrery().bridge_metric() == orrery::BridgeMetric::Betweenness;
+            let by_between = self.orrery().bridge_metric() == mere::orrery::BridgeMetric::Betweenness;
             items.push(pick(
                 check("  by betweenness", by_between),
                 by_between,
@@ -520,7 +520,7 @@ impl WindowCtx<'_> {
             gloss.is_none(),
             "orrery:gloss:".to_string(),
         ));
-        for &(id, label) in platen::ORRERY_LAYOUT_STRATEGIES {
+        for &(id, label) in mere::platen::ORRERY_LAYOUT_STRATEGIES {
             items.push(pick(
                 label.to_string(),
                 gloss == Some(id),

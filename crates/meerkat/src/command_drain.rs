@@ -14,7 +14,7 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use frame::PaneContent;
-use kernel::graph::SemanticSubKind;
+use mere::kernel::graph::SemanticSubKind;
 use meerkat::CommsIntent;
 use meerkat::command::Command;
 use meerkat::shell_eval::{CommandShell, RemoteAuthPairingAcceptance, ShellContext};
@@ -54,7 +54,7 @@ fn relation_kind_from_str(s: &str) -> SemanticSubKind {
 /// Compact one-line rendering of SPARQL rows for the omnibar echo: the row count,
 /// then up to five rows as `var=val, …` joined by ` | `, with a trailing `…` when
 /// truncated. (A first cut; a results pane is the follow-on.)
-fn format_sparql_rows(rows: &linked_data::query::QueryRows) -> String {
+fn format_sparql_rows(rows: &mere::linked_data::query::QueryRows) -> String {
     const MAX_ROWS: usize = 5;
     let rendered: Vec<String> = rows
         .rows
@@ -317,7 +317,7 @@ impl WindowCtx<'_> {
     /// Shared by the explicit Save and the autosave-on-close path.
     fn write_focused_knot_body(
         &mut self,
-        member: forme::GraphMemberId,
+        member: mere::forme::GraphMemberId,
         body: String,
     ) -> Option<String> {
         let Some((_, node)) = self.orrery().graph().get_node_by_id(member) else {
@@ -333,7 +333,7 @@ impl WindowCtx<'_> {
         };
         let body_for_graph = body.clone();
         let changed = self.orrery_mut().ingest_graph(|graph| {
-            use kernel::graph::apply::{GraphDelta, GraphDeltaResult, apply_graph_delta};
+            use mere::kernel::graph::apply::{GraphDelta, GraphDeltaResult, apply_graph_delta};
             let Some((key, _)) = graph.get_node_by_id(member) else {
                 return false;
             };
@@ -679,9 +679,9 @@ impl WindowCtx<'_> {
 
     /// Run a `>sparql("…")` query over the focused graph and format a one-line
     /// result for the omnibar echo. Read-only (builds an ephemeral in-memory
-    /// store via `linked_data::query`; the kernel stays the authority).
+    /// store via `mere::linked_data::query`; the kernel stays the authority).
     fn run_sparql_query(&self, query: &str) -> String {
-        match linked_data::query::sparql(self.orrery().graph(), query) {
+        match mere::linked_data::query::sparql(self.orrery().graph(), query) {
             Err(err) => format!("SPARQL error: {err}"),
             Ok(rows) if rows.rows.is_empty() => "0 results".to_string(),
             Ok(rows) => format_sparql_rows(&rows),
@@ -1136,7 +1136,8 @@ impl WindowCtx<'_> {
             .and_then(|member| self.orrery().graph().get_node_by_id(member))
             .map(|(_, node)| node);
         let state = node.and_then(|node| self.shared.content.pages.get(node.url()));
-        let inspect = super::inspector::inspector_rows(node, state);
+        let browser = node.and_then(|node| self.shared.content.browser_nodes.get(node.id));
+        let inspect = super::inspector::inspector_rows(node, browser, state);
 
         let chrome = self.chrome();
         ShellContext {

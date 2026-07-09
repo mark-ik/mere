@@ -2,13 +2,20 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Webpage `Node` and `NodeLifecycle` — the durable entity that
-//! anchors each web page (or addressable artifact) in the graph.
+//! Webpage `Node` — the durable entity that anchors each web page
+//! (or addressable artifact) in the graph.
 //!
 //! Extracted from `graph/mod.rs` per the 2026-04-30 renderer plan §6.4
 //! decomposition target. The history-projection types (`NodeNavigationMemory`,
 //! `NodeHistoryProjection`, etc.) remain in `graph/mod.rs` for now — they
 //! are the natural next decomposition target (as `graph/history.rs`).
+//!
+//! Browser-runtime state (scroll/form restore, viewer override, compat
+//! mode, webview lifecycle) left this struct on 2026-07-09 for the
+//! host-owned `BrowserNodeState` sidecar (session-runtime
+//! `browser_node_state`), per the mere/merecat boundary pass plan
+//! slice C: the graph library holds graph facts; what the browser
+//! knows about a node rides beside the graph, keyed by node id.
 
 use std::collections::HashSet;
 
@@ -108,35 +115,17 @@ pub struct Node {
     /// Favicon height in pixels (valid when `favicon_rgba` is `Some`).
     pub favicon_height: u32,
 
-    /// Last known scroll offset for higher-fidelity cold restore.
-    pub session_scroll: Option<(f32, f32)>,
-
-    /// Optional best-effort form draft payload (feature-guarded by caller policy).
-    pub session_form_draft: Option<String>,
-
-    /// Optional declared or sniffed MIME type; drives renderer selection.
+    /// Optional declared or sniffed MIME type — content classification
+    /// (what kind of content this node holds), consumed by mere-domain
+    /// surfaces (roster bucketing, note-format detection) and, host-side,
+    /// viewer selection. Set at node creation from URL extension sniffing;
+    /// may be updated by `SetNodeMimeHint` when content-byte detection or
+    /// a Content-Type header provides a more precise value.
     ///
-    /// Set at node creation time from URL extension sniffing; may be updated by
-    /// WAL entry `UpdateNodeMimeHint` when content-byte detection or a
-    /// Content-Type header provides a more precise value.
+    /// Deliberately kernel-side where scroll/viewer/compat state is not:
+    /// mime is a fact about the content; those were facts about the
+    /// browser's handling of it (now the host's `BrowserNodeState`).
     pub mime_hint: Option<String>,
-
-    /// User-set viewer override that takes precedence over all MIME/address-based
-    /// selection.  Stored in graph data and survives persistence/sync.
-    /// `None` means "use automatic viewer selection".
-    pub viewer_override: Option<String>,
-
-    /// Per-node "compatibility mode" toggle. When `true`, verso routes
-    /// web-managed content for this node through `WebEnginePreference::Wry`
-    /// (platform WebView) regardless of the app-level default web backend.
-    /// Middlenet-routed content (feeds, gemini, etc.) is unaffected because
-    /// compat mode only shifts the web-engine preference, not the lane
-    /// decision.
-    ///
-    /// Distinct from `viewer_override`: `viewer_override` pins a specific
-    /// viewer id; `compat_mode` only biases the web-engine preference and
-    /// lets verso's routing policy still apply.
-    pub compat_mode: bool,
 
     /// Inline authored content body — a knot note's djot source, for nodes whose
     /// content is authored in place rather than fetched. `None` for fetched / remote
@@ -162,25 +151,6 @@ pub struct Node {
 
     /// Durable opt-out for split-offer affordances on frame-anchor nodes.
     pub frame_split_offer_suppressed: bool,
-
-    /// Webview lifecycle state
-    pub lifecycle: NodeLifecycle,
-}
-
-/// Lifecycle state for webview management
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Archive, Serialize, Deserialize)]
-pub enum NodeLifecycle {
-    /// Active webview (visible, rendering)
-    Active,
-
-    /// Warm webview (kept alive in memory but not currently visible in a pane)
-    Warm,
-
-    /// Cold (metadata only, no process)
-    Cold,
-
-    /// Tombstoned node retained for history/identity continuity but not live rendering/runtime.
-    Tombstone,
 }
 
 impl Node {
@@ -233,16 +203,11 @@ impl Node {
             favicon_rgba: None,
             favicon_width: 0,
             favicon_height: 0,
-            session_scroll: None,
-            session_form_draft: None,
             mime_hint: None,
-            viewer_override: None,
-            compat_mode: false,
             body: None,
             addresses: vec![AddressClaim::primary(address_from_url(url))],
             frame_layout_hints: Vec::new(),
             frame_split_offer_suppressed: false,
-            lifecycle: NodeLifecycle::Cold,
         }
     }
 }

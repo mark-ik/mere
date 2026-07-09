@@ -67,7 +67,7 @@ pub(crate) fn window_local_view(s: &WindowLocal, crawl: &CrawlIndicator) -> Wind
     });
     // The gloss outline lens, when open, is a positioned subtree of the shell document
     // like the roster: lensed onto `WindowLocal.gloss_outline`, sized to the gloss pane's
-    // middle third ([`gloss::gloss_sections`]) so the one shell runner renders it,
+    // middle third ([`mere::gloss::gloss_sections`]) so the one shell runner renders it,
     // hit-tests it, and dispatches its row clicks — the first DOM gloss section, the
     // minimap and recent list still Scene-rasterize the top/bottom thirds. `None` keeps
     // the document identical to before this section existed. (gloss-outline plan P1.)
@@ -91,7 +91,7 @@ pub(crate) fn window_local_view(s: &WindowLocal, crawl: &CrawlIndicator) -> Wind
     });
     // The gloss recent-visited lens, when open, is a positioned subtree of the shell
     // document exactly like the outline above — the Scene-to-DOM migration's Phase 1.
-    // Sized to the gloss pane's bottom third ([`gloss::gloss_sections`]).
+    // Sized to the gloss pane's bottom third ([`mere::gloss::gloss_sections`]).
     let gloss_recent = s.gloss_recent_rect.map(|[x0, y0, x1, y1]| {
         let make_recent: fn(&mut GlossRecentState) -> GlossRecentView =
             |g: &mut GlossRecentState| recent_view(g);
@@ -386,7 +386,7 @@ pub(crate) fn object_card_widget_row(widget: &CardWidget) -> (WindowLocalView, W
                 el::<_, WindowLocal, ()>("div", "Size".to_string())
                     .attr("style", "color:#8b94a6;font-size:11px;margin-bottom:5px"),
             );
-            let dots: String = (0..orrery::SIZE_TIERS.len())
+            let dots: String = (0..mere::orrery::SIZE_TIERS.len())
                 .map(|i| if i <= *tier { '\u{25CF}' } else { '\u{25CB}' })
                 .collect();
             let btn = "width:30px;height:30px;display:flex;align-items:center;justify-content:center;\

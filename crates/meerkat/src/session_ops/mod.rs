@@ -10,7 +10,7 @@
 //! Factored out of `frame_ops.rs` to keep files under the 600-LOC ceiling.
 
 use frame::{GraphId, SessionId};
-use kernel::graph::Graph;
+use mere::kernel::graph::Graph;
 use session_runtime::{
     ViewIntent, frame_layout_store, manifest::GraphSessionManifest, session_graph_store,
     view_intent_store,
@@ -36,15 +36,15 @@ const RESTORE_WORKBENCH_TILING: bool = true;
 /// the boot restore in `main.rs`, so a restart reloads the tiling too. (A3.)
 pub(crate) fn load_workbench(
     session_dir: &std::path::Path,
-    present: &std::collections::HashSet<forme::GraphMemberId>,
-) -> platen::Workbench {
+    present: &std::collections::HashSet<mere::forme::GraphMemberId>,
+) -> mere::platen::Workbench {
     if !RESTORE_WORKBENCH_TILING {
-        return platen::Workbench::new();
+        return mere::platen::Workbench::new();
     }
     std::fs::read_to_string(session_dir.join(WORKBENCH_FILE))
         .ok()
-        .and_then(|json| platen::Workbench::from_persisted_json(json.as_str(), present))
-        .unwrap_or_else(platen::Workbench::new)
+        .and_then(|json| mere::platen::Workbench::from_persisted_json(json.as_str(), present))
+        .unwrap_or_else(mere::platen::Workbench::new)
 }
 
 /// Filename for the cartography position sidecar (beside `graph.json`): the orrery's
@@ -64,14 +64,14 @@ const RESTORE_CARTOGRAPHY: bool = true;
 /// by the session-switch and boot restore paths. (Position sidecar.)
 pub(crate) fn load_cartography(
     session_dir: &std::path::Path,
-    present: &std::collections::HashSet<forme::GraphMemberId>,
-) -> Option<platen::CartographyGeometry> {
+    present: &std::collections::HashSet<mere::forme::GraphMemberId>,
+) -> Option<mere::platen::CartographyGeometry> {
     if !RESTORE_CARTOGRAPHY {
         return None;
     }
     std::fs::read_to_string(session_dir.join(CARTOGRAPHY_FILE))
         .ok()
-        .and_then(|json| platen::CartographyGeometry::from_persisted_json(json.as_str(), present))
+        .and_then(|json| mere::platen::CartographyGeometry::from_persisted_json(json.as_str(), present))
 }
 
 // Session ops live on `Shell`, not `WindowCtx`: switching a session re-keys the

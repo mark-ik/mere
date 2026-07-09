@@ -324,11 +324,11 @@ impl Shell {
         let released = if let Some(src) = self.orreries.get_mut(&from) {
             src.ingest_graph(|g| match g.get_node_by_id(node) {
                 Some((key, _)) => matches!(
-                    kernel::graph::apply::apply_graph_delta(
+                    mere::kernel::graph::apply::apply_graph_delta(
                         g,
-                        kernel::graph::apply::GraphDelta::RemoveNode { key },
+                        mere::kernel::graph::apply::GraphDelta::RemoveNode { key },
                     ),
-                    kernel::graph::apply::GraphDeltaResult::NodeRemoved(true)
+                    mere::kernel::graph::apply::GraphDeltaResult::NodeRemoved(true)
                 ),
                 None => false,
             })
@@ -449,7 +449,7 @@ impl Shell {
     fn graphlet_window_label(
         &self,
         graph: crate::GraphId,
-        graphlet: forme::GraphletId,
+        graphlet: mere::forme::GraphletId,
         fallback: &str,
     ) -> Option<String> {
         let g = self.graphlets.get(&graph)?.get(graphlet)?;

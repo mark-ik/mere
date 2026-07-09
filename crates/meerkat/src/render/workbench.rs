@@ -59,36 +59,23 @@ impl crate::WindowCtx<'_> {
                     })
                 })
                 .collect();
-            // Each tab is tinted to match its graph node, so a tab reads as its node:
-            // the orrery's gnode coloring (NODE_SHEET) — selection wins (amber, dark
-            // label), else the activation state (open green / closed red / idle blue),
-            // each with that gnode's own label color. Recomputed per frame, so selecting
-            // a node recolors its tab (the yellow highlight) live.
+            // Each tab is tinted to match its graph node, so a tab reads as its node.
+            // The tab contract carries raw colors (it paints outside the cascade, so it
+            // cannot `var()` the `--node-*` properties), but it reads the same
+            // `mere::orrery::palette` table the gnodes and outline dots do, selection-wins rule
+            // included. A node absent from `states` colors as idle. Recomputed per frame,
+            // so selecting a node recolors its tab live.
+            // (Representations carry node identity.)
             let states = self.node_states();
             let selected: std::collections::HashSet<GraphMemberId> =
                 self.orrery().selected_members().into_iter().collect();
             let tree = self.view.workbench.to_tile_tree(|m| {
                 let key = m.as_u128() as u64;
-                let accent = if selected.contains(&m) {
-                    pelt_core::tile::TabAccent {
-                        background: [232, 150, 40],
-                        foreground: [28, 22, 10],
-                    }
-                } else {
-                    match states.get(&m) {
-                        Some(orrery::NodeState::Open) => pelt_core::tile::TabAccent {
-                            background: [58, 140, 94],
-                            foreground: [238, 250, 243],
-                        },
-                        Some(orrery::NodeState::Closed) => pelt_core::tile::TabAccent {
-                            background: [166, 72, 72],
-                            foreground: [250, 240, 240],
-                        },
-                        _ => pelt_core::tile::TabAccent {
-                            background: [54, 92, 156],
-                            foreground: [245, 247, 252],
-                        },
-                    }
+                let state = states.get(&m).copied().unwrap_or(mere::orrery::NodeState::Idle);
+                let a = mere::orrery::palette::accent(selected.contains(&m), state);
+                let accent = pelt_core::tile::TabAccent {
+                    background: a.bg,
+                    foreground: a.fg,
                 };
                 pelt_core::tile::Tile {
                     id: pelt_core::tile::TileId(key),

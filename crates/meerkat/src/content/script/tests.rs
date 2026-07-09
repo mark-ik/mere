@@ -48,7 +48,7 @@ fn mirror_preserves_elements_attributes_and_text() {
 
 #[test]
 fn grant_maps_resolved_permissions() {
-    use kernel::permissions::SettingScope;
+    use mere::kernel::permissions::SettingScope;
     let allow = ResolvedPermission {
         effective: Permission::Allow,
         decided_by: None,

@@ -9,21 +9,21 @@
 //! `glossary` itself stays graph-pure. (gloss-outline plan P1, P8 seam prep.)
 
 use super::WindowCtx;
-use gloss::GlossOutlineSnapshot;
+use mere::gloss::GlossOutlineSnapshot;
 
 impl WindowCtx<'_> {
     /// Project the focused graph into the gloss outline lens's snapshot for this
-    /// frame: [`glossary::outline_rows`] for the URL-structure tree, each node row
+    /// frame: [`mere::glossary::outline_rows`] for the URL-structure tree, each node row
     /// enriched with its member id + NODE_SHEET state/selection (the same
     /// `node_states` / `selected_members` the workbench tabs tint from), plus
-    /// [`glossary::graph_metrics`] for the header readout. `available_height` is the
+    /// [`mere::glossary::graph_metrics`] for the header readout. `available_height` is the
     /// outline rect's live pixel height (the caller's current `gloss_sections()`
-    /// split), used only to cap the *view's* copy of the rows — `glossary::outline_rows`
+    /// split), used only to cap the *view's* copy of the rows — `mere::glossary::outline_rows`
     /// itself stays fully uncapped. (gloss-outline plan P1 / P2 dynamic caps.)
     pub(super) fn gloss_outline_snapshot(&self, available_height: f32) -> GlossOutlineSnapshot {
         let graph = self.orrery().graph();
         let input = self.pane_input_snapshot();
-        gloss::build_outline_snapshot(
+        mere::gloss::build_outline_snapshot(
             graph,
             |member| (input.node_state(member), input.is_selected(member)),
             available_height,

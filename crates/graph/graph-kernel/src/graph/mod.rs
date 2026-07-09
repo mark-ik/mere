@@ -93,7 +93,7 @@ pub use identity::{EdgeKey, GraphDirection, GraphIndex, GraphViewId, NodeKey};
 // Node + NodeLifecycle extracted to `node.rs` per the same
 // decomposition target. Re-exported so `kernel::graph::Node`
 // continues to resolve.
-pub use node::{Node, NodeLifecycle};
+pub use node::Node;
 
 // Node navigation history extracted to `history.rs` (2026-05-11
 // kernel-mod decomposition pass). Re-exported so external callers
@@ -355,7 +355,8 @@ impl Graph {
     //   3. Transient/runtime state stays `pub`, exempt by design:
     //      `set_node_position` / `set_node_projected_position` (physics/view —
     //      positions are not graph truth), `set_current_session` (per-launch
-    //      host wiring), `set_node_lifecycle` (webview runtime state).
+    //      host wiring). Webview runtime state left the kernel entirely
+    //      (`BrowserNodeState` sidecar, boundary pass slice C).
     //   4. Test fixtures: the `fixtures` cargo feature re-exposes the raw
     //      mutators via `graph::fixtures::GraphFixtures` — dev-dependencies
     //      only, never a production enable.
@@ -416,15 +417,10 @@ impl Graph {
             favicon_rgba: None,
             favicon_width: 0,
             favicon_height: 0,
-            session_scroll: None,
-            session_form_draft: None,
             mime_hint: detect_mime(&url, None),
-            viewer_override: None,
-            compat_mode: false,
             addresses: vec![crate::address::AddressClaim::primary(primary_address)],
             frame_layout_hints: Vec::new(),
             frame_split_offer_suppressed: false,
-            lifecycle: NodeLifecycle::Cold,
         });
 
         self.url_to_nodes.entry(url).or_default().push(key);

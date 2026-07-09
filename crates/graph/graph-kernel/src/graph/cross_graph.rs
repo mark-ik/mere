@@ -17,7 +17,7 @@
 use euclid::default::{Point2D, Vector2D};
 use uuid::Uuid;
 
-use super::{Graph, Node, NodeKey, NodeLifecycle, ProvenanceSubKind};
+use super::{Graph, Node, NodeKey, ProvenanceSubKind};
 use crate::types::NodeDerivation;
 
 impl Graph {
@@ -30,7 +30,8 @@ impl Graph {
     /// fresh identity, and its **content** (title, tags, classifications, open
     /// properties, address, visuals, viewer preferences) is cloned, while its
     /// **identity / runtime / session / arrangement** state is reset (fresh id,
-    /// `Cold` lifecycle, unpinned, no session scroll/draft, no frame hints). A
+    /// unpinned, no frame hints; browser-runtime state lives in the host's
+    /// `BrowserNodeState` sidecar and never travels with a copy). A
     /// [`NodeDerivation`] records `(CopiedFrom, source.id, source_graph)` so the
     /// lineage survives and projects to a `wasDerivedFrom` statement.
     ///
@@ -81,8 +82,6 @@ impl Graph {
             properties: source.properties.clone(),
             addresses: source.addresses.clone(),
             mime_hint: source.mime_hint.clone(),
-            viewer_override: source.viewer_override.clone(),
-            compat_mode: source.compat_mode,
             body: source.body.clone(),
             thumbnail_png: source.thumbnail_png.clone(),
             thumbnail_width: source.thumbnail_width,
@@ -101,11 +100,8 @@ impl Graph {
             is_pinned: false,
             last_visited: std::time::SystemTime::now(),
             last_session_visited: 0,
-            session_scroll: None,
-            session_form_draft: None,
             frame_layout_hints: Vec::new(),
             frame_split_offer_suppressed: false,
-            lifecycle: NodeLifecycle::Cold,
         });
 
         self.url_to_nodes.entry(url).or_default().push(key);

@@ -12,8 +12,11 @@ use euclid::default::Point2D;
 use kernel::graph::{
     ContainmentSubKind, EdgeAssertion, Graph, NodeKey, RelationSelector, SemanticSubKind,
 };
+use layout_dom_api::LayoutDomMut;
+use serval_layout::IncrementalLayout;
 
 use crate::build::*;
+use crate::palette;
 
 #[test]
 fn sample_graph_has_nodes_and_edges() {
@@ -85,6 +88,63 @@ fn visible_relation_edges_keeps_one_tuple_per_cell_and_drops_hidden_ones() {
         vec![(a, b)],
         "hiding one cell drops exactly its own spring, leaving the other live"
     );
+}
+
+/// The load-bearing check for the palette-as-custom-properties move: the sheet
+/// names no color, so if serval's cascade ever stopped substituting `var()` the
+/// gnodes would silently lose their fill. Assert the *resolved* computed color,
+/// not the sheet text.
+#[test]
+fn gnode_fill_resolves_from_the_palette_custom_properties() {
+    let g = sample_graph();
+    let (dom, gnode_of, _stage) = build_pool_dom(&g);
+    let gnode = *gnode_of.values().next().expect("the pool has gnodes");
+
+    let layout = IncrementalLayout::new(&dom, &NODE_SHEET, 800.0, 600.0);
+
+    let idle_bg = palette::rgb(palette::IDLE.bg);
+    assert_eq!(
+        layout.computed_value(gnode, "background-color").as_deref(),
+        Some(idle_bg.as_str()),
+        "the default .gnode must resolve --node-idle-bg through the cascade",
+    );
+    let idle_fg = palette::rgb(palette::IDLE.fg);
+    assert_eq!(
+        layout.computed_value(gnode, "color").as_deref(),
+        Some(idle_fg.as_str()),
+        "the default .gnode must resolve --node-idle-fg through the cascade",
+    );
+}
+
+/// Each activation class pulls its own `--node-*` pair, and selection wins. This
+/// pins the class-to-var wiring the host relies on when it pushes node state.
+#[test]
+fn each_gnode_state_class_resolves_its_own_palette_entry() {
+    let g = sample_graph();
+    let (mut dom, gnode_of, _stage) = build_pool_dom(&g);
+    let gnode = *gnode_of.values().next().expect("the pool has gnodes");
+
+    for (class, expected) in [
+        ("gnode gnode-open", palette::OPEN),
+        ("gnode gnode-closed", palette::CLOSED),
+        ("gnode gnode-idle", palette::IDLE),
+        ("gnode gnode-selected", palette::SELECTED),
+    ] {
+        dom.set_attribute(gnode, qual("class"), class);
+        let layout = IncrementalLayout::new(&dom, &NODE_SHEET, 800.0, 600.0);
+        let want_bg = palette::rgb(expected.bg);
+        let want_fg = palette::rgb(expected.fg);
+        assert_eq!(
+            layout.computed_value(gnode, "background-color").as_deref(),
+            Some(want_bg.as_str()),
+            "`{class}` must resolve its own --node-*-bg",
+        );
+        assert_eq!(
+            layout.computed_value(gnode, "color").as_deref(),
+            Some(want_fg.as_str()),
+            "`{class}` must resolve its own --node-*-fg",
+        );
+    }
 }
 
 #[test]

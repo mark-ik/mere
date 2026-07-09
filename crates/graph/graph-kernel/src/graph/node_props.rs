@@ -5,13 +5,14 @@
 //! Node-property setters and per-node query accessors.
 //!
 //! All of Graph's property mutators for individual nodes: title,
-//! thumbnail, favicon, mime hint, viewer override, pinned, compat,
-//! frame-layout hints, tags, classifications, tag-icon override,
-//! position (committed + projected), session scroll, form draft,
-//! lifecycle, plus the per-node query accessors that sit alongside
+//! thumbnail, favicon, mime hint, pinned, frame-layout hints, tags,
+//! classifications, tag-icon override, position (committed +
+//! projected), plus the per-node query accessors that sit alongside
 //! them (`node_tags`, `node_classifications`, `frame_layout_hints`,
 //! `node_projected_position`, `node_committed_position`,
-//! `projected_centroid`).
+//! `projected_centroid`). Browser-runtime setters (session scroll,
+//! form draft, viewer override, compat mode, lifecycle) left with the
+//! `BrowserNodeState` sidecar (boundary pass slice C, 2026-07-09).
 //!
 //! Extracted from `graph/mod.rs` per the 2026-05-11 kernel
 //! decomposition pass. Lifecycle ops (`new`, `add_node`,
@@ -26,7 +27,7 @@ use euclid::default::Point2D;
 
 use super::Graph;
 use super::identity::NodeKey;
-use super::node::{Node, NodeLifecycle};
+use super::node::Node;
 use crate::types::{
     ClassificationProvenance, ClassificationScheme, ClassificationStatus, FrameLayoutHint,
     NodeClassification, NodeImportProvenance, NodeProperty, NodeTagPresentationState,
@@ -99,21 +100,6 @@ impl Graph {
         true
     }
 
-    pub(crate) fn set_node_viewer_override(
-        &mut self,
-        key: NodeKey,
-        viewer_override: Option<String>,
-    ) -> bool {
-        let Some(node) = self.inner.node_mut(key) else {
-            return false;
-        };
-        if node.viewer_override == viewer_override {
-            return false;
-        }
-        node.viewer_override = viewer_override;
-        true
-    }
-
     pub(crate) fn set_node_pinned(&mut self, key: NodeKey, is_pinned: bool) -> bool {
         let Some(node) = self.inner.node_mut(key) else {
             return false;
@@ -123,21 +109,6 @@ impl Graph {
         }
         node.is_pinned = is_pinned;
         true
-    }
-
-    pub(crate) fn set_node_compat_mode(&mut self, key: NodeKey, compat_mode: bool) -> bool {
-        let Some(node) = self.inner.node_mut(key) else {
-            return false;
-        };
-        if node.compat_mode == compat_mode {
-            return false;
-        }
-        node.compat_mode = compat_mode;
-        true
-    }
-
-    pub fn node_compat_mode(&self, key: NodeKey) -> Option<bool> {
-        self.get_node(key).map(|node| node.compat_mode)
     }
 
     pub(crate) fn append_frame_layout_hint(&mut self, key: NodeKey, hint: FrameLayoutHint) -> bool {
@@ -467,17 +438,6 @@ impl Graph {
         }
     }
 
-    pub(crate) fn set_node_form_draft(&mut self, key: NodeKey, form_draft: Option<String>) -> bool {
-        let Some(node) = self.inner.node_mut(key) else {
-            return false;
-        };
-        if node.session_form_draft == form_draft {
-            return false;
-        }
-        node.session_form_draft = form_draft;
-        true
-    }
-
     pub(crate) fn touch_node_last_visited_now(&mut self, key: NodeKey) -> bool {
         self.set_node_last_visited_at_ms(key, Graph::epoch_ms())
     }
@@ -519,29 +479,4 @@ impl Graph {
         true
     }
 
-    pub(crate) fn set_node_session_scroll(
-        &mut self,
-        key: NodeKey,
-        session_scroll: Option<(f32, f32)>,
-    ) -> bool {
-        let Some(node) = self.inner.node_mut(key) else {
-            return false;
-        };
-        if node.session_scroll == session_scroll {
-            return false;
-        }
-        node.session_scroll = session_scroll;
-        true
-    }
-
-    pub fn set_node_lifecycle(&mut self, key: NodeKey, lifecycle: NodeLifecycle) -> bool {
-        let Some(node) = self.inner.node_mut(key) else {
-            return false;
-        };
-        if node.lifecycle == lifecycle {
-            return false;
-        }
-        node.lifecycle = lifecycle;
-        true
-    }
 }

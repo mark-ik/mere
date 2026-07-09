@@ -4,7 +4,7 @@
 
 //! WindowCtx session ops: save/restore, rename, thumbnails.
 
-use kernel::geometry::PortablePoint;
+use mere::kernel::geometry::PortablePoint;
 
 use super::*;
 
@@ -85,6 +85,32 @@ impl WindowCtx<'_> {
         {
             tracing::warn!(%err, dir = ?session_dir, "failed to persist the view intent");
         }
+        // Per-node browser state (boundary pass slice C): fold this session's
+        // live scroll offsets into the sidecar (x unknown host-side; the view
+        // tracks vertical only), then persist the entries that belong to the
+        // focused graph's nodes — node UUIDs are global, so the shared map can
+        // hold two live graphs' state while each session file stays scoped.
+        for (member, y) in &self.view.scroll {
+            self.shared.content.browser_nodes.entry(*member).scroll = Some((0.0, *y));
+        }
+        let scoped = session_runtime::browser_node_state::BrowserNodeStates {
+            nodes: self
+                .shared
+                .content
+                .browser_nodes
+                .nodes
+                .iter()
+                .filter(|(id, state)| {
+                    !state.is_empty() && self.orrery().graph().get_node_by_id(**id).is_some()
+                })
+                .map(|(id, state)| (*id, state.clone()))
+                .collect(),
+        };
+        if let Err(err) =
+            session_runtime::browser_node_state::save_browser_node_states(&session_dir, &scoped)
+        {
+            tracing::warn!(%err, dir = ?session_dir, "failed to persist the browser node state");
+        }
         // The content frame's pane layout (which panes are open + split ratios) is
         // **window-scoped** (Model B, MG5): it persists at the shared root and stays
         // put across session switches, so a graph swap re-sources the panes without
@@ -143,7 +169,7 @@ impl WindowCtx<'_> {
     /// Restore the focused graph's persisted workbench tiling from its sidecar,
     /// pruned to the live graph's members. Thin wrapper over [`load_workbench`] for
     /// the session-switch path (which has a live `ctx`). (A3 persistence.)
-    pub(crate) fn restore_workbench(&self, session_dir: &std::path::Path) -> platen::Workbench {
+    pub(crate) fn restore_workbench(&self, session_dir: &std::path::Path) -> mere::platen::Workbench {
         let present = self
             .orrery()
             .graph()
@@ -289,9 +315,9 @@ impl WindowCtx<'_> {
                 let label = display_name.unwrap_or_else(|| derive_session_label(&graph));
                 // Positions are not graph truth; a cold session's thumbnail reads
                 // them from its cartography sidecar (origin when absent).
-                let present: std::collections::HashSet<forme::GraphMemberId> =
+                let present: std::collections::HashSet<mere::forme::GraphMemberId> =
                     graph.nodes().map(|(_, n)| n.id).collect();
-                let positions: std::collections::HashMap<forme::GraphMemberId, PortablePoint> =
+                let positions: std::collections::HashMap<mere::forme::GraphMemberId, PortablePoint> =
                     super::load_cartography(&dir, &present)
                         .map(|g| {
                             g.iter()

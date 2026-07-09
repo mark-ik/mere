@@ -88,7 +88,7 @@ pub struct ShellOutcome {
     /// default `relate()`, which rides the `AssertEdge` command path.
     pub relation_kind: Option<String>,
     /// A SPARQL query passed to `sparql("…")` — the host runs it over the focused
-    /// graph and echoes the result (`linked_data::query`). `None` when no
+    /// graph and echoes the result (`mere::linked_data::query`). `None` when no
     /// `sparql(…)` call was made. Recorded, not run here: the shell snapshot has
     /// only node URLs, not the full RDF graph.
     pub sparql_query: Option<String>,

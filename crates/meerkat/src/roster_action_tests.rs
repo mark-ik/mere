@@ -5,8 +5,8 @@
 //! Host-level proofs for Roster detail-card actions.
 
 use super::*;
-use forme::GraphMemberId;
-use kernel::graph::{FieldId, RelationKind, RelationSelector, SemanticSubKind};
+use mere::forme::GraphMemberId;
+use mere::kernel::graph::{FieldId, RelationKind, RelationSelector, SemanticSubKind};
 
 use crate::roster::{RosterDetail, RosterSubject};
 
@@ -64,7 +64,7 @@ fn has_semantic_relation(
         .any(|r| r.from == from_key && r.to == to_key && r.kind == RelationKind::Semantic(kind))
 }
 
-fn linked_anchor_count(app: &Shell, graph: GraphId, graphlet: forme::GraphletId) -> usize {
+fn linked_anchor_count(app: &Shell, graph: GraphId, graphlet: mere::forme::GraphletId) -> usize {
     app.graphlets
         .get(&graph)
         .and_then(|idx| idx.get(graphlet))
@@ -369,7 +369,7 @@ fn roster_action_graphlet_intents_queue_and_apply_host_commands() {
             .assert_relation_between_members(a, b, SemanticSubKind::Hyperlink)
     );
     let graphlet = app
-        .linked_graphlet(a, graph, forme::GraphletKind::Component, Vec::new())
+        .linked_graphlet(a, graph, mere::forme::GraphletKind::Component, Vec::new())
         .expect("linked graphlet");
     assert_eq!(linked_anchor_count(&app, graph, graphlet), 2);
 
@@ -456,7 +456,7 @@ fn roster_snapshot_graphlet_card_surfaces_drift_without_applying() {
             .assert_relation_between_members(a, b, SemanticSubKind::Hyperlink)
     );
     let graphlet = app
-        .linked_graphlet(a, graph, forme::GraphletKind::Component, Vec::new())
+        .linked_graphlet(a, graph, mere::forme::GraphletKind::Component, Vec::new())
         .expect("linked graphlet");
     assert_eq!(linked_anchor_count(&app, graph, graphlet), 2);
     assert!(

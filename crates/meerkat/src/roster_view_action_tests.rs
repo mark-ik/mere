@@ -1,5 +1,5 @@
-use forme::GraphMemberId;
-use kernel::graph::{EdgeFamily, RelationSelector, SemanticSubKind};
+use mere::forme::GraphMemberId;
+use mere::kernel::graph::{EdgeFamily, RelationSelector, SemanticSubKind};
 use layout_dom_api::LayoutDom;
 use register_theme::chrome::ChromeTheme;
 use serval_scripted_dom::{NodeId, ScriptedDom};

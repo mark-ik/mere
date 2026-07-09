@@ -6,10 +6,10 @@
 
 use std::collections::BTreeSet;
 
-use kernel::graph::{EdgeFamily, Graph, RelationKind, RelationSelector};
+use mere::kernel::graph::{EdgeFamily, Graph, RelationKind, RelationSelector};
 use session_runtime::{HiddenRelationRecord, ViewIntent};
 
-pub(crate) fn restore_hidden_relations(orrery: &mut orrery::Orrery, intent: Option<&ViewIntent>) {
+pub(crate) fn restore_hidden_relations(orrery: &mut mere::orrery::Orrery, intent: Option<&ViewIntent>) {
     let Some(intent) = intent else {
         return;
     };
@@ -30,7 +30,7 @@ pub(crate) fn restore_hidden_relations(orrery: &mut orrery::Orrery, intent: Opti
     }
 }
 
-pub(crate) fn hidden_relation_records(orrery: &orrery::Orrery) -> BTreeSet<HiddenRelationRecord> {
+pub(crate) fn hidden_relation_records(orrery: &mere::orrery::Orrery) -> BTreeSet<HiddenRelationRecord> {
     let graph = orrery.graph();
     let mut out = BTreeSet::new();
     for relation in graph.relations() {
@@ -76,13 +76,13 @@ fn selector_for_relation_kind(kind: RelationKind) -> RelationSelector {
 
 #[cfg(test)]
 mod tests {
-    use kernel::graph::SemanticSubKind;
+    use mere::kernel::graph::SemanticSubKind;
 
     use super::*;
 
     #[test]
     fn hidden_relation_records_round_trip_relation_cell_visibility() {
-        let mut orrery = orrery::Orrery::new();
+        let mut orrery = mere::orrery::Orrery::new();
         let a_key = orrery.visit("https://a.example");
         let a = orrery.graph().get_node(a_key).unwrap().id;
         let b_key = orrery.visit("https://b.example");
@@ -100,16 +100,16 @@ mod tests {
             record.from_id == a
                 && record.to_id == b
                 && record.relation_tag
-                    == kernel::graph::RelationKind::Semantic(SemanticSubKind::Cites).tag()
+                    == mere::kernel::graph::RelationKind::Semantic(SemanticSubKind::Cites).tag()
         }));
         assert!(!records.iter().any(|record| {
             record.from_id == a
                 && record.to_id == b
                 && record.relation_tag
-                    == kernel::graph::RelationKind::Semantic(SemanticSubKind::Quotes).tag()
+                    == mere::kernel::graph::RelationKind::Semantic(SemanticSubKind::Quotes).tag()
         }));
 
-        let mut restored = orrery::Orrery::with_graph(orrery.graph().clone());
+        let mut restored = mere::orrery::Orrery::with_graph(orrery.graph().clone());
         let intent = ViewIntent {
             hidden_relations: records,
             ..Default::default()

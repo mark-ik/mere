@@ -90,7 +90,7 @@ pub enum Command {
     /// action). (Window composition — pane-as-unit.)
     CloseGraphPane,
     /// Export the focused graph as JSON-LD to a file (host action). The dormant
-    /// inverse of the wired linked-data ingest; `linked_data::to_jsonld_string`.
+    /// inverse of the wired linked-data ingest; `mere::linked_data::to_jsonld_string`.
     ExportGraph,
     /// Freeze the focused graph into a content-addressed graph engram in the private
     /// eidetic store (host action) — the Alembic memory spine's "Save as graph engram".

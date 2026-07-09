@@ -25,7 +25,7 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 use armillary::{ActorHandle, Emitter, NavGeneration, Pool, ViewportGeneration, Wake, spawn_on};
 use document_canvas::{DocumentRenderPacket, DocumentStyleSheet, FontTable};
 use inker::{EngineRegistry, EngineRoutePolicy};
-use linked_data::GraphContribution;
+use mere::linked_data::GraphContribution;
 use netrender::Scene;
 
 use serval_layout::{ContentLayout, ScrollOffsets};
@@ -62,7 +62,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use document_host::{Grant, NetFetcher, Quota};
-use kernel::permissions::ResolvedPermission;
+use mere::kernel::permissions::ResolvedPermission;
 use script::ScriptInstance;
 
 #[cfg(feature = "scripted")]

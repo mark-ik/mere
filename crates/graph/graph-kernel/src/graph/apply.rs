@@ -83,17 +83,9 @@ pub enum GraphDelta {
         node_id: Uuid,
         mime_hint: Option<String>,
     },
-    ReplaySetNodeViewerOverrideById {
-        node_id: Uuid,
-        viewer_override: Option<String>,
-    },
     ReplaySetNodePinnedById {
         node_id: Uuid,
         is_pinned: bool,
-    },
-    ReplaySetNodeCompatModeById {
-        node_id: Uuid,
-        compat_mode: bool,
     },
     ReplayInsertNodeTagById {
         node_id: Uuid,
@@ -194,14 +186,6 @@ pub enum GraphDelta {
     ReplaySetImportRecords {
         import_records: Vec<ImportRecord>,
     },
-    ReplaySetNodeFormDraftById {
-        node_id: Uuid,
-        form_draft: Option<String>,
-    },
-    ReplaySetNodeSessionScrollById {
-        node_id: Uuid,
-        session_scroll: Option<[f32; 2]>,
-    },
     ReplayTouchNodeLastVisitedById {
         node_id: Uuid,
         timestamp_ms: u64,
@@ -244,17 +228,9 @@ pub enum GraphDelta {
         key: NodeKey,
         mime_hint: Option<String>,
     },
-    SetNodeViewerOverride {
-        key: NodeKey,
-        viewer_override: Option<String>,
-    },
     SetNodePinned {
         key: NodeKey,
         is_pinned: bool,
-    },
-    SetNodeCompatMode {
-        key: NodeKey,
-        compat_mode: bool,
     },
     AppendFrameLayoutHint {
         key: NodeKey,
@@ -302,16 +278,6 @@ pub enum GraphDelta {
     SetNodeImportProvenance {
         key: NodeKey,
         import_provenance: Vec<NodeImportProvenance>,
-    },
-    /// Set or clear one node's session draft payload.
-    SetNodeFormDraft {
-        key: NodeKey,
-        form_draft: Option<String>,
-    },
-    /// Set or clear one node's persisted session scroll offset.
-    SetNodeSessionScroll {
-        key: NodeKey,
-        session_scroll: Option<(f32, f32)>,
     },
     /// Stamp one node's last-visited clock from the kernel clock.
     TouchNodeLastVisited {
@@ -794,36 +760,6 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
             }
             GraphDeltaResult::NodeMetadataUpdated(updated)
         }
-        GraphDelta::ReplaySetNodeViewerOverrideById {
-            node_id,
-            viewer_override,
-        } => {
-            let updated = graph
-                .get_node_key_by_id(node_id)
-                .is_some_and(|key| graph.set_node_viewer_override(key, viewer_override.clone()));
-            if updated {
-                record_captured_delta(&CapturedDelta::ReplaySetNodeViewerOverrideById {
-                    node_id: node_id.to_string(),
-                    viewer_override,
-                });
-            }
-            GraphDeltaResult::NodeMetadataUpdated(updated)
-        }
-        GraphDelta::SetNodeViewerOverride {
-            key,
-            viewer_override,
-        } => {
-            let node_id = graph.get_node(key).map(|node| node.id);
-            let capture_viewer_override = viewer_override.clone();
-            let updated = graph.set_node_viewer_override(key, viewer_override);
-            if updated && let Some(node_id) = node_id {
-                record_captured_delta(&CapturedDelta::ReplaySetNodeViewerOverrideById {
-                    node_id: node_id.to_string(),
-                    viewer_override: capture_viewer_override,
-                });
-            }
-            GraphDeltaResult::NodeMetadataUpdated(updated)
-        }
         GraphDelta::ReplaySetNodePinnedById { node_id, is_pinned } => {
             let updated = graph
                 .get_node_key_by_id(node_id)
@@ -843,32 +779,6 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
                 record_captured_delta(&CapturedDelta::ReplaySetNodePinnedById {
                     node_id: node_id.to_string(),
                     is_pinned,
-                });
-            }
-            GraphDeltaResult::NodeMetadataUpdated(updated)
-        }
-        GraphDelta::ReplaySetNodeCompatModeById {
-            node_id,
-            compat_mode,
-        } => {
-            let updated = graph
-                .get_node_key_by_id(node_id)
-                .is_some_and(|key| graph.set_node_compat_mode(key, compat_mode));
-            if updated {
-                record_captured_delta(&CapturedDelta::ReplaySetNodeCompatModeById {
-                    node_id: node_id.to_string(),
-                    compat_mode,
-                });
-            }
-            GraphDeltaResult::NodeMetadataUpdated(updated)
-        }
-        GraphDelta::SetNodeCompatMode { key, compat_mode } => {
-            let node_id = graph.get_node(key).map(|node| node.id);
-            let updated = graph.set_node_compat_mode(key, compat_mode);
-            if updated && let Some(node_id) = node_id {
-                record_captured_delta(&CapturedDelta::ReplaySetNodeCompatModeById {
-                    node_id: node_id.to_string(),
-                    compat_mode,
                 });
             }
             GraphDeltaResult::NodeMetadataUpdated(updated)
@@ -1022,36 +932,6 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
                 capture_resolved_import_records(graph);
             }
             GraphDeltaResult::ImportRecordsUpdated(changed)
-        }
-        GraphDelta::ReplaySetNodeFormDraftById {
-            node_id,
-            form_draft,
-        } => {
-            let updated = graph
-                .get_node_key_by_id(node_id)
-                .is_some_and(|key| graph.set_node_form_draft(key, form_draft.clone()));
-            if updated {
-                record_captured_delta(&CapturedDelta::ReplaySetNodeFormDraftById {
-                    node_id: node_id.to_string(),
-                    form_draft,
-                });
-            }
-            GraphDeltaResult::NodeMetadataUpdated(updated)
-        }
-        GraphDelta::ReplaySetNodeSessionScrollById {
-            node_id,
-            session_scroll,
-        } => {
-            let updated = graph.get_node_key_by_id(node_id).is_some_and(|key| {
-                graph.set_node_session_scroll(key, session_scroll.map(|[x, y]| (x, y)))
-            });
-            if updated {
-                record_captured_delta(&CapturedDelta::ReplaySetNodeSessionScrollById {
-                    node_id: node_id.to_string(),
-                    session_scroll,
-                });
-            }
-            GraphDeltaResult::NodeMetadataUpdated(updated)
         }
         GraphDelta::ReplayTouchNodeLastVisitedById {
             node_id,
@@ -1722,33 +1602,6 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
                 capture_resolved_import_records(graph);
             }
             GraphDeltaResult::ImportRecordsUpdated(changed)
-        }
-        GraphDelta::SetNodeFormDraft { key, form_draft } => {
-            let node_id = graph.get_node(key).map(|node| node.id);
-            let capture_form_draft = form_draft.clone();
-            let updated = graph.set_node_form_draft(key, form_draft);
-            if updated && let Some(node_id) = node_id {
-                record_captured_delta(&CapturedDelta::ReplaySetNodeFormDraftById {
-                    node_id: node_id.to_string(),
-                    form_draft: capture_form_draft,
-                });
-            }
-            GraphDeltaResult::NodeMetadataUpdated(updated)
-        }
-        GraphDelta::SetNodeSessionScroll {
-            key,
-            session_scroll,
-        } => {
-            let node_id = graph.get_node(key).map(|node| node.id);
-            let capture_session_scroll = session_scroll.map(|(x, y)| [x, y]);
-            let updated = graph.set_node_session_scroll(key, session_scroll);
-            if updated && let Some(node_id) = node_id {
-                record_captured_delta(&CapturedDelta::ReplaySetNodeSessionScrollById {
-                    node_id: node_id.to_string(),
-                    session_scroll: capture_session_scroll,
-                });
-            }
-            GraphDeltaResult::NodeMetadataUpdated(updated)
         }
         GraphDelta::TouchNodeLastVisited { key } => {
             let node_id = graph.get_node(key).map(|node| node.id);

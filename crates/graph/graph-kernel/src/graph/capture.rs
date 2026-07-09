@@ -87,17 +87,9 @@ pub enum CapturedDelta {
         node_id: String,
         mime_hint: Option<String>,
     },
-    ReplaySetNodeViewerOverrideById {
-        node_id: String,
-        viewer_override: Option<String>,
-    },
     ReplaySetNodePinnedById {
         node_id: String,
         is_pinned: bool,
-    },
-    ReplaySetNodeCompatModeById {
-        node_id: String,
-        compat_mode: bool,
     },
     ReplayInsertNodeTagById {
         node_id: String,
@@ -197,14 +189,6 @@ pub enum CapturedDelta {
     },
     ReplaySetImportRecords {
         import_records: Vec<ImportRecord>,
-    },
-    ReplaySetNodeFormDraftById {
-        node_id: String,
-        form_draft: Option<String>,
-    },
-    ReplaySetNodeSessionScrollById {
-        node_id: String,
-        session_scroll: Option<[f32; 2]>,
     },
     ReplayTouchNodeLastVisitedById {
         node_id: String,
@@ -310,26 +294,12 @@ impl CapturedDelta {
                     mime_hint: mime_hint.clone(),
                 }
             }
-            Self::ReplaySetNodeViewerOverrideById {
-                node_id,
-                viewer_override,
-            } => GraphDelta::ReplaySetNodeViewerOverrideById {
-                node_id: parse_uuid(node_id),
-                viewer_override: viewer_override.clone(),
-            },
             Self::ReplaySetNodePinnedById { node_id, is_pinned } => {
                 GraphDelta::ReplaySetNodePinnedById {
                     node_id: parse_uuid(node_id),
                     is_pinned: *is_pinned,
                 }
             }
-            Self::ReplaySetNodeCompatModeById {
-                node_id,
-                compat_mode,
-            } => GraphDelta::ReplaySetNodeCompatModeById {
-                node_id: parse_uuid(node_id),
-                compat_mode: *compat_mode,
-            },
             Self::ReplayInsertNodeTagById { node_id, tag } => GraphDelta::ReplayInsertNodeTagById {
                 node_id: parse_uuid(node_id),
                 tag: tag.clone(),
@@ -490,20 +460,6 @@ impl CapturedDelta {
             },
             Self::ReplaySetImportRecords { import_records } => GraphDelta::ReplaySetImportRecords {
                 import_records: import_records.clone(),
-            },
-            Self::ReplaySetNodeFormDraftById {
-                node_id,
-                form_draft,
-            } => GraphDelta::ReplaySetNodeFormDraftById {
-                node_id: parse_uuid(node_id),
-                form_draft: form_draft.clone(),
-            },
-            Self::ReplaySetNodeSessionScrollById {
-                node_id,
-                session_scroll,
-            } => GraphDelta::ReplaySetNodeSessionScrollById {
-                node_id: parse_uuid(node_id),
-                session_scroll: *session_scroll,
             },
             Self::ReplayTouchNodeLastVisitedById {
                 node_id,
@@ -919,17 +875,6 @@ mod tests {
     }
 
     #[test]
-    fn session_fidelity_captured_delta_round_trips_through_postcard() {
-        let delta = CapturedDelta::ReplaySetNodeSessionScrollById {
-            node_id: Uuid::from_u128(92).to_string(),
-            session_scroll: Some([20.0, 640.0]),
-        };
-        let bytes = postcard::to_allocvec(&delta).expect("encode");
-        let restored: CapturedDelta = postcard::from_bytes(&bytes).expect("decode");
-        assert_eq!(restored, delta);
-    }
-
-    #[test]
     fn last_visited_captured_delta_round_trips_through_postcard() {
         let delta = CapturedDelta::ReplayTouchNodeLastVisitedById {
             node_id: Uuid::from_u128(93).to_string(),
@@ -1032,17 +977,9 @@ mod tests {
                 node_id: a_id.to_string(),
                 mime_hint: Some("text/html".into()),
             },
-            CapturedDelta::ReplaySetNodeViewerOverrideById {
-                node_id: a_id.to_string(),
-                viewer_override: Some("viewer:note".into()),
-            },
             CapturedDelta::ReplaySetNodePinnedById {
                 node_id: a_id.to_string(),
                 is_pinned: true,
-            },
-            CapturedDelta::ReplaySetNodeCompatModeById {
-                node_id: a_id.to_string(),
-                compat_mode: true,
             },
             CapturedDelta::ReplayInsertNodeTagById {
                 node_id: a_id.to_string(),
@@ -1055,14 +992,6 @@ mod tests {
             CapturedDelta::ReplaySetNodeBodyById {
                 node_id: a_id.to_string(),
                 body: Some("body".into()),
-            },
-            CapturedDelta::ReplaySetNodeFormDraftById {
-                node_id: a_id.to_string(),
-                form_draft: Some("draft body".into()),
-            },
-            CapturedDelta::ReplaySetNodeSessionScrollById {
-                node_id: a_id.to_string(),
-                session_scroll: Some([20.0, 640.0]),
             },
             CapturedDelta::ReplayTouchNodeLastVisitedById {
                 node_id: a_id.to_string(),
@@ -1298,12 +1227,8 @@ mod tests {
         assert_eq!(node.favicon_width, 1);
         assert_eq!(node.favicon_height, 1);
         assert_eq!(node.mime_hint.as_deref(), Some("text/html"));
-        assert_eq!(node.viewer_override.as_deref(), Some("viewer:note"));
         assert!(node.is_pinned);
-        assert!(node.compat_mode);
         assert_eq!(node.body.as_deref(), Some("body"));
-        assert_eq!(node.session_form_draft.as_deref(), Some("draft body"));
-        assert_eq!(node.session_scroll, Some((20.0, 640.0)));
         assert_eq!(
             node.last_visited
                 .duration_since(std::time::UNIX_EPOCH)
@@ -1591,23 +1516,9 @@ mod tests {
         );
         let _ = crate::graph::apply::apply_graph_delta(
             &mut graph,
-            GraphDelta::SetNodeViewerOverride {
-                key: a,
-                viewer_override: Some("viewer:note".into()),
-            },
-        );
-        let _ = crate::graph::apply::apply_graph_delta(
-            &mut graph,
             GraphDelta::SetNodePinned {
                 key: a,
                 is_pinned: true,
-            },
-        );
-        let _ = crate::graph::apply::apply_graph_delta(
-            &mut graph,
-            GraphDelta::SetNodeCompatMode {
-                key: a,
-                compat_mode: true,
             },
         );
         let _ = crate::graph::apply::apply_graph_delta(
@@ -1629,20 +1540,6 @@ mod tests {
             GraphDelta::SetNodeBody {
                 key: a,
                 body: Some("body".into()),
-            },
-        );
-        let _ = crate::graph::apply::apply_graph_delta(
-            &mut graph,
-            GraphDelta::SetNodeFormDraft {
-                key: a,
-                form_draft: Some("draft body".into()),
-            },
-        );
-        let _ = crate::graph::apply::apply_graph_delta(
-            &mut graph,
-            GraphDelta::SetNodeSessionScroll {
-                key: a,
-                session_scroll: Some((20.0, 640.0)),
             },
         );
         let _ = crate::graph::apply::apply_graph_delta(
@@ -1955,7 +1852,7 @@ mod tests {
         set_captured_delta_hook(None);
 
         let out = captured.lock().expect("capture sink");
-        assert_eq!(out.len(), 56);
+        assert_eq!(out.len(), 52);
         assert!(matches!(
             out[0],
             CapturedDelta::ReplayAddNodeWithIdIfMissing { .. }
@@ -1995,177 +1892,161 @@ mod tests {
         ));
         assert!(matches!(
             out[10],
-            CapturedDelta::ReplaySetNodeViewerOverrideById { .. }
-        ));
-        assert!(matches!(
-            out[11],
             CapturedDelta::ReplaySetNodePinnedById { .. }
         ));
         assert!(matches!(
-            out[12],
-            CapturedDelta::ReplaySetNodeCompatModeById { .. }
-        ));
-        assert!(matches!(
-            out[13],
+            out[11],
             CapturedDelta::ReplayInsertNodeTagById { .. }
         ));
         assert!(matches!(
-            out[14],
+            out[12],
             CapturedDelta::ReplayRemoveNodeTagById { .. }
         ));
         assert!(matches!(
-            out[15],
+            out[13],
             CapturedDelta::ReplaySetNodeBodyById { .. }
         ));
         assert!(matches!(
-            out[16],
-            CapturedDelta::ReplaySetNodeFormDraftById { .. }
-        ));
-        assert!(matches!(
-            out[17],
-            CapturedDelta::ReplaySetNodeSessionScrollById { .. }
-        ));
-        assert!(matches!(
-            out[18],
+            out[14],
             CapturedDelta::ReplayTouchNodeLastVisitedById { .. }
         ));
         assert!(matches!(
-            out[19],
+            out[15],
             CapturedDelta::ReplayInsertNodeTagById { .. }
         ));
         assert!(matches!(
-            out[20],
+            out[16],
             CapturedDelta::ReplaySetNodeTagIconOverrideById { .. }
         ));
         assert!(matches!(
-            out[21],
+            out[17],
             CapturedDelta::ReplayNavigateNodeById { .. }
+        ));
+        assert!(matches!(
+            out[18],
+            CapturedDelta::ReplayNavigateNodeById { .. }
+        ));
+        assert!(matches!(
+            out[19],
+            CapturedDelta::ReplayNodeHistoryBackById { .. }
+        ));
+        assert!(matches!(
+            out[20],
+            CapturedDelta::ReplayNodeHistoryForwardById { .. }
+        ));
+        assert!(matches!(
+            out[21],
+            CapturedDelta::ReplayBranchHistoryByIds { .. }
         ));
         assert!(matches!(
             out[22],
             CapturedDelta::ReplayNavigateNodeById { .. }
         ));
-        assert!(matches!(
-            out[23],
-            CapturedDelta::ReplayNodeHistoryBackById { .. }
-        ));
-        assert!(matches!(
-            out[24],
-            CapturedDelta::ReplayNodeHistoryForwardById { .. }
-        ));
+        assert!(matches!(out[23], CapturedDelta::ReplayAddField { .. }));
+        assert!(matches!(out[24], CapturedDelta::ReplayAddCoupling { .. }));
         assert!(matches!(
             out[25],
-            CapturedDelta::ReplayBranchHistoryByIds { .. }
+            CapturedDelta::ReplaySetFieldCouplingStrengthByFieldId { .. }
         ));
         assert!(matches!(
             out[26],
-            CapturedDelta::ReplayNavigateNodeById { .. }
-        ));
-        assert!(matches!(out[27], CapturedDelta::ReplayAddField { .. }));
-        assert!(matches!(out[28], CapturedDelta::ReplayAddCoupling { .. }));
-        assert!(matches!(
-            out[29],
-            CapturedDelta::ReplaySetFieldCouplingStrengthByFieldId { .. }
-        ));
-        assert!(matches!(
-            out[30],
             CapturedDelta::ReplayRetireFieldById { .. }
         ));
         assert!(matches!(
-            out[31],
+            out[27],
             CapturedDelta::ReplayActivateFieldById { .. }
         ));
         assert!(matches!(
-            out[32],
+            out[28],
             CapturedDelta::ReplayRetractCouplingById { .. }
         ));
-        assert!(matches!(out[33], CapturedDelta::ReplayAddCoupling { .. }));
+        assert!(matches!(out[29], CapturedDelta::ReplayAddCoupling { .. }));
         assert!(matches!(
-            out[34],
+            out[30],
             CapturedDelta::ReplaySetFieldCouplingStrengthByFieldId { .. }
         ));
         assert!(matches!(
-            out[35],
+            out[31],
             CapturedDelta::ReplayAppendNodePropertyById { .. }
         ));
         assert!(matches!(
-            out[36],
+            out[32],
             CapturedDelta::ReplayAddNodeClassificationById { .. }
         ));
         assert!(matches!(
-            out[37],
+            out[33],
             CapturedDelta::ReplayAddNodeClassificationById { .. }
         ));
         assert!(matches!(
-            out[38],
+            out[34],
             CapturedDelta::ReplayAddNodeClassificationById { .. }
         ));
         assert!(matches!(
-            out[39],
+            out[35],
             CapturedDelta::ReplaySetNodeClassificationStatusById { .. }
         ));
         assert!(matches!(
-            out[40],
+            out[36],
             CapturedDelta::ReplaySetNodePrimaryClassificationById { .. }
         ));
         assert!(matches!(
-            out[41],
+            out[37],
             CapturedDelta::ReplayRemoveNodeClassificationById { .. }
         ));
         assert!(matches!(
-            out[42],
+            out[38],
             CapturedDelta::ReplayRecordNodeDerivationById { .. }
         ));
         assert!(matches!(
-            out[43],
+            out[39],
             CapturedDelta::ReplaySetEdgeSemanticPredicateByIds { .. }
         ));
         assert!(matches!(
-            out[44],
+            out[40],
             CapturedDelta::ReplayAssertSemanticPredicateByIds { .. }
         ));
         assert!(matches!(
-            out[45],
+            out[41],
             CapturedDelta::ReplayAppendFrameLayoutHintById { .. }
         ));
         assert!(matches!(
-            out[46],
+            out[42],
             CapturedDelta::ReplayAppendFrameLayoutHintById { .. }
         ));
         assert!(matches!(
-            out[47],
+            out[43],
             CapturedDelta::ReplayMoveFrameLayoutHintById { .. }
         ));
         assert!(matches!(
-            out[48],
+            out[44],
             CapturedDelta::ReplayRemoveFrameLayoutHintById { .. }
         ));
         assert!(matches!(
-            out[49],
+            out[45],
             CapturedDelta::ReplaySetFrameSplitOfferSuppressedById { .. }
         ));
         assert!(matches!(
-            out[50],
+            out[46],
             CapturedDelta::ReplayUpdateNodeHistoryById { .. }
         ));
         assert!(matches!(
-            out[51],
+            out[47],
             CapturedDelta::ReplaySetImportRecords { .. }
         ));
         assert!(matches!(
-            out[52],
+            out[48],
             CapturedDelta::ReplaySetImportRecords { .. }
         ));
         assert!(matches!(
-            out[53],
+            out[49],
             CapturedDelta::ReplaySetImportRecords { .. }
         ));
         assert!(matches!(
-            out[54],
+            out[50],
             CapturedDelta::ReplayRetractRelationsByIds { .. }
         ));
         assert!(matches!(
-            out[55],
+            out[51],
             CapturedDelta::ReplayRemoveNodeById { .. }
         ));
     }

@@ -180,10 +180,9 @@ pub fn facet_projection_for_node(graph: &Graph, key: NodeKey) -> Option<FacetPro
         );
     }
 
-    proj.insert(
-        facet_keys::LIFECYCLE.to_string(),
-        FacetValue::Scalar(FacetScalar::Text(format!("{:?}", node.lifecycle))),
-    );
+    // Lifecycle left the kernel with the browser-state sidecar (boundary pass
+    // slice C); a host that wants a lifecycle facet projects it from its own
+    // runtime state.
 
     Some(proj)
 }
@@ -268,12 +267,15 @@ mod tests {
         );
     }
 
+    /// Lifecycle left the kernel with the browser-state sidecar (boundary
+    /// pass slice C): the kernel projection must NOT invent a lifecycle
+    /// facet; a host that wants one projects it from its own runtime state.
     #[test]
-    fn projection_includes_lifecycle() {
+    fn projection_omits_lifecycle() {
         let mut graph = Graph::new();
         let key = build_node(&mut graph, "https://example.com/");
         let proj = facet_projection_for_node(&graph, key).unwrap();
-        assert!(proj.contains_key(facet_keys::LIFECYCLE));
+        assert!(!proj.contains_key(facet_keys::LIFECYCLE));
     }
 
     #[test]

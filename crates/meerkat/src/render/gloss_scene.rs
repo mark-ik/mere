@@ -12,7 +12,7 @@
 
 use super::*;
 use crate::gloss_view::{GlossMinimapNode, GlossMinimapSnapshot};
-use gloss::MinimapFit;
+use mere::gloss::MinimapFit;
 
 impl WindowCtx<'_> {
     /// Build this frame's gloss minimap: fold its DOM node snapshot into the shell
@@ -30,7 +30,7 @@ impl WindowCtx<'_> {
             }
             return None;
         };
-        let (minimap_rect, _, _) = gloss::gloss_sections(grect);
+        let (minimap_rect, _, _) = mere::gloss::gloss_sections(grect);
         let mw = (minimap_rect[2] - minimap_rect[0]).round().max(1.0) as u32;
         let mh = (minimap_rect[3] - minimap_rect[1]).round().max(1.0) as u32;
 
@@ -49,7 +49,7 @@ impl WindowCtx<'_> {
                     let bridges = pane.show_bridge_rings().then(|| pane.bridges()).flatten();
                     let (positions, overlays): (Vec<_>, _) = match pane.gloss_scope_keys() {
                         Some(scope) => (
-                            platen::project_orrery_subgraph(
+                            mere::platen::project_orrery_subgraph(
                                 pane.graph(),
                                 &scope,
                                 &id,
@@ -57,10 +57,10 @@ impl WindowCtx<'_> {
                                 mw,
                                 mh,
                             ),
-                            platen::signal_overlays(clusters, bridges),
+                            mere::platen::signal_overlays(clusters, bridges),
                         ),
                         None => {
-                            let projection = platen::project_orrery_lens(
+                            let projection = mere::platen::project_orrery_lens(
                                 &id,
                                 pane.graph(),
                                 pane.focused_key(),
@@ -96,8 +96,8 @@ impl WindowCtx<'_> {
         };
 
         let theme = self.shared.presentation.chrome_theme.clone();
-        let node_color = gloss::theme_rgb_css(theme.body_text);
-        let selected_color = gloss::theme_rgb_css(theme.strong_text);
+        let node_color = mere::gloss::theme_rgb_css(theme.body_text);
+        let selected_color = mere::gloss::theme_rgb_css(theme.strong_text);
         let graph = self.orrery().graph();
         let dom_nodes: Vec<GlossMinimapNode> = nodes
             .iter()
@@ -112,7 +112,7 @@ impl WindowCtx<'_> {
                     url,
                     x,
                     y,
-                    size: gloss::minimap_node_size(*selected, *size_factor),
+                    size: mere::gloss::minimap_node_size(*selected, *size_factor),
                     color: if *selected {
                         selected_color.clone()
                     } else {
@@ -138,7 +138,7 @@ impl WindowCtx<'_> {
             .iter()
             .map(|(center, factor, color)| (fit.apply(*center), *factor, *color))
             .collect();
-        let backdrop = gloss::minimap_backdrop_scene(&mapped_edges, &mapped_rings, mw, mh, &theme);
+        let backdrop = mere::gloss::minimap_backdrop_scene(&mapped_edges, &mapped_rings, mw, mh, &theme);
         Some((backdrop, mw, mh))
     }
 }

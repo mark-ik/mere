@@ -186,7 +186,7 @@ pub fn apparatus_items(
     table_stats: &[ApparatusTableStat],
     sync_rows: &[(String, String)],
     obs: &ObservabilitySnapshot,
-    graph_metrics: &glossary::GraphMetrics,
+    graph_metrics: &mere::glossary::GraphMetrics,
 ) -> Vec<PaneItem> {
     let mut items = Vec::new();
 
@@ -395,14 +395,14 @@ pub fn apparatus_items(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kernel::graph::EdgeFamily;
+    use mere::kernel::graph::EdgeFamily;
     use std::collections::BTreeMap;
 
     #[test]
     fn graph_section_reports_the_full_metrics_breakdown() {
         let mut relations_by_family = BTreeMap::new();
         relations_by_family.insert(EdgeFamily::Semantic, 3);
-        let metrics = glossary::GraphMetrics {
+        let metrics = mere::glossary::GraphMetrics {
             node_count: 5,
             edge_count: 4,
             relation_count: 3,
@@ -433,7 +433,7 @@ mod tests {
 
     #[test]
     fn tables_section_renders_structured_stats_and_empty_state() {
-        let metrics = glossary::GraphMetrics::default();
+        let metrics = mere::glossary::GraphMetrics::default();
         let stats = vec![
             ApparatusTableStat::present("Node table", "kernel", 5, "rows")
                 .with_session_deltas(12)

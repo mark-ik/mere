@@ -11,6 +11,7 @@
 //! plan.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::LazyLock;
 
 use euclid::default::Point2D;
 use seiche::{Boundary, CouplingForce, EdgeSpring, LayoutView, NodeExclusion, Simulation};
@@ -30,38 +31,70 @@ use platen::scene_paint::ScenePaintStyle;
 use serval_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
 use signals::{BridgeNodes, ClusterSet};
 
-/// Author CSS for the node-children document. `.stage` is the camera-transformed
-/// container (also `position: relative`, so it is the containing block for the
-/// abs-pos nodes); each `.gnode` is an absolutely-positioned labelled box moved to
-/// its world position by an inline transform (serval propagates `.stage`'s camera
-/// transform onto these abs-pos descendants — the 1A fix).
-pub(crate) const NODE_SHEET: &[&str] = &[
-    "div { display: block; }",
-    ".stage { position: relative; }",
-    ".gnode { position: absolute; left: 0; top: 0; width: 36px; height: 36px; \
-        background-color: rgb(54, 92, 156); color: rgb(245, 247, 252); font-size: 15px; }",
-    ".gnode-selected { position: absolute; left: 0; top: 0; width: 36px; height: 36px; \
-        background-color: rgb(232, 150, 40); color: rgb(28, 22, 10); font-size: 15px; }",
-    // Activation-state colors: open (green), closed (red), idle (blue, the same
-    // fill as the default `.gnode`). The host pushes the state per node.
-    ".gnode-open { position: absolute; left: 0; top: 0; width: 36px; height: 36px; \
-        background-color: rgb(58, 140, 94); color: rgb(238, 250, 243); font-size: 15px; }",
-    ".gnode-closed { position: absolute; left: 0; top: 0; width: 36px; height: 36px; \
-        background-color: rgb(166, 72, 72); color: rgb(250, 240, 240); font-size: 15px; }",
-    ".gnode-idle { position: absolute; left: 0; top: 0; width: 36px; height: 36px; \
-        background-color: rgb(54, 92, 156); color: rgb(245, 247, 252); font-size: 15px; }",
-    // Content-type silhouettes, layered on the state/color class as a second class
-    // (border-radius only, so they merge with whichever color class is set). Square
-    // is the default (no class); rounded = small-web menu, circle = feed.
-    ".gnode-rounded { border-radius: 9px; }",
-    ".gnode-circle { border-radius: 50%; }",
-    // The node's display label, riding beside the tile (not inside the 36px box):
-    // absolutely positioned just right of the square so a long name reads in full on
-    // the canvas instead of overflowing the tile. It is a child of the `.gnode`, so
-    // the per-frame transform carries it along. (Node legibility.)
-    ".gcaption { position: absolute; left: 42px; top: 8px; white-space: nowrap; \
-        color: rgb(216, 222, 234); font-size: 14px; }",
-];
+use crate::palette;
+
+/// The geometry every `.gnode` color class repeats; only the fill/label differ.
+const GNODE_BOX: &str =
+    "position: absolute; left: 0; top: 0; width: 36px; height: 36px; font-size: 15px;";
+
+/// Author CSS for the node-children document, built once. `.stage` is the
+/// camera-transformed container (also `position: relative`, so it is the
+/// containing block for the abs-pos nodes); each `.gnode` is an
+/// absolutely-positioned labelled box moved to its world position by an inline
+/// transform (serval propagates `.stage`'s camera transform onto these abs-pos
+/// descendants — the 1A fix).
+///
+/// The node colors are **not** literals here: `.stage` carries the `--node-*`
+/// custom properties from [`crate::palette`], and the classes below `var()` them,
+/// so the canvas and every other representation read one palette through the
+/// cascade. (Representations carry node identity.)
+fn build_node_sheet() -> Vec<String> {
+    vec![
+        "div { display: block; }".to_string(),
+        // The palette enters the cascade here; `.gnode` and `.gcaption` are
+        // `.stage` descendants, so they inherit every `--node-*` var.
+        format!(
+            ".stage {{ position: relative; {} }}",
+            palette::custom_property_declarations()
+        ),
+        format!(
+            ".gnode {{ {GNODE_BOX} background-color: var(--node-idle-bg); color: var(--node-idle-fg); }}"
+        ),
+        format!(
+            ".gnode-selected {{ {GNODE_BOX} background-color: var(--node-selected-bg); color: var(--node-selected-fg); }}"
+        ),
+        // Activation-state colors: open (green), closed (red), idle (blue, the same
+        // fill as the default `.gnode`). The host pushes the state per node.
+        format!(
+            ".gnode-open {{ {GNODE_BOX} background-color: var(--node-open-bg); color: var(--node-open-fg); }}"
+        ),
+        format!(
+            ".gnode-closed {{ {GNODE_BOX} background-color: var(--node-closed-bg); color: var(--node-closed-fg); }}"
+        ),
+        format!(
+            ".gnode-idle {{ {GNODE_BOX} background-color: var(--node-idle-bg); color: var(--node-idle-fg); }}"
+        ),
+        // Content-type silhouettes, layered on the state/color class as a second class
+        // (border-radius only, so they merge with whichever color class is set). Square
+        // is the default (no class); rounded = small-web menu, circle = feed.
+        ".gnode-rounded { border-radius: 9px; }".to_string(),
+        ".gnode-circle { border-radius: 50%; }".to_string(),
+        // The node's display label, riding beside the tile (not inside the 36px box):
+        // absolutely positioned just right of the square so a long name reads in full on
+        // the canvas instead of overflowing the tile. It is a child of the `.gnode`, so
+        // the per-frame transform carries it along. (Node legibility.)
+        ".gcaption { position: absolute; left: 42px; top: 8px; white-space: nowrap; \
+            color: var(--node-caption-fg); font-size: 14px; }"
+            .to_string(),
+    ]
+}
+
+static NODE_SHEET_STRINGS: LazyLock<Vec<String>> = LazyLock::new(build_node_sheet);
+
+/// The node-children sheet as the `&[&str]` the layout seam takes. Built once:
+/// `apply` re-passes this every frame, so it must not allocate.
+pub(crate) static NODE_SHEET: LazyLock<Vec<&'static str>> =
+    LazyLock::new(|| NODE_SHEET_STRINGS.iter().map(String::as_str).collect());
 
 /// A small sample graph: a ring of nodes around the origin with ring edges plus a
 /// few hub spokes, so the underlay has both edges and nodes to draw. (S2 replaces
@@ -281,7 +314,7 @@ pub(crate) fn set_class(dom: &mut ScriptedDom, node: DomNodeId, class: &str) {
 }
 
 /// A `QualName` in the null namespace (the shape `ScriptedDom` builders take).
-fn qual(local: &str) -> QualName {
+pub(crate) fn qual(local: &str) -> QualName {
     QualName::new(None, Namespace::from(""), LocalName::from(local))
 }
 

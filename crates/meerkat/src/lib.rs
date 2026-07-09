@@ -45,7 +45,7 @@ use chrome::command_palette::{CommandPaletteSession, SearchPaletteScope};
 use chrome::omnibar::OmnibarMatch;
 use chrome::toolbar::ToolbarState;
 use comms::{CommsPane, ConversationId, Draft, ProtocolKind};
-use forme::GraphMemberId;
+use mere::forme::GraphMemberId;
 use frame::SessionId;
 pub use session_runtime::ShellbarEdge;
 use xilem_serval::TextInput;
@@ -483,14 +483,14 @@ pub enum ContextAction {
     /// the chosen kind instead of defaulting to `UserGrouped`; drains the same way (no
     /// tiles, no member-set mutation). The kind is `Copy`, so `ContextAction` stays `Copy`.
     /// (Audit A3 — relation-kind picker.)
-    RelateAs(kernel::graph::SemanticSubKind),
+    RelateAs(mere::kernel::graph::SemanticSubKind),
     /// Sentinel action for a submenu-parent row (`ContextItem::with_children`). A parent row
     /// expands its children rather than running an action, so this is never meant to drain; a
     /// stray dispatch is a harmless no-op. (Nested submenus.)
     OpenSubmenu,
     /// Mint a fresh node at the saved cursor point (the no-selection right-click).
     /// The anchor in `context_origin` is leaf-local screen px; the camera inversion
-    /// to world happens inside `Orrery::add_node_at`. Drains like `ShellbarMove` /
+    /// to world happens inside `mere::orrery::add_node_at`. Drains like `ShellbarMove` /
     /// `Relate` without touching `context_set`. From the add-pill (no cursor anchor)
     /// it mints at the default position.
     AddNode,
@@ -502,7 +502,7 @@ pub enum ContextAction {
     /// Place a fresh field region at the saved cursor point (the no-selection
     /// right-click's "Add field" / the add-pill's "Add field"). The anchor in
     /// `context_origin` is leaf-local screen px; the camera inversion to world
-    /// happens inside `Orrery::add_field_at`. From the add-pill (no anchor) it
+    /// happens inside `mere::orrery::add_field_at`. From the add-pill (no anchor) it
     /// places at the orrery view center. (Field regions P0.)
     AddField,
     /// Delete the field under the right-click (retire it; the kernel keeps its definition).

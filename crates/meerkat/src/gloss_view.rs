@@ -12,12 +12,12 @@
 //! embedded-Scene edges/rings backdrop, the same split `orrery_element` uses for
 //! the main graph canvas) both land here.
 
-use forme::GraphMemberId;
+use mere::forme::GraphMemberId;
 use register_theme::chrome::{ChromeTheme, Color32};
 use xilem_serval::{AnyView, Keyed, PointerClick, ServalCtx, ServalElement, clickable, el};
 
 use super::WindowCtx;
-use gloss::GlossRowIntent;
+use mere::gloss::GlossRowIntent;
 
 pub type GlossRecentView = Box<dyn AnyView<GlossRecentState, (), ServalCtx, ServalElement>>;
 
@@ -117,7 +117,7 @@ pub const GLOSS_MINIMAP_SCENE_KEY: u64 = 0xF0F0_0000_0000_0002;
 pub type GlossMinimapView = Box<dyn AnyView<GlossMinimapState, (), ServalCtx, ServalElement>>;
 
 /// One minimap node: identity, pane-local position + size (already mapped through
-/// `gloss::MinimapFit` — this struct carries no world coordinates), and its
+/// `mere::gloss::MinimapFit` — this struct carries no world coordinates), and its
 /// resolved CSS color. Selection-tinted only, matching pre-migration behavior — the
 /// minimap has never carried the outline's full NODE_SHEET state palette, just
 /// selected-vs-not.

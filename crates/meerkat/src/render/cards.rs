@@ -32,21 +32,23 @@ impl crate::WindowCtx<'_> {
 
     /// The member's vertical scroll (document px) for the synthesized snapshot peek
     /// and the verso-flip restore: the live in-session offset if it was scrolled
-    /// this session, else the node's persisted `session_scroll` (loaded from the
-    /// durable snapshot at boot), else page top. Closes the summoning design's §5
-    /// gap — `self.view.scroll` is in-session-only and cleared on session switch, so
-    /// a node not opened this session always fell back to page top even though its
-    /// last scroll was recorded on the node. (Cross-restart last-viewport.)
+    /// this session, else the browser-state sidecar's persisted scroll (loaded
+    /// from `browser_nodes.json` at boot; boundary pass slice C), else page top.
+    /// Closes the summoning design's §5 gap — `self.view.scroll` is
+    /// in-session-only and cleared on session switch, so a node not opened this
+    /// session always fell back to page top even though its last scroll was
+    /// recorded. (Cross-restart last-viewport.)
     pub(crate) fn member_scroll_y(&self, member: GraphMemberId) -> f32 {
         self.view
             .scroll
             .get(&member)
             .copied()
             .or_else(|| {
-                self.orrery()
-                    .graph()
-                    .get_node_by_id(member)
-                    .and_then(|(_, node)| node.session_scroll)
+                self.shared
+                    .content
+                    .browser_nodes
+                    .get(member)
+                    .and_then(|state| state.scroll)
                     .map(|(_, y)| y)
             })
             .unwrap_or(0.0)

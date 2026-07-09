@@ -10,10 +10,10 @@
 //! the action. Factored out of `frame_ops.rs` to keep files under the 600-LOC
 //! ceiling.
 
-use forme::GraphMemberId;
-use kernel::graph::SemanticSubKind;
+use mere::forme::GraphMemberId;
+use mere::kernel::graph::SemanticSubKind;
 use meerkat::{Chrome, ContextAction, ContextItem};
-use orrery::Face;
+use mere::orrery::Face;
 use session_runtime::ShellbarEdge;
 
 use super::WindowCtx;

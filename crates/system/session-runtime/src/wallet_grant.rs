@@ -1618,7 +1618,12 @@ mod tests {
     fn sample_pairing_ticket_request() -> RemoteAuthPairingTicketRequest {
         RemoteAuthPairingTicketRequest {
             issued_at_ms: 1_700_000_001,
-            expires_at_ms: Some(1_800_000_001),
+            // Far-future (2100-01-01), like the grant fixtures below: the
+            // ticket-issue path checks expiry against the real clock, and the
+            // old seconds-scale 1_800_000_001 in this ms field reads as 1970,
+            // so every ticket-consuming test failed as "expired". The
+            // deliberately-expired test overrides this to Some(1) itself.
+            expires_at_ms: Some(4_102_444_800_000),
             personas: vec![fixture_persona()],
             scopes: vec!["identity.act".into(), "private.read".into()],
             attenuations: vec!["no-subdelegation".into()],

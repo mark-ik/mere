@@ -93,15 +93,15 @@ impl WindowCtx<'_> {
             // acts on that specific live operation; the bare keys act on the focused
             // op. (Chrome bar P2 — Steward process list.)
             if let Some(id) = key.strip_prefix("steward:stop:") {
-                if let Ok(member) = forme::GraphMemberId::parse_str(id) {
+                if let Ok(member) = mere::forme::GraphMemberId::parse_str(id) {
                     self.stop_operation(member);
                 }
             } else if let Some(id) = key.strip_prefix("steward:pin:") {
-                if let Ok(member) = forme::GraphMemberId::parse_str(id) {
+                if let Ok(member) = mere::forme::GraphMemberId::parse_str(id) {
                     self.pin_operation(member);
                 }
             } else if let Some(id) = key.strip_prefix("steward:retry:") {
-                if let Ok(member) = forme::GraphMemberId::parse_str(id) {
+                if let Ok(member) = mere::forme::GraphMemberId::parse_str(id) {
                     if let Some(url) = self
                         .shared
                         .content
@@ -160,12 +160,12 @@ impl WindowCtx<'_> {
             "orrery:sizebyimportance" => self.toggle_orrery_size_by_importance(),
             "orrery:importance:degree" => {
                 self.orrery_mut()
-                    .set_importance_metric(orrery::ImportanceMetric::Degree);
+                    .set_importance_metric(mere::orrery::ImportanceMetric::Degree);
                 self.view.request_redraw();
             }
             "orrery:importance:betweenness" => {
                 self.orrery_mut()
-                    .set_importance_metric(orrery::ImportanceMetric::Betweenness);
+                    .set_importance_metric(mere::orrery::ImportanceMetric::Betweenness);
                 self.view.request_redraw();
             }
             "orrery:communityrings" => {
@@ -180,12 +180,12 @@ impl WindowCtx<'_> {
             }
             "orrery:bridge:betweenness" => {
                 self.orrery_mut()
-                    .set_bridge_metric(orrery::BridgeMetric::Betweenness);
+                    .set_bridge_metric(mere::orrery::BridgeMetric::Betweenness);
                 self.view.request_redraw();
             }
             "orrery:bridge:articulation" => {
                 self.orrery_mut()
-                    .set_bridge_metric(orrery::BridgeMetric::Articulation);
+                    .set_bridge_metric(mere::orrery::BridgeMetric::Articulation);
                 self.view.request_redraw();
             }
             "orrery:glossscope" => {
@@ -432,7 +432,7 @@ impl WindowCtx<'_> {
                     self.set_roster_subject(Some(crate::roster::RosterSubject::RelationCell {
                         from,
                         to,
-                        selector: kernel::graph::RelationSelector::Semantic(kind),
+                        selector: mere::kernel::graph::RelationSelector::Semantic(kind),
                     }));
                     self.view.request_redraw();
                 }
@@ -545,12 +545,12 @@ impl WindowCtx<'_> {
 
     /// Apply the gloss outline row intents the shell runner's dispatch queued: a click
     /// selects + focuses that node, mirroring the minimap's click-to-focus and the
-    /// roster's non-additive click (`Orrery::select_by_url`, the shared primitive).
+    /// roster's non-additive click (`mere::orrery::select_by_url`, the shared primitive).
     /// (gloss-outline plan P1.)
     pub(crate) fn drain_gloss_outline_intents(&mut self) {
         for intent in self.take_gloss_outline_intents() {
             match intent {
-                gloss::GlossRowIntent::Select(url) => {
+                mere::gloss::GlossRowIntent::Select(url) => {
                     self.orrery_mut().select_by_url(&url);
                     self.view.request_redraw();
                 }
@@ -563,7 +563,7 @@ impl WindowCtx<'_> {
     pub(crate) fn drain_gloss_recent_intents(&mut self) {
         for intent in self.take_gloss_recent_intents() {
             match intent {
-                gloss::GlossRowIntent::Select(url) => {
+                mere::gloss::GlossRowIntent::Select(url) => {
                     self.orrery_mut().select_by_url(&url);
                     self.view.request_redraw();
                 }
@@ -576,7 +576,7 @@ impl WindowCtx<'_> {
     pub(crate) fn drain_gloss_minimap_intents(&mut self) {
         for intent in self.take_gloss_minimap_intents() {
             match intent {
-                gloss::GlossRowIntent::Select(url) => {
+                mere::gloss::GlossRowIntent::Select(url) => {
                     self.orrery_mut().select_by_url(&url);
                     self.view.request_redraw();
                 }
@@ -586,9 +586,9 @@ impl WindowCtx<'_> {
 
     fn retarget_roster_after_relation_retract(
         &mut self,
-        from: forme::GraphMemberId,
-        to: forme::GraphMemberId,
-        selector: kernel::graph::RelationSelector,
+        from: mere::forme::GraphMemberId,
+        to: mere::forme::GraphMemberId,
+        selector: mere::kernel::graph::RelationSelector,
     ) {
         let Some(subject) = self.roster_subject() else {
             return;
@@ -619,7 +619,7 @@ impl WindowCtx<'_> {
         self.set_roster_tab(crate::roster::RosterTab::Links);
     }
 
-    fn relation_bundle_exists(&self, from: forme::GraphMemberId, to: forme::GraphMemberId) -> bool {
+    fn relation_bundle_exists(&self, from: mere::forme::GraphMemberId, to: mere::forme::GraphMemberId) -> bool {
         let graph = self.orrery().graph();
         let Some(from_key) = graph.get_node_key_by_id(from) else {
             return false;

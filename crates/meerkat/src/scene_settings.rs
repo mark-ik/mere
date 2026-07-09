@@ -115,43 +115,43 @@ impl WindowCtx<'_> {
                 true
             }
             "pyramid" => {
-                self.orrery_mut().load_scene(orrery::pyramid_scene());
+                self.orrery_mut().load_scene(mere::orrery::pyramid_scene());
                 true
             }
             "domino" | "dominoes" => {
-                self.orrery_mut().load_scene(orrery::domino_scene());
+                self.orrery_mut().load_scene(mere::orrery::domino_scene());
                 true
             }
             "galton" => {
-                self.orrery_mut().load_scene(orrery::galton_scene());
+                self.orrery_mut().load_scene(mere::orrery::galton_scene());
                 true
             }
             "funnel" => {
-                self.orrery_mut().load_scene(orrery::funnel_scene());
+                self.orrery_mut().load_scene(mere::orrery::funnel_scene());
                 true
             }
             "drift" => {
-                self.orrery_mut().load_scene(orrery::drift_scene());
+                self.orrery_mut().load_scene(mere::orrery::drift_scene());
                 true
             }
             "chain" => {
-                self.orrery_mut().load_scene(orrery::chain_scene());
+                self.orrery_mut().load_scene(mere::orrery::chain_scene());
                 true
             }
             "cradle" => {
-                self.orrery_mut().load_scene(orrery::cradle_scene());
+                self.orrery_mut().load_scene(mere::orrery::cradle_scene());
                 true
             }
             "bridge" => {
-                self.orrery_mut().load_scene(orrery::bridge_scene());
+                self.orrery_mut().load_scene(mere::orrery::bridge_scene());
                 true
             }
             "ballchain" | "wreck" | "wrecking" => {
-                self.orrery_mut().load_scene(orrery::ball_and_chain_scene());
+                self.orrery_mut().load_scene(mere::orrery::ball_and_chain_scene());
                 true
             }
             "mixer" => {
-                self.orrery_mut().load_scene(orrery::mixer_scene());
+                self.orrery_mut().load_scene(mere::orrery::mixer_scene());
                 true
             }
             "whirlpool" => {

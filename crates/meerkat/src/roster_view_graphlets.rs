@@ -6,7 +6,7 @@
 //! (binding, members, selectors, drift preview, control actions). Split out
 //! of `roster_view_parts.rs` per the 600-LOC ceiling.
 
-use kernel::graph::EdgeFamily;
+use mere::kernel::graph::EdgeFamily;
 use xilem_serval::{Keyed, PointerClick, clickable, el};
 
 use crate::roster::{self, GraphletCard, GraphletRow, RosterSubject};
@@ -14,7 +14,7 @@ use crate::roster_view::{RosterIntent, RosterState, RosterView};
 use crate::roster_view_parts::{action, action_bar, card_row, card_shell};
 
 pub(crate) fn graphlet_table(rows: &[GraphletRow]) -> RosterView {
-    let mut children: Vec<(forme::GraphletId, RosterView)> = Vec::new();
+    let mut children: Vec<(mere::forme::GraphletId, RosterView)> = Vec::new();
     for row in rows {
         let subject = RosterSubject::Graphlet(row.id);
         let entry: Vec<RosterView> = vec![
@@ -48,7 +48,7 @@ pub(crate) fn graphlet_table(rows: &[GraphletRow]) -> RosterView {
             )),
         ));
     }
-    let children: Keyed<forme::GraphletId, RosterView> = children.into();
+    let children: Keyed<mere::forme::GraphletId, RosterView> = children.into();
     Box::new(el::<_, RosterState, ()>("div", children).attr("class", "roster-table"))
 }
 
@@ -103,7 +103,7 @@ fn graphlet_drift_rows(card: &GraphletCard) -> Vec<RosterView> {
 /// family, checked when it currently narrows the graphlet's derivation walk. Empty
 /// (all unchecked) means no filter — the derivation follows every family, per the
 /// `selectors_label` row above it. (Graphlet selector/family editing.)
-fn family_selector_row(id: forme::GraphletId, families: &[(EdgeFamily, bool)]) -> RosterView {
+fn family_selector_row(id: mere::forme::GraphletId, families: &[(EdgeFamily, bool)]) -> RosterView {
     let chips: Vec<RosterView> = families
         .iter()
         .map(|&(family, on)| family_selector_chip(id, family, on))
@@ -111,11 +111,11 @@ fn family_selector_row(id: forme::GraphletId, families: &[(EdgeFamily, bool)]) -
     Box::new(el::<_, RosterState, ()>("div", chips).attr("class", "roster-card-actions"))
 }
 
-fn family_selector_chip(id: forme::GraphletId, family: EdgeFamily, on: bool) -> RosterView {
+fn family_selector_chip(id: mere::forme::GraphletId, family: EdgeFamily, on: bool) -> RosterView {
     let label = if on {
-        format!("{} \u{2713}", roster::edge_family_label(family))
+        format!("{} \u{2713}", mere::roster::edge_family_label(family))
     } else {
-        roster::edge_family_label(family).to_string()
+        mere::roster::edge_family_label(family).to_string()
     };
     action(label, move |st, ev| {
         ev.stop_propagation();
@@ -126,8 +126,8 @@ fn family_selector_chip(id: forme::GraphletId, family: EdgeFamily, on: bool) -> 
 
 fn graphlet_action(
     label: &'static str,
-    id: forme::GraphletId,
-    intent: fn(forme::GraphletId) -> RosterIntent,
+    id: mere::forme::GraphletId,
+    intent: fn(mere::forme::GraphletId) -> RosterIntent,
 ) -> RosterView {
     crate::roster_view_parts::action(label, move |st, ev| {
         ev.stop_propagation();

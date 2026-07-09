@@ -21,10 +21,10 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use armillary::Generations;
-use forme::GraphMemberId;
+use mere::forme::GraphMemberId;
 use frame::{FrameLayout, GraphId, PaneId, SessionId, SplitAxis, SplitChoice};
 use meerkat::{Chrome, ChromeView, CrawlIndicator, SharedChrome, chrome_view};
-use platen::Workbench;
+use mere::platen::Workbench;
 use serval_scripted_dom::{NodeId, ScriptedDom};
 use serval_winit_host::WindowSurface;
 use session_runtime::{StartupUnlockMode, settings_store::ScriptPermissionPrefs};
@@ -407,7 +407,7 @@ pub(crate) struct WindowView {
     pub(crate) object_card: Option<GraphMemberId>,
     /// The field a right-click landed on, stored when the context menu offers "Delete field"
     /// so the drain knows which to retire. (Field regions — delete.)
-    pub(crate) context_field: Option<kernel::graph::FieldId>,
+    pub(crate) context_field: Option<mere::kernel::graph::FieldId>,
     /// In-progress session rename: the target session + its edit buffer. `Some` while
     /// the switcher label is being typed (F2 / right-click a tile).
     pub(crate) renaming: Option<(SessionId, String)>,
@@ -457,8 +457,8 @@ pub(crate) struct WindowView {
     /// windows (which are the whole-session default graphlet). Phase 1 only *carries* it;
     /// Phase 2 makes the scope visible + accumulates the branch's lineage. (Graphlet
     /// wiring; tear-out gestures G3.)
-    pub(crate) branch_graphlet: Option<forme::GraphletId>,
-    /// This window's per-pane camera: one [`orrery::Viewport`] per graph it shows in
+    pub(crate) branch_graphlet: Option<mere::forme::GraphletId>,
+    /// This window's per-pane camera: one [`mere::orrery::Viewport`] per graph it shows in
     /// an Orrery pane. The pooled `Orrery` is the *authority* (graph + physics + node
     /// positions, shared across windows); the **camera/viewport is view state and
     /// lives here**, so two windows on one graph hold distinct viewports over the
@@ -466,7 +466,7 @@ pub(crate) struct WindowView {
     /// into its orrery on build and reads it back on drop (see `WindowCtx`); a graph
     /// absent here is seeded from the orrery's current framing the first time this
     /// window shows it. (Camera on the view.)
-    pub(crate) viewports: HashMap<GraphId, orrery::Viewport>,
+    pub(crate) viewports: HashMap<GraphId, mere::orrery::Viewport>,
     /// This window's per-pane node **selection** (and thus focus), one member-uuid set
     /// per graph it shows in an Orrery pane. Like `viewports`, the pooled `Orrery` holds
     /// the live slot and the per-window state lives here: the ctx installs this window's
@@ -617,21 +617,21 @@ pub(crate) struct WindowLocal {
     pub(crate) gloss_outline: GlossOutlineState,
     /// The outline's window rect `[x0,y0,x1,y1]`, `Some` while the gloss pane is open;
     /// the shell view positions the outline subtree there (the gloss pane's middle
-    /// third — [`gloss::gloss_sections`]). `None` keeps it out of the document.
+    /// third — [`mere::gloss::gloss_sections`]). `None` keeps it out of the document.
     pub(crate) gloss_outline_rect: Option<[f32; 4]>,
     /// The gloss recent-visited lens's view state, folded into the shell document like
     /// the outline. (Scene-to-DOM migration P1.)
     pub(crate) gloss_recent: GlossRecentState,
     /// The recent section's window rect, `Some` while the gloss pane is open; positions
     /// the recent subtree at the gloss pane's bottom third
-    /// ([`gloss::gloss_sections`]).
+    /// ([`mere::gloss::gloss_sections`]).
     pub(crate) gloss_recent_rect: Option<[f32; 4]>,
     /// The gloss minimap's view state (DOM node squares; the edges/rings backdrop
     /// rides an embedded `<external-texture>` inside this same subtree, not a
     /// separate host composite). (Scene-to-DOM migration P2.)
     pub(crate) gloss_minimap: GlossMinimapState,
     /// The minimap's window rect, `Some` while the gloss pane is open; positions the
-    /// minimap subtree at the gloss pane's top third ([`gloss::gloss_sections`]).
+    /// minimap subtree at the gloss pane's top third ([`mere::gloss::gloss_sections`]).
     pub(crate) gloss_minimap_rect: Option<[f32; 4]>,
     /// The most recent orrery wheel delta (device px), queued by the orrery pane element's
     /// `on_wheel` when the host dispatches a wheel there, and drained by the host into seiche's

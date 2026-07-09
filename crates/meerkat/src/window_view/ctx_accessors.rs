@@ -107,7 +107,7 @@ impl crate::WindowCtx<'_> {
 
     pub(crate) fn set_gloss_outline(
         &mut self,
-        snapshot: gloss::GlossOutlineSnapshot,
+        snapshot: mere::gloss::GlossOutlineSnapshot,
         rect: Option<[f32; 4]>,
     ) {
         let pid = self.view.projection_id;
@@ -129,7 +129,7 @@ impl crate::WindowCtx<'_> {
         self.multi.state().windows[self.view.projection_id.0].gloss_outline_rect
     }
 
-    pub(crate) fn take_gloss_outline_intents(&mut self) -> Vec<gloss::GlossRowIntent> {
+    pub(crate) fn take_gloss_outline_intents(&mut self) -> Vec<mere::gloss::GlossRowIntent> {
         let pid = self.view.projection_id;
         let mut out = Vec::new();
         self.multi.update_local(pid, |app| {
@@ -157,7 +157,7 @@ impl crate::WindowCtx<'_> {
             .is_some()
     }
 
-    pub(crate) fn take_gloss_recent_intents(&mut self) -> Vec<gloss::GlossRowIntent> {
+    pub(crate) fn take_gloss_recent_intents(&mut self) -> Vec<mere::gloss::GlossRowIntent> {
         let pid = self.view.projection_id;
         let mut out = Vec::new();
         self.multi.update_local(pid, |app| {
@@ -187,7 +187,7 @@ impl crate::WindowCtx<'_> {
             .is_some()
     }
 
-    pub(crate) fn take_gloss_minimap_intents(&mut self) -> Vec<gloss::GlossRowIntent> {
+    pub(crate) fn take_gloss_minimap_intents(&mut self) -> Vec<mere::gloss::GlossRowIntent> {
         let pid = self.view.projection_id;
         let mut out = Vec::new();
         self.multi.update_local(pid, |app| {

@@ -185,7 +185,7 @@ impl Shell {
                     if *gid != focused {
                         continue;
                     }
-                    let outcome = linked_data::apply_contribution(g, contribution);
+                    let outcome = mere::linked_data::apply_contribution(g, contribution);
                     changed |= outcome.nodes_created > 0 || outcome.edges_asserted > 0;
                 }
                 changed
@@ -204,7 +204,7 @@ impl Shell {
                     if *gid != focused {
                         continue;
                     }
-                    let outcome = linked_data::apply_contribution(g, contribution);
+                    let outcome = mere::linked_data::apply_contribution(g, contribution);
                     changed |= outcome.nodes_created > 0 || outcome.edges_asserted > 0;
                 }
                 changed

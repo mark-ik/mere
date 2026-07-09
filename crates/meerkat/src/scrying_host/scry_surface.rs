@@ -4,7 +4,7 @@
 
 //! Flip/navigation restore helpers for scrying-hosted web surfaces.
 
-use forme::GraphMemberId;
+use mere::forme::GraphMemberId;
 use inker::{Cookie, NavigationEvent, SameSite, WebSurface};
 use verso_scry::{NavSignal, ScryForward, ScrySurface};
 

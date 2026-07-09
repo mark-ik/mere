@@ -6,10 +6,10 @@
 //! [`Shell`](super::Shell). Factored from `main.rs` to keep files under the
 //! workspace 600-LOC ceiling.
 
-use forme::GraphMemberId;
+use mere::forme::GraphMemberId;
 use frame::{GraphId, InsertSide, PaneContent, PaneId, PaneNode};
 use meerkat::Chrome;
-use orrery::Orrery;
+use mere::orrery::Orrery;
 use session_runtime::{PersistedSettings, settings_store};
 
 use super::observability::ObservabilitySnapshot;

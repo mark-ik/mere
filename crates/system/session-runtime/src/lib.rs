@@ -46,6 +46,10 @@ pub mod content_store;
 // snapshots) — the sibling of content_store, keyed by BLAKE3 digest so identical
 // images dedup. The pixels live here; the kernel Node holds only an ImageRef.
 pub mod image_store;
+// Per-node browser-state sidecar (scroll / form draft / viewer override /
+// compat mode), keyed by node UUID beside graph.json — browser-runtime state
+// that doesn't belong in graph truth (boundary pass slice C).
+pub mod browser_node_state;
 pub mod engine_profile_store;
 // Freeze/thaw a live graph into an immutable, content-addressed graph engram over
 // an eidetic Store (the Alembic memory spine; wasm-clean — store-agnostic, not

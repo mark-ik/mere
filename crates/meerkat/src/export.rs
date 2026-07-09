@@ -5,7 +5,7 @@
 //! JSON-LD graph export (Lane 0 sidequest #1).
 //!
 //! The dormant inverse of the wired linked-data *ingest* (`apply_contribution`
-//! off the fetch drain): `linked_data::to_jsonld_string` over the focused graph,
+//! off the fetch drain): `mere::linked_data::to_jsonld_string` over the focused graph,
 //! written to a file under `<mere_root>/exports/`. Reached as `Command::ExportGraph`
 //! (palette + `>export_graph`); the host drains it and echoes the path. A first cut
 //! writes a timestamped file; a native Save-As dialog is the follow-up.
@@ -20,7 +20,7 @@ impl WindowCtx<'_> {
     pub(super) fn export_graph_jsonld(&self) -> String {
         let graph = self.orrery().graph();
         let node_count = graph.nodes().count();
-        let document = linked_data::to_jsonld_string(graph);
+        let document = mere::linked_data::to_jsonld_string(graph);
 
         let dir = self.shared.session.mere_root.join("exports");
         if let Err(err) = std::fs::create_dir_all(&dir) {

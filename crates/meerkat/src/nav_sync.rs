@@ -10,7 +10,7 @@
 //! keep files under the 600-LOC ceiling.
 
 use eidetic::browsing::TraceTransition;
-use forme::GraphMemberId;
+use mere::forme::GraphMemberId;
 
 use super::WindowCtx;
 
@@ -136,7 +136,7 @@ impl WindowCtx<'_> {
     /// Shell-side graphlet pool + persistence run after the ctx borrow ends; the Shell
     /// dedups, so revisiting a node is a cheap no-op. A leaf / the primary carries no
     /// `branch_graphlet`, so this is a no-op there. (Tear-out gestures G3.)
-    fn record_branch_nav(&mut self, member: forme::GraphMemberId) {
+    fn record_branch_nav(&mut self, member: mere::forme::GraphMemberId) {
         if let Some(graphlet) = self.view.branch_graphlet {
             self.commands.push(super::ShellCommand::RecordBranchMember {
                 graph: self.view.focused_graph,

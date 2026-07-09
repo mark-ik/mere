@@ -165,6 +165,24 @@ impl Shell {
                 None
             }
         };
+        // Per-node browser state (scroll / draft / viewer / compat) loads from
+        // its own sidecar beside graph.json, seeding once from a pre-split
+        // graph.json's legacy session state. (Boundary pass slice C.)
+        let (browser_nodes, browser_nodes_migrated) =
+            session_runtime::browser_node_state::load_or_migrate_browser_node_states(&session_dir);
+        if browser_nodes_migrated {
+            match session_runtime::browser_node_state::save_browser_node_states(
+                &session_dir,
+                &browser_nodes,
+            ) {
+                Ok(()) => {
+                    tracing::info!(dir = ?session_dir, "migrated legacy per-node session state into browser_nodes.json")
+                }
+                Err(err) => {
+                    tracing::warn!(%err, dir = ?session_dir, "failed to persist migrated browser node state")
+                }
+            }
+        }
         let mut orrery = match restored {
             Some(graph) => Orrery::with_graph(graph),
             None => {
@@ -480,7 +498,7 @@ impl Shell {
         // Restore this session's persisted workbench tiling at boot (not just on a
         // later session switch), so split shape / tabs / active tab survive a restart;
         // pruned to the loaded graph's members. (A3 persistence.)
-        let present_members: HashSet<forme::GraphMemberId> =
+        let present_members: HashSet<mere::forme::GraphMemberId> =
             orrery.graph().nodes().map(|(_, node)| node.id).collect();
         view.workbench = session_ops::load_workbench(&session_dir, &present_members);
         // Restore live workbench-mirror mode at boot; the render loop re-scopes the
@@ -579,6 +597,7 @@ impl Shell {
                     content_arrangement: Some(crate::content_affinity::ContentArrangement::new()),
                     engine_registry,
                     engine_pins: HashMap::new(),
+                    browser_nodes,
                     route_policy: inker::routing::EngineRoutePolicy::default(),
                     engine_activation: engine_activation::EngineActivation::new(
                         saved_settings.disabled_engines.clone(),
