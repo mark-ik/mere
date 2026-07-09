@@ -1325,3 +1325,23 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   focus and the pane. This mirrors the highlight promotion (illume plan point 8): serval
   is the editor toolkit; the grammar-aware and graph-aware layers stay in the host. 7
   chrome_comms + 247 bin tests green.
+- **2026-07-09, Phase 3 completion popups (`/` slash + `[[` node link).** Built the
+  first of the UI-surface cluster, ecosystem-first per the chisel catalog's read (menus
+  are Tier-1 views, not leaves). **serval gained a reusable overlay `menu` view**
+  (positioned selectable rows + host on-pick, composed from `overlay_at`; classes
+  `menu`/`menu-row`/`menu-row-active`; serval `8a4a0a0`) — the shape every host wants, so
+  Isometry/Strophe get menus for free. **meerkat's `knot_completion` module** holds the
+  shared machinery: trigger detection (a `/` at line start, or `[[` unclosed on the
+  line), candidate filtering, and accept (replace `trigger..caret` with the item's insert,
+  with an undo snapshot). The host (`WindowCtx::refresh_knot_completion`) rebuilds
+  candidates + the caret anchor (`caret_rect`) after every editor key and renders the
+  serval `menu`; the keyboard navigates (arrows), accepts (Enter/Tab), and closes (Escape),
+  with soft-wrap nav yielding while it is open. `/` items are static block templates
+  (headings, lists, task, quote, code fence, divider); `[[` items are titled graph nodes
+  filtered by query, inserting `[[Title]]` (`WindowCtx::wikilink_items` over
+  `graph().nodes()`). mere `bab1aa9` (slash) + `6d1ab51` (wikilink); 5 lib + 1 bin tests,
+  248 bin total green. **Follow-ons:** the popup is keyboard-driven — clicking a row needs
+  a press-routing check (like `knot_editor_pane_at`) to reach the chrome hit-test. **Next
+  in the cluster:** the fold gutter (the chisel play — catalog ladder rung 2: a gutter
+  arrangement-leaf column with Path-A fold-arrow glyphs + section collapse), then the
+  outline (defers to the gloss outline lens plan).
