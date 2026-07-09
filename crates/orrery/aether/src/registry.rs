@@ -21,7 +21,7 @@ use crate::ast::{ScalarField, VectorField};
 // are minted deterministically from a counter (`Uuid::from_u128`) so the type
 // stays WASM-clean; once fields are sourced from the `Graph` (field-system
 // Phase 3b) kernel ids flow in directly and this minting falls away.
-pub use kernel::graph::{FieldDefinition as FieldDef, FieldId};
+pub use numen::{FieldDefinition as FieldDef, FieldId};
 
 /// Per-canvas field registry.
 ///

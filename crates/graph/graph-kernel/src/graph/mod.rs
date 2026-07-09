@@ -70,16 +70,15 @@ pub mod node_props;
 // chartulary capability-trait impls for `Node` (graph re-base, G5).
 mod chart;
 
-// Field system (2026-05-31, field-system step 3): Field/Coupling kernel-truth
-// primitives + the portable field AST. A parallel keyed store on `Graph` lands
-// in Phase 1 — these are not petgraph node weights or `EdgePayload` sidecars.
-// See `2026-05-31_field_coupling_kernel_primitive_plan.md`.
-pub mod coupling;
-pub mod edge_path;
-pub mod field;
-pub mod field_ast;
-/// Graph mutators + queries for the field layer (Phase 1): the parallel keyed
-/// store on `Graph` + selector evaluation.
+// Field system: the field-layer definition types (Field / Coupling / the field AST /
+// EdgePath) live in the portable `numen` crate, promoted out of the kernel so the
+// third graph primitive sits at the same portable tier as chartulary's nodes/edges.
+// The kernel keeps the parallel keyed store on `Graph` (fields/couplings are neither
+// petgraph node weights nor `EdgePayload` sidecars) and re-exports numen's types.
+/// Graph mutators + queries for the field layer (Phase 1): the parallel keyed store
+/// on `Graph` + selector evaluation. The field-layer *definition* types (Field /
+/// Coupling / the field AST / EdgePath) now live in the portable `numen` crate,
+/// re-exported below so `kernel::graph::` paths stay stable.
 mod field_ops;
 
 // Identity types and rkyv archive helpers extracted to `identity.rs`
@@ -130,10 +129,11 @@ pub use edge_taxonomy::{
 
 // Field-system truth types (2026-05-31). Field/Coupling form a parallel field
 // layer beside the node/edge graph; aether reads them and evaluates.
-pub use coupling::{COUPLING_VOCAB, Coupling, CouplingResponse, NodeSelector};
-pub use edge_path::{EdgePath, EdgePathRule};
-pub use field::{CouplingId, Field, FieldDefinition, FieldExtent, FieldId, FieldLifecycle};
-pub use field_ast::{Falloff, ScalarField, VectorField};
+pub use numen::{
+    COUPLING_VOCAB, Coupling, CouplingId, CouplingResponse, EdgePath, EdgePathRule, Falloff,
+    Field, FieldDefinition, FieldExtent, FieldId, FieldLifecycle, NodeSelector, ScalarField,
+    VectorField,
+};
 
 /// Traversal archive payload emitted when dissolving a node.
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]

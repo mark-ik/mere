@@ -156,20 +156,34 @@ topology queries on the graph at all. So aether's promotion path is extracting t
 field-layer primitives (Field, Coupling, field_ast) into a portable crate, a distinct
 field-system extraction, not "run it on the generic graph."
 
+## numen — the field-layer extraction (this step)
+
+The field-primitive definitions (the scalar/vector field AST, `Field` + extent +
+lifecycle, `Coupling` + response vocabulary, `EdgePath`) moved out of `kernel::graph`
+into a new portable crate, **numen** (MIT/Apache, WASM-clean, plain data). They had been
+*inside* the kernel since the 2026-05-30 field-system decision ("fields are a third graph
+primitive"); now that nodes and edges live in the portable substrate (chartulary), the
+third primitive belongs at the same portable tier, not in mere's app kernel. Fields are
+spatial (they read positions), so they correctly stay out of chartulary, which is
+position-free; numen is their own substrate sibling.
+
+The kernel depends on numen and re-exports the types, so every `kernel::graph::` path
+stays stable (276 kernel tests unchanged; the field-layer's own 13 unit tests moved to
+numen). aether takes its field types from numen instead of the kernel; it keeps a kernel
+dependency only for the projection glue that authors fields into a live mere `Graph` (49
+tests with `field-rhai`). So aether's field-evaluation core no longer depends on mere's
+kernel: the field primitives are portable, and aether is portable over them.
+
 ## What remains
 
 1. **Content bytes out-of-line (follow-on).** Move `Node::body` bytes into an actual
    `muniment::BlobStore` (store only the `Hash` on the node) and content-address fetched
    web pages that live in mere's cache. `ContentBearing` already names the identity; this
    moves the storage. A data-model migration, its own deliberate step.
-2. **aether field-layer extraction.** Promote the Field / Coupling / field_ast primitives
-   out of `kernel::graph` into a portable crate so aether (field physics over positions)
-   depends on the substrate, not mere's kernel. Distinct from the graph genericization;
-   positions stay view state, not a graph capability.
-3. **Production journal persistence (follow-on).** A persisted tail journal alongside the
+2. **Production journal persistence (follow-on).** A persisted tail journal alongside the
    `GraphSnapshot` checkpoint for crash recovery, once codicil grows append-friendly
    persistence. A deliberate design, not a rush.
-4. **Done-condition.** meerkat runs on the substrate graph with no behaviour change. The
+3. **Done-condition.** meerkat runs on the substrate graph with no behaviour change. The
    graph swap already meets this at the kernel level (289 tests unchanged); the remaining
    steps deepen the adoption rather than gate it.
 

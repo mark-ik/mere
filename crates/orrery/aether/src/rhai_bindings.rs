@@ -51,7 +51,7 @@ use crate::ast::{ScalarField, VectorField};
 use crate::coupling::{Coupling, CouplingResponse, EdgePath, EdgePathRule, NodeSelector};
 use crate::projection::FieldProjection;
 use crate::registry::FieldId;
-use kernel::graph::CouplingId;
+use numen::CouplingId;
 
 // Scripts address fields by an `i64` handle. Registry ids are UUID-backed but
 // minted from a small `u64` counter (`Uuid::from_u128`), so the handle is just

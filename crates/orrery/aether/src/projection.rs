@@ -13,7 +13,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use kernel::graph::{Field, Graph};
+use kernel::graph::Graph;
+use numen::Field;
 
 use crate::ast::{ScalarField, VectorField};
 use crate::coupling::{Coupling, EdgePathRule};
@@ -130,7 +131,7 @@ mod tests {
         let mut p = FieldProjection::new();
         let id = p.add_scalar("f", ScalarField::Const(1.0));
         p.add_coupling(Coupling::new(
-            kernel::graph::CouplingId::from_uuid(uuid::Uuid::from_u128(0)),
+            numen::CouplingId::from_uuid(uuid::Uuid::from_u128(0)),
             id,
             NodeSelector::All,
             CouplingResponse::AttractToMin,
@@ -155,7 +156,7 @@ mod tests {
         let id = p.add_scalar("focus", ScalarField::gaussian_at(0.0, 0.0, 10.0));
         p.z_field = Some(id);
         p.add_coupling(Coupling::new(
-            kernel::graph::CouplingId::from_uuid(uuid::Uuid::from_u128(1)),
+            numen::CouplingId::from_uuid(uuid::Uuid::from_u128(1)),
             id,
             NodeSelector::Kind("paper".into()),
             CouplingResponse::AttractToMin,
@@ -179,7 +180,7 @@ mod tests {
         let mut p = FieldProjection::new();
         let fid = p.add_scalar("focus", ScalarField::gaussian_at(0.0, 0.0, 10.0));
         p.add_coupling(Coupling::new(
-            kernel::graph::CouplingId::from_uuid(uuid::Uuid::from_u128(1)),
+            numen::CouplingId::from_uuid(uuid::Uuid::from_u128(1)),
             fid,
             NodeSelector::All,
             CouplingResponse::AttractToMin,

@@ -128,9 +128,7 @@ impl Graph {
 
 #[cfg(test)]
 mod tests {
-    use super::super::coupling::CouplingResponse;
-    use super::super::field::FieldDefinition;
-    use super::super::field_ast::ScalarField;
+    use super::super::{CouplingResponse, FieldDefinition, ScalarField};
     use super::*;
     use euclid::default::Point2D;
     use uuid::Uuid;

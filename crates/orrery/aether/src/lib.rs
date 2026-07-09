@@ -28,10 +28,10 @@
 //! `field-burn` feature) will lower an entire field expression to a fused
 //! tensor program for vectorised evaluation; see `lower_burn`.
 
-// The scalar/vector field AST is kernel truth (`kernel::graph::field_ast`).
+// The scalar/vector field AST is a portable `numen` primitive (`numen::field_ast`).
 // aether re-exports it as `ast` so internal `crate::ast::` paths and external
 // `aether::ast::` callers keep resolving onto the canonical types.
-pub use kernel::graph::field_ast as ast;
+pub use numen::field_ast as ast;
 pub mod coupling;
 pub mod eval;
 #[cfg(feature = "field-burn")]

@@ -7,8 +7,8 @@
 //! All of these are kernel truth now (field-system extraction Phases 3a + 4): a
 //! coupling targets a selector over nodes, and an edge-path rule says how an
 //! edge's curve is drawn — neither is a node→node `EdgePayload`, both are
-//! field-layer definitions the kernel owns and aether reads. This module re-exports
+//! field-layer definitions from the portable `numen` crate. This module re-exports
 //! them so `crate::coupling::*` and `aether::*` keep resolving onto the canonical
-//! kernel types; their tests live beside the definitions in `kernel::graph`.
+//! types; their tests live beside the definitions in `numen`.
 
-pub use kernel::graph::{Coupling, CouplingResponse, EdgePath, EdgePathRule, NodeSelector};
+pub use numen::{Coupling, CouplingResponse, EdgePath, EdgePathRule, NodeSelector};

@@ -27,6 +27,11 @@ store = []
 # near-verbatim (GraphMemory -> Stemma), so the nav model is unchanged. Path dep to
 # the sibling repo during development.
 stemma = { path = "../../../../stemma" }
+# The portable field-primitive definitions (Field / Coupling / the scalar & vector
+# field AST / EdgePath) that the kernel's field store and aether both consume.
+# Promoted out of this kernel so the third graph primitive sits at the portable tier
+# beside chartulary's nodes/edges. Path dep to the sibling repo.
+numen = { path = "../../../../numen" }
 forme.workspace = true
 crossbeam-channel = "0.5"
 futures-util = "0.3"
