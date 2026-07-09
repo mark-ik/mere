@@ -1309,3 +1309,19 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   UI), the heading outline (ties into the gloss outline lens plan), `[[` node-link
   completion and the `/` slash menu (both need a completion popup) — then the
   query-block / agent-node wave.
+- **2026-07-09, universal editor ops promoted to serval.** Prompted by "where should
+  this live" against Isometry. Checked Isometry's bootstrap plan first: its text needs
+  are lighter (a compose field, schema character-sheet fields; its undo is map-domain,
+  not text), so it does *not* pull the djot-prose ops. Split accordingly: the
+  host-agnostic bits went to serval, the prose bits stayed. **xilem-serval gained an
+  `editor` module (core, no feature gate — needs only `TextInput`)**: `EditHistory` (a
+  bounded undo/redo stack of whole-buffer snapshots with coalesced typing runs) and
+  `wrap_selection` / `pair_close` (auto-pair wrap over a selection). Every serval host
+  now gets undoable, bracket-wrapping fields for free (serval `bf632fa`, 5 tests, 98
+  total). meerkat's three undo Chrome fields collapsed to one `knot_history:
+  EditHistory` and `wrap_selection_if_pair` delegates to serval (mere `0a8bc35`). **Kept
+  host-side** (prose- / grammar-specific or graph-coupled): list continuation, structural
+  selection (illume container tree), `note_edit_format`, the save path, the render lane,
+  focus and the pane. This mirrors the highlight promotion (illume plan point 8): serval
+  is the editor toolkit; the grammar-aware and graph-aware layers stay in the host. 7
+  chrome_comms + 247 bin tests green.
