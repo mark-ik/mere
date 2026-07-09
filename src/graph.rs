@@ -37,6 +37,17 @@ impl<N: Identified, E> Default for Graph<N, E> {
     }
 }
 
+impl<N: Identified + Clone, E: Clone> Clone for Graph<N, E> {
+    fn clone(&self) -> Self {
+        // The id index is Clone-able directly (keys are stable across a clone),
+        // so no rebuild is needed.
+        Self {
+            inner: self.inner.clone(),
+            by_id: self.by_id.clone(),
+        }
+    }
+}
+
 impl<N: Identified, E> Graph<N, E> {
     /// A fresh, empty graph.
     pub fn new() -> Self {
@@ -162,6 +173,30 @@ impl<N: Identified, E> Graph<N, E> {
         edges.sort();
         edges.dedup();
         edges
+    }
+
+    /// Whether `key` still refers to a live node.
+    pub fn contains_node(&self, key: NodeKey) -> bool {
+        self.inner.contains_node(key)
+    }
+
+    /// Every node payload, mutably. Weight-only: mutating a node's id field
+    /// desyncs the identity index (re-`insert` to change identity), the same
+    /// caveat as [`node_mut`](Self::node_mut).
+    pub fn node_weights_mut(&mut self) -> impl Iterator<Item = &mut N> {
+        self.inner.node_weights_mut()
+    }
+
+    /// The underlying petgraph, read-only.
+    ///
+    /// An escape hatch for the graph algorithms petgraph provides and this crate
+    /// does not re-wrap (shortest path, connected components, SCC, reachability)
+    /// and for raw structural iteration (`node_indices`, `edge_references`,
+    /// `edge_endpoints`, direction-scoped `edges`/`neighbors`). Topology mutation
+    /// must still go through the typed methods above so the identity index cannot
+    /// drift; this borrow is immutable precisely to keep that boundary.
+    pub fn inner(&self) -> &StableGraph<N, E> {
+        &self.inner
     }
 }
 
