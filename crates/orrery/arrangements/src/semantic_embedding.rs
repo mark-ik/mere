@@ -11,8 +11,8 @@
 //! targets, scaled and positioned per config.
 //!
 //! (The companion iterative `SemanticEdgeWeight` projection was retired
-//! once gyre's affinity force reached parity — similarity now clusters
-//! at gyre's cost, not as a projection.)
+//! once seiche's affinity force reached parity — similarity now clusters
+//! at seiche's cost, not as a projection.)
 
 use std::collections::HashMap;
 use std::hash::Hash;

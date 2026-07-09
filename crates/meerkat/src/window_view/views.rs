@@ -5,7 +5,7 @@
 //! Shell + card view builders (pure `WindowLocal -> WindowLocalView` functions, lensed
 //! per window into `AppState` by [`shell_view`]).
 //!
-//! **Node vs card.** A node is an object — a physics body with its own hull in gyre, a
+//! **Node vs card.** A node is an object — a physics body with its own hull in seiche, a
 //! DOM object here for tabbing/hit-test/a11y — that *references* an addressed thing (a
 //! page, a file, a settings namespace); it is not that thing, and it is not a card. Its
 //! rendered body is a **gnode** (the `.gnode` class), drawn either here as retained
@@ -225,13 +225,13 @@ pub(crate) fn window_local_view(s: &WindowLocal, crawl: &CrawlIndicator) -> Wind
 }
 
 /// The external-texture key for the orrery scene underlay: a reserved high value, disjoint from the
-/// workbench's per-member UUID-low-64 keys. The host rasterizes the gyre scene under it and
+/// workbench's per-member UUID-low-64 keys. The host rasterizes the seiche scene under it and
 /// composites it at the element's laid-out rect, which `render.rs` enumerates from the document
 /// (the external-texture-element compose). (cond 5.)
 pub(crate) const ORRERY_SCENE_KEY: u64 = 0xF0F0_0000_0000_0001;
 
 /// The orrery element: a positioned container whose gnodes are `position:absolute`
-/// + `transform: translate(...)` DOM placed by gyre's world positions. The shell view
+/// + `transform: translate(...)` DOM placed by seiche's world positions. The shell view
 /// reserves a stable host-owned child pool for them; the render path reconciles the pool
 /// directly against the DOM each frame. The underlay (edges + demoted dots) joins in (ii).
 /// The rect is a placeholder until the frame tree drives the container layout (iii).
@@ -239,7 +239,7 @@ pub(crate) const ORRERY_SCENE_KEY: u64 = 0xF0F0_0000_0000_0001;
 pub(crate) fn orrery_element(render: &OrreryRender) -> WindowLocalView {
     let [x0, y0, x1, y1] = render.rect;
     let (pw, ph) = ((x1 - x0).max(1.0), (y1 - y0).max(1.0));
-    // The orrery scene (gyre edges / backdrop / demoted dots), which the host rasterizes to a
+    // The orrery scene (seiche edges / backdrop / demoted dots), which the host rasterizes to a
     // texture, sits as an `<external-texture>` underlay in the document so its placement comes from
     // layout and the gnodes stack over it via the DOM. First child = painted first = under the
     // gnodes. (cond 5: the scene becomes a document element, not a standalone host composite.)
@@ -265,7 +265,7 @@ pub(crate) fn orrery_element(render: &OrreryRender) -> WindowLocalView {
     // chrome in the shell document. (Layering fix — card over nodes.)
     let focus_card = render.focus_card.as_ref().map(focus_card_view);
     // The orrery pane element bears the wheel: a wheel the host dispatches here queues its delta
-    // for the host to drain into gyre's pan / Ctrl-zoom, routing the orrery wheel through the
+    // for the host to drain into seiche's pan / Ctrl-zoom, routing the orrery wheel through the
     // document (the form wheel.rs intends). The gnodes / scene under it have no wheel handler, so
     // the runner's ancestor walk resolves any orrery wheel to this element. (cond 5 input bridge.)
     Box::new(on_wheel(

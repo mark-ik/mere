@@ -12,7 +12,7 @@
 //! This crate keeps only the pieces coupled to mere's own subsystems:
 //!
 //! - `persistence` — save/load a `VectorIndex` through eidetic's typed-payload API.
-//! - `field_bridge` / `canvas_search` — project query similarity into aether's
+//! - `field_bridge` / `canvas_search` — project query similarity into quint's
 //!   field algebra over the graph canvas.
 //!
 //! See `repos/mere/design_docs/mere_docs/research/2026-05-08_local_intelligence_integration_research.md`

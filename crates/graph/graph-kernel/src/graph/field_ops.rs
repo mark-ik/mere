@@ -8,7 +8,7 @@
 //! the node/edge petgraph (see the struct fields on [`Graph`]). These mutators
 //! sit on the same single-write-path boundary as the node/edge mutators:
 //! trusted writers (reducer + persistence replay) call them; other paths route
-//! through reducer intents. `aether` reads this layer and evaluates it; nothing
+//! through reducer intents. `quint` reads this layer and evaluates it; nothing
 //! writes back here except an explicit author/pin action.
 
 use super::{Coupling, CouplingId, Field, FieldId, FieldLifecycle, Graph, NodeKey, NodeSelector};

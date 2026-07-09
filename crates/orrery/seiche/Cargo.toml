@@ -1,5 +1,5 @@
 [package]
-name = "gyre"
+name = "seiche"
 version = "0.0.1"
 edition = "2024"
 license = "MPL-2.0"
@@ -16,19 +16,19 @@ path = "src/lib.rs"
 # layer alongside vello and petgraph rather than a feature bolt-on.
 rapier2d = "0.33"
 kernel.workspace = true
-# Field algebra: gyre's CouplingForce evaluates aether fields (closed-form +
-# finite-difference gradients) to drive rapier bodies. One-way dep — aether is
-# the portable field source, gyre the integrator. (aether default features only;
+# Field algebra: seiche's CouplingForce evaluates quint fields (closed-form +
+# finite-difference gradients) to drive rapier bodies. One-way dep — quint is
+# the portable field source, seiche the integrator. (quint default features only;
 # no rhai/burn pulled into the simulator.)
-aether.workspace = true
+quint.workspace = true
 euclid = "0.22"
 tracing = "0.1"
 
 [features]
-# Benchmark-only: pulls aether's wgpu N-body pass so the ignored settle bench can
-# inject it as a `RepulsionSolver`. Off by default; the shipped gyre lib never
+# Benchmark-only: pulls quint's wgpu N-body pass so the ignored settle bench can
+# inject it as a `RepulsionSolver`. Off by default; the shipped seiche lib never
 # compiles burn (it stays the burn-free integrator). (burn brief Lane 5 — P3.)
-gpu-bench = ["aether/field-burn-wgpu"]
+gpu-bench = ["quint/field-burn-wgpu"]
 
 [dev-dependencies]
 kernel = { workspace = true, features = ["fixtures"] }

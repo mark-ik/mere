@@ -7,7 +7,7 @@
 use super::*;
 
 impl Orrery {
-    /// The pane's active layout-strategy id, or `None` for force-directed (gyre).
+    /// The pane's active layout-strategy id, or `None` for force-directed (seiche).
     /// The host persists this as view-intent and checkmarks it in the layout picker.
     pub fn layout_strategy(&self) -> Option<&str> {
         self.active_strategy.as_deref()
@@ -15,7 +15,7 @@ impl Orrery {
 
     /// Switch the orrery's layout strategy. `Some(id)` selects a cartography adapter
     /// (the host then pushes its positions via [`apply_strategy_positions`]) and halts
-    /// gyre so the analytic layout holds still; `None` reverts to force-directed,
+    /// seiche so the analytic layout holds still; `None` reverts to force-directed,
     /// dropping the buffered positions and re-settling the physics. (Layout picker.)
     pub fn set_layout_strategy(&mut self, id: Option<String>) {
         let reverting = id.is_none() && self.active_strategy.is_some();
@@ -239,7 +239,7 @@ impl Orrery {
         self.weighted_edges_rebuilds
     }
 
-    /// Toggle the **affinity force**: a weighted, attract-only gyre spring over structural-Jaccard
+    /// Toggle the **affinity force**: a weighted, attract-only seiche spring over structural-Jaccard
     /// similarity, drawing structurally-similar nodes into clusters on top of the force-directed
     /// layout ("cluster by affinity"). The force is (un)installed on the next [`frame`](Self::frame)
     /// via [`sync_affinity_force`](Self::sync_affinity_force), with a settle so the change takes.

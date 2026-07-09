@@ -287,7 +287,7 @@ pub fn chain_scene() -> SceneSpec {
 }
 
 /// A whirlpool: two rings of loose gravity-free balls that a [`SceneField::Vortex`] swirls into an
-/// orbiting, slowly-inspiralling gyre. The host pairs this scene (the bodies) with `set_scene_field`
+/// orbiting, slowly-inspiralling seiche. The host pairs this scene (the bodies) with `set_scene_field`
 /// (the environment); the field keeps the actor ticking. (Physics scenes P4 — force-field tier.)
 ///
 /// [`SceneField::Vortex`]: crate::SceneField::Vortex

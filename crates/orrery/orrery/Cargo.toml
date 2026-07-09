@@ -6,9 +6,9 @@ license.workspace = true
 repository.workspace = true
 publish = false
 rust-version = "1.92.0"
-description = "Serval-on-winit host for the orrery (the graph field-canvas), build item 1D of the serval-as-host flip. Composites platen's scene-paint underlay (and, incrementally, gyre-positioned abs-pos node children under one camera transform) through the shared serval-winit-host present stack."
+description = "Serval-on-winit host for the orrery (the graph field-canvas), build item 1D of the serval-as-host flip. Composites platen's scene-paint underlay (and, incrementally, seiche-positioned abs-pos node children under one camera transform) through the shared serval-winit-host present stack."
 
-# The reusable orrery content-root (window-agnostic): graph + gyre physics + camera
+# The reusable orrery content-root (window-agnostic): graph + seiche physics + camera
 # + the abs-pos node-children pool, with `frame(w, h) -> (Scene, needs_redraw)` and
 # semantic input methods. The bin below is a thin winit shell over it; meerkat hosts
 # the same `Orrery` as its content-root (S1 of the modular integration plan).
@@ -24,12 +24,12 @@ path = "src/main.rs"
 # The host-neutral orrery scene producer + camera/style, and its graph + physics.
 platen.workspace = true
 kernel.workspace = true
-gyre.workspace = true
+seiche.workspace = true
 # The graph-structural signal producer (intel/signals): degree-based importance now (the
 # size-by-importance encoding reads it), richer signals later. (Graph signals.)
 signals.workspace = true
 
-# The actor harness behind the always-offload physics backend (P6): the gyre
+# The actor harness behind the always-offload physics backend (P6): the seiche
 # Simulation runs on an armillary actor thread, emitting position snapshots the
 # host folds into its LayoutView. The in-thread backend (tests + the future
 # no-threads wasm profile) needs none of this.
@@ -52,7 +52,7 @@ layout_dom_api = { package = "layout-dom-api", git = "https://github.com/mark-ik
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 uuid = "1"
-# Constructing seed positions for the gyre simulation (its position type).
+# Constructing seed positions for the seiche simulation (its position type).
 euclid = "0.22"
 
 # The native present stack: the Orrery lib is window-agnostic (frame -> Scene), so

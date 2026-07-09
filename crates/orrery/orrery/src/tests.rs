@@ -709,11 +709,11 @@ fn layout_strategy_overrides_node_positions_until_reverted() {
     assert_eq!(
         orrery.layout_strategy(),
         None,
-        "force-directed (gyre) by default"
+        "force-directed (seiche) by default"
     );
 
     // Activate a strategy and push a position; the overlay (what `frame` runs after
-    // the physics snapshot) writes it into the read model, winning over gyre.
+    // the physics snapshot) writes it into the read model, winning over seiche.
     orrery.set_layout_strategy(Some("test.grid".to_string()));
     assert_eq!(orrery.layout_strategy(), Some("test.grid"));
     orrery.apply_strategy_positions(&[(key, PortablePoint::new(321.0, 654.0))]);
@@ -724,7 +724,7 @@ fn layout_strategy_overrides_node_positions_until_reverted() {
         "the strategy position overrides the physics position, got {pos:?}",
     );
 
-    // Reverting drops the buffer and clears the strategy (gyre resumes).
+    // Reverting drops the buffer and clears the strategy (seiche resumes).
     orrery.set_layout_strategy(None);
     assert_eq!(orrery.layout_strategy(), None, "revert clears the strategy");
 }

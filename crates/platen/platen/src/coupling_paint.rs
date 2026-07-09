@@ -5,9 +5,9 @@
 //! Visual couplings → paint overlays: the paint-side consumer of the field
 //! system's open response tail.
 //!
-//! This is the aether→platen seam, the mirror of the aether→gyre
-//! [`gyre::CouplingForce`] on the force side. The kernel's response vocabulary is
-//! recognized-core-plus-open-tail: the six force responses are gyre's; everything
+//! This is the aether→platen seam, the mirror of the aether→seiche
+//! [`seiche::CouplingForce`] on the force side. The kernel's response vocabulary is
+//! recognized-core-plus-open-tail: the six force responses are seiche's; everything
 //! else rides as `CouplingResponse::Open { predicate }` under
 //! [`kernel::graph::COUPLING_VOCAB`]. This module is the consumer that recognizes
 //! the `visual/*` slice of that tail.
@@ -18,7 +18,7 @@
 //! [statements-over-schema stance](../../../../design_docs/mere_docs/technical_architecture/2026-05-22_statements_over_schema_stance.md):
 //! recognized behavior lives in the lens, not the substrate.
 //!
-//! Resolution mirrors [`gyre::CouplingForce::from_coupling`]: look up the field
+//! Resolution mirrors [`seiche::CouplingForce::from_coupling`]: look up the field
 //! ([`Graph::field`](kernel::graph::Graph::field)), the targets
 //! ([`Graph::nodes_matching`](kernel::graph::Graph::nodes_matching)), seed the
 //! registry from [`Graph::fields`](kernel::graph::Graph::fields) so `Sample`
@@ -27,7 +27,7 @@
 
 use std::collections::HashMap;
 
-use aether::{FieldRegistry, eval_scalar};
+use quint::{FieldRegistry, eval_scalar};
 use cartography::Projection;
 use kernel::geometry::PortablePoint;
 use kernel::graph::{COUPLING_VOCAB, FieldDefinition, Graph, NodeKey};
@@ -65,7 +65,7 @@ impl RecognizedVisual {
 /// paints in); merge them inside the scene's camera transform — see
 /// [`paint_projection_with_visuals`], or [`CanvasPaintList::splice_world_overlays`].
 ///
-/// Skipped (never an error): a recognized force-core response (gyre's), an
+/// Skipped (never an error): a recognized force-core response (seiche's), an
 /// unrecognized `visual/*` IRI, an unknown or non-scalar field, a target absent
 /// from this projection, or a non-positive resolved intensity.
 pub fn visual_overlays(
@@ -96,7 +96,7 @@ pub fn visual_overlays(
 
     let mut cmds = Vec::new();
     for coupling in graph.couplings() {
-        // Only open-tail responses carry a predicate; the force core is gyre's.
+        // Only open-tail responses carry a predicate; the force core is seiche's.
         let Some(visual) = coupling
             .response
             .predicate()
@@ -250,7 +250,7 @@ mod tests {
     #[test]
     fn force_core_response_is_not_a_visual_overlay() {
         // A force coupling carries no predicate; the visual pass ignores it (it is
-        // gyre's). No overlays.
+        // seiche's). No overlays.
         let (g, projection) = graph_field_and_projection(CouplingResponse::AttractToMin);
         assert!(visual_overlays(&g, &projection, &ScenePaintStyle::default()).is_empty());
     }

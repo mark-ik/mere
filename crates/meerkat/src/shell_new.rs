@@ -198,7 +198,7 @@ impl Shell {
         // recomputed on the first frame from the node set. (Layout picker.)
         orrery.set_layout_strategy(restored_view.as_ref().and_then(|v| v.strategy.clone()));
         session_ops::restore_hidden_relations(&mut orrery, restored_view.as_ref());
-        // Always-offload physics (P6): move the orrery's gyre simulation onto its
+        // Always-offload physics (P6): move the orrery's seiche simulation onto its
         // own armillary actor thread, so a heavy settle never blocks compositing or
         // input. It wakes the loop through the same winit proxy as the other
         // actors; the host folds each layout snapshot into the orrery's read model

@@ -10,7 +10,7 @@ use super::*;
 /// `J(a, b) = |N(a) ∩ N(b)| / |N(a) ∪ N(b)|` over the distinct undirected neighbours of each node.
 /// Two nodes score high when they share many neighbours, so structurally-equivalent nodes are
 /// "similar" **even when they share no direct edge** — the signal that lets the affinity force draw
-/// a community into a tight cluster (where gyre's `EdgeSpring` force only binds adjacent
+/// a community into a tight cluster (where seiche's `EdgeSpring` force only binds adjacent
 /// pairs). This is the cheap, dependency-free structural stand-in for the later content-embedding
 /// cosine affinity; both ride the same [`AffinityScores`] channel.
 ///

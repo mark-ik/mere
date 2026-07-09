@@ -148,7 +148,7 @@ layout_dom_api = { package = "layout-dom-api", git = "https://github.com/mark-ik
 # / acquire, + winit->serval key & modifier mapping), shared with the orrery host.
 serval-winit-host = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 
-# The orrery content-root: the graph's spatial presentation (graph + gyre physics
+# The orrery content-root: the graph's spatial presentation (graph + seiche physics
 # + camera + abs-pos node pool), as a window-agnostic `Orrery` exposing
 # `frame(w, h) -> (Scene, needs_redraw)` + semantic input. meerkat hosts it as the
 # content-root below the chrome band; the `orrery` bin is the same `Orrery` on

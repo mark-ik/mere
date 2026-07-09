@@ -130,7 +130,7 @@ pub enum Face {
 }
 
 impl Face {
-    /// The persisted string code for the cartography sidecar (kept gyre/orrery-free downstream).
+    /// The persisted string code for the cartography sidecar (kept seiche/orrery-free downstream).
     /// (Node body & face — face persistence.)
     pub fn as_code(self) -> &'static str {
         match self {

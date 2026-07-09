@@ -63,7 +63,7 @@ impl FieldProjection {
 
     #[cfg(feature = "kernel-bridge")]
     /// Commit this projection's fields and couplings into a kernel [`Graph`]'s
-    /// field layer — the inverse of the read path `gyre` and `platen` use, and the
+    /// field layer — the inverse of the read path `seiche` and `platen` use, and the
     /// bridge that lets an authored projection (e.g. one built by the Rhai surface)
     /// reach the truth those consumers read from.
     ///

@@ -336,8 +336,8 @@ impl WindowCtx<'_> {
                 if let Some((gid, _)) = self.orrery_pane_at(x, y) {
                     self.focus_pane_graph(gid);
                 }
-                // A left press on a node glyph routes to gyre like any other node
-                // press (no special-casing): gyre arms a drag on the node under the
+                // A left press on a node glyph routes to seiche like any other node
+                // press (no special-casing): seiche arms a drag on the node under the
                 // cursor, and its CLICK_SLOP splits a click (select the node) from a drag
                 // (move it) in `pointer_up`. The node is a physical object in the orrery;
                 // selection still shows on the glyph through `node_selected`. This is the
@@ -354,7 +354,7 @@ impl WindowCtx<'_> {
                 } else if button == MouseButton::Left && self.point_over_object_card(x, y) {
                     // The object card's widget buttons own this press: route it to the
                     // chrome so their `on_click` fires (queuing `object_card_keys`). It must
-                    // not fall through to gyre, which would grab the node under the card and
+                    // not fall through to seiche, which would grab the node under the card and
                     // never reach the button. (Object card — the press-routing gate.)
                     self.chrome_click(x, y);
                 } else if button == MouseButton::Left && self.try_begin_page_text_selection(x, y) {

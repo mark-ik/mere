@@ -70,7 +70,7 @@ impl Force for NodeExclusion {
             .collect();
 
         // Above the threshold, route the all-pairs repulsion to the host's GPU
-        // solver (aether's burn N-body pass); gyre stays burn-free. The solver
+        // solver (quint's burn N-body pass); seiche stays burn-free. The solver
         // computes a softened inverse-square repulsion over all pairs — the same
         // shape as the naive scan below, minus the `cutoff` optimisation (the GPU
         // sums every pair anyway; far pairs contribute negligibly at this scale).

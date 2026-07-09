@@ -8,9 +8,9 @@
 //! from cartography's perspective. Phyllotaxis, Penrose, Radial, Grid,
 //! Timeline, Kanban, L-system, Spectral, SemanticEmbedding —
 //! `project()` produces a final projection in one call. Live force
-//! physics (force-directed, the affinity force) is gyre's domain, not an
+//! physics (force-directed, the affinity force) is seiche's domain, not an
 //! analytic strategy; the old streaming-strategy contract was retired
-//! with the `SemanticEdgeWeight` projection once the gyre affinity force
+//! with the `SemanticEdgeWeight` projection once the seiche affinity force
 //! reached parity.
 
 use crate::projection::Projection;

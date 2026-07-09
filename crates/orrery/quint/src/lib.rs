@@ -2,19 +2,19 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! # aether — the field algebra
+//! # quint — the field algebra
 //!
 //! Defines a small AST for scalar and vector fields over canvas coordinates,
 //! coupling rules describing how nodes and edges respond to those fields, an
 //! evaluator that produces values at requested points, and a per-canvas
 //! [`FieldRegistry`] keyed by [`FieldId`].
 //!
-//! In the substrate, `aether` is the *source* of influence: it defines fields
-//! and couplings and resolves them. Force couplings compile to forces the `gyre`
-//! rapier integrator applies to bodies; visual couplings feed paint. `aether`
-//! reads the kernel's field-truth types (the AST, `FieldId`, `Coupling`) and
-//! evaluates them; it stays platform-free and WASM-portable (kernel + serde +
-//! optional Rhai/Burn), never pulling in a host or renderer.
+//! A *quint* is the quintessence: the fifth element the classical world named as
+//! the field-bearing medium, and in modern cosmology a scalar field. quint is that
+//! medium here, the runtime that evaluates [`numen`]'s field and coupling definitions
+//! into values. Force couplings compile to forces the `seiche` integrator applies to
+//! bodies; visual couplings feed paint. quint stays platform-free and WASM-portable
+//! (numen + serde + optional Rhai/Burn), never pulling in a host or renderer.
 //!
 //! Architectural anchor: the
 //! [field-system extraction brief](../../../../design_docs/mere_docs/technical_architecture/2026-05-30_field_system_extraction.md).
@@ -29,8 +29,8 @@
 //! tensor program for vectorised evaluation; see `lower_burn`.
 
 // The scalar/vector field AST is a portable `numen` primitive (`numen::field_ast`).
-// aether re-exports it as `ast` so internal `crate::ast::` paths and external
-// `aether::ast::` callers keep resolving onto the canonical types.
+// quint re-exports it as `ast` so internal `crate::ast::` paths and external
+// `quint::ast::` callers keep resolving onto the canonical types.
 pub use numen::field_ast as ast;
 pub mod coupling;
 pub mod eval;

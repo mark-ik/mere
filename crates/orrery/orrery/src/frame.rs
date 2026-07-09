@@ -7,7 +7,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use gyre::NodeCollider;
+use seiche::NodeCollider;
 use kernel::geometry::PortablePoint;
 use kernel::graph::NodeKey;
 use layout_dom_api::LayoutDomMut;
@@ -51,7 +51,7 @@ impl Orrery {
         if let Some(sim) = self.ambient.as_mut() {
             sim.advance(1.0 / 60.0);
         }
-        // A non-gyre layout strategy overrides the physics snapshot: write its buffered
+        // A non-seiche layout strategy overrides the physics snapshot: write its buffered
         // positions into the view before anything reads it. (Layout picker.)
         self.apply_strategy_to_view();
         // Pick up any finished off-thread community partition (a no-op when computing inline), so a
@@ -726,9 +726,9 @@ mod tests {
         let (graph, _key) = graph_with_one_node("https://ex.test/");
         let mut orrery = Orrery::with_graph(graph);
         orrery.register_scene_sprite("crate", vec![255u8; 4 * 4 * 4], 4, 4);
-        let spec = gyre::SceneSpec {
+        let spec = seiche::SceneSpec {
             bodies: vec![
-                gyre::SceneBodySpec::dynamic(gyre::NodeCollider::Square { half: 30.0 }, (0.0, 0.0))
+                seiche::SceneBodySpec::dynamic(seiche::NodeCollider::Square { half: 30.0 }, (0.0, 0.0))
                     .sprite("crate"),
             ],
             gravity: (0.0, 0.0),
@@ -750,9 +750,9 @@ mod tests {
     fn unregistered_sprite_scene_prop_emits_no_image_op() {
         let (graph, _key) = graph_with_one_node("https://ex.test/");
         let mut orrery = Orrery::with_graph(graph);
-        let spec = gyre::SceneSpec {
+        let spec = seiche::SceneSpec {
             bodies: vec![
-                gyre::SceneBodySpec::dynamic(gyre::NodeCollider::Square { half: 30.0 }, (0.0, 0.0))
+                seiche::SceneBodySpec::dynamic(seiche::NodeCollider::Square { half: 30.0 }, (0.0, 0.0))
                     .sprite("missing"),
             ],
             gravity: (0.0, 0.0),

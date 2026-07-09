@@ -26,9 +26,9 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use aether::eval::eval_scalar;
-use aether::projection::FieldProjection;
-use aether::registry::FieldRegistry;
+use quint::eval::eval_scalar;
+use quint::projection::FieldProjection;
+use quint::registry::FieldRegistry;
 use async_trait::async_trait;
 use eidetic::{
     ModelLibrary, ModerationState, NoFetcher, PrivacyClass, ProvenanceOrigin, ProvenanceRecord,
@@ -224,7 +224,7 @@ fn field_bridge_with_real_bert_separates_similar_from_dissimilar() {
     // Evaluate the field at each node's position.
     let registry = FieldRegistry::new();
     let field = projection.registry.get(_id).expect("field registered");
-    let aether::registry::FieldDef::Scalar(field) = field else {
+    let quint::registry::FieldDef::Scalar(field) = field else {
         panic!("expected scalar field");
     };
 

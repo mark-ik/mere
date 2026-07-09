@@ -128,7 +128,7 @@ pub use edge_taxonomy::{
 };
 
 // Field-system truth types (2026-05-31). Field/Coupling form a parallel field
-// layer beside the node/edge graph; aether reads them and evaluates.
+// layer beside the node/edge graph; quint reads them and evaluates.
 pub use numen::{
     COUPLING_VOCAB, Coupling, CouplingId, CouplingResponse, EdgePath, EdgePathRule, Falloff,
     Field, FieldDefinition, FieldExtent, FieldId, FieldLifecycle, NodeSelector, ScalarField,
@@ -278,7 +278,7 @@ pub struct Graph {
     /// Field-layer truth (field-system step 3, Phase 1): a parallel keyed store
     /// beside the node/edge petgraph. A coupling targets a *selector* over nodes,
     /// not a node→node edge, so fields/couplings cannot ride the petgraph; they
-    /// are content truth that `aether` reads and evaluates (derived).
+    /// are content truth that `quint` reads and evaluates (derived).
     pub(crate) fields: HashMap<FieldId, Field>,
     pub(crate) couplings: HashMap<CouplingId, Coupling>,
 

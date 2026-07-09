@@ -129,7 +129,7 @@ pub struct ViewIntent {
     #[serde(default)]
     pub focus: Option<String>,
     /// The orrery pane's active layout strategy (a cartography adapter `projection_id`,
-    /// e.g. `"phyllotaxis.default"`), or `None` for force-directed (gyre, the default).
+    /// e.g. `"phyllotaxis.default"`), or `None` for force-directed (seiche, the default).
     /// The host re-applies it on load; the positions themselves are recomputed, never
     /// persisted (analytic layouts re-derive from the node set). (Layout picker.)
     #[serde(default)]

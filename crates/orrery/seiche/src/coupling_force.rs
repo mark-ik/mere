@@ -2,15 +2,15 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! `CouplingForce` — the aether→gyre seam (field-system Phase 3b).
+//! `CouplingForce` — the aether→seiche seam (field-system Phase 3b).
 //!
 //! A [`kernel::graph::Coupling`] is field-algebra truth: a [`NodeSelector`] of
 //! targets, a [`FieldId`](kernel::graph::FieldId), a [`CouplingResponse`], and a
 //! strength. This adapter compiles one into a [`Force`] so the same rapier tick
 //! that runs the built-in [`NodeExclusion`](crate::NodeExclusion) /
 //! [`EdgeSpring`](crate::EdgeSpring) / [`Boundary`](crate::Boundary) forces also
-//! runs scriptable couplings. `aether` evaluates the field (closed forms +
-//! finite-difference gradients); gyre supplies bodies and integration.
+//! runs scriptable couplings. `quint` evaluates the field (closed forms +
+//! finite-difference gradients); seiche supplies bodies and integration.
 //!
 //! Build it against a [`Graph`] with [`CouplingForce::from_coupling`] — it
 //! resolves the field definition and the selector's matching nodes once, at
@@ -22,7 +22,7 @@
 //! `½(x² + y²)` (its gradient is `(x, y)`, so `-grad · strength = -pos · strength`).
 //! The built-ins stay as the fast native path; couplings are the general one.
 
-use aether::{FieldRegistry, ScalarField, VectorField, eval_scalar, eval_vector, grad_scalar};
+use quint::{FieldRegistry, ScalarField, VectorField, eval_scalar, eval_vector, grad_scalar};
 use kernel::graph::{Coupling, CouplingResponse, FieldDefinition, Graph, NodeKey};
 use rapier2d::prelude::*;
 
@@ -243,7 +243,7 @@ mod tests {
     fn attract_to_min_centers_like_boundary() {
         // Two sims, same seed: Boundary vs an AttractToMin coupling on the
         // paraboloid. The paraboloid's gradient is (x, y), so the coupling force
-        // is -pos·strength — Boundary exactly, up to aether's finite-difference
+        // is -pos·strength — Boundary exactly, up to quint's finite-difference
         // step. The bodies track each other across the whole settle (a ~580-unit
         // journey leaves them within a couple of units).
         let mut g = Graph::new();

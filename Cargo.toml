@@ -6,8 +6,8 @@ members = [
     "crates/armillary",
     "crates/orrery/orrery",
     "crates/persona/identity",
-    "crates/orrery/aether",
-    "crates/orrery/gyre",
+    "crates/orrery/quint",
+    "crates/orrery/seiche",
     "crates/orrery/cartography",
     "crates/orrery/arrangements",
     "crates/graph/glossary",
@@ -90,12 +90,12 @@ repository = "https://github.com/mark-ik/mere"
 # so only the root Cargo.toml knows where each crate lives. Package names
 # below are the *current* names — rename passes (drop mere-* prefix etc.)
 # update both this list and consumer references in one shot.
-aether = { path = "crates/orrery/aether" }
-gyre = { path = "crates/orrery/gyre" }
+quint = { path = "crates/orrery/quint" }
+seiche = { path = "crates/orrery/seiche" }
 cartography = { path = "crates/orrery/cartography" }
 # Deterministic graph arrangements (penrose / l-system / phyllotaxis /
 # kanban-timeline / radial-grid / semantic), recaptured from the retired
-# graph-layout; gyre owns live force physics.
+# graph-layout; seiche owns live force physics.
 arrangements = { path = "crates/orrery/arrangements" }
 linked-data = { path = "crates/graph/linked-data" }
 kernel = { path = "crates/graph/graph-kernel" }

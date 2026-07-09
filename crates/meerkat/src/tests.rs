@@ -769,7 +769,7 @@ fn orrery_element_reserves_a_retained_host_pool_over_the_external_texture_underl
     type OrreryView = Box<dyn AnyView<OrreryDemo, (), ServalCtx, ServalElement>>;
 
     fn orrery_gnode_view(_s: &OrreryDemo) -> OrreryView {
-        // The scene underlay the host paints (edges, demoted off-screen dots) via gyre.
+        // The scene underlay the host paints (edges, demoted off-screen dots) via seiche.
         let underlay = external_texture::<OrreryDemo, ()>(1, 600, 400);
         Box::new(
             el::<_, OrreryDemo, ()>(

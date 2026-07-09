@@ -15,7 +15,7 @@
 //! next phase. The neighbour search is O(n²) for now — fine at the capped particle counts; a
 //! uniform grid is the perf follow-on if a pool grows large.
 //!
-//! Math is euclid `Vector2D` / `Point2D` (gyre's public-surface convention), so positions feed the
+//! Math is euclid `Vector2D` / `Point2D` (seiche's public-surface convention), so positions feed the
 //! render snapshot directly. `+y` is down, matching the rest of Mere. (Physics scenes P4c.)
 
 use std::f32::consts::PI;

@@ -17,7 +17,7 @@ impl WindowCtx<'_> {
     }
 
     /// The layout-strategy rows for the focused orrery pane: "Force-directed" (the
-    /// gyre default) plus each wired cartography strategy ([`platen::ORRERY_LAYOUT_STRATEGIES`]),
+    /// seiche default) plus each wired cartography strategy ([`platen::ORRERY_LAYOUT_STRATEGIES`]),
     /// with the pane's current choice ✓-marked. A pane-level choice, so it rides the
     /// no-selection right-click beside "Add node". (Layout picker.)
     pub(crate) fn layout_picker_items(&self) -> Vec<ContextItem> {
@@ -252,7 +252,7 @@ impl WindowCtx<'_> {
             return;
         }
         // Set the focused orrery pane's layout strategy (the layout picker). An empty
-        // id reverts to force-directed (gyre); persisted per pane via view-intent on
+        // id reverts to force-directed (seiche); persisted per pane via view-intent on
         // save_session. No member set — return before the orrery-tile logic below.
         if let ContextAction::SetLayoutStrategy(id) = action {
             self.set_orrery_layout(id);

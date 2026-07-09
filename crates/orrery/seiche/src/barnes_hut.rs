@@ -6,7 +6,7 @@
 //!
 //! Harvested from the retired `graph-layout` force-directed module (its
 //! deterministic arrangements moved to the `arrangements` crate; its physics
-//! belongs here, with gyre's live simulation). The quadtree groups distant
+//! belongs here, with seiche's live simulation). The quadtree groups distant
 //! bodies into their center-of-mass so each body's long-range repulsion is
 //! computed against ~log(n) pseudo-bodies instead of all n−1 peers — the
 //! standard acceleration for force-directed layout at scale. `θ`

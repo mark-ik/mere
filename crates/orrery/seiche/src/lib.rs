@@ -2,24 +2,25 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! # gyre
+//! # seiche
 //!
-//! Rapier-backed force integration for Mere: the crate that realizes the
-//! graph's bodies as motion. Sibling to the forthcoming `aether` field-algebra
-//! crate — `aether` defines the fields and couplings and resolves them into
-//! forces; `gyre` integrates those forces (rapier bodies, collision, stepping)
-//! into positions. (`gyre` is the wheeling motion of the bodies; kin to the
-//! `orrery` view they compose.)
+//! Rapier-backed force integration for Mere: the crate that realizes the graph's
+//! bodies as motion. A *seiche* is the standing-wave oscillation of a lake or bay,
+//! the whole body of water rocking rhythmically back and forth; it moves the *mere*
+//! (a mere is a lake) the way this crate moves the graph's bodies. Sibling to the
+//! `quint` field-algebra crate: `quint` defines the fields and couplings and resolves
+//! them into forces; `seiche` integrates those forces (rapier bodies, collision,
+//! stepping) into positions.
 //!
 //! ## Place in the architecture
 //!
 //! [`kernel::graph::Graph`] is the source of truth for node identity, topology,
-//! and the *committed* position used for persistence. Gyre holds the rapier
+//! and the *committed* position used for persistence. seiche holds the rapier
 //! world that drives the *projected* position — bodies bound to nodes, forces
 //! from pluggable [`Force`] implementors, and a tick that mirrors body
 //! translations back to the graph each step.
 //!
-//! Petgraph (inside kernel) owns topology; gyre owns physical state. Both sit at
+//! Petgraph (inside kernel) owns topology; seiche owns physical state. Both sit at
 //! the substrate tier, consumed by everything above.
 //!
 //! ## Forces
@@ -31,7 +32,7 @@
 //!   and edge topology in step with the graph. Idempotent.
 //! - [`Simulation::tick`] — apply each registered [`Force`], then step the world.
 //! - Built-in forces ([`NodeExclusion`], [`EdgeSpring`], [`Boundary`]) are the
-//!   fast Rust default-path; `aether`'s couplings are the general, scriptable
+//!   fast Rust default-path; `quint`'s couplings are the general, scriptable
 //!   path that compiles to the same [`Force`] contract.
 //!
 //! Until a [`Force`] is registered, the world ticks empty — bodies settle to
@@ -47,7 +48,7 @@
 //! force-field tier in [`field`], and emitters in [`emitter`]. (Rust lets an
 //! `impl` span modules; private fields stay reachable from these child modules.)
 
-#![doc(html_root_url = "https://docs.rs/gyre/0.0.1")]
+#![doc(html_root_url = "https://docs.rs/seiche/0.0.1")]
 
 use std::collections::HashMap;
 
@@ -67,7 +68,7 @@ pub use forces::{Boundary, EdgeSpring, NodeExclusion};
 pub mod barnes_hut;
 pub use barnes_hut::{BarnesHutConfig, BarnesHutRepulsion, repulsion_forces};
 
-/// The aether→gyre seam: a kernel [`kernel::graph::Coupling`] compiled to a
+/// The aether→seiche seam: a kernel [`kernel::graph::Coupling`] compiled to a
 /// [`Force`] (the general, scriptable path the built-in forces specialize).
 pub mod coupling_force;
 pub use coupling_force::CouplingForce;
@@ -199,7 +200,7 @@ fn scene_groups() -> InteractionGroups {
 }
 
 /// A pluggable force-applier. Forces read the body store and apply
-/// forces / impulses; gyre's tick walks every registered force
+/// forces / impulses; seiche's tick walks every registered force
 /// before stepping the world.
 ///
 /// Implementors should be cheap — the tick budget is ~16ms total —
@@ -210,8 +211,8 @@ pub trait Force: Send {
 }
 
 /// A host-injected pairwise-repulsion solver: node positions in, per-node forces
-/// out, computed however the host likes. gyre stays **burn-free** — it only holds
-/// and calls this closure; the burn/wgpu N-body pass lives in `aether`. Args are
+/// out, computed however the host likes. seiche stays **burn-free** — it only holds
+/// and calls this closure; the burn/wgpu N-body pass lives in `quint`. Args are
 /// `(xs, ys, strength, min_distance) -> (fx, fy)`, all rank-1 in node order.
 /// [`NodeExclusion`] routes to it above [`Simulation::set_repulsion_solver`]'s
 /// threshold, falling back to its naive O(n²) scan below. (burn brief Lane 5.)
@@ -219,7 +220,7 @@ pub type RepulsionSolver =
     std::sync::Arc<dyn Fn(&[f32], &[f32], f32, f32) -> (Vec<f32>, Vec<f32>) + Send + Sync>;
 
 /// Default node count above which [`NodeExclusion`] uses an installed
-/// [`RepulsionSolver`]. Chosen from the aether force-pass timing (GPU beats the
+/// [`RepulsionSolver`]. Chosen from the quint force-pass timing (GPU beats the
 /// naive CPU scan from ~500-1000 nodes); the host can override per
 /// [`Simulation::set_repulsion_solver`].
 pub const DEFAULT_GPU_REPULSION_THRESHOLD: usize = 1_000;
@@ -233,7 +234,7 @@ pub struct ForceContext<'a> {
     pub joints: &'a mut ImpulseJointSet,
     pub bodies_by_node: &'a HashMap<NodeKey, RigidBodyHandle>,
     /// Topology the layout forces pull along (e.g. [`EdgeSpring`]). Node-key
-    /// pairs, set via [`Simulation::sync_edges`]; gyre stays relation-taxonomy
+    /// pairs, set via [`Simulation::sync_edges`]; seiche stays relation-taxonomy
     /// agnostic, so the caller decides which edge families feed the layout.
     pub edges: &'a [(NodeKey, NodeKey)],
     /// Host-injected GPU repulsion solver + the threshold above which
@@ -244,7 +245,7 @@ pub struct ForceContext<'a> {
 }
 
 /// One rapier world + bookkeeping. The host owns one of these per
-/// graph; gyre stays pure (no global state, no static handles).
+/// graph; seiche stays pure (no global state, no static handles).
 pub struct Simulation {
     pipeline: PhysicsPipeline,
     parameters: IntegrationParameters,
@@ -275,8 +276,8 @@ pub struct Simulation {
     affinity_force: Option<AffinitySpring>,
     /// Optional host-injected GPU repulsion solver + the node count above which
     /// [`NodeExclusion`] routes to it instead of its naive O(n²) scan. `None` =
-    /// always naive (the default). The host builds this from aether's burn pass;
-    /// gyre stays burn-free. (burn brief Lane 5 — P3.)
+    /// always naive (the default). The host builds this from quint's burn pass;
+    /// seiche stays burn-free. (burn brief Lane 5 — P3.)
     repulsion_solver: Option<RepulsionSolver>,
     gpu_repulsion_threshold: usize,
     /// Linear damping applied to every node body — runtime-tunable (the "inertia"
@@ -291,7 +292,7 @@ pub struct Simulation {
     /// (which key off `bodies_by_node`) ignore them. (Physics scenes P1.)
     scene_bodies: HashMap<SceneBodyId, (RigidBodyHandle, NodeCollider)>,
     /// Sparse sprite handles for scene bodies that wear one (a textured crate / barrel), keyed by
-    /// [`SceneBodyId`]. An opaque host key gyre never interprets — it rides through to the body's
+    /// [`SceneBodyId`]. An opaque host key seiche never interprets — it rides through to the body's
     /// [`SceneBodyView`] for the paint, like the collider shape. Most props have none. (Scene-prop
     /// sprites.)
     scene_sprites: HashMap<SceneBodyId, String>,
@@ -403,8 +404,8 @@ impl Simulation {
 
     /// Install (or clear, with `None`) the host's GPU repulsion solver, and the
     /// node count above which [`NodeExclusion`] routes to it instead of its naive
-    /// O(n²) scan. gyre stays burn-free — the solver is a plain closure the host
-    /// builds from `aether`'s burn pass. Position-preserving. See
+    /// O(n²) scan. seiche stays burn-free — the solver is a plain closure the host
+    /// builds from `quint`'s burn pass. Position-preserving. See
     /// [`RepulsionSolver`]. (burn brief Lane 5 — P3.)
     pub fn set_repulsion_solver(&mut self, solver: Option<RepulsionSolver>, threshold: usize) {
         self.repulsion_solver = solver;

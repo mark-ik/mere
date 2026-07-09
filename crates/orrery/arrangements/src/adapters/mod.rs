@@ -28,10 +28,10 @@
 //!   [`SpectralAdapter`], [`SemanticEmbeddingAdapter`].
 //!
 //! Live force physics (force-directed, Barnes-Hut, the pairwise affinity force)
-//! is `gyre`'s domain, not an arrangement adapter. The old streaming
+//! is `seiche`'s domain, not an arrangement adapter. The old streaming
 //! `SemanticEdgeWeightAdapter` (similarity-driven iterative projection) was
-//! retired once `gyre`'s `AffinitySpring` reached parity:
-//! affinity now clusters at gyre's cost rather than as a projection. (Graph
+//! retired once `seiche`'s `AffinitySpring` reached parity:
+//! affinity now clusters at seiche's cost rather than as a projection. (Graph
 //! signals — P4.)
 
 pub mod grid;

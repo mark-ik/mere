@@ -503,7 +503,7 @@ mod tests {
     fn authored_open_coupling_commits_to_the_graph() {
         // The full author → commit → graph path: a script authors a visual
         // coupling, committing it lands the field + coupling in the kernel Graph
-        // that gyre and platen read from.
+        // that seiche and platen read from.
         let p = build_from_script(
             r#"
             let p = new_projection();

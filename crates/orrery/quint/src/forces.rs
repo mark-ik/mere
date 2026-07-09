@@ -12,8 +12,8 @@
 //! burn kernel living beside [`lower_burn`](crate::lower_burn), backend-generic
 //! the same way (ndarray CPU, or wgpu GPU under `field-burn-wgpu`).
 //!
-//! gyre stays burn-free: this is the *field source*, computing forces that
-//! gyre's integrator applies. gyre already has an O(N log N) Barnes-Hut CPU
+//! seiche stays burn-free: this is the *field source*, computing forces that
+//! seiche's integrator applies. seiche already has an O(N log N) Barnes-Hut CPU
 //! path; this naive O(N²) GPU pass is meant to win only above a crossover N
 //! (measured in the timing test), where the GPU's throughput beats the better
 //! asymptotics on CPU.
@@ -77,7 +77,7 @@ pub fn repulsion<B: Backend>(
 
 /// Repulsion on the wgpu backend — the host-facing entry point (hosts never
 /// name `burn`). Takes/returns plain `f32` slices, so it drops straight into a
-/// gyre `RepulsionSolver` closure. Positions in, `(fx, fy)` out.
+/// seiche `RepulsionSolver` closure. Positions in, `(fx, fy)` out.
 #[cfg(feature = "field-burn-wgpu")]
 pub fn repulsion_wgpu(xs: &[f32], ys: &[f32], params: RepulsionParams) -> (Vec<f32>, Vec<f32>) {
     use burn::backend::Wgpu;
@@ -225,9 +225,9 @@ mod tests_wgpu {
     }
 
     /// CPU-vs-GPU across N, readback included, GPU warmed. Finds the crossover
-    /// N where the O(N²) GPU pass beats the O(N²) CPU pass (the gyre Barnes-Hut
+    /// N where the O(N²) GPU pass beats the O(N²) CPU pass (the seiche Barnes-Hut
     /// comparison is P3). Run:
-    /// `cargo test -p aether --features field-burn-wgpu --release -- --ignored timing --nocapture`
+    /// `cargo test -p quint --features field-burn-wgpu --release -- --ignored timing --nocapture`
     #[test]
     #[ignore]
     fn timing_repulsion_cpu_vs_gpu() {

@@ -191,7 +191,7 @@ impl Orrery {
         Point2D::new(w.x, w.y)
     }
 
-    /// The screen viewport mapped to world space — the region gyre culls against
+    /// The screen viewport mapped to world space — the region seiche culls against
     /// to decide which nodes are on screen.
     pub(crate) fn world_viewport(&self) -> Box2D<f32> {
         // Bound all four screen corners in world space: under an isometric yaw the

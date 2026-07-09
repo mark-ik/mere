@@ -532,7 +532,7 @@ pub enum ContextAction {
     CopyLink,
     /// Set the focused orrery pane's layout strategy — the per-pane layout picker. The
     /// id is a cartography adapter `projection_id` (`&'static str`, so `ContextAction`
-    /// stays `Copy`), or `""` for force-directed (gyre, the default). Drains like
+    /// stays `Copy`), or `""` for force-directed (seiche, the default). Drains like
     /// `ShellbarMove` without touching `context_set`. (Layout picker.)
     SetLayoutStrategy(&'static str),
     /// Toggle the focused orrery pane's size-by-degree mode (node faces grow with their

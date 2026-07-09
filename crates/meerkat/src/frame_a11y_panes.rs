@@ -147,10 +147,10 @@ impl WindowCtx<'_> {
 
     /// The a11y subtree for the orrery pane: each graph node as a `Role::Link` carrying the
     /// node's URL as its value, so the post-stitch `attach_link_actions` pass makes it
-    /// click/focus-actionable and routes it to `SelectNodeByUrl` (the select gyre's pointer
+    /// click/focus-actionable and routes it to `SelectNodeByUrl` (the select seiche's pointer
     /// hit-test also drives). Bounds come off the shell document's laid-out `.gnode` divs:
     /// each gnode's absolute origin (ancestor taffy offsets summed) plus its accumulated CSS
-    /// `translate` (gyre's world position, which the fragments omit — the same offset the focus
+    /// `translate` (seiche's world position, which the fragments omit — the same offset the focus
     /// ring adds), keyed by the gnode's `data-member`, so the a11y rect tracks where the gnode
     /// actually paints, not the graph-space coordinate the retired `project_graph` reported. A
     /// node culled off-pane (riding the underlay demote-dots, no gnode) stays listed but

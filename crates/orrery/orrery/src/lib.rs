@@ -6,7 +6,7 @@
 //! spatial presentation (build item 1D of the serval-as-host flip; S1 of the
 //! modular integration plan).
 //!
-//! [`Orrery`] owns the graph, its [`gyre::Simulation`], the camera, and the
+//! [`Orrery`] owns the graph, its [`seiche::Simulation`], the camera, and the
 //! pre-materialized abs-pos node-children pool. It exposes:
 //!
 //! - [`Orrery::frame`] — advance one frame at a given viewport and return the
@@ -33,10 +33,10 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use euclid::default::{Box2D, Point2D};
-use gyre::{AffinitySpring, LayoutSnapshot, LayoutView};
+use seiche::{AffinitySpring, LayoutSnapshot, LayoutView};
 /// The declarative scene catalog, re-exported so hosts (and the standalone bin) can load
-/// a scene by name without depending on `gyre` directly. (Physics scenes P4a.)
-pub use gyre::{
+/// a scene by name without depending on `seiche` directly. (Physics scenes P4a.)
+pub use seiche::{
     NODE_BODY_DENSITY, NodeMaterial, SceneSpec, ball_and_chain_scene, bridge_scene, chain_scene,
     cradle_scene, domino_scene, drift_scene, drop_bowl_scene, fountain_scene, funnel_scene,
     galton_scene, mixer_scene, pyramid_scene, whirlpool_scene,
@@ -56,7 +56,7 @@ use build::{
 };
 use paint_list_api::ColorF;
 
-/// Build the gyre [`AffinitySpring`] from a cartography [`AffinityScores`](signals::AffinityScores)
+/// Build the seiche [`AffinitySpring`] from a cartography [`AffinityScores`](signals::AffinityScores)
 /// signal: flatten the `((a, b), weight)` pairs into the force's `(a, b, weight)` triples at the
 /// default stiffness / rest length. (Graph signals — P4.)
 fn build_affinity_spring(scores: &signals::AffinityScores) -> AffinitySpring {
@@ -135,7 +135,7 @@ const SIZE_RESETTLE_TICKS: u32 = 90;
 /// an un-sized node reads as the second notch; the ends span dense-small to big-hub, inside
 /// the `set_node_size` 16..160 clamp. (Node-rep — size tiers.)
 pub const SIZE_TIERS: [f32; 5] = [24.0, 36.0, 56.0, 84.0, 120.0];
-/// Per-tick timestep handed to the gyre simulation.
+/// Per-tick timestep handed to the seiche simulation.
 const TICK_DT: f32 = 1.0 / 60.0;
 /// Minimum structural-Jaccard similarity for a pair to enter the affinity force. Prunes the
 /// long tail of weakly-similar pairs so the force list stays lean and only meaningful clusters
@@ -276,7 +276,7 @@ pub struct Orrery {
     /// with one collides at its hull rather than its silhouette, regardless of its face.
     /// Persisted in the cartography sidecar. (Node body & face — the Body axis.)
     node_sprite_hulls: HashMap<NodeKey, Vec<(f32, f32)>>,
-    /// Scene-prop sprite textures, keyed by the opaque handle a [`gyre::SceneBodySpec`] carries:
+    /// Scene-prop sprite textures, keyed by the opaque handle a [`seiche::SceneBodySpec`] carries:
     /// raw RGBA8 (straight alpha) plus dimensions, the [`PaintCmd::DrawImage`] shape (as favicons
     /// use). A scene prop whose `sprite` handle resolves here paints as a textured billboard instead
     /// of the abstract orb / polygon; unset handles fall back. A registry (persists across scenes,
@@ -291,10 +291,10 @@ pub struct Orrery {
     /// default on load; overridable via [`set_ambient_tincture`](Self::set_ambient_tincture). (P5.)
     ambient_tincture: Tincture,
     /// Per-node physical **material** overrides (restitution / friction / density) on the Body
-    /// axis. A node absent here takes the default [`gyre::NodeMaterial`] (the spawn values), so
+    /// axis. A node absent here takes the default [`seiche::NodeMaterial`] (the spawn values), so
     /// this holds only deliberate overrides. Pushed to physics and persisted in the cartography
     /// sidecar. (Node body & face — material.)
-    node_materials: HashMap<NodeKey, gyre::NodeMaterial>,
+    node_materials: HashMap<NodeKey, seiche::NodeMaterial>,
     /// Scene toggle: when on, a node's face grows with its undirected degree (capped),
     /// so the spatial map reads connection weight at a glance. Default off (uniform).
     /// (P0 resize — size-by-degree.)
@@ -364,7 +364,7 @@ pub struct Orrery {
     /// so the next [`ensure_bridges_fresh`](Self::ensure_bridges_fresh) recomputes under the new
     /// metric. (Graph signals — bridges / articulation points.)
     bridge_metric: signals::BridgeMetric,
-    /// Scene toggle: when on, a pairwise **affinity force** (a weighted, attract-only gyre spring
+    /// Scene toggle: when on, a pairwise **affinity force** (a weighted, attract-only seiche spring
     /// over structural-Jaccard similarity) runs on top of the force-directed layout, drawing
     /// structurally-similar nodes into tight clusters ("cluster by affinity"). Default off; only
     /// visible under force-directed (an analytic strategy overrides the physics snapshot).
@@ -449,7 +449,7 @@ pub struct Orrery {
     weighted_edges_rebuilds: u64,
     /// Scene toggle: when on, a node floats above the ground by its undirected degree
     /// (hubs highest), with a stem to its ground anchor — the isometric "fake height".
-    /// Purely visual (the gyre body does not move). Default off. (Isometric camera P3.)
+    /// Purely visual (the seiche body does not move). Default off. (Isometric camera P3.)
     height_by_degree: bool,
     /// `Some(press_origin)` (screen px) while a left-drag marquee on empty space
     /// is in progress.
@@ -467,12 +467,12 @@ pub struct Orrery {
     view_w: u32,
     view_h: u32,
     /// The pane's active layout strategy (a cartography adapter `projection_id`, e.g.
-    /// `"phyllotaxis.default"`), or `None` for the default force-directed (gyre) layout.
+    /// `"phyllotaxis.default"`), or `None` for the default force-directed (seiche) layout.
     /// Persisted per pane via view-intent; the host pushes positions for it via
     /// [`apply_strategy_positions`](Orrery::apply_strategy_positions). (Layout picker.)
     active_strategy: Option<String>,
-    /// Buffered positions for the active non-gyre strategy, applied into `view` each
-    /// frame **after** the physics snapshot (so they win over gyre regardless of the
+    /// Buffered positions for the active non-seiche strategy, applied into `view` each
+    /// frame **after** the physics snapshot (so they win over seiche regardless of the
     /// off-thread actor's timing). `None` under force-directed. (Layout picker.)
     strategy_positions: Option<Vec<(NodeKey, PortablePoint)>>,
     /// The pane's "scope" lens: when `Some`, the orrery renders only these nodes (a

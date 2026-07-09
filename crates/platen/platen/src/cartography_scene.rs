@@ -128,7 +128,7 @@ pub fn project_with<S: LayoutStrategy>(
 }
 
 /// The graph-wide layout strategies the orrery's empty-canvas picker offers:
-/// `(projection_id, label)`. The force-directed default (gyre physics) is the host's
+/// `(projection_id, label)`. The force-directed default (seiche physics) is the host's
 /// `None`, not listed here. These analytic adapters lay out from the node set alone,
 /// needing no selection focus. Focus-driven `radial.default` is *not* here — it rides
 /// the selection menu (it centers on the selected node) and dispatches through

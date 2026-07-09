@@ -1,23 +1,23 @@
 [package]
-name = "aether"
+name = "quint"
 version = "0.0.1"
 authors = ["@mark-ik"]
 license = "MPL-2.0"
 edition = "2024"
 publish = false
 rust-version = "1.92.0"
-description = "Field algebra for Mere's graph canvas — scalar/vector fields over canvas space, node/edge couplings, and evaluation (Rhai authoring, Burn lowering). The field source whose forces `gyre` integrates."
+description = "Field algebra for Mere's graph canvas — scalar/vector fields over canvas space, node/edge couplings, and evaluation (Rhai authoring, Burn lowering). The field source whose forces `seiche` integrates."
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 # The field-primitive definitions (the portable AST, FieldId/CouplingId, Field,
-# Coupling/CouplingResponse/NodeSelector) live in the portable `numen` crate; aether is
+# Coupling/CouplingResponse/NodeSelector) live in the portable `numen` crate; quint is
 # the runtime algebra over them: it evaluates the definitions and derives forces. This
-# is aether's only hard substrate dependency — aether's default build is portable.
+# is quint's only hard substrate dependency — quint's default build is portable.
 numen = { path = "../../../../numen" }
 # kernel is OPTIONAL, behind `kernel-bridge`: it supplies only the mere Graph +
 # apply-delta glue that `FieldProjection::commit_to_graph` uses to write an authored
-# projection into a live graph. Off by default so aether stays kernel-free (portable);
+# projection into a live graph. Off by default so quint stays kernel-free (portable);
 # a mere host that wants the commit bridge enables the feature. One-way dep.
 kernel = { workspace = true, optional = true }
 # For minting registry-local FieldIds (from_u128, WASM-safe) and serde of the
@@ -41,7 +41,7 @@ uuid = { version = "1", default-features = false, features = ["js"] }
 [features]
 default = []
 # The graph-commit bridge: `FieldProjection::commit_to_graph`, which writes an authored
-# projection's fields/couplings into a mere `kernel::graph::Graph`. Opt-in so aether's
+# projection's fields/couplings into a mere `kernel::graph::Graph`. Opt-in so quint's
 # default build stays kernel-free and portable; a mere host enables it.
 kernel-bridge = ["dep:kernel"]
 field-burn = ["dep:burn"]

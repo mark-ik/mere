@@ -10,7 +10,7 @@
 use std::collections::HashSet;
 
 use euclid::default::Point2D;
-use gyre::CouplingForce;
+use seiche::CouplingForce;
 use kernel::graph::apply::{GraphDelta, GraphDeltaResult, apply_graph_delta};
 use kernel::graph::{Falloff, Field, FieldDefinition, FieldExtent, FieldId, ScalarField};
 

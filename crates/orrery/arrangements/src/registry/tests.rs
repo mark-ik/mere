@@ -28,8 +28,8 @@ fn default_registry_includes_grid() {
 #[test]
 fn default_registry_surfaces_all_builtins() {
     let registry = LayoutRegistry::<Id>::default();
-    // 8 built-ins, all positional. Force physics is gyre's domain, not an arrangement; the
-    // similarity-driven projection (SemanticEdgeWeight) was retired once the gyre affinity force
+    // 8 built-ins, all positional. Force physics is seiche's domain, not an arrangement; the
+    // similarity-driven projection (SemanticEdgeWeight) was retired once the seiche affinity force
     // reached parity.
     assert_eq!(registry.len(), 8);
 }
@@ -54,7 +54,7 @@ fn filter_by_category_partitions_cleanly() {
 fn filter_by_tag_matches_expected_members() {
     let registry = LayoutRegistry::<Id>::default();
     // Phyllotaxis carries the `organic` tag (the force layouts that also did
-    // are gyre's now).
+    // are seiche's now).
     assert!(!registry.filter_by_tag("organic").is_empty());
     let fractal = registry.filter_by_tag("fractal");
     // Penrose + L-system.

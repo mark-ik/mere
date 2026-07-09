@@ -634,7 +634,7 @@ pub(crate) struct WindowLocal {
     /// minimap subtree at the gloss pane's top third ([`gloss::gloss_sections`]).
     pub(crate) gloss_minimap_rect: Option<[f32; 4]>,
     /// The most recent orrery wheel delta (device px), queued by the orrery pane element's
-    /// `on_wheel` when the host dispatches a wheel there, and drained by the host into gyre's
+    /// `on_wheel` when the host dispatches a wheel there, and drained by the host into seiche's
     /// pan / Ctrl-zoom. Routes the orrery wheel through the document. (cond 5 input bridge.)
     pub(crate) orrery_wheel: Option<(f32, f32)>,
     /// The open settings tiles, folded into the shell document like the list panes but

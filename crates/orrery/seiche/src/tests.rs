@@ -45,7 +45,7 @@ fn recording_push_solver(calls: std::sync::Arc<std::sync::atomic::AtomicUsize>) 
     })
 }
 
-/// Physics runs on abstract node keys with no graph at all. gyre's graph-free
+/// Physics runs on abstract node keys with no graph at all. seiche's graph-free
 /// surface (`sync_nodes` + `sync_edges` + `position_of` / `positions`) is the primary
 /// interface, so any app — a raw chartulary graph, a bespoke store — drives the
 /// simulation by feeding `(key, position)` pairs and reading positions back, with no
@@ -112,11 +112,11 @@ fn repulsion_solver_routes_only_above_threshold() {
     assert!(mean_x > 0.0, "the solver's +x push moved the layout right: {mean_x}");
 }
 
-/// End-to-end settle timing: naive CPU repulsion vs the aether wgpu solver,
+/// End-to-end settle timing: naive CPU repulsion vs the quint wgpu solver,
 /// at a large node count. Times whole ticks — rapier's step is identical both
 /// ways, so the delta is the repulsion step moving off the CPU. Ignored + behind
-/// `gpu-bench` (the only path that compiles burn into gyre's build). Run:
-/// `cargo test -p gyre --features gpu-bench --release -- --ignored settle_timing --nocapture`
+/// `gpu-bench` (the only path that compiles burn into seiche's build). Run:
+/// `cargo test -p seiche --features gpu-bench --release -- --ignored settle_timing --nocapture`
 #[cfg(feature = "gpu-bench")]
 #[test]
 #[ignore]
@@ -125,10 +125,10 @@ fn settle_timing_naive_vs_gpu_solver() {
 
     const TICKS: usize = 20;
     let solver: RepulsionSolver = Arc::new(|xs: &[f32], ys: &[f32], strength: f32, min_d: f32| {
-        aether::forces::repulsion_wgpu(
+        quint::forces::repulsion_wgpu(
             xs,
             ys,
-            aether::forces::RepulsionParams {
+            quint::forces::RepulsionParams {
                 strength,
                 softening: min_d,
             },

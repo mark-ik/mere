@@ -63,7 +63,7 @@ pub mod cartography_scene;
 pub mod scene_paint;
 
 /// Visual couplings → paint overlays: the paint-side consumer of the field
-/// system's open response tail (the aether→platen seam, mirroring aether→gyre).
+/// system's open response tail (the aether→platen seam, mirroring aether→seiche).
 pub mod coupling_paint;
 
 /// The orrery scene producer: graph → a painted `CanvasPaintList` underlay

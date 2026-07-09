@@ -300,7 +300,7 @@ impl Orrery {
         // The physics collider matches the *shape*, not just the size: a square node collides
         // square, a circle round (Decision 1 — the face is the collider). The view keeps the
         // bounding radius above for the pick + edge-trim. (Node-rep — collider matches shape.)
-        let colliders: Vec<(NodeKey, gyre::NodeCollider)> = self
+        let colliders: Vec<(NodeKey, seiche::NodeCollider)> = self
             .graph
             .nodes()
             .map(|(key, _)| (key, self.node_collider(key)))
@@ -315,7 +315,7 @@ impl Orrery {
     /// The hull applies **regardless of the face** ([`node_face`](Self::node_face)), so a node
     /// can wear a favicon over a custom-shaped body. So physics tracks the body, not just a
     /// bounding box. (Node body & face — the Body axis.)
-    pub(crate) fn node_collider(&self, key: NodeKey) -> gyre::NodeCollider {
+    pub(crate) fn node_collider(&self, key: NodeKey) -> seiche::NodeCollider {
         let size = self.node_size(key);
         let half = size / 2.0;
         // A custom hull (sprite-traced or hand-authored) collides at that hull, scaled to the
@@ -325,15 +325,15 @@ impl Orrery {
                 .iter()
                 .map(|&(nx, ny)| (nx * size, ny * size))
                 .collect();
-            return gyre::NodeCollider::Hull {
+            return seiche::NodeCollider::Hull {
                 points,
                 fallback: half,
             };
         }
         match self.node_shape(key) {
-            NodeShape::Circle => gyre::NodeCollider::Ball { radius: half },
-            NodeShape::Square => gyre::NodeCollider::Square { half },
-            NodeShape::Rounded => gyre::NodeCollider::RoundedSquare {
+            NodeShape::Circle => seiche::NodeCollider::Ball { radius: half },
+            NodeShape::Square => seiche::NodeCollider::Square { half },
+            NodeShape::Rounded => seiche::NodeCollider::RoundedSquare {
                 half,
                 border: half * 0.3,
             },

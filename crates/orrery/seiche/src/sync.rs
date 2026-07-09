@@ -19,7 +19,7 @@ use crate::{
 
 impl Simulation {
     /// Replace the topology the layout forces pull along (see
-    /// [`ForceContext::edges`](crate::ForceContext::edges)). Caller-chosen node-key pairs: gyre
+    /// [`ForceContext::edges`](crate::ForceContext::edges)). Caller-chosen node-key pairs: seiche
     /// does not read graph edges itself, so the caller filters to the relation families that
     /// should shape the layout (e.g. semantic edges, not arrangement). Idempotent; replaces the
     /// whole edge list.
@@ -61,9 +61,9 @@ impl Simulation {
     /// are skipped (seed after [`Self::sync_with_graph`]).
     ///
     /// Takes plain `(NodeKey, Point2D)` rather than a `cartography::Projection`
-    /// on purpose: gyre is a kernel-tier substrate and must not depend on the
+    /// on purpose: seiche is a kernel-tier substrate and must not depend on the
     /// projection layer above it. The caller maps `Projection.nodes` to these
-    /// pairs (see the cartography-gyre layout seam doc).
+    /// pairs (see the cartography-seiche layout seam doc).
     pub fn seed_positions(&mut self, positions: impl IntoIterator<Item = (NodeKey, Point2D<f32>)>) {
         for (node, pos) in positions {
             let Some(&handle) = self.bodies_by_node.get(&node) else {

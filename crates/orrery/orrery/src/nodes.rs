@@ -16,7 +16,7 @@ impl Orrery {
     /// the rest of the world. (Physics scenes P1.)
     pub fn add_scene_body(&mut self, position: (f32, f32), radius: f32, velocity: (f32, f32)) {
         self.physics.add_scene_body(
-            gyre::NodeCollider::Ball { radius },
+            seiche::NodeCollider::Ball { radius },
             Point2D::new(position.0, position.1),
             velocity,
         );
@@ -30,7 +30,7 @@ impl Orrery {
     }
 
     /// Register a scene-prop sprite texture under an opaque `handle`: raw RGBA8 (straight alpha) plus
-    /// its pixel dimensions. A scene prop whose [`SceneBodySpec::sprite`](gyre::SceneBodySpec) carries
+    /// its pixel dimensions. A scene prop whose [`SceneBodySpec::sprite`](seiche::SceneBodySpec) carries
     /// the same handle then paints as a textured billboard over its footprint (otherwise it falls back
     /// to the abstract orb / polygon). The registry persists across scene loads, so a host registers
     /// its props' textures once at startup. A re-register under the same handle replaces it. (Physics
@@ -117,13 +117,13 @@ impl Orrery {
     /// Load a demo liquid pool: a block of PBF particles dropped into a basin behind the graph; the
     /// physics actor keeps ticking while it flows. Clear with [`clear_fluid`]. (Physics scenes P4c.)
     pub fn load_demo_fluid(&mut self) {
-        let basin = gyre::Basin {
+        let basin = seiche::Basin {
             min_x: -250.0,
             max_x: 250.0,
             floor_y: 250.0,
         };
         self.physics.load_fluid(
-            gyre::FluidParams::default(),
+            seiche::FluidParams::default(),
             basin,
             Point2D::new(-150.0, -170.0),
             16,
@@ -139,11 +139,11 @@ impl Orrery {
     }
 
     /// Load the demo whirlpool: a ring of loose balls plus a centred vortex force-field that swirls
-    /// them into an orbiting gyre. The field keeps the actor ticking; `clear_scene` (key `0`) drops
+    /// them into an orbiting seiche. The field keeps the actor ticking; `clear_scene` (key `0`) drops
     /// both. (Physics scenes P4 — force-field tier.)
     pub fn load_whirlpool(&mut self) {
         self.physics.load_scene(whirlpool_scene());
-        self.physics.set_scene_field(Some(gyre::SceneField::Vortex {
+        self.physics.set_scene_field(Some(seiche::SceneField::Vortex {
             center: (0.0, 0.0),
             strength: 90.0,
             inward: 30.0,
@@ -156,8 +156,8 @@ impl Orrery {
     /// `clear_scene` (key `0`) drops both. (Physics scenes — emitters.)
     pub fn load_fountain(&mut self) {
         self.physics.load_scene(fountain_scene());
-        self.physics.add_emitter(gyre::SceneEmitter {
-            collider: gyre::NodeCollider::Ball { radius: 7.0 },
+        self.physics.add_emitter(seiche::SceneEmitter {
+            collider: seiche::NodeCollider::Ball { radius: 7.0 },
             position: (0.0, 260.0),
             position_jitter: (10.0, 0.0),
             velocity: (0.0, -430.0),

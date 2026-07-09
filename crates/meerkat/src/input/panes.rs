@@ -10,7 +10,7 @@ impl WindowCtx<'_> {
     /// Route an orrery-area wheel through the document: dispatch it to the orrery pane element
     /// (the runner resolves the wheel target by walking ancestors from the hit node, so a wheel
     /// over a card or the scene resolves to the orrery element), whose `on_wheel` queues the
-    /// delta; then drain it into gyre's pan / Ctrl-zoom. Returns whether gyre consumed it. The
+    /// delta; then drain it into seiche's pan / Ctrl-zoom. Returns whether seiche consumed it. The
     /// host complement of the orrery pane element's `on_wheel`. (cond 5 input bridge.)
     pub(crate) fn orrery_wheel_through_document(
         &mut self,

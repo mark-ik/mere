@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Mere's statistical-intelligence glue over the standalone sibylla retrieval crate: eidetic persistence and the aether field-algebra / canvas-search bridge, re-exporting sibylla's embedding + retrieval core (incl. the Burn-backed BERT provider behind features)."
+description = "Mere's statistical-intelligence glue over the standalone sibylla retrieval crate: eidetic persistence and the quint field-algebra / canvas-search bridge, re-exporting sibylla's embedding + retrieval core (incl. the Burn-backed BERT provider behind features)."
 readme = "README.md"
 keywords = ["embeddings", "vector-search", "intelligence", "mere"]
 categories = ["data-structures"]
@@ -24,7 +24,7 @@ async-trait = "0.1"
 eidetic.workspace = true
 # The field algebra (FieldProjection / FieldId / eval) the embedding→field
 # bridge builds onto — extracted from graph-canvas into its own crate.
-aether.workspace = true
+quint.workspace = true
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 # Test-support only: the `bert_full_pipeline` integration test (the mere-side

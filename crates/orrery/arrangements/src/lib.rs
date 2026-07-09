@@ -13,7 +13,7 @@
 //! tilings ([`penrose`]), fractal paths ([`l_system`]), spirals and
 //! grids ([`static_layouts`]), axial boards/timelines ([`axial`]), and
 //! semantic projections ([`semantic_embedding`]). Live force physics
-//! lives in `gyre` (rapier-backed); the Barnes-Hut approximation it uses
+//! lives in `seiche` (rapier-backed); the Barnes-Hut approximation it uses
 //! for large graphs was harvested out of this crate's old
 //! `force_directed`/`barnes_hut` modules.
 //!
@@ -116,7 +116,7 @@ where
     /// unordered pairs — store both `(a, b)` and `(b, a)` if callers want
     /// asymmetric lookups, or keep one order and have the reader normalize.
     /// A generic similarity input (the retired `SemanticEdgeWeight` layout
-    /// read it; pairwise affinity now drives gyre's affinity force instead).
+    /// read it; pairwise affinity now drives seiche's affinity force instead).
     pub semantic_similarity: HashMap<(N, N), f32>,
 
     /// Host-provided 2D coordinates per node (from UMAP / t-SNE / PCA /

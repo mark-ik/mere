@@ -13,7 +13,7 @@
 //! calls it and contributes the result as its paint sublist.
 //!
 //! Node positions come from the graph's committed positions today (matching the
-//! current orrery's `scene_from_graph`). When the gyre field-physics layer is
+//! current orrery's `scene_from_graph`). When the seiche field-physics layer is
 //! live, a force coupling moves a node and updates its position; this reprojects
 //! from the same accessor, so the producer is unchanged. The field's *visual*
 //! couplings are resolved here too, via [`crate::coupling_paint`].
@@ -46,15 +46,15 @@ pub fn projection_from_graph(graph: &Graph) -> Projection {
 }
 
 /// Build a [`Projection`] from a caller-supplied *live* position lookup (e.g. the
-/// gyre simulation's projected positions) instead of the committed positions —
+/// seiche simulation's projected positions) instead of the committed positions —
 /// otherwise identical to [`projection_from_graph`] (same edge dedup,
 /// `content_bounds`). The orrery element feeds `position_of` from
-/// `gyre::Simulation::position_of` (mapped to [`PortablePoint`]), so the underlay
+/// `seiche::Simulation::position_of` (mapped to [`PortablePoint`]), so the underlay
 /// reprojects from live motion each frame. A node with no live position
 /// (`position_of` returns `None`, e.g. not yet simulated) falls back to its
 /// committed position so it still draws.
 ///
-/// Generic over the lookup so platen stays gyre-free — gyre is a sibling
+/// Generic over the lookup so platen stays seiche-free — seiche is a sibling
 /// substrate, not a platen dependency.
 pub fn projection_from_positions<F>(graph: &Graph, position_of: F) -> Projection
 where
@@ -249,13 +249,13 @@ pub fn orrery_paint_list(
     paint_projection_with_visuals(graph, &projection, viewport, camera, style, generation)
 }
 
-/// The orrery underlay from *live* positions (the gyre-driven variant of
+/// The orrery underlay from *live* positions (the seiche-driven variant of
 /// [`orrery_paint_list`]): same edges + nodes + visual-coupling overlays, but the
 /// node positions come from `position_of` rather than the committed graph. The
-/// serval orrery element calls this each frame with `gyre::Simulation`'s
+/// serval orrery element calls this each frame with `seiche::Simulation`'s
 /// positions, so the underlay tracks the simulation (the plan's "positions
-/// transition from committed to gyre-live"). Generic over the lookup to keep
-/// platen gyre-free.
+/// transition from committed to seiche-live"). Generic over the lookup to keep
+/// platen seiche-free.
 pub fn orrery_paint_list_from_positions<F>(
     graph: &Graph,
     position_of: F,
@@ -278,7 +278,7 @@ where
 /// so the underlay and the DOM layer do not double-draw a node.
 ///
 /// Edges still use every node's position, so an edge from an on-screen node to a
-/// demoted one renders. Generic over both lookups to keep platen gyre-free.
+/// demoted one renders. Generic over both lookups to keep platen seiche-free.
 ///
 /// Visual-coupling overlays currently ride the underlay for every coupled node
 /// (the sample orrery has none); demoting overlays to the off-screen set as well

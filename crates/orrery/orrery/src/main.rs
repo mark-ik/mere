@@ -404,8 +404,8 @@ fn crate_texture() -> (Vec<u8>, u32, u32) {
 
 /// A demo scene of textured crates: a fixed floor with three rows of square crate props (each
 /// wearing the registered `crate` sprite) dropped onto it. (Scene-prop sprites.)
-fn crate_drop_scene() -> gyre::SceneSpec {
-    use gyre::{NodeCollider, SceneBodySpec, SceneSpec};
+fn crate_drop_scene() -> seiche::SceneSpec {
+    use seiche::{NodeCollider, SceneBodySpec, SceneSpec};
     let mut bodies = vec![
         SceneBodySpec::fixed(NodeCollider::Square { half: 300.0 }, (0.0, 360.0)).restitution(0.0),
     ];

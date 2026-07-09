@@ -10,7 +10,7 @@ impl Orrery {
     /// The Cartography projection geometry: each member's current world position,
     /// member-keyed — the orrery's settled layout, for the host to persist as the
     /// cartography sidecar (the counterpart of the workbench's `TreeGeometry`). Reads
-    /// the live gyre positions, so it captures whatever is shown (force-directed or a
+    /// the live seiche positions, so it captures whatever is shown (force-directed or a
     /// picked layout strategy). (Position sidecar.)
     pub fn cartography_geometry(&self) -> platen::CartographyGeometry {
         platen::CartographyGeometry::from_positions(
@@ -57,7 +57,7 @@ impl Orrery {
         }))
     }
 
-    /// One node's current world position (the live gyre position), so the host can
+    /// One node's current world position (the live seiche position), so the host can
     /// draw a switcher thumbnail from the orrery rather than the now position-free
     /// graph. `None` for a node the view has not placed. (Position gut.)
     pub fn node_position(&self, key: NodeKey) -> Option<PortablePoint> {
@@ -235,7 +235,7 @@ impl Orrery {
         for (id, (restitution, friction, density)) in materials {
             self.set_node_material(
                 id,
-                gyre::NodeMaterial {
+                seiche::NodeMaterial {
                     restitution,
                     friction,
                     density,
@@ -384,9 +384,9 @@ impl Orrery {
     }
 
     /// A node's physical material (the Body axis): its per-node override if set, else the
-    /// default [`gyre::NodeMaterial`] (the spawn restitution / friction / density).
+    /// default [`seiche::NodeMaterial`] (the spawn restitution / friction / density).
     /// (Node body & face — material.)
-    pub fn node_material(&self, key: NodeKey) -> gyre::NodeMaterial {
+    pub fn node_material(&self, key: NodeKey) -> seiche::NodeMaterial {
         self.node_materials.get(&key).copied().unwrap_or_default()
     }
 
@@ -395,7 +395,7 @@ impl Orrery {
     /// the default is stored too (an explicit override), so the facet shows it as set. Keyed by
     /// node UUID; a no-op for an unknown id. Persisted in the cartography sidecar. (Node body
     /// & face — material.)
-    pub fn set_node_material(&mut self, id: uuid::Uuid, material: gyre::NodeMaterial) {
+    pub fn set_node_material(&mut self, id: uuid::Uuid, material: seiche::NodeMaterial) {
         if let Some((key, _)) = self.graph.get_node_by_id(id) {
             self.node_materials.insert(key, material);
             self.physics.set_node_materials(vec![(key, material)]);
@@ -408,7 +408,7 @@ impl Orrery {
         if let Some((key, _)) = self.graph.get_node_by_id(id) {
             if self.node_materials.remove(&key).is_some() {
                 self.physics
-                    .set_node_materials(vec![(key, gyre::NodeMaterial::default())]);
+                    .set_node_materials(vec![(key, seiche::NodeMaterial::default())]);
             }
         }
     }
@@ -416,7 +416,7 @@ impl Orrery {
     /// A node's face footprint (px): a per-node override if set, else size-by-degree
     /// (the face grows with the node's undirected degree, capped) when that mode is on,
     /// else the uniform default. The gnode applies the selection lift on top, and uses the
-    /// same value to center the face on the gyre collider. (P0 resize.)
+    /// same value to center the face on the seiche collider. (P0 resize.)
     pub fn node_size(&self, key: NodeKey) -> f32 {
         const DEFAULT: f32 = 36.0;
         const MAX: f32 = 88.0;
@@ -539,7 +539,7 @@ impl Orrery {
 
     /// A node's render height (px above the ground plane) for the isometric float: `0`
     /// (flat) unless height-by-degree is on, where a node rises with its undirected
-    /// degree (capped) so hubs stand tallest. Purely visual: it does not move the gyre
+    /// degree (capped) so hubs stand tallest. Purely visual: it does not move the seiche
     /// body. The gnode is raised in screen-y by this (times zoom) and a stem drops to its
     /// ground anchor, where its edges meet. (Isometric camera P3 — fake height.)
     pub fn node_height(&self, key: NodeKey) -> f32 {

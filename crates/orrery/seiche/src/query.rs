@@ -8,7 +8,7 @@
 //! Node *point* picking ([`Simulation::hit_test`]) and frustum cull
 //! ([`Simulation::cull_aabb`]) live on `Simulation` directly (in `lib.rs`),
 //! resolved against each node body's live position and radius. Edges add a wrinkle:
-//! gyre stores them as opaque `(NodeKey, NodeKey)` pairs with no body, so a
+//! seiche stores them as opaque `(NodeKey, NodeKey)` pairs with no body, so a
 //! body-position scan can't see them. This module adds the edge geometry (resolved
 //! from the endpoints' live positions) and the picks built on it, plus a
 //! rect-select that returns both nodes and edges. Split out of `lib.rs` to keep

@@ -13,7 +13,7 @@
 use std::collections::{HashMap, HashSet};
 
 use euclid::default::Point2D;
-use gyre::{Boundary, CouplingForce, EdgeSpring, LayoutView, NodeExclusion, Simulation};
+use seiche::{Boundary, CouplingForce, EdgeSpring, LayoutView, NodeExclusion, Simulation};
 use kernel::geometry::PortablePoint;
 use kernel::graph::apply::{self as graph_apply};
 use kernel::graph::{
@@ -105,7 +105,7 @@ pub(crate) fn hyperlink() -> EdgeAssertion {
 }
 
 /// The undirected, de-duplicated relation pairs that feed the layout springs.
-/// gyre stays relation-taxonomy agnostic, so the orrery picks the topology: one
+/// seiche stays relation-taxonomy agnostic, so the orrery picks the topology: one
 /// edge per unordered node pair (a reciprocal A↔B counts once). Reused by
 /// [`build_simulation`] at startup and [`Orrery::visit`](crate::Orrery::visit)
 /// when the graph grows.
@@ -130,9 +130,9 @@ pub(crate) fn dedup_edges(graph: &Graph) -> Vec<(NodeKey, NodeKey)> {
 /// for graph-algorithm layout strategies that need plain connectivity, not weight), this
 /// keeps one `(NodeKey, NodeKey)` tuple per **visible** relation cell: a pair with three
 /// live cells pulls three times as hard as a pair with one, and hiding one cell drops the
-/// pull by exactly that cell's share. gyre stays relation-taxonomy agnostic — this
+/// pull by exactly that cell's share. seiche stays relation-taxonomy agnostic — this
 /// multiplicity is how the orrery hands it weight without leaking `RelationSelector` into
-/// gyre's edge type.
+/// seiche's edge type.
 pub(crate) fn visible_relation_edges(
     graph: &Graph,
     hidden_edges: &HashSet<crate::EdgeCell>,
@@ -200,7 +200,7 @@ pub(crate) fn build_simulation(graph: &Graph) -> Simulation {
     sim.add_force(NodeExclusion::default());
     sim.add_force(EdgeSpring::default());
     sim.add_force(Boundary::default());
-    // Field couplings: each resolves to a CouplingForce gyre integrates, so a placed
+    // Field couplings: each resolves to a CouplingForce seiche integrates, so a placed
     // field's well actually pulls its nodes. The live place / move / new-node rebuild
     // re-resolves these via `Physics::set_coupling_forces`. (Field regions.)
     let coupling_forces: Vec<CouplingForce> = graph

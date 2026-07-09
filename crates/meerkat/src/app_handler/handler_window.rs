@@ -220,7 +220,7 @@ impl Shell {
                 } else if let Some((gid, _)) = wc.orrery_pane_at(cx, cy) {
                     // Pan / Ctrl-zoom the Orrery pane under the cursor, routed through the document:
                     // the wheel dispatches to the orrery pane element's `on_wheel` (which queues its
-                    // delta), then drains into gyre. A cursor over the workbench / a utility pane
+                    // delta), then drains into seiche. A cursor over the workbench / a utility pane
                     // resolves to no Orrery leaf, so the wheel does nothing there. (cond 5 input
                     // bridge; per-pane: a second graph-pane navigates independently.)
                     let th = wc.current_toolbar_height() as f32;

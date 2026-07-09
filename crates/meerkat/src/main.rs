@@ -21,14 +21,14 @@
 //! document runs through serval-layout into one chrome `Scene`. Around and beneath
 //! it the host composites separate surfaces that are not serval documents: the
 //! orrery graph scene ([`Orrery`]'s own `Scene` of gnodes / edges / physics from
-//! `gyre`), the pelt workbench tile surface, and the focused node's content card.
+//! `seiche`), the pelt workbench tile surface, and the focused node's content card.
 //! Each rasterizes to its own texture and composites back to front: the orrery
 //! scene underneath, the chrome on top. The capability-separation discipline holds
 //! (neither the shell document nor a content surface sees the other's tree).
 //!
 //! Input routes top-down through the shell hit-test first: a press resolves
 //! against the one document (chrome control, folded-pane row, or orrery card), and
-//! an orrery-area miss falls through to `gyre`'s pan / zoom / drag / select.
+//! an orrery-area miss falls through to `seiche`'s pan / zoom / drag / select.
 //! Keyboard goes through the runner's `dispatch_key` (Tab traversal, Enter / Space
 //! activation) for focusables, then to the graph handler. This is the
 //! unified-document-host shape (Phase 1 complete); it replaced the earlier

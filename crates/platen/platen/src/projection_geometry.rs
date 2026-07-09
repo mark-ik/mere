@@ -170,7 +170,7 @@ impl TreeGeometry {
 /// semantic geometry), not pixels, so they render responsively at any zoom.
 ///
 /// This is the authoritative store of the orrery's *settled* layout: the live
-/// force-directed positions live in the gyre read model and were never written back
+/// force-directed positions live in the seiche read model and were never written back
 /// to the kernel graph, so without this sidecar a session's settled layout is lost on
 /// reload (graph.json carries only the load-time seed).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -211,7 +211,7 @@ pub struct CartographyGeometry {
     sprite_hulls: Vec<(GraphMemberId, Vec<(f32, f32)>)>,
     /// Per-member physical material overrides `(restitution, friction, density)` on the Body
     /// axis, so a node tuned heavier / bouncier / grippier re-opens that way. Stored as a plain
-    /// tuple to keep this crate gyre-free; the orrery maps it to/from `gyre::NodeMaterial`.
+    /// tuple to keep this crate seiche-free; the orrery maps it to/from `seiche::NodeMaterial`.
     /// Serde-defaulted. (Node body & face — material.)
     #[serde(default)]
     materials: Vec<(GraphMemberId, (f32, f32, f32))>,

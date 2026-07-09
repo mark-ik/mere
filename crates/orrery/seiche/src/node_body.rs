@@ -14,7 +14,7 @@ use crate::{NODE_BODY_DENSITY, Simulation};
 
 /// The collider shape the host wants for a node's physics body, so the hard-collision /
 /// hit geometry matches the node's *visible* face rather than a uniform ball. The host maps
-/// its own form vocabulary (orrery `NodeShape`, a custom sprite hull) onto this; gyre lowers
+/// its own form vocabulary (orrery `NodeShape`, a custom sprite hull) onto this; seiche lowers
 /// each to a parry shape in [`Simulation::set_node_colliders`]. Sizes/points are in world
 /// units (the same space as positions). (Node-rep — collider matches shape.)
 #[derive(Clone, Debug, PartialEq)]

@@ -47,9 +47,9 @@ pub struct SceneBodySpec {
     pub rotation: f32,
     /// An optional **sprite handle**: an opaque key the host resolves to a texture to paint over
     /// this prop (a crate, a barrel) instead of the flat orb / polygon. `None` (the default) keeps
-    /// the abstract paint. gyre never interprets it — it rides through to the
+    /// the abstract paint. seiche never interprets it — it rides through to the
     /// [`SceneBodyView`](crate::SceneBodyView) for the host, exactly as the collider shape does (the
-    /// gyre layer stays rendering-agnostic). (Physics scenes — scene-prop sprites.)
+    /// seiche layer stays rendering-agnostic). (Physics scenes — scene-prop sprites.)
     pub sprite: Option<String>,
 }
 

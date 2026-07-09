@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! The physics backend: where the gyre [`Simulation`] actually ticks.
+//! The physics backend: where the seiche [`Simulation`] actually ticks.
 //!
 //! Two shapes behind one [`Physics`] interface (the dual-backend decision, P6):
 //!
@@ -26,7 +26,7 @@ use std::time::Duration;
 
 use armillary::{ActorHandle, Emitter, Wake, spawn};
 use euclid::default::Point2D;
-use gyre::{
+use seiche::{
     AffinitySpring, Basin, CouplingForce, FluidParams, LayoutSnapshot, LayoutView, NodeCollider,
     NodeMaterial, SceneEmitter, SceneField, SceneSpec, Simulation,
 };
@@ -597,7 +597,7 @@ mod tests {
     use kernel::graph::fixtures::GraphFixtures;
 
     /// The actor processes a sync + settle and emits layout snapshots, then ends
-    /// cleanly when the handle drops. (The physics math itself is gyre's concern;
+    /// cleanly when the handle drops. (The physics math itself is seiche's concern;
     /// this is a protocol smoke test of the run loop.)
     #[test]
     fn actor_syncs_settles_and_emits_snapshots() {
@@ -614,7 +614,7 @@ mod tests {
         );
 
         let mut sim = Simulation::new();
-        sim.add_force(gyre::NodeExclusion::default());
+        sim.add_force(seiche::NodeExclusion::default());
         let wake: Wake = Arc::new(|| {});
         let (handle, updates) = spawn(wake, move |commands, out| run(sim, 0, false, commands, out));
 

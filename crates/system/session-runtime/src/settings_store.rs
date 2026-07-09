@@ -168,7 +168,7 @@ fn default_ui_zoom() -> f32 {
     1.1
 }
 
-/// The layout engine's tuned default linear damping (mirrors gyre's
+/// The layout engine's tuned default linear damping (mirrors seiche's
 /// `DEFAULT_LINEAR_DAMPING`); the seed when no setting is persisted.
 fn default_physics_damping() -> f32 {
     2.5

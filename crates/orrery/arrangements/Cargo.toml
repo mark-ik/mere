@@ -6,7 +6,7 @@ license = "MPL-2.0"
 edition = "2024"
 publish = false
 rust-version = "1.92.0"
-description = "Deterministic graph arrangements for Mere — the Layout<N> trait plus aperiodic (penrose), fractal (l-system), spiral (phyllotaxis), axial (kanban/timeline), radial, grid, and semantic-embedding layouts, with cartography LayoutStrategy adapters. The configurable ArrangementRelation design space; gyre owns the live force physics."
+description = "Deterministic graph arrangements for Mere — the Layout<N> trait plus aperiodic (penrose), fractal (l-system), spiral (phyllotaxis), axial (kanban/timeline), radial, grid, and semantic-embedding layouts, with cartography LayoutStrategy adapters. The configurable ArrangementRelation design space; seiche owns the live force physics."
 
 [lib]
 path = "src/lib.rs"

@@ -22,9 +22,9 @@
 //! analytic projection. Picks: Phyllotaxis, Penrose, Radial, Grid,
 //! Timeline, Kanban, L-system, Spectral, SemanticEmbedding. `project()`
 //! produces a final projection in one call. Live force physics
-//! (force-directed, the affinity force) is gyre's domain; the old
+//! (force-directed, the affinity force) is seiche's domain; the old
 //! streaming-strategy contract was retired with the `SemanticEdgeWeight`
-//! projection once the gyre affinity force reached parity.
+//! projection once the seiche affinity force reached parity.
 //!
 //! Strategies emit a [`Projection`]
 //! output type so canvases consume one shape uniformly. See the
