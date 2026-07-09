@@ -12,7 +12,7 @@ use super::*;
 /// `BridgeNodes` contract documents exactly this "detected by graph-structural betweenness" notion.
 /// A structureless graph (a clique, or all-leaves) has no high-betweenness node, so the set is empty.
 /// (Graph signals — bridges.)
-pub fn bridge_nodes(graph: &Graph, threshold: f32) -> BridgeNodes {
+pub fn bridge_nodes(graph: &impl TopologyView, threshold: f32) -> BridgeNodes {
     let bridges = betweenness_importance(graph)
         .weights
         .into_iter()
@@ -57,7 +57,7 @@ impl BridgeMetric {
 /// The graph's bridge nodes under the chosen `metric`: betweenness brokers (thresholded) or
 /// articulation points. The single entry the host reads; the metric is a per-scene choice (the
 /// `threshold` only applies to betweenness — articulation is binary). (Graph signals — bridges.)
-pub fn bridges(graph: &Graph, metric: BridgeMetric, threshold: f32) -> BridgeNodes {
+pub fn bridges(graph: &impl TopologyView, metric: BridgeMetric, threshold: f32) -> BridgeNodes {
     match metric {
         BridgeMetric::Betweenness => bridge_nodes(graph, threshold),
         BridgeMetric::Articulation => articulation_points(graph),
@@ -71,8 +71,8 @@ pub fn bridges(graph: &Graph, metric: BridgeMetric, threshold: f32) -> BridgeNod
 /// collapsed, self-loops dropped). A 2-connected graph (a clique, a cycle) has none; a tree's
 /// internal nodes are all articulation points. Returned in the `BridgeNodes` node-list contract, in
 /// ascending key order. (Graph signals — bridges / articulation points.)
-pub fn articulation_points(graph: &Graph) -> BridgeNodes {
-    let nodes: Vec<NodeKey> = graph.nodes().map(|(k, _)| k).collect();
+pub fn articulation_points(graph: &impl TopologyView) -> BridgeNodes {
+    let nodes: Vec<NodeKey> = graph.node_keys().collect();
     let index: HashMap<NodeKey, usize> = nodes.iter().enumerate().map(|(i, &k)| (k, i)).collect();
     let n = nodes.len();
     // Distinct undirected adjacency as indices (dedup parallel edges, drop self-loops).

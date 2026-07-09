@@ -22,8 +22,8 @@ pub struct CommunitySnapshot {
 impl CommunitySnapshot {
     /// Extract the weighted adjacency from `graph` (multigraph multiplicity summed, self-loops
     /// dropped). Cheap relative to the Louvain iteration it feeds. (Graph signals — background lane.)
-    pub fn from_graph(graph: &Graph) -> Self {
-        let nodes: Vec<NodeKey> = graph.nodes().map(|(k, _)| k).collect();
+    pub fn from_graph(graph: &impl TopologyView) -> Self {
+        let nodes: Vec<NodeKey> = graph.node_keys().collect();
         let index: HashMap<NodeKey, usize> =
             nodes.iter().enumerate().map(|(i, &k)| (k, i)).collect();
         // `neighbors_undirected` yields one entry per incident edge, so the running count captures
@@ -243,6 +243,6 @@ pub fn community_louvain_on_snapshot(snapshot: &CommunitySnapshot) -> ClusterSet
 /// Community detection on `graph`: extract a [`CommunitySnapshot`] then run Louvain inline. The
 /// synchronous entry; the background lane uses [`CommunitySnapshot::from_graph`] +
 /// [`community_louvain_on_snapshot`] across a thread. (Graph signals — community detection, P3.)
-pub fn community_louvain(graph: &Graph) -> ClusterSet {
+pub fn community_louvain(graph: &impl TopologyView) -> ClusterSet {
     community_louvain_on_snapshot(&CommunitySnapshot::from_graph(graph))
 }

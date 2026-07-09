@@ -41,7 +41,7 @@ impl ImportanceMetric {
 
 /// Per-node importance under the chosen `metric`, normalized `0..=1`. The single entry the host
 /// reads; the metric is a per-scene choice. (Graph signals — importance.)
-pub fn importance(graph: &Graph, metric: ImportanceMetric) -> ImportanceWeights {
+pub fn importance(graph: &impl TopologyView, metric: ImportanceMetric) -> ImportanceWeights {
     match metric {
         ImportanceMetric::Degree => degree_importance(graph),
         ImportanceMetric::Betweenness => betweenness_importance(graph),
@@ -53,10 +53,10 @@ pub fn importance(graph: &Graph, metric: ImportanceMetric) -> ImportanceWeights 
 /// `neighbors_undirected` count), so routing it through the signal contract is behaviour-
 /// preserving; betweenness / PageRank replace the metric here without touching the contract.
 /// (Graph signals — degree importance.)
-pub fn degree_importance(graph: &Graph) -> ImportanceWeights {
+pub fn degree_importance(graph: &impl TopologyView) -> ImportanceWeights {
     let degrees: Vec<(NodeKey, f32)> = graph
-        .nodes()
-        .map(|(key, _)| (key, graph.neighbors_undirected(key).count() as f32))
+        .node_keys()
+        .map(|key| (key, graph.neighbors_undirected(key).count() as f32))
         .collect();
     let max = degrees.iter().fold(0.0_f32, |m, &(_, d)| m.max(d));
     let weights = degrees
@@ -72,8 +72,8 @@ pub fn degree_importance(graph: &Graph) -> ImportanceWeights {
 /// low degree. O(V·E); cheap at current graph scale (the off-thread background lane is the
 /// scale-trigger refinement). Parallel edges are collapsed and self-loops dropped (shortest paths
 /// are over distinct adjacency). (Graph signals — betweenness importance.)
-pub fn betweenness_importance(graph: &Graph) -> ImportanceWeights {
-    let nodes: Vec<NodeKey> = graph.nodes().map(|(k, _)| k).collect();
+pub fn betweenness_importance(graph: &impl TopologyView) -> ImportanceWeights {
+    let nodes: Vec<NodeKey> = graph.node_keys().collect();
     // Distinct undirected adjacency: dedup the multigraph's parallel edges, drop self-loops.
     let adj: HashMap<NodeKey, Vec<NodeKey>> = nodes
         .iter()

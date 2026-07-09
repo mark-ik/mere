@@ -24,8 +24,8 @@ use super::*;
 /// them. (Graph signals — P4, the affinity signal.)
 ///
 /// [Jaccard similarity]: https://en.wikipedia.org/wiki/Jaccard_index
-pub fn structural_affinity(graph: &Graph, min_affinity: f32) -> AffinityScores {
-    let nodes: Vec<NodeKey> = graph.nodes().map(|(k, _)| k).collect();
+pub fn structural_affinity(graph: &impl TopologyView, min_affinity: f32) -> AffinityScores {
+    let nodes: Vec<NodeKey> = graph.node_keys().collect();
     // Distinct undirected adjacency (dedup the multigraph's parallel edges, drop self-loops) — the
     // same basis betweenness uses: structural similarity is over distinct neighbours, not edge
     // multiplicity. Each row is sorted, so a neighbour pair is emitted in canonical `(a < b)` order.

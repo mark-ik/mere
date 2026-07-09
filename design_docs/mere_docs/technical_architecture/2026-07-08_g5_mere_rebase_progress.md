@@ -136,17 +136,36 @@ content's identity while the bytes still live inline. `media_type()` is the node
 fetched page lives in mere's cache, off the node). 289 kernel tests pass. This unlocks
 scholia projecting content identity and the cross-vault content-addressing story.
 
+## Analytics: signals genericized (this step)
+
+signals (the graph-structural signal producer: degree / betweenness importance, Louvain
+community, bridges, articulation points, Jaccard affinity) is now generic over a minimal
+`TopologyView` seam (node keys + undirected neighbours) instead of mere's concrete
+`Graph`. Every signal is pure topology, so this was a clean genericization. Both
+`kernel::graph::Graph` and the generic `chartulary::Graph<N, E>` implement `TopologyView`,
+so the same algorithms run on the browser's graph and any substrate graph, proven by a
+test running degree / community / affinity / articulation on a `chartulary::Graph<Container,
+Relation>`. chartulary grew `neighbors_undirected` (the one method it lacked). Existing
+callers are unchanged (mere's `Graph` implements the seam). 24 signals tests pass.
+
+aether does not genericize the same way, and that is a real finding, not a gap. aether is
+field/force physics: it evaluates over node **positions** (view state mere keeps in the
+cartography sidecar, not graph truth, and that chartulary deliberately does not model) and
+over the Field / Coupling / field_ast primitives that live in `kernel::graph`. It makes no
+topology queries on the graph at all. So aether's promotion path is extracting the
+field-layer primitives (Field, Coupling, field_ast) into a portable crate, a distinct
+field-system extraction, not "run it on the generic graph."
+
 ## What remains
 
 1. **Content bytes out-of-line (follow-on).** Move `Node::body` bytes into an actual
    `muniment::BlobStore` (store only the `Hash` on the node) and content-address fetched
    web pages that live in mere's cache. `ContentBearing` already names the identity; this
    moves the storage. A data-model migration, its own deliberate step.
-2. **Analytics retarget.** Point aether (fields) and signals (centrality, community) at
-   the generic `chartulary::Graph<N, E>` rather than mere's concrete `Graph`, at which
-   point they become promotable, closing the loop opened by the 2026-07-08 survey. A real
-   genericization (each structural algorithm re-bounded on the substrate's node/edge
-   capabilities), possibly growing chartulary's read surface.
+2. **aether field-layer extraction.** Promote the Field / Coupling / field_ast primitives
+   out of `kernel::graph` into a portable crate so aether (field physics over positions)
+   depends on the substrate, not mere's kernel. Distinct from the graph genericization;
+   positions stay view state, not a graph capability.
 3. **Production journal persistence (follow-on).** A persisted tail journal alongside the
    `GraphSnapshot` checkpoint for crash recovery, once codicil grows append-friendly
    persistence. A deliberate design, not a rush.

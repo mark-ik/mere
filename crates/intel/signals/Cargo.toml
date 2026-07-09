@@ -12,6 +12,10 @@ path = "src/lib.rs"
 [dependencies]
 kernel.workspace = true
 cartography.workspace = true
+# The generic graph substrate. signals' structural algorithms are generic over the
+# TopologyView seam, which both kernel::graph::Graph and chartulary::Graph implement,
+# so they run on any substrate graph, not just mere's. Path dep to the sibling repo.
+chartulary = { path = "../../../../chartulary" }
 
 [dev-dependencies]
 kernel = { workspace = true, features = ["fixtures"] }
