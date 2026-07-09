@@ -1288,3 +1288,24 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   tree folds / outline wiring into the host, injection highlight in the live field, and
   the authoring affordances: smart lists, auto-pairs, slash menu, `[[` completion) and
   the query-block / agent-node wave.
+- **2026-07-09, Phase 3 authoring affordances (keyboard cluster).** Landed the
+  self-contained, keyboard-only slice of Phase 3, each with unit coverage: (1) **Smart
+  list continuation** — Enter in a list item continues the list (same indent + marker;
+  ordered markers increment; task items reset to unchecked), Enter on an empty item ends
+  it by clearing the marker, a non-list Enter is a plain newline
+  (`Chrome::continue_list_on_enter`). (2) **Auto-pairs** — typing a wrapping delimiter
+  ( `(` `[` `{` `*` `_` `` ` `` `~` `"` `'` ) over a selection wraps it and keeps the inner
+  text selected so wraps nest (`Chrome::wrap_selection_if_pair`). (3) **Structural
+  selection** — Alt-Up grows the selection to the smallest enclosing djot container via
+  `illume::expand_selection`, Alt-Down steps back through a per-editor expand stack
+  (`grow_selection`/`shrink_selection`); soft-wrap vertical nav gated to no-Alt so the
+  Alt+arrows reach the editor. All three intercept in `on_knot_editor_key` before the
+  generic dispatch, with undo snapshots. meerkat re-took a direct `illume` dep for the
+  container-tree logic (distinct from the highlight bridge in xilem-serval). **Injection
+  highlighting in the live field was already covered** by serval's `highlight` feature
+  (`highlighted_textarea` runs illume's `default_pack`, which dispatches code/raw blocks
+  to the injection registry). 7 chrome_comms unit tests + 247 bin tests green. **Remaining
+  Phase 3 is the UI-surface cluster** (each its own slice): section folds (line-hiding
+  UI), the heading outline (ties into the gloss outline lens plan), `[[` node-link
+  completion and the `/` slash menu (both need a completion popup) — then the
+  query-block / agent-node wave.
