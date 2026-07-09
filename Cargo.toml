@@ -14,7 +14,6 @@ members = [
     "crates/graph/graphlets",
     "crates/graph/graph-kernel",
     "crates/graph/linked-data",
-    "crates/graph/node-lineage",
     "crates/shell/chrome",
     "crates/shell/comms",
     "crates/shell/frame",
@@ -98,7 +97,6 @@ cartography = { path = "crates/orrery/cartography" }
 # kanban-timeline / radial-grid / semantic), recaptured from the retired
 # graph-layout; gyre owns live force physics.
 arrangements = { path = "crates/orrery/arrangements" }
-node-lineage = { path = "crates/graph/node-lineage" }
 linked-data = { path = "crates/graph/linked-data" }
 kernel = { path = "crates/graph/graph-kernel" }
 graphlets = { path = "crates/graph/graphlets" }

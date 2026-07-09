@@ -4,7 +4,7 @@
 
 //! Navigation history — one **shared** visit space for the whole graph.
 //!
-//! Every node is an `Owner` within a single `node_lineage::GraphMemory`, keyed by
+//! Every node is an `Owner` within a single `stemma::Stemma`, keyed by
 //! the node's UUID. A node's own browse history is its owner's path (within-node
 //! back/forward); a node minted by an "open in new node" gesture is **spawned**
 //! with its creator set to the origin node, so its first visit attaches under the
@@ -20,9 +20,9 @@
 //!
 //! Extracted from `graph/mod.rs` per the 2026-05-11 kernel-mod decomposition pass.
 
-use node_lineage::{
-    EntryPrivacy as MemoryEntryPrivacy, GraphMemory as OwnerScopedMemory, GraphMemorySnapshot,
-    TransitionKind as MemoryTransitionKind,
+use stemma::{
+    EntryPrivacy as MemoryEntryPrivacy, Stemma as OwnerScopedMemory,
+    StemmaSnapshot as GraphMemorySnapshot, TransitionKind as MemoryTransitionKind,
 };
 use rkyv::{Archive, Deserialize, Serialize};
 use uuid::Uuid;

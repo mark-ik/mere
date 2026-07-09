@@ -4,7 +4,7 @@
 
 //! The lineage bridge — live navigation memory projected into durable traces.
 //!
-//! `node-lineage` owns the live, graph-shaped visit authority (its standing
+//! `stemma` owns the live, graph-shaped visit authority (its standing
 //! rule: visits own the tree, views are projections). This module is one
 //! more such projection, pointed outward: a [`GraphMemorySnapshot`] becomes
 //! per-owner [`BrowsingTrace`]s, so live browsing turns into durable memory
@@ -16,7 +16,7 @@
 //! entries are pages, and how an owner is tagged. Entries that are not pages
 //! project to nothing.
 
-use node_lineage::{GraphMemorySnapshot, TransitionKind};
+use stemma::{StemmaSnapshot as GraphMemorySnapshot, TransitionKind};
 
 use super::{BrowsingTrace, PageRef, TraceEvent, TraceTransition};
 
@@ -54,10 +54,10 @@ pub fn project_lineage<K, E, O, X>(
     mut owner_tag: impl FnMut(&O) -> String,
 ) -> Vec<BrowsingTrace>
 where
-    K: node_lineage::EntryIdentityKey,
-    E: node_lineage::MemoryPayload,
-    O: node_lineage::OwnerIdentity,
-    X: node_lineage::MemoryPayload,
+    K: stemma::EntryIdentityKey,
+    E: stemma::MemoryPayload,
+    O: stemma::OwnerIdentity,
+    X: stemma::MemoryPayload,
 {
     let pages: Vec<Option<PageRef>> = snapshot
         .entries
@@ -112,7 +112,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use node_lineage::{
+    use stemma::{
         BindingSnapshot, EntryPrivacy, EntrySnapshot, OwnerSnapshot, TransitionRecord,
         VisitSnapshot,
     };

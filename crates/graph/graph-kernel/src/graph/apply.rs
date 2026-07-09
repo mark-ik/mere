@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use euclid::default::Point2D;
-use node_lineage::TransitionKind;
+use stemma::TransitionKind;
 use uuid::Uuid;
 
 use super::{

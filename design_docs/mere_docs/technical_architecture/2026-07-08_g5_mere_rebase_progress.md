@@ -105,28 +105,39 @@ pure function of the traits, can already emit RDF for a `Graph<Node, ...>` with 
 new projection code. The two-ring split, the fork lineage, and the RDF projection
 all apply to mere's node the moment mere adopts `chartulary::Graph`.
 
-## What remains (each its own step)
+## Host adoption + lineage on stemma (this step)
 
-1. **Retire the bespoke capture persistence.** The journal primitive is landed
-   (`graph::GraphJournal`, a `codicil::Codicil<CapturedDelta>`). The remaining work is
-   host-side: point the app's persistence at a `GraphJournal` (via
-   `journal_capture_hook`) and retire the ad-hoc capture-hook plumbing, so codicil is
-   the one durable history. `graph/capture.rs`'s `CapturedDelta` vocabulary stays (it
-   is mere's edit language); only its bespoke storage goes. Note the discovered
-   constraint: chartulary's `GraphLog` is topology-only, so mere's spine is codicil
-   under mere's own vocabulary, not `GraphLog<Node, EdgePayload>` as first sketched.
-2. **History over the spine + stemma.** Re-derive mere's `graph/history.rs`
-   snapshots over codicil and retire the in-tree `node-lineage` copy in favour of
-   `stemma` (node-level lineage) alongside the graph-level log.
-3. **Content over muniment.** Implement `ContentBearing` on `Node` by moving node
+- **Host adoption of the journal.** meerkat's `graph_delta_log.rs` (the env-gated
+  session delta logger, the one host consumer of the capture hook) now maintains and
+  replays through a `GraphJournal` (the kernel spine type), not a raw `CapturedDelta`
+  vec. The streaming `.postcardlog` file stays as the crash-safe transport: codicil's
+  founding persistence rewrites the whole log per save, so per-delta streaming stays
+  the durable path until codicil grows append-friendly, per-entry persistence (its own
+  roadmap). The production snapshot-plus-persisted-tail model (crash recovery via
+  `GraphSnapshot` checkpoint + journal tail) is the larger follow-on, a deliberate
+  design touching session save/restore.
+- **Lineage on stemma; node-lineage retired.** The kernel's nav-history authority
+  (`graph/history.rs`'s `SharedNavigationMemory`) now sits on `stemma::Stemma`
+  (`StemmaSnapshot`), not the in-tree MPL `node-lineage`. Because stemma is
+  node-lineage promoted near-verbatim (`GraphMemory` → `Stemma`), the swap is aliased
+  imports and the nav model, snapshot format, and every history test are unchanged
+  (288 kernel tests pass). eidetic's `browsing::lineage` bridge migrated the same way,
+  so `node-lineage` has zero consumers and the crate is removed from the workspace.
+
+## What remains
+
+1. **Content over muniment.** Implement `ContentBearing` on `Node` by moving node
    content behind a `muniment` blob (`muniment::Hash`), retiring the bespoke cache
    path for stored bodies.
-4. **Analytics retarget.** Point aether (fields) and signals (centrality,
+2. **Analytics retarget.** Point aether (fields) and signals (centrality,
    community) at the generic graph, at which point they become promotable, closing
    the loop opened by the 2026-07-08 survey.
-5. **Done-condition.** meerkat runs on the substrate graph with no behaviour change.
-   The graph swap already meets this at the kernel level (284 tests unchanged); the
-   remaining steps deepen the adoption (log, lineage, content) rather than gate it.
+3. **Production journal persistence (follow-on).** A persisted tail journal
+   alongside the `GraphSnapshot` checkpoint for crash recovery, once codicil grows
+   append-friendly persistence. A deliberate design, not a rush.
+4. **Done-condition.** meerkat runs on the substrate graph with no behaviour change.
+   The graph swap already meets this at the kernel level (288 tests unchanged); the
+   remaining steps deepen the adoption (content, analytics) rather than gate it.
 
-The graph swap (the big invasive middle) is done. The remaining steps are additive
-deepenings, each its own focused increment.
+The graph swap (the big invasive middle), the edit spine, host adoption, and the
+lineage migration are done. The remaining steps are additive deepenings.

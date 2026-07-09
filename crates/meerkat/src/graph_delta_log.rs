@@ -13,9 +13,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use kernel::graph::GraphJournal;
 use kernel::graph::capture::{CapturedDelta, set_captured_delta_hook};
 #[cfg(test)]
-use kernel::graph::{Graph, replay_captured_deltas};
+use kernel::graph::Graph;
 
 #[derive(Clone, Default)]
 pub(crate) struct GraphDeltaLog {
@@ -27,6 +28,13 @@ struct GraphDeltaLogInner {
     path: PathBuf,
     entry_count: AtomicU64,
     byte_count: AtomicU64,
+    /// The session's captured edits as the kernel's edit-spine type. The
+    /// `.postcardlog` file is the crash-safe streaming transport; this is the
+    /// ordered in-memory log a host replays, forks, or persists through the
+    /// substrate (codicil / muniment). Streaming stays the durable path until
+    /// codicil grows append-friendly, per-entry persistence (its own roadmap);
+    /// today `Codicil::save` rewrites the whole log per call.
+    journal: Mutex<GraphJournal>,
 }
 
 impl GraphDeltaLog {
@@ -68,6 +76,17 @@ impl GraphDeltaLog {
         self.inner.as_ref().map(|inner| inner.path.as_path())
     }
 
+    /// The session's captured edits as a [`GraphJournal`] (the kernel's edit-spine
+    /// type): the ordered log this session recorded, replayable into a graph and
+    /// forkable/persistable through the substrate. Empty when logging is disabled.
+    #[allow(dead_code)]
+    pub(crate) fn journal(&self) -> GraphJournal {
+        self.inner
+            .as_ref()
+            .and_then(|inner| inner.journal.lock().ok().map(|journal| journal.clone()))
+            .unwrap_or_default()
+    }
+
     fn for_dir(dir: PathBuf) -> Self {
         if let Err(err) = std::fs::create_dir_all(&dir) {
             tracing::warn!(%err, dir = ?dir, "graph-delta log directory unavailable; capture disabled");
@@ -92,6 +111,7 @@ impl GraphDeltaLog {
                 path,
                 entry_count: AtomicU64::new(0),
                 byte_count: AtomicU64::new(0),
+                journal: Mutex::new(GraphJournal::new()),
             })),
         }
     }
@@ -99,6 +119,11 @@ impl GraphDeltaLog {
 
 impl GraphDeltaLogInner {
     fn append(&self, delta: &CapturedDelta) {
+        // The in-memory edit spine: the ordered log a host reconstructs the graph
+        // from, alongside the crash-safe streaming file below.
+        if let Ok(mut journal) = self.journal.lock() {
+            journal.record(delta.clone());
+        }
         let bytes = match postcard::to_allocvec(delta) {
             Ok(bytes) => bytes,
             Err(err) => {
@@ -128,9 +153,9 @@ impl GraphDeltaLogInner {
 }
 
 #[cfg(test)]
-pub(crate) fn read_delta_log(path: &Path) -> io::Result<Vec<CapturedDelta>> {
+pub(crate) fn read_delta_log(path: &Path) -> io::Result<GraphJournal> {
     let mut file = File::open(path)?;
-    let mut out = Vec::new();
+    let mut journal = GraphJournal::new();
     loop {
         let mut len_bytes = [0u8; 4];
         match file.read_exact(&mut len_bytes) {
@@ -141,15 +166,15 @@ pub(crate) fn read_delta_log(path: &Path) -> io::Result<Vec<CapturedDelta>> {
         let len = u32::from_le_bytes(len_bytes) as usize;
         let mut payload = vec![0u8; len];
         file.read_exact(&mut payload)?;
-        let delta = postcard::from_bytes(&payload).map_err(io::Error::other)?;
-        out.push(delta);
+        let delta: CapturedDelta = postcard::from_bytes(&payload).map_err(io::Error::other)?;
+        journal.record(delta);
     }
-    Ok(out)
+    Ok(journal)
 }
 
 #[cfg(test)]
 pub(crate) fn replay_delta_log(path: &Path) -> io::Result<Graph> {
-    read_delta_log(path).map(replay_captured_deltas)
+    read_delta_log(path).map(|journal| journal.replay())
 }
 
 #[cfg(test)]

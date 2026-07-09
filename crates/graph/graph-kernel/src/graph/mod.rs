@@ -25,7 +25,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
-pub use node_lineage::TransitionKind as NodeHistoryTransitionKind;
+pub use stemma::TransitionKind as NodeHistoryTransitionKind;
 
 use crate::address::{Address, AddressKind, address_from_url, cached_host_from_url, detect_mime};
 use crate::persistence::{
@@ -501,7 +501,7 @@ impl Graph {
         let at_ms = Self::epoch_ms();
         if let Some(id) = self.inner.node(key).map(|n| n.id) {
             self.nav
-                .record_visit(id, url, node_lineage::TransitionKind::UrlTyped, at_ms);
+                .record_visit(id, url, stemma::TransitionKind::UrlTyped, at_ms);
         }
         if let Some(node) = self.inner.node_mut(key) {
             node.last_session_visited = self.current_session;
