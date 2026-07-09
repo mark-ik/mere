@@ -593,7 +593,7 @@ pub fn mixer_scene() -> SceneSpec {
 #[cfg(test)]
 mod tests {
     use euclid::default::Point2D;
-    use kernel::graph::NodeKey;
+    use crate::NodeKey;
 
     use super::*;
     use crate::Simulation;

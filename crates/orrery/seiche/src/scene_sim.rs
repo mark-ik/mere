@@ -9,7 +9,7 @@
 //! from `lib.rs` to keep the simulation core under the per-file size ceiling. (Physics scenes.)
 
 use euclid::default::Point2D;
-use kernel::graph::NodeKey;
+use crate::NodeKey;
 use rapier2d::prelude::*;
 
 use crate::{

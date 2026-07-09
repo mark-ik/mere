@@ -7,7 +7,7 @@
 //! friction / density), plus the [`Simulation`] methods that re-apply each to live bodies. Split
 //! from `lib.rs` to keep the simulation core under the per-file size ceiling. (Node-rep.)
 
-use kernel::graph::NodeKey;
+use crate::NodeKey;
 use rapier2d::prelude::*;
 
 use crate::{NODE_BODY_DENSITY, Simulation};

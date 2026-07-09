@@ -53,8 +53,14 @@
 use std::collections::HashMap;
 
 use euclid::default::{Box2D, Point2D};
-use kernel::graph::{Graph, NodeKey};
+#[cfg(feature = "kernel-bridge")]
+use kernel::graph::Graph;
 use rapier2d::prelude::*;
+
+/// The opaque identifier seiche binds a body to: petgraph's stable node index, the
+/// same type mere's kernel and chartulary use as `NodeKey`. A consumer supplies its
+/// own keys (from any graph, or minted directly); seiche never inspects them.
+pub type NodeKey = petgraph::stable_graph::NodeIndex;
 
 /// Built-in force forces for the force-directed orrery layout.
 pub mod forces;
@@ -588,6 +594,7 @@ impl Simulation {
     /// graph node. Returns the number of node positions that were
     /// actually changed (helpful for "only notify when something
     /// moved" tick loops).
+    #[cfg(feature = "kernel-bridge")]
     pub fn write_positions_to(&self, graph: &mut Graph) -> usize {
         let mut changed = 0;
         for (key, handle) in &self.bodies_by_node {
@@ -655,7 +662,11 @@ const _: fn() = || {
     assert_send::<LayoutSnapshot>();
 };
 
-#[cfg(test)]
+// The graph-convenience test suite (builds a mere `Graph` via fixtures, exercises
+// `sync_with_graph` / `write_positions_to` / `from_coupling`) runs under
+// `kernel-bridge`; the graph-free physics core is tested in `sync`'s test module,
+// which the default build runs.
+#[cfg(all(test, feature = "kernel-bridge"))]
 mod tests;
 
 /// Integration tests for the scene / fluid / field / emitter tiers (split alongside them).

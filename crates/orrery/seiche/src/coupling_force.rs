@@ -23,7 +23,10 @@
 //! The built-ins stay as the fast native path; couplings are the general one.
 
 use quint::{FieldRegistry, ScalarField, VectorField, eval_scalar, eval_vector, grad_scalar};
-use kernel::graph::{Coupling, CouplingResponse, FieldDefinition, Graph, NodeKey};
+use crate::NodeKey;
+#[cfg(feature = "kernel-bridge")]
+use kernel::graph::Graph;
+use numen::{Coupling, CouplingResponse, FieldDefinition};
 use rapier2d::prelude::*;
 
 use crate::{Force, ForceContext};
@@ -71,6 +74,7 @@ impl CouplingForce {
     /// Resolve a coupling against the graph: look up its field definition and the
     /// nodes its selector matches (a snapshot — rebuild on graph mutation).
     /// Returns `None` if the field id is unknown.
+    #[cfg(feature = "kernel-bridge")]
     pub fn from_coupling(coupling: &Coupling, graph: &Graph) -> Option<Self> {
         let field = graph.field(coupling.field)?;
         let targets: Vec<NodeKey> = graph.nodes_matching(&coupling.selector).collect();
@@ -201,7 +205,7 @@ impl Force for CouplingForce {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "kernel-bridge"))]
 mod tests {
     use super::*;
     use crate::{Boundary, Simulation};

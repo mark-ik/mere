@@ -10,7 +10,9 @@
 use std::collections::HashSet;
 
 use euclid::default::Point2D;
-use kernel::graph::{Graph, NodeKey};
+use crate::NodeKey;
+#[cfg(feature = "kernel-bridge")]
+use kernel::graph::Graph;
 use rapier2d::prelude::*;
 
 use crate::{
@@ -97,6 +99,7 @@ impl Simulation {
     /// or once at startup — does nothing when the graph and bimap
     /// are already in sync. A thin convenience over [`Self::sync_nodes`]
     /// that reads each node's projected position from the graph.
+    #[cfg(feature = "kernel-bridge")]
     pub fn sync_with_graph(&mut self, graph: &Graph) {
         let nodes: Vec<(NodeKey, Point2D<f32>)> = graph
             .nodes()
@@ -165,5 +168,41 @@ impl Simulation {
                 );
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::NodeExclusion;
+
+    /// Physics runs on abstract node keys with no graph at all: seiche's graph-free
+    /// surface (`sync_nodes` / `sync_edges` / `position_of` / `positions`) is the
+    /// primary interface, so any app (a raw chartulary graph, a bespoke store) drives
+    /// the simulation by feeding `(key, position)` pairs and reading positions back,
+    /// with no `Graph` in sight. Two nodes nearly on top of each other are pushed apart
+    /// by exclusion. (The graph-convenience suite is in `tests.rs`, behind
+    /// `kernel-bridge`.)
+    #[test]
+    fn physics_runs_on_abstract_nodes_without_a_graph() {
+        // Keys are minted directly (petgraph indices), not read from any graph.
+        let a = NodeKey::new(0);
+        let b = NodeKey::new(1);
+
+        let mut sim = Simulation::new();
+        sim.add_force(NodeExclusion::default());
+        sim.sync_nodes([(a, Point2D::new(0.0, 0.0)), (b, Point2D::new(1.0, 0.0))]);
+
+        let before = (sim.position_of(a).unwrap() - sim.position_of(b).unwrap()).length();
+        for _ in 0..120 {
+            sim.tick(1.0 / 60.0);
+        }
+        let after = (sim.position_of(a).unwrap() - sim.position_of(b).unwrap()).length();
+
+        assert!(
+            after > before,
+            "exclusion pushed the two nodes apart with no graph ({after} > {before})"
+        );
+        assert_eq!(sim.positions().count(), 2, "positions read back, still no graph");
     }
 }

@@ -15,16 +15,31 @@ path = "src/lib.rs"
 # resolve through this simulation, so the dep lands as a foundational
 # layer alongside vello and petgraph rather than a feature bolt-on.
 rapier2d = "0.33"
-kernel.workspace = true
+# NodeKey (the opaque body identifier) is petgraph's NodeIndex, the same type mere's
+# kernel and chartulary use, so seiche stays graph-agnostic without depending on
+# either; a consumer feeds its own node keys + positions in.
+petgraph = "0.8"
 # Field algebra: seiche's CouplingForce evaluates quint fields (closed-form +
-# finite-difference gradients) to drive rapier bodies. One-way dep — quint is
-# the portable field source, seiche the integrator. (quint default features only;
-# no rhai/burn pulled into the simulator.)
+# finite-difference gradients) to drive rapier bodies. quint (default features only,
+# no rhai/burn) is the portable field source, seiche the integrator. numen supplies
+# the field-definition types the CouplingForce carries.
 quint.workspace = true
+numen = { path = "../../../../numen" }
 euclid = "0.22"
 tracing = "0.1"
+# kernel is OPTIONAL, behind `kernel-bridge`: only the convenience wrappers that read
+# or write a mere Graph (sync_with_graph / write_positions_to /
+# CouplingForce::from_coupling) use it. Off by default so seiche's default build is
+# kernel-free and portable; the graph-free sync_nodes / sync_edges / positions are the
+# primary interface. A mere host enables the feature.
+kernel = { workspace = true, optional = true }
 
 [features]
+default = []
+# The convenience wrappers that take a mere `Graph` (sync_with_graph /
+# write_positions_to / CouplingForce::from_coupling). Opt-in so seiche's default build
+# stays kernel-free and portable; a mere host enables it.
+kernel-bridge = ["dep:kernel"]
 # Benchmark-only: pulls quint's wgpu N-body pass so the ignored settle bench can
 # inject it as a `RepulsionSolver`. Off by default; the shipped seiche lib never
 # compiles burn (it stays the burn-free integrator). (burn brief Lane 5 — P3.)

@@ -8,7 +8,7 @@
 //! the tiers they cover.
 
 use euclid::default::Point2D;
-use kernel::graph::NodeKey;
+use crate::NodeKey;
 
 use crate::{NODE_BODY_RADIUS, NodeCollider, Simulation};
 

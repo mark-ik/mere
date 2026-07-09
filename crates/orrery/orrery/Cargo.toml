@@ -24,7 +24,10 @@ path = "src/main.rs"
 # The host-neutral orrery scene producer + camera/style, and its graph + physics.
 platen.workspace = true
 kernel.workspace = true
-seiche.workspace = true
+# The orrery authors fields/couplings into its kernel Graph and syncs the sim from it
+# (build.rs / fields.rs), so it enables seiche's opt-in `kernel-bridge` (the
+# sync_with_graph / from_coupling wrappers). seiche's default build stays kernel-free.
+seiche = { workspace = true, features = ["kernel-bridge"] }
 # The graph-structural signal producer (intel/signals): degree-based importance now (the
 # size-by-importance encoding reads it), richer signals later. (Graph signals.)
 signals.workspace = true

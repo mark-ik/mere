@@ -15,7 +15,7 @@
 //! both files under the workspace's per-file size ceiling.
 
 use euclid::default::{Box2D, Point2D};
-use kernel::graph::NodeKey;
+use crate::NodeKey;
 
 use crate::view::{point_segment_distance, segment_intersects_box};
 use crate::{RectSelection, Simulation};
@@ -71,7 +71,7 @@ impl Simulation {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "kernel-bridge"))]
 mod tests {
     use euclid::default::{Box2D, Point2D};
     use kernel::graph::fixtures::GraphFixtures;

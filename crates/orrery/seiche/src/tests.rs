@@ -45,35 +45,6 @@ fn recording_push_solver(calls: std::sync::Arc<std::sync::atomic::AtomicUsize>) 
     })
 }
 
-/// Physics runs on abstract node keys with no graph at all. seiche's graph-free
-/// surface (`sync_nodes` + `sync_edges` + `position_of` / `positions`) is the primary
-/// interface, so any app — a raw chartulary graph, a bespoke store — drives the
-/// simulation by feeding `(key, position)` pairs and reading positions back, with no
-/// `kernel::graph::Graph` in sight. Two nodes started nearly on top of each other are
-/// pushed apart by exclusion.
-#[test]
-fn physics_runs_on_abstract_nodes_without_a_graph() {
-    // Node keys are minted directly (petgraph indices), not read from any graph.
-    let a = NodeKey::new(0);
-    let b = NodeKey::new(1);
-
-    let mut sim = Simulation::new();
-    sim.add_force(NodeExclusion::default());
-    sim.sync_nodes([(a, Point2D::new(0.0, 0.0)), (b, Point2D::new(1.0, 0.0))]);
-
-    let before = (sim.position_of(a).unwrap() - sim.position_of(b).unwrap()).length();
-    for _ in 0..120 {
-        sim.tick(1.0 / 60.0);
-    }
-    let after = (sim.position_of(a).unwrap() - sim.position_of(b).unwrap()).length();
-
-    assert!(
-        after > before,
-        "exclusion pushed the two nodes apart with no graph ({after} > {before})"
-    );
-    assert_eq!(sim.positions().count(), 2, "positions read back, still no graph");
-}
-
 #[test]
 fn repulsion_solver_routes_only_above_threshold() {
     use std::sync::Arc;

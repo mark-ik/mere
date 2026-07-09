@@ -21,7 +21,7 @@
 use std::collections::HashMap;
 
 use euclid::default::{Box2D, Point2D};
-use kernel::graph::NodeKey;
+use crate::NodeKey;
 
 use crate::{NODE_BODY_RADIUS, NodeCollider, SceneBodyId};
 
@@ -350,7 +350,7 @@ pub(crate) fn segment_intersects_box(a: Point2D<f32>, b: Point2D<f32>, r: Box2D<
     u1 <= u2
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "kernel-bridge"))]
 mod tests {
     use euclid::default::{Box2D, Point2D};
     use kernel::graph::fixtures::GraphFixtures;

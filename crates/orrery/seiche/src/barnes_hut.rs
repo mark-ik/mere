@@ -352,7 +352,7 @@ impl Quadtree {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "kernel-bridge"))]
 mod tests {
     use super::*;
     use kernel::graph::fixtures::GraphFixtures;

@@ -27,7 +27,7 @@
 //! fields are `Send` (node keys + floats), so the force rides onto the physics
 //! actor thread like the rest.
 
-use kernel::graph::NodeKey;
+use crate::NodeKey;
 
 use crate::{Force, ForceContext};
 
@@ -120,7 +120,7 @@ impl Force for AffinitySpring {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "kernel-bridge"))]
 mod tests {
     use super::*;
     use crate::{NodeExclusion, Simulation};
