@@ -31,13 +31,6 @@ members = [
     "crates/system/registry/register-theme",
     "crates/system/registry/register-viewer",
     "crates/system/ux-events",
-    "crates/inker",
-    "crates/inker/document-canvas",
-    "crates/inker/knot-editor-host",
-    "crates/inker/engines/nematic",
-    "crates/inker/engines/scrying-engine",
-    "crates/inker/engines/graft-engine",
-    "crates/inker/engines/weld-engine",
     "crates/forme/forme",
     "crates/forme/uxtree",
     "crates/domain/apparatus",
@@ -122,12 +115,16 @@ ux-events = { path = "crates/system/ux-events" }
 register-diagnostics = { path = "crates/system/registry/register-diagnostics" }
 register-theme = { path = "crates/system/registry/register-theme" }
 
-inker = { path = "crates/inker" }
-document-canvas = { path = "crates/inker/document-canvas" }
-nematic = { path = "crates/inker/engines/nematic" }
-scrying-engine = { path = "crates/inker/engines/scrying-engine" }
-graft-engine = { path = "crates/inker/engines/graft-engine" }
-weld-engine = { path = "crates/inker/engines/weld-engine" }
+# The engine-management family moved to serval 2026-07-10 (serval
+# docs/2026-07-09_inker_serval_adoption_plan.md); consumed as git siblings
+# like the rest of the serval components. Local edit loop: the gitignored
+# .cargo/config.toml patches these to the serval working copy.
+inker = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+document-canvas = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+nematic = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+scrying-engine = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+graft-engine = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+weld-engine = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 
 forme = { path = "crates/forme/forme" }
 uxtree = { path = "crates/forme/uxtree" }
