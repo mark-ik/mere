@@ -23,7 +23,7 @@ session-runtime.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread", "time", "io-util", "sync"] }
 tracing.workspace = true
 url = "2"
-verso-api.workspace = true
+verso-tile = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 
 [lints]
 workspace = true

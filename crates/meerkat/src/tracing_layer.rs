@@ -234,7 +234,7 @@ mod tests {
             "meerkat::input",
             "armillary::actor",
             "graph_kernel::graph",
-            "verso_serval::flip",
+            "verso_tile::serval",
         ] {
             assert!(interesting_target(t), "{t} should be captured");
         }

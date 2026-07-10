@@ -6,7 +6,7 @@
 
 use mere::forme::GraphMemberId;
 use inker::{Cookie, NavigationEvent, SameSite, WebSurface};
-use verso_scry::{NavSignal, ScryForward, ScrySurface};
+use verso_tile::scry::{NavSignal, ScryForward, ScrySurface};
 
 use super::windows_pool::Tile;
 
@@ -16,7 +16,7 @@ use super::windows_pool::Tile;
 struct ProducerSurface<'a>(&'a mut dyn WebSurface);
 
 impl ScrySurface for ProducerSurface<'_> {
-    fn set_cookie(&mut self, cookie: &verso_api::Cookie) -> Result<(), String> {
+    fn set_cookie(&mut self, cookie: &verso_tile::api::Cookie) -> Result<(), String> {
         self.0
             .set_cookie(&Cookie {
                 name: cookie.name.clone(),
@@ -43,11 +43,11 @@ impl ScrySurface for ProducerSurface<'_> {
     }
 }
 
-fn map_same_site(same_site: verso_api::SameSite) -> SameSite {
+fn map_same_site(same_site: verso_tile::api::SameSite) -> SameSite {
     match same_site {
-        verso_api::SameSite::Strict => SameSite::Strict,
-        verso_api::SameSite::Lax => SameSite::Lax,
-        verso_api::SameSite::None => SameSite::None,
+        verso_tile::api::SameSite::Strict => SameSite::Strict,
+        verso_tile::api::SameSite::Lax => SameSite::Lax,
+        verso_tile::api::SameSite::None => SameSite::None,
     }
 }
 

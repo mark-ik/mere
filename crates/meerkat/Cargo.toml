@@ -19,7 +19,7 @@ agent-harness = []
 # it is the working compat view and a light dep, unlike the heavy graft (Servo) / weld
 # (CEF) engines below. Off => the scrying / verso-scry / dpi deps and the windows_pool
 # driver drop out, and ScryingHost degrades to its no-op (off-platform) surface.
-engine-scry = ["dep:scrying", "dep:scrying-engine", "dep:grafting", "dep:verso-scry", "dep:dpi"]
+engine-scry = ["dep:scrying", "dep:scrying-engine", "dep:grafting", "dep:dpi"]
 # `engine-graft` (Servo via wgpu-graft) and `engine-weld` (Chromium/CEF via wgpu-weld)
 # are off by default. Each turns on its concrete host pool (GraftHost / WeldHost) and
 # the engine's presence in routing. Today these are no-op seams: enabling the real
@@ -350,8 +350,7 @@ dpi = { workspace = true, optional = true }
 # scrying pool drives verso-scry's forward-inject state machine over its producer so
 # the WebView loads carried, not blank. verso-api is the engine-agnostic contract;
 # verso-scry is the black-box receiver (host implements its `ScrySurface` seam here).
-verso-api = { workspace = true }
-verso-scry = { workspace = true, optional = true }
+verso-tile = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 accesskit_macos = { workspace = true }

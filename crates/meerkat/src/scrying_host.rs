@@ -270,7 +270,7 @@ impl ScryingHost {
     /// spawns, the pool sets the carried cookies and navigates (instead of a blank
     /// load), then restores scroll / forms once the load completes (`verso-scry`'s
     /// forward-inject). A no-op off Windows (no producer to drive). (Verso flip.)
-    pub fn begin_flip(&mut self, member: GraphMemberId, state: verso_api::PortableViewState) {
+    pub fn begin_flip(&mut self, member: GraphMemberId, state: verso_tile::api::PortableViewState) {
         #[cfg(all(target_os = "windows", feature = "engine-scry"))]
         self.pool.begin_flip(member, state);
         #[cfg(not(all(target_os = "windows", feature = "engine-scry")))]

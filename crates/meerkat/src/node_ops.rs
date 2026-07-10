@@ -490,7 +490,7 @@ impl WindowCtx<'_> {
                 let cookies = super::fetch::session_cookies_for(&url);
                 self.view.scrying.begin_flip(
                     member,
-                    verso_api::PortableViewState {
+                    verso_tile::api::PortableViewState {
                         url: Some(url),
                         scroll: (0.0, scroll_y),
                         cookies,

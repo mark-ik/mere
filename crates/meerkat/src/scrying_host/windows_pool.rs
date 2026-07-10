@@ -15,7 +15,7 @@ use inker::{
     SurfaceEngineRegistry, SurfaceProducer, WebFeatureStatus, WebSurfaceEvent,
 };
 use scrying::PlatformCompositionRoot;
-use verso_scry::ScryForward;
+use verso_tile::scry::ScryForward;
 
 use super::CapturedThumbnail;
 use super::factory::{build_composition_root, registry_for_root, spawn};
@@ -74,7 +74,7 @@ impl Pool {
     pub(super) fn begin_flip(
         &mut self,
         member: GraphMemberId,
-        state: verso_api::PortableViewState,
+        state: verso_tile::api::PortableViewState,
     ) {
         let flip = ScryForward::new(state);
         if flip.has_target() {
