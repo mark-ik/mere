@@ -40,7 +40,8 @@ pub mod surface_engine;
 /// Content-type sniffing for unlabelled byte streams.
 pub mod sniff;
 
-/// Statements-over-schema ingest — knot `rel` links → kernel `Semantic` edges.
+/// Statement extraction — the pure walk collecting knot `rel` links. The
+/// graph-side apply lives in mere's `linked-data` crate (kernel-free split).
 pub mod statements;
 
 pub use a11y::A11yCapability;
@@ -57,9 +58,7 @@ pub use routing::{
     SurfaceContractMode, SurfaceTargetId, WorkspaceRouteId,
 };
 pub use sniff::sniff_content_type;
-pub use statements::{
-    LinkStatement, StatementOutcome, apply_link_statements, link_statements, resolve_rel,
-};
+pub use statements::{LinkStatement, link_statements};
 pub use surface_engine::{
     Cookie, CookieAttributeCapabilities, CookieCapabilities, CursorShape, EngineProfileBinding,
     FocusReason, KeyboardEvent, KeyboardModifiers, MouseButton, MouseEvent, MouseEventKind,

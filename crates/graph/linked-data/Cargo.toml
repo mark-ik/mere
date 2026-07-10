@@ -29,6 +29,9 @@ bundled-contexts = []
 query = ["dep:spareval", "dep:spargebra", "dep:oxigraph"]
 
 [dependencies]
+# The statement vocabulary (`LinkStatement`) produced by inker's pure
+# `link_statements` walk; this crate carries the graph-side apply half.
+inker.workspace = true
 kernel.workspace = true
 serde_json.workspace = true
 oxjsonld = "0.2"

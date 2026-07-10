@@ -4,8 +4,10 @@
 
 //! Host-neutral engine routing vocabulary and default policy.
 
-use kernel::graph::{GraphViewId, NodeKey};
 use serde::{Deserialize, Serialize};
+
+mod ids;
+pub use ids::{NodeKey, RouteViewId};
 
 /// Opaque engine-output target key (`node:<idx>` / `view:<uuid>` /
 /// `route:...`), minted by [`surface_target_for`]. Inlined from the retired
@@ -196,7 +198,7 @@ impl WorkspaceRouteId {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EngineRouteRequest {
     pub workspace_id: WorkspaceRouteId,
-    pub view: Option<GraphViewId>,
+    pub view: Option<RouteViewId>,
     pub node: Option<NodeKey>,
     pub address: String,
     /// Known content type from a fetch response, file extension, or content
