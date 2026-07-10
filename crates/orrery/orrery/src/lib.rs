@@ -174,6 +174,13 @@ const EDGE_PICK_TOL: f32 = 6.0;
 /// Node box half-extent (px) — matches the underlay's default node rect, so each
 /// DOM child sits centered on the same world position.
 const NODE_HALF: f32 = 18.0;
+/// The favicon face inset: the icon quad occupies this fraction of the face so
+/// the node's accent (activation state, selection-wins amber) reads as a frame
+/// around the icon instead of surviving only at the icon's corner cutouts. A
+/// cover-fit face remains available as `Face::Sprite`; this knob is a design
+/// setting candidate (status-communication design space, 2026-07-09: inset
+/// frame now; caption chip / hover ring / status card tracked as alternatives).
+const FAVICON_INSET: f32 = 0.72;
 
 /// An in-progress left-button interaction on a node: a click until the pointer
 /// passes [`CLICK_SLOP`], then a drag that pins the node to the cursor.

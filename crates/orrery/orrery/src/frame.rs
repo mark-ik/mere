@@ -344,8 +344,11 @@ impl Orrery {
             // Billboard the favicon too: an upright screen-space square centered on the
             // node's projected anchor (not two projected corners, which would foreshorten
             // it with the ground). Matches the gnode. (Isometric camera P1.)
+            // Inset within the face so the accent frames the icon: state /
+            // selection must stay readable at a glance once an icon lands
+            // (representations carry node identity).
             let (cx, cy) = self.camera.to_screen(*pos);
-            let half = NODE_HALF * self.camera.zoom;
+            let half = NODE_HALF * super::FAVICON_INSET * self.camera.zoom;
             let (x0, y0, x1, y1) = (cx - half, cy - half, cx + half, cy + half);
             favicon_cmds.push(PaintCmd::DrawImage(ImageItem {
                 placement: CommonPlacement::new(LayoutRect::new(
