@@ -47,6 +47,7 @@ members = [
     "crates/domain/apparatus",
     "crates/domain/gloss",
     "crates/domain/roster",
+    "crates/domain/trail",
     "crates/platen/domain/workbench",
     "crates/platen/platen",
     "crates/eidetic/eidetic-core",
@@ -143,6 +144,7 @@ platen = { path = "crates/platen/platen" }
 apparatus = { path = "crates/domain/apparatus" }
 gloss = { path = "crates/domain/gloss" }
 roster = { path = "crates/domain/roster" }
+trail = { path = "crates/domain/trail" }
 workbench = { path = "crates/platen/domain/workbench" }
 
 eidetic = { path = "crates/eidetic/eidetic-core" }

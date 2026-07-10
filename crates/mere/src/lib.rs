@@ -14,4 +14,5 @@ pub use kernel;
 pub use linked_data;
 pub use platen;
 pub use roster;
+pub use trail;
 pub use workbench;

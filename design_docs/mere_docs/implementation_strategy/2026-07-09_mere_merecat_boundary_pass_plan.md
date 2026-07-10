@@ -50,7 +50,13 @@ verified against the tree, not carried from docs.
    wants to be the graph-truth presentation library across the apps
    (merecat, strophe, isometry, woodshed), not a merecat-private surface.
    platen's destination is reopened, undecided. Point 3's split is adjusted
-   below.
+   below. (The crate was subsequently renamed `crates/canvas`, freeing the
+   orrery name to the Merely tier ladder; same boundary, new name.)
+
+   *Resolved 2026-07-10 (Mark): platen goes to merecat*, in its refactored
+   shape (the pane home: workbench tiling, tree projection, pane geometry,
+   document scene; its graph-scene lane already merged into canvas in the
+   07-09 decomposition). Canvas stays in mere per the orrery amendment.
 3. **Moving orrery splits `crates/orrery/` three ways.** quint and seiche
    leave for their own repos (already-decided numen-stack publish follow-on,
    not this plan); the orrery scene host goes to the merecat canvas lane;
@@ -61,6 +67,10 @@ verified against the tree, not carried from docs.
    survives.* With orrery staying in mere (point 2 amendment), the scene
    host stays put, and arrangements/cartography's destination follows
    platen's, which is reopened.
+
+   *Superseded by the 07-09 late-session decomposition + the 2026-07-10
+   platen resolution:* the graph-scene/cartography lane lives in canvas
+   (mere); platen, as the pane home, goes to merecat.
 4. **The verso family is the heart of the merecat web lane.** verso,
    verso-api, verso-scry, verso-serval, and meerkat-browser-worker are the
    engine multiplexer and belong to merecat's engine-routing boundary. Any
@@ -294,6 +304,11 @@ Verified against the tree, 2026-07-09:
   graph-truth presentation library; platen's destination reopened; errand
   (with its protocol crates as members) and illume rehome to serval. No code
   yet.
+- **2026-07-10: platen resolved.** Platen (refactored 07-09 late session
+  into the pane home; graph-scene lane merged into canvas) goes to merecat.
+  With that, the slate's only open destination question is pane content
+  (gloss/trail/apparatus/steward/comms), tracked in the canvas/platen
+  decomposition notes.
 - **2026-07-09 (same session): slice A landed.** `crates/armillary` deleted
   (verified code-identical to repos/armillary modulo license header and doc
   edits; the sibling is strictly newer), workspace dep switched to the git
@@ -354,7 +369,18 @@ Verified against the tree, 2026-07-09:
   the port; renaming the frame crate's persisted variant is a separate
   vocabulary decision). Receipts: canvas 128 / platen 50 / meerkat 248 tests
   green; merecat renamed fully (it is the living host) and smoke-verified on
-  the restored session. Pane-content placement (gloss/trail/apparatus/steward/
-  comms et al.) recorded as the open question the pane-home reformulation
-  raises; answered in the session discussion, to be fixed in a follow-on
-  decision entry once Mark confirms.
+  the restored session.
+- **2026-07-10: pane-content placement DECIDED (with Mark).** Each pane's
+  content lives by its truth source; platen owns the furniture (pane-ness:
+  tiling, tree projection, geometry, the docking contract), never content —
+  the P8 grab-bag prohibition holds. Concretely: gloss + roster stay
+  `crates/domain/*` (graph truth; already home); **trail** earns its domain
+  crate on the P8 pattern (stemma/navigation projection — graph truth);
+  alembic + steward vocabulary is session-runtime's (persistence truth),
+  views app-side; apparatus splits its natures (settings/config vocabulary =
+  `domain/apparatus`, mere; the diagnostics feed is HostObservability = app
+  runtime, so the live pane is merecat's); inspector is merecat's outright
+  (fetch/content introspection); comms rides the murm/moot posture plan (pane
+  view with the app). One sentence: mere owns what a pane says when it speaks
+  graph or persistence truth, merecat owns panes that speak app-runtime
+  truth, platen owns how any of them dock and tile.

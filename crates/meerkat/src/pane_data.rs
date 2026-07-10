@@ -21,17 +21,6 @@ struct InspectorPaneInput<'a> {
     state: Option<&'a crate::fetch::ContentState>,
 }
 
-struct TrailRemovedInput {
-    node_id: String,
-    url: String,
-}
-
-struct TrailPaneInput {
-    recent_urls: Vec<String>,
-    history_urls: Vec<String>,
-    removed: Vec<TrailRemovedInput>,
-}
-
 struct AlembicRecentInput {
     url: String,
     shown: String,
@@ -79,8 +68,13 @@ impl WindowCtx<'_> {
 
     /// The Trail pane's item list: the graph-wide recently-visited nodes, the
     /// focused node's own url history, and the eidetic deleted-nodes log — three
-    /// titled sections of inert rows. (Lineage + eidetic pane.)
+    /// titled sections of inert rows. The projection lives in `mere::trail`
+    /// (pane-placement decision: trail speaks graph + persistence truth); this
+    /// host half gathers the inputs and maps the neutral items onto pane rows.
+    /// (Lineage + eidetic pane.)
     pub(super) fn trail_items(&mut self) -> Vec<crate::list_pane::PaneItem> {
+        use crate::list_pane::PaneItem;
+
         let input = self.pane_input_snapshot();
         let recent_urls = self
             .orrery()
@@ -108,16 +102,26 @@ impl WindowCtx<'_> {
             .deleted_node_log()
             .into_iter()
             .take(12)
-            .map(|tomb| TrailRemovedInput {
+            .map(|tomb| mere::trail::TrailRemoved {
                 node_id: tomb.node_id.to_string(),
                 url: tomb.url,
             })
             .collect();
-        build_trail_items(TrailPaneInput {
+        mere::trail::build_trail_items(&mere::trail::TrailInput {
             recent_urls,
             history_urls,
             removed,
         })
+        .into_iter()
+        .map(|item| match item {
+            mere::trail::TrailItem::SectionTitle(title) => PaneItem::text("utility-title", title),
+            mere::trail::TrailItem::Row(text) => PaneItem::text("utility-row", text),
+            mere::trail::TrailItem::MutedRow(text) => PaneItem::text("utility-row-muted", text),
+            mere::trail::TrailItem::Recover { text, node_id } => {
+                PaneItem::button("utility-row", text, format!("recover:{node_id}"))
+            }
+        })
+        .collect()
     }
 
     /// The Alembic memory pane's item list: **Recent** (short-term working set),
@@ -140,7 +144,7 @@ impl WindowCtx<'_> {
                         .is_none_or(|(_, n)| n.tags.is_empty())
                 })
                 .map(|rv| AlembicRecentInput {
-                    shown: short_url(&rv.url),
+                    shown: mere::trail::short_url(&rv.url),
                     url: rv.url.clone(),
                 })
                 .collect()
@@ -233,49 +237,8 @@ impl WindowCtx<'_> {
     }
 }
 
-fn short_url(url: &str) -> String {
-    url.strip_prefix("https://")
-        .or_else(|| url.strip_prefix("http://"))
-        .unwrap_or(url)
-        .chars()
-        .take(56)
-        .collect()
-}
-
 fn short_label(label: &str) -> String {
     label.chars().take(56).collect()
-}
-
-fn build_trail_items(input: TrailPaneInput) -> Vec<crate::list_pane::PaneItem> {
-    use crate::list_pane::PaneItem;
-
-    let mut items = vec![PaneItem::text("utility-title", "Recent")];
-    if input.recent_urls.is_empty() {
-        items.push(PaneItem::text("utility-row-muted", "nothing visited yet"));
-    } else {
-        for url in &input.recent_urls {
-            items.push(PaneItem::text("utility-row", short_url(url)));
-        }
-    }
-
-    if input.history_urls.len() > 1 {
-        items.push(PaneItem::text("utility-title", "This node"));
-        for url in &input.history_urls {
-            items.push(PaneItem::text("utility-row", short_url(url)));
-        }
-    }
-
-    if !input.removed.is_empty() {
-        items.push(PaneItem::text("utility-title", "Removed"));
-        for tomb in &input.removed {
-            items.push(PaneItem::button(
-                "utility-row",
-                short_url(&tomb.url),
-                format!("recover:{}", tomb.node_id),
-            ));
-        }
-    }
-    items
 }
 
 fn build_alembic_items(input: AlembicPaneInput) -> Vec<crate::list_pane::PaneItem> {
@@ -404,24 +367,4 @@ mod tests {
         assert_eq!(rows, vec![("Lane".to_string(), "off".to_string())]);
     }
 
-    #[test]
-    fn build_trail_items_includes_removed_recovery_buttons() {
-        let items = build_trail_items(TrailPaneInput {
-            recent_urls: vec!["https://example.com/a".to_string()],
-            history_urls: vec![
-                "https://example.com/a".to_string(),
-                "https://example.com/b".to_string(),
-            ],
-            removed: vec![TrailRemovedInput {
-                node_id: "123".to_string(),
-                url: "https://example.com/z".to_string(),
-            }],
-        });
-        assert!(items.iter().any(|item| item.text == "Recent"));
-        assert!(
-            items
-                .iter()
-                .any(|item| item.key.as_deref() == Some("recover:123"))
-        );
-    }
 }

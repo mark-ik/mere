@@ -28,6 +28,7 @@ linked-data = { workspace = true }
 canvas = { workspace = true }
 platen = { workspace = true }
 roster = { workspace = true }
+trail = { workspace = true }
 workbench = { workspace = true }
 
 [lints]

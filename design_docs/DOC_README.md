@@ -249,7 +249,7 @@ in the 2026-05-19 B1–B7 naming pass; the directory path disambiguates.
 | `inker` | `crates/inker/` | engines: `document-canvas`, `engines` (`nematic` for smolweb, scrying for system WebViews) + the registry |
 | `forme` | `crates/forme/` | per-graph-view workbench arrangement authority + `uxtree` |
 | `platen` | `crates/platen/` | composition surface: `platen`, the retained `workbench` panel domain, `view` |
-| `domain` | `crates/domain/` | pane-domain crates that do not belong to platen's composition layer: `apparatus`, `gloss`, and `roster` |
+| `domain` | `crates/domain/` | pane-domain crates that do not belong to platen's composition layer (content by truth source; platen owns only pane furniture): `apparatus`, `gloss`, `roster`, and `trail` |
 | *(verso)* | *(retired 2026-06-10)* | crates deleted (`SurfaceTargetId` inlined into inker); the name is the engine-flip seam — see verso_docs charter |
 | `eidetic` | `crates/eidetic/` | durable memory: `eidetic-core` + fjall / https / iroh fetchers |
 | `intel` | `crates/intel/` | local intelligence: `embed` owns embeddings + vector index + semantic search |
