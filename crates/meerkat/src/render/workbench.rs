@@ -62,7 +62,7 @@ impl crate::WindowCtx<'_> {
             // Each tab is tinted to match its graph node, so a tab reads as its node.
             // The tab contract carries raw colors (it paints outside the cascade, so it
             // cannot `var()` the `--node-*` properties), but it reads the same
-            // `mere::orrery::palette` table the gnodes and outline dots do, selection-wins rule
+            // `mere::canvas::palette` table the gnodes and outline dots do, selection-wins rule
             // included. A node absent from `states` colors as idle. Recomputed per frame,
             // so selecting a node recolors its tab live.
             // (Representations carry node identity.)
@@ -71,8 +71,8 @@ impl crate::WindowCtx<'_> {
                 self.orrery().selected_members().into_iter().collect();
             let tree = self.view.workbench.to_tile_tree(|m| {
                 let key = m.as_u128() as u64;
-                let state = states.get(&m).copied().unwrap_or(mere::orrery::NodeState::Idle);
-                let a = mere::orrery::palette::accent(selected.contains(&m), state);
+                let state = states.get(&m).copied().unwrap_or(mere::canvas::NodeState::Idle);
+                let a = mere::canvas::palette::accent(selected.contains(&m), state);
                 let accent = pelt_core::tile::TabAccent {
                     background: a.bg,
                     foreground: a.fg,

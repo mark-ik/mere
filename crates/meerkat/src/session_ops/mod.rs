@@ -65,13 +65,13 @@ const RESTORE_CARTOGRAPHY: bool = true;
 pub(crate) fn load_cartography(
     session_dir: &std::path::Path,
     present: &std::collections::HashSet<mere::forme::GraphMemberId>,
-) -> Option<mere::platen::CartographyGeometry> {
+) -> Option<mere::canvas::CartographyGeometry> {
     if !RESTORE_CARTOGRAPHY {
         return None;
     }
     std::fs::read_to_string(session_dir.join(CARTOGRAPHY_FILE))
         .ok()
-        .and_then(|json| mere::platen::CartographyGeometry::from_persisted_json(json.as_str(), present))
+        .and_then(|json| mere::canvas::CartographyGeometry::from_persisted_json(json.as_str(), present))
 }
 
 // Session ops live on `Shell`, not `WindowCtx`: switching a session re-keys the

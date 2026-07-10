@@ -218,7 +218,7 @@ impl crate::Shell {
     /// through here. (Window composition P2.)
     pub(crate) fn pool_orrery(&mut self, graph_id: GraphId, graph: Graph, empty: bool) {
         if let std::collections::hash_map::Entry::Vacant(slot) = self.orreries.entry(graph_id) {
-            let mut orrery = mere::orrery::Orrery::with_graph(graph);
+            let mut orrery = mere::canvas::Canvas::with_graph(graph);
             if empty {
                 orrery.visit("mere://welcome");
             }

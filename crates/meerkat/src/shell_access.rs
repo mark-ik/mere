@@ -74,13 +74,13 @@ impl Shell {
     /// that reach the orrery off `Shell` directly (the agent harness; the per-window
     /// `WindowCtx` bundles it as `self.orrery`). (Window composition P1.)
     #[cfg(any(test, feature = "agent-harness"))]
-    pub(crate) fn orrery(&self) -> &Orrery {
+    pub(crate) fn orrery(&self) -> &Canvas {
         let gid = self.view().focused_graph;
         self.orreries.get(&gid).expect("focused orrery is pooled")
     }
 
     #[cfg(any(test, feature = "agent-harness"))]
-    pub(crate) fn orrery_mut(&mut self) -> &mut Orrery {
+    pub(crate) fn orrery_mut(&mut self) -> &mut Canvas {
         let gid = self.view().focused_graph;
         self.orreries
             .get_mut(&gid)

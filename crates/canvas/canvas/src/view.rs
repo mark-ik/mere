@@ -6,7 +6,7 @@
 
 use super::*;
 
-impl Orrery {
+impl Canvas {
     /// The session graph, for the host to persist (`to_snapshot` → `graph.json`).
     pub fn graph(&self) -> &Graph {
         &self.graph
@@ -21,7 +21,7 @@ impl Orrery {
     }
 
     /// Restore the camera from persisted view-intent. A non-finite or
-    /// non-positive zoom falls back to `1.0`; the zoom is clamped to the orrery's
+    /// non-positive zoom falls back to `1.0`; the zoom is clamped to the canvas's
     /// range. The host suppresses its own first-frame recenter when it restores a
     /// camera, so this value is not immediately overwritten.
     pub fn set_camera(&mut self, view: CameraView) {
@@ -38,7 +38,7 @@ impl Orrery {
     /// pass via [`set_viewport`](Self::set_viewport). Carries yaw / tilt too (unlike
     /// [`camera`](Self::camera)), so an isometric pane round-trips losslessly. This is
     /// the seam that moves the camera off the shared authority onto the view: the
-    /// orrery's own `camera` / `pan_velocity` become per-pass working state the host
+    /// canvas's own `camera` / `pan_velocity` become per-pass working state the host
     /// drives, so two windows on one graph hold distinct viewports, not a mirror.
     pub fn viewport(&self) -> Viewport {
         Viewport {
@@ -111,16 +111,16 @@ impl Orrery {
         self.camera.tilt
     }
 
-    /// Whether a scope lens is active (the orrery is showing a curated subset, not the
-    /// whole graph). The host offers "Show all" when this is true. (Curated orrery.)
+    /// Whether a scope lens is active (the canvas is showing a curated subset, not the
+    /// whole graph). The host offers "Show all" when this is true. (Curated canvas.)
     pub fn is_scoped(&self) -> bool {
         self.scope.is_some()
     }
 
-    /// Focus the orrery on the current selection: scope it to the selected nodes plus
+    /// Focus the canvas on the current selection: scope it to the selected nodes plus
     /// their immediate (undirected) neighbors, so the selection shows as its own
     /// neighborhood projected through a curated arrangement. A no-op with no
-    /// selection. (Curated orrery.)
+    /// selection. (Curated canvas.)
     pub fn isolate_selection(&mut self) {
         if self.selected.is_empty() {
             return;
@@ -132,11 +132,11 @@ impl Orrery {
         self.scope = Some(scope.into_iter().collect());
     }
 
-    /// Scope the orrery to a host-supplied member set (by UUID), e.g. the workbench's
+    /// Scope the canvas to a host-supplied member set (by UUID), e.g. the workbench's
     /// open tiles, so the *same* arrangement renders as both a tiled workbench and a
     /// spatial map (the spine's "two projections of one arrangement"). Members absent
     /// from the graph are skipped; an empty set clears the lens (shows the whole
-    /// graph). (Curated orrery — workbench mirror.)
+    /// graph). (Curated canvas — workbench mirror.)
     pub fn scope_to_members(&mut self, members: impl IntoIterator<Item = uuid::Uuid>) {
         let keys: Vec<NodeKey> = members
             .into_iter()
@@ -145,7 +145,7 @@ impl Orrery {
         self.scope = (!keys.is_empty()).then_some(keys);
     }
 
-    /// Drop the scope lens — show the whole graph again. (Curated orrery.)
+    /// Drop the scope lens — show the whole graph again. (Curated canvas.)
     pub fn clear_scope(&mut self) {
         self.scope = None;
     }
@@ -163,9 +163,9 @@ impl Orrery {
     }
 
     /// Whether `key` is within the active scope lens (always true when unscoped). The
-    /// host's gnode builder filters on this so a scoped orrery (a branch window)
+    /// host's gnode builder filters on this so a scoped canvas (a branch window)
     /// shows only its scoped members, matching the `frame()` scene's own scope filter.
-    /// (Curated orrery — host gnode path.)
+    /// (Curated canvas — host gnode path.)
     pub fn node_in_scope(&self, key: NodeKey) -> bool {
         self.scope.as_ref().is_none_or(|s| s.contains(&key))
     }

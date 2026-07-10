@@ -39,7 +39,7 @@ impl WindowCtx<'_> {
     /// removed: P2 hands the ctx the whole pool so render / input can resolve any
     /// pane's orrery, and the window-focused-graph sites reach the focused one
     /// here. Resolution-identical to P1's bundling key. (Window composition P2.)
-    pub(crate) fn orrery(&self) -> &Orrery {
+    pub(crate) fn orrery(&self) -> &Canvas {
         self.orreries
             .get(&self.view.focused_graph)
             .expect("focused orrery is pooled")
@@ -47,7 +47,7 @@ impl WindowCtx<'_> {
 
     /// The focused window's orrery, mutable — the write half of the removed
     /// `self.orrery` field. (Window composition P2.)
-    pub(crate) fn orrery_mut(&mut self) -> &mut Orrery {
+    pub(crate) fn orrery_mut(&mut self) -> &mut Canvas {
         let gid = self.view.focused_graph;
         self.orreries
             .get_mut(&gid)
@@ -58,7 +58,7 @@ impl WindowCtx<'_> {
     /// render / hit-test drives the orrery a pane resolves to with. Panics if the
     /// graph isn't pooled, which a laid-out leaf's graph always is. (Window
     /// composition P2.)
-    pub(crate) fn pane_orrery_mut(&mut self, graph_id: GraphId) -> &mut Orrery {
+    pub(crate) fn pane_orrery_mut(&mut self, graph_id: GraphId) -> &mut Canvas {
         self.orreries
             .get_mut(&graph_id)
             .expect("a laid-out pane's graph is pooled")
@@ -66,7 +66,7 @@ impl WindowCtx<'_> {
 
     /// Read twin of [`pane_orrery_mut`](Self::pane_orrery_mut). (Window
     /// composition P2.)
-    pub(crate) fn pane_orrery(&self, graph_id: GraphId) -> &Orrery {
+    pub(crate) fn pane_orrery(&self, graph_id: GraphId) -> &Canvas {
         self.orreries
             .get(&graph_id)
             .expect("a laid-out pane's graph is pooled")

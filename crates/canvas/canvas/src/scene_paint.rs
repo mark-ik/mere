@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 //! Render a cartography [`Projection`] to a `paint_list_api` paint list — the
-//! orrery's host-agnostic scene underlay (the serval-as-host eval's "Layer 1").
+//! canvas's host-agnostic scene underlay (the serval-as-host eval's "Layer 1").
 //!
 //! Platen is "the press": it already dispatches strategies to a `Projection`
 //! (see [`crate::cartography_scene`]); this turns that projection into the
@@ -30,7 +30,7 @@ use paint_list_api::{
 };
 use serde::{Deserialize, Serialize};
 
-/// A concrete [`PaintList`] for canvas chrome (the orrery). Chrome is not a
+/// A concrete [`PaintList`] for canvas chrome (the canvas). Chrome is not a
 /// content engine, so it carries [`EngineId::UNASSIGNED`]; a dedicated canvas
 /// engine id is a small `paint_list_api` follow-up if chrome paint ever needs
 /// to be distinguished downstream.
@@ -209,10 +209,10 @@ pub fn paint_projection(
 
 /// [`paint_projection`], but a node's rect is painted only when `draw_node`
 /// returns `true` for it. Edges always use every node's position (so an edge to
-/// an undrawn node still renders), so the orrery can **demote** off-screen nodes
+/// an undrawn node still renders), so the canvas can **demote** off-screen nodes
 /// to the underlay (drawn as rects here) while on-screen nodes are drawn as
 /// richer host DOM and excluded from this pass — see
-/// [`crate::orrery::orrery_paint_list_demoted`].
+/// [`crate::canvas::canvas_paint_list_demoted`].
 pub fn paint_projection_filtered(
     projection: &Projection,
     viewport: DeviceIntSize,
@@ -420,7 +420,7 @@ mod tests {
     fn edge_weight_scales_the_stroke_width() {
         // a-b at unit weight, c-d at the multigraph multiplicity of 2: the heavier pair paints a
         // proportionally thicker stroke. This is the paint half of the multiplicity encoding; since
-        // the orrery's universal underlay path (project_keys -> paint_projection_filtered) feeds
+        // the canvas's universal underlay path (project_keys -> paint_projection_filtered) feeds
         // weighted edges in EVERY layout mode, edge thickness shows under analytic layouts too, not
         // only force-directed. (Graph signals — edge-weight encoding.)
         let (a, b, c, d) = (

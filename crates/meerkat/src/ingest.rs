@@ -12,7 +12,7 @@
 //! Dublin Core). [`harvest_contributions`] is the pure producer (the content
 //! actor runs it off-thread, owning no graph, and ships the result); [`harvest`]
 //! is the fused producer + applier for the host's own fetch drain, applying
-//! through `mere::orrery::ingest_graph` so the spatial view reconciles around the new
+//! through `mere::canvas::ingest_graph` so the spatial view reconciles around the new
 //! nodes.
 //!
 //! Anything that is not linked data (markdown, plain HTML with no JSON-LD, …) is

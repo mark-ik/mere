@@ -49,7 +49,7 @@ impl WindowCtx<'_> {
                     let bridges = pane.show_bridge_rings().then(|| pane.bridges()).flatten();
                     let (positions, overlays): (Vec<_>, _) = match pane.gloss_scope_keys() {
                         Some(scope) => (
-                            mere::platen::project_orrery_subgraph(
+                            mere::canvas::project_canvas_subgraph(
                                 pane.graph(),
                                 &scope,
                                 &id,
@@ -57,10 +57,10 @@ impl WindowCtx<'_> {
                                 mw,
                                 mh,
                             ),
-                            mere::platen::signal_overlays(clusters, bridges),
+                            mere::canvas::signal_overlays(clusters, bridges),
                         ),
                         None => {
-                            let projection = mere::platen::project_orrery_lens(
+                            let projection = mere::canvas::project_canvas_lens(
                                 &id,
                                 pane.graph(),
                                 pane.focused_key(),

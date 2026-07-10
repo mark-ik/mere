@@ -77,7 +77,7 @@ impl crate::Shell {
             &session_dir.join(session_graph_store::GRAPH_FILE),
             &fork_graph,
         );
-        let mut fork_orrery = mere::orrery::Orrery::with_graph(fork_graph);
+        let mut fork_orrery = mere::canvas::Canvas::with_graph(fork_graph);
         fork_orrery.set_current_session(self.shared.session.current_session_count);
         self.orreries.insert(graph_id, fork_orrery);
         self.shared.observability.record_probe(

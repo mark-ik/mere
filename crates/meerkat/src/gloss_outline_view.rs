@@ -9,8 +9,8 @@
 //! instead of a bespoke Scene hit-test.
 
 use mere::forme::GraphMemberId;
-use mere::orrery::NodeState;
-use mere::orrery::palette;
+use mere::canvas::NodeState;
+use mere::canvas::palette;
 use register_theme::chrome::{ChromeTheme, Color32};
 use xilem_serval::{AnyView, PointerClick, ServalCtx, ServalElement, clickable, el};
 

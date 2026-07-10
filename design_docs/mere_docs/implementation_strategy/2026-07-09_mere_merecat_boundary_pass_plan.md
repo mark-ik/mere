@@ -45,17 +45,37 @@ verified against the tree, not carried from docs.
    Both are application surfaces and move out with merecat. The founding
    doc's target shape ("mere = ... forme/platen, orrery ...") is amended
    accordingly this session.
+
+   *Amended 2026-07-09 (inker-adoption session): orrery stays in mere.* It
+   wants to be the graph-truth presentation library across the apps
+   (merecat, strophe, isometry, woodshed), not a merecat-private surface.
+   platen's destination is reopened, undecided. Point 3's split is adjusted
+   below.
 3. **Moving orrery splits `crates/orrery/` three ways.** quint and seiche
    leave for their own repos (already-decided numen-stack publish follow-on,
    not this plan); the orrery scene host goes to the merecat canvas lane;
    arrangements and cartography travel with platen (platen depends on both;
    they are layout strategies and projection, same lane).
+
+   *Amended 2026-07-09 (inker-adoption session): only the quint/seiche leg
+   survives.* With orrery staying in mere (point 2 amendment), the scene
+   host stays put, and arrangements/cartography's destination follows
+   platen's, which is reopened.
 4. **The verso family is the heart of the merecat web lane.** verso,
    verso-api, verso-scry, verso-serval, and meerkat-browser-worker are the
    engine multiplexer and belong to merecat's engine-routing boundary. Any
    merecat crate sketch that omits them is drawing around the hole. The
    port's first vertical path (open address to visible surface) routes
    through verso-api from day one.
+
+   *Amended 2026-07-09 (inker-adoption session): the four verso crates leave
+   for serval*, consolidated into one feature-layered component under the
+   already-claimed `verso-tile` name; see serval's
+   2026-07-09_inker_serval_adoption_plan.md. They are engine machinery (the
+   flip is inker's multiplexer's dynamic counterpart), not app boundary.
+   meerkat-browser-worker stays app-side. The first-vertical-path statement
+   survives with the import path changed; merecat consumes verso-tile via
+   the serval git dep.
 5. **eidetic stays mere-side, over muniment.** eidetic-core carries its own
    storage-backend-agnostic blob store trait and does not sit on muniment.
    Promoting "eidetic core/backends as a storage sibling" would found a
@@ -239,8 +259,8 @@ Verified against the tree, 2026-07-09:
   session_form_draft, mime_hint, viewer_override, compat_mode, lifecycle.
 - Browser-field references: 226 hits across 43 files workspace-wide, but
   forme's hits are its OWN display `Lifecycle` (host feeds transitions; name
-  coincidence, no kernel coupling), and `capture.rs` (28) + `apply.rs` (35)
-  + `node_props.rs` (22) dominate the kernel side.
+  coincidence, no kernel coupling), and `capture.rs` (28) + `apply.rs` (35) +
+  `node_props.rs` (22) dominate the kernel side.
 - Delta plumbing exists for all five movable value fields, each as a
   `GraphDelta` + `CapturedDelta::Replay*ById` pair.
 - armillary divergence: both copies 5 files; mere side last touched
@@ -265,6 +285,15 @@ Verified against the tree, 2026-07-09:
   correction; sidecar design; slice ordering). Facts above verified in-tree
   this session. merecat founding doc amended (target shape: orrery/platen
   move out with the app; verso family named). No code yet.
+- **2026-07-09 (inker-adoption session): slate amendments.** Decisions from
+  the pelt/inker discussion (serval's
+  2026-07-09_inker_serval_adoption_plan.md): inker + nematic +
+  document-canvas + knot-editor-host + the three surface-engine adapters
+  move to serval; the verso family consolidates into a `verso-tile` serval
+  component (points 2-4 amendments above); orrery stays in mere as the
+  graph-truth presentation library; platen's destination reopened; errand
+  (with its protocol crates as members) and illume rehome to serval. No code
+  yet.
 - **2026-07-09 (same session): slice A landed.** `crates/armillary` deleted
   (verified code-identical to repos/armillary modulo license header and doc
   edits; the sibling is strictly newer), workspace dep switched to the git
@@ -310,3 +339,22 @@ Verified against the tree, 2026-07-09:
     fixtures still carry the same seconds-scale value at four sites; their
     paths do not clock-check today, but the same bomb is latent there.
   - Session-runtime: 188 tests green after the fixture fix.
+- **2026-07-09 (later session): the platen decomposition + orrery name
+  retirement EXECUTED** (points 2/3 amendments made real, plus Mark's call
+  that platen reformulates as the pane home). `crates/orrery` is now
+  `crates/canvas`; the crate and type are `canvas::Canvas` (facade:
+  `mere::canvas`), freeing *orrery* back to the Merely tier ladder. Platen's
+  graph-scene lane (scene_paint, cartography_scene, coupling_paint, the
+  underlay producer, CartographyGeometry) merged into canvas — the graph-truth
+  presentation library across the apps — and platen slimmed to the pane home:
+  workbench tiling, tree projection, Tree pane geometry, document scene
+  (deps down to document-canvas/inker/pelt-core/forme/serde). meerkat swept
+  mechanically (its internal lowercase orrery vocabulary and the
+  PaneContent/ContentPane::Orrery variants stay — donor-internal, dies with
+  the port; renaming the frame crate's persisted variant is a separate
+  vocabulary decision). Receipts: canvas 128 / platen 50 / meerkat 248 tests
+  green; merecat renamed fully (it is the living host) and smoke-verified on
+  the restored session. Pane-content placement (gloss/trail/apparatus/steward/
+  comms et al.) recorded as the open question the pane-home reformulation
+  raises; answered in the session discussion, to be fixed in a follow-on
+  decision entry once Mark confirms.

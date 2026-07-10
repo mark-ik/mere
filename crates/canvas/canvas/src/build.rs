@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Construction + small paint/DOM helpers for the [`Orrery`](crate::Orrery): the
+//! Construction + small paint/DOM helpers for the [`Canvas`](crate::Canvas): the
 //! built-in sample graph and its force-directed [`Simulation`], the
 //! pre-materialized abs-pos node-children pool, and the screen/world
 //! paint-command builders the frame loop splices in. Split out of `lib.rs` to
@@ -27,7 +27,7 @@ use paint_list_api::{
     RectItem, StrokeCap, StrokeItem, StrokeJoin,
 };
 
-use platen::scene_paint::ScenePaintStyle;
+use crate::scene_paint::ScenePaintStyle;
 use serval_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
 use signals::{BridgeNodes, ClusterSet};
 
@@ -128,7 +128,7 @@ pub(crate) fn sample_graph() -> Graph {
     graph
 }
 
-/// A plain hyperlink relation (the orrery draws one undirected line per pair).
+/// A plain hyperlink relation (the canvas draws one undirected line per pair).
 pub(crate) fn hyperlink() -> EdgeAssertion {
     EdgeAssertion::Semantic {
         sub_kind: SemanticSubKind::Hyperlink,
@@ -138,9 +138,9 @@ pub(crate) fn hyperlink() -> EdgeAssertion {
 }
 
 /// The undirected, de-duplicated relation pairs that feed the layout springs.
-/// seiche stays relation-taxonomy agnostic, so the orrery picks the topology: one
+/// seiche stays relation-taxonomy agnostic, so the canvas picks the topology: one
 /// edge per unordered node pair (a reciprocal A↔B counts once). Reused by
-/// [`build_simulation`] at startup and [`Orrery::visit`](crate::Orrery::visit)
+/// [`build_simulation`] at startup and [`Canvas::visit`](crate::Canvas::visit)
 /// when the graph grows.
 pub(crate) fn dedup_edges(graph: &Graph) -> Vec<(NodeKey, NodeKey)> {
     let mut seen = HashSet::new();
@@ -164,7 +164,7 @@ pub(crate) fn dedup_edges(graph: &Graph) -> Vec<(NodeKey, NodeKey)> {
 /// keeps one `(NodeKey, NodeKey)` tuple per **visible** relation cell: a pair with three
 /// live cells pulls three times as hard as a pair with one, and hiding one cell drops the
 /// pull by exactly that cell's share. seiche stays relation-taxonomy agnostic — this
-/// multiplicity is how the orrery hands it weight without leaking `RelationSelector` into
+/// multiplicity is how the canvas hands it weight without leaking `RelationSelector` into
 /// seiche's edge type.
 pub(crate) fn visible_relation_edges(
     graph: &Graph,
@@ -226,7 +226,7 @@ pub(crate) fn dedup_edges_weighted(graph: &Graph) -> Vec<(NodeKey, NodeKey, u32)
 pub(crate) fn build_simulation(graph: &Graph) -> Simulation {
     let mut sim = Simulation::new();
     sim.sync_with_graph(graph);
-    // No `Orrery` (and so no hidden-cell set) exists yet at construction time; the first
+    // No `Canvas` (and so no hidden-cell set) exists yet at construction time; the first
     // real sync happens once session/view-intent restore runs and calls `reconcile_derived`.
     sim.sync_edges(visible_relation_edges(graph, &HashSet::new()));
 
@@ -333,7 +333,7 @@ pub(crate) fn marquee_rect_cmds(a: (f32, f32), b: (f32, f32)) -> Vec<PaintCmd> {
 }
 
 // ----- Dark-mode palette + backdrop -----------------------------------------
-// The orrery paints its own opaque backdrop as the bottom composite layer, so
+// The canvas paints its own opaque backdrop as the bottom composite layer, so
 // the content surface is dark regardless of the host's clear color (and stops
 // silently depending on a WHITE clear). A light variant + a runtime toggle are
 // the follow-up; these three are the single seam to flip when that lands.
@@ -357,7 +357,7 @@ pub(crate) fn dark_scene_style() -> ScenePaintStyle {
 }
 
 /// The backdrop as a single screen-space fill over the whole viewport (no
-/// camera transform) — the orrery's bottom composite layer.
+/// camera transform) — the canvas's bottom composite layer.
 pub(crate) fn background_cmds(w: u32, h: u32, color: ColorF) -> Vec<PaintCmd> {
     let rect = LayoutRect::new(LayoutPoint::zero(), LayoutPoint::new(w as f32, h as f32));
     vec![PaintCmd::DrawRect(RectItem {
@@ -473,7 +473,7 @@ pub(crate) fn bridge_ring_overlay(
 }
 
 /// Background paint for placed field regions, in **world space** (no transform) —
-/// spliced *under* the orrery underlay so the graph appears to sit within each
+/// spliced *under* the canvas underlay so the graph appears to sit within each
 /// field. A field with a `Region` extent draws as a soft radial-gradient "well"
 /// (its `Disk` falloff made visible); its faint dashed extent square draws **only
 /// while it is the `active` (hovered) field** — box-on-interaction, so the canvas

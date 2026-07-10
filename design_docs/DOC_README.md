@@ -243,7 +243,7 @@ in the 2026-05-19 B1–B7 naming pass; the directory path disambiguates.
 |---|---|---|
 | `meerkat` | `crates/meerkat/` | the Mere host binary: winit app, chrome + frame-tree + shellbar, panes, the constellation actors, content cards |
 | `graph` | `crates/graph/` | graph truth: `graph-kernel`, `linked-data` (ingest/export), `node-lineage` (nav history) |
-| `orrery` | `crates/orrery/` | the spatial graph view: `orrery` / `mere-orrery`, `arrangements` (layout strategies), `cartography` (non-destructive projection), `gyre` (rapier physics), `aether` (field algebra) |
+| `canvas` | `crates/canvas/` | the graph-truth presentation library (was `orrery`; that name retired to the Merely tier ladder 2026-07-09): `canvas` (content-root + the scene-paint lane merged from platen), `arrangements` (layout strategies), `cartography` (non-destructive projection), `seiche` (physics, was gyre), `quint` (field evaluation, was aether) |
 | `shell` | `crates/shell/` | host-neutral domain: `chrome` view-models, `comms`, `frame` model |
 | `system` | `crates/system/` | runtime services and worker/message seams: `fetch`, `content-contract`, `registry`, `session-runtime` (settings + manifest), `shell-state`, `ux-events` |
 | `inker` | `crates/inker/` | engines: `document-canvas`, `engines` (`nematic` for smolweb, scrying for system WebViews) + the registry |

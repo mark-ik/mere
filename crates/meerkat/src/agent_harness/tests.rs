@@ -619,7 +619,7 @@ fn a_pane_camera_lives_on_the_view_and_round_trips_through_the_ctx() {
 
     // A camera move made within a ctx is captured back onto the view on drop,
     // including the pan inertia (per-view, so one window's fling can't drift another).
-    let moved = mere::orrery::Viewport {
+    let moved = mere::canvas::Viewport {
         offset: (123.0, 45.0),
         zoom: 2.0,
         yaw: 0.0,

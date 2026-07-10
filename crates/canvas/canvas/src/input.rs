@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Semantic input methods for [`Orrery`](crate::Orrery) — pointer events, wheel,
+//! Semantic input methods for [`Canvas`](crate::Canvas) — pointer events, wheel,
 //! modifier state, and navigation. Factored from `lib.rs` to keep files under
 //! the workspace 600-LOC ceiling.
 
@@ -17,7 +17,7 @@ use kernel::graph::{
 use super::build::{hyperlink, seed_cluster};
 use super::edge_cells::{edge_cell_hit_test, edge_cells_in_rect};
 use super::{
-    CLICK_SLOP, Drag, EDGE_PICK_TOL, ORBIT_TILT_PER_PX, ORBIT_YAW_PER_PX, Orrery, PointerButton,
+    CLICK_SLOP, Drag, EDGE_PICK_TOL, ORBIT_TILT_PER_PX, ORBIT_YAW_PER_PX, Canvas, PointerButton,
     SETTLE_TICKS, WHEEL_PAN_SCALE, ZOOM_STEP,
 };
 
@@ -32,7 +32,7 @@ const DEFAULT_FIELD_RADIUS: f32 = 120.0;
 /// or too violent. (Field regions P1.)
 const DEFAULT_FIELD_STRENGTH: f32 = 5000.0;
 
-impl Orrery {
+impl Canvas {
     // ----- Input (semantic; each returns whether the host should redraw) --------
 
     /// Update whether Ctrl is held (gates wheel-zoom vs wheel-pan).
@@ -311,7 +311,7 @@ impl Orrery {
             .expect("a freshly minted node has an id")
     }
 
-    /// The node under a screen point (orrery-leaf-local px), if any — the host's hit-test
+    /// The node under a screen point (canvas-leaf-local px), if any — the host's hit-test
     /// for routing a drop / gesture onto a node (e.g. dropping an image file to set that
     /// node's sprite face). Mirrors the left-press hit-test; returns the member id.
     /// (Node representation P2 — sprite drop.)
@@ -350,7 +350,7 @@ impl Orrery {
     }
 
     /// Mint a fresh unlinked node at the cursor's world position — the empty-space
-    /// right-click "Add node" gesture. `content_band_xy` is the orrery-leaf-local
+    /// right-click "Add node" gesture. `content_band_xy` is the canvas-leaf-local
     /// cursor point (screen px); the camera inversion happens here, so the host
     /// needn't reach the crate-private [`screen_to_world`](Self::screen_to_world).
     /// Returns the new node's member id.
@@ -365,7 +365,7 @@ impl Orrery {
 
     /// Place a fresh disk field region at the cursor's world position — the empty-space
     /// "Add field" gesture, the spatial-rule twin of [`add_node_at`](Self::add_node_at).
-    /// `content_band_xy` is the orrery-leaf-local cursor point (screen px); the camera
+    /// `content_band_xy` is the canvas-leaf-local cursor point (screen px); the camera
     /// inversion happens here. The field is a `Disk` scalar definition inside a square
     /// `Region` extent centered on the point (the placed-extent the rules later evaluate
     /// over). Inert until coupled/projected; returns the new field's id. (Field regions P0.)
@@ -465,7 +465,7 @@ impl Orrery {
         self.physics_paused
     }
 
-    /// Set the linear damping (the "inertia" physics setting) on this orrery's
+    /// Set the linear damping (the "inertia" physics setting) on this canvas's
     /// bodies: lower preserves more drift after a settle, higher rests sooner. Takes
     /// effect immediately on the live bodies, then a short settle lets the new
     /// damping express itself. The host owns the setting value (persisted); this

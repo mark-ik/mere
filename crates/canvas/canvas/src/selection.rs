@@ -23,7 +23,7 @@ fn retract_via_delta(
     }
 }
 
-impl Orrery {
+impl Canvas {
     /// Replace the selection with just `key` (clearing any selected nodes/edges).
     pub(crate) fn select_only(&mut self, key: NodeKey) {
         self.selected.clear();
@@ -507,8 +507,8 @@ impl Orrery {
         self.settle_physics(SETTLE_TICKS / 3);
     }
 
-    /// Set the per-node activation states the orrery colors its on-screen nodes
-    /// by, keyed by node UUID (the host's member id); the orrery resolves each to
+    /// Set the per-node activation states the canvas colors its on-screen nodes
+    /// by, keyed by node UUID (the host's member id); the canvas resolves each to
     /// its `NodeKey`. The host recomputes + pushes this as the actor pool / content
     /// cache change; a node absent from `states` colors as [`NodeState::Idle`].
     pub fn set_node_states(&mut self, states: HashMap<uuid::Uuid, NodeState>) {

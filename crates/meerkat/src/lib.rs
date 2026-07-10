@@ -490,7 +490,7 @@ pub enum ContextAction {
     OpenSubmenu,
     /// Mint a fresh node at the saved cursor point (the no-selection right-click).
     /// The anchor in `context_origin` is leaf-local screen px; the camera inversion
-    /// to world happens inside `mere::orrery::add_node_at`. Drains like `ShellbarMove` /
+    /// to world happens inside `mere::canvas::add_node_at`. Drains like `ShellbarMove` /
     /// `Relate` without touching `context_set`. From the add-pill (no cursor anchor)
     /// it mints at the default position.
     AddNode,
@@ -502,7 +502,7 @@ pub enum ContextAction {
     /// Place a fresh field region at the saved cursor point (the no-selection
     /// right-click's "Add field" / the add-pill's "Add field"). The anchor in
     /// `context_origin` is leaf-local screen px; the camera inversion to world
-    /// happens inside `mere::orrery::add_field_at`. From the add-pill (no anchor) it
+    /// happens inside `mere::canvas::add_field_at`. From the add-pill (no anchor) it
     /// places at the orrery view center. (Field regions P0.)
     AddField,
     /// Delete the field under the right-click (retire it; the kernel keeps its definition).

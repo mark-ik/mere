@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Orrery projection tests.
+//! Canvas projection tests.
 
 use super::*;
 use kernel::graph::fixtures::GraphFixtures;
@@ -68,7 +68,7 @@ fn demoted_underlay_draws_only_the_off_screen_nodes() {
     let b = node(&mut g, 2, 100.0, 0.0);
     let _ = g.assert_relation(a, b, hyperlink());
 
-    let full = orrery_paint_list_demoted(
+    let full = canvas_paint_list_demoted(
         &g,
         |k| {
             Some(if k == a {
@@ -90,7 +90,7 @@ fn demoted_underlay_draws_only_the_off_screen_nodes() {
         "both nodes drawn when all demoted"
     );
 
-    let one = orrery_paint_list_demoted(
+    let one = canvas_paint_list_demoted(
         &g,
         |k| {
             Some(if k == a {
@@ -130,7 +130,7 @@ fn edge_visibility_predicate_hides_relations() {
     let _ = g.assert_relation(a, b, hyperlink());
 
     let strokes = |edge_visible: fn(&RelationView) -> bool| {
-        orrery_paint_list_demoted(
+        canvas_paint_list_demoted(
             &g,
             |k| {
                 Some(if k == a {
@@ -177,11 +177,11 @@ fn projection_from_positions_overrides_committed_and_falls_back() {
         PortablePoint::new(30.0, 40.0),
         "b falls back to committed"
     );
-    assert_eq!(p.metadata.strategy_id.as_deref(), Some("orrery.live"));
+    assert_eq!(p.metadata.strategy_id.as_deref(), Some("canvas.live"));
 }
 
 #[test]
-fn orrery_paint_list_composes_nodes_and_a_visual_overlay() {
+fn canvas_paint_list_composes_nodes_and_a_visual_overlay() {
     // One node at the origin, a Gaussian field peaking there, and a visual/halo
     // coupling over it. The paint list should carry the node rect *and* the
     // resolved halo overlay — the underlay producer wiring the field's light in.
@@ -189,7 +189,7 @@ fn orrery_paint_list_composes_nodes_and_a_visual_overlay() {
     node(&mut g, 1, 0.0, 0.0);
 
     // Baseline: no coupling → just the node rect.
-    let baseline = orrery_paint_list(
+    let baseline = canvas_paint_list(
         &g,
         DeviceIntSize::new(200, 200),
         Camera::default(),
@@ -212,7 +212,7 @@ fn orrery_paint_list_composes_nodes_and_a_visual_overlay() {
         1.0,
     ));
 
-    let with_halo = orrery_paint_list(
+    let with_halo = canvas_paint_list(
         &g,
         DeviceIntSize::new(200, 200),
         Camera::default(),
@@ -232,7 +232,7 @@ fn orrery_paint_list_composes_nodes_and_a_visual_overlay() {
 
 #[test]
 fn identity_arrangement_projects_byte_identically_to_the_whole_graph() {
-    // Routing the orrery through its Identity arrangement must not change a pixel:
+    // Routing the canvas through its Identity arrangement must not change a pixel:
     // the member set, order, positions, and edges all match the whole-graph path.
     let mut g = Graph::new();
     let a = node(&mut g, 1, 10.0, 20.0);
@@ -274,7 +274,7 @@ fn identity_arrangement_projects_byte_identically_to_the_whole_graph() {
 #[test]
 fn curated_arrangement_projects_only_its_members() {
     // The seam generalizes: a curated (non-Identity) arrangement shows only its
-    // members, the affordance the orrery-through-platen routing unlocks.
+    // members, the affordance the canvas-through-platen routing unlocks.
     let mut g = Graph::new();
     let a = node(&mut g, 1, 0.0, 0.0);
     let _b = node(&mut g, 2, 10.0, 10.0);

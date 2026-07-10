@@ -6,14 +6,14 @@
 
 use super::*;
 
-impl Orrery {
+impl Canvas {
     /// The pane's active layout-strategy id, or `None` for force-directed (seiche).
     /// The host persists this as view-intent and checkmarks it in the layout picker.
     pub fn layout_strategy(&self) -> Option<&str> {
         self.active_strategy.as_deref()
     }
 
-    /// Switch the orrery's layout strategy. `Some(id)` selects a cartography adapter
+    /// Switch the canvas's layout strategy. `Some(id)` selects a cartography adapter
     /// (the host then pushes its positions via [`apply_strategy_positions`]) and halts
     /// seiche so the analytic layout holds still; `None` reverts to force-directed,
     /// dropping the buffered positions and re-settling the physics. (Layout picker.)
@@ -42,7 +42,7 @@ impl Orrery {
     /// Whether the active analytic layout must be recomputed: `true` when its inputs — the strategy,
     /// the kernel's structural [`Graph::revision`](kernel::graph::Graph::revision), the viewport, and
     /// the focus (only for focus-driven strategies) — differ from the last computed layout. The host
-    /// gates its per-frame `project_orrery_strategy` call on this, so an unchanged analytic layout is
+    /// gates its per-frame `project_canvas_strategy` call on this, so an unchanged analytic layout is
     /// computed once per real change, not every frame. (Arrangements — the layout cache.)
     pub fn needs_strategy_recompute(
         &self,
@@ -154,7 +154,7 @@ impl Orrery {
     }
 
     /// The cached community partition, or `None` if none has been computed (no cluster strategy has
-    /// run this session, or the orrery was cleared). The host threads it into the cluster-kanban
+    /// run this session, or the canvas was cleared). The host threads it into the cluster-kanban
     /// projection so Louvain is not re-run per frame. (Graph signals — P3.)
     pub fn community(&self) -> Option<&signals::ClusterSet> {
         self.community_cache.as_ref()
@@ -257,8 +257,8 @@ impl Orrery {
     /// embeddings, as `(a, b, weight)` triples (`weight` in `0..=1`) — to drive the affinity force,
     /// superseding the internal structural-Jaccard signal while set. `None` reverts to structural.
     ///
-    /// The host owns the embedding provider (so burn stays out of the orrery), recomputes this when
-    /// node *content* changes, and re-injects; the orrery installs it on the next [`frame`](Self::frame)
+    /// The host owns the embedding provider (so burn stays out of the canvas), recomputes this when
+    /// node *content* changes, and re-injects; the canvas installs it on the next [`frame`](Self::frame)
     /// under the [`cluster_by_affinity`](Self::set_cluster_by_affinity) toggle, with a settle so the
     /// new clustering takes. `Some(empty)` is authoritative-but-inert (the host ran embeddings and
     /// found no pairs above its threshold) — it clears the force rather than falling back to
@@ -368,7 +368,7 @@ impl Orrery {
     }
 
     /// Overlay the buffered strategy positions onto `view` — called by
-    /// [`frame`](Orrery::frame) right after the physics snapshot, so the underlay,
+    /// [`frame`](Canvas::frame) right after the physics snapshot, so the underlay,
     /// DOM nodes, cull, and edges (all reading `view`) stay consistent in one write.
     /// A no-op under force-directed. (Layout picker.)
     pub(crate) fn apply_strategy_to_view(&mut self) {

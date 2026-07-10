@@ -8,8 +8,8 @@ use kernel::graph::apply::{self as graph_apply, GraphDelta, apply_graph_delta};
 
 use super::*;
 
-impl Orrery {
-    /// Add a drifting scene-decoration body to the orrery's world — a "living backdrop"
+impl Canvas {
+    /// Add a drifting scene-decoration body to the canvas's world — a "living backdrop"
     /// element, intangible to the graph by default (it never perturbs the layout). A ball
     /// of `radius` at world `position`, with an initial `velocity` (px/s). Best called
     /// before [`offload_physics`](Self::offload_physics) so it rides onto the actor with
@@ -48,7 +48,7 @@ impl Orrery {
 
     /// Load Conway's Game of Life as the ambient backdrop: a wrapped grid of cells, seeded with a
     /// random soup, that the frame loop steps a few generations a second and paints behind the graph.
-    /// Replaces any prior ambient sim; the orrery keeps redrawing while one is active so it animates.
+    /// Replaces any prior ambient sim; the canvas keeps redrawing while one is active so it animates.
     /// Clear with [`clear_ambient`](Self::clear_ambient). (Physics scenes P5.)
     pub fn load_game_of_life(&mut self) {
         let sim = GameOfLife::seeded(100, 64, 0x5EED_1234);

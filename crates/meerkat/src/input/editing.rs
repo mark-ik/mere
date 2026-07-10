@@ -29,11 +29,11 @@ impl WindowCtx<'_> {
                         }
                         "face:favicon" => {
                             self.orrery_mut()
-                                .set_node_face(member, mere::orrery::Face::Favicon);
+                                .set_node_face(member, mere::canvas::Face::Favicon);
                             face_changed = true;
                         }
                         "face:bare" => {
-                            self.orrery_mut().set_node_face(member, mere::orrery::Face::Bare);
+                            self.orrery_mut().set_node_face(member, mere::canvas::Face::Bare);
                             face_changed = true;
                         }
                         _ => {}

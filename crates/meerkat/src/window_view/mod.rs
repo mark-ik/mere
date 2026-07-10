@@ -458,7 +458,7 @@ pub(crate) struct WindowView {
     /// Phase 2 makes the scope visible + accumulates the branch's lineage. (Graphlet
     /// wiring; tear-out gestures G3.)
     pub(crate) branch_graphlet: Option<mere::forme::GraphletId>,
-    /// This window's per-pane camera: one [`mere::orrery::Viewport`] per graph it shows in
+    /// This window's per-pane camera: one [`mere::canvas::Viewport`] per graph it shows in
     /// an Orrery pane. The pooled `Orrery` is the *authority* (graph + physics + node
     /// positions, shared across windows); the **camera/viewport is view state and
     /// lives here**, so two windows on one graph hold distinct viewports over the
@@ -466,7 +466,7 @@ pub(crate) struct WindowView {
     /// into its orrery on build and reads it back on drop (see `WindowCtx`); a graph
     /// absent here is seeded from the orrery's current framing the first time this
     /// window shows it. (Camera on the view.)
-    pub(crate) viewports: HashMap<GraphId, mere::orrery::Viewport>,
+    pub(crate) viewports: HashMap<GraphId, mere::canvas::Viewport>,
     /// This window's per-pane node **selection** (and thus focus), one member-uuid set
     /// per graph it shows in an Orrery pane. Like `viewports`, the pooled `Orrery` holds
     /// the live slot and the per-window state lives here: the ctx installs this window's

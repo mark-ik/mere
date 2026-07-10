@@ -13,7 +13,7 @@
 use mere::forme::GraphMemberId;
 use mere::kernel::graph::SemanticSubKind;
 use meerkat::{Chrome, ContextAction, ContextItem};
-use mere::orrery::Face;
+use mere::canvas::Face;
 use session_runtime::ShellbarEdge;
 
 use super::WindowCtx;

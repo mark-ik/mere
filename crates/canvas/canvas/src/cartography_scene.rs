@@ -127,14 +127,14 @@ pub fn project_with<S: LayoutStrategy>(
     strategy.project(&request)
 }
 
-/// The graph-wide layout strategies the orrery's empty-canvas picker offers:
+/// The graph-wide layout strategies the canvas's empty-canvas picker offers:
 /// `(projection_id, label)`. The force-directed default (seiche physics) is the host's
 /// `None`, not listed here. These analytic adapters lay out from the node set alone,
 /// needing no selection focus. Focus-driven `radial.default` is *not* here — it rides
 /// the selection menu (it centers on the selected node) and dispatches through
-/// [`project_orrery_strategy`] all the same. Axis- and signal-driven strategies join
+/// [`project_canvas_strategy`] all the same. Axis- and signal-driven strategies join
 /// once their inputs are plumbed.
-pub const ORRERY_LAYOUT_STRATEGIES: &[(&str, &str)] = &[
+pub const CANVAS_LAYOUT_STRATEGIES: &[(&str, &str)] = &[
     ("phyllotaxis.default", "Phyllotaxis"),
     ("grid.default", "Grid"),
     ("spectral.default", "Spectral"),
@@ -162,10 +162,10 @@ fn url_host(url: &str) -> String {
 
 /// Dispatch `id` to its cartography adapter and project against `graph` at viewport
 /// `(width, height)`, returning the full [`cartography::Projection`] (positions + edges; overlays
-/// are added by [`project_orrery_lens`]). [`Projection::empty`](cartography::Projection::empty) for
+/// are added by [`project_canvas_lens`]). [`Projection::empty`](cartography::Projection::empty) for
 /// an unknown or not-yet-wired id, or radial without a focus. Only the graph-only analytic
-/// strategies in [`ORRERY_LAYOUT_STRATEGIES`] are dispatched here.
-fn project_orrery_dispatch(
+/// strategies in [`CANVAS_LAYOUT_STRATEGIES`] are dispatched here.
+fn project_canvas_dispatch(
     id: &str,
     graph: &Graph,
     focus: Option<NodeKey>,
@@ -260,7 +260,7 @@ fn project_orrery_dispatch(
             })
         }
         // Focus-driven: centers on `focus` (the pane's selection), BFS rings outward.
-        // Without a focus there is no layout to compute, so leave the orrery as-is.
+        // Without a focus there is no layout to compute, so leave the canvas as-is.
         "radial.default" => {
             if focus.is_none() {
                 return cartography::Projection::empty();
@@ -307,13 +307,13 @@ pub fn signal_overlays(
     overlays
 }
 
-/// Compute an orrery layout strategy's full [`cartography::Projection`] — positions **plus**
+/// Compute an canvas layout strategy's full [`cartography::Projection`] — positions **plus**
 /// signal-driven [`overlays`](cartography::Projection::overlays) (community halos + bridge emphasis,
 /// from [`signal_overlays`]). The gloss is the first consumer of the overlay channel: it paints the
 /// overlays at its own lens positions, so a second lens can show the clusters/brokers under a
-/// different layout than the main view. Positions-only callers use [`project_orrery_strategy`].
+/// different layout than the main view. Positions-only callers use [`project_canvas_strategy`].
 /// (Graph signals — P6b, the overlay pipe.)
-pub fn project_orrery_lens(
+pub fn project_canvas_lens(
     id: &str,
     graph: &Graph,
     focus: Option<NodeKey>,
@@ -322,7 +322,7 @@ pub fn project_orrery_lens(
     clusters: Option<&cartography::ClusterSet>,
     bridges: Option<&cartography::BridgeNodes>,
 ) -> cartography::Projection {
-    let mut projection = project_orrery_dispatch(id, graph, focus, width, height, clusters);
+    let mut projection = project_canvas_dispatch(id, graph, focus, width, height, clusters);
     projection.overlays = signal_overlays(clusters, bridges);
     projection
 }
@@ -334,7 +334,7 @@ pub fn project_orrery_lens(
 /// by their stable id, so each result position remaps back to the live graph; the induced edges are
 /// added once per pair (topology — multiplicity is a later fidelity step). (Graph signals — P6c, the
 /// gloss subgraph re-layout.)
-pub fn project_orrery_subgraph(
+pub fn project_canvas_subgraph(
     graph: &Graph,
     scope: &[NodeKey],
     id: &str,
@@ -395,7 +395,7 @@ pub fn project_orrery_subgraph(
         .and_then(|f| graph.get_node(f))
         .and_then(|n| sub.get_node_key_by_id(n.id));
     // Project the subgraph, then remap each position back to the original graph via the node id.
-    project_orrery_strategy(id, &sub, sub_focus, width, height, None)
+    project_canvas_strategy(id, &sub, sub_focus, width, height, None)
         .into_iter()
         .filter_map(|(sub_key, pos)| {
             let nid = sub.get_node(sub_key)?.id;
@@ -405,11 +405,11 @@ pub fn project_orrery_subgraph(
         .collect()
 }
 
-/// Compute an orrery layout strategy's node positions: the `(NodeKey, position)` pairs the orrery
-/// applies through [`Orrery::apply_strategy_positions`](../../orrery). Empty for an unknown or
+/// Compute an canvas layout strategy's node positions: the `(NodeKey, position)` pairs the canvas
+/// applies through [`Canvas::apply_strategy_positions`](../../canvas). Empty for an unknown or
 /// not-yet-wired id (the host then leaves the layout unchanged). The positions-only path the main
-/// view uses; the gloss uses [`project_orrery_lens`] when it also needs the overlay channel.
-pub fn project_orrery_strategy(
+/// view uses; the gloss uses [`project_canvas_lens`] when it also needs the overlay channel.
+pub fn project_canvas_strategy(
     id: &str,
     graph: &Graph,
     focus: Option<NodeKey>,
@@ -417,7 +417,7 @@ pub fn project_orrery_strategy(
     height: u32,
     clusters: Option<&cartography::ClusterSet>,
 ) -> Vec<(NodeKey, PortablePoint)> {
-    project_orrery_dispatch(id, graph, focus, width, height, clusters)
+    project_canvas_dispatch(id, graph, focus, width, height, clusters)
         .nodes
         .iter()
         .map(|n| (n.node, n.position))
@@ -477,7 +477,7 @@ mod tests {
         for &(a, b) in &[(0, 1), (1, 2), (2, 0), (3, 4), (4, 5), (5, 3), (2, 3)] {
             graph.assert_semantic_predicate(n[a], n[b], "links".to_string());
         }
-        let positions = project_orrery_strategy("kanban.community", &graph, None, 800, 600, None);
+        let positions = project_canvas_strategy("kanban.community", &graph, None, 800, 600, None);
         assert_eq!(positions.len(), 6, "every node is placed");
         let x_of = |key: NodeKey| positions.iter().find(|(k, _)| *k == key).unwrap().1.x;
         assert!(
@@ -496,10 +496,10 @@ mod tests {
     }
 
     #[test]
-    fn project_orrery_strategy_radial_centers_on_focus_and_no_ops_without_one() {
+    fn project_canvas_strategy_radial_centers_on_focus_and_no_ops_without_one() {
         let (graph, [a, _, _]) = triangle_graph();
         // With a focus, radial lays out the whole graph (focus at center).
-        let with_focus = project_orrery_strategy("radial.default", &graph, Some(a), 800, 600, None);
+        let with_focus = project_canvas_strategy("radial.default", &graph, Some(a), 800, 600, None);
         assert_eq!(
             with_focus.len(),
             3,
@@ -511,7 +511,7 @@ mod tests {
             "the focus sits at the radial center"
         );
         // Without a focus there is nothing to center on, so it leaves the layout alone.
-        let no_focus = project_orrery_strategy("radial.default", &graph, None, 800, 600, None);
+        let no_focus = project_canvas_strategy("radial.default", &graph, None, 800, 600, None);
         assert!(no_focus.is_empty(), "radial without a selection no-ops");
     }
 
@@ -557,7 +557,7 @@ mod tests {
     }
 
     #[test]
-    fn project_orrery_lens_carries_the_community_halos() {
+    fn project_canvas_lens_carries_the_community_halos() {
         // Two triangles + a bridge: the lens projection carries the two community halos on the
         // overlay channel, so the gloss can paint the clusters at its own (spectral) positions.
         let mut graph = Graph::new();
@@ -568,7 +568,7 @@ mod tests {
             graph.assert_semantic_predicate(n[a], n[b], "links".to_string());
         }
         let clusters = signals::community_louvain(&graph);
-        let lens = project_orrery_lens(
+        let lens = project_canvas_lens(
             "spectral.default",
             &graph,
             None,
@@ -586,7 +586,7 @@ mod tests {
         assert_eq!(halos, 2, "two communities => two halos ride the projection");
         // The positions-only path is unchanged (it drops the overlays).
         let positions =
-            project_orrery_strategy("spectral.default", &graph, None, 800, 600, Some(&clusters));
+            project_canvas_strategy("spectral.default", &graph, None, 800, 600, Some(&clusters));
         assert_eq!(
             positions.len(),
             6,
@@ -595,7 +595,7 @@ mod tests {
     }
 
     #[test]
-    fn project_orrery_subgraph_lays_out_only_the_scope() {
+    fn project_canvas_subgraph_lays_out_only_the_scope() {
         // Path a-b-c-d; scope to {a, b}. The subgraph projection returns positions only for the
         // scoped nodes, keyed by the ORIGINAL graph's keys (remapped via stable id). (P6c.)
         let mut graph = Graph::new();
@@ -614,7 +614,7 @@ mod tests {
             );
         }
         let scope = vec![n[0], n[1]];
-        let positions = project_orrery_subgraph(&graph, &scope, "spectral.default", None, 800, 600);
+        let positions = project_canvas_subgraph(&graph, &scope, "spectral.default", None, 800, 600);
         assert_eq!(positions.len(), 2, "only the scoped nodes are laid out");
         let keys: HashSet<NodeKey> = positions.iter().map(|(k, _)| *k).collect();
         assert!(

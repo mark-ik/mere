@@ -9,7 +9,7 @@
 use mere::forme::GraphMemberId;
 use frame::{GraphId, InsertSide, PaneContent, PaneId, PaneNode};
 use meerkat::Chrome;
-use mere::orrery::Orrery;
+use mere::canvas::Canvas;
 use session_runtime::{PersistedSettings, settings_store};
 
 use super::observability::ObservabilitySnapshot;

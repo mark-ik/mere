@@ -6,12 +6,12 @@
 
 use super::*;
 
-impl Orrery {
+impl Canvas {
     /// Graph geometry for a minimap swatch (gloss): each node's `(uuid, world
     /// position, selected)` and each visible edge as a world-space `(from, to)`
     /// segment. World coordinates — the consumer fits them into its own rect. The
     /// gloss pane draws its own swatch from this rather than rendering a second
-    /// orrery (the Navigator is one surface, never a second instance).
+    /// canvas (the Navigator is one surface, never a second instance).
     #[allow(clippy::type_complexity)]
     pub fn minimap_geometry(
         &self,
@@ -225,7 +225,7 @@ impl Orrery {
 
     /// Store the host-computed gloss lens positions + overlays + record the inputs they were computed
     /// for, so [`gloss_needs_recompute`](Self::gloss_needs_recompute) returns `false` until one
-    /// changes. The overlays ride the same `project_orrery_lens` projection as the positions (the
+    /// changes. The overlays ride the same `project_canvas_lens` projection as the positions (the
     /// overlay pipe); [`gloss_geometry`](Self::gloss_geometry) resolves them to rings. (Graph signals
     /// — P6 / P6b.)
     pub fn set_gloss_positions(

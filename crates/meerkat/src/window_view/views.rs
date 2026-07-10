@@ -386,7 +386,7 @@ pub(crate) fn object_card_widget_row(widget: &CardWidget) -> (WindowLocalView, W
                 el::<_, WindowLocal, ()>("div", "Size".to_string())
                     .attr("style", "color:#8b94a6;font-size:11px;margin-bottom:5px"),
             );
-            let dots: String = (0..mere::orrery::SIZE_TIERS.len())
+            let dots: String = (0..mere::canvas::SIZE_TIERS.len())
                 .map(|i| if i <= *tier { '\u{25CF}' } else { '\u{25CB}' })
                 .collect();
             let btn = "width:30px;height:30px;display:flex;align-items:center;justify-content:center;\

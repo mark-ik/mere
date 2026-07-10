@@ -6,30 +6,30 @@
 
 use super::*;
 
-impl Orrery {
-    /// A new orrery over an **empty** session graph. The host grows it with
-    /// [`visit`](Orrery::visit) as the user navigates (the graph-rooted browse
+impl Canvas {
+    /// A new canvas over an **empty** session graph. The host grows it with
+    /// [`visit`](Canvas::visit) as the user navigates (the graph-rooted browse
     /// loop). For an isolated demo / the standalone bin, use
-    /// [`with_sample_graph`](Orrery::with_sample_graph).
+    /// [`with_sample_graph`](Canvas::with_sample_graph).
     pub fn new() -> Self {
         Self::from_graph(Graph::new())
     }
 
-    /// A new orrery over a small built-in sample graph (a ring + spokes), seeded
+    /// A new canvas over a small built-in sample graph (a ring + spokes), seeded
     /// into a tight central spiral so the first settle is visible. The standalone
-    /// `orrery-host` bin and the orrery tests use this; meerkat uses
-    /// [`new`](Orrery::new) and drives the graph through [`visit`](Orrery::visit).
+    /// `canvas-host` bin and the canvas tests use this; meerkat uses
+    /// [`new`](Canvas::new) and drives the graph through [`visit`](Canvas::visit).
     pub fn with_sample_graph() -> Self {
         Self::from_graph(sample_graph())
     }
 
-    /// Build an orrery over a **restored** session `graph`: keep each node at its
+    /// Build an canvas over a **restored** session `graph`: keep each node at its
     /// saved (committed) position and do not auto-settle, so a reloaded session
     /// looks as it was left rather than re-scrambling into a fresh spiral.
     /// (Persistence host seam, S3.)
     pub fn with_graph(graph: Graph) -> Self {
-        let mut orrery = Self::from_graph(graph);
-        let positions: Vec<(NodeKey, Point2D<f32>)> = orrery
+        let mut canvas = Self::from_graph(graph);
+        let positions: Vec<(NodeKey, Point2D<f32>)> = canvas
             .graph
             .nodes()
             .map(|(key, node)| {
@@ -38,14 +38,14 @@ impl Orrery {
             })
             .collect();
         for &(key, pos) in &positions {
-            orrery.view.set_position(key, pos);
+            canvas.view.set_position(key, pos);
         }
-        orrery.physics.seed(positions);
-        orrery.physics.halt();
-        orrery
+        canvas.physics.seed(positions);
+        canvas.physics.halt();
+        canvas
     }
 
-    /// Re-point this orrery at a different session `graph` **in place**, keeping the
+    /// Re-point this canvas at a different session `graph` **in place**, keeping the
     /// (possibly offloaded) physics actor and the node-children pool alive. The
     /// graph is replaced wholesale, every derived view is reconciled to it
     /// (departed nodes drop, the spring topology and node pool rebuild), per-graph
@@ -91,10 +91,10 @@ impl Orrery {
         self.generation += 1;
     }
 
-    /// Build an orrery over `graph`: its [`build_simulation`], the node-children
-    /// pool, and a default camera. Shared by [`new`](Orrery::new) (empty),
-    /// [`with_sample_graph`](Orrery::with_sample_graph), and
-    /// [`with_graph`](Orrery::with_graph).
+    /// Build an canvas over `graph`: its [`build_simulation`], the node-children
+    /// pool, and a default camera. Shared by [`new`](Canvas::new) (empty),
+    /// [`with_sample_graph`](Canvas::with_sample_graph), and
+    /// [`with_graph`](Canvas::with_graph).
     pub(crate) fn from_graph(graph: Graph) -> Self {
         let sim = build_simulation(&graph);
         let view = sim.view();
@@ -182,7 +182,7 @@ impl Orrery {
     }
 
     /// Set the current app-launch session number (Alembic B5). The host calls this
-    /// once per pooled orrery, right after construction, with its persisted-and-
+    /// once per pooled canvas, right after construction, with its persisted-and-
     /// incremented persona session counter; every in-place navigation afterwards
     /// stamps the visited node's `last_session_visited` for
     /// `EvictionPolicy::KeepSessions`.
@@ -190,8 +190,8 @@ impl Orrery {
         self.graph.set_current_session(session);
     }
 
-    /// Set the viewport the orrery culls + centers against. The host calls this on
-    /// a surface resize; the next [`frame`](Orrery::frame) rebuilds the node-pool
+    /// Set the viewport the canvas culls + centers against. The host calls this on
+    /// a surface resize; the next [`frame`](Canvas::frame) rebuilds the node-pool
     /// layout at the new size.
     ///
     /// Keeps whatever world point sits at the viewport center fixed across the
@@ -389,18 +389,18 @@ impl Orrery {
     /// Move physics onto an off-thread actor (the native always-offload path).
     /// The host calls this once, just after construction, with a [`Wake`] that
     /// pokes its event loop when a layout snapshot is ready. Left uncalled, the
-    /// orrery keeps ticking in-thread (tests; the no-threads wasm profile).
+    /// canvas keeps ticking in-thread (tests; the no-threads wasm profile).
     ///
     /// [`Wake`]: armillary::Wake
     pub fn offload_physics(&mut self, wake: armillary::Wake) {
-        // Capture the host's wake as the orrery's off-thread wake: the community lane reuses it to
+        // Capture the host's wake as the canvas's off-thread wake: the community lane reuses it to
         // poke the same loop when its worker result lands, so it needs no separate host wiring.
         // `Some` here is also the "native + offloaded" signal that gates community off-thread.
         self.offthread_wake = Some(wake.clone());
         self.physics.offload(wake);
     }
 
-    /// Park this orrery's physics: stop any in-progress settle so a backgrounded
+    /// Park this canvas's physics: stop any in-progress settle so a backgrounded
     /// graph does not keep ticking and waking the host loop. The off-thread actor
     /// then idles on its command channel (no busy-spin, no CPU) and stays warm in
     /// the pool. The host calls this when a pooled graph loses focus. No explicit
@@ -418,7 +418,7 @@ impl Orrery {
     /// minted at the origin, which the force sim must not stack), and the settle
     /// restarts. Returns whether the graph changed.
     ///
-    /// orrery-host stays free of the linked-data bridge: the host passes the merge
+    /// canvas-host stays free of the linked-data bridge: the host passes the merge
     /// in as a closure over [`Graph`].
     pub fn ingest_graph<F: FnOnce(&mut Graph) -> bool>(&mut self, mutate: F) -> bool {
         let before: HashSet<NodeKey> = self.graph.nodes().map(|(k, _)| k).collect();

@@ -7,7 +7,7 @@
 //! Two shapes behind one [`Physics`] interface (the dual-backend decision, P6):
 //!
 //! - [`Physics::Inline`] — the simulation ticks **in the frame loop**, on the UI
-//!   thread. Deterministic (no thread race), so it is what the orrery's tests
+//!   thread. Deterministic (no thread race), so it is what the canvas's tests
 //!   drive; it is also the path for the no-threads `wasm32` browser/PWA profile,
 //!   where [`armillary`] cannot spawn an OS thread.
 //! - [`Physics::Actor`] — the simulation runs on an [`armillary`] **actor
@@ -18,7 +18,7 @@
 //! Native builds construct [`Physics::Inline`] and immediately
 //! [`offload`](Physics::offload) onto an actor (so native always offloads); the
 //! host supplies the [`Wake`] that pokes its event loop when a snapshot lands.
-//! Either way the orrery reads only its [`LayoutView`] — the backend just feeds
+//! Either way the canvas reads only its [`LayoutView`] — the backend just feeds
 //! authoritative positions into it.
 
 use std::sync::mpsc::{Receiver, TryRecvError};
@@ -123,7 +123,7 @@ pub(crate) struct ActorPhysics {
     settling: bool,
 }
 
-/// The physics backend the [`Orrery`](crate::Orrery) talks to. Inline by
+/// The physics backend the [`Canvas`](crate::Canvas) talks to. Inline by
 /// default (tests + wasm); [`offload`](Physics::offload) swaps in the actor.
 pub(crate) enum Physics {
     Inline(InlinePhysics),

@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 use mere::kernel::graph::{EdgeFamily, Graph, RelationKind, RelationSelector};
 use session_runtime::{HiddenRelationRecord, ViewIntent};
 
-pub(crate) fn restore_hidden_relations(orrery: &mut mere::orrery::Orrery, intent: Option<&ViewIntent>) {
+pub(crate) fn restore_hidden_relations(orrery: &mut mere::canvas::Canvas, intent: Option<&ViewIntent>) {
     let Some(intent) = intent else {
         return;
     };
@@ -30,7 +30,7 @@ pub(crate) fn restore_hidden_relations(orrery: &mut mere::orrery::Orrery, intent
     }
 }
 
-pub(crate) fn hidden_relation_records(orrery: &mere::orrery::Orrery) -> BTreeSet<HiddenRelationRecord> {
+pub(crate) fn hidden_relation_records(orrery: &mere::canvas::Canvas) -> BTreeSet<HiddenRelationRecord> {
     let graph = orrery.graph();
     let mut out = BTreeSet::new();
     for relation in graph.relations() {
@@ -82,7 +82,7 @@ mod tests {
 
     #[test]
     fn hidden_relation_records_round_trip_relation_cell_visibility() {
-        let mut orrery = mere::orrery::Orrery::new();
+        let mut orrery = mere::canvas::Canvas::new();
         let a_key = orrery.visit("https://a.example");
         let a = orrery.graph().get_node(a_key).unwrap().id;
         let b_key = orrery.visit("https://b.example");
@@ -109,7 +109,7 @@ mod tests {
                     == mere::kernel::graph::RelationKind::Semantic(SemanticSubKind::Quotes).tag()
         }));
 
-        let mut restored = mere::orrery::Orrery::with_graph(orrery.graph().clone());
+        let mut restored = mere::canvas::Canvas::with_graph(orrery.graph().clone());
         let intent = ViewIntent {
             hidden_relations: records,
             ..Default::default()

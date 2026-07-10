@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! The per-frame render step for [`Orrery`](crate::Orrery). Factored from
+//! The per-frame render step for [`Canvas`](crate::Canvas). Factored from
 //! `lib.rs` to keep files under the workspace 600-LOC ceiling.
 
 use std::collections::{HashMap, HashSet};
@@ -20,7 +20,7 @@ use paint_list_api::{
     TransformSpec,
 };
 use paint_list_render::{CompositeLayer, composite_paint_layers};
-use platen::orrery::{identity_arrangement, orrery_paint_list_demoted_from_arrangement};
+use crate::underlay::{identity_arrangement, canvas_paint_list_demoted_from_arrangement};
 use serval_layout::{Applied, IncrementalLayout, ScrollOffsets};
 use serval_scripted_dom::NodeId as DomNodeId;
 
@@ -29,9 +29,9 @@ use super::build::{
     marquee_rect_cmds, set_class, set_style,
 };
 use super::edge_cells::{edge_cell_for_relation, relation_cell_overlay, selected_edge_overlay};
-use super::{NODE_HALF, NodeShape, NodeState, Orrery, PAN_DECAY};
+use super::{NODE_HALF, NodeShape, NodeState, Canvas, PAN_DECAY};
 
-impl Orrery {
+impl Canvas {
     /// Advance one frame at viewport `(w, h)` and return the composited content
     /// scene plus whether the host should request another frame (sim still
     /// settling, pan still gliding, or a node being dragged). Does not present.
@@ -115,26 +115,26 @@ impl Orrery {
             .cull_aabb(self.world_viewport())
             .into_iter()
             .collect();
-        // The scope lens (curated orrery): when set, render only the scoped nodes —
+        // The scope lens (curated canvas): when set, render only the scoped nodes —
         // filter the on-screen DOM set here, project the underlay through a curated
         // arrangement of just the scope (below), and hide non-scoped DOM nodes (the
-        // gnode loop). `None` shows the whole graph. (Curated orrery.)
+        // gnode loop). `None` shows the whole graph. (Curated canvas.)
         let scoped: Option<HashSet<NodeKey>> =
             self.scope.as_ref().map(|s| s.iter().copied().collect());
         if let Some(sc) = &scoped {
             on_screen.retain(|k| sc.contains(k));
         }
 
-        // Route the underlay through the orrery's forme arrangement — the full
+        // Route the underlay through the canvas's forme arrangement — the full
         // read-through Identity arrangement, or a curated arrangement of just the
-        // scope. Either way the orrery renders as a Cartography projection of an
+        // scope. Either way the canvas renders as a Cartography projection of an
         // arrangement (the spine's "two projections of one arrangement"); a scoped
         // arrangement is exactly the shape a stored/compare arrangement would take.
         let arrangement = match &self.scope {
-            Some(keys) => platen::orrery::arrangement_of_keys(&self.graph, keys),
+            Some(keys) => crate::underlay::arrangement_of_keys(&self.graph, keys),
             None => identity_arrangement(&self.graph),
         };
-        let mut underlay = orrery_paint_list_demoted_from_arrangement(
+        let mut underlay = canvas_paint_list_demoted_from_arrangement(
             &self.graph,
             &arrangement,
             |k| positions.get(&k).copied(),
@@ -222,7 +222,7 @@ impl Orrery {
             self.stage_node,
             "transform: translate(0px, 0px) scale(1);",
         );
-        // When the host renders these gnodes as chrome DOM elements (orrery-as-element)
+        // When the host renders these gnodes as chrome DOM elements (canvas-as-element)
         // the in-scene gnode layer is dropped below, so skip the per-gnode transform/class
         // updates: an empty set makes the loop a no-op, the costliest part of the frame on
         // a big graph. (Phase 2 — perf / cleaning.)
@@ -233,7 +233,7 @@ impl Orrery {
         };
         for (key, gnode) in gnodes {
             // Scope lens: hide a non-scoped node's DOM child (the underlay already
-            // excludes it), so a scoped orrery shows only its subset. (Curated orrery.)
+            // excludes it), so a scoped canvas shows only its subset. (Curated canvas.)
             if scoped.as_ref().is_some_and(|sc| !sc.contains(&key)) {
                 set_style(&mut self.node_dom, gnode, "display: none;");
                 continue;
@@ -301,7 +301,7 @@ impl Orrery {
         if !matches!(applied, Applied::RepaintOnly | Applied::Unchanged) {
             tracing::warn!(
                 ?applied,
-                "orrery pool: node layout left the RepaintOnly path"
+                "canvas pool: node layout left the RepaintOnly path"
             );
         }
         let scroll = ScrollOffsets::<DomNodeId>::default();
@@ -317,7 +317,7 @@ impl Orrery {
         // projecting each corner through `Camera::to_screen` (at the default camera
         // that is `world * zoom + offset`). The favicon's `favicon_rgba` is already
         // the `ImageResource` shape (RGBA8, straight alpha), so the host's existing
-        // rasterize uploads it with no GPU plumbing in the orrery. It draws above the
+        // rasterize uploads it with no GPU plumbing in the canvas. It draws above the
         // colored tile square and below the marquee. (Favicon-on-tile.)
         let mut favicon_cmds: Vec<PaintCmd> = Vec::new();
         let mut favicon_images: Vec<ImageResource> = Vec::new();
@@ -399,7 +399,7 @@ impl Orrery {
         let marquee_cmds = self
             .marquee
             .map(|origin| marquee_rect_cmds(origin, self.cursor));
-        // The orrery's own opaque backdrop is the bottom layer (so the surface is
+        // The canvas's own opaque backdrop is the bottom layer (so the surface is
         // dark without depending on the host clear color); then the living-backdrop
         // scene orbs, then the underlay edges + demoted rects, then the on-screen node
         // DOM, then any marquee on top.
@@ -630,8 +630,8 @@ impl Orrery {
         }
         layers.push(CompositeLayer::commands_only(underlay.commands()));
         // The on-screen gnode + favicon layers, unless the host renders these gnodes as
-        // chrome DOM elements instead (orrery-as-element); then only edges + demoted
-        // dots remain as the underlay. (Orrery-as-element — Phase 2.)
+        // chrome DOM elements instead (canvas-as-element); then only edges + demoted
+        // dots remain as the underlay. (Canvas-as-element — Phase 2.)
         if !self.render_gnodes_as_dom {
             // Height stems under the gnodes (P3): the floating gnode paints over its stem.
             if !stem_cmds.is_empty() {
@@ -675,7 +675,7 @@ fn scene_body_half(collider: &NodeCollider) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use crate::Orrery;
+    use crate::Canvas;
     use euclid::default::Point2D;
     use kernel::graph::Graph;
     use kernel::graph::fixtures::GraphFixtures;
@@ -705,8 +705,8 @@ mod tests {
         let (mut graph, key) = graph_with_one_node("https://ex.test/");
         // A tiny 2x2 opaque favicon (RGBA8, 16 bytes).
         assert!(graph.set_node_favicon(key, vec![255u8; 2 * 2 * 4], 2, 2));
-        let mut orrery = Orrery::with_graph(graph);
-        let (scene, _) = orrery.frame(800, 600);
+        let mut canvas = Canvas::with_graph(graph);
+        let (scene, _) = canvas.frame(800, 600);
         assert!(
             image_op_count(&scene) >= 1,
             "a favicon node emits at least one image op"
@@ -717,8 +717,8 @@ mod tests {
     #[test]
     fn node_without_favicon_emits_no_image_op() {
         let (graph, _key) = graph_with_one_node("https://ex.test/");
-        let mut orrery = Orrery::with_graph(graph);
-        let (scene, _) = orrery.frame(800, 600);
+        let mut canvas = Canvas::with_graph(graph);
+        let (scene, _) = canvas.frame(800, 600);
         assert_eq!(image_op_count(&scene), 0, "no favicon -> no image op");
     }
 
@@ -727,8 +727,8 @@ mod tests {
     #[test]
     fn registered_sprite_scene_prop_emits_an_image_op() {
         let (graph, _key) = graph_with_one_node("https://ex.test/");
-        let mut orrery = Orrery::with_graph(graph);
-        orrery.register_scene_sprite("crate", vec![255u8; 4 * 4 * 4], 4, 4);
+        let mut canvas = Canvas::with_graph(graph);
+        canvas.register_scene_sprite("crate", vec![255u8; 4 * 4 * 4], 4, 4);
         let spec = seiche::SceneSpec {
             bodies: vec![
                 seiche::SceneBodySpec::dynamic(seiche::NodeCollider::Square { half: 30.0 }, (0.0, 0.0))
@@ -739,8 +739,8 @@ mod tests {
             perpetual: false,
             joints: Vec::new(),
         };
-        orrery.load_scene(spec);
-        let (scene, _) = orrery.frame(800, 600);
+        canvas.load_scene(spec);
+        let (scene, _) = canvas.frame(800, 600);
         assert!(
             image_op_count(&scene) >= 1,
             "a registered sprite prop emits an image op"
@@ -752,7 +752,7 @@ mod tests {
     #[test]
     fn unregistered_sprite_scene_prop_emits_no_image_op() {
         let (graph, _key) = graph_with_one_node("https://ex.test/");
-        let mut orrery = Orrery::with_graph(graph);
+        let mut canvas = Canvas::with_graph(graph);
         let spec = seiche::SceneSpec {
             bodies: vec![
                 seiche::SceneBodySpec::dynamic(seiche::NodeCollider::Square { half: 30.0 }, (0.0, 0.0))
@@ -763,8 +763,8 @@ mod tests {
             perpetual: false,
             joints: Vec::new(),
         };
-        orrery.load_scene(spec);
-        let (scene, _) = orrery.frame(800, 600);
+        canvas.load_scene(spec);
+        let (scene, _) = canvas.frame(800, 600);
         assert_eq!(
             image_op_count(&scene),
             0,
@@ -772,31 +772,31 @@ mod tests {
         );
     }
 
-    /// The Game of Life ambient backdrop keeps the orrery redrawing (so it animates) while loaded,
+    /// The Game of Life ambient backdrop keeps the canvas redrawing (so it animates) while loaded,
     /// and parks again once cleared. (Physics scenes P5.)
     #[test]
     fn game_of_life_backdrop_keeps_redrawing_until_cleared() {
         let (graph, _key) = graph_with_one_node("https://ex.test/");
-        let mut orrery = Orrery::with_graph(graph);
+        let mut canvas = Canvas::with_graph(graph);
         // Settle the graph so the only thing that could request a redraw is the ambient sim.
         for _ in 0..400 {
-            let _ = orrery.frame(800, 600);
+            let _ = canvas.frame(800, 600);
         }
-        let (_, settled_redraw) = orrery.frame(800, 600);
+        let (_, settled_redraw) = canvas.frame(800, 600);
         assert!(!settled_redraw, "a settled graph with no ambient sim parks");
 
-        orrery.load_game_of_life();
-        let (_, with_gol) = orrery.frame(800, 600);
-        assert!(with_gol, "the ambient backdrop keeps the orrery redrawing");
+        canvas.load_game_of_life();
+        let (_, with_gol) = canvas.frame(800, 600);
+        assert!(with_gol, "the ambient backdrop keeps the canvas redrawing");
 
-        orrery.clear_ambient();
+        canvas.clear_ambient();
         for _ in 0..400 {
-            let _ = orrery.frame(800, 600);
+            let _ = canvas.frame(800, 600);
         }
-        let (_, after_clear) = orrery.frame(800, 600);
+        let (_, after_clear) = canvas.frame(800, 600);
         assert!(
             !after_clear,
-            "clearing the ambient backdrop lets the orrery park again"
+            "clearing the ambient backdrop lets the canvas park again"
         );
     }
 }

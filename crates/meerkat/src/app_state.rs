@@ -98,7 +98,7 @@ pub(crate) struct Content {
     /// Content-embedding graph arrangement (burn brief Lane 5, P4): the embedding
     /// provider + recompute gate that derives the orrery's affinity signal from node
     /// content. Recomputed (throttled, revision-gated) while "cluster by affinity" is
-    /// on and injected via `mere::orrery::set_content_affinity`. Behind the `content-affinity`
+    /// on and injected via `mere::canvas::set_content_affinity`. Behind the `content-affinity`
     /// feature so the default build's affinity toggle stays structural.
     ///
     /// `Option` only so the render path can `take()` it out to break the self-borrow
@@ -178,7 +178,7 @@ pub(crate) struct Session {
     pub(crate) host_text: text::HostText,
     /// This persona's app-launch counter, incremented and persisted once at boot
     /// (`PersonaSettings::session_count`). Pushed into every pooled orrery via
-    /// `mere::orrery::set_current_session` so in-place navigation stamps
+    /// `mere::canvas::set_current_session` so in-place navigation stamps
     /// `last_session_visited`; `run_forgetting_pass` reads it back for
     /// `EvictionPolicy::KeepSessions`. (Alembic B5 — by-sessions eviction.)
     pub(crate) current_session_count: u64,

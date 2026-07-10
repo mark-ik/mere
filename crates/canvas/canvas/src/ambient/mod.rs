@@ -5,7 +5,7 @@
 //! Ambient-sim backdrops: small standalone simulations painted behind the graph for liveliness the
 //! rapier solver should not carry (the "ambient separate-sim backdrop" tier, physics scenes P5).
 //! Non-rapier and host-side (cheap, no actor offload), advanced and painted each frame as the bottom
-//! backdrop layer. They share the [`AmbientSim`] seam (advance + paint), so the orrery holds one
+//! backdrop layer. They share the [`AmbientSim`] seam (advance + paint), so the canvas holds one
 //! `Box<dyn AmbientSim>` and the catalog grows without touching the host. Each is painted in a
 //! [`Tincture`] - a base colour it interprets as it likes.
 //!
@@ -27,11 +27,11 @@ pub use sand::SandFall;
 
 /// The base colour an ambient sim is painted in - a tint / wash. One colour the sim interprets as it
 /// sees fit (Game of Life tints its cells; particle-life rotates the hue per species). Overridable
-/// per backdrop via [`Orrery::set_ambient_tincture`](crate::Orrery::set_ambient_tincture). (P5.)
+/// per backdrop via [`Canvas::set_ambient_tincture`](crate::Canvas::set_ambient_tincture). (P5.)
 pub type Tincture = ColorF;
 
 /// A non-rapier ambient backdrop simulation: advance it by `dt`, then paint it across the viewport in
-/// a [`Tincture`]. The orrery holds one as `Box<dyn AmbientSim>`, advancing + painting it each frame
+/// a [`Tincture`]. The canvas holds one as `Box<dyn AmbientSim>`, advancing + painting it each frame
 /// as the bottom layer and keep-redrawing while it is live. `Send` so a backdrop could later move to
 /// an actor if one grows expensive. (Physics scenes P5.)
 pub trait AmbientSim: Send {

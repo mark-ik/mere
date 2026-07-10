@@ -16,7 +16,7 @@ use forme::GraphMemberId;
 use inker::{Block, EngineDocument, inline_text};
 use kernel::graph::Graph;
 use netrender::Scene;
-use orrery::NodeState;
+use canvas::NodeState;
 use register_theme::chrome::{ChromeTheme, Color32};
 use uxtree::{UxTree, node_id_for_path};
 

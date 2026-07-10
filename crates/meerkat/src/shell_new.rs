@@ -184,11 +184,11 @@ impl Shell {
             }
         }
         let mut orrery = match restored {
-            Some(graph) => Orrery::with_graph(graph),
+            Some(graph) => Canvas::with_graph(graph),
             None => {
                 // The orrery opens on one node and grows from there as the user
                 // navigates (the graph-rooted browse loop).
-                let mut orrery = Orrery::new();
+                let mut orrery = Canvas::new();
                 if !content_location.is_empty() {
                     orrery.visit(&content_location);
                 }
@@ -534,7 +534,7 @@ impl Shell {
         // session dir and offloads its own physics, like the active orrery above; the
         // render then centres it on first frame. (Window composition — pane-as-unit
         // restore.)
-        let mut orreries: HashMap<GraphId, Orrery> = HashMap::from([(active_graph, orrery)]);
+        let mut orreries: HashMap<GraphId, Canvas> = HashMap::from([(active_graph, orrery)]);
         let mut orrery_lru: Vec<GraphId> = vec![active_graph];
         let extra_graphs: HashSet<GraphId> = view
             .frame_layout
@@ -557,8 +557,8 @@ impl Shell {
                     .flatten()
             });
             let mut extra = match graph {
-                Some(g) => Orrery::with_graph(g),
-                None => Orrery::new(),
+                Some(g) => Canvas::with_graph(g),
+                None => Canvas::new(),
             };
             extra.offload_physics(physics_wake.clone());
             orreries.insert(gid, extra);

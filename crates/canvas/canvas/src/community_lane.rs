@@ -5,7 +5,7 @@
 //! The off-thread **community-detection lane**: an [`armillary`] actor that runs Louvain on a
 //! `Send` [`CommunitySnapshot`] and emits a revision-stamped [`ClusterSet`]. Mirrors the physics
 //! actor (the same off-thread discipline). Used only when the host has supplied an off-thread wake
-//! (native + offloaded); on wasm and in tests the orrery computes community inline instead, so this
+//! (native + offloaded); on wasm and in tests the canvas computes community inline instead, so this
 //! lane is never spun up there. (Graph signals — the background lane, P3.)
 //!
 //! The `Graph` never crosses the thread: the owner extracts a `Send` [`CommunitySnapshot`] on its

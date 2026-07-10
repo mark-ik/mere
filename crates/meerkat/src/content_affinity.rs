@@ -20,7 +20,7 @@
 //!   `infer::decoder::load_wgpu_provider`, plus the D1 device decision.
 //!
 //! Burn stays out of the orrery: the orrery takes plain `(NodeKey, NodeKey, f32)`
-//! triples through [`mere::orrery::set_content_affinity`](mere::orrery::Orrery::set_content_affinity);
+//! triples through [`mere::canvas::set_content_affinity`](mere::canvas::Canvas::set_content_affinity);
 //! this module (behind the feature) owns the provider.
 
 use std::time::{Duration, Instant};

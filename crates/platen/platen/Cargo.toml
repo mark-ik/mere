@@ -4,51 +4,29 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Graph-aware composition surface for the Mere browser — compiles arrangements into presentation plans; the press in the printing metaphor."
+description = "The pane home for the Mere browser — compiles forme arrangements into workbench plans, tile trees, and pane geometry; the press in the printing metaphor. Decomposed 2026-07-09: the graph-scene paint lane moved to the canvas crate."
 documentation = "https://docs.rs/platen"
 readme = "README.md"
-keywords = ["layout", "composition", "graph", "workbench", "browser"]
+keywords = ["layout", "composition", "panes", "workbench", "browser"]
 categories = ["gui"]
 
 [lib]
 path = "src/lib.rs"
 
 [dependencies]
-cartography.workspace = true
-# Field algebra: the visual-coupling paint pass (coupling_paint) evaluates quint
-# fields to resolve a coupling's intensity at each node. One-way dep, mirroring
-# seiche's; quint stays renderer-free.
-quint.workspace = true
 document-canvas.workspace = true
 inker.workspace = true
-kernel.workspace = true
-# The engine-agnostic paint vocabulary (PaintCmd). Platen renders a cartography
-# Projection into a PaintList here; netrender (behind the host) consumes it.
-# Direct path dep like inker/document-canvas, so the heavy renderer stays
-# host-side and this dep does not propagate through the contract crates.
-paint_list_api = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
 # Pelt's tile-tree contract (V5/V6): platen projects a forme arrangement's
-# WorkbenchPlan onto it (`tree_projection::tile_tree_from_plan`), so meerkat can
-# host the standalone pelt tile surface as its workbench pane. A zero-dependency
-# contract leaf in serval; the projection is the only seam between forme and the
-# surface (the projection-not-a-second-authority rule).
+# WorkbenchPlan onto it (`tree_projection::tile_tree_from_plan`), so a host
+# can drive the standalone pelt tile surface as its workbench pane. A
+# zero-dependency contract leaf in serval; the projection is the only seam
+# between forme and the surface (the projection-not-a-second-authority rule).
 pelt-core = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 # Platen projects a forme arrangement into a presentation plan (the
 # tree projection — its core role under the composition spine).
 forme.workspace = true
-# Concrete cartography layout strategies (phyllotaxis / grid / penrose / ...),
-# dispatched by `cartography_scene::project_orrery_strategy` for the orrery's
-# per-pane layout picker.
-arrangements.workspace = true
-# The graph-structural signal producer (intel/signals): degree-based importance now, richer
-# signals later. project_orrery_strategy hands its snapshot to the layout strategies. (Graph signals.)
-signals.workspace = true
 serde = { version = "1.0", features = ["derive"] }
 # Workbench tiling persists as JSON (the bridge's (Arrangement, geometry) pair);
 # the host writes the string beside the session graph.
 serde_json = "1"
-tracing = "0.1"
 uuid = { version = "1", features = ["serde"] }
-
-[dev-dependencies]
-kernel = { workspace = true, features = ["fixtures"] }

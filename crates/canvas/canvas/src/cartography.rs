@@ -6,14 +6,14 @@
 
 use super::*;
 
-impl Orrery {
+impl Canvas {
     /// The Cartography projection geometry: each member's current world position,
-    /// member-keyed — the orrery's settled layout, for the host to persist as the
+    /// member-keyed — the canvas's settled layout, for the host to persist as the
     /// cartography sidecar (the counterpart of the workbench's `TreeGeometry`). Reads
     /// the live seiche positions, so it captures whatever is shown (force-directed or a
     /// picked layout strategy). (Position sidecar.)
-    pub fn cartography_geometry(&self) -> platen::CartographyGeometry {
-        platen::CartographyGeometry::from_positions(
+    pub fn cartography_geometry(&self) -> crate::geometry::CartographyGeometry {
+        crate::geometry::CartographyGeometry::from_positions(
             self.view
                 .positions()
                 .filter_map(|(key, p)| self.graph.get_node(key).map(|node| (node.id, (p.x, p.y)))),
@@ -58,7 +58,7 @@ impl Orrery {
     }
 
     /// One node's current world position (the live seiche position), so the host can
-    /// draw a switcher thumbnail from the orrery rather than the now position-free
+    /// draw a switcher thumbnail from the canvas rather than the now position-free
     /// graph. `None` for a node the view has not placed. (Position gut.)
     pub fn node_position(&self, key: NodeKey) -> Option<PortablePoint> {
         self.view
@@ -84,9 +84,9 @@ impl Orrery {
     }
 
     /// A node's render color, matching the in-scene gnode's class palette: orange when
-    /// selected, else green open / red closed / blue idle. The host colors the orrery
+    /// selected, else green open / red closed / blue idle. The host colors the canvas
     /// element's chrome-DOM gnodes with it so they carry node identity without the
-    /// in-scene gnode layer. (Orrery-as-element — Phase 2.)
+    /// in-scene gnode layer. (Canvas-as-element — Phase 2.)
     pub fn node_color(&self, key: NodeKey) -> &'static str {
         if self.selected.contains(&key) {
             return "#f7a440";
@@ -132,11 +132,11 @@ impl Orrery {
     }
 
     /// Render the on-screen gnodes as host chrome-DOM elements instead of in-scene Scene
-    /// layers: the next [`frame`](Orrery::frame) drops the gnode + favicon layers, keeping
-    /// edges + demoted dots as the underlay. The host sets this on the focused orrery
+    /// layers: the next [`frame`](Canvas::frame) drops the gnode + favicon layers, keeping
+    /// edges + demoted dots as the underlay. The host sets this on the focused canvas
     /// (whose gnodes it snapshots into the shell document) and leaves it off on secondary
     /// panes. Either way a gnode is the node's rendered body, never the node's referenced
-    /// document. (Orrery-as-element.)
+    /// document. (Canvas-as-element.)
     pub fn set_render_gnodes_as_dom(&mut self, on: bool) {
         self.render_gnodes_as_dom = on;
     }
@@ -181,7 +181,7 @@ impl Orrery {
     ) {
         self.size_by_degree = size_by_degree;
         // Restore size-by-importance before `push_node_geometry` below, and force the cache stale
-        // so the push actually recomputes: on a reused orrery (a session switch) `importance_dirty`
+        // so the push actually recomputes: on a reused canvas (a session switch) `importance_dirty`
         // may already be clean, which would otherwise leave the restored mode with an empty map and
         // every node at the default size. (Graph signals — restore the importance encoding.)
         self.size_by_importance = size_by_importance;
@@ -257,7 +257,7 @@ impl Orrery {
         }
     }
 
-    /// Theme the orrery's surfaces: the content-surface `backdrop` and the `edge`
+    /// Theme the canvas's surfaces: the content-surface `backdrop` and the `edge`
     /// stroke color, as straight `[r, g, b, a]` (0..1). The host pushes these from
     /// the active theme so the graph re-themes with the chrome. Node *state* colors
     /// (open / closed / idle / selected) stay semantic and are not rethemed here.
@@ -266,8 +266,8 @@ impl Orrery {
         self.style.edge_color = ColorF::new(edge[0], edge[1], edge[2], edge[3]);
     }
 
-    /// Set the per-node content silhouettes the orrery shapes its on-screen nodes
-    /// by, keyed by node UUID; the orrery resolves each to its `NodeKey`. The host
+    /// Set the per-node content silhouettes the canvas shapes its on-screen nodes
+    /// by, keyed by node UUID; the canvas resolves each to its `NodeKey`. The host
     /// recomputes + pushes this from each node's content type as content is
     /// fetched; a node absent from `shapes` draws as [`NodeShape::Square`].
     pub fn set_node_shapes(&mut self, shapes: HashMap<uuid::Uuid, NodeShape>) {
@@ -284,7 +284,7 @@ impl Orrery {
     /// over the default [`Favicon`](Face::Favicon) until [`clear_node_face`](Self::clear_node_face).
     /// Sets only the face: the body (the collider hull) and any stored sprite image are left
     /// intact, so a face switch never reshapes the node or discards an imported sprite. The
-    /// override is held on the orrery; persisting it is a follow-up (it joins the cartography
+    /// override is held on the canvas; persisting it is a follow-up (it joins the cartography
     /// sidecar). A no-op for an unknown id. (Node body & face — the Face axis.)
     pub fn set_node_face(&mut self, id: uuid::Uuid, face: Face) {
         if let Some((key, _)) = self.graph.get_node_by_id(id) {
@@ -315,7 +315,7 @@ impl Orrery {
 
     /// Give a node a custom sprite face: store the imported image (a PNG data-URI) and set its
     /// face to [`Sprite`](Face::Sprite) in one step. Keyed by node UUID; a no-op for an unknown
-    /// id. Held on the orrery and persisted in the cartography sidecar. The host follows with
+    /// id. Held on the canvas and persisted in the cartography sidecar. The host follows with
     /// [`set_node_sprite_hull`] to trace the body hull; this backs the drag-and-drop image
     /// import. (Node body & face — sprite face.)
     pub fn set_node_sprite(&mut self, id: uuid::Uuid, data_uri: String) {

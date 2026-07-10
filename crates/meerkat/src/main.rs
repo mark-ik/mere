@@ -54,7 +54,7 @@ use frame::{FrameId, FrameLayout, GraphId, PaneContent, PaneId, PaneNode, Sessio
 use inker::EngineRegistry;
 use layout_dom_api::LayoutDom;
 use meerkat::{Chrome, ChromeLogic, chrome_view};
-use mere::orrery::{CameraView, Orrery};
+use mere::canvas::{CameraView, Canvas};
 use mere::platen::Workbench;
 use register_diagnostics::{DiagnosticEvent, install_global_sender};
 use register_theme::chrome::{ChromeTheme, Color32};
@@ -223,7 +223,7 @@ struct Shell {
     /// orrery as `self.orrery`. A sibling `Shell` field (not in `SharedState`) so it
     /// borrows disjointly from `shared` / `view`, as the single `orrery` did before.
     /// (Window composition P1; was the single `orrery: Orrery`.)
-    orreries: HashMap<GraphId, Orrery>,
+    orreries: HashMap<GraphId, Canvas>,
     /// Pooled graphs in least-recently-focused order (front = stalest). A graph
     /// moves to the back when focused; over [`MAX_POOLED_ORRERIES`] the stalest
     /// non-focused one is evicted (dropped, ending its physics thread). The graph
@@ -339,7 +339,7 @@ struct WindowCtx<'a> {
     /// [`WindowCtx::orrery`] / [`WindowCtx::orrery_mut`]; per-pane paths resolve a
     /// specific `graph_id`. Was the single bundled `orrery: &mut Orrery` (P1).
     /// (Window composition P2.)
-    orreries: &'a mut HashMap<GraphId, Orrery>,
+    orreries: &'a mut HashMap<GraphId, Canvas>,
     /// The per-session graphlet pool (read-only here), so a **branch** window's render
     /// can scope its orrery to its graphlet's live roster. (Graphlet wiring Phase 2
     /// slice 3.)

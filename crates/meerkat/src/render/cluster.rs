@@ -13,7 +13,7 @@
 //! node identity.)
 
 use chisel::{ColorF, GraphGlyph, GraphGlyphNode, Leaf, Meter, PaintCx, Size};
-use mere::orrery::NodeState;
+use mere::canvas::NodeState;
 use paint_list_api::specs::{TransformKind, TransformSpec};
 use paint_list_api::{DeviceIntSize, LayoutPoint, LayoutTransform, PaintCmd};
 
@@ -32,7 +32,7 @@ const FRAME_FULL_MS: f32 = 33.3;
 /// so it cannot `var()` the `--node-*` properties the DOM representations use; it
 /// reads the same table directly instead. (Representations carry node identity.)
 fn state_color(state: NodeState) -> ColorF {
-    let [r, g, b] = mere::orrery::palette::unit(mere::orrery::palette::accent(false, state).bg);
+    let [r, g, b] = mere::canvas::palette::unit(mere::canvas::palette::accent(false, state).bg);
     ColorF { r, g, b, a: 1.0 }
 }
 

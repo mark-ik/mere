@@ -249,7 +249,7 @@ impl crate::WindowCtx<'_> {
                             tier: self.orrery().node_size_tier(k),
                         },
                         CardWidget::Face {
-                            is_favicon: self.orrery().node_face(k) == mere::orrery::Face::Favicon,
+                            is_favicon: self.orrery().node_face(k) == mere::canvas::Face::Favicon,
                         },
                     ]
                 })

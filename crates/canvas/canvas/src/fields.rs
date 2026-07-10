@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Field-region interaction for [`Orrery`](crate::Orrery): which field the cursor
+//! Field-region interaction for [`Canvas`](crate::Canvas): which field the cursor
 //! is over (hover → box-on-interaction), hiding / showing fields (the roster's
 //! visibility toggle, mirroring `hidden_edges`), and centering the camera on a
 //! field. Factored out of `lib.rs` to stay under the workspace 600-LOC ceiling.
@@ -14,7 +14,7 @@ use seiche::CouplingForce;
 use kernel::graph::apply::{GraphDelta, GraphDeltaResult, apply_graph_delta};
 use kernel::graph::{Falloff, Field, FieldDefinition, FieldExtent, FieldId, ScalarField};
 
-use super::Orrery;
+use super::Canvas;
 
 /// World-space reach of a field's corner resize handles. A press within this of a
 /// `Region` corner resizes; the rest of the box moves. (Field regions — move/resize.)
@@ -42,7 +42,7 @@ pub(crate) struct FieldDrag {
     orig: [f32; 4],
 }
 
-impl Orrery {
+impl Canvas {
     /// Re-resolve every field coupling against the current graph + node set and
     /// replace the live forces — the rebuild a field place / move / resize / new
     /// node triggers. A `CouplingForce` snapshots its targets + the field definition
@@ -56,7 +56,7 @@ impl Orrery {
             .filter_map(|c| {
                 // A retired (deleted) field exerts no force, so its well drops when the
                 // field is deleted — `from_coupling` resolves a field by id regardless of
-                // lifecycle, so the active check is the orrery's job. (Field regions — delete.)
+                // lifecycle, so the active check is the canvas's job. (Field regions — delete.)
                 if !self.graph.field(c.field).is_some_and(|f| f.is_active()) {
                     return None;
                 }
@@ -66,7 +66,7 @@ impl Orrery {
         self.physics.set_coupling_forces(forces);
     }
 
-    /// The field whose `Region` extent contains the orrery-local screen point, if any — the
+    /// The field whose `Region` extent contains the canvas-local screen point, if any — the
     /// host's right-click field hit-test for the "Delete field" menu. (Field regions — delete.)
     pub fn field_at_screen(&self, sx: f32, sy: f32) -> Option<FieldId> {
         self.field_at_world(self.screen_to_world((sx, sy)))
@@ -134,7 +134,7 @@ impl Orrery {
     /// the soft disk well always). Returns whether the active field changed (so the
     /// host redraws).
     pub(crate) fn update_active_field(&mut self, screen_xy: (f32, f32)) -> bool {
-        // Off the orrery viewport (the cursor moved onto an adjacent pane / the
+        // Off the canvas viewport (the cursor moved onto an adjacent pane / the
         // toolbar) → no field is hovered, so the box doesn't stay stuck on.
         let off = screen_xy.0 < 0.0
             || screen_xy.0 > self.view_w as f32
@@ -195,7 +195,7 @@ impl Orrery {
     }
 
     /// Clear the hovered field (no field active) — the host calls this when the
-    /// cursor leaves the orrery, so a hover box does not stay stuck on after the
+    /// cursor leaves the canvas, so a hover box does not stay stuck on after the
     /// pointer moves onto another pane. Returns whether it changed. (Field regions.)
     pub fn clear_active_field(&mut self) -> bool {
         let changed = self.active_field.is_some();

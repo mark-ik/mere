@@ -1,29 +1,38 @@
 [package]
-name = "orrery"
+name = "canvas"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
 rust-version = "1.92.0"
-description = "Serval-on-winit host for the orrery (the graph field-canvas), build item 1D of the serval-as-host flip. Composites platen's scene-paint underlay (and, incrementally, seiche-positioned abs-pos node children under one camera transform) through the shared serval-winit-host present stack."
+description = "The mere graph canvas: the graph-truth presentation library (content-root: graph + seiche physics + camera + the abs-pos node-children pool + the scene-paint underlay), composited through the shared serval-winit-host present stack. Was `orrery`; that name retired to the Merely product tier ladder 2026-07-09, and platen's graph-scene lane merged in the same pass."
 
-# The reusable orrery content-root (window-agnostic): graph + seiche physics + camera
+# The reusable canvas content-root (window-agnostic): graph + seiche physics + camera
 # + the abs-pos node-children pool, with `frame(w, h) -> (Scene, needs_redraw)` and
-# semantic input methods. The bin below is a thin winit shell over it; meerkat hosts
-# the same `Orrery` as its content-root (S1 of the modular integration plan).
+# semantic input methods. The bin below is a thin winit shell over it; meerkat and
+# merecat host the same `Canvas` as their content-root.
 [lib]
-name = "orrery"
+name = "canvas"
 path = "src/lib.rs"
 
 [[bin]]
-name = "orrery"
+name = "canvas"
 path = "src/main.rs"
 
 [dependencies]
-# The host-neutral orrery scene producer + camera/style, and its graph + physics.
-platen.workspace = true
 kernel.workspace = true
+# The scene-paint lane (merged from platen, 2026-07-09): cartography projection
+# dispatch + the layout-strategy catalog + the coupling paint pass, over forme
+# arrangements.
+cartography.workspace = true
+arrangements.workspace = true
+quint.workspace = true
+forme.workspace = true
+# The scene-paint list + the cartography-geometry sidecar serialize (the host
+# persists the sidecar as JSON beside the session graph).
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1"
 # The orrery authors fields/couplings into its kernel Graph and syncs the sim from it
 # (build.rs / fields.rs), so it enables seiche's opt-in `kernel-bridge` (the
 # sync_with_graph / from_coupling wrappers). seiche's default build stays kernel-free.

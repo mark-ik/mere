@@ -2,18 +2,18 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! The orrery scene producer: graph → a painted `CanvasPaintList` underlay.
+//! The canvas scene producer: graph → a painted `CanvasPaintList` underlay.
 //!
-//! This is the **host-agnostic scene-paint underlay** of the orrery under
+//! This is the **host-agnostic scene-paint underlay** of the canvas under
 //! serval-as-host (the [serval-as-host evaluation](../../../../design_docs/mere_docs/technical_architecture/2026-05-29_serval_as_host_evaluation.md)
 //! §6, layer 1): edges + nodes + visual-coupling effects as one flat `PaintCmd`
 //! list. The brief's load-bearing claim is that this list "renders identically
 //! whether driven from a Masonry widget or a serval element", so the producer
-//! lives here, host-neutral; the eventual serval orrery element (or any host)
+//! lives here, host-neutral; the eventual serval canvas element (or any host)
 //! calls it and contributes the result as its paint sublist.
 //!
 //! Node positions come from the graph's committed positions today (matching the
-//! current orrery's `scene_from_graph`). When the seiche field-physics layer is
+//! current canvas's `scene_from_graph`). When the seiche field-physics layer is
 //! live, a force coupling moves a node and updates its position; this reprojects
 //! from the same accessor, so the producer is unchanged. The field's *visual*
 //! couplings are resolved here too, via [`crate::coupling_paint`].
@@ -31,7 +31,7 @@ use crate::coupling_paint::{paint_projection_with_visuals, visual_overlays};
 use crate::scene_paint::{Camera, CanvasPaintList, ScenePaintStyle, paint_projection_filtered};
 
 /// Build a [`Projection`] from the graph's committed node positions and its
-/// relations (collapsed to undirected, de-duplicated pairs — the orrery draws one
+/// relations (collapsed to undirected, de-duplicated pairs — the canvas draws one
 /// line per connected pair, not one per typed sidecar). Node radii are left `0.0`
 /// (the paint layer substitutes the style default); `content_bounds` is the
 /// axis-aligned box of the node positions, for a host that fits the view.
@@ -40,7 +40,7 @@ pub fn projection_from_graph(graph: &Graph) -> Projection {
         graph,
         |k| graph.node_projected_position(k),
         |_| true,
-        "orrery.stored",
+        "canvas.stored",
         true,
     )
 }
@@ -48,7 +48,7 @@ pub fn projection_from_graph(graph: &Graph) -> Projection {
 /// Build a [`Projection`] from a caller-supplied *live* position lookup (e.g. the
 /// seiche simulation's projected positions) instead of the committed positions —
 /// otherwise identical to [`projection_from_graph`] (same edge dedup,
-/// `content_bounds`). The orrery element feeds `position_of` from
+/// `content_bounds`). The canvas element feeds `position_of` from
 /// `seiche::Simulation::position_of` (mapped to [`PortablePoint`]), so the underlay
 /// reprojects from live motion each frame. A node with no live position
 /// (`position_of` returns `None`, e.g. not yet simulated) falls back to its
@@ -64,24 +64,24 @@ where
         graph,
         |k| position_of(k).or_else(|| graph.node_projected_position(k)),
         |_| true,
-        "orrery.live",
+        "canvas.live",
         false,
     )
 }
 
-/// The orrery's read-through *Identity* arrangement for `graph`: every graph member
+/// The canvas's read-through *Identity* arrangement for `graph`: every graph member
 /// as a `MemberIntent` (spine §14.2 `FormeRef::Identity`). Derived from the current
-/// node set, never stored. Projecting the orrery through this is what makes the
-/// orrery and the tiled workbench two projections of one forme arrangement.
+/// node set, never stored. Projecting the canvas through this is what makes the
+/// canvas and the tiled workbench two projections of one forme arrangement.
 pub fn identity_arrangement(graph: &Graph) -> Arrangement {
     Arrangement::identity(graph.nodes().map(|(_, node)| node.id))
 }
 
 /// A curated arrangement of just `keys` (a subset of the graph) as `MemberIntent`s
-/// keyed by their member UUIDs, in graph order — the orrery's "scope" lens. Like
+/// keyed by their member UUIDs, in graph order — the canvas's "scope" lens. Like
 /// [`identity_arrangement`] restricted to the given nodes; the same shape a
-/// `FormeRef::Stored` curated arrangement would take, so a scoped orrery and a
-/// curated bench are the same projection of different arrangements. (Curated orrery.)
+/// `FormeRef::Stored` curated arrangement would take, so a scoped canvas and a
+/// curated bench are the same projection of different arrangements. (Curated canvas.)
 pub fn arrangement_of_keys(graph: &Graph, keys: &[NodeKey]) -> Arrangement {
     let set: HashSet<NodeKey> = keys.iter().copied().collect();
     Arrangement::identity(
@@ -93,7 +93,7 @@ pub fn arrangement_of_keys(graph: &Graph, keys: &[NodeKey]) -> Arrangement {
 }
 
 /// Build a [`Projection`] whose node SET comes from a forme [`Arrangement`]'s
-/// membership rather than the whole graph — the seam that makes the orrery a
+/// membership rather than the whole graph — the seam that makes the canvas a
 /// Cartography projection of an arrangement. Positions come from `position_of`
 /// (committed fallback); edges still come from `graph.relations()`. For an Identity
 /// arrangement (every graph member) this is byte-identical to
@@ -112,7 +112,7 @@ where
         &keys,
         |k| position_of(k).or_else(|| graph.node_projected_position(k)),
         |_| true,
-        "orrery.live",
+        "canvas.live",
         false,
     )
 }
@@ -235,10 +235,10 @@ fn projected_undirected_edges(
     edges
 }
 
-/// The orrery scene as one paint list: the graph projected from its committed
+/// The canvas scene as one paint list: the graph projected from its committed
 /// positions, painted with edges, nodes, and the recognized visual-coupling
 /// overlays. The §6 layer-1 underlay in a single call, host-neutral.
-pub fn orrery_paint_list(
+pub fn canvas_paint_list(
     graph: &Graph,
     viewport: DeviceIntSize,
     camera: Camera,
@@ -249,14 +249,14 @@ pub fn orrery_paint_list(
     paint_projection_with_visuals(graph, &projection, viewport, camera, style, generation)
 }
 
-/// The orrery underlay from *live* positions (the seiche-driven variant of
-/// [`orrery_paint_list`]): same edges + nodes + visual-coupling overlays, but the
+/// The canvas underlay from *live* positions (the seiche-driven variant of
+/// [`canvas_paint_list`]): same edges + nodes + visual-coupling overlays, but the
 /// node positions come from `position_of` rather than the committed graph. The
-/// serval orrery element calls this each frame with `seiche::Simulation`'s
+/// serval canvas element calls this each frame with `seiche::Simulation`'s
 /// positions, so the underlay tracks the simulation (the plan's "positions
 /// transition from committed to seiche-live"). Generic over the lookup to keep
 /// platen seiche-free.
-pub fn orrery_paint_list_from_positions<F>(
+pub fn canvas_paint_list_from_positions<F>(
     graph: &Graph,
     position_of: F,
     viewport: DeviceIntSize,
@@ -271,8 +271,8 @@ where
     paint_projection_with_visuals(graph, &projection, viewport, camera, style, generation)
 }
 
-/// The orrery underlay with off-screen nodes **demoted**: same edges + visual
-/// overlays as [`orrery_paint_list_from_positions`], but a node rect is drawn
+/// The canvas underlay with off-screen nodes **demoted**: same edges + visual
+/// overlays as [`canvas_paint_list_from_positions`], but a node rect is drawn
 /// only for nodes where `is_demoted` returns `true` (the off-screen set). The
 /// host draws the on-screen nodes as richer DOM children and excludes them here,
 /// so the underlay and the DOM layer do not double-draw a node.
@@ -281,9 +281,9 @@ where
 /// demoted one renders. Generic over both lookups to keep platen seiche-free.
 ///
 /// Visual-coupling overlays currently ride the underlay for every coupled node
-/// (the sample orrery has none); demoting overlays to the off-screen set as well
+/// (the sample canvas has none); demoting overlays to the off-screen set as well
 /// is a follow-on, like the richer demoted-node glyphs.
-pub fn orrery_paint_list_demoted<F, G, V>(
+pub fn canvas_paint_list_demoted<F, G, V>(
     graph: &Graph,
     position_of: F,
     is_demoted: G,
@@ -304,7 +304,7 @@ where
         graph,
         |k| position_of(k).or_else(|| graph.node_projected_position(k)),
         edge_visible,
-        "orrery.live",
+        "canvas.live",
         false,
     );
     let mut list =
@@ -313,13 +313,13 @@ where
     list
 }
 
-/// [`orrery_paint_list_demoted`] with the node SET sourced from a forme
-/// [`Arrangement`]'s membership instead of the whole graph — the orrery rendered as
+/// [`canvas_paint_list_demoted`] with the node SET sourced from a forme
+/// [`Arrangement`]'s membership instead of the whole graph — the canvas rendered as
 /// a Cartography projection of an arrangement (the spine's "two projections of one
 /// arrangement"). For an Identity arrangement the output is byte-identical to
-/// `orrery_paint_list_demoted`; a curated arrangement would show only its members.
+/// `canvas_paint_list_demoted`; a curated arrangement would show only its members.
 /// Edges, positions, demotion, and visual overlays are otherwise unchanged.
-pub fn orrery_paint_list_demoted_from_arrangement<F, G, V, R>(
+pub fn canvas_paint_list_demoted_from_arrangement<F, G, V, R>(
     graph: &Graph,
     arrangement: &Arrangement,
     position_of: F,
@@ -343,7 +343,7 @@ where
         &keys,
         |k| position_of(k).or_else(|| graph.node_projected_position(k)),
         edge_visible,
-        "orrery.live",
+        "canvas.live",
         false,
     );
     // Carry each node's face radius into the projection so straight edges trim to the

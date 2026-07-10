@@ -160,12 +160,12 @@ impl WindowCtx<'_> {
             "orrery:sizebyimportance" => self.toggle_orrery_size_by_importance(),
             "orrery:importance:degree" => {
                 self.orrery_mut()
-                    .set_importance_metric(mere::orrery::ImportanceMetric::Degree);
+                    .set_importance_metric(mere::canvas::ImportanceMetric::Degree);
                 self.view.request_redraw();
             }
             "orrery:importance:betweenness" => {
                 self.orrery_mut()
-                    .set_importance_metric(mere::orrery::ImportanceMetric::Betweenness);
+                    .set_importance_metric(mere::canvas::ImportanceMetric::Betweenness);
                 self.view.request_redraw();
             }
             "orrery:communityrings" => {
@@ -180,12 +180,12 @@ impl WindowCtx<'_> {
             }
             "orrery:bridge:betweenness" => {
                 self.orrery_mut()
-                    .set_bridge_metric(mere::orrery::BridgeMetric::Betweenness);
+                    .set_bridge_metric(mere::canvas::BridgeMetric::Betweenness);
                 self.view.request_redraw();
             }
             "orrery:bridge:articulation" => {
                 self.orrery_mut()
-                    .set_bridge_metric(mere::orrery::BridgeMetric::Articulation);
+                    .set_bridge_metric(mere::canvas::BridgeMetric::Articulation);
                 self.view.request_redraw();
             }
             "orrery:glossscope" => {
@@ -545,7 +545,7 @@ impl WindowCtx<'_> {
 
     /// Apply the gloss outline row intents the shell runner's dispatch queued: a click
     /// selects + focuses that node, mirroring the minimap's click-to-focus and the
-    /// roster's non-additive click (`mere::orrery::select_by_url`, the shared primitive).
+    /// roster's non-additive click (`mere::canvas::select_by_url`, the shared primitive).
     /// (gloss-outline plan P1.)
     pub(crate) fn drain_gloss_outline_intents(&mut self) {
         for intent in self.take_gloss_outline_intents() {

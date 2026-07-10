@@ -16,7 +16,7 @@
 //! See `2026-06-21_settings_lane_consolidation_plan` (P3).
 
 use mere::forme::GraphMemberId;
-use mere::orrery::Face;
+use mere::canvas::Face;
 
 use crate::WindowCtx;
 use crate::list_pane::PaneItem;
@@ -171,7 +171,7 @@ impl WindowCtx<'_> {
         // Material (the Body axis's physics): bounce / grip / weight, as steppers. A node can be
         // made heavier, bouncier, or grippier; the value persists in the sidecar. (Body & face.)
         let mat = orrery.node_material(key);
-        let weight = mat.density / mere::orrery::NODE_BODY_DENSITY;
+        let weight = mat.density / mere::canvas::NODE_BODY_DENSITY;
         items.push(PaneItem::text("app-title", "Material"));
         items.push(PaneItem::text(
             "app-row",
@@ -325,8 +325,8 @@ impl WindowCtx<'_> {
             "bounce:down" => mat.restitution = round1((mat.restitution - 0.1).max(0.0)),
             "grip:up" => mat.friction = round1((mat.friction + 0.1).min(2.0)),
             "grip:down" => mat.friction = round1((mat.friction - 0.1).max(0.0)),
-            "mass:up" => mat.density = (mat.density * 1.5).min(mere::orrery::NODE_BODY_DENSITY * 8.0),
-            "mass:down" => mat.density = (mat.density / 1.5).max(mere::orrery::NODE_BODY_DENSITY * 0.25),
+            "mass:up" => mat.density = (mat.density * 1.5).min(mere::canvas::NODE_BODY_DENSITY * 8.0),
+            "mass:down" => mat.density = (mat.density / 1.5).max(mere::canvas::NODE_BODY_DENSITY * 0.25),
             _ => return,
         }
         self.orrery_mut().set_node_material(member, mat);

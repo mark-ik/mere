@@ -23,7 +23,7 @@ impl EdgeCell {
     }
 }
 
-/// A pointer button the host reports to the orrery (winit / serval / … map onto it).
+/// A pointer button the host reports to the canvas (winit / serval / … map onto it).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PointerButton {
     Left,
@@ -31,7 +31,7 @@ pub enum PointerButton {
     Right,
 }
 
-/// The orrery's camera as plain pan + zoom, for the host to persist and restore
+/// The canvas's camera as plain pan + zoom, for the host to persist and restore
 /// (the host maps it to/from its own serialized form). `offset` is the screen-px
 /// translation, `zoom` the uniform scale: `screen = world * zoom + offset`.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -40,18 +40,18 @@ pub struct CameraView {
     pub zoom: f32,
 }
 
-/// The full per-pane *view* state over a shared orrery: the complete camera (pan +
-/// zoom + isometric orbit/foreshorten) plus its pan inertia. The orrery
+/// The full per-pane *view* state over a shared canvas: the complete camera (pan +
+/// zoom + isometric orbit/foreshorten) plus its pan inertia. The canvas
 /// *authority* owns the graph, physics, and node positions; the **view** owns one
 /// `Viewport` per (window, graph) pane. The host installs it before a render/input
-/// pass with [`Orrery::set_viewport`] and reads back the mutated value with
-/// [`Orrery::viewport`].
+/// pass with [`Canvas::set_viewport`] and reads back the mutated value with
+/// [`Canvas::viewport`].
 ///
 /// This is what lets two windows on one graph be independent views rather than a
 /// mirror: they hold distinct `Viewport`s over the *shared* node positions. The
-/// orrery's own camera/`pan_velocity` fields are then per-pass working state the
+/// canvas's own camera/`pan_velocity` fields are then per-pass working state the
 /// host drives, not durable per-graph truth. Seed a fresh pane's viewport from the
-/// orrery's current one (`viewport()`) rather than constructing it, so the initial
+/// canvas's current one (`viewport()`) rather than constructing it, so the initial
 /// framing is sensible.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Viewport {
@@ -64,13 +64,13 @@ pub struct Viewport {
     /// Isometric vertical foreshorten in `(0, 1]` (`1.0` is top-down 2D).
     pub tilt: f32,
     /// Inertial pan velocity (px/frame); per-view so one window's fling does not
-    /// drift another window sharing the same orrery.
+    /// drift another window sharing the same canvas.
     pub pan_velocity: (f32, f32),
 }
 
-/// A node's coarse activation state, for the orrery to color its on-screen
+/// A node's coarse activation state, for the canvas to color its on-screen
 /// nodes. The host computes these from the actor pool + content cache and pushes
-/// them via [`Orrery::set_node_states`]; a node absent from the map colors as
+/// them via [`Canvas::set_node_states`]; a node absent from the map colors as
 /// [`Idle`](NodeState::Idle).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NodeState {
@@ -83,10 +83,10 @@ pub enum NodeState {
     Idle,
 }
 
-/// A node's content-type silhouette, so the orrery can shape its on-screen nodes
+/// A node's content-type silhouette, so the canvas can shape its on-screen nodes
 /// by what kind of content they hold. The host resolves each node's content type
 /// (inker's content-type → engine routing) and pushes these via
-/// [`Orrery::set_node_shapes`], the same way it pushes [`NodeState`] colors. A
+/// [`Canvas::set_node_shapes`], the same way it pushes [`NodeState`] colors. A
 /// node absent from the map draws as [`Square`](NodeShape::Square), the neutral
 /// default; square reads as a document, the others distinguish renderable
 /// families at a glance. (The shape vocabulary is a first cut — a theme / lens
@@ -109,7 +109,7 @@ pub enum NodeShape {
 /// node with a custom hull body can still show its favicon, and a sprite face can sit on the
 /// default silhouette body. Independent of the node's truth (content, identity, edges stay
 /// authoritative in the kernel). The host pushes per-node overrides via
-/// [`Orrery::set_node_face`]; a node without an override defaults to [`Favicon`](Face::Favicon).
+/// [`Canvas::set_node_face`]; a node without an override defaults to [`Favicon`](Face::Favicon).
 /// The card preview is a *separate* layer over the node, not a face, so it is absent here.
 /// (Node body & face model — the Face axis.)
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -120,7 +120,7 @@ pub enum Face {
     #[default]
     Favicon,
     /// A custom imported sprite image, cover-fit over the whole face — the "alive graph" form.
-    /// The host stores the per-node image (a PNG data-URI) via [`Orrery::set_node_sprite`],
+    /// The host stores the per-node image (a PNG data-URI) via [`Canvas::set_node_sprite`],
     /// which sets this face. The body (silhouette or a sprite-traced hull) is a separate axis.
     /// (Node body & face — sprite face.)
     Sprite,
@@ -130,7 +130,7 @@ pub enum Face {
 }
 
 impl Face {
-    /// The persisted string code for the cartography sidecar (kept seiche/orrery-free downstream).
+    /// The persisted string code for the cartography sidecar (kept seiche/canvas-free downstream).
     /// (Node body & face — face persistence.)
     pub fn as_code(self) -> &'static str {
         match self {

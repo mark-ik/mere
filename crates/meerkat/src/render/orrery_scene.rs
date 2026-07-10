@@ -10,7 +10,7 @@
 use super::*;
 use crate::window_view::{GnodeBuildStats, GnodeHotRow, GnodeSnapshot, GnodeStableRow};
 use frame::GraphId;
-use mere::orrery::Face;
+use mere::canvas::Face;
 use serval_scripted_dom::ScriptedDom;
 
 impl crate::WindowCtx<'_> {
@@ -91,7 +91,7 @@ impl crate::WindowCtx<'_> {
                 self.pane_orrery_mut(orrery_gid)
                     .refresh_community_cache(&id);
                 let pane = self.pane_orrery(orrery_gid);
-                let positions = mere::platen::project_orrery_strategy(
+                let positions = mere::canvas::project_canvas_strategy(
                     &id,
                     pane.graph(),
                     pane.focused_key(),
@@ -197,9 +197,9 @@ impl crate::WindowCtx<'_> {
                         label: gnode_pool.cached_label(node.id, &node.title),
                         // Content-type silhouette as the face's border-radius.
                         radius: match orrery.node_shape(key) {
-                            mere::orrery::NodeShape::Square => "0",
-                            mere::orrery::NodeShape::Rounded => "9px",
-                            mere::orrery::NodeShape::Circle => "50%",
+                            mere::canvas::NodeShape::Square => "0",
+                            mere::canvas::NodeShape::Rounded => "9px",
+                            mere::canvas::NodeShape::Circle => "50%",
                         },
                         image_uri: match face {
                             Face::Sprite => sprite,
@@ -285,7 +285,7 @@ impl crate::WindowCtx<'_> {
                     let focus = orrery.focused_key();
                     if orrery.needs_strategy_recompute(&id, sw, sh, focus) {
                         orrery.refresh_community_cache(&id);
-                        let positions = mere::platen::project_orrery_strategy(
+                        let positions = mere::canvas::project_canvas_strategy(
                             &id,
                             orrery.graph(),
                             orrery.focused_key(),

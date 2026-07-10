@@ -8,7 +8,7 @@
 use std::collections::{HashMap, HashSet};
 
 use mere::forme::GraphMemberId;
-use mere::orrery::NodeState;
+use mere::canvas::NodeState;
 use session_runtime::memory_levels::EvictionPolicy;
 
 use super::WindowCtx;

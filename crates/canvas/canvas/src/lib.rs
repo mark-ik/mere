@@ -2,26 +2,26 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! The orrery as a reusable, **window-agnostic content-root** — the graph's
+//! The canvas as a reusable, **window-agnostic content-root** — the graph's
 //! spatial presentation (build item 1D of the serval-as-host flip; S1 of the
 //! modular integration plan).
 //!
-//! [`Orrery`] owns the graph, its [`seiche::Simulation`], the camera, and the
+//! [`Canvas`] owns the graph, its [`seiche::Simulation`], the camera, and the
 //! pre-materialized abs-pos node-children pool. It exposes:
 //!
-//! - [`Orrery::frame`] — advance one frame at a given viewport and return the
+//! - [`Canvas::frame`] — advance one frame at a given viewport and return the
 //!   composited `netrender::Scene` plus whether another frame is needed (the sim
 //!   still settling, pan still gliding, or a node being dragged). It does **not**
 //!   present — the host (a winit bin, or meerkat's content-root) rasterizes +
 //!   composites the returned scene.
-//! - Semantic input methods ([`pointer_down`](Orrery::pointer_down) /
-//!   [`pointer_up`](Orrery::pointer_up) / [`cursor_moved`](Orrery::cursor_moved) /
-//!   [`wheel`](Orrery::wheel) / [`set_ctrl`](Orrery::set_ctrl) /
-//!   [`reseed`](Orrery::reseed)), each returning whether a redraw is needed. The
-//!   host maps its raw events (winit, serval input, …) onto these; the orrery
+//! - Semantic input methods ([`pointer_down`](Canvas::pointer_down) /
+//!   [`pointer_up`](Canvas::pointer_up) / [`cursor_moved`](Canvas::cursor_moved) /
+//!   [`wheel`](Canvas::wheel) / [`set_ctrl`](Canvas::set_ctrl) /
+//!   [`reseed`](Canvas::reseed)), each returning whether a redraw is needed. The
+//!   host maps its raw events (winit, serval input, …) onto these; the canvas
 //!   never sees a window.
 //!
-//! The three composited layers (per the §6 plan): the [`platen::orrery`]
+//! The three composited layers (per the §6 plan): the [`crate::underlay`]
 //! scene-paint underlay (edges + demoted off-screen node rects + coupling
 //! overlays) under one camera transform; the on-screen nodes as abs-pos serval
 //! DOM children (laid out incrementally, moved per-frame by inline transform on
@@ -43,7 +43,7 @@ pub use seiche::{
 };
 use kernel::geometry::PortablePoint;
 use kernel::graph::{EdgeAssertion, FieldId, Graph, NodeKey, RelationSelector, SemanticSubKind};
-use platen::scene_paint::{Camera, ScenePaintStyle};
+use crate::scene_paint::{Camera, ScenePaintStyle};
 use serval_layout::IncrementalLayout;
 use serval_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
 
@@ -65,7 +65,7 @@ fn build_affinity_spring(scores: &signals::AffinityScores) -> AffinitySpring {
 
 /// How the affinity force combines its two signals — **structural** (Jaccard over topology) and
 /// **content** (cosine over node embeddings) — when both are available under the
-/// [`cluster_by_affinity`](Orrery::set_cluster_by_affinity) toggle. (burn brief Lane 5 — P6,
+/// [`cluster_by_affinity`](Canvas::set_cluster_by_affinity) toggle. (burn brief Lane 5 — P6,
 /// blended affinity.)
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum AffinityBlend {
@@ -111,6 +111,27 @@ mod types;
 pub use signals::{BridgeMetric, ImportanceMetric};
 pub use types::{CameraView, EdgeCell, Face, NodeShape, NodeState, PointerButton, Viewport};
 
+// The graph-scene paint lane, merged from platen in the 2026-07-09
+// decomposition (platen is the pane home now; the canvas is the graph-truth
+// presentation library):
+/// Cartography projection-request derivation + the layout-strategy catalog.
+pub mod cartography_scene;
+/// Visual couplings → paint overlays (the quint field paint pass).
+pub mod coupling_paint;
+/// Cartography geometry: the settled-layout sidecar the host persists.
+pub mod geometry;
+/// Render a cartography `Projection` into a `paint_list_api` paint list.
+pub mod scene_paint;
+/// The canvas scene-paint underlay (edges + demoted node rects + overlays).
+pub mod underlay;
+
+pub use cartography_scene::{
+    CANVAS_LAYOUT_STRATEGIES, CartographySceneOptions, build_projection_request,
+    project_canvas_lens, project_canvas_strategy, project_canvas_subgraph, project_with,
+    signal_overlays,
+};
+pub use geometry::CartographyGeometry;
+
 /// The node accent palette every representation of a node tints from.
 pub mod palette;
 
@@ -153,7 +174,7 @@ const GLOSS_CLUSTER_RING_ALPHA: f32 = 0.9;
 /// The bold near-white the gloss bridge ring wears (matches the main-view bridge ring's intent).
 const GLOSS_BRIDGE_RING_RGBA: [f32; 4] = [0.95, 0.96, 1.0, 0.92];
 /// Pixels per wheel line-notch (the host scales `LineDelta` by this before
-/// calling [`Orrery::wheel`]; `wheel` divides back out to recover notches for zoom).
+/// calling [`Canvas::wheel`]; `wheel` divides back out to recover notches for zoom).
 pub const WHEEL_PAN_SCALE: f32 = 40.0;
 /// Zoom multiplier per wheel notch under Ctrl.
 const ZOOM_STEP: f32 = 1.15;
@@ -193,12 +214,12 @@ struct Drag {
     moved: bool,
 }
 
-/// The orrery content-root: the graph, its physics, the camera, and the abs-pos
+/// The canvas content-root: the graph, its physics, the camera, and the abs-pos
 /// node-children pool. Window-agnostic — see the module docs.
-pub struct Orrery {
+pub struct Canvas {
     graph: Graph,
     /// The force-directed layout backend — in-thread (tests / wasm) or an
-    /// off-thread armillary actor (native always-offload). The orrery never reads
+    /// off-thread armillary actor (native always-offload). The canvas never reads
     /// it directly; it feeds positions into `view` each frame.
     physics: Physics,
     /// Whether the layout physics is paused (the user froze the graph with Space /
@@ -342,7 +363,7 @@ pub struct Orrery {
     /// was computed at, so a stale partition is recomputed and a fresh one reused. (Graph signals.)
     community_cache_revision: u64,
     /// The inputs the active analytic layout was last computed for: `(strategy_id, graph revision,
-    /// width, height, focus)`. The host gates its per-frame `project_orrery_strategy` call on these
+    /// width, height, focus)`. The host gates its per-frame `project_canvas_strategy` call on these
     /// via [`needs_strategy_recompute`](Self::needs_strategy_recompute), so an unchanged analytic
     /// layout (grid, kanban, penrose, radial, ...) is computed once per real change, not every frame.
     /// `focus` is only recorded for focus-driven strategies (radial), so a selection change does not
@@ -392,8 +413,8 @@ pub struct Orrery {
     installed_affinity_revision: Option<u64>,
     /// A host-injected **content-affinity** signal (semantic similarity from node embeddings),
     /// superseding the internal structural-Jaccard one while `Some`. `None` = use structural. The
-    /// host owns the embedding provider (burn stays out of the orrery) and re-injects on node-content
-    /// change; the orrery installs it under the `cluster_by_affinity` toggle. `Some(empty)` is
+    /// host owns the embedding provider (burn stays out of the canvas) and re-injects on node-content
+    /// change; the canvas installs it under the `cluster_by_affinity` toggle. `Some(empty)` is
     /// authoritative-but-inert (clusters found nothing). (burn brief Lane 5 — P4, content source.)
     content_affinity: Option<Vec<(NodeKey, NodeKey, f32)>>,
     /// Set when the host injects a fresh content signal; drives a single (re)install on the next
@@ -431,7 +452,7 @@ pub struct Orrery {
         Option<NodeKey>,
     )>,
     /// The gloss lens's signal overlays (community halos + bridge emphasis), captured from the same
-    /// `project_orrery_lens` projection as [`gloss_positions`](Self::gloss_positions) — the overlay
+    /// `project_canvas_lens` projection as [`gloss_positions`](Self::gloss_positions) — the overlay
     /// pipe's first consumer. [`gloss_geometry`](Self::gloss_geometry) resolves them into rings at
     /// the lens's own positions, so a second lens shows the clusters/brokers under its own layout.
     /// (Graph signals — P6b, the overlay pipe.)
@@ -472,32 +493,32 @@ pub struct Orrery {
     /// Whether Alt is held (a left-drag orbits the camera instead of picking / marqueeing).
     /// (Isometric camera — orbit gesture.)
     alt: bool,
-    /// The current viewport (px), updated by [`frame`](Orrery::frame) /
-    /// [`resize`](Orrery::resize); used by `world_viewport` (cull) + `recenter`.
+    /// The current viewport (px), updated by [`frame`](Canvas::frame) /
+    /// [`resize`](Canvas::resize); used by `world_viewport` (cull) + `recenter`.
     view_w: u32,
     view_h: u32,
     /// The pane's active layout strategy (a cartography adapter `projection_id`, e.g.
     /// `"phyllotaxis.default"`), or `None` for the default force-directed (seiche) layout.
     /// Persisted per pane via view-intent; the host pushes positions for it via
-    /// [`apply_strategy_positions`](Orrery::apply_strategy_positions). (Layout picker.)
+    /// [`apply_strategy_positions`](Canvas::apply_strategy_positions). (Layout picker.)
     active_strategy: Option<String>,
     /// Buffered positions for the active non-seiche strategy, applied into `view` each
     /// frame **after** the physics snapshot (so they win over seiche regardless of the
     /// off-thread actor's timing). `None` under force-directed. (Layout picker.)
     strategy_positions: Option<Vec<(NodeKey, PortablePoint)>>,
-    /// The pane's "scope" lens: when `Some`, the orrery renders only these nodes (a
+    /// The pane's "scope" lens: when `Some`, the canvas renders only these nodes (a
     /// curated subset), projecting through a curated forme arrangement instead of the
-    /// full Identity one. `None` shows the whole graph. (Curated orrery.)
+    /// full Identity one. `None` shows the whole graph. (Curated canvas.)
     scope: Option<Vec<NodeKey>>,
     /// When set, the scene omits the on-screen gnode + favicon layers: the host renders
-    /// those gnodes as DOM elements in the shell document instead (the focused orrery only;
+    /// those gnodes as DOM elements in the shell document instead (the focused canvas only;
     /// secondary panes keep their in-scene gnodes). Edges + demoted dots stay as the underlay.
     /// A gnode is the node's rendered body either way — a Scene layer here, a chrome DOM
-    /// element there — never the node's referenced document. (Orrery-as-element — Phase 2.)
+    /// element there — never the node's referenced document. (Canvas-as-element — Phase 2.)
     render_gnodes_as_dom: bool,
 }
 
-impl Default for Orrery {
+impl Default for Canvas {
     fn default() -> Self {
         Self::new()
     }

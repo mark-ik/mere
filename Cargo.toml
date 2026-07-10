@@ -4,12 +4,12 @@ members = [
     "crates/mere",
     "crates/meerkat-browser-worker",
     "crates/meerkat",
-    "crates/orrery/orrery",
+    "crates/canvas/canvas",
     "crates/persona/identity",
-    "crates/orrery/quint",
-    "crates/orrery/seiche",
-    "crates/orrery/cartography",
-    "crates/orrery/arrangements",
+    "crates/canvas/quint",
+    "crates/canvas/seiche",
+    "crates/canvas/cartography",
+    "crates/canvas/arrangements",
     "crates/graph/glossary",
     "crates/graph/graphlets",
     "crates/graph/graph-kernel",
@@ -90,18 +90,19 @@ repository = "https://github.com/mark-ik/mere"
 # so only the root Cargo.toml knows where each crate lives. Package names
 # below are the *current* names — rename passes (drop mere-* prefix etc.)
 # update both this list and consumer references in one shot.
-quint = { path = "crates/orrery/quint" }
-seiche = { path = "crates/orrery/seiche" }
-cartography = { path = "crates/orrery/cartography" }
+quint = { path = "crates/canvas/quint" }
+seiche = { path = "crates/canvas/seiche" }
+cartography = { path = "crates/canvas/cartography" }
 # Deterministic graph arrangements (penrose / l-system / phyllotaxis /
 # kanban-timeline / radial-grid / semantic), recaptured from the retired
 # graph-layout; seiche owns live force physics.
-arrangements = { path = "crates/orrery/arrangements" }
+arrangements = { path = "crates/canvas/arrangements" }
 linked-data = { path = "crates/graph/linked-data" }
 kernel = { path = "crates/graph/graph-kernel" }
 graphlets = { path = "crates/graph/graphlets" }
-# The orrery host content-root (was `orrery-host`); takes the bare `orrery` name.
-orrery = { path = "crates/orrery/orrery" }
+# The graph-canvas content-root (was `orrery`; that name retired to the Merely
+# product tier ladder, 2026-07-09 — see the boundary pass plan amendments).
+canvas = { path = "crates/canvas/canvas" }
 # Graph digest projections (djot outline, metrics) — `glossary` (was `mere-orrery`).
 glossary = { path = "crates/graph/glossary" }
 
