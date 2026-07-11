@@ -43,7 +43,7 @@ index and search facade, feature-gated model backends), but it lives inside mere
 and is `publish = false`. Two consumers now want it independently:
 
 - **mere** itself (its statistical-intelligence tier), the current owner.
-- **Isometry** (a standalone Strophos-stack app), for the RAG and
+- **Isometry** (a standalone Merely-stack app), for the RAG and
   semantic-recall half of the optional DM-loaded-model lane: retrieving relevant
   world and entity context to ground an NPC line or a recap. See isometry
   `design_docs/2026-07-07_optional_intelligence_vision.md`; the generation half
@@ -181,7 +181,7 @@ wgpu execution land behind features, mirroring vates.
   consumer that wants only generation pulls vates without an index. A RAG
   consumer that wants both depends on both, which is the honest dependency.
 - **Licensing.** The ported files are MPL-2.0 (mere's license), so sibylla is
-  MPL-2.0 for now. The Strophos app workspaces (isometry, serval) use
+  MPL-2.0 for now. The Merely app workspaces (isometry, serval) use
   `MIT OR Apache-2.0`; whether sibylla relicenses to match the crates.io norm is
   Mark's call before first publish, and should be decided together with vates so
   the sibling crates match. Until then MPL is the safe default for promoted code.
