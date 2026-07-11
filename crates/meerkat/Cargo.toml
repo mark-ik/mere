@@ -327,7 +327,7 @@ tincture = { workspace = true }
 # illume's container tree for structural editor ops (expand-selection to the enclosing
 # djot container). This is host editing logic, distinct from the highlight bridge that
 # lives in xilem-serval's `highlight` feature.
-illume = { git = "https://github.com/mark-ik/illume.git", branch = "main" }
+illume = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 # Unique ids for forked user themes.
 uuid = { workspace = true }
 
