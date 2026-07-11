@@ -233,7 +233,7 @@ netfetcher = { git = "https://github.com/mark-ik/netfetcher.git", branch = "main
 # one-way; a **git dep** (not a path dep) so any machine pulls just mere and Cargo
 # fetches errand from GitHub — no `../../../errand` layout to replicate. The fetch
 # actor routes http(s) -> netfetcher and smolweb schemes -> errand.
-errand = { git = "https://github.com/mark-ik/errand.git" }
+errand = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 # Construct `errand::ClientIdentity` (CertificateDer / PrivateKeyDer) from the
 # misfin cert's DER bytes for the misfin send path. Same crate rustls re-exports
 # as `rustls::pki_types`, so it unifies with errand's rustls 0.23.

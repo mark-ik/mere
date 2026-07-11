@@ -13,7 +13,7 @@ path = "src/lib.rs"
 [dependencies]
 armillary.workspace = true
 eidetic.workspace = true
-errand = { git = "https://github.com/mark-ik/errand.git" }
+errand = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 netfetcher = { git = "https://github.com/mark-ik/netfetcher.git", branch = "main" }
 pollster = "0.4"
 rustls-pki-types = "1"
