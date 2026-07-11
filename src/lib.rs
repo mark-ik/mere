@@ -1,6 +1,6 @@
 //! # personae
 //!
-//! The identity and carry layer for the Strophos ecosystem. personae owns a
+//! The identity and carry layer for the Merely ecosystem. personae owns a
 //! person's **faces**: the master Ed25519 keypair, deterministic per-protocol
 //! key derivation (BLAKE3 keyed-hash), the passphrase- and OS-store-unlocked
 //! vault, and sealed-record storage for secrets at rest. A human has *personae*,

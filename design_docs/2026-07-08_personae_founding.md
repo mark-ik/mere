@@ -8,7 +8,7 @@ chartulary doctrine: fresh/lifted core, the app re-bases last).
 
 ## What personae is
 
-The identity **and carry** layer for the Strophos ecosystem (mere, isometry,
+The identity **and carry** layer for the Merely ecosystem (mere, isometry,
 strophe, woodshed). A person has *personae*, plural — a work face, a research
 face, a burner — so the crate is the register of those faces and the root of
 trust they derive from. It is the trust-plane spine, companion to the

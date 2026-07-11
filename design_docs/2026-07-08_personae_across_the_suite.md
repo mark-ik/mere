@@ -1,4 +1,4 @@
-# personae Across the Suite — the identity spine of the Strophos apps
+# personae Across the Suite — the identity spine of the Merely apps
 
 **Date:** 2026-07-08
 **Status:** vision / architecture brief. Sits above two mere-side docs that hold
@@ -11,7 +11,7 @@ suite: mere, isometry, strophe, woodshed.
 
 ## Thesis: the wallet is a server-less account
 
-Every app suite has an account system. The Strophos suite's is a **P2P wallet.**
+Every app suite has an account system. The Merely suite's is a **P2P wallet.**
 One personae identity, a master Ed25519 seed and the faces derived from it, signs
 into all four apps with no login server, offline-first, carried between your own
 devices by the wallet's device roster. personae is not persona support built four
