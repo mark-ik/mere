@@ -218,6 +218,46 @@ impl Canvas {
         self.camera.zoom = 1.0;
     }
 
+    /// Frame the graph itself: the fit-to-`content_bounds` camera that
+    /// [`recenter`](Self::recenter) documents as its replacement for a hosted
+    /// graph. Restored sessions need this rather than `recenter` — persisted
+    /// positions may have settled anywhere in world space, so framing the
+    /// origin can frame empty ground with every node off-screen. Zoom fits
+    /// the padded bounds but never exceeds `1.0` (a lone node reads at its
+    /// natural size, not blown up to fill the window). An empty graph (or one
+    /// with no finite positions) falls back to `recenter`.
+    pub fn fit_to_content(&mut self) {
+        let mut min = (f32::INFINITY, f32::INFINITY);
+        let mut max = (f32::NEG_INFINITY, f32::NEG_INFINITY);
+        let mut any = false;
+        for (_, node) in self.graph.nodes() {
+            let p = node.projected_position();
+            if !p.x.is_finite() || !p.y.is_finite() {
+                continue;
+            }
+            any = true;
+            min = (min.0.min(p.x), min.1.min(p.y));
+            max = (max.0.max(p.x), max.1.max(p.y));
+        }
+        if !any {
+            self.recenter();
+            return;
+        }
+        // Pad the bounds so rim nodes draw fully inside the viewport (a node's
+        // disc + caption extend past its position point).
+        const MARGIN: f32 = 160.0;
+        let (w, h) = (self.view_w as f32, self.view_h as f32);
+        let span_w = (max.0 - min.0) + MARGIN * 2.0;
+        let span_h = (max.1 - min.1) + MARGIN * 2.0;
+        let zoom = (w / span_w)
+            .min(h / span_h)
+            .min(1.0)
+            .clamp(MIN_ZOOM, MAX_ZOOM);
+        let center = ((min.0 + max.0) / 2.0, (min.1 + max.1) / 2.0);
+        self.camera.zoom = zoom;
+        self.camera.offset = (w / 2.0 - center.0 * zoom, h / 2.0 - center.1 * zoom);
+    }
+
     /// Whether the graph is empty, or at least one node lies within the current
     /// viewport. `false` means every node is off-screen — a degenerate camera (a
     /// restored pan/zoom that no longer frames the graph), which the host recovers

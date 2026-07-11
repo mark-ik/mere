@@ -694,6 +694,43 @@ fn with_graph_restores_nodes_and_positions() {
 }
 
 #[test]
+fn fit_to_content_frames_a_far_restored_graph() {
+    // The restored-session failure: persisted positions settled far from the
+    // world origin, so the boot recenter (which frames the origin) shows
+    // empty ground. fit_to_content must frame the content instead.
+    let mut graph = Graph::new();
+    graph.add_node(
+        "https://far.example".to_string(),
+        PortablePoint::new(4000.0, -2600.0),
+    );
+    let mut canvas = Canvas::with_graph(graph);
+    canvas.resize(800, 600);
+    canvas.recenter();
+    assert!(
+        !canvas.graph_visible(),
+        "recenter frames the origin, missing far content (the bug setup)"
+    );
+    canvas.fit_to_content();
+    assert!(
+        canvas.graph_visible(),
+        "fit_to_content frames the restored positions"
+    );
+    assert!(
+        (canvas.camera().zoom - 1.0).abs() < f32::EPSILON,
+        "a lone node is framed at natural size, not zoomed in"
+    );
+}
+
+#[test]
+fn fit_to_content_on_an_empty_graph_recenters() {
+    let mut canvas = Canvas::new();
+    canvas.resize(800, 600);
+    canvas.fit_to_content();
+    assert_eq!(canvas.camera().offset, (400.0, 300.0));
+    assert!((canvas.camera().zoom - 1.0).abs() < f32::EPSILON);
+}
+
+#[test]
 fn layout_strategy_overrides_node_positions_until_reverted() {
     let mut graph = Graph::new();
     graph.add_node(
