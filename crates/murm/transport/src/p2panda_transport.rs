@@ -15,9 +15,11 @@
 //!
 //! ## Identity
 //!
-//! Constructed from an [`identity::Ed25519Keypair`]; the p2panda `SigningKey` is
-//! built from the raw 32-byte seed via [`Ed25519Keypair::to_seed`], bridging the
-//! ed25519-dalek major-version boundary without forcing either side to upgrade.
+//! Constructed from an [`identity::Ed25519Keypair`] or a provider-neutral raw
+//! 32-byte Ed25519 signing seed. The latter lets sibling applications use an
+//! external identity provider such as Personae without coupling this crate to
+//! it. In either case the seed bridges the ed25519-dalek major-version boundary
+//! without forcing either side to upgrade.
 //!
 //! ## Discovery
 //!
@@ -130,7 +132,7 @@ type AlpnQueues =
 
 /// Builder for [`P2pandaTransport`]. Use [`P2pandaTransport::builder`].
 pub struct P2pandaTransportBuilder<'a> {
-    master: &'a Ed25519Keypair,
+    signing_seed: [u8; 32],
     alpns: Vec<Alpn>,
     blobs: Option<&'a BlobStore>,
     mdns: Option<MdnsDiscoveryMode>,
@@ -147,9 +149,15 @@ impl<'a> P2pandaTransportBuilder<'a> {
 
     /// Serve the iroh-blobs protocol against the given store. Peers can then
     /// `fetch_from` this transport's PeerID.
-    pub fn blobs(mut self, store: &'a BlobStore) -> Self {
-        self.blobs = Some(store);
-        self
+    pub fn blobs<'b>(self, store: &'b BlobStore) -> P2pandaTransportBuilder<'b> {
+        P2pandaTransportBuilder {
+            signing_seed: self.signing_seed,
+            alpns: self.alpns,
+            blobs: Some(store),
+            mdns: self.mdns,
+            discovery: self.discovery,
+            gossip: self.gossip,
+        }
     }
 
     /// Enable mDNS discovery so peers on the same local network auto-populate
@@ -190,7 +198,7 @@ impl<'a> P2pandaTransportBuilder<'a> {
     /// Bind the p2panda-net endpoint. Consumes the builder.
     pub async fn bind(self) -> Result<P2pandaTransport, TransportError> {
         P2pandaTransport::bind_inner(
-            self.master,
+            self.signing_seed,
             self.alpns,
             self.blobs,
             self.mdns,
@@ -223,7 +231,23 @@ impl P2pandaTransport {
     /// Start a builder for a new p2panda-net transport.
     pub fn builder(master: &Ed25519Keypair) -> P2pandaTransportBuilder<'_> {
         P2pandaTransportBuilder {
-            master,
+            signing_seed: master.to_seed(),
+            alpns: Vec::new(),
+            blobs: None,
+            mdns: None,
+            discovery: None,
+            gossip: false,
+        }
+    }
+
+    /// Start a builder from raw Ed25519 signing-key seed material.
+    ///
+    /// This is the identity-provider-neutral boundary for sibling apps. A
+    /// Personae vault or another provider derives a protocol-scoped key and
+    /// passes its 32-byte seed; transport never needs that provider's type.
+    pub fn builder_from_seed(signing_seed: [u8; 32]) -> P2pandaTransportBuilder<'static> {
+        P2pandaTransportBuilder {
+            signing_seed,
             alpns: Vec::new(),
             blobs: None,
             mdns: None,
@@ -234,7 +258,15 @@ impl P2pandaTransport {
 
     /// Bind with just the given Mere ALPNs (no discovery; explicit `add_peer`).
     pub async fn bind(master: &Ed25519Keypair, alpns: Vec<Alpn>) -> Result<Self, TransportError> {
-        Self::bind_inner(master, alpns, None, None, None, false).await
+        Self::bind_seed(master.to_seed(), alpns).await
+    }
+
+    /// Bind from raw protocol-scoped Ed25519 seed material.
+    pub async fn bind_seed(
+        signing_seed: [u8; 32],
+        alpns: Vec<Alpn>,
+    ) -> Result<Self, TransportError> {
+        Self::bind_inner(signing_seed, alpns, None, None, None, false).await
     }
 
     /// Bind with the given ALPNs and serve iroh-blobs against the provided store.
@@ -243,18 +275,20 @@ impl P2pandaTransport {
         alpns: Vec<Alpn>,
         blobs: Option<&BlobStore>,
     ) -> Result<Self, TransportError> {
-        Self::bind_inner(master, alpns, blobs, None, None, false).await
+        Self::bind_inner(master.to_seed(), alpns, blobs, None, None, false).await
     }
 
     async fn bind_inner(
-        master: &Ed25519Keypair,
+        signing_seed: [u8; 32],
         alpns: Vec<Alpn>,
         blobs: Option<&BlobStore>,
         mdns: Option<MdnsDiscoveryMode>,
         discovery: Option<DiscoveryConfig>,
         gossip: bool,
     ) -> Result<Self, TransportError> {
-        let signing_key = SigningKey::from_bytes(&master.to_seed());
+        let signing_key = SigningKey::from_bytes(&signing_seed);
+        let peer_id = PeerID::from_bytes(signing_key.verifying_key().as_bytes())
+            .map_err(|error| TransportError::Backend(format!("transport key: {error}")))?;
         let address_book = AddressBook::builder()
             .spawn()
             .await
@@ -264,8 +298,6 @@ impl P2pandaTransport {
             .spawn()
             .await
             .map_err(|e| TransportError::Backend(format!("endpoint: {e}")))?;
-        let peer_id = PeerID::from_public_key(master.public_key());
-
         let queues: AlpnQueues = Arc::new(StdMutex::new(HashMap::new()));
         for alpn in &alpns {
             let (tx, rx) = mpsc::unbounded_channel();

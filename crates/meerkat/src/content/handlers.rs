@@ -240,18 +240,20 @@ fn ensure_smolweb(content: &mut Content) -> bool {
     if !is_smolweb_lane(&content.url) {
         return false;
     }
-    if content.smolweb.is_none() {
+    if content.session.is_none() {
         let body = match &content.state {
             Some(ContentState::Ready(fetched)) => &fetched.body,
             // Not fetched yet: fall through to the loading card until Ready.
             _ => return false,
         };
         let theme = smolweb_app_theme(&content.sheet);
-        content.smolweb = Some(pelt_desktop::SmolwebDocument::parse(
-            &content.url,
-            body,
-            theme,
-        ));
+        let doc = pelt_desktop::SmolwebDocument::parse(&content.url, body, theme);
+        // Wrapped in the component's session type so render/input flow through
+        // the one DocumentSession path. (Session-engines plan phase 3.)
+        content.session = Some(Box::new(serval_documents::SmolwebDocumentSession::new(
+            doc,
+            content.viewport,
+        )));
     }
     true
 }
@@ -311,16 +313,28 @@ pub(crate) fn render(
     // mutated DOM and paints; emit it as one viewport (banding/scroll of a scripted
     // tile is a follow-up — the document scrolls internally, not via host bands).
     // (Render ladder phase 2a.)
-    #[cfg(feature = "scripted")]
-    if let Some(doc) = content.scripted_doc.as_mut() {
-        let scene = doc.frame(w, h);
+    #[cfg(feature = "smolweb")]
+    ensure_smolweb(content);
+    if let Some(session) = content.session.as_mut() {
+        // Session lanes (scripted rungs, smolweb native) scroll internally and
+        // emit one viewport. Banding echoes content_height so the host's band
+        // bookkeeping matches: a session whose content fits the viewport
+        // (scripted lanes report exactly h) pins band_y to 0, same as the old
+        // scripted branch.
+        let content_height = session.content_height(w, h);
+        let band_y = if content_height > h { content.band_y } else { 0 };
+        session.scroll_to(band_y as f32);
+        let scene = session.frame(w, h);
         // The link-rect table a click resolves against (ConstellationOps::link_at),
-        // read off the frame's retained cascade — the same mechanism the HTML/serval
-        // lane and the smolweb lane use, no per-click query into the live DOM.
-        let links = doc
+        // read off the frame's retained cascade — no per-click query into the
+        // live DOM; same mechanism as the HTML lane's harvest.
+        let links = session
             .links()
             .into_iter()
-            .map(|(url, rect)| LinkHit { rect, url })
+            .map(|link| LinkHit {
+                rect: link.rect,
+                url: link.url,
+            })
             .collect();
         emit_scene(
             out,
@@ -328,12 +342,16 @@ pub(crate) fn render(
             content.nav,
             content.viewport_gen,
             scene,
-            h,
-            0,
+            content_height,
+            band_y,
             h,
             links,
             Vec::new(),
         );
+        // Observation extras (phase-3 rescope): the scripted lane's dom/layout
+        // stats for the apparatus feed, reached by downcast.
+        #[cfg(feature = "scripted")]
+        if let Some(doc) = session.as_any().downcast_mut::<HostScriptedDocument>() {
         let dom = doc.dom_stats();
         let dom = DomArenaStats {
             live_nodes: dom.live_nodes,
@@ -361,6 +379,7 @@ pub(crate) fn render(
                 ..LayoutBatchStats::default()
             });
         emit_engine_stats(out, content.nav, content.viewport_gen, dom, layout);
+        }
         return;
     }
     // Scripted page (P2.5c): render from the script's mutable `ScriptedDom`, which
@@ -415,46 +434,8 @@ pub(crate) fn render(
         );
         return;
     }
-    // Serval smolweb lane: a focused smolweb capsule (gemini/gopher/feed) renders
-    // natively through `SmolwebDocument`. Like the scripted lane it scrolls internally,
-    // so it emits one viewport, not host bands (host-band scroll is P3). Falls through
-    // to the loading/document lane while the body is not yet ready. (Smolweb host P1.)
-    #[cfg(feature = "smolweb")]
-    if ensure_smolweb(content) {
-        let (w, h) = content.viewport;
-        if let Some(doc) = content.smolweb.as_mut() {
-            // The host requests a band once it sees `content_height` exceed the
-            // viewport (`constellation::request_scroll`); scroll to the requested
-            // offset before framing, and echo it back so the host's band bookkeeping
-            // matches (mirrors the HTML lane's `band_y`/`band_h`, though here the
-            // "band" is always one viewport tall — the session scrolls, not the frame).
-            // (Smolweb host P3.)
-            let content_height = doc.content_height(w, h);
-            doc.scroll_to(content.band_y as f32);
-            let scene = doc.frame(w, h);
-            // The link-rect table a click resolves against (ConstellationOps::link_at),
-            // the same mechanism the HTML/serval lane's `harvest_link_rects` populates —
-            // full-document px, unscrolled, cached host-side; no per-click round trip.
-            // (Smolweb host P3b.)
-            let links = doc
-                .links()
-                .into_iter()
-                .map(|(url, rect)| LinkHit { rect, url })
-                .collect();
-            emit_scene(
-                out,
-                content.nav,
-                content.viewport_gen,
-                scene,
-                content_height,
-                content.band_y,
-                h,
-                links,
-                Vec::new(),
-            );
-            return;
-        }
-    }
+    // (The smolweb lane renders through the unified session branch above;
+    // ensure_smolweb builds its session lazily once the body is ready.)
     let wanted = RefCell::new(Vec::new());
     if ensure_html_layout(content, store, registry, policy, &wanted) {
         // HTML/serval lane: emit this band off the retained layout, no re-cascade.

@@ -9,6 +9,16 @@ fn make_inputs(seed: u8) -> (Ed25519Keypair, PeerID) {
     (kp, peer_id)
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn raw_seed_constructor_preserves_peer_identity() {
+    let (keypair, expected_peer) = make_inputs(41);
+    let transport = P2pandaTransport::bind_seed(keypair.to_seed(), vec![Alpn::new("mere/test/v1")])
+        .await
+        .expect("bind from external identity seed");
+
+    assert_eq!(transport.local_peer_id(), expected_peer);
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn paired_p2panda_transports_round_trip_bytes() {
     let alpn = Alpn::new("mere/test/v1");

@@ -9,9 +9,10 @@ consumes generically.
 
 ## Design
 
-- **Identity comes from [`identity`](https://crates.io/crates/identity).**
-  A peer's `PeerID` is derived from its master Ed25519 public key. Transport
-  never holds the master secret; it consumes the public key for addressing.
+- **Identity is provider-neutral at the boundary.** Existing Mere consumers can
+  pass an `identity::Ed25519Keypair`; sibling applications can pass the raw
+  32-byte Ed25519 signing seed from Personae or another provider. In both cases
+  the peer ID is derived from the corresponding public key.
 - **Streams are byte-oriented.** `Transport::Stream: AsyncRead + AsyncWrite`.
   Higher protocols layer their own framing on top — `murmuring` carries
   signed p2panda-core Operations; co-op sessions carry their own format.
@@ -80,7 +81,8 @@ the substrate.
 ```
 
 - [`identity`](https://crates.io/crates/identity) — `PeerID::from_public_key(master_pubkey)`
-  derives the transport's peer identity from the identity trust root. No
+  derives the transport's peer identity from the identity trust root. External
+  providers use `P2pandaTransport::builder_from_seed` or `bind_seed`; no
   separate transport key is generated.
 - [`murm`](https://crates.io/crates/murm) — opens a stream per cabal
   conversation, carrying signed p2panda-core Operations over the byte

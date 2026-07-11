@@ -516,8 +516,9 @@ fn scripted_rung_post_js_extract_contributes_metadata() {
         ContentUpdate::Contribution { contributions } => contributions.iter().any(|c| {
             c.nodes.iter().any(|n| {
                 n.id == "https://spa.test/app"
-                    && n.properties.iter().any(|(p, v)| {
-                        p == "https://schema.org/description" && v == "JS-rendered summary"
+                    && n.properties.iter().any(|p| {
+                        p.predicate == "https://schema.org/description"
+                            && p.value == "JS-rendered summary"
                     })
             })
         }),

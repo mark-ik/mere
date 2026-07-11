@@ -121,6 +121,129 @@ impl HostScriptedDocument {
             Self::Nova(doc) => doc.extract(),
         }
     }
+
+    // Page Visibility / Page Lifecycle passthroughs (the SetLifecycle
+    // handler's surface; ScriptedDocument owns the real gating).
+    fn set_hidden(&mut self, hidden: bool) {
+        match self {
+            Self::Boa(doc) => doc.set_hidden(hidden),
+            #[cfg(feature = "scripted-nova")]
+            Self::Nova(doc) => doc.set_hidden(hidden),
+        }
+    }
+
+    fn is_hidden(&self) -> bool {
+        match self {
+            Self::Boa(doc) => doc.is_hidden(),
+            #[cfg(feature = "scripted-nova")]
+            Self::Nova(doc) => doc.is_hidden(),
+        }
+    }
+
+    fn is_frozen(&self) -> bool {
+        match self {
+            Self::Boa(doc) => doc.is_frozen(),
+            #[cfg(feature = "scripted-nova")]
+            Self::Nova(doc) => doc.is_frozen(),
+        }
+    }
+
+    fn freeze(&mut self) {
+        match self {
+            Self::Boa(doc) => doc.freeze(),
+            #[cfg(feature = "scripted-nova")]
+            Self::Nova(doc) => doc.freeze(),
+        }
+    }
+
+    fn resume(&mut self) {
+        match self {
+            Self::Boa(doc) => doc.resume(),
+            #[cfg(feature = "scripted-nova")]
+            Self::Nova(doc) => doc.resume(),
+        }
+    }
+}
+
+/// The scripted rungs as a document session (session-engines plan phase 3):
+/// render + input flow through the trait; observation extras (dom stats,
+/// extract, freeze/resume) stay on the enum, reached by `as_any` downcast
+/// per the phase-3 rescope.
+#[cfg(feature = "scripted")]
+impl inker::DocumentSession<Scene> for HostScriptedDocument {
+    fn frame(&mut self, width: u32, height: u32) -> Scene {
+        HostScriptedDocument::frame(self, width, height)
+    }
+
+    fn scroll_by(&mut self, dx: f32, dy: f32) -> bool {
+        match self {
+            Self::Boa(doc) => doc.scroll_by(dx, dy),
+            #[cfg(feature = "scripted-nova")]
+            Self::Nova(doc) => doc.scroll_by(dx, dy),
+        }
+    }
+
+    fn scroll_for_key(&mut self, key: inker::SessionScrollKey) -> bool {
+        use serval_layout::ScrollKey;
+        let key = match key {
+            inker::SessionScrollKey::LineUp => ScrollKey::Up,
+            inker::SessionScrollKey::LineDown => ScrollKey::Down,
+            inker::SessionScrollKey::PageUp => ScrollKey::PageUp,
+            inker::SessionScrollKey::PageDown => ScrollKey::PageDown,
+            inker::SessionScrollKey::Home => ScrollKey::Home,
+            inker::SessionScrollKey::End => ScrollKey::End,
+        };
+        match self {
+            Self::Boa(doc) => doc.scroll_for_key(key),
+            #[cfg(feature = "scripted-nova")]
+            Self::Nova(doc) => doc.scroll_for_key(key),
+        }
+    }
+
+    fn click_at(&mut self, x: f32, y: f32) -> inker::SessionClick {
+        // The scripted lane's bool is "a handler consumed it"; navigation
+        // flows through the links table, as the host resolves today.
+        if HostScriptedDocument::click_at(self, x, y) {
+            inker::SessionClick::Handled
+        } else {
+            inker::SessionClick::Miss
+        }
+    }
+
+    fn links(&self) -> Vec<inker::SessionLink> {
+        HostScriptedDocument::links(self)
+            .into_iter()
+            .map(|(url, rect)| inker::SessionLink { url, rect })
+            .collect()
+    }
+
+    fn pump(&mut self, now_ms: f64) {
+        match self {
+            Self::Boa(doc) => {
+                let _ = doc.pump(now_ms);
+            }
+            #[cfg(feature = "scripted-nova")]
+            Self::Nova(doc) => {
+                let _ = doc.pump(now_ms);
+            }
+        }
+    }
+
+    fn settled(&mut self) -> bool {
+        match self {
+            Self::Boa(doc) => !doc.has_pending_work(),
+            #[cfg(feature = "scripted-nova")]
+            Self::Nova(doc) => !doc.has_pending_work(),
+        }
+    }
+
+    fn set_hidden(&mut self, hidden: bool) {
+        HostScriptedDocument::set_hidden(self, hidden);
+    }
+
+    fn as_any(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
 }
 
 /// A command from the kernel to a content actor.
@@ -482,20 +605,14 @@ pub(crate) struct Content {
     /// script's edits are live; cleared on a fresh `Show` and by `DetachScript`.
     script: Option<ScriptInstance>,
     /// The scripted render rung: a live `ScriptedDocument` whose page JS ran on load
-    /// and whose mutated DOM renders each frame. `Some` only for a scripted Serval
-    /// rung (`serval.scripted`, or `serval.scripted.nova` when that feature is on),
-    /// built on `Show` and only in the `scripted` build. Supersedes every other lane
-    /// in `render`. (Render ladder phase 2a.)
-    #[cfg(feature = "scripted")]
-    scripted_doc: Option<HostScriptedDocument>,
-    /// The serval smolweb lane: a focused smolweb capsule (gemini/gopher/feed) rendered
-    /// natively through pelt's `SmolwebDocument` (errand parse -> smolweb-views ->
-    /// ScriptedDom -> serval-layout). `Some` once a smolweb-scheme node's body is ready
-    /// (built lazily in `render`). It scrolls internally (like the scripted lane), so it
-    /// emits one viewport, not host bands; `frame(w, h)` re-lays-out on a viewport change,
-    /// so a resize needs no explicit clear. (Smolweb host lane P1.)
-    #[cfg(feature = "smolweb")]
-    smolweb: Option<pelt_desktop::SmolwebDocument>,
+    /// The retained document session, when this content is a session lane
+    /// (session-engines plan phase 3): the scripted rungs (spawned through the
+    /// actor's `SessionRegistry` on `Show`) or the smolweb native lane (built
+    /// lazily in `render` once the body is ready, themed per content).
+    /// Supersedes the banded HTML/document lanes in `render`; sessions scroll
+    /// internally and emit one viewport. Lane extras (dom stats, extract,
+    /// freeze/resume) are reached by downcast per the phase-3 rescope.
+    session: Option<Box<dyn inker::DocumentSession<Scene>>>,
     /// Fingerprint of the last band scene shipped (gens + band + content
     /// height + the serialized scene), so a re-render that converges to an
     /// IDENTICAL band is not re-shipped: no version bump host-side, no wake,
@@ -529,6 +646,94 @@ impl pelt_desktop::ScriptResourceFetcher for ScriptFetcher {
             .ok()
             .map(|response| response.body.into_bytes())
     }
+}
+
+/// The scripted rungs as meerkat session engines (session-engines plan phase
+/// 3): the registry does the id matching `build_scripted`'s match arms used
+/// to, and the per-spawn seams (a fresh blocking [`ScriptFetcher`], the
+/// node-origin cookie jar) live here, beside the seam types. Unit structs:
+/// everything is constructed per spawn on the actor thread.
+#[cfg(feature = "scripted")]
+pub(crate) struct BoaRungEngine;
+
+#[cfg(feature = "scripted")]
+impl inker::SessionEngine<Scene> for BoaRungEngine {
+    fn engine_id(&self) -> &str {
+        inker::routing::ENGINE_SERVAL_SCRIPTED
+    }
+
+    fn spawn(
+        &self,
+        request: &inker::SessionSpawnRequest,
+    ) -> Result<Box<dyn inker::DocumentSession<Scene>>, inker::SessionError> {
+        spawn_scripted_rung(request, HostScriptedDocument::Boa, |body, fetcher, url, jar| {
+            match fetcher {
+                Some(f) => ScriptedDocument::<BoaEngine>::from_body(body, f, url, jar),
+                // No fetcher (the blocking fetch could not be built):
+                // inline-only, no cookies — same degradation as before.
+                None => ScriptedDocument::<BoaEngine>::parse(body),
+            }
+        })
+    }
+}
+
+#[cfg(feature = "scripted-nova")]
+pub(crate) struct NovaRungEngine;
+
+#[cfg(feature = "scripted-nova")]
+impl inker::SessionEngine<Scene> for NovaRungEngine {
+    fn engine_id(&self) -> &str {
+        inker::routing::ENGINE_SERVAL_SCRIPTED_NOVA
+    }
+
+    fn spawn(
+        &self,
+        request: &inker::SessionSpawnRequest,
+    ) -> Result<Box<dyn inker::DocumentSession<Scene>>, inker::SessionError> {
+        spawn_scripted_rung(request, HostScriptedDocument::Nova, |body, fetcher, url, jar| {
+            match fetcher {
+                Some(f) => ScriptedDocument::<NovaEngine>::from_body(body, f, url, jar),
+                None => ScriptedDocument::<NovaEngine>::parse(body),
+            }
+        })
+    }
+}
+
+/// Shared spawn body for the scripted rungs: body required (the host fetched
+/// it), per-spawn fetcher + node-origin cookies, wrap in the lane enum.
+#[cfg(feature = "scripted")]
+fn spawn_scripted_rung<E: script_engine_api::ScriptEngine>(
+    request: &inker::SessionSpawnRequest,
+    wrap: impl FnOnce(ScriptedDocument<E>) -> HostScriptedDocument,
+    build: impl FnOnce(
+        &str,
+        Option<&dyn pelt_desktop::ScriptResourceFetcher>,
+        &str,
+        Option<Box<dyn pelt_desktop::CookieProvider>>,
+    ) -> Result<ScriptedDocument<E>, String>,
+) -> Result<Box<dyn inker::DocumentSession<Scene>>, inker::SessionError> {
+    let Some(body) = request.body.as_deref() else {
+        return Err(inker::SessionError::Unsupported(
+            "scripted rung renders an already-fetched body".into(),
+        ));
+    };
+    // The node's origin cookies, so the page's JS shares the session HTTP uses.
+    let cookies: Option<Box<dyn pelt_desktop::CookieProvider>> = url::Url::parse(&request.address)
+        .ok()
+        .map(|parsed| {
+            Box::new(JarCookieProvider { url: parsed }) as Box<dyn pelt_desktop::CookieProvider>
+        });
+    let fetcher = ScriptFetcher::new();
+    let doc = build(
+        body,
+        fetcher
+            .as_ref()
+            .map(|f| f as &dyn pelt_desktop::ScriptResourceFetcher),
+        &request.address,
+        cookies,
+    )
+    .map_err(inker::SessionError::SpawnFailed)?;
+    Ok(Box::new(wrap(doc)))
 }
 
 /// `document.cookie` over the process session jar, scoped to the node's origin. The

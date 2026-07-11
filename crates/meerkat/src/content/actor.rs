@@ -29,7 +29,12 @@ const FIND_ACTIVE_HIGHLIGHT: serval_layout::HighlightStyle = serval_layout::High
 /// fetched HTML body and run its scripts. With a `fetcher`, external `<script src>` is
 /// fetched through it (`from_body`, no document re-fetch); without one, inline scripts
 /// only (`parse`). `None` for any other engine or a non-`Ready` state. (Render ladder.)
+///
+/// Production spawns go through the actor's `SessionRegistry` (the rung
+/// engines construct their own fetcher + cookie jar); this survives as the
+/// fetcher-injectable construction seam the rung tests exercise.
 #[cfg(feature = "scripted")]
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn build_scripted(
     engine: &str,
     url: &str,
@@ -179,6 +184,10 @@ impl ContentUpdateSink for TransferContentUpdateSink {
 
 pub(crate) struct ContentRuntime {
     registry: EngineRegistry,
+    /// Session engines (session-engines plan phase 3): the scripted rungs
+    /// spawn through here, keyed by engine id — the registry does the match
+    /// `build_scripted`'s arms used to.
+    sessions: inker::SessionRegistry<Scene>,
     policy: EngineRoutePolicy,
     store: RefCell<ResourceStore>,
     current: Option<Content>,
@@ -194,8 +203,15 @@ impl ContentRuntime {
                 registry.register(engine);
             }
         }
+        #[allow(unused_mut)]
+        let mut sessions = inker::SessionRegistry::new();
+        #[cfg(feature = "scripted")]
+        sessions.register(Box::new(super::BoaRungEngine));
+        #[cfg(feature = "scripted-nova")]
+        sessions.register(Box::new(super::NovaRungEngine));
         Self {
             registry,
+            sessions,
             // Mere's app rules layered over inker's engine rules (internal
             // pages, ld+json ingest), so second-pass content-type routing can
             // reach the host-handled lanes.
@@ -261,23 +277,41 @@ impl ContentRuntime {
                         }
                     }
                 }
-                #[cfg(feature = "scripted")]
-                let scripted_doc = {
-                    let fetcher = ScriptFetcher::new();
-                    build_scripted(
-                        &engine,
-                        &url,
-                        state.as_ref(),
-                        fetcher
-                            .as_ref()
-                            .map(|f| f as &dyn pelt_desktop::ScriptResourceFetcher),
-                    )
+                // Session lanes spawn through the registry: the id match that
+                // build_scripted's arms did is the registry key now. A body is
+                // required (already fetched); non-session ids miss and fall to
+                // the banded lanes. (Session-engines plan phase 3.)
+                let mut session: Option<Box<dyn inker::DocumentSession<Scene>>> = {
+                    let request = {
+                        let mut request = inker::SessionSpawnRequest::new(&url)
+                            .with_viewport(viewport.0, viewport.1);
+                        if let Some(ContentState::Ready(fetched)) = state.as_ref() {
+                            request = request.with_body(&fetched.body);
+                            if let Some(ct) = fetched.content_type.as_deref() {
+                                request = request.with_content_type(ct);
+                            }
+                        }
+                        request
+                    };
+                    match self.sessions.spawn(&engine, &request) {
+                        Ok(session) => Some(session),
+                        Err(inker::SessionError::EngineNotFound(_)) => None,
+                        Err(err) => {
+                            tracing::warn!(%err, %engine, "session spawn failed");
+                            None
+                        }
+                    }
                 };
                 #[cfg(not(feature = "scripted"))]
                 let _ = &engine;
                 #[cfg(feature = "scripted")]
                 if self.auto_ingest {
-                    if let Some(doc) = scripted_doc.as_ref() {
+                    // Observation extra (phase-3 rescope): extract() stays on
+                    // the concrete lane type, reached by downcast.
+                    if let Some(doc) = session
+                        .as_mut()
+                        .and_then(|s| s.as_any().downcast_mut::<HostScriptedDocument>())
+                    {
                         if let Some(extract) =
                             meerkat::ingest::contribution_from_page_extract(&url, doc.extract())
                         {
@@ -299,10 +333,7 @@ impl ContentRuntime {
                     html: None,
                     find_ranges: Vec::new(),
                     script: None,
-                    #[cfg(feature = "scripted")]
-                    scripted_doc,
-                    #[cfg(feature = "smolweb")]
-                    smolweb: None,
+                    session: session.take(),
                     last_scene_sig: None,
                 };
                 if let Some(old) = self.current.as_mut().and_then(|c| c.script.take()) {
@@ -331,9 +362,15 @@ impl ContentRuntime {
             } => {
                 if let Some(content) = self.current.as_mut() {
                     content.sheet = sheet;
+                    // A smolweb session bakes its theme at parse: drop it so
+                    // render rebuilds with the new sheet. Other sessions keep.
                     #[cfg(feature = "smolweb")]
-                    {
-                        content.smolweb = None;
+                    if content.session.as_mut().is_some_and(|s| {
+                        s.as_any()
+                            .downcast_mut::<serval_documents::SmolwebDocumentSession>()
+                            .is_some()
+                    }) {
+                        content.session = None;
                     }
                     content.viewport_gen = viewport_gen;
                     render(content, &self.store, &self.registry, &self.policy, out);
@@ -550,7 +587,14 @@ impl ContentRuntime {
                 // other lanes have no tasks to gate.
                 #[cfg(feature = "scripted")]
                 if let Some(content) = self.current.as_mut() {
-                    if let Some(doc) = content.scripted_doc.as_mut() {
+                    // Freeze/resume are scripted-lane extras (phase-3 rescope):
+                    // reach the enum by downcast; other sessions have no task
+                    // pump to gate.
+                    if let Some(doc) = content
+                        .session
+                        .as_mut()
+                        .and_then(|s| s.as_any().downcast_mut::<HostScriptedDocument>())
+                    {
                         let was_presented = !doc.is_hidden() && !doc.is_frozen();
                         if frozen {
                             doc.set_hidden(hidden);
@@ -571,8 +615,8 @@ impl ContentRuntime {
             #[cfg(feature = "scripted")]
             ContentCommand::ScriptedClick { x, y, viewport_gen } => {
                 if let Some(content) = self.current.as_mut() {
-                    if let Some(doc) = content.scripted_doc.as_mut() {
-                        doc.click_at(x, y);
+                    if let Some(session) = content.session.as_mut() {
+                        let _ = session.click_at(x, y);
                         content.viewport_gen = viewport_gen;
                         render(content, &self.store, &self.registry, &self.policy, out);
                     }

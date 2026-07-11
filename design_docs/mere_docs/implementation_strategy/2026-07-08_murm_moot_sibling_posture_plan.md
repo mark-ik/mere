@@ -95,7 +95,12 @@ Gate: R1 and S2 landed, R2 purity check green. Do not found repos around the pre
 
 - **Mail convergence** (one native sealed mail object, two delivery modes; misfin / LXMF-via-retinue / nostr as edge bridges): the stated north star for a slice gated on the one-state migration. Not this plan's cargo.
 - **Presence/here-ness under murmur**: claim the ambient register only after the carillon boundary is written (murmur: ambient liveness; carillon: active coordinated notification).
-- **Transport floor for isometry/strophe**: stays unextracted. Trigger: strophe starts its net crate and converges with isometry-net on the same tickets/blobs slice. Cheap insurance now: keep mere and isometry on the same iroh pin (both 0.98 today).
+- **Transport floor for Isometry/Strophe**: the old "stays unextracted" call is
+  superseded. Isometry now consumes the shared p2panda store and needs the same
+  endpoint/LogSync pump. `P2pandaTransport` therefore exposes a
+  provider-neutral raw-seed constructor so Personae consumers do not depend on
+  Mere's identity crate. Promotion to `repos/murm` remains Phase P work; do not
+  duplicate the endpoint in Isometry while that move is pending.
 - **Browser sync probe**: verify iroh/p2panda-net wasm viability before any browser peer design.
 
 ## 6. Open questions (Mark's calls)
@@ -170,3 +175,14 @@ Gate: R1 and S2 landed, R2 purity check green. Do not found repos around the pre
   - **meerkat** `sync.rs`: `TesseraFileStore`, `sync_store()` into the builder, async `insert`/`is_empty`/`author_starter_log`/`ledger`; the keepalive box became `Box<dyn Any + Send + Sync>` so the status-poll task can hold `&self` across the async ledger fold; the log-id type pinned (`LogSync<_, u64, TesseraExt>`) because the muniment store impls `LogStore` for every `L` and the type-erased keepalive leaves inference nothing to work back from.
   - **Verified:** `cargo test -p moothold` green (68/68, incl. both networked tessera convergence tests — `two_moots_converge_on_the_same_scores` and the ticket-bootstrap variant — plus the moot lane, untouched; the 4 fewer than before are the deleted `log_store.rs` tests, now covered by mooting's adapter tests + the convergence tests). meerkat's `sync.rs` compiles clean; a full `cargo check -p meerkat` is currently blocked **only** by a concurrent agent's in-progress `scenario` module (unrelated to tessera: missing `chord_label` / `scenario_navigate` / `scenario_key`), so its scenario WIP was left unstaged and this commit carries only the tessera files.
   - **Store convergence is 2 of 3** (mesh + tessera on muniment; the moot-object lane's `MootStore` stays p2panda-sqlite, out of S2's stated murm/tessera/mesh scope). **S2b-murm** remains: decouple `PersistentCabalStore`'s domain view from its sync index.
+- **External-consumer boundary landed (2026-07-11).** Isometry's campaign
+  collaboration lane now composes `mooting::MunimentStore` with Personae-signed
+  p2panda operations. To remove the remaining identity-crate coupling from the
+  endpoint, `P2pandaTransport` gained `builder_from_seed` and `bind_seed`; the
+  existing identity-keypair constructors delegate to the same path. A focused
+  identity-equivalence test and the full 29-test transport suite are green.
+  Isometry also surfaced repeated topic/operation write ordering, so
+  `MunimentStore::insert_indexed_operation` now centralizes the
+  discoverability-safe order for every domain consumer. This is the first
+  non-Mere consumer proving that the shared store and pump are library
+  boundaries, and strengthens the Phase P promotion trigger.

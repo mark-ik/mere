@@ -7,9 +7,9 @@
 //!
 //! ## Design
 //!
-//! - **Identity** comes from [`identity`]: a peer's [`PeerID`] is
-//!   derived from its master Ed25519 public key. Transport never holds the
-//!   master secret; it consumes the public key for addressing.
+//! - **Identity** is provider-neutral at the transport boundary: Mere callers
+//!   can supply an [`identity`] keypair, while external providers can supply a
+//!   raw Ed25519 seed. The same signing key determines the [`PeerID`].
 //! - **Streams are byte-oriented**: the [`Transport::Stream`] associated
 //!   type is `AsyncRead + AsyncWrite`, so consumers can layer their own
 //!   framing (Cable's p2panda operations, MLS's TLS-style, etc.) on top.
@@ -57,11 +57,11 @@ pub use crate::p2panda_transport::{P2pandaStream, P2pandaTransport, sync_overlay
 // The gossip handle returned by `P2pandaTransport::subscribe` (space live-sync):
 // `publish(bytes)` to broadcast, `subscribe()` for the received-bytes stream.
 pub use crate::peer_id::PeerID;
-pub use crate::synced_space::{SyncRound, SyncStatus, SyncedSpace};
 #[cfg(feature = "reticulum")]
 pub use crate::reticulum_transport::{
     ReticulumInterface, ReticulumStream, ReticulumTransport, ReticulumTransportBuilder,
 };
+pub use crate::synced_space::{SyncRound, SyncStatus, SyncedSpace};
 pub use crate::transport::Transport;
 pub use p2panda_net::gossip::GossipHandle;
 

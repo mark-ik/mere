@@ -33,7 +33,7 @@ engine-weld = []
 # Off by default so the base build stays the static rung — no JS engine in its
 # dependency graph (the profile ladder's witness discipline) and clear of the
 # Boa+wgpu link-size limit. Build the scripted variant with `--features scripted`.
-scripted = ["pelt-desktop/scripted", "dep:script-engine-boa", "content-contract/scripted"]
+scripted = ["pelt-desktop/scripted", "dep:script-engine-api", "dep:script-engine-boa", "content-contract/scripted"]
 # Add the Nova JS engine as a second scripted rung (`serval.scripted.nova`), keeping
 # the Boa rung and the shared scripted host path. Mirrors pelt-desktop's split so the
 # host can route to Nova explicitly rather than silently swapping engines under one id.
@@ -42,7 +42,7 @@ scripted-nova = ["scripted", "pelt-desktop/scripted-nova", "dep:script-engine-no
 # natively through pelt's `SmolwebDocument` (errand parse -> smolweb-views ->
 # ScriptedDom -> serval-layout), the serval lane rather than the block card. Off by
 # default so the base build stays clear of the smolweb transport/parse stack.
-smolweb = ["pelt-desktop/smolweb"]
+smolweb = ["pelt-desktop/smolweb", "dep:serval-documents", "serval-documents/smolweb"]
 # Local LLM inference for the `>ask` omnibar verb. Off by default: it pulls the
 # burn-wgpu tree (cubecl), a multi-minute cold build. Without it, `>ask` still
 # exists and answers through infer's deterministic `CannedProvider` stub (the
@@ -215,6 +215,8 @@ pelt-desktop = { git = "https://github.com/mark-ik/serval.git", branch = "main",
 # Boa JS engine for the `scripted` rung (the `ScriptedDocument<BoaEngine>` the content
 # actor drives). Optional — only the `scripted` feature pulls it, so the base build
 # links no JS engine. Pure Rust, all targets.
+script-engine-api = { git = "https://github.com/mark-ik/serval.git", branch = "main", optional = true }
+serval-documents = { git = "https://github.com/mark-ik/serval.git", branch = "main", optional = true }
 script-engine-boa = { git = "https://github.com/mark-ik/serval.git", branch = "main", optional = true }
 # Optional Nova JS engine for the `scripted-nova` rung.
 script-engine-nova = { git = "https://github.com/mark-ik/serval.git", branch = "main", optional = true }
