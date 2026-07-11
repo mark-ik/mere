@@ -9,9 +9,9 @@ keywords = ["append-only", "log", "event-sourcing", "history", "persistence"]
 categories = ["data-structures"]
 
 [dependencies]
-# The store codicil persists through. Path dep to the sibling repo during local
-# development; becomes a git dep on publish (see the founding proposal).
-muniment = { path = "../muniment" }
+# The store codicil persists through. Local development redirects this source
+# through the ignored `.cargo/config.toml` patch, matching its consumers.
+muniment = { git = "https://github.com/mark-ik/muniment.git", branch = "main" }
 serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]

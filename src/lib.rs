@@ -7,7 +7,7 @@
 //! a new entry.
 //!
 //! It is the event-source and nondestructive-history primitive shared across the
-//! Strophos apps: isometry's session events, strophe's edit history, mere's graph
+//! Merely apps: isometry's session events, strophe's edit history, mere's graph
 //! mutations. Each stamps entries with a monotonic [`Seq`] that stays valid for
 //! the life of the log, so a reader or peer can hold one as a durable cursor and
 //! catch up with [`from`](Codicil::from) / [`replay_from`](Codicil::replay_from).

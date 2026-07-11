@@ -73,9 +73,12 @@ Done-conditions, not time estimates.
 - **P2: incremental persistence and compaction.** Persist only entries past the
   last-saved `Seq`; optionally snapshot-and-truncate a long log to bound replay
   cost. **Done when** a long-running log persists in bounded time and space.
-- **P3: consumer adoption.** isometry moves its session event log onto codicil;
-  strophe's `History` re-bases onto it. **Done when** one app's live history runs
-  through codicil.
+- **P3: consumer adoption.** **Isometry half landed 2026-07-09.**
+  `isometry-net::HostSession` now owns `Codicil<GameEvent>` as its ordered
+  authority history; Isometry checkpoints it beside the public snapshot and
+  private campaign state, rebuilding sequence/hash on restore. Strophe's
+  `History` remains the next consumer. **Done when** one app's live history runs
+  through codicil (met by Isometry).
 
 The branching edit-tree (undo/redo with divergent history) is tracked as a
 possible P4 shape, gated on a real consumer wanting divergence rather than linear
