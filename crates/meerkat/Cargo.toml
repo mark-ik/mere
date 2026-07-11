@@ -81,7 +81,7 @@ xilem-serval = { git = "https://github.com/mark-ik/serval.git", branch = "main",
 # GraphGlyph) as `<chisel-leaf>` elements in the chrome DOM, plus the grid
 # widget (GridSpec) for the nodes/recent table. The chrome emit splices leaf
 # commands via IncrementalLayout::emit_paint_list_with_leaves.
-chisel = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+chisel = { package = "serval-chisel", git = "https://github.com/mark-ik/serval.git", branch = "main" }
 serval-scripted-dom = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 # The content card parses fetched pages as full HTML documents (keeping <head>,
 # so head <style> / <link> are seen) and renders them through the shared serval

@@ -186,3 +186,20 @@ Gate: R1 and S2 landed, R2 purity check green. Do not found repos around the pre
   discoverability-safe order for every domain consumer. This is the first
   non-Mere consumer proving that the shared store and pump are library
   boundaries, and strengthens the Phase P promotion trigger.
+- **Recognition-policy primitive landed (2026-07-11).** Isometry's next
+  external-consumer pressure exposed a governance gap shared by every Moot
+  consumer: endorsement counts are meaningless without a frozen electorate.
+  `mooting` now provides serializable fixed-threshold, fraction, unanimity, and
+  any-eligible policies bound to an `ElectorateSnapshot` at a signed revision,
+  plus a content fingerprint and inspectable eligible/ineligible endorsement
+  result. `MootRoster::recognition_context` bridges live roster membership into
+  that generic evaluator. Policy selection remains a signed domain/Moot act;
+  the plumbing does not choose a default.
+- **Group-scoped policy evidence (2026-07-11).** Isometry's signed
+  campaign-to-Moot association exposed a replay gap: revision + member keys are
+  insufficient if another Moot happens to have the same roster. The generic
+  `ElectorateSnapshot` and its fingerprint now include the group/Moot id, and
+  `MootRoster::recognition_context` requires it. Isometry uses the result for
+  signed governance proposals and claims; initial association is admitted by
+  the target Moot, while later policy changes or migrations are evaluated under
+  the campaign's current binding.
