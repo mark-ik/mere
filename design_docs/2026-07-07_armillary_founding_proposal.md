@@ -146,7 +146,7 @@ choice rather than pre-deciding it.
   event loop, its own command/update types, and its own kernel state; armillary
   supplies the discipline that keeps that state on one thread and the work off it.
 - **Licensing.** The ported files are MPL-2.0 (mere's license), so armillary is
-  MPL-2.0 for now. The Strophos app workspaces (isometry, serval) use
+  MPL-2.0 for now. The Merely app workspaces (isometry, serval) use
   `MIT OR Apache-2.0`; whether armillary relicenses to match the crates.io norm is
   Mark's call before first publish, and should be decided together with vates and
   sibylla so the promoted crates match. Until then MPL is the safe default.
