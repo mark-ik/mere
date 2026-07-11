@@ -79,7 +79,7 @@ where
         out.push((SCHEMA_NAME.to_string(), Term::plain(title)));
     }
     for tag in node.tags() {
-        out.push((SCHEMA_KEYWORDS.to_string(), Term::plain(tag)));
+        out.push((SCHEMA_KEYWORDS.to_string(), Term::plain(&tag)));
     }
     for (_, target, edge) in graph.out_edges(key) {
         if let Some(predicate) = edge.predicate() {
