@@ -4,6 +4,10 @@
 //! projections. It deliberately does not expose browser-window, input, render,
 //! or session-host concerns; those belong to a consumer such as Merecat.
 
+/// Mere's routing vocabulary over inker's host-neutral policy: the
+/// app-flavored host-handled ids + [`routing::route_policy`].
+pub mod routing;
+
 pub use apparatus;
 pub use canvas;
 pub use forme;

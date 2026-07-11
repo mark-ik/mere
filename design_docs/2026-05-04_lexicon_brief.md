@@ -13,7 +13,7 @@
 | Name | What it labels | Notes |
 |------|----------------|-------|
 | **Mere** | Product / app — the browser itself | Triple-meaning positioning: *merely* (humble — "merely a browser!"), *mere* (a small lake — still-water surface where things accrue and reflect), slant-rhyme with *mirror*. Disambiguates from Māori weapon by intentional framing. Replaces *Graphshell-as-product-name* and *Verse-as-network-layer*. |
-| **Merely** | Parent brand / company-name layer | Adopted 2026-07-09, replacing *Strophos*. The umbrella takes its name from the product's own positioning: Mere is *merely a browser*, so the parent is that adverb. Humility as a house style. |
+| **Merely** | Parent brand / company-name layer | Adopted 2026-07-09, replacing *Strophos*; confirmed 2026-07-10 after a full challenge round (history entry 4). The umbrella takes its name from the product's own positioning: Mere is *merely a browser*, so the parent is that adverb. Humility as a house style. GitHub org: **merely-made** (registered 2026-07-10; bare `merely` was taken). |
 | **Verso** | Brand-level concept name for the rendering-surface layer | Crate family is `verso` (`verso-core`, `tile-state`). |
 
 ## 2. The printing-press metaphor
@@ -145,6 +145,23 @@ Then, on 2026-07-09:
    problem from the collisions that killed Carta, Camino, Tela, and Lemni: not a
    conflict, a distinctiveness cost. Recorded here so it is a decision rather
    than an oversight.
+
+4. **Merely confirmed; org slug registered** (2026-07-10). Before committing,
+   the name was challenged against a full bench: the smallholding register
+   (croft, steading, whittle), the gift register (lagniappe's family: handsel,
+   fairing, benison, boon, windfall, whet), buoy, and the mark/marquis family
+   (waymark, marque). Buoy fell to live companies (Buoy Health among others).
+   **Croft**, the strongest challenger, fell to a genuine collision: an active
+   `croft` dev-tool crate on crates.io (updated 2026-05, same audience), the
+   bare GitHub slug taken, plus the Lara Croft (Square Enix, Class 9) and Croft
+   port-house shadows. Merely's own objections dissolved on inspection: its
+   weakness is not a collision (nothing found occupying it), and the
+   Simply / Very / The Ordinary precedent shows understatement marks register
+   and thrive, with "Merely Software" as the composite fallback if registration
+   is ever wanted. GitHub org **merely-made** registered 2026-07-10 (bare
+   `merely` taken; `-made` over `-hq` because it completes the adverb and reads
+   as a colophon). Croft benched with affection as a possible future colloquial
+   place-name inside the family.
 
 Other rejected candidates (with reason): Carta (Carta, Inc. wall), Camino (Mozilla Camino® + camino crate), Tela (Schlumberger + tela.com), Waystone (Waystone Group financial), Almagest (Almagest Space Corp.), Holon (Holon Solutions/Platform), Duende (Duende Software/IdentityServer), Synoche (user reported conflict), Snicket (Snicket Labs Feb 2026 rebrand same metaphor), Holloway (Holloway.com publishing platform), Postern (dead Android proxifier ghost), Foundry (Foundry VTT + Foundry FX), Caster (`caster` crate taken), Motif (X11 Motif® + motif.io VC + crate), Syzygy (WPP-owned digital agency), Lemni (Sequoia-backed AI-agent), and others (see [`project_naming_state.md`](C:\Users\mark_\.claude\projects\c--Users-mark--Code\memory\project_naming_state.md) for the full list).
 

@@ -669,10 +669,8 @@ impl WindowCtx<'_> {
     /// the serval html lane, the host-handled internal / external / ingest lanes, or
     /// a known surface engine available on this platform. (engine-picker Phase 0.)
     fn engine_present(&self, id: &str) -> bool {
-        use inker::routing::{
-            ENGINE_EXTERNAL_PROTOCOL, ENGINE_GRAPHSHELL_INTERNAL, ENGINE_LINKED_DATA_INGEST,
-            ENGINE_SCRYING_WEB, ENGINE_SERVAL_WEB,
-        };
+        use inker::routing::{ENGINE_EXTERNAL_PROTOCOL, ENGINE_SCRYING_WEB, ENGINE_SERVAL_WEB};
+        use mere::routing::{ENGINE_GRAPHSHELL_INTERNAL, ENGINE_LINKED_DATA_INGEST};
         if self.shared.content.engine_registry.contains(id) {
             return true; // nematic.* document engines, registered at startup
         }
@@ -719,9 +717,8 @@ impl WindowCtx<'_> {
     /// structural and never user-deactivatable; every real engine honors the
     /// session's activation set (global default + per-session override). (Phase 1.)
     fn engine_active(&self, id: &str) -> bool {
-        use inker::routing::{
-            ENGINE_EXTERNAL_PROTOCOL, ENGINE_GRAPHSHELL_INTERNAL, ENGINE_LINKED_DATA_INGEST,
-        };
+        use inker::routing::ENGINE_EXTERNAL_PROTOCOL;
+        use mere::routing::{ENGINE_GRAPHSHELL_INTERNAL, ENGINE_LINKED_DATA_INGEST};
         if matches!(
             id,
             ENGINE_GRAPHSHELL_INTERNAL | ENGINE_EXTERNAL_PROTOCOL | ENGINE_LINKED_DATA_INGEST

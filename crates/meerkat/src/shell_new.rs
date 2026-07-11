@@ -598,7 +598,7 @@ impl Shell {
                     engine_registry,
                     engine_pins: HashMap::new(),
                     browser_nodes,
-                    route_policy: inker::routing::EngineRoutePolicy::default(),
+                    route_policy: mere::routing::route_policy(),
                     engine_activation: engine_activation::EngineActivation::new(
                         saved_settings.disabled_engines.clone(),
                     ),

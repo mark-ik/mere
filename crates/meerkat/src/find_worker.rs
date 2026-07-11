@@ -68,7 +68,7 @@ pub fn spawn_find_worker(wake: Wake) -> (ActorHandle<FindCommand>, Receiver<Find
         for engine in nematic::engines() {
             registry.register(engine);
         }
-        let policy = EngineRoutePolicy::default();
+        let policy = mere::routing::route_policy();
         let store = RefCell::new(ResourceStore::default());
 
         while let Ok(first) = commands.recv() {

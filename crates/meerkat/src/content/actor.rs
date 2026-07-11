@@ -196,7 +196,10 @@ impl ContentRuntime {
         }
         Self {
             registry,
-            policy: EngineRoutePolicy::default(),
+            // Mere's app rules layered over inker's engine rules (internal
+            // pages, ld+json ingest), so second-pass content-type routing can
+            // reach the host-handled lanes.
+            policy: mere::routing::route_policy(),
             store: RefCell::new(ResourceStore::default()),
             current: None,
             net_fetcher: None,
