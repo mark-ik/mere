@@ -38,7 +38,7 @@ backends), but it lives inside mere and is `publish = false`. Two consumers now
 want it independently:
 
 - **mere** itself (its statistical-intelligence tier), the current owner.
-- **Isometry** (a standalone Strophos-stack app), for the optional DM-loaded
+- **Isometry** (a standalone Merely-stack app), for the optional DM-loaded
   model lane: the DM-in-the-loop dialog system, recap, RAG, generation. See
   isometry `design_docs/2026-07-07_optional_intelligence_vision.md`, section
   3.5 (the recommended inference architecture is exactly this seam: DM-only,
@@ -164,7 +164,7 @@ hardcodes a runtime.
   (the RAG/search half of the isometry vision's opportunity catalog); keep them
   separate crates unless a consumer proves they want one dependency.
 - **Licensing.** The ported files are MPL-2.0 (mere's license), so vates is
-  MPL-2.0 for now. The Strophos app workspaces (isometry, serval) use
+  MPL-2.0 for now. The Merely app workspaces (isometry, serval) use
   `MIT OR Apache-2.0`; the other standalone libs' license should be confirmed.
   Whether vates relicenses to match the crates.io ecosystem norm is Mark's call
   before first publish; until then MPL is the safe default for promoted code.
