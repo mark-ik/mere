@@ -11,7 +11,7 @@ categories = ["data-structures"]
 [dependencies]
 # The store codicil persists through. Local development redirects this source
 # through the ignored `.cargo/config.toml` patch, matching its consumers.
-muniment = { git = "https://github.com/mark-ik/muniment.git", branch = "main" }
+muniment = { git = "https://github.com/mark-ik/muniment.git", branch = "main", version = "0.1.0" }
 serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
