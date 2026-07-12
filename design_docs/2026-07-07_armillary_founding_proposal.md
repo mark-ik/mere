@@ -105,6 +105,13 @@ adoption, not construction.
   vates and sibylla, not a blocker. **Done when** an Isometry actor emits updates
   to the host kernel through this crate.
 
+**P3 landed 2026-07-11.** Isometry's network authority runs as an Armillary
+actor. Its generated-campaign commit path also supplied the first non-browser
+correlation requirement: `RequestId`/`RequestIds` and `Correlated<T>` now pair a
+host command with its eventual typed outcome. The primitive is deliberately
+outcome-neutral so Strophe project I/O and Merecat action/effect execution can
+reuse it without moving their command taxonomies into Armillary.
+
 P2 and P3 are independent. P1 is the immediate motivation and the reason this
 crate exists as a repo today.
 
@@ -141,15 +148,13 @@ choice rather than pre-deciding it.
   armillary; the flow is one-way (they depend on it, it depends on none of them).
   This mirrors the wgpu-sibling libs, vates, and sibylla.
 - **Scope: the runtime spine only.** armillary is the kernel/actor boundary, the
-  harness, the pool, and generation counters. It is not an async runtime (no
+  harness, the pool, generation counters, and request correlation. It is not an async runtime (no
   tokio, no executor), not a message bus, and names no host. A host brings its own
   event loop, its own command/update types, and its own kernel state; armillary
   supplies the discipline that keeps that state on one thread and the work off it.
-- **Licensing.** The ported files are MPL-2.0 (mere's license), so armillary is
-  MPL-2.0 for now. The Merely app workspaces (isometry, serval) use
-  `MIT OR Apache-2.0`; whether armillary relicenses to match the crates.io norm is
-  Mark's call before first publish, and should be decided together with vates and
-  sibylla so the promoted crates match. Until then MPL is the safe default.
+- **Licensing.** Resolved after founding: the repository, manifest, and license
+  files use `MIT OR Apache-2.0`, matching Isometry, Serval, and the promoted
+  sibling libraries.
 
 ## 7. Open questions
 
@@ -158,9 +163,7 @@ choice rather than pre-deciding it.
 2. **mere reconciliation mechanism** (P2): git-dep the standalone crate, or delete
    the in-tree copy and depend outright. The latter fits no-legacy-friction; the
    former is reversible during the transition.
-3. **License** (section 6): MPL-2.0 or relicense to MIT/Apache before publish;
-   decide alongside vates and sibylla.
-4. **Publish vs git-dep:** publish to crates.io (like wgpu-scry) or consume as a
+3. **Publish vs git-dep:** publish to crates.io (like wgpu-scry) or consume as a
    git dep first. `publish` stays off until this and the license settle, decided
    alongside the sibling crates.
 

@@ -19,6 +19,9 @@ The runtime spine, and nothing host-specific:
   count (and any leaked per-thread state) to peak concurrency, not total spawns.
 - **Generation counters** for backpressure, so a result from a superseded state
   is dropped rather than applied.
+- **Request correlation** (`RequestId`, `RequestIds`, `Correlated<T>`) so a host
+  can pair actor progress or completion updates with the command that caused
+  them without Armillary defining the app's outcome vocabulary.
 
 ```rust
 use std::sync::Arc;

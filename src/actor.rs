@@ -331,18 +331,21 @@ mod tests {
 
         let captured = Captured::default();
         let subscriber = tracing_subscriber::registry().with(captured.clone());
-        // Run the wrapper inline (not on a thread) so the thread-local subscriber sees it.
-        tracing::subscriber::with_default(subscriber, || {
-            let (command_tx, command_rx) = mpsc::channel::<u32>();
-            let (update_tx, _update_rx) = mpsc::channel::<u32>();
-            let emitter = Emitter {
-                updates: update_tx,
-                wake: Arc::new(|| {}),
-            };
-            drop(command_tx); // close the command channel so `run` returns at once
-            run_with_lifecycle_span("test_actor", command_rx, emitter, |commands, _out| {
-                while commands.recv().is_ok() {}
-            });
+        // Actor tests run in parallel and share tracing's callsite-interest
+        // cache. A temporary thread-local subscriber can therefore race with
+        // no-subscriber actor threads and capture only one bracketing event.
+        // One subscriber for this test binary keeps the receipt deterministic.
+        tracing::subscriber::set_global_default(subscriber)
+            .expect("actor tests install one tracing subscriber");
+        let (command_tx, command_rx) = mpsc::channel::<u32>();
+        let (update_tx, _update_rx) = mpsc::channel::<u32>();
+        let emitter = Emitter {
+            updates: update_tx,
+            wake: Arc::new(|| {}),
+        };
+        drop(command_tx); // close the command channel so `run` returns at once
+        run_with_lifecycle_span("test_actor", command_rx, emitter, |commands, _out| {
+            while commands.recv().is_ok() {}
         });
 
         let events = captured.0.lock().unwrap();
