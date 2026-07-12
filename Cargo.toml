@@ -16,6 +16,10 @@ serde = { version = "1", features = ["derive"] }
 muniment = { git = "https://github.com/mark-ik/muniment.git", branch = "main", version = "0.1.0", default-features = false }
 # The edit spine (G1): graph edits are a codicil log, persisted through muniment.
 codicil = { git = "https://github.com/mark-ik/codicil.git", branch = "main", version = "0.1.0" }
+# The lineage layer (`chartulary::stemma`, folded in 2026-07-12): rkyv for the
+# zero-copy snapshot, slotmap for the visit arena.
+rkyv = { version = "0.8", features = ["std"] }
+slotmap = { version = "1.0", features = ["serde"] }
 
 [dev-dependencies]
 pollster = "0.4"

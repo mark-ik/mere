@@ -29,6 +29,13 @@ pub mod caps;
 pub mod container;
 pub mod edit;
 pub mod graph;
+
+/// The lineage layer: owner-scoped descent of content through branching visits
+/// (folded in from the standalone `stemma` crate 2026-07-12 — the crates.io
+/// name was taken by an unrelated DOCX tool, and the module always described
+/// itself as "chartulary's lineage layer, a projection over the edit spine and
+/// never a second store"; the sibling repo archives).
+pub mod stemma;
 pub mod spine;
 pub mod taxonomy;
 
