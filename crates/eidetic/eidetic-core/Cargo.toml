@@ -25,10 +25,10 @@ serde_json = "1.0"
 # stemma is the promoted (MIT/Apache) successor to the retired in-tree
 # node-lineage. Git sibling; local checkout via the gitignored
 # `.cargo/config.toml` patch.
-stemma = { git = "https://github.com/mark-ik/stemma.git", branch = "main", optional = true }
+chartulary = { git = "https://github.com/mark-ik/chartulary.git", branch = "main", version = "0.1.0", optional = true }
 
 [features]
-lineage = ["dep:stemma"]
+lineage = ["dep:chartulary"]
 
 [dev-dependencies]
 pollster = "0.4"

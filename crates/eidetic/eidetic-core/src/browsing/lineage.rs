@@ -16,7 +16,7 @@
 //! entries are pages, and how an owner is tagged. Entries that are not pages
 //! project to nothing.
 
-use stemma::{StemmaSnapshot as GraphMemorySnapshot, TransitionKind};
+use chartulary::stemma::{StemmaSnapshot as GraphMemorySnapshot, TransitionKind};
 
 use super::{BrowsingTrace, PageRef, TraceEvent, TraceTransition};
 
@@ -54,10 +54,10 @@ pub fn project_lineage<K, E, O, X>(
     mut owner_tag: impl FnMut(&O) -> String,
 ) -> Vec<BrowsingTrace>
 where
-    K: stemma::EntryIdentityKey,
-    E: stemma::MemoryPayload,
-    O: stemma::OwnerIdentity,
-    X: stemma::MemoryPayload,
+    K: chartulary::stemma::EntryIdentityKey,
+    E: chartulary::stemma::MemoryPayload,
+    O: chartulary::stemma::OwnerIdentity,
+    X: chartulary::stemma::MemoryPayload,
 {
     let pages: Vec<Option<PageRef>> = snapshot
         .entries
@@ -112,7 +112,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use stemma::{
+    use chartulary::stemma::{
         BindingSnapshot, EntryPrivacy, EntrySnapshot, OwnerSnapshot, TransitionRecord,
         VisitSnapshot,
     };

@@ -99,8 +99,13 @@ Three subtleties:
 
 - **Referential integrity**: collecting a statement must collect its reifier /
   provenance (the statements about it), or annotations dangle.
-- **Federation makes GC a retraction, not a delete**: a statement shared into a moot
-  cannot be unilaterally deleted; its collection is a tombstone other peers can see.
+- **Federation makes immediate GC a withdrawal before compaction**: a statement
+  shared into a moot cannot be unilaterally erased from every copy. Its accepted
+  withdrawal remains visible until a checkpoint captures the resulting absence;
+  p2panda prefix pruning may then remove the withdrawal with the older history.
+  This avoids a permanent tombstone per statement while preserving
+  anti-resurrection. See the
+  [deletion, retention, and native drop plan](../implementation_strategy/2026-07-12_deletion_retention_and_native_drop_plan.md).
   Local-only statements collect freely; shared ones are CRDT-shaped. This is one
   reason the profile keeps provenance: you need a statement's reach before you can
   collect it.

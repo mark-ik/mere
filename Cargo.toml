@@ -251,6 +251,13 @@ stylo_atoms = { git = "https://github.com/mark-ik/stylo", branch = "mark-ik/serv
 # support/patches/taffy, so it never collides with this patch. No local paths live in
 # this committed manifest, so it compiles anywhere.
 taffy = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+# Same restatement for stylo_taffy: serval-layout deps stylo_taffy 0.3.0-beta.1,
+# whose crates.io copy requires stylo ^0.19 — while our stylo fork is 0.18, and
+# both `links = "servo_style_crate"`, so the registry copy is not merely wrong,
+# it is unresolvable. Serval vendors a stylo_taffy patched onto the fork; mere
+# does not inherit serval's patch table, so it restates it here (same rule as
+# taffy above; the local `.cargo/config.toml` redirects it to a serval checkout).
+stylo_taffy = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 
 # ipc-channel: in-process fork, vendored in serval at support/patches/ipc-channel
 # and reached here via serval's git (exactly like the taffy patch above). Mere is

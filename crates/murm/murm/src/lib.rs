@@ -357,6 +357,52 @@ mod tests {
     }
 
     #[test]
+    fn cabal_membership_folds_signed_join_leave_by_author_sequence() {
+        let alice_provider: Arc<dyn IdentityProvider> =
+            Arc::new(identity::InMemoryProvider::from_seed([70; 32]));
+        let alice_id = PeerID::from_public_key(alice_provider.master_public_key());
+        let alice = Murm::new(alice_provider, StubTransport::new(alice_id));
+
+        let bob_provider: Arc<dyn IdentityProvider> =
+            Arc::new(identity::InMemoryProvider::from_seed([71; 32]));
+        let bob_id = PeerID::from_public_key(bob_provider.master_public_key());
+        let bob = Murm::new(bob_provider, StubTransport::new(bob_id));
+
+        let key = CabalKey::new([0xce; 32]);
+        let alice_cabal = alice.open_cabal(&key).unwrap();
+        let bob_cabal = bob.open_cabal(&key).unwrap();
+        let alice_author = alice_cabal.author_public_key().unwrap().to_bytes();
+        let bob_author = bob_cabal.author_public_key().unwrap().to_bytes();
+
+        let alice_join = alice_cabal.send_join_at("secrets", 30).unwrap();
+        let bob_join = bob_cabal.send_join_at("secrets", 10).unwrap();
+        bob_cabal
+            .ingest_post(alice_cabal.get_post(&alice_join).unwrap())
+            .unwrap();
+        alice_cabal
+            .ingest_post(bob_cabal.get_post(&bob_join).unwrap())
+            .unwrap();
+
+        let alice_view = alice_cabal.membership("secrets");
+        let bob_view = bob_cabal.membership("secrets");
+        assert_eq!(alice_view, bob_view);
+        assert!(alice_view.contains(&alice_author));
+        assert!(alice_view.contains(&bob_author));
+        let joined_revision = alice_view.revision;
+
+        // Alice's later per-author operation wins even with an older asserted
+        // timestamp; membership never uses wall-clock last-writer-wins.
+        let alice_leave = alice_cabal.send_leave_at("secrets", 1).unwrap();
+        bob_cabal
+            .ingest_post(alice_cabal.get_post(&alice_leave).unwrap())
+            .unwrap();
+        let left = bob_cabal.membership("secrets");
+        assert!(!left.contains(&alice_author));
+        assert!(left.contains(&bob_author));
+        assert_ne!(left.revision, joined_revision);
+    }
+
+    #[test]
     fn derive_cabal_keypair_uses_identity_provider() {
         let murm = make_murm();
         let cabal_key = CabalKey::new([1; 32]);

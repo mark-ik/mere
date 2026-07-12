@@ -76,7 +76,7 @@ path = "src/main.rs"
 # tree into serval's mutable ScriptedDom. Cross-repo path dep on the sibling
 # serval checkout — mere and serval share the vello 0.9 / wgpu 29 pins, so there
 # is no renderer-stack reconciliation (serval-as-host flip plan, Findings).
-xilem-serval = { git = "https://github.com/mark-ik/serval.git", branch = "main", features = ["highlight"] }
+xilem-serval = { package = "serval-xilem", git = "https://github.com/mark-ik/serval.git", branch = "main", features = ["highlight"] }
 # Chisel widget leaves: the toolbar status cluster (frame-time Meter + recent
 # GraphGlyph) as `<chisel-leaf>` elements in the chrome DOM, plus the grid
 # widget (GridSpec) for the nodes/recent table. The chrome emit splices leaf

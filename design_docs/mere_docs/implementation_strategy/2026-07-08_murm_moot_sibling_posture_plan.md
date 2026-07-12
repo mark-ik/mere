@@ -132,6 +132,16 @@ Gate: R1 and S2 landed, R2 purity check green. Do not found repos around the pre
 
 ## Progress
 
+### 2026-07-12
+
+- **Signed channel-membership projection landed in Murm.** `CabalHandle::membership`
+  folds each author's highest-sequence signed Join/Leave operation, returns the
+  active per-cabal author keys, and commits the current states with BLAKE3.
+  Wall-clock timestamps do not resolve membership. Consumers can now freeze a
+  private audience by revision without inventing their own roster fold.
+  Removal updates the roster but does not revoke a known cabal key; key rotation
+  and sealed payload delivery remain separate security requirements.
+
 ### 2026-07-08
 
 - Plan created from the murm audit workflow (map/propose/critique), the sibling-posture discussion, and the store-substrate analysis. DOC_README indexed same session.

@@ -261,9 +261,13 @@ impl CabalHandle {
             };
             let author = post.author.to_bytes();
             let post_id = hash_post(&post);
-            let replace = latest
-                .get(&author)
-                .is_none_or(|(seq_num, _, _)| post.seq_num > *seq_num);
+            let replace = match latest.get(&author) {
+                Some((seq_num, _, prior_id)) => {
+                    post.seq_num > *seq_num
+                        || (post.seq_num == *seq_num && post_id.as_bytes() > prior_id.as_bytes())
+                }
+                None => true,
+            };
             if replace {
                 latest.insert(author, (post.seq_num, joined, post_id));
             }

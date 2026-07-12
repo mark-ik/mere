@@ -16,7 +16,7 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 use euclid::default::Point2D;
-use stemma::TransitionKind;
+use chartulary::stemma::TransitionKind;
 use rkyv::{Archive, Deserialize, Serialize};
 use uuid::Uuid;
 
