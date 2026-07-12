@@ -289,7 +289,7 @@ model a fork is clean: a new constitution whose `Genesis` cites the parent
 constitution hash and the divergence point, carried forward by whoever signs the
 new genesis. That `Genesis` must bind the new `MootId`, founder / initial governance
 key, parent constitution (if any), divergence point, and initial rules hash; otherwise
-joiners cannot distinguish a fork from a squat. Membership, flora pins, and tessera
+joiners cannot distinguish a fork from a squat. Membership, fauna pins, and tessera
 history are inherited by reference; the amendment rule is what the forkers chose to
 change. Fork is not disaster recovery; it is the amendment rule's escape valve when
 amendment fails.

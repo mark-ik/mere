@@ -18,6 +18,7 @@ path = "src/lib.rs"
 identity.workspace = true
 transport.workspace = true
 murmuring.workspace = true
+blake3 = "1.5"
 # LogSync (offline catch-up) is assembled here over a cabal's redb store: the
 # protocol (`p2panda-net`), its sync-event types (`p2panda-sync`), and `Topic`
 # (`p2panda-core`). The store traits live in murmuring; murm only drives the

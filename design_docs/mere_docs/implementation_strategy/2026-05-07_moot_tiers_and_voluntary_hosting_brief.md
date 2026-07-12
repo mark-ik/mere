@@ -91,7 +91,7 @@ It contains:
   node with a URL and a protocol tag.
 - **Hosting commitments** — signed events naming who's running which
   service, with heartbeats and successor chains.
-- **Engram flora** — durable contributions accumulated over time.
+- **Engram fauna** — durable contributions accumulated over time.
 - **Governance** — tessera-weighted decisions about resource use,
   capability assignment, scope changes (not about hosting *burdens*; see
   §4).
@@ -135,7 +135,7 @@ The moot **dissolves if nobody pins it** — liveness is determined by
 whether any member cares enough to maintain a pin.
 
 Within the moot, members make and pin: shared graph spaces, public
-annotations, recommended links, indexes, page snapshots, flora,
+annotations, recommended links, indexes, page snapshots, fauna,
 cross-moot requests (compute, federation reach, etc.).
 
 Resources can be publicly accessible — a friend group can host a curated
@@ -500,7 +500,7 @@ checkpoints:
 
 4. Two users form a moot. Both pin the moot's seed graph. Both sign a
    stake + agreement event.
-5. One user authors an engram into the moot's flora; the other pins it.
+5. One user authors an engram into the moot's fauna; the other pins it.
 6. A signed hosting commitment for a live service (a Matrix-room-link
    node) is recorded with a heartbeat.
 

@@ -108,9 +108,10 @@ complete), user zoom shipped, auto-DPI planned.
   (swatch said "unstarted" after code landed) and also outrun the code (the
   edge audit's stale "no way to draw an edge"). The standing rule holds:
   trust the code.
-- **Naming hazards**: `flora` (engram-ref list in code vs federated-LoRA in
-  docs), "card" names three surfaces with different lifetimes (roster detail
-  card / canvas focus card / swatch card), LoRa radio vs LoRA adapters.
+- **Naming hazards**: the engram-ref catalog is now `fauna`, reserving `flora`
+  for federated LoRA (resolved 2026-07-12). "Card" still names three surfaces
+  with different lifetimes (roster detail card / canvas focus card / swatch
+  card), and LoRa radio remains easy to confuse with LoRA adapters.
 
 ## 5. Synergies
 

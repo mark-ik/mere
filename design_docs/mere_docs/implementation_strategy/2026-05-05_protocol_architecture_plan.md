@@ -100,7 +100,7 @@ All four iroh primitives **live in `mere-transport`**. Murm and Moothold are *co
 | Layer | Crate | Lives in | Workloads (consumed via mere-transport API) |
 |-------|-------|----------|---------------------------------------------|
 | **iroh** (QUIC + NodeId discovery) | `iroh` | `mere-transport` | Authenticated streams to known peers |
-| **iroh-blobs** | `iroh-blobs` | `mere-transport` | Cable attachments, engram payloads, flora archives, large memory-class artifacts. BLAKE3 content-addressed transfer; large binary payloads off the chat-message wire |
+| **iroh-blobs** | `iroh-blobs` | `mere-transport` | Cable attachments, engram payloads, fauna archives, large memory-class artifacts. BLAKE3 content-addressed transfer; large binary payloads off the chat-message wire |
 | **iroh-gossip** | `iroh-gossip` | `mere-transport` | Cabal presence, moot-membership churn, kith/kin online-state. HyParView + PlumTree pub/sub for low-latency many-to-few state |
 | **iroh-docs** | `iroh-docs` | `mere-transport` | Shared moot state (topic, member roster, moderation seeds), co-op session metadata longer-lived than chat. CRDT meta-protocol; small, contention-tolerant, shared-mutable state |
 

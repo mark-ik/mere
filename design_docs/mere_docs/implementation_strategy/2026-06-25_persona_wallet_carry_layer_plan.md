@@ -188,7 +188,7 @@ persona-encrypted. The dial is per node, not per session.
 | 1 Persona / vault | private | master Ed25519 + per-persona derivation; the identity boundary |
 | 2 Eidetic | private by default | immutable BLAKE3-hashed engrams + `PrivacyClass`; the data |
 | 3 Tessera | public within a moot | earned standing; an input to authz, gated by `gate.rs` |
-| 4 Moot | public/shared to members | the community graph + flora + hosting commitments |
+| 4 Moot | public/shared to members | the community graph + fauna + hosting commitments |
 | 5 Constitution | public | amendable law; who may grant caps, thresholds, fork rules |
 | 6 Transport | mixed | per-persona NodeId / discovery / egress (the transport plan) |
 | 7 Moothold | shared | federation: reciprocity ledger, cross-moot pinning |
@@ -460,7 +460,7 @@ mint capability.
 **Built, shipped, or already source-grounded:** persona identity (master Ed25519 +
 BLAKE3 derivation); content-addressed engrams with `PrivacyClass` (cleartext today); the
 persona vault with `PassphraseEncryptedStorage` (Argon2id + ChaCha20-Poly1305) for
-credentials; the tessera ledger + gate; the moot roster + flora; the transport (iroh,
+credentials; the tessera ledger + gate; the moot roster + fauna; the transport (iroh,
 per-persona NodeId optional); the new `session-runtime::wallet_store` module (identity
 wallet, device roster, persona wallet, grant paths, and tests); and the chosen lane
 engines `p2panda-auth` (cleartext gating) and `p2panda-encryption` (the private lane),

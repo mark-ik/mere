@@ -47,7 +47,7 @@ mod cabal;
 mod error;
 mod gossip_sync;
 
-pub use crate::cabal::{CabalHandle, CabalId, CabalKey};
+pub use crate::cabal::{CabalHandle, CabalId, CabalKey, CabalMembership};
 pub use crate::error::MurmError;
 pub use crate::gossip_sync::SyncedCabal;
 

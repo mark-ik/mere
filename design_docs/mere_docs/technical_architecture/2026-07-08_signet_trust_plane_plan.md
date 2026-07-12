@@ -76,7 +76,7 @@ personae    identity + carry in one crate: master Ed25519 + BLAKE3 derivation +
 murm        bilateral comms: cabals (murmuring) + misfin mail
 retinue     the Reticulum transport lane (own endpoint impl, when it lands)
 transport   the p2panda / iroh wire under murm
-moot        community graph + flora + hosting commitments
+moot        community graph + fauna + hosting commitments
 tessera     earned standing (the trust token); an input to authz
 kith        capability sharing: kith/kin grants, revocation, namespace caps
 ```
@@ -128,7 +128,7 @@ the data plane never learns about keys, the trust plane never learns graph shape
   that made a separate `signet` unnecessary.
 - `murm/*` (transport, murmuring, murm, misfin) → **murm** family + **retinue**
   (retinue already scaffolded; own Reticulum impl, trigger-gated).
-- `moot/moothold` (tessera, roster, flora, constitution, reciprocity) → **moot /
+- `moot/moothold` (tessera, roster, fauna, constitution, reciprocity) → **moot /
   tessera**; **kith** (the capability-sharing slice, already named in
   `2026-06-30_kith_capability_sharing_plan.md`).
 - `eidetic::seal` → the **seal interface** promoted to the muniment/personae joint

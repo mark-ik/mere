@@ -340,13 +340,10 @@ what is indexed is C4** — the "an excluded page is not indexed" clause lands t
   origin-gated, SSRF-floored, rate-capped; `document-host` tests green. Earlier
   "stub" framing in the relational and substrate plans was same-day-stale and is
   superseded by the documentscript net-hardening plan.
-- **Naming hazard to disambiguate before federation work**: `flora` means two
-  live things. In code, `MootRoster.flora` is a list of accumulated engram CID
-  references (the 2026-05-04 lexicon). In docs (2026-06-23), `flora = federated
-  LoRA`. Both are current; a reader cannot tell which without dating it.
-  Recommend Mark pick one (rename the roster field, or scope the term) before the
-  flora lane gets code, so the federatability class (C4) and any adapter-engram
-  schema are not built against an ambiguous word.
+- **Naming resolved 2026-07-12**: `fauna` is the Moot's catalog of accumulated
+  engram CID references (`MootRoster.fauna`); `flora` retains its established
+  federated-LoRA meaning. Federatability class C4 and adapter-engram schemas can
+  now name the two lanes without date-dependent interpretation.
 
 ---
 

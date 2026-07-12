@@ -16,13 +16,14 @@
 //! from `BLAKE3(master_secret || cabal_key)` — that derivation lives in
 //! [`identity::IdentityProvider::derive_keypair`].
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use murmuring::CableEngine;
 
 use crate::error::MurmError;
-use crate::{Post, PostId};
+use crate::{Post, PostId, PostKind, hash_post};
 
 /// Current wall-clock time as milliseconds since UNIX epoch. Returns 0 if
 /// the system clock is before the epoch (effectively unreachable on
@@ -85,6 +86,31 @@ impl CabalId {
     /// View as bytes.
     pub fn as_bytes(&self) -> &[u8; 32] {
         &self.0
+    }
+}
+
+/// Deterministic current membership of one cabal channel.
+///
+/// Members are per-cabal author public keys, derived by each persona from the
+/// cabal key. The revision commits to the latest signed Join/Leave operation
+/// for every author, so consumers can bind private state to a frozen audience.
+/// This is an audience projection, not key revocation: removing a member must
+/// be followed by a new cabal key before future posts are confidential from a
+/// former key holder.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CabalMembership {
+    /// Channel whose signed Join/Leave records were folded.
+    pub channel: String,
+    /// Active per-cabal author public keys.
+    pub members: BTreeSet<[u8; 32]>,
+    /// BLAKE3 commitment to the current per-author membership states.
+    pub revision: [u8; 32],
+}
+
+impl CabalMembership {
+    /// Whether a per-cabal author public key is currently joined.
+    pub fn contains(&self, author: &[u8; 32]) -> bool {
+        self.members.contains(author)
     }
 }
 
@@ -218,6 +244,48 @@ impl CabalHandle {
     pub fn history(&self, channel: &str) -> Vec<Post> {
         self.engine
             .channel_history(self.cabal_id.as_bytes(), channel)
+    }
+
+    /// Fold signed Join/Leave posts into the channel's current audience.
+    ///
+    /// Each author's highest per-cabal sequence number wins for that author;
+    /// cross-author wall-clock timestamps never decide membership. The result
+    /// therefore converges independent of arrival order.
+    pub fn membership(&self, channel: &str) -> CabalMembership {
+        let mut latest: BTreeMap<[u8; 32], (u64, bool, PostId)> = BTreeMap::new();
+        for post in self.history(channel) {
+            let joined = match &post.kind {
+                PostKind::Join { .. } => true,
+                PostKind::Leave { .. } => false,
+                _ => continue,
+            };
+            let author = post.author.to_bytes();
+            let post_id = hash_post(&post);
+            let replace = latest
+                .get(&author)
+                .is_none_or(|(seq_num, _, _)| post.seq_num > *seq_num);
+            if replace {
+                latest.insert(author, (post.seq_num, joined, post_id));
+            }
+        }
+
+        let mut hasher = blake3::Hasher::new_derive_key("mere.murm.cabal-membership.v1");
+        hasher.update(&(channel.len() as u64).to_le_bytes());
+        hasher.update(channel.as_bytes());
+        for (author, (seq_num, joined, post_id)) in &latest {
+            hasher.update(author);
+            hasher.update(&seq_num.to_le_bytes());
+            hasher.update(&[u8::from(*joined)]);
+            hasher.update(post_id.as_bytes());
+        }
+        CabalMembership {
+            channel: channel.to_owned(),
+            members: latest
+                .into_iter()
+                .filter_map(|(author, (_, joined, _))| joined.then_some(author))
+                .collect(),
+            revision: *hasher.finalize().as_bytes(),
+        }
     }
 
     /// Subscribe to posts as they land in this cabal.

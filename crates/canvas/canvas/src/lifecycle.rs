@@ -506,6 +506,27 @@ impl Canvas {
         let Some(key) = self.graph.get_node_by_url(url).map(|(k, _)| k) else {
             return false;
         };
+        self.favicon_at_key(key, rgba, width, height)
+    }
+
+    /// [`set_node_favicon`](Self::set_node_favicon) keyed by the node's stable
+    /// member id instead of its URL. URL keying answers first-match when two
+    /// nodes share an address; a host correlating fetches by node id stamps
+    /// the exact requester (correlation-over-URLs).
+    pub fn set_node_favicon_for(
+        &mut self,
+        member: uuid::Uuid,
+        rgba: Vec<u8>,
+        width: u32,
+        height: u32,
+    ) -> bool {
+        let Some(key) = self.graph.get_node_key_by_id(member) else {
+            return false;
+        };
+        self.favicon_at_key(key, rgba, width, height)
+    }
+
+    fn favicon_at_key(&mut self, key: NodeKey, rgba: Vec<u8>, width: u32, height: u32) -> bool {
         matches!(
             kernel::graph::apply::apply_graph_delta(
                 &mut self.graph,
@@ -530,6 +551,19 @@ impl Canvas {
         let Some(key) = self.graph.get_node_by_url(url).map(|(k, _)| k) else {
             return false;
         };
+        self.title_at_key(key, title)
+    }
+
+    /// [`set_node_title`](Self::set_node_title) keyed by member id (see
+    /// [`set_node_favicon_for`](Self::set_node_favicon_for) for why).
+    pub fn set_node_title_for(&mut self, member: uuid::Uuid, title: String) -> bool {
+        let Some(key) = self.graph.get_node_key_by_id(member) else {
+            return false;
+        };
+        self.title_at_key(key, title)
+    }
+
+    fn title_at_key(&mut self, key: NodeKey, title: String) -> bool {
         let updated = matches!(
             kernel::graph::apply::apply_graph_delta(
                 &mut self.graph,
@@ -550,6 +584,19 @@ impl Canvas {
         let Some(key) = self.graph.get_node_by_url(url).map(|(k, _)| k) else {
             return false;
         };
+        self.mime_hint_at_key(key, mime_hint)
+    }
+
+    /// [`set_node_mime_hint`](Self::set_node_mime_hint) keyed by member id
+    /// (see [`set_node_favicon_for`](Self::set_node_favicon_for) for why).
+    pub fn set_node_mime_hint_for(&mut self, member: uuid::Uuid, mime_hint: Option<String>) -> bool {
+        let Some(key) = self.graph.get_node_key_by_id(member) else {
+            return false;
+        };
+        self.mime_hint_at_key(key, mime_hint)
+    }
+
+    fn mime_hint_at_key(&mut self, key: NodeKey, mime_hint: Option<String>) -> bool {
         matches!(
             kernel::graph::apply::apply_graph_delta(
                 &mut self.graph,

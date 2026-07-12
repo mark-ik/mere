@@ -203,3 +203,10 @@ Gate: R1 and S2 landed, R2 purity check green. Do not found repos around the pre
   signed governance proposals and claims; initial association is admitted by
   the target Moot, while later policy changes or migrations are evaluated under
   the campaign's current binding.
+- **Live Moot composition boundary landed (2026-07-11).** Moot operation and
+  store authoring now accept raw protocol-scoped Ed25519 seeds, letting
+  Personae consumers participate without importing Mere identity. `MootRoster`
+  computes `membership_revision` from the winning signed join operations only;
+  fauna and other non-membership events leave policy contexts stable. Isometry's
+  opt-in `campaign-moot` host layer now loads `MootStore` and derives campaign,
+  admission, and governance-change contexts directly from that live roster.

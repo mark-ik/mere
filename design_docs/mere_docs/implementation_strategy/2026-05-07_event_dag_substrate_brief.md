@@ -230,7 +230,7 @@ This satisfies Mark's "privacy as an option, possibly enabled by a mod" framing.
 
 The Pattern A / Pattern B framing below remains useful as a coarse shape: thin-client adapters fit Pattern A's slot; outbound publishing fits Pattern B. The earlier "bridges-only" framing in this section collapsed the two patterns:
 
-- **Pattern A — native hosting (`mooting-*` adapter crates).** The foreign p2p protocol can express moot semantics directly. A moot is hosted *on* that protocol; members of the moot speak the protocol under the hood; moothold's verbs (membership, governance, tessera, engram flora, capability scopes) map onto the protocol's primitives. **Bidirectional.** This is the right pattern for Matrix rooms, Nostr communities (NIP-72-shaped), ATProto feeds, ActivityPub Group actors, P2P Matrix, and other systems whose native primitives can carry moot semantics.
+- **Pattern A — native hosting (`mooting-*` adapter crates).** The foreign p2p protocol can express moot semantics directly. A moot is hosted *on* that protocol; members of the moot speak the protocol under the hood; moothold's verbs (membership, governance, tessera, engram fauna, capability scopes) map onto the protocol's primitives. **Bidirectional.** This is the right pattern for Matrix rooms, Nostr communities (NIP-72-shaped), ATProto feeds, ActivityPub Group actors, P2P Matrix, and other systems whose native primitives can carry moot semantics.
 
 - **Pattern B — outbound bridge (`mere-bridge-*` crates).** The foreign system can't host moot semantics (or mere only wants to publish outward). One-way mapping from MereEvents into the foreign protocol's vocabulary. Useful for one-shot Mastodon posts, IRC channel echoes, ATProto firehose announcements. **Outbound only.**
 
