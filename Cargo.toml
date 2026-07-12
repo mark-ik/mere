@@ -13,9 +13,9 @@ petgraph = { version = "0.8", features = ["serde-1"] }
 serde = { version = "1", features = ["derive"] }
 # For the content reference in ContentBearing (the blake3 Hash). default-features
 # off so chartulary does not pull muniment's JSON/postcard codecs, only its Hash.
-muniment = { path = "../muniment", default-features = false }
+muniment = { git = "https://github.com/mark-ik/muniment.git", branch = "main", version = "0.1.0", default-features = false }
 # The edit spine (G1): graph edits are a codicil log, persisted through muniment.
-codicil = { path = "../codicil" }
+codicil = { git = "https://github.com/mark-ik/codicil.git", branch = "main", version = "0.1.0" }
 
 [dev-dependencies]
 pollster = "0.4"
