@@ -1,35 +1,35 @@
-//! The serval [`FlipDonor`] glass-box donor (was the `verso-serval` crate; the `serval-donor` feature).
+//! The genet [`FlipDonor`] glass-box donor (was the `verso-genet` crate; the `genet-donor` feature).
 //!
-//! serval is a glass-box primary: a flip *out of* serval can export the full live
-//! view-state (charter §3, asymmetric fidelity). This adapter bridges serval's
+//! genet is a glass-box primary: a flip *out of* genet can export the full live
+//! view-state (charter §3, asymmetric fidelity). This adapter bridges genet's
 //! engine APIs to [`crate::api::PortableViewState`]. It reaches three sources, by
 //! layer:
 //!
 //! * DOM + FORM come straight from the scripted DOM (`ScriptedDom::outer_html`,
 //!   `ScriptedDom::form_values`), so the adapter can fill them itself.
-//! * NAV (url, scroll) lives in serval's *script runtime* (`HostState.base_url`,
+//! * NAV (url, scroll) lives in genet's *script runtime* (`HostState.base_url`,
 //!   `HostState.viewport_scroll`), not the DOM.
 //! * SESSION (cookies) lives in the host's netfetcher / eidetic jar.
 //! * VISUAL (the last frame) is a compositor handle.
 //!
 //! The last three are not DOM-derivable, so the host feeds them in via the
-//! `with_*` setters. That keeps this module depending only on `serval-scripted-dom`
+//! `with_*` setters. That keeps this module depending only on `genet-scripted-dom`
 //! and the [`crate::api`] contract (never the runtime or the GPU layer), and mirrors
 //! how the [`crate::scry`] receiver is host-fed. The [`crate::flip`] orchestrator builds a donor at
 //! flip time, calls [`capture`](FlipDonor::capture) once, and drops it.
 
 use layout_dom_api::LayoutDom;
-use serval_scripted_dom::ScriptedDom;
+use genet_scripted_dom::ScriptedDom;
 use crate::api::{Cookie, FlipDonor, FormValues, FrameHandle, LayerSet, PortableViewState};
 
-/// A one-shot flip donor over a serval scripted document.
+/// A one-shot flip donor over a genet scripted document.
 ///
 /// Borrows the live DOM for the FORM and DOM layers; the NAV, SESSION, and VISUAL
 /// layers are fed by the host (they live outside the DOM: the script runtime, the
 /// cookie jar, the compositor). [`donates`](FlipDonor::donates) advertises FORM and
 /// DOM unconditionally (a glass-box can always serialize and walk its tree) plus
 /// whichever host layers were supplied.
-pub struct ServalDonor<'a> {
+pub struct GenetDonor<'a> {
     dom: &'a ScriptedDom,
     url: Option<String>,
     scroll: (f32, f32),
@@ -37,7 +37,7 @@ pub struct ServalDonor<'a> {
     visual: Option<FrameHandle>,
 }
 
-impl<'a> ServalDonor<'a> {
+impl<'a> GenetDonor<'a> {
     /// A donor over `dom`'s primary document (its [`LayoutDom::document`] root). The
     /// DOM and form layers come from the tree; add the host-owned layers with the
     /// `with_*` setters before calling [`capture`](FlipDonor::capture).
@@ -51,14 +51,14 @@ impl<'a> ServalDonor<'a> {
         }
     }
 
-    /// The document URL (serval's `HostState.base_url`). Enables the NAV layer and
+    /// The document URL (genet's `HostState.base_url`). Enables the NAV layer and
     /// the receiver's faithful re-fetch path.
     pub fn with_url(mut self, url: impl Into<String>) -> Self {
         self.url = Some(url.into());
         self
     }
 
-    /// The viewport scroll offset (serval's `HostState.viewport_scroll`). Carried
+    /// The viewport scroll offset (genet's `HostState.viewport_scroll`). Carried
     /// inside the NAV layer; defaults to the origin when no url is fed.
     pub fn with_scroll(mut self, scroll: (f32, f32)) -> Self {
         self.scroll = scroll;
@@ -79,7 +79,7 @@ impl<'a> ServalDonor<'a> {
     }
 }
 
-impl FlipDonor for ServalDonor<'_> {
+impl FlipDonor for GenetDonor<'_> {
     fn donates(&self) -> LayerSet {
         // FORM and DOM are always available from the tree; the rest only when the
         // host fed them.
@@ -116,7 +116,7 @@ mod tests {
     #[test]
     fn empty_donor_donates_form_and_dom_only() {
         let dom = ScriptedDom::new();
-        let set = ServalDonor::new(&dom).donates();
+        let set = GenetDonor::new(&dom).donates();
         assert!(set.contains(LayerSet::FORM));
         assert!(set.contains(LayerSet::DOM));
         assert!(!set.contains(LayerSet::NAV));
@@ -127,7 +127,7 @@ mod tests {
     #[test]
     fn fed_layers_widen_donates_and_fill_capture() {
         let dom = ScriptedDom::new();
-        let donor = ServalDonor::new(&dom)
+        let donor = GenetDonor::new(&dom)
             .with_url("https://example.com/page")
             .with_scroll((0.0, 120.0))
             .with_cookies(vec![Cookie {
@@ -155,7 +155,7 @@ mod tests {
         let dom = ScriptedDom::new();
         // Scroll alone is degenerate without a document to re-root: NAV is gated on
         // the url (the receiver's faithful re-fetch key), not the scroll.
-        let set = ServalDonor::new(&dom).with_scroll((10.0, 20.0)).donates();
+        let set = GenetDonor::new(&dom).with_scroll((10.0, 20.0)).donates();
         assert!(!set.contains(LayerSet::NAV));
     }
 }
