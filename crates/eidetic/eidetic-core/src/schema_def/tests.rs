@@ -8,29 +8,12 @@ use crate::schema::{ProvenanceOrigin, ProvenanceRecord, Timestamp};
 use async_trait::async_trait;
 use std::collections::HashMap;
 
-#[derive(Default)]
-struct InMemoryStore {
-    blobs: HashMap<String, Vec<u8>>,
-}
+    // The in-memory test store is muniment's (2026-07-12): eidetic's
+    // hand-rolled one was the same map behind the same seam.
+    use muniment::MemoryBackend as InMemoryStore;
 
-#[async_trait(?Send)]
-impl Store for InMemoryStore {
-    async fn load_blob(&mut self, key: &str) -> Result<Option<Vec<u8>>> {
-        Ok(self.blobs.get(key).cloned())
-    }
-    async fn save_blob(&mut self, key: &str, value: &[u8]) -> Result<()> {
-        self.blobs.insert(key.to_string(), value.to_vec());
-        Ok(())
-    }
-    async fn iter_keys(&mut self, prefix: &str) -> Result<Vec<String>> {
-        Ok(self
-            .blobs
-            .keys()
-            .filter(|k| k.starts_with(prefix))
-            .cloned()
-            .collect())
-    }
-}
+
+
 
 fn test_provenance() -> ProvenanceRecord {
     ProvenanceRecord {

@@ -146,53 +146,30 @@ impl std::error::Error for Error {}
 /// Crate-level result alias.
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Owner-scoped private blob store.
+/// The storage seam, **muniment's** (2026-07-12).
 ///
-/// Implementations decide where blobs live (fjall, redb, OPFS, in-memory,
-/// …). The trait surface is intentionally narrow: load by key, save by key,
-/// enumerate by key prefix. Index/snapshot/journal concerns belong to
-/// higher-level seams that may build on top of `Store`.
+/// Eidetic used to declare its own `Store` trait — get/put/delete/list over
+/// `&str -> Vec<u8>`, async, one method per operation. That was
+/// [`muniment::Backend`] written twice: eidetic poured its own floor before
+/// muniment existed. It now consumes the real one, and `Store` remains as an
+/// alias so every layer above (manifests, schemas, sealing, engrams) reads
+/// unchanged.
 ///
-/// The trait is `?Send` so single-threaded wasm impls (browser OPFS) can
-/// satisfy it without contortions; native multi-threaded consumers that need
-/// `Send` futures can add the bound at the call site.
-///
-/// ## `iter_keys`
-///
-/// Backends that don't support enumeration return an error (the default
-/// impl). Higher layers that need listing (`list_manifests`, `list_typed`)
-/// will surface that error to the consumer. Most real backends — fjall,
-/// redb, OPFS, and the test in-memory stores — can answer enumeration
-/// cheaply.
-#[async_trait(?Send)]
-pub trait Store {
-    async fn load_blob(&mut self, key: &str) -> Result<Option<Vec<u8>>>;
+/// What the swap buys beyond deleting a duplicate: backends take `&self`,
+/// `delete`/`list` are required rather than `Err`-by-default, muniment's
+/// `scan` (ordered range) and `apply` (atomic batch) come along, and every
+/// muniment backend (memory, redb) is now an eidetic store — while
+/// eidetic-fjall becomes a backend the whole family can reuse.
+pub use muniment::{Backend, Backend as Store, MemoryBackend, WriteOp};
 
-    async fn save_blob(&mut self, key: &str, value: &[u8]) -> Result<()>;
-
-    /// Return all keys that begin with `prefix`. Order is implementation-
-    /// defined; consumers that need a stable order should sort the
-    /// returned vector.
-    async fn iter_keys(&mut self, _prefix: &str) -> Result<Vec<String>> {
-        Err(Error::new(
-            "Store implementation does not support iter_keys",
-        ))
-    }
-
-    /// Delete the value under `key`, returning whether something was
-    /// deleted. Backends that don't support deletion return an error (the
-    /// default impl).
-    ///
-    /// Layer-4 quota policies (e.g. browsing-memory age-out) delete
-    /// *manifests* via [`manifest::delete_manifest`]; blob bytes stay until
-    /// an explicit GC pass walks reachability (design pass §8 — a blob may
-    /// be referenced by multiple manifests).
-    async fn delete_blob(&mut self, _key: &str) -> Result<bool> {
-        Err(Error::new(
-            "Store implementation does not support delete_blob",
-        ))
+/// muniment's store errors flow into eidetic's owned error vocabulary, so the
+/// layers above keep returning [`Result`] and `?` still works at every call.
+impl From<muniment::error::StoreError> for Error {
+    fn from(err: muniment::error::StoreError) -> Self {
+        Error::new(err.to_string())
     }
 }
+
 
 /// Idempotent first-init seeding for any [`Store`].
 ///
@@ -210,10 +187,10 @@ pub async fn dispatch(store: &mut dyn Store, request: &Request) -> Result<Respon
     match request {
         Request::LoadBlob { key } => Ok(Response::BlobLoaded {
             key: key.clone(),
-            value: store.load_blob(key).await?,
+            value: store.get(key).await?,
         }),
         Request::SaveBlob { key, value } => {
-            store.save_blob(key, value).await?;
+            store.put(key, value).await?;
             Ok(Response::BlobSaved { key: key.clone() })
         }
     }
@@ -222,33 +199,15 @@ pub async fn dispatch(store: &mut dyn Store, request: &Request) -> Result<Respon
 #[cfg(test)]
 mod tests {
     use super::*;
+    use muniment::error::StoreError;
     use std::collections::HashMap;
 
-    #[derive(Default)]
-    struct InMemoryStore {
-        blobs: HashMap<String, Vec<u8>>,
-    }
+        // The in-memory test store is muniment's (2026-07-12): eidetic's
+    // hand-rolled one was the same map behind the same seam.
+    use muniment::MemoryBackend as InMemoryStore;
 
-    #[async_trait(?Send)]
-    impl Store for InMemoryStore {
-        async fn load_blob(&mut self, key: &str) -> Result<Option<Vec<u8>>> {
-            Ok(self.blobs.get(key).cloned())
-        }
 
-        async fn save_blob(&mut self, key: &str, value: &[u8]) -> Result<()> {
-            self.blobs.insert(key.to_string(), value.to_vec());
-            Ok(())
-        }
 
-        async fn iter_keys(&mut self, prefix: &str) -> Result<Vec<String>> {
-            Ok(self
-                .blobs
-                .keys()
-                .filter(|k| k.starts_with(prefix))
-                .cloned()
-                .collect())
-        }
-    }
 
     #[test]
     fn dispatch_round_trips_save_then_load() {
@@ -307,14 +266,29 @@ mod tests {
 
     #[test]
     fn dispatch_propagates_store_errors() {
+        // A backend whose disk is on fire, in muniment's vocabulary.
         struct FailingStore;
-        #[async_trait(?Send)]
-        impl Store for FailingStore {
-            async fn load_blob(&mut self, _key: &str) -> Result<Option<Vec<u8>>> {
-                Err(Error::new("disk on fire"))
+        type R<T> = std::result::Result<T, StoreError>;
+        #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+        #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+        impl Backend for FailingStore {
+            async fn get(&self, _key: &str) -> R<Option<Vec<u8>>> {
+                Err(StoreError::Backend("disk on fire".into()))
             }
-            async fn save_blob(&mut self, _key: &str, _value: &[u8]) -> Result<()> {
-                Err(Error::new("disk on fire"))
+            async fn put(&self, _key: &str, _bytes: &[u8]) -> R<()> {
+                Err(StoreError::Backend("disk on fire".into()))
+            }
+            async fn delete(&self, _key: &str) -> R<()> {
+                Err(StoreError::Backend("disk on fire".into()))
+            }
+            async fn list(&self, _prefix: &str) -> R<Vec<String>> {
+                Err(StoreError::Backend("disk on fire".into()))
+            }
+            async fn scan(&self, _start: &str, _end: &str) -> R<Vec<String>> {
+                Err(StoreError::Backend("disk on fire".into()))
+            }
+            async fn apply(&self, _ops: &[WriteOp]) -> R<()> {
+                Err(StoreError::Backend("disk on fire".into()))
             }
         }
 
@@ -322,7 +296,10 @@ mod tests {
             let err = dispatch(&mut FailingStore, &Request::LoadBlob { key: "k".into() })
                 .await
                 .unwrap_err();
-            assert_eq!(err.message, "disk on fire");
+            // muniment's StoreError Display prefixes its variant ("backend: …"),
+            // and eidetic's From carries that through — the error vocabulary is
+            // now the seam's, which is the point of the swap.
+            assert_eq!(err.message, "backend: disk on fire");
         });
     }
 }

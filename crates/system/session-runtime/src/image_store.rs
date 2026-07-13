@@ -40,14 +40,14 @@ pub async fn save_image(
     height: u32,
 ) -> Result<ImageRef> {
     let hash = Hash::of(png);
-    store.save_blob(&image_key(&hash.to_hex()), png).await?;
+    store.put(&image_key(&hash.to_hex()), png).await?;
     Ok(ImageRef::new(*hash.as_bytes(), width, height))
 }
 
 /// Load the PNG bytes an [`ImageRef`] names, or `None` when the blob is absent
 /// (e.g. a reference that outlived an orphan sweep, or a not-yet-synced blob).
 pub async fn load_image(store: &mut dyn Store, image: &ImageRef) -> Result<Option<Vec<u8>>> {
-    store.load_blob(&image_key(&image.hex())).await
+    Ok(store.get(&image_key(&image.hex())).await?)
 }
 
 /// Drop the blob an [`ImageRef`] names, returning whether one was removed.
@@ -56,7 +56,13 @@ pub async fn load_image(store: &mut dyn Store, image: &ImageRef) -> Result<Optio
 /// live node references the digest — the caller (the Athanor orphan sweep) owns
 /// that reachability check; this performs the drop it decides on.
 pub async fn delete_image(store: &mut dyn Store, image: &ImageRef) -> Result<bool> {
-    store.delete_blob(&image_key(&image.hex())).await
+    // Probe first: muniment's delete is idempotent (absent keys are not an
+    // error), but this reports whether a blob was actually removed — the
+    // orphan sweep counts reclamations.
+    let key = image_key(&image.hex());
+    let existed = store.get(&key).await?.is_some();
+    store.delete(&key).await?;
+    Ok(existed)
 }
 
 /// The hex digest of every stored image blob. The input to the orphan sweep:
@@ -65,7 +71,7 @@ pub async fn delete_image(store: &mut dyn Store, image: &ImageRef) -> Result<boo
 /// wanted.
 pub async fn stored_image_hexes(store: &mut dyn Store) -> Result<Vec<String>> {
     Ok(store
-        .iter_keys(IMAGE_PREFIX)
+        .list(IMAGE_PREFIX)
         .await?
         .into_iter()
         .filter_map(|key| key.strip_prefix(IMAGE_PREFIX).map(str::to_string))
@@ -80,32 +86,12 @@ mod tests {
 
     /// Minimal in-memory [`Store`] for the round-trip tests (mirrors the ones in
     /// `content_store` / `athanor`, with `iter_keys` for the sweep helper).
-    #[derive(Default)]
-    struct MemStore {
-        blobs: HashMap<String, Vec<u8>>,
-    }
+    // The in-memory test store is muniment's (2026-07-12): the
+// hand-rolled one was the same map behind the same seam.
+use muniment::MemoryBackend as MemStore;
 
-    #[async_trait(?Send)]
-    impl Store for MemStore {
-        async fn load_blob(&mut self, key: &str) -> Result<Option<Vec<u8>>> {
-            Ok(self.blobs.get(key).cloned())
-        }
-        async fn save_blob(&mut self, key: &str, value: &[u8]) -> Result<()> {
-            self.blobs.insert(key.to_string(), value.to_vec());
-            Ok(())
-        }
-        async fn delete_blob(&mut self, key: &str) -> Result<bool> {
-            Ok(self.blobs.remove(key).is_some())
-        }
-        async fn iter_keys(&mut self, prefix: &str) -> Result<Vec<String>> {
-            Ok(self
-                .blobs
-                .keys()
-                .filter(|k| k.starts_with(prefix))
-                .cloned()
-                .collect())
-        }
-    }
+
+
 
     #[test]
     fn save_then_load_round_trips_the_bytes() {

@@ -2,7 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Fjall LSM [`Store`] implementation for [`eidetic`].
+//! Fjall LSM [`muniment::Backend`] — eidetic's production-default native store,
+//! and (since 2026-07-12) a backend any muniment consumer can use.
 //!
 //! Persists eidetic blobs and manifests under a single fjall keyspace
 //! partition, opened at a directory path the caller provides. The
@@ -20,7 +21,8 @@
 #![doc(html_root_url = "https://docs.rs/eidetic-fjall/0.0.1")]
 
 use async_trait::async_trait;
-use eidetic::{Error, Result, Store};
+use muniment::error::StoreError;
+use muniment::{Backend, WriteOp};
 use fjall::{Config, Keyspace, PartitionCreateOptions, PartitionHandle};
 use std::path::Path;
 
@@ -43,20 +45,20 @@ pub struct FjallStore {
 impl FjallStore {
     /// Open (or create) a fjall keyspace at `path` and return a Store
     /// over the default partition.
-    pub fn open(path: impl AsRef<Path>) -> Result<Self> {
+    pub fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {
         Self::open_partition(path, DEFAULT_PARTITION)
     }
 
     /// Open (or create) a keyspace at `path` and return a Store over the
     /// named partition. Useful when one fjall keyspace hosts multiple
     /// logical stores (e.g. one per identity).
-    pub fn open_partition(path: impl AsRef<Path>, partition: &str) -> Result<Self> {
+    pub fn open_partition(path: impl AsRef<Path>, partition: &str) -> Result<Self, StoreError> {
         let keyspace = Config::new(path)
             .open()
-            .map_err(|e| Error::new(format!("fjall open: {e}")))?;
+            .map_err(|e| StoreError::Backend(format!("fjall open: {e}")))?;
         let partition = keyspace
             .open_partition(partition, PartitionCreateOptions::default())
-            .map_err(|e| Error::new(format!("fjall partition: {e}")))?;
+            .map_err(|e| StoreError::Backend(format!("fjall partition: {e}")))?;
         Ok(Self {
             _keyspace: keyspace,
             partition,
@@ -64,45 +66,86 @@ impl FjallStore {
     }
 }
 
-#[async_trait(?Send)]
-impl Store for FjallStore {
-    async fn load_blob(&mut self, key: &str) -> Result<Option<Vec<u8>>> {
+// A **muniment backend** (2026-07-12), not an eidetic-only store: fjall now
+// serves every family crate that speaks the seam (eidetic, mooting, future
+// stores), which is the point of collapsing the duplicate trait.
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+impl Backend for FjallStore {
+    async fn get(&self, key: &str) -> Result<Option<Vec<u8>>, StoreError> {
         match self.partition.get(key) {
             Ok(Some(slice)) => Ok(Some(slice.to_vec())),
             Ok(None) => Ok(None),
-            Err(e) => Err(Error::new(format!("fjall get {key}: {e}"))),
+            Err(e) => Err(StoreError::Backend(format!("fjall get {key}: {e}"))),
         }
     }
 
-    async fn save_blob(&mut self, key: &str, value: &[u8]) -> Result<()> {
+    async fn put(&self, key: &str, bytes: &[u8]) -> Result<(), StoreError> {
         self.partition
-            .insert(key, value)
-            .map_err(|e| Error::new(format!("fjall insert {key}: {e}")))?;
+            .insert(key, bytes)
+            .map_err(|e| StoreError::Backend(format!("fjall insert {key}: {e}")))?;
         Ok(())
     }
 
-    async fn iter_keys(&mut self, prefix: &str) -> Result<Vec<String>> {
+    async fn list(&self, prefix: &str) -> Result<Vec<String>, StoreError> {
         let mut keys = Vec::new();
         for entry in self.partition.prefix(prefix) {
-            let (key, _value) = entry.map_err(|e| Error::new(format!("fjall prefix scan: {e}")))?;
+            let (key, _value) =
+                entry.map_err(|e| StoreError::Backend(format!("fjall prefix scan: {e}")))?;
             let key_str = std::str::from_utf8(&key)
-                .map_err(|e| Error::new(format!("fjall non-utf8 key: {e}")))?;
+                .map_err(|e| StoreError::Backend(format!("fjall non-utf8 key: {e}")))?;
             keys.push(key_str.to_string());
         }
         Ok(keys)
     }
 
-    async fn delete_blob(&mut self, key: &str) -> Result<bool> {
-        let present = self
-            .partition
-            .contains_key(key)
-            .map_err(|e| Error::new(format!("fjall contains {key}: {e}")))?;
-        if present {
-            self.partition
-                .remove(key)
-                .map_err(|e| Error::new(format!("fjall remove {key}: {e}")))?;
+    /// Idempotent, per muniment's contract: an absent key is not an error.
+    /// (Eidetic's old `delete_blob` returned "was it present?"; the one caller
+    /// that needs that — `delete_manifest`, for the age-out eviction count —
+    /// probes with `get` first.)
+    async fn delete(&self, key: &str) -> Result<(), StoreError> {
+        self.partition
+            .remove(key)
+            .map_err(|e| StoreError::Backend(format!("fjall remove {key}: {e}")))?;
+        Ok(())
+    }
+
+    /// Ordered range read, `[start, end)`. Fjall's LSM is key-ordered, so this
+    /// is a native range scan — the ordered read a codicil log needs to replay
+    /// a per-author range in `seq` order.
+    async fn scan(&self, start: &str, end: &str) -> Result<Vec<String>, StoreError> {
+        let mut keys = Vec::new();
+        for entry in self.partition.range(start.to_string()..end.to_string()) {
+            let (key, _value) =
+                entry.map_err(|e| StoreError::Backend(format!("fjall range scan: {e}")))?;
+            let key_str = std::str::from_utf8(&key)
+                .map_err(|e| StoreError::Backend(format!("fjall non-utf8 key: {e}")))?;
+            keys.push(key_str.to_string());
         }
-        Ok(present)
+        Ok(keys)
+    }
+
+    /// Fjall has no cross-key transaction on a single partition, so the batch
+    /// is applied in order. Muniment's contract allows this for backends
+    /// without transactions: the writes it batches are content-addressed or
+    /// idempotent, so a crash mid-batch leaves recoverable orphans, never a
+    /// torn read of a mutated key.
+    async fn apply(&self, ops: &[WriteOp]) -> Result<(), StoreError> {
+        for op in ops {
+            match op {
+                WriteOp::Put { key, value } => {
+                    self.partition
+                        .insert(key, value.as_slice())
+                        .map_err(|e| StoreError::Backend(format!("fjall batch put {key}: {e}")))?;
+                }
+                WriteOp::Delete { key } => {
+                    self.partition.remove(key).map_err(|e| {
+                        StoreError::Backend(format!("fjall batch delete {key}: {e}"))
+                    })?;
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -154,8 +197,8 @@ mod tests {
     fn save_then_load_returns_same_bytes() {
         pollster::block_on(async {
             let (mut store, _dir) = open_store();
-            store.save_blob("k", b"hello").await.unwrap();
-            let got = store.load_blob("k").await.unwrap();
+            store.put("k", b"hello").await.unwrap();
+            let got = store.get("k").await.unwrap();
             assert_eq!(got, Some(b"hello".to_vec()));
         });
     }
@@ -164,7 +207,7 @@ mod tests {
     fn load_missing_returns_none() {
         pollster::block_on(async {
             let (mut store, _dir) = open_store();
-            let got = store.load_blob("never-saved").await.unwrap();
+            let got = store.get("never-saved").await.unwrap();
             assert!(got.is_none());
         });
     }
@@ -173,9 +216,9 @@ mod tests {
     fn save_overwrites_existing() {
         pollster::block_on(async {
             let (mut store, _dir) = open_store();
-            store.save_blob("k", b"first").await.unwrap();
-            store.save_blob("k", b"second").await.unwrap();
-            let got = store.load_blob("k").await.unwrap();
+            store.put("k", b"first").await.unwrap();
+            store.put("k", b"second").await.unwrap();
+            let got = store.get("k").await.unwrap();
             assert_eq!(got, Some(b"second".to_vec()));
         });
     }
@@ -202,11 +245,11 @@ mod tests {
             let dir = TempDir::new().expect("tempdir");
             {
                 let mut store = FjallStore::open(dir.path()).expect("open 1");
-                store.save_blob("persistent", b"survive").await.unwrap();
+                store.put("persistent", b"survive").await.unwrap();
             }
             {
                 let mut store = FjallStore::open(dir.path()).expect("open 2");
-                let got = store.load_blob("persistent").await.unwrap();
+                let got = store.get("persistent").await.unwrap();
                 assert_eq!(got, Some(b"survive".to_vec()));
             }
         });
@@ -216,18 +259,18 @@ mod tests {
     fn iter_keys_returns_prefix_matches() {
         pollster::block_on(async {
             let (mut store, _dir) = open_store();
-            store.save_blob("manifest:a", b"1").await.unwrap();
-            store.save_blob("manifest:b", b"2").await.unwrap();
-            store.save_blob("blob:c", b"3").await.unwrap();
+            store.put("manifest:a", b"1").await.unwrap();
+            store.put("manifest:b", b"2").await.unwrap();
+            store.put("blob:c", b"3").await.unwrap();
 
-            let mut manifests = store.iter_keys("manifest:").await.unwrap();
+            let mut manifests = store.list("manifest:").await.unwrap();
             manifests.sort();
             assert_eq!(manifests, vec!["manifest:a", "manifest:b"]);
 
-            let blobs = store.iter_keys("blob:").await.unwrap();
+            let blobs = store.list("blob:").await.unwrap();
             assert_eq!(blobs, vec!["blob:c"]);
 
-            let nothing = store.iter_keys("missing:").await.unwrap();
+            let nothing = store.list("missing:").await.unwrap();
             assert!(nothing.is_empty());
         });
     }
@@ -239,15 +282,15 @@ mod tests {
             let mut alice = FjallStore::open_partition(dir.path(), "alice").unwrap();
             let mut bob = FjallStore::open_partition(dir.path(), "bob").unwrap();
 
-            alice.save_blob("k", b"alice-value").await.unwrap();
-            bob.save_blob("k", b"bob-value").await.unwrap();
+            alice.put("k", b"alice-value").await.unwrap();
+            bob.put("k", b"bob-value").await.unwrap();
 
             assert_eq!(
-                alice.load_blob("k").await.unwrap(),
+                alice.get("k").await.unwrap(),
                 Some(b"alice-value".to_vec())
             );
             assert_eq!(
-                bob.load_blob("k").await.unwrap(),
+                bob.get("k").await.unwrap(),
                 Some(b"bob-value".to_vec())
             );
         });

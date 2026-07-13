@@ -135,7 +135,7 @@ pub async fn bootstrap_meta_schema(store: &mut dyn Store) -> Result<()> {
     // SchemaDefinition — re-serialization can reorder JSON object keys
     // and produce a different hash than META_SCHEMA_REF anchors to).
     let local_key = format!("blob:{}", Hash::of(META_SCHEMA_PAYLOAD).to_hex());
-    store.save_blob(&local_key, META_SCHEMA_PAYLOAD).await?;
+    store.put(&local_key, META_SCHEMA_PAYLOAD).await?;
 
     let manifest = crate::manifest::BlobManifest {
         id: meta_id,

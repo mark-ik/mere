@@ -168,7 +168,7 @@ pub fn persist_cookies(store: &mut dyn Store, persona: PersonaId) {
         }
         match serde_json::to_vec(cookie) {
             Ok(bytes) => {
-                match pollster::block_on(store.save_blob(&cookie_blob_key(persona, key), &bytes)) {
+                match pollster::block_on(store.put(&cookie_blob_key(persona, key), &bytes)) {
                     Ok(()) => {
                         shadow.insert(key.clone(), cookie.clone());
                     }
@@ -192,7 +192,7 @@ pub fn persist_cookies(store: &mut dyn Store, persona: PersonaId) {
         .cloned()
         .collect();
     for key in removed {
-        match pollster::block_on(store.delete_blob(&cookie_blob_key(persona, &key))) {
+        match pollster::block_on(store.delete(&cookie_blob_key(persona, &key))) {
             Ok(_) => {
                 shadow.remove(&key);
             }
@@ -215,7 +215,7 @@ pub fn persist_cookies(store: &mut dyn Store, persona: PersonaId) {
 /// first persist after load does not rewrite everything. A persona with no stored
 /// cookies (first run) leaves the jar empty.
 pub fn load_cookies(store: &mut dyn Store, persona: PersonaId) {
-    let keys = match pollster::block_on(store.iter_keys(&cookie_prefix(persona))) {
+    let keys = match pollster::block_on(store.list(&cookie_prefix(persona))) {
         Ok(keys) => keys,
         Err(err) => {
             tracing::warn!(%err, "cookie load: iter_keys failed");
@@ -228,7 +228,7 @@ pub fn load_cookies(store: &mut dyn Store, persona: PersonaId) {
         Err(_) => return,
     };
     for key in keys {
-        match pollster::block_on(store.load_blob(&key)) {
+        match pollster::block_on(store.get(&key)) {
             Ok(Some(bytes)) => match serde_json::from_slice::<PersistedCookie>(&bytes) {
                 Ok(cookie) => {
                     shadow.insert(cookie_key_of(&cookie), cookie.clone());

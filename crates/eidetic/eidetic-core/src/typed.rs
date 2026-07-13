@@ -143,7 +143,7 @@ pub async fn save_typed_sealed<T: TypedPayload>(
     // otherwise. The stored bytes may be sealed; the manifest's content_hash
     // stays the cleartext hash for the post-unseal integrity check.
     let stored = seal_payload_for_store(sealer, &mut manifest, &bytes)?;
-    store.save_blob(&local_key, &stored).await?;
+    store.put(&local_key, &stored).await?;
     save_manifest(store, &manifest).await?;
     Ok(id)
 }
@@ -212,29 +212,12 @@ mod tests {
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
 
-    #[derive(Default)]
-    struct InMemoryStore {
-        blobs: HashMap<String, Vec<u8>>,
-    }
+        // The in-memory test store is muniment's (2026-07-12): eidetic's
+    // hand-rolled one was the same map behind the same seam.
+    use muniment::MemoryBackend as InMemoryStore;
 
-    #[async_trait(?Send)]
-    impl Store for InMemoryStore {
-        async fn load_blob(&mut self, key: &str) -> Result<Option<Vec<u8>>> {
-            Ok(self.blobs.get(key).cloned())
-        }
-        async fn save_blob(&mut self, key: &str, value: &[u8]) -> Result<()> {
-            self.blobs.insert(key.to_string(), value.to_vec());
-            Ok(())
-        }
-        async fn iter_keys(&mut self, prefix: &str) -> Result<Vec<String>> {
-            Ok(self
-                .blobs
-                .keys()
-                .filter(|k| k.starts_with(prefix))
-                .cloned()
-                .collect())
-        }
-    }
+
+
 
     /// First test schema: a simple greeting record.
     #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -485,8 +468,9 @@ mod tests {
 
             let blob_key = format!("blob:{}", id.0.to_hex());
             store
-                .blobs
-                .insert(blob_key, b"not the original bytes".to_vec());
+                .put(&blob_key, b"not the original bytes")
+                .await
+                .unwrap();
 
             let mut fetcher = NoFetcher;
             let result: Result<Option<Greeting>> = load_typed(&mut store, &mut fetcher, id).await;
@@ -548,8 +532,8 @@ mod tests {
 
             // On disk the bytes are sealed, not the cleartext serialization.
             let blob_key = format!("blob:{}", id.0.to_hex());
-            let stored = store.blobs.get(&blob_key).unwrap();
-            assert_ne!(stored, &original.serialize_to_bytes().unwrap());
+            let stored = store.get(&blob_key).await.unwrap().unwrap();
+            assert_ne!(stored, original.serialize_to_bytes().unwrap());
 
             // The sealed read round-trips through the same sealer.
             let mut fetcher = NoFetcher;

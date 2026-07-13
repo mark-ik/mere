@@ -14,6 +14,11 @@ categories = ["data-structures"]
 path = "src/lib.rs"
 
 [dependencies]
+# The storage floor (2026-07-12): eidetic's `Store` was muniment's `Backend`
+# declared twice — same get/put/delete/list seam. Eidetic now consumes it, and
+# `eidetic::Store` is an alias so the layers above (manifests, schemas, engrams)
+# read unchanged. Plan: design_docs/…/2026-07-12_eidetic_on_muniment_plan.md.
+muniment = { git = "https://github.com/mark-ik/muniment.git", branch = "main", version = "0.1.0" }
 async-trait = "0.1"
 blake3 = "1.5"
 jsonschema = { version = "0.18", default-features = false }

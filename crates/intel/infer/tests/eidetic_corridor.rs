@@ -30,21 +30,12 @@ use safetensors::tensor::{Dtype, TensorView};
 type B = NdArray<f32>;
 
 /// Minimal in-memory store (embed's bert_full_pipeline helper shape).
-#[derive(Default)]
-struct InMemoryStore {
-    blobs: HashMap<String, Vec<u8>>,
-}
+// The in-memory test store is muniment's (2026-07-12): the
+// hand-rolled one was the same map behind the same seam.
+use muniment::MemoryBackend as InMemoryStore;
 
-#[async_trait(?Send)]
-impl Store for InMemoryStore {
-    async fn load_blob(&mut self, key: &str) -> eidetic::Result<Option<Vec<u8>>> {
-        Ok(self.blobs.get(key).cloned())
-    }
-    async fn save_blob(&mut self, key: &str, value: &[u8]) -> eidetic::Result<()> {
-        self.blobs.insert(key.to_string(), value.to_vec());
-        Ok(())
-    }
-}
+
+
 
 // ── Tiny synthetic artifacts (mirrors decoder::loader's test fixtures) ──────
 

@@ -198,7 +198,7 @@ pub async fn resolve_sealed_blob(
     let mut last_error: Option<Error> = None;
     for source in &manifest.sources {
         let sealed = match source {
-            BlobSource::Local { key } => store.load_blob(key).await?,
+            BlobSource::Local { key } => store.get(key).await?,
             BlobSource::Embedded { bytes, .. } => Some(bytes.clone()),
             // Sealed private bytes live on the host; a remote source for a
             // sealed blob is not resolved through this path.
@@ -245,22 +245,12 @@ mod tests {
     use chacha20poly1305::{Key, XChaCha20Poly1305, XNonce};
     use std::collections::HashMap;
 
-    /// Minimal in-memory Store for the seal round-trip tests.
-    #[derive(Default)]
-    struct MemStore {
-        blobs: HashMap<String, Vec<u8>>,
-    }
+        // The in-memory test store is muniment's (2026-07-12): eidetic's
+    // hand-rolled one was the same map behind the same seam.
+    use muniment::MemoryBackend as MemStore;
 
-    #[async_trait::async_trait(?Send)]
-    impl Store for MemStore {
-        async fn load_blob(&mut self, key: &str) -> Result<Option<Vec<u8>>> {
-            Ok(self.blobs.get(key).cloned())
-        }
-        async fn save_blob(&mut self, key: &str, value: &[u8]) -> Result<()> {
-            self.blobs.insert(key.to_string(), value.to_vec());
-            Ok(())
-        }
-    }
+
+
 
     /// Test sealer over XChaCha20-Poly1305, mirroring the wallet's AEAD family.
     ///
@@ -392,7 +382,7 @@ mod tests {
             assert!(seal_marker(&manifest).unwrap().is_some());
 
             let mut store = MemStore::default();
-            store.save_blob(&store_key(&manifest), &stored).await.unwrap();
+            store.put(&store_key(&manifest), &stored).await.unwrap();
 
             let got = resolve_sealed_blob(&mut store, &mut NoFetcher, Some(&sealer), &manifest)
                 .await
@@ -414,7 +404,7 @@ mod tests {
             assert!(seal_marker(&manifest).unwrap().is_none());
 
             let mut store = MemStore::default();
-            store.save_blob(&store_key(&manifest), &stored).await.unwrap();
+            store.put(&store_key(&manifest), &stored).await.unwrap();
             let got = resolve_sealed_blob(&mut store, &mut NoFetcher, Some(&sealer), &manifest)
                 .await
                 .unwrap();
@@ -440,7 +430,7 @@ mod tests {
             let stored =
                 seal_payload_for_store(Some(&sealer), &mut manifest, cleartext).unwrap();
             let mut store = MemStore::default();
-            store.save_blob(&store_key(&manifest), &stored).await.unwrap();
+            store.put(&store_key(&manifest), &stored).await.unwrap();
 
             let err = resolve_sealed_blob(&mut store, &mut NoFetcher, None, &manifest)
                 .await
@@ -458,7 +448,7 @@ mod tests {
             let stored =
                 seal_payload_for_store(Some(&sealer), &mut manifest, cleartext).unwrap();
             let mut store = MemStore::default();
-            store.save_blob(&store_key(&manifest), &stored).await.unwrap();
+            store.put(&store_key(&manifest), &stored).await.unwrap();
 
             let err = resolve_blob(&mut store, &mut NoFetcher, &manifest)
                 .await
@@ -477,7 +467,7 @@ mod tests {
             let old = TestSealer::new([0xAA; 16], [1u8; 32]);
             let stored = seal_payload_for_store(Some(&old), &mut manifest, cleartext).unwrap();
             let mut store = MemStore::default();
-            store.save_blob(&store_key(&manifest), &stored).await.unwrap();
+            store.put(&store_key(&manifest), &stored).await.unwrap();
 
             let rotated =
                 TestSealer::new([0xBB; 16], [2u8; 32]).with_epoch([0xAA; 16], [1u8; 32]);
@@ -497,7 +487,7 @@ mod tests {
             let stored =
                 seal_payload_for_store(Some(&sealer), &mut manifest, cleartext).unwrap();
             let mut store = MemStore::default();
-            store.save_blob(&store_key(&manifest), &stored).await.unwrap();
+            store.put(&store_key(&manifest), &stored).await.unwrap();
 
             // A sealer that knows the epoch id but holds the wrong key bytes.
             let wrong = TestSealer::new([5u8; 16], [99u8; 32]);
@@ -519,7 +509,7 @@ mod tests {
                 seal_payload_for_store(Some(&sealer), &mut manifest, cleartext).unwrap();
             stored[0] ^= 0xff;
             let mut store = MemStore::default();
-            store.save_blob(&store_key(&manifest), &stored).await.unwrap();
+            store.put(&store_key(&manifest), &stored).await.unwrap();
 
             assert!(
                 resolve_sealed_blob(&mut store, &mut NoFetcher, Some(&sealer), &manifest)
@@ -555,7 +545,7 @@ mod tests {
             assert!(seal_marker(&manifest).unwrap().is_none());
             let mut store = MemStore::default();
             store
-                .save_blob(&store_key(&manifest), cleartext)
+                .put(&store_key(&manifest), cleartext)
                 .await
                 .unwrap();
 

@@ -125,24 +125,13 @@ mod tests {
     use eidetic::{ModerationState, ProvenanceOrigin, TrustLevel};
     use std::collections::HashMap;
 
-    /// Minimal in-memory store for tests. Real implementations would back
-    /// onto fjall/redb/OPFS; this mirrors the shape without bringing in
-    /// a storage backend.
-    #[derive(Default)]
-    struct InMemoryStore {
-        blobs: HashMap<String, Vec<u8>>,
-    }
+    // The in-memory store is muniment's (2026-07-12): the hand-rolled
+// one was the same map behind the same seam.
+    use muniment::Backend as _;
+    use muniment::MemoryBackend as InMemoryStore;
 
-    #[async_trait(?Send)]
-    impl eidetic::Store for InMemoryStore {
-        async fn load_blob(&mut self, key: &str) -> eidetic::Result<Option<Vec<u8>>> {
-            Ok(self.blobs.get(key).cloned())
-        }
-        async fn save_blob(&mut self, key: &str, value: &[u8]) -> eidetic::Result<()> {
-            self.blobs.insert(key.to_string(), value.to_vec());
-            Ok(())
-        }
-    }
+
+
 
     fn make_index() -> VectorIndex<u32> {
         let mut idx = VectorIndex::<u32>::new(3, SimilarityMetric::Cosine);
@@ -323,8 +312,9 @@ mod tests {
 
             let blob_key = format!("blob:{}", id.0.to_hex());
             store
-                .blobs
-                .insert(blob_key, b"not valid index bytes".to_vec());
+                .put(&blob_key, b"not valid index bytes")
+                .await
+                .unwrap();
 
             let result: eidetic::Result<Option<VectorIndex<u32>>> =
                 load_from_eidetic(&mut store, &mut fetcher, id).await;

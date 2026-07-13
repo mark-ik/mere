@@ -176,10 +176,10 @@ pub async fn list_manifests(
     store: &mut dyn Store,
     schema_filter: Option<SchemaRef>,
 ) -> Result<Vec<BlobManifest>> {
-    let keys = store.iter_keys("manifest:").await?;
+    let keys = store.list("manifest:").await?;
     let mut out = Vec::with_capacity(keys.len());
     for key in keys {
-        let bytes = match store.load_blob(&key).await? {
+        let bytes = match store.get(&key).await? {
             Some(b) => b,
             None => continue, // race: key disappeared between enumeration and load
         };
@@ -205,7 +205,8 @@ pub async fn list_manifests(
 pub async fn save_manifest(store: &mut dyn Store, manifest: &BlobManifest) -> Result<()> {
     let bytes =
         serde_json::to_vec(manifest).map_err(|e| Error::new(format!("manifest serialize: {e}")))?;
-    store.save_blob(&manifest.id.store_key(), &bytes).await
+    store.put(&manifest.id.store_key(), &bytes).await?;
+    Ok(())
 }
 
 /// Delete a manifest by id, returning whether one was present.
@@ -215,7 +216,13 @@ pub async fn save_manifest(store: &mut dyn Store, manifest: &BlobManifest) -> Re
 /// is an explicit GC pass over manifest reachability (design pass §8), never
 /// a side effect of dropping one manifest.
 pub async fn delete_manifest(store: &mut dyn Store, id: ManifestId) -> Result<bool> {
-    store.delete_blob(&id.store_key()).await
+    // muniment's `delete` is idempotent and returns `()` ("absent keys are not
+    // an error"), but this function's contract — and the age-out policy that
+    // counts evictions — needs "was one present?", so probe first.
+    let key = id.store_key();
+    let existed = store.get(&key).await?.is_some();
+    store.delete(&key).await?;
+    Ok(existed)
 }
 
 /// Load a manifest by id. Returns `Ok(None)` if no manifest is stored under
@@ -227,7 +234,7 @@ pub async fn delete_manifest(store: &mut dyn Store, id: ManifestId) -> Result<bo
 /// is a stub that just records the observed version.
 pub async fn load_manifest(store: &mut dyn Store, id: ManifestId) -> Result<Option<BlobManifest>> {
     let key = id.store_key();
-    match store.load_blob(&key).await? {
+    match store.get(&key).await? {
         None => Ok(None),
         Some(bytes) => {
             let manifest: BlobManifest = serde_json::from_slice(&bytes)
@@ -265,7 +272,7 @@ pub async fn resolve_blob(
     for source in &manifest.sources {
         let candidate = match source {
             BlobSource::Embedded { bytes, .. } => Some(bytes.clone()),
-            BlobSource::Local { key } => store.load_blob(key).await?,
+            BlobSource::Local { key } => store.get(key).await?,
             _ => match fetcher.fetch(source).await {
                 Ok(value) => value,
                 Err(error) => {
@@ -296,7 +303,7 @@ pub async fn resolve_blob(
             BlobSource::Local { .. } | BlobSource::Embedded { .. }
         ) {
             let cache_key = blob_cache_key(&actual);
-            store.save_blob(&cache_key, &bytes).await?;
+            store.put(&cache_key, &bytes).await?;
         }
 
         return Ok(bytes);

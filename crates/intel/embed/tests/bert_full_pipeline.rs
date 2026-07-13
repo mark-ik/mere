@@ -44,21 +44,12 @@ type B = burn::backend::NdArray<f32>;
 /// Minimal in-memory store used by the eidetic round-trip test below.
 /// Mirrors the shape of `eidetic::ModelLibrary` tests' helper without
 /// pulling in a storage backend (fjall is a separate crate).
-#[derive(Default)]
-struct InMemoryStore {
-    blobs: HashMap<String, Vec<u8>>,
-}
+// The in-memory test store is muniment's (2026-07-12): the
+// hand-rolled one was the same map behind the same seam.
+use muniment::MemoryBackend as InMemoryStore;
 
-#[async_trait(?Send)]
-impl Store for InMemoryStore {
-    async fn load_blob(&mut self, key: &str) -> eidetic::Result<Option<Vec<u8>>> {
-        Ok(self.blobs.get(key).cloned())
-    }
-    async fn save_blob(&mut self, key: &str, value: &[u8]) -> eidetic::Result<()> {
-        self.blobs.insert(key.to_string(), value.to_vec());
-        Ok(())
-    }
-}
+
+
 
 fn test_provenance() -> ProvenanceRecord {
     ProvenanceRecord {

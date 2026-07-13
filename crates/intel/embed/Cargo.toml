@@ -43,5 +43,7 @@ bert = ["sibylla/bert", "dep:burn"]
 bert-wgpu = ["bert", "sibylla/bert-wgpu"]
 
 [dev-dependencies]
+# Test stores are muniment backends now (2026-07-12).
+muniment = { git = "https://github.com/mark-ik/muniment.git", branch = "main", version = "0.1.0" }
 pollster = "0.4"
 serde_json = "1.0"

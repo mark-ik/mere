@@ -42,11 +42,11 @@ fn ct_key(url: &str) -> String {
 /// the cache presence marker: with no stored body, this is a miss regardless of
 /// any stray content-type entry.
 pub async fn load_content(store: &mut dyn Store, url: &str) -> Result<Option<StoredContent>> {
-    let Some(body) = store.load_blob(&body_key(url)).await? else {
+    let Some(body) = store.get(&body_key(url)).await? else {
         return Ok(None);
     };
     let content_type = store
-        .load_blob(&ct_key(url))
+        .get(&ct_key(url))
         .await?
         .map(|bytes| String::from_utf8_lossy(&bytes).into_owned());
     Ok(Some(StoredContent { content_type, body }))
@@ -55,10 +55,10 @@ pub async fn load_content(store: &mut dyn Store, url: &str) -> Result<Option<Sto
 /// Store `content` for `url`, overwriting any previous entry. A `None`
 /// content-type leaves no content-type blob (so `load_content` reports `None`).
 pub async fn save_content(store: &mut dyn Store, url: &str, content: &StoredContent) -> Result<()> {
-    store.save_blob(&body_key(url), &content.body).await?;
+    store.put(&body_key(url), &content.body).await?;
     if let Some(content_type) = &content.content_type {
         store
-            .save_blob(&ct_key(url), content_type.as_bytes())
+            .put(&ct_key(url), content_type.as_bytes())
             .await?;
     }
     Ok(())
@@ -71,8 +71,14 @@ pub async fn save_content(store: &mut dyn Store, url: &str, content: &StoredCont
 /// content-type is dropped best-effort alongside. (Alembic slice C eviction /
 /// Athanor forgetting.)
 pub async fn evict_content(store: &mut dyn Store, url: &str) -> Result<bool> {
-    let _ = store.delete_blob(&ct_key(url)).await?;
-    store.delete_blob(&body_key(url)).await
+    // muniment's `delete` is idempotent and returns `()`, so probe the body —
+    // the presence marker whose removal this function reports — before dropping
+    // it, and drop the content-type best-effort alongside.
+    let body = body_key(url);
+    let existed = store.get(&body).await?.is_some();
+    let _ = store.delete(&ct_key(url)).await?;
+    store.delete(&body).await?;
+    Ok(existed)
 }
 
 #[cfg(test)]
@@ -83,24 +89,12 @@ mod tests {
 
     /// Minimal in-memory [`Store`] for the round-trip tests (mirrors the one in
     /// eidetic's own tests).
-    #[derive(Default)]
-    struct MemStore {
-        blobs: HashMap<String, Vec<u8>>,
-    }
+    // The in-memory test store is muniment's (2026-07-12): the
+// hand-rolled one was the same map behind the same seam.
+use muniment::MemoryBackend as MemStore;
 
-    #[async_trait(?Send)]
-    impl Store for MemStore {
-        async fn load_blob(&mut self, key: &str) -> Result<Option<Vec<u8>>> {
-            Ok(self.blobs.get(key).cloned())
-        }
-        async fn save_blob(&mut self, key: &str, value: &[u8]) -> Result<()> {
-            self.blobs.insert(key.to_string(), value.to_vec());
-            Ok(())
-        }
-        async fn delete_blob(&mut self, key: &str) -> Result<bool> {
-            Ok(self.blobs.remove(key).is_some())
-        }
-    }
+
+
 
     #[test]
     fn evict_drops_cached_content() {

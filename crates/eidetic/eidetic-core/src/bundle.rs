@@ -185,21 +185,12 @@ mod tests {
     use async_trait::async_trait;
     use std::collections::HashMap;
 
-    #[derive(Default)]
-    struct InMemoryStore {
-        blobs: HashMap<String, Vec<u8>>,
-    }
+        // The in-memory test store is muniment's (2026-07-12): eidetic's
+    // hand-rolled one was the same map behind the same seam.
+    use muniment::MemoryBackend as InMemoryStore;
 
-    #[async_trait(?Send)]
-    impl Store for InMemoryStore {
-        async fn load_blob(&mut self, key: &str) -> Result<Option<Vec<u8>>> {
-            Ok(self.blobs.get(key).cloned())
-        }
-        async fn save_blob(&mut self, key: &str, value: &[u8]) -> Result<()> {
-            self.blobs.insert(key.to_string(), value.to_vec());
-            Ok(())
-        }
-    }
+
+
 
     fn test_provenance() -> ProvenanceRecord {
         ProvenanceRecord {
@@ -365,7 +356,7 @@ mod tests {
         let hash = Hash::of(bytes);
         let id = ManifestId::from_hash(hash);
         let local_key = format!("blob:{}", hash.to_hex());
-        store.save_blob(&local_key, bytes).await.unwrap();
+        store.put(&local_key, bytes).await.unwrap();
         let manifest = crate::manifest::BlobManifest {
             id,
             schema: SchemaRef::from_id(ManifestId::of_blob(b"opaque")),

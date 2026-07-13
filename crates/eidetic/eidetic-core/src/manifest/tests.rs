@@ -37,21 +37,12 @@ fn manifest_for(blob: &[u8], sources: Vec<BlobSource>) -> BlobManifest {
     }
 }
 
-#[derive(Default)]
-struct InMemoryStore {
-    blobs: HashMap<String, Vec<u8>>,
-}
+    // The in-memory test store is muniment's (2026-07-12): eidetic's
+    // hand-rolled one was the same map behind the same seam.
+    use muniment::MemoryBackend as InMemoryStore;
 
-#[async_trait(?Send)]
-impl Store for InMemoryStore {
-    async fn load_blob(&mut self, key: &str) -> Result<Option<Vec<u8>>> {
-        Ok(self.blobs.get(key).cloned())
-    }
-    async fn save_blob(&mut self, key: &str, value: &[u8]) -> Result<()> {
-        self.blobs.insert(key.to_string(), value.to_vec());
-        Ok(())
-    }
-}
+
+
 
 /// Test fetcher that returns canned bytes for `Iroh` and `Https` sources
 /// keyed by their identifier. Returns `None` for any source it isn't
@@ -116,7 +107,7 @@ fn resolve_returns_bytes_from_local_source() {
     pollster::block_on(async {
         let mut store = InMemoryStore::default();
         let blob: &[u8] = b"local payload";
-        store.save_blob("blob:test", blob).await.unwrap();
+        store.put("blob:test", blob).await.unwrap();
         let manifest = manifest_for(
             blob,
             vec![BlobSource::Local {
@@ -187,7 +178,7 @@ fn resolve_falls_through_local_then_iroh_then_https() {
 
         // Verify caching: a "blob:<hash>" key now exists in the store.
         let cache_key = format!("blob:{}", Hash::of(blob).to_hex());
-        assert!(store.blobs.contains_key(&cache_key));
+        assert!(store.get(&cache_key).await.unwrap().is_some());
     });
 }
 
@@ -198,7 +189,7 @@ fn resolve_rejects_hash_mismatch() {
         // Manifest declares a hash for "good"; we serve "evil" instead.
         let good_blob: &[u8] = b"good";
         let evil_blob: &[u8] = b"evil";
-        store.save_blob("blob:tampered", evil_blob).await.unwrap();
+        store.put("blob:tampered", evil_blob).await.unwrap();
         let manifest = manifest_for(
             good_blob,
             vec![BlobSource::Local {
