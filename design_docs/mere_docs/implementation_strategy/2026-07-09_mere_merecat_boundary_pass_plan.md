@@ -94,6 +94,16 @@ verified against the tree, not carried from docs.
    move is the inverse: rebase eidetic's backends onto muniment's seam (the
    way `mooting` already rides muniment). Out of scope here; recorded so it
    is not re-proposed.
+
+   *DONE 2026-07-12* (mere d9cd0c6; plan:
+   2026-07-12_eidetic_on_muniment_plan.md). eidetic's `Store` was
+   `muniment::Backend` declared twice; it is now an alias for the real one,
+   and eidetic-fjall is a muniment backend the whole family can reuse.
+   **Correction, recorded so the citation is not misread again:** this point
+   refused promoting eidetic into a competing storage SIBLING. It never
+   forbade eidetic *depending on* muniment — it named that rebase as the
+   destination. (Claude cited it as a prohibition once, to argue against
+   folding stemma into chartulary. Wrong on both counts; the fold landed.)
 6. **Browser-runtime state leaves `Node` (slice C).** As landed: four tenants
    moved to the host-owned sidecar keyed by node id (`session_scroll`,
    `session_form_draft`, `viewer_override`, `compat_mode`), and `lifecycle`
