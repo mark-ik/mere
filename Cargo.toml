@@ -155,7 +155,7 @@ signals = { path = "crates/intel/signals" }
 
 # Standalone spec-B misfin implementation (promoted out of this workspace
 # 2026-07-03); an owned mark-ik repo, tracked by branch per convention.
-misfin = { git = "https://github.com/mark-ik/misfin", branch = "main" }
+misfin = { git = "https://github.com/mark-ik/misfin", branch = "main", features = ["ring"] }
 murm = { path = "crates/murm/murm" }
 murmuring = { path = "crates/murm/murmuring" }
 transport = { path = "crates/murm/transport" }
@@ -232,16 +232,16 @@ all = "warn"
 # ─── Cross-repo render-stack alignment (meerkat → serval) ────────────────────
 # meerkat pulls serval-layout (via pelt-live) for the cascade → layout → paint
 # path. serval-layout's `stylo_taffy` deps crates.io `stylo`/`stylo_atoms`, and
-# serval-layout itself now git-deps the mark-ik/stylo fork (branch
-# mark-ik/servo-media-features — the v0.18.0 tag plus additive Servo-mode media
-# features, still declaring 0.18.0). `stylo` declares `links = "servo_style_crate"`
+# serval-layout itself git-deps the mark-ik/stylo fork (`main`, realigned to
+# v0.19.0 plus Serval's additive media features). `stylo` declares
+# `links = "servo_style_crate"`
 # (only one Stylo allowed per graph), so redirect the crates.io deps to the same
 # fork so every transitive stylo unifies with serval-layout's rather than
 # conflicting with a second (servo/stylo) source — a root-workspace patch applies
 # graph-wide. Mirrors serval's own crates.io patch (repos/serval Cargo.toml).
 [patch.crates-io]
-stylo = { git = "https://github.com/mark-ik/stylo", branch = "mark-ik/servo-media-features" }
-stylo_atoms = { git = "https://github.com/mark-ik/stylo", branch = "mark-ik/servo-media-features" }
+stylo = { git = "https://github.com/mark-ik/stylo", branch = "main", package = "serval-stylo" }
+stylo_atoms = { git = "https://github.com/mark-ik/stylo", branch = "main", package = "serval-stylo-atoms" }
 # serval-layout requires taffy =0.11.0-experimental-cache-fix.3 (serval's vendored
 # float-layout fork, not on crates.io). serval patches it in its own workspace; mere
 # does not inherit that, so redirect taffy to the fork from the owned serval repo by
