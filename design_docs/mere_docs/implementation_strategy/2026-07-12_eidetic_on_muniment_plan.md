@@ -1,8 +1,9 @@
 # Eidetic onto muniment: delete the duplicated storage seam
 
 **Date:** 2026-07-12
-**Status:** plan, endorsed (Mark, 2026-07-12: "let's update eidetic to use
-muniment"). Not started — blocked on a green tree (see Sequencing).
+**Status:** **LANDED 2026-07-12** (mere d9cd0c6). All done conditions met
+except the meerkat receipt, which waits on serval's in-flight ring-3 rename
+(see Progress).
 
 Completes the boundary-pass plan's point 5, which said the eventual move is
 "the inverse: rebase eidetic's backends onto muniment's seam (the way
@@ -75,12 +76,50 @@ the `serval-publish-names` branch) puts two crates linking
 `servo_style_crate` in the graph. A 107-site trait swap without a compiler
 is not a thing to attempt; start when `cargo check -p eidetic` runs.
 
+## Progress
+
+**2026-07-12 — landed** (mere d9cd0c6). Receipts: eidetic 84,
+eidetic-fjall 7, session-runtime 188, fetch 3, embed 23 — green;
+eidetic-search / https-fetcher / iroh-fetcher check clean. `grep` finds no
+`trait Store` defined outside muniment.
+
+Findings the plan under-called:
+
+- **muniment's `Backend` is richer than the plan said**: six methods, not
+  four (`scan` = ordered range, `apply` = atomic batch), and on native it is
+  `Send`-bounded where eidetic's `Store` was `?Send`. Both were free: fjall's
+  LSM is key-ordered (a native `scan`) and its handles are `&self`-safe.
+- **`delete`'s return type is a real semantic change.** muniment's is
+  idempotent and returns `()`; eidetic's returned "was it present?". Three
+  functions depend on that answer — `delete_manifest` (age-out counts
+  evictions), `evict_content`, `delete_image` (the orphan sweep counts
+  reclamations) — and now probe with `get` first. That is one extra read per
+  delete on those paths; if it ever matters, muniment could grow a
+  `delete_if_present`, but the honest cost is recorded rather than hidden.
+- **Error vocabulary is muniment's now.** `StoreError` flows into
+  `eidetic::Error` through `From`, so `?` works everywhere, but messages gain
+  the variant prefix ("backend: disk on fire"). The propagation test asserts
+  the new truth.
+- **11 hand-rolled in-memory test stores** collapsed into
+  `muniment::MemoryBackend`. Every one was the same `HashMap` behind the same
+  seam — the duplication was not just the trait.
+
+Not verified: **meerkat**. Its cookie store's four renamed lines are
+byte-identical to `system/fetch`'s (green), but the crate cannot build while
+serval's ring-3 fork rename (stylo -> `serval-stylo`) leaves mere's serval
+cone unresolvable. Run `cargo test -p meerkat` once that lands. Also
+pre-existing and unrelated: `eidetic-search`'s example fails a `TypedPayload`
+bound (broken before this change; verified by stashing).
+
 ## Done conditions
 
-1. `eidetic::Store` is gone; eidetic-core deps muniment; the workspace
-   compiles with no `Store` trait defined outside muniment.
-2. eidetic-fjall is a `muniment::Backend` impl, and mooting/eidetic share it.
-3. eidetic's test suite green; meerkat's suite green (its recall paths are
-   the biggest consumer).
-4. The boundary-pass plan's point 5 is stamped done, with the
-   "not-a-prohibition" correction recorded there too.
+1. ~~`eidetic::Store` is gone; eidetic-core deps muniment; no `Store` trait
+   defined outside muniment.~~ **DONE** (it survives as an alias for
+   `muniment::Backend`, so the layers above read unchanged).
+2. ~~eidetic-fjall is a `muniment::Backend` impl~~ **DONE** — it is now a
+   backend the whole family can reuse. (mooting adopting it is a follow-on:
+   it rides muniment already, so it is a manifest change, not a port.)
+3. ~~eidetic's suite green~~ **DONE** (84 + 7 + 188 + 3 + 23). meerkat's
+   suite: **pending the serval ring-3 rename**, see Progress.
+4. The boundary-pass plan's point 5 stamped done with the
+   "not-a-prohibition" correction: **pending** (a one-line edit there).
