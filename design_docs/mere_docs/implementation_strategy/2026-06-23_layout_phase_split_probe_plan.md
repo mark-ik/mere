@@ -3,7 +3,7 @@
 **Planned, 2026-06-23.** Spun out of the
 [unified document host plan](2026-06-17_unified_document_host_plan.md) as its pressing slice 5
 (documented-only there, never built). Build the **cascade-vs-box-tree-vs-shaping phase-split probe**
-in serval-layout: a native-release timing harness that times each phase of a cold layout and reports
+in genet-layout: a native-release timing harness that times each phase of a cold layout and reports
 the split. It is the measurement prerequisite the
 [parallelism strategy research](../research/2026-06-19_cross_platform_parallelism_strategy.md) §0
 names for the whole parallel-cascade thesis, and it gates goal 2 (reach gpui-level baseline
@@ -11,7 +11,7 @@ performance).
 
 ## Why it gates everything downstream
 
-There is no timing instrumentation in serval-layout today (no `Instant` / `bench` anywhere in the
+There is no timing instrumentation in genet-layout today (no `Instant` / `bench` anywhere in the
 crate), so the ~100 ms / 578 KB cold-layout cost is a single opaque number. The parallel-cascade
 thesis assumes the **cascade** is the dominant, parallelizable share, but **box-tree build is
 sequential**, so it caps the achievable win. Until the split is measured, every parallelism decision
@@ -29,7 +29,7 @@ is a known number, not an assumption.
 ## Wasmtime-async lane (per Mark)
 
 The phase split also bounds the win for the non-browser **wasmtime lane** the parallelism research
-doc parks (serval-on-Wasmtime / Spin for server-side async/parallel layout, the SSR/edge lane),
+doc parks (genet-on-Wasmtime / Spin for server-side async/parallel layout, the SSR/edge lane),
 distinct from the browser's Web-Worker path. WASI 0.3 async (shipped 2026-06-11) is its substrate
 today, wasi-threads later; the wasmtime-async work is where async/parallel layout can run off the
 main thread server-side, and this probe's measurement is the same prerequisite for that lane. Unlike

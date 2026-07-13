@@ -206,7 +206,7 @@ impl crate::WindowCtx<'_> {
                         // Absolute (document-space) origin via the engine's shared parent-chain
                         // accumulation, instead of re-rolling it here. (Host-scroll P1.)
                         let abs_origin = |start| -> (f32, f32) {
-                            serval_layout::absolute_origin(&*dom, frags, start)
+                            genet_layout::absolute_origin(&*dom, frags, start)
                                 .map_or((0.0, 0.0), |p| (p.x, p.y))
                         };
                         let panel_x = abs_origin(panel).0;
@@ -340,7 +340,7 @@ impl crate::WindowCtx<'_> {
 
 fn stamp_overlay_style_if_changed(
     cache: &mut Option<String>,
-    dom: &mut serval_scripted_dom::ScriptedDom,
+    dom: &mut genet_scripted_dom::ScriptedDom,
     root: NodeId,
     class_name: &str,
     style: String,
@@ -368,7 +368,7 @@ fn stamp_overlay_style_if_changed(
 mod tests {
     use super::*;
     use layout_dom_api::LayoutDomMut;
-    use serval_scripted_dom::ScriptedDom;
+    use genet_scripted_dom::ScriptedDom;
 
     fn qual(local: &str) -> QualName {
         QualName::new(None, Namespace::from(""), LocalName::from(local))

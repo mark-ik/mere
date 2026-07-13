@@ -12,20 +12,20 @@ was a flat `Vec` with no nesting. Three such flat pickers existed (relate, layou
 question was where a real submenu belongs across the stack.
 
 **Answer: the geometry primitive already exists in `xilem-serval`, and we now use it.**
-`repos/serval/components/xilem-serval/src/overlay.rs` provides `overlay_at(x,y,content)`,
+`repos/genet/components/xilem-serval/src/overlay.rs` provides `overlay_at(x,y,content)`,
 `anchor_point(trigger, popup, Placement)`, and `Placement` — with `Placement::RightOf` documented
 verbatim as "(a submenu)". The mechanism (anchored floating panel geometry) is cross-surface and
 engine-adjacent, so it lives in `xilem-serval`; meerkat owns the menu *content tree* + interaction;
-serval (the engine) provides the substrate. `mere-domain` is not involved.
+genet (the engine) provides the substrate. `mere-domain` is not involved.
 
-**Stacking is no longer a problem.** The `overlay.rs` module docs are stale: they say serval has no
-z-index and an overlay must be "last among its siblings". Serval Stage 7 landed full CSS 2.1
-Appendix E stacking (`serval-layout/paint_stacking.rs`): every `position: absolute` box auto-lifts
+**Stacking is no longer a problem.** The `overlay.rs` module docs are stale: they say genet has no
+z-index and an overlay must be "last among its siblings". Genet Stage 7 landed full CSS 2.1
+Appendix E stacking (`genet-layout/paint_stacking.rs`): every `position: absolute` box auto-lifts
 above in-flow content regardless of document order. So nested panels just work; no z-index juggling.
 
-**Nested-submenu UI is greenfield on top of the primitive.** Nothing in serval or mere had a
+**Nested-submenu UI is greenfield on top of the primitive.** Nothing in genet or mere had a
 submenu/flyout/popup-stack abstraction. `ContextItem` is flat; the menu is host-painted via the
-serval DOM. So this builds the submenu layer in meerkat over `anchor_point`.
+genet DOM. So this builds the submenu layer in meerkat over `anchor_point`.
 
 ## What landed
 
@@ -59,7 +59,7 @@ Depth-1 only (all three substitutes are one level). Files in `crates/meerkat/src
   158 bin tests green.
 - Adversarially reviewed by a 4-agent workflow. It found 2 bugs (both fixed): the `.context-menu-layer`
   wrapper was unpositioned and shifted the whole menu down by the toolbar height (one reviewer
-  confirmed it with a serval-layout repro) — fixed by making the wrapper `position: absolute; top:0;
+  confirmed it with a genet-layout repro) — fixed by making the wrapper `position: absolute; top:0;
   left:0`; and the root scroll-into-view latched onto a mouse-opened submenu's active child — fixed by
   the distinct `context-subitem-active` class + a dedicated submenu scroll block. Plus 5 nits/risks
   fixed (Enter/ArrowRight highlight parity, OpenSubmenu diagnostic noise, LeftOf left-edge clamp,
@@ -81,9 +81,9 @@ Depth-1 only (all three substitutes are one level). Files in `crates/meerkat/src
 - **Depth-N.** The model is depth-1 by convention (child rows render as leaves). Deeper nesting would
   need the child render path + `submenu_parent_at` to carry a path, not a single index.
 
-## Follow-on: serval capabilities the host underuses
+## Follow-on: genet capabilities the host underuses
 
 Surfaced while doing this work (see the separate sweep): meerkat hand-rolls `position: absolute`
 inline strings for the menu/palette/etc. instead of `xilem-serval::overlay_at`, and the overlay
 module's own docs still describe the pre-z-index stacking model. These are not bugs, but they are the
-host not yet using the primitive the serval-as-host track built for it.
+host not yet using the primitive the genet-as-host track built for it.

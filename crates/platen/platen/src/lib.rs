@@ -10,7 +10,7 @@
 //! inked forme onto the page to produce the impression. Here it is the
 //! layer that holds the pane arrangement — *which content goes in which
 //! frame pane* — and projects that arrangement into the rendering-surface
-//! layer (pelt's tile tree; `platen-view` flex DOM under serval).
+//! layer (pelt's tile tree; `platen-view` flex DOM under genet).
 //!
 //! ## Decomposed 2026-07-09
 //!
@@ -27,7 +27,7 @@
 //!   canvas knows where each node goes; document-canvas knows where each
 //!   paragraph goes). Platen sees pane content as opaque renderable units.
 //! - **Rendering** — that's the host's job: `platen-view` flex DOM through
-//!   serval's layout, presented by netrender.
+//!   genet's layout, presented by netrender.
 //! - **A11y projection** — that's mere-domain (`frame`, `gloss`,
 //!   `apparatus`) → uxtree; canvas a11y is host-side.
 
@@ -42,7 +42,7 @@ pub mod document_scene;
 /// the active tab per stack, and the projection mode. platen's canonical tiling state
 /// (it replaces the legacy `FrameState` / `PaneBinding` frame model), projected to
 /// side-by-side placed slots via [`tree_projection`] (concrete rects come from
-/// `platen-view`'s flex DOM under serval).
+/// `platen-view`'s flex DOM under genet).
 pub mod workbench;
 
 /// Tree projection — compiles a forme [`forme::Arrangement`] into a

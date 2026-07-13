@@ -14,12 +14,12 @@
 
 use mere::forme::GraphMemberId;
 use register_theme::chrome::{ChromeTheme, Color32};
-use xilem_serval::{AnyView, Keyed, PointerClick, ServalCtx, ServalElement, clickable, el};
+use xilem_serval::{AnyView, Keyed, PointerClick, GenetCtx, GenetElement, clickable, el};
 
 use super::WindowCtx;
 use mere::gloss::GlossRowIntent;
 
-pub type GlossRecentView = Box<dyn AnyView<GlossRecentState, (), ServalCtx, ServalElement>>;
+pub type GlossRecentView = Box<dyn AnyView<GlossRecentState, (), GenetCtx, GenetElement>>;
 
 /// One recently-visited row: the node's identity (for `data-member` + the click
 /// route) and its URL, shown as-is — the same raw-URL label `recent_scene` already
@@ -114,7 +114,7 @@ fn recent_row(row: &GlossRecentRow) -> GlossRecentView {
 /// not per-pane, so reusing the orrery's key would collide. (Scene-to-DOM migration P2.)
 pub const GLOSS_MINIMAP_SCENE_KEY: u64 = 0xF0F0_0000_0000_0002;
 
-pub type GlossMinimapView = Box<dyn AnyView<GlossMinimapState, (), ServalCtx, ServalElement>>;
+pub type GlossMinimapView = Box<dyn AnyView<GlossMinimapState, (), GenetCtx, GenetElement>>;
 
 /// One minimap node: identity, pane-local position + size (already mapped through
 /// `mere::gloss::MinimapFit` — this struct carries no world coordinates), and its
@@ -249,7 +249,7 @@ pub fn gloss_minimap_sheet(_c: &ChromeTheme) -> Vec<String> {
 mod tests {
     use layout_dom_api::LayoutDom;
     use register_theme::chrome::ChromeTheme;
-    use serval_scripted_dom::{NodeId, ScriptedDom};
+    use genet_scripted_dom::{NodeId, ScriptedDom};
     use xilem_serval::PointerClick;
 
     use super::*;

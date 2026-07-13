@@ -5,7 +5,7 @@
 
 > **Crate-name note (2026-06-09 audit):** `mere-host`→`meerkat`, `mere-kernel`→`graph/graph-kernel`. The engine taxonomy (scrying is a library, not a peer engine) holds; the host references below are gpui-era names.
 **Scope**: Pins the engine taxonomy after a working-tree-clean conversation
-about whether serval should host nematic / scrying internally, or whether
+about whether genet should host nematic / scrying internally, or whether
 all three sit as peers under mere. Refines the engine-profile boundary
 in the [browser multiplexer framing brief](2026-05-11_browser_multiplexer_framing.md)
 §5.4 with the specific decision about scrying's role.
@@ -26,8 +26,8 @@ Scrying is a library, not a peer engine.**
 
 Engine peers under mere:
 
-- `serval.*` — Servo rendering. One sub-engine today (`serval.web`); future
-  sub-engines per the [Hekate framing memory](memory) (`serval.smolweb` for
+- `genet.*` — Servo rendering. One sub-engine today (`genet.web`); future
+  sub-engines per the [Hekate framing memory](memory) (`genet.smolweb` for
   reader-mode extract; etc.).
 - `nematic.*` — 12 protocol engines (markdown, gemtext, gopher, feed, text,
   file, finger, knot, scroll, misfin, nex, guppy).
@@ -71,7 +71,7 @@ The cleanest mental model:
   - DOM/CSSOM, JS heap, GPU textures, paint cache.
 - **Engines never see graph truth directly.** Mere passes them
   `(address, view_intent)`; engines return `EngineDocument` (nematic)
-  or paint frames into a `SurfaceContract` (serval, `scrying.web`,
+  or paint frames into a `SurfaceContract` (genet, `scrying.web`,
   `wry.web`).
 
 ### Scrying as library, not engine
@@ -86,22 +86,22 @@ the library; if a different "system-WebView-shaped" engine appears
 later (a Tauri-managed tile, an SDL2 WebView tile, etc.), it also
 uses scrying or a sibling primitive. Engine ≠ library.
 
-### Why no `serval.compat` internal mode
+### Why no `genet.compat` internal mode
 
-An earlier framing put scrying *inside* serval as a "compatibility mode"
-serval flips into when Servo can't render a site. That has appeal —
+An earlier framing put scrying *inside* genet as a "compatibility mode"
+genet flips into when Servo can't render a site. That has appeal —
 mode-flips are cheap and the engine boundary is shorter — but it makes
-serval a meta-engine that quietly orchestrates scrying, which:
+genet a meta-engine that quietly orchestrates scrying, which:
 
 - Duplicates the scrying integration path (mere also has one).
 - Splits engine selection across two systems (inker for cross-tile,
-  serval-internal for compat-flip).
-- Makes serval responsible for cookie/session continuity across engines
+  genet-internal for compat-flip).
+- Makes genet responsible for cookie/session continuity across engines
   (a host-level concern, not a Servo-rendering concern).
 
-The simpler shape: **serval is pure Servo rendering.** When Servo can't
-render, serval reports rendering failure upward; mere offers a tile-
-engine switch from `serval.web` to `scrying.web`. The flip becomes a
+The simpler shape: **genet is pure Servo rendering.** When Servo can't
+render, genet reports rendering failure upward; mere offers a tile-
+engine switch from `genet.web` to `scrying.web`. The flip becomes a
 regular engine-selection event, using existing inker machinery, not
 a parallel decision system.
 
@@ -120,10 +120,10 @@ per-domain rules are a third.
 
 ## Cookie / session continuity
 
-The key insight: **scrying inherits serval's session state via a shared
+The key insight: **scrying inherits genet's session state via a shared
 persona-scoped UDF**, not via engine-to-engine handoff.
 
-When mere flips a tile from `serval.web` to `scrying.web`, both engines
+When mere flips a tile from `genet.web` to `scrying.web`, both engines
 bind the same persona-scoped UDF (see multiplexer brief §5.4):
 
 ```text
@@ -136,10 +136,10 @@ under scrying, it reads from the same UDF. Logins persist, cart state
 persists, permissions persist — because the *storage* is shared, not
 because the engines coordinate.
 
-This works because **the cookie transfer is one-way** (serval-built
+This works because **the cookie transfer is one-way** (genet-built
 context → scrying consumes it). Scrying is the compatibility consumer,
-not a co-producer; we don't need scrying-to-serval continuity, only
-serval-to-scrying.
+not a co-producer; we don't need scrying-to-genet continuity, only
+genet-to-scrying.
 
 ### Where the UDF model has limits
 
@@ -164,7 +164,7 @@ v1: full reload, accept the cost. The page may render differently in
 WebView2 anyway; preserving scroll position to a different layout is
 of questionable value.
 
-v2: serval emits a `TileSnapshot` of serializable view state at engine-
+v2: genet emits a `TileSnapshot` of serializable view state at engine-
 flip time; mere stashes it in the per-pane `ViewIntent` sidecar (§5.3);
 scrying restores what it can on load. No new architecture — just one
 more field on the sidecar.
@@ -172,7 +172,7 @@ more field on the sidecar.
 ## Inker engine taxonomy after this decision
 
 ```text
-serval.web                  → http(s)://* default
+genet.web                  → http(s)://* default
 nematic.markdown            → text/markdown, *.md
 nematic.gemtext             → gemini://, text/gemini
 nematic.gopher              → gopher://
@@ -212,7 +212,7 @@ window). Picking either is a per-tile decision.
 
 ### Auto-fallback rule (future, not v1)
 
-A planned inker policy: when `serval.web` reports a rendering failure
+A planned inker policy: when `genet.web` reports a rendering failure
 (layout never settled / paint errored / JS exception flood / explicit
 "this site requires a different engine" signal), the host offers
 `scrying.web` for that tile via the user's existing engine-pin
@@ -230,8 +230,8 @@ Small surface:
    latter is a smaller diff if `wry.webview` isn't referenced by any
    default rule).
 2. **`scrying` dependency**: pulled into `mere-host` (or a thin
-   `mere-host-scrying-tile` crate). Not pulled into `serval`.
-3. **`serval`**: no change. Servo rendering only; reports failure
+   `mere-host-scrying-tile` crate). Not pulled into `genet`.
+3. **`genet`**: no change. Servo rendering only; reports failure
    upward through the existing `SurfaceContract` failure path (which
    already exists for crashed webviews per the current code).
 4. **`mere-host`**: gains a `scrying-web-tile` module structurally
@@ -242,7 +242,7 @@ Small surface:
 5. **`mere-kernel::graph::Node`**: no schema change. The existing
    `viewer_override` field already supports per-node engine pinning.
 6. **Persona-scoped UDF binding**: documented as a contract that
-   `serval.web` and `scrying.web` both honor. Where the UDF path
+   `genet.web` and `scrying.web` both honor. Where the UDF path
    comes from is a host-config concern (multiplexer brief §5.4).
    `wry.web`, if shipped, also binds the same UDF.
 7. **`TileSnapshot` (deferred)**: small new type for v2 continuity;
@@ -263,11 +263,11 @@ shape, different impl (overlay rather than embedded frame).
    naming should generalize — possibly `system.web` (engine kind) +
    per-platform sub-engine. Defer until a third such engine actually
    wants to land.
-2. **Sub-engine sub-modes.** `serval` may eventually grow
-   `serval.smolweb` (reader extract) as a peer to `serval.web`. The
+2. **Sub-engine sub-modes.** `genet` may eventually grow
+   `genet.smolweb` (reader extract) as a peer to `genet.web`. The
    `engine.sub-engine` shape supports this without churning the
    taxonomy.
-3. **Failure-signal vocabulary.** What exactly counts as "serval failed
+3. **Failure-signal vocabulary.** What exactly counts as "genet failed
    to render"? Layout never settled? Paint errored? JS exception
    threshold? The auto-fallback heuristic needs a concrete signal
    schema. Skip until manual flip is wired and we have data.

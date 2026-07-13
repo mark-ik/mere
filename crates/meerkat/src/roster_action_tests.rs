@@ -522,7 +522,7 @@ fn roster_action_field_facet_intents_update_orrery_field_state() {
 
 #[test]
 fn folded_roster_renders_visible_tab_buttons_in_shell_document() {
-    use serval_layout::ScrollOffsets;
+    use genet_layout::ScrollOffsets;
 
     let mut app = test_app();
     add_member(&mut app, "https://roster-shell-tabs.test");
@@ -567,7 +567,7 @@ fn folded_roster_renders_visible_tab_buttons_in_shell_document() {
         "first tab has a visible box: {:?}",
         first_tab_rect.size
     );
-    let origins = serval_layout::accumulate_painted_origins(
+    let origins = genet_layout::accumulate_painted_origins(
         &*dom,
         session.fragments(),
         session.element_scroll(),

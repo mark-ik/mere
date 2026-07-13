@@ -66,7 +66,7 @@ there is also `guest-bomb/` for the quota tests). Both guests `generate!` from t
     DetachScript{viewport_gen}}`; `ContentUpdate::ScriptOutcome{nav,outcome}`; the `render` branch
     emits from the script's `ScriptedDom` via the generic `scene_from_content_band`, **superseding**
     the static path. **Hybrid**: unscripted pages keep the fast `StaticDocument` path
-    (`content.html`). `attach_script` / `deliver_event` helper fns gate on `is_serval_html_lane`.
+    (`content.html`). `attach_script` / `deliver_event` helper fns gate on `is_genet_html_lane`.
 - **host wiring**:
   - `constellation.rs`: `attach_script(member, path, log, document)`, `deliver_script_event(member,
     kind, payload)`, `detach_script(member)` (send the ContentCommands; mirror `request_find`).
@@ -86,7 +86,7 @@ there is also `guest-bomb/` for the quota tests). Both guests `generate!` from t
 
 **Commits this session (the substrate arc).** mere: `bb30ed0` P2.4, `4b5c71d` §11.4, `dfb4ec6`
 P2.5a, `620e850` P2.5c, `f45f228` P2.5 perms adapter, `c07f5e1` trigger+resolution (+ WIP
-checkpoints `fc949c9`/`bde8342` of Mark's tree he authorized). serval: `67cce3c`/`95622930`
+checkpoints `fc949c9`/`bde8342` of Mark's tree he authorized). genet: `67cce3c`/`95622930`
 (perf timers). All green at each step; document-host 17 tests, meerkat 73 lib + 109 bin.
 
 ---
@@ -287,7 +287,7 @@ default it `Prompt`/`Deny` at the App scope (unlike `log`/`document` which defau
   built clean; the build was red only on Mark's dirty `gyre/Cargo.toml` geometry-dep change breaking
   render.rs — uncommitted, not in HEAD, so #3 commits against a green HEAD). No new unit test (it is
   render-path wiring; the unit-testable pieces — mirror / grant / binding matching — are already
-  covered). **Deferred**: a Retheme path for scripts (the serval lane themes via its own CSS, so
+  covered). **Deferred**: a Retheme path for scripts (the genet lane themes via its own CSS, so
   unchanged). Next: follow-on #4 (P2.6 AOT, then fiber-async `fetch`).
 - **2026-06-23 (follow-on #4a — P2.6 AOT, landed + green; committed `6e95e42`).** `precompile_to_cwasm`
   (Cranelift at build time → `.cwasm` bytes) + `load_component` (deserialize a `.cwasm`, no Cranelift,

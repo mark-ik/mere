@@ -3,7 +3,7 @@
 **Date**: 2026-06-26
 **Status**: **COMPLETE — D1 + D2 + D3 landed + verified (2026-06-26).** Chrome and content render DPI-correct + crisp at 2× (verified headed: chrome, the welcome card, a live example.org page, and a link-click landing); per-window DPI wired for multi-monitor (code-correct, not headed-verifiable on a single monitor set). Spun out of the [chrome bar refinement plan](2026-06-26_chrome_bar_refinement_plan.md)'s deferred auto-DPI finding (which shipped the user-zoom half: Ctrl +/-/0, baseline 1.1).
 **Open questions resolved (2026-06-26)**: window-size persistence = **logical**; DPI = **per-window**, user_zoom **shared**; supersample cost = **measure** before defaulting D2a on.
-**Related**: `crates/meerkat/` (`app_handler.rs`, `render.rs`, `main.rs`), `repos/serval` (`components/serval-layout`, `netrender`), the [host framework memory](../../) (xilem_serval).
+**Related**: `crates/meerkat/` (`app_handler.rs`, `render.rs`, `main.rs`), `repos/genet` (`components/genet-layout`, `netrender`), the [host framework memory](../../) (xilem_serval).
 
 Make the whole UI track the display's DPI automatically, so a HiDPI panel gets a correctly-sized (not tiny, not huge) chrome and crisp text, with the user's Ctrl-zoom composing on top.
 
@@ -22,11 +22,11 @@ True auto-DPI for the **chrome** is *not* a full logical-pixel coordinate migrat
 
 With both, a 16px CSS font → 32 physical px in a 2048-physical-px window — the same *proportion* as 16px in a 1024 window at 1×, but crisp. Input needs no conversion: the layout viewport stays the physical window size, so winit's physical cursor coords still match the (scaled) layout. This is why the chrome is the easy half.
 
-The **content / orrery** is the hard half (below): web pages and the graph canvas have their own coordinate systems and their own text, and making *those* crisp + correctly-sized is where serval's missing device-pixel-ratio bites.
+The **content / orrery** is the hard half (below): web pages and the graph canvas have their own coordinate systems and their own text, and making *those* crisp + correctly-sized is where genet's missing device-pixel-ratio bites.
 
 ## Phases
 
-### D1 — Chrome auto-DPI (meerkat-only; no serval change)
+### D1 — Chrome auto-DPI (meerkat-only; no genet change)
 
 Done when:
 - The window is created with `LogicalSize` (or `with_inner_size` fed logical), so its physical size is `logical × scale_factor`. The persisted window size is interpreted as logical.
@@ -36,12 +36,12 @@ Done when:
 
 Risk: the orrery / content surfaces share the now-larger physical window. They already take `w, h` physical, so they get more pixels (crisper backgrounds) but their *content* is unscaled — handled in D2. Window-size persistence and the multi-window path (each window reads its own `scale_factor`) need a pass.
 
-### D2 — Content + orrery DPR (needs the serval side)
+### D2 — Content + orrery DPR (needs the genet side)
 
-The chrome is host-CSS we scale ourselves. Web pages and the orrery scene are laid out + rasterized by serval / the scene path, which has **no device-pixel-ratio** (serval's cascade lists `zoom` as unsupported; `netrender` rasterize takes a bare `w, h` with no scale). So at D1 a page renders its 16px text at 16 physical px in the 2048 window — half-size. Options:
+The chrome is host-CSS we scale ourselves. Web pages and the orrery scene are laid out + rasterized by genet / the scene path, which has **no device-pixel-ratio** (genet's cascade lists `zoom` as unsupported; `netrender` rasterize takes a bare `w, h` with no scale). So at D1 a page renders its 16px text at 16 physical px in the 2048 window — half-size. Options:
 
-- **D2a — Supersample at compose (meerkat-side, cheaper):** lay content out at *logical* size (`w/scale, h/scale`), rasterize the scene into a `scale×`-larger texture via a scene-level scale transform, compose 1:1. Needs `netrender` to accept a render scale (a transform on the scene, or a `rasterize_scaled(scene, w, h, scale)`). One serval/netrender addition; no layout-engine change. Crisp text falls out of rasterizing the vector scene at physical res.
-- **D2b — Real DPR in serval layout (cleaner, larger):** give `serval-layout` a `device_pixel_ratio` so CSS px are DIPs end-to-end (layout, hit-test, paint), matching how a browser does it. Bigger change in a vendored-ish engine; the principled long-term shape.
+- **D2a — Supersample at compose (meerkat-side, cheaper):** lay content out at *logical* size (`w/scale, h/scale`), rasterize the scene into a `scale×`-larger texture via a scene-level scale transform, compose 1:1. Needs `netrender` to accept a render scale (a transform on the scene, or a `rasterize_scaled(scene, w, h, scale)`). One genet/netrender addition; no layout-engine change. Crisp text falls out of rasterizing the vector scene at physical res.
+- **D2b — Real DPR in genet layout (cleaner, larger):** give `genet-layout` a `device_pixel_ratio` so CSS px are DIPs end-to-end (layout, hit-test, paint), matching how a browser does it. Bigger change in a vendored-ish engine; the principled long-term shape.
 
 Recommendation: **D2a** first (one netrender render-scale seam, meerkat drives it), leaving D2b as the eventual convergence if/when content fidelity demands it. The orrery scene takes the same render-scale (its `camera.scale_factor` field, currently always 1.0, is the natural carrier).
 
@@ -56,18 +56,18 @@ Recommendation: **D2a** first (one netrender render-scale seam, meerkat drives i
 Grounded in code, the content path is exactly as feared:
 - The content actor is sent a **physical** viewport — `ContentCommand::Show` /
   `Resize { viewport: (cw, ch) }` in [`constellation.rs:387/403`](../../../crates/meerkat/src/constellation.rs#L387),
-  where `cw, ch` are physical px (meerkat is physical end-to-end). serval lays the page
+  where `cw, ch` are physical px (meerkat is physical end-to-end). genet lays the page
   out with CSS px = physical px, so at 2× a 16px font is 16 physical = 8 logical px —
-  half-size. No DPR knob exists in `serval-layout` (cascade lists `zoom` unsupported).
+  half-size. No DPR knob exists in `genet-layout` (cascade lists `zoom` unsupported).
 - The HTML lane returns a vector `Scene` in viewport-px coords; the host rasterizes it
   via `core.rasterize(scene, w, h, ..)` → `renderer.render_vello(scene, view, clear)`
-  ([`serval-winit-host/src/lib.rs:134`](../../../../serval/components/serval-winit-host/src/lib.rs#L134)).
+  ([`genet-winit-host/src/lib.rs:134`](../../../../genet/components/genet-winit-host/src/lib.rs#L134)).
 
 **The D2a edit (precise):**
 1. **meerkat** — send the content actor a *logical* viewport (`cw/scale, ch/scale`) so it
    lays out at the right logical width with correctly-sized text; keep the *physical*
    `(cw, ch)` for the texture it rasterizes into.
-2. **serval** — `rasterize` (or `render_vello`) takes a `scale: f32` and applies it as a
+2. **genet** — `rasterize` (or `render_vello`) takes a `scale: f32` and applies it as a
    root affine on the scene, so the logical-coord scene fills the physical texture
    crisply. Additive; also lets the chrome supersample if ever wanted.
 3. **meerkat** — scale content **hit-testing** + scroll/band math by `scale` (clicks
@@ -77,16 +77,16 @@ Grounded in code, the content path is exactly as feared:
 
 Scope note: D2 touches layout-size + raster + compose + hit-test + scroll together, in
 two repos, and can't be verified without driving a live page — a focused session of its
-own, not a quick follow-on. Greenlight needed to edit the serval repo (its own build).
+own, not a quick follow-on. Greenlight needed to edit the genet repo (its own build).
 The **document lane** (windowed packet) needs the same logical/scale treatment in its
 band-lowering path. Measure the 2×-supersample fill cost (resolved open question) before
 defaulting it on low-power targets.
 
-## Serval-side summary (what this needs upstream of meerkat)
+## Genet-side summary (what this needs upstream of meerkat)
 
 - **D1**: nothing. Pure meerkat (window sizing + `scale_px`, already built).
 - **D2a**: a **render-scale seam in `netrender`** — `rasterize` (or the renderer) accepts a scale so a logical-sized scene rasterizes into a physical-sized target with a scene transform. Small, additive, serves chrome-supersampling too.
-- **D2b** (optional/later): a `device_pixel_ratio` threaded through `serval-layout`'s cascade + box tree + paint — the full browser DPR model.
+- **D2b** (optional/later): a `device_pixel_ratio` threaded through `genet-layout`'s cascade + box tree + paint — the full browser DPR model.
 
 ## Open questions
 
@@ -116,12 +116,12 @@ defaulting it on low-power targets.
   shellbar, panes, orrery host-draw, list panes) are all DPI-correct now; only live
   **web-page tiles** still render at half-size (no content DPR) — that's D2.
 
-**Next:** D2 (serval/`netrender` render-scale seam for content + orrery scenes; measure
+**Next:** D2 (genet/`netrender` render-scale seam for content + orrery scenes; measure
 supersample cost per the resolved open question) → D3 (move `dpi_scale` per-window with
 per-window scaled sheets; reconcile with orrery Ctrl+wheel zoom).
 
 **2026-06-26 — D2 landed (content/orrery DPR, cross-repo).**
-- **serval / netrender** (the reusable render-scale seam): added `render_scaled` on the
+- **genet / netrender** (the reusable render-scale seam): added `render_scaled` on the
   vello tile rasterizer (appends the vector master scene under a `kurbo::Affine::scale`
   and renders at `viewport × scale`), `Renderer::render_vello_scaled`, and
   `RenderCore::rasterize_scaled` — all additive; `render`/`render_vello`/`rasterize` now

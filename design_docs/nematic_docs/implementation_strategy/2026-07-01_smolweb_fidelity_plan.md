@@ -12,13 +12,13 @@ posture the native lane currently drops.
 
 1. **Share the synonymous parts through the box substrate.** A gemtext paragraph
    and an HTML paragraph are the same box. Render them the same way and inherit
-   typography, wrapping, selection, focus order, and a11y once, from serval-layout,
+   typography, wrapping, selection, focus order, and a11y once, from genet-layout,
    instead of re-deriving them per format.
 2. **Go bespoke (regime B) only where a format's line model genuinely is not
    box-shaped.** Gopher's fixed-width typed column is the first real case. A
    paragraph is never a reason to go bespoke, because it is the synonymous case.
 3. **Enrich the parse ASTs, and manage trust in the native lane.** Most of what we
-   collapse is lost at parse time, not paint time. And the native serval lane
+   collapse is lost at parse time, not paint time. And the native genet lane
    bypasses `Block`, so it drops the trust posture the card lane models.
 
 ---
@@ -56,7 +56,7 @@ render regimes would recover none of it, because the data is already gone.
 
 The parse ASTs carry no trust state (verified: nothing in `errand/src/parse/`). The
 native lane goes errand-parse → smolweb-views, **bypassing `Block`** and its
-`DocumentTrustState`. So focused viewing via the serval lane surfaces no security
+`DocumentTrustState`. So focused viewing via the genet lane surfaces no security
 posture: a spartan page (unauthenticated by design), a gemini page (TOFU), and a
 misfin message (signed sender) render with the same neutral chrome. The transport
 already knows the outcome (Phase A installs `InMemoryTofu`; a pin mismatch fails the
@@ -81,7 +81,7 @@ escalates one format at a time.
 | | (A) element tree + CSS *(default)* | (B) own layout, shared shaper | (C) raw paint |
 | --- | --- | --- | --- |
 | Format idiom lives in | mapping + stylesheet | a bespoke line/layout tree | a bespoke layout + paint fn |
-| Shaping | shared (serval) | shared (parley direct) | shared shaper |
+| Shaping | shared (genet) | shared (parley direct) | shared shaper |
 | Line-break + stack | shared | you own it | you own it |
 | Selection / find / a11y / zoom | free | re-earned per format | re-earned per format |
 | Cross-format identity of a paragraph | guaranteed identical | drifts | drifts |
@@ -127,7 +127,7 @@ the new fields feed the article reader, the podcast affordance, and read-state.
 
 - **Lockstep + publish timing.** These are public-struct field changes on errand,
   breaking nematic's lowerings and `feed_view` simultaneously: one coordinated
-  cross-repo pass (errand → serval → mere) per the established push choreography.
+  cross-repo pass (errand → genet → mere) per the established push choreography.
   And errand's manifest is publish-shaped (crates.io metadata, keywords, readme), so
   the field set should settle through WS1 *before* any crates.io publish; churning
   public struct fields post-publish is a semver treadmill.
@@ -150,7 +150,7 @@ stays `Search` here; the input affordance is Workstream 3.
 never carries it). Spartan then renders it as an upload affordance instead of body
 text.
 
-**Cross-repo note:** struct-field additions are visible to mere/serval through the
+**Cross-repo note:** struct-field additions are visible to mere/genet through the
 gitignored `.cargo/config.toml` path override at build time, so the local edit loop
 works. A clean or CI build needs the errand push (unlike the *feature*-resolution
 wall the native plan hit, plain field additions do not need a feature gate).
@@ -246,7 +246,7 @@ Targets, not dates.
   imposed at paint time. The fix is richer ASTs, not a different render regime.
 - **The native lane carries no trust** (nothing trust-shaped in `errand/src/parse/`;
   `smolweb-views` emits no posture). The `Block` lane has `DocumentTrustState`; the
-  serval lane, which the host uses for focused tiles, drops it.
+  genet lane, which the host uses for focused tiles, drops it.
 - **Gopher is the sole clear regime-B candidate.** Gemtext, feed, nex, finger,
   spartan, guppy, scroll, misfin are all box-flow-shaped; gopher's fixed-width typed
   column is the one line model the box substrate visibly distorts.
@@ -264,7 +264,7 @@ Targets, not dates.
   shipped transport → parse → native render this extends; the two-family model and the
   crate/dependency direction it defines.
 - [smolweb host integration plan](../../mere_docs/implementation_strategy/2026-06-28_smolweb_host_integration_plan.md)
-  — the meerkat serval lane; Workstream 2's trust surfacing lands against its P3/P4.
+  — the meerkat genet lane; Workstream 2's trust surfacing lands against its P3/P4.
 - [TERMINOLOGY.md](../../TERMINOLOGY.md) — the trust ladder and the
   protocol-faithfulness rule this plan operationalizes.
 - errand (sibling repo `mark-ik/errand`) — owns the parse ASTs Workstream 1 enriches

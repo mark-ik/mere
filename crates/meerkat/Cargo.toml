@@ -6,7 +6,7 @@ license.workspace = true
 repository.workspace = true
 publish = false
 rust-version = "1.92.0"
-description = "Mere's serval-as-host shell (the eventual replacement for the Xilem + Masonry mere-app host): chrome — toolbar / omnibar / command palette / frametree — built as xilem_serval views over the reused graphshell chrome domain, presented by serval. Holds the separate-roots discipline (chrome-root vs content-roots) from commit one."
+description = "Mere's genet-as-host shell (the eventual replacement for the Xilem + Masonry mere-app host): chrome — toolbar / omnibar / command palette / frametree — built as xilem_serval views over the reused graphshell chrome domain, presented by genet. Holds the separate-roots discipline (chrome-root vs content-roots) from commit one."
 
 [features]
 default = ["engine-scry"]
@@ -28,21 +28,21 @@ engine-scry = ["dep:scrying", "dep:scrying-engine", "dep:grafting", "dep:dpi"]
 # follow-on that fills the host pools and the render-drive path.
 engine-graft = []
 engine-weld = []
-# The serval *scripted* render rung (render ladder phase 2): a content node pinned to
-# `serval.scripted` runs its page JS through `pelt_desktop::ScriptedDocument` on Boa.
+# The genet *scripted* render rung (render ladder phase 2): a content node pinned to
+# `genet.scripted` runs its page JS through `pelt_desktop::ScriptedDocument` on Boa.
 # Off by default so the base build stays the static rung — no JS engine in its
 # dependency graph (the profile ladder's witness discipline) and clear of the
 # Boa+wgpu link-size limit. Build the scripted variant with `--features scripted`.
 scripted = ["pelt-desktop/scripted", "dep:script-engine-api", "dep:script-engine-boa", "content-contract/scripted"]
-# Add the Nova JS engine as a second scripted rung (`serval.scripted.nova`), keeping
+# Add the Nova JS engine as a second scripted rung (`genet.scripted.nova`), keeping
 # the Boa rung and the shared scripted host path. Mirrors pelt-desktop's split so the
 # host can route to Nova explicitly rather than silently swapping engines under one id.
 scripted-nova = ["scripted", "pelt-desktop/scripted-nova", "dep:script-engine-nova"]
-# The serval smolweb render lane: a focused gemini/gopher/feed capsule renders
+# The genet smolweb render lane: a focused gemini/gopher/feed capsule renders
 # natively through pelt's `SmolwebDocument` (errand parse -> smolweb-views ->
-# ScriptedDom -> serval-layout), the serval lane rather than the block card. Off by
+# ScriptedDom -> genet-layout), the genet lane rather than the block card. Off by
 # default so the base build stays clear of the smolweb transport/parse stack.
-smolweb = ["pelt-desktop/smolweb", "dep:serval-documents", "serval-documents/smolweb"]
+smolweb = ["pelt-desktop/smolweb", "dep:genet-documents", "genet-documents/smolweb"]
 # Local LLM inference for the `>ask` omnibar verb. Off by default: it pulls the
 # burn-wgpu tree (cubecl), a multi-minute cold build. Without it, `>ask` still
 # exists and answers through infer's deterministic `CannedProvider` stub (the
@@ -65,7 +65,7 @@ name = "meerkat"
 path = "src/lib.rs"
 
 # The on-screen shell: a winit window that renders the reused chrome through
-# serval and presents via netrender (pelt-live-shaped). The lib half stays
+# genet and presents via netrender (pelt-live-shaped). The lib half stays
 # headless; this bin carries the windowing + present stack.
 [[bin]]
 name = "meerkat"
@@ -73,24 +73,24 @@ path = "src/main.rs"
 
 [dependencies]
 # The chrome-as-DOM view layer: a xilem_core backend that diffs a Xilem view
-# tree into serval's mutable ScriptedDom. Cross-repo path dep on the sibling
-# serval checkout — mere and serval share the vello 0.9 / wgpu 29 pins, so there
-# is no renderer-stack reconciliation (serval-as-host flip plan, Findings).
-xilem-serval = { package = "serval-xilem", git = "https://github.com/mark-ik/serval.git", branch = "main", features = ["highlight"] }
+# tree into genet's mutable ScriptedDom. Cross-repo path dep on the sibling
+# genet checkout — mere and genet share the vello 0.9 / wgpu 29 pins, so there
+# is no renderer-stack reconciliation (genet-as-host flip plan, Findings).
+xilem-serval = { package = "serval-xilem", git = "https://github.com/mark-ik/genet.git", branch = "main", features = ["highlight"] }
 # Chisel widget leaves: the toolbar status cluster (frame-time Meter + recent
 # GraphGlyph) as `<chisel-leaf>` elements in the chrome DOM, plus the grid
 # widget (GridSpec) for the nodes/recent table. The chrome emit splices leaf
 # commands via IncrementalLayout::emit_paint_list_with_leaves.
-chisel = { package = "serval-chisel", git = "https://github.com/mark-ik/serval.git", branch = "main" }
-serval-scripted-dom = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+chisel = { package = "serval-chisel", git = "https://github.com/mark-ik/genet.git", branch = "main" }
+genet-scripted-dom = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 # The content card parses fetched pages as full HTML documents (keeping <head>,
-# so head <style> / <link> are seen) and renders them through the shared serval
-# content core; StaticDocument is serval's script-free document DOM.
-serval-static-dom = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+# so head <style> / <link> are seen) and renders them through the shared genet
+# content core; StaticDocument is genet's script-free document DOM.
+genet-static-dom = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 # The render-free extraction lane: walks a parsed document into structured content
 # (title / metadata / outline / links / text) with no cascade/layout/paint, for the
-# eidetic corpus. Depends only on serval's layout-dom-api, so no render stack rides in.
-serval-extract = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+# eidetic corpus. Depends only on genet's layout-dom-api, so no render stack rides in.
+genet-extract = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 
 # Reused, host-neutral chrome view-models — toolbar / omnibar / command palette /
 # frame model / routing. meerkat is the next "host widget" that renders these as
@@ -109,14 +109,14 @@ comms = { workspace = true, features = ["misfin-adapter", "murm-adapter"] }
 misfin = { workspace = true, features = ["server"] }
 murm = { workspace = true }
 
-# ─── On-screen bin: the serval render + present stack ────────────────────────
+# ─── On-screen bin: the genet render + present stack ────────────────────────
 # meerkat owns its `ScriptedDom -> netrender::Scene` render glue (the
-# `serval_render` module), depending on serval's *components* directly rather than
-# on `pelt-live` (a serval-side probe). See the serval_render_glue_extraction_plan.
+# `genet_render` module), depending on genet's *components* directly rather than
+# on `pelt-live` (a genet-side probe). See the genet_render_glue_extraction_plan.
 # The cascade / layout / emit / query engine, plus ScrollOffsets (the per-node
 # scroll map the glue takes) and IncrementalLayout (the pane sessions).
-serval-layout = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
-engine-observables-api = { package = "engine-observables-api", git = "https://github.com/mark-ik/serval.git", branch = "main" }
+genet-layout = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+engine-observables-api = { package = "engine-observables-api", git = "https://github.com/mark-ik/genet.git", branch = "main" }
 # The paint-list -> netrender::Scene lowering (translate_paint_list); the same
 # crate the orrery lowers through.
 paint_list_render = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
@@ -125,8 +125,8 @@ paint_list_api = { git = "https://github.com/mark-ik/netrender.git", branch = "m
 # Scene / Renderer / ColorLoad / ExternalTexturePlacement for the present pass.
 netrender = { git = "https://github.com/mark-ik/netrender.git", branch = "main", features = ["serde"] }
 # Favicon PNG encoding for the orrery-as-element gnodes: RGBA -> PNG bytes -> a
-# `data:` URI <img> the gnode carries (serval decodes it). Already resolved in the
-# workspace via serval's image decoder, so this only exposes the built crate to
+# `data:` URI <img> the gnode carries (genet decodes it). Already resolved in the
+# workspace via genet's image decoder, so this only exposes the built crate to
 # encode (favicons + snapshot cards). The decode features (jpeg/gif/bmp on top of png)
 # back the drag-and-drop sprite import — a dropped image decoded to a face. (Phase 2 / P2 sprite.)
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp"] }
@@ -142,11 +142,11 @@ netrender_text = { git = "https://github.com/mark-ik/netrender.git", branch = "m
 # The `LayoutDom` trait: `document()` + `element_name` / `dom_children` to walk
 # and measure the chrome band (toolbar split + click-region gate). ScriptedDom
 # implements it; same cross-repo path as xilem-serval.
-layout_dom_api = { package = "layout-dom-api", git = "https://github.com/mark-ik/serval.git", branch = "main" }
+layout_dom_api = { package = "layout-dom-api", git = "https://github.com/mark-ik/genet.git", branch = "main" }
 
-# Shared serval-on-winit present plumbing (SurfaceHost: boot / resize / rasterize
-# / acquire, + winit->serval key & modifier mapping), shared with the orrery host.
-serval-winit-host = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+# Shared genet-on-winit present plumbing (SurfaceHost: boot / resize / rasterize
+# / acquire, + winit->genet key & modifier mapping), shared with the orrery host.
+genet-winit-host = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 
 # The content-card pipeline: a focused node's media as a document. inker supplies
 # the portable EngineDocument model; document-canvas lays it out (parley) and,
@@ -208,18 +208,18 @@ frame = { workspace = true }
 # standalone pelt `TileSurface` as its workbench pane, driven entirely through the
 # contract (`Workbench::to_tile_tree` projects forme's tiling onto it). The
 # `tile-surface` feature is the GPU-free surface only — `default-features = false`
-# keeps pelt's reference-shell windowing (serval-winit-host / wgpu present stack)
+# keeps pelt's reference-shell windowing (genet-winit-host / wgpu present stack)
 # out; meerkat brings its own. `pelt-core` is the zero-dependency contract leaf.
-pelt-core = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
-pelt-desktop = { git = "https://github.com/mark-ik/serval.git", branch = "main", default-features = false, features = ["tile-surface"] }
+pelt-core = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+pelt-desktop = { git = "https://github.com/mark-ik/genet.git", branch = "main", default-features = false, features = ["tile-surface"] }
 # Boa JS engine for the `scripted` rung (the `ScriptedDocument<BoaEngine>` the content
 # actor drives). Optional — only the `scripted` feature pulls it, so the base build
 # links no JS engine. Pure Rust, all targets.
-script-engine-api = { git = "https://github.com/mark-ik/serval.git", branch = "main", optional = true }
-serval-documents = { git = "https://github.com/mark-ik/serval.git", branch = "main", optional = true }
-script-engine-boa = { git = "https://github.com/mark-ik/serval.git", branch = "main", optional = true }
+script-engine-api = { git = "https://github.com/mark-ik/genet.git", branch = "main", optional = true }
+genet-documents = { git = "https://github.com/mark-ik/genet.git", branch = "main", optional = true }
+script-engine-boa = { git = "https://github.com/mark-ik/genet.git", branch = "main", optional = true }
 # Optional Nova JS engine for the `scripted-nova` rung.
-script-engine-nova = { git = "https://github.com/mark-ik/serval.git", branch = "main", optional = true }
+script-engine-nova = { git = "https://github.com/mark-ik/genet.git", branch = "main", optional = true }
 
 # Off-UI-thread fetch (S2.2b): netfetcher's async WHATWG Fetch runs on a tokio
 # worker pool; results are delivered back to the winit loop over a channel + an
@@ -235,7 +235,7 @@ netfetcher = { git = "https://github.com/mark-ik/netfetcher.git", branch = "main
 # one-way; a **git dep** (not a path dep) so any machine pulls just mere and Cargo
 # fetches errand from GitHub — no `../../../errand` layout to replicate. The fetch
 # actor routes http(s) -> netfetcher and smolweb schemes -> errand.
-errand = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+errand = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 # Construct `errand::ClientIdentity` (CertificateDer / PrivateKeyDer) from the
 # misfin cert's DER bytes for the misfin send path. Same crate rustls re-exports
 # as `rustls::pki_types`, so it unifies with errand's rustls 0.23.
@@ -254,6 +254,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "time", "io-util", "sync
 # host builds the `LogSync` pump directly — hence the p2panda-net / p2panda-core
 # deps here.
 identity = { workspace = true }
+murm-replication = { workspace = true }
 transport = { workspace = true }
 moothold = { workspace = true }
 p2panda-net = "0.6.1"
@@ -282,8 +283,8 @@ raw-window-handle = { workspace = true }
 
 # Content engines for the card (S2.2b-ii): nematic's document engines (markdown /
 # gemtext / plain text / feeds / …) turn fetched bytes into an EngineDocument,
-# routed by content-type. HTML rides the serval lane instead (set_inner_html →
-# scene_from_scripted_dom via the host-owned serval_render glue).
+# routed by content-type. HTML rides the genet lane instead (set_inner_html →
+# scene_from_scripted_dom via the host-owned genet_render glue).
 nematic = { workspace = true }
 
 # Session persistence (S3): the session graph survives restart as graph.json via
@@ -302,11 +303,11 @@ eidetic-search = { workspace = true }
 pollster = "0.4"
 
 # Windowing + present (mirrors pelt-live's bin deps; mere's pins align with
-# serval's, so the wgpu 29 / winit 0.30 surface + netrender Renderer unify).
+# genet's, so the wgpu 29 / winit 0.30 surface + netrender Renderer unify).
 winit = { workspace = true }
 wgpu = { version = "29", default-features = false, features = ["std", "wgsl"] }
 # System clipboard for the omnibar / command-palette Ctrl(Cmd)+C/X/V, the same
-# crate pelt-live's bin uses for its serval text field.
+# crate pelt-live's bin uses for its genet text field.
 arboard = "3"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
@@ -329,7 +330,7 @@ tincture = { workspace = true }
 # illume's container tree for structural editor ops (expand-selection to the enclosing
 # djot container). This is host editing logic, distinct from the highlight bridge that
 # lives in xilem-serval's `highlight` feature.
-illume = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+illume = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 # Unique ids for forked user themes.
 uuid = { workspace = true }
 
@@ -347,12 +348,12 @@ scrying-engine = { workspace = true, optional = true }
 grafting = { git = "https://github.com/mark-ik/wgpu-graft.git", branch = "main", default-features = false, features = ["wgpu-29"], optional = true }
 dpi = { workspace = true, optional = true }
 
-# The verso compatibility-view flip: when a node is pinned serval -> scrying.web,
+# The verso compatibility-view flip: when a node is pinned genet -> scrying.web,
 # the host captures the donor's place/session (verso-api's PortableViewState) and the
 # scrying pool drives verso-scry's forward-inject state machine over its producer so
 # the WebView loads carried, not blank. verso-api is the engine-agnostic contract;
 # verso-scry is the black-box receiver (host implements its `ScrySurface` seam here).
-verso-tile = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+verso-tile = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 accesskit_macos = { workspace = true }

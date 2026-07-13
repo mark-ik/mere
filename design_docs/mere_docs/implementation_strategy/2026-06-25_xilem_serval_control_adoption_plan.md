@@ -1,10 +1,10 @@
 # xilem-serval control-set adoption
 
 **Date**: 2026-06-25
-**Status**: P1 + P2 done 2026-06-25 (serval + meerkat). P3 gated/open. From the
-[serval capability-misuse sweep](../../archive_docs/2026-07-03_completed_plans/2026-06-25_overlay_primitive_adoption_plan.md) (2026-06-25).
-**Owner**: meerkat (consumes xilem-serval `controls`); P1/P2 also touch serval (xilem-serval +
-serval-render).
+**Status**: P1 + P2 done 2026-06-25 (genet + meerkat). P3 gated/open. From the
+[genet capability-misuse sweep](../../archive_docs/2026-07-03_completed_plans/2026-06-25_overlay_primitive_adoption_plan.md) (2026-06-25).
+**Owner**: meerkat (consumes xilem-serval `controls`); P1/P2 also touch genet (xilem-serval +
+genet-render).
 
 ## Problem
 
@@ -67,7 +67,7 @@ stateless, a near drop-in).
 
 - 2026-06-25: Drafted from the capability sweep. Not started.
 - 2026-06-25: **P1 done.** `.attr` was `El`-only (not on `OnClick`/`ElementView`), so the
-  `button(..).attr("class", ..)` route did not compile as drafted. Resolved by extending serval:
+  `button(..).attr("class", ..)` route did not compile as drafted. Resolved by extending genet:
   added a fluent `OnClick::attr` that forwards to the wrapped `El` (xilem-serval `event.rs`), so
   `xilem_serval::button(label, h).attr("class", x)` (and any attribute) now works, with a unit test
   (`button_attr_stamps_class_and_keeps_handler`). meerkat `views.rs` gained one `button(label, class,
@@ -75,7 +75,7 @@ stateless, a near drop-in).
   newer knot-editor close) now route through it. No bare `el("button")` left. The `<button>` tag
   stamps `role="button"` for the a11y tree. `cargo check -p meerkat` clean; 87 meerkat lib tests +
   the xilem-serval button tests green (the 13-`<button>` toolbar count assertion still holds).
-- 2026-06-25: **P2 serval-render half done (the prerequisite).** `serval-render/a11y.rs` now reads
+- 2026-06-25: **P2 genet-render half done (the prerequisite).** `genet-render/a11y.rs` now reads
   ARIA: `role_for` honors an explicit `role` attr (`button`/`checkbox`/`radio`/`radiogroup`/`switch`),
   overriding the tag, and `build` maps `aria-checked` (`true`/`false`/`mixed`) to accesskit `Toggled`.
   This is grand_audit direction 2 — previously the reader mapped roles by tag only and dropped the

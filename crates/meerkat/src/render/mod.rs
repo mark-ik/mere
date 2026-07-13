@@ -5,13 +5,13 @@
 //! Render, resize, and toolbar-measurement for [`Shell`](super::Shell). Factored
 //! from `main.rs` to keep files under the workspace 600-LOC ceiling.
 
-use crate::serval_render::TextCursor;
+use crate::genet_render::TextCursor;
 use mere::forme::GraphMemberId;
 use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
 use netrender::ColorLoad;
 use netrender::external_texture::{ExternalTexturePlacement, SourceAlpha};
-use serval_layout::ScrollOffsets;
-use serval_scripted_dom::NodeId;
+use genet_layout::ScrollOffsets;
+use genet_scripted_dom::NodeId;
 
 use std::cell::RefCell;
 use std::time::Instant;

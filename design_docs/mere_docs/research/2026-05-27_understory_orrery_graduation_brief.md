@@ -3,7 +3,7 @@
 **Date**: 2026-05-27
 **Status**: Design probe / decision framework. Not a commitment to a dependency; records *how and when* to evaluate [forest-rs/understory](https://github.com/forest-rs/understory) against Mere's graph-canvas/projection layer, and what was already decided about it.
 
-> **Crate-name note (2026-06-09 audit):** the comparison premise shifted: `graph-canvas` has since **dissolved** into the `orrery/*` family (so "rebuild graph-canvas vs understory" is partly OBE), `mere/app/src/camera.rs`→`orrery/arrangements` camera, and the host is `meerkat` (serval-as-host, not Masonry). The understory-evaluation shape (camera boundary, hit-test/cull seam, responder/focus) still applies to the orrery element.
+> **Crate-name note (2026-06-09 audit):** the comparison premise shifted: `graph-canvas` has since **dissolved** into the `orrery/*` family (so "rebuild graph-canvas vs understory" is partly OBE), `mere/app/src/camera.rs`→`orrery/arrangements` camera, and the host is `meerkat` (genet-as-host, not Masonry). The understory-evaluation shape (camera boundary, hit-test/cull seam, responder/focus) still applies to the orrery element.
 **Related**: [composition spine](../technical_architecture/2026-05-21_mere_composition_spine.md), [component fit-map](../technical_architecture/2026-05-26_component_fit_map.md), [renderer registry contract](2026-05-15_renderer_registry_contract_brief.md), [spatial-chrome adoption plan](../implementation_strategy/2026-05-15_spatial_chrome_modular_adoption_plan.md), [donor docs full harvest](2026-05-27_graphshell_docs_full_harvest.md) (its §1/§4 focus/event/UxTree + canvas specs are the yardsticks below).
 
 ---

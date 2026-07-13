@@ -28,7 +28,7 @@ use paint_list_api::{
 };
 
 use crate::scene_paint::ScenePaintStyle;
-use serval_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
+use genet_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
 use signals::{BridgeNodes, ClusterSet};
 
 use crate::palette;
@@ -41,7 +41,7 @@ const GNODE_BOX: &str =
 /// camera-transformed container (also `position: relative`, so it is the
 /// containing block for the abs-pos nodes); each `.gnode` is an
 /// absolutely-positioned labelled box moved to its world position by an inline
-/// transform (serval propagates `.stage`'s camera transform onto these abs-pos
+/// transform (genet propagates `.stage`'s camera transform onto these abs-pos
 /// descendants — the 1A fix).
 ///
 /// The node colors are **not** literals here: `.stage` carries the `--node-*`

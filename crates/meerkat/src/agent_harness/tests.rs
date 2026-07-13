@@ -1119,7 +1119,7 @@ fn scheme_flip_reuses_the_chrome_session_without_rebuild() {
     // light/dark flip refreshes the retained chrome session via
     // `set_prefers_color_scheme` — `rebuild` stays false, the session object
     // survives.
-    use serval_layout::ScrollOffsets;
+    use genet_layout::ScrollOffsets;
     let mut app = test_app();
     let wc = app.ctx();
     let sheet = wc.shared.presentation.chrome_sheet_refs();
@@ -1313,7 +1313,7 @@ fn soft_wrap_nav_declines_outside_the_knot_editor() {
 #[test]
 fn knot_editor_close_button_is_small_and_right_of_the_title() {
     use layout_dom_api::LayoutDom;
-    use serval_layout::ScrollOffsets;
+    use genet_layout::ScrollOffsets;
     let mut app = test_app();
     let mut wc = app.ctx();
     wc.chrome_update(|c| c.open_knot_editor("a note"));
@@ -1365,7 +1365,7 @@ fn knot_editor_close_button_is_small_and_right_of_the_title() {
 #[test]
 fn knot_editor_uses_bound_tile_rect_when_available() {
     use layout_dom_api::LayoutDom;
-    use serval_layout::ScrollOffsets;
+    use genet_layout::ScrollOffsets;
     let mut app = test_app();
     let mut wc = app.ctx();
     wc.chrome_update(|c| {
@@ -2156,7 +2156,7 @@ fn accesskit_focus_on_a_chrome_control_routes_to_the_runner() {
     // the node's salted a11y id, so the projection's node id and the route key
     // round-trip — the seam the first cut (reversing the salted id) got
     // debug-wrong, a doc-tag riding the salt's high bits.
-    use serval_layout::ScrollOffsets;
+    use genet_layout::ScrollOffsets;
     let mut app = test_app();
     let mut wc = app.ctx();
 
@@ -2185,7 +2185,7 @@ fn accesskit_focus_on_a_chrome_control_routes_to_the_runner() {
     // Project: the omnibar carries a `ChromeNode` route under its own a11y id —
     // the key the bridge targets a request with.
     wc.refresh_a11y_summary();
-    let target = crate::serval_a11y::chrome_a11y_id(omnibar);
+    let target = crate::genet_a11y::chrome_a11y_id(omnibar);
     assert_eq!(
         wc.a11y_action_routes.get(&target),
         Some(&crate::A11yHostAction::ChromeNode(omnibar)),

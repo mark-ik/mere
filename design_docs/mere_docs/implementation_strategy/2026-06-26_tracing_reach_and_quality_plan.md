@@ -2,7 +2,7 @@
 
 **Date**: 2026-06-26
 **Status**: Active. T1 + T1.5 (reach gate) landed; T2 substrate-half landed; T3 leaf-library passes
-(netfetcher / netrender / errand / serval-layout) + T5 dev-loop ring-dump + trace-event-quality
+(netfetcher / netrender / errand / genet-layout) + T5 dev-loop ring-dump + trace-event-quality
 landed. Remaining: T2 call-site half, T3 in-tree engines + graph kernel (+ the larger scry / weld /
 graft pass), T4 correlation, T5 sampling + error-chain capture.
 **Spun out of**: [system diagnostics and accessibility plan](2026-06-08_system_diagnostics_and_accessibility_plan.md)
@@ -70,7 +70,7 @@ oversight: lossless names require changing that field to `String` / `Cow<'static
 | `intel` (embed/RAG) | **0** | | `persona` | 4 |
 | `mesh` | **0** | | `orrery` | 3 |
 | `moot` | **0** | | `forme` | 2 |
-| `verso-scry` / `verso-serval` (engines) | **0** | | `shell` | 1 |
+| `verso-scry` / `verso-genet` (engines) | **0** | | `shell` | 1 |
 | `import`, `eidetic` | **0** | | | |
 
 The async actor substrate, the graph kernel, and the web engines, the exact places where faults
@@ -180,7 +180,7 @@ What "quality" means here, concretely:
   keep natural values. The feared `&'static str -> Cow` ripple through `register-diagnostics` did
   **not** apply.
 - `interesting_target` now checks a default first-party component prefix allowlist
-  (`armillary`/`graph`/`inker`/`intel`/`orrery`/`mesh`/`moot`/`murm`/`persona`/`verso`/`serval`/...),
+  (`armillary`/`graph`/`inker`/`intel`/`orrery`/`mesh`/`moot`/`murm`/`persona`/`verso`/`genet`/...),
   overridable per dev session via `MEERKAT_TRACE_TARGETS` (comma-separated prefixes) with no rebuild.
 - The `meerkat.tracing.event` generic channel stays the catch-all; T2/T5 promote the hot ones to
   schema'd channels.
@@ -212,18 +212,18 @@ the call-site half lands the per-operation detail.)
 `debug` completion + `warn` fault, runtime-verified end-to-end (headed) and committed in their own
 repos: `netfetcher` fetch (`url`/`status`/`elapsed_ms`, `65721fd`), `netrender` paint
 (`op_count`/`viewport`/`scale`, per-frame, `6820eed95`), `errand` smolweb fetch
-(`scheme`/`status`/`byte_len`, `4c82b5f`), `serval-layout` `lay_out_content`
+(`scheme`/`status`/`byte_len`, `4c82b5f`), `genet-layout` `lay_out_content`
 (`fragment_count`/`image_count`/`elapsed_ms`, `868abf3`). The bridge allowlist gained
 `netfetcher`/`netrender`/`errand`, and the Apparatus ring filter became an `EnvFilter`
-(`info,netfetcher=debug,errand=debug,serval_layout=debug`, `f4af6d8`) so per-op completions reach the
+(`info,netfetcher=debug,errand=debug,genet_layout=debug`, `f4af6d8`) so per-op completions reach the
 ring while `netrender`'s per-frame `debug` stays out (only its faults pass). This is the
 level/sampling discipline T5 calls for, applied at the ring rather than per-crate.
 
-Remaining: the in-tree engines (`verso-scry` / `verso-serval` / `inker`) and `graph` kernel spans
+Remaining: the in-tree engines (`verso-scry` / `verso-genet` / `inker`) and `graph` kernel spans
 below; the external web engines `scry` / `weld` / `graft` are the larger follow-on (same per-op +
 fault shape, plus the engine-neutral `SurfaceFrame` seam).
 
-- `verso-scry` / `verso-serval` / `inker`: cascade / layout / paint (and fetch / decode) spans with
+- `verso-scry` / `verso-genet` / `inker`: cascade / layout / paint (and fetch / decode) spans with
   timing. This doubles as the per-pass perf signal the parallelism work will want.
 - `graph` kernel: mutation / snapshot / query spans at `debug`, sampled.
 
@@ -342,7 +342,7 @@ component the later slices instrument.
   `c8c4f19`; the ~4-line `main.rs` hunk rides the concurrent switcher refactor in that file rather
   than being carved out). This makes T1/T2/T3 actually observable. Leftover: open decision #4 below.
 - 2026-06-28/29: **T3 leaf libraries + T5 dev-loop + trace-event quality landed.** Instrumented the
-  four load-path sibling libraries (netfetcher / netrender / errand / serval-layout) with a per-op
+  four load-path sibling libraries (netfetcher / netrender / errand / genet-layout) with a per-op
   `debug` completion + `warn` fault, runtime-verified headed (example.com fetch then layout pulse,
   plus a bad-URL fault, all in the Apparatus pane under default RUST_LOG); committed in their own
   repos (`65721fd` / `6820eed95` / `4c82b5f` / `868abf3`). Made the Apparatus ring an `EnvFilter` so

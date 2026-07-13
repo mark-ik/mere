@@ -5,18 +5,18 @@
 host/realization rows (§1, §7, §9, §12) are pre-flip; read them through the
 2026-06-10 correction banner below.
 
-> **2026-06-10 post-flip correction.** The serval-as-host flip has executed
+> **2026-06-10 post-flip correction.** The genet-as-host flip has executed
 > (see the archived
-> [flip plan](../../archive_docs/2026-06-10_completed_plans/2026-06-01_serval_host_flip_plan.md));
+> [flip plan](../../archive_docs/2026-06-10_completed_plans/2026-06-01_genet_host_flip_plan.md));
 > the host rows below predate it. Where this doc says "Xilem app" /
 > "Masonry" / "the `GraphCanvas` Masonry widget", the running stack is:
-> **meerkat**, a serval-as-host shell whose chrome is authored as
-> `xilem_serval` views (a `xilem_core` backend diffing into serval's
-> ScriptedDom), laid out by serval (stylo + taffy), painted through netrender.
+> **meerkat**, a genet-as-host shell whose chrome is authored as
+> `xilem_serval` views (a `xilem_core` backend diffing into genet's
+> ScriptedDom), laid out by genet (stylo + taffy), painted through netrender.
 > Morphorm is gone from the workspace: between-tiles geometry is flex DOM
-> emitted by `platen-view` and laid out by serval. The orrery shipped as a
+> emitted by `platen-view` and laid out by genet. The orrery shipped as a
 > **host-side composition** (scene-paint underlay + physics-positioned DOM
-> under one camera transform), not a Masonry widget and not a serval custom
+> under one camera transform), not a Masonry widget and not a genet custom
 > element. **Verso's chartered realization role has no code counterpart
 > today**: verso-core survives as a thin ID/surface-types layer, platen
 > carries an unused verso-core dep, and the realization work landed in
@@ -54,7 +54,7 @@ Graph truth            kernel Graph, relations, provenance, session, lineage
       → Platen         compiles an arrangement into a presentation PLAN
           → projection { split tree | tab stack | lattice | corridor | spatial bench | graph canvas }
               → Verso  composable tile/surface realization + lifecycle
-                  → Inker   which engine backs a tile (Nematic | Serval | Scrying)
+                  → Inker   which engine backs a tile (Nematic | Genet | Scrying)
   → Host             Xilem app: realizes the plan as a view tree; window, input, GPU
 ```
 
@@ -141,7 +141,7 @@ constraints. Tiles are what *some* nodes realize into, via Verso.
 | **Arrangement** | `forme` | what a workbench *is*: members, groups, tiles-intents, focus paths, comparisons, portals | **graph-capable** |
 | **Projection** | `platen` | compile an arrangement → a presentation plan for a host mode | tree / cartography / … |
 | **Surface** | `verso` | composable tile/surface realization + lifecycle; the tile system Mere mounts into workbenches | — |
-| **Engine** | `inker` (+ `nematic`/`scrying`/Serval) | which engine backs a tile's content; route by pin/type/scheme/override | — |
+| **Engine** | `inker` (+ `nematic`/`scrying`/Genet) | which engine backs a tile's content; route by pin/type/scheme/override | — |
 | **Frame chrome** | `frame` (FrameTree) | OS-window pane splits, pane placement, pane kinds, persistence | **tree** (deliberately) |
 | **Platform** | `meerkat` (Host) | Xilem app: realize the plan as a view tree; window, input, frame loop, GPU *(pre-flip row; see the 2026-06-10 banner)* | — |
 
@@ -198,16 +198,16 @@ Xilem" (the re-scaffold doc) still holds — forme/platen are the model→plan l
 
 **Host-architecture note (2026-05-29; 2026-06-10: executed — see the banner).**
 The "Host (Xilem)" row above describes
-architecture 1 (Xilem authoring, Masonry within-tile content). Serval-as-host
-(architecture 3) is the evaluated destination: serval renders both between-tiles
+architecture 1 (Xilem authoring, Masonry within-tile content). Genet-as-host
+(architecture 3) is the evaluated destination: genet renders both between-tiles
 and within-tile through one engine, chrome authored via `xilem_serval` and painted
 through netrender. It changes the *realization substrate* at the bottom of the
-spine (the Masonry scene becomes serval DOM + netrender) while leaving the
+spine (the Masonry scene becomes genet DOM + netrender) while leaving the
 model→plan layers (forme, platen) and "chrome = idiomatic Xilem" (now an
-`xilem_core` backend beside Masonry) intact. platen loses Morphorm to serval's
+`xilem_core` backend beside Masonry) intact. platen loses Morphorm to genet's
 taffy; the orrery becomes a custom-paint element with physics-positioned DOM
 children. See the
-[serval-as-host evaluation](2026-05-29_serval_as_host_evaluation.md) for the
+[genet-as-host evaluation](2026-05-29_genet_as_host_evaluation.md) for the
 decision, pros/cons, and the worked orrery + platen consequences.
 
 ## 10. Costs we accept (and the guardrails)
@@ -237,7 +237,7 @@ Graph-capability costs what a tree gives for free:
 
 ## 12. Build order
 
-*(Pre-flip sequencing; largely executed in serval-as-host form — see the
+*(Pre-flip sequencing; largely executed in genet-as-host form — see the
 2026-06-10 banner. Step 5's verso surface contract never got a consumer.)*
 
 On the `meerkat` Xilem skeleton (FrameTree = split views already landed):

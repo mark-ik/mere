@@ -1,5 +1,5 @@
 //! P2.1b verification: the 8-turn driver runs the DOM-shaped guest end to end
-//! against the `document-host` library backed by a live serval `ScriptedDom`
+//! against the `document-host` library backed by a live genet `ScriptedDom`
 //! (seeded `<body><p>Intro</p><p>Second</p></body>`), asserting the DOM mutates
 //! and the conflict / unknown-node / declined paths fire.
 //!

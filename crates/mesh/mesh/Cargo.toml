@@ -18,15 +18,14 @@ p2panda-core = "0.6.1"
 identity = { workspace = true }
 serde = { version = "1", features = ["derive"] }
 thiserror = "1"
+blake3 = "1.5"
+proofs.workspace = true
 # The three sync traits LogSync reconciles against (`LogStore` + `TopicStore`,
 # plus `OperationStore`). Default features off: the mesh brings muniment through
 # the mooting adapter instead of p2panda-store's bundled SQLite backend.
 p2panda-store = { version = "0.6.1", default-features = false }
-# The muniment-backed store adapter (`MunimentStore`) implementing those traits,
-# plus muniment's backends: an in-memory floor for tests, redb for a durable
-# device. The store-substrate convergence — mesh, murm and tessera ride one
-# store family now.
-mooting = { workspace = true }
+# Shared muniment-backed store and LogSync drain.
+murm-replication = { workspace = true }
 muniment = { git = "https://github.com/mark-ik/muniment.git", branch = "main", features = ["redb"] }
 # The sync lane (`sync::SyncedMesh`): LogSync over the store. `p2panda-net`
 # is the protocol — its `Endpoint`/`Gossip` still come injected from the host
@@ -36,18 +35,12 @@ muniment = { git = "https://github.com/mark-ik/muniment.git", branch = "main", f
 p2panda-net = "0.6.1"
 p2panda-sync = "0.6.1"
 tokio = { version = "1", features = ["rt", "time"] }
-# `transport::SyncedSpace` is the shared LogSync drain (the R1 dedup: one drain
-# loop + sync-status + resync, murm and mesh both consume it). This makes
-# `transport` a normal dep, reversing the earlier "lib decoupled from transport"
-# stance — deliberate under the sibling posture, where mesh is host-composed glue
-# consuming murm's p2panda-net home. The lib is still endpoint-decoupled (takes
-# raw `Endpoint`/`Gossip`); it just no longer re-rolls the drain.
-transport = { workspace = true }
 
 [dev-dependencies]
-# `transport` (now a normal dep, above) builds the real p2panda-net peers for
+# `transport` builds the real p2panda-net peers for
 # the two-peer convergence test and the `mesh-peer` example bin. `macros` +
 # `rt-multi-thread` run the async tests; `io-std`/`io-util` read pasted peer
 # tickets in the example; tempfile backs the file-store reopen test.
+transport = { workspace = true }
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time", "io-std", "io-util"] }
 tempfile = "3"

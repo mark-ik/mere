@@ -19,7 +19,7 @@ use document_canvas::{
 };
 // Used only by the `#[cfg(test)]` link-lowering helper + tests; the live path queries
 // `DocumentRenderPacket::link_at` directly. (Phase 2 query API.)
-use crate::serval_render::scene_from_layout_dom;
+use crate::genet_render::scene_from_layout_dom;
 #[cfg(test)]
 use document_canvas::{InteractionKind, InteractionRegion};
 use inker::{
@@ -27,10 +27,10 @@ use inker::{
     EngineRoutePolicy, EngineRouteRequest, InlineSpan, WorkspaceRouteId,
 };
 use netrender::Scene;
-use serval_layout::{
+use genet_layout::{
     ImageLoader, ScrollOffsets, inline_stylesheets, linked_stylesheets_with_loader,
 };
-use serval_static_dom::{StaticDocument, StaticNodeId};
+use genet_static_dom::{StaticDocument, StaticNodeId};
 
 use crate::fetch::{ContentState, Fetched};
 
@@ -92,7 +92,7 @@ pub fn content_document(url: &str, state: Option<&ContentState>) -> EngineDocume
 fn welcome_blocks() -> Vec<Block> {
     vec![
         heading(1, "Mere"),
-        paragraph("A graph-shaped browser, hosted on serval."),
+        paragraph("A graph-shaped browser, hosted on genet."),
         paragraph(
             "Type a URL or a search above and press Enter. Each place you visit \
              becomes a node in the graph behind this card; Back and Forward move \
@@ -104,7 +104,7 @@ fn welcome_blocks() -> Vec<Block> {
 /// Fetched content as a plain document (S2.2b-i): the address, its content-type,
 /// then the decoded body split into paragraphs on blank lines. Bounded so a large
 /// page can't make an unbounded card. Content-type-aware engines (markdown, HTML
-/// via serval, …) replace this plain split in S2.2b-ii.
+/// via genet, …) replace this plain split in S2.2b-ii.
 fn ready_blocks(url: &str, fetched: &Fetched) -> Vec<Block> {
     let mut blocks = vec![heading(1, url)];
     if let Some(ct) = &fetched.content_type {
@@ -230,7 +230,7 @@ fn card_sheet(colors: ColorVocabulary) -> DocumentStyleSheet {
 /// A node's rendered content, forked by lane. The document lane (gemtext, feeds,
 /// synthesized cards: most smolweb content) ships the **retained packet** the host
 /// windows and lowers a band of at a time, so a tall page is not baked into one
-/// capped texture. The HTML/serval lane still ships one pre-lowered scene (a
+/// capped texture. The HTML/genet lane still ships one pre-lowered scene (a
 /// different pipeline; its windowing is the Phase 5 lane-parity work).
 pub enum RenderedContent {
     Document {
@@ -249,8 +249,8 @@ pub enum RenderedContent {
 }
 
 /// Render the focused node's content, routing Ready content through the engine
-/// policy: an id of [`serval.web`](inker::routing::ENGINE_SERVAL_WEB) parses +
-/// renders through serval ([`html_scene`], resolving subresources via `loader`) to a
+/// policy: an id of [`genet.web`](inker::routing::ENGINE_GENET_WEB) parses +
+/// renders through genet ([`html_scene`], resolving subresources via `loader`) to a
 /// scene; a registered nematic engine and everything else (welcome / loading /
 /// failed / unrouted) lay out through the document lane to a retained packet.
 pub fn render_content(
@@ -261,20 +261,20 @@ pub fn render_content(
     loader: &impl ImageLoader,
     w: u32,
     h: u32,
-    // The HTML/serval lane emits only this vertical band (`band_y`..`band_y + band_h`)
+    // The HTML/genet lane emits only this vertical band (`band_y`..`band_y + band_h`)
     // so a tall dense page does not overflow the GPU; the document lane ignores it (the
     // host windows its retained packet). (HTML scroll.)
     band_y: u32,
     band_h: u32,
     // The composed document style sheet (user typography + theme-derived colours);
-    // the document lane lays out with it, the HTML/serval lane ignores it (it themes
+    // the document lane lays out with it, the HTML/genet lane ignores it (it themes
     // through HTML_SHEET + the page's CSS). (Document theming P3; typography D1.)
     sheet: &DocumentStyleSheet,
 ) -> RenderedContent {
     if let Some(ContentState::Ready(fetched)) = state {
         let engine_id =
             route_document_engine(url, fetched.content_type.as_deref(), registry, policy);
-        if engine_id == inker::routing::ENGINE_SERVAL_WEB {
+        if engine_id == inker::routing::ENGINE_GENET_WEB {
             let (scene, content_height, links, masks) =
                 html_scene(&fetched.body, loader, w, h, band_y, band_h);
             return RenderedContent::Html {
@@ -291,10 +291,10 @@ pub fn render_content(
     layout_document_content(&content_document(url, state), w, h, sheet)
 }
 
-/// Whether `(url, state)` routes to the serval HTML lane, so the content actor retains a
-/// [`serval_layout::ContentLayout`] for it (the document / synthesized lanes keep their own
+/// Whether `(url, state)` routes to the genet HTML lane, so the content actor retains a
+/// [`genet_layout::ContentLayout`] for it (the document / synthesized lanes keep their own
 /// retained packet / one-shot path, so they do not). (Slice 1.)
-pub fn is_serval_html_lane(
+pub fn is_genet_html_lane(
     url: &str,
     state: Option<&ContentState>,
     registry: &EngineRegistry,
@@ -304,7 +304,7 @@ pub fn is_serval_html_lane(
         state,
         Some(ContentState::Ready(fetched))
             if route_document_engine(url, fetched.content_type.as_deref(), registry, policy)
-                == inker::routing::ENGINE_SERVAL_WEB
+                == inker::routing::ENGINE_GENET_WEB
     )
 }
 
@@ -420,7 +420,7 @@ pub fn render_content_scene(
 
 /// Route Ready content to an engine id through the policy: scheme + content-type
 /// over the active rules, filtered to engines this lane can serve (registered
-/// document engines plus the serval html lane). Surface-engine pins are resolved
+/// document engines plus the genet html lane). Surface-engine pins are resolved
 /// at nav time on the UI thread and never reach the actor, so this pass carries no
 /// pin. (engine-picker Phase 0b — replaces the bespoke `engine_id_for` match.)
 fn route_document_engine(
@@ -439,14 +439,14 @@ fn route_document_engine(
     };
     policy
         .route_filtered(&request, |id| {
-            registry.contains(id) || id == inker::routing::ENGINE_SERVAL_WEB
+            registry.contains(id) || id == inker::routing::ENGINE_GENET_WEB
         })
         .engine_id
 }
 
 /// Dispatch Ready content to the document engine `id` (a registered nematic
 /// engine), producing an [`EngineDocument`]. `None` when `id` is not a registered
-/// document engine (the serval / internal / external / ingest ids), so the caller
+/// document engine (the genet / internal / external / ingest ids), so the caller
 /// falls back to the synthesized document.
 fn dispatch_document(
     url: &str,
@@ -466,7 +466,7 @@ fn dispatch_document(
 }
 
 /// The [`EngineDocument`] a document-family node renders to: route the Ready content
-/// to its engine and dispatch. `None` for non-Ready / non-document content. The serval
+/// to its engine and dispatch. `None` for non-Ready / non-document content. The genet
 /// note-tile lane uses this to get the blocks for `note_view`. (Djot reframe slice B.)
 pub(crate) fn engine_document_for(
     url: &str,
@@ -482,7 +482,7 @@ pub(crate) fn engine_document_for(
 }
 
 /// Parse `body` as a full HTML document and render it through the shared content
-/// core ([`crate::serval_render::scene_from_layout_dom`]) — the same cascade → image-decode
+/// core ([`crate::genet_render::scene_from_layout_dom`]) — the same cascade → image-decode
 /// → layout → emit pipeline the static viewer uses. A full-document parse (not a
 /// body-only fragment) keeps `<head>`, so head `<style>` / `<link>` are seen.
 ///
@@ -512,7 +512,7 @@ fn html_scene(
     sheets.extend(linked.iter().map(String::as_str));
     let scroll = ScrollOffsets::default();
     // Lay out at the viewport (so `@media` cascades right) and emit ONE band
-    // (`band_y`..`band_y + band_h`) of the page: a flat serval scene the host cannot
+    // (`band_y`..`band_y + band_h`) of the page: a flat genet scene the host cannot
     // window, so emitting the whole tall dense page would overflow the GPU. The host
     // requests bands as the scroll moves. `content_height` is the full page height (the
     // scroll range); the band carries only its slice of ops. `masks` are the blurred
@@ -530,11 +530,11 @@ fn html_scene(
 }
 
 /// Parse + cascade + lay out a fetched HTML page ONCE into a retained
-/// [`serval_layout::ContentLayout`], so the content actor re-emits scroll bands / find
+/// [`genet_layout::ContentLayout`], so the content actor re-emits scroll bands / find
 /// rects off it without re-cascading per band / keystroke (slice 1). Mirrors
 /// [`html_scene`]'s parse + sheet assembly; the emit halves are
-/// [`crate::serval_render::scene_from_content_band`] and
-/// [`serval_layout::ContentLayout::find`]. Returns the parsed doc (the layout's planes are
+/// [`crate::genet_render::scene_from_content_band`] and
+/// [`genet_layout::ContentLayout::find`]. Returns the parsed doc (the layout's planes are
 /// keyed by its node ids and the band / find emit walk it) alongside the layout. Subresource
 /// wants are recorded through `loader`, as in `html_scene`.
 pub fn build_html_layout(
@@ -542,14 +542,14 @@ pub fn build_html_layout(
     loader: &impl ImageLoader,
     w: u32,
     h: u32,
-) -> (StaticDocument, serval_layout::ContentLayout<StaticNodeId>) {
+) -> (StaticDocument, genet_layout::ContentLayout<StaticNodeId>) {
     let doc = StaticDocument::parse(body);
     let inline = inline_stylesheets(&doc);
     let linked = linked_stylesheets_with_loader(&doc, loader);
     let mut sheets: Vec<&str> = HTML_SHEET.to_vec();
     sheets.extend(inline.iter().map(String::as_str));
     sheets.extend(linked.iter().map(String::as_str));
-    let layout = serval_layout::lay_out_content(&doc, &sheets, loader, w, h);
+    let layout = genet_layout::lay_out_content(&doc, &sheets, loader, w, h);
     (doc, layout)
 }
 

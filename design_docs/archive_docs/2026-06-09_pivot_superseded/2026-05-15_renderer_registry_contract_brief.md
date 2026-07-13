@@ -2,12 +2,12 @@
 
 **Date**: 2026-05-15
 **Status**: Research brief (defines a contract; does not yet propose adoption)
-**Scope**: Defines `NodeRenderer` — the trait + registry shape that lets serval / scrying / wry / platen / vello-direct / parley / cartography coexist as **co-resident renderers of node content kinds**, dispatched per `NodeContent` variant under one host-agnostic contract. Independent of whether the [spatial chrome IR](2026-05-15_spatial_chrome_ir_brief.md) substrate-as-host ever ships — useful even under the current gpui host because it normalises how renderers are described in every adjacent doc and gives the inker `Engine` / `SurfaceEngine` / `SurfaceProducer` triad a single roof.
+**Scope**: Defines `NodeRenderer` — the trait + registry shape that lets genet / scrying / wry / platen / vello-direct / parley / cartography coexist as **co-resident renderers of node content kinds**, dispatched per `NodeContent` variant under one host-agnostic contract. Independent of whether the [spatial chrome IR](2026-05-15_spatial_chrome_ir_brief.md) substrate-as-host ever ships — useful even under the current gpui host because it normalises how renderers are described in every adjacent doc and gives the inker `Engine` / `SurfaceEngine` / `SurfaceProducer` triad a single roof.
 
 **Related**:
 
 - [`2026-05-15_spatial_chrome_ir_brief.md`](2026-05-15_spatial_chrome_ir_brief.md) — parent framing. §4 sketches the registry shape; this brief makes it concrete.
-- [`2026-05-11_engine_peers_and_scrying_library_brief.md`](2026-05-11_engine_peers_and_scrying_library_brief.md) — engines as content-production functions; pins serval / scrying / wry composition models. The `NodeRenderer` trait defined here is the abstraction those three implement.
+- [`2026-05-11_engine_peers_and_scrying_library_brief.md`](2026-05-11_engine_peers_and_scrying_library_brief.md) — engines as content-production functions; pins genet / scrying / wry composition models. The `NodeRenderer` trait defined here is the abstraction those three implement.
 - [`2026-05-11_scrying_web_tile_plan.md`](../implementation_strategy/2026-05-11_scrying_web_tile_plan.md) — currently introduces `SurfaceEngine` + `SurfaceProducer` traits in inker, parallel to the existing `Engine` trait. This brief reframes both as concrete *composition modes* under one `NodeRenderer` umbrella, without churning the inker code (§9).
 - [`2026-05-09_netrender_for_engine_documents_brief.md`](2026-05-09_netrender_for_engine_documents_brief.md) — vello vs netrender stacking; informs the in-scene vs embedded-frame composition split.
 - [`2026-05-11_browser_multiplexer_framing.md`](2026-05-11_browser_multiplexer_framing.md) — §5.4 (engine profile binding), §7 (capability gates), §8 (diagnostic events). The renderer registry composes with all three; this brief specifies the seams.
@@ -34,11 +34,11 @@ This brief decides the contract shape. It does not decide adoption beyond §11.
 
 The case for the registry doesn't depend on the substrate. Today, under gpui:
 
-- The host has bespoke per-renderer wiring. mere-host renders document tiles via gpui-shaped layout; scrying tiles via `SurfaceProducer`; serval (in the planned netrender path) via netrender's wgpu integration; future wry tiles via overlay composition. Each path is described differently in each plan, with no shared vocabulary.
+- The host has bespoke per-renderer wiring. mere-host renders document tiles via gpui-shaped layout; scrying tiles via `SurfaceProducer`; genet (in the planned netrender path) via netrender's wgpu integration; future wry tiles via overlay composition. Each path is described differently in each plan, with no shared vocabulary.
 - The [scrying-web plan](../implementation_strategy/2026-05-11_scrying_web_tile_plan.md) already had to introduce a parallel trait (`SurfaceEngine`/`SurfaceProducer`) because the existing `Engine` trait couldn't express long-lived producers + frame streams + textures. Without a registry framing, every new composition shape will spawn a similar parallel trait.
 - Capability gates ([multiplexer framing §7](2026-05-11_browser_multiplexer_framing.md)) and diagnostics ([§8](2026-05-11_browser_multiplexer_framing.md)) need a uniform place to attach. Today they attach per-renderer because there's no single seam.
 
-The registry pays for itself by giving inker, mere-host, and the platen/serval/scrying/wry stack one vocabulary. Under the current gpui host the `register` / `dispatch` / `compose` lifecycle still applies — the only thing that changes under substrate-as-host is *what the host does with the renderer's output* (paint into the substrate's vello scene vs hand to gpui).
+The registry pays for itself by giving inker, mere-host, and the platen/genet/scrying/wry stack one vocabulary. Under the current gpui host the `register` / `dispatch` / `compose` lifecycle still applies — the only thing that changes under substrate-as-host is *what the host does with the renderer's output* (paint into the substrate's vello scene vs hand to gpui).
 
 ## 2. Three composition modes
 
@@ -60,7 +60,7 @@ The renderer produces an independent wgpu texture / surface (or stream of textur
 - **Composition cost**: medium (texture handoff, fence sync, possibly cross-queue synchronisation).
 - **Frame coupling**: independent frame rate (renderer can be 60fps while host is 30fps or vice versa; host samples the latest texture).
 - **Cross-renderer effects**: limited — the host can blend/clip the output rectangle as a unit, but in-scene effects don't reach inside the texture.
-- **Examples**: serval (rendering pages into its own netrender Scene → wgpu texture), scrying (system WebView frame stream → wgpu texture), future video decoders, future 3D scene renderers.
+- **Examples**: genet (rendering pages into its own netrender Scene → wgpu texture), scrying (system WebView frame stream → wgpu texture), future video decoders, future 3D scene renderers.
 
 ### 2.3 Overlay
 
@@ -184,7 +184,7 @@ When a `SceneNode` first needs rendering, the registry resolves a `RendererId` (
 
 ### 4.4 Hot-swap
 
-Per [engine-peers brief](2026-05-11_engine_peers_and_scrying_library_brief.md), the user (or auto-fallback) can switch a tile from `serval.web` to `scrying.web` to `wry.web`. This is the registry's `select` re-running for the same node content with a different `engine_id` constraint.
+Per [engine-peers brief](2026-05-11_engine_peers_and_scrying_library_brief.md), the user (or auto-fallback) can switch a tile from `genet.web` to `scrying.web` to `wry.web`. This is the registry's `select` re-running for the same node content with a different `engine_id` constraint.
 
 The trait surface supports hot-swap natively: the old renderer's `release` is called; the new renderer's `ensure_*` runs; cookies/session state continuity is the concern of `EngineProfileBinding` (§6), not the renderer registry — the new renderer reads the same UDF the old one wrote to.
 
@@ -194,12 +194,12 @@ The trait surface supports hot-swap natively: the old renderer's `release` is ca
 
 ## 5. Resolution rules — multi-renderer per content kind
 
-The interesting case: `NodeContent::WebPage(profile, url)` has *three* registered renderers (serval, scrying, wry). The selector picks one. Resolution chain (first match wins):
+The interesting case: `NodeContent::WebPage(profile, url)` has *three* registered renderers (genet, scrying, wry). The selector picks one. Resolution chain (first match wins):
 
 1. **Per-node pin**. The `SceneNode` carries an optional `RendererId` override. Per [engine-peers brief](2026-05-11_engine_peers_and_scrying_library_brief.md), the user can pin a tile's engine — that pin lives on the node and dominates everything else.
 2. **Profile-binding constraint**. The `EngineProfileBinding` (§6) may declare an engine the profile is bound to (e.g., a UDF written by scrying isn't readable by wry, and vice versa). If the profile is bound, the binding constrains the candidate set to compatible renderers.
 3. **Host capability filter**. Renderers requiring host capabilities the host can't provide (e.g., wry on a host without OS WebView; embedded-frame requiring external-texture support that the gpui host doesn't yet provide on macOS) drop out of the candidate set. Filtered renderers emit a `engine.route_degraded` diagnostic ([§8](2026-05-11_browser_multiplexer_framing.md)) so the user knows why their preferred engine wasn't chosen.
-4. **Default policy**. Per [engine-peers brief](2026-05-11_engine_peers_and_scrying_library_brief.md), `serval.web` is the preferred web renderer. If serval succeeded, it's chosen. If serval reported failure, `scrying.web` is offered (the user accepts via a tile-engine switch). Auto-fallback rule is a follow-up.
+4. **Default policy**. Per [engine-peers brief](2026-05-11_engine_peers_and_scrying_library_brief.md), `genet.web` is the preferred web renderer. If genet succeeded, it's chosen. If genet reported failure, `scrying.web` is offered (the user accepts via a tile-engine switch). Auto-fallback rule is a follow-up.
 5. **Last resort**. If nothing matches, the registry returns `None` and the host paints a "no renderer available for this content" placeholder with a diagnostic. This should be vanishingly rare — it indicates a registration bug or a missing default-coverage renderer.
 
 The selector is a trait (§3.3), so the resolution policy is **configurable per `feedback_configurability_over_opinionated_defaults`** rather than hardcoded. v0 ships a `DefaultSelector` implementing the chain above; later policies (per-persona engine preferences, per-graph engine policies, content-type-aware fallbacks) plug in without touching the registry's core.
@@ -245,7 +245,7 @@ Concrete registrations under v0 of the contract. *Status* column reflects 2026-0
 
 | Renderer            | Composition mode    | Handles content kinds                                | Profile binding scope        | Status                                                    |
 | ------------------- | ------------------- | ---------------------------------------------------- | ---------------------------- | --------------------------------------------------------- |
-| `serval.web`        | EmbeddedFrame       | `WebPage(*)`                                         | Persona / Session / Graph    | netrender mainline shipped 2026-05-04                     |
+| `genet.web`        | EmbeddedFrame       | `WebPage(*)`                                         | Persona / Session / Graph    | netrender mainline shipped 2026-05-04                     |
 | `scrying.web`       | EmbeddedFrame       | `WebPage(*)`                                         | Persona / Session / Graph    | per [scrying-web plan](../implementation_strategy/2026-05-11_scrying_web_tile_plan.md), Windows-first |
 | `wry.web`           | Overlay             | `WebPage(*)`                                         | Persona / Session            | per [engine-peers brief](2026-05-11_engine_peers_and_scrying_library_brief.md), composition-different from scrying |
 | `nematic.markdown`  | InScenePaint*       | `DocumentTile(EngineDocument{markdown})`             | None                         | shipped; renders via platen → netrender → vello           |
@@ -324,13 +324,13 @@ The renaming concern (per [feedback_consumer_pull_gates_check_first](C:/Users/ma
 
 ## 10. Open questions
 
-### 10.1 InScenePaint vs EmbeddedFrame for serval
+### 10.1 InScenePaint vs EmbeddedFrame for genet
 
-Serval today is described as embedded-frame (it produces its own netrender Scene → wgpu texture). But serval's *output* is a netrender Scene, which could in principle be merged into the host's vello scene directly (in-scene-paint mode) instead of rasterised to a texture and re-composited.
+Genet today is described as embedded-frame (it produces its own netrender Scene → wgpu texture). But genet's *output* is a netrender Scene, which could in principle be merged into the host's vello scene directly (in-scene-paint mode) instead of rasterised to a texture and re-composited.
 
-In-scene merge would eliminate a render-target round-trip but couples serval's frame rate to the host's paint cycle and forces single-threaded paint coordination. Embedded-frame keeps serval independently driven.
+In-scene merge would eliminate a render-target round-trip but couples genet's frame rate to the host's paint cycle and forces single-threaded paint coordination. Embedded-frame keeps genet independently driven.
 
-Probable answer: **embedded-frame** for serval as the default; in-scene-paint as an opt-in optimisation when serval and the host can be coordinated on a single GPU queue. Defer until measured. Tracked here so the registry shape doesn't preclude either choice.
+Probable answer: **embedded-frame** for genet as the default; in-scene-paint as an opt-in optimisation when genet and the host can be coordinated on a single GPU queue. Defer until measured. Tracked here so the registry shape doesn't preclude either choice.
 
 ### 10.2 Multi-mode renderer (same renderer, different modes per node)
 
@@ -343,7 +343,7 @@ Lean *yes* (registry supports it implicitly via `RendererId` per-mode) but flag 
 
 ### 10.3 Cross-renderer effects across modes
 
-In-scene effects (blur, clip, blend) can't reach inside an embedded-frame texture's pixels (you can blur the rect, not the page being painted). For some cases (workbench-style frosted-glass overlays over a serval page) this is a legitimate limitation. Worked-around possibilities: (a) pre-render the embedded frame to a texture the host can sample for blur; (b) push effect chains into the embedded-frame renderer (it does its own blur). Both are heavier than in-scene blur.
+In-scene effects (blur, clip, blend) can't reach inside an embedded-frame texture's pixels (you can blur the rect, not the page being painted). For some cases (workbench-style frosted-glass overlays over a genet page) this is a legitimate limitation. Worked-around possibilities: (a) pre-render the embedded frame to a texture the host can sample for blur; (b) push effect chains into the embedded-frame renderer (it does its own blur). Both are heavier than in-scene blur.
 
 Not a registry concern per se — flag for the chrome-effects design when it arises.
 

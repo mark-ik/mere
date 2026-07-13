@@ -1,8 +1,8 @@
 # Meerkat render-path refactor + GUI performance plan
 
 **Date:** 2026-06-24
-**Status:** plan. Spun out of the grand audit (`repos/serval/docs/2026-06-24_grand_audit.md` §3 + §4).
-**Thesis:** meerkat's hot path is a single ~1700-line `render()` method that violates Mere's 600-LOC ceiling, repaints unconditionally on every actor wake, and rebuilds per-frame scene/state/allocation work with no dirty-gating. The transform-motion relayout fear is retired (serval spike 2026-06-01, restyle stays RepaintOnly), so the budget is scene rebuilds, allocations, and redraw cadence, not layout. This plan splits the monolith, then closes the redraw/allocation hotspots, then lands per-surface scenes (which both fixes a correctness wart and unblocks multi-window-same-graph).
+**Status:** plan. Spun out of the grand audit (`repos/genet/docs/2026-06-24_grand_audit.md` §3 + §4).
+**Thesis:** meerkat's hot path is a single ~1700-line `render()` method that violates Mere's 600-LOC ceiling, repaints unconditionally on every actor wake, and rebuilds per-frame scene/state/allocation work with no dirty-gating. The transform-motion relayout fear is retired (genet spike 2026-06-01, restyle stays RepaintOnly), so the budget is scene rebuilds, allocations, and redraw cadence, not layout. This plan splits the monolith, then closes the redraw/allocation hotspots, then lands per-surface scenes (which both fixes a correctness wart and unblocks multi-window-same-graph).
 **Related:** `2026-06-19_tearout_composability_plan.md` (multi-window fan-out folds there), `2026-06-23_render_ladder_and_extraction_plan.md` (HTML-lane parity folds there), the scrying tile plan (`2026-06-10_scrying_tile_plan.md`, the per-tile cache-flush this plan batches).
 
 ## Phases (done-conditions, not dates)
@@ -43,7 +43,7 @@
 
 - **Multi-window fan-out (MW3 5/6):** sync/comms writes target the primary runner (`app_handler.rs:324-349`), secondaries lack an AccessKit bridge and present full chrome not the slim leaf (`app_handler.rs:826-848`; `window_view.rs:42-53` Leaf is a bare marker). Tracked in `2026-06-19_tearout_composability_plan.md`.
 - **HTML-lane link + find parity (render ladder Phase 5):** `link_at` walks an empty `Activation.links` Vec for the HTML lane (`constellation.rs:643-657`); the lane rasterizes one capped texture until parity (`render.rs:1286-1287`). Tracked in `2026-06-23_render_ladder_and_extraction_plan.md`.
-- **Scripted/extraction lane (pump-before-extract, keyboard dispatch, crawl frontier):** tracked in the document-script + extraction plans; keyboard dispatch is gated on a serval focus model ("not thin after all").
+- **Scripted/extraction lane (pump-before-extract, keyboard dispatch, crawl frontier):** tracked in the document-script + extraction plans; keyboard dispatch is gated on a genet focus model ("not thin after all").
 
 ## Sequencing
 
@@ -51,7 +51,7 @@ M1 first (unblocks all). M2 next (biggest idle win, smallest change). M3 + M5 ar
 
 ## Findings
 
-- 2026-06-24 (grand audit, verified): file LOC and line refs above are code-grounded. The transform-motion relayout fear is retired (serval spike 2026-06-01: transform/translate declares `recalculate_overflow`, not RELAYOUT; stays RepaintOnly), so perf budget is rebuilds/allocations/cadence, not layout. Per-pane profiling is half-built.
+- 2026-06-24 (grand audit, verified): file LOC and line refs above are code-grounded. The transform-motion relayout fear is retired (genet spike 2026-06-01: transform/translate declares `recalculate_overflow`, not RELAYOUT; stays RepaintOnly), so perf budget is rebuilds/allocations/cadence, not layout. Per-pane profiling is half-built.
 
 ## Progress
 

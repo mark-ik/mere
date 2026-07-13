@@ -26,7 +26,7 @@
 //!   With no async import yet, every call completes in a single poll.
 //! - **`Send + Sync` trait vs the per-mod store.** The trait demands `Send + Sync`;
 //!   we retain live `Store<ScriptHost>`s behind a `Mutex`. That compiles only
-//!   because `ScriptHost` is `Send` (serval's `ScriptedDom` is an id-keyed arena of
+//!   because `ScriptHost` is `Send` (genet's `ScriptedDom` is an id-keyed arena of
 //!   `HashMap`/`Vec`, its `QualName`s string-cache atoms — no `Rc`/`RefCell`). If
 //!   that ever regresses, the fallback is a dedicated worker thread; for now the
 //!   live store rides in the runtime directly.

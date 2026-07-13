@@ -14,7 +14,7 @@
 
 use std::collections::HashMap;
 
-use xilem_serval::{AnyView, Keyed, PointerClick, ServalCtx, ServalElement, clickable, el};
+use xilem_serval::{AnyView, Keyed, PointerClick, GenetCtx, GenetElement, clickable, el};
 
 // The `ListPane` bundle is a #[cfg(test)] harness now that the four list panes fold into
 // the shell document; its DOM / layout imports come along under the gate. (Phase 1, step 2.)
@@ -25,9 +25,9 @@ use layout_dom_api::LayoutDom;
 #[cfg(test)]
 use netrender::Scene;
 #[cfg(test)]
-use serval_layout::ScrollOffsets;
+use genet_layout::ScrollOffsets;
 #[cfg(test)]
-use serval_scripted_dom::NodeId;
+use genet_scripted_dom::NodeId;
 
 /// A segmented slider control: a horizontal strip of `count` clickable cells.
 /// Clicking cell `i` queues `"<key_prefix>:<i>:<count>"`, which the host maps to
@@ -63,7 +63,7 @@ pub struct ReorderSpec {
 /// accessibility tree announces it as a control with a checked state (the row is
 /// otherwise a styled `div` a screen reader reads as a neutral container). The
 /// `bool` is the checked / selected state. The render paths emit `role` +
-/// `aria-checked`, which serval-render's a11y bridge maps to the accesskit role +
+/// `aria-checked`, which genet-render's a11y bridge maps to the accesskit role +
 /// toggled state.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PaneAria {
@@ -275,7 +275,7 @@ pub struct ListPaneState {
 }
 
 /// The erased view a list pane produces.
-pub type ListView = Box<dyn AnyView<ListPaneState, (), ServalCtx, ServalElement>>;
+pub type ListView = Box<dyn AnyView<ListPaneState, (), GenetCtx, GenetElement>>;
 
 /// Logic alias for the runner (the `ListPane` test harness only). (Phase 1, step 2.)
 #[cfg(test)]

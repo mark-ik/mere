@@ -125,7 +125,7 @@ impl crate::WindowCtx<'_> {
         };
         let dom = self.view.dom.borrow();
         let fragments = session.fragments();
-        let origins = crate::serval_render::accumulate_origins(&dom, fragments);
+        let origins = crate::genet_render::accumulate_origins(&dom, fragments);
         let mut out = Vec::new();
         let mut stack = vec![dom.document()];
         while let Some(node) = stack.pop() {

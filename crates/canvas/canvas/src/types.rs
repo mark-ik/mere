@@ -23,7 +23,7 @@ impl EdgeCell {
     }
 }
 
-/// A pointer button the host reports to the canvas (winit / serval / … map onto it).
+/// A pointer button the host reports to the canvas (winit / genet / … map onto it).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PointerButton {
     Left,

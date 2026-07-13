@@ -18,8 +18,8 @@ kernel = { workspace = true }
 nematic = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-serval-extract = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
-serval-static-dom = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+genet-extract = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+genet-static-dom = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 url = "2.5"
 
 [dev-dependencies]

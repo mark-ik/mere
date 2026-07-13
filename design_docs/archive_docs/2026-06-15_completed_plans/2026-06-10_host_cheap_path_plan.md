@@ -10,16 +10,16 @@
 [host_wiring_grabbag_plan](2026-06-11_host_wiring_grabbag_plan.md). Ready to archive.
 **Scope**: Move meerkat's DOM panes off the stateless per-frame pipeline and onto
 the incremental machinery that already exists on both sides of the seam
-(serval's `IncrementalLayout` + the always-recorded `DomMutation` stream), and
-stop re-running cascade+layout for point queries. Cross-repo: serval supplies
+(genet's `IncrementalLayout` + the always-recorded `DomMutation` stream), and
+stop re-running cascade+layout for point queries. Cross-repo: genet supplies
 the session/query seam; meerkat adopts it.
 **Related**: the archived
-[serval-as-host flip plan](../../archive_docs/2026-06-10_completed_plans/2026-06-01_serval_host_flip_plan.md)
+[genet-as-host flip plan](../../archive_docs/2026-06-10_completed_plans/2026-06-01_genet_host_flip_plan.md)
 (this plan picks up the perf story the flip deferred);
-serval's [layout infrastructure scope](../../../../serval/docs/2026-06-07_serval_layout_infrastructure_scope.md)
+genet's [layout infrastructure scope](../../../../genet/docs/2026-06-07_genet_layout_infrastructure_scope.md)
 (§1 interaction state is what makes `:hover`/`:focus` styling work under
 sessions; §2's shared-font-collection note merges with C2 here);
-serval's [orrery transform perf spike](../../../../serval/docs/2026-06-01_orrery_transform_perf_spike.md)
+genet's [orrery transform perf spike](../../../../genet/docs/2026-06-01_orrery_transform_perf_spike.md)
 (the proof the session's `RepaintOnly` path holds at N=1000);
 the [window composition plan](2026-06-11_window_composition_plan.md)
 (its P2+ pane-heavy phases build on C6's composition-enabling subset and benefit from
@@ -47,21 +47,21 @@ The orrery rides the cheap path; everything else pays the expensive one.
 - **The mutation logs of the two session-persistent DOMs leak.** Every
   `set_attribute`/insert/remove pushes a `DomMutation` (with cloned old-value
   String); `drain_mutations` is the only sink
-  (`serval-scripted-dom/lib.rs:394-396`), and across mere only the orrery
+  (`genet-scripted-dom/lib.rs:394-396`), and across mere only the orrery
   drains (`orrery/src/frame.rs:101,145`). The chrome DOM gains at least one
   `AttributeChanged` per frame from the unconditional shellbar inline-style
   write (`render.rs:167-180`); the workbench DOM grows on state changes.
   Frame-local pane DOMs (roster/apparatus/utility) are dropped wholesale, so
   they are bounded but wasteful.
 - The eager-apply design of xilem-serval exists *for* this batching boundary
-  ("serval batches at the drain_mutations → relayout boundary",
+  ("genet batches at the drain_mutations → relayout boundary",
   `xilem-serval/src/lib.rs:14-23`); the product host never exercises it.
 - **The cost is plausible but unmeasured.** No chrome-update profile exists.
   C0 records a baseline so the win (or its absence) is a number, not a guess.
 
 ## What already exists (do not rebuild)
 
-- `IncrementalLayout` (`serval-layout/incremental.rs`) retains StylePlane +
+- `IncrementalLayout` (`genet-layout/incremental.rs`) retains StylePlane +
   persistent Stylist + FragmentPlane + BoxTree + TextMeasureCtx;
   attribute-only batches take `RepaintOnly` (layout skipped, retained box tree
   feeds `emit_paint_list`); proven in the orrery loop over 400 sustained
@@ -78,7 +78,7 @@ The orrery rides the cheap path; everything else pays the expensive one.
    restyles against old sheets (`incremental.rs:74-80,151-159`). Theme
    switching (`frame_ops.rs:1291-1295`) must recreate the session. Acceptable:
    themes change rarely; the orrery already recreates on viewport resize.
-   Stylesheet hot-reload stays a serval follow-up; user-CSS editing is its
+   Stylesheet hot-reload stays a genet follow-up; user-CSS editing is its
    first real consumer.
 2. **Structural splices invalidate paint**: a `Spliced` apply sets
    `paint_side_valid=false`, after which `emit_paint_list` is unusable
@@ -126,9 +126,9 @@ utility panes) is the documented refinement, but the headline already justifies 
 C1/C2 under it. Instrumentation lives behind `RUST_LOG=meerkat::profile=debug`
 (`render.rs`), so re-measuring the delta after C3 is one run.
 
-### C1 — Laid-out-document query seam (serval)
+### C1 — Laid-out-document query seam (genet)
 
-pelt-live (or serval-layout) exposes a query object over retained layout
+pelt-live (or genet-layout) exposes a query object over retained layout
 artifacts: `hit_test`, `caret_screen_rect`/`caret_byte_at`, `rect_of`/
 fragment enumeration, and the a11y tree, as methods over
 (styles, fragments, built box tree, text ctx) computed once, instead of each
@@ -137,7 +137,7 @@ query re-running cascade+layout (`pelt-live/render.rs:290-348`).
 can return the same object. **Done when** pelt-live's own bin serves render +
 all queries from one cascade+layout per dirty frame.
 
-**C1 seam DONE (2026-06-11, serval `7d87a3b668b`).** `LaidOutDocument`
+**C1 seam DONE (2026-06-11, genet `7d87a3b668b`).** `LaidOutDocument`
 (`pelt-live/render.rs`) computes cascade+layout once and serves `hit_test`,
 `fragments`/`rect_of`, `caret_screen_rect`, `soft_wrap_caret_byte`,
 `caret_byte_at`, and `accesskit_tree` as methods over the retained (styles,
@@ -148,7 +148,7 @@ the full done-condition:** the bin (`main.rs`/`input.rs`) builds *one*
 functions still compute one layout each, so a multi-query frame still multiplies
 until the bin adopts the object).
 
-### C2 — One font system per pass (serval)
+### C2 — One font system per pass (genet)
 
 Layout entry points accept a persistent font context (host-held or
 session-owned) instead of `TextMeasureCtx::new()` per pass
@@ -158,7 +158,7 @@ meerkat's `text.rs` already holds its contexts for the host's life; this
 brings layout to the same discipline. **Done when** a steady-state frame
 performs no font discovery.
 
-**C2 DONE (2026-06-11, serval `2dc05c84087`).** `TextMeasureCtx::reset()` clears
+**C2 DONE (2026-06-11, genet `2dc05c84087`).** `TextMeasureCtx::reset()` clears
 the per-pass parley-layout caches (stale Taffy keys) while keeping the persistent
 `font_ctx`/`layout_ctx`; `layout_via_box_tree` takes a caller-held
 `&mut TextMeasureCtx`. `IncrementalLayout` now builds its context once and reuses
@@ -190,7 +190,7 @@ paint side), the session is **rebuilt** whenever the drained batch is structural
 stateless frame, but only on those frames — so `apply` only ever sees
 attribute-only batches and the session is never left un-emittable. Resize and
 theme self-heal through a dims/sheet compare; no caller invalidates it. Parity is
-a runtime fixture (`session_render_matches_stateless_render`, serval pelt-live):
+a runtime fixture (`session_render_matches_stateless_render`, genet pelt-live):
 `scene_from_session` is **op-for-op identical** to `scene_from_scripted_dom`
 across plain / caret / selection states. The session overlay sources caret /
 selection / `::selection` color from new `IncrementalLayout` query methods (the C1
@@ -231,7 +231,7 @@ Workbench (equality-guarded writes already skip most frames), roster
 **Done when** no per-frame `scene_from_scripted_dom` callers remain in
 meerkat's render path.
 
-### C6 — Host wiring parity (mere + serval; the audit's adjacent gaps)
+### C6 — Host wiring parity (mere + genet; the audit's adjacent gaps)
 
 **SPUN OUT (2026-06-11) → [host_wiring_grabbag_plan](2026-06-11_host_wiring_grabbag_plan.md).**
 With C0–C5 + C4c done, C6 is all that remained here, so it grew into its own plan
@@ -239,7 +239,7 @@ With C0–C5 + C4c done, C6 is all that remained here, so it grew into its own p
 below is the snapshot it was scoped from; the grab-bag plan is now the checklist
 of record. This plan (the perf chain) is **ready to archive**.
 
-This is the **grab-bag of unused serval/xilem-serval host capability** — wired and
+This is the **grab-bag of unused genet/xilem-serval host capability** — wired and
 tested one layer down, with zero or stub meerkat callers. Each lands separately; spin
 out into its own plan if it grows.
 
@@ -259,7 +259,7 @@ anytime): **IME**, **environment threading**, **keyboard-model escape hatches**.
 **a11y `accesskit_tree` swap** (in C4) is also host-completeness. The full grab-bag is
 the eleven items across C1–C6; this plan (C1–C6) is the checklist of record.
 
-*Adjacent but a different crate (not serval/xilem, so tracked in the scrying plan, not
+*Adjacent but a different crate (not genet/xilem, so tracked in the scrying plan, not
 here):* scrying X2's leftover host wiring — omnibar `load_url`, back/forward + `can_go_*`,
 `poll_navigation_event` → omnibar/lineage, `poll_cursor_shape` → winit cursor, Tab focus.
 
@@ -267,16 +267,16 @@ here):* scrying X2's leftover host wiring — omnibar `load_url`, back/forward +
   `winit::Ime` arm, no `set_ime_allowed`, no `set_ime_cursor_area`, so the
   omnibar cannot take CJK/composition input. Done when preedit renders in the
   omnibar via the C1 caret seam.
-- **`on_wheel` event view** (serval, the one open Stage 3 item): registry +
+- **`on_wheel` event view** (genet, the one open Stage 3 item): registry +
   dispatch parallel to `on_pointer`, so meerkat's hand-routed wheel
   (`app_handler.rs:370-414`) and host-owned ScrollOffsets become view-owned.
 - **Pointer cancellation**: give `PointerEvent` a Propagation cell and have
   `route_pointer` record `default_prevented` (today it leaves the stale
   click/key value). Relevant the moment drags route through `on_pointer`.
 - **`memoize` the stable chrome subtrees** (re-exported and tested over
-  ServalCtx, unused in meerkat) to cut the O(view tree) rebuild per event.
-- **Transform-aware hit-testing** (serval): `walk_for_hit`
-  (serval_lane.rs:310-374) composes box locations only; paint already computes
+  GenetCtx, unused in meerkat) to cut the O(view tree) rebuild per event.
+- **Transform-aware hit-testing** (genet): `walk_for_hit`
+  (genet_lane.rs:310-374) composes box locations only; paint already computes
   the needed matrices in the same crate (`compute_transform_matrix` +
   `conjugate_at`). Gates any interactive DOM content under the orrery camera,
   and (with the pointer cell above) the *interactive* external-texture element.
@@ -299,7 +299,7 @@ here):* scrying X2's leftover host wiring — omnibar `load_url`, back/forward +
   three independent review lenses converged on the same diagnosis.
 - The flip plan's standing constraint "keep every new host-coupling
   retargetable" survives this plan untouched: sessions and the query seam are
-  serval-side seams; meerkat's adoption is confined to render.rs / input.rs /
+  genet-side seams; meerkat's adoption is confined to render.rs / input.rs /
   frame_ops.rs call sites.
 
 ## Progress
@@ -324,23 +324,23 @@ here):* scrying X2's leftover host wiring — omnibar `load_url`, back/forward +
   **chrome cascade+layout+paint pipeline is 53% of every rendered frame** (median 29 ms
   of a 56 ms frame; table in C0). The ratio is build-independent, so **C3 (sessionize the
   chrome pane) roughly halves the frame** — the win is a number, not a guess. Next:
-  C1 (the laid-out-document query seam in serval) + C2 (persistent FontContext) are the
-  serval-side infra C3 sits on; or pick up the composition-enabling C6 subset in
+  C1 (the laid-out-document query seam in genet) + C2 (persistent FontContext) are the
+  genet-side infra C3 sits on; or pick up the composition-enabling C6 subset in
   parallel (independent of the perf chain). Re-measuring after C3 is one run.
-- **2026-06-11** — **C1 + C2 landed (serval-side).** C2 (`2dc05c84087`):
+- **2026-06-11** — **C1 + C2 landed (genet-side).** C2 (`2dc05c84087`):
   `TextMeasureCtx::reset()` + `layout_via_box_tree` takes a persistent
   `&mut TextMeasureCtx`; `IncrementalLayout` reuses one context across relayouts
   instead of recreating it, so the session path runs no steady-state font
   discovery. C1 (`7d87a3b668b`): `LaidOutDocument` serves every point query
   (hit-test, fragments, caret ×3, a11y) off one cascade+layout; the free query
-  functions delegate to it. Both are tested in serval-layout / pelt-live and
+  functions delegate to it. Both are tested in genet-layout / pelt-live and
   build clean. **Now C3 (sessionize the chrome pane in meerkat) has both pieces
   it sits on**; the remaining C1 step is the bin building one `LaidOutDocument`
   per dirty frame (rolls into C3/C4's render.rs+input.rs adoption).
 - **2026-06-11** — **C3 done: chrome on a session, frame down ~40%.** meerkat's
   chrome renders through a per-window `IncrementalLayout` (`ChromeSession`), rebuilt
   only on a structural / resize / theme frame and riding the `RepaintOnly` path
-  otherwise; serval gained session-side `caret_rect` / `selection_rects` /
+  otherwise; genet gained session-side `caret_rect` / `selection_rects` /
   `selection_style` query methods + `scene_from_session` (the C1 seam applied to the
   session). Parity is op-for-op (`session_render_matches_stateless_render`). Re-measured
   over 560 frames (same debug build as C0): chrome cascade+layout+paint **29 → 6.8 ms**
@@ -361,14 +361,14 @@ here):* scrying X2's leftover host wiring — omnibar `load_url`, back/forward +
   `IncrementalLayout` per frame (its fragments feed the scroll-clamp / hit-rects, the
   scene emits from the same layout); utility was already single-layout. **No DOM pane
   lays out more than once per frame now.** Alongside, the **pelt-live glue extraction**
-  ([own plan](2026-06-11_serval_render_glue_extraction_plan.md)): meerkat owns its
-  `ScriptedDom → Scene` glue (`serval_render`), so C5's emit-once path is a
-  meerkat-local `scene_from_session` over a fresh session (no serval coordination), and
+  ([own plan](2026-06-11_genet_render_glue_extraction_plan.md)): meerkat owns its
+  `ScriptedDom → Scene` glue (`genet_render`), so C5's emit-once path is a
+  meerkat-local `scene_from_session` over a fresh session (no genet coordination), and
   `pelt-live` is dropped (~30 transitive crates pruned). All green (110 meerkat tests).
   **Deferred:** C4's a11y half (the chrome a11y subtree from the rendered DOM, a
   UxTree → accesskit swap, correctness-sensitive) and the C6 grab-bag.
 - **2026-06-11** — **C4c done (a11y half): chrome a11y derives from the rendered DOM.**
-  A `serval_a11y` module walks the chrome `ScriptedDom` and the chrome session's
+  A `genet_a11y` module walks the chrome `ScriptedDom` and the chrome session's
   retained fragments into a `UxTree` (roles by tag, names folded from text, bounds
   from the session's layout, ids salted out of the path-hash space), replacing the
   single hand-built "Chrome" placeholder node; the bridge stitches it under the host
@@ -391,7 +391,7 @@ here):* scrying X2's leftover host wiring — omnibar `load_url`, back/forward +
   The earlier C3 numbers were taken before the orrery animated continuously, so
   re-ran the profile over 582 frames of a representative interaction (same debug
   build). chrome cascade+layout+paint **7.2 ms median / 8.9 ms p95** (was 6.8 ms
-  at C3 — the +0.4 ms is the serval-layout F4 box-tree style refresh now on every
+  at C3 — the +0.4 ms is the genet-layout F4 box-tree style refresh now on every
   `RepaintOnly` apply, negligible), whole frame **34.8 ms median** (≈ the C3 33 ms),
   chrome **~21%** of the frame. `total_us` includes `frame.present()` and quantizes
   near 16.7 ms multiples (vsync-paced), so the clean CPU win lives in `chrome_us`.

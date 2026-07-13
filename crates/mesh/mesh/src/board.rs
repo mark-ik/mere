@@ -21,15 +21,17 @@
 use std::collections::BTreeMap;
 
 use p2panda_core::Operation;
+use serde::{Deserialize, Serialize};
 
+use crate::retention::JobBoardSnapshot;
 use crate::wire::{JobKind, MeshEvent, MeshExt, from_operation, verify};
 
 /// A job's identity: the hash of its `JobPosted` operation.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct JobId(pub [u8; 32]);
 
 /// Where a job is in its M1 lifecycle.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum JobState {
     /// Posted, no claims yet.
     Posted,
@@ -40,11 +42,12 @@ pub enum JobState {
 }
 
 /// One job on the board.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Job {
     pub id: JobId,
     pub kind: JobKind,
-    pub payload: Vec<u8>,
+    /// `None` after an accepted checkpoint erases a terminal job's input.
+    pub payload: Option<Vec<u8>>,
     /// The poster's author (verifying) key bytes.
     pub posted_by: [u8; 32],
     pub state: JobState,
@@ -65,10 +68,18 @@ impl JobBoard {
     where
         I: IntoIterator<Item = &'a Operation<MeshExt>>,
     {
+        Self::fold_from_snapshot(mesh_id, &JobBoardSnapshot::default(), ops)
+    }
+
+    /// Replay a retained checkpoint plus the operations after its frontier.
+    pub fn fold_from_snapshot<'a, I>(mesh_id: [u8; 32], snapshot: &JobBoardSnapshot, ops: I) -> Self
+    where
+        I: IntoIterator<Item = &'a Operation<MeshExt>>,
+    {
         // Gather phase.
         struct Posted {
             kind: JobKind,
-            payload: Vec<u8>,
+            payload: Option<Vec<u8>>,
             by: [u8; 32],
         }
         let mut posted: BTreeMap<JobId, Posted> = BTreeMap::new();
@@ -77,6 +88,33 @@ impl JobBoard {
         let mut claims: BTreeMap<JobId, BTreeMap<[u8; 32], [u8; 32]>> = BTreeMap::new();
         // job → author → result.
         let mut results: BTreeMap<JobId, BTreeMap<[u8; 32], Vec<u8>>> = BTreeMap::new();
+
+        // Seed the gather maps from the accepted checkpoint. The all-zero
+        // synthetic claim key sorts before any real operation hash, preserving
+        // a winner already resolved at the checkpoint frontier.
+        for job in &snapshot.jobs {
+            posted.insert(
+                job.id,
+                Posted {
+                    kind: job.kind,
+                    payload: job.payload.clone(),
+                    by: job.posted_by,
+                },
+            );
+            match &job.state {
+                JobState::Posted => {}
+                JobState::Claimed { winner } => {
+                    claims.entry(job.id).or_default().insert([0; 32], *winner);
+                }
+                JobState::Done { winner, result } => {
+                    claims.entry(job.id).or_default().insert([0; 32], *winner);
+                    results
+                        .entry(job.id)
+                        .or_default()
+                        .insert(*winner, result.clone());
+                }
+            }
+        }
 
         for op in ops {
             if !verify(op) {
@@ -95,7 +133,7 @@ impl JobBoard {
                         JobId(*op.hash.as_bytes()),
                         Posted {
                             kind,
-                            payload,
+                            payload: Some(payload),
                             by: author,
                         },
                     );
@@ -112,6 +150,7 @@ impl JobBoard {
                         .or_default()
                         .insert(author, result);
                 }
+                MeshEvent::RetentionCheckpoint { .. } | MeshEvent::HistoryPruned { .. } => {}
             }
         }
 
@@ -375,5 +414,40 @@ mod tests {
         );
         let board = JobBoard::fold(MESH, [&posted_here, &posted_elsewhere]);
         assert_eq!(board.len(), 1, "only this mesh's jobs fold in");
+    }
+
+    #[test]
+    fn checkpoint_plus_tail_equals_full_replay() {
+        let asker = keypair(1);
+        let worker = keypair(2);
+        let posted = post(&asker, 0, None);
+        let id = JobId(*posted.hash.as_bytes());
+        let claim = to_operation(
+            &worker,
+            MESH,
+            &MeshEvent::JobClaimed {
+                job: id.0,
+                at_ms: 2,
+            },
+            0,
+            None,
+        );
+        let at_checkpoint = JobBoard::fold(MESH, [&posted, &claim]);
+        let snapshot = JobBoardSnapshot::from_board(&at_checkpoint);
+        let done = to_operation(
+            &worker,
+            MESH,
+            &MeshEvent::JobDone {
+                job: id.0,
+                result: b"job".to_vec(),
+                at_ms: 3,
+            },
+            1,
+            Some(*claim.hash.as_bytes()),
+        );
+
+        let full = JobBoard::fold(MESH, [&posted, &claim, &done]);
+        let retained = JobBoard::fold_from_snapshot(MESH, &snapshot, [&done]);
+        assert_eq!(full, retained);
     }
 }

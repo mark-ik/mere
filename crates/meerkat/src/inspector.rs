@@ -96,9 +96,9 @@ fn content_rows(url: Option<&str>, state: Option<&ContentState>) -> Vec<(String,
 fn document_rows(url: &str, fetched: &Fetched) -> Vec<(String, String)> {
     if is_html(fetched.content_type.as_deref()) {
         let extract =
-            serval_extract::extract(&serval_static_dom::StaticDocument::parse(&fetched.body));
+            genet_extract::extract(&genet_static_dom::StaticDocument::parse(&fetched.body));
         return vec![
-            ("Parser lane".to_string(), "serval.html".to_string()),
+            ("Parser lane".to_string(), "genet.html".to_string()),
             (
                 "Document title".to_string(),
                 extract.title.as_deref().unwrap_or("none").to_string(),
@@ -114,7 +114,7 @@ fn document_rows(url: &str, fetched: &Fetched) -> Vec<(String, String)> {
             ),
             (
                 "Parse diagnostics".to_string(),
-                "serval-extract PageExtract".to_string(),
+                "genet-extract PageExtract".to_string(),
             ),
         ];
     }
@@ -214,7 +214,7 @@ fn summarize_blocks(blocks: &[Block]) -> String {
     )
 }
 
-fn summarize_page_extract(extract: &serval_extract::PageExtract) -> String {
+fn summarize_page_extract(extract: &genet_extract::PageExtract) -> String {
     format!(
         "headings={} text={} reader_text={} metadata={}",
         extract.headings.len(),
@@ -465,7 +465,7 @@ mod tests {
     }
 
     #[test]
-    fn inspector_reports_serval_extract_for_html() {
+    fn inspector_reports_genet_extract_for_html() {
         let fetched = Fetched {
             content_type: Some("text/html".to_string()),
             body: "<html><head><title>The Page</title><meta name='description' content='Desc'></head><body><main><h1>Title</h1><p>Body text.</p><a href='/next'>Next</a></main></body></html>".to_string(),
@@ -482,7 +482,7 @@ mod tests {
         assert!(rows.iter().any(|(k, v)| k == "Outgoing links" && v == "1"));
         assert!(
             rows.iter()
-                .any(|(k, v)| k == "Parse diagnostics" && v == "serval-extract PageExtract")
+                .any(|(k, v)| k == "Parse diagnostics" && v == "genet-extract PageExtract")
         );
     }
 }

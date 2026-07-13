@@ -99,9 +99,9 @@ not a task.
 - **2026-06-18** — node_quads projection + slices 1 (linked-data `query` feature)
   and 2 (`>sparql` omnibar verb) shipped and verified green; slice-2 files
   warning-clean. Not committed (working tree). The build detour was a stale local
-  `Cargo.lock`: piecemeal `cargo update -p {serval-layout, netrender}` left an
+  `Cargo.lock`: piecemeal `cargo update -p {genet-layout, netrender}` left an
   incoherent partial state (a `windows` 0.61/0.62 split); a full fresh resolve
-  (`rm Cargo.lock`) to the current owned-fork mains (serval `69431717`, netrender
+  (`rm Cargo.lock`) to the current owned-fork mains (genet `69431717`, netrender
   `c5e6400c`) restored a coherent set. Lesson, matching the workspace convention:
   for gitignored, branch-tracked owned forks, re-resolve fresh rather than bump
   pins one at a time.

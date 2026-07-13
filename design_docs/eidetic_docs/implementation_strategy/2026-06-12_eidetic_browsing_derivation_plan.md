@@ -12,7 +12,7 @@ defensive ingestion).
 **Source design**: [eidetic design pass](../research/2026-05-09_eidetic_design_pass.md)
 (§Layer 4, §6.2 browsing memory, §7.5 search-index engrams, §8 privacy/quota).
 **Conflict posture**: pure mere lane — eidetic crates, `import`, and a dev
-bin; no serval-layout, no meerkat render/input/frame_ops, no pelt. Shell
+bin; no genet-layout, no meerkat render/input/frame_ops, no pelt. Shell
 surfacing is the explicitly **gated last slice**, adopted after the
 window-composition reshape settles (the mesh-P6 pattern).
 
@@ -98,7 +98,7 @@ detail, producer side only:
   OPFS/wasm is Phase 7 + the wasm probe, deferred.
 - Index the trail: titles, canonical URLs, domains, timestamps from
   `BrowsingTrace` (+ clip text when clips exist). **Full page text is not in
-  this slice**: content capture needs a text-extraction seam on the serval
+  this slice**: content capture needs a text-extraction seam on the genet
   side (the laid-out document already has it; pulling it crosses the
   conflict line today). Named below as the content-capture trigger.
 - Re-index from engrams (the re-mint path): the index is derived state; the
@@ -136,7 +136,7 @@ The bin is the proof surface until then.
 - **Phase 9 consume half** (`EngramDirectory` over iroh-blobs ranges,
   per-moot merge, defensive ingestion) — federation; stays in the deferred
   plan. Trigger: a moot-side consumer.
-- **Full page-text capture** — trigger: a serval-side text-extraction seam
+- **Full page-text capture** — trigger: a genet-side text-extraction seam
   (post-V4 conversation; the engine owns layout-ordered text). Until then
   recall ranks on titles/URLs/clips, which already beats nothing by a lot.
 - **ClipLibrary capture UI** — trigger: E5 territory (a capture verb needs a

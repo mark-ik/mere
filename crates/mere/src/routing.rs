@@ -4,10 +4,10 @@
 
 //! Mere's routing vocabulary over inker's host-neutral policy.
 //!
-//! Inker's default policy carries only engine-shaped rules (serval rungs,
+//! Inker's default policy carries only engine-shaped rules (genet rungs,
 //! nematic formats, surface engines) plus the neutral hand-to-OS fallback.
 //! The app-flavored, host-handled ids live here (moved out of inker with the
-//! 2026-07-10 serval adoption): internal pages and the JSON-LD
+//! 2026-07-10 genet adoption): internal pages and the JSON-LD
 //! graph-contribution marker. Hosts (meerkat today, merecat next) route with
 //! [`route_policy`] instead of `EngineRoutePolicy::default()`.
 
@@ -96,7 +96,7 @@ mod tests {
         // And it is recognized as a non-render route the host handles itself.
         assert!(is_graph_contribution_route(&decision.engine_id));
         assert!(!is_graph_contribution_route(
-            inker::routing::ENGINE_SERVAL_WEB
+            inker::routing::ENGINE_GENET_WEB
         ));
     }
 

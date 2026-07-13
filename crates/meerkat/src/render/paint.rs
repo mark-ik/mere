@@ -34,7 +34,7 @@ pub(super) enum ChromeRasterPlan {
 /// reuse the same key range, so each must be built right before its own rasterize
 /// (they rasterize sequentially, so the registry holds the right masks each time).
 fn build_chrome_masks(
-    core: &serval_winit_host::RenderCore,
+    core: &genet_winit_host::RenderCore,
     masks: &[paint_list_render::BoxShadowMaskRequest],
 ) {
     for m in masks {

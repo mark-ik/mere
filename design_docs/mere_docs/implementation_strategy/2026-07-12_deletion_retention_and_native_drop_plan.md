@@ -8,9 +8,11 @@ accepted operations, checkpoints, proofs, and payloads over Iroh, Retinue,
 files, or other store-and-forward paths.
 **Related**:
 
-- [`2026-07-08_murm_moot_sibling_posture_plan.md`](2026-07-08_murm_moot_sibling_posture_plan.md)
-  owns the shared `MunimentStore`, `SyncedSpace`, and murm/moot boundary this
-  plan extends.
+- [`2026-07-12_murm_peer_runtime_and_moot_domain_plan.md`](2026-07-12_murm_peer_runtime_and_moot_domain_plan.md)
+  owns the shared `murm-replication` foundation and the corrected Murm/Moot
+  boundary this plan extends. It supersedes the earlier sibling posture.
+- [`2026-06-30_commitment_proof_interface_plan.md`](2026-06-30_commitment_proof_interface_plan.md)
+  owns typed digests, commitments, and proof domains.
 - [`../technical_architecture/2026-06-19_statement_kernel_brief.md`](../technical_architecture/2026-06-19_statement_kernel_brief.md)
   owns per-predicate lifecycle and GC.
 - [`2026-06-29_reticulum_transport_plan.md`](2026-06-29_reticulum_transport_plan.md)
@@ -29,9 +31,11 @@ files, or other store-and-forward paths.
 
 ## 1. Decision record
 
-1. **Current state is a checkpoint plus a tail.** A space's accepted current
-   state is the latest authorized checkpoint and the operations after its
-   frontier. Older history is useful evidence, not permanent application truth.
+1. **Prunable current state is a retention checkpoint plus a tail.** An
+   ordinary materialization checkpoint remains a replay optimization whose log
+   stays authoritative. An authorized `RetentionCheckpoint` is a distinct
+   trust-root transition after which an eligible prefix may disappear. This
+   plan does not rewrite Codicil or local undo/history semantics.
 2. **No generic permanent tombstone.** This plan adds no `Tombstone` record to
    the store or drop format. Immediate shared withdrawal still requires a
    signed negative event until a checkpoint records the resulting absence.
@@ -67,24 +71,31 @@ files, or other store-and-forward paths.
 | Concern | Live owner | Current fact | Gap this plan closes |
 |---|---|---|---|
 | Signed replication | p2panda-core operations in murmuring, moothold, mesh | Per-author `seq_num` and `backlink`; LogSync reconciles them | Domain extensions do not carry `PruneFlag` |
-| Shared persistence | `mooting::MunimentStore` | Implements `OperationStore`, `LogStore`, and `TopicStore`; can strip a payload or prune a log prefix | Pruning is callable but not governed by one application law |
-| Live receive | `transport::SyncedSpace` plus domain `accept` closures | Signature, address, and insert checks differ by consumer | No common prune-aware ingest processor |
-| Murmur history | `PersistentCabalStore` | Header and payload are bundled; `prune_entries` is a deliberate no-op | Sibling-plan S2b must separate its domain view from the muniment sync store |
+| Shared persistence | `mooting::MunimentStore`, moving to `murm-replication` | Implements `OperationStore`, `LogStore`, and `TopicStore`; can strip a payload or prune a log prefix | Pruning is callable but not governed by one application law |
+| Live receive | `transport::SyncedSpace`, moving to `murm-replication`, plus domain `accept` closures | Signature, address, and insert checks differ by consumer | No common prune-aware ingest processor |
+| Murmur history | `PersistentCabalStore` | Header and payload are bundled; `prune_entries` is a deliberate no-op | The Murm direct-exchange rebase must separate its domain view from the shared muniment sync store |
 | Materialization | Domain folds; generic graph snapshots elsewhere | Several areas already use snapshot plus tail replay | No shared checkpoint contract for replicated spaces |
 | Off-grid bytes | feature-gated `ReticulumTransport`; future Retinue resources | Bilateral streams work; sync and blobs stay Iroh-only | No delay-tolerant application bundle |
 | Group security | constitution/capability plans; p2panda encryption is a candidate | Structural caps and live key state are not production-wired | Private drops must stay gated until a real protector is injected |
 
 Ownership after this plan:
 
-- **Domain crates** define what a checkpoint means, what may be withdrawn, and
-  who may authorize it.
-- **`mooting`** owns the generic muniment-backed ingest, retention, checkpoint,
-  and drop machinery. Its store is already intentionally useful outside Moot.
-- **The host** composes domain policy with the generic processor and store.
-- **`transport`** moves live bytes and exposes endpoints. It does not interpret
-  retention or drop records.
+- **Domain crates** define withdrawal meaning, checkpoint authority, governed
+  retention policy, and materialization.
+- **`murm-replication`** owns generic muniment-backed ingest, retention and
+  prune mechanics, checkpoint storage, and native drop machinery.
+- **Murm and Moot services** compose their domain policy with the replication
+  foundation and expose typed commands, snapshots, events, and status.
+- **Merecat** supplies settings and resources. It does not assemble p2panda
+  sessions or operation callbacks.
+- **Murm peer transport** moves live bytes and exposes endpoints. It does not
+  interpret retention or drop records.
 - **Retinue** moves an opaque drop as a resource or a small framed payload. It
   does not learn p2panda or Mere policy.
+- **Personae/wallet** owns key custody, enrollment, recovery, and capability
+  slots. A drop carries only opaque envelopes produced by that layer.
+- **Blob-domain owners** decide whether their content is live before generic
+  storage collects it.
 
 ## 3. The deletion and retention law
 
@@ -116,11 +127,19 @@ hardcoded durations:
 
 ```rust
 pub struct RetentionPolicy {
-    pub availability_floor: KeepBound,
-    pub privacy_ceiling: KeepBound,
+    pub availability: AvailabilityPolicy,
+    pub erasure: ErasurePolicy,
     pub checkpoint_rule: CheckpointRule,
-    pub payload_rule: PayloadRule,
     pub audit_rule: AuditRule,
+}
+
+pub struct AvailabilityPolicy {
+    pub promised_floor: KeepBound,
+}
+
+pub struct ErasurePolicy {
+    pub privacy_ceiling: KeepBound,
+    pub payload_rule: PayloadRule,
 }
 
 pub enum KeepBound {
@@ -138,11 +157,18 @@ do not:
 - personal `LocalOnly` data uses the owner's settings;
 - a murmur uses its negotiated conversation policy, with each author retaining
   authority over their own log;
-- a moot uses the constitution revision named by the checkpoint;
+- a moot names a governed `RetentionPolicy` revision; its constitution
+  separately proves who may adopt or amend that policy;
 - a mesh may retain terminal job bodies for a configured audit window and then
   keep only compact results or receipts;
 - a voluntary host must surface when local settings make it ineligible for the
-  advertised retention promise.
+  advertised retention promise;
+- availability lapse does not itself authorize erasure. It ends a hosting or
+  pinning promise, while privacy withdrawal or the erasure ceiling governs
+  destructive action;
+- local browsing history, Eidetic memory tiers, and Athanor image collection
+  keep their existing owners. This policy applies when their data enters a
+  replicated space or native drop.
 
 ### 3.3 Withdrawal, checkpoint, and prune
 
@@ -183,7 +209,8 @@ Therefore:
 - an inactive author's old bodies can be erased under accepted space policy;
 - their small signed headers may remain until the protocol has a checkpoint-aware
   log-root transition accepted upstream;
-- Mere must report `body erased` separately from `history pruned`.
+- service and product status must report `body erased` separately from
+  `history pruned`.
 
 Arbitrary physical removal of one operation from the middle of a signed log is
 not a v0 promise. Its live effect can be withdrawn and its body erased, but its
@@ -191,27 +218,35 @@ header leaves only when a later prefix prune covers it.
 
 ### 3.5 Checkpoint contract
 
-Every replicated domain checkpoint must bind at least:
+Every replicated domain retention checkpoint must bind at least:
 
 ```rust
-pub struct SpaceCheckpoint {
+pub struct RetentionCheckpoint {
     pub version: u16,
-    pub space_id: [u8; 32],
+    pub space_id: SpaceId,
     pub schema_id: String,
-    pub policy_revision: [u8; 32],
+    pub policy_revision: Digest,
+    pub authority_revision: Digest,
     pub frontier: Vec<LogFrontier>,
     pub snapshot: BlobRef,
-    pub snapshot_digest: [u8; 32],
-    pub key_epoch: Option<[u8; 32]>,
+    pub snapshot_commitment: Commitment,
+    pub key_epoch: Option<Digest>,
 }
 
 pub struct LogFrontier {
     pub author: [u8; 32],
     pub log_id: Vec<u8>,
     pub seq_num: u64,
-    pub operation: [u8; 32],
+    pub operation: Digest,
 }
 ```
+
+`Digest` and `Commitment` are the shared typed proof vocabulary. The snapshot
+uses the storage-checkpoint commitment domain. A p2panda operation hash remains
+an operation identity and is not silently reused as an application commitment.
+An ordinary materialization checkpoint may reuse the snapshot and frontier
+shape, but it does not carry prune authority and never advances the retained
+history floor by itself.
 
 The checkpoint operation remains an ordinary signed p2panda operation. Its
 backlink commits to the prior author chain even after those bytes are gone. The
@@ -236,6 +271,9 @@ A **drop** is an idempotent, bounded package of retained Mere data that can be
 created without a live peer session and ingested through the normal application
 pipeline later. It supports files, removable media, email-like attachment
 paths, Iroh blobs, and Retinue resources.
+
+The native sealed mail object remains the comms format. A drop may carry that
+object or a reference to it, but does not define another message envelope.
 
 It is not:
 
@@ -265,51 +303,55 @@ pub enum DropRecord {
         offset: u64,
         bytes: Vec<u8>,
     },
-    Proof {
-        proof_type: String,
+    Evidence {
+        kind: EvidenceKind,
+        subject: Digest,
         bytes: Vec<u8>,
         critical: bool,
     },
 }
 ```
 
-`Proof` carries capability chains, checkpoint authorization, or key envelopes
-without teaching the container their semantics. A checkpoint is an ordinary
-operation plus its referenced blob. A withdrawal and a prune point are ordinary
-operations. There is deliberately no drop-only deletion record.
+`EvidenceKind` is a registered numeric discriminant, not an arbitrary string.
+It distinguishes typed commitment proofs, capability chains, checkpoint
+authorization, and opaque wallet-produced key envelopes while allowing unknown
+optional kinds to be skipped. A checkpoint is an ordinary operation plus its
+referenced blob. A withdrawal and a prune point are ordinary operations. There
+is deliberately no drop-only deletion record.
 
 Headers and bodies stay separable, matching `MunimentStore` and allowing a
 compact drop to carry signed history without large or privacy-expired content.
 Chunks are content-addressed and independently deduplicated.
 
-### 4.3 Manifest, protection, and physical frames
+### 4.3 Manifest, protection, and physical stream
 
 The semantic body is deterministic CBOR, matching the current operation stack.
 A canonical manifest lists each record's kind, BLAKE3 digest, byte length, and
 whether it is critical. `DropId` is BLAKE3 over the canonical manifest and lives
 inside the protected body. It identifies semantic content independently of
-compression, encryption, frame sizing, or carrier.
+compression, encryption, transfer segmentation, or carrier.
 
 The physical encoding has two layers:
 
 1. A small clear **cover**: magic, format version, protection-suite id,
-   protected-body length, frame count, a transfer id, and protected-body digest.
+   protected-body length, and protected-body digest.
 2. A protected **body**: manifest plus records, optionally compressed before it
    is encrypted.
 
-The protected body is split into self-delimiting frames for streaming and
-resume. Each frame carries the format version, transfer id, frame index, total
-frames, payload length, payload bytes, and a BLAKE3 checksum. The transfer id is
-derived from the protected bytes, so frames can be grouped before decryption
-without exposing the semantic `DropId` of a private drop. File concatenation and
-out-of-order store-and-forward delivery use the same codec. Exact field widths
-and magic bytes are frozen only after golden-vector tests.
+The body is a self-delimiting record stream, so a decoder can enforce limits and
+stage records without loading the entire plaintext into memory. The drop format
+does not define indexed transfer fragments or resume state. Iroh and Retinue
+segment, retry, and resume the opaque protected stream. File and removable-media
+carriers write the stream directly. Exact field widths and magic bytes are
+frozen only after golden-vector tests.
 
 Private drops require an injected protector. The intended production protector
 wraps a fresh drop content key to a p2panda-encryption epoch or explicit
 recipients. Until that layer is live, plaintext drops are limited to public data
 and explicit local test/export flows. The UI must refuse a private export rather
-than imply encryption.
+than imply encryption. Personae/wallet supplies the key and capability
+envelopes; the drop codec does not define device enrollment, persona recovery,
+or wallet backup semantics.
 
 An optional exporter signature authenticates the completeness claim of this
 particular package. It never grants authority to the contained operations, which
@@ -327,18 +369,18 @@ Profiles are named settings bundles, not protocol constants:
   invitations, withdrawals, votes, short murmurs, checkpoints, and compact
   receipts before bulk content.
 
-Each profile exposes byte budget, chunk size, compression, expiry, inline-body
+Each profile exposes byte budget, record chunk size, compression, expiry, inline-body
 threshold, blob policy, and priority ordering as settings. Retinue's resource
-layer owns reliable segmentation. Before Retinue R4, only a drop that fits the
-available bilateral stream or packet budget may use that lane.
+layer owns reliable segmentation and resume. Before Retinue R4, only a drop that
+fits the available bilateral stream or packet budget may use that lane.
 
 ### 4.5 Import law
 
 Import is staged and transactional:
 
-1. Parse the cover and enforce configured byte, frame, record, nesting, and
+1. Parse the cover and enforce configured byte, record, nesting, and
    decompression limits before allocating the claimed sizes.
-2. Reassemble, verify, decrypt, and decompress the protected body.
+2. Verify, decrypt, and decompress the protected body.
 3. Verify the manifest, record digests, and optional exporter signature.
 4. Group operations by `(space, author, log_id)`, order them by sequence, and
    select the highest admissible prune point before considering an older prefix.
@@ -363,9 +405,20 @@ still retains its manifest digest.
 
 ### Phase D0: upstream prune proof
 
-Build a focused `mooting` test extension containing a space id and optional
-`PruneFlag`. Compose `MunimentStore`, p2panda-core's prune-aware backlink
-validation, and p2panda-stream's `LogPrune` without any network dependency.
+Build a focused `murm-replication` test extension containing a space id and
+optional `PruneFlag`. Compose `MunimentStore`, p2panda-core's prune-aware
+backlink validation, and p2panda-stream's `LogPrune` without a network session.
+
+Implementation status, 2026-07-13: complete. The focused proof preserves
+pre-field encoding and identity, removes operations 0 through 2 beneath a
+flagged operation 3, validates that survivor without its predecessor, rejects
+replay below the retained frontier, and rejects an unapproved flag before
+mutation.
+
+`LogPrune` delegates to `LogStore::prune_entries` after ingestion. It proves the
+upstream deletion semantics, but does not make operation insertion and prefix
+removal one transaction. D1 must compose those writes inside the muniment
+backend batch or introduce an equivalent backend transaction boundary.
 
 Done when:
 
@@ -379,10 +432,21 @@ Done when:
 
 ### Phase D1: one ingest pipeline
 
-Add a generic prune-aware processor beside `MunimentStore`, with injected
-domain verification and authorization callbacks. Route the mesh vertical slice
-through it first. Then route LogSync and local authoring through the same API.
-Murm waits for sibling-plan S2b, which removes its coupled redb sync index.
+Add the generic prune-aware processor to `murm-replication`, beside
+`MunimentStore`, with injected domain verification and authorization. Route the
+mesh vertical slice through it first. Then route LogSync, gossip, local
+authoring, and drop import through the same API. Murm direct exchange migrates
+after its coupled redb sync index is replaced by the shared store.
+
+Implementation status, 2026-07-13: the processor and atomic retention-effect
+path are landed. Domain admission returns `Keep`, an authorized
+`PruneBeforeCurrent`, and any authorized payload erasures. The processor applies p2panda's
+prune-aware backlink law, separately rejects any operation at or below the
+retained frontier, and commits prefix deletion with the surviving operation,
+topic, log entry, operation pointer, and body erasure in one muniment backend
+batch. Mesh local authoring, LogSync receipt, checkpoint acceptance, and
+authorized pruning share this path. The D0 proof is complete. Gossip receipt
+and drop import remain.
 
 Done when:
 
@@ -396,10 +460,27 @@ Done when:
 
 ### Phase D2: checkpoint and policy contract
 
-Implement `SpaceCheckpoint`, `LogFrontier`, retention settings, and a small
-domain adapter trait. Use mesh first because `JobBoard` is deterministic and its
-terminal jobs give an honest retention case. Add a checkpoint event and fold
-support without teaching `mooting` mesh semantics.
+Implement `RetentionCheckpoint`, `LogFrontier`, separate availability and
+erasure settings, and the replication domain adapter. Use mesh first because
+`JobBoard` is deterministic and its terminal jobs give an honest retention
+case. Add a checkpoint event and fold support without teaching
+`murm-replication` mesh semantics.
+
+Implementation status, 2026-07-13: the mesh vertical slice is landed. Mesh has
+separate event and checkpoint logs, governed policy revisions, monotone
+per-author event frontiers, canonical snapshot digests, checkpoint-plus-tail
+folding, flagged prune authoring, and atomic terminal-input erasure. Keeping the
+checkpoint in its own log lets the event prefix disappear without deleting the
+trust root that authorizes the cut. The policy vocabulary separates an
+availability floor from an erasure ceiling, and process outcomes distinguish
+body erasure from prefix pruning.
+
+The general D2 contract is still partial. The mesh snapshot is inline and uses
+a mesh-local `CheckpointDigest`; it must move to the shared typed
+`Commitment`/`BlobRef` vocabulary when that proof interface lands. Blob
+reference tracing and collection are also absent. The current configured
+authority is one key, suitable for the personal mesh, while Moot still needs
+constitution-authorized checkpoint adoption.
 
 Done when:
 
@@ -414,16 +495,29 @@ Done when:
 
 ### Phase D3: native drop codec
 
-Implement the cover, canonical manifest, record vocabulary, frame codec, and
-configured resource limits in `mooting::drop`. Start with plaintext public/test
-drops and an injected protector trait.
+Implement the cover, canonical manifest, self-delimiting record stream, and
+configured resource limits in `murm_replication::drop`. Start with plaintext
+public/test drops and an injected protector trait.
+
+Implementation status, 2026-07-13: the plaintext/public framing is landed. A
+fixed `MEREDRP\0` cover binds version, protection-suite id, protected length,
+and body digest. The protected body contains a canonical manifest followed by
+self-delimiting record frames. `DropId` is BLAKE3 over the canonical manifest,
+and each manifest entry binds kind, criticality, length, and record digest. The
+writer makes bounded per-record passes rather than buffering the full body; the
+reader visits one verified record at a time through an explicitly staging-only
+callback. Configurable limits are checked before manifest or record allocation.
+
+This is a partial D3 landing. Suite `0` is deliberately plaintext and suitable
+only for public data and local tests. The injected protector and compression
+layers are not yet implemented, so private export remains unavailable and
+decompression-bomb handling remains a future protected-suite concern.
 
 Done when:
 
 - golden vectors freeze canonical encoding, semantic `DropId` derivation, and
-  protected transfer-id derivation;
-- a multi-frame drop round-trips when frames arrive in order, out of order, and
-  with duplicates;
+  protected-body digest derivation;
+- a drop streams and round-trips without loading its full plaintext body;
 - bit corruption, truncation, wrong lengths, decompression bombs, unknown
   critical records, and unsupported protection suites fail closed;
 - unknown optional records are reported and skipped;
@@ -455,7 +549,8 @@ with each domain supplying its own authority and checkpoint fold.
 Done when:
 
 - file, Iroh, and Retinue resource carriage preserve the same semantic `DropId`
-  and produce identical import reports even when framing or protection changes;
+  and produce identical import reports even when carrier segmentation or
+  protection changes;
 - transport loss/resume changes delivery only, never application semantics;
 - private export is impossible without a configured protector;
 - key rotation does not change `SpaceId` or checkpoint identity;
@@ -476,8 +571,8 @@ Done when:
   that previously held plaintext. Report cooperative-replica scope plainly.
 - Do not use a group encryption epoch as the stable namespace id.
 - Do not ship private plaintext drops as a temporary product fallback.
-- Do not optimize radio framing until the catch-up drop works through the file
-  carrier and the importer proves anti-resurrection.
+- Do not optimize Retinue radio segmentation until the catch-up drop works
+  through the file carrier and the importer proves anti-resurrection.
 
 ---
 
@@ -505,9 +600,9 @@ lesson expressed in the p2panda-native log model.
 
 Willow's useful donor idea is one idempotent package that can travel by any
 means. Mere should package its own operations and BLAKE3 content rather than
-translate them into Willow Entries. The shared muniment/p2panda adapter in
-`mooting` is the existing neutral home. Iroh and Retinue remain opaque carriers;
-domain folds remain the semantic owners.
+translate them into Willow Entries. The shared muniment/p2panda adapter is
+moving from `mooting` into `murm-replication`, the corrected neutral home. Iroh
+and Retinue remain opaque carriers; domain folds remain the semantic owners.
 
 ## Progress
 
@@ -520,4 +615,65 @@ domain folds remain the semantic owners.
   against p2panda 0.6.1, the version pinned in Mere.
 - Chose the checkpoint plus tail law, transient withdrawals, separate payload
   erasure, upstream prefix pruning, and one native drop carrier.
+- Reconciled the plan with the Murm peer-runtime reframe: generic machinery now
+  targets `murm-replication`; retention checkpoints are distinct from ordinary
+  materialization snapshots; typed commitments replace raw proof identifiers;
+  availability and erasure policies are separate; wallet and blob-GC ownership
+  stay outside replication; Retinue retains transfer segmentation and resume.
 - Planning only. No runtime code or tests changed in this pass.
+
+### 2026-07-13
+
+- Landed the shared non-prune `OperationProcessor` in `murm-replication` with
+  injected mesh admission, signature and operation-id checks, idempotence, and
+  ordinary backlink continuity.
+- Routed mesh local authoring and LogSync receipt through that single path.
+  Rejection-before-mutation is covered directly, and the then-eighteen-test
+  mesh suite passed against the real source through an isolated manifest.
+- Batched topic association, log indexing, and the operation pointer into one
+  backend apply. Checkpoint and prune effects remain absent from the production
+  processor.
+- Completed D0 against p2panda 0.6.1. Eleven `murm-replication` tests now prove
+  default-field wire compatibility, authorized prefix removal, missing-
+  predecessor validation at the prune point, stale-prefix rejection, and
+  rejection-before-mutation for an unauthorized flag.
+- Confirmed that upstream `LogPrune` performs prefix removal through a separate
+  `LogStore::prune_entries` call. D1 therefore owns the stronger atomic
+  insertion-plus-prune boundary.
+- Added `Admission` and `HistoryAction` to the production processor. An
+  authorized `PruneBeforeCurrent` now permits a surviving operation whose
+  predecessor is absent while a separate retained-frontier check rejects stale
+  ordinary and flagged operations.
+- Added the muniment atomic prune path: old log entries and operation pointers
+  are deleted in the same `Backend::apply` batch that writes the surviving
+  operation, topic association, and new pointer. `ProcessOutcome` reports the
+  removed-entry count.
+- Focused workspace verification passes thirteen `murm-replication` tests and all
+  twenty-seven mesh tests, including two-peer convergence, governed checkpoint
+  rejection, checkpoint-plus-tail equivalence, atomic terminal-input erasure,
+  checkpoint survival across event-prefix pruning, and stale-prefix rejection.
+- Landed the mesh D2 vertical slice: `MeshRetentionPolicy`,
+  `RetentionCheckpoint`, monotone `LogFrontier`, canonical snapshot digest,
+  separate `Events` and `Checkpoints` logs, snapshot-plus-tail `JobBoard`
+  replay, checkpoint and prune authoring helpers, and structured retention
+  effects.
+- Extended shared admission with authorized payload erasures. Muniment now
+  strips those bodies in the same backend batch that inserts the checkpoint;
+  the retained header still binds the erased body hash, while the checkpoint
+  keeps the terminal job result.
+- The first workspace mesh run finished compiling just as the command timeout
+  closed its test pipe. An immediate rerun passed. The only migration residue
+  in these package graphs is unused-patch warnings for Genet's `graft-engine`
+  and `weld-engine`.
+- D2 remains partial at the cross-domain boundary: mesh still uses an inline
+  snapshot and mesh-local digest pending the shared commitment interface;
+  referenced-blob tracing/GC and Moot constitution authorization remain.
+- Landed the D3 plaintext/public native drop framing in `murm-replication`:
+  fixed cover, canonical semantic manifest, BLAKE3 `DropId`, four record kinds,
+  self-delimiting frames, bounded streaming visit, and structured errors.
+- Golden cover/identity vectors and failure tests cover bit corruption,
+  truncation, false lengths, allocation limits, unsupported protection suites,
+  unknown optional skipping, unknown critical rejection, and header-first body
+  carriage. The shared replication suite now passes twenty tests.
+- D3 remains partial until a real injected protector and compression suite land.
+  The D4 staged importer/export selector remains unimplemented.

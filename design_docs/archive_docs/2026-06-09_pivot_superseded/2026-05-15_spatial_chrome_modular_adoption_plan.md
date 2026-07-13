@@ -2,7 +2,7 @@
 
 **Date**: 2026-05-15 (initial); 2026-05-17 implementation status added
 **Status**: Implementation strategy (sequencing plan; does not commit substrate-as-host adoption). Phases 2–3 largely shipped; phase 4 has structural skeleton.
-**Scope**: Turns the spatial chrome IR, renderer registry contract, browser taxonomy translation, OS-plumbing audit, and existing multiplexer/session work into a staged plan. Goal: land the useful host-agnostic pieces first, defer substrate-as-host until proof gates clear, and keep Serval/NetRender/wgpu-* sibling crates aligned with Mere's renderer model.
+**Scope**: Turns the spatial chrome IR, renderer registry contract, browser taxonomy translation, OS-plumbing audit, and existing multiplexer/session work into a staged plan. Goal: land the useful host-agnostic pieces first, defer substrate-as-host until proof gates clear, and keep Genet/NetRender/wgpu-* sibling crates aligned with Mere's renderer model.
 
 **Primary inputs**:
 
@@ -109,7 +109,7 @@ Still missing:
 - No Workbench-sized NetRender/Vello substrate proof.
 - No accepted OS-plumbing extraction/validation plan beyond the audit posture.
 - No explicit PWA/browser-host degraded envelope.
-- No shared native texture interop crate across scrying/weld/Serval/NetRender.
+- No shared native texture interop crate across scrying/weld/Genet/NetRender.
 
 ## Cross-cutting prerequisite — single-write-path invariant on mere-kernel
 
@@ -173,7 +173,7 @@ This sits above the spatial-chrome lane but blocks none of it: phases 2–4 can 
    - `renderer.hot_swapped`,
    - `surface.attach_failed`.
 
-   **Naming convention for long-running operations** (per [graphshell harvest brief](../research/2026-05-17_graphshell_harvest_brief.md) Tier 1 / T1-3): any operation that can hang, fail asynchronously, or have non-trivial latency emits a paired `<op>.started` / `<op>.succeeded` / `<op>.failed` triple with a timeout contract. Watchdog analyzers consume the stream to surface hangs vs. silent failures. The point events listed above stay point events; future async expansions (e.g. `renderer.boot_started` / `renderer.boot_succeeded` / `renderer.boot_failed` for renderers that boot asynchronously like Serval or scrying WebView2; `engine.warmup_*` for engines with cold-start) follow the triple convention. `ChannelRegistry` carries channel descriptors (schema, severity, retention) as declarative config separate from the live analyzers — schema is configuration, analyzers are pluggable.
+   **Naming convention for long-running operations** (per [graphshell harvest brief](../research/2026-05-17_graphshell_harvest_brief.md) Tier 1 / T1-3): any operation that can hang, fail asynchronously, or have non-trivial latency emits a paired `<op>.started` / `<op>.succeeded` / `<op>.failed` triple with a timeout contract. Watchdog analyzers consume the stream to surface hangs vs. silent failures. The point events listed above stay point events; future async expansions (e.g. `renderer.boot_started` / `renderer.boot_succeeded` / `renderer.boot_failed` for renderers that boot asynchronously like Genet or scrying WebView2; `engine.warmup_*` for engines with cold-start) follow the triple convention. `ChannelRegistry` carries channel descriptors (schema, severity, retention) as declarative config separate from the live analyzers — schema is configuration, analyzers are pluggable.
 5. Thread capability gates:
    - per-node route override -> `engine.route_override`,
    - profile escalation -> `engine.profile.escalate`.
@@ -201,7 +201,7 @@ Build a small proof harness, not a product host:
 1. Root scene with pan/zoom camera.
 2. One cartography/graph node.
 3. One document tile rendered through document engine -> platen -> NetRender.
-4. One embedded-frame placeholder texture using the same external-texture path expected by scrying/Serval.
+4. One embedded-frame placeholder texture using the same external-texture path expected by scrying/Genet.
 5. One relation edge with label and hit-test.
 6. Basic hit-test returning node/edge/content identity.
 7. Thumbnail/capture path for switcher preview.
@@ -259,7 +259,7 @@ Rules:
 
 1. `wgpu-scry` depends on it for WebView/WebView2/WK/WebKitGTK captured frames.
 2. `wgpu-weld` depends on it for CEF accelerated OSR frames.
-3. Serval depends on it only at the host-output boundary, not inside core document/layout logic.
+3. Genet depends on it only at the host-output boundary, not inside core document/layout logic.
 4. NetRender consumes imported textures through a stable external-texture API.
 5. Mere's renderer registry sees only embedded-frame capability metadata and host texture handles, not platform-specific COM/ObjC/DMABuf details.
 
@@ -302,7 +302,7 @@ Rules:
 
 - PWA/browser-host documentation stops implying full native parity.
 - Direct Lane/source/graph views are the first-class browser envelope.
-- Serval/native WebView/native texture features are explicitly native-only.
+- Genet/native WebView/native texture features are explicitly native-only.
 - `EnvelopeCapabilityProfile` exists as a typed contract (somewhere in `mere-host-runtime` or a small `mere-envelope` crate) and is consulted by `RendererSelector`, replacing any ad-hoc per-feature "is this host supported" checks.
 
 **Risks:**
@@ -414,9 +414,9 @@ mere-host/scene-graph-proof    (experimental)
 - Building an impressive demo that still misses IME/a11y/session restore.
 - Letting the prototype become the mainline host before it earns it.
 
-## Serval changes required
+## Genet changes required
 
-Serval should become a renderer tenant, not a host.
+Genet should become a renderer tenant, not a host.
 
 Required direction:
 
@@ -435,7 +435,7 @@ Required direction:
 4. Keep WebGL-over-wgpu output compatible with the shared native texture/external texture path.
 5. Do not internalise scrying/Wry as compatibility paths. Those are peer renderers selected by Mere.
 
-Pitfall: using Serval as a toolkit or replacing Mere's host/session model with Serval internals. Serval is the web content engine, not the workbench authority.
+Pitfall: using Genet as a toolkit or replacing Mere's host/session model with Genet internals. Genet is the web content engine, not the workbench authority.
 
 ## NetRender changes required
 
@@ -509,7 +509,7 @@ host backends
   -> scene-graph/substrate proof later
 
 optional renderer providers
-  -> Serval
+  -> Genet
   -> wgpu-scry
   -> wgpu-weld / CEF
   -> Wry overlay
@@ -521,7 +521,7 @@ Forbidden direction:
 mere-kernel -> host/backend/rendering crates
 cartography -> gpui
 inker -> gpui or final compositor
-Serval -> Mere host/session authority
+Genet -> Mere host/session authority
 wgpu-scry -> Mere policy/session authority
 wgpu-weld -> Mere policy/session authority
 ```
@@ -531,7 +531,7 @@ wgpu-weld -> Mere policy/session authority
 Useful but not on the critical path:
 
 1. WebExtension compatibility envelope.
-2. DevTools/page inspector story for Serval and system WebView renderers.
+2. DevTools/page inspector story for Genet and system WebView renderers.
 3. `about:`-style diagnostics pages or Mere-native equivalent.
 4. Download manager and permission UI aggregation.
 5. Cross-renderer visual effects.
@@ -548,7 +548,7 @@ Useful but not on the critical path:
 4. Treating static HTML as a universal fallback for full web content.
 5. Chasing WebExtension parity before Mere's native mod/capability surface exists.
 6. Claiming PWA parity before WebGPU, persistence, transport, and native-feature degradation are explicit.
-7. Duplicating native-frame/importer contracts across scrying, weld, Serval, and NetRender.
+7. Duplicating native-frame/importer contracts across scrying, weld, Genet, and NetRender.
 8. Letting native `pollster`/desktop wgpu backend assumptions leak into browser/wasm targets.
 9. Overfitting to Windows validation and forgetting macOS/Wayland are the substrate-host risk multipliers.
 
@@ -568,7 +568,7 @@ Useful but not on the critical path:
 - No immediate gpui removal.
 - No immediate WebExtension implementation.
 - No claim that PWA/browser-hosted Mere equals native Mere.
-- No requirement that Serval, scrying, Wry, and CEF all ship before the registry is useful.
+- No requirement that Genet, scrying, Wry, and CEF all ship before the registry is useful.
 - No process-sandbox/multiprocess commitment for v1.
 
 ## Decisions
@@ -576,7 +576,7 @@ Useful but not on the critical path:
 1. **Renderer registry adoption is the first implementation move.**
 2. **Substrate-as-host remains gated by renderer maturity, OS-plumbing proof, and parity demo.**
 3. **NetRender proof is a composition proof, not a host migration.**
-4. **Serval is a renderer tenant, not the workbench authority.**
+4. **Genet is a renderer tenant, not the workbench authority.**
 5. **wgpu-scry and wgpu-weld must converge on a shared native texture interop contract before both are treated as first-class Mere renderer providers.**
 6. **PWA/browser-hosted Mere is explicitly degraded until proven otherwise.**
 7. **P2P sync state must be bucketed before spatial persistence lands.**

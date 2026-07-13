@@ -5,8 +5,8 @@
 use super::command::Command;
 use super::*;
 use layout_dom_api::LayoutDom;
-use serval_scripted_dom::{NodeId, ScriptedDom};
-use xilem_serval::{Key, KeyEvent, NamedKey, PointerClick, ServalAppRunner, TextInput};
+use genet_scripted_dom::{NodeId, ScriptedDom};
+use xilem_serval::{Key, KeyEvent, NamedKey, PointerClick, GenetAppRunner, TextInput};
 
 /// Count elements with local tag `tag` in the subtree rooted at `id`.
 fn count_tag(dom: &ScriptedDom, id: NodeId, tag: &str) -> usize {
@@ -603,17 +603,17 @@ fn count_class(dom: &ScriptedDom, id: NodeId, class: &str) -> usize {
 /// ink under a full-width advance).
 #[test]
 fn omnibar_caret_tracks_bytes() {
-    use serval_layout::IncrementalLayout;
+    use genet_layout::IncrementalLayout;
     const TEST_SHEET: &[&str] =
         &["div, button, input { display: block; } input { font-size: 22px; }"];
-    let input_of = |runner: &ServalAppRunner<Chrome, ChromeLogic, ChromeView>| {
+    let input_of = |runner: &GenetAppRunner<Chrome, ChromeLogic, ChromeView>| {
         let root = runner.root();
         let d = runner.dom();
         let d = d.borrow();
         first_tag(&d, root, "input").expect("input")
     };
     let caret_x =
-        |runner: &ServalAppRunner<Chrome, ChromeLogic, ChromeView>, node: NodeId, byte: usize| {
+        |runner: &GenetAppRunner<Chrome, ChromeLogic, ChromeView>, node: NodeId, byte: usize| {
             let dom = runner.dom();
             let dom = dom.borrow();
             // The production caret primitive (a fresh session's retained layout), the
@@ -678,7 +678,7 @@ fn first_tag(dom: &ScriptedDom, id: NodeId, tag: &str) -> Option<NodeId> {
     None
 }
 
-/// Phase 1 spike (unified-document-host plan, 2026-06-17): one `ServalAppRunner`
+/// Phase 1 spike (unified-document-host plan, 2026-06-17): one `GenetAppRunner`
 /// hosts the real chrome **and** a second pane as two `lens`-composed subtrees of a
 /// single shell-container root in one `ScriptedDom`. This is the host-side container
 /// that replaces the per-pane-runner fragmentation, proving (a) both surfaces coexist
@@ -689,7 +689,7 @@ fn first_tag(dom: &ScriptedDom, id: NodeId, tag: &str) -> Option<NodeId> {
 fn shell_container_hosts_chrome_and_pane_under_one_runner() {
     use std::cell::RefCell;
     use std::rc::Rc;
-    use xilem_serval::{AnyView, ServalCtx, ServalElement, el, lens, on_click};
+    use xilem_serval::{AnyView, GenetCtx, GenetElement, el, lens, on_click};
 
     struct DemoPane {
         clicks: u32,
@@ -698,8 +698,8 @@ fn shell_container_hosts_chrome_and_pane_under_one_runner() {
         chrome: Chrome,
         pane: DemoPane,
     }
-    type ShellView = Box<dyn AnyView<ShellState, (), ServalCtx, ServalElement>>;
-    type DemoView = Box<dyn AnyView<DemoPane, (), ServalCtx, ServalElement>>;
+    type ShellView = Box<dyn AnyView<ShellState, (), GenetCtx, GenetElement>>;
+    type DemoView = Box<dyn AnyView<DemoPane, (), GenetCtx, GenetElement>>;
 
     fn demo_pane_view(p: &DemoPane) -> DemoView {
         Box::new(on_click(
@@ -723,7 +723,7 @@ fn shell_container_hosts_chrome_and_pane_under_one_runner() {
     }
 
     let dom: Rc<RefCell<ScriptedDom>> = Rc::new(RefCell::new(ScriptedDom::new()));
-    let mut runner = ServalAppRunner::new(
+    let mut runner = GenetAppRunner::new(
         dom,
         shell_view as fn(&ShellState) -> ShellView,
         ShellState {
@@ -763,10 +763,10 @@ fn shell_container_hosts_chrome_and_pane_under_one_runner() {
 fn orrery_element_reserves_a_retained_host_pool_over_the_external_texture_underlay() {
     use std::cell::RefCell;
     use std::rc::Rc;
-    use xilem_serval::{AnyView, ServalCtx, ServalElement, el, external_texture, host_pool};
+    use xilem_serval::{AnyView, GenetCtx, GenetElement, el, external_texture, host_pool};
 
     struct OrreryDemo;
-    type OrreryView = Box<dyn AnyView<OrreryDemo, (), ServalCtx, ServalElement>>;
+    type OrreryView = Box<dyn AnyView<OrreryDemo, (), GenetCtx, GenetElement>>;
 
     fn orrery_gnode_view(_s: &OrreryDemo) -> OrreryView {
         // The scene underlay the host paints (edges, demoted off-screen dots) via seiche.
@@ -786,7 +786,7 @@ fn orrery_element_reserves_a_retained_host_pool_over_the_external_texture_underl
     }
 
     let dom: Rc<RefCell<ScriptedDom>> = Rc::new(RefCell::new(ScriptedDom::new()));
-    let runner = ServalAppRunner::new(
+    let runner = GenetAppRunner::new(
         dom,
         orrery_gnode_view as fn(&OrreryDemo) -> OrreryView,
         OrreryDemo,

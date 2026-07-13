@@ -7,9 +7,9 @@ so they survive alongside the same-day
 absorbed four of them into spec-shaped form and deliberately could not
 absorb the other three (they go beyond what the platform standardizes).
 Context: xilem_serval is the third `xilem_core` backend (beside Masonry and
-`xilem_web`), diffing typed view trees into serval's `ScriptedDom`; see
-`serval/docs/2026-05-27_serval_as_host_xilem_serval_plan.md` and the crate
-docs at `serval/components/xilem-serval/src/lib.rs`.
+`xilem_web`), diffing typed view trees into genet's `ScriptedDom`; see
+`genet/docs/2026-05-27_genet_as_host_xilem_serval_plan.md` and the crate
+docs at `genet/components/xilem-serval/src/lib.rs`.
 
 What makes these compound: xilem_serval is a reactive layer that owns a
 real DOM inside an engine we also own. Each idea exploits that double
@@ -19,7 +19,7 @@ ownership; none is available to a stack that borrows either half.
 
 ## 1. One app state, N windows, each a projection
 
-The `ServalAppRunner` owns app state and a retained view tree; a
+The `GenetAppRunner` owns app state and a retained view tree; a
 `ScriptedDom` is just a target. Let one runner drive several DOMs, one per
 OS window, each window's view function a lens over shared state.
 
@@ -37,7 +37,7 @@ OS window, each window's view function a lens over shared state.
   [one_state_n_windows_design](../design/2026-07-05_one_state_n_windows_design.md),
   which resolves the divergence by dissolving it — one forest dom makes a
   cross-window move same-document, so the platform primitive covers it.
-  Engine side: `serval/docs/2026-07-05_movebefore_dom_standard_plan.md`,
+  Engine side: `genet/docs/2026-07-05_movebefore_dom_standard_plan.md`,
   S1-S3 landed 2026-07-05 (`DomMutation::Moved` + `ScriptedDom::move_before`
   + splice-path verification + `Node.prototype.moveBefore`); S5 there is
   this idea's keyed-view half.
@@ -105,13 +105,13 @@ xilem_serval already re-exports (`lens`, `map_state`, `map_action`,
 
 xilem_serval is deliberately "xilem_web, but native." A thin compatibility
 layer would let the same chrome views run against the browser DOM when
-serval-web is not the right vehicle (an ordinary PWA shell, hosted
+genet-web is not the right vehicle (an ordinary PWA shell, hosted
 settings/docs pages). Speculative; the cheap move now is discipline, not
 code: keep view code on standard DOM/CSS idioms (the standards review is
 the whitelist) so the delta between `ScriptedDom` and the browser DOM
-stays near the type-erasure difference. Serval-web itself already runs in
+stays near the type-erasure difference. Genet-web itself already runs in
 a browser (the 2026-07-04 receipt), so this is about reach into
-non-serval hosts, not about reaching the web at all.
+non-genet hosts, not about reaching the web at all.
 
 ---
 

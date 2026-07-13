@@ -13,7 +13,7 @@
 //! channels through the same wake without fighting over one event enum.
 //!
 //! S2.2b-i carries the decoded body as text and renders it plainly; content-type
-//! routing to the nematic + serval engines is S2.2b-ii.
+//! routing to the nematic + genet engines is S2.2b-ii.
 //!
 //! Smolweb: the same actor also speaks the small web. A page request is routed by
 //! scheme, http(s) runs through netfetcher (WHATWG Fetch) and gemini / gopher /

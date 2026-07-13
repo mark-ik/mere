@@ -59,10 +59,10 @@ share the shape.
 
 | # | Instance | Table / id | Kind | Delta stream | Where |
 |---|---|---|---|---|---|
-| 1 | Nova JS heap | kind-segregated vectors; `Value` = pointer-sized tagged index; compacting GC moves indexes (hence `Bindable`/`GcScope`) | heap-kind tag | GC work lists | `serval:components/script-engine-nova` (fork: mark-ik/nova, `serval-embedder`) |
-| 2 | Scripted DOM | `NodeId`-keyed arena, slots never reused, debug doc-tag fence in high bits | `NodeKind` | `DomMutation` stream via `drain_mutations` | `serval:components/serval-scripted-dom` |
-| 3 | Box/fragment tree | layout arena over the DOM holding `Arc<ComputedValues>` per node; Taffy traverses via trait impls | display/box kind | `RestyleDamage` per batch | `serval:components/serval-layout` (`box_tree.rs`, `incremental.rs`) |
-| 4 | Xilem view layer | retained view tree diffed against app state | view type | diff → `DomMutation`s (eager apply, batch at relayout boundary) | `serval:components/xilem-serval` |
+| 1 | Nova JS heap | kind-segregated vectors; `Value` = pointer-sized tagged index; compacting GC moves indexes (hence `Bindable`/`GcScope`) | heap-kind tag | GC work lists | `genet:components/script-engine-nova` (fork: mark-ik/nova, `genet-embedder`) |
+| 2 | Scripted DOM | `NodeId`-keyed arena, slots never reused, debug doc-tag fence in high bits | `NodeKind` | `DomMutation` stream via `drain_mutations` | `genet:components/genet-scripted-dom` |
+| 3 | Box/fragment tree | layout arena over the DOM holding `Arc<ComputedValues>` per node; Taffy traverses via trait impls | display/box kind | `RestyleDamage` per batch | `genet:components/genet-layout` (`box_tree.rs`, `incremental.rs`) |
+| 4 | Xilem view layer | retained view tree diffed against app state | view type | diff → `DomMutation`s (eager apply, batch at relayout boundary) | `genet:components/xilem-serval` |
 | 5 | netrender Scene | flat op list + font/transform/image palettes keyed by id | `SceneOp` variant | per-frame ops; asset bytes sent once by id; postcard capture/replay | netrender repo; transport in [transfer.rs](../crates/meerkat/src/content/transfer.rs) |
 | 6 | Orrery graph | petgraph `StableGraph` (arena-backed, stable indices) | node/edge taxonomy | `history.rs` + two-phase `apply.rs` | [graph-kernel](../crates/graph/graph-kernel/src/graph/) |
 | 7a | *prospective:* DocumentScript mutation contract | coarse mutation variants over a flat canonical ABI | variant tag | per-turn batched contract | D-doc §10.2/§10.3 |
@@ -85,7 +85,7 @@ layer, same shape between layers.
    because it is already flat (composition brief §5a). A pointer graph needs
    a fixup pass; an arena is its own wire format.
 4. **Diffing and incrementality for free.** Deltas against indexes are small,
-   comparable, coalescible (`classify`/`coalesce` in serval-layout), and
+   comparable, coalescible (`classify`/`coalesce` in genet-layout), and
    replayable (netrender capture/replay, graph history).
 5. **Instrumentation for free.** Per-kind memory is `len × size_of` per
    table. Live counts, dirty-set sizes, deltas per frame, palette hit rates
@@ -171,8 +171,8 @@ shared core.
    headlessly. Planned 2026-07-02 for the two unrecorded streams:
    [graph_delta_capture_apparatus_stats_plan](mere_docs/implementation_strategy/2026-07-02_graph_delta_capture_apparatus_stats_plan.md)
    (mere: `GraphDelta`) and
-   `serval:docs/2026-07-02_dom_mutation_capture_replay_plan.md`
-   (serval: `DomMutation`).
+   `genet:docs/2026-07-02_dom_mutation_capture_replay_plan.md`
+   (genet: `DomMutation`).
 3. **Uniform table instrumentation.** A tiny convention (not a framework):
    each arena exposes per-kind row counts and byte sizes, deltas per frame,
    and dirty-set size per propagation. Four integers per layer characterize
@@ -180,7 +180,7 @@ shared core.
    dirties 14 nodes"). Surface in the apparatus panel. This is the
    measurement half of the Valmet story and it costs a method per table.
    Planned 2026-07-02: apparatus surfacing in the graph-delta plan above
-   (Phase D); engine-arena stats in the serval plan (Phase 4).
+   (Phase D); engine-arena stats in the genet plan (Phase 4).
 4. **Oracle diffing for parallel implementations.** The box tree kept
    `TaffyTree` as its diff-test oracle until parity. That pattern (old fold
    as oracle, new fold diffed against it over the same delta stream) is the
@@ -254,17 +254,17 @@ shared core.
   (the layer tower: kernel → forme → platen → surfaces → host).
 - [document_script_substrate_plan](archive_docs/2026-07-03_completed_plans/2026-06-21_document_script_substrate_plan.md)
   (D-doc §10.2/§10.3: the per-turn batched mutation contract, instance 7a).
-- serval repo: `components/script-engine-nova/lib.rs` (data-oriented `Value`,
-  reflector bridge), `components/serval-scripted-dom/lib.rs` (NodeId arena,
-  mutation stream, doc-tag fence), `components/serval-layout/box_tree.rs` +
+- genet repo: `components/script-engine-nova/lib.rs` (data-oriented `Value`,
+  reflector bridge), `components/genet-scripted-dom/lib.rs` (NodeId arena,
+  mutation stream, doc-tag fence), `components/genet-layout/box_tree.rs` +
   `incremental.rs` (layout arena, classify/coalesce, paint-only skip),
   `components/xilem-serval/src/lib.rs` (view diff → DomMutation).
 - §6 item 7 (dormancy ladder): nova_vm
   `ecmascript/execution/agent.rs` (`GcAgent::snapshot_clone`,
   `Agent::clone_for_snapshot`) and `heap.rs` (`Heap::clone`) for the
-  same-process primitive; serval `components/script-engine-nova/lib.rs`
+  same-process primitive; genet `components/script-engine-nova/lib.rs`
   (`NovaEngine::snapshot_clone`) and `components/script-runtime-api/lib.rs`
-  (`Runtime::snapshot_clone`) for the embedding wrapper; serval
+  (`Runtime::snapshot_clone`) for the embedding wrapper; genet
   `docs/2026-06-24_wpt_harness_exactness_plan.md` §H2 for the
   checkpoint-snapshot precedent (clone posted after `testharness.js` eval);
   [native_surface_compositing_plan](archive_docs/2026-07-03_completed_plans/2026-06-19_native_surface_compositing_plan.md)
@@ -272,5 +272,5 @@ shared core.
 - Nova provenance: [What is the Nova JavaScript engine?](https://trynova.dev/blog/what-is-the-nova-javascript-engine),
   [Web Engines Hackfest 2024 slides](https://webengineshackfest.org/2024/slides/nova_javascript_engine_exploring_a_data-oriented_engine_design_by_aapo_alasuutari.pdf).
   Wasm intent: upstream repo tagline ("A JavaScript and WebAssembly engine
-  written in Rust"); the serval-embedder fork README still lists wasm
+  written in Rust"); the genet-embedder fork README still lists wasm
   execution as unimplemented.

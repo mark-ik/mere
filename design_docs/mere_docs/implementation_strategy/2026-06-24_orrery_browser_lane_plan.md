@@ -18,7 +18,7 @@ the browser; Mere adds the relational memory layer the browser lacks.
 
 - **The browser is another host for the orrery, the way pelt is.** The orrery is
   already `window-agnostic` (`frame(w,h) -> (Scene, needs_redraw)` + semantic input);
-  meerkat hosts it on pelt/serval/netrender natively. Swap the host adapter and the
+  meerkat hosts it on pelt/genet/netrender natively. Swap the host adapter and the
   *same component* renders to a browser surface. Not a port, the same orrery.
 - **Capture is the product; the views are secondary.** Even a user who never opens
   the orrery gets something a browser cannot give them: a private, durable, queryable
@@ -38,7 +38,7 @@ the browser; Mere adds the relational memory layer the browser lacks.
 
 ## 2. Why all three browsers rule (the unlock)
 
-The Memory64 / SharedArrayBuffer / COOP-COEP / nightly-build-std apparatus (serval's
+The Memory64 / SharedArrayBuffer / COOP-COEP / nightly-build-std apparatus (genet's
 `docs/2026-06-24_nova_memory64_browser_lane_plan.md`, and the
 [substrate parallelism brief](../../2026-06-21_substrate_parallelism_composition_brief.md))
 exists for one purpose: running a web engine (Nova page-JS + the parallel cascade)
@@ -54,7 +54,7 @@ and no parallel cascade. So none of that apparatus applies:
 | underlay render | WebGPU, Canvas2D fallback | ✓ | ✓ | ✓ (18+) / fallback |
 | capture + surfaces | WebExtension MV3 core | ✓ | ✓ | ✓ (Xcode wrap) |
 
-The scary part of "cross-browser" was a different, harder product (serval-in-the-
+The scary part of "cross-browser" was a different, harder product (genet-in-the-
 browser) that this lane sidesteps. WebKit's only real friction is **distribution**
 (Safari Web Extensions need an Xcode wrapper + App Store review) and **WebGPU
 maturity** (Canvas2D is the insurance), not capability.
@@ -67,7 +67,7 @@ origin = one OPFS store all surfaces share.
 
 - **Background capture** (service worker + content script): on each `webNavigation`
   commit, the content script hands the page HTML + favicon to the background, which
-  runs `serval-extract` (title / metadata / outline / links / text), takes a
+  runs `genet-extract` (title / metadata / outline / links / text), takes a
   `captureVisibleTab` snapshot, and writes a node + a provenance edge into eidetic.
   Runs whether or not a view is ever opened.
 - **The gloss sidebar** (`sidePanel` / sidebar): the djot outline of where you are,
@@ -104,7 +104,7 @@ layer** is the underlay (edges / fields) in the WebGPU Scene.
 - `eidetic-core` + `eidetic-opfs`, the data model + the OPFS Store. **This lane is the
   browser-side consumer that activates [Phase 7](../../eidetic_docs/implementation_strategy/2026-06-09_eidetic_deferred_phases_plan.md)**
   (gates a/b/c measured; pack small blobs).
-- `serval-extract`, the capture's content half (render-free; depends only on
+- `genet-extract`, the capture's content half (render-free; depends only on
   `layout-dom-api`, no engine rides in).
 - `glossary` (`outline_djot` / `graph_metrics`, the
   [gloss outline lens](2026-06-23_gloss_outline_lens_plan.md)), feeds the sidebar.
@@ -116,17 +116,17 @@ layer** is the underlay (edges / fields) in the WebGPU Scene.
 - A wasm entrypoint driving `orrery.frame(...)`, lowering the Scene to WebGPU/Canvas2D
   for the underlay, placing gyre-positioned **DOM elements** for the nodes, routing DOM
   events back as semantic input.
-- The capture pipeline (nav → DOM grab → `serval-extract` + `captureVisibleTab` +
+- The capture pipeline (nav → DOM grab → `genet-extract` + `captureVisibleTab` +
   favicon + provenance → eidetic node + edge).
 - The MV3 extension shell, packaged per browser.
 
-**Dropped (the browser supplies it):** serval, inker, pelt, the meerkat host,
+**Dropped (the browser supplies it):** genet, inker, pelt, the meerkat host,
 Nova/Boa, the companion (deferred with sync).
 
 ## 6. Phases (v1, no sync)
 
 - **P0, the portable wasm core builds baseline.** `orrery` + `eidetic-opfs` +
-  `serval-extract` + `glossary` compile for `wasm32-unknown-unknown` (the `getrandom`
+  `genet-extract` + `glossary` compile for `wasm32-unknown-unknown` (the `getrandom`
   `wasm_js` flag is known). **Measure the bundle size early** (like the OPFS bench);
   it is the first real gate.
 - **P1, capture.** The MV3 shell + the pipeline writing nodes/edges (+ snapshots +
@@ -140,10 +140,10 @@ Nova/Boa, the companion (deferred with sync).
 
 ## 7. Honest gates / hard parts
 
-- **Bundle size.** orrery + eidetic + serval-extract + glossary as one baseline wasm
+- **Bundle size.** orrery + eidetic + genet-extract + glossary as one baseline wasm
   must fit the extension budget. Measure at P0.
 - **Where the extraction wasm runs.** Content-script CSP makes running wasm there
-  awkward; grab the DOM in the content script, run `serval-extract` in the background /
+  awkward; grab the DOM in the content script, run `genet-extract` in the background /
   an offscreen document.
 - **WebGPU-in-an-extension-page** is solid on Chromium/Gecko, newer on Safari; the
   underlay is simple enough that the Canvas2D fallback is real insurance.
@@ -180,7 +180,7 @@ Nova/Boa, the companion (deferred with sync).
 - [browser_extension_companion_plan](2026-06-23_browser_extension_companion_plan.md)
   (superseded node/delivery framing; the companion/federation forward vision stands).
 - [substrate parallelism brief](../../2026-06-21_substrate_parallelism_composition_brief.md)
-  and the serval Nova-Memory64 lane (why running a web engine is the hard path this
+  and the genet Nova-Memory64 lane (why running a web engine is the hard path this
   sidesteps; the actor-per-origin substrate).
 - [eidetic Phase 7](../../eidetic_docs/implementation_strategy/2026-06-09_eidetic_deferred_phases_plan.md)
   (the OPFS Store this lane activates; gates measured, pack small blobs).

@@ -20,7 +20,7 @@ fn show(url: &str, content_type: &str, body: &str) -> ContentCommand {
             content_type: Some(content_type.to_string()),
             body: body.to_string(),
         })),
-        engine: inker::routing::ENGINE_SERVAL_WEB.to_string(),
+        engine: inker::routing::ENGINE_GENET_WEB.to_string(),
         viewport: (420, 360),
         nav: NavGeneration::default(),
         viewport_gen: ViewportGeneration::default(),
@@ -165,7 +165,7 @@ fn show_harvests_embedded_jsonld_into_a_contribution() {
 /// reflow around it (its own text is byte-stable), and `ClearOverlay` restores the
 /// exact baseline band. This is the meerkat integration proof; the geometric
 /// survival half — an overlay re-deriving its position across scroll bands and an
-/// anchor-moving mutation — is proven headless engine-side by serval-layout's
+/// anchor-moving mutation — is proven headless engine-side by genet-layout's
 /// `overlay_slot_tracks_its_anchor_across_bands` (the retained layout the actor
 /// re-emits per band is the same one those tests exercise).
 #[cfg(not(target_arch = "wasm32"))]
@@ -184,7 +184,7 @@ fn overlay_slot_composites_over_a_live_page_without_reflow() {
     ));
     // A satellite "chip": a single distinctly-coloured fill, laid out host-side
     // (here built directly — the actor is oblivious to how the host produced it).
-    let mut chip = serval_layout::ServalPaintList::new(paint_list_api::DeviceIntSize::new(40, 20));
+    let mut chip = genet_layout::GenetPaintList::new(paint_list_api::DeviceIntSize::new(40, 20));
     chip.push_fill(
         0.0,
         0.0,
@@ -266,7 +266,7 @@ const INLINE_SCRIPT_PAGE: &str = "<body><script>\
 
 #[cfg(feature = "scripted")]
 fn scripted_show(url: &str, body: &str) -> ContentCommand {
-    scripted_show_with_engine(inker::routing::ENGINE_SERVAL_SCRIPTED, url, body)
+    scripted_show_with_engine(inker::routing::ENGINE_GENET_SCRIPTED, url, body)
 }
 
 #[cfg(feature = "scripted")]
@@ -323,7 +323,7 @@ fn scripted_nova_rung_runs_inline_script_and_renders() {
         false,
     );
     handle.command(scripted_show_with_engine(
-        inker::routing::ENGINE_SERVAL_SCRIPTED_NOVA,
+        inker::routing::ENGINE_GENET_SCRIPTED_NOVA,
         "https://example.com/app",
         INLINE_SCRIPT_PAGE,
     ));
@@ -386,7 +386,7 @@ fn scripted_rung_click_dispatches_to_script() {
     );
 }
 
-/// Control: the same page on the static serval lane (its default engine) never
+/// Control: the same page on the static genet lane (its default engine) never
 /// runs the script, so the otherwise-empty body paints no text — proving the
 /// glyphs above came from the JS, not the markup.
 #[cfg(feature = "scripted")]
@@ -439,7 +439,7 @@ fn scripted_rung_runs_external_script() {
         body: "<body><script src=\"app.js\"></script></body>".to_string(),
     });
     let mut doc = build_scripted(
-        inker::routing::ENGINE_SERVAL_SCRIPTED,
+        inker::routing::ENGINE_GENET_SCRIPTED,
         "http://x/index.html",
         Some(&state),
         Some(&fetcher),
@@ -472,7 +472,7 @@ fn scripted_rung_document_cookie_reaches_the_jar() {
     // A fetcher (even a no-op) is what installs the cookie provider; the script runs
     // on build and writes through it.
     let _doc = build_scripted(
-        inker::routing::ENGINE_SERVAL_SCRIPTED,
+        inker::routing::ENGINE_GENET_SCRIPTED,
         url,
         Some(&state),
         Some(&NoFetch),

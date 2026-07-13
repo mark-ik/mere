@@ -6,8 +6,8 @@
 [data-oriented doctrine brief](../../2026-07-02_data_oriented_doctrine_brief.md)
 (§6 items 2-3): make the orrery's `GraphDelta` stream recordable and replayable,
 wire the first producer for the existing `Replay*` variants, and give the
-apparatus panel real per-table instrumentation. The serval half (DomMutation
-capture, engine arena stats) is `serval:docs/2026-07-02_dom_mutation_capture_replay_plan.md`.
+apparatus panel real per-table instrumentation. The genet half (DomMutation
+capture, engine arena stats) is `genet:docs/2026-07-02_dom_mutation_capture_replay_plan.md`.
 
 **Out of scope:** log-authoritative persistence (rides the p2panda event-DAG
 substrate work; today's snapshot-authoritative kernel persistence stands),
@@ -97,8 +97,8 @@ deviations in the brief; revisit when scale demands).
 - Sources, in wiring order:
   1. kernel: node count, edge count by family, history owner/entry counts,
      delta-log length (from Phase B when active);
-  2. serval engine arenas via the observables seam (DOM nodes/bytes, last
-     restyle batch). The serval-side producer is landed; mere still needs to
+  2. genet engine arenas via the observables seam (DOM nodes/bytes, last
+     restyle batch). The genet-side producer is landed; mere still needs to
      surface it per focused document/lane;
   3. Scene: per-frame op count and encoded size (numbers the transfer path
      already computes). The mere-side surfacing is now landed through the
@@ -193,7 +193,7 @@ deviations in the brief; revisit when scale demands).
   snapshot test, and returned the `meerkat` log replay oracle to full
   canonicalized `GraphSnapshot` comparison for that field.
 - 2026-07-02: apparatus engine-document stats slice landed. Content actors now
-  ship focused-document Serval observables (`DomArenaStats` plus optional
+  ship focused-document Genet observables (`DomArenaStats` plus optional
   `LayoutBatchStats`) through the host update stream; the constellation caches
   them per activation; and apparatus now replaces the old "Document tables: not
   wired yet" placeholder with real focused-document DOM/layout rows when the

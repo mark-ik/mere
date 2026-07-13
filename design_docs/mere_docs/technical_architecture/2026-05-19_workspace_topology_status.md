@@ -1,7 +1,7 @@
 # Workspace Topology Status — 2026-05-19
 
 **Date**: 2026-05-19
-**Status**: Snapshot after the B1–B7 supercrate naming pass + vestigial cleanup. **Latest:** §7 (2026-06-07) records the `graphshell/` supercrate dissolution into the `graph` / `orrery` / `shell` / `system` clusters; §8 (2026-06-07) records the `canvas-ir` + `graph-layout` review → `orrery/arrangements` + `gyre::barnes_hut`. §§1–5 predate the serval-as-host flip and are stale (see §7's staleness flag).
+**Status**: Snapshot after the B1–B7 supercrate naming pass + vestigial cleanup. **Latest:** §7 (2026-06-07) records the `graphshell/` supercrate dissolution into the `graph` / `orrery` / `shell` / `system` clusters; §8 (2026-06-07) records the `canvas-ir` + `graph-layout` review → `orrery/arrangements` + `gyre::barnes_hut`. §§1–5 predate the genet-as-host flip and are stale (see §7's staleness flag).
 **Companion to**: [`../research/2026-05-15_browser_taxonomy_translation_brief.md`](../research/2026-05-15_browser_taxonomy_translation_brief.md) (taxonomy-translation framing), [`../implementation_strategy/2026-05-15_spatial_chrome_modular_adoption_plan.md`](../implementation_strategy/2026-05-15_spatial_chrome_modular_adoption_plan.md) (adoption sequence).
 
 Earlier doc-level snapshots (e.g. the topology table in `DOC_README.md`) predate this pass and still cite a `crates/workbench/` umbrella that the rename dissolved. This file is the current source of truth for the workspace shape; the index has been updated to point here.
@@ -103,7 +103,7 @@ Mainstream browsers (Firefox, Chromium) ship roughly twelve functional groups. M
 |---|---|---|---|
 | **Browser chrome / UI** | Title bar, menus, address bar, sidebar, settings | Toolbar + omnibar + command palette + authorities view-models (rendered via xilem-masonry once the panel renderer lands) | `graphshell/shell/domain/chrome`, `forme/uxtree` |
 | **Tab management** | Tab strip, tab switcher, session restore | **Replaced** by spatial graph canvas — nodes are tiles, edges are relations, tabs are not a primary concept; switcher = graph thumbnails | `graphshell/graph/{kernel,canvas,cartography,orrery}`, `forme/forme`, session-runtime's `switcher_thumbnail` |
-| **Web engine** | DOM/CSS/layout/JS engine | **Multi-tenant** — engines coexist via inker registry: `scrying.web` (system WebView), `nematic.*` (smolweb), `serval.web` (full web, external) | `inker/engines/{scrying-engine,nematic}`, `crates/verso/masonry-renderer` (excluded), serval (external) |
+| **Web engine** | DOM/CSS/layout/JS engine | **Multi-tenant** — engines coexist via inker registry: `scrying.web` (system WebView), `nematic.*` (smolweb), `genet.web` (full web, external) | `inker/engines/{scrying-engine,nematic}`, `crates/verso/masonry-renderer` (excluded), genet (external) |
 | **Rendering / compositor** | Display list → compositor scene → GPU | Renderer-registry contract; three composition modes (InScenePaint / EmbeddedFrame / Overlay). vello + wgpu under everything. | `graphshell/shell/system/registry/register-renderer{,-types}`, `verso/{verso-core,scrying-renderer}`, `platen/platen` |
 | **Process model** | Parent + content + GPU + network processes | **Single-process logical daemon** at v1; SessionServiceRunner reserves the seam for later split | `graphshell/shell/session-runtime::session_service_runner` |
 | **Networking** | HTTP, fetch, cookies, cache, TLS, DNS | Two fetchers + a peer transport; cookies/cache fold into engine profile bytes | `eidetic/{eidetic-https-fetcher,eidetic-iroh-fetcher}`, `murm/transport` |
@@ -195,7 +195,7 @@ crates/
 │   └── linked-data/       — RDF/linked-data ingest + export
 │
 ├── orrery/       # Presentation + manipulation of the graph (the field-canvas)
-│   ├── orrery/            — `orrery` (was orrery-host): the serval-on-winit content-root
+│   ├── orrery/            — `orrery` (was orrery-host): the genet-on-winit content-root
 │   │                         host; `frame(w,h) -> (Scene, redraw)` + the always-offload
 │   │                         physics backend. meerkat hosts the same `Orrery` lib.
 │   ├── gyre/              — rapier-backed body/field simulation + rapier-free LayoutView
@@ -234,9 +234,9 @@ green: full `cargo build` + tests at the same counts as before the move (kernel
 
 ### Staleness flag (deferred)
 
-§§1–5 above predate **both** the serval-as-host flip **and** this dissolution.
+§§1–5 above predate **both** the genet-as-host flip **and** this dissolution.
 They still describe `crates/mere/host` + `host-substrate` as the binary — the host
-is now **`meerkat`** (serval-as-host; see the [serval host flip plan](../implementation_strategy/2026-06-01_serval_host_flip_plan.md)),
+is now **`meerkat`** (genet-as-host; see the [genet host flip plan](../implementation_strategy/2026-06-01_genet_host_flip_plan.md)),
 and several crates named there (`spatial-substrate`, `host-ports`, `control-plane`,
 `register-renderer`, `verso/scrying-renderer`, `crates/mere/host-substrate`) have
 since moved, merged, or been cut. The cluster tree in this §7 is the current
@@ -299,7 +299,7 @@ session-runtime re-export nothing downstream used. Outcome:
   (`tile-state` + its unconsumed re-export). Stale layer claims removed from
   the platen README/lib docs, forme, uxtree, eidetic-core, and inker docs.
 - **The name survives with a designated charter**: verso = the engine-flip /
-  compatibility-view seam, minted at the first serval→scrying flip — see
+  compatibility-view seam, minted at the first genet→scrying flip — see
   [`verso_docs/technical_architecture/2026-06-10_compatibility_view_charter.md`](../../verso_docs/technical_architecture/2026-06-10_compatibility_view_charter.md).
   The `verso-tile` crates.io reservation is unaffected.
 

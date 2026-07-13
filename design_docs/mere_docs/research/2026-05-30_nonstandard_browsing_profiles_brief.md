@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-30
 **Status:** Research brief. Refreshes May substrate research against current upstream code and specifications.
-**Scope:** Optional browsing profiles and semantic-web donor code above Mere's native event DAG, Iroh transport, and Serval/Xilem host boundary.
+**Scope:** Optional browsing profiles and semantic-web donor code above Mere's native event DAG, Iroh transport, and Genet/Xilem host boundary.
 
 ---
 
@@ -91,7 +91,7 @@ The implementation estimate changes:
 
 Iroh itself is moving quickly. The [Iroh 1.0 release candidate](https://www.iroh.computer/blog/iroh-1-0-release-candidate) was announced on 2026-05-19 and includes WebAssembly support. Mere currently pins the 0.98 family in `murm`.
 
-This does not require an immediate transport rewrite. It adds a useful experiment: determine whether a browser-Wasm peer lane can complement the native Serval/Xilem host and existing fetch boundary.
+This does not require an immediate transport rewrite. It adds a useful experiment: determine whether a browser-Wasm peer lane can complement the native Genet/Xilem host and existing fetch boundary.
 
 ### 3.3 NextGraph and Lofire
 
@@ -114,7 +114,7 @@ The broader stack is active:
 - [SHACL 1.2 Core](https://www.w3.org/TR/shacl12-core/) is under active development.
 - [SHACL 1.2 UI](https://www.w3.org/TR/shacl12-ui/) published its first Working Draft on 2026-05-26.
 
-SHACL 1.2 UI is particularly relevant to the Serval/Xilem authoring layer: accepted schema engrams could describe validation constraints and editing affordances, while Rust-native views render the actual interface.
+SHACL 1.2 UI is particularly relevant to the Genet/Xilem authoring layer: accepted schema engrams could describe validation constraints and editing affordances, while Rust-native views render the actual interface.
 
 ---
 
@@ -140,7 +140,7 @@ RDF-CRDT behavior should remain specialized. It may be valuable for collaborativ
 |---|---|---|---|
 | P0 | Semantic projection | JSON-LD 1.1, RDF 1.2, SPARQL 1.2, SHACL 1.2, `engine/oxigraph` | Lossless export, interoperable ingest, derived query, validation, and authoring metadata. |
 | P0 | Annotated temporal snapshot | [Web Annotation](https://www.w3.org/TR/annotation-model/), [Memento RFC 7089](https://www.rfc-editor.org/rfc/rfc7089.html), [WACZ 1.2](https://specs.webrecorder.net/wacz/1.2.0/) | Natural fit for engrams, provenance, glosses, archived pages, and time-aware browsing. |
-| P1 | Portable miniapp | [webxdc](https://webxdc.org/docs/spec/index.html) | Network-isolated packages with host-mediated updates map cleanly to primitive Moot nodes and separate Serval roots. |
+| P1 | Portable miniapp | [webxdc](https://webxdc.org/docs/spec/index.html) | Network-isolated packages with host-mediated updates map cleanly to primitive Moot nodes and separate Genet roots. |
 | P1 | Linked notification | [Webmention](https://www.w3.org/TR/webmention/), [LDN](https://www.w3.org/TR/ldn/), [Solid Notifications](https://solidproject.org/TR/notifications-protocol) | External inbox and subscription adapters for mentions, replies, and graph-change notices. |
 | P1 | Reproducible bundle | [RO-Crate 1.2](https://www.researchobject.org/ro-crate/1.2/introduction.html) | JSON-LD package shape for research objects, datasets, provenance, and engram bundles. |
 | P2 | Compound media | [IIIF Presentation 3.0](https://iiif.io/api/presentation/3.0/) | Browseable canvases, annotations, and manifests for image, document, and audiovisual collections. |
@@ -212,7 +212,7 @@ Replace the old line-count estimate with a current integration measurement:
 
 ### Spike D: webxdc-style miniapp
 
-Render one signed, network-isolated package in its own Serval root. Limit it to host-mediated state updates and explicit capabilities. This tests the boundary for future applets without prematurely inventing a full extension platform.
+Render one signed, network-isolated package in its own Genet root. Limit it to host-mediated state updates and explicit capabilities. This tests the boundary for future applets without prematurely inventing a full extension platform.
 
 ---
 

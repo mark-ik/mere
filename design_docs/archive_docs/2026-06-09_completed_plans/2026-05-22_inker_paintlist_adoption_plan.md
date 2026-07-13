@@ -5,15 +5,15 @@
 `paint_list_render` translator, replacing its bespoke
 `DocumentRenderPacket → netrender::Scene` walk. This is phase **P4** of the
 cross-repo PaintList-layer extraction; the master plan and the P1–P3
-receipts (the serval side + the new neutral crates) live at
-[`serval/docs/2026-05-20_paintlist_extraction_plan.md`](../../../../serval/docs/2026-05-20_paintlist_extraction_plan.md).
+receipts (the genet side + the new neutral crates) live at
+[`genet/docs/2026-05-20_paintlist_extraction_plan.md`](../../../../genet/docs/2026-05-20_paintlist_extraction_plan.md).
 
 ## Why
 
 Before P4, document-canvas reached the renderer through its own
 hand-rolled scene walk ([`netrender_backend::scene_from_packet`]),
 bypassing `paint_list_api` entirely. That made it a *second door* to the
-renderer alongside serval — proving the polyglot PaintList story was
+renderer alongside genet — proving the polyglot PaintList story was
 not actually exercised by a second engine. P4 routes inker through the
 same shared vocabulary + translator, making it the second genuine
 PaintList producer.
@@ -40,7 +40,7 @@ PaintList producer.
 - `netrender::Scene::push_font` does not validate bytes (it stores the
   blob and returns an id), so unit tests can use a dummy non-empty face
   and still assert a `GlyphRun` op is emitted; real-font fidelity is a
-  rasterization concern, validated serval-side.
+  rasterization concern, validated genet-side.
 
 ## What changed
 
@@ -97,16 +97,16 @@ needed:
 - `Run::normalized_coords() -> &[i16]` — variable-font axis coords the
   run was shaped at.
 
-### Reference implementation — serval already does Tier 1
+### Reference implementation — genet already does Tier 1
 
-This is not an open design question. Serval, the more mature sibling
+This is not an open design question. Genet, the more mature sibling
 producer, already does exactly what Tier 1 proposes:
-[`serval-layout::paint_emit`](../../../../serval/components/serval-layout/paint_emit.rs)
+[`genet-layout::paint_emit`](../../../../genet/components/genet-layout/paint_emit.rs)
 keys its `FontCollector` on `font.data.id()` (blob id) and interns
 `parley_run.font()` — parley's *actual* shaped face, not a re-resolved
 label — shipping `font.data.data().to_vec()` + `font.index`. **Inker is
 the only one of the four producers doing label re-resolution.** That
-collapses Tier 1 from a design exercise to a mirror-task: copy serval's
+collapses Tier 1 from a design exercise to a mirror-task: copy genet's
 `FontCollector` shape and its `emit_with_layouts_populates_font_table`
 test pattern. Lead the graduated plan with this.
 
@@ -153,8 +153,8 @@ Lean (a).
 
 ### Architectural note — does the serializable intermediate earn its keep?
 
-Serval has none of this tension because
-[`serval-layout::paint_emit`](../../../../serval/components/serval-layout/paint_emit.rs)
+Genet has none of this tension because
+[`genet-layout::paint_emit`](../../../../genet/components/genet-layout/paint_emit.rs)
 emits `PaintCmd`s straight from the live parley `Layout` at walk time — it
 never drops to a serializable intermediate, so glyph IDs and face bytes
 can't diverge by construction. Inker's tension is *entirely* a product of
@@ -169,7 +169,7 @@ AccessKit)" rationale is aspirational — nothing pulls on the packet's
 
 - **Keep the intermediate, add the sidecar** (option (a)) — smaller,
   reversible, ships Tier 1 now. Recommended near-term.
-- **Collapse toward serval's shape** — keep the parley `Layout` alive and
+- **Collapse toward genet's shape** — keep the parley `Layout` alive and
   emit the `PaintList` directly, retiring the serializable packet. Makes
   the bug *and* the tension vanish together; the right move if the
   packet's `Serialize` derive stays unpulled. Decide this consciously
@@ -203,7 +203,7 @@ Resolve the two together.
    per option (a) — the packet stays honestly serializable.
 3. `paint_list.rs` — drop resolver re-resolution; map `FontFaceId →
    FontInstanceKey`; populate `InkerPaintList.fonts` from the sidecar table
-   (dedup by blob id). Mirror serval's `FontCollector`.
+   (dedup by blob id). Mirror genet's `FontCollector`.
 4. `font.rs` — remove `resolve_font_data`'s render role; keep
    `register_with_parley`.
 5. Tests — a fallback case (resolver advertises family A; parley falls
@@ -223,8 +223,8 @@ Resolve the two together.
   [`FontRegistry`](../../../../netrender/netrender/src/registry.rs) built
   for exactly this is never threaded into the translator.
   - **Consumer-reality check (2026-05-23, corrected 2026-05-24).** The
-    render path is *not* absent — serval's C4 landed 2026-05-09:
-    [`Paint::render`](../../../../serval/components/paint/netrender_painter.rs)
+    render path is *not* absent — genet's C4 landed 2026-05-09:
+    [`Paint::render`](../../../../genet/components/paint/netrender_painter.rs)
     drives `renderer.render_with_compositor(&state.scene, …)` on a
     persistent `netrender::Renderer` (one per painter id, built in
     `register_rendering_context`). It renders the *stored* `Scene`, whose
@@ -252,10 +252,10 @@ Resolve the two together.
 - **Tier 2b sequencing (synthesis)** — renderer-capability work. Add a
   run-level synthesis payload to the PaintList API, then plan the
   netrender/vello implementation separately (especially faux-bold).
-- **Cross-check serval-layout** — *resolved:* serval already threads
+- **Cross-check genet-layout** — *resolved:* genet already threads
   `run.font()` and keys on `Blob::id()` (see "Reference implementation —
-  serval already does Tier 1" above). Mirror it; this scope does not apply
-  to serval.
+  genet already does Tier 1" above). Mirror it; this scope does not apply
+  to genet.
 
 ## Progress
 
@@ -267,7 +267,7 @@ Resolve the two together.
     the producer path stays wgpu-free / wasm-light.
   - `paint_list_api` `engine_id_sentinels_are_stable` green with `INKER`.
 - 2026-05-23: v2 scope sharpened against the codebase (parley 0.9,
-  netrender, `paint_list_api`, serval-layout). Revisions: serval already
+  netrender, `paint_list_api`, genet-layout). Revisions: genet already
   implements Tier 1 (mirror-task, not a design exercise); option (a) is a
   sidecar return, not a `#[serde(skip)]` packet field; Tier 2 split into 2a
   (var-coords, upstream-only — netrender already models it) and 2b
@@ -304,7 +304,7 @@ Resolve the two together.
     the change is one self-contained pass fully covered by the scope above
     (DOC_POLICY §1 — control doc growth).
 
-This completes the extraction's payoff: serval and inker are now two
+This completes the extraction's payoff: genet and inker are now two
 producers of the same `paint_list_api` vocabulary, both lowering through
 the one shared `paint_list_render` translator. Tier 1 (thread parley's
 real `FontData`) landed 2026-05-23 — see Progress. **Tier 2a** (var-coords,

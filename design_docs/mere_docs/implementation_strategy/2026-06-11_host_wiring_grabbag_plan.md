@@ -1,8 +1,8 @@
 # Host Wiring Grab-Bag Plan
 
 **Date**: 2026-06-11
-**Status**: **Serval-side complete (2026-06-12); meerkat adoption of 4 items still
-open.** All eight items' serval / xilem-serval seams landed (G1.1–G1.4, G2.1–G2.4).
+**Status**: **Genet-side complete (2026-06-12); meerkat adoption of 4 items still
+open.** All eight items' genet / xilem-serval seams landed (G1.1–G1.4, G2.1–G2.4).
 Two have live meerkat callers (G2.1 IME, G2.4 chrome a11y actions); the other four
 (G1.1 on_wheel, G1.2 transform hit-test, G1.3 pointer cancel, G2.3 keyboard escapes)
 are runway with **no meerkat caller**, their own done-conditions (meerkat adoption)
@@ -11,8 +11,8 @@ not 8/0. Per-item statuses below. Spun out of the
 [host cheap-path plan](../../archive_docs/2026-06-15_completed_plans/2026-06-10_host_cheap_path_plan.md)'s C6 (which is now
 otherwise done: C0–C5 + C4c shipped). This was the checklist of record for the
 remaining host-wiring parity items; what is left is meerkat-side adoption of the
-serval-side runway (G1.1–G1.3, G2.3), which rides window-composition P2+.
-**Scope**: The grab-bag of serval / xilem-serval host capability that is wired
+genet-side runway (G1.1–G1.3, G2.3), which rides window-composition P2+.
+**Scope**: The grab-bag of genet / xilem-serval host capability that is wired
 and tested one layer down with zero or stub meerkat callers. Each item lands
 separately; this plan phases them by what unblocks what, not by date.
 **Related**: the [host cheap-path plan](../../archive_docs/2026-06-15_completed_plans/2026-06-10_host_cheap_path_plan.md) (the
@@ -42,16 +42,16 @@ call site).
 ## Phase G1 — Composition runway (do before window-composition P2+)
 
 **G1 COMPLETE (2026-06-11).** All four landed: G1.1 `on_wheel` infra, G1.2
-transform-aware hit-test, G1.3 pointer cancellation (serval, committed
+transform-aware hit-test, G1.3 pointer cancellation (genet, committed
 `718cf5d7d3c` / `bab5a2c7f1c` / `173282dde89`), G1.4 `memoize` (meerkat). The
-serval-side seams (G1.1–G1.3) are forward-looking runway — their meerkat callers
+genet-side seams (G1.1–G1.3) are forward-looking runway — their meerkat callers
 arrive with window-composition P2+; G1.4 ships its meerkat caller now. Per-item
 status under each heading.
 
-### G1.1 — `on_wheel` event view (serval)
+### G1.1 — `on_wheel` event view (genet)
 
 **Now**: meerkat hand-routes wheel input (`app_handler.rs:370-414`) and owns
-`ScrollOffsets`; serval has the one open Stage-3 event-view gap here — no
+`ScrollOffsets`; genet has the one open Stage-3 event-view gap here — no
 `on_wheel` registry/dispatch parallel to `on_pointer`.
 
 **Do**: add an `on_wheel` registry + dispatch mirroring `on_pointer`, so wheel
@@ -60,7 +60,7 @@ becomes view-owned and per-pane.
 **Done when**: meerkat's hand-routed wheel and host-owned `ScrollOffsets` retire
 in favour of per-pane view-routed wheel.
 
-**Status (2026-06-11): serval half DONE; meerkat retirement gated on
+**Status (2026-06-11): genet half DONE; meerkat retirement gated on
 composition.** The event-view gap is closed: `xilem-serval` now has `on_wheel`
 parallel to `on_pointer` — `WheelEvent { delta, local, size }` + `OnWheel` view
 (`wheel.rs`), a no-phase `wheel_handlers` registry (`context.rs`), and
@@ -74,9 +74,9 @@ nodes, so there is nothing in today's view tree to attach `on_wheel` to. That
 retirement lands when window-composition P2+ expresses those panes as views —
 the infra is now the runway it needs.
 
-### G1.2 — Transform-aware hit-testing (serval)
+### G1.2 — Transform-aware hit-testing (genet)
 
-**Now**: `walk_for_hit` (`serval_lane.rs`) composes box *locations* only, not CSS
+**Now**: `walk_for_hit` (`genet_lane.rs`) composes box *locations* only, not CSS
 transforms; the matrices it needs already exist in the same crate
 (`compute_transform_matrix` + `conjugate_at`, used by paint). So a hit inside a
 `transform`ed subtree (the orrery camera container) mis-resolves.
@@ -87,7 +87,7 @@ transforms; the matrices it needs already exist in the same crate
 any interactive DOM content under the orrery camera (and, with G1.3, the
 *interactive* external-texture element).
 
-**Status (2026-06-11): DONE.** `walk_for_hit` (`serval_lane.rs`) now folds each
+**Status (2026-06-11): DONE.** `walk_for_hit` (`genet_lane.rs`) now folds each
 node's CSS transform into the walk: it maps the incoming point through the
 node's transform conjugated at the box origin (`conjugate_at` +
 `compute_transform_matrix`, made `pub(crate)`), the exact composition
@@ -96,7 +96,7 @@ is a no-op (untransformed DOMs byte-identical); the inverse telescopes through
 nesting (each node maps the already-mapped point); a singular transform skips its
 subtree. Guards: `hit_test_resolves_a_point_inside_a_translated_subtree` and
 `..._scaled_subtree` (scale exercises the around-origin conjugation a translate
-can't); clip/scroll/topmost tests unregressed; 141/141 serval-layout green,
+can't); clip/scroll/topmost tests unregressed; 141/141 genet-layout green,
 meerkat builds clean. No current consumer (the orrery picks geometrically), so
 this is runway — interactive DOM under the orrery camera in composition P2+ is
 the first caller.
@@ -127,7 +127,7 @@ the pointer path yet.
 
 ### G1.4 — `memoize` the stable chrome subtrees (xilem-serval)
 
-**Now**: `memoize` is re-exported and tested over `ServalCtx` but has zero
+**Now**: `memoize` is re-exported and tested over `GenetCtx` but has zero
 meerkat callers, so the whole view tree rebuilds per event.
 
 **Do**: wrap the stable chrome subtrees in `memoize`.
@@ -194,7 +194,7 @@ view in chrome behaves the same on both paths.
 `finish()` hands it back — so the fix is a **take → route → finish → restore**
 thread, not a swap, and there are **four** dispatch sites (click, key, pointer,
 and the G1.1 wheel), the click/key ones looping over multiple paths (env threaded
-through the loop). New `ServalCtx::take_environment` / `set_environment` back it.
+through the loop). New `GenetCtx::take_environment` / `set_environment` back it.
 Behaviorally a no-op today — nothing reads the env in a message path, so the real
 env and `Environment::new()` are both empty — so verification is the full suite
 staying green (48/48; no dispatch regression) plus by-construction correctness;
@@ -213,7 +213,7 @@ an overridable Tab default; Vec-per-node listener registries.
 **Done when**: a plain button is keyboard-activatable, Tab is overridable
 per-view, and a node can carry multiple listeners of one kind.
 
-**Status (2026-06-12): DONE (serval-side; meerkat adoption is the follow-up).**
+**Status (2026-06-12): DONE (genet-side; meerkat adoption is the follow-up).**
 All three escape hatches landed in xilem-serval.
 (1) **Vec-per-node registries** — `click_handlers` / `key_handlers` now map a node
 to a `Vec<Handler>` (idempotent per routing path); `register_*` appends rather than
@@ -238,7 +238,7 @@ winit Tab/Enter/Space through `dispatch_key`) is the on-device follow-up.
 ### G2.4 — Chrome a11y actions
 
 **Now**: C4c landed the chrome a11y *tree* (roles/names/bounds derive from the
-rendered chrome `ScriptedDom` via `serval_a11y`), but the chrome is not
+rendered chrome `ScriptedDom` via `genet_a11y`), but the chrome is not
 *actionable* — a screen reader cannot activate the omnibar or a toolbar button.
 (No regression: chrome was unactionable before too.)
 
@@ -249,7 +249,7 @@ existing activation paths.
 toolbar button) through the a11y tree.
 
 **Status (2026-06-12): DONE.** Two parts. **Part 1** (2026-06-11): chrome controls
-*advertise* their action (`serval_a11y::build` calls `Node::add_action` —
+*advertise* their action (`genet_a11y::build` calls `Node::add_action` —
 `Button`→`Click`, `TextInput`→`Focus`); guard in
 `chrome_dom_projects_to_a11y_subtree` (`supports_action`). **Part 2** (2026-06-12):
 the host now *routes* the resulting `ActionRequest` back to the chrome's activation
@@ -287,19 +287,19 @@ firing the `ActionRequest`) is the one check left, as with G2.1's IME round-trip
   rides them, so they clear the runway before the pane-heavy phases. The G2
   items are correctness, independent of that ordering.
 - Almost everything here is "wired one layer down, no caller up top": the
-  capability exists and is tested in serval / xilem-serval; the work is the
+  capability exists and is tested in genet / xilem-serval; the work is the
   meerkat (or dispatch) call site, not new infrastructure. The exceptions that
-  need real serval code are G1.1 (`on_wheel` dispatch) and G1.2 (transform
+  need real genet code are G1.1 (`on_wheel` dispatch) and G1.2 (transform
   threading into the hit walk).
 - Constraint carried from the flip plan: keep every new host-coupling
-  retargetable. These are serval-side seams; meerkat's adoption stays confined
+  retargetable. These are genet-side seams; meerkat's adoption stays confined
   to its render / input / app-handler call sites.
 
 ## Progress
 
 - **2026-06-11** — Plan spun out of the host cheap-path plan's C6 once that plan's
   perf chain (C0–C5 + C4c) finished. No code yet. Phase G1 is the entry point
-  (composition runway); start with G1.1 / G1.2 (the two that need real serval
+  (composition runway); start with G1.1 / G1.2 (the two that need real genet
   code) since G1.3 / G1.4 are mechanical wraps that ride them.
 - **2026-06-11** — Phase G1 complete (G1.1–G1.4); G2.1 (IME), G2.2 (env threading),
   and G2.4 part 1 (advertise actions) landed. G2.4 part 2 deferred with a design
@@ -310,6 +310,6 @@ firing the `ActionRequest`) is the one check left, as with G2.1's IME round-trip
   keyboard-model escape hatches landed in xilem-serval — Vec-per-node listener
   registries, a `focusable()` marker, and Enter/Space activation + overridable Tab.
   **Phase G2 done; the grab-bag plan is complete** (G1.1–G1.4, G2.1–G2.4 all
-  landed). The remaining work is meerkat-side adoption of the serval-side runway
+  landed). The remaining work is meerkat-side adoption of the genet-side runway
   (G1.1–G1.3 wheel/hit-test/cancel, G2.3 keyboard escapes), which arrives with
   window-composition P2+ and on-device chrome-control work.

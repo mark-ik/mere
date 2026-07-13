@@ -34,7 +34,7 @@ impl Shell {
         // toolbar band is the titlebar, with host-drawn window controls + edge
         // resize (see `titlebar` + `input`). A min size keeps the bar usable.
         let attributes = Window::default_attributes()
-            .with_title("Meerkat — Mere chrome on serval")
+            .with_title("Meerkat — Mere chrome on genet")
             .with_decorations(false)
             .with_visible(false)
             // Logical sizing so the on-screen window is the same size at any DPI; winit

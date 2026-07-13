@@ -51,7 +51,7 @@ Sibling / converging docs:
   card is *one* sprite, never the node's truth-form).
 - [native_surface_compositing_plan](../../archive_docs/2026-07-03_completed_plans/2026-06-19_native_surface_compositing_plan.md) — owns the
   **snapshot-texture-vs-live-visual** split for the orrery card and the host-surface **layering**
-  (the four-way by-nature split: serval DOM subtree / external WebView2 native visual below chrome /
+  (the four-way by-nature split: genet DOM subtree / external WebView2 native visual below chrome /
   dormant snapshot / orrery scene texture). The orrery card = snapshot is its compositing half.
 - [cross_platform_parallelism_strategy](../research/2026-06-19_cross_platform_parallelism_strategy.md)
   — owns the **dormancy/snapshot + incremental-layout** performance strategy that the LOD
@@ -108,7 +108,7 @@ layers user-customizable. The card is one sprite, not the mandated form.
 ## Representation — a pluggable per-node form
 
 The same node-truth, rendered as any of an open set of forms. Forms that carry semantics emit
-serval DOM (so the a11y / JSON-LD legibility holds); forms that carry liveliness emit a
+genet DOM (so the a11y / JSON-LD legibility holds); forms that carry liveliness emit a
 texture or scene primitive. Every form rides the same gyre rapier body, and the **face is the
 collider**: a node's hit-target is its face geometry (a square today; an arbitrary polygon or
 custom shape later, via parry's convex / compound shapes), not a generic box around it.
@@ -143,7 +143,7 @@ Architecture:
   [native_surface_compositing_plan](../../archive_docs/2026-07-03_completed_plans/2026-06-19_native_surface_compositing_plan.md); the
   external-texture *input* bridge by [tearout_composability_plan](../../archive_docs/2026-07-04_completed_plans/2026-06-19_tearout_composability_plan.md)
   per the spine, line 139 — name both, they are distinct):
-  - **serval-rendered content** diffs into the shell document as a **real DOM subtree** (a11y /
+  - **genet-rendered content** diffs into the shell document as a **real DOM subtree** (a11y /
     find-in-page / selection / true scroll hold).
   - **genuinely-external content** (a live page / scry WebView2) rides a **native composition
     visual z-ordered below the chrome** (native-surface-compositing), **not** a document
@@ -156,7 +156,7 @@ Architecture:
   representation can be LOD- and state-driven, a texture-glyph (tile / textured-body) by
   default, materializing into a richer DOM subtree (a card with a live content preview) on
   focus or expand, and demoting to an underlay dot when culled. **Demoting to a texture is not a
-  per-frame-perf win**: baking is the GPU rasterize step, not a CPU-layout skip (serval already
+  per-frame-perf win**: baking is the GPU rasterize step, not a CPU-layout skip (genet already
   has `IncrementalLayout`), and the snapshot is justified by **dormancy / memory** — you cannot
   hold N live layout sessions in RAM for N previews — **not** per-frame performance. The
   active / focused sprite stays **live** the engine way (cold layout once, incremental thereafter).
@@ -207,7 +207,7 @@ From an investigation workflow (old gnode rendering, current card, drag/physics 
 data) plus targeted reads.
 
 - **Drag / play is intact.** Grab/drag/fling was never lost. The path is winit-driven and
-  bypasses serval DOM hit-testing, so DOM cards painting on top cannot steal the grab:
+  bypasses genet DOM hit-testing, so DOM cards painting on top cannot steal the grab:
   `app_handler` MouseInput → meerkat `input.rs:483 pointer_down` → orrery `input.rs:117-120`
   `hit_test(world)` sets `self.drag`; CursorMoved → `cursor_moved` past CLICK_SLOP sets
   `physics.set_dragging(true)` + `physics.pin(node, world)` (kinematic drag-pin, neighbors
@@ -284,7 +284,7 @@ The card regains the gnode's object cues, driven from the same per-node hints th
 - Keep placement co-located with gyre (`transform:translate(x,y)` from `node_position`), and
   add `pointer-events:none` to `.node-card` / `.orrery` defensively (winit drives input today,
   but this guarantees the cards can never swallow the grab if a future host routes content-band
-  clicks through serval dispatch).
+  clicks through genet dispatch).
 - Moveable + resizable cards (Mark's fields-moveable/resizable ask, the node-card case; field
   *regions* are already moveable + resizable, owned by the field-regions plan). Moveable is
   already intact (the gyre drag-pin); resizable is net-new: add a per-node `size` / footprint to
@@ -317,7 +317,7 @@ bridge, and the DOM route for the other half needs the chrome image-decode gap c
   select rides the document hit-test (a click resolves to the face element; mapping that node
   back to its URL is the host step the card path already uses). You select and drag the *node*,
   not click *into* the texture. **Now gated on P1 alone:** the second prerequisite, the **chrome
-  image-decode gap**, was closed 2026-06-19 (serval-layout's `IncrementalLayout` caches a decoded
+  image-decode gap**, was closed 2026-06-19 (genet-layout's `IncrementalLayout` caches a decoded
   `ImagePlane`, refreshed at full layout, `incremental.rs:97/158/722/969`), so `<img>` data-URIs
   paint. What remains is (1) P1's per-node `Representation` hook to slot the form (today it is a
   binary per-pane flag). (The `<external-texture>` route avoids the decode path but asks the host
@@ -332,7 +332,7 @@ bridge, and the DOM route for the other half needs the chrome image-decode gap c
   producer behind it), the external-texture-input bridge owned by the
   [tearout_composability_plan](../../archive_docs/2026-07-04_completed_plans/2026-06-19_tearout_composability_plan.md) (the window-composition
   continuation). The compat-WebView-node case specifically rides native-surface-compositing's
-  API-forwarding path; the DOM-textured-body case rides tearout's serval-hit-relay bridge — they
+  API-forwarding path; the DOM-textured-body case rides tearout's genet-hit-relay bridge — they
   are distinct routes, not duplicates. Blocked until the input bridge lands.
 
 The scripted form (scene-decoration / scripting hook) shares the field-regions rhai substrate and
@@ -453,7 +453,7 @@ it is the default of a setting, not a baked constant.
     slug, previews the eventual title and keeps same-site nodes distinct), capped to 24 chars
     with a trailing ellipsis. Verified (Bird/Dog/Cat distinct; "Rust_programming_langua…" capped).
   - **Layering cull (`2c6ddb8`).** Off-screen nodes' cards escaped the orrery element into the
-    chrome (serval does not clip transformed overflow); cull cards to the pane box, off-screen
+    chrome (genet does not clip transformed overflow); cull cards to the pane box, off-screen
     nodes ride the underlay dots.
   - **Snapshot/frame reorder (`2f5141a`).** The card snapshot ran *before* this frame's orrery
     updates (colors, resize, strategy, `frame()`), so cards were a frame stale in position,
@@ -474,7 +474,7 @@ it is the default of a setting, not a baked constant.
   surfaced that P2-static as a DOM citizen is gated not on the input bridge but on the **chrome
   image-decode gap** (the shell `IncrementalLayout` emits an empty `ImagePlane`) and on P1's
   per-node `Representation` hook. Closing the image-decode gap is the first step: it makes card
-  favicons paint *and* unblocks the static textured face. It is a serval-side change (the
+  favicons paint *and* unblocks the static textured face. It is a genet-side change (the
   session's emit path), consumed by meerkat across the git dep.
 - 2026-06-19: **Node-vs-card model sharpened (with Mark); collider + menu fixes landed, headed-verified.**
   The node and the card are strictly separate. The **node** is the physical object rendered AT its
@@ -495,7 +495,7 @@ it is the default of a setting, not a baked constant.
   - **Menu over node cards.** The shell document reordered to `(orrery, panes, chrome)` so the
     chrome and its overlays paint + hit-test over the node cards (the nodes had occluded the menu
     and stolen its clicks).
-  - **Card favicons paint.** Closed the chrome image-decode gap serval-side (serval-layout
+  - **Card favicons paint.** Closed the chrome image-decode gap genet-side (genet-layout
     `IncrementalLayout` caches a decoded `ImagePlane`, refreshed at full layout); the favicon-as-face
     cue renders now.
   The menu-vs-host-composited-surfaces precedence (scry System WebViews drawn over the menu) is a
@@ -513,11 +513,11 @@ it is the default of a setting, not a baked constant.
     cards are host-positioned DOM; cond 1, the custom-layout `<orrery>` element, is deferred) and
     decouples the semantic win from the card.
   - **By-nature compositing layering (C2) cross-ref.** Corrected the universal "external-texture
-    element = the bridge for textured/scripted forms" claim: serval content → real DOM subtree;
+    element = the bridge for textured/scripted forms" claim: genet content → real DOM subtree;
     genuinely-external (scry) → native composition visual below chrome (native-surface-compositing),
     *not* a document element; orrery scene → texture. P2-interactive now names both routes (the
     compat-WebView case on native-surface-compositing's API-forwarding path; the DOM-textured-body
-    case on tearout's serval-hit-relay input bridge).
+    case on tearout's genet-hit-relay input bridge).
   - **Bake = dormancy-not-perf correction (C3) on the LOD hinge.** Stated that demoting to a
     texture is the GPU rasterize step, not a CPU-layout skip; the snapshot is a dormancy/memory
     decision, the active sprite stays live via `IncrementalLayout`. Cross-ref the research doc
@@ -534,7 +534,7 @@ it is the default of a setting, not a baked constant.
   substrate corrected (Findings + the Arrangement section + Decision 7): radial / penrose /
   phyllotaxis / lsystem are dispatched, while kanban / timeline / semantic_edge_weight /
   semantic_embedding are written but unwired, so Decision 7 is wiring built layouts, not authoring
-  them. (c) P2-static's image-decode prerequisite retired (closed serval-side, `incremental.rs`),
+  them. (c) P2-static's image-decode prerequisite retired (closed genet-side, `incremental.rs`),
   leaving it gated on P1 alone. (d) Noted dead `point_over_orrery_card` (`input.rs:735`, defined
   but uncalled after the cond-3 removal) for cleanup. Five most pressing slices ranked for Mark:
   P1 representation hook, wire the dormant arrangements (semantic_edge_weight first), finish P0's
@@ -554,7 +554,7 @@ it is the default of a setting, not a baked constant.
   separate compositing axis (DOM-vs-raster), unchanged. The default lens is uniform Tile, so the
   look is unchanged; the per-node override is the new capability. An orrery unit test locks the
   override-or-default contract. **Not yet built**: a fresh Cargo.lock resolve hit a `windows`
-  0.61/0.62 diamond (`ipc-channel` 0.22 anchors 0.61 via serval; `gpu-allocator` 0.28 unified onto
+  0.61/0.62 diamond (`ipc-channel` 0.22 anchors 0.61 via genet; `gpu-allocator` 0.28 unified onto
   it; `wgpu-hal` 29.0.3 needs 0.62, so its dx12 backend fails). Pre-existing, independent of P1, a
   workspace-pin decision; the P1 code is reviewed and complete pending the dep fix. Persisting the
   per-node override across a reload is a follow-up (it joins the cartography sidecar / scene-pane
@@ -801,8 +801,8 @@ it is the default of a setting, not a baked constant.
   through `gyre::NodeCollider::Hull`); (2) the **node shape editor** — a DOM "swatch" in the
   `node:<id>/appearance` facet pane renders the sprite + its hull with a dot per vertex (Stage A) and
   makes the vertices **draggable** to reshape the collider live (Stage B: a host-side drag through the
-  chrome session, since serval has no native DOM pointer-drag; the collider rebuilds on each move).
-  Adversarially reviewed; the engine-side serval-layout scroll fix (absolute-in-scroll layers) shipped
+  chrome session, since genet has no native DOM pointer-drag; the collider rebuilds on each move).
+  Adversarially reviewed; the engine-side genet-layout scroll fix (absolute-in-scroll layers) shipped
   alongside. **Plan superseded the same day**: Mark's Body × Face reframe re-bases the representation
   axis into the [node_body_face_model_plan](2026-06-23_node_body_face_model_plan.md), which decouples
   the hull from the sprite (so a tailored body is not sprite-only), adds per-node material properties,

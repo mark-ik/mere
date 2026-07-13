@@ -171,13 +171,13 @@ scry-compositing determination (2026-06-19): **scrying / WebView tiles do NOT us
 bridge**. They are genuinely-external native composition visuals captured to a texture
 and composited under the chrome with input forwarded by API / CDP, owned by the
 [native-surface-compositing plan](../../archive_docs/2026-07-03_completed_plans/2026-06-19_native_surface_compositing_plan.md)
-(revision 2). The bridge's remaining scope is the narrower **serval-rendered
-textured-body**: serval content composited as a texture (the
+(revision 2). The bridge's remaining scope is the narrower **genet-rendered
+textured-body**: genet content composited as a texture (the
 [node-representation](2026-06-18_node_representation_arrangement_plan.md) P2 textured-body)
-whose input must relay back into *that serval content's own hit-test*, not a foreign WebView.
+whose input must relay back into *that genet content's own hit-test*, not a foreign WebView.
 
-**The serval mechanism already exists — no engine ask remains (verified 2026-06-19).**
-serval's `on_wheel` (xilem-serval/wheel.rs) and `on_pointer` (with `prevent_default` =
+**The genet mechanism already exists — no engine ask remains (verified 2026-06-19).**
+genet's `on_wheel` (xilem-serval/wheel.rs) and `on_pointer` (with `prevent_default` =
 pointer cancellation, pointer.rs) are composable wrappers over an `external_texture`
 element (tags.rs:74) that the engine lays out (placement from layout). The
 `<external-texture>` leaf stays output-only by design; you make it input-bearing by
@@ -186,24 +186,24 @@ does exactly this for the orrery**: window_view.rs:528-551 seats the scene as an
 `external_texture` underlay and wraps the orrery pane in `on_wheel`, routing the wheel
 through the document into gyre. So the earlier "build an input-bearing external-texture
 element / not the output-only leaf it is today" framing is retired — the primitives are in
-serval and demonstrated end-to-end.
+genet and demonstrated end-to-end.
 
-What is left is **consumer-side and gated on a *live serval-rendered* textured-body form, which does not exist
+What is left is **consumer-side and gated on a *live genet-rendered* textured-body form, which does not exist
 yet.** Node-rep now has a real `Representation` enum (`Tile` / `Shape` / `Sprite`,
 orrery/types.rs:67) with per-node overrides, but `Sprite` is a *static* PNG (no input relay
-needed) and no live serval-rendered form exists yet. When such a form lands, render it as
-`on_wheel(on_pointer(external_texture(...)))` and relay the events into the inner serval
+needed) and no live genet-rendered form exists yet. When such a form lands, render it as
+`on_wheel(on_pointer(external_texture(...)))` and relay the events into the inner genet
 content's hit-test — the one new wrinkle vs the orrery, which relays to gyre. That also
 satisfies the host-wiring G1.1 / G1.3 callers. (In-graph DOM node-card interactivity, the
 old G1.2 framing, is delivered by unified Phase 2 / the orrery `gyre` hit path.)
 
-**Status: no work now.** The serval mechanism is in place and no consumer exists — the
-static `Sprite` form needs no input relay, and a *live* serval-rendered textured-body form
+**Status: no work now.** The genet mechanism is in place and no consumer exists — the
+static `Sprite` form needs no input relay, and a *live* genet-rendered textured-body form
 is not built. C2 unblocks when that live form ships, and is then a thin consumer wiring. (Scry / WebView input is out of scope here, see
 native-surface-compositing.)
 
-Done when: a serval-rendered textured-body tile (once that form exists) takes `on_wheel` /
-`on_pointer` and relays into the inner serval hit-test, with placement from layout.
+Done when: a genet-rendered textured-body tile (once that form exists) takes `on_wheel` /
+`on_pointer` and relays into the inner genet hit-test, with placement from layout.
 
 ## C3 — Cross-window pane resolution (the leaf)
 
@@ -363,7 +363,7 @@ What shipped:
 - **2026-06-19** — Spun out of the completed [window_composition_plan](../../archive_docs/2026-06-19_completed_plans/2026-06-11_window_composition_plan.md)
   on a code-verified audit: P1 banked and load-bearing, the P2 input tail migrated to
   the unified-document-host plan, `frame_ops` split done, OQ2 resolved. C1-C5 +
-  deferred camera are the live forward scope; C2 is coordinated with the serval/pelt
+  deferred camera are the live forward scope; C2 is coordinated with the genet/pelt
   agent. No code written.
 - **2026-06-19** — Folded in the unified-document-model ramifications: added the
   Relationship section; reworded C1 ("delivered by", not "converges with") and narrowed
@@ -377,12 +377,12 @@ What shipped:
   `focus_pane_graph_moves_focus_without_a_switch_or_clobber`. Reframed C1 to DONE; the
   live forward scope is now C2-C5 + the deferred camera.
 - **2026-06-19** — **C2 checked against the code: nothing to implement now; doc
-  corrected.** The serval input-bearing-external-texture mechanism already exists
+  corrected.** The genet input-bearing-external-texture mechanism already exists
   (`on_wheel` / `on_pointer`+`prevent_default` compose over `external_texture`) and cond 5
   demonstrated it end-to-end (the orrery scene is an `external_texture` underlay with the
   wheel routed through the document into gyre, window_view.rs:528-551). C2's consumer (a
-  serval-rendered textured-body) does not exist (representation is still binary
-  `render_as_cards`; node-rep at P0). So C2 has no serval engine ask and no work until
+  genet-rendered textured-body) does not exist (representation is still binary
+  `render_as_cards`; node-rep at P0). So C2 has no genet engine ask and no work until
   node-representation P2 ships the textured-body form; reframed C2 from "build the bridge"
   to "thin consumer wiring, gated on the form."
 - **2026-06-19** — **Full audit vs the code; live phases re-grounded.** C3: multi-window
@@ -399,7 +399,7 @@ What shipped:
   scry-compositing determination). The determination chose native-surface-compositing
   revision 2 (off-window host HWND + capture-to-texture + API/CDP input) over the
   composition-tree / external-texture-element direction, so scrying / WebView tiles do
-  **not** flow through this bridge; its remaining consumer is the serval-rendered
+  **not** flow through this bridge; its remaining consumer is the genet-rendered
   textured-body (node-representation P2), and scry input is owned by
   native-surface-compositing. Also corrected the stale "node-cards take input via the
   shell hit-test" framing (the cond-3/4 reversal routes node interactivity through
@@ -410,7 +410,7 @@ What shipped:
   shared graph, not a torn tile, and step-5 fan-out is still deferred — so the prior
   "spawn = full-chrome" finding is stale. Node-rep replaced binary `render_as_cards` with a
   `Representation` enum (Tile/Shape/Sprite); `Sprite` is a *static* PNG, so C2's *live*
-  serval-rendered consumer still does not exist (C2 verdict unchanged: no work).
+  genet-rendered consumer still does not exist (C2 verdict unchanged: no work).
   native-surface-compositing finished. C4 (rekey + `CopiedFrom`) still unbuilt. C1 intact
   through the refactor (`focus_pane_graph` / `orrery_pane_at` / its test present).
   **Re-ranked:** (1) C4 core; (2) C3 tear-out content + step-5 fan-out; (3) C5 gestures;

@@ -41,7 +41,7 @@ the summonable preview/object/connections family; see
 ## Design review (2026-07-01, before implementation)
 
 A Plan-agent independently checked this approach against alternatives and the
-actual serval primitive set before it was committed to:
+actual genet primitive set before it was committed to:
 
 - **Is DOM-nodes-plus-embedded-Scene-edges right for the minimap, or should it
   stay pure Scene?** The minimap is genuinely unbounded — `Orrery::minimap_geometry()`
@@ -55,8 +55,8 @@ actual serval primitive set before it was committed to:
   the bottleneck. Verdict: proceed; add a node-count fallback-to-Scene
   threshold only if it actually shows up as a problem in practice, not
   pre-emptively.
-- **Is there a serval vector primitive (SVG-like) that beats "Scene raster for
-  edges"?** No. Checked directly against the pinned serval commit:
+- **Is there a genet vector primitive (SVG-like) that beats "Scene raster for
+  edges"?** No. Checked directly against the pinned genet commit:
   `xilem-serval`'s tag set special-cases exactly one non-standard element,
   `<external-texture>` (`components/xilem-serval/src/tags.rs`). No `<svg>`,
   `<path>`, `<line>`, `<circle>`. The display primitive set is
@@ -192,7 +192,7 @@ intent type instead of three near-identical single-variant enums.
 
 - **2026-07-01 (scoped).** Spun out of the gloss outline lens plan's Open
   Decision #5 once its P1 landed and was headed-verified. Design-reviewed by
-  a Plan-agent (hybrid approach validated against the actual serval primitive
+  a Plan-agent (hybrid approach validated against the actual genet primitive
   set; a required a11y-bounds-migration step surfaced) before being written
   down. No code yet; P1 (recent → DOM) is the first build step.
 - **2026-07-01/02 (P1-P3 landed, headed-verified, 247/247 tests green).**
@@ -254,7 +254,7 @@ intent type instead of three near-identical single-variant enums.
     `chrome_us` stayed 100-145ms even on `rebuild=false` (RepaintOnly, layout
     skipped) frames regardless of mutation count (16 mutations/frame cost
     about the same as 203) — pointing at paint-list emission scaling with
-    total DOM size rather than the changed delta. That's a `serval-layout`
+    total DOM size rather than the changed delta. That's a `genet-layout`
     question, out of scope for this session; worth its own investigation/
     plan given the shell document (roster + gloss + orrery gnodes) is
     only going to grow. See the [UI polish plan](2026-07-01_ui_polish_plan.md)

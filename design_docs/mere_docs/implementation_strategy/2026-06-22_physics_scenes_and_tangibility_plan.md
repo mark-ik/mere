@@ -443,7 +443,7 @@ within budget.
   gyre never interprets it. The orrery owns the pixels: a `handle -> RGBA` registry
   (`register_scene_sprite`, persisting across scene loads) and a `frame.rs` paint branch billboarding
   a `DrawImage` quad over a prop whose handle resolves (favicon-style `ImageResource`, image namespace
-  2 so it never collides with favicons (0) / serval images (1)), sized to the prop's collider
+  2 so it never collides with favicons (0) / genet images (1)), sized to the prop's collider
   half-extent; an unregistered handle falls back to the polygon. A bin demo (a procedural crate
   texture and a crate-drop scene on key `x`) proves it. Billboards are axis-aligned for now (no
   rotation as a prop

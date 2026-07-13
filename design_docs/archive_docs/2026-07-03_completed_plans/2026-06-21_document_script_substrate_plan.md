@@ -9,7 +9,7 @@ verified against primary sources 2026-06-20 at the confidence levels stated.
 **Date:** 2026-06-21.
 **Scope:** a capability-scoped, typed, cross-language contract for what a *script*
 or *extension* is allowed to mean in Mere, carried over the WebAssembly Component
-Model, sitting **above** serval's JS-engine `ScriptEngine` rather than replacing
+Model, sitting **above** genet's JS-engine `ScriptEngine` rather than replacing
 it.
 
 The realistic dream is not "every language becomes interchangeable behind
@@ -26,9 +26,9 @@ isolation" seam this fills), [protocol_architecture_plan](2026-05-05_protocol_ar
 [cross_platform_parallelism_strategy](../research/2026-06-19_cross_platform_parallelism_strategy.md)
 (the no-JIT browser policy + the PWA-vs-open-web lane fork this inherits),
 [polyglot_block_resolver_plan](../../nematic_docs/implementation_strategy/2026-06-13_polyglot_block_resolver_plan.md)
-(the native-only wasm-block kind that wants this contract). Serval side:
+(the native-only wasm-block kind that wants this contract). Genet side:
 `script-engine-api/lib.rs`, `script-runtime-api/fetch.rs`,
-`docs/2026-05-20_serval_script_engine_plan.md`, `docs/2026-05-25_js_execution_strategy.md`.
+`docs/2026-05-20_genet_script_engine_plan.md`, `docs/2026-05-25_js_execution_strategy.md`.
 
 ---
 
@@ -104,14 +104,14 @@ same conclusion the two-heap reflector finding reached from the other direction
 
 ### 2.3 Codebase grounding (what exists, what is deferred)
 
-- **Absent as a top-level idea.** Neither serval/docs nor mere/design_docs frames
+- **Absent as a top-level idea.** Neither genet/docs nor mere/design_docs frames
   the Component Model as a cross-language script substrate today. It is not ruled
   out; it is simply not in the architectural conversation. (Confidence: high; full
   design-corpus sweep 2026-06-20.)
 - **The deferred seam is named.** [actor_constellation_plan](2026-06-03_actor_constellation_plan.md)
   lists "capability / wasm-component isolation" as a *future plugin seam, not a
   near-term primitive*, and descopes the in-process wasmtime sandbox (P5) on the
-  grounds that it "would require compiling the entire serval + Nova content engine
+  grounds that it "would require compiling the entire genet + Nova content engine
   to wasm32." **That reasoning does not touch this proposal:** we confine the
   *script/extension*, not the *engine*. The host engine stays native and supplies
   the imports; the thing compiled to wasm is a Rune runtime or a Rust extension,
@@ -163,7 +163,7 @@ cannot run that against an async `apply`. So you do not:
 > points.
 
 That is the Servo model (script owns a DOM; layout is reached by message) recast
-as a component boundary, and it is exactly the existing `serval-scripted-dom` +
+as a component boundary, and it is exactly the existing `genet-scripted-dom` +
 reflector machinery, now scoped as the innards of one component instead of the
 top-level architecture. It also classifies the profiles cleanly: `tree-document`
 and `document-core` scripts can speak the contract directly; `html-document`
@@ -380,7 +380,7 @@ finding corrects an earlier section, that section now carries an inline pointer.
 The largest correction. `html-document` should not be a Wasm interpreter component,
 and it leaves P0 and P1.
 
-Verified in source (`script-runtime-api/lib.rs`): serval's live runtime already
+Verified in source (`script-runtime-api/lib.rs`): genet's live runtime already
 runs the model §3 treats as the hard case, and it is not a component.
 
 - The runtime owns `dom: ScriptedDom` (L80) and never lays out (L67, L73, L99).
@@ -392,13 +392,13 @@ runs the model §3 treats as the hard case, and it is not a component.
   the host reconciles *out* after. A mid-run read of a value just written sees the
   unreconciled value, "the script/layout split's one fidelity gap."
 
-So serval does not do true synchronous forced reflow. It does synchronous reads of
+So genet does not do true synchronous forced reflow. It does synchronous reads of
 the previous frame's layout and accepts a documented fidelity gap. The §3 premise
 ("you cannot run that against an async apply") is true for genuine forced reflow,
-which serval never does, so the bar the existing native lane already clears is lower
+which genet never does, so the bar the existing native lane already clears is lower
 than §3 implies.
 
-Consequence for §2.3: the actor-plan P5 descope ("compiling the entire serval +
+Consequence for §2.3: the actor-plan P5 descope ("compiling the entire genet +
 Nova content engine to wasm32") does touch this proposal for `html-document`.
 Legacy-with-synchronous-layout *is* the engine, so wrapping it as a component
 reintroduces that cost. "We confine the script, not the engine" holds only where the
@@ -445,7 +445,7 @@ Optimistic concurrency needs more than `expected-revision`:
 **Resolved (2026-06-21), node identity.** Opaque host-assigned `node-id` (u64) is the
 canonical identity for mutation targeting and cross-turn references: stable across content
 edits and moves, unambiguous, capability-scoped (the host mints ids only for in-scope
-nodes, so a script cannot forge an out-of-scope reference), and a match for serval's
+nodes, so a script cannot forge an out-of-scope reference), and a match for genet's
 existing `NodeId` (`ReflectorData = u64`). Content-hash is **rejected as the identity** (it
 collides on identical-content nodes, and changes under the very edit being made, Merkle-
 propagating to ancestors) but **kept as a per-node change-detection token** in the snapshot
@@ -535,9 +535,9 @@ grows.
 ## 11. P2 design — the component host actor (proposed 2026-06-22, pending §11.7)
 
 A read-only design pass (6-reader workflow) verified against armillary, the meerkat
-content actor, serval's scripted-DOM, `register-mod-loader`, and `kernel::permissions`.
+content actor, genet's scripted-DOM, `register-mod-loader`, and `kernel::permissions`.
 The probe's WIT + host logic transplant nearly 1:1; the only genuinely new code is the
-serval-backed imports, a lifecycle/quota wrapper, and the linker policy.
+genet-backed imports, a lifecycle/quota wrapper, and the linker policy.
 
 ### 11.1 Placement (decision, pending confirm)
 
@@ -548,14 +548,14 @@ it** — that crate is deliberately runtime-free (the trait exists precisely so 
 stays host-side). Do not bury Wasmtime in meerkat (`content.rs` is ~455 LOC against the
 600 ceiling, and the capability boundary deserves headless testability). Module split,
 each < 600 LOC: `engine` / `host` / `imports/{inspect,apply,log}` / `instance` /
-`linker` / `runtime` (the mod-loader bridge) / `dom_view` (the only serval-coupled file).
-Deps one-way: `document-host` → {serval-scripted-dom, register-mod-loader, kernel,
+`linker` / `runtime` (the mod-loader bridge) / `dom_view` (the only genet-coupled file).
+Deps one-way: `document-host` → {genet-scripted-dom, register-mod-loader, kernel,
 wasmtime}; `meerkat` → `document-host`.
 
 ### 11.2 Shape on armillary
 
 Not a new actor: a `!Send` subsystem built inside the content actor's existing
-`spawn_on` run closure (`content.rs:176`), beside the serval registry + ResourceStore.
+`spawn_on` run closure (`content.rs:176`), beside the genet registry + ResourceStore.
 The `Engine` is shared process-wide (`Arc<Engine>`, Send+Sync, passed in like the other
 build args); the `Store<ScriptHost>` + component instance are built on the thread, so the
 `!Send` state never crosses. Mailbox: new `ContentCommand::{AttachScript, DeliverEvent,
@@ -572,9 +572,9 @@ WIT `node-id`; `ReflectorData = u64`), a **shallow** content-hash (kind+attrs+te
 child-count, not a Merkle subtree hash), `revision` = the host counter; `subtree` scopes
 the walk. `apply` → expected-revision check → atomic `is_live` precheck (`unknown-node`)
 → quota check → ordered `LayoutDomMut` calls (`set_text`/`remove`/`insert_before`/
-`append_child`) → bump revision → drain mutations into serval-layout's incremental
+`append_child`) → bump revision → drain mutations into genet-layout's incremental
 scheduler → re-render. **Revision counter lives host-side (`ScriptHost`), not in
-`ScriptedDom`** (serval has none today; keep it render-state-free) and MUST be bumped by
+`ScriptedDom`** (genet has none today; keep it render-state-free) and MUST be bumped by
 *all* actor writers (script apply, Resource arrival, Retheme), or a stale batch won't
 conflict correctly. `log` → the actor's tracing span. `network`: a SYNC-signature
 `fetch: func(request) -> result<response, error>` implemented host-side as an `async fn`
@@ -622,7 +622,7 @@ same `call_async` without suspending, and `fetch` slots in when wired.
 
 1. **MSRV** — **RESOLVED + DONE 2026-06-22: workspace bumped to 1.93, `document-host` folded
    into the workspace.** `mere/rust-toolchain.toml` pins 1.93 (+ wasm32-wasip2);
-   `document-host` is a `members` entry with the git serval deps that unify with meerkat via
+   `document-host` is a `members` entry with the git genet deps that unify with meerkat via
    mere's `[paths]` override; all its tests pass in-workspace. The 6 crates still declaring
    `rust-version = "1.92.0"` are harmless under the 1.93 toolchain (the effective MSRV is 1.93).
    The meerkat-wiring half of P2.5 (the content-actor integration) still remains.
@@ -652,7 +652,7 @@ same `call_async` without suspending, and `fetch` slots in when wired.
 Reading the content actor for P2.5 surfaced a gate the earlier design did not see, and a
 strong convergence with already-prioritized work.
 
-**The gate.** A DocumentScript mutates a serval **`ScriptedDom`** (the `document` import's
+**The gate.** A DocumentScript mutates a genet **`ScriptedDom`** (the `document` import's
 inspect/apply). But the content actor does **not** hold one: `card.rs` renders by
 `StaticDocument::parse(body)` **fresh every call** (`card.rs:448` render, `:494` find) — an
 immutable, re-parsed-each-render DOM. So "a script mutates the page and it re-renders" is not
@@ -664,7 +664,7 @@ exactly the unified-document-model question Mark flagged.
 the content actor" — the web lane re-runs `run_cascade` from scratch on every scroll band /
 find keystroke / subresource), which Mark already put on the do-list ("do 2, 3, 1, 4"). And
 the pieces exist: `scene_from_layout_dom<D, L>` is **generic over `LayoutDom`**
-(`serval_render.rs:131`), `ScriptedDom` implements `LayoutDom` and is the script target, and
+(`genet_render.rs:131`), `ScriptedDom` implements `LayoutDom` and is the script target, and
 `IncrementalLayout` is generic and already drives the chrome panes. So one architectural move
 — content lane on a retained `ScriptedDom` + `IncrementalLayout` (built from the fetched HTML
 via the existing `set_inner_html` path) — pays **three** ways: fixes slice #1's per-frame
@@ -711,7 +711,7 @@ DOM model is the decision.
 - **2026-06-21 (review pass).** Two independent codebase-verified reviews folded into
   §10 as the "Before P0" punch list. Headline correction: `html-document` leaves
   P0/P1 and legacy web JS becomes a separate native lane, not a Wasm component.
-  Grounded by `script-runtime-api/lib.rs` (L62-70, L80, L98-103): serval's runtime
+  Grounded by `script-runtime-api/lib.rs` (L62-70, L80, L98-103): genet's runtime
   already runs legacy turn-based (snapshot in / reconcile out) with a synchronous
   `ComputedStyleHandler` seam and a documented fidelity gap, and never does true
   forced reflow; so §2.3's "the P5 descope does not touch this" is overbroad for the
@@ -807,7 +807,7 @@ DOM model is the decision.
   architecturally-interesting sync P1 work is now done; P1's remainder is a batch size
   limit and the async `network` seam (gated on Wasmtime 46). Mere-side uncommitted.
 - **2026-06-22 (P2 design pass — proposed, pending decisions).** Ran a read-only 6-reader
-  workflow over armillary, the meerkat content actor, serval's scripted-DOM,
+  workflow over armillary, the meerkat content actor, genet's scripted-DOM,
   `register-mod-loader`, and `kernel::permissions`; synthesized §11 (the component host
   actor design). Headline: a new leaf crate `crates/script/document-host` consumed by
   meerkat via a thin `meerkat::script` module, extending `register-mod-loader` through its
@@ -838,15 +838,15 @@ DOM model is the decision.
   8-turn driver passes as a crate test (`tests/eight_turns.rs`): four id-targeted mutations
   applied (rev 0→4), a scoped subtree no-op, and the conflict / unknown-node / declined paths,
   with the final tree asserted. Mere-side uncommitted; document-host folds into the workspace +
-  the MSRV bump at P2.5. Next: P2.1 (swap `Doc` → serval `ScriptedDom` behind the same imports).
+  the MSRV bump at P2.5. Next: P2.1 (swap `Doc` → genet `ScriptedDom` behind the same imports).
 - **2026-06-22 (P2.1 — dom_view over live ScriptedDom, green).** Added `src/dom_view.rs`: the
-  serval-coupled adapter backing `inspect`/`apply` on a live `serval-scripted-dom::ScriptedDom`
-  (path-depped from local serval — light: markup5ever + layout-dom-api + serval-static-dom, no
+  genet-coupled adapter backing `inspect`/`apply` on a live `genet-scripted-dom::ScriptedDom`
+  (path-depped from local genet — light: markup5ever + layout-dom-api + genet-static-dom, no
   stylo/taffy, no patches). `snapshot` projects the HTML DOM into document-core view-nodes
   (elements → tag-named, text nodes → `#text`; the document-core view *is* the DOM tree, §11.3);
   `apply` maps id-targeted mutations to `LayoutDomMut` (`set_text`/`remove`/`insert_before`/
   `append_child`), with node identity round-tripped via `opaque_id`/`NodeId::from_raw` and
-  validated by `is_live` (no host id-map needed), against a host-side revision (serval tracks
+  validated by `is_live` (no host id-map needed), against a host-side revision (genet tracks
   none). Three lib unit tests pass: snapshot projects the tree + ids/text round-trip; the
   subtree query scopes the view; apply mutates and enforces revision-conflict (carrying current)
   + unknown-node (nothing applied, rev unchanged). The P2.0/P2.1 state (Doc-backed lib +
@@ -858,7 +858,7 @@ DOM model is the decision.
   `eight_turns_drive_the_live_dom` green: the wasm guest pulls the seeded `<body><p>…</p>` DOM,
   edits a `#text` by id, appends/inserts `<p>` by id-anchor, removes, and the conflict /
   unknown-node / declined paths fire; final DOM = 3 `<p>` with the edited `#text` live (rev 0→4).
-  This is the key integration proof: a sandboxed wasm component mutating serval's real DOM through
+  This is the key integration proof: a sandboxed wasm component mutating genet's real DOM through
   the capability-scoped contract. P2.1b uncommitted (changes on top of 5825c17).
 - **2026-06-22 (P2.2 — cancellation + quotas, green).** Added epoch interruption + `StoreLimits`
   to the host (`run_guarded` returning a `Guarded` outcome) and a misbehaving `guest-bomb` crate.
@@ -871,8 +871,8 @@ DOM model is the decision.
 - **2026-06-22 (P2.5 fold-in — workspace MSRV bump + membership, green).** Added
   `mere/rust-toolchain.toml` (channel 1.93 + wasm32-wasip2) and `crates/script/document-host` to
   the workspace `members`; removed document-host's standalone `[workspace]` + per-crate toolchain
-  pin, and switched its serval deps from local-path to the **git dep meerkat uses** (they resolve
-  to the local serval via mere's `[paths]` override, so they unify — verified: `serval-scripted-dom`
+  pin, and switched its genet deps from local-path to the **git dep meerkat uses** (they resolve
+  to the local genet via mere's `[paths]` override, so they unify — verified: `genet-scripted-dom`
   / `layout-dom-api` compiled from the local checkout). `cargo build -p document-host` builds on
   rustc 1.93 in-workspace; all 7 tests pass via `cargo test -p document-host`. Left the 6 crates'
   `1.92` rust-version pins untouched (harmless under 1.93). Unblocks P2.3/P2.4 to depend on
@@ -889,7 +889,7 @@ DOM model is the decision.
   `resolve_permission` → `Grant` mapping is a thin P2.5 adapter in the content actor (the policy
   lives here, the resolution is input — §11.4). Remaining for §11.4: a `caps.granted()` discovery
   import (`granted_names` is its seam) — a small additive WIT step. (cargo notes a benign
-  `[paths]`-override warning for the redirected serval crates.)
+  `[paths]`-override warning for the redirected genet crates.)
 - **2026-06-22 (P2.4 — the `register-mod-loader` `WasmModRuntime` bridge, green).** Added
   `src/runtime.rs`: `DocumentScriptRuntime` *implements* `register-mod-loader`'s `WasmModRuntime`
   DI trait (the crate is untouched — runtime stays host-side, §11.1). `activate` runs a host-policy
@@ -900,7 +900,7 @@ DOM model is the decision.
   teardown export and drops it. Two impedance mismatches bridged: **sync trait vs async exports** →
   per-call `pollster::block_on` (executor-neutral, no global runtime); **`Send + Sync` trait vs the
   per-mod store** → retain live `Store<ScriptHost>` behind a `Mutex` — which **compiles, proving
-  `ScriptHost` is `Send`** (serval's `ScriptedDom` is an id-keyed `HashMap`/`Vec` arena with
+  `ScriptHost` is `Send`** (genet's `ScriptedDom` is an id-keyed `HashMap`/`Vec` arena with
   string-cache `QualName`s — no `Rc`/`RefCell`; this relaxes §11.2's conservative `!Send` assumption,
   so the bridge needs no worker thread). 5 new tests green (15 total): activate→deactivate lifecycle,
   denied-capability-refused-before-instantiation (proven by pointing a refused mod at a non-existent
@@ -958,11 +958,11 @@ DOM model is the decision.
   `html: Option<(StaticDocument, ContentLayout<StaticNodeId>)>` (`content.rs:175`), built once via
   `build_html_layout`, re-emitted per band via `scene_from_content_band`, find off the retained layout.
   It uses **`StaticDocument`** (immutable), so the remaining combined-move piece is making the page DOM
-  **script-mutable**. Two serval facts settle the approach: (1) `ScriptedDom::set_inner_html` is
-  **fragment-only** (`serval-scripted-dom/lib.rs:643`), not a full-document parse — it drops
+  **script-mutable**. Two genet facts settle the approach: (1) `ScriptedDom::set_inner_html` is
+  **fragment-only** (`genet-scripted-dom/lib.rs:643`), not a full-document parse — it drops
   `<head>`/`<style>`/`<link>`; (2) `build_html_layout` already **extracts the stylesheets separately**
   (`lay_out_content(&doc, &sheets, ...)`, `card.rs:495-508`), and `lay_out_content` / `ContentLayout` /
-  `scene_from_content_band` / `find` are **generic over `LayoutDom`**. So **no serval change is
+  `scene_from_content_band` / `find` are **generic over `LayoutDom`**. So **no genet change is
   needed**: keep `StaticDocument::parse` (fidelity + sheet extraction), and for a *scripted* page
   mirror its tree into a `ScriptedDom` (a short LayoutDom -> LayoutDomMut copy walk), lay the
   `ScriptedDom` out with the same extracted sheets, and let the script mutate it. **Hybrid
@@ -981,7 +981,7 @@ DOM model is the decision.
   branch emits from the script's mutable `ScriptedDom` through the existing generic
   `scene_from_content_band`, **superseding** the static path. **Hybrid preserved:** unscripted pages
   keep the fast `StaticDocument` path untouched; only a script-attached page mirrors into a
-  `ScriptedDom`. No serval change. Interim `Grant::allow_all` (the `kernel::permissions` -> `Grant`
+  `ScriptedDom`. No genet change. Interim `Grant::allow_all` (the `kernel::permissions` -> `Grant`
   adapter is the one remaining tail). meerkat builds; **72 lib + 107 bin tests pass** including the new
   `content::script` mirror test. Files: `content.rs` (+170), `content/script.rs` (new), `card.rs`
   (`HTML_SHEET` -> `pub(crate)`), `constellation.rs` (the `ScriptOutcome` arm), `Cargo.toml`
@@ -1021,9 +1021,9 @@ DOM model is the decision.
 
 ## Key grounding files
 
-- serval: `components/script-engine-api/lib.rs` (the JS-shaped trait),
+- genet: `components/script-engine-api/lib.rs` (the JS-shaped trait),
   `components/script-runtime-api/fetch.rs:86-118` (the deferred fetch seam),
-  `docs/2026-05-20_serval_script_engine_plan.md` (reflector model + per-target
+  `docs/2026-05-20_genet_script_engine_plan.md` (reflector model + per-target
   backend selection), `docs/2026-05-25_js_execution_strategy.md` (no-JIT, weval),
   `docs/2026-06-11_gc_arena_dom_plan.md` (the owned DOM store + mark-sweep).
 - mere: [actor_constellation_plan](2026-06-03_actor_constellation_plan.md)

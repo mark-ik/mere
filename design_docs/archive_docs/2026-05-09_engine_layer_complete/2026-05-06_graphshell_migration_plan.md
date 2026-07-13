@@ -10,7 +10,7 @@
 - [`../../2026-05-04_lexicon_brief.md`](../../2026-05-04_lexicon_brief.md) — current product/component vocabulary
 - [`../../mere_docs/implementation_strategy/2026-05-05_protocol_architecture_plan.md`](../../mere_docs/implementation_strategy/2026-05-05_protocol_architecture_plan.md) — protocol/identity/transport architecture that Graphshell must consume, not duplicate
 - Inherited: [`../../../../graphshell/design_docs/graphshell_docs/implementation_strategy/2026-05-01_workspace_architecture_proposal.md`](../../../../graphshell/design_docs/graphshell_docs/implementation_strategy/2026-05-01_workspace_architecture_proposal.md) — current root-crate decomposition plan and registrar/system-layer receipts
-- Inherited: [`../../../../serval/docs/2026-05-05_serval_netrender_cut_plan.md`](../../../../serval/docs/2026-05-05_serval_netrender_cut_plan.md) — Serval/Netrender imposed renderer shape
+- Inherited: [`../../../../genet/docs/2026-05-05_genet_netrender_cut_plan.md`](../../../../genet/docs/2026-05-05_genet_netrender_cut_plan.md) — Genet/Netrender imposed renderer shape
 - Inherited: [`../../../../netrender/netrender-notes/2026-05-04_feature_roadmap.md`](../../../../netrender/netrender-notes/2026-05-04_feature_roadmap.md) — Netrender compositor handoff roadmap
 - [`2026-05-06_graphbrowserapp_donor_inventory.md`](2026-05-06_graphbrowserapp_donor_inventory.md) — migration gate for classifying donor `GraphBrowserApp` methods before import
 
@@ -37,7 +37,7 @@ Practical meaning:
 
 `repos/mere` is the build/test proof root for migration work. The old `repos/graphshell` workspace is the donor until its portable pieces compile inside Mere.
 
-Reason: the Mere workspace already builds and tests cleanly, while the old Graphshell workspace is mid-refactor and still carries stale path assumptions around the Servo/Serval transition.
+Reason: the Mere workspace already builds and tests cleanly, while the old Graphshell workspace is mid-refactor and still carries stale path assumptions around the Servo/Genet transition.
 
 Done condition for each migration slice: `cargo test --workspace` passes in `repos/mere`, or the slice records a precise blocker here.
 
@@ -88,19 +88,19 @@ The old `middlenet-*` crates migrate under the `nematic` family, but the migrati
 
 - Direct/source-faithful lane first for Gemini, Gopher, Scroll, Markdown, feeds, and other smolweb formats.
 - HTML lane only where HTML is actually the right intermediate.
-- Serval/Wry fallback only for browser-managed content.
+- Genet/Wry fallback only for browser-managed content.
 
 Do not turn Nematic into "everything becomes HTML."
 
-### 1.6 Netrender/Serval Replaces the Old Render Stack
+### 1.6 Netrender/Genet Replaces the Old Render Stack
 
 Do not port Graphshell's old GL/WebRender/surfman render assumptions. The renderer path is:
 
 ```text
-inker -> Serval or Nematic or Wry -> platen -> verso-tile -> graphshell host
+inker -> Genet or Nematic or Wry -> platen -> verso-tile -> graphshell host
 ```
 
-For full web content, Serval's target is Netrender-driven rendering with native-compositor handoff. Graphshell should consume that surface; it should not preserve obsolete WebRender ownership or compatibility plumbing.
+For full web content, Genet's target is Netrender-driven rendering with native-compositor handoff. Graphshell should consume that surface; it should not preserve obsolete WebRender ownership or compatibility plumbing.
 
 ### 1.7 Reducer-Owned Durable Mutation
 
@@ -341,7 +341,7 @@ Replace the current placeholder `crates/graphshell` with a facade over the migra
 - frame input/view-model contracts
 - no desktop host dependency by default
 
-Acceptance: `crates/graphshell` is still light enough to compile as a library target without Serval, Wry, iced, GPUI, or platform WebView dependencies.
+Acceptance: `crates/graphshell` is still light enough to compile as a library target without Genet, Wry, iced, GPUI, or platform WebView dependencies.
 
 ### Phase 3 — App State and Reducer
 
@@ -364,7 +364,7 @@ migration layer is app state, not host composition.
 
 `GraphWorkspace` becomes the reducer-owned state envelope. It should be
 constructible, serializable where appropriate, and unit-testable without a
-desktop host, renderer, Serval, Wry, iced, GPUI, concrete storage backend, or
+desktop host, renderer, Genet, Wry, iced, GPUI, concrete storage backend, or
 protocol worker.
 
 `GraphWorkspace` may own:
@@ -451,7 +451,7 @@ Move old engine routing and viewer decisions by responsibility:
 - old tile/surface placement -> `verso-tile`
 - host adapters -> `graphshell` host crates
 
-Serval/Netrender integration stays aligned with the Serval cut plan and Netrender compositor roadmap.
+Genet/Netrender integration stays aligned with the Genet cut plan and Netrender compositor roadmap.
 
 Acceptance: Graphshell can ask Inker for an engine decision and receive a host-neutral route/surface contract without importing old Graphshell renderer internals.
 
@@ -501,7 +501,7 @@ because a hypothetical second consumer pulls on it.
 These three are load-bearing for any end-to-end demo. Without one of each,
 Mere has no UI surface, no rendering, and no content.
 
-1. **At least one real host adapter.** Host order pivoted 2026-05-08 to gpui first (Glass-HQ/gpui fork), with iced and HTML/CSS retained as fallbacks; vello/netrender/serval embed via a `PlatformSurface` trait using OS composition rather than wgpu texture sharing. [`graphshell-host-iced`](../../../crates/graphshell/host-iced/) remains as a port boundary; the gpui host is on the come up in parallel. Whichever lands first needs to present a real `SurfacePlacementPlan` from `verso-tile` in a window and route input back as intents.
+1. **At least one real host adapter.** Host order pivoted 2026-05-08 to gpui first (Glass-HQ/gpui fork), with iced and HTML/CSS retained as fallbacks; vello/netrender/genet embed via a `PlatformSurface` trait using OS composition rather than wgpu texture sharing. [`graphshell-host-iced`](../../../crates/graphshell/host-iced/) remains as a port boundary; the gpui host is on the come up in parallel. Whichever lands first needs to present a real `SurfacePlacementPlan` from `verso-tile` in a window and route input back as intents.
 2. **Engine layer in `inker`.** Landed 2026-05-08 — `inker::engine` defines the [`Engine`] trait, the [`EngineDocument`] / [`DocumentBlock`] / [`InlineSpan`] document model (with AccessKit role mapping for projection), [`EngineInput`] (already-fetched content; I/O is the host's job), and [`EngineRegistry`] for engine-ID dispatch. Default routing policy now points `gemini` / `spartan` schemes at the concrete `nematic.gemtext` engine; `gopher` / `finger` continue to use the `nematic.smolweb` umbrella ID until concrete engines exist.
 3. **Protocol lanes in `nematic`.** Three concrete engines shipped 2026-05-08: [`MarkdownEngine`] (CommonMark via `pulldown-cmark`), [`GemtextEngine`] (Gemini's `text/gemini` line-oriented format), [`TextEngine`] (plain text with paragraph splitting). `nematic::engines()` returns a `Vec<Box<dyn Engine>>` of all three for one-call registration. Gopher menu, file viewer, and feed (RSS/Atom) lanes pending. End-to-end test in `nematic::tests` confirms: `EngineRoutePolicy::default()` routes `gemini://` → `nematic.gemtext` decision → `EngineRegistry::dispatch` → renders title from `# H1`. The path from address to document works.
 
@@ -546,7 +546,7 @@ Run `cargo test --workspace` from `repos/mere` after every narrow change. File-s
 
 - Mere already has real foundation code: `mere-identity`, `mere-transport`, `murm`, and `murmuring` are not placeholders.
 - `cargo test --workspace` in `repos/mere` passes before migration work begins.
-- Old `repos/graphshell` is a donor, not the proof root. Its root workspace is in active decomposition and still contains stale Servo/Serval path assumptions.
+- Old `repos/graphshell` is a donor, not the proof root. Its root workspace is in active decomposition and still contains stale Servo/Genet path assumptions.
 - The current app module cuts in old Graphshell are good migration seams and should be preserved.
 - The most important architectural refinement is not to carry old `verso` forward as-is. It must be split across `inker`, `platen`, and `verso-tile`.
 
@@ -675,7 +675,7 @@ Verification: `cargo check --workspace --all-targets` clean; `cargo fmt --all` c
 - Added `graphshell::app_state::services` as the first trait-backed `GraphWorkspace` service container. It dispatches every current `WorkspaceEffect` variant through `WorkspaceRepository`, `SettingsStore`, `GraphMutationJournal`, `MnemStore`, `EngineRouter`, `SurfaceHost`, `DiagnosticsSink`, and `TaskRuntime`, returning a report with route decisions, surface outcomes, Mnem responses, and side-effect counts.
 - This completes the plan's immediate service-container proof before donor `GraphBrowserApp` import: reducers can emit a full pending-effect queue, and composition/service glue can execute that queue without concrete stores, host widgets, renderer handles, or engine implementations entering `app_state`.
 - Verification: `cargo test -p graphshell app_state::services` passed; `cargo test -p graphshell -p platen -p verso-tile` passed with 46 Graphshell tests, 10 Platen tests, and 8 Verso-Tile tests; `cargo fmt` completed; `cargo test --workspace` passed across Mere.
-- Added `inker::routing::EngineRoutePolicy` and `EngineRouteRule` as the first concrete route-policy home outside Graphshell. The default policy sends full web schemes to `serval.web`, smolweb schemes to `nematic.smolweb`, local files to `nematic.file`, internal Mere/Graphshell routes to a headless internal engine, and unknown protocols to a headless external-protocol handoff instead of guessing a webview.
+- Added `inker::routing::EngineRoutePolicy` and `EngineRouteRule` as the first concrete route-policy home outside Graphshell. The default policy sends full web schemes to `genet.web`, smolweb schemes to `nematic.smolweb`, local files to `nematic.file`, internal Mere/Graphshell routes to a headless internal engine, and unknown protocols to a headless external-protocol handoff instead of guessing a webview.
 - Added `platen::workbench::WorkbenchProjection` and `ProjectedPane` plus `project_frame` / `project_active_workbench` so active frame/pane projection is plain data owned by Platen. `graphshell::app_state::composition` now wraps that projection instead of owning the packet shape.
 - Added `2026-05-06_graphbrowserapp_donor_inventory.md` as the import gate for old `GraphBrowserApp` methods. The seed inventory classifies runtime lifecycle, arrangement bridge, persistence facade, sync/storage handles, clip capture, and history areas as reducer, service glue, host adapter, Platen projection, Inker policy, Verso-Tile lifecycle, or obsolete residue before any method body can be copied into Mere.
 - Verification: `cargo test -p inker -p platen -p graphshell` passed with 5 Inker tests, 12 Platen tests, and 47 Graphshell tests; `cargo fmt` completed; `cargo test -p inker -p platen -p graphshell -p verso-tile` passed with 5 Inker tests, 12 Platen tests, 47 Graphshell tests, and 8 Verso-Tile tests; `cargo test --workspace` passed across Mere.
@@ -729,7 +729,7 @@ Verification: `cargo check --workspace --all-targets` clean; `cargo fmt --all` c
 - **`nematic::markdown`** (new module): first concrete `Engine` implementation. CommonMark via `pulldown-cmark` 0.13. `MarkdownEngine` (engine ID `nematic.markdown`) covers headings, paragraphs with emphasis/strong/links/inline code/soft-and-hard breaks, recursive block quotes, ordered/unordered lists with multi-block items, fenced and indented code blocks, horizontal rules. Image alt text preserved as plain text in v1 (lossy but simple); HTML, footnotes, tables, math, and metadata blocks dropped. Stack-based converter handling Start/End event balancing across nested block + inline contexts. Tests cover engine-ID stability, H1-as-title extraction, link/emphasis preservation, code-block language preservation, list ordering, nested quotes, rules, image alt-text retention, and end-to-end dispatch through `inker::EngineRegistry`.
 - Verification: `cargo test -p inker` 8 tests pass (3 new engine tests + 5 routing tests); `cargo test -p nematic` 11 tests pass; `cargo test --workspace` all green; `cargo fmt --all` clean; `cargo check --workspace --all-targets` clean. File sizes well under the 600 LOC ceiling (engine.rs ~290 LOC, markdown.rs ~370 LOC after fmt expanded enum variants).
 - §3.1 critical-path remaining: #1 fresh iced host adapter (the only piece left for end-to-end demo); #2 partial — markdown engine wired but smolweb/file/web engines still TODO; #3 partial — markdown lane shipped, gemini/gopher/file/feed lanes pending.
-- **Host pivot: iced → gpui.** Per a new memory entry, the host plan moved from iced-first to a Glass-HQ/gpui fork as primary, with iced and HTML/CSS retained as fallbacks. Vello / netrender / serval embed via a `PlatformSurface` trait using OS composition (not wgpu texture sharing). §3.1 #1 updated to reflect the new direction; the existing `graphshell-host-iced` port-boundary scaffold stays as a fallback adapter rather than the lead host.
+- **Host pivot: iced → gpui.** Per a new memory entry, the host plan moved from iced-first to a Glass-HQ/gpui fork as primary, with iced and HTML/CSS retained as fallbacks. Vello / netrender / genet embed via a `PlatformSurface` trait using OS composition (not wgpu texture sharing). §3.1 #1 updated to reflect the new direction; the existing `graphshell-host-iced` port-boundary scaffold stays as a fallback adapter rather than the lead host.
 - **`nematic` filled out with two more engines plus a registration helper.** Per Mark: "we've got a gpui host on the come up, due to iced's foibles. wanna keep adding to nematic and inker in the meantime?" — kept building engines while host work happens in parallel.
 - **`nematic::gemtext`** (new module, ~410 LOC): `GemtextEngine` (engine ID `nematic.gemtext`) parses Gemini's `text/gemini` line-oriented format. Headings (3 levels), link lines (`=> URL [label]`), list items (`* `, consecutive lines merge into one list), quote lines (`> `, consecutive lines merge), preformatted blocks (` ``` ` toggle, alt text captured as language hint), paragraph accumulation across non-prefixed lines with blank-line separation. Single-pass state machine with a `Pending` enum tracking the current accumulator. Tests cover engine ID, H1 → title, three heading levels, link with/without label, list/quote merging, preformatted block alt-text + prefix-swallowing inside fences, paragraph soft-break preservation, end-to-end registry dispatch.
 - **`nematic::text`** (new module, ~129 LOC): `TextEngine` (engine ID `nematic.text`) splits on blank lines into paragraphs, preserves soft breaks within paragraphs. Tests cover engine ID, blank-line separation, soft-break preservation, no title extraction, empty body, content-type override.
@@ -751,8 +751,8 @@ Verification: `cargo check --workspace --all-targets` clean; `cargo fmt --all` c
 - **`nematic::file`** (new module, ~234 LOC): `FileEngine` (engine ID `nematic.file`) owns one instance of each delegate engine and dispatches by file extension (`.md`/`.markdown`/`.mkd`/`.mdown` → markdown; `.gmi`/`.gemini` → gemtext; `.gophermap`/`.goph` → gopher; `.xml`/`.rss`/`.atom` → feed; everything else → text). Extension extraction handles `file://` schemes, query strings, fragments, trailing slashes; case-insensitive; treats hidden files (`.gitignore`) as having no extension. Hosts that load a file body without knowing its MIME hand the whole input to this engine; hosts that *do* know the MIME set `EngineInput::content_type` and let the inker policy's content-type rules win — explicit MIME beats extension sniff. 10 tests including end-to-end via the default `file://` route.
 - **`nematic::finger`** (new module, ~115 LOC): `FingerEngine` (engine ID `nematic.finger`) wraps `TextEngine` with finger-specific content-type tagging (`text/x-finger`). Finger responses are plain text per RFC 1288 — no structure beyond the lines themselves — so a separate engine looks redundant against `nematic.text`, but having a distinct lane gives telemetry / logging / future finger-specific structure handling a stable engine ID to attach to. Replaces the `nematic.smolweb` umbrella for `finger://`. 4 tests.
 - **Retired `ENGINE_NEMATIC_SMOLWEB`** entirely. The umbrella existed as a placeholder for protocols without concrete engines; with gopher and finger now both filled, no protocol is using it. Removed the constant from `inker::routing`. Pre-alpha breaking change with no external consumers — clean cut.
-- **`EngineRegistry::contains(id) -> bool`** (new) — paired with **`EngineRoutePolicy::route_filtered(request, is_available)`** (new) to let hosts route only to engines they actually have registered. When a matched rule's engine isn't available, routing walks through to the next rule rather than producing a decision pointing at an unregistered engine. Use case: a wasm-only host can register a subset of engines (markdown + gemtext + text) and route requests through `policy.route_filtered(req, |id| registry.contains(id))` — `https://` requests fall through to the external-protocol fallback rather than dispatching to a non-existent Serval engine. The plain `route()` is now a thin wrapper that passes `|_| true`. 3 new inker tests.
-- **All engine slots filled.** Inker's default policy now has only fully-implemented engine IDs in its scheme rules: every `nematic.*` ID is backed by a concrete engine in the `nematic` crate, registered by `nematic::engines()`. The remaining unfilled slots (`serval.web`, `graphshell.internal`, `host.external-protocol`) belong to other crates by design and are not nematic's responsibility.
+- **`EngineRegistry::contains(id) -> bool`** (new) — paired with **`EngineRoutePolicy::route_filtered(request, is_available)`** (new) to let hosts route only to engines they actually have registered. When a matched rule's engine isn't available, routing walks through to the next rule rather than producing a decision pointing at an unregistered engine. Use case: a wasm-only host can register a subset of engines (markdown + gemtext + text) and route requests through `policy.route_filtered(req, |id| registry.contains(id))` — `https://` requests fall through to the external-protocol fallback rather than dispatching to a non-existent Genet engine. The plain `route()` is now a thin wrapper that passes `|_| true`. 3 new inker tests.
+- **All engine slots filled.** Inker's default policy now has only fully-implemented engine IDs in its scheme rules: every `nematic.*` ID is backed by a concrete engine in the `nematic` crate, registered by `nematic::engines()`. The remaining unfilled slots (`genet.web`, `graphshell.internal`, `host.external-protocol`) belong to other crates by design and are not nematic's responsibility.
 - File sizes: `nematic/src/file.rs` ~234 LOC; `nematic/src/finger.rs` ~115 LOC. Both well under the 600 LOC ceiling.
 - Verification: `cargo test -p inker` 18 tests pass (was 15; +3 filter); `cargo test -p nematic` 68 tests pass (was 53; +15: file 10 + finger 4 + lib 1); `cargo test --workspace` 1113+ passing, no failures; `cargo fmt --all` clean; `cargo check --workspace --all-targets` clean.
 - **Semantic-document enrichment + knot note format + smolweb completionist (2026-05-08).** Mark, after exploring the donor's `middlenet-core::SemanticDocument`: "is there a semantic document lane like scroll? that will be important for notes/clips made in the graph; we want semantic information after all, helps fuel intelligence." Three slices ran in sequence: (1) enrich `EngineDocument` with provenance / trust / diagnostics + semantic block variants; (2) add a knot note format engine; (3) port the donor's smolweb stub formats (scroll, misfin, nex, guppy) as protocol-spec-faithful body engines.
@@ -781,7 +781,7 @@ Verification: `cargo check --workspace --all-targets` clean; `cargo fmt --all` c
 
 ### 2026-05-09
 
-- **Knot wikilinks + hashtags + inker richer routing.** Two parallel slices on top of the polyglot knot foundation. Mark also reframed the would-be HTML reader-mode lane: rather than building it in nematic, it belongs in **Serval as a three-head Hekate negotiator** (smolweb extract / middlenet / fullweb modes for the same HTML input) — captured in the [Blitz/Serval convergence memory](memory) as the strategic direction. **Don't build `nematic.html-reader`**; HTML in any depth is Serval's job.
+- **Knot wikilinks + hashtags + inker richer routing.** Two parallel slices on top of the polyglot knot foundation. Mark also reframed the would-be HTML reader-mode lane: rather than building it in nematic, it belongs in **Genet as a three-head Hekate negotiator** (smolweb extract / middlenet / fullweb modes for the same HTML input) — captured in the [Blitz/Genet convergence memory](memory) as the strategic direction. **Don't build `nematic.html-reader`**; HTML in any depth is Genet's job.
 - **Knot wikilinks** (`[[node-name]]`): the knot post-process pass now runs an inline-rewrite step after fence expansion. Wikilinks become `InlineSpan::Link { url: "mere://node/<slug>" }` where `<slug>` is the lowercased name with whitespace → `-`. Display text preserves the original surface form. The link routes through inker's existing `mere://` → `graphshell.internal` rule, so wikilinks are first-class graph navigation. Implementation needed pre-merging adjacent `Text` spans first because pulldown-cmark splits `[[my note]]` into separate Text events for `[`, `[`, `my note`, `]`, `]`.
 - **Knot hashtags** (`#tag`): `#tag` tokens at word boundaries are *extracted* (not preserved inline) from paragraph text and emitted as sibling `DocumentBlock::Badge` blocks after the containing paragraph. Hashtags inside headings stay as text — only paragraphs extract. Boundary detection: `#` at start-of-string OR preceded by whitespace / `(`/`[`/`,`/`.`/`;`. Wikilinks inside an existing markdown link are not re-rewritten (the outer link's display text wins).
 - **Inker richer routing**: the README's two planned expansions landed.

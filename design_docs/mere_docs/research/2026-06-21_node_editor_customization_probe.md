@@ -32,7 +32,7 @@ silhouette, not a square or a ball.
   any in-app editor.
 - **In-app editing** (MS-Paint level) is a real but bounded UI: a fixed-grid pixel canvas
   (e.g. 32×32 / 64×64) with pencil + fill + a small palette is the minimal version; a free
-  bitmap canvas is the richer one. It is a serval document like the other overlays (palette /
+  bitmap canvas is the richer one. It is a genet document like the other overlays (palette /
   settings), so it composites correctly now that the **shell z-stack** is principled
   (2026-06-21) — an editor pane is just another chrome layer over the orrery.
 - **Sprite → collider (the hard, interesting part).** Today gyre gives every node a fixed

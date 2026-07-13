@@ -1,43 +1,43 @@
-# Serval Render Glue Extraction Plan
+# Genet Render Glue Extraction Plan
 
 **Date**: 2026-06-11
-**Status**: **Done (2026-06-11).** meerkat owns the glue (`crates/meerkat/src/serval_render.rs`);
-the `pelt-live` dependency is dropped; serval is untouched. Green (110 meerkat tests).
+**Status**: **Done (2026-06-11).** meerkat owns the glue (`crates/meerkat/src/genet_render.rs`);
+the `pelt-live` dependency is dropped; genet is untouched. Green (110 meerkat tests).
 **Scope**: Move meerkat's render glue (the `ScriptedDom -> netrender::Scene`
 assembly it consumes from `pelt-live`) into a meerkat-owned module that calls
-`serval-layout` + `paint_list_render` directly, and drop the `pelt-live`
-dependency. serval/pelt-live is left untouched; it stays the headless probe.
+`genet-layout` + `paint_list_render` directly, and drop the `pelt-live`
+dependency. genet/pelt-live is left untouched; it stays the headless probe.
 **Related**: [host_cheap_path_plan](../../archive_docs/2026-06-15_completed_plans/2026-06-10_host_cheap_path_plan.md) *(archived)* (this
-removes the shared edit surface that was forcing serval-side detours, unblocking
-that plan's C5-remaining and C6 serval items); the archived serval-as-host flip
+removes the shared edit surface that was forcing genet-side detours, unblocking
+that plan's C5-remaining and C6 genet items); the archived genet-as-host flip
 plan established "keep host-coupling retargetable", which this sharpens.
 
 ## Why
 
-meerkat depends on `pelt-live`, a leaf probe in the *serval* workspace (its own
+meerkat depends on `pelt-live`, a leaf probe in the *genet* workspace (its own
 header reads "headless host probe, Stage 1b, no window, no input"). Nothing in
-serval consumes it; meerkat is its only consumer. Three problems follow.
+genet consumes it; meerkat is its only consumer. Three problems follow.
 
-1. **Inverted dependency.** mere depends on a serval *port* (a demo leaf) where
-   it should depend on serval *components*. meerkat already depends on
-   `serval-layout` (the real engine component) directly; the pelt-live glue is
+1. **Inverted dependency.** mere depends on a genet *port* (a demo leaf) where
+   it should depend on genet *components*. meerkat already depends on
+   `genet-layout` (the real engine component) directly; the pelt-live glue is
    the odd coupling.
 2. **A probe on the product's hot path.** `scene_from_scripted_dom`,
    `hit_test_node`, and the caret + scrollbar overlay assembly run every meerkat
-   frame, yet they live in scaffolding that proved the serval spine offline.
+   frame, yet they live in scaffolding that proved the genet spine offline.
 3. **A shared edit surface across a repo boundary.** pelt-live's `render.rs` is
-   actively extended on the serval side (`range_rects`, `TextRange`,
+   actively extended on the genet side (`range_rects`, `TextRange`,
    `selection_style` landed mid-session) while meerkat consumes it, which forces
-   additive-only changes and serval-side detours (the C4 session hit-test was put
-   in serval-layout to avoid touching the file). Owning the glue gives meerkat a
-   stable contract: serval-layout's generic, tested API.
+   additive-only changes and genet-side detours (the C4 session hit-test was put
+   in genet-layout to avoid touching the file). Owning the glue gives meerkat a
+   stable contract: genet-layout's generic, tested API.
 
 ## Key finding: the engine already lives in shared crates
 
 The glue is thin assembly. Every piece under it is a shared crate meerkat can
 call directly:
 
-- cascade / layout / emit / query primitives: `serval-layout` (already a direct
+- cascade / layout / emit / query primitives: `genet-layout` (already a direct
   meerkat dep).
 - the paint-list to Scene lowering: `paint_list_render::translate_paint_list`.
   pelt-live only *aliases* this crate as `paint`; the orrery and platen-view
@@ -45,7 +45,7 @@ call directly:
 - query types (`Point`, hit-test) from `engine_observables_api`; paint types
   (`DeviceIntSize`) from `paint_list_api`; a11y from `accesskit` (already a dep).
 
-So the extraction moves no engine code and needs **zero serval changes**. It
+So the extraction moves no engine code and needs **zero genet changes**. It
 copies roughly 300 lines of assembly into meerkat and repoints dependencies.
 
 ## Surface (what meerkat consumes today)
@@ -58,17 +58,17 @@ they share (`LaidOutDocument`, `push_scrollbars`, `paint_list_from_*`) and
 
 ## Phases (done-conditions, not dates)
 
-### E1: meerkat `serval_render` module
+### E1: meerkat `genet_render` module
 
-Copy the glue into `crates/meerkat/src/serval_render.rs` (under the 600-LOC
-ceiling), calling serval-layout + paint_list_render directly. Lean on
-serval-layout's convenience entry points (`render`, `paint_list_from_layout_dom`)
+Copy the glue into `crates/meerkat/src/genet_render.rs` (under the 600-LOC
+ceiling), calling genet-layout + paint_list_render directly. Lean on
+genet-layout's convenience entry points (`render`, `paint_list_from_layout_dom`)
 where they hide taffy/euclid, to keep the new direct-dep set minimal. **Done
 when** the module builds and reproduces the seven functions.
 
 ### E2: repoint call sites
 
-Swap meerkat's `pelt_live::X` to `crate::serval_render::X` at the consuming sites
+Swap meerkat's `pelt_live::X` to `crate::genet_render::X` at the consuming sites
 (render.rs, input.rs, main.rs, roster.rs, card.rs, pane_session.rs, tests.rs).
 Mechanical. **Done when** no `pelt_live::` reference remains in meerkat.
 
@@ -76,7 +76,7 @@ Mechanical. **Done when** no `pelt_live::` reference remains in meerkat.
 
 Drop `pelt-live`; add `paint_list_render` (mirroring netrender's path dep) and
 whichever of {`paint_list_api`, `engine_observables_api`, `taffy`, `euclid`} the
-module names directly. The taffy/euclid pins must match serval-layout's (the
+module names directly. The taffy/euclid pins must match genet-layout's (the
 experimental taffy pin); most resolve to the already-locked transitive versions.
 **Done when** meerkat builds with no `pelt-live` dependency.
 
@@ -89,29 +89,29 @@ copy). **Done when** green and the on-screen shell renders unchanged.
 ## What does not move
 
 pelt-live keeps everything: its `pelt-live-counter` bin and its lib tests
-(`cascade_is_deterministic_off_thread_and_concurrent` guards serval thread
+(`cascade_is_deterministic_off_thread_and_concurrent` guards genet thread
 safety; the counter end-to-end and the xilem_serval dispatch tests guard the
-serval host spine). Those stay serval-side. The duplication of the thin assembly
+genet host spine). Those stay genet-side. The duplication of the thin assembly
 is the intended decoupling: the heavy, tested logic stays single-source in
-serval-layout + paint_list_render; only the ScriptedDom convenience signatures
+genet-layout + paint_list_render; only the ScriptedDom convenience signatures
 are copied, and that copy is what insulates the product from probe churn.
 
 ## Payoff
 
-- Fixes the inverted dependency (mere depends on a serval *component*, not a
+- Fixes the inverted dependency (mere depends on a genet *component*, not a
   *port*).
 - C5-remaining's emit-from-`LaidOutDocument` seam becomes a meerkat-local
   function, with no pelt-live coordination.
-- The C6 serval composition items stop colliding with active serval edits: the
-  only shared surface left is serval-layout's stable generic API.
+- The C6 genet composition items stop colliding with active genet edits: the
+  only shared surface left is genet-layout's stable generic API.
 
 ## Progress
 
 - **2026-06-11** — Scoped from the pelt-live dependency question. Surface
   inventoried (seven functions, all consumers meerkat-side); confirmed
   `translate_paint_list` belongs to `paint_list_render`, not pelt-live, so the
-  extraction needs no serval edits.
-- **2026-06-11** — **Executed, green.** `serval_render.rs` landed. The plan
+  extraction needs no genet edits.
+- **2026-06-11** — **Executed, green.** `genet_render.rs` landed. The plan
   expected a verbatim copy needing taffy/euclid; the C3/C4 session-query methods
   made it leaner: every stateless function collapses to a fresh `IncrementalLayout`
   plus a session query (`scene_from_scripted_dom` = `scene_from_session` over a
@@ -121,6 +121,6 @@ are copied, and that copy is what insulates the product from probe churn.
   now calls the production `IncrementalLayout::caret_rect`). All six runtime call
   sites repointed; `pelt-live` removed from Cargo. meerkat builds without compiling
   pelt-live; 110 tests green. The one snag: `tests.rs` is a *lib* test, so it could
-  not reach the bin-side `serval_render`; resolved by pointing it at the serval
+  not reach the bin-side `genet_render`; resolved by pointing it at the genet
   primitive instead. Behaviour preserved (meerkat only ever rendered the stateless
   panes with `cursor: None`; the chrome caret already rode the session).

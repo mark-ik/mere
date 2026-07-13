@@ -40,7 +40,7 @@ Murm does NOT own:
 |---------|-------|
 | Master keypair, OS keychain integration | [`mere-identity`](https://crates.io/crates/mere-identity) |
 | iroh transport, ALPN, QUIC connection management | [`mere-transport`](https://crates.io/crates/mere-transport) |
-| Engine management (Wry, Serval, Nematic) | [`inker`](https://crates.io/crates/inker) |
+| Engine management (Wry, Genet, Nematic) | [`inker`](https://crates.io/crates/inker) |
 | Rendering surfaces (GraphTree tiles) | [`verso-tile`](https://crates.io/crates/verso-tile) |
 | Many-to-many community/federation comms (Matrix, Nostr, IRC, ATproto, ActivityPub, native moot infra) | [`moothold`](https://crates.io/crates/moothold) + [`mooting`](https://crates.io/crates/mooting) |
 | Shell layer, host GUI, Navigator surface | [`graphshell`](https://crates.io/crates/graphshell) |

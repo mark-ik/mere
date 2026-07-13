@@ -1,11 +1,11 @@
-# Serval-as-host: evaluation, and what it does to the spine
+# Genet-as-host: evaluation, and what it does to the spine
 
 **Date**: 2026-05-29
 **Status**: Decision brief. Records the call on whether Mere's chrome should be
-rendered by serval (one engine) rather than Masonry, the evidence, and the
+rendered by genet (one engine) rather than Masonry, the evidence, and the
 worked consequences for the two subsystems it touches hardest (the orrery and
-platen). Companion to the serval-side implementation doc
-[`serval/docs/2026-05-27_serval_as_host_xilem_serval_plan.md`](../../../../serval/docs/2026-05-27_serval_as_host_xilem_serval_plan.md),
+platen). Companion to the genet-side implementation doc
+[`genet/docs/2026-05-27_genet_as_host_xilem_serval_plan.md`](../../../../genet/docs/2026-05-27_genet_as_host_xilem_serval_plan.md),
 which owns the `xilem_serval` backend mechanics; this doc owns the Mere-side
 architecture decision and adoption-plan relevance.
 **Related**: [composition spine](2026-05-21_mere_composition_spine.md),
@@ -18,13 +18,13 @@ architecture decision and adoption-plan relevance.
 
 ## 1. The decision
 
-Serval-as-host (chrome and content rendered by one engine, chrome authored in
+Genet-as-host (chrome and content rendered by one engine, chrome authored in
 Rust through `xilem_serval`, painted through netrender) is **the right end-state
 for Mere**, adopted as a *deliberate, gated flip*, not an immediate migration and
 not a maybe. The current Xilem + Masonry setup stays the working host until the
 flip gate clears.
 
-The gate is narrow and now clear on the serval-side prerequisites: **IME is
+The gate is narrow and now clear on the genet-side prerequisites: **IME is
 complete**, the orrery perf spike is clear, and the previously active
 host-backend blockers are implemented (`pointerdown`/`move`/`up` + capture,
 slider, Tab/Shift+Tab focus traversal, and clip-aware scrolled hit-testing).
@@ -39,31 +39,31 @@ layer rather than an excavation.
 
 ## 2. The three architectures
 
-From the serval doc, "use serval for the GUI" is three different things:
+From the genet doc, "use genet for the GUI" is three different things:
 
-1. **serval-as-texture-in-a-host** (today): Xilem owns the chrome, serval renders
+1. **genet-as-texture-in-a-host** (today): Xilem owns the chrome, genet renders
    content to a texture the host composites. The working setup.
-2. **host-framework + serval-rendered chrome**: deliberately *excluded*. Runs two
+2. **host-framework + genet-rendered chrome**: deliberately *excluded*. Runs two
    layout engines, two event models, two a11y trees, and buys only web-authoring
    ergonomics. The worst seat.
-3. **serval-as-the-host**: serval owns window, layout, paint, input, script, and
+3. **genet-as-the-host**: genet owns window, layout, paint, input, script, and
    accessibility; chrome and content are both documents. This is the only
    architecture where "chrome as CSS" is coherent, because there is one engine.
 
 This decision is about (3). Architecture (2) is never the path; whenever the
-stack wobbles toward "render chrome through serval on top of Masonry," the answer
+stack wobbles toward "render chrome through genet on top of Masonry," the answer
 is "go to (3) instead."
 
 ## 3. State of the prototype (why this is a decision, not a question)
 
 The scariest objection to (3) was "you have to build a reactive UI framework."
 That risk is empirically retired. `xilem_serval` is a third `xilem_core` backend
-(beside Masonry and `xilem_web`), `xilem_web` retargeted at serval's DOM, and the
-full loop (diff → serval DOM → layout → paint → netrender → present, input via
-serval hit-test + faithful message dispatch) is validated on screen
+(beside Masonry and `xilem_web`), `xilem_web` retargeted at genet's DOM, and the
+full loop (diff → genet DOM → layout → paint → netrender → present, input via
+genet hit-test + faithful message dispatch) is validated on screen
 (`pelt-live-counter`, 2026-05-28).
 
-The serval-as-host doc says "Stage 3 open." The serval git log already shows Stage
+The genet-as-host doc says "Stage 3 open." The genet git log already shows Stage
 3 work landed since: keyboard + focus (`09f2bf1a720`), form controls
 (`61135dec2b5`), capture-phase dispatch (`abde0a9ec1c`), caret-aware text editing
 (`4ceac562e0c`), plus heavy script-runtime DOM/Element/TreeWalker progress. The
@@ -76,7 +76,7 @@ Two seams the rest of Mere depends on are confirmed present:
   scrying content tile re-homes onto netrender's external-texture path rather than
   Masonry's external layer. The GPU-interop core built in the scrying session is
   host-agnostic; only the compositor seam moves, and the destination exists.
-- serval already depends on the `crates/xilem` fork (via pelt-viewer), so the
+- genet already depends on the `crates/xilem` fork (via pelt-viewer), so the
   dependency direction `xilem_serval` needs is established.
 
 ## 4. Pros and cons (architecture 3 vs the current architecture 1)
@@ -98,7 +98,7 @@ Two seams the rest of Mere depends on are confirmed present:
    AccessKit from a semantic tree beats synthesizing it from a widget tree.
    Architecture 1 has to merge two AccessKit trees; architecture 3 has one. The
    `inker::a11y::A11yCapability` declaration adopted in R0 slots straight in:
-   engines declare capability, serval-as-host emits the tree.
+   engines declare capability, genet-as-host emits the tree.
 4. **The reactive layer is reuse, and proven** (section 3).
 5. **One event/input/focus model.** Architecture 1 forced the reconciliation the
    understory brief wrestled with and forced scrying to forward input from Masonry
@@ -119,8 +119,8 @@ Two seams the rest of Mere depends on are confirmed present:
 3. **Chrome-update performance is unmeasured.** A full cascade + relayout per
    chrome update is heavier than targeted widget mutation. `IncrementalLayout` is
    the mitigation and is nascent. Section 8 turns this into a concrete gate.
-4. **Coupling to two churning substrates** (`xilem_core` API + serval's DOM API),
-   with serval itself under heavy active change. The fork pace is ours, but it is
+4. **Coupling to two churning substrates** (`xilem_core` API + genet's DOM API),
+   with genet itself under heavy active change. The fork pace is ours, but it is
    maintenance surface.
 5. **Transition cost.** The clean move (per the zero-user-prototype jump-ship
    bias) is rebuilding the chrome in `xilem_serval` rather than running both paths,
@@ -137,34 +137,34 @@ deep-wired Masonry specifics. What shifts:
 - **R0 a11y is reinforced** (section 4, pro 3); R0 temporal-integrity is unchanged.
 - **R1 orrery work is validated as host-agnostic.** The gyre hit-test/cull
   surface (`3c12827`) and the future force-field/physics work are host-agnostic;
-  only the canvas *host-binding* (Masonry widget vs serval element) is
+  only the canvas *host-binding* (Masonry widget vs genet element) is
   architecture-dependent. So the paused R1 fork resolves: the gyre/live-layout
   work is safe to continue, the app-wiring stays thin and retargetable.
 - **scrying re-homes cleanly** onto `netrender::compose_external_texture` (section
   3), which the counter demo already exercises.
-- **verso** realizes into serval DOM instead of a Masonry scene; the TileId
+- **verso** realizes into genet DOM instead of a Masonry scene; the TileId
   reshaping survives at the model level.
 
 The single actionable change is the section-1 instruction: stop deepening
 Masonry-specific investment; keep new host-coupling retargetable.
 
-## 6. The orrery under serval-as-host (more than a document)
+## 6. The orrery under genet-as-host (more than a document)
 
-The orrery is **not** an opaque `<canvas>`. Because serval is ours, it becomes a
+The orrery is **not** an opaque `<canvas>`. Because genet is ours, it becomes a
 custom-layout element composing three first-class layers:
 
 1. **Scene paint underlay (PaintCmds).** Edges, culled-node glyphs, selection
-   halos, effects. The element contributes a `PaintCmd` sublist to the serval
+   halos, effects. The element contributes a `PaintCmd` sublist to the genet
    paint list: `PushTransform(camera)`, then `DrawPath`/`DrawStroke` per edge,
    `DrawRect` + glyph runs for distant nodes, `PushLayer` for effects. This is the
    existing graph-canvas scene-packet rendering expressed in netrender's
    engine-agnostic `paint_list_api` vocabulary (`DrawPath` is a filled/stroked
    Bezier, already in the enum). It scales because it is a flat command list, not
-   DOM, and it renders identically whether driven from a Masonry widget or a serval
+   DOM, and it renders identically whether driven from a Masonry widget or a genet
    element.
 2. **Physics-positioned DOM children (real documents).** The visible nodes
-   (selected by `gyre::Simulation::cull_aabb`) materialize as real serval DOM
-   subtrees: cascade-styled, hit-tested by serval's `FragmentQuery`, emitted to
+   (selected by `gyre::Simulation::cull_aabb`) materialize as real genet DOM
+   subtrees: cascade-styled, hit-tested by genet's `FragmentQuery`, emitted to
    AccessKit. Their *position* comes from gyre, not CSS flow: each is
    `position: absolute` with a per-frame `transform: translate(x, y)` from the sim.
    A node can therefore hold a label, a live document, or a WebView (via
@@ -177,11 +177,11 @@ custom-layout element composing three first-class layers:
    steal-the-shape governs the camera math; the navigation defaults (wheel=pan,
    ctrl+wheel=zoom, inertia, infinite canvas) live in the element's input handling.
 
-**The two-hit-test worry resolves.** Node-*content* hit-testing is serval's (nodes
+**The two-hit-test worry resolves.** Node-*content* hit-testing is genet's (nodes
 are DOM fragments); scene-*geometry* hit-testing (empty space, edge picking,
 marquee) is gyre's `QueryPipeline`. They are complementary, not duplicative,
 with a clean boundary: a pointer landing on a materialized node dispatches through
-serval; otherwise it is a scene-geometry query.
+genet; otherwise it is a scene-geometry query.
 
 **Fidelity to the three goals.** petgraph stays the truth; the DOM children and the
 scene are a projection of it (the R0 shared-projection invariant applies). rapier
@@ -195,8 +195,8 @@ demotion.
 
 ## 7. The platen retarget
 
-**Morphorm is obviated.** serval's layout engine is taffy with flexbox + grid +
-block + float (`stylo_taffy`, `serval-layout/Cargo.toml`). Tiling panes map to
+**Morphorm is obviated.** genet's layout engine is taffy with flexbox + grid +
+block + float (`stylo_taffy`, `genet-layout/Cargo.toml`). Tiling panes map to
 nested flex containers: a split is a flex row/col with children plus a draggable
 divider adjusting flex-basis; a tab group is a strip plus a content slot. VS Code
 is the existence proof that resizable tiling panes work in flex + DOM. So taffy
@@ -214,13 +214,13 @@ always platen's.
   forme's tile-tree and canvas swatches, the press-on-paper layer between forme and
   verso. The forme TileId reshaping from the verso work carries over.
 - **Output changes**: from `LaidOutPlan` (positions a Masonry host consumes) to
-  serval DOM emitted via `xilem_serval` views. platen becomes a consumer of the
+  genet DOM emitted via `xilem_serval` views. platen becomes a consumer of the
   authoring layer, diffing the forme tile-tree into a DOM subtree (flex containers,
   tile content-roots, dividers) and handling drag by updating flex sizes.
-- **Within-tile boundary re-homes to serval**: "Masonry owns within-tile content"
-  becomes "the tile content is a serval content-root," a separate document
-  authority per the serval doc's separate-roots discipline. That root is either a
-  serval-rendered document (an inker/nematic engine's output as DOM) or an
+- **Within-tile boundary re-homes to genet**: "Masonry owns within-tile content"
+  becomes "the tile content is a genet content-root," a separate document
+  authority per the genet doc's separate-roots discipline. That root is either a
+  genet-rendered document (an inker/nematic engine's output as DOM) or an
   `ExternalTextureItem` (texture_key + `content_generation`) for a WebView/scrying
   tile. `content_generation` is the frame-arrival hint that ties to the redraw
   straggler from the scrying session.
@@ -233,14 +233,14 @@ likely a hybrid: flex for the docked tree, absolute for floaters, which maps ont
 the existing tile modes rather than fighting them.
 
 **Net**: platen gets simpler (no Morphorm, no separate solver, no place-seam) but
-serval-coupled (emits DOM via `xilem_serval`; within-tile content is serval roots
+genet-coupled (emits DOM via `xilem_serval`; within-tile content is genet roots
 or external textures). The arch-1-specific part that retargets is this session's
 Morphorm layout; the tiling model and interaction survive intact, and the retarget
 cost is moderate because the Morphorm seam is days old.
 
 ## 8. The flip gate and the perf spike
 
-The flip from architecture 1 to 3 is gated on serval reaching Masonry's
+The flip from architecture 1 to 3 is gated on genet reaching Masonry's
 interactive bar. As of the 2026-06-10 live-code check:
 
 - **IME** across chrome text entry is complete.
@@ -253,10 +253,10 @@ interactive bar. As of the 2026-06-10 live-code check:
   owns the Mere-side integration decision from section 6.
 
 **The perf spike (gates the orrery flip specifically):** confirm that
-transform-only node motion lands on serval's `RepaintOnly` path, not
+transform-only node motion lands on genet's `RepaintOnly` path, not
 `full_relayout`, at orrery scale (hundreds to thousands of nodes, 60fps physics).
 The mechanism exists (the `RepaintOnly` vs `full_relayout` split in
-`serval-layout/incremental.rs`, and Stylo classifies `transform` as
+`genet-layout/incremental.rs`, and Stylo classifies `transform` as
 composite-level damage rather than reflow). It needs measurement, not invention:
 model node motion as `transform`, not `left/top`, and measure relayout incidence
 on a moving N-node orrery against the `canvas_behavior_contract` scenarios. If
@@ -274,6 +274,6 @@ the whole chrome.
 - **Hold the separate-roots discipline** from day one: chrome-root and content-root
   are distinct document authorities. This is the invariant that goes wrong quietly.
 - **Run the perf spike** (section 8) before any commitment to render the whole
-  chrome through serval.
+  chrome through genet.
 - The flip itself, when gated open, is a dedicated implementation-strategy plan,
   not part of this brief.

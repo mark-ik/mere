@@ -146,7 +146,7 @@ impl WindowCtx<'_> {
                 }
             }
         }
-        // Ctrl+F opens / closes the find-in-page bar (HTML/serval lane).
+        // Ctrl+F opens / closes the find-in-page bar (HTML/genet lane).
         if self.view.modifiers.ctrl
             && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("f"))
         {

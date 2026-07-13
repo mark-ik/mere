@@ -20,6 +20,7 @@ members = [
     "crates/system/session-runtime",
     "crates/system/fetch",
     "crates/system/content-contract",
+    "crates/system/proofs",
     "crates/system/shell-state",
     "crates/system/registry/register-diagnostics",
     "crates/system/registry/register-input",
@@ -51,6 +52,7 @@ members = [
     "crates/intel/signals",
     "crates/murm/murm",
     "crates/murm/murmuring",
+    "crates/murm/replication",
     "crates/murm/transport",
     "crates/persona/gazetteer",
     "crates/moot/moothold",
@@ -106,6 +108,7 @@ meerkat-browser-worker = { path = "crates/meerkat-browser-worker" }
 
 fetch = { path = "crates/system/fetch" }
 content-contract = { path = "crates/system/content-contract" }
+proofs = { path = "crates/system/proofs" }
 shell-state = { path = "crates/system/shell-state" }
 frame = { path = "crates/shell/frame" }
 chrome = { path = "crates/shell/chrome" }
@@ -115,16 +118,16 @@ ux-events = { path = "crates/system/ux-events" }
 register-diagnostics = { path = "crates/system/registry/register-diagnostics" }
 register-theme = { path = "crates/system/registry/register-theme" }
 
-# The engine-management family moved to serval 2026-07-10 (serval
-# docs/2026-07-09_inker_serval_adoption_plan.md); consumed as git siblings
-# like the rest of the serval components. Local edit loop: the gitignored
-# .cargo/config.toml patches these to the serval working copy.
-inker = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
-document-canvas = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
-nematic = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
-scrying-engine = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
-graft-engine = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
-weld-engine = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+# The engine-management family moved to genet 2026-07-10 (genet
+# docs/2026-07-09_inker_genet_adoption_plan.md); consumed as git siblings
+# like the rest of the genet components. Local edit loop: the gitignored
+# .cargo/config.toml patches these to the genet working copy.
+inker = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+document-canvas = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+nematic = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+scrying-engine = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+graft-engine = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+weld-engine = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 
 forme = { path = "crates/forme/forme" }
 uxtree = { path = "crates/forme/uxtree" }
@@ -158,6 +161,7 @@ signals = { path = "crates/intel/signals" }
 misfin = { git = "https://github.com/mark-ik/misfin", branch = "main", features = ["ring"] }
 murm = { path = "crates/murm/murm" }
 murmuring = { path = "crates/murm/murmuring" }
+murm-replication = { path = "crates/murm/replication" }
 transport = { path = "crates/murm/transport" }
 
 moothold = { path = "crates/moot/moothold" }
@@ -175,7 +179,7 @@ identity = { path = "crates/persona/identity" }
 gazetteer = { path = "crates/persona/gazetteer" }
 
 # Rhai backend for the knot block-evaluator lane (the thin BlockEvaluator
-# slice, distinct from serval's full ScriptEngine seam). Pure Rust, sandboxed.
+# slice, distinct from genet's full ScriptEngine seam). Pure Rust, sandboxed.
 script-rhai = { path = "crates/script/rhai" }
 
 # ─── External pins ───────────────────────────────────────────────────────────
@@ -209,7 +213,7 @@ uuid = { version = "1", features = ["serde", "v4"] }
 # derives the full ThemeTokenSet from a few seed colours via this. Published as
 # `tinct` on crates.io; kept under the local alias `tincture` (Cargo `package =`)
 # so consumers and every `use tincture::` stay unchanged.
-tincture = { package = "tinct", git = "https://github.com/mark-ik/serval.git", branch = "main" }
+tincture = { package = "tinct", git = "https://github.com/mark-ik/genet.git", branch = "main" }
 
 # Off-grid mesh transport probe (optional, default-off). The `reticulum` crate
 # is a Rust implementation of the Reticulum Network Stack; keep the pin here so
@@ -229,49 +233,49 @@ unsafe_code = "warn"
 [workspace.lints.clippy]
 all = "warn"
 
-# ─── Cross-repo render-stack alignment (meerkat → serval) ────────────────────
-# meerkat pulls serval-layout (via pelt-live) for the cascade → layout → paint
-# path. serval-layout's `stylo_taffy` deps crates.io `stylo`/`stylo_atoms`, and
-# serval-layout itself git-deps the mark-ik/stylo fork (`main`, realigned to
-# v0.19.0 plus Serval's additive media features). `stylo` declares
+# ─── Cross-repo render-stack alignment (meerkat → genet) ────────────────────
+# meerkat pulls genet-layout (via pelt-live) for the cascade → layout → paint
+# path. genet-layout's `stylo_taffy` deps crates.io `stylo`/`stylo_atoms`, and
+# genet-layout itself git-deps the mark-ik/stylo fork (`main`, realigned to
+# v0.19.0 plus Genet's additive media features). `stylo` declares
 # `links = "servo_style_crate"`
 # (only one Stylo allowed per graph), so redirect the crates.io deps to the same
-# fork so every transitive stylo unifies with serval-layout's rather than
+# fork so every transitive stylo unifies with genet-layout's rather than
 # conflicting with a second (servo/stylo) source — a root-workspace patch applies
-# graph-wide. Mirrors serval's own crates.io patch (repos/serval Cargo.toml).
+# graph-wide. Mirrors genet's own crates.io patch (repos/genet Cargo.toml).
 [patch.crates-io]
-stylo = { git = "https://github.com/mark-ik/stylo", branch = "main", package = "serval-stylo" }
-stylo_atoms = { git = "https://github.com/mark-ik/stylo", branch = "main", package = "serval-stylo-atoms" }
-# serval-layout requires taffy =0.11.0-experimental-cache-fix.3 (serval's vendored
-# float-layout fork, not on crates.io). serval patches it in its own workspace; mere
-# does not inherit that, so redirect taffy to the fork from the owned serval repo by
+stylo = { git = "https://github.com/mark-ik/stylo", branch = "main", package = "genet-stylo" }
+stylo_atoms = { git = "https://github.com/mark-ik/stylo", branch = "main", package = "genet-stylo-atoms" }
+# genet-layout requires taffy =0.11.0-experimental-cache-fix.3 (genet's vendored
+# float-layout fork, not on crates.io). genet patches it in its own workspace; mere
+# does not inherit that, so redirect taffy to the fork from the owned genet repo by
 # BRANCH, never a rev (owned forks track branches). A fresh checkout anywhere resolves
-# it from git; a local serval checkout is picked up by the gitignored
-# `.cargo/config.toml` override, which lists serval's component/port dirs but NOT
+# it from git; a local genet checkout is picked up by the gitignored
+# `.cargo/config.toml` override, which lists genet's component/port dirs but NOT
 # support/patches/taffy, so it never collides with this patch. No local paths live in
 # this committed manifest, so it compiles anywhere.
-taffy = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
-# Same restatement for stylo_taffy: serval-layout deps stylo_taffy 0.3.0-beta.1,
+taffy = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+# Same restatement for stylo_taffy: genet-layout deps stylo_taffy 0.3.0-beta.1,
 # whose crates.io copy requires stylo ^0.19 — while our stylo fork is 0.18, and
 # both `links = "servo_style_crate"`, so the registry copy is not merely wrong,
-# it is unresolvable. Serval vendors a stylo_taffy patched onto the fork; mere
-# does not inherit serval's patch table, so it restates it here (same rule as
-# taffy above; the local `.cargo/config.toml` redirects it to a serval checkout).
-stylo_taffy = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+# it is unresolvable. Genet vendors a stylo_taffy patched onto the fork; mere
+# does not inherit genet's patch table, so it restates it here (same rule as
+# taffy above; the local `.cargo/config.toml` redirects it to a genet checkout).
+stylo_taffy = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 
-# ipc-channel: in-process fork, vendored in serval at support/patches/ipc-channel
-# and reached here via serval's git (exactly like the taffy patch above). Mere is
+# ipc-channel: in-process fork, vendored in genet at support/patches/ipc-channel
+# and reached here via genet's git (exactly like the taffy patch above). Mere is
 # single-process, so ipc-channel's OS IPC transport is vestigial; the fork defaults
 # to its built-in force-inprocess backend and makes the OS deps optional, dropping
 # the windows 0.61 pin that let gpu-allocator latch onto 0.61.3 while wgpu-hal forced
 # 0.62.2, breaking the dx12 suballocator. With it gone, gpu-allocator unifies on 0.62.
-ipc-channel = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+ipc-channel = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 
-# Boa JS engine, for the meerkat `scripted` render rung (the `serval.scripted` lane
-# runs page JS through `ScriptedDocument` on Boa). Mirrors serval's own patch
+# Boa JS engine, for the meerkat `scripted` render rung (the `genet.scripted` lane
+# runs page JS through `ScriptedDocument` on Boa). Mirrors genet's own patch
 # (`script-engine-boa` names `boa_engine`/`boa_gc` `=1.0.0-dev`, resolved to the fork).
 # `script-engine-boa` is an *optional* meerkat dep, so the base build's compile graph
 # stays JS-engine-free (the profile ladder's witness discipline); this patch only
 # satisfies resolution. Git deps so a bare clone resolves.
-boa_engine = { git = "https://github.com/mark-ik/boa.git", branch = "serval" }
-boa_gc = { git = "https://github.com/mark-ik/boa.git", branch = "serval" }
+boa_engine = { git = "https://github.com/mark-ik/boa.git", branch = "genet" }
+boa_gc = { git = "https://github.com/mark-ik/boa.git", branch = "genet" }

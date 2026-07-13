@@ -343,9 +343,9 @@ fn engine_document(
         pinned_engine: None,
     };
     let decision = policy.route_filtered(&request, |id| {
-        registry.contains(id) || id == inker::routing::ENGINE_SERVAL_WEB
+        registry.contains(id) || id == inker::routing::ENGINE_GENET_WEB
     });
-    if decision.engine_id == inker::routing::ENGINE_SERVAL_WEB {
+    if decision.engine_id == inker::routing::ENGINE_GENET_WEB {
         return None;
     }
     let mut input = EngineInput::new(source_url, body.to_string());
@@ -360,8 +360,8 @@ fn document_text(content_type: Option<&str>, body: &str) -> String {
         .map(|ct| ct.to_ascii_lowercase().contains("html"))
         .unwrap_or(false)
     {
-        let doc = serval_static_dom::StaticDocument::parse(body);
-        if let Some(text) = serval_extract::extract_main_text(&doc) {
+        let doc = genet_static_dom::StaticDocument::parse(body);
+        if let Some(text) = genet_extract::extract_main_text(&doc) {
             return text;
         }
     }

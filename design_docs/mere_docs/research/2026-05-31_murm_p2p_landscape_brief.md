@@ -3,7 +3,7 @@
 **Date**: 2026-05-31
 **Status**: Research brief / orientation survey. Grounds the p2p design corpus against the live code and against the current (May 2026) external p2p landscape. No code change proposed; this frames state, contradictions, and adopt-vs-build calls.
 
-> **Update note (2026-06-09 audit):** the central "nothing has executed the pivot" finding is now **OBE** — the p2panda substrate spike + logsync executed it (2026-06-01/02): Cable wire deleted, `IrohTransport`→`P2pandaTransport`, BLAKE2b→BLAKE3 unified, mDNS discovery wired. So contradictions (A) Cable drop-vs-keep and (B) BLAKE2b-vs-BLAKE3 are resolved in code, and (D) the host is `meerkat` (serval-as-host), not Xilem. The §1 "built reality" table and §5 contradiction list below predate that and read as a dated snapshot; the external-landscape survey (verdicts on iroh / p2panda / Willow / etc.) still stands.
+> **Update note (2026-06-09 audit):** the central "nothing has executed the pivot" finding is now **OBE** — the p2panda substrate spike + logsync executed it (2026-06-01/02): Cable wire deleted, `IrohTransport`→`P2pandaTransport`, BLAKE2b→BLAKE3 unified, mDNS discovery wired. So contradictions (A) Cable drop-vs-keep and (B) BLAKE2b-vs-BLAKE3 are resolved in code, and (D) the host is `meerkat` (genet-as-host), not Xilem. The §1 "built reality" table and §5 contradiction list below predate that and read as a dated snapshot; the external-landscape survey (verdicts on iroh / p2panda / Willow / etc.) still stands.
 **Scope**: The whole p2p program centred on *murm* (bilateral comms) and reaching across `transport` (iroh), `moothold`/`mooting` (federation), the event-DAG substrate, and the identity vault. Treats iroh as the foundational piece and asks where the rest of the stack should come from.
 **Related**:
 
@@ -44,7 +44,7 @@ What is **not** in the tree (verified: `MereEvent` and `mere-namespace` appear o
 3. **05-07** [Event-DAG substrate brief](../implementation_strategy/2026-05-07_event_dag_substrate_brief.md), the pivot: drop the Cable wire, unify on BLAKE3, make a signed Mere-native event DAG the protocol identity, demote sync layers (iroh-docs / Willow / p2panda) to projections, crystallize schema at the engram boundary not at write time, add Veilid as optional per-moot privacy transport, split moot hosting into Pattern A native (`mooting-*`) vs Pattern B outbound bridges (`mere-bridge-*`).
 4. **05-07** [Moot tiers brief](../implementation_strategy/2026-05-07_moot_tiers_and_voluntary_hosting_brief.md): orrery (t1) to moot (t2) to moothold (t3) to coalition (t4); voluntary hosting with reputational tessera stakes; cheesecloth pinning; ILL-shaped reciprocity; lapse-and-revive; moots link and store, they do not translate protocols.
 5. **05-10/11/30** refinements: the capability *stack* (meadowcap structural / Biscuit policy / Keyhive group-key); [graph-cluster-derived namespaces](../implementation_strategy/2026-05-10_graph_cluster_namespaces_brief.md); hash-agility/multihash discipline; Loro as preferred CRDT projection; NextGraph narrowed to an RDF donor.
-6. **05-30** present design energy is elsewhere (two-natured kernel, fields/aether/gyre, serval-as-host). P2P is parked, by deliberate fit-map discipline.
+6. **05-30** present design energy is elsewhere (two-natured kernel, fields/aether/gyre, genet-as-host). P2P is parked, by deliberate fit-map discipline.
 
 ## 3. Best big ideas (worth keeping)
 

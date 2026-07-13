@@ -122,7 +122,7 @@ The cluster where verso, the Xilem driver edit, and the scrying brief converge:
   `WorkbenchTiling` widget (Phase 1) hosts it.
 - The Xilem `MasonryDriver` gains an app-facing hook forwarding
   `composite_external_layers` (the vendored-lib edit, now with a real consumer —
-  see the [scrying DOM-bridge brief](../../../../serval/docs/2026-05-26_scrying_dom_bridge.md)
+  see the [scrying DOM-bridge brief](../../../../genet/docs/2026-05-26_scrying_dom_bridge.md)
   for the orthogonal observable channel).
 - `scrying-engine`'s producer becomes the `SurfaceProducer` behind the tile.
 

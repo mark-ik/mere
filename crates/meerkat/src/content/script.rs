@@ -10,7 +10,7 @@
 //! stylesheets lay it out and the existing generic `scene_from_content_band`
 //! renders it. Unscripted pages keep the `StaticDocument` path untouched.
 //!
-//! No serval change is needed: `ScriptedDom::set_inner_html` is fragment-only (it
+//! No genet change is needed: `ScriptedDom::set_inner_html` is fragment-only (it
 //! drops `<head>`/`<style>`/`<link>`), but `build_html_layout` already extracts the
 //! sheets separately and `lay_out_content`/`ContentLayout` are generic over
 //! `LayoutDom`, so the mirror + the same sheets reproduce the static render.
@@ -25,11 +25,11 @@ use mere::kernel::permissions::{
     Permission, ResolvedPermission, ScopedPermission, SettingScope, resolve_permission,
 };
 use layout_dom_api::{LayoutDom, LayoutDomMut, NodeKind};
-use serval_layout::{
+use genet_layout::{
     ContentLayout, ImageLoader, inline_stylesheets, lay_out_content, linked_stylesheets_with_loader,
 };
-use serval_scripted_dom::{NodeId, ScriptedDom};
-use serval_static_dom::StaticDocument;
+use genet_scripted_dom::{NodeId, ScriptedDom};
+use genet_static_dom::StaticDocument;
 use session_runtime::settings_store::ScriptPermissionPrefs;
 
 use crate::card::HTML_SHEET;

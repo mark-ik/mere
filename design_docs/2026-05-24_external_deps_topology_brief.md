@@ -16,28 +16,28 @@ Two sibling directories under `Code/`:
   (plus `xilem-graft-seam`, `xilem-pr-masonry-defaults`,
   `xilem-pr-with-default-properties`), `imaging`, `nova`, `glass-gpui`, `blitz`,
   `weave`, `boa`, `piccolo`.
-  - **`boa`** (added 2026-05-25; shallow @ `v0.21.1`, `serval` branch) — fork of the
+  - **`boa`** (added 2026-05-25; shallow @ `v0.21.1`, `genet` branch) — fork of the
     Boa JS engine. Carries an icu-family pin widen (`~2.0` → `^2.1`) so its
-    `icu_normalizer` unifies with serval's parley/nova-forced icu 2.2.x; serval
+    `icu_normalizer` unifies with genet's parley/nova-forced icu 2.2.x; genet
     redirects `boa_engine`/`boa_gc` to it via `[patch.crates-io]` (same pattern as
     `nova`). Owned so it can later be restructured for weval-based AOT (the real reason
     to fork — the icu fix was free along the way). See
-    [`serval/docs/2026-05-20_serval_script_engine_plan.md`](../../serval/docs/2026-05-20_serval_script_engine_plan.md).
+    [`genet/docs/2026-05-20_genet_script_engine_plan.md`](../../genet/docs/2026-05-20_genet_script_engine_plan.md).
   - **`piccolo`** (noted 2026-06-11; v0.3.3, MIT) — fork of kyren's stackless Lua
     VM. Two intended dividends: a `ScriptEngine` seam backend (the modding-Lua
     *option*, not a third first-party substrate — the Rust+JS decision stands)
-    and gc-arena technique/dependency for the `serval-scripted-dom` refit.
-    Consumes `gc-arena` as a git dep pinned to kyren's `5a7534b`; when serval
+    and gc-arena technique/dependency for the `genet-scripted-dom` refit.
+    Consumes `gc-arena` as a git dep pinned to kyren's `5a7534b`; when genet
     takes gc-arena directly, align both on one deliberate workspace pin. Plan:
-    [`serval/docs/2026-06-11_gc_arena_dom_plan.md`](../../serval/docs/2026-06-11_gc_arena_dom_plan.md).
-- **`Code/repos/`** — Mark's own projects: `mere`, `serval`, `netrender`,
+    [`genet/docs/2026-06-11_gc_arena_dom_plan.md`](../../genet/docs/2026-06-11_gc_arena_dom_plan.md).
+- **`Code/repos/`** — Mark's own projects: `mere`, `genet`, `netrender`,
   `netfetcher`, `errand`, `strophe`, `woodshed`, `wgpu-graft`, `wgpu-scry`,
   `wgpu-weld`. (**`graphshell`** was here until 2026-05-27, when it was
   GitHub-archived and the local clone deleted — see the [donor-repo code
   salvage map](mere_docs/research/2026-05-27_donor_graphshell_repo_salvage_map.md)
   and [full docs harvest](mere_docs/research/2026-05-27_graphshell_docs_full_harvest.md).)
   (**`netfetcher`** added 2026-05-25 — a scaffold; the portable
-  WHATWG-Fetch network engine. Mere owns it; serval/consumers receive bytes. Plan:
+  WHATWG-Fetch network engine. Mere owns it; genet/consumers receive bytes. Plan:
   [`mere_docs/.../2026-05-25_netfetcher_plan.md`](mere_docs/implementation_strategy/2026-05-25_netfetcher_plan.md).)
 
 Anything "essentially a library I don't maintain" moves into `crates/`. The
@@ -51,7 +51,7 @@ break the others silently — the audit's standing "no net under the
 five-checkout lattice" gap. The net is
 [`repos/mere/scripts/cross-repo-smoke.ps1`](../scripts/cross-repo-smoke.ps1):
 targeted `cargo check`s of the load-bearing crates in dependency order,
-innermost first (netrender → netfetcher → serval components → pelt → orrery →
+innermost first (netrender → netfetcher → genet components → pelt → orrery →
 meerkat), so a failure names the repo that introduced it; `-Tests` adds the
 fast lib suites, `-KeepGoing` collects all failures; logs land in
 `target/smoke/` (gitignored). Run it after pulling or landing cross-repo
@@ -64,7 +64,7 @@ Local overrides are repo-scoped. Do not put `paths = [...]` overrides in
 under `Code/`, so a package-name match can affect unrelated workspaces. Mere's
 ignored `repos/mere/.cargo/config.toml` owns its local edit loop with
 source-specific `[patch."https://github.com/mark-ik/<repo>.git"]` entries for
-serval, netrender, netfetcher, errand, wgpu-scry, and wgpu-graft, plus
+genet, netrender, netfetcher, errand, wgpu-scry, and wgpu-graft, plus
 `build.target-dir = "C:/t/meerkat-target"`.
 
 The blessed Meerkat local runner is
@@ -79,7 +79,7 @@ Because `crates/` and `repos/` are siblings, a path-dep from a repo into a
 vendored crate ascends to `Code/` then descends into `crates/`. From a repo
 root that is `"../../crates/<lib>/<sub>"`; deeper crates add one `../` per level.
 The 2026-05-24 reorg sweep repointed all stale `../<lib>/…` deps (which had
-pointed at a now-absent `repos/<lib>/`) across `woodshed`, `strophe`, `serval`,
+pointed at a now-absent `repos/<lib>/`) across `woodshed`, `strophe`, `genet`,
 and `mere`. See the sweep transform: *add one `../`, insert `crates/`*.
 
 ## Cross-repo rename lineage
@@ -88,7 +88,7 @@ graphshell's old sibling-repo deps map to current homes:
 
 | Old name (graphshell-era) | Current home |
 | --- | --- |
-| `servo-wgpu` | `repos/serval` |
+| `servo-wgpu` | `repos/genet` |
 | `webrender-wgpu` | `repos/netrender` |
 | `wgpu-graft/wgpu-native-texture-interop` | `repos/wgpu-graft/grafting` |
 
@@ -105,7 +105,7 @@ A repo-wide path sweep flags these as broken; they are **expected**:
   pulled into mere (engines, `crates/import`, the `register-*` cluster, `murm`
   misfin/webfinger) and its 633 design docs were harvested before archiving.
   No longer in `repos/`; the path sweep no longer applies to it.
-- **`serval`** carries servo-stack path-deps (`html5ever`, `mozjs`, `stylo`,
+- **`genet`** carries servo-stack path-deps (`html5ever`, `mozjs`, `stylo`,
   `rust-content-security-policy`) that are being incorporated **piece by
   piece** into the architecture. The dangling paths are deliberate WIP, not
   reorg breakage.
@@ -123,7 +123,7 @@ validation**.
 - **`weave`** — entity-level semantic git **merge driver**. Resolves false
   conflicts where independent edits touch different functions/structs/keys in
   the same file. **Enabled repo-wide** as of 2026-05-24: every repo (mere,
-  serval, netrender, strophe, woodshed, graphshell, wgpu-graft/scry/weld) has a
+  genet, netrender, strophe, woodshed, graphshell, wgpu-graft/scry/weld) has a
   committed `.gitattributes` mapping ~50 file types (`*.rs`, `*.toml`, `*.md`,
   …) to `merge=weave`.
 - **`sem`** — semantic version control (entity-level diff / listing / context /
@@ -139,4 +139,4 @@ clone or a machine without it installed, `merge=weave` is a dangling pointer and
 git **silently falls back** to its default merge. New clones need the driver
 installed + the local config set before weave actually engages.
 
-Origin / first evaluation: [`serval/docs/2026-05-23_sem_weave_smoke_test.md`](../../serval/docs/2026-05-23_sem_weave_smoke_test.md).
+Origin / first evaluation: [`genet/docs/2026-05-23_sem_weave_smoke_test.md`](../../genet/docs/2026-05-23_sem_weave_smoke_test.md).

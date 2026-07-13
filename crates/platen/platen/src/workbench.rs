@@ -15,7 +15,7 @@
 //! (one or more members, one visible), and a split lays its children along an axis (a
 //! `Row` side-by-side, a `Column` top-to-bottom), each with a fractional share. Splits
 //! nest, so the tree expresses every variation: horizontal, vertical, and combinations.
-//! It is geometry-free; layout is the host's serval/taffy job, reached through
+//! It is geometry-free; layout is the host's genet/taffy job, reached through
 //! [`Workbench::to_tile_tree`] (the pelt surface) and [`Workbench::slot_views`] (the
 //! a11y / automation projection).
 //!

@@ -71,5 +71,5 @@ mere-sessions/
 # not source — never commit.
 .sem/
 
-# Local cargo path overrides (serval/netrender local working copies) - local-dev only
+# Local cargo path overrides (genet/netrender local working copies) - local-dev only
 .cargo/

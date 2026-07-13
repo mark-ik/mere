@@ -2,24 +2,24 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! meerkat-shell: the on-screen serval host for Mere's chrome.
+//! meerkat-shell: the on-screen genet host for Mere's chrome.
 //!
 //! A winit window that runs the reused chrome ([`meerkat::chrome_view`] over a
-//! [`meerkat::Chrome`] wrapping the graphshell `ToolbarState`) through serval and
+//! [`meerkat::Chrome`] wrapping the graphshell `ToolbarState`) through genet and
 //! presents via netrender. Its `ScriptedDom → Scene` render glue (the
-//! `serval_render` module: [`crate::serval_render::scene_from_session`] and
-//! the point→node [`crate::serval_render::hit_test_node`]) calls serval-layout +
+//! `genet_render` module: [`crate::genet_render::scene_from_session`] and
+//! the point→node [`crate::genet_render::hit_test_node`]) calls genet-layout +
 //! paint_list_render directly, so this file is the window + present +
 //! input-dispatch harness, not a second engine.
 //!
 //! ## One shell document, one window
 //!
 //! The window draws one **shell document**: a single `ScriptedDom` under one
-//! [`ServalAppRunner`], holding the chrome (toolbar, omnibar, palette, overlays),
+//! [`GenetAppRunner`], holding the chrome (toolbar, omnibar, palette, overlays),
 //! the folded panes (roster, apparatus, steward, inspector, trail) as lensed
 //! subtrees, and the orrery's gnodes as transform-positioned DOM. That
-//! document runs through serval-layout into one chrome `Scene`. Around and beneath
-//! it the host composites separate surfaces that are not serval documents: the
+//! document runs through genet-layout into one chrome `Scene`. Around and beneath
+//! it the host composites separate surfaces that are not genet documents: the
 //! orrery graph scene ([`Orrery`]'s own `Scene` of gnodes / edges / physics from
 //! `seiche`), the pelt workbench tile surface, and the focused node's content card.
 //! Each rasterizes to its own texture and composites back to front: the orrery
@@ -46,7 +46,7 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
 use std::time::Instant;
 
-use crate::serval_render::fragments_from_scripted_dom;
+use crate::genet_render::fragments_from_scripted_dom;
 use accesskit::NodeId as AccessNodeId;
 use eidetic_fjall::FjallStore;
 use mere::forme::GraphMemberId;
@@ -59,9 +59,9 @@ use mere::platen::Workbench;
 use register_diagnostics::{DiagnosticEvent, install_global_sender};
 use register_theme::chrome::{ChromeTheme, Color32};
 use register_theme::theme::ThemeRegistry;
-use serval_layout::FragmentPlane;
-use serval_scripted_dom::{NodeId, ScriptedDom};
-use serval_winit_host::RenderCore;
+use genet_layout::FragmentPlane;
+use genet_scripted_dom::{NodeId, ScriptedDom};
+use genet_winit_host::RenderCore;
 use session_runtime::{
     ManifestStore, frame_layout_store, manifest::GraphSessionManifest, session_graph_store,
     settings_store, view_intent_store,
@@ -81,13 +81,13 @@ mod resources;
 mod sync;
 mod wallet_pairing;
 
-/// The platform AccessKit bridge moved into the shared serval host
-/// ([`serval_winit_host`]); any serval-on-winit host now shares the same OS a11y
+/// The platform AccessKit bridge moved into the shared genet host
+/// ([`genet_winit_host`]); any genet-on-winit host now shares the same OS a11y
 /// plumbing. Re-exported under the old module path so the `a11y_bridge` field and
 /// its call sites read unchanged — meerkat keeps only the routing
 /// (`apply_a11y_request`) that maps a drained request back to its host verbs.
 mod a11y_bridge {
-    pub(crate) use serval_winit_host::{A11yActionRequest, AccessKitBridge, BridgeStatus};
+    pub(crate) use genet_winit_host::{A11yActionRequest, AccessKitBridge, BridgeStatus};
 }
 #[cfg(any(test, feature = "agent-harness"))]
 mod agent_harness;
@@ -152,8 +152,8 @@ mod web_clip;
 // (Phase 1, step 2.)
 mod mode_store;
 mod scrying_host;
-mod serval_a11y;
-mod serval_render;
+mod genet_a11y;
+mod genet_render;
 mod session_ops;
 mod session_thumbs;
 mod shell_command;
@@ -579,7 +579,7 @@ fn main() {
     // The layer's `interesting_target` scopes which targets it actually mirrors into the ring, and
     // its `on_enter` records span starts idempotently (a re-entrant span must not double-insert).
     let ring_filter = tracing_subscriber::EnvFilter::new(
-        "info,netfetcher=debug,errand=debug,serval_layout=debug",
+        "info,netfetcher=debug,errand=debug,genet_layout=debug",
     );
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer().with_filter(env_filter))

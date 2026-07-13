@@ -36,6 +36,7 @@ pub fn next_action(board: &JobBoard, me: &[u8; 32]) -> WorkerAction {
     for job in board.jobs() {
         if let JobState::Claimed { winner } = &job.state
             && winner == me
+            && job.payload.is_some()
         {
             return WorkerAction::Execute(job.id);
         }

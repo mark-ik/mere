@@ -388,7 +388,7 @@ has a done-condition, not a date.
 
 ### Deferred (explicit non-goals for this effort)
 - HTML `<script type="application/ld+json">` / microdata extraction — needs
-  Serval/HTML parsing; do after standalone-resource ingest proves the seam.
+  Genet/HTML parsing; do after standalone-resource ingest proves the seam.
 - General node **property bag** for full literal fidelity (separate kernel
   change).
 - JSON-LD framing, RDF canonicalization (URDNA2015/RDFC-1.0), signing,

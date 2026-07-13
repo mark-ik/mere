@@ -17,8 +17,8 @@ setting; anything received (a moot's flora, a peer's clip) renders inert
 until explicit consent — fences degrade to visible source, never to silent
 execution or silent fetches.
 **Conflict posture**: nematic + inker + netfetcher (the smolweb clients) +
-a dev bin — no serval-layout, no meerkat render/input/frame_ops, no pelt.
-The consent *UI* and any serval-fragment rendering are named and gated.
+a dev bin — no genet-layout, no meerkat render/input/frame_ops, no pelt.
+The consent *UI* and any genet-fragment rendering are named and gated.
 
 ---
 
@@ -136,7 +136,7 @@ received knot's script fences render as inert source.
   `CodeBlock` with `language = "lua eval"`), so inert rendering is free
   everywhere.
 - **K2b — the Lua engine already exists; do NOT build a new crate.** Survey
-  (applying the errand lesson) found serval's **`script-engine-api`** (the
+  (applying the errand lesson) found genet's **`script-engine-api`** (the
   DOM-neutral ScriptEngine seam this plan already named) and its
   **`script-engine-piccolo`** backend (the gc-arena DOM plan's G4): `new()`
   / `eval(source)` / `value_to_string(value)` / `Budget` / `pump`, on the
@@ -146,9 +146,9 @@ received knot's script fences render as inert source.
 - **K2c — the host bridge (deferred, scoped).** Joining the two halves is a
   ~15-line adapter: `|lang, source| { engine.eval(source).and_then(|v|
   engine.value_to_string(&v)).map(EvalOutput::plain) }` (plus a
-  `return format, text` convention later). But it pulls serval + piccolo +
+  `return format, text` convention later). But it pulls genet + piccolo +
   gc-arena, which must not couple to pure nematic — so it lives where
-  serval is already linked (meerkat), deferred with the rest of the shell
+  genet is already linked (meerkat), deferred with the rest of the shell
   wiring, or in a `crates/probes/` spike if a standalone demo is wanted
   first. **One real gap found**: `PiccoloEngine::eval` runs `finish()`
   (unbounded), so it hangs on `while true do end`; the seam's `Budget` is
@@ -159,7 +159,7 @@ received knot's script fences render as inert source.
   in a wall-clock-bounded worker. Decision deferred to Mark with K2c.
 
 - **K2c + the bounded-eval gap — both landed (Mark's call: harvest + probe).**
-  **Harvest** (serval, the errand pattern): added `eval_bounded(source,
+  **Harvest** (genet, the errand pattern): added `eval_bounded(source,
   Budget)` to `script-engine-api::ScriptEngine` with a default that runs the
   existing unbounded `eval` (non-breaking — Nova/Boa unchanged), and an
   override in `script-engine-piccolo` that steps the executor with metered
@@ -191,9 +191,9 @@ received knot's script fences render as inert source.
   `ScriptEngine` seam, what about Rhai/Rune as pluggable backends? Decision:
   a **thin `BlockEvaluator`** (in inker: `eval_block(source, max_ops) ->
   EvalOutput`, plus a `BlockEvaluators` registry keyed by language tag) is
-  the knot-eval contract, deliberately distinct from serval's full DOM
+  the knot-eval contract, deliberately distinct from genet's full DOM
   seam (reflectors, promises) which mod/DOM scripting keeps. `script-rhai`
-  (`crates/script/rhai`, pure Rust, no serval) implements it: Rhai is
+  (`crates/script/rhai`, pure Rust, no genet) implements it: Rhai is
   sandboxed by default (no file/network) and has a **native operation
   budget** (`set_max_operations`), so the runaway cap is first-class (a
   `loop {}` is caught, not hung) rather than the fuel loop piccolo needed.
@@ -214,7 +214,7 @@ Djot forbids raw HTML *in prose*; it does not forbid explicit fenced
 blocks — clippings stay format-clean.
 
 - **Semantic tier (exists)**: `build_clip_knot` already serializes
-  selected blocks from a serval-rendered tile with provenance (per-block
+  selected blocks from a genet-rendered tile with provenance (per-block
   overrides included). This is the default clip and the export-friendly
   representation.
 - **Faithful tier (new)**: clip-time *additionally* captures the source
@@ -224,10 +224,10 @@ blocks — clippings stay format-clean.
   subset — text, headings, lists, tables, images; scripts, event
   handlers, iframes, and styles stripped (sanitization proven by test,
   not by intention). Parser choice: **html5ever** (spec-grade tokenizer,
-  the standards-correct pick and the lineage serval already trusts) over
+  the standards-correct pick and the lineage genet already trusts) over
   lighter non-spec parsers; the heavier dep is confined to nematic's
   optional feature.
-- Full-fidelity serval-fragment rendering inside a knot stays a named
+- Full-fidelity genet-fragment rendering inside a knot stays a named
   registry slot for post-reshape — the fence and the routing seam are the
   same either way, so upgrading fidelity later touches no format.
 - Export: `html` fences export via their semantic sibling (the tiers
@@ -237,7 +237,7 @@ blocks — clippings stay format-clean.
   fragment engine is its seed.
 
 **Done when**: a clipped fragment renders inline matching its source's
-semantics (fixture pairs against the serval-rendered original); a
+semantics (fixture pairs against the genet-rendered original); a
 script/onclick-bearing fragment provably renders with them stripped; clip
 round-trip keeps both tiers intact; exporting a knot with an `html` fence
 produces the semantic downgrade.
@@ -266,7 +266,7 @@ A Mere-native gemini *server* (exporters produce files; serve with
 anything); full readability/article-extraction browsing mode (separate
 lane seeded by K4's fragment engine); JS-engine wiring beyond the seam
 contract (follows the Lua lap); canvas-swatch script outputs (platen,
-later); serval full-fidelity fragments (registry slot, post-reshape);
+later); genet full-fidelity fragments (registry slot, post-reshape);
 any change to `mooting`/flora formats (a shared knot is just an engram —
 K-lanes read its trust state, nothing more).
 
@@ -281,7 +281,7 @@ K-lanes read its trust state, nothing more).
 - TOFU cert-pin store location (file beside the profile vs eidetic
   engrams) — start file-backed, migrate when persona/keys land fully.
 - Where `BlockEvaluator`'s piccolo implementation lives: meerkat (it
-  already deps the serval components) vs a small dedicated crate so the
+  already deps the genet components) vs a small dedicated crate so the
   bin can evaluate without the shell. The bin requirement leans toward
   the small crate.
 

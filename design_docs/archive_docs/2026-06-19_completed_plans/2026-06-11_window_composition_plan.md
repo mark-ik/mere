@@ -255,7 +255,7 @@ correctly, with input routed to the right orrery per pane.
 
 Context (2026-06-12): the
 [host wiring grabbag plan](2026-06-11_host_wiring_grabbag_plan.md) completed
-its serval-side seams (on_wheel, transform-aware hit-testing, pointer
+its genet-side seams (on_wheel, transform-aware hit-testing, pointer
 cancellation, keyboard escape hatches; 51/51 green) and correctly recorded
 G1.1–G1.3 + G2.3 as *runway* — their meerkat callers cannot exist yet,
 because the content surfaces aren't view nodes. The honest usage inventory:
@@ -295,12 +295,12 @@ cards are off-thread actor textures), but it is the most expensive place to
   hand-interception in input.rs, not a design conflict; once keys dispatch,
   the omnibar's Enter is just its own `on_key` consuming first.
 
-pelt V2 (serval's reference shell) demonstrates the same pattern mere-free
+pelt V2 (genet's reference shell) demonstrates the same pattern mere-free
 at 1/20th the size, and is the clean-room check that the spine works.
 Charter note (2026-06-12): pelt's plan now carries V5/V6 — the surface grows
-a tile tree (presentation-grade, over a serval-side plan-shaped contract
+a tile tree (presentation-grade, over a genet-side plan-shaped contract
 that platen's `tree_projection` maps forme onto) and then sheds its host
-loop to become **this plan's workbench pane** (mixed content via serval
+loop to become **this plan's workbench pane** (mixed content via genet
 content-roots + the external-texture element). Design pane work here with
 that destination in mind; the pane-module contract (standalone-or-hosted
 surface) gets written down at pelt V6.
@@ -514,13 +514,13 @@ wanted.
     element/view exists yet (only the host-compositor `ExternalTexturePlacement`).
     It gates the content-pane input spine (G1.1/G1.3), interactive in-graph DOM
     (G1.2), and **pelt V6** (workbench-pane → pelt surface). It lives in
-    xilem-serval / serval-scripted-dom — the **serval/pelt agent's repo**, so the
+    xilem-serval / genet-scripted-dom — the **genet/pelt agent's repo**, so the
     content half of the P2 companion is coordinated, not solo. The workbench pane's
     current `platen_view` internals are throwaway pending that convergence.
 - 2026-06-13: **P2-companion scout — list-pane view-ification, the pelt-informed design.**
   Code-checked the input spine before building. The three systems, concretely: **chrome**
   is the good pattern (`chrome_view(&Chrome) -> ChromeView` declarative views with
-  `on_click(el(...), handler)`, driven by a `ServalAppRunner` that diffs into a persistent
+  `on_click(el(...), handler)`, driven by a `GenetAppRunner` that diffs into a persistent
   DOM and dispatches input, no rect caches); **list panes** are the debt (per frame
   `build_roster_dom`/`build_utility_pane_dom` rebuild a fresh `ScriptedDom` →
   `scene_from_*` → rasterize → `compose_external_texture` into the pane rect, with the
@@ -528,7 +528,7 @@ wanted.
   `roster_row_rects`, `apparatus_button_rects` — rebuilt in render + hit-tested in
   frame_ops, plus a separately hand-built UxTree); **orrery/cards/gloss** are scene
   composition (not a view target — that is the external-texture-element piece).
-  - **The pelt lesson (`serval/ports/pelt-desktop/chrome.rs`):** a view-driven pane is one
+  - **The pelt lesson (`genet/ports/pelt-desktop/chrome.rs`):** a view-driven pane is one
     self-contained struct bundling its runner + sheets, exposing `frame(w,h) -> Scene`,
     `hit_test(x,y,w,h) -> Option<NodeId>` (lays out inline, no stored session field),
     `dispatch_click(node)` / `dispatch_key`, and `take_intents()` / `state()`. The shell
@@ -579,7 +579,7 @@ wanted.
     routing, which is inherently **P2**. The P2 items (per-pane resolution, non-focused
     contribution routing, that wake routing) follow the P2 companion.
 - 2026-06-12: **P2 companion added** (the xilem-serval input-spine target), prompted by
-  the host-wiring grabbag plan completing its serval-side seams with their meerkat
+  the host-wiring grabbag plan completing its genet-side seams with their meerkat
   callers correctly recorded as blocked-on-composition. Records the honest usage
   inventory (two runners; chrome-only dispatch; three parallel input systems), why the
   current state was deliberate staging but a bad place to stay, and the landing order:

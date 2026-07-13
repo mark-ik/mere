@@ -24,7 +24,7 @@ use mere::linked_data::{
     ContextCache, EdgeContribution, GraphContribution, NodeContribution, apply_contribution,
     from_html_with_contexts, from_jsonld_with_contexts,
 };
-use serval_static_dom::StaticDocument;
+use genet_static_dom::StaticDocument;
 
 /// schema.org `description` — the page's own summary.
 const SCHEMA_DESCRIPTION: &str = "https://schema.org/description";
@@ -79,11 +79,11 @@ pub fn page_extract_contribution(
     if media_type(content_type).as_deref() != Some("text/html") {
         return None;
     }
-    let extract = serval_extract::extract(&StaticDocument::parse(body));
+    let extract = genet_extract::extract(&StaticDocument::parse(body));
     contribution_from_page_extract(url, extract)
 }
 
-/// Map an already-computed [`PageExtract`](serval_extract::PageExtract) to a page-node
+/// Map an already-computed [`PageExtract`](genet_extract::PageExtract) to a page-node
 /// [`GraphContribution`] (title / description / canonical / OpenGraph). The shared
 /// mapping behind both the static path ([`page_extract_contribution`]) and the
 /// **headless-scripted** path (the host runs the scripted rung, then feeds
@@ -91,7 +91,7 @@ pub fn page_extract_contribution(
 /// metadata contributes too). `None` when the page declares nothing extractable.
 pub fn contribution_from_page_extract(
     url: &str,
-    extract: serval_extract::PageExtract,
+    extract: genet_extract::PageExtract,
 ) -> Option<GraphContribution> {
     let mut properties: Vec<NodeProperty> = Vec::new();
     if let Some(description) = extract.metadata.description {
@@ -130,7 +130,7 @@ pub fn contribution_from_page_extract(
 /// of an already-fetched body, with **no target fetch and no new actor**. `None`
 /// when the page has no outbound links.
 pub fn harvest_links(seed_url: &str, body: &str) -> Option<GraphContribution> {
-    let links = serval_extract::extract_links(&StaticDocument::parse(body));
+    let links = genet_extract::extract_links(&StaticDocument::parse(body));
     links_contribution(seed_url, links)
 }
 
@@ -143,7 +143,7 @@ pub fn harvest_links(seed_url: &str, body: &str) -> Option<GraphContribution> {
 /// target remains.
 pub fn links_contribution(
     seed_url: &str,
-    links: Vec<serval_extract::Link>,
+    links: Vec<genet_extract::Link>,
 ) -> Option<GraphContribution> {
     let predicate = mere::kernel::graph::predicate_iri(mere::kernel::graph::SemanticSubKind::Hyperlink);
     // Dedup by resolved URL, keeping the first non-empty anchor text. BTreeMap for a

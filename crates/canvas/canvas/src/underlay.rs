@@ -5,11 +5,11 @@
 //! The canvas scene producer: graph → a painted `CanvasPaintList` underlay.
 //!
 //! This is the **host-agnostic scene-paint underlay** of the canvas under
-//! serval-as-host (the [serval-as-host evaluation](../../../../design_docs/mere_docs/technical_architecture/2026-05-29_serval_as_host_evaluation.md)
+//! genet-as-host (the [genet-as-host evaluation](../../../../design_docs/mere_docs/technical_architecture/2026-05-29_genet_as_host_evaluation.md)
 //! §6, layer 1): edges + nodes + visual-coupling effects as one flat `PaintCmd`
 //! list. The brief's load-bearing claim is that this list "renders identically
-//! whether driven from a Masonry widget or a serval element", so the producer
-//! lives here, host-neutral; the eventual serval canvas element (or any host)
+//! whether driven from a Masonry widget or a genet element", so the producer
+//! lives here, host-neutral; the eventual genet canvas element (or any host)
 //! calls it and contributes the result as its paint sublist.
 //!
 //! Node positions come from the graph's committed positions today (matching the
@@ -252,7 +252,7 @@ pub fn canvas_paint_list(
 /// The canvas underlay from *live* positions (the seiche-driven variant of
 /// [`canvas_paint_list`]): same edges + nodes + visual-coupling overlays, but the
 /// node positions come from `position_of` rather than the committed graph. The
-/// serval canvas element calls this each frame with `seiche::Simulation`'s
+/// genet canvas element calls this each frame with `seiche::Simulation`'s
 /// positions, so the underlay tracks the simulation (the plan's "positions
 /// transition from committed to seiche-live"). Generic over the lookup to keep
 /// platen seiche-free.

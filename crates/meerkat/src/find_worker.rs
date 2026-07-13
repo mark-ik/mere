@@ -5,7 +5,7 @@
 //! The find-in-page worker: a single off-thread actor that lays out a page and
 //! returns its match rects.
 //!
-//! Find runs `find_content` (a full serval cascade + layout) which costs ~1-2s on a
+//! Find runs `find_content` (a full genet cascade + layout) which costs ~1-2s on a
 //! large page — far too slow on the UI thread per keystroke. A dedicated worker keeps
 //! it off the critical path: the host ships the focused page's body + query stamped
 //! with a generation, the worker lays out and ships the rects back, and the host

@@ -29,7 +29,7 @@ eidetic concern. It does **not** re-derive the eidetic stack or the front-end.
   bridge, the `eidetic-search` tantivy index, hybrid recall. This plan supplies
   the **live caller** that E1 left to a consumer, answers E1's open question on
   trace granularity, and routes page text into E3's index (the parked
-  "serval-side text-extraction seam" trigger, now satisfied by `serval-extract`).
+  "genet-side text-extraction seam" trigger, now satisfied by `genet-extract`).
 - [Relational Browse Graphlet](2026-06-23_relational_browse_graphlet_plan.md)
   — V1 (single-hop materializer) + V2 (crawl actor) are **built**. Its **V3**
   (relational capture into eidetic) is **moved here** and generalized: V3 was the
@@ -279,9 +279,9 @@ cleanup, a narrow materialized-only case, remains.)**
 ### C5 — Page text into the index (the fired trigger)
 
 Close the hop both the eidetic plan and the relational plan describe as the
-*other's* trigger. `serval-extract::extract_text` / `main_text` (the producer)
+*other's* trigger. `genet-extract::extract_text` / `main_text` (the producer)
 is built; `eidetic-search` indexes only titles / URLs / domains (the consumer);
-the connecting call lives in no crate. The trigger ("a serval-side text-extraction
+the connecting call lives in no crate. The trigger ("a genet-side text-extraction
 seam") has fired; the consuming work was never re-queued.
 
 - Route `extract_text` / reader-mode `main_text` from the browse / crawl path into
@@ -297,7 +297,7 @@ through the existing recall path; an excluded page is not indexed; the index lan
 `text` field (fields v2) + a `rebuild_with_text` variant; meerkat stands up the
 trail index live and answers a `>recall <terms>` omnibar verb — it loads the trace
 corpus, pulls each page's `main_text` from the durable content cache
-(`StaticDocument::parse` → `serval-extract`), re-mints the index with the text, and
+(`StaticDocument::parse` → `genet-extract`), re-mints the index with the text, and
 echoes the top BM25 hits. Stands up eidetic-search as a live in-app surface (it was
 dev-bin only). Headed-verified: `>recall documentation` (a term only in the page
 body, not the title or URL) returns the page. Caveats: the index rebuilds per query
@@ -332,7 +332,7 @@ what is indexed is C4** — the "an excluded page is not indexed" clause lands t
   cross-graph copy and snapshot replay assert it. This is C3.
 - **No consent / incognito / retention / forget anywhere in eidetic.** Only
   `PrivacyClass` routing and `apply_quota` keep-N exist. This is C4.
-- **The text-extraction seam fired.** `serval-extract::extract_text` / `main_text`
+- **The text-extraction seam fired.** `genet-extract::extract_text` / `main_text`
   is built and render-free; `eidetic-search` still indexes only titles / URLs.
   This is C5.
 - **`net.fetch` is no longer a stub** (relevant because the crawl recorder rides
@@ -361,7 +361,7 @@ what is indexed is C4** — the "an excluded page is not indexed" clause lands t
   focused node's graph out-edges, so the signal is present once a page is
   materialized/crawled and empty in plain browsing. Open: is "saw in a normal page,
   did not click" worth capturing too (would need re-extracting the page's links at
-  nav time via `serval-extract`, not just reading graph out-edges)? And the richer
+  nav time via `genet-extract`, not just reading graph out-edges)? And the richer
   `Decision` (dismiss / pin / dwell, vs the current "followed `to`") needs the
   neighborhood interaction UI.
 - **Recorder granularity vs `node-lineage`.** C1 must not let the durable trace
@@ -381,7 +381,7 @@ what is indexed is C4** — the "an excluded page is not indexed" clause lands t
   record; C5 closes the fired text-extraction trigger. Absorbs relational-browse
   V3. Same session, corrected the stale `net.fetch` "stub" framing and the
   resolved "one missing primitive" framing in the relational-browse plan (V1/V2
-  are built; `serval-extract::extract_links` is the primitive). No code yet.
+  are built; `genet-extract::extract_links` is the primitive). No code yet.
 - **2026-06-26 (C1 built + verified, `ac43edd`).** The live recorder:
   `browse_capture.rs` (per-nav `save_trace`, `capture_enabled` gate, schema
   bootstrap at store open), tapped in `nav_sync.rs` (`sync_orrery` +
@@ -398,7 +398,7 @@ what is indexed is C4** — the "an excluded page is not indexed" clause lands t
   id (the stale-from-URL bug). Headed run proved the loop: navigate → `>materialize`
   → navigate records candidates 0 → 1. **Audit (this entry):** C1 + C2 done +
   verified; relational-browse V1 is now fully reachable. Open lanes unchanged: **C5**
-  (route `serval-extract::extract_text` into `eidetic-search` — both ends built, the
+  (route `genet-extract::extract_text` into `eidetic-search` — both ends built, the
   connecting call is the smallest next win), **C3** (Provenance-family edge writers),
   **C4** (consent / retention / forget + federatability), and a richer `Decision`
   model when a neighborhood interaction UI exists.

@@ -2,16 +2,16 @@
 
 **Status: building; routed note tile, web-clip command, tall-note banding, and
 focused source writeback live.** The editor surface was reframed 2026-06-27: a
-note is a locally-addressed knot document inker routes to a serval-document tile,
+note is a locally-addressed knot document inker routes to a genet-document tile,
 created by typing a `knot://` address into the omnibar. The mapper, local-knot
-producer, inline `Node.body` persistence, table prerequisite, serval-rendered knot
+producer, inline `Node.body` persistence, table prerequisite, genet-rendered knot
 tile, themed note sheet, `>clip` semantic plus cropped-visual clip writer, and
 focused `>knot_editor` save path are built. Note tiles now report their laid-out
 height and render cached scroll bands instead of only the top viewport. The bound
 source editor now sits over the focused tile content rect when that tile is
 visible. Source highlighting also landed (2026-06-26, via the
 [illume text lexer plan](2026-06-26_illume_text_lexer_plan.md): illume spans →
-tinct roles → a serval styled field, headed-verified) — see the correction note
+tinct roles → a genet styled field, headed-verified) — see the correction note
 in Progress. Click-to-place and drag-select landed 2026-07-01 (a chrome click
 resolves DOM focus and snaps the caret to the clicked byte; a held press
 extends the selection as the pointer moves), completing Phase 1's mouse input.
@@ -45,7 +45,7 @@ pick an element off a live page and land it as a web-clip knot node carrying a
 
 ---
 
-## Reframe (2026-06-27): note as a routed serval-document tile
+## Reframe (2026-06-27): note as a routed genet-document tile
 
 Converged with Mark. The editor's home and render path change; the knot format,
 clips, polyglot vocabulary, and ergonomics below stand. This supersedes the
@@ -62,20 +62,20 @@ locally addressed. So the note-node correspondence is literal: opening a note-no
 is opening a content tile, identical in kind to opening a page-node. The node is the
 document; the tile is its view.
 
-**Render through serval + netrender, via a block→view mapper.** The host already
-builds a serval `ScriptedDom` by hand: the whole chrome is one, laid out by
-serval-layout and painted by netrender through `scene_from_session`. A note is the
+**Render through genet + netrender, via a block→view mapper.** The host already
+builds a genet `ScriptedDom` by hand: the whole chrome is one, laid out by
+genet-layout and painted by netrender through `scene_from_session`. A note is the
 same move on a different source tree, `EngineDocument` → xilem_serval views
 (headings, paragraphs, lists, code, blockquote, links) → `ScriptedDom` →
-serval-layout → netrender. The one new piece is the mapper, and it rides the
+genet-layout → netrender. The one new piece is the mapper, and it rides the
 view→DOM path the chrome proves every frame. The real web engine renders the note,
 so document-canvas leaves the note path (it stays on the node card for now).
 Building the view tree directly means no serialize-to-HTML round-trip.
 
 **Edit mode is the source, source-as-truth.** jotdown is read-only, so the buffer
-stays the source text. Edit mode is the illume-highlighted serval styled field over
-the same node body, re-rendered through the mapper on change. The rendered serval
-document is the view; the source field is the edit; both are serval DOM. This is not
+stays the source text. Edit mode is the illume-highlighted genet styled field over
+the same node body, re-rendered through the mapper on change. The rendered genet
+document is the view; the source field is the edit; both are genet DOM. This is not
 WYSIWYG over the rendered tree.
 
 **The omnibar is the new-note entry: address-to-create.** Typing `knot://field-notes`
@@ -96,8 +96,8 @@ onboards.
 
 ### Re-scoped slices
 
-1. **`EngineDocument` → serval-view mapper — landed (`0ab66a7` / `3d7c7ea`).**
-   Proven by rendering a document-family scene through serval views, layout, and
+1. **`EngineDocument` → genet-view mapper — landed (`0ab66a7` / `3d7c7ea`).**
+   Proven by rendering a document-family scene through genet views, layout, and
    netrender. Static knot, no kernel risk, self-demonstrating.
 2. **Omnibar `knot://` routing — landed.** The local-knot producer resolves
    `Node.body` to `text/x-knot`; `knot://` navigation creates/focuses a node and
@@ -109,7 +109,7 @@ onboards.
    `knot://` node, seeds from `Node.body`, saves back to that body, refreshes the
    live `text/x-knot` content state, invalidates note tile caches, and sits over
    the focused tile content rect when visible. The field also highlights live
-   (illume/tinct/serval bridge, landed separately — see Progress). Remaining:
+   (illume/tinct/genet bridge, landed separately — see Progress). Remaining:
    autosave/history and live re-render-on-change behavior.
 
 The semantic clip writer is now the first capture/provenance slice. Query blocks,
@@ -158,27 +158,27 @@ reusable.
 - **Page-to-graph pipe.** Whole-page fetch to `GraphContribution` to
   `apply_contribution` to `Orrery::ingest_graph`.
   Files: `crates/meerkat/src/fetch.rs`, `ingest.rs`, `crawl/mod.rs`.
-- **Element-selection primitive (in serval).** A CSS selector matcher
+- **Element-selection primitive (in genet).** A CSS selector matcher
   (`Selectors`) wired as `querySelector` / `querySelectorAll` / `matches`, plus
   `extract_*` over `LayoutDom`.
-  Files: `repos/serval/components/script-runtime-api/selector.rs`, `dom.rs`;
-  `serval/components/serval-extract/lib.rs`.
+  Files: `repos/genet/components/script-runtime-api/selector.rs`, `dom.rs`;
+  `genet/components/genet-extract/lib.rs`.
 - **Live-page scripting plus capture.** `execute_script_with_result` against the
   JS-rendered page (scrying_host.rs:260); `acquire_frame() -> SurfaceFrame` (GPU
   texture) and `capture_snapshot_png()` (producer.rs:62,147). Whole-surface only.
 - **A real multi-line edit widget.** `xilem_serval::TextInput`
-  (`repos/serval/components/xilem-serval/src/controls.rs`) is a String buffer with
+  (`repos/genet/components/xilem-serval/src/controls.rs`) is a String buffer with
   a char-index caret plus anchor selection, IME preedit, ghost text, select-all,
   and a `textarea` handler with column-preserving `move_up` / `move_down`,
-  `home_line` / `end_line`, and `set_caret_byte`. It lays out through serval-layout
-  on parley; the caret paints via `serval_layout::caret_rect`; meerkat already
+  `home_line` / `end_line`, and `set_caret_byte`. It lays out through genet-layout
+  on parley; the caret paints via `genet_layout::caret_rect`; meerkat already
   wires IME and focus across chrome fields. So the note editor extends a working
   multi-line widget. Two gaps: it lays the buffer out as plain runs (it styles
   only the preedit and ghost spans, so a per-range highlight channel is net-new),
   and `controls.rs` is already **696 LOC, over the 600 ceiling**, so editor work
   lands in new files.
 - **The click-to-place primitive, half-wired.** `caret_byte_at_point` exists as a
-  free function in serval-layout (point to byte via parley `Cursor::from_point`)
+  free function in genet-layout (point to byte via parley `Cursor::from_point`)
   but is not threaded through the `IncrementalLayout` session to `set_caret_byte`.
   Wiring that passthrough plus a meerkat call site is the one missing input piece.
 - **A styled preview render path.** inker `document-canvas` renders styled
@@ -189,7 +189,7 @@ reusable.
 - **A pure-Rust XML lexer already in nematic.** `quick-xml` is a nematic
   dependency. It is the inner lexer for `=svg` and other XML payloads, no new
   dependency. File: `crates/inker/engines/nematic/Cargo.toml`.
-- **Swatch pattern.** A graph element rendered as portable serval-laid-out DOM,
+- **Swatch pattern.** A graph element rendered as portable genet-laid-out DOM,
   with inline-block and replaced-box layout. Today it is the node face and shape
   surface; it is the natural carrier for an inline web-clip block.
   File: `crates/meerkat/src/swatch.rs`.
@@ -208,7 +208,7 @@ reusable.
 
 - **The edit-in side.** The first write path is live: the focused `knot://` node's
   source opens in the bound tile-positioned editor and saves to `Node.body`. The
-  per-range style channel landed too (illume/tinct/serval bridge), and so have
+  per-range style channel landed too (illume/tinct/genet bridge), and so have
   click-to-place and drag-select (a press resolves DOM focus and snaps the
   caret to the clicked byte; a held press extends the selection as the pointer
   moves). Remaining editor work is autosave/history and the
@@ -278,13 +278,13 @@ editor picks one for each job, and keeps each surface to its strength.
   lacks is a per-range style channel: today it lays the buffer out as plain runs,
   styling only the preedit and ghost spans. Highlighting means emitting the body
   as styled inline spans per highlight range, reusing the exact mechanism preedit
-  and ghost already prove. Serval is an HTML engine, so this is additive.
+  and ghost already prove. Genet is an HTML engine, so this is additive.
 - **Preview surface: inker `document-canvas`.** It renders styled `EngineDocument`
   blocks today and disowns caret, selection, and IME, so it stays a preview beside
   the source.
 
 The one missing input primitive gates click-to-place and drag-select:
-`caret_byte_at_point` exists in serval-layout but is not wired through the
+`caret_byte_at_point` exists in genet-layout but is not wired through the
 `IncrementalLayout` session to `set_caret_byte`. Wiring that passthrough plus a
 meerkat call site lands in Phase 1.
 
@@ -377,7 +377,7 @@ Four Zed ideas map onto Mere concepts and serve note-taking directly.
   and later for multi-cursor. Implement as a small anchor layer over the buffer,
   not a rope dependency at note size.
 - **Block decorations (inline embeds).** Mere's inline web-clip is a swatch and
-  block sibling in the layout, not styled text. serval already lays out
+  block sibling in the layout, not styled text. genet already lays out
   inline-block and replaced boxes, so the clip-in-note rides the existing swatch
   layout. Highlighting is a text-run concern; the clip is a block decoration. Keep
   them separate.
@@ -474,7 +474,7 @@ Four moves, most primitives present.
    with a consent gate. The faithful HTML fragment tier (sanitized html5ever with
    site context) is the later fidelity rung, owned by the knot-evaluation plan; v1
    clips are semantic-tier plus an optional cropped texture. HTML render depth
-   stays Serval's job, not nematic's.
+   stays Genet's job, not nematic's.
 
 ### Query blocks and agent nodes
 
@@ -559,7 +559,7 @@ moves). **Phase 1 is complete.**
 Partly live: `knot://` creates/focuses the note node, inline `Node.body` plus
 snapshot round-trip are built, the editor saves/reopens through that body, and
 jotdown `into_offset_iter` spans now drive a per-range style channel (the
-illume/tinct/serval bridge, headed-verified — see Progress). Remaining:
+illume/tinct/genet bridge, headed-verified — see Progress). Remaining:
 undo/redo grouping, embedded-tile ergonomics, and `.md` / `.txt` raw-edit saveback
 through `sniff`.
 
@@ -672,9 +672,9 @@ Resolved with Mark 2026-06-24:
    multi-line, selection, and IME; the editor adds a style channel, not a new
    widget.
 3. **Render split** — *superseded by the 2026-06-27 Reframe.* Originally: edit on the
-   serval field, preview on document-canvas. The Reframe renders the note through
-   serval-views + netrender (the web engine) and keeps document-canvas off the note
-   path; edit mode stays the serval source field.
+   genet field, preview on document-canvas. The Reframe renders the note through
+   genet-views + netrender (the web engine) and keeps document-canvas off the note
+   path; edit mode stays the genet source field.
 4. **Outer-djot pipe: pure-Rust jotdown.** Highlight spans plus a container tree
    (folds, outline, structural selection) from one jotdown parse. No C, no wasm
    question for the editor floor. Inner-language injection is a separate registry
@@ -705,7 +705,7 @@ Open:
    render glue, versus a single host module. Lean portable where the parley
    coupling allows.
 3. **Picker mechanism and surface.** `elementFromPoint` hit-test versus
-   selector-driven pick versus both; live scrying tile only, or also serval-laid-out
+   selector-driven pick versus both; live scrying tile only, or also genet-laid-out
    static pages. Lean: `elementFromPoint` on the live tile first.
 4. **Clip default tier.** Semantic-only by default with the cropped texture opt-in
    until Phase 5 proves the crop path, versus always capturing both.
@@ -792,11 +792,11 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   `(Event, Range<usize>)`; nested `Start(Container, Attributes)` / `End(Container)`
   events fold into a container tree (folds, outline, structural selection); raw
   blocks carry a `=FORMAT` tag. No AST, no writer. Pure Rust, wasm32 clean.
-- `xilem_serval::TextInput` (`repos/serval/components/xilem-serval/src/controls.rs`,
+- `xilem_serval::TextInput` (`repos/genet/components/xilem-serval/src/controls.rs`,
   696 LOC): String buffer, char-index caret, anchor selection, IME preedit, ghost,
   `select_all`, and a `textarea` handler with `move_up` / `move_down` / `home_line`
   / `end_line` / `set_caret_byte`. Plain-run render; styles only preedit and ghost.
-- `caret_byte_at_point` is a free function in serval-layout (parley
+- `caret_byte_at_point` is a free function in genet-layout (parley
   `Cursor::from_point`), not wired through `IncrementalLayout` to `set_caret_byte`.
 - inker `document-canvas` renders styled `EngineDocument` via per-byte-range
   `StyleProperty` pushes; disowns caret, selection, IME.
@@ -884,15 +884,15 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   trade is authoring and maintaining a small lexer set versus consuming a grammar
   library. Updated the injection and build-path sections, feature table, crate
   decision, decision 7 and the open question, risks, and findings. No code yet.
-- **2026-06-24, Phase 1 slice 1a (serval).** Exposed
+- **2026-06-24, Phase 1 slice 1a (genet).** Exposed
   `IncrementalLayout::caret_byte_at_point` and `caret_byte_vertical` on the session
-  (`repos/serval/components/serval-layout/incremental.rs`), mirroring the existing
+  (`repos/genet/components/genet-layout/incremental.rs`), mirroring the existing
   `caret_rect` method and delegating to the `crate::caret::*` free functions over the
   session's retained `built` / `text_ctx` / `fragments`. This is the one missing input
   primitive for click-to-place and soft-wrap vertical motion. `cargo check -p
-  serval-layout` green (1m03s; only pre-existing warnings, none from the change). Not
-  committed: serval `main` carries Mark's in-flight script-engine work, so the change
-  is isolated to serval-layout and left uncommitted. Next: the meerkat call site
+  genet-layout` green (1m03s; only pre-existing warnings, none from the change). Not
+  committed: genet `main` carries Mark's in-flight script-engine work, so the change
+  is isolated to genet-layout and left uncommitted. Next: the meerkat call site
   (pointer-down → `caret_byte_at_point` → `TextInput::set_caret_byte`).
 - **2026-06-25, Phase 1 slice 1b (meerkat).** Added `PaneSession::caret_byte_at_point`
   and `caret_byte_vertical` wrappers (`crates/meerkat/src/pane_session.rs`, a file
@@ -901,7 +901,7 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   run from inside mere on the pinned 1.93.0 toolchain; only the expected
   unused-method warning until a call site lands). The mere tree compiles with the
   concurrent work in place, so it is at a buildable checkpoint. The input-primitive
-  bridge is now complete end to end: serval session method → meerkat wrapper →
+  bridge is now complete end to end: genet session method → meerkat wrapper →
   (next) call site → `TextInput::set_caret_byte`. The remaining Phase 1 pieces (the
   pointer-down call site and the two-pane editor shell) land in the in-flight pane
   files (`input.rs` / `render.rs` / `pane_data.rs` / `views.rs`), so they wait on the
@@ -946,7 +946,7 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   `knot-editor` stays lean (jotdown + the logos pack); the free reuse-lexers
   (Boa / cssparser / html5ever / oxttl / pulldown-cmark / rhai / quick-xml) live
   host-side as `InjectionLexer` impls over the same registry, since those deps are
-  already in meerkat/serval and wasm-available. This refines Open question 1: the
+  already in meerkat/genet and wasm-available. This refines Open question 1: the
   pack is logos for languages without a tree tokenizer; everything else reuses the
   host's existing tokenizer.
 - **2026-06-25, engine-independent floors (Nova/Boa robustness).** Corrected the
@@ -967,7 +967,7 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   greedy punctuation run swallowing `--[[`). `cargo test -p knot-editor` green: 21
   tests, 0 warnings. Refined the pack-vs-reuse split: the logos pack floors languages
   with no reliably-present tokenizer (Rust, JS, rhai, rune, Lua, JSON / JSON-LD,
-  TOML); CSS / HTML / Markdown / Turtle keep a tokenizer whenever serval is loaded
+  TOML); CSS / HTML / Markdown / Turtle keep a tokenizer whenever genet is loaded
   (cssparser / html5ever / pulldown-cmark / oxttl), so those are host-side reuse, not
   logos floors. Pack labels now: json, json-ld, jsonld, toml, rust, rs, js,
   javascript, mjs, rhai, rune, lua.
@@ -1047,7 +1047,7 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   Committed my editor work to mere `main` in three batches (explicit pathspecs, no
   attribution trailers, on top of Mark's `fa5f32a`): the `knot-editor-host` editor model;
   the meerkat panel; this plan. Mark's graphlet work (app_handler / graphlets / main /
-  nav_sync / session_ops + the graphlet/tearout plans) left untouched; the serval-layout
+  nav_sync / session_ops + the graphlet/tearout plans) left untouched; the genet-layout
   caret primitive was already committed. Follow-ons: a multi-line textarea (the field is
   single-line today), the highlight overlay + the rendered preview pane (both driving
   `KnotEditor`), and responsive geometry.
@@ -1082,33 +1082,33 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   a fence. Added the *Query blocks and agent nodes* subsection, two ergonomics rows
   (Phase 4 / 5), and a phasing block; cross-refs the borrowed-ideas brief, the gloss
   design, and the graph-signals plan. Plan-only.
-- **2026-06-26, highlight render + illume promotion (spun out).** Built serval's
+- **2026-06-26, highlight render + illume promotion (spun out).** Built genet's
   `styled_textarea` (per-range styled `<span>` runs, the Phase-2 highlight render
-  surface; serval `6a3ceace`) and tinct's `syntax` palette (themed contrast-gated
+  surface; genet `6a3ceace`) and tinct's `syntax` palette (themed contrast-gated
   colours; tincture `03661ce`). The highlight core's promotion to a standalone sibling
   lexer crate (**illume**) and the full text-legibility architecture are spun out to
   their own plan, [illume text lexer plan](2026-06-26_illume_text_lexer_plan.md): the
   editor consumes illume (lexer: text → spans) + tinct (palette: role → colour) + the
-  serval styled field (renderer), with the host owning the `SyntaxKind` → `SyntaxRole`
+  genet styled field (renderer), with the host owning the `SyntaxKind` → `SyntaxRole`
   seam. Three editor-architecture fixes resolved there: #1 colours derive from tinct
   (never hardcoded), #2 one style-aware field body (not a styled fork), #3 `KnotEditor`
   becomes a stateless deriver so the host's `TextInput` is the single buffer. The
   remaining editor wiring (the bridge, the deriver) is tracked in the illume plan.
-- **2026-06-27, editor reframe: note as a routed serval-document tile.** Converged
+- **2026-06-27, editor reframe: note as a routed genet-document tile.** Converged
   with Mark across the session. The chrome-panel editor surface (the 2026-06-25
   expedient) and the document-canvas preview split (Decision 3) are superseded: a note
-  is a locally-addressed knot document inker routes to a serval-document tile, rendered
-  through serval-views + netrender (the same `ScriptedDom` → serval-layout → netrender
+  is a locally-addressed knot document inker routes to a genet-document tile, rendered
+  through genet-views + netrender (the same `ScriptedDom` → genet-layout → netrender
   path the chrome already uses), with the omnibar's `knot://` address-to-create as the
   new-note entry and `mere://welcome` teaching the scheme vocabulary. Added the Reframe
   section + the re-scoped slices (mapper → welcome tile; `knot://` routing; persistence;
   edit mode). Context: tinct 0.1.0 + illume 0.0.1 were published earlier this session
-  (see the illume plan). Starting slice 1, the `EngineDocument` → serval-view mapper.
+  (see the illume plan). Starting slice 1, the `EngineDocument` → genet-view mapper.
 - **2026-06-27, slice 1 done + native-smolweb-plan alignment.** Built the
   document-family block→view mapper (`meerkat/note_view.rs`: `Block` /
   `InlineSpan` → xilem_serval `el` / `text`, every block + inline-span variant, 3 tests;
   mere `0ab66a7`) and the render surface (`meerkat/note_surface.rs`: `note_scene_band` builds
-  the views into a `ScriptedDom` via a `ServalAppRunner`, lays out, lowers to a
+  the views into a `ScriptedDom` via a `GenetAppRunner`, lays out, lowers to a
   `netrender::Scene` through the chrome's `scene_from_session` path; a test renders
   `mere://welcome` end to end; mere `3d7c7ea`). The
   [native smolweb rendering plan](../../nematic_docs/implementation_strategy/2026-06-27_native_smolweb_rendering_plan.md)
@@ -1116,7 +1116,7 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   markdown, and reader-mode HTML all ride this one mapper (so it is not note-specific —
   its doc + eventual name should read "document-family"). The **smolweb family**
   (gemtext / gopher / feed / scroll / misfin) instead gets per-format native views in a
-  new `serval/smolweb-views`, shareable with pelt because they avoid `Block`; so
+  new `genet/smolweb-views`, shareable with pelt because they avoid `Block`; so
   the slice-1b content integration routes only document-family content through
   `note_scene_band`, never smolweb. Pending prerequisite from that plan: **`Block::Table`**
   (the enum lacks it; both djot and markdown need it) lands as its own change — touching
@@ -1126,30 +1126,30 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   (header + rows of inline-span cells, per-column `TableAlignment`) and covered every
   exhaustive `Block` match across the workspace (inker render / statements /
   document helpers, the djot round-trip writer, uxtree a11y, document-canvas card, the
-  meerkat inspector, and the `note_view` serval mapper → `<table>` / `<thead>` / `<tbody>`);
+  meerkat inspector, and the `note_view` genet mapper → `<table>` / `<thead>` / `<tbody>`);
   markdown + djot pipe-table exporters, with text / gemini / gopher fallbacks. `cargo check
   --workspace` green; inker + note_view + note_surface tests pass. The parser side (jotdown /
   pulldown table events → `Table`) lands with the live tiles. Clears the native-smolweb-plan
   prerequisite; next is the live welcome tile (slice 1b).
-- **2026-06-27, slices 2 + 3 + B — a serval-rendered knot note, end to end.** Slice 3: the
+- **2026-06-27, slices 2 + 3 + B — a genet-rendered knot note, end to end.** Slice 3: the
   inline `Node` body + `PersistedNode` snapshot round-trip (kernel `4bf7a17`, 257 tests green);
   the body lives on the node so it travels on snapshot / sync / fork. Slice 2: the local-knot
   producer (`ensure_content` reads `Node.body` → a `text/x-knot` Ready state → the existing
   `DjotKnotEngine` route renders it), a starter body for a fresh note, and open-the-note-as-a-tile
   on `knot://` navigation; `knot://` already classifies as a URL (`is_verbatim_url`) and `visit()`
   already creates-or-finds the node, so create-on-miss was free. B: the tile rasterizer gains a
-  knot lane that renders the note through serval (`note_scene_band`: `note_view` → `ScriptedDom` →
+  knot lane that renders the note through genet (`note_scene_band`: `note_view` → `ScriptedDom` →
   netrender) instead of document-canvas, the reframe's native web-engine path. Headed-confirmed
-  before/after (scry-shots `knotnote-BEFORE-document-canvas.png` / `-AFTER-serval.png`):
-  `knot://field-notes` opens a serval-rendered tile (serif `<h1>` / `<p>` on a light page) beside
+  before/after (scry-shots `knotnote-BEFORE-document-canvas.png` / `-AFTER-genet.png`):
+  `knot://field-notes` opens a genet-rendered tile (serif `<h1>` / `<p>` on a light page) beside
   an example.org document-canvas tile. Follow-ons: a themed note sheet + the illume syntax-palette
-  bridge (the serval note is UA-default serif on a placeholder light page for now); slice 4
+  bridge (the genet note is UA-default serif on a placeholder light page for now); slice 4
   (in-tile source editing); banding for tall notes; and the deferred networked / co-op `knot://`
   resolution.
 - **2026-06-29, status refresh before web-clip implementation.** Re-read the plan
   against the live seams after the capture/provenance membrane closed C4. Landed:
   the document-family mapper, `Block::Table`, inline `Node.body`, local
-  `knot://` producer, open-as-tile navigation, and serval-rendered knot note. Still
+  `knot://` producer, open-as-tile navigation, and genet-rendered knot note. Still
   live but superseded: the `>knot_editor` chrome panel, useful only as a scratch
   prototype until in-tile source editing replaces it. Next implementation target:
   Phase 4's semantic web-clip command/picker — create the clip node from a selected
@@ -1195,7 +1195,7 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   had spun highlight work out to on 2026-06-26 but never synced back. Finding:
   "richer source highlighting" was stale everywhere it appeared (top status, Reframe
   slice 4, What is net-new, Phase 2 remaining, and the prior progress bullet) — the
-  illume → tinct → serval styled-field bridge landed and was headed-verified on
+  illume → tinct → genet styled-field bridge landed and was headed-verified on
   2026-06-26, and is confirmed still live in the tree
   (`knot_editor_pane` in `views/panels.rs` renders
   `styled_textarea(t, &knot_highlight::knot_styles(t.text()))`). Corrected all five
@@ -1251,13 +1251,13 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   Phase 1's ergonomics row (click-to-place, drag-select) is now fully landed;
   remaining editor UI work is live-on-change render refresh, autosave/history, undo
   grouping, and the Phase 3 structural/authoring layers.
-- **2026-07-08, highlight bridge moved to serval (+ Phase 2 live-refresh/toggle in flight).**
+- **2026-07-08, highlight bridge moved to genet (+ Phase 2 live-refresh/toggle in flight).**
   While starting the Phase 2 tail, Mark raised promoting the editor for Isometry to
   consume. Outcome (tracked in the [illume plan](2026-06-26_illume_text_lexer_plan.md)
   point 8): illume extracted to its own public repo, and the highlight bridge
   (`meerkat/knot_highlight.rs`) dissolved *into* xilem-serval's new `highlight` feature —
   so the editor field is now `xilem_serval::highlighted_textarea(t, Highlight::Note)` and
-  the stylesheet `xilem_serval::syntax_css`, and every serval host (Isometry included)
+  the stylesheet `xilem_serval::syntax_css`, and every genet host (Isometry included)
   gets highlighted text for free. Also landed this session, ahead of that: live-on-change
   render refresh (the note tile renders from the uncommitted editor buffer,
   `knot_editor_live_body` in render/cards.rs) and the toggle source/preview view
@@ -1283,7 +1283,7 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   format. Since the buffer is raw source, format-aware = content-type preservation, no
   conversion. New tests: `knot_editor_close_autosaves_the_note_body`,
   `knot_editor_edits_a_markdown_note_and_saves_as_markdown`. Also this session (see the
-  illume plan point 8): the highlight bridge moved into serval's `highlight` feature and
+  illume plan point 8): the highlight bridge moved into genet's `highlight` feature and
   illume was extracted to its own repo. **Remaining editor work is Phase 3** (container-
   tree folds / outline wiring into the host, injection highlight in the live field, and
   the authoring affordances: smart lists, auto-pairs, slash menu, `[[` completion) and
@@ -1302,40 +1302,40 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   Alt+arrows reach the editor. All three intercept in `on_knot_editor_key` before the
   generic dispatch, with undo snapshots. meerkat re-took a direct `illume` dep for the
   container-tree logic (distinct from the highlight bridge in xilem-serval). **Injection
-  highlighting in the live field was already covered** by serval's `highlight` feature
+  highlighting in the live field was already covered** by genet's `highlight` feature
   (`highlighted_textarea` runs illume's `default_pack`, which dispatches code/raw blocks
   to the injection registry). 7 chrome_comms unit tests + 247 bin tests green. **Remaining
   Phase 3 is the UI-surface cluster** (each its own slice): section folds (line-hiding
   UI), the heading outline (ties into the gloss outline lens plan), `[[` node-link
   completion and the `/` slash menu (both need a completion popup) — then the
   query-block / agent-node wave.
-- **2026-07-09, universal editor ops promoted to serval.** Prompted by "where should
+- **2026-07-09, universal editor ops promoted to genet.** Prompted by "where should
   this live" against Isometry. Checked Isometry's bootstrap plan first: its text needs
   are lighter (a compose field, schema character-sheet fields; its undo is map-domain,
   not text), so it does *not* pull the djot-prose ops. Split accordingly: the
-  host-agnostic bits went to serval, the prose bits stayed. **xilem-serval gained an
+  host-agnostic bits went to genet, the prose bits stayed. **xilem-serval gained an
   `editor` module (core, no feature gate — needs only `TextInput`)**: `EditHistory` (a
   bounded undo/redo stack of whole-buffer snapshots with coalesced typing runs) and
-  `wrap_selection` / `pair_close` (auto-pair wrap over a selection). Every serval host
-  now gets undoable, bracket-wrapping fields for free (serval `bf632fa`, 5 tests, 98
+  `wrap_selection` / `pair_close` (auto-pair wrap over a selection). Every genet host
+  now gets undoable, bracket-wrapping fields for free (genet `bf632fa`, 5 tests, 98
   total). meerkat's three undo Chrome fields collapsed to one `knot_history:
-  EditHistory` and `wrap_selection_if_pair` delegates to serval (mere `0a8bc35`). **Kept
+  EditHistory` and `wrap_selection_if_pair` delegates to genet (mere `0a8bc35`). **Kept
   host-side** (prose- / grammar-specific or graph-coupled): list continuation, structural
   selection (illume container tree), `note_edit_format`, the save path, the render lane,
-  focus and the pane. This mirrors the highlight promotion (illume plan point 8): serval
+  focus and the pane. This mirrors the highlight promotion (illume plan point 8): genet
   is the editor toolkit; the grammar-aware and graph-aware layers stay in the host. 7
   chrome_comms + 247 bin tests green.
 - **2026-07-09, Phase 3 completion popups (`/` slash + `[[` node link).** Built the
   first of the UI-surface cluster, ecosystem-first per the chisel catalog's read (menus
-  are Tier-1 views, not leaves). **serval gained a reusable overlay `menu` view**
+  are Tier-1 views, not leaves). **genet gained a reusable overlay `menu` view**
   (positioned selectable rows + host on-pick, composed from `overlay_at`; classes
-  `menu`/`menu-row`/`menu-row-active`; serval `8a4a0a0`) — the shape every host wants, so
+  `menu`/`menu-row`/`menu-row-active`; genet `8a4a0a0`) — the shape every host wants, so
   Isometry/Strophe get menus for free. **meerkat's `knot_completion` module** holds the
   shared machinery: trigger detection (a `/` at line start, or `[[` unclosed on the
   line), candidate filtering, and accept (replace `trigger..caret` with the item's insert,
   with an undo snapshot). The host (`WindowCtx::refresh_knot_completion`) rebuilds
   candidates + the caret anchor (`caret_rect`) after every editor key and renders the
-  serval `menu`; the keyboard navigates (arrows), accepts (Enter/Tab), and closes (Escape),
+  genet `menu`; the keyboard navigates (arrows), accepts (Enter/Tab), and closes (Escape),
   with soft-wrap nav yielding while it is open. `/` items are static block templates
   (headings, lists, task, quote, code fence, divider); `[[` items are titled graph nodes
   filtered by query, inserting `[[Title]]` (`WindowCtx::wikilink_items` over

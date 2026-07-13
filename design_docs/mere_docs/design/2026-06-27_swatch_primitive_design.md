@@ -126,7 +126,7 @@ To stay one component rather than a god-object:
 
 - **One shared view layer** runs the pipeline, emits the element model, and owns the
   hit-test / gesture contract (`gesture G on element E in swatch S`, routed through
-  the chrome press-gate since serval has no native pointer-drag).
+  the chrome press-gate since genet has no native pointer-drag).
 - **A geometry provider keyed by scope**: a single node's face + hull versus a
   cartography subgraph layout. The single node is the degenerate case.
 - **An edit strategy keyed by scope**: `NodeBodyEdit` (hull vertices, sprite) /

@@ -4,7 +4,7 @@
 WebRTC (data channels + media tracks) and audio/video **decode** (everything we
 can get *shy of being blessed by the censors* — i.e. no DRM/EME). Sibling to
 [`netfetcher`](2026-05-25_netfetcher_plan.md) (network), `netrender`
-(paint→GPU), and serval (render). **Mere owns it; serval consumes decoded
+(paint→GPU), and genet (render). **Mere owns it; genet consumes decoded
 frames** through a byte/frame seam, the same way it consumes fetched bytes.
 
 > Status: **plan-only.** No `net-media` crate exists yet. Bucket #3 of the
@@ -66,7 +66,7 @@ The rav1d/rav1e reality (established in the 2026-05 conversation): the fast
 codec path is **Rust logic + hand-written NASM/GAS SIMD kernels**, and that asm
 is *permanent* (it's a hand-asm-vs-compiler gap, identical in C — `std::simd` is
 nightly, intrinsics don't match hand-tuned asm). So pulling in fast software
-decode means pulling in **NASM** — the exact build-environment baggage serval
+decode means pulling in **NASM** — the exact build-environment baggage genet
 shed (vanilla-Windows builds, no NASM/MOZILLABUILD/clang-cl).
 
 **Resolution — a three-tier decode policy, asm isolated and opt-in:**
@@ -102,7 +102,7 @@ net-media
 ```
 
 The registry mirrors the **engine-neutral organ pattern** the ecosystem already
-uses (netfetcher's seams, netrender's `PaintList`, serval's `LayoutDom`): neutral
+uses (netfetcher's seams, netrender's `PaintList`, genet's `LayoutDom`): neutral
 trait contract + per-impl crates + feature/tier gating. A codec is selected by
 content kind + a tier policy (hw → pure-rust → asm), exactly parallel to
 netfetcher's transport selection.
@@ -111,13 +111,13 @@ netfetcher's transport selection.
 
 - **Mere owns net-media**; it runs decode (likely in a service worker akin to
   netfetcher's `FetcherPool`, off the UI thread).
-- **serval consumes decoded frames** through a seam, the same shape as its
-  `ImageLoader` (host fetches+decodes; serval lays out + composites). A
-  `VideoFrameSink`/`MediaSource`-style seam: serval requests a media resource;
+- **genet consumes decoded frames** through a seam, the same shape as its
+  `ImageLoader` (host fetches+decodes; genet lays out + composites). A
+  `VideoFrameSink`/`MediaSource`-style seam: genet requests a media resource;
   the host decodes via net-media and hands back frames (as GPU textures where
   hardware decode produced them — composited via netrender, zero-copy where
-  possible, reusing the External-layer interop from the serval viewer work).
-- **JS `<video>`/`<audio>`/`MediaSource`/WebRTC APIs** (serval's scripting tier)
+  possible, reusing the External-layer interop from the genet viewer work).
+- **JS `<video>`/`<audio>`/`MediaSource`/WebRTC APIs** (genet's scripting tier)
   bind to net-media through the host — never linking it directly (same discipline
   as netfetcher).
 - **WebRTC data channels** serve the **p2p/smolweb** lane directly (Mere's
@@ -148,8 +148,8 @@ netfetcher's transport selection.
    pattern).
 2. **`webrtc-rs` maturity/version** — verify current release + how heavy its
    tree is; whether data-channels-only can be feature-gated from media tracks.
-3. **Frame seam shape** — what serval's media seam looks like (CPU `Frame` vs
-   GPU texture handle); reuse the External-layer / `wgpu` interop from the serval
+3. **Frame seam shape** — what genet's media seam looks like (CPU `Frame` vs
+   GPU texture handle); reuse the External-layer / `wgpu` interop from the genet
    viewer + `wgpu-scry`/`grafting` work rather than inventing.
 4. **Repo placement** — own repo `Code/repos/net-media/` (sibling to netfetcher),
    or a crate under an existing repo? Likely own repo (it's a substantial,
@@ -166,7 +166,7 @@ netfetcher's transport selection.
 - **netfetcher** supplies the *bytes* (HTTP(S) media fetch, range requests for
   seeking); net-media decodes them. Composed, not coupled.
 - **netrender** composites decoded frames (GPU textures) into the scene.
-- **serval** consumes frames via a media seam (parallel to `ImageLoader`).
+- **genet** consumes frames via a media seam (parallel to `ImageLoader`).
 - **murm/transport** — WebRTC data channels are a *browser-interop* p2p path
   beside Mere's iroh transport; coordinate ownership.
 - **Conformance** — WPT `media-source/`/`webcodecs/` deferred; manual playback +
@@ -185,5 +185,5 @@ netfetcher's transport selection.
 ## Progress
 
 - **2026-05-26** — plan created. Scope (WebRTC + decode, no DRM), the three-tier
-  asm-isolated decode policy, codec-registry shape, layering (Mere owns; serval
+  asm-isolated decode policy, codec-registry shape, layering (Mere owns; genet
   consumes frames), increment ladder, and open questions fixed. No code yet.

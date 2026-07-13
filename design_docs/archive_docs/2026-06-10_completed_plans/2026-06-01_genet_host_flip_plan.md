@@ -1,4 +1,4 @@
-# Serval-as-Host Flip Plan
+# Genet-as-Host Flip Plan
 
 **Date**: 2026-06-01
 **Status**: Closed 2026-06-10. P0-P3 and P5's core done-condition shipped
@@ -7,31 +7,31 @@ of Progress). P4 (external content re-home) is re-homed to the modular
 integration plan, S6. Archived per DOC_POLICY §8.
 **P0 (perf spike) run 2026-06-01:
 the relayout worry is retired (transform motion is paint-tier → `RepaintOnly`, not
-reflow). The three serval prerequisites it surfaced for the orrery's continuous
+reflow). The three genet prerequisites it surfaced for the orrery's continuous
 motion (incremental inline-`style` invalidation, repeated-`apply()` restyle, and
-transform→paint-position) are all RESOLVED in serval-layout (verified single-threaded
+transform→paint-position) are all RESOLVED in genet-layout (verified single-threaded
 and parallel; see Phase 0). The orrery flip (P1) is unblocked on the layout/perf
 side. The earlier `xilem_serval` host-backend blocker list is now closed in the
 current tree: pointer-drag (`pointerdown`/`move`/`up` + capture), slider,
 Tab/Shift+Tab focus traversal, and clip-aware scroll hit-testing are implemented
 and test-covered.**
 Execution plan for flipping Mere's host from Xilem + Masonry (architecture 1) to
-serval-as-host (architecture 3). Cross-repo: sequences mere-side work against serval capabilities.
-**Decision owner**: the [serval-as-host evaluation](../technical_architecture/2026-05-29_serval_as_host_evaluation.md)
+genet-as-host (architecture 3). Cross-repo: sequences mere-side work against genet capabilities.
+**Decision owner**: the [genet-as-host evaluation](../technical_architecture/2026-05-29_genet_as_host_evaluation.md)
 owns the *call* and the §6/§7 worked consequences; this doc is the *execution*.
 **Related**: [host architecture roadmap](2026-05-20_host_architecture_roadmap.md),
 [adoption roadmap](2026-05-27_adoption_roadmap.md),
 [scrying integration plan](2026-05-27_scrying_integration_plan.md),
-serval [`xilem_serval` plan](../../../../serval/docs/2026-05-27_serval_as_host_xilem_serval_plan.md).
+genet [`xilem_serval` plan](../../../../genet/docs/2026-05-27_genet_as_host_xilem_serval_plan.md).
 
 ---
 
 ## Gate status (updated 2026-06-10)
 
-The flip gate (evaluation brief §8) is **open on the serval-side prerequisites**:
+The flip gate (evaluation brief §8) is **open on the genet-side prerequisites**:
 
 - **IME — done.** All three tiers plus the underline-styled preedit landed in
-  `xilem-serval` (serval `c7a78a5` "IME functionally complete", `944c070` T2
+  `xilem-serval` (genet `c7a78a5` "IME functionally complete", `944c070` T2
   preedit, `42d9d04` T1 commit + T3 candidate placement). This was the long pole.
 - **Form-control breadth — done.** Stages 0 through 7
   are done: mutation API, runner, faithful event dispatch, component composition,
@@ -42,16 +42,16 @@ The flip gate (evaluation brief §8) is **open on the serval-side prerequisites*
   capture) is present and test-covered; it also gives the reusable primitive for
   scrollbar-thumb drag, resize handles, and drag-tab-out.
 - **Chrome-critical follow-ups — done.** `Tab`/`Shift+Tab` focus traversal is
-  implemented in the runner, and `ServalLaneView` hit-testing is clip- and
+  implemented in the runner, and `GenetLaneView` hit-testing is clip- and
   scroll-aware for interactive scrolled content.
 - **Perf spike — done (Phase 0).** §8's check that transform-only node motion
-  lands on serval's `RepaintOnly` path, not `full_relayout`, at orrery scale has
+  lands on genet's `RepaintOnly` path, not `full_relayout`, at orrery scale has
   been run; the relayout worry is retired, and the continuous-transform
   prerequisites A+B+C are resolved.
 
 ## Findings (grounded 2026-06-01)
 
-- serval and the mere Xilem fork share **vello 0.9 / wgpu 29**, so there is no
+- genet and the mere Xilem fork share **vello 0.9 / wgpu 29**, so there is no
   renderer-stack reconciliation.
 - `xilem-serval` is strong through Stage 7 (scrolling, z-index, overlays, a11y,
   select / radio / textarea / slider, IME), validated on screen.
@@ -69,25 +69,25 @@ The flip gate (evaluation brief §8) is **open on the serval-side prerequisites*
 
 Model node motion as `transform`, not `left`/`top`, and measure relayout incidence
 on a moving N-node orrery (hundreds to thousands of nodes, 60fps physics) against
-the `canvas_behavior_contract` scenarios, on serval. Serval-side; gates the orrery
+the `canvas_behavior_contract` scenarios, on genet. Genet-side; gates the orrery
 phases below. Chrome phases (2–4) can proceed in parallel since they are flex/DOM,
 not transform-animated.
 
-**Done (2026-06-01, serval `6bf33947f`; spike + writeup in
-[serval/docs/2026-06-01_orrery_transform_perf_spike.md](../../../../serval/docs/2026-06-01_orrery_transform_perf_spike.md)).**
+**Done (2026-06-01, genet `6bf33947f`; spike + writeup in
+[genet/docs/2026-06-01_orrery_transform_perf_spike.md](../../../../genet/docs/2026-06-01_orrery_transform_perf_spike.md)).**
 The relayout worry is **retired**: a transform value change is paint-tier on
-serval's pinned stylo (`RECALCULATE_OVERFLOW` < `RELAYOUT`), so
+genet's pinned stylo (`RECALCULATE_OVERFLOW` < `RELAYOUT`), so
 `IncrementalLayout::apply()` returns `RepaintOnly` — layout skipped, box geometry
 untouched, at N up to 1000 (test-proven + source-verified). Transform motion does
 NOT force reflow.
 
-The spike surfaced **three serval prerequisites** the orrery's *continuous*
+The spike surfaced **three genet prerequisites** the orrery's *continuous*
 transform-driven motion needs (the relayout classification is necessary, not
-sufficient). **All three are now resolved in serval-layout**, verified
+sufficient). **All three are now resolved in genet-layout**, verified
 single-threaded (85/85) and parallel (10/10 full-suite runs clean):
 
 - **(A) incremental restyle ignored inline-`style` changes** — `snapshot.rs` marks
-  them `other_attributes_changed` (only `[attr]`-selector invalidation), and serval
+  them `other_attributes_changed` (only `[attr]`-selector invalidation), and genet
   emitted no hint to re-apply the inline block. **Fixed**: on a `style`-attribute
   mutation, force a full re-cascade of the element's subtree
   (`RestyleHint::restyle_subtree`); the inline-style pass re-parses the attribute
@@ -101,7 +101,7 @@ single-threaded (85/85) and parallel (10/10 full-suite runs clean):
   `compute_transform_matrix` folds the computed `transform`/`translate` into the
   in-flow `PushTransform`.
 
-Memory-safety note (recorded in the serval spike doc): (A)'s first cut used stylo's
+Memory-safety note (recorded in the genet spike doc): (A)'s first cut used stylo's
 `RESTYLE_STYLE_ATTRIBUTE` replacement hint, which reused a rule node from the prior
 pass against a per-pass-fresh `Stylist`/rule tree — a use-after-free that surfaced
 as parallel-only heap corruption. First fixed with the `restyle_subtree` full
@@ -112,23 +112,23 @@ re-matches selectors). Verified clean single-threaded and parallel, incl. a
 400-frame sustained-motion test crossing Stylo's rule-tree GC interval.
 
 Net: the gate's fear is gone **and** the orrery's motion mechanism (A+B+C) is
-unblocked on the serval side. The tripwire tests were flipped to assert the
+unblocked on the genet side. The tripwire tests were flipped to assert the
 corrected behaviour and pinned as regression guards (stylo `572ecba`).
 
 ### Phase 1 — The orrery element (brief §6)
 
-A serval custom-layout element composing three layers:
+A genet custom-layout element composing three layers:
 
 1. **Scene-paint underlay** — `platen::orrery::orrery_paint_list` (built)
    contributes its `PaintCmd` list as the element's paint sublist, under
    `PushTransform(camera)`.
 2. **Physics-positioned DOM children** — gyre `cull_aabb` selects visible nodes;
-   each materializes as a serval DOM subtree, `position: absolute` + a per-frame
+   each materializes as a genet DOM subtree, `position: absolute` + a per-frame
    `transform: translate(x, y)` from the sim. Off-screen nodes demote to underlay
    glyphs (virtualization rides `cull_aabb`); focus/state survive demotion.
-   **P0's prerequisites A+B+C are resolved** (serval-side): incremental inline-`style`
+   **P0's prerequisites A+B+C are resolved** (genet-side): incremental inline-`style`
    invalidation, repeated-`apply()` restyle correctness, and folding the CSS
-   transform into painted position all land in serval-layout, so per-frame
+   transform into painted position all land in genet-layout, so per-frame
    inline-transform motion is honoured and visible. One materialization rule carries
    over: a node going from no transform to a transform relayouts once (it gains a
    containing block), then subsequent value-to-value changes are `RepaintOnly`; the
@@ -138,28 +138,28 @@ A serval custom-layout element composing three layers:
    defaults (wheel = pan, ctrl+wheel = zoom, inertia, infinite canvas) live in the
    element's input handling.
 
-Two-hit-test split: node content via serval `FragmentQuery`; scene geometry (empty
+Two-hit-test split: node content via genet `FragmentQuery`; scene geometry (empty
 space, edge pick, marquee) via gyre's `QueryPipeline`. **Done:** the orrery renders,
-pans/zooms, drags a node, and shows force + visual couplings, hosted by serval,
+pans/zooms, drags a node, and shows force + visual couplings, hosted by genet,
 fed by the producer + gyre. Node positions transition from committed to gyre-live
 in this phase (the producer reprojects unchanged).
 
 ### Phase 2 — platen retarget (brief §7)
 
 Morphorm → taffy/flex. platen becomes an `xilem_serval` consumer: it diffs the
-forme tile-tree into serval DOM (flex containers, draggable dividers, tile
+forme tile-tree into genet DOM (flex containers, draggable dividers, tile
 content-roots) and handles resize by updating flex-basis. Within-tile content is a
-serval content-root (an inker/nematic engine's output as DOM) or an
+genet content-root (an inker/nematic engine's output as DOM) or an
 `ExternalTextureItem` (WebView/scrying). Hybrid: flex for the docked split-tree,
 absolute for floaters / sticky-notes. The canvas swatch is the Phase-1 orrery
 element placed as a tile/region. The tiling *model* + interaction + serialization
 stay platen's (they were never CSS). **Done:** the workbench tiling renders,
-resizes, and rearranges through serval; the Morphorm dependency is dropped.
+resizes, and rearranges through genet; the Morphorm dependency is dropped.
 
 ### Phase 3 — Chrome rebuild in `xilem_serval`
 
 Rebuild the toolbar / omnibar / frametree / panes as `xilem_serval` views
-(chrome-as-DOM), on a `pelt-live`-shaped serval host. Hold the **separate-roots
+(chrome-as-DOM), on a `pelt-live`-shaped genet host. Hold the **separate-roots
 discipline** from the first commit: the chrome-root (diffed by `xilem_serval` from
 app state) and each content-root (mutated by its engine/JS) are distinct document
 authorities; neither sees the other's tree. `register-theme` becomes real CSS.
@@ -173,20 +173,20 @@ Web / scrying tiles move from Masonry's external layer to netrender
 `content_generation` as the frame-arrival hint). The scrying GPU-interop core is
 host-agnostic; only the compositor seam moves, and the destination exists (the
 counter demo exercises it). **Done:** a web/scrying tile composites through
-serval's external-texture path inside a content-root tile.
+genet's external-texture path inside a content-root tile.
 
 ### Phase 5 — Cutover
 
-A serval host (pelt-live-shaped) owns the window, input, layout, paint, script, and
+A genet host (pelt-live-shaped) owns the window, input, layout, paint, script, and
 accessibility; AccessKit emits from the one semantic DOM (no two-tree merge). The
-`crates/mere/app` Masonry path retires. **Done:** mere runs on serval-as-host; the
+`crates/mere/app` Masonry path retires. **Done:** mere runs on genet-as-host; the
 Xilem + Masonry host is removed.
 
 ## Standing constraints (brief §9)
 
 - **Stop deepening Masonry investment**; keep every new host-coupling retargetable.
 - **Hold separate-roots** from day one (the invariant that goes wrong quietly).
-- **Run Phase 0** before committing to render the whole chrome through serval.
+- **Run Phase 0** before committing to render the whole chrome through genet.
 - The **host-agnostic core needs no flip work** — kernel/forme/inker/mere-domain/
   gyre and the field system are consumed by the new host unchanged. The flip is a
   rebuild of the thin host-coupled layer, not an excavation.
@@ -194,30 +194,30 @@ Xilem + Masonry host is removed.
 ## Progress
 
 - **2026-06-01** — Plan created. At the time, the gate was read as open on IME +
-  form-control breadth against the serval git log, with the §8 perf spike
+  form-control breadth against the genet git log, with the §8 perf spike
   (Phase 0) pending (mechanism present, orrery-scale measurement not run). Later
   status corrections below supersede that early read: P0 is done, and the
   previous host-backend blocker list is now closed. The orrery scene-paint
   underlay producer already landed host-neutral (`platen::orrery`, `1110a26`) and
   is Phase-1 layer 1. No flip code written yet; this is the coordination artifact,
-  and execution is cross-cutting across mere + serval.
+  and execution is cross-cutting across mere + genet.
 
-- **2026-06-01** — **P0 run (serval `6bf33947f`).** Orchestrated a read-only recon
-  workflow (6 agents) mapping serval's incremental-layout, then implemented the
-  spike in `serval-layout` (instrumentation + 4 tests; serval-layout 80 tests pass).
+- **2026-06-01** — **P0 run (genet `6bf33947f`).** Orchestrated a read-only recon
+  workflow (6 agents) mapping genet's incremental-layout, then implemented the
+  spike in `genet-layout` (instrumentation + 4 tests; genet-layout 80 tests pass).
   Verdict: the relayout fear is **retired** — a transform value change is paint-tier
   (`RECALCULATE_OVERFLOW` < `RELAYOUT`) → `apply()` returns `RepaintOnly`, layout
   skipped, box geometry untouched, N up to 1000 (test + pinned-stylo source). The
-  spike then surfaced three serval prerequisites for *continuous* transform motion,
+  spike then surfaced three genet prerequisites for *continuous* transform motion,
   now Phase-1 gates: (A) incremental restyle ignores inline-`style` changes; (B) a
   second sequential `RepaintOnly` `apply()` drops the change; (C) paint doesn't fold
-  the CSS transform into painted position. A + B are pinned as serval-layout
+  the CSS transform into painted position. A + B are pinned as genet-layout
   tripwire tests. Writeup:
-  [serval/docs/2026-06-01_orrery_transform_perf_spike.md](../../../../serval/docs/2026-06-01_orrery_transform_perf_spike.md).
-  So P0's measurement is done; the orrery flip (P1) is gated on A+B+C, all serval-side.
+  [genet/docs/2026-06-01_orrery_transform_perf_spike.md](../../../../genet/docs/2026-06-01_orrery_transform_perf_spike.md).
+  So P0's measurement is done; the orrery flip (P1) is gated on A+B+C, all genet-side.
 
-- **2026-06-01** — **A+B+C resolved (serval-layout).** Implemented all three P0
-  prerequisites in serval-layout: (A) inline-`style` incremental invalidation via a
+- **2026-06-01** — **A+B+C resolved (genet-layout).** Implemented all three P0
+  prerequisites in genet-layout: (A) inline-`style` incremental invalidation via a
   forced subtree re-cascade, (B) `handled_snapshot` reset per pass for repeated-apply
   correctness, (C) `compute_transform_matrix` folding the cascaded transform into the
   paint `PushTransform`. While landing (A), found and fixed a memory-safety regression:
@@ -226,7 +226,7 @@ Xilem + Masonry host is removed.
   corruption); the `restyle_subtree` full-recascade path (fresh rule nodes) resolves
   it. Verified 85/85 single-threaded and 10/10 parallel full-suite runs clean. Tripwire
   tests flipped to assert corrected behaviour, pinned to stylo `572ecba`. **P1's
-  serval-side gates are clear**; the orrery element (Phase 1) can begin.
+  genet-side gates are clear**; the orrery element (Phase 1) can begin.
 
 - **2026-06-01** — **Persistent Stylist (cheap replacement path restored).**
   Follow-up to the A/B/C work: `IncrementalLayout` now owns a persistent `Stylist`
@@ -254,14 +254,14 @@ Xilem + Masonry host is removed.
   (S1-S4), the platen taffy retarget plan, and the orrery-element phase-1 plan.
   Anyone reading this plan alone concluded no flip code existed. Final state:
   - **P0 done** (entries above).
-  - **P1 shipped as a host-side composition**, not the "serval custom-layout
-    element" Phase 1 describes. Recon found serval has no custom-element /
+  - **P1 shipped as a host-side composition**, not the "genet custom-layout
+    element" Phase 1 describes. Recon found genet has no custom-element /
     custom-paint hook; meerkat composites the orrery scene and DOM panes
     itself (orrery-element plan, archived 2026-06-09). The element framing
     here was never corrected; treat the archived plan as the receipt.
   - **P2 shipped 2026-06-04**, via the new `platen-view` crate rather than
     "platen becomes an `xilem_serval` consumer" as Phase 2 sketches:
-    platen-core stays serval-free and the coupling lives in the view crate
+    platen-core stays genet-free and the coupling lives in the view crate
     (taffy retarget plan, Architecture). Morphorm is out of the workspace.
   - **P3 shipped**: toolbar / omnibar / palette / frametree / panes run as
     `xilem_serval` views over the reused `chrome` domain, on the

@@ -1,6 +1,6 @@
 # Dependency + footprint brief — audit baseline
 
-**Date**: 2026-07-04. Cross-repo (mere, serval, netrender, netfetcher, errand,
+**Date**: 2026-07-04. Cross-repo (mere, genet, netrender, netfetcher, errand,
 wgpu-scry, wgpu-graft, wgpu-weld).
 **Why**: bloat is a recurring vague fear; this brief converts it into tracked
 numbers and recorded gate rationales, on the model that killed held-RDF-truth
@@ -12,7 +12,7 @@ becomes a diff instead of a feeling.
 Extracted every crates.io-versioned dependency declaration across the eight
 repos (656 declarations, 406 unique crates), queried crates.io for the latest
 stable of each, and classified lags: semver-compatible (cargo floats them on
-fresh builds; serval + mere gitignore their locks) vs semver-major (a real
+fresh builds; genet + mere gitignore their locks) vs semver-major (a real
 migration). Git/path deps (stylo tag, taffy vendor, mark-ik forks) checked by
 hand where load-bearing.
 
@@ -36,10 +36,10 @@ hand where load-bearing.
 - **wgpu 29, not 30 — gated on vello + a settling period.** wgpu 30.0.0
   shipped 2026-07-01; vello 0.9 requires `^29.0.3` and vello main has not
   bumped. The expensive part is our own lockstep (scrying/weld sit on wgpu-hal,
-  which churns hardest in majors; netrender/serval/graft move in the same
+  which churns hardest in majors; netrender/genet/graft move in the same
   breath), so waiting for vello + a 30.0.1 is deliberate. Fork trigger: vello
   still on 29 after ~a month AND something in wgpu 30 actually pulls us.
-- **taffy — gated on stylo_taffy.** serval vendors
+- **taffy — gated on stylo_taffy.** genet vendors
   `taffy 0.11.0-experimental-cache-fix.3` with 3 documented re-applyable
   patches. taffy 0.12.1 stable now ships `float_layout`/`block_layout` (the
   experimental line graduated), but stylo_taffy 0.3.0-alpha.6 still requires
@@ -53,7 +53,7 @@ hand where load-bearing.
    stylo_taffy that resolves the taffy gate).
 2. **Text stack lockstep**: parley 0.11 + fontique 0.11 + **skrifa 0.43** +
    **read-fonts 0.40** (not 0.44/0.41 — parley 0.11 caps them) across
-   serval/netrender/mere.
+   genet/netrender/mere.
 3. **wasmtime 45 → 46** (mere; rebuild wasip2 test guests, read RELEASES.md).
 4. **mere RustCrypto generation** (~7 use-sites: hkdf/chacha20poly1305/sha2 in
    murm): 0.10 → 0.11 era as one family (generic-array → hybrid-array trait
@@ -64,16 +64,16 @@ hand where load-bearing.
 
 ## De-bloat done this pass
 
-Deleted 20 dead crypto workspace declarations from serval's root `Cargo.toml`
+Deleted 20 dead crypto workspace declarations from genet's root `Cargo.toml`
 (aes, aes-gcm, aes-kw, cbc, chacha20poly1305, cipher, ctr, der, digest, ecdsa,
 elliptic-curve, hkdf, ml-dsa, ml-kem, num-bigint-dig, p256, pkcs8, sec1, sha1,
 sha3) — servo-heritage entries with zero in-workspace consumers (the WebCrypto
-component they served was cut). sha2 kept (serval-scripted + pelt-desktop use
+component they served was cut). sha2 kept (genet-scripted + pelt-desktop use
 it for subresource integrity). `cargo metadata` validates.
 
 ## Migrations done this pass
 
-**icu 1.5 → 2.x, serval.** `icu_locid` renamed to `icu_locale_core` upstream;
+**icu 1.5 → 2.x, genet.** `icu_locid` renamed to `icu_locale_core` upstream;
 bumped `components/fonts` and `components/malloc_size_of` (the two direct
 1.5-line consumers) plus the dead `icu_segmenter` workspace pin, all to 2.2.0.
 Code changes: `icu_locid::subtags::{Language, language}` →
@@ -95,7 +95,7 @@ pin (out of our control, semver-compatible coexistence).
 | --- | --- |
 | Unique crates.io deps, 8 repos | 406 |
 | mere workspace crates | 68 |
-| serval workspace crates | 75 |
+| genet workspace crates | 75 |
 | netrender / netfetcher / errand | 5 / 1 / 1 |
 | wgpu-scry / graft / weld | 7 / 12 / 3 |
 | meerkat.exe (debug) | 216 MiB |

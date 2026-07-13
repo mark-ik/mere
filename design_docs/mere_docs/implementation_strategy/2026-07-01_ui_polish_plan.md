@@ -2,7 +2,7 @@
 
 **Date**: 2026-07-01
 **Status**: planning. Findings verified headed 2026-07-01 (driven session, shots in `scry-shots/ui-01-baseline.png`, `ui-02-chrome-zoom.png`, `ui-03-canvas-zoom.png` + crops).
-**Related**: [chrome_bar_refinement_plan](../../archive_docs/2026-07-04_completed_plans/2026-06-26_chrome_bar_refinement_plan.md) (P4 moved sessions into toolbar chips, closeout retired the switcher thumbnails), [ui_dpi_scaling_plan](../../archive_docs/2026-07-04_completed_plans/2026-06-26_ui_dpi_scaling_plan.md) (D1-D3 landed; this plan covers the surfaces it missed), [gloss_scene_to_dom_migration_plan](../../archive_docs/2026-07-04_completed_plans/2026-07-01_gloss_scene_to_dom_migration_plan.md) (§Progress, the originating session for finding 5's paint-cost measurement + the screenshot-harness fix this plan's own driven verification reused), `crates/meerkat/` (`views.rs`, `window_view/views.rs`, `tile_theme.rs`, `render/workbench.rs`, `render/orrery_scene.rs`, `app_state.rs`), `repos/serval/ports/pelt-desktop/tile_surface.rs`.
+**Related**: [chrome_bar_refinement_plan](../../archive_docs/2026-07-04_completed_plans/2026-06-26_chrome_bar_refinement_plan.md) (P4 moved sessions into toolbar chips, closeout retired the switcher thumbnails), [ui_dpi_scaling_plan](../../archive_docs/2026-07-04_completed_plans/2026-06-26_ui_dpi_scaling_plan.md) (D1-D3 landed; this plan covers the surfaces it missed), [gloss_scene_to_dom_migration_plan](../../archive_docs/2026-07-04_completed_plans/2026-07-01_gloss_scene_to_dom_migration_plan.md) (§Progress, the originating session for finding 5's paint-cost measurement + the screenshot-harness fix this plan's own driven verification reused), `crates/meerkat/` (`views.rs`, `window_view/views.rs`, `tile_theme.rs`, `render/workbench.rs`, `render/orrery_scene.rs`, `app_state.rs`), `repos/genet/ports/pelt-desktop/tile_surface.rs`.
 
 Three of Mark's asks (2026-07-01): text that "doesn't want to scale", pelt tile tabs mis-proportioned and clipped at the toolbar, and the session indicator regressing from graph thumbnails to a big orange pill. Plus a toolbar-overflow defect found while verifying, and the paint-cost finding documented here so it lives in design_docs.
 
@@ -12,14 +12,14 @@ Three of Mark's asks (2026-07-01): text that "doesn't want to scale", pelt tile 
 
 `ui_scale()` (dpi × user_zoom, [app_state.rs:232](../../../crates/meerkat/src/app_state.rs#L232)) is applied by rewriting px values in the chrome sheet (`scale_px` in `rebuild_chrome_sheet`, [app_state.rs:246](../../../crates/meerkat/src/app_state.rs#L246)). Everything styled outside that sheet never scales:
 
-- **Pelt tile surface.** `DEFAULT_TILE_CSS` in [tile_surface.rs:183](../../../../serval/ports/pelt-desktop/tile_surface.rs#L183) is fixed px (tabbar 36px, tab padding 5/10, default font size), and meerkat's theme layer (`tile_sheet`, [tile_theme.rs:11](../../../crates/meerkat/src/tile_theme.rs#L11)) sets colors only. At dpi ~2 the tab bar renders at half the chrome's visual scale; Ctrl+zoom moves the chrome and leaves the tabs alone (verified: ui-01 vs ui-02).
+- **Pelt tile surface.** `DEFAULT_TILE_CSS` in [tile_surface.rs:183](../../../../genet/ports/pelt-desktop/tile_surface.rs#L183) is fixed px (tabbar 36px, tab padding 5/10, default font size), and meerkat's theme layer (`tile_sheet`, [tile_theme.rs:11](../../../crates/meerkat/src/tile_theme.rs#L11)) sets colors only. At dpi ~2 the tab bar renders at half the chrome's visual scale; Ctrl+zoom moves the chrome and leaves the tabs alone (verified: ui-01 vs ui-02).
 - **Orrery node cards.** `node_card_view` uses inline styles: face size from `node_size` (world px, default 36) and a hardcoded `font-size:14px` label ([window_view/views.rs:292](../../../crates/meerkat/src/window_view/views.rs#L292)). Inline px bypass `scale_px`, so DPI and Ctrl+zoom never touch canvas text: 14 physical px on a 2x panel.
 - **Canvas zoom scales positions only.** The card snapshot multiplies node *positions* by `cam.zoom` ([render/orrery_scene.rs:139](../../../crates/meerkat/src/render/orrery_scene.rs#L139)) but `node_size` and the label are zoom-independent, so Ctrl+wheel spreads or packs the constellation without magnifying anything (verified: ui-03, a zoomed-in node renders the same 24px face and tiny label).
 - **Content ignores user_zoom.** Page text tracked DPI (D2a) but did not change under Ctrl+= (ui-02). Browser convention is that Ctrl+zoom also zooms content. Open question OQ-1 below.
 
 ### 2. Tile tab text clips at the tab's top edge
 
-Verified at default zoom (full-res crops of ui-01/ui-03): the tab pill renders ~24px tall against the intended 36px tabbar, and the label's ascenders are cut at the pill's top edge. Because the tab bar sits flush under the toolbar with zero inset, the result reads as "the toolbar clipped my tab". Mechanism not yet pinned: fixed-height flex container + `align-items: center` + inline text in serval-layout, either a line-box vertical-alignment defect (fix in the engine, standards-correct preference) or CSS that needs an explicit `line-height`. The unscaled sheet (finding 1) compounds the bad proportions.
+Verified at default zoom (full-res crops of ui-01/ui-03): the tab pill renders ~24px tall against the intended 36px tabbar, and the label's ascenders are cut at the pill's top edge. Because the tab bar sits flush under the toolbar with zero inset, the result reads as "the toolbar clipped my tab". Mechanism not yet pinned: fixed-height flex container + `align-items: center` + inline text in genet-layout, either a line-box vertical-alignment defect (fix in the engine, standards-correct preference) or CSS that needs an explicit `line-height`. The unscaled sheet (finding 1) compounds the bad proportions.
 
 ### 3. Session chip: a big wrapped pill where thumbnails used to be
 
@@ -33,7 +33,7 @@ At user_zoom 1.4 on the 2x panel (ui-02) the window-controls strip (minimize/max
 
 ### 5. Paint cost scales with shell-document size (documented here, fixed elsewhere)
 
-From the 2026-07-02 diagnostics session: `chrome_us` (cascade+layout+paint of the shell document) runs 100-145ms/frame even on the RepaintOnly path, nearly independent of mutation count (203 vs 16 mutations, same cost). `RepaintOnly` skips layout but `emit_paint_list` re-walks and re-encodes the whole box tree into a fresh `netrender::Scene` every frame, so cost tracks total DOM size (roster + gloss + orrery cards + panes), not the changed delta. That lives in `serval-layout` (`repos/serval/components/serval-layout/`), out of scope for a meerkat-side fix. Needs its own serval-side plan: retained or fragment-keyed paint lists patched by mutation, or partitioning the shell document's paint emission. This plan only relieves pressure (P1 keeps thumbnails off the per-frame path; smaller chip DOM). Enable diagnostics with `RUST_LOG=meerkat=info,meerkat::profile=debug` (permanent probes in `pane_session.rs` + `render/paint.rs`).
+From the 2026-07-02 diagnostics session: `chrome_us` (cascade+layout+paint of the shell document) runs 100-145ms/frame even on the RepaintOnly path, nearly independent of mutation count (203 vs 16 mutations, same cost). `RepaintOnly` skips layout but `emit_paint_list` re-walks and re-encodes the whole box tree into a fresh `netrender::Scene` every frame, so cost tracks total DOM size (roster + gloss + orrery cards + panes), not the changed delta. That lives in `genet-layout` (`repos/genet/components/genet-layout/`), out of scope for a meerkat-side fix. Needs its own genet-side plan: retained or fragment-keyed paint lists patched by mutation, or partitioning the shell document's paint emission. This plan only relieves pressure (P1 keeps thumbnails off the per-frame path; smaller chip DOM). Enable diagnostics with `RUST_LOG=meerkat=info,meerkat::profile=debug` (permanent probes in `pane_session.rs` + `render/paint.rs`).
 
 ## Scoping pass (2026-07-05, code-reground)
 
@@ -69,7 +69,7 @@ remaining scope, verified against today's code:
   together (headed shots 1.0 / 1.4 / 2.2).
 - **S3 (P3) — tab clip verification, then root-cause only if it persists.**
   Fresh headed crops at 1x and 2x of a tab label's ascenders. If clipped even
-  with the new 44px + line-height CSS, minimal serval-layout repro
+  with the new 44px + line-height CSS, minimal genet-layout repro
   (fixed-height flex + centered inline text) and fix in the engine
   (standards-correct rule); else close P3 citing the CSS change. Either way add
   the small top inset so tabs stop abutting the toolbar underside.
@@ -95,7 +95,7 @@ remaining scope, verified against today's code:
 
 Risk note: S1 touches `render/textures.rs` + views only; keep out of
 `render/cards.rs`/`render/mod.rs` while the shell-paint workstream is hot in
-those files. S2/S3 live in the serval repo (pelt-desktop / serval-layout),
+those files. S2/S3 live in the genet repo (pelt-desktop / genet-layout),
 currently quiet.
 
 ## Phases
@@ -116,7 +116,7 @@ currently quiet.
 
 ### P3: Tab text clipping fixed at the root
 
-- Reproduce minimally: fixed-height flex row + centered inline text through serval-layout, confirm whether the line box overflows the top (engine defect) or the sheet needs explicit `line-height`. Fix the engine if it is the engine (standards-correct over host hacks).
+- Reproduce minimally: fixed-height flex row + centered inline text through genet-layout, confirm whether the line box overflows the top (engine defect) or the sheet needs explicit `line-height`. Fix the engine if it is the engine (standards-correct over host hacks).
 - Give the tab bar breathing room under the toolbar: a themed divider or small top inset on the workbench surface, so tabs never abut the toolbar's underside.
 - Done when: full glyphs render at 1x and 2x and under chrome zoom, verified with full-res crops.
 
@@ -138,7 +138,7 @@ currently quiet.
 
 - **OQ-1**: should Ctrl+zoom also zoom content tiles (browser convention), or stay chrome-only with a separate per-tile zoom? Content follows DPI today but not user_zoom.
 - **OQ-2**: thumbnail size/cadence for P1 chips (the old switcher rasterized on every session change; fine at small counts, revisit past ~10 sessions).
-- **OQ-3**: whether P3's engine fix belongs in serval-layout's flex line-box handling or in explicit tile CSS; decided by the minimal repro.
+- **OQ-3**: whether P3's engine fix belongs in genet-layout's flex line-box handling or in explicit tile CSS; decided by the minimal repro.
 
 ## Progress
 
@@ -154,7 +154,7 @@ currently quiet.
   the drag-ghost geometry, and workbench.rs rebuilds both on theme or scale change
   (epsilon-tracked). The one real gap: the tab-drag arm threshold was a fixed 6.0 px
   (3 logical px on a 2x panel — accidental drags); now `6.0 * ui_scale`
-  (serval `tile_shell.rs`). Headed-verified: captures at user_zoom 1.0 vs 1.2 measure
+  (genet `tile_shell.rs`). Headed-verified: captures at user_zoom 1.0 vs 1.2 measure
   the tile-tab band at 83 px vs 98 px (expected 99.6 at exactly 1.2x — within a
   rounding pixel), toolbar and tabs moving together under Ctrl+zoom
   (`C:\t\s2-zoom100.png` / `s2-zoom140.png`). Both sheets ride the same scale
@@ -164,7 +164,7 @@ currently quiet.
   the scoping: full-res crops at user_zoom 1.0 and 1.2 (both on the 2x panel) show tab
   labels fully rendered, ascenders and descenders intact, vertically centered
   (`C:\t\s3-tabs-z100.png` / `s3-tabs-z120.png`) — the 44px + `line-height: 1.2` CSS
-  that landed since the 07-01 finding resolved finding 2; no serval-layout line-box
+  that landed since the 07-01 finding resolved finding 2; no genet-layout line-box
   investigation needed. The breathing-room half landed both-sheets: `.tile-tabbar`
   gains `padding: 4px 2px 0 2px` (pelt DEFAULT_TILE_CSS + the meerkat theme
   restatement, so it scales via scale_px_in) and the meerkat theme now paints the
@@ -201,7 +201,7 @@ currently quiet.
   at the new dims (`meerkat::profile` rebuild entries at resize time), so this is real
   flex layout, not a stale viewport: despite `min-width: 0` + default shrink on the
   omnibar and chips, the row's items keep natural widths and overflow. Needs a minimal
-  serval-layout repro (fixed-width flex row + nowrap items + min-width:0) to determine
+  genet-layout repro (fixed-width flex row + nowrap items + min-width:0) to determine
   whether item shrink-below-min-content is an engine gap or a sheet gap, then the
   plan's named levers (omnibar shrink priority, width-aware `SESSION_INLINE_CAP`).
   Spun as the remaining S4 fix slice; not attempted blind.

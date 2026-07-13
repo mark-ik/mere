@@ -210,7 +210,7 @@ const DEFAULT_TRACE_TARGETS: &[&str] = &[
     "murm",
     "persona",
     "verso",
-    "serval",
+    "genet",
     "netfetcher",
     "netrender",
     "errand",
@@ -234,7 +234,7 @@ mod tests {
             "meerkat::input",
             "armillary::actor",
             "graph_kernel::graph",
-            "verso_tile::serval",
+            "verso_tile::genet",
         ] {
             assert!(interesting_target(t), "{t} should be captured");
         }
@@ -329,11 +329,11 @@ mod tests {
         // per-frame `frame rendered` debug is dropped while its faults (warn+) still reach the ring.
         let subscriber =
             tracing_subscriber::registry().with(ApparatusTracingLayer::new(ring_tx).with_filter(
-                EnvFilter::new("info,netfetcher=debug,errand=debug,serval_layout=debug"),
+                EnvFilter::new("info,netfetcher=debug,errand=debug,genet_layout=debug"),
             ));
         tracing::subscriber::with_default(subscriber, || {
             tracing::debug!(target: "netfetcher", "fetch complete"); // opted in -> ring
-            tracing::debug!(target: "serval_layout", "lay_out_content complete"); // opted in -> ring
+            tracing::debug!(target: "genet_layout", "lay_out_content complete"); // opted in -> ring
             tracing::debug!(target: "netrender", "frame rendered"); // per-frame, info floor -> dropped
             tracing::warn!(target: "netrender", "render failed"); // fault, warn > info -> ring
             tracing::info!(target: "meerkat", "omnibar submit"); // lifecycle -> ring
@@ -349,8 +349,8 @@ mod tests {
             "a library's per-operation debug completion is opted into the ring: {targets:?}",
         );
         assert!(
-            targets.contains(&"serval_layout".to_string()),
-            "serval_layout's debug completion is opted in: {targets:?}",
+            targets.contains(&"genet_layout".to_string()),
+            "genet_layout's debug completion is opted in: {targets:?}",
         );
         assert!(
             targets.contains(&"meerkat".to_string()),

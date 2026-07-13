@@ -4,7 +4,7 @@
 
 //! Subresource cache + demand loader for the content card.
 //!
-//! The card renders fetched HTML through serval, which pulls `<img>` and
+//! The card renders fetched HTML through genet, which pulls `<img>` and
 //! `<link rel=stylesheet>` resources by calling [`ImageLoader::load`] for each
 //! URL. Network fetches are async (see [`crate::fetch`]), so the loader cannot
 //! block: on a cache miss it records the resolved absolute URL as *wanted* and
@@ -13,12 +13,12 @@
 //! the resource appears on the next frame. This converges — once every
 //! resource has arrived or failed, a render records only already-requested URLs
 //! and spawns nothing, so no further wake fires. `data:` URIs never reach the
-//! loader (serval decodes them inline).
+//! loader (genet decodes them inline).
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
-use serval_layout::ImageLoader;
+use genet_layout::ImageLoader;
 
 /// Fetched subresource bytes keyed by absolute URL, plus the set of URLs
 /// already requested (in flight or done) so the demand loader never re-spawns a

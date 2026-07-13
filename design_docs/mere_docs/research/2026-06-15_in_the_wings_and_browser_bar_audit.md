@@ -165,7 +165,7 @@ From the dedicated browser pass, ordered by severity. "Severity" is "how much it
 | **Bookmarks** | absent | no add/list/store; dovetails with import (§7) |
 | **Settings breadth** | partial | the Settings overlay exposes exactly one control (tab cap); no homepage, search-engine choice (DuckDuckGo hardcoded), zoom, download location |
 | **Zoom / text scaling** | absent | no Ctrl+±/0; font sizes are fixed constants |
-| **HTML-lane scroll + links** | partial | the serval/HTML lane reports `content_height == viewport` and empty link rects (`card.rs:337`), so web pages clip to one screen and their links are inert |
+| **HTML-lane scroll + links** | partial | the genet/HTML lane reports `content_height == viewport` and empty link rects (`card.rs:337`), so web pages clip to one screen and their links are inert |
 | **Content-type beyond gemtext** | partial | good text coverage; a top-level `image/*` falls to a synthesized card dumping the binary as lossy UTF-8; no video/audio/PDF, no unknown→download |
 | **Link affordances** | partial | document-lane links navigate, but no hover/status URL, no cursor change, no right-click "copy link / open in new" |
 
@@ -194,7 +194,7 @@ The decision behind the roadmap is whether to keep patching the gates or to do t
 fix: **clamp the scene viewport to the texture window and tile/virtualize tall content, backed by
 a retained laid-out-text model the host can query.** That one change is the unlock for the blocker
 plus find-in-page plus selection plus true scroll. It is L-effort but it pays for four table-stakes
-at once, and it is the single highest-leverage item on the board. (The HTML/serval lane needs its
+at once, and it is the single highest-leverage item on the board. (The HTML/genet lane needs its
 own version: report full laid-out height and harvest `<a href>` rects, which also fixes dead web-page
 links.)
 
@@ -310,7 +310,7 @@ majors that do not depend on §5.
 
 **Lane 2 — The retained-text / tiled-render foundation (the §5 fix).** Clamp the scene viewport to
 the texture window; tile or virtualize tall content; introduce a retained laid-out-text model the
-host can query; give the HTML/serval lane true height + link rects. This clears the **blocker** and
+host can query; give the HTML/genet lane true height + link rects. This clears the **blocker** and
 unlocks **find-in-page**, **text selection/copy**, **true scroll**, and **live web-page links** in
 one foundation. Highest leverage on the board. Done condition: a 166 KB capsule renders and scrolls
 fully; Ctrl+F highlights; a paragraph is selectable and copyable; a link on a fetched HTML page
@@ -345,7 +345,7 @@ The critic flagged where the audit's confidence was thinner. All five are now ve
   serialize and restore safely; the only gap is that the host never *writes* most of them. Safe to
   build on.
 - **probes/knot-lua — VERIFIED: a Lua eval lane parallel to rhai.** `probes/knot-lua` runs
-  `lua eval` knot fences end to end via serval's **piccolo** backend (`script-engine-piccolo` over
+  `lua eval` knot fences end to end via genet's **piccolo** backend (`script-engine-piccolo` over
   `script-engine-api`), driven through the *same* `inker::evaluate_blocks` seam the rhai note lane
   uses. So note-scripting is two backends (rhai + lua/piccolo) over one `BlockEvaluator` seam, both
   unwired in the shell; lua is further out (quarantined as an excluded probe so piccolo/gc-arena

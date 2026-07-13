@@ -2,7 +2,7 @@ use mere::forme::GraphMemberId;
 use mere::kernel::graph::{EdgeFamily, RelationSelector, SemanticSubKind};
 use layout_dom_api::LayoutDom;
 use register_theme::chrome::ChromeTheme;
-use serval_scripted_dom::{NodeId, ScriptedDom};
+use genet_scripted_dom::{NodeId, ScriptedDom};
 use xilem_serval::PointerClick;
 
 use super::*;

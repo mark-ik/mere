@@ -252,7 +252,7 @@ impl WindowCtx<'_> {
         // The container's painted top-left: its absolute layout origin (via the engine's shared
         // parent-chain accumulation) minus the body's scroll offset. (Host-scroll P1.)
         let frags = session.fragments();
-        let abs = serval_layout::absolute_origin(&*dom, frags, container)
+        let abs = genet_layout::absolute_origin(&*dom, frags, container)
             .map_or((0.0_f32, 0.0_f32), |p| (p.x, p.y));
         let edge = crate::swatch::swatch_edge_px();
         // The container's painted top-left subtracts the settings-pane-body's retained scroll
@@ -306,7 +306,7 @@ impl WindowCtx<'_> {
     /// reorderable row's **drag grip** (`app-reorder-grip`), arm the drag with that row's
     /// `data-reorder-id` and return `true` (the caller consumes the press); otherwise `false`
     /// (it falls through to the normal pane click, so the label / ▲ / ▼ controls still work).
-    /// Serval has no native DOM pointer-drag, so the host drives it from the cursor — the swatch
+    /// Genet has no native DOM pointer-drag, so the host drives it from the cursor — the swatch
     /// editor's "handle press → drag → mutate" pattern, generalized to a list row. (Command
     /// registry B2 — drag reorder.)
     pub(crate) fn try_begin_row_reorder(&mut self, x: f32, y: f32) -> bool {
@@ -387,7 +387,7 @@ impl WindowCtx<'_> {
     }
 }
 
-fn attr_value(dom: &serval_scripted_dom::ScriptedDom, node: NodeId, name: &str) -> Option<String> {
+fn attr_value(dom: &genet_scripted_dom::ScriptedDom, node: NodeId, name: &str) -> Option<String> {
     dom.attributes(node)
         .find(|a| a.name.local.as_ref() == name)
         .map(|a| a.value.to_string())

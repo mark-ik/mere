@@ -22,6 +22,7 @@ path = "src/lib.rs"
 # Path + version: path is used during local workspace builds; version is
 # required for `cargo publish` to record the crates.io dependency.
 identity.workspace = true
+murm-replication = { workspace = true }
 # `time` paces `endpoint_addr`'s brief wait for iroh's interface discovery.
 tokio = { version = "1", features = ["io-util", "sync", "rt", "macros", "time"] }
 thiserror = "1"
@@ -40,11 +41,6 @@ bytes = "1"
 # pins iroh 0.98, unifying with the iroh/iroh-blobs deps above.
 p2panda-net = "0.6.1"
 p2panda-core = "0.6.1"
-# `SyncedSpace` names `TopicLogSyncEvent` (the LogSync drain event) and drains
-# the `SyncSubscription` stream; p2panda-sync supplies the event type, tokio-stream
-# the `StreamExt::next`. Both are already in the tree via p2panda-net.
-p2panda-sync = "0.6.1"
-tokio-stream = "0.1"
 # Reticulum mesh-networking backend (optional, see [features]).
 reticulum = { workspace = true, optional = true }
 x25519-dalek = { workspace = true, optional = true }

@@ -11,16 +11,16 @@ architecture churn.
 
 ---
 
-## Handoff context (2026-06-16, from the serval-layout + render-lane agent)
+## Handoff context (2026-06-16, from the genet-layout + render-lane agent)
 
 What is **already done** in-repo (do not re-do): `wry.web` deleted (51504fc); favicons + human
 `node_display_label` + caption-beside tiles; HTML-lane band scroll + inline-link nav; the
 **tiled-render foundation** (Lane 2) is *theirs and in progress* (windowed document render Phase 1,
-`c2ddff8`; the retained-text plan doc). **Do not touch** Lane 2 / serval-layout / card-render
-areas, or the serval threads that agent owns (image-only inline links, per-band re-harvest caching,
-serval static-layout fidelity, the HTML-lane retained-packet → find-in-page/selection question).
+`c2ddff8`; the retained-text plan doc). **Do not touch** Lane 2 / genet-layout / card-render
+areas, or the genet threads that agent owns (image-only inline links, per-band re-harvest caching,
+genet static-layout fidelity, the HTML-lane retained-packet → find-in-page/selection question).
 
-**Blocked, needs cross-repo coordination:** adopting the built serval input seams (`on_wheel`
+**Blocked, needs cross-repo coordination:** adopting the built genet input seams (`on_wheel`
 view-routing, transform-aware hit-test, pointer-cancel, keyboard escapes) is gated on the
 external-texture element view in xilem-serval (unstarted, that agent's repo). Coordinate before
 adopting.

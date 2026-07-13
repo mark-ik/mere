@@ -125,7 +125,7 @@ pub(crate) fn thumbnail_png_bytes_from_rgba(
 
 /// The node's favicon RGBA (straight-alpha RGBA8) encoded as a `data:image/png;base64,`
 /// URI, or `None` if it can't be encoded. The orrery card carries it as a leading
-/// `<img>` that serval decodes. PNG (not BMP) keeps alpha and stays compact. (Phase 2.)
+/// `<img>` that genet decodes. PNG (not BMP) keeps alpha and stays compact. (Phase 2.)
 /// Also the sprite-import encoder (a downscaled dropped image to the face). (P2 sprite.)
 pub(crate) fn favicon_data_uri(rgba: &[u8], w: u32, h: u32) -> Option<String> {
     png_bytes_from_rgba(rgba, w, h).and_then(|png| png_data_uri(&png))

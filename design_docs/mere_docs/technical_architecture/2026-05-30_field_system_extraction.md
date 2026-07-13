@@ -8,7 +8,7 @@ runtime into its own crate, names the physics-substrate sibling pair
 `graph-canvas` crate goes as it comes apart.
 **Related**: [composition spine](2026-05-21_mere_composition_spine.md),
 [cartography-aether seam](2026-05-29_cartography_aether_layout_seam.md),
-[serval-as-host eval](2026-05-29_serval_as_host_evaluation.md),
+[genet-as-host eval](2026-05-29_genet_as_host_evaluation.md),
 [cartography brief](../research/2026-05-10_cartography_layer_brief.md),
 [local-intelligence research](../research/2026-05-08_local_intelligence_integration_research.md).
 
@@ -84,7 +84,7 @@ It reads `Field` + `Coupling` primitives from the graph, evaluates the fields
 (Burn on GPU when present, `ndarray` otherwise), resolves couplings, and emits the
 responses. It depends on kernel (the primitives) and Rhai/Burn (the runtime); it
 is portable (Rhai + Burn run everywhere wasm32 ships, matching the
-browser/PWA scripting direction), so it survives the serval-as-host flip
+browser/PWA scripting direction), so it survives the genet-as-host flip
 untouched.
 
 ## 4. The seams
@@ -151,7 +151,7 @@ slice (§8 step 0).
 | `camera`, `navigation` | **understory** view2d steal-the-shape + a small portable canvas-feel config (the `NavigationPolicy` knobs). |
 | `node_style` | **register-theme** (the look layer). |
 | `lod` | cull mechanics → `gyre`; LOD *policy* rides with the renderer (platen). |
-| `engine`, `interaction`, `input` | the **host**. Under serval-as-host, serval's hit-test + dispatch own interaction; the `CanvasAction` indirection collapses. |
+| `engine`, `interaction`, `input` | the **host**. Under genet-as-host, genet's hit-test + dispatch own interaction; the `CanvasAction` indirection collapses. |
 | `scripting` | reconciles into the Rhai scripting story (the Wasmtime/Extism framing here is superseded by the browser/PWA Rhai+Burn direction). |
 | `math`, `types` | absorbed at use sites (geometry → `kernel::geometry`). |
 

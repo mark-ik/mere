@@ -35,7 +35,7 @@ declined paths are exercised; the final tree is asserted.
 
 ## P2 roadmap (plan §11.6)
 
-P2.0 (this) → P2.1 swap `Doc` → serval `ScriptedDom` → P2.2 engine config (epoch +
+P2.0 (this) → P2.1 swap `Doc` → genet `ScriptedDom` → P2.2 engine config (epoch +
 StoreLimits) → P2.3 linker / capability policy → P2.4 `WasmModRuntime` bridge →
 P2.5 meerkat wiring + workspace fold-in (MSRV bump) → P2.6 AOT. The sync-WIT
 `fetch` import (fiber async, §11.7-7) lands as a later step on this same

@@ -25,12 +25,12 @@ use mere::forme::GraphMemberId;
 use frame::{FrameLayout, GraphId, PaneId, SessionId, SplitAxis, SplitChoice};
 use meerkat::{Chrome, ChromeView, CrawlIndicator, SharedChrome, chrome_view};
 use mere::platen::Workbench;
-use serval_scripted_dom::{NodeId, ScriptedDom};
-use serval_winit_host::WindowSurface;
+use genet_scripted_dom::{NodeId, ScriptedDom};
+use genet_winit_host::WindowSurface;
 use session_runtime::{StartupUnlockMode, settings_store::ScriptPermissionPrefs};
 use winit::window::CursorIcon;
 use xilem_serval::{
-    AnyView, Modifiers, PointerClick, ProjectionId, ServalCtx, ServalElement, ServalMultiRunner,
+    AnyView, Modifiers, PointerClick, ProjectionId, GenetCtx, GenetElement, GenetMultiRunner,
     WheelEvent, el, external_texture, host_pool, lens, on_click, on_wheel, overlay_rect,
 };
 
@@ -70,7 +70,7 @@ impl WindowKind {
 
 /// An in-progress swatch hull-vertex drag — the node shape editor's edit gesture.
 /// The swatch is DOM in the chrome document, so the host hit-tests it and drives the
-/// drag from the cursor (serval has no native DOM pointer-drag), mirroring the orrery's
+/// drag from the cursor (genet has no native DOM pointer-drag), mirroring the orrery's
 /// node drag. The dragged vertex's new position is written into the node's collider
 /// hull on each move, which rebuilds the physics body live. (Swatch — Stage B; the
 /// first binding of the general "handle press → drag → mutate the scoped element".)
@@ -91,7 +91,7 @@ pub(crate) struct SwatchDrag {
 /// An in-progress drag-reorder of a settings-pane list row — the generic row-reorder gesture
 /// (a `data-reorder-id` grip drag), whose first consumer is the persona-configurable context
 /// menu. `Some` from a press on a row's drag grip until release: the move tracks the drop
-/// target, the release repositions + persists. Serval has no native DOM pointer-drag, so the
+/// target, the release repositions + persists. Genet has no native DOM pointer-drag, so the
 /// host drives it from the cursor (the swatch editor's pattern). (Command registry B2.)
 pub(crate) struct RowReorderDrag {
     /// The grabbed row's `data-reorder-id` (a command id, for the menu list).
@@ -164,7 +164,7 @@ pub(crate) struct PageTextDrag {
 /// take `&mut WindowView` for the target window explicitly.
 ///
 /// Constructed via [`WindowView::new`] — the chrome + workbench runners it owns
-/// are `!Default` (a serval document authority can't be conjured), so the
+/// are `!Default` (a genet document authority can't be conjured), so the
 /// derive-`Default` era ends here and a second window is minted by handing
 /// [`WindowView::new`] a fresh pair of runners over the shared session. (MW2.)
 pub(crate) struct WindowView {
@@ -172,7 +172,7 @@ pub(crate) struct WindowView {
     /// MW6, camera ownership. Fixed at construction. (MW3 step 4.)
     pub(crate) kind: WindowKind,
 
-    // ── Chrome authority: this window's two serval document roots and the runners
+    // ── Chrome authority: this window's two genet document roots and the runners
     //    that drive them — the toolbar / omnibar / dropdowns (chrome) and the tiled
     //    workbench. Separate roots by discipline; both per-window. (MW2.) ──────────
     /// The chrome DOM this window's projection mutates and the render path reads. The

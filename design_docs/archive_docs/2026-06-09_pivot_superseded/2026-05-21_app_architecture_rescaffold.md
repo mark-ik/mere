@@ -102,7 +102,7 @@ relocates into one custom widget, `GraphCanvas`:
   an *action* (Xilem's `message`) so the host mutates `AppState.graph` /
   `selection` — same drag/select logic we already wrote, minus the substrate.
 - **embedded tiles**: a node whose content is a web/smolweb document composites
-  the engine's output. External wgpu texture (serval/scrying) or in-scene paint
+  the engine's output. External wgpu texture (genet/scrying) or in-scene paint
   (nematic) — the EmbeddedFrame/InScenePaint distinction survives *here*, scoped
   to the canvas, not the whole host.
 - **LOD / camera / addressable identity**: canvas-internal, where they belong.
@@ -113,7 +113,7 @@ this widget's contract, not a host mandate.
 
 ## 4. Engines & tiles
 
-Engine choice (nematic / serval / scrying) is **"which engine backs this
+Engine choice (nematic / genet / scrying) is **"which engine backs this
 tile."** A tile is a custom widget (in the workbench pane, or a canvas node)
 that composites its engine's output. `inker` stays the engine-selection layer;
 the renderer-registry's multi-engine routing *localizes* to the tile, not a
@@ -132,7 +132,7 @@ global registry. The four concerns map cleanly:
 - `kernel` — graph truth. Becomes a foundational top-level crate (no longer
   nested under a chrome-named supercrate).
 - `cartography` + `graph-layout` + `graph-canvas` IR — feed `GraphCanvas`.
-- `inker` + engines (`nematic`, `scrying-engine`, Serval) — tile content.
+- `inker` + engines (`nematic`, `scrying-engine`, Genet) — tile content.
 - `eidetic` (+ fetchers), `intel`, `murm`, `moot`, `persona` — orthogonal; keep.
 - `session-runtime`'s stores (manifest, graph, view-intent) — the persistence
   layer; keep. (Already proved: graph round-trips across restart.)

@@ -8,7 +8,7 @@ the `orrery/` family; the Cable wire is deleted).
 
 The pivots that retired these:
 - **Host**: gpui / Xilem-Masonry-as-host / the `register-renderer` trait →
-  `meerkat` on the serval-as-host path. (`modular_integration_plan` names the
+  `meerkat` on the genet-as-host path. (`modular_integration_plan` names the
   register-renderer stack dead.) Retires: scrying_web_tile, typed_action_bus,
   spatial_chrome_modular_adoption, host_architecture_roadmap, scrying_integration,
   verso_adoption, browser_taxonomy_translation, os_plumbing_reuse_audit,

@@ -40,7 +40,7 @@ pre-truncated so the laid-out height stays under one texture. Concretely:
 - A scene authored taller than the texture does not clip cleanly; large enough it
   rasterizes to nothing (the reported "no fetched media yet" blank on a 166 KB
   gemtext capsule laid out to ~19000 px).
-- `card.rs:337` the HTML/serval lane (`html_scene`) returns `(scene, h, Vec::new())`:
+- `card.rs:337` the HTML/genet lane (`html_scene`) returns `(scene, h, Vec::new())`:
   it reports the viewport height as the content extent (so web pages never scroll)
   and empty link rects (so their links are inert).
 
@@ -119,7 +119,7 @@ content (section 2.5+), and returns cleanly to the top. 91 meerkat bin tests gre
 (the expensive parley pass), but band **lowering** moved to the host render loop. A
 band is a few visible blocks, so the per-band lower is cheap; the actor model's "scenes
 travel as messages" now reads "packets travel as messages" for the document lane (the
-HTML/serval lane still ships a pre-lowered scene until Phase 5). The retained packet
+HTML/genet lane still ships a pre-lowered scene until Phase 5). The retained packet
 host-side is exactly what Phase 2's query API (find / selection / hit-test) reads.
 
 ### Phase 2 — Query API over the retained packet
@@ -155,19 +155,19 @@ Done: a paragraph on a fetched page is selectable and copyable. Current
 selection is block-scoped over retained document blocks, with copy text coming
 from `EngineDocument::to_text()`.
 
-### Phase 5 — HTML/serval lane parity
+### Phase 5 — HTML/genet lane parity
 
 - `html_scene` reports the true laid-out height (so HTML cards scroll) and harvests
-  `<a href>` rects off serval's fragment plane (so HTML links navigate), replacing
+  `<a href>` rects off genet's fragment plane (so HTML links navigate), replacing
   the `(scene, h, Vec::new())` stub at `card.rs:337`.
 
 Done: a fetched HTML page scrolls fully and a link on it navigates.
 
 **Attempt + finding (2026-06-16, reverted): HTML scroll needs band virtualization,
-not just the true height.** serval exposes the height cheaply (added
+not just the true height.** genet exposes the height cheaply (added
 `document_scroll_range` + a `paint_list_and_scroll_range_from_layout_dom` entry that
-emits taller than the viewport). But the host CANNOT window a serval scene the way it
-windows the document packet: serval hands back one flat `netrender::Scene`, not a
+emits taller than the viewport). But the host CANNOT window a genet scene the way it
+windows the document packet: genet hands back one flat `netrender::Scene`, not a
 queryable packet, and the translator culls paint commands below the emit viewport. So:
 emitting at the viewport height clips to one screen (scrolling hits blank past it); and
 emitting at the full content height makes a dense real page (ycombinator.com, ~7500 px)
@@ -177,15 +177,15 @@ the retained packet (only the visible band's blocks lower). The HTML lane has no
 to window, so the real fix is **actor-side band re-emit**: a `Scroll` command drives the
 content actor to re-emit the page at the scroll offset (one viewport band), shipping a
 band scene the host composites — mirroring `window_packet`, but in the actor since only
-it holds the serval layout. Links are independent of this (a `<a href>` rect harvest off
+it holds the genet layout. Links are independent of this (a `<a href>` rect harvest off
 the fragment plane needs no scroll mechanism) and can land first. The first attempt's
-code was reverted to no-regression; the serval `document_scroll_range` plumbing was kept
+code was reverted to no-regression; the genet `document_scroll_range` plumbing was kept
 as the reusable foundation.
 
 **Built + verified (2026-06-16): actor-side band re-emit, HTML scroll works.** The fix
 shipped as the finding prescribed:
 
-- serval grew `paint_list_band_from_layout_dom` (`serval-layout/lib.rs`): cascade + layout
+- genet grew `paint_list_band_from_layout_dom` (`genet-layout/lib.rs`): cascade + layout
   at the real viewport, compute `document_scroll_range` for the full height, then
   `emit_paint_list_scrolled` with `viewport = (w, band_h)` and `viewport_scroll =
   (0, band_y)`. The translator culls to the band viewport, so the returned flat scene holds
@@ -209,7 +209,7 @@ Verified headed (61 lib + 93 bin tests green): a tall HTML page (a long Wikipedi
 scrolls fully in both directions, content re-emitting per band, with no OOM, no panic, no
 `unknown ImageKey`, and no vanish — the exact failure modes the first attempt hit.
 ycombinator.com itself stays a short "peephole" (its body is JS/image-driven and collapses
-in serval's static layout, so it has almost no scroll range); that is a serval layout-fidelity
+in genet's static layout, so it has almost no scroll range); that is a genet layout-fidelity
 matter, separate from band windowing, which the tall-page test isolates and confirms working.
 
 **Built + verified (2026-06-16): `<a href>` rect harvest, HTML links navigate.** The
@@ -217,7 +217,7 @@ host pipe (`Activation.links` → `Constellation::link_at`'s HTML branch → `ca
 → `resolve_href` → `follow_link`) was already wired and consumed; the only gap was the
 producer (`html_scene` returned `Vec::new()`). Filled:
 
-- serval grew a `link_harvest` module, folded into `paint_list_band_from_layout_dom` (so
+- genet grew a `link_harvest` module, folded into `paint_list_band_from_layout_dom` (so
   it reuses the band's existing layout pass, no second cascade/layout). Two anchor shapes,
   both emitting **full-document px, unscrolled** rects (band-independent — the host adds
   the card's scroll itself): **text anchors** map each `<a href>` to its byte span within
@@ -231,7 +231,7 @@ producer (`html_scene` returned `Vec::new()`). Filled:
 Verified headed: on the Rust Wikipedia article, clicking the "Main page" sidebar link
 navigated to `en.wikipedia.org/wiki/Main_Page` (relative `/wiki/Main_Page` resolved against
 the base) and rendered the Main Page, whose own links harvested in turn. Unit-tested in
-serval (`link_harvest`: inline line rect, block box, no-links) and meerkat
+genet (`link_harvest`: inline line rect, block box, no-links) and meerkat
 (`html_lane_harvests_link_hit_regions`).
 
 Still open in Phase 5: an `<a>` that wraps only a replaced element while staying `inline`
@@ -315,7 +315,7 @@ sets both (harmless) and confirms on a headed tall-page run.
   (`constellation/ops.rs::link_at` queries `activation.packet` directly; the doc-lane
   `LinkHit` walk is the Scene-lane fallback only) and P5 landed per the 2026-06-16
   entries above. P3/P4 confirmed not started (`ContentCommand::Find` is
-  HTML/serval-only; no cluster offsets on `GlyphRun`; no page-text selection in
+  HTML/genet-only; no cluster offsets on `GlyphRun`; no page-text selection in
   meerkat). Plan stays active for P3/P4.
 - 2026-07-03: P3/P4 acceptance slice landed host-side on the retained packet.
   Document-lane Ctrl+F now searches the retained source blocks directly and paints

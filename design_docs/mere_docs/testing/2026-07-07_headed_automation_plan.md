@@ -69,7 +69,7 @@ session; the fourth is the proposal below.
   chrome-minus-orrery the chrome-layer capture targets), so capture works on any frame.
 
 With those, the Slice 3 headed check ran clean: primary + a Ctrl+Shift+N leaf both rendered
-from the one `ServalMultiRunner` (leaf slim, primary full, both on the shared graph through
+from the one `GenetMultiRunner` (leaf slim, primary full, both on the shared graph through
 their own cameras), no crash. Shots: `testing\mere\images\s3c-{1-primary,3-both}.png`.
 
 ## The unification seam: the registry command id
@@ -134,7 +134,7 @@ of receiving OS input. This shipped 2026-07-08.
 Multi-window was the immediate motivator, and it verified clean: the shipped
 `scenarios/multi_window.scn` self-drives `capture primary` -> `invoke roster` (roster pane
 opens on the primary) -> `spawn` -> `assert windows == 2` (PASS, two live OS windows) ->
-`capture leaf @1` (the slim leaf), all from one `ServalMultiRunner`, no OS input, no focus
+`capture leaf @1` (the slim leaf), all from one `GenetMultiRunner`, no OS input, no focus
 race.
 
 ## Migration / next
@@ -142,7 +142,7 @@ race.
 1. **Landed 2026-07-07**: `mk-harness.ps1` base; the partitioned-mode capture fix; target-dir
    back to `repos/mere/target`; the Slice 3 headed check on the new base. The three media
    folders (`screenshots\` / `screenrecordings\` / `scry-shots\`) were unified into
-   `Code\testing\<repo>\{images,videos,scripts}` (repo = `mere` / `isometry` / `serval`;
+   `Code\testing\<repo>\{images,videos,scripts}` (repo = `mere` / `isometry` / `genet`;
    `_unsorted\` = the ~700 untagged raw captures + recordings; `_archive\scripts\` = the ~138
    retired one-off drivers). `mk-harness` + `drive-s3c` moved to `testing\mere\scripts\` and
    write shots to `testing\mere\images\`; the ephemeral cruft (448 logs, the `forget-profile`

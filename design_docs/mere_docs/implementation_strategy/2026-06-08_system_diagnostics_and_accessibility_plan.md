@@ -47,7 +47,7 @@ through typed observations and actions rather than raw pixel puppetry.
 
 ### What should not be revived
 
-- The old substrate-as-host plan is not the current plan. Serval/meerkat owns the
+- The old substrate-as-host plan is not the current plan. Genet/meerkat owns the
   host path now; Graphshell's substrate material is a source of concepts and OS
   plumbing warnings, not a host mandate.
 - `register-viewer` / `register-renderer-types` should not become the canonical
@@ -396,8 +396,8 @@ accessibility states.
   provenance, classifications, pinned/compat/viewer metadata, fetch state,
   content type/body size, parser lane, trust/provenance, parse diagnostics,
   outgoing links, and document-structure counts. Nematic-routed content is
-  inspected through `EngineDocument`; HTML reports a Serval lane structure
-  summary until Serval exposes a full document semantic tree. Steward now lists
+  inspected through `EngineDocument`; HTML reports a Genet lane structure
+  summary until Genet exposes a full document semantic tree. Steward now lists
   live content operations from the constellation and exposes host-routed retry,
   stop, and background-pin hooks through command-palette verbs and typed agent
   actions. Remaining D8 work is making those hooks clickable in the Steward pane

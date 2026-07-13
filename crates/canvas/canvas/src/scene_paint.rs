@@ -3,12 +3,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 //! Render a cartography [`Projection`] to a `paint_list_api` paint list — the
-//! canvas's host-agnostic scene underlay (the serval-as-host eval's "Layer 1").
+//! canvas's host-agnostic scene underlay (the genet-as-host eval's "Layer 1").
 //!
 //! Platen is "the press": it already dispatches strategies to a `Projection`
 //! (see [`crate::cartography_scene`]); this turns that projection into the
 //! engine-agnostic [`PaintCmd`] stream `netrender` renders, the *same* output
-//! whether the host is Masonry today or serval later. Nodes render as rects and
+//! whether the host is Masonry today or genet later. Nodes render as rects and
 //! edges as straight strokes under a camera transform; richer visuals (glyphs,
 //! routed edges, external-texture node content) layer on later.
 //!

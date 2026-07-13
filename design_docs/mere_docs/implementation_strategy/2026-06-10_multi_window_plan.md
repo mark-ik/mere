@@ -85,7 +85,7 @@ struct Shell {
 
 struct WindowView {
     surface: WindowSurface,                   // per-window surface + config (shares one device)
-    runner: ServalAppRunner<...>, dom: ...,   // this window's chrome (toolbar/omnibar)
+    runner: GenetAppRunner<...>, dom: ...,   // this window's chrome (toolbar/omnibar)
     frame_layout: FrameLayout,
     kind: WindowKind,                         // payload enum (below)
     // per-window view + render caches: cursor, modifiers, drags, *_rects, *_textures,
@@ -121,7 +121,7 @@ load-bearing).
 **Chrome is per-window, which is leverage, not just cost.** Each `WindowKind` is a
 different DOM *template*: a leaf window gets a slim chrome (no shellbar, no switcher)
 with no layout code, the MW5 toast is a DOM overlay, the drag ghost is a positioned DOM
-element. Serval's DOM layout makes these variations free.
+element. Genet's DOM layout makes these variations free.
 
 The one deferred decision: **how the shared graph is held** — and it is deferred behind
 a trait, not left open. Leaf rendering depends on a read-only `NodeView` seam (resolve
@@ -340,7 +340,7 @@ mutations applied as commands), with the shared/​per-window seam enforced by t
 
 ### MW3 — a second window, shared state (one device, N surfaces)
 
-- **Split `SurfaceHost`** (in `serval-winit-host`) into a shared `RenderCore` (the one
+- **Split `SurfaceHost`** (in `genet-winit-host`) into a shared `RenderCore` (the one
   wgpu device + netrender `Renderer`) and a per-window `WindowSurface` (surface +
   config). Today `SurfaceHost::boot` mints its own device per call, so two windows
   would be two devices and the shared constellation texture could not be sampled into a
@@ -368,9 +368,9 @@ window intact.
   `renderer.wgpu_device.core.{instance, adapter}`. So a second window's surface is
   `core.instance.create_surface(window)` + caps from `core.adapter` + configure with
   `core.device` — all from the one shared `Renderer`. The one-device/N-surfaces split
-  is **entirely within `serval-winit-host` + `meerkat`**; the cross-repo `netrender`
+  is **entirely within `genet-winit-host` + `meerkat`**; the cross-repo `netrender`
   checkout is untouched.
-- **The split (serval-winit-host).** `SurfaceHost { surface, surface_config, renderer }`
+- **The split (genet-winit-host).** `SurfaceHost { surface, surface_config, renderer }`
   becomes `RenderCore { renderer }` (shared: owns instance/adapter/device/queue +
   netrender pipelines) and `WindowSurface { surface, surface_config }` (per window).
   Method assignment: `rasterize` / `renderer` / `device` / `queue` → `RenderCore`;
@@ -388,7 +388,7 @@ window intact.
   pulls `device`/`queue` from the host → now from `render_core`. **Borrow note:** the
   brief's render disjointness (`view.host` immut beside `view.tile_textures` mut) shifts
   — `render_core` is now a separate field from `view`, which actually *eases* it.
-- **Step order, each green:** (1) split `SurfaceHost` in serval-winit-host, update the
+- **Step order, each green:** (1) split `SurfaceHost` in genet-winit-host, update the
   current single-window caller in lockstep (still one window, behavior-preserving);
   (2) `Shell.render_core` + `WindowView.surface`, rewire the render path + scrying
   device source; (3) the **`ShellCommand` queue + `Shell::apply` (this is deferred
@@ -498,7 +498,7 @@ primary window's camera, and far-B leaf coexistence falls out of the same regist
   inbox **multicasts** so shared chrome state (sync / inbox badges) flows through
   fan-out, not a load-bearing broadcast-redraw. (4) **One wgpu device, N surfaces** —
   *verified*: `SurfaceHost::boot` mints a device per call today, so MW3 must split it
-  (in `serval-winit-host`) into a shared `RenderCore` + per-window `WindowSurface`,
+  (in `genet-winit-host`) into a shared `RenderCore` + per-window `WindowSurface`,
   which is what lets a leaf blit the donor's node texture rather than re-render it. (5)
   Tear-out is **spawn-on-drop** with an in-donor drag ghost (live window-follows-cursor
   needs a mid-gesture pointer-grab transfer Wayland forbids; winit `drag_window` is a
@@ -556,7 +556,7 @@ primary window's camera, and far-B leaf coexistence falls out of the same regist
   per-window because each WebView is HWND-bound, folding in the X1/X2 work), the
   **window/size/input** cluster (`window`, `host`, `toolbar_h`, `width`, `height`,
   `cursor`, `modifiers`), and the **chrome-runner** cluster (`dom`, `runner`, `workbench`,
-  `workbench_dom`, `workbench_runner`). The runners are `!Default` (a serval document
+  `workbench_dom`, `workbench_runner`). The runners are `!Default` (a genet document
   authority can't be conjured), so this **ends the derive-`Default` era**: `WindowView`
   now has an explicit [`WindowView::new(dom, runner, workbench, workbench_dom,
   workbench_runner)`](../../../crates/meerkat/src/window_view.rs) over a fresh runner pair,
@@ -624,7 +624,7 @@ primary window's camera, and far-B leaf coexistence falls out of the same regist
   secondaries-map, to avoid the asymmetry/soup. **Remaining to close MW2:** (d2) the
   `user_event` chrome-write fan-out (a `for` over windows; no-op at N=1, MW3 seam),
   (d3) the `App`→`Shell` rename (cosmetic; a safe global `\bApp\b` sweep — verified it
-  can't hit `ServalAppRunner`/`ApplicationHandler`), and (e) the `ShellCommand` seam.
+  can't hit `GenetAppRunner`/`ApplicationHandler`), and (e) the `ShellCommand` seam.
   **Carried forward (documented in the struct comments):** `a11y_bridge` + routes →
   `WindowView` at MW3; `orrery` → `WindowKind::Primary` at MW6.
 - 2026-06-10: **MW2 structural reshape complete — (d3) done, (d2) + (e) consciously
@@ -649,7 +649,7 @@ primary window's camera, and far-B leaf coexistence falls out of the same regist
   structural reshape that unblocks MW3. The `WindowKind` payload enum, the spawn path,
   the `ShellCommand` queue, and (d2) all land together in MW3, where they're real.
 - 2026-06-10: **MW3 steps 1–2 done — one device, N surfaces (the rendering
-  foundation).** Step 1 (`serval-winit-host`): `SurfaceHost` split into `RenderCore`
+  foundation).** Step 1 (`genet-winit-host`): `SurfaceHost` split into `RenderCore`
   (the one wgpu device + netrender `Renderer` — instance/adapter/device/queue) and
   `WindowSurface` (per-window swapchain + config, created via
   `RenderCore::create_surface` from the core's *retained* wgpu instance — confirmed
@@ -662,7 +662,7 @@ primary window's camera, and far-B leaf coexistence falls out of the same regist
   render path splits `self.view.host.*` into `self.render_core` (rasterize / renderer /
   compose) + `self.view.surface` (acquire / format); scrying pulls device/queue from
   the shared core. ~30 `host.*` sites rewired; behavior-preserving at N=1 (44 lib + 63
-  bin green; serval-winit-host + orrery green through the wrapper). **Next: step 3** —
+  bin green; genet-winit-host + orrery green through the wrapper). **Next: step 3** —
   the `ShellCommand` queue + `Shell::apply` + `SpawnWindow`/`CloseWindow` + a
   Cmd/Ctrl+Shift+N verb: the first *actual* second window, where the deferred (e) seam
   becomes real (and step 4's `WindowKind::Leaf` gives that window its slim chrome).

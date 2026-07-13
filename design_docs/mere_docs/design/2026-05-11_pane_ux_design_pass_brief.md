@@ -3,7 +3,7 @@
 **Date**: 2026-05-11
 **Status**: Design brief — directional, not implementation-locked. Captures the UX target the foundation work (action bus, manifest store, persistence, leaf/branch/fork) is enabling, so the next slices land *shaped by* the target rather than retrofitted to it.
 
-> **Crate-name note (2026-06-09 audit):** the implementation references below (`mere-host/src/context_menu.rs`, gpui) are a 2026-05-11 gpui-era snapshot; the host is now `meerkat` (serval-as-host). Much of this UX target has since shipped (frame-tree panes, shellbar, `reparent_leaf`); the live successor is the [graph roster + frame taxonomy](2026-06-07_graph_roster_and_frame_taxonomy.md). This brief is a merge-then-archive candidate.
+> **Crate-name note (2026-06-09 audit):** the implementation references below (`mere-host/src/context_menu.rs`, gpui) are a 2026-05-11 gpui-era snapshot; the host is now `meerkat` (genet-as-host). Much of this UX target has since shipped (frame-tree panes, shellbar, `reparent_leaf`); the live successor is the [graph roster + frame taxonomy](2026-06-07_graph_roster_and_frame_taxonomy.md). This brief is a merge-then-archive candidate.
 **Scope**: Five UX gaps observed in real Mere use as of 2026-05-11:
 
 1. Panes can't be rearranged within a window's frame (only splitter ratios adjust).

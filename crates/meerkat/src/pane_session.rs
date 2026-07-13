@@ -5,7 +5,7 @@
 //! A DOM pane's incremental-layout session — the cheap-path plan's C3 (chrome)
 //! and C5 (the remaining panes).
 //!
-//! A meerkat pane backed by a serval `ScriptedDom` (the chrome toolbar / omnibar /
+//! A meerkat pane backed by a genet `ScriptedDom` (the chrome toolbar / omnibar /
 //! shellbar / dropdowns; the tiled workbench; later roster / apparatus / utility)
 //! used to re-run the whole stateless pipeline (`scene_from_scripted_dom`: fresh
 //! Stylist + full cascade + box-tree layout + paint emit) every frame — the chrome
@@ -20,7 +20,7 @@
 //! **Structural batches ride the session's splice path now.** A structural
 //! batch (palette rows / suggestion lists / tile changes / a text write) drives
 //! `IncrementalLayout::apply` to `Spliced`, and since the paint-side graft
-//! landed (serval `BoxTree::graft_subtree`, shell paint plan 2026-07-03) a
+//! landed (genet `BoxTree::graft_subtree`, shell paint plan 2026-07-03) a
 //! splice keeps the box-tree side-table + shaped text valid, so the session
 //! stays emittable and the pane no longer rebuilds it per structural frame
 //! (P0 receipts: 34ms of stylist + full cascade + layout per batch, paid even
@@ -36,10 +36,10 @@ use std::rc::Rc;
 
 use layout_dom_api::{DomMutation, LayoutDom, LayoutDomMut, NodeKind};
 use netrender::Scene;
-use serval_layout::{Applied, FragmentPlane, IncrementalLayout, ScrollOffsets, ServalPaintList};
-use serval_scripted_dom::{NodeId, ScriptedDom};
+use genet_layout::{Applied, FragmentPlane, IncrementalLayout, ScrollOffsets, GenetPaintList};
+use genet_scripted_dom::{NodeId, ScriptedDom};
 
-use crate::serval_render::TextCursor;
+use crate::genet_render::TextCursor;
 
 /// A persistent cascade+layout session over one of a window's DOM panes, plus the
 /// `(dims, sheet)` it was built against so a resize or theme switch triggers a
@@ -93,11 +93,11 @@ impl PaneSession {
         let dom_ref = dom.borrow();
         Self::refresh(slot, &dom_ref, sheet, scheme_dark, w, h, &muts);
         let session = &slot.as_ref().expect("session built above").layout;
-        crate::serval_render::scene_from_session(session, &dom_ref, cursor, scroll, w, h)
+        crate::genet_render::scene_from_session(session, &dom_ref, cursor, scroll, w, h)
     }
 
     /// Like [`scene`](Self::scene) but stops at the engine-agnostic
-    /// [`ServalPaintList`] instead of lowering to a `netrender::Scene` — for a
+    /// [`GenetPaintList`] instead of lowering to a `netrender::Scene` — for a
     /// caller that composes the pane's paint list into *another* document rather
     /// than rasterizing it standalone. The overlay-slot satellite path uses this:
     /// a host `ViewPane` produces its paint list here, and the content actor
@@ -112,13 +112,13 @@ impl PaneSession {
         w: u32,
         h: u32,
         scroll: &ScrollOffsets<NodeId>,
-    ) -> ServalPaintList {
+    ) -> GenetPaintList {
         let mut muts: Vec<DomMutation<NodeId>> = Vec::new();
         dom.borrow_mut().drain_mutations(&mut muts);
         let dom_ref = dom.borrow();
         Self::refresh(slot, &dom_ref, sheet, scheme_dark, w, h, &muts);
         let session = &slot.as_ref().expect("session built above").layout;
-        crate::serval_render::paint_list_from_session(session, &dom_ref, None, scroll, w, h)
+        crate::genet_render::paint_list_from_session(session, &dom_ref, None, scroll, w, h)
     }
 
     pub(crate) fn refresh(
@@ -165,7 +165,7 @@ impl PaneSession {
             // A fresh session evaluates media at the engine default (light);
             // seed the active scheme so a session built while dark mode is on
             // lands the dark rules. (An extra recascade over the just-built
-            // session; a `new`-time scheme would save it — serval follow-up.)
+            // session; a `new`-time scheme would save it — genet follow-up.)
             if scheme_dark {
                 layout.set_prefers_color_scheme(dom, true);
             }

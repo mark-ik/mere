@@ -163,7 +163,7 @@ impl Shell {
     }
 
     /// Mint a fresh per-window view over the shared session: its own chrome +
-    /// workbench runners (a second pair of serval document authorities) and a default
+    /// workbench runners (a second pair of genet document authorities) and a default
     /// single-orrery content frame bound to the active graph. The view-session bits
     /// start at rest (no restored camera / frame); a spawned window opens on the
     /// shared graph the way the primary first did. The caller (`SpawnWindow`) creates

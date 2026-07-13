@@ -4,9 +4,9 @@
 
 //! # meerkat
 //!
-//! Mere's serval-as-host shell — the chrome (toolbar, omnibar, command palette,
+//! Mere's genet-as-host shell — the chrome (toolbar, omnibar, command palette,
 //! frametree) built as [`xilem_serval`] views over the **reused** `graphshell`
-//! chrome domain, presented by serval. This is flip Phase 3 (chrome-as-DOM): the
+//! chrome domain, presented by genet. This is flip Phase 3 (chrome-as-DOM): the
 //! eventual replacement for the Xilem + Masonry `mere-app` host.
 //!
 //! ## Reuse, not rewrite
@@ -16,7 +16,7 @@
 //! `chrome::routing` are host-neutral, WASM-clean view-models built to the
 //! contract *"host widgets render from these types through the view-model; the
 //! shell owns the mutations."* meerkat is the next such host widget (after the
-//! egui and iced ones), so it renders those types as serval DOM and routes
+//! egui and iced ones), so it renders those types as genet DOM and routes
 //! mutations back through the runner. Only the *rendering* is new.
 //!
 //! ## Shell document vs content roots
@@ -30,8 +30,8 @@
 //!
 //! ## Status
 //!
-//! The chrome renders from the reused [`chrome`] view-models into a serval
-//! `ScriptedDom` via [`ServalAppRunner`]: toolbar, an editable omnibar
+//! The chrome renders from the reused [`chrome`] view-models into a genet
+//! `ScriptedDom` via [`GenetAppRunner`]: toolbar, an editable omnibar
 //! ([`TextInput`] lensed into the view), command palette, find bar, settings,
 //! comms pane, shellbar, and context menu are all `xilem_serval` views. The
 //! omnibar drives a real linear [`History`](nav::History) (text classified and
@@ -101,7 +101,7 @@ pub struct Chrome {
     /// The palette's live query buffer (caret / editing), mirrored into
     /// `palette.query` — the same host-owns-the-buffer split the omnibar uses.
     pub palette_input: TextInput,
-    /// Whether the find-in-page bar is open (Ctrl+F; HTML/serval lane).
+    /// Whether the find-in-page bar is open (Ctrl+F; HTML/genet lane).
     pub find_open: bool,
     /// The find query buffer (caret / editing); the host pushes it to the content
     /// actor via `Constellation::request_find` on each edit.
@@ -229,10 +229,10 @@ pub struct Chrome {
     /// read-only rendered view. `false` is the source-edit mode. Toggled by the header
     /// button / Ctrl+E. (Djot editor — Phase 2 toggle source/preview.)
     pub knot_editor_preview: bool,
-    /// Undo/redo history for the knot source — the generic [`EditHistory`] serval provides
+    /// Undo/redo history for the knot source — the generic [`EditHistory`] genet provides
     /// for any `TextInput` field (snapshot + coalesced typing + undo/redo). The buffer stays
     /// [`knot_source`](Self::knot_source); this drives it. Cleared on open/close.
-    /// (Djot editor — Phase 2 undo/redo; promoted to serval.)
+    /// (Djot editor — Phase 2 undo/redo; promoted to genet.)
     pub knot_history: xilem_serval::EditHistory,
     /// Prior selection byte-ranges for structural expand/shrink (Alt-Up / Alt-Down): each
     /// grow pushes the pre-grow range; a shrink pops back to it. Cleared by any edit or

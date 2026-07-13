@@ -112,7 +112,7 @@ already tracked by an active plan are *not* repeated here.
 ### From gnode_pool (landed 2026-07-02, follow-ons resolved 2026-07-03)
 
 - No open gnode-pool debt. The residual (loaded-session `chrome_us` /
-  `chrome_raster_us` on legitimately-dirty frames) is owned by serval's
+  `chrome_raster_us` on legitimately-dirty frames) is owned by genet's
   `docs/2026-07-03_shell_paint_emission_raster_plan.md`; the like-for-like
   loaded-session capture is that plan's motivating measurement.
 

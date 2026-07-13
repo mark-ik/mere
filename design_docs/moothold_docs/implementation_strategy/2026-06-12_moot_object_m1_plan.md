@@ -20,7 +20,7 @@ the [eidetic browsing derivation plan](../../eidetic_docs/implementation_strateg
 (the flora is where a shared `SearchIndex` reference would land — the
 federation demo seed, and the consume half's eventual trigger);
 the communal-compute tiers brief (a moot is ring 2's container).
-**Conflict posture**: pure mere lane (moothold + docs); no serval, no
+**Conflict posture**: pure mere lane (moothold + docs); no genet, no
 meerkat. Shell adoption is post-reshape, as everywhere today.
 
 ---

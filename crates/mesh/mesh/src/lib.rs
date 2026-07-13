@@ -22,8 +22,12 @@
 //! - [`worker`] — the pure decision function ([`next_action`]) + the M1 job
 //!   executors ([`execute`]: `Echo`, `Blake3`). The *host* drives the loop
 //!   (the `mesh-peer` bin now; meerkat's P6 compute actor later).
-//! - [`store`] — the [`MeshStore`]: p2panda-store's SQLite backend behind one
-//!   write path that persists *and* sync-indexes each op atomically.
+//! - [`store`] — the [`MeshStore`]: the shared muniment operation store behind
+//!   one policy-before-insert path that validates, admits, and indexes each op
+//!   atomically. Retention checkpoints live in a separate author log from job
+//!   events, so an authorized event-prefix cut cannot delete its own trust
+//!   root. Checkpoint acceptance can erase terminal input bodies in the same
+//!   backend batch while retaining signed headers and compact results.
 //! - [`sync`] — [`SyncedMesh`], mirroring tessera's `SyncedMoot`: the LogSync
 //!   catch-up + live session over the store, plus the device's authoring
 //!   path ([`SyncedMesh::author`]) and a real, non-placebo [`SyncStatus`].
@@ -32,15 +36,24 @@
 //! [mesh M1 plan](https://github.com/mark-ik/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-06-12_mesh_m1_plan.md).
 
 pub mod board;
+pub mod retention;
 pub mod store;
 pub mod sync;
 pub mod wire;
 pub mod worker;
 
 pub use board::{Job, JobBoard, JobId, JobState};
+pub use proofs::{BlobRef, Commitment, CommitmentDomain, CommitmentScheme, Digest, DigestAlg};
+pub use retention::{
+    AvailabilityPolicy, CheckpointError, ErasurePolicy, JobBoardSnapshot, KeepBound, LogFrontier,
+    MeshRetentionPolicy, PayloadRule, PolicyRevision, RetentionCheckpoint, RetentionEffect,
+};
 pub use store::{MeshStore, MeshStoreError};
 pub use sync::{MeshSyncError, SyncRound, SyncStatus, SyncedMesh};
-pub use wire::{JobKind, MeshEvent, MeshExt, WireError, from_operation, to_operation, verify};
+pub use wire::{
+    JobKind, MeshEvent, MeshExt, MeshLogId, WireError, from_operation, to_operation,
+    to_prune_operation, verify,
+};
 pub use worker::{WorkerAction, execute, next_action};
 
 /// Crate version.

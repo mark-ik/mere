@@ -42,7 +42,7 @@ Two render targets, composited by the browser's own compositor:
 - **WebGPU (Canvas2D fallback)** renders only the graph underlay: edges, fields,
   physics, demoted off-screen dots. The one surface the browser does not give you.
 
-The trade taken knowingly: the native pelt/serval host composites everything in
+The trade taken knowingly: the native pelt/genet host composites everything in
 one wgpu scene; the browser stacks DOM cards over a canvas underlay. We give up
 some pixel control and take on DOM-over-canvas z-ordering, in exchange for free
 layout, text shaping, and accessibility. For the extension/PWA target that is the
@@ -87,7 +87,7 @@ seam, per-target backend, gated by the `net` grant (default-denied, §6 consent)
 
 **Drop (the host browser already does it):**
 
-- `serval` (the HTML engine: Stylo cascade, box-tree, taffy layout). The big weight.
+- `genet` (the HTML engine: Stylo cascade, box-tree, taffy layout). The big weight.
 - `inker` (engine controller), the scry/graft/weld multiplexer, `verso-tile` /
   `platen` / `pelt` insofar as they tile or compose *web* surfaces. Browser tabs and
   windows replace pelt's tiling.
@@ -107,8 +107,8 @@ seam, per-target backend, gated by the `net` grant (default-denied, §6 consent)
   - **Native** = Wasmtime (`document-host`), `.cwasm` AOT (follow-on #4a). **Browser** = jco,
     its own AOT — symmetric, both no-JIT.
   - The `document-host` *interface* (`inspect`/`apply`) is render-engine-neutral. The native
-    impl (`dom_view`) is over serval's `ScriptedDom`; the **browser impl is over the browser
-    DOM** (serval is dropped here). The native meerkat content-actor wiring (P2.5c mirror +
+    impl (`dom_view`) is over genet's `ScriptedDom`; the **browser impl is over the browser
+    DOM** (genet is dropped here). The native meerkat content-actor wiring (P2.5c mirror +
     `ScriptInstance`) is native-only — the browser is a separate jco integration over the same
     contract, not a reuse of that wiring.
   - `net.fetch` (#4b) takes a browser backend (companion raw-socket / browser `fetch()`, §1).
@@ -137,15 +137,15 @@ demoted dots stay as the underlay." A browser host is a new consumer of that mod
 where "the shell document" becomes the browser DOM.
 
 The crate is also already wasm-aware: the native present stack (winit + wgpu +
-serval-winit-host) is gated `cfg(not(target_arch = "wasm32"))`, the in-thread physics
+genet-winit-host) is gated `cfg(not(target_arch = "wasm32"))`, the in-thread physics
 backend is called out as "the future no-threads wasm profile," and "the wasm present
 path (canvas + WebGPU)" is noted as a planned step (P2, 2026-06-06).
 
-The one non-gated friction: the serval-backed gnode pool (`build_pool_dom`,
-`node_dom`, `node_layout` over `serval_scripted_dom` / `serval_layout`) is a
+The one non-gated friction: the genet-backed gnode pool (`build_pool_dom`,
+`node_dom`, `node_layout` over `genet_scripted_dom` / `genet_layout`) is a
 hard dependency. `render_as_cards` skips it at *runtime*, but it still *compiles* in.
 The first refactor feature-gates that pool so a cards-only wasm build does not pull
-serval-layout.
+genet-layout.
 
 ---
 
@@ -158,7 +158,7 @@ zero networking.
 (`build_pool_dom` / `node_dom` / `node_layout`) behind a `gnode-pool` feature (on for
 native). A `dom-cards` profile forces `render_as_cards` and gates the pool out.
 *Done when* `cargo build --target wasm32-unknown-unknown -p orrery --no-default-features --features dom-cards`
-is green and the dep tree shows no serval-layout / inker / platen.
+is green and the dep tree shows no genet-layout / inker / platen.
 
 **P1 — Orrery in a tab, DOM cards, no network.** A thin wasm shell crate presents the
 netrender underlay to a WebGPU canvas (Canvas2D fallback) and draws node cards as DOM
@@ -185,7 +185,7 @@ into another instance with identity preserved.
 **P5 — Companion bridge (localhost).** The native node exposes a local API
 (native-messaging or localhost WebSocket); capability/persona pairing; captures and
 engrams flow to full eidetic; the companion serves enriched content back (reader text,
-thumbnails, smolweb fetch, full serval HTML on demand). *Done when* a paired companion
+thumbnails, smolweb fetch, full genet HTML on demand). *Done when* a paired companion
 ingests captures (`adopt`) into full eidetic and serves back requested content.
 
 **P6 — p2p via the companion.** The companion runs iroh (already built): replication,
@@ -236,7 +236,7 @@ cartography).
 - **The portable core is wasm-clean by design.** `kernel` is self-described "Portable"
   with `store` off-by-default and per-target UUID handling; gyre/aether/arrangements/
   cartography are plain compute. The friction is entirely the render/composition path
-  (serval-layout, inker, platen), which the browser replaces with DOM.
+  (genet-layout, inker, platen), which the browser replaces with DOM.
 - **The capture substrate is built and dormant.** eidetic `BrowsingMemory` /
   `BrowsingTrace` (record_traversal / adopt / recent_corridor / co_occurrence) is the
   federation-faithful half the in-the-wings audit flags with zero live callers. The
@@ -259,7 +259,7 @@ cartography).
   not a separate mechanism. (3) The `kernel::permissions` → `Grant` model + the
   `script_permissions` / `script-bindings.json` stores carry straight into the extension's
   consent / per-site model (IndexedDB-backed); `net` stays default-denied. The render-neutral
-  `document-host` interface maps to the browser DOM (the serval-coupled `dom_view` impl is
+  `document-host` interface maps to the browser DOM (the genet-coupled `dom_view` impl is
   native-only).
 
 ## Open risks

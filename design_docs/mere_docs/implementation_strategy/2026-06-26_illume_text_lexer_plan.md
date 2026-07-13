@@ -1,21 +1,21 @@
-# Illume: the text lexer / highlighter, its tinct + serval pairing, and the omnibar legibility goal
+# Illume: the text lexer / highlighter, its tinct + genet pairing, and the omnibar legibility goal
 
 **Date**: 2026-06-26
 **Status**: Points 1-6 done and headed-verified. Point 7 part-shipped 2026-06-27
 (tinct 0.1.0 + illume 0.0.1 published). **Point 8 landed 2026-07-08: illume extracted
-to its own repo and the bridge dissolved into serval.** illume is now a standalone
+to its own repo and the bridge dissolved into genet.** illume is now a standalone
 public repo (`github.com/mark-ik/illume`, MIT OR Apache-2.0, edition 2024), and the
 `SyntaxKind → SyntaxRole → class` bridge that had lived host-side in
 `meerkat/knot_highlight.rs` moved *into* xilem-serval behind a `highlight` feature
 (optional illume + tinct deps). So the highlighter is no longer a per-host concern: any
-serval host flips `xilem-serval/highlight` and gets `highlighted_textarea` /
+genet host flips `xilem-serval/highlight` and gets `highlighted_textarea` /
 `highlighted_text_field` / `syntax_css` for free (the omnibar, a note editor, a chat
-line, and — when serval gains a TUI backend — terminal text too). meerkat's bridge is
+line, and — when genet gains a TUI backend — terminal text too). meerkat's bridge is
 deleted; Isometry (which already consumes xilem-serval) can adopt highlighting with a
 single feature flag. See the 2026-07-08 Progress entry. Captures the decisions and the
 build of the illume promotion across the 2026-06-26 / 27 / 07-08 sessions: the knot
 editor's highlight core promoted to a standalone sibling crate (**illume**), paired with
-tincture (published as **tinct**) for themed colours and serval's styled field for
+tincture (published as **tinct**) for themed colours and genet's styled field for
 rendering, aimed at making mere/meerkat operable and legible from the omnibar.
 
 ## The idea
@@ -59,12 +59,12 @@ The highlight path is three crates that each do one thing, plus a host bridge:
 2. **tinct (the palette)** — `SyntaxRole` → a contrast-gated colour, derived from the
    theme seeds. Lives in tincture (publishing as tinct); the `syntax` module shipped
    this session. serde-only, toolkit-agnostic, lexer-agnostic.
-3. **serval styled field (the renderer)** — `(range, css/class)` → styled `<span>` runs
+3. **genet styled field (the renderer)** — `(range, css/class)` → styled `<span>` runs
    in the edit surface. `xilem_serval::styled_textarea`, shipped this session. Generic,
    no djot knowledge.
 
 The **host (meerkat)** bridges them: it maps each illume `SyntaxKind` onto a tinct
-`SyntaxRole`, looks up the colour in the derived `SyntaxPalette`, and hands serval the
+`SyntaxRole`, looks up the colour in the derived `SyntaxPalette`, and hands genet the
 styled ranges (as classes against a host stylesheet, so the colours stay themeable).
 
 **The key seam: `SyntaxKind` → `SyntaxRole`.** illume's kinds are about *what was
@@ -112,15 +112,15 @@ illume's first non-editor consumer.
    `derive_syntax_palette`: accents fanned off the brand primary in OKLCH, contrast-gated
    to WCAG 4.5 against the surface, muted roles on the dim-text tier. This is the #1 fix
    (colours derived, never hardcoded).
-2. **serval `styled_textarea` — DONE** (serval `6a3ceace`). Per-range styled `<span>`
+2. **genet `styled_textarea` — DONE** (genet `6a3ceace`). Per-range styled `<span>`
    runs, innermost-wins flatten, caret/preedit/ghost intact, fully generic.
 3. **illume — DONE** (mere `bcaf834` rename + `6d0a2ae` entity pass). Renamed
    `knot-editor` → illume; added the prose-entity passes (URL / mention / tag / email)
    and their `SyntaxKind`s. The `SyntaxKind` → `SyntaxRole` map is the host's (point 5).
-4. **#2 — DONE** (serval `3abaad8`). Folded serval's `styled_body` into one style-aware
-   field body (plain text = the empty-styles case); 75 serval tests pass.
+4. **#2 — DONE** (genet `3abaad8`). Folded genet's `styled_body` into one style-aware
+   field body (plain text = the empty-styles case); 75 genet tests pass.
 5. **The bridge — DONE + headed-verified** (mere `81d0c86` editor + `8e32f38` omnibar,
-   serval `ea5fdf33`). illume spans → `SyntaxRole` → tinct colour → the serval styled
+   genet `ea5fdf33`). illume spans → `SyntaxRole` → tinct colour → the genet styled
    field, as a themeable host stylesheet; the editor and the omnibar both highlight, and a
    headed run confirmed distinct perceptual colours at runtime.
 6. **#3 — DONE** (mere `e271adc`). `KnotEditor` → `KnotReadout`, a stateless deriver
@@ -131,14 +131,14 @@ illume's first non-editor consumer.
    `package = "tinct"` alias (no src churn — the Woodshed consumer turned out not to exist).
    illume **published 0.0.1** as a name-reserve straight from the workspace. Remaining:
    illume's extraction to its own sibling repo + a stable release once the API settles.
-8. **Extraction + serval-owns-the-bridge — LANDED** (2026-07-08). illume extracted to its
+8. **Extraction + genet-owns-the-bridge — LANDED** (2026-07-08). illume extracted to its
    own public repo (`github.com/mark-ik/illume`, MIT OR Apache-2.0, edition 2024, 32
    tests); mere consumes it by git dep + local override, the in-workspace copy deleted.
    The `SyntaxKind → SyntaxRole → class` bridge moved from `meerkat/knot_highlight.rs`
    into **xilem-serval** behind a `highlight` feature (optional illume + tinct deps),
    exposing `highlighted_textarea` / `highlighted_text_field` / `syntax_css`. This
    **revises Decision 5**: the seam is no longer host-owned (that was a single-host
-   premise), it is owned by the shared toolkit, so every serval host inherits highlighting
+   premise), it is owned by the shared toolkit, so every genet host inherits highlighting
    for free and none re-writes the map. meerkat's bridge deleted; 230 bin tests green.
 
 ## Decisions
@@ -146,10 +146,10 @@ illume's first non-editor consumer.
 1. **Colours are derived, not hardcoded** (#1). The host maps `SyntaxKind` → `SyntaxRole`
    → `tinct::derive_syntax_palette` over the active theme's seeds (fetched directly via
    `theme.theme_def(id).seeds`, no register-theme change needed), emitting the `syntax-*`
-   rules into the chrome stylesheet serval applies. No parallel palette; tracks the theme
+   rules into the chrome stylesheet genet applies. No parallel palette; tracks the theme
    and any reseed.
 2. **Highlight runs carry classes, not inline CSS.** Themeable through one sheet, the
-   serval/stylo way, so user/mod themes override.
+   genet/stylo way, so user/mod themes override.
 3. **One style-aware field body** (#2), not a styled fork of the plain one.
 4. **`KnotReadout` is a stateless deriver** (#3, renamed from `KnotEditor`), the host owns
    the buffer. The portable derivations (highlight / outline / folds / render) take text;
@@ -170,17 +170,17 @@ illume's first non-editor consumer.
 - [command registry / configurable menus plan](2026-06-21_command_registry_configurable_menus_plan.md):
   the `>` shell + `ActionRegistry` that the omnibar legibility goal sits on top of.
 - tincture (publishing as tinct): the `syntax` module, the colour contract.
-- serval `xilem-serval`: `styled_textarea`, the renderer.
+- genet `xilem-serval`: `styled_textarea`, the renderer.
 
 ## Progress
 
 - **2026-06-26, plan written + first two pieces shipped.** Captured the session's
   decisions: illume (the promoted lexer name), tinct (tincture's necessary published
-  name), the three-piece architecture (illume lexer / tinct palette / serval renderer)
+  name), the three-piece architecture (illume lexer / tinct palette / genet renderer)
   with the host-owned `SyntaxKind` → `SyntaxRole` seam, the omnibar-as-legibility-layer
   goal, and the #1/#2/#3 resolutions. Shipped tinct's `syntax` module (perceptual
-  contrast-gated highlight palette, tincture `03661ce`) and serval's `styled_textarea`
-  (serval `6a3ceace`). Remaining points 3-7 to address in order.
+  contrast-gated highlight palette, tincture `03661ce`) and genet's `styled_textarea`
+  (genet `6a3ceace`). Remaining points 3-7 to address in order.
 - **2026-06-26, point 3 done (illume born).** Renamed the `knot-editor` crate to
   **illume** in place (dir + package name + the host crate's dep/use; meerkat untouched,
   since its `knot_editor_*` identifiers are local names, not crate uses; mere `bcaf834`),
@@ -188,15 +188,15 @@ illume's first non-editor consumer.
   `@mention` / `#tag` / email spans for *any* text, with the matching `SyntaxKind`s (mere
   `6d0a2ae`). illume now enriches the omnibar and comms, not just the editor; 32 tests
   green. Point 3(c), the `SyntaxKind` → `SyntaxRole` map, is the host's and lands with
-  the point-5 bridge. Next: point 4 (unify serval's field body).
-- **2026-06-26, point 4 done (one field body).** Unified serval's field rendering: a
+  the point-5 bridge. Next: point 4 (unify genet's field body).
+- **2026-06-26, point 4 done (one field body).** Unified genet's field rendering: a
   single `field_children(input, styles)` in `styled_field.rs` builds the field's
   children (unstyled runs as text nodes, styled runs as `<span class>`) with the
   caret / preedit / ghost splice; the plain `text_field` / `textarea` pass empty styles,
   so there is one body, not a styled fork. `TextField` is now the Vec-children view type
   and `field_body` shrank to a 3-line delegator (controls.rs lighter). Styled runs carry
   a **class** (not inline CSS), baking in the #1 themeable decision. `StyledField`
-  dropped (it is `TextField` now). serval `3abaad8`; 75 tests pass, including the existing
+  dropped (it is `TextField` now). genet `3abaad8`; 75 tests pass, including the existing
   `text_field` behaviour tests over the new body. Next: point 5 (the bridge: illume spans
   → `SyntaxRole` → tinct colour → the styled field, editor first then omnibar).
 - **2026-06-26, point 5a (bridge brain) + tincture pinned.** Resolved the tincture gate:
@@ -218,22 +218,22 @@ illume's first non-editor consumer.
   `styled_textarea(t, &knot_styles(t.text()))`, so the editor paints illume's highlight +
   entity spans as the themed classes. `cargo check -p meerkat` green; mere `81d0c86`,
   Mark's concurrent files untouched. **The whole pipeline is connected**: illume lexer →
-  kind → role → class bridge → serval styled field → tinct colours. Honest caveats: the
+  kind → role → class bridge → genet styled field → tinct colours. Honest caveats: the
   palette derives from fixed dark seeds for now (live-theme seeds are the follow-up,
   gated on a register-theme `ThemeTokenSet.syntax` field that ripples to every token-set
   constructor); and this is compile-verified, not yet headed-verified (running the app to
   see the colours is the next confirmation). Remaining: **5d** (omnibar entities live as
   you type), then point 6 (the deriver) and point 7 (extraction + publish).
-- **2026-06-26, point 5d done (omnibar highlighting) — point 5 complete.** Added serval
+- **2026-06-26, point 5d done (omnibar highlighting) — point 5 complete.** Added genet
   `styled_text_field` (the single-line styled sibling of `styled_textarea`; `edit` made
   `pub(crate)`), reachable to meerkat via the `.cargo/config.toml` `paths` override on
-  `repos/serval/components` (so serval, unlike the git-dep tincture, needs no push or lock
-  bump; that override is why earlier serval changes "just worked"). meerkat's
+  `repos/genet/components` (so genet, unlike the git-dep tincture, needs no push or lock
+  bump; that override is why earlier genet changes "just worked"). meerkat's
   `omnibar_styles` runs only illume's entity pass (no djot pass, the omnibar is not a
   note), and the omnibar field is now `styled_text_field(t, &omnibar_styles(...))`, so
-  urls / mentions / tags colour as you type. serval `ea5fdf33`, mere `8e32f38`; meerkat
+  urls / mentions / tags colour as you type. genet `ea5fdf33`, mere `8e32f38`; meerkat
   compiles, Mark's concurrent files untouched. **Point 5 complete**: the editor and the
-  omnibar both highlight through illume → tinct → the serval styled field, so the
+  omnibar both highlight through illume → tinct → the genet styled field, so the
   omnibar-as-legibility-layer vision is realized (the lexer's first non-editor consumer).
   Still compile-verified, not headed-verified. Remaining: point 6 (the `KnotEditor`
   stateless deriver) and point 7 (extraction + publish).
@@ -243,7 +243,7 @@ illume's first non-editor consumer.
   editor's seeded `# New note` heading colours (teal `#`, themed heading text) versus the
   plain body. The omnibar paints `visit https://example.com or @ada #web` with the url
   blue, `@ada` (mention) teal, and `#web` (tag) magenta, each distinct, plain words left
-  white. So the illume → tinct → serval styled-field pipeline is confirmed end to end, and
+  white. So the illume → tinct → genet styled-field pipeline is confirmed end to end, and
   the omnibar-as-legibility-layer vision is visibly real. (The editor's *typed* note did
   not land, a click-focus timing miss in the driver, not a highlighting issue; the seed
   heading already proves the editor path.) Point 5 done and verified; remaining points 6
@@ -289,14 +289,14 @@ illume's first non-editor consumer.
   extraction to its own sibling repo + a stable (0.1) release, both held until the API
   settles. Cosmetic loose end: the local checkout is still `repos/tincture` (crate + remote
   are tinct); rename the dir whenever convenient.
-- **2026-07-08, point 8: illume extracted + the bridge dissolved into serval.** Prompted
+- **2026-07-08, point 8: illume extracted + the bridge dissolved into genet.** Prompted
   by Mark asking whether the editor should promote to a standalone that Isometry could
   consume. The dep-graph check reframed it: Isometry already consumes `xilem-serval` (git
   dep), and illume + tinct are already standalone, so the widget + lexer + palette are
   *already* shared; the one un-shared piece was the `SyntaxKind → SyntaxRole → class`
   bridge, duplicated per host. Rather than a third bridge crate (Mark: "right back at
-  making two crates three... nah"), the bridge moved into serval's toolkit, where it can
-  see both libs: **xilem-serval owns highlighted text, every serval host inherits it for
+  making two crates three... nah"), the bridge moved into genet's toolkit, where it can
+  see both libs: **xilem-serval owns highlighted text, every genet host inherits it for
   free.** Landed across three repos: (1) **illume extracted** to its own public repo
   (`github.com/mark-ik/illume`, MIT OR Apache-2.0 relicense off mere's MPL, edition 2024,
   MPL per-file headers stripped, 32 tests, pushed to `main`); (2) **mere repointed** —
@@ -304,7 +304,7 @@ illume's first non-editor consumer.
   from workspace members, the in-workspace copy deleted; (3) **xilem-serval** gained a
   `highlight` feature (optional illume + tinct deps) with `src/highlight.rs`: the kind→role
   map, `role_class`, `note_styles` / `entity_styles`, the `Highlight` mode enum,
-  `highlighted_textarea` / `highlighted_text_field`, and `syntax_css` — emitting serval's
+  `highlighted_textarea` / `highlighted_text_field`, and `syntax_css` — emitting genet's
   native `StyleRange`, 3 tests, 96 total green; (4) **meerkat** deleted `knot_highlight.rs`,
   repointed the editor field to `highlighted_textarea(t, Highlight::Note)` and the
   stylesheet to `xilem_serval::syntax_css` (with a small host-side `fallback_seeds`),

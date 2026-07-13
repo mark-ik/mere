@@ -89,7 +89,7 @@ Architecture implication: the swatch wants to be a **standalone component** (a s
 condition set + a form factor → a rendered, hit-testable projection), with the gloss pane,
 facet panes, menus, and djot blocks all as embedders rather than gloss owning it.
 
-**The swatch should render as document elements the chrome understands** — serval lays them
+**The swatch should render as document elements the chrome understands** — genet lays them
 out, themes them, hit-tests them, exposes them to accessibility — **not as an opaque
 `netrender::Scene` texture pasted into the DOM** (the gloss minimap's current form, Mark
 2026-06-22). An opaque element can't flow, theme, or be navigated *inside* the note / menu /

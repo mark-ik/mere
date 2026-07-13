@@ -69,7 +69,7 @@ struct Activation {
     /// (Render ladder phase 3.)
     engine: String,
     /// The latest generation-accepted scene, composited at the node's pane. Set by
-    /// the HTML/serval lane; `None` for a document-lane node (which carries `packet`
+    /// the HTML/genet lane; `None` for a document-lane node (which carries `packet`
     /// instead and the host lowers a band of it per scroll).
     scene: Option<Scene>,
     /// The retained document-lane packet (plus its font sidecar): the host windows +
@@ -111,7 +111,7 @@ struct Activation {
     /// document rects plus plain text. `None` until a selection query lands, when the
     /// query collapses, or after a navigation/resize invalidates it. (HTML selection.)
     page_text_selection: Option<crate::content::TextSelectionMessage>,
-    /// The most recent focused-document Serval observables the actor reported, when
+    /// The most recent focused-document Genet observables the actor reported, when
     /// its active lane owns a real DOM/layout surface.
     engine_stats: Option<ContentEngineStats>,
     /// The most recent focused-document scene stats for lanes that ship a lowered

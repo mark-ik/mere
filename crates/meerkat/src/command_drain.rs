@@ -814,8 +814,8 @@ impl WindowCtx<'_> {
                 pollster::block_on(session_runtime::content_store::load_content(store, url))
             {
                 let body = String::from_utf8_lossy(&content.body);
-                let doc = serval_static_dom::StaticDocument::parse(&body);
-                if let Some(text) = serval_extract::extract_main_text(&doc) {
+                let doc = genet_static_dom::StaticDocument::parse(&body);
+                if let Some(text) = genet_extract::extract_main_text(&doc) {
                     texts.insert(url.clone(), text);
                 }
             }

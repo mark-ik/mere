@@ -294,7 +294,7 @@ pub(crate) struct Presentation {
 }
 
 impl Presentation {
-    /// The active theme's chrome CSS as `&[&str]`, the shape the serval layout /
+    /// The active theme's chrome CSS as `&[&str]`, the shape the genet layout /
     /// paint / hit-test entry points take. Borrows the baked `chrome_sheet`. A read
     /// of shared presentation state, so it lives on the subsystem that owns it; every
     /// window's chrome renders from the same sheet. (MW2 (c).)
@@ -450,7 +450,7 @@ impl Presentation {
 /// Brand-coherent dark seed triad the syntax palette falls back to when no theme
 /// def resolves (the shouldn't-happen `None` arm). Matches the default chrome; the
 /// syntax colours derive from it via `xilem_serval::syntax_css`. (Kept host-side
-/// because it is mere's brand default, not a serval concern.)
+/// because it is mere's brand default, not a genet concern.)
 fn fallback_seeds() -> tincture::Seeds {
     tincture::Seeds {
         primary: tincture::Srgb::rgb(0x33, 0x66, 0xC8),

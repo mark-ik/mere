@@ -266,7 +266,7 @@ impl ScryingHost {
     }
 
     /// Stage a compatibility-view flip for `member`: the place/session captured from
-    /// the serval side at the serval -> `scrying.web` pin. When this member's tile next
+    /// the genet side at the genet -> `scrying.web` pin. When this member's tile next
     /// spawns, the pool sets the carried cookies and navigates (instead of a blank
     /// load), then restores scroll / forms once the load completes (`verso-scry`'s
     /// forward-inject). A no-op off Windows (no producer to drive). (Verso flip.)

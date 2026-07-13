@@ -127,7 +127,7 @@ impl WindowCtx<'_> {
         let (chrome_tree, chrome_actionable) = match &self.view.chrome_session {
             Some(session) => {
                 let dom = self.view.dom.borrow();
-                crate::serval_a11y::chrome_a11y_tree(&dom, session.fragments())
+                crate::genet_a11y::chrome_a11y_tree(&dom, session.fragments())
             }
             None => {
                 let mut chrome = Node::new(Role::Application);
@@ -156,7 +156,7 @@ impl WindowCtx<'_> {
         // reversed back to one) sidesteps the debug-broken doc-tag overlap. (G2.4.)
         for node in chrome_actionable {
             action_routes.insert(
-                crate::serval_a11y::chrome_a11y_id(node),
+                crate::genet_a11y::chrome_a11y_id(node),
                 A11yHostAction::ChromeNode(node),
             );
         }
@@ -189,7 +189,7 @@ impl WindowCtx<'_> {
             // The focused chrome DOM node (the omnibar field) when the DOM-derived
             // subtree is in use; the chrome subtree root in the placeholder fallback.
             Some(focused) if self.view.chrome_session.is_some() => {
-                (crate::serval_a11y::chrome_a11y_id(focused), chrome_root)
+                (crate::genet_a11y::chrome_a11y_id(focused), chrome_root)
             }
             Some(_) => (chrome_root, chrome_root),
             None => (

@@ -1,22 +1,22 @@
-# Cross-Platform Parallelism + Performance Strategy: serval / pelt / meerkat / mere
+# Cross-Platform Parallelism + Performance Strategy: genet / pelt / meerkat / mere
 
 **Status:** research / strategy synthesis. Codebase-grounded; external upstream
 facts (vello-on-WebGPU, WASI roadmap) cited at the confidence levels stated.
 **Date:** 2026-06-19.
-**Scope:** how serval (web engine), netrender (wgpu renderer), pelt (desktop
+**Scope:** how genet (web engine), netrender (wgpu renderer), pelt (desktop
 port), meerkat (host), and mere (umbrella) parallelize for good performance
 *cross-platform including the browser*, under the no-JIT browser policy
 (Wasmtime out; JS via Nova native / Boa in-browser).
 
 Every load-bearing claim carries a confidence level. Numbers borrowed from the
 wider ecosystem (Quantum CSS speedups, SIMD ratios) are marked as **borrowed,
-unmeasured in our stack** — do not treat them as bankable for serval/wasm.
+unmeasured in our stack** — do not treat them as bankable for genet/wasm.
 
 ---
 
 ## 0. The problem, stated honestly
 
-Established empirically this session: serval-layout lays out a 578 KB real page
+Established empirically this session: genet-layout lays out a 578 KB real page
 (cold, full document) in **~100 ms release / ~600 ms debug**, against a 16.7 ms
 frame budget (~6x over). That cold path is single-threaded **except** a Rayon
 text-shaping pre-pass (`box_tree.rs:1076`, threshold >24 inline leaves). The
@@ -34,15 +34,15 @@ different fractions:
   caps the achievable cold-cost win well below 2x.
 
 **De-risking step 0 (prerequisite for the whole parallel-cascade thesis):**
-instrument serval-layout to split the 100 ms into cascade / box-tree / shaping /
+instrument genet-layout to split the 100 ms into cascade / box-tree / shaping /
 fragment phases on the 578 KB page, native release. Until that breakdown exists,
 "parallelism owns the cold cost" is a hypothesis, not a result.
 
 ### Step 0 result (2026-06-21) — measured on synthetic AND real pages
 
 Instrumented `layout_via_box_tree` with env-gated phase timers and built a
-breakdown harness (`serval/components/serval-layout/examples/phase_timing.rs`;
-`SERVAL_LAYOUT_TIMING=1`, native release, fresh `TextMeasureCtx` per pass = a true
+breakdown harness (`genet/components/genet-layout/examples/phase_timing.rs`;
+`GENET_LAYOUT_TIMING=1`, native release, fresh `TextMeasureCtx` per pass = a true
 cold first paint). Two pages, shares of **cold paint (cascade + layout)**:
 
 | Phase | Real 1.2 MB (Wikipedia, 16 author sheets) | Synthetic 539 KB (1 trivial sheet) |
@@ -72,7 +72,7 @@ Corrected reading:
   cost scales with text volume (the synthetic over-had it). Real pages sit between.
 
 **Shaping parallel vs serial (real page, the web-without-SAB penalty).** Forcing the
-shaping pre-pass serial (`SERVAL_SHAPE_SERIAL`, all other phases unchanged): parallel
+shaping pre-pass serial (`GENET_SHAPE_SERIAL`, all other phases unchanged): parallel
 **~46 ms** vs serial **~61 ms** — a **1.32x** speedup, ~15 ms saved. So the Rayon
 pre-pass buys only ~1.3x on this page (sublinear: the merge is single-threaded, the
 font-context clone is per worker, per-leaf work is uneven). This is **well below the
@@ -84,7 +84,7 @@ some fraction of the still-serial ~30 ms cascade; **off-main-thread (lever a) re
 the bigger, universal web win** — it removes freeze regardless of the cold ms, and
 needs no SAB.
 
-**Cascade drill-down (real page, de-risking lever (c); serval commit 95622930).** Split
+**Cascade drill-down (real page, de-risking lever (c); genet commit 95622930).** Split
 the ~32 ms cascade (`cascade.rs`): traverse_dom (selector match + cascade + computed-value
 apply) ~25.7 ms (~80%), serial setup (Stylist build + snapshot/context wiring) ~5.8 ms
 (~18%), marker + rule-tree GC ~0.8 ms. The dominant traverse_dom is exactly the slice
@@ -127,7 +127,7 @@ excludes anyway. (Confidence: high. Sources: wasi.dev/roadmap; shared-everything
 Overview; WASI 0.3 release notes; uno-platform "State of WASM" 2025/2026.)
 
 WASI's only legitimate Mere relevance is a **separate, optional non-browser
-SSR/edge lane** (serval-on-Wasmtime/Spin doing server-side parallel layout,
+SSR/edge lane** (genet-on-Wasmtime/Spin doing server-side parallel layout,
 shipping baked frames). Park that as a future product question; it is not part of
 the cross-platform *browser* build.
 
@@ -192,7 +192,7 @@ framing is **deleted** as inaccurate.
 move kernel authority onto an actor thread; actors carry only `Send
 ActorHandle<C>`; pinned state (Stylo, Nova, a DOM) stays on its thread because
 `spawn()` *builds* it on the actor thread (`armillary/src/actor.rs:96-141`,
-`lib.rs:5-32`). The content actor already renders the serval cascade off the UI
+`lib.rs:5-32`). The content actor already renders the genet cascade off the UI
 thread and ships back `Send ContentUpdate::Scene`
 (`meerkat/src/content/mod.rs`, `meerkat/src/content/actor.rs`). The
 **`Scene` is the serialization seam** between worker-side layout and main-thread
@@ -204,11 +204,11 @@ web caveat is the missing browser Worker backend around the landed byte envelope
 
 ## 3. Per-layer strategy
 
-### serval (cascade / layout / shaping) — the parallelism owner
+### genet (cascade / layout / shaping) — the parallelism owner
 
 - **Today:** builds for `wasm32-unknown-unknown` (exit 0, verified 2026-06-06) —
   **but in an isolated, uncommitted worktree (`wasm-fonts-cut`), not mainline.**
-  "serval builds for wasm" is a worktree fact, and it rests on de-IPC and
+  "genet builds for wasm" is a worktree fact, and it rests on de-IPC and
   de-randomness cuts that are **unlanded**. (Confidence: high; this is a
   provenance caveat, not a contradiction.)
 - One active parallel path: the Rayon inline-text shaping pre-pass
@@ -231,12 +231,12 @@ web caveat is the missing browser Worker backend around the landed byte envelope
   diagnosis; the fix is unlanded.)
 - **Three browser blocker classes beyond threads** (the first is widely missed):
   1. **No clock.** On `wasm32-unknown-unknown`, `Instant::now()` / `SystemTime`
-     **panic**. serval-layout itself is clean (no `std::time`), but the host path
+     **panic**. genet-layout itself is clean (no `std::time`), but the host path
      is not — meerkat animation scheduling, debounce/throttle, and `gyre` physics
      use `Duration`/timing (`orrery/physics.rs:25`). All time must route through
      `web_time` / `performance.now()`. Pervasive, easy to miss. (Confidence:
      high.)
-  2. **Randomness.** serval's own 2026-06-06 plan names `uuid` v4 as wasm-hostile;
+  2. **Randomness.** genet's own 2026-06-06 plan names `uuid` v4 as wasm-hostile;
      `getrandom` needs the `js` feature to bind `crypto.getRandomValues`. The
      green worktree build depends on these cuts, which are unlanded. (Confidence:
      high.)
@@ -304,7 +304,7 @@ web caveat is the missing browser Worker backend around the landed byte envelope
 
 - Keeps **native Rayon and native wgpu** unchanged — no browser tax.
   `pelt-desktop` is the winit/native port. The browser host is a *different,
-  unbuilt port* consuming the wasm `serval-layout` lib. **pelt is where parallel
+  unbuilt port* consuming the wasm `genet-layout` lib. **pelt is where parallel
   Stylo cascade gets proven first** (native, ThreadSanitizer-verifiable) before
   any wasm thread pool. (Confidence: high. Correction: winit is *not*
   native-only — it has a working web backend; pelt uses the native one by choice,
@@ -362,7 +362,7 @@ web caveat is the missing browser Worker backend around the landed byte envelope
   customizations: Win32 borderless/titlebar tricks + native AccessKit bridges
   that the web backend doesn't carry. The browser host is a minimal canvas + rAF +
   DOM-event port driving `boot_async` from `wasm-bindgen-futures` over an
-  OffscreenCanvas — host plumbing, not a serval/netrender rewrite. (Confidence:
+  OffscreenCanvas — host plumbing, not a genet/netrender rewrite. (Confidence:
   high.)
 
 ---
@@ -370,7 +370,7 @@ web caveat is the missing browser Worker backend around the landed byte envelope
 ## 4. Levers in priority order (cost vs payoff against the ~100 ms cold cost)
 
 Payoff numbers borrowed from the ecosystem are tagged **[borrowed]** — none are
-measured in serval/wasm.
+measured in genet/wasm.
 
 **(a) Off-main-thread, single worker — DO FIRST**
 - *Payoff:* eliminates UI freeze regardless of the 100 ms. The
@@ -385,7 +385,7 @@ measured in serval/wasm.
 **(b) Incremental layout + dormancy/snapshot — MOSTLY THERE**
 - *Payoff:* pay the cold cost *once*; per-frame work drops to repaint-only;
   suspended tabs cost nothing.
-- *Cost:* low — serval has `IncrementalLayout` (repaint vs relayout, restyle
+- *Cost:* low — genet has `IncrementalLayout` (repaint vs relayout, restyle
   damage); meerkat has band-scroll + per-tile generation cache. Mostly
   finishing/wiring.
 
@@ -398,7 +398,7 @@ measured in serval/wasm.
   (~48%) and already parallel on native, going serial on web without the SAB shim.
   So this lever has two real targets: keep shaping parallel on web (#1), and
   parallelize the still-serial cascade native-first (#2). Both attack first-order
-  fractions.** The cascade drill-down (serval 95622930) confirms the cascade is
+  fractions.** The cascade drill-down (genet 95622930) confirms the cascade is
   well-targeted: traverse_dom (the Stylo-parallelizable slice) is ~80% of the ~32 ms
   cascade with only a ~6.5 ms serial floor, so parallel cascade is not Amdahl-trapped.
   Do not cite the magnitude as bankable (the Stylo-parallel speedup is unmeasured; the
@@ -502,7 +502,7 @@ the **app lane**, not the browser lane.
 | **fontique-in-wasm + fallback font** | Medium-high | Make `system` a per-target feature (manifest edit); confirm the blob path; **ship an embedded fallback font in the bundle** or text renders nothing; wire host font-feeding. |
 | **winit-on-web host port** | Medium-low — winit *has* a web backend; the gap is meerkat's Win32/AccessKit host code | Stand up a minimal canvas + rAF + DOM-event host driving `boot_async` over an OffscreenCanvas. Host plumbing, not an engine rewrite. |
 | **Parallel speedup materializing** | Medium — sublinear, plateaus ~4 threads, can regress on big.LITTLE | Benchmark per-target; gate browser parallel cascade behind homogeneous-core detection; never let a hot path *require* SAB. |
-| **wasm build is worktree-only** | High | The green `wasm32` build lives in `wasm-fonts-cut`, not mainline, and depends on unlanded IPC/random/font cuts. Land them before treating "serval builds for wasm" as a repo fact. |
+| **wasm build is worktree-only** | High | The green `wasm32` build lives in `wasm-fonts-cut`, not mainline, and depends on unlanded IPC/random/font cuts. Land them before treating "genet builds for wasm" as a repo fact. |
 
 ---
 
@@ -559,9 +559,9 @@ the **app lane**, not the browser lane.
 
 ## Key grounding files
 
-- `serval/components/serval-layout/`: `box_tree.rs:1076-1146`, `cascade.rs:696`,
+- `genet/components/genet-layout/`: `box_tree.rs:1076-1146`, `cascade.rs:696`,
   `style.rs:48-83`, `host_loader.rs:5-10`, `text_measure.rs:347`, `Cargo.toml:23`
-- `serval/docs/`: `2026-06-06_wasm_enablement_and_crate_rename_plan.md`,
+- `genet/docs/`: `2026-06-06_wasm_enablement_and_crate_rename_plan.md`,
   `2026-06-13_parallel_cascade_scope.md`
 - `netrender/netrender_device/src/core.rs:{17,80,103}`,
   `netrender/src/{vello_tile_rasterizer.rs:137-146, external_texture.rs}`,

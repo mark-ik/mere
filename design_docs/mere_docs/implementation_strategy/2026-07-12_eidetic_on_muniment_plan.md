@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-12
 **Status:** **LANDED 2026-07-12** (mere d9cd0c6). All done conditions met
-except the meerkat receipt, which waits on serval's in-flight ring-3 rename
+except the meerkat receipt, which waits on genet's in-flight ring-3 rename
 (see Progress).
 
 Completes the boundary-pass plan's point 5, which said the eventual move is
@@ -71,8 +71,8 @@ storage.
 ## Sequencing
 
 **Blocked on a green mere tree.** As of 2026-07-12 mere's workspace does not
-resolve: serval's in-flight ring-3 fork rename (stylo → `serval-stylo` on
-the `serval-publish-names` branch) puts two crates linking
+resolve: genet's in-flight ring-3 fork rename (stylo → `genet-stylo` on
+the `genet-publish-names` branch) puts two crates linking
 `servo_style_crate` in the graph. A 107-site trait swap without a compiler
 is not a thing to attempt; start when `cargo check -p eidetic` runs.
 
@@ -106,7 +106,7 @@ Findings the plan under-called:
 
 Not verified: **meerkat**. Its cookie store's four renamed lines are
 byte-identical to `system/fetch`'s (green), but the crate cannot build while
-serval's ring-3 fork rename (stylo -> `serval-stylo`) leaves mere's serval
+genet's ring-3 fork rename (stylo -> `genet-stylo`) leaves mere's genet
 cone unresolvable. Run `cargo test -p meerkat` once that lands. Also
 pre-existing and unrelated: `eidetic-search`'s example fails a `TypedPayload`
 bound (broken before this change; verified by stashing).
@@ -120,6 +120,6 @@ bound (broken before this change; verified by stashing).
    backend the whole family can reuse. (mooting adopting it is a follow-on:
    it rides muniment already, so it is a manifest change, not a port.)
 3. ~~eidetic's suite green~~ **DONE** (84 + 7 + 188 + 3 + 23). meerkat's
-   suite: **pending the serval ring-3 rename**, see Progress.
+   suite: **pending the genet ring-3 rename**, see Progress.
 4. The boundary-pass plan's point 5 stamped done with the
    "not-a-prohibition" correction: **pending** (a one-line edit there).

@@ -107,7 +107,7 @@ State legend: **live** (on the running path) · **partial** (used in part) ·
 ### Externals (sibling repos)
 | Repo | Role | State |
 |---|---|---|
-| `serval` | full-web engine (servo stack) | external, WIP — the **delegate** lane |
+| `genet` | full-web engine (servo stack) | external, WIP — the **delegate** lane |
 | `netrender` | Scene rasterizer + `paint_list_{api,render}` | external — document-canvas lowers to it |
 | `netfetcher` | portable WHATWG Fetch | external, planned — the network organ; rung-1 customer is nematic |
 | vendored: `xilem` / `imaging` / `blitz` / `glass-gpui` | UI / paint / HTML-lib / gpui-fork | external, minimally maintained |

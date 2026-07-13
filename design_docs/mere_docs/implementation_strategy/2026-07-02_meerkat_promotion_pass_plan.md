@@ -20,7 +20,7 @@ description says "chrome shell"; this plan makes the code match it.
 [render ladder + extraction plan](2026-06-23_render_ladder_and_extraction_plan.md)
 (frames the crawl/extraction axis as corpus + agent infrastructure, not shell
 code), the archived
-[serval render glue extraction plan](../../archive_docs/2026-07-03_completed_plans/2026-06-11_serval_render_glue_extraction_plan.md)
+[genet render glue extraction plan](../../archive_docs/2026-07-03_completed_plans/2026-06-11_genet_render_glue_extraction_plan.md)
 (the precedent: own the seam, depend on components), the
 [meerkat CLI tooling plan](../../archive_docs/2026-07-03_completed_plans/2026-06-29_meerkat_cli_tooling_plan.md) (owns the
 agent_harness cluster; out of scope here), and the mere-domain layer direction
@@ -330,7 +330,7 @@ Verified by grepping each candidate's `use` lines. "crate-refs" counts
   deliberately narrows; `meerkat-browser-worker`
   is a 109-LOC bootstrap that does not yet consume the transfer wire form (the
   fork risk P3 still preempts once its contract boundary is chosen).
-- Precedent: the serval render glue extraction (2026-06-11) established the
+- Precedent: the genet render glue extraction (2026-06-11) established the
   pattern this plan repeats: own the seam, depend on components, zero
   upstream changes.
 
@@ -423,7 +423,7 @@ Verified by grepping each candidate's `use` lines. "crate-refs" counts
   (`TrailPaneInput`, `AlembicPaneInput`, `ApparatusSyncInput`). Verified with
   `cargo check -p roster --lib`, `cargo check -p meerkat --lib`, and
   `cargo test -p roster --lib`; a targeted `cargo test -p meerkat --lib` pane
-  test hit unrelated `serval-layout` compile errors and does not reflect this
+  test hit unrelated `genet-layout` compile errors and does not reflect this
   slice itself.
 - **2026-07-02** (later implementation pass): P8's next inversion slice landed.
   `roster_model.rs` now owns the roster snapshot vocabulary, `roster.rs` was

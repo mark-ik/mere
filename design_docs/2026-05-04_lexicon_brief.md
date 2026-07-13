@@ -4,7 +4,7 @@
 **Date**: 2026-05-04
 **Scope**: Establishes the post-rename naming scheme and in-product vocabulary for the Mere project. Authoritative for terms it covers; supersedes the prior [2026-05-03 lexicon brief](../../graphshell/design_docs/2026-05-03_lexicon_brief.md) (which had Strophos+Orrery as the product) and complements [`TERMINOLOGY.md`](TERMINOLOGY.md) until that file is fully populated. Terms not addressed here are covered by the donor harvest indexes; the donor `graphshell` repo is GitHub-archived (read-only) and its local clone was deleted 2026-05-27, so `../../graphshell/design_docs/` paths no longer resolve.
 
-**Execution status (updated 2026-06-09)**: the workspace has since reorganized from the flat 2026-05-04 scaffolding into supercrate subtrees under `crates/`, with **meerkat** as the host on the serval-as-host path; see the topology table in [`DOC_README.md`](DOC_README.md) for the current layout. The donor `graphshell` repo was GitHub-archived and its local clone deleted 2026-05-27.
+**Execution status (updated 2026-06-09)**: the workspace has since reorganized from the flat 2026-05-04 scaffolding into supercrate subtrees under `crates/`, with **meerkat** as the host on the genet-as-host path; see the topology table in [`DOC_README.md`](DOC_README.md) for the current layout. The donor `graphshell` repo was GitHub-archived and its local clone deleted 2026-05-27.
 
 ---
 
@@ -18,11 +18,11 @@
 
 ## 2. The printing-press metaphor
 
-The architectural through-line. Engines (Wry, Serval, Nematic) produce content. The **inker** pairs each engine to its content. The **platen** composes the layout (graph-aware). The **verso** layer receives the impression (places it into tile slots). The user sees the printed result via **meerkat** (the host), chrome and content both rendered by serval on the serval-as-host path. **Eidetic** keeps the impressions over time. **Murm** carries bilateral comms; **moothold** carries federation across moots; **coalition** (t4) carries coalition across mootholds.
+The architectural through-line. Engines (Wry, Genet, Nematic) produce content. The **inker** pairs each engine to its content. The **platen** composes the layout (graph-aware). The **verso** layer receives the impression (places it into tile slots). The user sees the printed result via **meerkat** (the host), chrome and content both rendered by genet on the genet-as-host path. **Eidetic** keeps the impressions over time. **Murm** carries bilateral comms; **moothold** carries federation across moots; **coalition** (t4) carries coalition across mootholds.
 
 ```
                           ┌─────────────┐
-                          │   engines   │   Wry, Serval, Nematic
+                          │   engines   │   Wry, Genet, Nematic
                           └──────┬──────┘
                                  │ produce content
                                  ▼
@@ -174,7 +174,7 @@ Most of the original list has executed:
 3. **Cable migration** — superseded: the bilateral substrate pivoted to p2panda (Cable wire deleted; `P2pandaTransport` live).
 4. **Donor `graphshell/` repo code salvage** — done (engines, `import`, the `register-*` cluster, `murm` misfin/webfinger pulled); repo archived.
 5. **CLAUDE.md global instructions** still reference Graphshell; update when Mark wants the global config to track the rename.
-6. **`servo-wgpu` → `serval` and `webrender-wgpu` → `netrender` renames** — done (`repos/serval`, `repos/netrender`).
+6. **`servo-wgpu` → `genet` and `webrender-wgpu` → `netrender` renames** — done (`repos/genet`, `repos/netrender`).
 
 ## 8. References
 

@@ -38,8 +38,8 @@ quota-exceeded returns a clean error; persistence survives reload after
 
 **Dependencies**: Phases 1-2 shipped (the OPFS impl is at Layer 1).
 
-**Trigger now emerging (2026-06-24).** Serval's Nova-on-Memory64 browser engine
-lane landed (`serval/docs/2026-06-24_nova_memory64_browser_lane_plan.md`): an
+**Trigger now emerging (2026-06-24).** Genet's Nova-on-Memory64 browser engine
+lane landed (`genet/docs/2026-06-24_nova_memory64_browser_lane_plan.md`): an
 in-browser script engine running in a dedicated Web Worker. That is the browser
 runtime a browser-side eidetic consumer needs, and its profile fits Phase 7 hand in
 glove — the engine lane is **single-worker with no SharedArrayBuffer/Atomics/COOP/
@@ -70,7 +70,7 @@ couple of OPFS files as a log+index, or redb / sqlite-wasm as the blob store, bo
 which already run on a sync handle) amortizes it. Start file-per-blob, measure, pack
 if the per-file overhead bites.
 
-**Second consumer.** Serval's web-platform storage for scripted pages
+**Second consumer.** Genet's web-platform storage for scripted pages
 (`localStorage` / `sessionStorage` / IndexedDB / Cache) can ride this same eidetic
 `OpfsStore` in the worker rather than stand up a parallel store — one OPFS-backed
 durable layer, two faces. (DocumentScript's deferred `persistent-storage` profile
@@ -218,17 +218,17 @@ checkout at `Code/.tantivy-probe` — and the design pass §7.5):**
   (Mark pulled the user-value arc directly: derive useful information from
   your own browsing). This plan remains the umbrella for Phase 7, the wasm
   probe, and Phase 9's consume/federation half.
-- 2026-06-24 — **Phase 7 trigger emerging; measure first.** Serval's
+- 2026-06-24 — **Phase 7 trigger emerging; measure first.** Genet's
   Nova-on-Memory64 browser engine lane landed (a script engine in a dedicated
   worker), supplying the browser runtime Phase 7's `eidetic-opfs` consumer needs;
   its single-worker, no-SAB/Atomics/COOP/COEP profile is exactly the profile OPFS
   sync access handles want. Folded into Phase 7: the engine-lane trigger + that
   isolation-free fit, the wasm build as the real gate (eidetic-core+opfs on
   wasm32/64, `web-sys` `FileSystemSyncAccessHandle` behind the unstable-apis flag),
-  the file-per-blob-then-pack layout call, and serval web-platform storage as a
+  the file-per-blob-then-pack layout call, and genet web-platform storage as a
   second consumer of the same `OpfsStore`. Mark is in; next step is the measurement
-  probe (OpfsStore vs FjallStore blob round-trip in a worker). A serval-side draft of
-  this was discarded as mis-homed (durable store is eidetic, not serval).
+  probe (OpfsStore vs FjallStore blob round-trip in a worker). A genet-side draft of
+  this was discarded as mis-homed (durable store is eidetic, not genet).
   **Gates (a) + (b) cleared (measured):** `eidetic-core` compiles clean for
   `wasm32-unknown-unknown` (one target-gated `getrandom` `wasm_js` feature + the cfg
   flag; verified then reverted — no code landed), and `web-sys` binds the OPFS

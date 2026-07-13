@@ -1,0 +1,15 @@
+[package]
+name = "proofs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Typed digests, commitments, blob references, and proof envelopes for Mere domains."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+blake3 = "1.5"
+serde = { version = "1", features = ["derive"] }
+thiserror = "1"

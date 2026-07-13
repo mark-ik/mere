@@ -146,7 +146,7 @@ to a new window (later). The orrery↔tiled projection toggle is **out of scope*
   pane_path, gutter, maximize override) with tests; `Roster` added to the frame
   crate's `PaneContent`; the graph pane renders into its leaf rect (orrery /
   tiled / cards / placements all offset by the leaf, card anchoring generalized to
-  a band rect); a `roster` module (serval-DOM node list, themed from chrome
+  a band rect); a `roster` module (genet-DOM node list, themed from chrome
   tokens) renders into its leaf with row hit-testing. Controls: Ctrl+R summon /
   close roster (right split, graph keeps ~0.66), drag the frame divider to resize,
   Ctrl+M maximize the pane under the cursor, click a roster row to focus its node
@@ -173,7 +173,7 @@ to a new window (later). The orrery↔tiled projection toggle is **out of scope*
   and the roster/apparatus/gloss panes are unchanged. A migration guard drops
   pre-coexistence saved layouts (graph pane saved as Workbench).
 - 2026-06-09: **Roster scroll backlog item landed.** The roster root is now a
-  Serval overflow scroller; wheel input over the roster leaf updates a host-owned
+  Genet overflow scroller; wheel input over the roster leaf updates a host-owned
   pane scroll offset, render clamps it to the live roster content extent, and row
   hit rects are translated/clipped to the scrolled viewport so click-to-focus
   stays aligned on large graphs.

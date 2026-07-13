@@ -13,7 +13,7 @@
 //!
 //! The tree holds [`GraphMemberId`]s; the host resolves each to renderable content. The
 //! algorithms here (split beside, stack into, remove + collapse, divider fractions) are
-//! the geometry-free tiling logic; layout is the host's serval/taffy job.
+//! the geometry-free tiling logic; layout is the host's genet/taffy job.
 
 use forme::GraphMemberId;
 use pelt_core::tile::SplitAxis;

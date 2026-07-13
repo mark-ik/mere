@@ -45,8 +45,8 @@ The refactor this implies:
 | --- | --- | --- | --- |
 | Browser parent / chrome | Parent process owns browser UI, privileged chrome, process management, helper orchestration | `graphshell/shell/session-runtime`, `graphshell/shell/system/control-plane`, capability gates, session manifest, window/runtime host | Partially planned; gpui host canonical today |
 | Tabs / windows / browser frontend | Tabs and browser chrome around web documents | `GraphSessionManifest`, panes, `ViewIntent`, spatial scene nodes, multi-window projections | Session manifest and view-intent seams exist; spatial IR is research |
-| Content process | Web content loaded in content processes, with origin/process isolation | Renderer tenants: `serval.web`, `scrying.web`, `wry.web`, Nematic document engines, panels | Renderer taxonomy clarified; registry not adopted |
-| Layout/document engine | DOM/CSS/layout builds display lists/scenes | Serval for full web; Nematic/Platen/NetRender for protocol-faithful documents; Cartography for graph views | Multiple lanes exist; unified dispatch pending |
+| Content process | Web content loaded in content processes, with origin/process isolation | Renderer tenants: `genet.web`, `scrying.web`, `wry.web`, Nematic document engines, panels | Renderer taxonomy clarified; registry not adopted |
+| Layout/document engine | DOM/CSS/layout builds display lists/scenes | Genet for full web; Nematic/Platen/NetRender for protocol-faithful documents; Cartography for graph views | Multiple lanes exist; unified dispatch pending |
 | Rendering / compositor | Display list -> WebRender scene/frame -> GPU/compositor | NetRender/Vello scene fragments plus external texture composition | NetRender exists; substrate proof pending |
 | GPU/helper processes | GPU process, network/socket process, RDD/utility/helper processes | Future helper/session workers behind `SessionServiceRunner`; optional process split later | Single-process logical daemon for v1 |
 | Navigation/history | URL navigation, Places, session restore, tab history | Graph/session manifests, frame/pane identity, view-intent sidecars, Eidetic durable memory | Manifest/view-intent work is the right spine |
@@ -80,7 +80,7 @@ Mere should avoid pretending every content surface is a web content process. A w
 
 Renderer tenants are the right abstraction:
 
-- `serval.web` — full web, JS/browser-API-heavy content.
+- `genet.web` — full web, JS/browser-API-heavy content.
 - `scrying.web` — system WebView capture/import path.
 - `wry.web` — overlay-only system WebView fallback.
 - `nematic.*` — protocol-faithful smolweb/document engines.
@@ -125,7 +125,7 @@ WebExtension compatibility can be a later bridge for browser-ecosystem affordanc
 
 The spatial IR improves the embeddable story if the registry lands first.
 
-The key shift: "embed a browser" becomes "register a `WebPage` renderer with one of three composition modes." Serval, scrying, Wry, and optional CEF/wgpu-weld are then choices behind the same content-kind boundary, not separate host strategies.
+The key shift: "embed a browser" becomes "register a `WebPage` renderer with one of three composition modes." Genet, scrying, Wry, and optional CEF/wgpu-weld are then choices behind the same content-kind boundary, not separate host strategies.
 
 Do not make substrate-as-host a dependency of this goal. The embeddable browser path can advance under gpui as long as the renderer contract is host-agnostic.
 
@@ -158,7 +158,7 @@ Likely supported in browser/PWA mode:
 
 Likely unavailable or degraded:
 
-- native Serval,
+- native Genet,
 - native texture import,
 - OS WebView capture,
 - raw iroh assumptions,
@@ -187,7 +187,7 @@ Routing rule:
 
 - Gemini/Gopher/Scroll/Markdown/feeds/plaintext -> Nematic Direct Lane.
 - Static/simple HTML -> Nematic HTML Lane when that lane exists.
-- JS/browser-API-heavy web apps -> Serval.
+- JS/browser-API-heavy web apps -> Genet.
 - Emergency/system fallback -> scrying or Wry/CEF, depending on composition needs.
 
 Do not flatten Scroll or other smolweb formats into HTML just to reuse a browser-shaped renderer. Scroll remains source-faithful document truth first, visual projection second.
@@ -219,12 +219,12 @@ mere-kernel / eidetic / relation taxonomy
 
 Rules:
 
-1. `mere-kernel` must not depend on gpui, wgpu, Serval, scrying, Wry, CEF, NetRender, or host crates.
+1. `mere-kernel` must not depend on gpui, wgpu, Genet, scrying, Wry, CEF, NetRender, or host crates.
 2. `inker` owns engine identity and engine/profile routing, not final composition.
 3. `platen`/NetRender are document/layout/render adapters, not graph truth.
 4. Renderer-registry types should live at the host/runtime boundary, or in a tiny host-facing crate with portable IDs/types plus feature-gated GPU handles.
-5. scrying/wgpu-weld/Serval are optional renderer providers, never core dependencies.
-6. Native texture interop should be factored once and shared by scrying, wgpu-weld, Serval, and NetRender.
+5. scrying/wgpu-weld/Genet are optional renderer providers, never core dependencies.
+6. Native texture interop should be factored once and shared by scrying, wgpu-weld, Genet, and NetRender.
 7. Browser/PWA builds get their own async WebGPU/OPFS/WebRTC envelope; do not let native `pollster`/desktop backend assumptions leak into it.
 
 ## 6. Decisions
@@ -242,7 +242,7 @@ Rules:
 1. Should the renderer registry stay under `graphshell/shell/system/registry` or split into a tiny host-facing crate with portable IDs/types? Lean: shell/system boundary, not `mere-kernel`.
 2. What is the first acceptable WebExtension compatibility story: none, read-only adapter, or a privileged compatibility renderer?
 3. How much of `GraphSessionManifest` should be syncable by default versus local-only?
-4. Does CEF/wgpu-weld become a first-class `chromium.web` renderer or remain an experiment until scrying/Serval gaps force it?
+4. Does CEF/wgpu-weld become a first-class `chromium.web` renderer or remain an experiment until scrying/Genet gaps force it?
 5. What diagnostics UI replaces `about:`-style browser internals for Mere?
 
 ## 8. Implied follow-up

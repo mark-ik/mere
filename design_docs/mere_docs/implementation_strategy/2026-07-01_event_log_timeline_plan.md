@@ -71,7 +71,7 @@ is the one place a chosen past state crosses into slice A.
 - **No continuous-drag scrubber substrate exists.** The only slider primitive
   (`list_pane::SliderSpec` / `settings_pane_view::slider_view`) is a segmented N-cell discrete picker (a
   hue-picker shape) with no pointer-drag behavior at all. The only real drag precedent in the whole chrome
-  is `swatch.rs`'s vertex-drag hull editor, which works via host-side pointer hit-testing because serval has
+  is `swatch.rs`'s vertex-drag hull editor, which works via host-side pointer hit-testing because genet has
   no native range input. A continuous-drag scrubber thumb would be first-of-its-kind UI engineering, not a
   reskin.
 - **`node-lineage`'s `SharedNavigationMemory`** (`graph/history.rs`) already solves the exact

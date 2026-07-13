@@ -10,7 +10,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use layout_dom_api::{LayoutDom, LayoutDomMut, Namespace};
-use serval_scripted_dom::{NodeId, ScriptedDom};
+use genet_scripted_dom::{NodeId, ScriptedDom};
 use xilem_serval::{attr_qual, html_qual};
 
 use super::*;

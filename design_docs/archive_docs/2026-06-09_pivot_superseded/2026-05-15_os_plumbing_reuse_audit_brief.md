@@ -55,7 +55,7 @@ The audit's recommendations are *postures*, not commitments. None of them schedu
 
 **Rust ecosystem alternatives.** winit has basic IME support (preedit, commit) on all platforms but is acknowledged-shallow on the candidate-window / cursor-feedback side. `tao` (wry's window crate) is similar. No standalone "IME for Rust" crate exists at the polish gpui has.
 
-**What Mere actually needs.** Composition + commit for text editing in: omnibar, knot editing, text inputs in serval/wry pages (handled by the engine), graph node label edits. Candidate-window positioning is desirable but not load-bearing for v1.
+**What Mere actually needs.** Composition + commit for text editing in: omnibar, knot editing, text inputs in genet/wry pages (handled by the engine), graph node label edits. Candidate-window positioning is desirable but not load-bearing for v1.
 
 **Extraction posture.** *fork-and-trim* on macOS (gpui's implementation is the reference; extraction would essentially be a clean-room rewrite informed by it). *lift-as-crate* possible on Windows TSF if the implementation isn't too entangled. *use-ecosystem* (winit baseline) on Linux as a pragmatic floor; gpui's Linux IME is no better than winit's anyway.
 
@@ -78,7 +78,7 @@ The audit's recommendations are *postures*, not commitments. None of them schedu
 
 **Rust ecosystem alternatives.** AccessKit *is* the ecosystem. There's no other game in town.
 
-**What Mere actually needs.** AccessKit nodes for every chrome element (panels, panes, toolbars, the orrery, edges, nodes). Engines (serval / scrying / wry) maintain their own accessibility trees for their content; the host stitches at the boundary.
+**What Mere actually needs.** AccessKit nodes for every chrome element (panels, panes, toolbars, the orrery, edges, nodes). Engines (genet / scrying / wry) maintain their own accessibility trees for their content; the host stitches at the boundary.
 
 **Extraction posture.** *use-ecosystem* — already done structurally. The substrate-as-host story for accessibility is essentially "drop AccessKit in the same place gpui does," and our `uxtree` work is already moving toward this.
 
@@ -454,7 +454,7 @@ The umbrella organises subsystems independently of substrate adoption. Two of it
 
 ### 8.4 Engine-side OS plumbing inheritance
 
-Engines (serval, scrying, wry) bring their own OS plumbing inside their content surfaces — wry inherits the system WebView's IME/clipboard/etc.; serval implements its own; scrying inherits the system WebView's. Mere's chrome OS plumbing only covers the *chrome*, not the engine surfaces. This is correct (engine surfaces are opaque to Mere's input router, per the [renderer-registry brief §10.4](2026-05-15_renderer_registry_contract_brief.md)) but worth being explicit about: the audit's scope ends at the chrome / engine boundary.
+Engines (genet, scrying, wry) bring their own OS plumbing inside their content surfaces — wry inherits the system WebView's IME/clipboard/etc.; genet implements its own; scrying inherits the system WebView's. Mere's chrome OS plumbing only covers the *chrome*, not the engine surfaces. This is correct (engine surfaces are opaque to Mere's input router, per the [renderer-registry brief §10.4](2026-05-15_renderer_registry_contract_brief.md)) but worth being explicit about: the audit's scope ends at the chrome / engine boundary.
 
 ### 8.5 The "honest broker" question
 

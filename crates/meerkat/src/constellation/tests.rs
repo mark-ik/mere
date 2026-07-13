@@ -216,7 +216,7 @@ fn respawn_replays_the_tab_and_caps_the_storm() {
         100,
         100,
         DocumentStyleSheet::default(),
-        "serval.web",
+        "genet.web",
     ); // gives it a `shown` state
     assert!(c.active.get(&m(1)).unwrap().shown.is_some());
     // A respawn replaces the actor and clears `shown` so the next drive re-Shows.

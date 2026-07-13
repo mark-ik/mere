@@ -10,7 +10,7 @@
 //! enumeration is one-time) rather than rebuilt per frame.
 //!
 //! This is deliberately single-line: the host-drawn surfaces label small chips
-//! (switcher tiles), not paragraphs — full document text rides the serval /
+//! (switcher tiles), not paragraphs — full document text rides the genet /
 //! document-canvas panes instead. (Multi-graph MG4 host text path.)
 
 use netrender::Scene;

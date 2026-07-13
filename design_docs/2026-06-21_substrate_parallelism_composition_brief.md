@@ -29,7 +29,7 @@ over the exact subsystems the parallelism work makes fast.
   per-origin actor   ┌──────────────┴─────────────────────────────────┐
   (native thread /   │  content actor                                   │  P-doc lever (a)
    Web Worker;       │  ┌───────────────────────┐ ┌──────────────────┐ │
-   1 per origin)     │  │ serval engine          │ │ DocumentScript   │ │
+   1 per origin)     │  │ genet engine          │ │ DocumentScript   │ │
                      │  │ cascade/layout/shape   │ │ component(s)     │ │
                      │  │ + legacy JS (Nova/Boa) │ │ capability-      │ │
                      │  │   §10.1 native lane     │ │ confined         │ │
@@ -40,7 +40,7 @@ over the exact subsystems the parallelism work makes fast.
 
 Three things straddle both docs:
 
-- **The armillary actor boundary.** P-doc runs the serval cascade off the UI
+- **The armillary actor boundary.** P-doc runs the genet cascade off the UI
   thread in a content actor and ships back `Send ContentUpdate::Scene`. D-doc P2
   hosts each script component in an armillary actor, "one per origin." Same
   substrate, different occupants.
@@ -92,7 +92,7 @@ split are the same line.
 ## 4. Decision: the script host is the content actor (co-located)
 
 Both docs say "one actor per origin" but mean different occupants. Resolution:
-**one per-origin `!Send` actor owns the serval engine *and* hosts that origin's
+**one per-origin `!Send` actor owns the genet engine *and* hosts that origin's
 DocumentScript components.** The capability boundary sits at the *component* edge,
 not the actor edge. On web, a jco-transpiled component runs inside the same Web
 Worker as the engine. This is the first P2 design call and it is what makes §5

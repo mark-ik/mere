@@ -1,4 +1,4 @@
-# Cross-repo smoke for the path-dep lattice (mere ← serval ← netrender, + netfetcher).
+# Cross-repo smoke for the path-dep lattice (mere ← genet ← netrender, + netfetcher).
 #
 # The lattice has no CI; a `git pull` (or an agent edit) in any sibling can break
 # the others silently. This script is the minimal net: targeted `cargo check`s of
@@ -50,7 +50,7 @@ function Step {
     }
 }
 
-$serval     = Join-Path $repos "serval"
+$genet     = Join-Path $repos "genet"
 $netrender  = Join-Path $repos "netrender"
 $netfetcher = Join-Path $repos "netfetcher"
 $mere       = Join-Path $repos "mere"
@@ -59,17 +59,17 @@ $mere       = Join-Path $repos "mere"
 Step "netrender (netrender + text + lowering)" $netrender @(
     "check", "-p", "netrender", "-p", "netrender_text", "-p", "paint_list_render")
 Step "netfetcher" $netfetcher @("check")
-Step "serval components (layout/render/winit-host/xilem-serval/scripted-dom)" $serval @(
-    "check", "-p", "serval-layout", "-p", "serval-render", "-p", "serval-winit-host",
-    "-p", "xilem-serval", "-p", "serval-scripted-dom")
-Step "serval pelt (default member)" $serval @("check", "-p", "pelt")
+Step "genet components (layout/render/winit-host/xilem-serval/scripted-dom)" $genet @(
+    "check", "-p", "genet-layout", "-p", "genet-render", "-p", "genet-winit-host",
+    "-p", "xilem-serval", "-p", "genet-scripted-dom")
+Step "genet pelt (default member)" $genet @("check", "-p", "pelt")
 Step "mere orrery" $mere @("check", "-p", "orrery")
 Step "mere meerkat (full cross-repo graph)" $mere @("check", "-p", "meerkat")
 
 if ($Tests) {
     # Sequential on purpose (one cargo test invocation at a time).
-    Step "tests: xilem-serval" $serval @("test", "-p", "xilem-serval", "--lib")
-    Step "tests: serval-render" $serval @("test", "-p", "serval-render")
+    Step "tests: xilem-serval" $genet @("test", "-p", "xilem-serval", "--lib")
+    Step "tests: genet-render" $genet @("test", "-p", "genet-render")
     Step "tests: meerkat" $mere @("test", "-p", "meerkat")
 }
 

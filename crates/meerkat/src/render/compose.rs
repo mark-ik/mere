@@ -9,7 +9,7 @@
 //! live `target_view`. [`super::paint`]
 
 use super::*;
-use serval_winit_host::RenderCore;
+use genet_winit_host::RenderCore;
 
 impl crate::WindowCtx<'_> {
     #[allow(clippy::too_many_arguments)]

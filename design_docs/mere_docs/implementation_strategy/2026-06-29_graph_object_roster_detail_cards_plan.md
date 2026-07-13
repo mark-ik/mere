@@ -385,7 +385,7 @@ Verification:
   `roster_view_action_tests.rs` 188, `session_ops/view_intent.rs` 99,
   `render/connections.rs` 89.
 - Headed run launched `C:\t\graphshell-target\debug\meerkat.exe`; window title
-  was `Meerkat — Mere chrome on serval`. Screenshots saved under
+  was `Meerkat — Mere chrome on genet`. Screenshots saved under
   `C:\Users\mark_\Code\screenshots\`:
   `meerkat-roster-tail-2026-06-29.png`,
   `meerkat-roster-open-2026-06-29.png`, and

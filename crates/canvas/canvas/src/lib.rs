@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 //! The canvas as a reusable, **window-agnostic content-root** — the graph's
-//! spatial presentation (build item 1D of the serval-as-host flip; S1 of the
+//! spatial presentation (build item 1D of the genet-as-host flip; S1 of the
 //! modular integration plan).
 //!
 //! [`Canvas`] owns the graph, its [`seiche::Simulation`], the camera, and the
@@ -18,12 +18,12 @@
 //!   [`pointer_up`](Canvas::pointer_up) / [`cursor_moved`](Canvas::cursor_moved) /
 //!   [`wheel`](Canvas::wheel) / [`set_ctrl`](Canvas::set_ctrl) /
 //!   [`reseed`](Canvas::reseed)), each returning whether a redraw is needed. The
-//!   host maps its raw events (winit, serval input, …) onto these; the canvas
+//!   host maps its raw events (winit, genet input, …) onto these; the canvas
 //!   never sees a window.
 //!
 //! The three composited layers (per the §6 plan): the [`crate::underlay`]
 //! scene-paint underlay (edges + demoted off-screen node rects + coupling
-//! overlays) under one camera transform; the on-screen nodes as abs-pos serval
+//! overlays) under one camera transform; the on-screen nodes as abs-pos genet
 //! DOM children (laid out incrementally, moved per-frame by inline transform on
 //! the `RepaintOnly` path); and a screen-space marquee rubber-band when active.
 //!
@@ -44,8 +44,8 @@ pub use seiche::{
 use kernel::geometry::PortablePoint;
 use kernel::graph::{EdgeAssertion, FieldId, Graph, NodeKey, RelationSelector, SemanticSubKind};
 use crate::scene_paint::{Camera, ScenePaintStyle};
-use serval_layout::IncrementalLayout;
-use serval_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
+use genet_layout::IncrementalLayout;
+use genet_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
 
 mod build;
 #[cfg(test)]
@@ -232,7 +232,7 @@ pub struct Canvas {
     /// an off-thread physics actor (P6): swap the snapshot source feeding this
     /// view, and the read sites here are untouched.
     view: LayoutView,
-    /// The pre-materialized node-children pool: a persistent serval DOM with one
+    /// The pre-materialized node-children pool: a persistent genet DOM with one
     /// `.gnode` per node under a `.stage` container (built once, mutated per
     /// frame — never rebuilt structurally).
     node_dom: ScriptedDom,

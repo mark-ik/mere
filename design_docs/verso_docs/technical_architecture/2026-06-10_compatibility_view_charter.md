@@ -14,7 +14,7 @@ banner for the absorption record:
 
 Recto/verso is the front and back of one printed leaf: same leaf, two faces.
 Verso is reborn as exactly that: **the same page, re-presented through another
-engine, state carried across**. The compatibility view (a site serval cannot
+engine, state carried across**. The compatibility view (a site genet cannot
 yet render faithfully, flipped to the system WebView with the user's place and
 session intact) is the first face of it; the general capability is moving live
 content from a primary engine to a compatible secondary one.
@@ -73,7 +73,7 @@ Verso owns what survives a flip and how it is carried.
 3. **Flip choreography** over a tile: freeze the visual snapshot, boot the
    receiver actor, inject, swap the backing texture, park or retire the donor.
    Tile identity (node id, pane, lineage) is stable across the flip, and the
-   flip is recorded as a node-lineage event ("presented via serval, flipped to
+   flip is recorded as a node-lineage event ("presented via genet, flipped to
    scrying") — provenance for free.
 
 ## 4. Invariants
@@ -83,7 +83,7 @@ Verso owns what survives a flip and how it is carried.
   the lossless roots instead: engines are byte-consuming and never own
   networking, so source bytes (netfetcher / eidetic) plus the primary's
   snapshot are always available.
-- **Asymmetric fidelity is the nature of the engines, not policy.** serval and
+- **Asymmetric fidelity is the nature of the engines, not policy.** genet and
   nematic are glass-box (full state export). System WebViews are black-box:
   inject almost everything; extract only partially (URL, title, outerHTML via
   eval, cookies via API; never the JS heap). The primary-to-secondary
@@ -103,12 +103,12 @@ Verso owns what survives a flip and how it is carried.
 
 ## 6. Why this matters ecosystem-wide
 
-The compatibility view is what makes serval's W3C-knockout strategy shippable:
+The compatibility view is what makes genet's W3C-knockout strategy shippable:
 capabilities can be cut aggressively because anything a cut breaks has a
 one-gesture escape hatch with place and session intact. It is also the
 adoption ramp — mere works on the real web from day one through scrying, while
-serval takes over content classes as it matures. The pressure-release valve
-buys serval time to stay minimal.
+genet takes over content classes as it matures. The pressure-release valve
+buys genet time to stay minimal.
 
 ## 7. Sequencing and disposition
 
@@ -118,10 +118,10 @@ Gate order (done-conditions, not dates):
    actor + `ExternalTextureItem` placement (live home: integration plan S6).
 2. **Inker picker**: engines become user-visible; forces the dual-routing
    reconcile.
-3. **Mint verso at the first flip**: one pair (serval → scrying), one carrier,
+3. **Mint verso at the first flip**: one pair (genet → scrying), one carrier,
    flip choreography on one tile. That is the consumer-pull moment.
 
-**V1 done when**: a page rendered by serval flips to scrying with URL, scroll,
+**V1 done when**: a page rendered by genet flips to scrying with URL, scroll,
 and cookies carried, the tile identity and lineage intact, and a flip-back
 that re-fetches with navigation-state carry.
 

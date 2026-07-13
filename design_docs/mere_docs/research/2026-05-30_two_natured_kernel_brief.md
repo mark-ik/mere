@@ -11,7 +11,7 @@ which lands a third kernel primitive and the `aether` / `gyre` naming this brief
 adopts (see §5).
 **Scope**: The graph-kernel's data-model shape. Whether the content/world
 relations and the experience/workspace relations want one engine or two, what the
-prior art says about doing that cleanly, and how serval-as-host (and the Nova
+prior art says about doing that cleanly, and how genet-as-host (and the Nova
 engine already inside it) bears on the answer.
 **Related**:
 
@@ -25,7 +25,7 @@ engine already inside it) bears on the answer.
 - [composition spine](../technical_architecture/2026-05-21_mere_composition_spine.md)
   — "graph truth, projected into surfaces"; the authority asymmetry this brief
   leans on (§14.1 pin/save write-back).
-- [serval-as-host eval](../technical_architecture/2026-05-29_serval_as_host_evaluation.md)
+- [genet-as-host eval](../technical_architecture/2026-05-29_genet_as_host_evaluation.md)
   — §6 orrery-as-element; the forcing function for naming the experience core.
 - [cartography-aether seam](../technical_architecture/2026-05-29_cartography_aether_layout_seam.md)
   — the rapier substrate (`gyre`, the crate formerly named `aether`) as a
@@ -58,23 +58,23 @@ halves want different stores.
 
 ## 2. The reframe: Nova is already in the stack
 
-Before researching Nova as a hypothetical, the code settled it. serval already
+Before researching Nova as a hypothetical, the code settled it. genet already
 embeds Nova as its primary native script engine.
-[`serval/Cargo.toml`](../../../../serval/Cargo.toml) patches `nova_vm` to a
-minimally-forked `mark-ik/nova` (`serval-embedder` branch carrying an
+[`genet/Cargo.toml`](../../../../genet/Cargo.toml) patches `nova_vm` to a
+minimally-forked `mark-ik/nova` (`genet-embedder` branch carrying an
 `EmbedderObject` native-data patch);
-[`script-engine-nova`](../../../../serval/components/script-engine-nova/Cargo.toml)
+[`script-engine-nova`](../../../../genet/components/script-engine-nova/Cargo.toml)
 is "the PRIMARY backend, NATIVE-ONLY" (Nova's `Value` is usize-sized, so it is
 64-bit-bound and gated off wasm32), and
-[`script-engine-boa`](../../../../serval/components/script-engine-boa/Cargo.toml)
+[`script-engine-boa`](../../../../genet/components/script-engine-boa/Cargo.toml)
 is the pure-Rust wasm32 backend and conformance oracle.
 
-So serval-as-host brings a data-oriented, vector-backed, handle-indexed Rust
+So genet-as-host brings a data-oriented, vector-backed, handle-indexed Rust
 runtime into Mere's host process as a matter of fact. The Nova question for the
 kernel is therefore not "should we adopt it" but "what does the data-oriented
 runtime already in our stack teach the kernel's design." The `EmbedderObject` hook
-the serval fork fills was an empty `todo!()` upstream as of mid-2025, so the
-fork's purpose is exactly the embedder-native-data path serval needs.
+the genet fork fills was an empty `todo!()` upstream as of mid-2025, so the
+fork's purpose is exactly the embedder-native-data path genet needs.
 
 ## 3. The two-natured thesis: validated, with one correction
 
@@ -103,7 +103,7 @@ authoritative, experience derived.**
 Mere already encodes that asymmetry:
 
 - The spine: "graph truth, projected into composable surfaces."
-- [serval-as-host §6](../technical_architecture/2026-05-29_serval_as_host_evaluation.md):
+- [genet-as-host §6](../technical_architecture/2026-05-29_genet_as_host_evaluation.md):
   "petgraph stays the truth; the DOM children and the scene are a projection of it."
 - [spine §14.1](../technical_architecture/2026-05-21_mere_composition_spine.md):
   arrangement facts promote into durable graph Arrangement-relations "only on an
@@ -132,8 +132,8 @@ components (position, velocity, collider, exclusion radius, spring, boundary) ke
 by `NodeKey`, stepped by a system each frame. The experience nature of the kernel
 is not a green-field idea; half of it is shipping as the rapier integrator.
 
-serval-as-host sharpens the other half.
-[§6](../technical_architecture/2026-05-29_serval_as_host_evaluation.md) describes
+genet-as-host sharpens the other half.
+[§6](../technical_architecture/2026-05-29_genet_as_host_evaluation.md) describes
 the orrery as per-node state that is textbook entity-component: world position
 (the integrator), cull/visibility (`cull_aabb`), LOD and materialization state (a
 real DOM subtree versus a paint glyph), focus halo, external-texture binding.
@@ -226,7 +226,7 @@ per-type vectors rather than pointers, with a borrow-checker-enforced rooting GC
 (no JIT, QuickJS-class speed by the author's own target), about two-thirds
 test262, with RegExp and other conformance gaps, and effectively one developer on
 grant funding; the author says "if you need an embeddable JS engine in Rust today,
-go use Boa," which is exactly why serval pairs Boa (oracle/wasm) with Nova
+go use Boa," which is exactly why genet pairs Boa (oracle/wasm) with Nova
 (native primary).
 
 Bearing on the *kernel* question, three bounded things:
@@ -246,7 +246,7 @@ Bearing on the *kernel* question, three bounded things:
 The caveat, so it is not oversold: Nova's data-orientation is internal to the JS
 heap. It is not an exposed app-data-model or a reusable ECS crate. The relevance
 is inspiration, transferable patterns, and cultural congruence, not free
-infrastructure; serval-as-host will not hand the kernel an ECS store.
+infrastructure; genet-as-host will not hand the kernel an ECS store.
 `xilem_serval` touches the kernel only indirectly: by making the orrery's
 experiential state (physics-positioned DOM, materialization, visibility)
 first-class, it is the forcing function that makes modeling that state as a
@@ -266,10 +266,10 @@ field-system sequencing.
   rather than hand-writing another mirror set. (The u32 codec's own justification,
   "`graph-canvas` cannot depend on `kernel`," is itself dissolving, since the
   field-system doc retires `graph-canvas`.)
-- **Then (gated on serval-as-host):** name and consolidate the experiential state
+- **Then (gated on genet-as-host):** name and consolidate the experiential state
   (position, cull/visibility, LOD, materialization, focus) into an explicit
   entity-component store of *derived* state, `gyre` as its simulator, Rerun's
-  entity-component / latest-at as the shape reference. serval-as-host §6 is the
+  entity-component / latest-at as the shape reference. genet-as-host §6 is the
   trigger, because it makes materialization and visibility first-class. This is the
   derived-side counterpart to the field-system's step 3 (fields as truth); the two
   are complementary, content-truth and experience-derived.
@@ -311,8 +311,8 @@ Internal: the Related docs above, plus `edge_taxonomy.rs` for the live taxonomy.
 
 - **2026-05-30** — Brief created from the kernel-design discussion (direction #3)
   plus two research fan-outs (Nova architecture/maturity; ECS / relational /
-  two-store prior art), grounded against `edge_taxonomy.rs`, the serval
-  `Cargo.toml` script-engine wiring, the serval-as-host eval, the cartography-aether
+  two-store prior art), grounded against `edge_taxonomy.rs`, the genet
+  `Cargo.toml` script-engine wiring, the genet-as-host eval, the cartography-aether
   seam, and the composition spine. Reconciled the same day with the
   [field-system extraction](../technical_architecture/2026-05-30_field_system_extraction.md):
   adopted the `aether` (field algebra) / `gyre` (rapier integrator) naming, added

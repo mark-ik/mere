@@ -42,11 +42,11 @@ In scope now (the model is stated over these):
   ([net_media_plan](../implementation_strategy/2026-05-26_net_media_plan.md), no crate); in scope
   as a *target*, needs the net-media crate built. AV1 / WebRTC decode internals can lag.
 
-Deferred to the later **Serval / WPT track** (not this spine): full-web HTML via serval (the
+Deferred to the later **Genet / WPT track** (not this spine): full-web HTML via genet (the
 flat-scene lane), scrying / compat WebView (the 549-LOC Windows-only self-rendering tile), the WPT
 conformance grind, page-supplied CSS fidelity. Full-web rides the
 [compatibility-view charter](../../verso_docs/technical_architecture/2026-06-10_compatibility_view_charter.md);
-this spine treats serval / scrying only as the embedded-frame compositing case.
+this spine treats genet / scrying only as the embedded-frame compositing case.
 
 ## The pipeline, stage by stage
 
@@ -64,7 +64,7 @@ routes a fetched body into a lane:
 
 - **Lane A** (document-canvas retained packet, host-queryable `link_at`): smolweb, djot,
   local-media, the rendered side of the supported formats.
-- **Lane B** (serval flat scene): full-web HTML. *Later track.*
+- **Lane B** (genet flat scene): full-web HTML. *Later track.*
 - **Lane C** (self-rendering external-texture): scrying / compat. *Later track.*
 
 The definitely-support formats all live in Lane A plus the linked-data ingest harvest. The contract
@@ -81,7 +81,7 @@ representation code paths today (in-scene gnode, demoted underlay rect, host DOM
 single contract; unifying them is the represent layer's job.
 **Owner: [node-representation + arrangement plan](../implementation_strategy/2026-06-18_node_representation_arrangement_plan.md)**,
 the Representation set and the LOD machine. The DOM-*materialization mechanism* (how a card or tile
-becomes a real serval subtree under the camera) is owned by unified-document-host.
+becomes a real genet subtree under the camera) is owned by unified-document-host.
 
 ### 4. Arrange (the orrery's strongest seam)
 
@@ -136,10 +136,10 @@ The drift was five seams each claimed by two or three plans. The cut:
 | The Representation set + LOD machine | node-representation | unified-document-host references it, owns only DOM-materialization |
 | Scene-wide arrangement | node-representation | field-regions owns localized/scripted; arrangements registry is the substrate |
 | Localized / scripted arrangement | field-regions | node-representation owns scene-wide |
-| The external-texture-input bridge | window-composition | distinct from the custom-layout `<orrery>` element (unified-document-host); two serval asks, not one |
+| The external-texture-input bridge | window-composition | distinct from the custom-layout `<orrery>` element (unified-document-host); two genet asks, not one |
 | The two-hit-test (DOM vs gyre) boundary | unified-document-host Phase 2 | the gyre `hit_test` primitive exists; this is a boundary-doc + host-seam |
 
-## Serval asks the model pulls (prioritized)
+## Genet asks the model pulls (prioritized)
 
 Revised 2026-06-19 against the
 [unified-document-host](../implementation_strategy/2026-06-17_unified_document_host_plan.md) Phase 2
@@ -154,7 +154,7 @@ external-texture-input bridge.
    engine. Revisit only if host-driven transform-setting becomes a perf or correctness problem.
    (unified-document-host Phase 2, cond 1.)
 2. **Transform-aware hit-test**: done in the engine. `IncrementalLayout::hit_test` →
-   `ServalLaneView::walk_for_hit` (`serval-layout/serval_lane.rs:398-417`) inverse-maps the point
+   `GenetLaneView::walk_for_hit` (`genet-layout/genet_lane.rs:398-417`) inverse-maps the point
    through each node's `transform` and honours `pointer-events: none`. The host routes an
    orrery press through the shell hit-test first, a card hit dispatching in the document and a miss
    falling to `gyre` (`input.rs` `point_over_orrery_card`).
@@ -162,10 +162,10 @@ external-texture-input bridge.
    bridge; `<external-texture>` is output-only today. Unblocks the content-pane input spine and the
    textured-body node form.
 4. **Image-decode in the chrome / shell `IncrementalLayout` render path**: open. The session path
-   passes an empty `ImagePlane` (`serval-layout/incremental.rs:738`, "Empty image planes, matching
+   passes an empty `ImagePlane` (`genet-layout/incremental.rs:738`, "Empty image planes, matching
    the scripted layout path"), so favicon `<img>` data-URIs paint nowhere on this lane, even though
-   serval-layout decodes `data:` URIs inline when handed a populated plane.
-5. **Key-dispatch unification through serval `dispatch_key`**: partly landed. Tab / Shift+Tab
+   genet-layout decodes `data:` URIs inline when handed a populated plane.
+5. **Key-dispatch unification through genet `dispatch_key`**: partly landed. Tab / Shift+Tab
    traversal and Enter / Space activation over the focusable set now ride `dispatch_key` (Phase 1
    cond 2); the residual is the omnibar's Enter, still hand-intercepted.
 
@@ -183,10 +183,10 @@ external-texture-input bridge.
    `size` on `OrreryGnode`; resize handles out of `content_rects`; size-by-degree opt-in).
 4. **The window-composition focus / active-session decoupling → the one input spine** over the
    consolidated document.
-5. **Then the cross-repo serval asks** for Phase 2 (the custom-layout `<orrery>` element +
+5. **Then the cross-repo genet asks** for Phase 2 (the custom-layout `<orrery>` element +
    transform-aware hit-test); node-representation P1/P2 (pluggable forms, textured-body via the
    external-texture-input bridge) and the net-media crate ride here. The later WPT / full-web track
-   stays parked behind the Serval charter until this definitely-support model is solid.
+   stays parked behind the Genet charter until this definitely-support model is solid.
 
 ## Capability stack (where the product pieces ride)
 

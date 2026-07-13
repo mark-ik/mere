@@ -234,7 +234,7 @@ impl Shell {
         });
         let (fetch_handle, fetch_rx) = fetch::spawn_fetcher(fetch_wake);
         // The find-in-page worker lays out the focused page off the UI thread (a full
-        // serval layout costs ~1-2s, far too slow per keystroke) and ships back match
+        // genet layout costs ~1-2s, far too slow per keystroke) and ships back match
         // rects, woken through the same proxy.
         let find_proxy = proxy.clone();
         let find_wake: armillary::Wake = Arc::new(move || {
@@ -251,7 +251,7 @@ impl Shell {
         });
         let (infer_handle, infer_rx) = crate::infer_host::spawn_inference(infer_wake);
         // The content actor renders the focused card off the UI thread (it owns the
-        // serval cascade + nematic engines + a per-tile subresource cache on its own
+        // genet cascade + nematic engines + a per-tile subresource cache on its own
         // thread) and ships scenes / wanted subresources / harvested linked data
         // back through the same wake.
         let content_proxy = proxy.clone();

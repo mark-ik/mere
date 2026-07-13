@@ -355,8 +355,8 @@ Search-result rows carry a pin toggle: `PinSpec` + `ContextItem.pin` / `ContextI
 — fixed to skip the close when the click was a `PinToMenu` (so several can be pinned in a row). views.rs
 renders an inline **+ / ✓** toggle (CSS `.context-pin` / `.context-pin-on`). Verified live
 (`scry-shots/pin-1..2`): searching "comms" shows the result with a + toggle; clicking it appends
-`"comms"` to `menu_actions` in `ui.json`. (A concurrent serval bump broke the workspace mid-build; once
-the serval-side fix landed it compiled clean.)
+`"comms"` to `menu_actions` in `ui.json`. (A concurrent genet bump broke the workspace mid-build; once
+the genet-side fix landed it compiled clean.)
 
 ### S3 — frequency auto-suggest. BUILT + verified (2026-06-23)
 

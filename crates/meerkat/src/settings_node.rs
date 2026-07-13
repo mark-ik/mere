@@ -206,19 +206,19 @@ impl WindowCtx<'_> {
     /// gets just Auto + a note. (Settings lane P3.)
     fn node_engine_items(&self, member: GraphMemberId) -> Vec<PaneItem> {
         let mut pickable: Vec<(&str, &str)> = vec![
-            (inker::routing::ENGINE_SERVAL_WEB, "Serval (web)"),
+            (inker::routing::ENGINE_GENET_WEB, "Genet (web)"),
             (inker::routing::ENGINE_SCRYING_WEB, "System WebView"),
         ];
-        // The scripted serval rung is pickable only in the `scripted` build. (Ladder.)
+        // The scripted genet rung is pickable only in the `scripted` build. (Ladder.)
         #[cfg(feature = "scripted")]
         pickable.push((
-            inker::routing::ENGINE_SERVAL_SCRIPTED,
-            "Serval (scripted, Boa)",
+            inker::routing::ENGINE_GENET_SCRIPTED,
+            "Genet (scripted, Boa)",
         ));
         #[cfg(feature = "scripted-nova")]
         pickable.push((
-            inker::routing::ENGINE_SERVAL_SCRIPTED_NOVA,
-            "Serval (scripted, Nova)",
+            inker::routing::ENGINE_GENET_SCRIPTED_NOVA,
+            "Genet (scripted, Nova)",
         ));
         let pin = self
             .shared

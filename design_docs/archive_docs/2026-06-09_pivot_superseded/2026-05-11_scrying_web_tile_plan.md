@@ -86,7 +86,7 @@ pub trait Engine {
 ```
 
 Pros: one trait, one registry, one dispatch path.
-Cons: every existing engine impl (12 nematic engines + serval +
+Cons: every existing engine impl (12 nematic engines + genet +
 graphshell internal) has to handle the enum even though they only
 ever return `Document`. The trait surface grows for downstream
 consumers (host needs to match on the enum at every call site).
@@ -238,7 +238,7 @@ minimal.
 
 ## 5. UDF binding
 
-Per the engine-peers brief: `serval.web` and `scrying.web` bind the
+Per the engine-peers brief: `genet.web` and `scrying.web` bind the
 same persona-scoped UDF. Implementation:
 
 ```rust
@@ -304,7 +304,7 @@ scrying impl plumbs it to the right producer config.
 
 - gpui needs to composite an external wgpu texture into its render
   tree. gpui (Glass-HQ fork) likely already has external-texture
-  support since serval-shaped tiles will need the same thing.
+  support since genet-shaped tiles will need the same thing.
   Verify in the host's existing code; reuse if so.
 - Per-frame: poll the producer for a new frame; if present, hand
   the texture to gpui for the surface tile's rect; pass through the
@@ -371,7 +371,7 @@ trait; the parallel-trait choice is more code but lower-risk.
 - **`wry.web` (overlay-based)**: separate engine, separate impl.
   Lives or doesn't on its own merits. Doesn't share code with
   `scrying.web`.
-- **Auto-fallback heuristic** (serval failure → propose
+- **Auto-fallback heuristic** (genet failure → propose
   `scrying.web`): the engine-peers brief flagged it as a follow-up.
   Lands after manual pin works.
 - **Cookie/UDF persona resolution**: this plan assumes a working

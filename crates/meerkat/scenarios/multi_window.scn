@@ -1,4 +1,4 @@
-# multi-window smoke: one ServalMultiRunner projected into two windows.
+# multi-window smoke: one GenetMultiRunner projected into two windows.
 # Self-driven (no OS synthetic input): the app injects each registry command and
 # self-captures its own chrome, so there is no focus race across the two windows.
 #

@@ -54,9 +54,9 @@ edit loop without the path-override warning storm.
 
 **Status**: Done 2026-06-29. Mere's ignored `.cargo/config.toml` now patches:
 
-- `serval`: `layout-dom-api`, `pelt-core`, `pelt-desktop`,
-  `script-engine-boa`, `serval-extract`, `serval-layout`,
-  `serval-scripted-dom`, `serval-static-dom`, `serval-winit-host`,
+- `genet`: `layout-dom-api`, `pelt-core`, `pelt-desktop`,
+  `script-engine-boa`, `genet-extract`, `genet-layout`,
+  `genet-scripted-dom`, `genet-static-dom`, `genet-winit-host`,
   `xilem-serval`, and `xilem_core`.
 - `netrender`: `netrender`, `netrender_device`, `netrender_text`,
   `paint_list_api`, and `paint_list_render`.
@@ -139,7 +139,7 @@ Verification:
 - `cargo metadata --no-deps --format-version 1` with `CARGO_TARGET_DIR` removed
   reports `target_directory: C:/t/meerkat-target`.
 - `cargo tree -p meerkat -i xilem_core --edges normal` resolves `xilem_core`
-  from `C:\Users\mark_\Code\repos\serval\components\xilem-core`.
+  from `C:\Users\mark_\Code\repos\genet\components\xilem-core`.
 - `powershell -ExecutionPolicy Bypass -File scripts\check-meerkat.ps1` passed.
 - `powershell -ExecutionPolicy Bypass -File scripts\test-roster.ps1` passed:
   graphlet card tests, active-tab test, fanned relation-cell test, and hidden

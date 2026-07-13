@@ -76,7 +76,7 @@ Nothing here is speculative plumbing; it is what G0-G5 produced:
 
 ## 5. Open questions
 
-1. **merecat extraction scope.** What leaves mere with the browser (serval host,
+1. **merecat extraction scope.** What leaves mere with the browser (genet host,
    rendering, page runtime, the web-runtime node facets: favicon, viewer routing,
    session restore, lifecycle) versus what stays as the orrery (the container graph,
    RDF, lineage, vault and persona indexing). The capability-trait work already drew

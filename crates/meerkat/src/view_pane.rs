@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! A self-contained, view-driven pane: a [`ServalAppRunner`] over its own DOM, a
+//! A self-contained, view-driven pane: a [`GenetAppRunner`] over its own DOM, a
 //! cached cascade+layout [`PaneSession`], and the resolved stylesheet. This is the
 //! pelt `pelt-desktop::chrome::Chrome` bundle, generalized over the pane's state /
 //! view / logic so every list-shaped pane (roster, apparatus, the utility panes)
@@ -19,22 +19,22 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use netrender::Scene;
-use serval_layout::{FragmentPlane, ScrollOffsets, ServalPaintList};
-use serval_scripted_dom::{NodeId, ScriptedDom};
-use xilem_serval::{PointerClick, ServalAppRunner, ServalCtx, ServalElement, View};
+use genet_layout::{FragmentPlane, ScrollOffsets, GenetPaintList};
+use genet_scripted_dom::{NodeId, ScriptedDom};
+use xilem_serval::{PointerClick, GenetAppRunner, GenetCtx, GenetElement, View};
 
 use crate::pane_session::PaneSession;
 
 /// The runner + cached layout + sheet bundle. `State` is the pane's view state,
 /// `Logic` its `view` function, `V` the erased view it returns (a
-/// `Box<dyn AnyView<State, (), ServalCtx, ServalElement>>` in practice).
+/// `Box<dyn AnyView<State, (), GenetCtx, GenetElement>>` in practice).
 pub struct ViewPane<State, Logic, V>
 where
     State: 'static,
     Logic: FnMut(&State) -> V,
-    V: View<State, (), ServalCtx, Element = ServalElement>,
+    V: View<State, (), GenetCtx, Element = GenetElement>,
 {
-    runner: ServalAppRunner<State, Logic, V>,
+    runner: GenetAppRunner<State, Logic, V>,
     session: Option<PaneSession>,
     sheets: Vec<String>,
 }
@@ -43,13 +43,13 @@ impl<State, Logic, V> ViewPane<State, Logic, V>
 where
     State: 'static,
     Logic: FnMut(&State) -> V,
-    V: View<State, (), ServalCtx, Element = ServalElement>,
+    V: View<State, (), GenetCtx, Element = GenetElement>,
 {
     /// Build the pane over a fresh DOM, driven by `logic` from `state`.
     pub fn new(logic: Logic, state: State) -> Self {
         let dom: Rc<RefCell<ScriptedDom>> = Rc::new(RefCell::new(ScriptedDom::new()));
         Self {
-            runner: ServalAppRunner::new(dom, logic, state),
+            runner: GenetAppRunner::new(dom, logic, state),
             session: None,
             sheets: Vec::new(),
         }
@@ -78,7 +78,7 @@ where
         PaneSession::scene(&mut self.session, &dom, &sheet, false, w, h, None, scroll)
     }
 
-    /// The pane's engine-agnostic [`ServalPaintList`] at `w`×`h` (pre-lowering),
+    /// The pane's engine-agnostic [`GenetPaintList`] at `w`×`h` (pre-lowering),
     /// for composing this pane as an overlay-slot satellite into *another*
     /// document instead of rasterizing it standalone. The overlay-roots host
     /// seam: a satellite `ViewPane` produces its paint list here, the host ships
@@ -93,7 +93,7 @@ where
         w: u32,
         h: u32,
         scroll: &ScrollOffsets<NodeId>,
-    ) -> ServalPaintList {
+    ) -> GenetPaintList {
         let sheet: Vec<&str> = self.sheets.iter().map(String::as_str).collect();
         let dom = self.runner.dom();
         PaneSession::paint_list(&mut self.session, &dom, &sheet, false, w, h, scroll)

@@ -2,7 +2,7 @@
 //!
 //! The native side of the `document-core` WIT world. It owns a Wasmtime engine +
 //! a per-instance `Store<ScriptHost>`, backs the `log` + `document-host.inspect`
-//! imports over a **live serval `ScriptedDom`** (via [`dom_view`]), and drives the
+//! imports over a **live genet `ScriptedDom`** (via [`dom_view`]), and drives the
 //! per-turn `handle-event` contract (§10.2) with atomic, revision-checked `apply`
 //! (§10.3).
 //!
@@ -11,12 +11,12 @@
 //!   blocking (plan §11.7-7). No async import yet, so turns never suspend.
 //! - The document is the real HTML DOM (P2.0's in-memory `Doc` is retired): each
 //!   element is a view-node named by tag, each text node a `#text` view-node. Node
-//!   identity is serval's `NodeId` round-tripped through the WIT `node-id` (`u64`);
+//!   identity is genet's `NodeId` round-tripped through the WIT `node-id` (`u64`);
 //!   `is_live` guards every mutation. The revision counter is host-side.
 
 use std::path::Path;
 
-/// Project / mutate a live serval `ScriptedDom` behind the WIT imports.
+/// Project / mutate a live genet `ScriptedDom` behind the WIT imports.
 pub mod dom_view;
 
 /// The `register-mod-loader` `WasmModRuntime` bridge (P2.4).
@@ -27,7 +27,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
-use serval_scripted_dom::ScriptedDom;
+use genet_scripted_dom::ScriptedDom;
 use wasmtime::component::{Component, HasSelf, Linker, ResourceTable};
 use wasmtime::{Config, Engine, Store, StoreLimits, StoreLimitsBuilder};
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};

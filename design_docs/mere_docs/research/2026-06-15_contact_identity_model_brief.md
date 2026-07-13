@@ -20,7 +20,7 @@ frames decisions for a later phase.
   open point "the identity model (one persona, many protocol handles), settle in
   P5"; decision 3 (misfin receive = run a server).
 - [daemon split research brief](2026-05-14_daemon_split_research_brief.md) — the
-  listener-process question (gpui-era; needs a serval/xilem re-read).
+  listener-process question (gpui-era; needs a genet/xilem re-read).
 - [capability gate catalogue brief](2026-05-14_capability_gate_catalogue_brief.md) —
   contacts are persona-scoped, so they sit under the gate chain.
 - [lexicon brief](../../2026-05-04_lexicon_brief.md) — *kith / kin* contact tiers.
@@ -169,7 +169,7 @@ reads a `MailboxStore`, not a socket, so the listener splits into a headless
 Three configurable shapes: in-process listener, separate daemon, or a rented host.
 The general daemon-vs-clients process question belongs to the
 [daemon split research brief](2026-05-14_daemon_split_research_brief.md) (gpui-era; it
-needs a serval/xilem re-read). **murm is the no-daemon escape hatch**: p2p over iroh,
+needs a genet/xilem re-read). **murm is the no-daemon escape hatch**: p2p over iroh,
 key-rooted, NAT-friendly, no always-on listener. Mere can offer "needs a server" and
 "needs no server" side by side because both sit behind one comms pane.
 

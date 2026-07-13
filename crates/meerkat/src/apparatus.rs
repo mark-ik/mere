@@ -441,7 +441,7 @@ mod tests {
             ApparatusTableStat::unavailable(
                 "Document scene",
                 "scene",
-                "awaiting first scene on current lane (serval.web)",
+                "awaiting first scene on current lane (genet.web)",
             ),
         ];
         let items = apparatus_items(
@@ -459,7 +459,7 @@ mod tests {
         assert!(items.iter().any(|i| {
             i.class == "app-row-muted"
                 && i.text
-                    == "Document scene (scene): awaiting first scene on current lane (serval.web)"
+                    == "Document scene (scene): awaiting first scene on current lane (genet.web)"
         }));
     }
 }

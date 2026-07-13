@@ -91,7 +91,7 @@ mod tests {
     fn global_disable_takes_effect() {
         let act = EngineActivation::new(["scrying.web".to_string()]);
         assert!(!act.is_enabled("scrying.web"));
-        assert!(act.is_enabled("serval.web"));
+        assert!(act.is_enabled("genet.web"));
     }
 
     #[test]

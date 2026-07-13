@@ -8,7 +8,7 @@ use super::*;
 
 /// Engine-painted find-highlight fills (overlay-roots P2), mirroring the retired
 /// host overlay's amber tints: every match translucent, the active match stronger.
-const FIND_HIGHLIGHT: serval_layout::HighlightStyle = serval_layout::HighlightStyle {
+const FIND_HIGHLIGHT: genet_layout::HighlightStyle = genet_layout::HighlightStyle {
     color: paint_list_api::ColorF {
         r: 1.0,
         g: 0.82,
@@ -16,7 +16,7 @@ const FIND_HIGHLIGHT: serval_layout::HighlightStyle = serval_layout::HighlightSt
         a: 0.38,
     },
 };
-const FIND_ACTIVE_HIGHLIGHT: serval_layout::HighlightStyle = serval_layout::HighlightStyle {
+const FIND_ACTIVE_HIGHLIGHT: genet_layout::HighlightStyle = genet_layout::HighlightStyle {
     color: paint_list_api::ColorF {
         r: 1.0,
         g: 0.55,
@@ -25,7 +25,7 @@ const FIND_ACTIVE_HIGHLIGHT: serval_layout::HighlightStyle = serval_layout::High
     },
 };
 
-/// Build the scripted-rung document for a scripted Serval node: parse the already-
+/// Build the scripted-rung document for a scripted Genet node: parse the already-
 /// fetched HTML body and run its scripts. With a `fetcher`, external `<script src>` is
 /// fetched through it (`from_body`, no document re-fetch); without one, inline scripts
 /// only (`parse`). `None` for any other engine or a non-`Ready` state. (Render ladder.)
@@ -51,7 +51,7 @@ pub(crate) fn build_scripted(
         });
     let result =
         match engine {
-            inker::routing::ENGINE_SERVAL_SCRIPTED => match fetcher {
+            inker::routing::ENGINE_GENET_SCRIPTED => match fetcher {
                 Some(fetcher) => {
                     ScriptedDocument::<BoaEngine>::from_body(&fetched.body, fetcher, url, cookies)
                         .map(HostScriptedDocument::Boa)
@@ -61,7 +61,7 @@ pub(crate) fn build_scripted(
                     .map(HostScriptedDocument::Boa),
             },
             #[cfg(feature = "scripted-nova")]
-            inker::routing::ENGINE_SERVAL_SCRIPTED_NOVA => match fetcher {
+            inker::routing::ENGINE_GENET_SCRIPTED_NOVA => match fetcher {
                 Some(fetcher) => {
                     ScriptedDocument::<NovaEngine>::from_body(&fetched.body, fetcher, url, cookies)
                         .map(HostScriptedDocument::Nova)
@@ -259,8 +259,8 @@ impl ContentRuntime {
                             &fetched.body,
                         );
                         #[cfg(feature = "scripted")]
-                        let is_scripted_rung = inker::routing::serval_rung(&engine)
-                            == Some(inker::routing::ServalRung::Scripted);
+                        let is_scripted_rung = inker::routing::genet_rung(&engine)
+                            == Some(inker::routing::GenetRung::Scripted);
                         #[cfg(not(feature = "scripted"))]
                         let is_scripted_rung = false;
                         if !is_scripted_rung {
@@ -367,7 +367,7 @@ impl ContentRuntime {
                     #[cfg(feature = "smolweb")]
                     if content.session.as_mut().is_some_and(|s| {
                         s.as_any()
-                            .downcast_mut::<serval_documents::SmolwebDocumentSession>()
+                            .downcast_mut::<genet_documents::SmolwebDocumentSession>()
                             .is_some()
                     }) {
                         content.session = None;

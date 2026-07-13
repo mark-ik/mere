@@ -1,16 +1,16 @@
-//! P2.1: the serval-coupled adapter. Projects a live `ScriptedDom` into
+//! P2.1: the genet-coupled adapter. Projects a live `ScriptedDom` into
 //! document-core view-nodes (`inspect`) and applies id-targeted mutations back via
 //! `LayoutDomMut` (`apply`) — the §11.3 wiring.
 //!
 //! The document-core view **is** the HTML DOM tree: each element becomes a
 //! view-node named by its tag, each text node a `#text` view-node carrying the
-//! text. Node identity is serval's `NodeId` round-tripped through the WIT
+//! text. Node identity is genet's `NodeId` round-tripped through the WIT
 //! `node-id` (`u64`) via `opaque_id`/`from_raw`; `is_live` validates an id before
 //! any mutation (the unknown-node guard), so no host id-map is needed. The
-//! revision is host-side (serval's DOM tracks none).
+//! revision is host-side (genet's DOM tracks none).
 
 use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, NodeKind, QualName};
-use serval_scripted_dom::{NodeId, ScriptedDom};
+use genet_scripted_dom::{NodeId, ScriptedDom};
 
 use crate::content_hash;
 use crate::mere::script::document::{

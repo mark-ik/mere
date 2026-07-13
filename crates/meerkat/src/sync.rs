@@ -38,9 +38,10 @@ use moothold::tessera::{
     ChainRoot, CommitmentId, Ledger, Scope, TesseraConfig, TesseraEvent, TesseraExt,
     TesseraFileStore, TesseraStoreError, to_operation, verify,
 };
+use murm_replication::{SyncStatus, SyncedSpace};
 use p2panda_core::Topic;
 use p2panda_net::LogSync;
-use transport::{P2pandaTransport, SyncStatus, SyncedSpace, sync_overlay_topic};
+use transport::{P2pandaTransport, sync_overlay_topic};
 
 use meerkat::SyncIndicator;
 

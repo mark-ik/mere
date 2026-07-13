@@ -6,8 +6,8 @@ the scripted-rung cookie wiring has also landed. Remaining native-session work i
 the JS-cookie persistence trigger, durable `localStorage` host backing, flip-back
 SESSION import, live multi-persona jar selection, and web-privacy refinements
 (`Partitioned` / top-level-site storage keys).
-**Origin**: surfaced building the verso serval→scrying flip
-([flipcarrier plan](../../verso_docs/implementation_strategy/2026-06-23_serval_scrying_flipcarrier_plan.md)).
+**Origin**: surfaced building the verso genet→scrying flip
+([flipcarrier plan](../../verso_docs/implementation_strategy/2026-06-23_genet_scrying_flipcarrier_plan.md)).
 Carrying a login across a flip forced the question: *what is Mere's own session
 state, where does it live, and how much of its shape is standardized?*
 
@@ -33,7 +33,7 @@ already uses, make it persistent + durable + partitioned, and let every consumer
 | Where | What it is | Used by meerkat today |
 | --- | --- | --- |
 | **netfetcher** `cookie_jar.rs` | `InMemoryCookieJar` + the `CookieStore` trait. Full RFC 6265bis: domain/path match, `Secure`, `Max-Age` over `Expires`, `SameSite` gating, longest-path serialization. Built on the [`cookie`](https://crates.io/crates/cookie) crate. **Pluggable** (`Box<dyn CookieStore>`). | **Yes** — the http(s) WHATWG-Fetch lane (`fetch::do_fetch`). |
-| **serval** `components/shared/net` (Servo net) | Full Servo jar: `cookies_for_url`/`set_cookie_for_url`, `CookieSource` (the HTTP-vs-script HttpOnly gate), `CookieStoreId` partitioning. Same `cookie` crate. | No — meerkat chose netfetcher over the heavy Servo resource thread. |
+| **genet** `components/shared/net` (Servo net) | Full Servo jar: `cookies_for_url`/`set_cookie_for_url`, `CookieSource` (the HTTP-vs-script HttpOnly gate), `CookieStoreId` partitioning. Same `cookie` crate. | No — meerkat chose netfetcher over the heavy Servo resource thread. |
 | **system WebView** (scrying) | The native OS cookie store. Black box: `set_cookie` in, `request_all_cookies` out. | Only at a flip boundary. |
 
 All three model the cookie record with the **same `cookie` crate**, so the record
@@ -55,7 +55,7 @@ mutability and are `Send + Sync`, so one shared context (or one shared
 
 ### Storage (the non-cookie half)
 
-serval's script runtime has an in-memory `localStorage` (one origin per runtime, no
+genet's script runtime has an in-memory `localStorage` (one origin per runtime, no
 persistence; `script-runtime-api/platform.rs`). `sessionStorage`, IndexedDB, and any
 durability or partitioning are unbuilt. This is the genuinely-greenfield part of the
 model; cookies are mostly already there.
@@ -64,10 +64,10 @@ model; cookies are mostly already there.
 
 | Concern | Standard | State in Mere |
 | --- | --- | --- |
-| Cookie record + domain/path/secure/expiry match | RFC 6265bis (the `cookie` crate) | netfetcher: done; serval-net: done |
+| Cookie record + domain/path/secure/expiry match | RFC 6265bis (the `cookie` crate) | netfetcher: done; genet-net: done |
 | Script-vs-HTTP access (HttpOnly), SameSite gating | RFC 6265bis + `CookieSource`/`SameSiteContext` | netfetcher: stored + gated; HttpOnly access gate not yet wired to a script reader |
-| `localStorage` / `sessionStorage` | WHATWG HTML §Web Storage | serval: in-memory localStorage only |
-| Partitioning, quota, persistence, buckets | WHATWG Storage Standard (storage key = origin + top-level site) | serval's `CookieStoreId` is the partition key; not wired in netfetcher |
+| `localStorage` / `sessionStorage` | WHATWG HTML §Web Storage | genet: in-memory localStorage only |
+| Partitioning, quota, persistence, buckets | WHATWG Storage Standard (storage key = origin + top-level site) | genet's `CookieStoreId` is the partition key; not wired in netfetcher |
 | Async cookie JS API | Cookie Store API (W3C WICG) | not yet |
 | Partitioned third-party access | Storage Access API (W3C) | not yet |
 
@@ -79,14 +79,14 @@ The portable `verso-api::Cookie` must mirror this record (it currently omits
 One **Mere session substrate**, standard-shaped, consumed by every engine:
 
 - **Owner**: netfetcher's `CookieStore` seam (the lane meerkat fetches through).
-  Keep serval's Servo-net jar as a partitioning *reference*, not a routing target
+  Keep genet's Servo-net jar as a partitioning *reference*, not a routing target
   (its weight is why meerkat chose netfetcher).
 - **Persistence**: an eidetic-backed `CookieStore` (and, later, storage-area store)
   behind the existing trait. The seam is already pluggable; this is a drop-in impl.
 - **Partitioning**: per the Storage Standard, key by origin + top-level site (and
-  per-persona for Mere's multi-persona model). serval's `CookieStoreId` is the model.
-- **Script integration**: serval's `document.cookie` / Cookie Store API and
-  `localStorage`/`sessionStorage` read the **same** substrate (serval's
+  per-persona for Mere's multi-persona model). genet's `CookieStoreId` is the model.
+- **Script integration**: genet's `document.cookie` / Cookie Store API and
+  `localStorage`/`sessionStorage` read the **same** substrate (genet's
   `FetchHandler` is already host-injected; add a cookie/storage seam beside it), so a
   login made in JS and one made over HTTP share state.
 - **Flip**: verso reads the substrate at the flip boundary to fill the SESSION layer
@@ -101,7 +101,7 @@ One **Mere session substrate**, standard-shaped, consumed by every engine:
    flip. v1 is a single unpartitioned process jar.
 2. **Flip SESSION layer** *(this session)* — the trigger reads `cookies_for(url)`
    from the shared jar to fill `PortableViewState.cookies`; the flip sets them on the
-   WebView before navigating. A logged-in serval page flips to a logged-in WebView.
+   WebView before navigating. A logged-in genet page flips to a logged-in WebView.
 3. **Standard `verso-api::Cookie`** *(this session)* — add `same_site`, `expires`,
    `partitioned`, so the interchange is lossless.
 4. **Durability + persona partitioning** *(done 2026-06-23)* — the shared jar is
@@ -119,11 +119,11 @@ One **Mere session substrate**, standard-shaped, consumed by every engine:
    record from `cookies_for` for jars that don't override it. This is also the
    serialization form thread 4's durable store will persist.
 6. **Script ↔ substrate + storage areas**
-   - **6a. `document.cookie` ↔ the jar** — *engine seam done 2026-06-23* (serval
+   - **6a. `document.cookie` ↔ the jar** — *engine seam done 2026-06-23* (genet
      `3cf326a`): a `CookieProvider` host seam (mirroring `ComputedStyleHandler` /
      `FetchHandler`) plus a `document.cookie` accessor; `get_cookies` returns the
      document's script-visible cookies, `set_cookie` records one assignment. Tested on
-     boa + nova. **Meerkat wiring landed later:** the `serval.scripted` rung builds a
+     boa + nova. **Meerkat wiring landed later:** the `genet.scripted` rung builds a
      `ScriptedDocument<BoaEngine>` from the already-fetched body and installs a
      `JarCookieProvider` over `fetch::session_jar()`, hiding `HttpOnly` cookies from
      script and marking the jar dirty on writes. This is not the default static HTML
@@ -132,7 +132,7 @@ One **Mere session substrate**, standard-shaped, consumed by every engine:
      host event-loop drain or another regular host tick so a JS-only cookie change
      survives restart without waiting for a later page fetch. Also add a source-aware
      `set_cookie` refinement so script cannot set `HttpOnly`.
-   - **6b. Durable storage areas** — *engine seam done 2026-06-23* (serval `3ed0ed0`):
+   - **6b. Durable storage areas** — *engine seam done 2026-06-23* (genet `3ed0ed0`):
      a `StorageProvider` host seam (mirroring `CookieProvider`); when set, the
      `localStorage` `__storage*` sinks route through it (the in-memory
      `HostState.storage` stays the default for tests / WPT). The host backs it durably
@@ -148,7 +148,7 @@ One **Mere session substrate**, standard-shaped, consumed by every engine:
 ### 6a — meerkat `CookieProvider` wiring
 
 **Update 2026-07-04:** this prerequisite is stale. Meerkat now has a scripted rung
-(`serval.scripted`) that instantiates `ScriptedDocument<BoaEngine>` over the fetched
+(`genet.scripted`) that instantiates `ScriptedDocument<BoaEngine>` over the fetched
 body. It is still opt-in by engine route, not the default static HTML lane, but
 `document.cookie` is invoked in a live Meerkat path.
 
@@ -159,7 +159,7 @@ What landed:
   (script must not see HttpOnly cookies), rendered `n=v; n=v`. `set_cookie` =
   `jar.set_cookie(url, header)` + arm `COOKIES_DIRTY`.
 - The content actor passes it into `ScriptedDocument::<BoaEngine>::from_body(...)`;
-  serval installs it before scripts run, so load-time scripts see the session jar.
+  genet installs it before scripts run, so load-time scripts see the session jar.
 - Regression coverage: `scripted_rung_document_cookie_reaches_the_jar`.
 
 Remaining:
@@ -174,12 +174,12 @@ Remaining:
 
 ### 7 — flip-back SESSION
 
-Gated on flip-back (scry→serval) existing (flipcarrier §5, unbuilt). Once it does, the
+Gated on flip-back (scry→genet) existing (flipcarrier §5, unbuilt). Once it does, the
 bounded work is: `verso-scry`'s `FlipBack::extract` reads the WebView's cookies
 (scrying's `request_all_cookies`) into `BackState.cookies` (already a field), and
-serval's `FlipReceiver` applies them to `session_jar()` (`jar.set_cookie` per cookie)
+genet's `FlipReceiver` applies them to `session_jar()` (`jar.set_cookie` per cookie)
 before re-fetching. Net: a login made *inside* the compat-view WebView comes home to
-serval. No new session-store surface; it rides the jar + the existing `BackState`.
+genet. No new session-store surface; it rides the jar + the existing `BackState`.
 
 ### Multi-persona
 
@@ -229,26 +229,26 @@ jar to follow the active persona:
   name)>`; a persisted-shadow diff writes only the cookies that changed and deletes
   blobs for cookies that are gone, so one `Set-Cookie` writes one small blob.
   `load_cookies` enumerates the persona prefix and seeds the shadow. (mere `6bbe6f4`.)
-- **2026-06-23 (thread 6a engine seam)**: serval gained `document.cookie` via a
-  `CookieProvider` host seam mirroring `ComputedStyleHandler` (serval `3cf326a`; native
+- **2026-06-23 (thread 6a engine seam)**: genet gained `document.cookie` via a
+  `CookieProvider` host seam mirroring `ComputedStyleHandler` (genet `3cf326a`; native
   `__cookieGet`/`__cookieSet` sinks + a `Document.prototype.cookie` accessor; tested on
   boa + nova). **2026-07-04 note:** the original scoping sentence here said Meerkat
-  had no live Serval-JS consumer yet. That was true on 2026-06-23 but is stale now;
+  had no live Genet-JS consumer yet. That was true on 2026-06-23 but is stale now;
   the scripted-rung Meerkat consumer landed later, as recorded below. Also scoped:
   flip-back SESSION (thread 7, awaits flip-back) and multi-persona (awaits v1). **The
   immediate-mere-payoff session work — threads 1-5 + the incremental refinement — is
   done: HTTP sessions persist, survive restart, and cross the flip.**
-- **2026-06-23 (thread 6b engine seam)**: serval gained a `StorageProvider` host seam
-  for durable `localStorage` (serval `3ed0ed0`; the `__storage*` sinks route through a
+- **2026-06-23 (thread 6b engine seam)**: genet gained a `StorageProvider` host seam
+  for durable `localStorage` (genet `3ed0ed0`; the `__storage*` sinks route through a
   host provider when set, in-memory default otherwise; WHATWG `Storage` shape,
   host-owned persistence + order; tested on boa + nova). Correct-ahead engine work: the
   meerkat host impl (an eidetic-backed, `(persona, origin)`-partitioned provider) shares
-  6a's page-JS gating. With this, serval's cookie + localStorage stores are both
+  6a's page-JS gating. With this, genet's cookie + localStorage stores are both
   host-backable durably; `sessionStorage` / IndexedDB / the Cookie Store API remain
   separate standards items.
 - **2026-07-04 (reconciliation)**: the 6a Meerkat gating note had gone stale. The
-  scripted rung now runs Serval's JS runtime (`ScriptedDocument<BoaEngine>`) for
-  `serval.scripted` nodes, installs `JarCookieProvider` over the shared session jar,
+  scripted rung now runs Genet's JS runtime (`ScriptedDocument<BoaEngine>`) for
+  `genet.scripted` nodes, installs `JarCookieProvider` over the shared session jar,
   filters `HttpOnly` on reads, and marks cookies dirty on writes. Verified against
   `content/actor.rs`, `content/mod.rs`, `fetch/cookies.rs`, and the
   `scripted_rung_document_cookie_reaches_the_jar` test. Remaining is narrower than

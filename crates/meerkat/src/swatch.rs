@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 //! The **swatch**: a portable, chrome-understood representation of a graph element (gloss
-//! design §2a). It renders as **DOM** — serval lays it out, themes it, hit-tests it — not an
+//! design §2a). It renders as **DOM** — genet lays it out, themes it, hit-tests it — not an
 //! opaque `netrender::Scene`, so it can embed anywhere a graph element wants representing (a
 //! node facet pane, a menu, a djot script block, an orrery card).
 //!
@@ -12,7 +12,7 @@
 //! It renders the sprite (optional, a tracing underlay) + the hull polygon + a dot per vertex,
 //! and is a full **body designer**: the host hit-tests the swatch through the chrome session
 //! (the object-card press-gate pattern), walks up to the `node-swatch` container, reads its
-//! `data-subject`, and drives editing from the cursor (serval has no native DOM pointer-drag):
+//! `data-subject`, and drives editing from the cursor (genet has no native DOM pointer-drag):
 //! drag a vertex to move it, click a hull edge to add a corner, right-click a vertex to remove
 //! it. A node with no sprite can seed a default hull and shape it from scratch. The view is
 //! now **host-generic** over the embedder state `S` (swatch-primitive plan P1): the facet pane
@@ -21,7 +21,7 @@
 //! carries no state-bound view callbacks. (Node body & face — the shape editor; swatch template #1.)
 
 use mere::kernel::graph::{EdgeFamily, RelationKind};
-use xilem_serval::{AnyView, ServalCtx, ServalElement, el};
+use xilem_serval::{AnyView, GenetCtx, GenetElement, el};
 
 /// What a node swatch shows: the sprite face (a PNG data-URI) and its collider hull (the
 /// opaque-region convex polygon in face-normalized coords, `[-0.5, 0.5]`). A node without a
@@ -54,7 +54,7 @@ pub(crate) fn swatch_edge_px() -> f32 {
 /// the embedder state `S`. The swatch has no state-bound view callbacks (interaction routes through
 /// the host hit-test on `data-subject`), so it is generic over any `S: 'static` — the facet pane
 /// and the focus-card slot mount the same view. (Swatch primitive — P1 host-generic lift.)
-pub(crate) type SwatchView<S> = Box<dyn AnyView<S, (), ServalCtx, ServalElement>>;
+pub(crate) type SwatchView<S> = Box<dyn AnyView<S, (), GenetCtx, GenetElement>>;
 
 /// Build the node swatch as DOM: the sprite image, its collider hull as a translucent
 /// clip-path polygon over it, and a dot at each hull vertex. Read-only (Stage A). The hull
@@ -284,7 +284,7 @@ fn fan_edge(
 }
 
 /// Render a connections swatch as host-generic DOM: the selected nodes as dots, the edges among them
-/// as transform-free dotted lines (serval's CSS subset has no `transform`, so a single rotated bar is
+/// as transform-free dotted lines (genet's CSS subset has no `transform`, so a single rotated bar is
 /// unavailable; the dotted line is position-only), family-coloured. Read-only for P2; the projection
 /// strip (P3) and per-cell hit-test (P4) ride the same `data-element` tags. (Swatch primitive — P2.)
 pub(crate) fn connections_swatch_view<S: 'static>(spec: &ConnectionsSpec) -> SwatchView<S> {

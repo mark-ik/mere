@@ -305,7 +305,7 @@ an ad-hoc list: the format *is* the editing + export path.
   metrics" — settles Open Decision #4), and the Scene -> DOM migration for minimap/recent ("heck
   yeah" — settles Open Decision #5 by spinning it into its own plan, since it was already scoped
   out of this one). A Plan-agent design review validated the Scene->DOM approach specifically
-  (hybrid DOM-nodes-plus-embedded-Scene-edges, confirmed against the actual serval primitive set —
+  (hybrid DOM-nodes-plus-embedded-Scene-edges, confirmed against the actual genet primitive set —
   no SVG-like tag exists in `xilem-serval`, so embedded Scene is the only viable option for edges,
   not just the chosen one) before it was committed to the new doc. P1a/P2-caps/Decision-4 land as
   updates to this doc; the Scene->DOM work is

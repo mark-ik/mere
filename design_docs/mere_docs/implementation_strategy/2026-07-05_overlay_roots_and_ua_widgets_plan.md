@@ -45,7 +45,7 @@ ranges, no per-match DOM at all. Floating chrome anchored to content nodes is
 **CSS Anchor Positioning** plus the **Popover API** and the **top layer** —
 exactly the machinery browsers now use for their own UI. Isolation of an
 overlay subtree from page styles is a **UA shadow root**. So the engine work
-is: serval implements top layer, anchor positioning, custom highlights, and UA
+is: genet implements top layer, anchor positioning, custom highlights, and UA
 shadow roots, with xilem_serval as their first and most demanding consumer.
 Only the annotation *data* layer goes beyond rendering specs, and the **W3C
 Web Annotation Data Model** exists there for interchange. Two dividends: the
@@ -79,7 +79,7 @@ subset, not bespoke machinery.
   same contract inverted: a subtree the *view* owns inside a document someone
   else owns. The diffing-tolerance questions were already answered once.
 - **The transport already shipped.** `DomMutation` batches stream and splice:
-  serval's `BoxTree::graft_subtree` keeps a retained layout emittable across
+  genet's `BoxTree::graft_subtree` keeps a retained layout emittable across
   structural splices (shell paint plan, 2026-07-03), and the capture/replay
   plan defines the portable mutation vocabulary. A host-side runner can diff a
   view tree against a local mirror and ship the resulting mutation batch over
@@ -93,17 +93,17 @@ subset, not bespoke machinery.
   paint order. The host-side rect math these features use today re-implements
   exactly this, per feature, badly.
 - **Style machinery for isolation exists upstream.** Stylo implements shadow
-  trees; serval's cascade rides stylo. The satellite root needs a cascade
+  trees; genet's cascade rides stylo. The satellite root needs a cascade
   boundary (own sheet set, page cascade does not cross) — a scoping problem
   stylo has vocabulary for, not greenfield.
 - **The controls are real.** `text_field` (+ styled/typed variants, caret and
-  IME through the same serval caret primitives the omnibar uses), `select`,
+  IME through the same genet caret primitives the omnibar uses), `select`,
   `slider`, `checkbox`/`toggle`, `radio`, `button` — the exact set `<input>`,
   `<select>`, `<details>` need.
 
 ## Architecture
 
-**Engine (serval): satellite roots.** A document can carry N satellite
+**Engine (genet): satellite roots.** A document can carry N satellite
 subtrees, each attached to a host node with a slot kind:
 
 - **Overlay slot** = top layer + Popover API semantics + CSS Anchor
@@ -149,7 +149,7 @@ overlay slot on the focused input, state host-side, invisible to the page.
 
 ## Phases (done-conditions, not dates)
 
-- **P0 — engine spec-subset probe.** serval-layout grows the minimal slice of
+- **P0 — engine spec-subset probe.** genet-layout grows the minimal slice of
   each spec: a top-layer entry anchored per anchor-positioning to a host
   element, carrying a UA-shadow-isolated subtree; plus a registered custom
   highlight painted over a range. Done when: headless tests prove (a) the
@@ -183,7 +183,7 @@ overlay slot on the focused input, state host-side, invisible to the page.
   Done when: a real page's select opens, picks, commits, and the popup
   overlays page content correctly inside a scrolled band.
 - **P5 — `<input type=text>` / `<textarea>`.** The hard one last: `text_field`
-  in the shadow slot, caret/IME through the serval caret primitives the
+  in the shadow slot, caret/IME through the genet caret primitives the
   omnibar already exercises. Done when: typing, selection, IME composition,
   and paste work in a fetched form at parity with the omnibar.
 - **P6 — the feature wave.** Link previews, annotation pins (statement-bucket
@@ -198,7 +198,7 @@ overlay slot on the focused input, state host-side, invisible to the page.
   DocumentScript mirror seam (`handlers.rs:86`) is the enforcement point to
   test explicitly, not assume.
 - **Cascade scoping**: satellites need their own stylist scope; verify stylo's
-  shadow-tree machinery reaches serval's cascade path before P0 commits to a
+  shadow-tree machinery reaches genet's cascade path before P0 commits to a
   cheaper hack.
 - **Anchor lifetime**: anchor removed → satellite unmounts (event to host);
   P1's churn test owns this.
@@ -211,7 +211,7 @@ overlay slot on the focused input, state host-side, invisible to the page.
   contract.
 - **Scope discipline**: P3-P5 rebuild *rendering + interaction* of controls,
   not the full HTML forms model (form submission, validation, autofocus are
-  separate, later, and mostly page-semantics work in serval proper). Use the
+  separate, later, and mostly page-semantics work in genet proper). Use the
   ElementInternals surface as the boundary marker: what it names
   (submission value, validity, states, default ARIA) is the eventual
   obligation; P3-P5 explicitly record which of those each widget slice does
@@ -233,7 +233,7 @@ overlay slot on the focused input, state host-side, invisible to the page.
   the capability shape rides the mod permissions model later.
 - **OQ-4**: the smolweb/document lanes — same slot machinery over
   `DocumentRenderPacket`, or chrome-DOM overlays as today? Defer until the
-  serval-lane version proves the model.
+  genet-lane version proves the model.
 
 ## Cross-refs
 
@@ -243,7 +243,7 @@ overlay slot on the focused input, state host-side, invisible to the page.
   — ownership map; overlay roots slot into the Render/Interact stages.
 - Gnode pool `host_pool` seam + splice-safety test (archived plan,
   2026-07-04 checkpoint) — the inverted dual of the remote runner.
-- serval `docs/2026-07-02_dom_mutation_capture_replay_plan.md` +
+- genet `docs/2026-07-02_dom_mutation_capture_replay_plan.md` +
   `BoxTree::graft_subtree` — the mutation transport + splice substrate.
 - [xilem_serval_control_adoption_plan](2026-06-25_xilem_serval_control_adoption_plan.md)
   — the chrome-side control adoption this makes bidirectional.
@@ -251,7 +251,7 @@ overlay slot on the focused input, state host-side, invisible to the page.
   — the rect pipeline P2 retires.
 - [petgraph_rdf_plan](2026-06-18_petgraph_rdf_plan.md) statement buckets — the
   annotation-pin backend.
-- Serval W3C knockout strategy (project memory) — P3-P5 is the first
+- Genet W3C knockout strategy (project memory) — P3-P5 is the first
   knockout-then-rebuild rebuild, done in the cheap layer; P0's spec subsets
   (top layer, anchor positioning, custom highlights, UA shadow) are rebuilds
   funded by chrome needs that later serve page authors verbatim.
@@ -277,7 +277,7 @@ overlay slot on the focused input, state host-side, invisible to the page.
   for the one non-rendering layer. Every P0 test now cites the spec section
   it subsets.
 - **2026-07-05 — P0 first slice landed: the highlight slot (engine side).**
-  serval-layout gained `highlights.rs` (css-highlight-api-1 subset: named
+  genet-layout gained `highlights.rs` (css-highlight-api-1 subset: named
   registry, static byte ranges, engine-derived geometry; the v0 deviations —
   translucent over-ink painting, name-order priority, per-node ranges — are
   documented in the module header as deliberate cuts) and
@@ -290,7 +290,7 @@ overlay slot on the focused input, state host-side, invisible to the page.
   content emission unchanged, clear restores parity), and geometry
   **re-derives across relayout** (a wrapped narrow layout moves the
   highlighted word's fill down with no re-registration). 242/242
-  serval-layout lib tests green (serval `components/serval-layout`, one
+  genet-layout lib tests green (genet `components/genet-layout`, one
   commit). Next: P2 wires the find worker's matches onto `set_highlight` in
   the content actor and deletes the render.rs match-rect compositing — or the
   P0 top-layer/anchor probe, whichever lane is quiet.
@@ -311,7 +311,7 @@ overlay slot on the focused input, state host-side, invisible to the page.
 - **2026-07-05 — P2 landed (engine-painted find-in-page), count-path verified live;
   visual paint pending a content-render confirm.** Full chain wired: `ContentLayout`
   gained the `HighlightRegistry` + `set_highlight`/`clear_highlight`/`find_ranges`/
-  `range_rects`, appended band-shifted in `emit_band` (serval, one commit). The content
+  `range_rects`, appended band-shifted in `emit_band` (genet, one commit). The content
   actor's `Find` arm now registers the matches as the `"find"` engine highlight (first as
   `"find-active"`) on its retained layout and re-emits; a new `FindActive { index }`
   command (threaded through the content-contract wire enums both directions) re-registers
@@ -326,14 +326,14 @@ overlay slot on the focused input, state host-side, invisible to the page.
   confirmed**: the engine-painted fills on screen — the loaded page body wasn't
   compositing visibly in the capture (a content-card display matter, unrelated to this
   change), so the in-band highlight paint needs one more headed pass once a page renders
-  visibly. **Closed headlessly 2026-07-05**: a `ContentLayout::emit_band` test proves both `"needle"` matches paint a fill in-band with zero DOM/no re-search, the fills band-shift with the content (a lower band moves them up by the band delta), and clearing restores the plain band's command count — a more durable proof than a screenshot (245/245 serval-layout lib tests green, committed). The on-screen confirm remains a nice-to-have once the content card renders visibly, but the engine paint itself is now test-covered. The render.rs rect-compositing was **not deleted**, only demoted to the
+  visibly. **Closed headlessly 2026-07-05**: a `ContentLayout::emit_band` test proves both `"needle"` matches paint a fill in-band with zero DOM/no re-search, the fills band-shift with the content (a lower band moves them up by the band delta), and clearing restores the plain band's command count — a more durable proof than a screenshot (245/245 genet-layout lib tests green, committed). The on-screen confirm remains a nice-to-have once the content card renders visibly, but the engine paint itself is now test-covered. The render.rs rect-compositing was **not deleted**, only demoted to the
   fallback — deleting it waits on that visual confirm + the snapshot-lane decision (a
   snapshot card has no live layout to register highlights on, so the fallback stays for
   it). Concurrent-workstream note: 3 unrelated bin tests were red at commit time
-  (graph_delta_log, wallet_pairing, a serval keyed.rs panic), none in touched files.
+  (graph_delta_log, wallet_pairing, a genet keyed.rs panic), none in touched files.
 - **2026-07-05 — P0 overlay-slot probe landed (engine side; all 4 done-conditions
-  headless-proven).** `serval-layout/overlays.rs` (top-layer + anchor-positioning +
-  UA-shadow subset), `ServalPaintList::push_sublist(origin, sub)` (compose a satellite
+  headless-proven).** `genet-layout/overlays.rs` (top-layer + anchor-positioning +
+  UA-shadow subset), `GenetPaintList::push_sublist(origin, sub)` (compose a satellite
   paint list under one transform to the anchor — fill-only in the probe; a text/image
   satellite adds the font/image side-table merge here later), and an `OverlayRegistry`
   on `ContentLayout` with `set_overlay(name, anchor, content)` / `clear_overlay`,
@@ -367,8 +367,8 @@ overlay slot on the focused input, state host-side, invisible to the page.
   index, so the satellite's commands stay valid verbatim and only unseen resources are
   appended (dedup by key). A P1 test composes a text satellite (`count: 7` chip) into a
   page that has its own text and asserts both faces survive and every composed glyph
-  run's font resolves in the merged table (249/249 lib green, serval `d20c06d`). The
-  runner half is **already in hand**: `xilem-serval::ServalAppRunner` builds a view into
+  run's font resolves in the merged table (249/249 lib green, genet `d20c06d`). The
+  runner half is **already in hand**: `xilem-serval::GenetAppRunner` builds a view into
   a `ScriptedDom` and `update(f)` re-diffs it against new state emitting `DomMutation`s —
   a live host runner over a satellite DOM. So the remaining P1 work is integration, not
   new architecture: a host `WindowView` satellite runner whose emitted `ScriptedDom`
@@ -382,22 +382,22 @@ overlay slot on the focused input, state host-side, invisible to the page.
   end.** The full pipeline now runs host app state → engine-composited overlay on a
   live page. Pieces:
   - **Actor seam** (`meerkat/src/content`): `ContentCommand::SetOverlay { name, anchor,
-    content: ServalPaintList, .. }` / `ClearOverlay`, native-desktop-only
+    content: GenetPaintList, .. }` / `ClearOverlay`, native-desktop-only
     (`#[cfg(not(target_arch = "wasm32"))]`). The actor arms `ensure_html_layout`, resolve
     the `OverlayAnchor` against the live document (`Root` → `document_element()`),
     register the satellite via `ContentLayout::set_overlay`, bust the scene fingerprint,
     and re-emit. Repaint-only by construction (the satellite is a pre-emitted list
     composited after content), so the page never reflows. The wasm content-worker
     command-transfer half gates to `wasm32` (overlays don't cross the serialized worker
-    wire in v1 — a `ServalPaintList` would need the Scene transfer's font/image dedup),
+    wire in v1 — a `GenetPaintList` would need the Scene transfer's font/image dedup),
     so the overlay commands need no `ContentCommandMessage` variant.
   - **Constellation seam**: `request_set_overlay` / `request_clear_overlay`, the
     overlay-slot counterpart of `request_find` (the host command API; live caller is P6).
   - **Host satellite runner**: `ViewPane::paint_list` (+ `PaneSession::paint_list`) —
     the reusable runner already used by every list pane now also emits the pre-lowering
-    `ServalPaintList` an overlay wants (it rode `IncrementalLayout::emit_paint_list`,
+    `GenetPaintList` an overlay wants (it rode `IncrementalLayout::emit_paint_list`,
     which also hit-tests, so the same primitive serves render + input). No new runner
-    architecture: `ServalAppRunner` → `ScriptedDom` → `IncrementalLayout` → paint list,
+    architecture: `GenetAppRunner` → `ScriptedDom` → `IncrementalLayout` → paint list,
     exactly the chrome path.
   - **Proof** (`meerkat/src/overlay_probe.rs`, the P1 done-condition end to end): a
     `CounterChip` satellite `ViewPane` over app state mounts as an overlay on a live page
@@ -413,6 +413,6 @@ overlay slot on the focused input, state host-side, invisible to the page.
     (P6)**: a link preview or annotation pin supplies a real view + anchor, rather than
     wiring throwaway demo scaffolding for the toy chip now. The geometric survival half
     (anchor tracking across scroll bands + an anchor-moving mutation) is already the
-    serval-layout P0 test's territory; the meerkat tests prove the actor integration and
+    genet-layout P0 test's territory; the meerkat tests prove the actor integration and
     the host round-trip. `OverlayAnchor` is deliberately a role-named enum (v1: `Root`)
     so P6 adds `FindMatch` / `LinkAt` / a node handle without changing the command shape.

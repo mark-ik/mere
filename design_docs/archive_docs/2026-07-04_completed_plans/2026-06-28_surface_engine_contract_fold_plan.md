@@ -180,12 +180,12 @@ registry path. Steps 4-5 remove the bypass entirely.
   Fresh binary, live session: `>compat_view` on an example.com node spawned the WebView2
   surface through the registry (capabilities line logged: `scrying.webview2`,
   `transport=ImportedTexture`, Dx12SharedTexture + fence delegation), the off-window tile
-  composited **non-blank** beside a serval tile, and liveness was proven dynamically: a
+  composited **non-blank** beside a genet tile, and liveness was proven dynamically: a
   select-all forwarded through the CDP input path re-rendered the page (selection
   highlight visible in capture `C:\t\smoke8-wiki.png`), `WebSurfaceEvent` polling observed
   the accelerator (`meerkat.surface.event` diagnostics), and **zero stall-restarts** were
   logged across the session. Two crashes found and fixed on the way (the in-flight
   partition classifier + batch diagnostics walked read accessors on dead batch NodeIds;
-  both now gate on the engine's never-panicking `is_live`: `serval_render.rs`
+  both now gate on the engine's never-panicking `is_live`: `genet_render.rs`
   `node_under_root`, `pane_session.rs` `describe_node_brief`). Plan complete; the
   remaining polish is the `SecondaryForward` rename if wanted.

@@ -28,7 +28,7 @@ host-positioned DOM.
 
 The remaining **surface migration** does **not** mean "every host-composited surface becomes a
 document external-texture element". Surfaces split **by nature** (the four-way layering owned by the
-[native-surface-compositing plan](../../archive_docs/2026-07-03_completed_plans/2026-06-19_native_surface_compositing_plan.md)): serval-rendered
+[native-surface-compositing plan](../../archive_docs/2026-07-03_completed_plans/2026-06-19_native_surface_compositing_plan.md)): genet-rendered
 content → a real DOM subtree; genuinely-external content (scrying = a system WebView2 visual) → a
 **native composition visual below the chrome**, *not* a document element; dormant surfaces → a
 snapshot texture; the orrery gyre **scene** → a texture is correct. The earlier blanket recipe is
@@ -75,10 +75,10 @@ Sibling/converging docs:
 - [cartography_aether_layout_seam](../technical_architecture/2026-05-29_cartography_aether_layout_seam.md)
   — `gyre` simulates a layout; the two-hit-test split.
 - The orrery-as-element design originates in the archived
-  `serval_as_host_evaluation` §6 (in
+  `genet_as_host_evaluation` §6 (in
   [`archive_docs/2026-06-09_completed_plans/`](../../archive_docs/2026-06-09_completed_plans/)).
-- Engine-side work belongs in serval's own
-  `docs/2026-05-27_serval_as_host_xilem_serval_plan.md`; this plan is the
+- Engine-side work belongs in genet's own
+  `docs/2026-05-27_genet_as_host_xilem_serval_plan.md`; this plan is the
   meerkat-side consumer view and the engine asks it generates.
 
 ---
@@ -106,9 +106,9 @@ This plan is framed around three goals, not just "one engine renders chrome + co
 ## The thesis: a bigger role for `xilem_serval`
 
 `xilem_serval` is a third `xilem_core` backend (beside `xilem`→Masonry and
-`xilem_web`→browser DOM) that diffs a Xilem view tree into serval's
-`ScriptedDom`. It does state → view → diff → DOM mutation; serval does the
-cascade, layout, paint, hit-test, a11y. The serval-as-host bet (architecture 3
+`xilem_web`→browser DOM) that diffs a Xilem view tree into genet's
+`ScriptedDom`. It does state → view → diff → DOM mutation; genet does the
+cascade, layout, paint, hit-test, a11y. The genet-as-host bet (architecture 3
 in the engine plan) is that one engine renders chrome and content alike, so the
 shell gets one layout model, one hit-test, one focus ring, and one a11y tree.
 
@@ -148,7 +148,7 @@ turns on one product question that is the architect's to make:
 The two_natured brief points at a hybrid that maps onto Path A: the node **container** rides the
 document spine (a11y / tab / focus / automation), node **positions** are experience-derived
 (`gyre`), and the node's **look** is a free sprite the node-representation plan owns (the card is
-one sprite, never the node's truth). Lean Path A, sequenced after Phase 1, gated on serval
+one sprite, never the node's truth). Lean Path A, sequenced after Phase 1, gated on genet
 custom-layout-element support.
 
 ---
@@ -156,9 +156,9 @@ custom-layout-element support.
 ## Phase 1 — One document, one shell root
 
 Consolidate the chrome and every document-shaped pane into a single
-`ScriptedDom` under one `ServalAppRunner` whose single root is a **shell container**
+`ScriptedDom` under one `GenetAppRunner` whose single root is a **shell container**
 holding the panes as subtrees, replacing the current one-runner-per-pane
-fragmentation. (serval roots layout at one document element by design, so the shell
+fragmentation. (genet roots layout at one document element by design, so the shell
 container is the proper shape, not sibling document-roots; see Open questions.)
 
 Done conditions:
@@ -188,10 +188,10 @@ Notes:
   is not the work; the per-pane session bundles are.
 - No engine prerequisite (resolved 2026-06-17): the runner attaches a single root
   under the document root, which is exactly right: that root is the shell
-  container, and its children are the chrome + pane subtrees. serval lays out one
+  container, and its children are the chrome + pane subtrees. genet lays out one
   document element by design (box_tree.rs:282-318), so this is the standard shape,
   not a workaround. See Open questions for why sibling document-roots are neither
-  needed nor a serval shape.
+  needed nor a genet shape.
 - The shellbar and overlays are already chrome-root, so they come along for free.
 - Migrate panes into the shell root one at a time with parity checks per pane, not
   big-bang: this touches five live panes' focus and a11y, and the "behaviour
@@ -199,13 +199,13 @@ Notes:
 
 ## Phase 2 — Orrery as element (Path A)
 
-Make the orrery a serval custom-layout element inside the document: a
+Make the orrery a genet custom-layout element inside the document: a
 scene-paint underlay, physics-positioned DOM node-cards, and a camera transform,
 with geometry delegated to `gyre`.
 
 Done conditions:
 
-- A serval element (an `<orrery>` custom-layout element, or a generalization of
+- A genet element (an `<orrery>` custom-layout element, or a generalization of
   the replaced-element path) whose box the engine lays out and whose interior the
   host paints as a scene underlay.
 - The node-as-container materializes as a DOM subtree inside the element (so it rides the a11y /
@@ -214,7 +214,7 @@ Done conditions:
   Findings; **not** a per-frame-perf justification — see the bake-vs-live note below). The card the
   subtree carries is **one sprite**, not the node; the sprite/representation layer is owned by the
   [node-representation-arrangement plan](2026-06-18_node_representation_arrangement_plan.md) (C1).
-- Pointer and keyboard input reach the element through serval's hit-test. **REVERSED 2026-06-19**
+- Pointer and keyboard input reach the element through genet's hit-test. **REVERSED 2026-06-19**
   (per the [node-representation-arrangement plan](2026-06-18_node_representation_arrangement_plan.md)):
   the earlier two-hit-test split (DOM-card hit vs `gyre` hit) was **abandoned**. The card is **no
   longer the node's hit-target**; a press over the orrery routes to **`gyre` directly**
@@ -232,26 +232,26 @@ Done conditions:
 **transform-only-motion fact** (transform-only motion does not relayout), and that claim is true.
 It is **not** a per-frame-perf justification, and "baking to a texture" is **not** a per-frame-perf
 win: baking is the **GPU rasterize** step and does **not** avoid the **CPU layout** (you must lay
-out to rasterize). serval already has `IncrementalLayout` (repaint-only vs relayout, restyle
+out to rasterize). genet already has `IncrementalLayout` (repaint-only vs relayout, restyle
 damage); the per-frame cost is solved by **incremental layout + layerized compositing**, not by
 baking everything. A snapshot texture is justified by **DORMANCY / MEMORY** (you cannot hold N live
 layout sessions in RAM for N previews = the suspended-tab model), not by per-frame performance; the
 **active / focused surface stays LIVE the engine way** (cold layout once, incremental thereafter).
 
-Gated on: the Path A/B decision, and a serval **custom-layout element with
-transform-positioned DOM children**. The input machinery is not the gap: serval
+Gated on: the Path A/B decision, and a genet **custom-layout element with
+transform-positioned DOM children**. The input machinery is not the gap: genet
 already dispatches pointer capture / bubble, and the host already owns the
 `point → NodeId` hit-test half (xilem-serval/runner.rs:222-223), so DOM node-cards
 take input for free and scene-geometry hits delegate to `gyre` at the existing host
 seam. The new engine work is an element whose DOM children are placed by host /
 `gyre` transforms rather than CSS flow (transform-only motion already verified
-`RepaintOnly`), plus transform-aware hit-test (a G1 runway item). Today serval has
+`RepaintOnly`), plus transform-aware hit-test (a G1 runway item). Today genet has
 only replaced elements (`<external-texture>`, output-only), so this is a new element
-kind, scoped in serval's plan.
+kind, scoped in genet's plan.
 
 ### Phase 2 design pass (2026-06-19): no engine gate, Phase 2 is host-side
 
-Reading the engine (`serval-layout/box_tree.rs`, `incremental.rs`, `serval_lane.rs`, the
+Reading the engine (`genet-layout/box_tree.rs`, `incremental.rs`, `genet_lane.rs`, the
 `<external-texture>` wiring) against the current `orrery_element` removes Phase 2's engine gate and
 questions cond 1.
 
@@ -260,12 +260,12 @@ questions cond 1.
   children. The orrery cards are a *container's* children, so none of that machinery applies. A
   true custom-layout element (cond 1) is net-new, not an extension of the replaced path.
 - **The cards are already DOM and paint correctly (cond 2 done).** `orrery_element` is a `<div>`
-  whose children are `position:absolute; transform:translate(gyre.x, gyre.y)`. serval lays them
+  whose children are `position:absolute; transform:translate(gyre.x, gyre.y)`. genet lays them
   out and the `translate` shifts only the **paint** (the verified `RepaintOnly` transform path),
   not the box geometry.
 - **The engine hit-test is already transform-aware (correcting an earlier draft of this entry).**
   `IncrementalLayout::hit_test` (`incremental.rs:182`) resolves a point through
-  `ServalLaneView::hit_test`, whose `walk_for_hit` (`serval_lane.rs:398-417`) reads each node's
+  `GenetLaneView::hit_test`, whose `walk_for_hit` (`genet_lane.rs:398-417`) reads each node's
   `transform` from its cascaded values, conjugates it at the box origin, and inverse-maps the
   incoming point into the node's pre-transform space before the box test, the exact inverse of
   `paint_emit::walk`. It also honours `pointer-events: none`. So a point over a painted card *does*
@@ -284,10 +284,10 @@ questions cond 1.
   interactive payoff lands without it on the host-positioned div. Recommend deferring cond 1,
   revisiting only if host-driven transform-setting becomes a perf or correctness problem.
 
-**Engine asks (serval): none.** The transform-aware hit-test is already in the engine
+**Engine asks (genet): none.** The transform-aware hit-test is already in the engine
 (`walk_for_hit`), so Phase 2 lost its engine gate. cond 1 (a custom-layout element kind) stays
 deferred and is not needed for the payoff. (This corrects the committed first draft of this entry,
-which named a transform-aware hit-test as the engine ask; reading `serval_lane.rs` to write that
+which named a transform-aware hit-test as the engine ask; reading `genet_lane.rs` to write that
 change showed it already done. DOC_POLICY 9: the implementation-as-probe loop caught it before any
 engine code was written.)
 
@@ -312,10 +312,10 @@ gyre's pan / select / drag. Selects drain in `drain_chrome_intents`, so the keyb
 click-to-focus rings the clicked card (cond 4). Compiles, 94 tests pass. **Pending: visual
 confirm** (a card press selects + rings; an empty-canvas press still pans).
 
-This pass also needed a taffy patch mirror (commit 302a3ac): serval main adopted experimental
+This pass also needed a taffy patch mirror (commit 302a3ac): genet main adopted experimental
 float-layout taffy through a vendored fork (`support/patches/taffy`) it patches in, which mere did
-not inherit, so serval-layout would not compile against the published taffy. mere now mirrors that
-patch the way it mirrors serval's stylo patch.
+not inherit, so genet-layout would not compile against the published taffy. mere now mirrors that
+patch the way it mirrors genet's stylo patch.
 
 Remaining Phase 2: cond 5 (retire the standalone orrery `Scene`); the card a11y nodes still need
 to become actionable (currently inert divs in the one a11y tree); the z-order follow-up (node
@@ -325,9 +325,9 @@ labels paint over the command palette).
 
 The cards paint at their fragment slot plus a paint-only `transform: translate(gyre.x, gyre.y)`,
 so a focus ring positioned from fragments drew at the orrery container origin, not on the card.
-Fixed by giving the paint-side overlays the transform-awareness the hit-test already has: serval
+Fixed by giving the paint-side overlays the transform-awareness the hit-test already has: genet
 gained `IncrementalLayout::accumulated_translate(node)` (the sum of transform translates root to
-node, the paint-side complement to `walk_for_hit`; serval `a2d91ddc`), and `push_focus_ring` adds
+node, the paint-side complement to `walk_for_hit`; genet `a2d91ddc`), and `push_focus_ring` adds
 it (mere `7181206`). This is the stopgap that holds the visible behavior correct until cond 1; the
 same primitive can fix the card a11y bounds (which are still at the pre-transform slot).
 
@@ -344,9 +344,9 @@ shown.)
 **Mechanism B (absolute `left`/`top`) is rejected.** Setting each card's `left`/`top` from gyre
 and letting taffy flow them would put the positions in the fragments, but a `left`/`top` change is
 layout-tier: every physics frame would relayout, the "orrery freeze" the transform / RepaintOnly
-path was built to avoid (regression guard, serval `incremental.rs:1232`). B reintroduces it.
+path was built to avoid (regression guard, genet `incremental.rs:1232`). B reintroduces it.
 
-**Mechanism A (custom-layout concern) is the form.** Three serval-layout pieces:
+**Mechanism A (custom-layout concern) is the form.** Three genet-layout pieces:
 
 1. A custom-layout mode for the orrery element, recognized by a marker attribute the way
    external-texture is recognized by `external_texture_key_of` (not a new CSS `display`): its
@@ -364,14 +364,14 @@ per-card `transform: translate`; `render.rs` feeds gyre's per-node positions int
 frame instead of into transforms. `accumulated_translate` then returns 0 for the cards (their
 fragments carry the real positions) so the interim ring fix becomes a harmless no-op.
 
-**Scope.** A real multi-subsystem serval feature (box-tree layout mode + concern plumbing + a new
+**Scope.** A real multi-subsystem genet feature (box-tree layout mode + concern plumbing + a new
 incremental damage class / path), not a tail change. It warrants its own focused effort; the
 interim ring fix holds the visible behavior correct until then.
 
 ### cond 5 landed (2026-06-19): the orrery scene is a document element, the standalone Scene retired
 
 cond 5 ("retire the standalone orrery `Scene`") is done via the external-texture-element path, in three
-commits, using serval's existing `<external-texture>` machinery (no new element kind):
+commits, using genet's existing `<external-texture>` machinery (no new element kind):
 
 - **The scene is a document `<external-texture>` element** (mere `73af79e`): `orrery_element`'s first
   child is `external_texture(ORRERY_SCENE_KEY, ...)`, the underlay beneath the DOM cards. The host
@@ -380,7 +380,7 @@ commits, using serval's existing `<external-texture>` machinery (no new element 
   `on_wheel`; a wheel over the orrery dispatches to it (the runner's `wheel_target` ancestor walk
   resolves a wheel over a card or the scene to the orrery element), its handler queues the delta, and
   the host drains it to `gyre.wheel`. The pane element bears input, the form `wheel.rs` and the
-  window-composition plan name. This is also serval ask #3's first consumer.
+  window-composition plan name. This is also genet ask #3's first consumer.
 - **The compose is document-driven** (mere `571c38e`, verified): the host enumerates the chrome
   document's `<external-texture>` elements (`external_texture_placements`, from the chrome session's
   layout) and composites each registered texture at its laid-out rect, resolved by key. The orrery
@@ -394,7 +394,7 @@ rendered *field*, not a document, so a texture is the right shape (C2 case (d)).
 generalize to "every host-composited surface becomes a document external-texture element". Surfaces
 split **by nature** (the four-way layering owned by the native-surface-compositing plan):
 
-- **(a) serval-rendered content** (a secondary orrery's chrome, the workbench tile chrome, content
+- **(a) genet-rendered content** (a secondary orrery's chrome, the workbench tile chrome, content
   the engine lays out) → a **real DOM subtree** in the shell document (rides a11y, find-in-page,
   selection, true scroll), not a texture.
 - **(b) genuinely-external content** (scrying = a system WebView2 visual) → a **native composition
@@ -410,7 +410,7 @@ onto the document-element path. Cross-reference the native-surface-compositing p
 
 Tiles follow-on (either path): workbench tab/divider chrome and content cards.
 The composition spine's working-principles say `platen-view` realizes formes as
-serval flex DOM, the natural vehicle for tile chrome, with `<external-texture>` for
+genet flex DOM, the natural vehicle for tile chrome, with `<external-texture>` for
 genuinely external content (scrying / WebView). Confirmed 2026-06-17 this is a
 migration, not a re-wire: meerkat composites a pelt `TileShell` today, and
 `platen-view` does not exist yet (only `platen/lib.rs` + README). So the step is
@@ -446,12 +446,12 @@ documented-only.
 1. **Retain an `IncrementalLayout` session in the content actor.** The web-content lane re-runs a
    full `run_cascade` plus layout from scratch on every scroll band, find keystroke, and subresource
    (`content.rs:228/240/252` reach `paint_list_band_from_layout_dom` / `find_text_rects_from_layout_dom`,
-   each calling `run_cascade` fresh, serval-layout/lib.rs:220/281). The chrome lane already has the
+   each calling `run_cascade` fresh, genet-layout/lib.rs:220/281). The chrome lane already has the
    fix (`PaneSession`'s `IncrementalLayout`, pane_session.rs:47, with the
    `Applied::Unchanged | RepaintOnly | Restyled` cheap path); the content actor holds raw `Content`
    with no retained layout. Add a retained `IncrementalLayout` over the parsed `StaticDocument`,
    apply incrementally on Scroll/Find/Resource, rebuild only on Show/Resize/structural change. No
-   serval engine change. Medium. The single biggest per-frame cost (goal 2, the perf ceiling).
+   genet engine change. Medium. The single biggest per-frame cost (goal 2, the perf ceiling).
 2. **Fix the orrery Tab order.** `collect_focusables` (runner.rs:781) is an unfiltered DOM pre-order
    walk; the orrery element is first in document order (window_view.rs:443) and every card is
    `focusable` (window_view.rs:507), so Tab from the omnibar cycles every on-screen card before
@@ -467,12 +467,12 @@ documented-only.
 4. **Source the orrery a11y from the document card divs, not the parallel graph projection.** "One
    a11y tree" (cond 3) holds only at the OS-handle level: the orrery a11y is
    `mere_orrery::project_graph` (frame_a11y_panes.rs:32), a graph side-channel, not the shell DOM
-   that renders. Generalize the serval-side DOM a11y walk (the pattern chrome uses, `chrome_a11y_tree`,
+   that renders. Generalize the genet-side DOM a11y walk (the pattern chrome uses, `chrome_a11y_tree`,
    frame_a11y.rs:130) to the orrery card subtree (actionable role plus `accumulated_translate`
-   bounds, the bounds the focus ring already gets at serval_render.rs:304 but a11y does not), then
+   bounds, the bounds the focus ring already gets at genet_render.rs:304 but a11y does not), then
    retire `project_graph` for the orrery. Medium-Large. Unblocks core goal 3 (accessible /
    automatable).
-5. **Build the Step-0 cascade-vs-box-tree-vs-shaping phase-split probe in serval-layout.** Absent
+5. **Build the Step-0 cascade-vs-box-tree-vs-shaping phase-split probe in genet-layout.** Absent
    (no `Instant`/`bench` anywhere in the crate). The
    [parallelism research doc](../research/2026-06-19_cross_platform_parallelism_strategy.md) §0 names
    it the prerequisite for the whole parallel-cascade thesis: box-tree build is sequential, so it
@@ -481,7 +481,7 @@ documented-only.
    reports the split. Small-Medium, pure measurement.
 
    **Wasmtime-async note (slice 5, per Mark).** The phase split also bounds the win for the
-   non-browser **wasmtime lane** the parallelism research doc parks (serval-on-Wasmtime / Spin for
+   non-browser **wasmtime lane** the parallelism research doc parks (genet-on-Wasmtime / Spin for
    server-side async/parallel layout, the SSR/edge lane), distinct from the browser's Web-Worker
    path. WASI 0.3 async (shipped 2026-06-11) is its substrate today, wasi-threads later; the
    wasmtime-async work is where async/parallel layout can run off the main thread server-side, and
@@ -494,14 +494,14 @@ side-by-side panes** slice (`secondary_orreries: Vec<(netrender::Scene, ...)>`, 
 document, the architecture-2 multi-surface-compositor shape Phase 2 exists to kill). It is large,
 co-owned with the [tearout plan](../../archive_docs/2026-07-04_completed_plans/2026-06-19_tearout_composability_plan.md), and gated on slice 2's
 "card or container is the node" decision. cond 1 (the custom-layout `<orrery>` element) stays
-deferred (a genuine multi-subsystem serval feature, see its design above).
+deferred (a genuine multi-subsystem genet feature, see its design above).
 
 ## Path B alternative — formalize the surface compositor
 
 Only if Path B is chosen for the canvas. Phase 1 still ships; then:
 
 - One `Surface` abstraction over the three kinds in play: document-surface
-  (serval), scene-surface (`netrender` direct, the orrery), external-texture-surface.
+  (genet), scene-surface (`netrender` direct, the orrery), external-texture-surface.
 - One input router and one focus arbiter across surfaces, replacing the
   hardcoded Y thresholds in `input.rs`.
 - The orrery stays a scene-surface but gets a single integration contract (one
@@ -512,17 +512,17 @@ Only if Path B is chosen for the canvas. Phase 1 still ships; then:
 
 ## Findings (code-verified 2026-06-17)
 
-The shape today, confirmed by an 8-agent workflow over serval + meerkat plus
+The shape today, confirmed by an 8-agent workflow over genet + meerkat plus
 targeted reads:
 
 - **`xilem_serval` is the chrome's reactive layer.** `chrome_view(c: &Chrome)`
-  returns `Box<dyn AnyView<Chrome, (), ServalCtx, ServalElement>>`
-  (`crates/meerkat/src/views.rs`); one `ServalAppRunner` per window diffs it into
+  returns `Box<dyn AnyView<Chrome, (), GenetCtx, GenetElement>>`
+  (`crates/meerkat/src/views.rs`); one `GenetAppRunner` per window diffs it into
   the chrome `ScriptedDom`.
 - **Each document pane is its own document and runner.** `ViewPane::new` builds a
-  fresh `ScriptedDom` and a `ServalAppRunner` per pane (view_pane.rs:50); roster,
+  fresh `ScriptedDom` and a `GenetAppRunner` per pane (view_pane.rs:50); roster,
   apparatus, and the utility panes are each a `ViewPane`. So the document
-  surfaces are several independent serval documents, each with its own focus and
+  surfaces are several independent genet documents, each with its own focus and
   a11y projection.
 - **The canvas surfaces bypass `xilem_serval` entirely.** Orrery, workbench
   tiles, gloss, and content cards render straight to `netrender::Scene`s. Meerkat
@@ -532,7 +532,7 @@ targeted reads:
   documented at input.rs:60-64). There is no unified focus ring or Tab order, and
   the a11y tree is fragmented (orrery nodes appear only as their visual cards).
 - **The only in-tree non-DOM bridge is output-only.** `<external-texture>` is a
-  replaced element (`serval-layout/construct.rs:114-128`,
+  replaced element (`genet-layout/construct.rs:114-128`,
   `external_texture_key_of`) that emits `PaintCmd::DrawExternalTexture` for the
   host to composite; the view is `xilem_serval::external_texture(key, w, h)`
   (`xilem-serval/src/tags.rs:74`). It carries no input, so the orrery cannot be
@@ -546,7 +546,7 @@ targeted reads:
   live the engine way; a snapshot texture is a dormancy / memory decision (C3 bake-vs-live, owner =
   [cross_platform_parallelism_strategy](../research/2026-06-19_cross_platform_parallelism_strategy.md)
   §4(b); cross-ref only).
-- **One document via a shell root, not sibling roots.** serval roots layout at a
+- **One document via a shell root, not sibling roots.** genet roots layout at a
   single document element (`build_box_tree`'s first-element-child rule, "no synthetic
   wrapper", box_tree.rs:282-318); independent roots are expressed with `SubtreeView`
   (re-root at a sub-element, subtree.rs). So the separate-roots discipline ("separate
@@ -557,22 +557,22 @@ targeted reads:
 
 ## Open questions and risks
 
-Reviewed against serval + meerkat 2026-06-17 (second pass). The first three of the
+Reviewed against genet + meerkat 2026-06-17 (second pass). The first three of the
 original four resolve or narrow; resolutions are reflected in the phase notes above.
 
-- **Multi-root: resolved; Phase 1 needs no engine change.** serval roots layout at
+- **Multi-root: resolved; Phase 1 needs no engine change.** genet roots layout at
   a *single* document element by design: `build_box_tree` takes the document's first
-  element child as the root, "no synthetic wrapper" (serval-layout box_tree.rs:282-318).
+  element child as the root, "no synthetic wrapper" (genet-layout box_tree.rs:282-318).
   Its mechanism for an independent root is `SubtreeView`, which re-roots layout at any
-  sub-element (serval-layout/subtree.rs; `render_subtree`, already used by incremental.rs).
-  So "sibling roots under the document" is not a serval shape, and editing `build_box_tree`
+  sub-element (genet-layout/subtree.rs; `render_subtree`, already used by incremental.rs).
+  So "sibling roots under the document" is not a genet shape, and editing `build_box_tree`
   to wrap several top-level children would just be the container hidden in the engine,
   against its explicit no-wrapper design. The host-side **shell container** (one document
   element, panes as subtrees) is the proper model and gives the same unification;
   `SubtreeView` stays available as the per-pane isolated-relayout knob. The only axis
   multi-root would win, style *isolation*, is the opposite of Phase 1's goal. Phase 1 is
   a host-side `ShellState` / view consolidation.
-- **Custom-layout element with input: narrower than stated, mostly host-side.** serval's
+- **Custom-layout element with input: narrower than stated, mostly host-side.** genet's
   pointer dispatch already does capture + bubble + ancestor walk
   (xilem-serval/runner.rs `dispatch_pointer_down/move/up`), and the host already owns the
   `point → NodeId` half (`hit_test_node`, runner.rs:222-223). So DOM node-cards receive
@@ -581,7 +581,7 @@ original four resolve or narrow; resolutions are reflected in the phase notes ab
   a **custom-layout element whose DOM children are positioned by host/`gyre` transforms**
   rather than CSS flow (transform-only motion already verified `RepaintOnly`), plus
   **transform-aware hit-test** in the host (already a G1 composition-runway item). Scope
-  that, not input routing, in serval's plan.
+  that, not input routing, in genet's plan.
 - **`gyre` two-hit-test: RESOLVED the other way (2026-06-19).** The DOM-vs-`gyre` boundary was
   written, but it **collapsed toward `gyre`, not toward a card/`gyre` split**: per the
   [node-representation-arrangement plan](2026-06-18_node_representation_arrangement_plan.md)
@@ -592,10 +592,10 @@ original four resolve or narrow; resolutions are reflected in the phase notes ab
   resolve in the DOM" half is retired. cartography_aether_layout_seam remains the geometry
   reference.
 - **Tiles live path: confirmed a migration.** The workbench composites a pelt `TileShell`
-  today (render.rs), and `platen-view` (formes as serval flex DOM) does not exist yet (only
+  today (render.rs), and `platen-view` (formes as genet flex DOM) does not exist yet (only
   `platen/lib.rs` + README). So Phase 2's tiles step is net-new `platen-view` tile chrome
   plus retiring the pelt path for chrome, with `<external-texture>` for tile content, not a
-  re-wire of an existing serval path.
+  re-wire of an existing genet path.
 - **Newly surfaced, genuinely open.** The focus / `Tab` traversal order across chrome and
   panes is unspecified. And one composed view function rebuilds wider than today's isolated
   per-pane runners; whether `xilem` memoization keeps that acceptable, or a hot pane wants
@@ -604,17 +604,17 @@ original four resolve or narrow; resolutions are reflected in the phase notes ab
 ## Progress
 
 - **2026-06-17** — Plan created from a code-verified investigation of
-  `xilem_serval` usage in meerkat (8-agent workflow over serval + meerkat, plus
-  targeted reads of `runner.rs`, `serval-scripted-dom/lib.rs`, `view_pane.rs`,
+  `xilem_serval` usage in meerkat (8-agent workflow over genet + meerkat, plus
+  targeted reads of `runner.rs`, `genet-scripted-dom/lib.rs`, `view_pane.rs`,
   `construct.rs`, `tags.rs`). Confirmed the chrome-only / pane-fragmented /
   canvas-bypass shape; confirmed `<external-texture>` is output-only; confirmed
   the `RepaintOnly` perf prerequisite; confirmed separate-roots allows one
   document. No code written. Phase 1 (document consolidation) recommended to
   start regardless of the canvas decision; Phase 2 (orrery-as-element, Path A) is
-  the recommended target, gated on the A/B decision and serval custom-layout-element
+  the recommended target, gated on the A/B decision and genet custom-layout-element
   support.
-- **2026-06-17 (second pass)** — Open questions reviewed against serval + meerkat.
-  Multi-root resolved: serval roots layout at one document element by design
+- **2026-06-17 (second pass)** — Open questions reviewed against genet + meerkat.
+  Multi-root resolved: genet roots layout at one document element by design
   (box_tree.rs:282-318), `SubtreeView` is its re-root mechanism, so Phase 1 is a
   host-side shell-container consolidation with no engine change (retagged above;
   "sibling roots" language corrected to "shell root / pane subtrees"). Custom-layout
@@ -628,7 +628,7 @@ original four resolve or narrow; resolutions are reflected in the phase notes ab
   cost vs `xilem` memoization. No code written.
 - **2026-06-17 (Phase 1 spike)** — Container-root mechanism proven in a passing test
   (`crates/meerkat/src/tests.rs`, `shell_container_hosts_chrome_and_pane_under_one_runner`):
-  one `ServalAppRunner` hosts the real `chrome_view` plus a second pane as two
+  one `GenetAppRunner` hosts the real `chrome_view` plus a second pane as two
   `lens`-composed subtrees of a single "shell" container root in one `ScriptedDom`; both
   surfaces coexist in the one document, and a dispatched click routes through the single
   runner to the pane's own lensed sub-state. Confirms the host-side shell container with
@@ -661,7 +661,7 @@ original four resolve or narrow; resolutions are reflected in the phase notes ab
 - **2026-06-18 (the shipped slice recorded; the plan was behind the code, rule-9 gap closed).**
   A narrow slice of both phases landed across this and the prior session, unrecorded until now.
   **Phase 1, mechanism not consolidation.** `WindowView.runner` is a
-  `ServalAppRunner<ShellState, ShellLogic, ShellView>` with `ShellState { chrome, orrery }`
+  `GenetAppRunner<ShellState, ShellLogic, ShellView>` with `ShellState { chrome, orrery }`
   (window_view.rs:318); chrome is lensed and the orrery is a sibling element under one shell
   root; ~118 chrome sites migrated behind accessors. But roster / apparatus / steward /
   inspector stay separate `RosterPane`/`ListPane` runners (window_view.rs:102/113/117/118), so
@@ -669,7 +669,7 @@ original four resolve or narrow; resolutions are reflected in the phase notes ab
   are **unmet**: the document-unification core is untouched. **Phase 2, cards only.** The orrery
   snapshots on-screen nodes through the camera into `OrreryRender` and draws transform-positioned
   DOM card chips in the shell document (RepaintOnly; `set_render_as_cards` suppresses the gnode
-  layer), done-condition 2. Not met: a real serval custom-layout `<orrery>` element (it is a
+  layer), done-condition 2. Not met: a real genet custom-layout `<orrery>` element (it is a
   host-positioned `<div>`, cond 1), the two-hit-test split (input stays winit→gyre, cards
   pointer-transparent, cond 3), focusable card DOM in the ring (cond 4), scene/edge teardown
   (cond 5). **Fix-up pass:** card label = page-title-or-URL-slug + ellipsis (`1c564ab`), off-pane
@@ -701,7 +701,7 @@ original four resolve or narrow; resolutions are reflected in the phase notes ab
   bounds at absolute coords (taffy locations are parent-relative, so a single fragment rect is only
   the offset within its parent; `208ac13`), the command palette centred over the orrery rect's
   insets so it clears the side panes (`4cda3a3`), and the cross-repo stylo dep unblocked (mere's
-  `[patch.crates-io]` synced to serval main's `8bde0e96`, the lock advanced to serval main
+  `[patch.crates-io]` synced to genet main's `8bde0e96`, the lock advanced to genet main
   `39cb5b86`; `fdead82`). Open follow-ups: orrery node labels stack over the palette (z-order;
   chrome should layer above the `orrery_element`), and scroll is laggy (re-rasterize-on-scroll).
 
@@ -742,7 +742,7 @@ original four resolve or narrow; resolutions are reflected in the phase notes ab
   - **Added the three-goals frame** (unify the host; reach gpui-level baseline perf as **two
     per-lane ceilings**; diagnosable / accessible / automatable) and **promoted the
     semantic-surface payoff from a "(Path A only)" side effect to core goal 3**.
-  - **Corrected the surface-migration recipe (C2):** surfaces split **by nature** — serval content →
+  - **Corrected the surface-migration recipe (C2):** surfaces split **by nature** — genet content →
     DOM subtree; genuinely-external scry → a native composition visual below the chrome (**not** a
     document element); dormant → snapshot texture; the orrery gyre **scene** → texture (correct,
     cond 5). The blanket "every surface → document external-texture element" recipe is superseded for
@@ -750,7 +750,7 @@ original four resolve or narrow; resolutions are reflected in the phase notes ab
     factual record (orrery scene on `<external-texture>`) is retained; only its generalization to
     scrying was wrong.
   - **Added the bake-vs-live correction (C3)** at every RepaintOnly / texture-as-perf site: baking is
-    the GPU rasterize step and does not avoid CPU layout; serval already has `IncrementalLayout`; the
+    the GPU rasterize step and does not avoid CPU layout; genet already has `IncrementalLayout`; the
     snapshot texture is a **dormancy / memory** decision, not a per-frame-perf win; the active surface
     stays live the engine way. RepaintOnly kept correct as a transform-only-motion fact.
   - **Reframed node-card-as-document language (C1)** to the node-as-container / free-sprite framing
@@ -787,18 +787,18 @@ original four resolve or narrow; resolutions are reflected in the phase notes ab
     600-LOC mere ceiling, in the exact files these slices churn; split before adding.
 
 - **2026-06-23 (slices 2, 3, 1, 4 landed; slice 4 adversarially verified sound).** The four directed
-  slices implemented, meerkat green (179 tests) and serval-layout green (205) for the cross-repo cut:
+  slices implemented, meerkat green (179 tests) and genet-layout green (205) for the cross-repo cut:
   - **Slices 2 + 3 (orrery focus ring + orphaned plumbing).** The node cards left the Tab ring (the
     `focusable` wrapper + `on_click` select removed, window_view.rs); the dead two-path plumbing
     (`point_over_orrery_card`, `OrreryCard.url`, `orrery_card_selects`/take/drain) deleted. The orrery
     is one focusable container, gyre owns selection (the cond-2/4 reversal made real, retiring the
     Phase-2a dead code the 2026-06-21 entry flagged).
-  - **Slice 1 (content-actor retained layout).** serval-layout gained `ContentLayout` +
+  - **Slice 1 (content-actor retained layout).** genet-layout gained `ContentLayout` +
     `lay_out_content` + `emit_band` + `find`; the `paint_list_band_from_layout_dom` /
     `find_text_rects_from_layout_dom` free functions became thin wrappers over it, behaviour-identical
     (205 tests). The content actor retains one `ContentLayout` per page and re-emits scroll bands /
     find off the cascade instead of re-running `run_cascade` each call (content.rs). The cross-repo
-    cut Mark approved; `cargo clean -p serval-layout` cleared a stale artifact from the multi-crate
+    cut Mark approved; `cargo clean -p genet-layout` cleared a stale artifact from the multi-crate
     path-override.
   - **Slice 4 (orrery a11y from the document).** `orrery_a11y_tree` (frame_a11y_panes.rs) replaces the
     `mere_orrery::project_graph` side-channel: each graph node is a `Role::Link` carrying its URL value

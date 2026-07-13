@@ -7,7 +7,7 @@ overlay + apparatus settings sections retired into `pelt/*`, tab cap on `pelt/ap
 `node:<id>` facets provider). Supersedes the loose "migrate settings to pelt" framing and
 absorbs the node-facets / node-editor work as the `node:` provider.
 **Code**: `crates/meerkat/` (apparatus, settings overlay, context menu, the tile-render arm),
-`serval/ports/pelt-core` (the `ContentSource::Settings` contract, already present),
+`genet/ports/pelt-core` (the `ContentSource::Settings` contract, already present),
 `crates/domain/apparatus`.
 **Siblings**:
 [node_editor_customization_probe](../research/2026-06-21_node_editor_customization_probe.md)
@@ -40,7 +40,7 @@ DOC_POLICY §2/§3 calls out (eliminate redundancy; replace, do not half-migrate
 ## The model (the lane is already designed)
 
 pelt-core's `ContentSource` is the lane set a tile is driven by:
-`Document` (html / serval), `ExternalTexture` (external surface / scry), `Settings`. The
+`Document` (html / genet), `ExternalTexture` (external surface / scry), `Settings`. The
 **Settings lane is multi-provider**: a `SettingsRef` is a namespaced string
 (`"pelt/appearance"`, `"node:<id>/engine"`, `"moot:<id>/permissions"`); the provider for that
 namespace resolves it to a permission-gated page. The tile contract names the lane and carries
@@ -84,7 +84,7 @@ do not gut the menu.
   It opens via the **existing** `open_tile(member)` path — no workbench slot change. The pieces:
   (a) the `settings://` scheme routes to the settings lane and is non-fetchable/synthesized (like
   `mere://`); (b) the per-node content dispatch (render.rs `tile_for` / the workbench content loop,
-  where scry-vs-serval is already decided per node) gains a third arm: a settings node →
+  where scry-vs-genet is already decided per node) gains a third arm: a settings node →
   `ContentSource::Settings(ref)`, the ref being the node's url path; (c) the render arm resolves the
   ref through the **provider seam** (`settings_lane.rs`, landed: `settings_index` + `settings_page`)
   and paints the page's controls + the **index spine** at the tile body rect, reusing the list-pane

@@ -1,6 +1,6 @@
 # DocumentScript component host (P2): the native side of the document-core WIT
 # world — owns a Wasmtime engine + per-instance Store, backs the inspect/apply/log
-# imports over serval's live ScriptedDom, drives per-turn handle-event, and
+# imports over genet's live ScriptedDom, drives per-turn handle-event, and
 # enforces epoch / StoreLimits quotas.
 #
 # A member of the mere workspace (folded in at P2.5). The workspace pins rustc 1.93
@@ -22,11 +22,11 @@ path = "src/lib.rs"
 # a turn without blocking (plan §11.7-7).
 wasmtime = "45"
 wasmtime-wasi = "45"
-# serval's live scripted DOM, via the same git dep meerkat uses (so they unify on
-# one rev). serval-scripted-dom is light — markup5ever + layout-dom-api +
-# serval-static-dom; no stylo/taffy, so the workspace patches do not touch it.
-serval-scripted-dom = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
-layout_dom_api = { package = "layout-dom-api", git = "https://github.com/mark-ik/serval.git", branch = "main" }
+# genet's live scripted DOM, via the same git dep meerkat uses (so they unify on
+# one rev). genet-scripted-dom is light — markup5ever + layout-dom-api +
+# genet-static-dom; no stylo/taffy, so the workspace patches do not touch it.
+genet-scripted-dom = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+layout_dom_api = { package = "layout-dom-api", git = "https://github.com/mark-ik/genet.git", branch = "main" }
 # The mod-loader DI seam (P2.4): we *implement* its `WasmModRuntime` trait, never
 # edit it (that crate stays runtime-free). Intra-workspace path dep, matching the
 # sibling register-* crates' own cross-references.

@@ -10,8 +10,8 @@ stays), [tearout_composability_plan](../implementation_strategy/2026-06-19_tearo
 and [tearout_gestures_plan](../implementation_strategy/2026-06-24_tearout_gestures_plan.md)
 (the trichotomy this makes state-level), [swatch_primitive_design](2026-06-27_swatch_primitive_design.md)
 (swatches as view-instances over shared truth: the same shape one level down).
-Code receipts: `serval/components/xilem-serval/src/runner.rs` (the runner),
-`xilem-serval/src/keyed.rs` (keyed sequences), `serval/components/serval-layout/incremental.rs`
+Code receipts: `genet/components/xilem-serval/src/runner.rs` (the runner),
+`xilem-serval/src/keyed.rs` (keyed sequences), `genet/components/genet-layout/incremental.rs`
 (`graft_subtree`, the splice path), `meerkat/src/shell_access.rs::build_window_view_for`
 (the sync-seeding exhibit), `meerkat/src/render/cards.rs::render_chrome_scene`
 (mutation routing by root, the miniature).
@@ -42,7 +42,7 @@ instead of being built on top of it.
   view state (orrery rect, pane rects, wheel one-shots). The mirroring exists
   because the shared half lives in N copies.
 - **The runner is one (dom, state, logic, view, root, focus, capture).**
-  `ServalAppRunner`'s own doc names it the owner of state, root, and rebuild
+  `GenetAppRunner`'s own doc names it the owner of state, root, and rebuild
   cadence. Nothing in xilem_core schedules; the runner is the artifact.
 
 ## 3. The topology fork, resolved
@@ -103,16 +103,16 @@ documents, animations, focus; custom elements get `connectedMoveCallback`).
 That is the splice/graft contract as a standard, and its own constraint
 ratifies §3's topology: `moveBefore` throws across documents, so same-document
 is the only case, which is the case the forest dom creates. Chrome tear-out and
-a page reparenting a live iframe become the same engine code path. Serval keeps
+a page reparenting a live iframe become the same engine code path. Genet keeps
 the full WPT suite on disk (`tests/wpt/tests/dom/nodes/moveBefore/`) wired into
-`ports/serval-wpt` with expectations currently `"fail"`, so done conditions are
+`ports/genet-wpt` with expectations currently `"fail"`, so done conditions are
 expectation flips. Plan and slices:
-`repos/serval/docs/2026-07-05_movebefore_dom_standard_plan.md`.
+`repos/genet/docs/2026-07-05_movebefore_dom_standard_plan.md`.
 
 The mechanism therefore splits in two:
 
 - **Execution (engine, standard)**: `ScriptedDom::move_before` emitting a
-  `DomMutation::Moved { node, from_parent, to_parent }`, with serval-layout
+  `DomMutation::Moved { node, from_parent, to_parent }`, with genet-layout
   handling `Moved` via the splice/graft path. Also fixes a live defect this
   design would have hit: today's `insert_before` already moves an in-tree node
   but emits only `Inserted`, so the source parent's session never learns the
@@ -159,10 +159,10 @@ between `shared` and `view`.
 2. **Multi-projection runner.** One runner owns the state and N projections
    (still N doms at this step). Done when one `update` diffs every window's
    lens and no host-side mirroring remains.
-   **Framework half landed 2026-07-06**: `ServalAppRunner`'s per-tree guts
+   **Framework half landed 2026-07-06**: `GenetAppRunner`'s per-tree guts
    (dom, ctx, retained view, focus, capture) moved into a crate-internal
    `RunnerTree` with state + logic threaded per call — public API unchanged,
-   every consumer untouched — and `ServalMultiRunner` (`multi.rs`) owns one
+   every consumer untouched — and `GenetMultiRunner` (`multi.rs`) owns one
    state plus N `(logic, tree)` projections with stable `ProjectionId`s.
    One `update` rebuilds every projection; a dispatch into any window routes
    through that window's tree then rebuilds the others, so a click in window
@@ -175,25 +175,25 @@ between `shared` and `view`.
    **Consumer half done 2026-07-07** — meerkat's migration (Slices 0-3; the plan is
    archived to `archive_docs/2026-07-07_one_state_migration/`): the ShellState/Chrome split
    into `AppState` (owned `shared: SharedChrome`) vs one `WindowLocal` per window;
-   `Shell.multi: ServalMultiRunner`; `WindowView.projection_id` replaced `runner`; the
+   `Shell.multi: GenetMultiRunner`; `WindowView.projection_id` replaced `runner`; the
    `chrome_update` fan-outs + spawn-time chip seeding deleted; `shell_view(app, i)` is the
-   per-window lens (`ProjectionId(pub usize)` added serval-side for index alignment).
+   per-window lens (`ProjectionId(pub usize)` added genet-side for index alignment).
    Verified headless (302 meerkat + 89 xilem-serval tests) and headed (primary + slim leaf
    render from the one runner, no crash). **Step 2 is complete; steps 3-4 below remain.**
 3. **Forest dom.** One ScriptedDom, N window roots, per-window sessions rooted
    per window element, mutation routing by root containment. Done when two
    windows at different sizes and DPIs lay out and rasterize from one dom.
    **Plan (2026-07-08): [forest_dom_plan](../implementation_strategy/2026-07-08_forest_dom_plan.md)**
-   (gate → F0 spike → F1 serval → F2 serval-layout → F3 meerkat → F4 multi-DPI).
-4. **Portable keyed adoption over moveBefore.** Engine slices first (the serval
+   (gate → F0 spike → F1 genet → F2 genet-layout → F3 meerkat → F4 multi-DPI).
+4. **Portable keyed adoption over moveBefore.** Engine slices first (the genet
    plan's S1/S2: the `Moved` mutation vocabulary, `move_before` semantics, the
    splice fast path), then the view-layer recognition (S5) lowering a portable
    keyed move to one `move_before` call. Done when dragging a tile to another
    window preserves its DOM nodes (same NodeId, scroll position observably
    survives), the target window's apply is scoped rather than a full recompute,
    and the trichotomy is expressed as state mutations. WPT expectation flips in
-   `ports/serval-wpt` gate the engine slices.
-   **Framework half done 2026-07-06** (serval plan S1-S5 all landed:
+   `ports/genet-wpt` gate the engine slices.
+   **Framework half done 2026-07-06** (genet plan S1-S5 all landed:
    `PortableKeyed` + ctx nursery + `(node, path)` handler reconciliation; a
    cross-parent keyed move preserves element, DOM node, view state, and live
    handlers, with one atomic `Moved`). What remains here is the consumer half:
@@ -216,7 +216,7 @@ between `shared` and `view`.
   and pointer capture both live per-`RunnerTree`. meerkat drives them through
   `self.multi.<m>(self.view.projection_id, …)`. Carrying the window beats the root-chain
   alternative the OQ floated: no root walk today, and still correct under the forest dom.
-- **OQ-2 Where recognition lives — framework RESOLVED; the rest is a step-4 build.** serval's
+- **OQ-2 Where recognition lives — framework RESOLVED; the rest is a step-4 build.** genet's
   moveBefore S1–S5 landed the answer as a hybrid, not an either/or: recognition is a **View
   wrapper** (`PortableKeyed`) in xilem-serval, backed by **runner-level nursery** machinery for
   the cross-tree parking. What remains is not a placement question but the meerkat consumer:

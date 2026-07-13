@@ -212,5 +212,5 @@ streams.
 - One producer per `TileId`; the `SurfaceRegistry`'s value grows from `[u8;4]`
   to a frame handle. The `WorkbenchTiling` widget (verso P1) will host these
   tiles once it lands; for now the single `MainView::Surface` tile drives it.
-- No DOM bridge here — that's the [scrying DOM-bridge brief](../../../../serval/docs/2026-05-26_scrying_dom_bridge.md),
+- No DOM bridge here — that's the [scrying DOM-bridge brief](../../../../genet/docs/2026-05-26_scrying_dom_bridge.md),
   orthogonal, riding the same producer.

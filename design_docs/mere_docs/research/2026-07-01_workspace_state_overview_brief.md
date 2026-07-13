@@ -18,7 +18,7 @@ baseline for the next audit.
 
 ## 1. Where we're at
 
-The stack is live end to end: meerkat runs Mere chrome on serval as one shell
+The stack is live end to end: meerkat runs Mere chrome on genet as one shell
 document, themed from seed palettes ([theme system](../../archive_docs/2026-07-04_completed_plans/2026-06-22_seed_palette_theme_system_plan.md)
 complete), user zoom shipped, auto-DPI planned.
 

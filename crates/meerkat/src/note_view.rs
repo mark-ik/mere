@@ -2,18 +2,18 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! `EngineDocument` → serval views: the **document-family** block→view mapper.
+//! `EngineDocument` → genet views: the **document-family** block→view mapper.
 //!
 //! Maps the portable block model (`Block` / `InlineSpan`, what
 //! `DjotKnotEngine` and every other engine produce) into xilem_serval element
-//! views, so a document renders through serval-layout + netrender like any web
+//! views, so a document renders through genet-layout + netrender like any web
 //! page — the same `ScriptedDom` path the chrome builds every frame.
 //!
 //! This is the document family's one renderer (native smolweb rendering plan,
 //! 2026-06-27, Phase D): djot/knot, markdown, and reader-mode HTML all ride this
 //! mapper, because all three lower to `Block`. The **smolweb family**
-//! (gemtext, gopher, feed, …) does not come here — each gets its own native serval
-//! view (`serval/smolweb-views`) so it stays shareable with pelt without
+//! (gemtext, gopher, feed, …) does not come here — each gets its own native genet
+//! view (`genet/smolweb-views`) so it stays shareable with pelt without
 //! `Block`. `Block` keeps capture + cards; focused viewing goes
 //! native.
 //!
@@ -22,16 +22,16 @@
 //! djot/markdown tile. The render-to-`Scene` surface is `crate::note_surface`.
 
 use inker::{Block, EngineDocument, InlineSpan};
-use xilem_serval::{AnyView, ServalCtx, ServalElement, el, text};
+use xilem_serval::{AnyView, GenetCtx, GenetElement, el, text};
 
-/// A type-erased note view child: a serval element or text node.
+/// A type-erased note view child: a genet element or text node.
 ///
 /// State/Action are `()` for now — the rendered note is read-only in slice 1
 /// (links render as `<a href>`, but click-navigation is not yet wired). When edit
 /// mode and link navigation land, this gains the tile's interaction types.
-pub type NoteChild = Box<dyn AnyView<(), (), ServalCtx, ServalElement>>;
+pub type NoteChild = Box<dyn AnyView<(), (), GenetCtx, GenetElement>>;
 
-/// Map a rendered document into serval block views, in document order. The caller
+/// Map a rendered document into genet block views, in document order. The caller
 /// wraps these in the tile's container element.
 pub fn document_views(doc: &EngineDocument) -> Vec<NoteChild> {
     doc.blocks.iter().map(block_view).collect()
@@ -67,7 +67,7 @@ fn heading_tag(level: u8) -> &'static str {
     }
 }
 
-/// One block → one serval element view.
+/// One block → one genet element view.
 fn block_view(block: &Block) -> NoteChild {
     match block {
         Block::Heading { level, spans } => Box::new(el(heading_tag(*level), span_views(spans))),
@@ -160,7 +160,7 @@ fn block_view(block: &Block) -> NoteChild {
     }
 }
 
-/// Inline spans → inline serval views (text, `em`, `strong`, `code`, `a`, `br`).
+/// Inline spans → inline genet views (text, `em`, `strong`, `code`, `a`, `br`).
 fn span_views(spans: &[InlineSpan]) -> Vec<NoteChild> {
     spans.iter().map(span_view).collect()
 }

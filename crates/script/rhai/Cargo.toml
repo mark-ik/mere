@@ -12,7 +12,7 @@ path = "src/lib.rs"
 
 [dependencies]
 # The thin knot-eval contract (BlockEvaluator + EvalOutput). This backend
-# satisfies that slice, *not* serval's full DOM-shaped ScriptEngine seam —
+# satisfies that slice, *not* genet's full DOM-shaped ScriptEngine seam —
 # Rhai is a logic/mod language with no DOM, async, or GC.
 inker = { workspace = true }
 # Rhai: pure Rust, embeddable, sandboxed by default (no file/network), with a

@@ -14,7 +14,7 @@ use accesskit::{Action, Node, NodeId as AccessNodeId, Role};
 use mere::forme::GraphMemberId;
 use frame::{PaneContent, PaneId};
 use layout_dom_api::{LayoutDom, Namespace, NodeKind};
-use serval_scripted_dom::NodeId;
+use genet_scripted_dom::NodeId;
 use uxtree::{UxTree, node_id_for_path};
 
 use super::frame_a11y::rect;
@@ -98,7 +98,7 @@ impl WindowCtx<'_> {
                 // overlay uses), not the bare `location`. (Phase 1.)
                 // Painted origins fold the roster pane's retained `element_scroll`, so a row's
                 // bounds already account for the wheel scroll. (Host-scroll P2.)
-                let origins = serval_layout::accumulate_painted_origins(
+                let origins = genet_layout::accumulate_painted_origins(
                     &*dom,
                     frags,
                     session.element_scroll(),
@@ -170,7 +170,7 @@ impl WindowCtx<'_> {
                 let frags = session.fragments();
                 let dom = self.view.dom.borrow();
                 let droot = dom.document();
-                let origins = crate::serval_render::accumulate_origins(&dom, frags);
+                let origins = crate::genet_render::accumulate_origins(&dom, frags);
                 for node in crate::all_with_class(&dom, droot, "gnode-root") {
                     if dom.attribute(node, &Namespace::from(""), &"data-parked".into())
                         == Some("true")
@@ -248,7 +248,7 @@ impl WindowCtx<'_> {
                 let droot = dom.document();
                 // Painted origins fold the pane's retained `element_scroll`, so a row's bounds
                 // already account for the wheel scroll — no host offset to subtract. (P2.)
-                let origins = serval_layout::accumulate_painted_origins(
+                let origins = genet_layout::accumulate_painted_origins(
                     &*dom,
                     frags,
                     session.element_scroll(),
@@ -396,7 +396,7 @@ impl WindowCtx<'_> {
         let dom = self.view.dom.borrow();
         let droot = dom.document();
         let origins =
-            serval_layout::accumulate_painted_origins(&*dom, frags, session.element_scroll());
+            genet_layout::accumulate_painted_origins(&*dom, frags, session.element_scroll());
         for node in crate::all_with_class(&dom, droot, class) {
             if let (Some(member), Some(l), Some(p)) = (
                 crate::member_attr(&dom, node),

@@ -112,7 +112,7 @@ A block whose body is a diagram description, rendered to a visual swatch.
   block variant or a swatch-embedding seam (a `Block::Canvas`-shaped
   hole, decided with platen). This hole is the non-box escape hatch the
   [smolweb fidelity plan](2026-07-01_smolweb_fidelity_plan.md) names: box-structured
-  text shares the serval box substrate, but genuinely *visual* output (a diagram, a
+  text shares the genet box substrate, but genuinely *visual* output (a diagram, a
   canvas) skips it and paints its own scene. A `dot` block is the same shape of case
   as gopher's fixed-width grid there: a line/output model boxes cannot honestly carry,
   so it earns bespoke rendering rather than being flattened into `Block` text.

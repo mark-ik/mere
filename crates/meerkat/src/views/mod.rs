@@ -5,9 +5,9 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use serval_scripted_dom::ScriptedDom;
+use genet_scripted_dom::ScriptedDom;
 use xilem_serval::{
-    AnyView, El, OnClick, OptionalAction, PointerClick, ServalAppRunner, ServalCtx, ServalElement,
+    AnyView, El, OnClick, OptionalAction, PointerClick, GenetAppRunner, GenetCtx, GenetElement,
     TextField, TextInput, el, lens, memoize, on_click, overlay_at, text_field_typed,
 };
 
@@ -23,7 +23,7 @@ use super::{
 
 /// The erased view type meerkat's logic produces, so the toolbar's concrete
 /// `El<…>` tuple need not be spelled (it grows as the chrome does).
-pub type ChromeView = Box<dyn AnyView<Chrome, (), ServalCtx, ServalElement>>;
+pub type ChromeView = Box<dyn AnyView<Chrome, (), GenetCtx, GenetElement>>;
 
 /// Logic alias for the runner: chrome state → chrome view tree.
 pub type ChromeLogic = fn(&Chrome) -> ChromeView;
@@ -78,7 +78,7 @@ pub(super) fn sync_chrome_from_history(c: &mut Chrome, submitted: bool) {
     c.close_suggestions();
 }
 
-/// The toolbar chrome as serval DOM: back / forward buttons and an **editable**
+/// The toolbar chrome as genet DOM: back / forward buttons and an **editable**
 /// omnibar — a reused `xilem_serval` [`text_field`](xilem_serval::text_field)
 /// over [`Chrome::omnibar`], composed via [`lens`] exactly like pelt-live's
 /// field. The host paints its caret and syncs it into the reused `ToolbarState`
@@ -465,12 +465,12 @@ pub(crate) fn chrome_view_standalone(c: &Chrome) -> ChromeView {
     chrome_view(c, &CrawlIndicator::default())
 }
 
-/// Build the chrome via a [`ServalAppRunner`] over a fresh [`ScriptedDom`] — the
+/// Build the chrome via a [`GenetAppRunner`] over a fresh [`ScriptedDom`] — the
 /// same diff path the windowed host will drive, minus layout / paint. Returns the
 /// runner so callers (and tests) can inspect the DOM, dispatch input, and rebuild.
-pub fn runner(initial_location: &str) -> ServalAppRunner<Chrome, ChromeLogic, ChromeView> {
+pub fn runner(initial_location: &str) -> GenetAppRunner<Chrome, ChromeLogic, ChromeView> {
     let dom: Rc<RefCell<ScriptedDom>> = Rc::new(RefCell::new(ScriptedDom::new()));
-    ServalAppRunner::new(
+    GenetAppRunner::new(
         dom,
         chrome_view_standalone as ChromeLogic,
         Chrome::new(initial_location),

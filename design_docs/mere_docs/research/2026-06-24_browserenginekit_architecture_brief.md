@@ -72,7 +72,7 @@ one-to-one onto Mere's actors (see [actor_constellation_plan](../implementation_
 |---|---|---|
 | Browser host | meerkat host | the winit/`xilem_serval` host loop |
 | Networking extension | I/O / fetch actor | `errand` / netfetcher (the fetch async seam) |
-| Web content extension | content actor | serval gnode pool / the constellation content actors |
+| Web content extension | content actor | genet gnode pool / the constellation content actors |
 | Rendering extension | render / compositor | netrender / platen / the scrying GPU import |
 
 The constellation deliberately runs Servo's split **in-process** ("scenes travel as messages"), and
@@ -104,7 +104,7 @@ Four sharper correspondences:
    the content process's a11y tree in the host - the same problem Mere's DOM-sourced a11y faces once
    content is a separate actor/process.
 
-**Strategic fork.** BEK = "ship serval as a real iOS/iPadOS browser engine," a *more sovereign* and
+**Strategic fork.** BEK = "ship genet as a real iOS/iPadOS browser engine," a *more sovereign* and
 heavier commitment than the
 [browser_extension_companion_plan](../implementation_strategy/2026-06-23_browser_extension_companion_plan.md)'s
 "ride inside someone else's browser as an extension / PWA." They are two different cross-platform

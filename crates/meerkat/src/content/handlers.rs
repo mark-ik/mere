@@ -84,7 +84,7 @@ fn emit_engine_stats(
 }
 
 /// Mirror the current HTML page into a `ScriptedDom` and attach the DocumentScript at
-/// `component_path` over it under `grant` (P2.5c). HTML/serval lane only; returns a
+/// `component_path` over it under `grant` (P2.5c). HTML/genet lane only; returns a
 /// human-readable outcome for the `ScriptOutcome` update. A `grant` that denies a
 /// capability the component requires makes instantiation fail (reported as "attach
 /// failed") — the runtime-enforced capability boundary.
@@ -99,14 +99,14 @@ pub(crate) fn attach_script(
     policy: &EngineRoutePolicy,
     out: &impl ContentUpdateSink,
 ) -> String {
-    if !is_serval_html_lane(&content.url, content.state.as_ref(), registry, policy) {
-        return "not an HTML/serval page (no mirrorable DOM)".to_string();
+    if !is_genet_html_lane(&content.url, content.state.as_ref(), registry, policy) {
+        return "not an HTML/genet page (no mirrorable DOM)".to_string();
     }
     let url = content.url.clone();
     let (w, h) = content.viewport;
     let body = match &content.state {
         Some(ContentState::Ready(fetched)) => fetched.body.clone(),
-        // is_serval_html_lane above guarantees a Ready HTML body.
+        // is_genet_html_lane above guarantees a Ready HTML body.
         _ => return "no Ready HTML body".to_string(),
     };
     // Tear down any script already attached to this tile (run its `deactivate`)
@@ -187,8 +187,8 @@ pub(crate) fn deliver_event(
     outcome
 }
 
-/// Build the retained serval-lane [`ContentLayout`] into `content.html` if this is the
-/// HTML/serval lane and the cache is empty (recording subresource wants through `wanted`),
+/// Build the retained genet-lane [`ContentLayout`] into `content.html` if this is the
+/// HTML/genet lane and the cache is empty (recording subresource wants through `wanted`),
 /// and return whether the HTML cache is now present. The arms clear `content.html` on a
 /// body / viewport / subresource change, so a present layout is fresh. (Slice 1.)
 pub(crate) fn ensure_html_layout(
@@ -198,7 +198,7 @@ pub(crate) fn ensure_html_layout(
     policy: &EngineRoutePolicy,
     wanted: &RefCell<Vec<String>>,
 ) -> bool {
-    if !is_serval_html_lane(&content.url, content.state.as_ref(), registry, policy) {
+    if !is_genet_html_lane(&content.url, content.state.as_ref(), registry, policy) {
         return false;
     }
     if content.html.is_none() {
@@ -206,8 +206,8 @@ pub(crate) fn ensure_html_layout(
         let loader = ResourceLoader::new(store, &content.url, wanted);
         let body = match &content.state {
             Some(ContentState::Ready(fetched)) => &fetched.body,
-            // `is_serval_html_lane` above guarantees a Ready HTML body.
-            _ => unreachable!("is_serval_html_lane implies a Ready state"),
+            // `is_genet_html_lane` above guarantees a Ready HTML body.
+            _ => unreachable!("is_genet_html_lane implies a Ready state"),
         };
         content.html = Some(build_html_layout(body, &loader, w, h));
     }
@@ -215,7 +215,7 @@ pub(crate) fn ensure_html_layout(
 }
 
 /// Whether `url` is a smolweb scheme. The content actor is the focused path, so a
-/// smolweb capsule here renders through the serval lane; cards keep the separate
+/// smolweb capsule here renders through the genet lane; cards keep the separate
 /// synchronous block path. (Smolweb host P1.)
 #[cfg(feature = "smolweb")]
 fn is_smolweb_lane(url: &str) -> bool {
@@ -250,7 +250,7 @@ fn ensure_smolweb(content: &mut Content) -> bool {
         let doc = pelt_desktop::SmolwebDocument::parse(&content.url, body, theme);
         // Wrapped in the component's session type so render/input flow through
         // the one DocumentSession path. (Session-engines plan phase 3.)
-        content.session = Some(Box::new(serval_documents::SmolwebDocumentSession::new(
+        content.session = Some(Box::new(genet_documents::SmolwebDocumentSession::new(
             doc,
             content.viewport,
         )));
@@ -297,7 +297,7 @@ fn css_wgpu(c: wgpu::Color) -> String {
 }
 
 /// Render `content` against the cached subresources, emitting the scene and any
-/// subresources the render newly wants. The HTML/serval lane rides the retained
+/// subresources the render newly wants. The HTML/genet lane rides the retained
 /// [`ContentLayout`] (cascade once, emit each band off it without re-cascading); the
 /// document / synthesized lanes take the one-shot [`render_content`] path.
 pub(crate) fn render(
@@ -308,7 +308,7 @@ pub(crate) fn render(
     out: &impl ContentUpdateSink,
 ) {
     let (w, h) = content.viewport;
-    // Scripted render rung: a scripted Serval node renders straight from its live
+    // Scripted render rung: a scripted Genet node renders straight from its live
     // `ScriptedDocument` (page JS already ran on load). `frame()` re-lays-out the
     // mutated DOM and paints; emit it as one viewport (banding/scroll of a scripted
     // tile is a follow-up — the document scrolls internally, not via host bands).
@@ -384,7 +384,7 @@ pub(crate) fn render(
     }
     // Scripted page (P2.5c): render from the script's mutable `ScriptedDom`, which
     // supersedes the static `html` path so the script's edits are live. Emits one band
-    // off the script's retained layout, exactly like the static serval lane.
+    // off the script's retained layout, exactly like the static genet lane.
     if let Some(inst) = content.script.as_ref() {
         let scroll = ScrollOffsets::default();
         let (scene, masks, content_height, link_rects) = scene_from_content_band(
@@ -438,7 +438,7 @@ pub(crate) fn render(
     // ensure_smolweb builds its session lazily once the body is ready.)
     let wanted = RefCell::new(Vec::new());
     if ensure_html_layout(content, store, registry, policy, &wanted) {
-        // HTML/serval lane: emit this band off the retained layout, no re-cascade.
+        // HTML/genet lane: emit this band off the retained layout, no re-cascade.
         let (doc, layout) = content
             .html
             .as_ref()

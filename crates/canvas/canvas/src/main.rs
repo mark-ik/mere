@@ -21,7 +21,7 @@ use std::sync::Arc;
 use netrender::external_texture::ExternalTexturePlacement;
 use netrender::{ColorLoad, NetrenderOptions};
 use canvas::{Canvas, PointerButton, WHEEL_PAN_SCALE};
-use serval_winit_host::SurfaceHost;
+use genet_winit_host::SurfaceHost;
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
@@ -106,7 +106,7 @@ impl ApplicationHandler for App {
             return;
         }
         let attributes = Window::default_attributes()
-            .with_title("Canvas — graph field-canvas on serval")
+            .with_title("Canvas — graph field-canvas on genet")
             .with_inner_size(PhysicalSize::new(self.width, self.height));
         let window = Arc::new(
             event_loop

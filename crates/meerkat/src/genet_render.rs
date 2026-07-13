@@ -4,14 +4,14 @@
 
 //! `ScriptedDom` → `netrender::Scene` render glue, owned by the host.
 //!
-//! Formerly consumed from `pelt-live` (a serval-side probe). meerkat now owns
-//! this thin assembly directly, depending on serval's *components* (serval-layout,
-//! paint_list_render) rather than a serval *port*, so the product's render
+//! Formerly consumed from `pelt-live` (a genet-side probe). meerkat now owns
+//! this thin assembly directly, depending on genet's *components* (genet-layout,
+//! paint_list_render) rather than a genet *port*, so the product's render
 //! hot-path no longer rides probe code and is immune to probe churn. The heavy,
-//! tested logic stays single-source in serval-layout (cascade / layout / emit /
+//! tested logic stays single-source in genet-layout (cascade / layout / emit /
 //! the caret + hit-test query primitives) and paint_list_render (the paint-list →
 //! Scene lowering); only the convenience signatures live here. See
-//! `design_docs/.../2026-06-11_serval_render_glue_extraction_plan.md`.
+//! `design_docs/.../2026-06-11_genet_render_glue_extraction_plan.md`.
 //!
 //! The stateless helpers that remain (`fragments_from_scripted_dom` for measure,
 //! `hit_test_node` for point-to-node) express themselves through a fresh
@@ -27,12 +27,12 @@ use layout_dom_api::LayoutDom;
 use netrender::Scene;
 use paint_list_api::{ColorF, DeviceIntSize};
 use rustc_hash::FxHashSet;
-use serval_layout::{
-    FragmentPlane, ImageLoader, IncrementalLayout, LeafPaintSource, ScrollOffsets, ServalPaintList,
+use genet_layout::{
+    FragmentPlane, ImageLoader, IncrementalLayout, LeafPaintSource, ScrollOffsets, GenetPaintList,
 };
-use serval_scripted_dom::{NodeId, ScriptedDom};
+use genet_scripted_dom::{NodeId, ScriptedDom};
 
-/// Adapts chisel's rendered leaf buffers to serval-layout's paint-list source
+/// Adapts chisel's rendered leaf buffers to genet-layout's paint-list source
 /// (the orphan-rule-legal home: this crate owns the newtype). See the chisel
 /// toolbar cluster — `<chisel-leaf>` elements in the chrome DOM.
 struct LeafSource<'a>(&'a chisel::RenderedLeaves);
@@ -56,7 +56,7 @@ pub(crate) fn paint_list_from_session_with_leaves(
     height: u32,
     registry: &mut chisel::LeafRegistry<u64>,
     cache: &mut chisel::RenderedLeaves,
-) -> ServalPaintList {
+) -> GenetPaintList {
     let sizes: std::collections::HashMap<u64, (f32, f32)> =
         session.chisel_leaf_boxes().into_iter().collect();
     registry.render_into(
@@ -76,7 +76,7 @@ pub(crate) fn paint_list_from_session_with_leaves(
         &source,
     );
     append_cursor_and_focus(&mut plist, session, dom, &merged, cursor);
-    serval_layout::push_scrollbars(&mut plist, dom, session.fragments(), &merged);
+    genet_layout::push_scrollbars(&mut plist, dom, session.fragments(), &merged);
     plist
 }
 
@@ -214,7 +214,7 @@ pub(crate) fn scene_from_session_subtree(
 /// lowering half plus the command count so a loaded-session frame can say how much
 /// of `chrome_us` was scene production vs paint-list -> Scene translation).
 /// (2026-07-03 shell paint emission plan, P0.)
-fn lower_timed(lane: &str, plist: &ServalPaintList) -> Scene {
+fn lower_timed(lane: &str, plist: &GenetPaintList) -> Scene {
     use paint_list_api::PaintList;
     let t = std::time::Instant::now();
     let scene = paint_list_render::translate_paint_list(plist);
@@ -237,7 +237,7 @@ fn lower_timed(lane: &str, plist: &ServalPaintList) -> Scene {
 /// same. (Box-shadow — chrome masks.)
 fn lower_with_masks(
     lane: &str,
-    plist: &ServalPaintList,
+    plist: &GenetPaintList,
 ) -> (Scene, Vec<paint_list_render::BoxShadowMaskRequest>) {
     use paint_list_api::PaintList;
     let t = std::time::Instant::now();
@@ -258,7 +258,7 @@ fn lower_with_masks(
     (tdl.scene, tdl.box_shadow_masks)
 }
 
-/// The [`ServalPaintList`] half of [`scene_from_session`]: emit from the session,
+/// The [`GenetPaintList`] half of [`scene_from_session`]: emit from the session,
 /// then append the focused-field selection (under) + caret (over) and scrollbar
 /// overlays, all sourced from the session's retained layout so they match the body.
 pub(crate) fn paint_list_from_session(
@@ -268,7 +268,7 @@ pub(crate) fn paint_list_from_session(
     scroll: &ScrollOffsets<NodeId>,
     width: u32,
     height: u32,
-) -> ServalPaintList {
+) -> GenetPaintList {
     let merged = merged_scroll_offsets(session, scroll);
     let t = std::time::Instant::now();
     let mut plist =
@@ -280,7 +280,7 @@ pub(crate) fn paint_list_from_session(
         "paint list emitted"
     );
     append_cursor_and_focus(&mut plist, session, dom, &merged, cursor);
-    serval_layout::push_scrollbars(&mut plist, dom, session.fragments(), &merged);
+    genet_layout::push_scrollbars(&mut plist, dom, session.fragments(), &merged);
     plist
 }
 
@@ -292,7 +292,7 @@ fn paint_list_from_session_excluding_subtrees(
     skipped_subtrees: &FxHashSet<NodeId>,
     width: u32,
     height: u32,
-) -> ServalPaintList {
+) -> GenetPaintList {
     let merged = merged_scroll_offsets_excluding_subtrees(session, dom, scroll, skipped_subtrees);
     let t = std::time::Instant::now();
     let mut plist = session.emit_paint_list_excluding_subtrees(
@@ -313,7 +313,7 @@ fn paint_list_from_session_excluding_subtrees(
             .any(|&root| node_under_root(dom, c.node, root))
     });
     append_cursor_and_focus(&mut plist, session, dom, &merged, cursor);
-    serval_layout::push_scrollbars(&mut plist, dom, session.fragments(), &merged);
+    genet_layout::push_scrollbars(&mut plist, dom, session.fragments(), &merged);
     plist
 }
 
@@ -325,7 +325,7 @@ fn paint_list_from_session_subtree(
     scroll: &ScrollOffsets<NodeId>,
     width: u32,
     height: u32,
-) -> Option<ServalPaintList> {
+) -> Option<GenetPaintList> {
     let merged = merged_scroll_offsets_under_root(session, dom, scroll, root);
     let t = std::time::Instant::now();
     let plist = session.emit_subtree_paint_list(
@@ -343,7 +343,7 @@ fn paint_list_from_session_subtree(
     let mut plist = plist?;
     let cursor = cursor.filter(|c| node_under_root(dom, c.node, root));
     append_cursor_and_focus(&mut plist, session, dom, &merged, cursor);
-    serval_layout::push_scrollbars(&mut plist, dom, session.fragments(), &merged);
+    genet_layout::push_scrollbars(&mut plist, dom, session.fragments(), &merged);
     Some(plist)
 }
 
@@ -387,7 +387,7 @@ fn merged_scroll_offsets_excluding_subtrees(
 }
 
 fn append_cursor_and_focus(
-    plist: &mut ServalPaintList,
+    plist: &mut GenetPaintList,
     session: &IncrementalLayout<NodeId>,
     dom: &ScriptedDom,
     merged_scroll: &ScrollOffsets<NodeId>,
@@ -444,7 +444,7 @@ pub(crate) fn node_under_root(dom: &ScriptedDom, node: NodeId, root: NodeId) -> 
 }
 
 /// Any `LayoutDom` document (with image decode) → `netrender::Scene`, through
-/// serval-layout's shared content pipeline + the paint-list lowering. The content
+/// genet-layout's shared content pipeline + the paint-list lowering. The content
 /// lane (fetched pages, the content card). No caret/selection/scrollbar overlays.
 pub(crate) fn scene_from_layout_dom<D, L>(
     dom: &D,
@@ -463,7 +463,7 @@ pub(crate) fn scene_from_layout_dom<D, L>(
 )
 where
     D: LayoutDom,
-    // serval-layout's Send-ification (parallel shaping pre-pass) requires
+    // genet-layout's Send-ification (parallel shaping pre-pass) requires
     // `Send + Sync` on the node id; both real DOM node ids are usize newtypes,
     // so no concrete caller is restricted.
     D::NodeId: Copy + Eq + Hash + Send + Sync + 'static,
@@ -473,12 +473,12 @@ where
     // Lay out at the viewport, then emit ONE band (`band_y`..`band_y + band_h`) of the
     // page plus the document scroll range and the page's `<a href>` hit rects, so the
     // host knows the full height, can request the next band, and can hit-test a click
-    // against the links (the flat serval scene is not queryable). A flat serval scene
+    // against the links (the flat genet scene is not queryable). A flat genet scene
     // the host cannot window, so the actor does the windowing here. Lower through
     // `translate_paint_cmd_stream` (not the scene-only `translate_paint_list`) so the
     // box-shadow mask requests survive for the host to build. The link rects are
     // full-document px (band-independent). (HTML scroll; box-shadow; inline-link nav.)
-    let (list, scroll_range, links) = serval_layout::paint_list_band_from_layout_dom(
+    let (list, scroll_range, links) = genet_layout::paint_list_band_from_layout_dom(
         dom,
         stylesheets,
         loader,
@@ -499,12 +499,12 @@ where
 }
 
 /// The retained-layout twin of [`scene_from_layout_dom`]: emit one band off a pre-built
-/// [`serval_layout::ContentLayout`] (cascade once, emit many) and lower it to a
+/// [`genet_layout::ContentLayout`] (cascade once, emit many) and lower it to a
 /// `netrender::Scene`. The content actor holds the layout across scroll bands / find
 /// keystrokes so a re-band does not re-cascade. `height` is the layout viewport height (for
 /// the content-height report). (Slice 1, content-lane incremental.)
 pub(crate) fn scene_from_content_band<D>(
-    layout: &serval_layout::ContentLayout<D::NodeId>,
+    layout: &genet_layout::ContentLayout<D::NodeId>,
     dom: &D,
     height: u32,
     band_y: u32,
@@ -540,7 +540,7 @@ pub(crate) fn fragments_from_scripted_dom(
     width: u32,
     height: u32,
 ) -> FragmentPlane<NodeId> {
-    serval_layout::render(dom, stylesheets, width as f32, height as f32)
+    genet_layout::render(dom, stylesheets, width as f32, height as f32)
 }
 
 /// Lay out `dom` and hit-test scene point `(x, y)`, returning the topmost
@@ -562,7 +562,7 @@ pub(crate) fn hit_test_node(
 /// Accumulate each laid-out node's absolute origin into `out`, walking from `node`
 /// whose parent sits at `parent_origin`. Taffy fragment locations are parent-
 /// relative, so absolute coords require summing the chain — mirrors the a11y
-/// tree's bounds accumulation (the engine's `serval_layout::build_subtree`, which
+/// tree's bounds accumulation (the engine's `genet_layout::build_subtree`, which
 /// the chrome a11y now shares). Shared with the roster a11y row bounds, which face
 /// the same nested-pane offset.
 pub(crate) fn accumulate_origins(
@@ -570,9 +570,9 @@ pub(crate) fn accumulate_origins(
     fragments: &FragmentPlane<NodeId>,
 ) -> HashMap<NodeId, (f32, f32)> {
     // The engine owns the parent-chain accumulation (upstreaming P2); this host entry just
-    // adapts serval-layout's `accumulate_origins` (a `Point` map, walked from the document
+    // adapts genet-layout's `accumulate_origins` (a `Point` map, walked from the document
     // root) to the call sites' `(f32, f32)` map.
-    serval_layout::accumulate_origins(dom, fragments)
+    genet_layout::accumulate_origins(dom, fragments)
         .into_iter()
         .map(|(id, p)| (id, (p.x, p.y)))
         .collect()
@@ -583,7 +583,7 @@ pub(crate) fn accumulate_origins(
 /// or folded-pane row/button (the engine leaves `:focus` styling to the host). No-op with
 /// nothing focused or no laid-out box. (Phase 1, step 3c.)
 fn push_focus_ring(
-    plist: &mut ServalPaintList,
+    plist: &mut GenetPaintList,
     session: &IncrementalLayout<NodeId>,
     dom: &ScriptedDom,
     scroll_offsets: &ScrollOffsets<NodeId>,
@@ -596,7 +596,7 @@ fn push_focus_ring(
     };
     // Painted origin (the node's origin minus its ancestors' scroll) via the engine's shared
     // walk, instead of a host copy of the painted accumulation. (Upstreaming P2.)
-    let origins = serval_layout::accumulate_painted_origins(dom, fragments, scroll_offsets);
+    let origins = genet_layout::accumulate_painted_origins(dom, fragments, scroll_offsets);
     let Some(p) = origins.get(&node) else { return };
     let (x, y) = (p.x, p.y);
     // A transform-positioned element (an orrery card) paints at its fragment slot plus its

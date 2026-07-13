@@ -100,7 +100,7 @@ impl Shell {
                 // node's tile. Snapshot persistence carries it across restarts.
                 // (Favicon-on-tile.)
                 fetch::FetchUpdate::Favicon { owner_url, bytes } => {
-                    if let Some(decoded) = serval_layout::decode_image_bytes(&bytes) {
+                    if let Some(decoded) = genet_layout::decode_image_bytes(&bytes) {
                         graph_changed |= wc.orrery_mut().set_node_favicon(
                             &owner_url,
                             decoded.rgba,

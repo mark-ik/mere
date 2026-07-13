@@ -8,9 +8,9 @@ coupling and exposed as a clean async **library** API, plus an HTTP/3 lane and a
 modern TLS stack.
 
 netfetcher is a **Mere-ecosystem network organ**, sibling in spirit to
-[`serval`](../../../../serval/) (render engine) and
+[`genet`](../../../../genet/) (render engine) and
 [`netrender`](../../../../netrender/) (paint→GPU): a reusable, host-agnostic
-component Mere owns and drives. **Mere owns networking; serval consumes bytes.**
+component Mere owns and drives. **Mere owns networking; genet consumes bytes.**
 
 > Status: **scaffolded (2026-05-25).** `repos/netfetcher/` exists as a
 > compile-ready skeleton (the API surface below — `fetch` / `Request` / `Response`
@@ -84,8 +84,8 @@ with the surrounding standards it depends on:
 | HTTP/3 + QUIC | RFC 9114 | increment 4 (quinn/h3) |
 | WebSocket | RFC 6455 | increment 5 (optional) |
 
-**Not in scope:** the DOM `fetch()` *binding* (that lives in serval's scripting
-tier and *calls* netfetcher), the resource cache of decoded images (serval's
+**Not in scope:** the DOM `fetch()` *binding* (that lives in genet's scripting
+tier and *calls* netfetcher), the resource cache of decoded images (genet's
 `ImageLoader` / plane territory), media streaming/DRM (a future `net-media`
 organ), and P2P transports (murm/iroh territory — though netfetcher's
 `Request`/`Response` types may be reused there; see §9).
@@ -105,34 +105,34 @@ organ), and P2P transports (murm/iroh territory — though netfetcher's
         ┌───────────────────────────┼───────────────────────────┐
         │                           │                           │
    ┌────▼─────┐              ┌──────▼───────┐            ┌───────▼────────┐
-   │  Mere    │              │   serval     │            │ eidetic        │
+   │  Mere    │              │   genet     │            │ eidetic        │
    │  host    │              │ (byte        │            │ (BlobFetcher   │
    │ FetcherPool             │  consumer)   │            │  adapter? §9)  │
    │  worker  │              │              │            │                │
    └──────────┘              └──────────────┘            └────────────────┘
         │                           │
-   drives netfetcher           serval stays byte-consuming:
+   drives netfetcher           genet stays byte-consuming:
    off the UI thread,          its ImageLoader / stylesheet /
    feeds results into          script seams take *bytes*; the
    the graph/session           host (via netfetcher) does the
-   layers                      fetching. serval never links
+   layers                      fetching. genet never links
                                netfetcher directly.
 ```
 
 Key invariants:
 
-- **serval does not depend on netfetcher.** serval's whole design (per its
+- **genet does not depend on netfetcher.** genet's whole design (per its
   Hekate lanes doc and the `ImageLoader` seam in
-  [`image_decode.rs`](../../../../serval/components/serval-layout/image_decode.rs))
-  is that *fetching is the host's job; serval consumes bytes*. netfetcher is one
-  concrete host-side fetcher that feeds those seams. This keeps serval portable
+  [`image_decode.rs`](../../../../genet/components/genet-layout/image_decode.rs))
+  is that *fetching is the host's job; genet consumes bytes*. netfetcher is one
+  concrete host-side fetcher that feeds those seams. This keeps genet portable
   (it compiles for wasm where netfetcher's native stack can't run) and keeps the
   fetch policy in one place.
 - **Mere is the primary consumer/driver.** The host runs netfetcher inside the
   `FetcherPool` worker, applies per-persona/per-session policy (engine profile
   binding → cookie jar + cache partition; capability gates → `connect-src`
   decisions), and routes fetched bytes to whichever renderer tenant asked
-  (`serval.web`, nematic engines, etc.).
+  (`genet.web`, nematic engines, etc.).
 - **Native-only — the *whole* crate, not just the h3/WebSocket lanes.** netfetcher
   is built on `hyper` + `tokio` (sockets, runtime), which don't run on
   `wasm32`. So netfetcher is a **native** network engine, period; the
@@ -144,7 +144,7 @@ Key invariants:
   the core stack is native already.) Corrects the earlier "wasm-friendlier"
   framing in the open questions below — storage-agnostic seams are still good
   design, just not for a wasm *netfetcher*.
-- **The JS `fetch()` binding (serval scripting tier) ultimately calls
+- **The JS `fetch()` binding (genet scripting tier) ultimately calls
   netfetcher** — but through the host, not by linking it, preserving the same
   byte-seam discipline.
 
@@ -157,7 +157,7 @@ keeping its spec-correctness. Approach:
 
 1. **Reference, don't vendor wholesale.** Use Servo's `net` at a pinned commit
    as the *spec oracle and source of algorithm logic*, not as a dependency. The
-   serval workspace already pins the full Servo networking stack (hyper 1.9,
+   genet workspace already pins the full Servo networking stack (hyper 1.9,
    hyper-rustls/rustls 0.23, http, cookie 0.18, content-security-policy 0.8,
    encoding_rs, url 2.5, data-url, brotli/flate2, async-tungstenite,
    ipc-channel, mime/headers/percent-encoding) — those *leaf* crates carry over;
@@ -191,7 +191,7 @@ keeping its spec-correctness. Approach:
    and eidetic can supply durable storage. Ship in-memory defaults.
 5. **CSP as a hook, not an owner.** netfetcher consults a
    `trait CspChecker { fn allows_connect(&self, url: &Url) -> Decision }`
-   the embedder supplies; netfetcher does not own policy. Mirrors serval's
+   the embedder supplies; netfetcher does not own policy. Mirrors genet's
    "policy lives in the host" discipline and composes with Mere's capability
    gates ([`2026-05-14_capability_gate_catalogue_brief.md`](../research/2026-05-14_capability_gate_catalogue_brief.md)).
 
@@ -199,7 +199,7 @@ keeping its spec-correctness. Approach:
 
 ## 5. Dependency stack (proposed)
 
-All present in the serval pin set except the h3 lane:
+All present in the genet pin set except the h3 lane:
 
 - **Transport:** `hyper` 1.x (h1/h2), `hyper-util`, connection pooling.
 - **TLS:** `rustls` 0.23 + `hyper-rustls` (ring or aws-lc-rs backend — pick at
@@ -283,7 +283,7 @@ Two oracles, used together:
   request. Catches transport/encoding regressions cheaply.
 - **WPT `fetch/` suite** (ongoing): the Web Platform Tests `fetch/` directory is
   the spec-conformance measuring stick for CORS/credentials/tainting/cache.
-  Wiring a WPT-fetch harness is a shared need with serval (which wants a
+  Wiring a WPT-fetch harness is a shared need with genet (which wants a
   WPT-runner for layout/CSS); building it once and pointing it at both is the
   efficient path. Tracked as a cross-cutting follow-up, not a netfetcher
   blocker.
@@ -294,7 +294,7 @@ Two oracles, used together:
 
 1. **`Request`/`Response` types — `http` crate vs Fetch-spec types.** Wrap the
    `http` crate thinly, or define standalone Fetch types? Leaning thin-wrapper
-   (interop with the ecosystem; serval's scripting tier and murm can share
+   (interop with the ecosystem; genet's scripting tier and murm can share
    them), but response tainting/mode/credentials need somewhere to live.
    **Decided (increment 1), provisionally:** netfetcher owns standalone
    `Request`/`Response` types (tainting/mode/credentials have a natural home);
@@ -323,7 +323,7 @@ Two oracles, used together:
    Default: leave it until duplication actually hurts; they serve different
    policies (content-addressed verify vs Fetch-spec).
 6. **Repo placement + naming.** Own repo under `Code/repos/netfetcher/`
-   (sibling to serval/netrender), reserved on crates.io? Confirm the `net*`
+   (sibling to genet/netrender), reserved on crates.io? Confirm the `net*`
    naming doesn't collide with `netrender` confusingly (render vs fetch — both
    "net", different organs; acceptable, but note it).
 7. **Shared `Request`/`Response` reuse by murm/iroh.** P2P transports aren't
@@ -336,15 +336,15 @@ Two oracles, used together:
 
 - **Consumes nothing upstream of itself**; is consumed by Mere host
   (`FetcherPool` worker — [`session_service_runner_plan`](2026-05-14_session_service_runner_plan.md)),
-  serval (indirectly, via byte seams), and possibly eidetic (§9.5).
+  genet (indirectly, via byte seams), and possibly eidetic (§9.5).
 - **Policy composition:** engine profile boundary
   ([plan](2026-05-14_engine_profile_boundary_plan.md)) supplies cookie/cache
   partitioning; capability gates
   ([brief](../research/2026-05-14_capability_gate_catalogue_brief.md)) drive the
   CSP/`connect-src` hook.
-- **Conformance:** shares a WPT-runner harness with serval's CSS/layout
+- **Conformance:** shares a WPT-runner harness with genet's CSS/layout
   conformance effort.
-- **Sibling organs:** `netrender` (paint→GPU, done), `serval` (render engine),
+- **Sibling organs:** `netrender` (paint→GPU, done), `genet` (render engine),
   `net-media` ([plan](2026-05-26_net_media_plan.md): WebRTC + media decode — a
   separate organ; netfetcher does not do media streaming/DRM).
 
@@ -369,26 +369,26 @@ against real use. The shape:
 
    The worker takes a request (URL + method + headers + initiator origin), runs
    `fetch`, and returns the `Response`.
-2. **serval side — byte seams (no serval change).** serval's `ImageLoader`
+2. **genet side — byte seams (no genet change).** genet's `ImageLoader`
    (and stylesheet/script seams) already take *bytes*; the host fetches via
-   netfetcher and hands them back. serval never links netfetcher. Flow: serval
-   reports a needed URL → host fetches → bytes → serval's seam.
+   netfetcher and hands them back. genet never links netfetcher. Flow: genet
+   reports a needed URL → host fetches → bytes → genet's seam.
 3. **CORS stays host-side.** The host supplies the initiating document's
-   `origin`; netfetcher does the cross-origin gating; serval just gets bytes
+   `origin`; netfetcher does the cross-origin gating; genet just gets bytes
    (success) or nothing (blocked) — it never reasons about CORS.
 4. **Streaming vs collect.** netfetcher's `ResponseBody` is a stream; the
    image/stylesheet seams want complete bytes (worker collects), while
    progressive consumers (future) take the stream.
 5. **The wasm split (per §3).** Native host → netfetcher. wasm/PWA → a host
-   adapter over the **browser's** `fetch`. serval's seams are identical across
-   both (they only take bytes), so **serval is unchanged native↔wasm — only the
+   adapter over the **browser's** `fetch`. genet's seams are identical across
+   both (they only take bytes), so **genet is unchanged native↔wasm — only the
    host's fetcher differs.**
 6. **eidetic-https-fetcher convergence (OQ#5), on contact.** Once netfetcher is
    the host fetch path, eidetic's `BlobFetcher` can either delegate to it (one
    HTTP stack) or stay a minimal hash-verified blob GET. Decide then.
 
 **Smallest first integration:** one native consumer doing a single GET through
-netfetcher into serval's `ImageLoader` — proves the whole organ end-to-end
+netfetcher into genet's `ImageLoader` — proves the whole organ end-to-end
 against real use, and surfaces any seam-shape mismatch early.
 
 ---
@@ -402,8 +402,8 @@ against real use, and surfaces any seam-shape mismatch early.
   the gap netfetcher fills is real and unoccupied.
 - `WorkerKind::FetcherPool` already reserved as the host-side driver slot;
   netfetcher is its intended payload.
-- serval's `ImageLoader` / stylesheet / script seams are already byte-taking,
-  so the "Mere fetches, serval consumes" layering needs no serval change.
+- genet's `ImageLoader` / stylesheet / script seams are already byte-taking,
+  so the "Mere fetches, genet consumes" layering needs no genet change.
 
 ## Progress
 
@@ -484,6 +484,6 @@ against real use, and surfaces any seam-shape mismatch early.
   round-trip (text + binary); `wss://` supported via webpki but not offline-tested.
   **52 tests green.** **Ladder complete (1–5).** Remaining is *not* more protocol
   surface but **integration** (wire netfetcher into a consumer — Mere's
-  `FetcherPool` + serval's byte-seams; see §11) and the deferred refinements
+  `FetcherPool` + genet's byte-seams; see §11) and the deferred refinements
   (h3-with-bodies, active/passive mixed-content, PSL same-site). Confirmed
   native-only as a whole (hyper/tokio) — wasm uses the browser's fetch (§3).

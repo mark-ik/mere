@@ -2,15 +2,15 @@
 
 **Date**: 2026-05-15
 **Status**: Framing probe (exploratory; decides nothing; flags follow-ups)
-**Scope**: Names a chrome-architecture shape mismatch surfaced in conversation: every host framework Mere has considered (iced, gpui, blitz, serval-as-toolkit) is **document-tree-shaped**, but a browser multiplexer / spatial browser is **spatial-relational-graph-shaped**. Sketches what IR would actually fit, what existing traditions overlap, and how renderers (serval, netrender, vello, parley) plug in as painters of node types rather than as the host of the app.
+**Scope**: Names a chrome-architecture shape mismatch surfaced in conversation: every host framework Mere has considered (iced, gpui, blitz, genet-as-toolkit) is **document-tree-shaped**, but a browser multiplexer / spatial browser is **spatial-relational-graph-shaped**. Sketches what IR would actually fit, what existing traditions overlap, and how renderers (genet, netrender, vello, parley) plug in as painters of node types rather than as the host of the app.
 
 **Related**:
 
 - [`2026-05-11_browser_multiplexer_framing.md`](2026-05-11_browser_multiplexer_framing.md) — establishes Session / Window / Pane / Manifest as the durable structure this IR has to render. The chrome IR sits *under* `FrameLayout` leaves, not next to them.
-- [`2026-05-09_netrender_for_engine_documents_brief.md`](2026-05-09_netrender_for_engine_documents_brief.md) — picked option (1) (keep netrender inside serval) for now; this brief is the long-form case for revisiting that, since the chrome IR question moves netrender from "document renderer for serval/nematic" to "compositor of all node types in the chrome graph."
+- [`2026-05-09_netrender_for_engine_documents_brief.md`](2026-05-09_netrender_for_engine_documents_brief.md) — picked option (1) (keep netrender inside genet) for now; this brief is the long-form case for revisiting that, since the chrome IR question moves netrender from "document renderer for genet/nematic" to "compositor of all node types in the chrome graph."
 - [`2026-05-11_engine_peers_and_scrying_library_brief.md`](2026-05-11_engine_peers_and_scrying_library_brief.md) — engines as content producers per node type. This brief generalises the same shape to *all* paint within the chrome, not only engine surfaces.
 - [`2026-05-10_cartography_layer_brief.md`](2026-05-10_cartography_layer_brief.md) — `LayoutStrategy` / `Projection` / `MinimapDescriptor`. Cartography stays the projection layer *for graph nodes*; this brief is one layer below — the substrate cartography projects *into*.
-- Memory: `project_host_framework_glass_gpui` (current pivot to gpui via PlatformSurface — what this brief reopens), `project_mere_domain_layer` (the UX-concept layer above data crates — already half-implements the shape proposed here), `project_multi_window_synced_panels` (graph-shaped session model — relies on the IR being graph-shaped), `project_blitz_serval_convergence` (where serval-as-toolkit was first floated — this brief disambiguates *toolkit-of-pages* from *toolkit-of-spatial-nodes*).
+- Memory: `project_host_framework_glass_gpui` (current pivot to gpui via PlatformSurface — what this brief reopens), `project_mere_domain_layer` (the UX-concept layer above data crates — already half-implements the shape proposed here), `project_multi_window_synced_panels` (graph-shaped session model — relies on the IR being graph-shaped), `project_blitz_genet_convergence` (where genet-as-toolkit was first floated — this brief disambiguates *toolkit-of-pages* from *toolkit-of-spatial-nodes*).
 
 ---
 
@@ -21,7 +21,7 @@
 Two consequences fall out of that statement, both addressed below:
 
 1. The host shrinks to *window + GPU surface + spatial scene graph runtime + input router*. Everything else is a renderer plugged into a node type.
-2. serval / vello / netrender / parley / scrying / wry stop competing for "host" and become **co-resident renderers of different node types** in the same chrome graph.
+2. genet / vello / netrender / parley / scrying / wry stop competing for "host" and become **co-resident renderers of different node types** in the same chrome graph.
 
 This brief decides none of the above. It names the shape, the lineage, the slot diagram, and what would have to be true before adopting it.
 
@@ -36,7 +36,7 @@ Every framework Mere has been close to picking is structured as a **single roote
 | iced                  | `Element` tree, single window root        | A function `state -> Element`                              |
 | gpui                  | View tree under a `Window` root           | Reactive `Entity<T>` rendered via `Element`s               |
 | blitz                 | DOM (HTML document) → layout → paint      | A web page with native renderer                            |
-| serval-as-toolkit     | DOM (HTML document) → layout → paint      | A web page with the full web engine                        |
+| genet-as-toolkit     | DOM (HTML document) → layout → paint      | A web page with the full web engine                        |
 | browser embed (wry)   | DOM (HTML document) inside an OS WebView  | A web page composed onto an OS surface                     |
 
 What Mere's chrome wants to express *cannot* be said cleanly inside any of those:
@@ -93,7 +93,7 @@ What Mere's IR is, in one line: **outliner-graph hybrid's identity-and-relations
 
 ## 4. Renderers as plug-ins per node type
 
-If the substrate is a spatial graph of placed embeddable nodes, then the renderer question reframes. Today's competition (gpui-vs-vello-vs-blitz-vs-serval-as-toolkit) becomes **co-residence**: each renderer claims certain node kinds.
+If the substrate is a spatial graph of placed embeddable nodes, then the renderer question reframes. Today's competition (gpui-vs-vello-vs-blitz-vs-genet-as-toolkit) becomes **co-residence**: each renderer claims certain node kinds.
 
 Illustrative-signature-only sketch (not implementation-ready; types renamed for clarity):
 
@@ -114,7 +114,7 @@ SceneNode {
 }
 
 NodeContent {
-    WebPage(EngineProfileBinding, Url),      // serval | scrying | wry
+    WebPage(EngineProfileBinding, Url),      // genet | scrying | wry
     GraphView(GraphId, ViewIntent),          // cartography → vello
     Panel(PanelKind, ViewIntent),            // mere-domain panel descriptor → vello/parley
     Knot(EngramHandle),                      // nematic.knot → platen → vello
@@ -144,7 +144,7 @@ How current crates would map onto this:
 
 | Node content kind     | Renderer                                                                   | Status                                     |
 | --------------------- | -------------------------------------------------------------------------- | ------------------------------------------ |
-| `WebPage` (full)      | **serval** (style + layout + paint into vello scene via netrender)          | netrender mainline shipped 2026-05-04      |
+| `WebPage` (full)      | **genet** (style + layout + paint into vello scene via netrender)          | netrender mainline shipped 2026-05-04      |
 | `WebPage` (system)    | **scrying** (mere-managed system WebView; embedded-frame composition)       | per [scrying-web plan](../implementation_strategy/2026-05-11_scrying_web_tile_plan.md) |
 | `WebPage` (overlay)   | **wry** (overlay composition; fallback)                                     | per [engine-peers brief](2026-05-11_engine_peers_and_scrying_library_brief.md) |
 | `GraphView`           | **cartography → vello** directly                                            | cartography contracts in flight            |
@@ -154,7 +154,7 @@ How current crates would map onto this:
 | `Composite`           | **recursive scene graph traversal**                                         | substrate-level                            |
 | Edges                 | **parley** (labels) + **vello** (lines) — possibly own renderer crate       | small, isolated                            |
 
-The substrate is the toolkit. serval/vello/netrender/parley/scrying/wry are tenants of the substrate.
+The substrate is the toolkit. genet/vello/netrender/parley/scrying/wry are tenants of the substrate.
 
 ## 5. ECS framing
 
@@ -169,7 +169,7 @@ The reactive layer (`Entity<T>` + cx, à la gpui) sits **above** the ECS as the 
 
 ## 6. What this reframes about the host question
 
-Currently canonical (per `project_host_framework_glass_gpui`): **gpui as host, embed vello/netrender/serval surfaces via PlatformSurface (OS composition layers).** That decision was right *for the framing it answered*: "what hosts the iced-shaped Mere app?" The PlatformSurface route lets a tree-shaped host coexist with a foreign-shaped renderer at the OS layer.
+Currently canonical (per `project_host_framework_glass_gpui`): **gpui as host, embed vello/netrender/genet surfaces via PlatformSurface (OS composition layers).** That decision was right *for the framing it answered*: "what hosts the iced-shaped Mere app?" The PlatformSurface route lets a tree-shaped host coexist with a foreign-shaped renderer at the OS layer.
 
 This brief asks a different question: **what if the chrome itself is not tree-shaped?** Under that framing the host stops being "the framework that owns the view tree" and shrinks to:
 
@@ -180,8 +180,8 @@ mere-host = window manager + GPU surface + spatial scene graph runtime + input r
 Everything above shrinks; everything below stays as it is. Critically:
 
 - **mere-domain stays portable.** Already gpui-free per `project_mere_domain_layer`. *Vocabulary-half* the IR — `workbench` / `orrery` / `gloss` / `apparatus` / `system` / `graphshell` / `murm` / `moot` are the canonical *node content kinds* the substrate would dispatch on. **Structurally, today's output is `UxTree`** (`frame::project_frame_with`, `workbench::project_workbench`, `orrery::project_graph`, `gloss::project_outline`, `apparatus::project_skeleton` all emit a flat `Vec<(NodeId, accesskit::Node)>` whose `Node::children: Vec<NodeId>` builds a strict tree). The substrate needs either a new output mode per crate that emits `(NodeContentKind, StableHandle, Content)` triples directly, or a thin wrapper mapping `UxTree → substrate nodes` for projection only. Either way the crate boundaries are at the right seams; only the output shape changes. The wrapper is the cheaper migration; the new-output-mode is the cleaner one. See §10.7.
-- **Two-stack GPU coexistence resolves into one stack.** vello via netrender is the single backend; serval / scrying / wry compose into it (netrender Scene for serval-painted content; OS-composed surfaces for system-WebView content). gpui's blade pipeline drops out.
-- **Web-native chrome, without "chrome = web pages."** The substrate is graph-shaped (per §1 above); web pages are *one node content kind*, painted by serval. The toolkit is the spatial graph IR; serval is a tenant. This dissolves the question Mark balked at — the chrome doesn't have to model itself as HTML to be web-native.
+- **Two-stack GPU coexistence resolves into one stack.** vello via netrender is the single backend; genet / scrying / wry compose into it (netrender Scene for genet-painted content; OS-composed surfaces for system-WebView content). gpui's blade pipeline drops out.
+- **Web-native chrome, without "chrome = web pages."** The substrate is graph-shaped (per §1 above); web pages are *one node content kind*, painted by genet. The toolkit is the spatial graph IR; genet is a tenant. This dissolves the question Mark balked at — the chrome doesn't have to model itself as HTML to be web-native.
 - **Multi-window synced panels become substrate-native.** Per `project_multi_window_synced_panels`, drag-tab-out spawns a window that re-attaches the same handle. With identity (§2.5) as a substrate property, this is one ECS query per window, not custom plumbing.
 
 What this brief **does not claim**: that the substrate-as-host should ship next, or even that it should ship at all. The case for reopening the host question rests on three preconditions, listed in §8.
@@ -218,7 +218,7 @@ The substrate slots into work already in flight without reshaping any of it. Rou
                                      ▼
                     ┌─────────────────────────────────────────┐
                     │ Renderers (co-resident)                 │
-                    │  serval | scrying | wry | platen        │
+                    │  genet | scrying | wry | platen        │
                     │  vello | netrender | parley             │
                     └─────────────────────────────────────────┘
 ```
@@ -313,8 +313,8 @@ Decisions are deliberately minimal — this is a framing probe.
 
 1. **The chrome IR shape question is real and load-bearing.** Document-tree hosts can ship Mere; they cannot express its multiplexer / spatial-browser shape natively. Future host evaluations must include a substrate-native option in the comparison set.
 2. **mere-domain stays portable.** No gpui leakage, ever. Per `project_mere_domain_layer`. This brief makes the long-term reason for that constraint explicit.
-3. **Renderer registry shape is the right framing.** Whether or not the substrate-as-host ships, treating serval / vello / netrender / parley / scrying / wry as **renderers of node content kinds** (rather than as competing hosts) is the correct mental model and should drive how their integration is described in subsequent docs.
-4. **Five first-class properties (§2) are the substrate test.** Any future IR proposal — whether a spatial substrate, a serval-as-toolkit revival, a return to iced, or anything else — is judged against whether it can express all five uniformly.
+3. **Renderer registry shape is the right framing.** Whether or not the substrate-as-host ships, treating genet / vello / netrender / parley / scrying / wry as **renderers of node content kinds** (rather than as competing hosts) is the correct mental model and should drive how their integration is described in subsequent docs.
+4. **Five first-class properties (§2) are the substrate test.** Any future IR proposal — whether a spatial substrate, a genet-as-toolkit revival, a return to iced, or anything else — is judged against whether it can express all five uniformly.
 5. **Substrate adoption requires §8's three preconditions.** Renderer maturity + OS-plumbing reuse strategy + substrate-as-host parity demo. Until met, gpui via PlatformSurface remains canonical.
 
 ## 12. Follow-ups
@@ -337,7 +337,7 @@ Four of these are filed (same day as this brief — all useful even under the cu
 **Does:**
 - Names a chrome architecture shape mismatch and the IR shape that resolves it.
 - Establishes five first-class IR properties (§2) as the substrate test.
-- Frames serval / vello / netrender / parley / scrying / wry as **co-resident renderers of node content kinds**.
+- Frames genet / vello / netrender / parley / scrying / wry as **co-resident renderers of node content kinds**.
 - Records three preconditions (§8) before substrate-as-host can be reopened.
 
 **Does not:**

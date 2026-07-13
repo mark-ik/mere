@@ -3,10 +3,10 @@
 **Status (2026-07-05):** research brief, broadened same-day from a
 chrome-skewed first pass to cover the full browser platform. Mines the
 standards corpus for architectural, design, and feature recommendations
-across serval, xilem_serval, netrender, and mere/meerkat. Browser shipping
+across genet, xilem_serval, netrender, and mere/meerkat. Browser shipping
 statuses were web-verified 2026-07-05 (sources at the end); spec-shape
 claims are from the specs. Extends the method of
-`serval/docs/2026-06-12_viewport_root_standards_scope.md` (the viewport/root
+`genet/docs/2026-06-12_viewport_root_standards_scope.md` (the viewport/root
 family: "when a rule turns up missing, look for its siblings") from one
 family to the whole platform.
 
@@ -44,7 +44,7 @@ algorithm. An engine whose loader is not Fetch-shaped re-derives each of
 those as a special case.
 
 **Recommendations:**
-- Serval's resource loading becomes one internal `Request → Response`
+- Genet's resource loading becomes one internal `Request → Response`
   pipeline with destinations, modes, and priorities from day one, even
   while the only callers are the HTML parser and the image loader. Every
   later security feature (S2) then has its specified hook point.
@@ -56,7 +56,7 @@ those as a special case.
 - URL is already rust-url (the WHATWG algorithm); Encoding rides `encoding_rs`
   (Gecko's own). Both are solved-by-crate; the recommendation is only to
   never bypass them.
-- Nematic stays out of scope: smolweb protocols only; serval owns HTML
+- Nematic stays out of scope: smolweb protocols only; genet owns HTML
   lanes. But murm/moot sync transports should still speak Fetch shapes at
   the boundary where they hand documents to the engine.
 
@@ -126,7 +126,7 @@ documents with history", including the hard cases (iframe history,
 cross-document traversal, bfcache eligibility).
 
 **Recommendations:**
-- Model meerkat's frametree and serval's future iframes on the navigable
+- Model meerkat's frametree and genet's future iframes on the navigable
   tree. A content card is a navigable; a gnode's session dimension is its
   entry series; the window's traversable is the graph session's history
   spine.
@@ -236,7 +236,7 @@ desktop 130+); WebAudio; EME; WebRTC; WebGPU (W3C) / WebGL.
 - WebRTC: defer; and keep the boundary clean: murm owns the product's p2p
   lane natively; WebRTC would only ever be a *content-facing* API, never
   the substrate murm rides on.
-- **WebGPU exposure is the natural graphics API for serval** (the engine
+- **WebGPU exposure is the natural graphics API for genet** (the engine
   is already wgpu; wgpu upstream tracks the W3C spec). WebGL is the
   legacy tax: defer it, on the record, and let WebGPU-first be a stated
   identity of the browser. Canvas 2D lands earlier (it is chrome-useful
@@ -334,7 +334,7 @@ companion [xilem_serval directions brief](2026-07-05_xilem_serval_directions_bri
 DOM `moveBefore()` (Chrome 133, Firefox 144; Safari is the Baseline
 blocker): an insertion that does not reset state (focus, animations,
 iframe documents, popover state). `BoxTree::graft_subtree` is this
-contract at the layout tier; align serval's DOM-level reparenting with
+contract at the layout tier; align genet's DOM-level reparenting with
 `moveBefore` semantics and steal its WPT tests as the splice-survival
 regression suite. xilem_serval keyed views reparent via the move path,
 never remove+insert. **Platform gap, on the record:** there is no standard
@@ -396,7 +396,7 @@ Firefox Nightly; not Baseline).
   accessibility) even before any custom-elements API exists.
 - Serializable shadow roots give snapshots a standard format: chrome cards
   and static page cards serialize to declarative-shadow-DOM HTML that
-  round-trips through serval itself.
+  round-trips through genet itself.
 
 ## C5. Rendering pipeline — ADOPT containment; PULL transitions
 
@@ -412,7 +412,7 @@ spec churning: `item-flow`, `item-tolerance`).
   plus C7's freeze; netrender's per-surface tile caches are its
   raster-tier twin.
 - **View transitions are the card-morph system**: summon and navigation
-  morphs are snapshot-old/snapshot-new/animate-named-pairs, and serval
+  morphs are snapshot-old/snapshot-new/animate-named-pairs, and genet
   already owns snapshots at the netrender boundary. One choreography
   system for canvas and future page transitions.
 - **The canvas element model is the external-surface seam**: a `<canvas>`
@@ -433,7 +433,7 @@ Firefox positive-with-concerns); Selection API; async Clipboard.
 - **EditContext is the architecture even where the API is not Baseline**:
   editable region decouples buffer + IME composition from DOM mutation;
   the app owns the buffer, the platform owns composition. xilem_serval's
-  `TextInput` already made that split; shape serval's IME integration as
+  `TextInput` already made that split; shape genet's IME integration as
   an internal EditContext so a rebuilt contenteditable later sits on the
   same object.
 - Selection lands with C3's highlight painting (selection is a highlight

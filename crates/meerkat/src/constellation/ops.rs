@@ -184,7 +184,7 @@ impl Constellation {
         ch: u32,
         sheet: DocumentStyleSheet,
         // The host-routed engine id (the node's pin or the policy decision), passed to
-        // the actor so it can take the scripted Serval lane when pinned there. (Ladder.)
+        // the actor so it can take the scripted Genet lane when pinned there. (Ladder.)
         engine: &str,
     ) {
         let tag = ContentState::tag(state.as_ref());
@@ -259,7 +259,7 @@ impl Constellation {
     /// Re-render every active document with a new composed style sheet (a live
     /// theme or typography change). Each content actor re-lays its document; a
     /// bumped viewport generation makes the re-render clear the generation gate so
-    /// the new packet is accepted. The HTML/serval lane ignores the sheet (it
+    /// the new packet is accepted. The HTML/genet lane ignores the sheet (it
     /// themes through its own CSS). (Document theming P3; typography surface D1.)
     pub fn retheme(&mut self, sheet: DocumentStyleSheet) {
         for activation in self.active.values_mut() {
@@ -302,7 +302,7 @@ impl Constellation {
             .map_or(0, |a| ((a.content_height as f32) * self.dpr).round() as u32)
     }
 
-    /// The vertical band `(band_y, band_h)` the member's latest HTML/serval scene
+    /// The vertical band `(band_y, band_h)` the member's latest HTML/genet scene
     /// covers: the page scrolled to `band_y` into a `band_h`-tall window. The host
     /// composites the flat scene at this offset (the visible UV row is
     /// `scroll − band_y`) and requests a new band via [`request_scroll`](Self::request_scroll)
@@ -321,7 +321,7 @@ impl Constellation {
         })
     }
 
-    /// Ask `member`'s actor to re-emit the HTML/serval band covering
+    /// Ask `member`'s actor to re-emit the HTML/genet band covering
     /// `(band_y, band_h)` — the document scrolled to `band_y` into a `band_h`-tall
     /// viewport — so a tall dense page is windowed one band at a time instead of
     /// rasterized whole (which overflows the GPU encode budget). Deduped against the
@@ -337,7 +337,7 @@ impl Constellation {
             return;
         };
         // The document lane carries a packet the host windows directly; only the
-        // flat HTML/serval scene needs an actor-side re-emit.
+        // flat HTML/genet scene needs an actor-side re-emit.
         if activation.packet.is_some() {
             return;
         }
@@ -437,7 +437,7 @@ impl Constellation {
         member: GraphMemberId,
         name: &str,
         anchor: crate::content::OverlayAnchor,
-        content: serval_layout::ServalPaintList,
+        content: genet_layout::GenetPaintList,
     ) {
         let Some(activation) = self.active.get(&member) else {
             return;
@@ -549,7 +549,7 @@ impl Constellation {
     #[cfg(feature = "scripted")]
     pub fn is_scripted(&self, member: GraphMemberId) -> bool {
         self.active.get(&member).is_some_and(|a| {
-            inker::routing::serval_rung(&a.engine) == Some(inker::routing::ServalRung::Scripted)
+            inker::routing::genet_rung(&a.engine) == Some(inker::routing::GenetRung::Scripted)
         })
     }
 
@@ -618,7 +618,7 @@ impl Constellation {
         }
     }
 
-    /// The member's latest focused-document Serval stats, if its current content lane
+    /// The member's latest focused-document Genet stats, if its current content lane
     /// reported any.
     pub fn engine_stats(
         &self,

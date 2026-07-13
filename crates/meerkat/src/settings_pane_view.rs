@@ -19,13 +19,13 @@
 //! `2026-06-21_settings_lane_consolidation_plan` (P1 render arm).
 
 use mere::forme::GraphMemberId;
-use xilem_serval::{AnyView, PointerClick, ServalCtx, ServalElement, clickable, el, on_click};
+use xilem_serval::{AnyView, PointerClick, GenetCtx, GenetElement, clickable, el, on_click};
 
 use crate::list_pane::{PaneItem, ReorderSpec, SliderSpec};
 use crate::swatch::{SwatchSpec, swatch_view};
 
 /// The erased view the settings-panes logic produces (mirrors `RosterView`).
-pub type SettingsPanesView = Box<dyn AnyView<SettingsPanesState, (), ServalCtx, ServalElement>>;
+pub type SettingsPanesView = Box<dyn AnyView<SettingsPanesState, (), GenetCtx, GenetElement>>;
 
 /// One entry in a settings tile's index spine: the page id (suffixed onto the namespace
 /// to form the nav target), its display title, and whether it is the active page.
@@ -200,7 +200,7 @@ fn reorder_view(
     key: Option<&str>,
     spec: &ReorderSpec,
 ) -> SettingsPanesView {
-    // The drag grip: a press here starts the host-driven reorder (serval has no native DOM
+    // The drag grip: a press here starts the host-driven reorder (genet has no native DOM
     // pointer-drag, so the host hit-tests the chrome session and drives it — the swatch
     // editor's pattern). It carries no click handler; the row's `data-reorder-id` does the work.
     let grip = el::<_, SettingsPanesState, ()>("div", "\u{2261}".to_string())
@@ -317,8 +317,8 @@ mod tests {
     use super::*;
     use crate::view_pane::ViewPane;
     use layout_dom_api::LayoutDom;
-    use serval_layout::ScrollOffsets;
-    use serval_scripted_dom::NodeId;
+    use genet_layout::ScrollOffsets;
+    use genet_scripted_dom::NodeId;
     use xilem_serval::PointerClick;
 
     type Pane = ViewPane<
@@ -355,7 +355,7 @@ mod tests {
         let dom = dom.borrow();
         let frags = pane.fragments().expect("laid out");
         let node = crate::first_with_class(&dom, dom.document(), class).expect("class in document");
-        let origins = crate::serval_render::accumulate_origins(&dom, frags);
+        let origins = crate::genet_render::accumulate_origins(&dom, frags);
         let &(ox, oy) = origins.get(&node).expect("origin for the node");
         let size = frags.rect_of(node).expect("node has a rect").size;
         (ox + size.width / 2.0, oy + size.height / 2.0)
@@ -482,7 +482,7 @@ mod tests {
     /// (Control-set adoption P2.)
     #[test]
     fn radio_and_switch_items_stamp_aria() {
-        let attr = |dom: &serval_scripted_dom::ScriptedDom, node, name: &str| {
+        let attr = |dom: &genet_scripted_dom::ScriptedDom, node, name: &str| {
             dom.attributes(node)
                 .find(|a| a.name.local.as_ref() == name)
                 .map(|a| a.value.to_string())

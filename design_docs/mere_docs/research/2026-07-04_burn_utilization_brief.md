@@ -178,7 +178,7 @@ at a measured node count.
    data burn consumes without a marshalling layer. Already policy; this brief
    adds the second reason to hold it.
 2. **Burn stays behind the seams.** `EmbeddingProvider`, `InferenceProvider`,
-   and aether's field registry are the only burn boundaries. gyre, serval,
+   and aether's field registry are the only burn boundaries. gyre, genet,
    meerkat, and the kernel never see a tensor type. Widening the burn tree in
    a crate is a gate question per the dependency footprint brief, not a
    convenience import.

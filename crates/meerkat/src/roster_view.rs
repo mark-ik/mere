@@ -15,12 +15,12 @@ use netrender::Scene;
 #[cfg(test)]
 use register_theme::chrome::ChromeTheme;
 #[cfg(test)]
-use serval_layout::ScrollOffsets;
+use genet_layout::ScrollOffsets;
 #[cfg(test)]
-use serval_scripted_dom::NodeId;
+use genet_scripted_dom::NodeId;
 #[cfg(test)]
 use xilem_serval::PointerClick;
-use xilem_serval::{AnyView, ServalCtx, ServalElement, el};
+use xilem_serval::{AnyView, GenetCtx, GenetElement, el};
 
 #[cfg(test)]
 use crate::roster::RosterSnapshot;
@@ -32,7 +32,7 @@ use crate::roster::{
 #[cfg(test)]
 use crate::view_pane::ViewPane;
 
-pub type RosterView = Box<dyn AnyView<RosterState, (), ServalCtx, ServalElement>>;
+pub type RosterView = Box<dyn AnyView<RosterState, (), GenetCtx, GenetElement>>;
 
 #[cfg(test)]
 pub type RosterLogic = fn(&RosterState) -> RosterView;
@@ -180,7 +180,7 @@ impl RosterPane {
     }
 
     #[cfg(test)]
-    pub(crate) fn dom(&self) -> std::rc::Rc<std::cell::RefCell<serval_scripted_dom::ScriptedDom>> {
+    pub(crate) fn dom(&self) -> std::rc::Rc<std::cell::RefCell<genet_scripted_dom::ScriptedDom>> {
         self.pane.dom()
     }
 
@@ -212,7 +212,7 @@ mod tests {
     use mere::kernel::graph::{EdgeFamily, RelationSelector, SemanticSubKind};
     use layout_dom_api::LayoutDom;
     use register_theme::chrome::ChromeTheme;
-    use serval_scripted_dom::{NodeId, ScriptedDom};
+    use genet_scripted_dom::{NodeId, ScriptedDom};
     use xilem_serval::PointerClick;
 
     use super::*;

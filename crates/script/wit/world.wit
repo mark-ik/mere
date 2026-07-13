@@ -42,7 +42,7 @@ interface net {
 interface document {
     /// Opaque, host-assigned, stable node identity (§10.3): survives content edits
     /// and moves, unambiguous, capability-scoped (the host mints ids), and a match
-    /// for serval's `NodeId` (`ReflectorData = u64`).
+    /// for genet's `NodeId` (`ReflectorData = u64`).
     type node-id = u64;
 
     record block {

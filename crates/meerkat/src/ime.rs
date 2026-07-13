@@ -21,7 +21,7 @@ use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::Ime;
 use xilem_serval::{Key, KeyEvent};
 
-use crate::serval_render::CARET_WIDTH;
+use crate::genet_render::CARET_WIDTH;
 
 use super::WindowCtx;
 

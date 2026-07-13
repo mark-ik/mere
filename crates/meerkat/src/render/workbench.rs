@@ -261,8 +261,8 @@ impl crate::WindowCtx<'_> {
                 let state = self.shared.content.pages.get(&url).cloned();
                 let sheet = self.shared.presentation.document_sheet_composed();
                 // The routed engine (the node's pin or the policy decision) tells the
-                // actor which render rung to take — static `serval.web` or the scripted
-                // lane for `serval.scripted`. (Render ladder.)
+                // actor which render rung to take — static `genet.web` or the scripted
+                // lane for `genet.scripted`. (Render ladder.)
                 let engine = self.route_engine(member, &url).engine_id;
                 self.shared
                     .content

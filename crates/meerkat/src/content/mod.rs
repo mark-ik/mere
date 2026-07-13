@@ -5,7 +5,7 @@
 //! The content actor: a focused tile's media rendered off the UI thread.
 //!
 //! P2 of the actor constellation plan. The kernel ships a tile's fetched document
-//! to a content actor; the actor owns the serval cascade + nematic engines + a
+//! to a content actor; the actor owns the genet cascade + nematic engines + a
 //! per-tile subresource cache on its own thread (the cascade is confirmed
 //! off-thread-safe, see the `cascade-offthread` probe), runs the existing
 //! [`render_content_scene`](crate::card::render_content_scene) there, and ships a
@@ -28,8 +28,8 @@ use inker::{EngineRegistry, EngineRoutePolicy};
 use mere::linked_data::GraphContribution;
 use netrender::Scene;
 
-use serval_layout::{ContentLayout, ScrollOffsets};
-use serval_static_dom::{StaticDocument, StaticNodeId};
+use genet_layout::{ContentLayout, ScrollOffsets};
+use genet_static_dom::{StaticDocument, StaticNodeId};
 
 pub(crate) use content_contract::{
     ContentSceneStats, DomArenaStatsMessage as DomArenaStats,
@@ -39,7 +39,7 @@ pub(crate) use content_contract::{
     TransferError, scene_stats,
 };
 
-// The scripted render rung (render ladder phase 2): a scripted Serval node runs its
+// The scripted render rung (render ladder phase 2): a scripted Genet node runs its
 // page JS through pelt's `ScriptedDocument`. Boa is the base engine; `scripted-nova`
 // adds the Nova variant under a second host-visible engine id. Behind the `scripted`
 // feature so the base build links no JS engine (the ladder's witness discipline).
@@ -51,11 +51,11 @@ use script_engine_boa::BoaEngine;
 use script_engine_nova::NovaEngine;
 
 use crate::card::{
-    LinkHit, RenderedContent, build_html_layout, is_serval_html_lane, render_content,
+    LinkHit, RenderedContent, build_html_layout, is_genet_html_lane, render_content,
 };
 use crate::fetch::ContentState;
 use crate::resources::{ResourceLoader, ResourceStore};
-use crate::serval_render::scene_from_content_band;
+use crate::genet_render::scene_from_content_band;
 
 pub(crate) mod script;
 use std::path::{Path, PathBuf};
@@ -184,7 +184,7 @@ impl inker::DocumentSession<Scene> for HostScriptedDocument {
     }
 
     fn scroll_for_key(&mut self, key: inker::SessionScrollKey) -> bool {
-        use serval_layout::ScrollKey;
+        use genet_layout::ScrollKey;
         let key = match key {
             inker::SessionScrollKey::LineUp => ScrollKey::Up,
             inker::SessionScrollKey::LineDown => ScrollKey::Down,
@@ -257,8 +257,8 @@ pub enum ContentCommand {
         /// `mere://welcome`); the actor renders any state, harvesting only `Ready`.
         state: Option<ContentState>,
         /// The host-routed engine id for this node (its pin or the policy decision).
-        /// The actor renders the static serval lane for `serval.web`; the `scripted`
-        /// feature additionally drives `ScriptedDocument` for the scripted Serval
+        /// The actor renders the static genet lane for `genet.web`; the `scripted`
+        /// feature additionally drives `ScriptedDocument` for the scripted Genet
         /// engine ids. Other ids fall to the content-type routing the actor runs
         /// itself. (Render ladder.)
         engine: String,
@@ -293,8 +293,8 @@ pub enum ContentCommand {
     /// tasks entirely (`freeze`/`resume` events). No-op for non-scripted
     /// lanes. Becoming visible re-renders once so a stale band refreshes.
     SetLifecycle { hidden: bool, frozen: bool },
-    /// Re-emit the current HTML/serval document at a new scroll band (the host's
-    /// windowing of the flat serval scene). `band_y` is the document scroll offset,
+    /// Re-emit the current HTML/genet document at a new scroll band (the host's
+    /// windowing of the flat genet scene). `band_y` is the document scroll offset,
     /// `band_h` the band height; the actor emits only that band so a tall dense page
     /// does not overflow the GPU. The document lane never receives this. (HTML scroll.)
     Scroll {
@@ -302,7 +302,7 @@ pub enum ContentCommand {
         band_h: u32,
         viewport_gen: ViewportGeneration,
     },
-    /// Find `query` in the current HTML/serval document (find-in-page). The actor runs
+    /// Find `query` in the current HTML/genet document (find-in-page). The actor runs
     /// the search where its layout lives and ships the match rects back; the HTML lane
     /// has no host-queryable packet. An empty query clears the matches. (Find-in-page.)
     Find {
@@ -318,7 +318,7 @@ pub enum ContentCommand {
         index: usize,
         viewport_gen: ViewportGeneration,
     },
-    /// Resolve a point-drag text selection in the current HTML/serval document. The
+    /// Resolve a point-drag text selection in the current HTML/genet document. The
     /// points are content-local document coords in device px (the host subtracts the
     /// card origin and adds scroll before calling); the actor maps them through its
     /// retained layout and ships back rects + plain text for copy. No-op on the
@@ -330,7 +330,7 @@ pub enum ContentCommand {
     },
     /// Attach a DocumentScript (a wasm `document-core` component) to this tile's page.
     /// The page is mirrored into a mutable `ScriptedDom` the script can edit, and the
-    /// tile renders from it thereafter. HTML/serval lane only. `log` / `document` are
+    /// tile renders from it thereafter. HTML/genet lane only. `log` / `document` are
     /// the host-resolved permissions for the application capabilities (`log` /
     /// `document` / `net`; the host runs the five-scope `resolve_permission`, the actor
     /// maps them to the link grant). A script attaches only where the caps it imports
@@ -371,7 +371,7 @@ pub enum ContentCommand {
         y: f32,
         viewport_gen: ViewportGeneration,
     },
-    /// Register (or replace) a named overlay slot on the current HTML/serval
+    /// Register (or replace) a named overlay slot on the current HTML/genet
     /// document: a host-laid-out satellite paint list anchored to a page node,
     /// composited engine-side after content + highlights (top-layer order) and
     /// tracking its anchor across scroll/relayout for free. The host's satellite
@@ -379,7 +379,7 @@ pub enum ContentCommand {
     /// its own isolated `ScriptedDom` out; the actor only registers it on the
     /// retained [`ContentLayout`] and re-emits the band. No-op off the HTML lane.
     /// Desktop-host only in v1: the wasm content-worker lane does not carry
-    /// overlays yet (a `ServalPaintList` would need the Scene transfer's
+    /// overlays yet (a `GenetPaintList` would need the Scene transfer's
     /// font/image dedup to cross the serialized worker wire), so these variants
     /// are gated off `wasm32` and never reach `ContentCommandMessage`.
     /// (Overlay-roots P1 — the overlay slot's host seam.)
@@ -387,7 +387,7 @@ pub enum ContentCommand {
     SetOverlay {
         name: String,
         anchor: OverlayAnchor,
-        content: serval_layout::ServalPaintList,
+        content: genet_layout::GenetPaintList,
         viewport_gen: ViewportGeneration,
     },
     /// Remove a named overlay slot and re-emit the band without it. (Overlay-roots P1.)
@@ -429,11 +429,11 @@ pub enum ContentUpdate {
         // (`DocumentRenderPacket::link_at`), so the document lane ships no separate
         // link-rect table. (Phase 2 query API.)
     },
-    /// An HTML/serval-lane render: one pre-lowered scene for a vertical BAND of the
+    /// An HTML/genet-lane render: one pre-lowered scene for a vertical BAND of the
     /// page. `content_height` is the full laid-out height; `band_y` / `band_h` are the
     /// band this scene covers (the page scrolled to `band_y`, `band_h` tall). The host
     /// composites it at that offset and requests the next band as the scroll moves
-    /// (its windowing of a flat serval scene the actor emits one band of). (HTML scroll.)
+    /// (its windowing of a flat genet scene the actor emits one band of). (HTML scroll.)
     Scene {
         nav: NavGeneration,
         viewport_gen: ViewportGeneration,
@@ -478,7 +478,7 @@ pub enum ContentUpdate {
         selection: Option<TextSelectionMessage>,
     },
     /// Focused-document engine observables for the current render lane, when the
-    /// actor owns a real Serval DOM/layout surface.
+    /// actor owns a real Genet DOM/layout surface.
     EngineStats {
         nav: NavGeneration,
         viewport_gen: ViewportGeneration,
@@ -576,9 +576,9 @@ pub(crate) struct Content {
     viewport: (u32, u32),
     nav: NavGeneration,
     viewport_gen: ViewportGeneration,
-    /// The vertical band of the HTML/serval lane to emit: `band_y` is the document
+    /// The vertical band of the HTML/genet lane to emit: `band_y` is the document
     /// scroll offset, `band_h` the band height. The host requests bands as the scroll
-    /// moves (its windowing of a flat serval scene, done here because only the actor
+    /// moves (its windowing of a flat genet scene, done here because only the actor
     /// holds the layout). Ignored by the document lane (the host windows its packet).
     band_y: u32,
     band_h: u32,
@@ -586,20 +586,20 @@ pub(crate) struct Content {
     /// colours). Kept across renders so a Resize / Scroll / Resource re-render
     /// reuses it; a `Retheme` swaps it. (Document theming P3; typography D1.)
     sheet: DocumentStyleSheet,
-    /// The retained HTML/serval-lane layout: the parsed document plus its cascaded
+    /// The retained HTML/genet-lane layout: the parsed document plus its cascaded
     /// [`ContentLayout`], built ONCE and re-emitted per scroll band / find keystroke so a
     /// re-band does not re-cascade (slice 1, the single biggest per-frame content cost).
     /// `None` for the document / synthesized lanes (which keep their own retained packet),
     /// and cleared by the arms that change the body / viewport / subresources (Show builds a
     /// fresh `Content`; Resize / Resource set it back to `None`), so a present layout is
-    /// fresh. A `Retheme` keeps it (the serval lane themes through HTML_SHEET + the page CSS,
+    /// fresh. A `Retheme` keeps it (the genet lane themes through HTML_SHEET + the page CSS,
     /// not the document sheet). Built lazily by [`ensure_html_layout`].
     html: Option<(StaticDocument, ContentLayout<StaticNodeId>)>,
-    /// The last `Find`'s match ranges (HTML/serval lane), retained so
+    /// The last `Find`'s match ranges (HTML/genet lane), retained so
     /// `FindActive` can re-register the active-match engine highlight without
     /// re-searching. Cleared with `html` (a fresh layout invalidates leaf ids)
     /// and on an empty query. (Overlay-roots P2.)
-    find_ranges: Vec<serval_layout::HighlightRange<StaticNodeId>>,
+    find_ranges: Vec<genet_layout::HighlightRange<StaticNodeId>>,
     /// An attached DocumentScript (P2.5c). When present, the tile renders from the
     /// script's mutable `ScriptedDom` (it supersedes the static `html` path), so the
     /// script's edits are live; cleared on a fresh `Show` and by `DetachScript`.
@@ -659,7 +659,7 @@ pub(crate) struct BoaRungEngine;
 #[cfg(feature = "scripted")]
 impl inker::SessionEngine<Scene> for BoaRungEngine {
     fn engine_id(&self) -> &str {
-        inker::routing::ENGINE_SERVAL_SCRIPTED
+        inker::routing::ENGINE_GENET_SCRIPTED
     }
 
     fn spawn(
@@ -683,7 +683,7 @@ pub(crate) struct NovaRungEngine;
 #[cfg(feature = "scripted-nova")]
 impl inker::SessionEngine<Scene> for NovaRungEngine {
     fn engine_id(&self) -> &str {
-        inker::routing::ENGINE_SERVAL_SCRIPTED_NOVA
+        inker::routing::ENGINE_GENET_SCRIPTED_NOVA
     }
 
     fn spawn(

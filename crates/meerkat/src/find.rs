@@ -2,9 +2,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Host-side find-in-page over the HTML/serval lane, dispatched to the find worker.
+//! Host-side find-in-page over the HTML/genet lane, dispatched to the find worker.
 //!
-//! The match search is a full serval layout (~1-2s on a large page), so it runs on the
+//! The match search is a full genet layout (~1-2s on a large page), so it runs on the
 //! [find worker](crate::find_worker) thread, not the UI loop. The host ships the focused
 //! page's body + query (stamped with a generation), the worker lays out and replies, and
 //! [`apply_find_result`] folds the latest generation's rects into the window view for the

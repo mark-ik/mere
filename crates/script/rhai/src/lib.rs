@@ -13,7 +13,7 @@
 //! (`Engine::set_max_operations`), so the runaway cap is the engine's own
 //! rather than a hand-rolled fuel loop.
 //!
-//! This is deliberately *not* serval's full DOM-shaped `ScriptEngine` seam
+//! This is deliberately *not* genet's full DOM-shaped `ScriptEngine` seam
 //! (reflectors, host promises, native callbacks). Rhai is a logic/mod
 //! language with no DOM, async, or GC; the knot path needs only eval +
 //! budget + to-text, which is this whole crate.

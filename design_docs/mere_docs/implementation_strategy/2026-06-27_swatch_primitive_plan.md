@@ -85,7 +85,7 @@ under the 600-LOC ceiling.
 
 **Status: done 2026-06-27** (the host-generic lift). `swatch_view` is now
 `swatch_view<S: 'static>(spec) -> SwatchView<S>` (`SwatchView<S> = Box<dyn AnyView<S,
-(), ServalCtx, ServalElement>>`), generic over the embedder state because the swatch
+(), GenetCtx, GenetElement>>`), generic over the embedder state because the swatch
 carries no state-bound callbacks (interaction routes through the host hit-test on
 `data-subject`). The facet pane mounts it as `SwatchView<SettingsPanesState>` with no
 call-site change (inference), behavior-preserved; `cargo check -p meerkat --lib`
@@ -118,7 +118,7 @@ routes `selected_members().len() > 1` to a new `compute_connections_card`
 `swatch::connections_spec_from`. A new `FocusCardKind::Connections { spec }` renders via
 `swatch::connections_swatch_view::<ShellState>` (the P1 host-generic lift now paying off:
 the same DOM swatch mounts in the focus-card slot, not just the facet pane). Edges draw as
-transform-free dotted lines (serval CSS has no `transform`); nodes carry `data-element` tags
+transform-free dotted lines (genet CSS has no `transform`); nodes carry `data-element` tags
 for the P4 hit-test. Lands entirely in clean files (not the concurrently-edited `cards.rs`).
 Bin compiles, 2 `connections_spec` unit tests green. **Deferred to P2b**: the cartography
 *re-layout* (today it crops the live arrangement's positions, not a relation-driven layout),
@@ -352,7 +352,7 @@ template renders a purpose-built UI over its own subgraph.
   → `compute_connections_card` (new `render/connections.rs`) → `connections_spec_from` (pure,
   normalizes the selected nodes' kernel positions + inter-edges into the card) →
   `FocusCardKind::Connections` → `connections_swatch_view::<ShellState>` (the P1 lift mounting in
-  the slot). Edges are transform-free dotted lines (no serval CSS `transform`), family-coloured;
+  the slot). Edges are transform-free dotted lines (no genet CSS `transform`), family-coloured;
   nodes tagged `data-element` for P4. Six clean files touched, **not** the concurrently-edited
   `cards.rs` (whose `len == 1` snapshot gate already suppresses multi-select; its TODO updated to
   point here). 2 unit tests green. **Verification lesson**: `swatch` / `render` / `window_view` /
@@ -439,7 +439,7 @@ template renders a purpose-built UI over its own subgraph.
   This clears the "chip render not yet headed-verified" residual from P3c; the sqlx/sync
   crash that made earlier drives flaky did not recur. Note for drive harnesses: the app's
   earlier crash-on-URL-load this session was the shell-partition dead-NodeId bug (fixed
-  in `serval_render.rs`/`pane_session.rs`, logged in the surface-engine fold plan), not a
+  in `genet_render.rs`/`pane_session.rs`, logged in the surface-engine fold plan), not a
   swatch issue. Still unverified headed: the P5 hide/show spring relaxation (focused
   tests cover it) and the P4 fan/pick on a multi-relation pair.
 - **2026-07-05 — Reconciled against code; P6 marked shipped-differently, retrofit

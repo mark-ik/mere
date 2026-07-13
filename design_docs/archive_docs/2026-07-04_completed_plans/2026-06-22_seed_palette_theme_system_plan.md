@@ -332,17 +332,17 @@ and stable (low duplication risk).
   - Follow-ons: a **granular per-token style editor** (rides the same `ThemeDef`
     override seam); sweep the rest of the on-accent text/icons through `best_on`;
     an arbitrary-offset "Lock current" UI (today's presets + capture cover it).
-- **2026-06-22 (settings-pane scroll, serval-native, e2e verified).** The
+- **2026-06-22 (settings-pane scroll, genet-native, e2e verified).** The
   appearance editor grew past the pane fold (Tertiary / Neutral unreachable). Fix
-  uses serval's existing scroll primitive (per Mark's "is there a serval feature"
-  question): `serval-render` already makes any `overflow: scroll` box a clip +
+  uses genet's existing scroll primitive (per Mark's "is there a genet feature"
+  question): `genet-render` already makes any `overflow: scroll` box a clip +
   scroll container and `push_scrollbars` draws the thumb for any container in the
   host `ScrollOffsets`. The `.settings-pane-body` had `overflow: scroll` but
   wasn't wired, so: a `settings_scroll` offset (window_view), wheel-decremented
   when the cursor is over a settings tile (app_handler), registered in the shell
   `ScrollOffsets` after the panes are folded (render) and mirrored in the
   hit-test (`chrome_click`) — mirroring the apparatus/roster pane pattern. The
-  pane now wheel-scrolls with the serval thumb; no host-drawn scrollbar.
+  pane now wheel-scrolls with the genet thumb; no host-drawn scrollbar.
 - **T3 — user themes + CRUD + persistence. (done 2026-06-22.)** register-theme:
   `ThemeDef` (id / name / source / seeds / high_contrast, serde) + `ThemeSource`
   (BuiltIn / User); the registry now stores authored defs + a listing order

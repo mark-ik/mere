@@ -20,8 +20,9 @@ and [G5 rebase progress](../technical_architecture/2026-07-08_g5_mere_rebase_pro
 (owns the favicon/thumbnail fields; deliberately NOT folded into slice C),
 the [meerkat promotion pass plan](2026-07-02_meerkat_promotion_pass_plan.md)
 (the module-promotion precedent and audit method), the
-[murm/moot sibling posture plan](2026-07-08_murm_moot_sibling_posture_plan.md)
-(governs murm/moot; untouched here), and vates's own
+[Murm peer-runtime and Moot domain plan](2026-07-12_murm_peer_runtime_and_moot_domain_plan.md)
+(current Murm/Moot authority; it supersedes the sibling posture cited when this
+pass landed), and vates's own
 `design_docs/2026-07-07_vates_founding_proposal.md`.
 
 ---
@@ -40,7 +41,7 @@ verified against the tree, not carried from docs.
 2. **orrery and platen do not become permanent parts of mere.** The `mere`
    facade re-exports them today (`crates/mere/src/lib.rs:14-15`); that is
    compatibility scaffolding for the in-workspace host, not the library
-   boundary. orrery ships a winit bin over serval/netrender git deps; platen
+   boundary. orrery ships a winit bin over genet/netrender git deps; platen
    depends on document-canvas, pelt-core, and the netrender paint vocabulary.
    Both are application surfaces and move out with merecat. The founding
    doc's target shape ("mere = ... forme/platen, orrery ...") is amended
@@ -72,20 +73,20 @@ verified against the tree, not carried from docs.
    platen resolution:* the graph-scene/cartography lane lives in canvas
    (mere); platen, as the pane home, goes to merecat.
 4. **The verso family is the heart of the merecat web lane.** verso,
-   verso-api, verso-scry, verso-serval, and meerkat-browser-worker are the
+   verso-api, verso-scry, verso-genet, and meerkat-browser-worker are the
    engine multiplexer and belong to merecat's engine-routing boundary. Any
    merecat crate sketch that omits them is drawing around the hole. The
    port's first vertical path (open address to visible surface) routes
    through verso-api from day one.
 
    *Amended 2026-07-09 (inker-adoption session): the four verso crates leave
-   for serval*, consolidated into one feature-layered component under the
-   already-claimed `verso-tile` name; see serval's
-   2026-07-09_inker_serval_adoption_plan.md. They are engine machinery (the
+   for genet*, consolidated into one feature-layered component under the
+   already-claimed `verso-tile` name; see genet's
+   2026-07-09_inker_genet_adoption_plan.md. They are engine machinery (the
    flip is inker's multiplexer's dynamic counterpart), not app boundary.
    meerkat-browser-worker stays app-side. The first-vertical-path statement
    survives with the import path changed; merecat consumes verso-tile via
-   the serval git dep.
+   the genet git dep.
 5. **eidetic stays mere-side, over muniment.** eidetic-core carries its own
    storage-backend-agnostic blob store trait and does not sit on muniment.
    Promoting "eidetic core/backends as a storage sibling" would found a
@@ -142,7 +143,7 @@ verified against the tree, not carried from docs.
    user-authored and today travel with graph snapshots. After slice C they
    persist per-vault in the sidecar store and stop traveling with the graph.
    That is the intended reading (browser preference, not graph fact); a
-   sidecar sync lane is a murm-side follow-on, not this plan.
+   sidecar sync lane is a `murm-replication` domain follow-on, not this plan.
 10. **Timing window for the delta cut.** The five browser-state delta pairs
     ride `GraphDelta`/`CapturedDelta` today, and G5's production journal
     persistence has not landed yet, so retiring the variants breaks no
@@ -306,13 +307,13 @@ Verified against the tree, 2026-07-09:
   this session. merecat founding doc amended (target shape: orrery/platen
   move out with the app; verso family named). No code yet.
 - **2026-07-09 (inker-adoption session): slate amendments.** Decisions from
-  the pelt/inker discussion (serval's
-  2026-07-09_inker_serval_adoption_plan.md): inker + nematic +
+  the pelt/inker discussion (genet's
+  2026-07-09_inker_genet_adoption_plan.md): inker + nematic +
   document-canvas + knot-editor-host + the three surface-engine adapters
-  move to serval; the verso family consolidates into a `verso-tile` serval
+  move to genet; the verso family consolidates into a `verso-tile` genet
   component (points 2-4 amendments above); orrery stays in mere as the
   graph-truth presentation library; platen's destination reopened; errand
-  (with its protocol crates as members) and illume rehome to serval. No code
+  (with its protocol crates as members) and illume rehome to genet. No code
   yet.
 - **2026-07-10: platen resolved.** Platen (refactored 07-09 late session
   into the pane home; graph-scene lane merged into canvas) goes to merecat.
@@ -390,7 +391,7 @@ Verified against the tree, 2026-07-09:
   views app-side; apparatus splits its natures (settings/config vocabulary =
   `domain/apparatus`, mere; the diagnostics feed is HostObservability = app
   runtime, so the live pane is merecat's); inspector is merecat's outright
-  (fetch/content introspection); comms rides the murm/moot posture plan (pane
-  view with the app). One sentence: mere owns what a pane says when it speaks
-  graph or persistence truth, merecat owns panes that speak app-runtime
-  truth, platen owns how any of them dock and tile.
+  (fetch/content introspection); comms consumes the Murm and Moot domain
+  services (pane view with the app). One sentence: mere owns what a pane says
+  when it speaks graph or persistence truth, merecat owns panes that speak
+  app-runtime truth, platen owns how any of them dock and tile.

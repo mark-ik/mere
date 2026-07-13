@@ -11,7 +11,7 @@ use super::*;
 use crate::window_view::{GnodeBuildStats, GnodeHotRow, GnodeSnapshot, GnodeStableRow};
 use frame::GraphId;
 use mere::canvas::Face;
-use serval_scripted_dom::ScriptedDom;
+use genet_scripted_dom::ScriptedDom;
 
 impl crate::WindowCtx<'_> {
     /// Drive the focused Orrery pane for this frame: push node state/shape colours, resize
@@ -136,7 +136,7 @@ impl crate::WindowCtx<'_> {
         let gnodes = {
             let orrery = self.pane_orrery(orrery_gid);
             let cam = orrery.camera();
-            // The focused pane box, for culling gnodes to it: serval does not clip
+            // The focused pane box, for culling gnodes to it: genet does not clip
             // transformed overflow, so an off-screen node would otherwise escape the
             // orrery element up into the chrome (the toolbar-escape we saw).
             let (pw, ph) = (
@@ -305,7 +305,7 @@ impl crate::WindowCtx<'_> {
     }
 }
 
-fn count_dom_nodes(dom: &ScriptedDom, node: serval_scripted_dom::NodeId) -> usize {
+fn count_dom_nodes(dom: &ScriptedDom, node: genet_scripted_dom::NodeId) -> usize {
     1 + dom
         .dom_children(node)
         .map(|child| count_dom_nodes(dom, child))

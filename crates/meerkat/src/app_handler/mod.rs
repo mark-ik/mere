@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use netrender::NetrenderOptions;
 use mere::canvas::WHEEL_PAN_SCALE;
-use serval_winit_host::{RenderCore, modifiers_from_winit};
+use genet_winit_host::{RenderCore, modifiers_from_winit};
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalPosition, PhysicalSize};
 use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
@@ -23,11 +23,11 @@ use super::{Shell, comms_host, fetch, scrying_host, sync, titlebar};
 /// `<link rel="icon">` href if the head declares one, else the well-known
 /// `{origin}/favicon.ico` for an http(s) page. `None` for a page with neither (a
 /// non-http(s) scheme with no icon link, e.g. gemtext). A lightweight parse of the
-/// already-fetched body, reusing serval's `<link>` scan. (Favicon-on-tile.)
+/// already-fetched body, reusing genet's `<link>` scan. (Favicon-on-tile.)
 pub(crate) fn favicon_url_for(page_url: &str, body: &str) -> Option<String> {
     let base = url::Url::parse(page_url).ok()?;
-    let doc = serval_static_dom::StaticDocument::parse(body);
-    if let Some(href) = serval_layout::linked_icon_href(&doc) {
+    let doc = genet_static_dom::StaticDocument::parse(body);
+    if let Some(href) = genet_layout::linked_icon_href(&doc) {
         if let Ok(resolved) = base.join(&href) {
             return Some(resolved.to_string());
         }

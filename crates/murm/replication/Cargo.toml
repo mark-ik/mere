@@ -1,0 +1,31 @@
+[package]
+name = "murm-replication"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Shared replicated-space runtime for Murm, Moot, mesh, and other signed peer domains."
+readme = "README.md"
+keywords = ["p2p", "replication", "local-first", "sync"]
+categories = ["network-programming", "database"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+muniment = { git = "https://github.com/mark-ik/muniment.git", branch = "main" }
+p2panda-core = "0.6.1"
+p2panda-net = "0.6.1"
+p2panda-store = { version = "0.6.1", default-features = false }
+p2panda-sync = "0.6.1"
+hex = "0.4"
+blake3 = "1.5"
+serde = { version = "1", features = ["derive"] }
+proofs.workspace = true
+tokio = { version = "1", features = ["rt", "time"] }
+tokio-stream = "0.1"
+thiserror = "1"
+
+[dev-dependencies]
+pollster = "0.4"
+p2panda-stream = { version = "0.6.1", default-features = false, features = ["log_prune"] }

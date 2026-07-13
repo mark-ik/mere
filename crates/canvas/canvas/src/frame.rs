@@ -21,8 +21,8 @@ use paint_list_api::{
 };
 use paint_list_render::{CompositeLayer, composite_paint_layers};
 use crate::underlay::{identity_arrangement, canvas_paint_list_demoted_from_arrangement};
-use serval_layout::{Applied, IncrementalLayout, ScrollOffsets};
-use serval_scripted_dom::NodeId as DomNodeId;
+use genet_layout::{Applied, IncrementalLayout, ScrollOffsets};
+use genet_scripted_dom::NodeId as DomNodeId;
 
 use super::build::{
     NODE_SHEET, background_cmds, bridge_ring_overlay, community_ring_overlay, field_overlay,
@@ -313,7 +313,7 @@ impl Canvas {
 
         // Favicon layer: a textured quad over each on-screen tile that carries a
         // favicon. This layer is NOT under the `.stage` camera transform (it is a
-        // bare command list, not the serval DOM), so the camera is applied here by
+        // bare command list, not the genet DOM), so the camera is applied here by
         // projecting each corner through `Camera::to_screen` (at the default camera
         // that is `world * zoom + offset`). The favicon's `favicon_rgba` is already
         // the `ImageResource` shape (RGBA8, straight alpha), so the host's existing

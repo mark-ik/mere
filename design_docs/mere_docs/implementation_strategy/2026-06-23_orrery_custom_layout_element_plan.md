@@ -3,7 +3,7 @@
 **Parked / deferred, 2026-06-23.** Spun out of the
 [unified document host plan](2026-06-17_unified_document_host_plan.md) as its Phase-2 cond 1, the
 one remaining engine-native piece after Phase 1 + the four pressing slices landed. cond 1 makes the
-orrery a real serval **custom-layout element** whose `gyre`-positioned children carry their position
+orrery a real genet **custom-layout element** whose `gyre`-positioned children carry their position
 in the layout fragments, so every consumer (overlays, a11y bounds, text selection, hit-test) reads
 correct geometry with no transform special-casing. It is **deferred by design**: the interim
 transform-aware focus ring + the slice-4 DOM-sourced a11y bounds hold the visible behaviour correct
@@ -12,12 +12,12 @@ without it. Un-park only when host-driven transform-setting becomes a perf or co
 ## Why parked (the interim holds)
 
 Today `orrery_element` is a host-positioned `<div>` whose card children are
-`position:absolute; transform:translate(gyre.x, gyre.y)`. serval lays them out and the `translate`
+`position:absolute; transform:translate(gyre.x, gyre.y)`. genet lays them out and the `translate`
 shifts only the **paint** (the verified `RepaintOnly` transform path), not the box geometry. The
 fragments therefore carry each card at its *pre-transform* slot, and every paint-side consumer has
 to add the transform back:
 
-- the focus ring does, via `IncrementalLayout::accumulated_translate` (serval `a2d91ddc`, mere `7181206`);
+- the focus ring does, via `IncrementalLayout::accumulated_translate` (genet `a2d91ddc`, mere `7181206`);
 - the orrery a11y bounds do, via the same `accumulated_translate` (slice 4, 2026-06-23).
 
 So the correctness gap is **closed for the two live consumers**. cond 1 is the structural form that
@@ -29,9 +29,9 @@ carets, find-in-page rects inside the orrery), not a fix for a present-day bug.
 **Mechanism B (absolute `left`/`top`) is rejected.** Setting each card's `left`/`top` from `gyre`
 and letting taffy flow them would put the positions in the fragments, but a `left`/`top` change is
 layout-tier: every physics frame would relayout, the "orrery freeze" the transform / `RepaintOnly`
-path was built to avoid (regression guard, serval `incremental.rs:1232`). B reintroduces it.
+path was built to avoid (regression guard, genet `incremental.rs:1232`). B reintroduces it.
 
-**Mechanism A (custom-layout concern) is the form.** Three serval-layout pieces:
+**Mechanism A (custom-layout concern) is the form.** Three genet-layout pieces:
 
 1. **A custom-layout mode** for the orrery element, recognized by a marker attribute the way
    external-texture is recognized by `external_texture_key_of` (not a new CSS `display`): its
@@ -51,11 +51,11 @@ fragments carry the real positions) so the interim ring + a11y fixes become harm
 
 ## Scope + engine ask
 
-A real multi-subsystem serval-layout feature: a box-tree layout mode + the per-child position concern
+A real multi-subsystem genet-layout feature: a box-tree layout mode + the per-child position concern
 plumbing + a new incremental damage class / path. It warrants its own focused effort and is the
-engine-side work the unified plan said "belongs in serval's own
-`docs/2026-05-27_serval_as_host_xilem_serval_plan.md`"; this plan is the meerkat-side consumer view +
-the documented serval ask. Not a tail change; the interim ring + a11y fixes hold until it is built.
+engine-side work the unified plan said "belongs in genet's own
+`docs/2026-05-27_genet_as_host_xilem_serval_plan.md`"; this plan is the meerkat-side consumer view +
+the documented genet ask. Not a tail change; the interim ring + a11y fixes hold until it is built.
 
 ## Trigger to un-park
 

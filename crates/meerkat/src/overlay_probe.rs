@@ -24,8 +24,8 @@
 //! hit-testing) lands with the first real overlay feature (P6 — link preview /
 //! annotation pin), which supplies a real anchor and view instead of this toy.
 
-use serval_layout::{ScrollOffsets, ServalPaintList};
-use xilem_serval::{AnyView, PointerClick, ServalCtx, ServalElement, clickable, el};
+use genet_layout::{ScrollOffsets, GenetPaintList};
+use xilem_serval::{AnyView, PointerClick, GenetCtx, GenetElement, clickable, el};
 
 use crate::view_pane::ViewPane;
 
@@ -35,7 +35,7 @@ struct CounterState {
     count: u32,
 }
 
-type CounterView = Box<dyn AnyView<CounterState, (), ServalCtx, ServalElement>>;
+type CounterView = Box<dyn AnyView<CounterState, (), GenetCtx, GenetElement>>;
 type CounterLogic = fn(&CounterState) -> CounterView;
 
 /// The chip view: a classed `div` showing the live count, clickable to increment.
@@ -50,7 +50,7 @@ fn counter_view(state: &CounterState) -> CounterView {
 }
 
 /// A counter-chip overlay satellite: a [`ViewPane`] over [`CounterState`] that
-/// emits a composable [`ServalPaintList`] for the overlay slot and round-trips
+/// emits a composable [`GenetPaintList`] for the overlay slot and round-trips
 /// clicks host-side.
 struct CounterChip {
     pane: ViewPane<CounterState, CounterLogic, CounterView>,
@@ -69,7 +69,7 @@ impl CounterChip {
     /// The chip's satellite paint list at `w`×`h` — the overlay-slot content the
     /// host ships to the actor. Lays the chip out (so a subsequent `click` has a
     /// layout to hit-test).
-    fn paint_list(&mut self, w: u32, h: u32) -> ServalPaintList {
+    fn paint_list(&mut self, w: u32, h: u32) -> GenetPaintList {
         self.pane.paint_list(w, h, &ScrollOffsets::default())
     }
 
@@ -109,7 +109,7 @@ mod tests {
     /// fingerprint of its rendered text. Two chips whose only difference is the
     /// counter digit produce different sequences (the digit glyph changes), so
     /// this catches the click's effect on the composed satellite.
-    fn glyph_indices(pl: &ServalPaintList) -> Vec<String> {
+    fn glyph_indices(pl: &GenetPaintList) -> Vec<String> {
         pl.commands()
             .iter()
             .flat_map(|cmd| match cmd {
@@ -128,7 +128,7 @@ mod tests {
                 content_type: Some("text/html".to_string()),
                 body: body.to_string(),
             })),
-            engine: inker::routing::ENGINE_SERVAL_WEB.to_string(),
+            engine: inker::routing::ENGINE_GENET_WEB.to_string(),
             viewport: (420, 360),
             nav: NavGeneration::default(),
             viewport_gen: ViewportGeneration::default(),
@@ -136,7 +136,7 @@ mod tests {
         }
     }
 
-    fn set_overlay(content: ServalPaintList) -> ContentCommand {
+    fn set_overlay(content: GenetPaintList) -> ContentCommand {
         ContentCommand::SetOverlay {
             name: "counter".to_string(),
             anchor: OverlayAnchor::Root,

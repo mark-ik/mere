@@ -16,6 +16,7 @@ path = "src/lib.rs"
 [dependencies]
 # Path + version: path for local workspace builds; version for `cargo publish`.
 identity.workspace = true
+murm-replication = { workspace = true }
 transport.workspace = true
 murmuring.workspace = true
 blake3 = "1.5"

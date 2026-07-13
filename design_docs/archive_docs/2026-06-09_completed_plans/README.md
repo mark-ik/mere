@@ -18,11 +18,11 @@ Contents (origin area → doc):
   platen_taffy_retarget, card_system_and_staging, frame_tree_in_meerkat,
   adoption_roadmap, p2panda_substrate_spike_plan.
 - mere research: node_identity_and_duplicates (brief).
-- mere tech-arch: serval_as_host_evaluation (the serval-as-host decision, executed).
+- mere tech-arch: genet_as_host_evaluation (the genet-as-host decision, executed).
 - eidetic impl: eidetic_layered_stack.
 - inker impl: inker_paintlist_adoption.
 - moothold impl: tessera_plan (Phases 1-5 shipped; biscuit-auth tail homed in the moot-constitution brief).
 
-The last four (adoption_roadmap, p2panda_substrate_spike_plan, serval_as_host_evaluation,
+The last four (adoption_roadmap, p2panda_substrate_spike_plan, genet_as_host_evaluation,
 tessera_plan) were held back in the first 2026-06-09 sweep as still-cross-referenced
 executed records, then archived in a second pass once confirmed.

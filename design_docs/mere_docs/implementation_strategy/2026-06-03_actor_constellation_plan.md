@@ -112,12 +112,12 @@ not the whole engine. (Sourced from the verified model menu, 2026-06-03.)
   scheduler that does not run on wasm (Bevy itself ships single-threaded there).
   Lives in: the `Orrery` / gyre node storage, kernel-side.
 - **Incremental computation (salsa, self-adjusting computation).** Recompute only
-  what a changed input invalidated. Serval already has the *domain-specific*
+  what a changed input invalidated. Genet already has the *domain-specific*
   instance: `IncrementalLayout` with damage classes (RepaintOnly / Restyled /
   Spliced / FullRecompute) over Stylo's restyle-with-snapshots. Keep it
   domain-specific; a generic salsa graph would carry heavier dependency-tracking
   overhead than the damage classification for this domain. Lives in:
-  serval-layout, inside the content actor. The kernel-side lesson: derived state
+  genet-layout, inside the content actor. The kernel-side lesson: derived state
   (frame layout, LOD, arrangement) carries explicit invalidation, never a shared
   mutable cache.
 - **Structured concurrency / fork-join (rayon).** Parallelize *inside* one
@@ -127,14 +127,14 @@ not the whole engine. (Sourced from the verified model menu, 2026-06-03.)
   data model, never mandatory parallelism (mandatory broke on floats). Lives in:
   compute actors (P6), feature-gated.
 - **Reactive dataflow (Xilem, signals).** The view layer. Declarative views
-  diffed into serval's DOM, running on the `!Send` kernel context. Composes
+  diffed into genet's DOM, running on the `!Send` kernel context. Composes
   directly: actor kernel for state and ownership, reactive dataflow for the view.
   Lives in: `xilem_serval`, the kernel's programming model.
 - **Utility-first systems (Tailwind).** Borrow the *bounded primitive vocabulary*
   with static lowering, not class-string authoring: a small token set the runtime
   sees as a finite, normalized representation beats open-ended per-component style
   APIs. For Mere, typed tokens / variants / primitives that lower to
-  `netrender::Scene` or serval styles. Lives in: chrome/style tokens and
+  `netrender::Scene` or genet styles. Lives in: chrome/style tokens and
   projection lowering. Do **not** make Tailwind a dependency or utility strings a
   protocol.
 - **Capability / wasm-component isolation.** Shared-nothing linking with explicit
@@ -184,11 +184,11 @@ channels."
 **The content pipeline is a pure `Scene` producer, but verify it off-thread.**
 `crates/meerkat/src/card.rs::render_content_scene(url, state, registry, loader,
 w, h) -> Scene` is pure CPU and runs on the UI thread today: HTML parses through
-`serval_static_dom::StaticDocument` and the shared serval cascade/layout to a
+`genet_static_dom::StaticDocument` and the shared genet cascade/layout to a
 scene; markdown/gemtext/text/feed route through a nematic `EngineDocument`;
 everything else renders a synthesized document. Moving it onto a content-actor
 thread is a relocation in principle. The caveat to clear before P2 is called
-low-risk: the serval cascade leans on Stylo's process-global `GLOBAL_STYLE_DATA`
+low-risk: the genet cascade leans on Stylo's process-global `GLOBAL_STYLE_DATA`
 plus a `CascadeGuard` thread-local and a leaked per-thread sharing cache. Confirm
 by runtime test that the cascade initializes and runs correctly off the main
 thread and concurrently across N content-actor threads. That is the class of
@@ -263,12 +263,12 @@ in `card.rs`); Nova is a later phase, and `!Send` from the day it lands.
    microtask checkpoints. Keep an atomic task atomic: the sub-steps run inside one
    delivered message, not as a fan-out. (Borrowed from formal-web; this is the
    exact bug Terzian fixed twice in Servo's event loop. See
-   `repos/serval/docs/2026-06-24_formal_web_lessons.md`.)
+   `repos/genet/docs/2026-06-24_formal_web_lessons.md`.)
 6. **Coalesced cross-owner work is scoped per owner, never one global flag.** When
    a shared scheduler batches work across independently-lifetimed owners
    (documents, tiles, scenes, agents), a single global batching flag strands the
    siblings when one owner is torn down. Scope the coalescing state per owner. (The
-   second Servo event-loop bug; serval's multi-scene-per-loop constellation is a
+   second Servo event-loop bug; genet's multi-scene-per-loop constellation is a
    textbook setting.)
 
 The typed boundary makes invariants 1-2 compile-enforced rather than guarded; the
@@ -357,7 +357,7 @@ input meant for a page it has already replaced.
 
 ## Threat model
 
-Pinned: **Mere's content is semi-trusted.** Own code, audited engines (serval,
+Pinned: **Mere's content is semi-trusted.** Own code, audited engines (genet,
 Nova), authenticated federation peers. Not arbitrary hostile multi-origin web
 content.
 
@@ -409,7 +409,7 @@ verified against current primary sources.
   builds in-process.
 
 P5 follows from this. An in-process wasmtime sandbox would require compiling the
-entire serval + Nova content engine to wasm32 to run under it, for a boundary
+entire genet + Nova content engine to wasm32 to run under it, for a boundary
 that is memory-safety rather than Spectre resistance anyway. For semi-trusted
 content the actor-thread boundary already gives the failure and memory-safety
 isolation that matters, so P5 is descoped: real isolation, if ever needed, is an
@@ -468,7 +468,7 @@ arc, but its self-healing does not). Per phase, with evidence:
   the cascade off the UI thread and ships generation-tagged `ContentUpdate::Scene`;
   the constellation accepts the latest. `ingest::harvest_contributions` is the pure
   producer, split from `harvest` (the kernel-side apply). Cascade-off-thread is
-  guarded by serval's `cascade_is_deterministic_off_thread_and_concurrent` test.
+  guarded by genet's `cascade_is_deterministic_off_thread_and_concurrent` test.
 - **P3 Nova — not started.** Content is `StaticDocument`; no JS engine yet.
 - **P4 N actors + lifecycle — done** (2026-06-04). `meerkat::Constellation` is the
   plural, per-tile actor pool: spawn / reap / LRU eviction over a cap / keep-warm /
@@ -619,7 +619,7 @@ what is most likely to break, the mitigation, and a pointer.
 - **`!Send` Nova needs a dedicated thread from P2,** so the content actor is
   thread-shaped before scripting lands and Nova drops in without a rewrite.
 - **Cascade off-thread (P2) — cleared 2026-06-03.** The `cascade-offthread` probe
-  confirms the serval cascade runs correctly off the main thread and under 8-way
+  confirms the genet cascade runs correctly off the main thread and under 8-way
   concurrency (see **Findings** / **Progress**).
 - **Declarative lifecycle.** Respawn from the kernel-owned `ActorSpec`, never ad
   hoc closure state, or fault recovery becomes another hidden shared-state seam
@@ -660,7 +660,7 @@ what is most likely to break, the mitigation, and a pointer.
   **threat model** to semi-trusted with the Spectre / Site-Isolation tripwire, and
   descoped **P5** (in-process wasmtime) accordingly. Added the **Technical ground
   truth** (verified, cited). Affirmed `Scene: Send` by code inspection and
-  separated it from the weaker serializability claim. Flagged the serval cascade's
+  separated it from the weaker serializability claim. Flagged the genet cascade's
   off-thread and concurrent thread-local/global behavior as a P2 verification
   gate. Added the **Decide now vs defer** framing, switched the fault default to
   thread respawn over in-place `catch_unwind`, and recorded the snapshot
@@ -668,7 +668,7 @@ what is most likely to break, the mitigation, and a pointer.
 - **2026-06-03.** Added the Tailwind lesson to the model menu: borrow the bounded
   primitive vocabulary and static lowering pattern, not Tailwind itself. For Mere,
   that means typed tokens / variants / small composable primitives that lower into
-  serval styles or `netrender::Scene`, never utility strings as protocol and never
+  genet styles or `netrender::Scene`, never utility strings as protocol and never
   a styling framework inside `armillary`.
 - **2026-06-03.** Tightened the implementation constraints: kernel authority must
   remain private (`!Send` alone is not enough if a `Send` wrapper leaks graph/GPU
@@ -678,9 +678,9 @@ what is most likely to break, the mitigation, and a pointer.
   kernel-owned `ActorSpec`; and P3 now has a script-protocol floor (lifecycle,
   generation-tagged input, run-to-completion turns, microtask checkpoints,
   message-based fetch, coherent paint commits, contribution output).
-- **2026-06-04.** Cascade off-thread guarantee hardened on the serval side
+- **2026-06-04.** Cascade off-thread guarantee hardened on the genet side
   (lesson #1). Added `cascade_is_deterministic_off_thread_and_concurrent` to
-  `ports/pelt-live` (serval): the Scene's draw ops are byte-identical on the main
+  `ports/pelt-live` (genet): the Scene's draw ops are byte-identical on the main
   thread, off-thread, and across 8 concurrent threads, so the property P2 leans on
   is now a `cargo test` regression guard living with the engine (stronger than the
   mere-side glyph-count probe, which counts rather than compares). Path audit: safe
@@ -702,7 +702,7 @@ what is most likely to break, the mitigation, and a pointer.
   (proven by a `compile_fail` doctest, not asserted), the actor harness
   (`spawn(wake, run) -> (ActorHandle, Receiver)` with the runtime / engine built *on*
   the actor thread so `!Send` internals never cross), and the generation types
-  (`39a8530`). The **serval cascade off-thread gate** flagged above is **cleared** by
+  (`39a8530`). The **genet cascade off-thread gate** flagged above is **cleared** by
   the `cascade-offthread` probe ([`crates/probes/cascade-offthread`](../../../crates/probes/cascade-offthread)):
   the `card.rs::html_scene` path renders identically on the main thread, off-thread,
   and across 8 concurrent threads, no panic (`f8f79e5`). **P1:** the `fetch`
@@ -780,18 +780,18 @@ what is most likely to break, the mitigation, and a pointer.
   43+23 green.
 - **2026-06-10. Scripting map collapsed to Rust + JS; Rune and Rhai dropped.** The
   four-language placement (Rust+arena / JS content / Rune orchestration / Rhai
-  declarative+policy) was re-examined against present-day facts and the serval binding
+  declarative+policy) was re-examined against present-day facts and the genet binding
   code, and it does not hold. Decision: **two scripting substrates, Rust and JS** (Nova
   native, Boa wasm/oracle). Grounding, in order of weight:
   - **The binding seam is DOM-neutral, verified in code**
-    (`components/script-engine-api/lib.rs` in serval). `ScriptEngine` names no DOM
+    (`components/script-engine-api/lib.rs` in genet). `ScriptEngine` names no DOM
     types; `HostData` is `Rc<dyn Any>`; the reflector primitive is an opaque `u64`
     handle (`ReflectorData`) with engine-side identity caching, not a node type. So an
     orchestration actor binds its host surface (model / tool / agent calls) to Nova or
     Boa by reusing the neutral seam, with no DOM baggage. This was the one fact that
     could have justified Rune (cheap Rust interop a JS binding can't match). It does not.
   - **Orchestration is async glue, which is JS's home turf.** Rune's headline edge was
-    first-class async; JS has promises and `await` natively, and serval already pumps
+    first-class async; JS has promises and `await` natively, and genet already pumps
     Nova/Boa microtasks. The everywhere-ships-wasm32 property that first picked Rhai is
     equally true of Boa (interpreter, no JIT), so the browser/PWA target is unaffected.
   - **Untrusted coordination policy leaves scripting entirely.** It becomes a
@@ -808,7 +808,7 @@ what is most likely to break, the mitigation, and a pointer.
     resolve and reject paths, double-settle safe; cross-backend tests green
     (`host_promise_bridges_js_await` on Nova and Boa). The primitive is **dual-use with
     content-tier `fetch`** (host-future to JS-promise), so it rides infrastructure the
-    content lane needs regardless, not Rune-justifying net work. Code in serval
+    content lane needs regardless, not Rune-justifying net work. Code in genet
     `components/script-engine-{api,nova,boa}`.
   - **Reopen trigger:** a Rune 1.0 with a sandbox warranty would reopen only the
     untrusted-policy question, and only if that policy is kept as a script rather than
@@ -827,7 +827,7 @@ what is most likely to break, the mitigation, and a pointer.
   JS-isms (`null` vs `undefined`, ToString, reflector `===` identity). Even a sync-only
   engine (Rhai, were it kept) rides the same seam with the promise methods returning
   unsupported, so **no second seam is justified at all**. Language stays a **consumer
-  policy**: `serval-scripted-dom` binds JS only (fixed by web semantics); the P6
+  policy**: `genet-scripted-dom` binds JS only (fixed by web semantics); the P6
   orchestration actor could take its backend by config (the real Rune appeal); nematic
   living-knots are a hedged sidequest that **inherits the trusted/untrusted line** (Rune's
   WIP sandbox makes them a local-authoring feature, not a run-a-stranger's-doc one). Does
@@ -899,7 +899,7 @@ what is most likely to break, the mitigation, and a pointer.
   contributions are graph-stamped under the window-composition orrery pool. The
   constellation's actor scenes remain the texture lane of pelt V6's mixed-content
   tiles — this plan's outputs plug into the pane contract unchanged.
-- **2026-06-24. Harvested gterzian/formal-web** (`repos/serval/docs/2026-06-24_formal_web_lessons.md`).
+- **2026-06-24. Harvested gterzian/formal-web** (`repos/genet/docs/2026-06-24_formal_web_lessons.md`).
   Two load-bearing **invariants** added (5: an atomic spec task is one message, not
   decomposed into several; 6: coalesced cross-owner work is scoped per owner, never
   one global flag) — both are event-loop bugs Terzian fixed in Servo that this
@@ -912,7 +912,7 @@ what is most likely to break, the mitigation, and a pointer.
   spec-level data, decoupled from the process): bind `EventLoopId` to an armillary
   actor (native) or a Web Worker (wasm), and carry the `can_block` flag (workers may
   block, windows may not). Trace validation of the event loop (NDJSON tap on the
-  task boundaries, replayed against a TLA+ spec) was spun out to serval's
+  task boundaries, replayed against a TLA+ spec) was spun out to genet's
   `archive/2026-06-24_event_loop_rigor_plan.md` and landed there (E4 completed
-  2026-07-02; plan archived 2026-07-05, residuals in serval's
+  2026-07-02; plan archived 2026-07-05, residuals in genet's
   `2026-07-05_event_loop_rigor_followups.md`).

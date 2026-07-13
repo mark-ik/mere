@@ -2,8 +2,8 @@
 
 **Date**: 2026-06-16
 **Status**: Planned; backend done + in tree, host UI to build.
-**Scope**: The Ctrl+F find-bar + match-highlight overlay over the **HTML/serval lane**, on top of
-the committed find-in-page backend (serval `28e3e553`, mere `eefbed6`). A Lane 1 browser table-stake
+**Scope**: The Ctrl+F find-bar + match-highlight overlay over the **HTML/genet lane**, on top of
+the committed find-in-page backend (genet `28e3e553`, mere `eefbed6`). A Lane 1 browser table-stake
 from the [in-the-wings audit](../research/2026-06-15_in_the_wings_and_browser_bar_audit.md) §4.
 **Related**: the 2026-06-16 find-in-page handoff addendum (the source of the file:line pointers).
 
@@ -20,7 +20,7 @@ from the [in-the-wings audit](../research/2026-06-15_in_the_wings_and_browser_ba
   into the card exactly like `card_link_at` (subtract card origin, add `view.scroll[member]`).
 - Matches arriving set `out.any_scene`, so a redraw fires automatically.
 
-**Scope:** HTML/serval lane only (the actor searches serval's laid-out text). The **document lane**
+**Scope:** HTML/genet lane only (the actor searches genet's laid-out text). The **document lane**
 (gemtext/markdown) needs source text + a glyph→char map on `DocumentRenderPacket`
 (`inker/document-canvas/src/types.rs` `GlyphRun`/`RenderedBlock` ship glyph IDs, not chars) — a
 separate follow-on. So HTML find lands first; gemtext find is a later piece.

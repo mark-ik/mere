@@ -2,9 +2,9 @@
 
 **Date**: 2026-06-02
 **Status**: Draft (for review). The unifying sequence + architecture spine for
-integrating all of Mere onto the single serval-as-host shell (`meerkat`). It does not replace the
+integrating all of Mere onto the single genet-as-host shell (`meerkat`). It does not replace the
 canonical docs it weaves: the [composition spine](../technical_architecture/2026-05-21_mere_composition_spine.md)
-(the model), the [serval-as-host flip plan](2026-06-01_serval_host_flip_plan.md)
+(the model), the [genet-as-host flip plan](2026-06-01_genet_host_flip_plan.md)
 (the host migration), and the [adoption roadmap](2026-05-27_adoption_roadmap.md)
 (the R0–R5 wiring order). It sequences those three in-flight tracks into one build,
 fixes the architecture's root question, inventories the (large) already-built
@@ -45,7 +45,7 @@ servoshell, graphshell, and meerkat eras whenever it tried to re-invert:
 
 ### The layered stack
 
-Everything below the host is host-neutral. The host is the only serval-coupled
+Everything below the host is host-neutral. The host is the only genet-coupled
 layer. The [composition spine](../technical_architecture/2026-05-21_mere_composition_spine.md)
 (graph → forme → platen → verso → inker → host) is fixed; the flip changed only
 the bottom realization substrate.
@@ -54,10 +54,10 @@ the bottom realization substrate.
 | --- | --- | --- |
 | Truth / data | `kernel` (graph + Field/Coupling), `eidetic`, `persona/identity`, `murm`/`moot`, `intel/embed`, `import`, `node-lineage` | graph + durable memory + identity + comms |
 | Graph substrate | `aether` (fields), `gyre` (physics), `cartography` (projection), `arrangements`, `platen::scene_paint`/`orrery` | the graph realized as spatial geometry + paint |
-| Engines | `inker` (controller), `nematic` (smolweb), `serval` (fullweb), `scrying-engine` (system WebView), `document-canvas` | node media → render output |
+| Engines | `inker` (controller), `nematic` (smolweb), `genet` (fullweb), `scrying-engine` (system WebView), `document-canvas` | node media → render output |
 | Composition | `forme` (arrangement authority), `platen` (projection compiler), `verso` (surface lifecycle), `frame` (tiled-mode pane tree) | arranging projections of the graph |
 | Shell domain | `chrome`, `shell-state`, `session-runtime`, `ux-events`, `register-viewer` | host-neutral view-models + routing |
-| **Host (serval-coupled)** | `meerkat` (+ `serval-winit-host`), retiring: `mere-app` | window + present + input; renders the projections |
+| **Host (genet-coupled)** | `meerkat` (+ `genet-winit-host`), retiring: `mere-app` | window + present + input; renders the projections |
 
 ---
 
@@ -76,10 +76,10 @@ only an empty `register-renderer-types` stub survives). The seam is:
   full-bleed, chrome floating over it. (Today it is synthesized HTML; that is the
   central gap, §4.)
 - **`content_for(graph / node / pane)` resolves to one of three composition modes**
-  (the surviving, re-derived-against-serval form of the old NodeRenderer modes), as
+  (the surviving, re-derived-against-genet form of the old NodeRenderer modes), as
   a **convention**, not a trait registry:
-  - **in-scene** — a serval `ScriptedDom` content-root / `platen` PaintList (the
-    orrery underlay, document tiles via `document-canvas`, fullweb via serval);
+  - **in-scene** — a genet `ScriptedDom` content-root / `platen` PaintList (the
+    orrery underlay, document tiles via `document-canvas`, fullweb via genet);
   - **embedded-frame** — a `netrender` `ExternalTexturePlacement` (scrying/web
     tiles, the path meerkat already exercises);
   - **overlay** — an OS WebView (wry), reserved.
@@ -104,13 +104,13 @@ The single biggest finding of the corpus read: **most of the parts exist, are
 green, and are host-neutral. The work is wiring, not building.** Status verified
 against the tree.
 
-**Host / present (serval-as-host, live):**
+**Host / present (genet-as-host, live):**
 - `meerkat` — chrome-as-DOM shell on screen: toolbar/omnibar/command-palette/linear
   history via xilem-serval over reused `chrome`; two-root composition. Content-root
   is now the `Orrery` (S1, `8786484`); fetch + a live engine behind it is the S2 gap.
-- `serval-winit-host` — shared wgpu+netrender present stack (boot, rasterize,
-  acquire, input mapping). Used by both serval bins. *(2026-06-10: only mere's
-  copy exists now; no `SurfaceHost` remains anywhere in the serval repo.)*
+- `genet-winit-host` — shared wgpu+netrender present stack (boot, rasterize,
+  acquire, input mapping). Used by both genet bins. *(2026-06-10: only mere's
+  copy exists now; no `SurfaceHost` remains anywhere in the genet repo.)*
 - `orrery-host` — the full interactive orrery (platen underlay + live gyre + abs-pos
   DOM node children under one camera + pan/zoom/inertia/drag/pick/marquee/edge-pick +
   pre-materialized pool), now factored into a reusable window-agnostic `Orrery` lib
@@ -119,7 +119,7 @@ against the tree.
 
 **Render substrate (frozen, build on it):** `netrender` (Scene, `composite_paint_layers`,
 external-texture, box-shadow masks), `paint_list_render` (`PaintCmd`→Scene;
-`DrawStroke`/`DrawPath`→`SceneShape` landed), `serval-layout` (`IncrementalLayout` +
+`DrawStroke`/`DrawPath`→`SceneShape` landed), `genet-layout` (`IncrementalLayout` +
 persistent Stylist + incremental inline-transform restyle), `pelt-live`
 (`scene_from_scripted_dom`/`hit_test_node` — meerkat reuses), `xilem-serval`. Render
 gaps are localized warn-skips (nine-patch borders, inset shadows, path clips, stroke
@@ -164,12 +164,12 @@ host-wired), `intel/embed` (Tier-2 embeddings, persists through eidetic),
 1. **meerkat content-root** — ~~synthesized HTML, not the orrery~~ **the orrery now
    (S1)**. Remaining: no fetch and no live engine behind a node yet. The content
    pipeline exists; meerkat does not yet consume it. This is the S2 keystone gap.
-2. **Two serval bins (meerkat + orrery-host) should be one shell** — *functionally
-   folded* (S1.2): both run the same `Orrery` over the shared `serval-winit-host`.
+2. **Two genet bins (meerkat + orrery-host) should be one shell** — *functionally
+   folded* (S1.2): both run the same `Orrery` over the shared `genet-winit-host`.
    Remaining: the orrery-host bin's physical retirement, deferred to the S7 cutover.
 3. **Node-media tiles** — *shipped* (S2.2): the focused node's media renders as a
    floating card from real fetched content — document lane (nematic) + HTML lane
-   (serval). Remaining: web-via-scrying (S6), binary media, multiple / at-node tiles
+   (genet). Remaining: web-via-scrying (S6), binary media, multiple / at-node tiles
    and the tiled workbench (S4).
 4. **netfetcher** — *consumed* (S2.2b): meerkat fetches off the UI thread (tokio
    worker + `EventLoopProxy` wake) and routes the bytes to engines. Remaining: a
@@ -208,13 +208,13 @@ critical path threads the flip plan (P1–P5) and the adoption roadmap (R0–R5)
 - **S1 — Orrery as meerkat's content-root (flip P1 → in the real shell).** Fold
   orrery-host's loop into meerkat as the content-root spatial surface (the graph,
   rendered), chrome composited over it. *Leverage*: orrery-host is done;
-  `serval-winit-host` is shared. *Done*: meerkat opens to an interactive orrery of a
+  `genet-winit-host` is shared. *Done*: meerkat opens to an interactive orrery of a
   graph, pan/zoom/drag/pick working, chrome on top. **Done `2026-06-02`** (S1.1
   `64ebe44` + S1.2 `8786484`); the orrery-host bin's physical retirement folds into
   the S7 cutover (it stays a lib test-harness over the shared `Orrery` until then).
 - **S2 — Node media as tiles + fetch (flip P4 in-scene part + netfetcher).** Wire the
   engine pipeline so a node's content renders as a tile (in-scene): omnibar URL →
-  `netfetcher::fetch` → `inker` route → engine → `document-canvas`/serval →
+  `netfetcher::fetch` → `inker` route → engine → `document-canvas`/genet →
   `PaintList` → composited tile, bound to the node (`graph_id`). *Leverage*: the
   whole pipeline + netfetcher exist. *Done*: navigating populates the graph and shows
   a node's media as a tile. This is the graph-rooted browse loop.
@@ -231,7 +231,7 @@ critical path threads the flip plan (P1–P5) and the adoption roadmap (R0–R5)
     real loading + error card states. Renders fetched bytes as plain text.
   - *S2.2b-ii* (`7c03a93`): content-type routing — a nematic `EngineRegistry`
     (markdown / gemtext / plain / feeds) through the document lane, and `text/html`
-    through the **serval lane** (`set_inner_html` → `scene_from_scripted_dom`,
+    through the **genet lane** (`set_inner_html` → `scene_from_scripted_dom`,
     reusing the host renderer). This consumes netfetcher first (gap #4) and is the
     async-host architecture S3/S5 reuse. **S2 done `2026-06-02`.**
 - **S3 — Persistence host seam (R-data).** meerkat constructs a per-identity `eidetic`
@@ -261,7 +261,7 @@ critical path threads the flip plan (P1–P5) and the adoption roadmap (R0–R5)
     flush), so pages survive restart without re-fetching.
 - **S4 — Tiled-workbench mode + peripheral panes (flip P2 + verso, R2).** `FrameLayout`
   becomes the cross-graph tiled-analysis mode over node-tiles; retarget
-  `platen::layout` Morphorm→taffy under serval; light up gloss/apparatus projections;
+  `platen::layout` Morphorm→taffy under genet; light up gloss/apparatus projections;
   verso surface lifecycle gains its first real consumer here (consumer-first). *Done*:
   a workbench mode arranges node-tiles from one or more graphs; tear-out keeps
   `graph_id`.
@@ -278,7 +278,7 @@ critical path threads the flip plan (P1–P5) and the adoption roadmap (R0–R5)
 - **S6 — External content re-home (flip P4 embedded-frame).** Re-land scrying web
   tiles on meerkat via `ExternalTexturePlacement` (discard the dead Masonry fork
   edits; the scrying-engine crate is host-neutral). *Done*: a web/scrying tile
-  composites through serval.
+  composites through genet.
   **Detailed elaboration: [scrying tile plan](2026-06-10_scrying_tile_plan.md)**
   (UI-thread `ScryingHost` beside the constellation; X1 Windows-first →
   X2 input/nav → X3 lifecycle + per-node pin → X4 macOS/Linux).
@@ -311,10 +311,10 @@ critical path threads the flip plan (P1–P5) and the adoption roadmap (R0–R5)
   placeholder string become a parallel identity.
 - **STM TTL vs eidetic no-GC.** Short-term sidecars (session-runtime) own sweep;
   eidetic engrams are durable-by-default.
-- **Pick one `serval-winit-host`** (mere's is live; confirm serval's copy is
+- **Pick one `genet-winit-host`** (mere's is live; confirm genet's copy is
   reference, not a drifting fork).
 - **Narrow `kernel::host_toolkit.rs`** — it still enumerates Iced/Gpui/Egui/Makepad
-  host adapters, a multi-adapter assumption that predates the serval-only flip.
+  host adapters, a multi-adapter assumption that predates the genet-only flip.
 
 ---
 
@@ -395,7 +395,7 @@ consumer appears.
     module). 31/31 meerkat lib tests pass; meerkat builds clean.
   - *Deferred*: the orrery-host bin's **physical** retirement (gap #2's last step)
     folds into the S7 cutover, alongside `mere-app`, rather than deleting a working
-    isolated harness mid-stream. It shares the `Orrery` lib + `serval-winit-host`
+    isolated harness mid-stream. It shares the `Orrery` lib + `genet-winit-host`
     with meerkat (no divergent engine), so it is a lib test-harness bin, not a
     competing app host. Done-condition for S1's interactive-orrery-in-the-shell is
     met; only the cleanup tail moves.
@@ -420,9 +420,9 @@ consumer appears.
     loading + error states. Deps: netfetcher (sibling), url, tokio. 6 bin tests.
   - *S2.2b-ii* (`7c03a93`): content-type routing. A nematic `EngineRegistry`
     (markdown / gemtext / plain / feeds) feeds the document lane; `text/html` rides
-    the **serval lane** (`set_inner_html` → `scene_from_scripted_dom`), confirming
-    Mark's point that serval is free here (already the host). 10 bin tests
-    (markdown-through-nematic + HTML-through-serval). Deps: nematic.
+    the **genet lane** (`set_inner_html` → `scene_from_scripted_dom`), confirming
+    Mark's point that genet is free here (already the host). 10 bin tests
+    (markdown-through-nematic + HTML-through-genet). Deps: nematic.
   - The full graph-rooted browse loop now runs: navigate → graph grows a linked node
     → fetch off-thread → route by type → the focused node's media renders as a card,
     chrome on top. The async-host seam (worker + channel + proxy wake) is the
@@ -431,7 +431,7 @@ consumer appears.
     concurrent fastbloom/zstd change is interleaved in the shared lock; the next lock
     commit carries meerkat's netfetcher / tokio / url / nematic entries with it.
   - *Deferred from S2*: durable `FetchContext` (cookie jar / cache / real CSP) instead
-    of `permissive()`; binary media; page-supplied CSS in the serval HTML lane.
+    of `permissive()`; binary media; page-supplied CSS in the genet HTML lane.
 - **2026-06-02 — S3.1 done: the session graph survives restart.**
   - `session-runtime::session_graph_store` (`900253e`, native-only): `save` / `load`
     the graph through its serde `GraphSnapshot` (URL-stable) as pretty `graph.json`,
@@ -457,7 +457,7 @@ consumer appears.
     `CameraSnapshot` affine and restores on launch (suppressing the first-frame
     recenter); graph + camera save after each navigation and on window close. Reuses
     `view_intent_store` (atomic writes); no new deps. 11 orrery + 11 meerkat tests.
-  - The serval HTML lane also gained page-supplied inline `<style>` layering
+  - The genet HTML lane also gained page-supplied inline `<style>` layering
     (`inline_stylesheets_from_source`), landed alongside by a sibling change.
   - *Next (S3.2b)*: `ViewIntent.focus` to re-open the focused node's card on reload;
     persona / session / manifest threading; the eidetic content store for media.

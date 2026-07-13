@@ -17,7 +17,7 @@ use crate::card::LinkHit;
 // `ContentCommandMessage`) is exercised only on the wasm content-worker path;
 // on native, commands ride the in-process actor handle directly and never
 // serialize. Gating it to wasm32 keeps the overlay commands — desktop-host-only
-// and carrying a `ServalPaintList` the worker wire does not encode — out of the
+// and carrying a `GenetPaintList` the worker wire does not encode — out of the
 // message contract entirely, so they need no `ContentCommandMessage` variant.
 // (Overlay-roots P1.)
 #[cfg(target_arch = "wasm32")]

@@ -13,7 +13,7 @@ use kernel::graph::{
     ContainmentSubKind, EdgeAssertion, Graph, NodeKey, RelationSelector, SemanticSubKind,
 };
 use layout_dom_api::LayoutDomMut;
-use serval_layout::IncrementalLayout;
+use genet_layout::IncrementalLayout;
 
 use crate::build::*;
 use crate::palette;
@@ -91,7 +91,7 @@ fn visible_relation_edges_keeps_one_tuple_per_cell_and_drops_hidden_ones() {
 }
 
 /// The load-bearing check for the palette-as-custom-properties move: the sheet
-/// names no color, so if serval's cascade ever stopped substituting `var()` the
+/// names no color, so if genet's cascade ever stopped substituting `var()` the
 /// gnodes would silently lose their fill. Assert the *resolved* computed color,
 /// not the sheet text.
 #[test]

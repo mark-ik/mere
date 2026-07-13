@@ -105,8 +105,8 @@ Pulled into slice 1 (decision 2026-06-13): read-only **graph queries**
 immediately (`>for n in nodes() { ... }`). This realizes the cross-to-orrery
 reach in the first cut rather than deferring it, at the cost of the snapshot
 carrying graph state. Still deferred to a later slice: the richer per-node
-`inspect()` returning the serval `ContentReport` as a map (it converges with the
-pelt/serval inspector work and wants the laid-out-document query seam).
+`inspect()` returning the genet `ContentReport` as a map (it converges with the
+pelt/genet inspector work and wants the laid-out-document query seam).
 
 ## Placement
 
@@ -152,7 +152,7 @@ there until a second consumer pulls it out.
   a rhai map, queryable by label (`inspect()["Title"]`). `ShellContext` carries the
   rows as plain `(String, String)` (no cross-crate dep); the bin populates them
   from `inspector_rows` over the focused node, `CommandShell` surfaces the map.
-  (Broader than the originally-scoped serval `ContentReport`, and reuses the
+  (Broader than the originally-scoped genet `ContentReport`, and reuses the
   existing inspector logic — closes the omnibar↔inspector loop.)
 
 ## Decisions (2026-06-13)
@@ -161,7 +161,7 @@ there until a second consumer pulls it out.
    stance). `classify` reads a leading `>` as the command arm.
 2. **Slice-1 binding scope:** the 20 Commands + nav/history queries **plus**
    read-only graph queries (`focused_node()`, `nodes()`). Richer per-node
-   `inspect()` (the serval `ContentReport`) stays deferred.
+   `inspect()` (the genet `ContentReport`) stays deferred.
 
 ## Progress
 
@@ -178,7 +178,7 @@ there until a second consumer pulls it out.
   live `>`-command and the S4 `inspect()` query remain.
 - 2026-06-13: **polish + unification + S4 shipped.** Palette/omnibar single source
   (`Command::verb()`; bindings + completion derive from `Command::ALL`); ghost-text
-  autocomplete (serval `TextInput` ghost suffix + `accept_ghost`, `shell_eval::complete`,
+  autocomplete (genet `TextInput` ghost suffix + `accept_ghost`, `shell_eval::complete`,
   → / Tab accept; `f12f013`, `e6b459646da`); caret/selection/Ctrl+A input polish;
   `>relate` / `>unrelate` edge commands (`d4f7787`); S4 `inspect()` (`f4eee77`).
   All on-screen verified. Suite: 59 lib + 76 bin.

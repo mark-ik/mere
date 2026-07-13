@@ -6,17 +6,19 @@
 //!
 //! [`SyncedMesh`] runs the offline-catch-up + live lane for one mesh's job
 //! log: a `LogSync` (RBSR) session over the [`MeshStore`], reconciling
-//! operations a device missed while away and draining each received operation
-//! into the store (verified + idempotent). Where a receive-only consumer just
-//! folds, a mesh peer also *speaks*: [`author`](SyncedMesh::author) signs an
-//! event at the device's next log position, persists it, and pushes it onto
-//! the live lane so connected peers see it now — RBSR covers whoever was away.
+//! operations a device missed while away and passing each received operation
+//! through the shared policy-before-insert processor. Where a receive-only
+//! consumer just folds, a mesh peer also *speaks*:
+//! [`author`](SyncedMesh::author) signs an event at the device's next log
+//! position, passes it through that same processor, and pushes a newly inserted
+//! operation onto the live lane so connected peers see it now. RBSR covers
+//! whoever was away.
 //!
 //! The drain half (the loop, the [`SyncStatus`] counters, `resync`, the
-//! task lifetime) is [`transport::SyncedSpace`], shared with murm's cabal
+//! task lifetime) is [`murm_replication::SyncedSpace`], shared with murm's cabal
 //! sync. This module keeps only the mesh-specific parts: building the session
-//! over the [`MeshStore`], the `accept` closure (verify + addressed-mesh guard
-//! + async insert), the authoring path, and the [`JobBoard`] fold.
+//! over the [`MeshStore`], the domain admission policy and addressed-mesh
+//! guard, the authoring path, and the [`JobBoard`] fold.
 //!
 //! It is **endpoint-decoupled**: `join` takes the raw p2panda-net [`Endpoint`]
 //! + [`Gossip`] (the host pulls them from its `P2pandaTransport` via
@@ -25,26 +27,26 @@
 //! session syncs exactly that mesh's log.
 
 use identity::Ed25519Keypair;
-use mooting::MunimentStore;
 use muniment::Backend;
+use murm_replication::{MunimentStore, SyncedSpace};
 use p2panda_core::{Operation, SigningKey, Topic};
 use p2panda_net::sync::SyncHandle;
 use p2panda_net::{Endpoint, Gossip, LogSync};
 use p2panda_sync::protocols::TopicLogSyncEvent;
-use transport::SyncedSpace;
 
 use crate::board::JobBoard;
+use crate::retention::RetentionCheckpoint;
 use crate::store::{MeshStore, MeshStoreError};
-use crate::wire::{MeshEvent, MeshExt, to_operation, verify};
+use crate::wire::{MeshEvent, MeshExt, MeshLogId, to_operation, to_prune_operation};
 
 // The shared drain's status + checkpoint types are re-exported so the mesh
 // public surface (`mesh::SyncStatus` / `mesh::SyncRound`) stays stable.
-pub use transport::{SyncRound, SyncStatus};
+pub use murm_replication::{SyncRound, SyncStatus};
 
 /// The mesh's LogSync session type: the muniment-backed store, one log per
 /// author per mesh (the log id is the mesh id), mesh extensions on every
 /// operation.
-type MeshLogSync<B> = LogSync<MunimentStore<B, MeshExt>, [u8; 32], MeshExt>;
+type MeshLogSync<B> = LogSync<MunimentStore<B, MeshExt>, MeshLogId, MeshExt>;
 type MeshSyncHandle = SyncHandle<Operation<MeshExt>, TopicLogSyncEvent<MeshExt>>;
 
 /// A mesh sync failure (LogSync session setup, publish, or the store).
@@ -101,18 +103,13 @@ impl<B: Backend + Clone + Send + Sync + 'static> SyncedMesh<B> {
             .await
             .map_err(|e| MeshSyncError::Backend(format!("logsync subscribe: {e}")))?;
 
-        // Drain each reconciled op into the store: verify the signature and the
-        // addressed mesh (defence in depth behind the protocol's header
-        // validation), then insert (idempotent on the hash). `accept` counts an
-        // op only when it verifies and is new.
+        // Remote receipt and local authoring use the same shared processor.
+        // `accept` counts an operation only when policy admits it and the atomic
+        // indexed write reports it as new.
         let accept_store = store.clone();
         let space = SyncedSpace::drive(sub, move |op: Operation<MeshExt>| {
             let store = accept_store.clone();
-            async move {
-                verify(&op)
-                    && op.header.extensions.mesh_id == mesh_id
-                    && matches!(store.insert(&op).await, Ok(true))
-            }
+            async move { matches!(store.accept(mesh_id, &op).await, Ok(true)) }
         });
 
         Ok(Self {
@@ -147,19 +144,89 @@ impl<B: Backend + Clone + Send + Sync + 'static> SyncedMesh<B> {
         keypair: &Ed25519Keypair,
         event: &MeshEvent,
     ) -> Result<Operation<MeshExt>, MeshSyncError> {
+        self.author_event(keypair, event, false).await
+    }
+
+    async fn author_event(
+        &self,
+        keypair: &Ed25519Keypair,
+        event: &MeshEvent,
+        prune: bool,
+    ) -> Result<Operation<MeshExt>, MeshSyncError> {
         let author = SigningKey::from_bytes(&keypair.to_seed()).verifying_key();
-        let latest = self.store.latest(&author, self.mesh_id).await?;
+        let latest = self.store.latest_in(&author, event.log_id()).await?;
         let (seq_num, backlink) = match latest {
             Some(prev) => (prev.header.seq_num + 1, Some(*prev.hash.as_bytes())),
             None => (0, None),
         };
-        let op = to_operation(keypair, self.mesh_id, event, seq_num, backlink);
-        self.store.insert(&op).await?;
+        let op = if prune {
+            let MeshEvent::HistoryPruned { checkpoint, at_ms } = event else {
+                return Err(MeshSyncError::Backend(
+                    "only a history-pruned event can request prefix pruning".into(),
+                ));
+            };
+            to_prune_operation(
+                keypair,
+                self.mesh_id,
+                *checkpoint,
+                *at_ms,
+                seq_num,
+                backlink,
+            )
+        } else {
+            to_operation(keypair, self.mesh_id, event, seq_num, backlink)
+        };
+        if !self.store.accept(self.mesh_id, &op).await? {
+            return Err(MeshSyncError::Backend(
+                "authored operation was already present".into(),
+            ));
+        }
         self.handle
             .publish(op.clone())
             .await
             .map_err(|e| MeshSyncError::Backend(format!("publish: {e}")))?;
         Ok(op)
+    }
+
+    /// Author an owner checkpoint from the current board and event-log frontier.
+    pub async fn checkpoint(
+        &self,
+        keypair: &Ed25519Keypair,
+        at_ms: u64,
+    ) -> Result<(Operation<MeshExt>, RetentionCheckpoint), MeshSyncError> {
+        let checkpoint = self.store.build_checkpoint(self.mesh_id, at_ms).await?;
+        let operation = self
+            .author_event(
+                keypair,
+                &MeshEvent::RetentionCheckpoint {
+                    checkpoint: Box::new(checkpoint.clone()),
+                },
+                false,
+            )
+            .await?;
+        Ok((operation, checkpoint))
+    }
+
+    /// Prune this author's event-log prefix beneath the latest checkpoint.
+    pub async fn prune_history(
+        &self,
+        keypair: &Ed25519Keypair,
+        at_ms: u64,
+    ) -> Result<Operation<MeshExt>, MeshSyncError> {
+        let checkpoint = self
+            .store
+            .latest_checkpoint(self.mesh_id)
+            .await?
+            .ok_or_else(|| MeshSyncError::Backend("no accepted retention checkpoint".into()))?;
+        self.author_event(
+            keypair,
+            &MeshEvent::HistoryPruned {
+                checkpoint: checkpoint.operation,
+                at_ms,
+            },
+            true,
+        )
+        .await
     }
 
     /// Fold the synced store into the mesh's [`JobBoard`] — the same board on
@@ -312,7 +379,10 @@ mod tests {
         let board = bob.board().await.unwrap();
         assert_eq!(next_action(&board, &bob_me), WorkerAction::Execute(id));
         let job = board.job(id).unwrap();
-        let result = execute(job.kind, &job.payload);
+        let result = execute(
+            job.kind,
+            job.payload.as_deref().expect("claimed job has payload"),
+        );
         bob.author(
             &bob_kp,
             &MeshEvent::JobDone {

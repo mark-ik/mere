@@ -6,8 +6,8 @@
 the target + the open questions so the shape is settled before step 3 lands.
 **Parent**: [one_state_n_windows_design](../design/2026-07-05_one_state_n_windows_design.md)
 — **step 4** (§8), the mechanism in §5, the trichotomy in §6.
-**Serval dependency (LANDED)**: the moveBefore engine
-([serval movebefore plan](../../../../serval/docs/2026-07-05_movebefore_dom_standard_plan.md),
+**Genet dependency (LANDED)**: the moveBefore engine
+([genet movebefore plan](../../../../genet/docs/2026-07-05_movebefore_dom_standard_plan.md),
 S1–S5): the `PortableKeyed` View wrapper, the `Moved` mutation, the ctx **nursery** (parks a
 departing keyed subtree until the target adopts it), and `(node, path)` handler
 reconciliation. A cross-parent keyed move already preserves element + DOM node + view state
@@ -21,7 +21,7 @@ it. The two axes are orthogonal.
 
 Dragging a tile to another window preserves its DOM node (same `NodeId`), its scroll position
 observably survives, the target window's apply is scoped rather than a full recompute, and the
-§6 trichotomy is expressed as plain state mutations. The serval half is done; the meerkat half
+§6 trichotomy is expressed as plain state mutations. The genet half is done; the meerkat half
 is the below.
 
 ## The first question, and it is load-bearing: which content is even DOM-lane?
@@ -90,7 +90,7 @@ option between fresh-build and the full forest dom):
   key registry** carrying *view-side* retained state only: a keyed component's internal state
   survives, but the DOM node, scroll, text buffer, and layout rebuild fresh in the target.
 - **Recommendation**: do NOT build the cross-tree key registry speculatively. It is a distinct
-  new mechanism (a cross-*document* state carrier, not the same-document nursery serval already
+  new mechanism (a cross-*document* state carrier, not the same-document nursery genet already
   has), and for the content that matters most (web tiles) the surface-lane path already
   preserves the live state. Build it only if a specific **view-heavy** DOM-lane tile (a
   stateful widget, not a web page) needs its state to survive a tear-out before the forest dom

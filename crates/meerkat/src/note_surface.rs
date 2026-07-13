@@ -2,13 +2,13 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Note render surface: an `EngineDocument` → serval `Scene`.
+//! Note render surface: an `EngineDocument` → genet `Scene`.
 //!
-//! Builds the note's serval view tree ([`meerkat::note_view`]) into a `ScriptedDom`
-//! through a [`ServalAppRunner`], lays it out with serval-layout's content band
-//! path, and lowers the band to a `netrender::Scene`. This is the serval-rendered
+//! Builds the note's genet view tree ([`meerkat::note_view`]) into a `ScriptedDom`
+//! through a [`GenetAppRunner`], lays it out with genet-layout's content band
+//! path, and lowers the band to a `netrender::Scene`. This is the genet-rendered
 //! parallel to [`crate::card::render_card_scene`] (which lowers via
-//! document-canvas) for the note-as-routed-serval-document-tile reframe (djot
+//! document-canvas) for the note-as-routed-genet-document-tile reframe (djot
 //! editor plan, 2026-06-27).
 //!
 //! Slice 1 of the reframe proves the path end to end; the retained, editable,
@@ -20,9 +20,9 @@ use std::rc::Rc;
 use inker::EngineDocument;
 use netrender::Scene;
 use paint_list_api::PaintList;
-use serval_layout::{NoImageLoader, ScrollOffsets};
-use serval_scripted_dom::ScriptedDom;
-use xilem_serval::{ServalAppRunner, el};
+use genet_layout::{NoImageLoader, ScrollOffsets};
+use genet_scripted_dom::ScriptedDom;
+use xilem_serval::{GenetAppRunner, el};
 
 use meerkat::note_view::document_views;
 
@@ -47,7 +47,7 @@ pub(crate) fn note_scene_band(
 ) -> NoteSceneBand {
     let dom = Rc::new(RefCell::new(ScriptedDom::new()));
     let doc = doc.clone();
-    let runner = ServalAppRunner::new(
+    let runner = GenetAppRunner::new(
         dom,
         move |_: &()| el("article", document_views(&doc)).attr("class", "note-sheet"),
         (),
@@ -57,7 +57,7 @@ pub(crate) fn note_scene_band(
     let dom_ref = dom.borrow();
     let viewport_h = viewport_h.max(1);
     let band_h = band_h.max(1);
-    let layout = serval_layout::lay_out_content(&*dom_ref, &sheet, &NoImageLoader, w, viewport_h);
+    let layout = genet_layout::lay_out_content(&*dom_ref, &sheet, &NoImageLoader, w, viewport_h);
     let (list, scroll_range, _links) =
         layout.emit_band(&*dom_ref, band_y, band_h, &ScrollOffsets::default());
     let translated = paint_list_render::translate_paint_cmd_stream(
@@ -93,7 +93,7 @@ mod tests {
                 },
                 Block::Paragraph {
                     spans: vec![InlineSpan::Text(
-                        "A graph-shaped browser, hosted on serval.".into(),
+                        "A graph-shaped browser, hosted on genet.".into(),
                     )],
                 },
             ],

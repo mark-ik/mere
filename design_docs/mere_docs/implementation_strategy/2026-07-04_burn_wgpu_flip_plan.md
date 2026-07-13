@@ -69,7 +69,7 @@ API. No integration here; the receipt + a recommendation go to the brief's D1.
 
 `cargo check --target wasm32-unknown-unknown` for aether (`field-burn-wgpu`)
 and embed (`bert-wgpu`). Build-only receipt; a runtime WebGPU pass rides the
-serval web-smoke harness later and D2 (model-size ceiling) stays with the
+genet web-smoke harness later and D2 (model-size ceiling) stays with the
 harness brief.
 
 ## Findings

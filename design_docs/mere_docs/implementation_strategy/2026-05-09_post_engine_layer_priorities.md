@@ -7,7 +7,7 @@ workspace state and priority map live in the
 [modular_integration_plan](2026-06-02_modular_integration_plan.md). Kept in place as the
 post-migration historical record (the 2026-06-09 crate-rename banner below still applies).
 
-> **Crate-name note (2026-06-09 audit):** the §1 18-crate list and §2 host references are a 2026-05-09 **gpui-era** snapshot. The host is now `meerkat` (serval-as-host), not gpui: `mere-host`→`meerkat`, `mere-kernel`→`graph/graph-kernel`, `mere-host-contract`→`system/...`, `intelligence-embeddings`→`intel/embed`, `mere-transport`→`murm/transport`, `verso-tile`→`verso`. Dated status notes below are historical record.
+> **Crate-name note (2026-06-09 audit):** the §1 18-crate list and §2 host references are a 2026-05-09 **gpui-era** snapshot. The host is now `meerkat` (genet-as-host), not gpui: `mere-host`→`meerkat`, `mere-kernel`→`graph/graph-kernel`, `mere-host-contract`→`system/...`, `intelligence-embeddings`→`intel/embed`, `mere-transport`→`murm/transport`, `verso-tile`→`verso`. Dated status notes below are historical record.
 **Scope**: What's still open after the Graphshell→Mere migration finished and the engine layer (inker + nematic + polyglot knot + uxtree projection) landed. Replaces the 2026-05-06 Graphshell migration plan, which is archived under [`../../archive_docs/2026-05-09_engine_layer_complete/`](../../archive_docs/2026-05-09_engine_layer_complete/) along with its companion donor inventory.
 
 **Related**:
@@ -84,7 +84,7 @@ Identified during the 2026-05-09 review pass:
 ### 2.5 Legitimate defers
 
 - **Friction point #4 — split `graphshell` meta-crate from the reducer**. Splitting requires committing to a public API shape with no second consumer to validate against. Leave deferred until either (a) a real second consumer of the shell vocabulary appears, or (b) the reducer surface becomes painful enough inside the meta-crate to force the split on its own merits.
-- **HTML reader-mode lane in nematic — don't build it**. Per the [Blitz/Serval convergence](memory) memory's three-head Hekate framing, HTML in any rendering depth is Serval's job. The reader-mode use case is a future Serval mode (smolweb extract / middlenet / fullweb negotiator), not a nematic engine. Resist the urge to add `nematic.html-reader`.
+- **HTML reader-mode lane in nematic — don't build it**. Per the [Blitz/Genet convergence](memory) memory's three-head Hekate framing, HTML in any rendering depth is Genet's job. The reader-mode use case is a future Genet mode (smolweb extract / middlenet / fullweb negotiator), not a nematic engine. Resist the urge to add `nematic.html-reader`.
 
 ---
 

@@ -83,7 +83,7 @@ ImageRole { Favicon, Preview, Snapshot(lane) }      // extensible; deterministic
 **A role-keyed map, not two fixed slots.** Preview imagery is three roles, not two:
 the **favicon** (site icon on the node face), the **preview** (the small default
 thumbnail), and the **snapshot** (the last-rendered peek the preview card shows) —
-and snapshots want to key by render lane (last rasterized band for serval lanes,
+and snapshots want to key by render lane (last rasterized band for genet lanes,
 last captured frame for scry tiles), so a node can hold more than one. Today
 `thumbnail_png` conflates preview and snapshot into one slot: depositing a snapshot
 *overwrites* the thumbnail, so a node cannot hold both a tiny orrery-face sprite and
@@ -264,7 +264,7 @@ Per the "expose design choices as settings, track the full space" discipline:
   pages vs a subset) is an upstream capture setting that this plan does not decide;
   it only changes where the bytes land.
 - **Image roles** — the `ImageRole` set (favicon / preview / snapshot) is extensible
-  without a storage change: per-lane snapshots (serval band vs scry frame) are new
+  without a storage change: per-lane snapshots (genet band vs scry frame) are new
   keys, not new fields. Which roles a given node populates, and at what resolution a
   snapshot is captured, are capture-side policies this plan leaves open.
 
@@ -315,7 +315,7 @@ Verified against the code, 2026-07-06:
   plan. Not a footprint concern (the probe measured images, and body is small and
   minority-populated).
 - **Consumer path.** `render/textures.rs` turns image bytes into `data:image/png`
-  URIs embedded as `<img>` in the orrery card that serval renders
+  URIs embedded as `<img>` in the orrery card that genet renders
   (`favicon_data_uri`, `png_data_uri`). The resolver slots in right here.
 - **Snapshots already ride `thumbnail_png`.** The preview / snapshot card prefers
   `node.thumbnail_png` (the deposited last-seen pixels) and re-renders only on

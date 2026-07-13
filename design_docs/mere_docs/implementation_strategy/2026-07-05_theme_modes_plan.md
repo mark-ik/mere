@@ -4,7 +4,7 @@
 **Status**: T1–T5 implemented 2026-07-05 (see Progress; T5 shipped the declarative lane, rhai
 graduation open). From Mark's theme-model decision (2026-07-05), unblocking the W3C adoption
 plan's P3 host half.
-**Related**: `repos/serval/docs/2026-07-05_w3c_mechanism_adoption_plan.md` (P3 engine half landed:
+**Related**: `repos/genet/docs/2026-07-05_w3c_mechanism_adoption_plan.md` (P3 engine half landed:
 `IncrementalLayout::set_prefers_color_scheme`), `repos/tincture` (tinct seed-to-palette
 derivation), `crates/meerkat/src/theme_sheets.rs` + `theme_edit.rs` (current sheet baking +
 switch path).
@@ -73,7 +73,7 @@ switch path).
   media axis (4-in-1 sheet) or route contrast switches through the sheet-swap path explicitly.
 - **Done when** hc modes are pickable, derive via T1, and the chosen mechanism is recorded here
   with receipts.
-- **RESOLVED 2026-07-05: sheet-swap path.** Stylo's servo-side media feature table at serval's
+- **RESOLVED 2026-07-05: sheet-swap path.** Stylo's servo-side media feature table at genet's
   pinned rev (8bde0e9, `style/servo/media_features.rs`) evaluates only `width / scan /
   resolution / device-pixel-ratio / -moz-device-pixel-ratio / prefers-color-scheme`;
   `prefers-contrast` exists gecko-side only. So the 2x2 4-in-1 sheet is not expressible on the
@@ -109,7 +109,7 @@ T4 and T5 ride settings passes; T5 last.
 ## Progress
 
 - 2026-07-05: decision recorded, plan written. Engine prerequisite (scheme flip) already landed
-  serval-side.
+  genet-side.
 - 2026-07-05: **T1 landed.** tinct (repos/tincture, v0.1.1 NOT YET PUBLISHED — Mark's call):
   `ModeProfile { dark, high_contrast }` with `LIGHT/DARK/HC_LIGHT/HC_DARK` consts +
   `derive_palette_with`; hc ladders push surfaces toward the extremes, text past them, and
@@ -129,7 +129,7 @@ T4 and T5 ride settings passes; T5 last.
   is scheme-invariant. `PaneSession::refresh/scene` take `scheme_dark`: sheet unchanged +
   scheme changed rides `IncrementalLayout::set_prefers_color_scheme` (session + element scroll
   survive); a rebuild seeds the scheme after `new` (engine builds light-default — a
-  `new`-with-scheme serval API would save that extra recascade, minor follow-up). Non-sheet
+  `new`-with-scheme genet API would save that extra recascade, minor follow-up). Non-sheet
   lanes re-key off the mode tokens via `theme_edit::apply_resolved_tokens` (shared by
   `set_theme` / the new `set_mode`); the chrome base-raster cache folds the scheme into
   `chrome_base_sig`. Mode picker radios on the Appearance page (`mode:set:<key>`); persisted
@@ -187,7 +187,7 @@ T4 and T5 ride settings passes; T5 last.
   pre-existing fails; register-theme 21 pass.
 - Remaining follow-ups: the rhai calculator lane (if declarative tables prove insufficient),
   an in-app editor surface for T4 per-mode sheets and T5 mode files (a later settings pass),
-  the serval `new`-with-scheme micro-optimisation, and publishing tinct 0.1.1 (then
+  the genet `new`-with-scheme micro-optimisation, and publishing tinct 0.1.1 (then
   optionally migrating register-theme's derivation onto `tinct::derive_palette_with`).
 - 2026-07-05 (follow-ups pass): **tinct migration landed** — 0.1.1 published (Mark), pin bumped,
   `derive_token_set` bases on `derive_palette_with(seeds, ModeProfile)` (hc widens at the source;
@@ -202,5 +202,5 @@ T4 and T5 ride settings passes; T5 last.
   materializes, removes, reloads. Receipts: `mode_sheet_editor_materializes_and_clears`,
   `custom_mode_editor_creates_removes_and_reloads`,
   `template_is_complete_and_valid_for_all_flag_combos`; suite 225 pass / same 3 pre-existing
-  fails. Still open: serval `new`-with-scheme (deferred while moveBefore edits serval-layout)
+  fails. Still open: genet `new`-with-scheme (deferred while moveBefore edits genet-layout)
   and the rhai calculator graduation.

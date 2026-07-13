@@ -8,7 +8,7 @@ visual graph crawlers (the egui-based [raydroplet/crawler-rs](https://github.com
 as a UX reference only; its egui_graphs / fdg-sim / petgraph stack does not
 transfer, and it ships no license so it is read-for-ideas, not lift-able).
 **Lane / conflict posture**: meerkat content actor + `graph-kernel` + `orrery`,
-plus a small `serval-static-dom` consumer. This is the **front-end** counterpart
+plus a small `genet-static-dom` consumer. This is the **front-end** counterpart
 to the already-built eidetic capture/index back-end; it deliberately does *not*
 re-derive that work.
 **Relationship to existing plans** (read these; this plan composes them, it does
@@ -17,7 +17,7 @@ not restate them):
   — **built** (E1-E4 green): `BrowsingTrace` capture from `node-lineage`,
   real-history ingest, the `eidetic-search` tantivy index (BM25 + fast-field
   reports), hybrid lexical+vector recall. It explicitly parks **full page-text
-  capture** out of scope with the named trigger *"a serval-side text-extraction
+  capture** out of scope with the named trigger *"a genet-side text-extraction
   seam."* The V1 materializer below is that trigger.
 - [Eidetic Deferred Phases](../../eidetic_docs/implementation_strategy/2026-06-09_eidetic_deferred_phases_plan.md)
   — Phase 9 **consume half** (federated index merge: `EngramDirectory`,
@@ -104,13 +104,13 @@ is an existing pipe.
 already fetched).
 
 **Pipeline** (every stage but one already exists and is callable):
-1. `serval-static-dom::StaticDocument::parse(body)` — paint-free, layout-free,
-   html5ever into an arena tree (`crates/.../serval-static-dom/lib.rs:35`; it
+1. `genet-static-dom::StaticDocument::parse(body)` — paint-free, layout-free,
+   html5ever into an arena tree (`crates/.../genet-static-dom/lib.rs:35`; it
    `impl LayoutDom` at `:178`).
 2. **NEW**: a rect-free anchor walk over the `LayoutDom` trait
    (`shared/layout-dom/lib.rs:28`, using `walk` `:142` + `attribute(href)`
    `:121` + `text` `:135`). Today's anchor harvest is *layout-coupled*: every
-   `<a href>` is lowered to a `LinkHit` **with a hit rect** by `serval_layout`
+   `<a href>` is lowered to a `LinkHit` **with a hit rect** by `genet_layout`
    (`crates/meerkat/src/card.rs:478`). A crawl wants only URLs and anchor text,
    so it needs the same enumeration *without* paying for layout. This helper is
    the single missing primitive (~30 LOC over the trait).
@@ -155,8 +155,8 @@ anchor walker has unit tests over a `StaticDocument` fixture; every file under
 the 600-LOC ceiling.
 
 **Status: built 2026-06-24** (mere `6966e0b`, riding the render-ladder extraction
-lane). The rect-free anchor enumerator landed as `serval-extract::extract_links`
-(serval, render-free; its dep graph is the witness). `meerkat::ingest::harvest_links`
+lane). The rect-free anchor enumerator landed as `genet-extract::extract_links`
+(genet, render-free; its dep graph is the witness). `meerkat::ingest::harvest_links`
 maps it to a `GraphContribution` (seed `—Semantic:Hyperlink→` each resolved target,
 deduped by URL, non-navigable hrefs skipped), invoked via
 `ContentCommand::MaterializeLinks` + `Constellation::materialize_links` and emitted on
@@ -223,7 +223,7 @@ landed and were headed-verified (driven in `target/debug/meerkat.exe`; shots in
 (`fetch::CRAWLER_USER_AGENT`, the `merebot` token shared with robots matching);
 **mid-crawl cancellation** is wired to `>crawl_stop` (`Command::StopCrawl` flips the
 actor's cancel flag); a **progress chip** in the toolbar reads `crawling/crawled: N
-pages` (hidden when idle, via a class toggle since serval `:empty` does not match an
+pages` (hidden when idle, via a class toggle since genet `:empty` does not match an
 empty-string text view) and mirrors to leaf windows (MW3 fan-out); a **`pelt/crawl`
 settings page** picks scope (same host / domain / any), depth, the **page cap**, and the
 **whole-site (sitemap)** mode, each draining `crawl:<key>`, persisted to
@@ -254,7 +254,7 @@ preserved, not flattened to a chronological trail.
   dismiss / pin / dwell). This answers the eidetic plan's open question on trace
   granularity and per-owner partitioning directly.
 - Feed the V1/V2 extracted text into the eidetic content-capture seam that the
-  derivation plan parks as *"full page-text capture, trigger: a serval-side
+  derivation plan parks as *"full page-text capture, trigger: a genet-side
   text-extraction seam."* The rect-free walk (V1) plus a text extractor is that
   seam, so `eidetic-search` can index page text, not only titles/URLs.
 - Keep it **LocalOnly by default**, per the eidetic privacy axis; sharing into a
@@ -282,7 +282,7 @@ text from the same browse; classification defaults LocalOnly.
 **Seams verified against the code this session** (not doc-to-doc): the V1 pipe
 is real end to end. `fetch_page` routes netfetcher/errand (`fetch.rs:180`);
 `StaticDocument::parse` is paint-free and `impl LayoutDom`
-(`serval-static-dom/lib.rs:35,178`); the `LayoutDom` trait exposes
+(`genet-static-dom/lib.rs:35,178`); the `LayoutDom` trait exposes
 `walk`/`attribute`/`text`/`element_name` (`shared/layout-dom/lib.rs:28+`);
 `GraphContribution`/`NodeContribution`/`EdgeContribution` exist
 (`linked-data/src/ingest.rs:85,46,75`) and `apply_contribution` maps a
@@ -295,7 +295,7 @@ recognized predicate IRI to a typed sub-kind (`linked-data/src/lib.rs:24-25`);
 semantic edges (`orrery/orrery/src/physics.rs:38`, `lib.rs:423`). The **one**
 missing primitive was a rect-free anchor enumerator (existing anchor harvest is
 layout-coupled because a `LinkHit` needs a hit rect, `card.rs:478`); **resolved
-2026-06-24** as `serval-extract::extract_links` (render-free).
+2026-06-24** as `genet-extract::extract_links` (render-free).
 
 **SERP reality (drop "scrape a SERP, open all links").** Live SERP scraping is
 both broken and hostile as of mid-2026: Google's SearchGuard (Jan 2025) broke
@@ -389,7 +389,7 @@ from scratch.
   already **designed** (compute-tiers brief). The genuinely new, unbuilt material
   is the relational-browse **front-end** (V1 single-hop materializer, V2
   second-hop enrichment) and the **capture-schema enrichment** (V3) that makes
-  the trace LoRA-ready and supplies the serval-side text-extraction seam the
+  the trace LoRA-ready and supplies the genet-side text-extraction seam the
   eidetic plan parks as a named trigger. All V1 code seams verified against the
   actual sources this session (file:line refs in Findings). The one missing
   primitive is a rect-free anchor enumerator over `LayoutDom`. No code yet.
@@ -399,12 +399,12 @@ from scratch.
   the term is closed.
 - **2026-06-24** — **V1 built** (mere `6966e0b`), on the back of the render-ladder
   extraction lane. The "one new primitive" (rect-free anchor enumerator) is
-  `serval-extract::extract_links`; `meerkat::ingest::harvest_links` materializes the
+  `genet-extract::extract_links`; `meerkat::ingest::harvest_links` materializes the
   seed's outbound neighborhood as `Hyperlink`-edged nodes through the Contribution
   pipe, invoked via `MaterializeLinks` / `Constellation::materialize_links` — no fetch,
   no new actor, 3 tests. Two adjacent extraction-lane pieces also landed and serve this
-  plan's later slices: the **serval-side text-extraction seam** the eidetic derivation
-  parks (V3's trigger) is now `serval-extract`'s `extract_text` + reader-mode
+  plan's later slices: the **genet-side text-extraction seam** the eidetic derivation
+  parks (V3's trigger) is now `genet-extract`'s `extract_text` + reader-mode
   `main_text` (`extract()` over any `LayoutDom`, static or post-JS `ScriptedDom`), and a
   page's declared metadata already enriches its node via the same pipe. Remaining for
   V1: the host trigger (toolbar/menu action) + canvas placement. **V2 (the dedicated
@@ -423,7 +423,7 @@ from scratch.
   distillation.
 - **2026-06-26** — Cross-cutting state audit + doc reconciliation. The audit
   confirmed (against code) that V1 + V2 are **built and host-wired** (crawl actor,
-  frontier, robots, sitemap, `>crawl`, 30 tests), the `serval-extract::extract_links`
+  frontier, robots, sitemap, `>crawl`, 30 tests), the `genet-extract::extract_links`
   primitive resolves the "one missing primitive", and **`net.fetch` is a real
   backend, not a stub**. Corrected the stale Status line, the Findings
   "missing primitive" note, and the `net.fetch` Open Question accordingly. **V3 is

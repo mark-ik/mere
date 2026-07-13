@@ -1,19 +1,19 @@
-# Serval ↔ Scrying FlipCarrier — first-flip plan
+# Genet ↔ Scrying FlipCarrier — first-flip plan
 
 **Date**: 2026-06-23
-**Status**: Design resolved; `verso-api` + serval donor primitives shipped (2026-06-23).
+**Status**: Design resolved; `verso-api` + genet donor primitives shipped (2026-06-23).
 Both charter prerequisites are **done** (verified in code 2026-06-23): P4 (the scry
 tile) and the inker picker (the engine-picker plan's Phases 0-3 — `engine_pins`
 routing through `EngineRoutePolicy`, `is_surface_engine`, the apparatus engine
 manager, and the per-node picker) both shipped 2026-06-15. **Verso is unblocked.**
 The picker already flips a node to `scrying.web` as a *stateless* engine-switch (a
 fresh WebView); verso is the state-carry layer that turns that switch into a flip.
-Next: the carrier + the `verso-serval`/`verso-scry` adapters, hooking the existing
+Next: the carrier + the `verso-genet`/`verso-scry` adapters, hooking the existing
 `engine_pins` pin-switch in the ScryingHost.
 **Extends**: [compatibility-view charter](../technical_architecture/2026-06-10_compatibility_view_charter.md)
 (§3 the charter, §7.3 "mint verso at the first flip").
 
-The first verso flip: a serval-rendered page re-presented through the scrying
+The first verso flip: a genet-rendered page re-presented through the scrying
 system WebView, place and session carried across, the tile keeping its identity.
 This is the consumer-pull moment that mints the verso crates (charter §7.3). One
 engine pair, both directions.
@@ -43,16 +43,16 @@ engine pair, both directions.
   frame loop and the concrete (WebView2) producer (`inner_mut`). It is **not** a
   standalone crate buildable in isolation — it lands with the carrier + host wiring.
   That host wiring is no longer gated: the inker picker shipped 2026-06-15, so the
-  serval→`scrying.web` pin-switch already exists; `verso-scry` lands over it whenever
+  genet→`scrying.web` pin-switch already exists; `verso-scry` lands over it whenever
   the carrier does. Flip-back's reads are likewise host-tracked: URL
   from nav-event tracking, scroll via `execute_script`, cookies need a read path
   (`set_cookie` is write-only today).
 
-### Serval (glass-box donor): state reachable, export API missing
+### Genet (glass-box donor): state reachable, export API missing
 
 - **URL**: `rt.base_url()` ✓.
 - **Scroll**: `ScriptedDocument.scroll` (owned, private) — needs a public accessor.
-- **DOM serialization**: not on `serval-scripted-dom`. Build a serializer (outerHTML).
+- **DOM serialization**: not on `genet-scripted-dom`. Build a serializer (outerHTML).
 - **Form values**: not present. Build DOM traversal collecting field values.
 
 Net: receiver is done; the donor needs three small, verso-unaware export accessors.
@@ -63,13 +63,13 @@ The dependency points one way so the heavy engines never stack on each other:
 
 - **`verso-api`** — traits + `PortableViewState` / `BackState` / `LayerSet`. Tiny,
   engine-agnostic.
-- **`verso-serval` / `verso-scry` / `verso-weld` / `verso-graft`** — per-engine
+- **`verso-genet` / `verso-scry` / `verso-weld` / `verso-graft`** — per-engine
   adapters. Each depends on its engine crate + `verso-api` and does the bridging;
-  the engine crates (`serval-scripted-dom`, `scrying-engine`) stay verso-unaware.
+  the engine crates (`genet-scripted-dom`, `scrying-engine`) stay verso-unaware.
 - **`verso`** — the orchestrator (carrier + flip choreography + registry). Depends
   on `verso-api` only, never on an engine, so it never drags Servo or CEF in.
 - **host** (meerkat/pelt) — pulls `verso` + whichever `verso-*` adapters its build
-  features enable, and wires them in. `meerkat` = verso-serval + verso-scry;
+  features enable, and wires them in. `meerkat` = verso-genet + verso-scry;
   `meerkat-graft` adds verso-graft. The adapter crates are the per-engine feature
   seam, so a heavy engine only lands in the variant that asked for it.
 
@@ -78,7 +78,7 @@ The dependency points one way so the heavy engines never stack on each other:
 No-chain (charter §4) is encoded in which traits an engine implements:
 
 ```rust
-trait FlipDonor    { fn donates(&self) -> LayerSet; fn capture(&self) -> PortableViewState; } // primaries: serval, nematic
+trait FlipDonor    { fn donates(&self) -> LayerSet; fn capture(&self) -> PortableViewState; } // primaries: genet, nematic
 trait FlipBack     { fn extract(&self) -> BackState; }                                         // secondaries: scry, weld, graft
 trait FlipReceiver { fn receives(&self) -> LayerSet; fn present(&mut self, carry: Carry); }    // all engines
 enum  Carry        { Forward(PortableViewState), Back(BackState) }
@@ -90,7 +90,7 @@ document to anyone. A primary's `FlipReceiver` consumes a `Back` by re-fetching;
 secondary's consumes a `Forward` by navigating. The registry only wires
 (primary→secondary) and (secondary→primary). A leaf has two faces.
 
-## 4. Forward flip: serval → scrying
+## 4. Forward flip: genet → scrying
 
 ### PortableViewState (layered; each layer degrades, never blocks)
 
@@ -100,15 +100,15 @@ secondary's consumes a `Forward` by navigating. The registry only wires
 4. DOM snapshot: serialized outerHTML
 5. visual snapshot: donor's last frame as a texture (cross-fade, no flash)
 
-### Layer mapping: capture (serval) → inject (scry) → fidelity
+### Layer mapping: capture (genet) → inject (scry) → fidelity
 
-| Layer | Capture from serval | Inject into scry | Fidelity |
+| Layer | Capture from genet | Inject into scry | Fidelity |
 | --- | --- | --- | --- |
 | navigation | `base_url`, history cursor, `ScriptedDocument.scroll` | `navigate_to_url`, then `execute_script("scrollTo")` post-load | URL faithful; scroll best-effort |
 | form | walk scripted-DOM, collect values | `execute_script` to refill post-load | best-effort |
 | session | origin cookies from netfetcher/eidetic | `set_cookie(...)` once, **before** navigation | one-shot |
 | DOM snapshot | serialize outerHTML | `navigate_to_string(html)` — **degrade path** | static, loses live JS |
-| visual snapshot | last serval frame (the snapshot-card texture) | hold as receiver's first frame | cosmetic cross-fade |
+| visual snapshot | last genet frame (the snapshot-card texture) | hold as receiver's first frame | cosmetic cross-fade |
 
 ### Inject choreography (order matters)
 
@@ -119,11 +119,11 @@ secondary's consumes a `Forward` by navigating. The registry only wires
    `navigate_to_string(dom)` only when there is no refetchable URL.
 5. On `NavigationFinished { success: true }`: `execute_script` to restore scroll
    and refill forms.
-6. Swap the tile's backing texture serval→scrying when the first **post-nav**
+6. Swap the tile's backing texture genet→scrying when the first **post-nav**
    captured frame arrives (cross-fade out of the held card frame).
-7. Park or retire serval. Record the flip as a node-lineage event (provenance).
+7. Park or retire genet. Record the flip as a node-lineage event (provenance).
 
-## 5. Flip-back: scrying → serval (re-root, not reverse capture)
+## 5. Flip-back: scrying → genet (re-root, not reverse capture)
 
 A black-box WebView can only surface a *dead* snapshot (post-JS outerHTML, no live
 document, no JS heap). So flip-back re-roots at the lossless source rather than
@@ -131,12 +131,12 @@ transferring a DOM:
 
 1. scry extracts the cheap locator (`BackState`): current URL, scroll, form?,
    cookies — via the WebView API + `execute_script`.
-2. serval re-fetches the URL from the lossless root (netfetcher live, or eidetic if
+2. genet re-fetches the URL from the lossless root (netfetcher live, or eidetic if
    cached) and renders it *live* with its own engine. Fresh JS run, real document.
 3. Apply the carried nav state: scroll, best-effort form refill.
 4. Cookies flow back into the netfetcher/eidetic cookie world (one-shot reverse, so
    a login made *inside* scry comes home).
-5. Swap the tile texture scry→serval, cross-fade, retire the scry actor.
+5. Swap the tile texture scry→genet, cross-fade, retire the scry actor.
 
 Result: same page, same place, same session — never the same running program (the
 JS heap cannot cross). That is the charter ceiling, stated honestly.
@@ -154,10 +154,10 @@ struct BackState {
 
 ### Primary re-fetch receiver path
 
-serval's `FlipReceiver`, on `Carry::Back(b)`: fetch `b.url` (netfetcher/eidetic) →
+genet's `FlipReceiver`, on `Carry::Back(b)`: fetch `b.url` (netfetcher/eidetic) →
 build a fresh `ScriptedDocument` → on its first frame apply `b.scroll` and refill
 `b.form` → push `b.cookies` into the netfetcher/eidetic jar. No DOM injection;
-serval re-renders from source.
+genet re-renders from source.
 
 ### Why this is the no-chain mechanism
 
@@ -169,19 +169,19 @@ primary→secondary (compat view) and secondary→primary (flip-back). One hop.
 
 ## 6. Build phases
 
-1. **Serval export accessors** — `url()`/`scroll()` public on `ScriptedDocument`;
-   a DOM serializer + form-value extraction on `serval-scripted-dom`. Verso-unaware.
+1. **Genet export accessors** — `url()`/`scroll()` public on `ScriptedDocument`;
+   a DOM serializer + form-value extraction on `genet-scripted-dom`. Verso-unaware.
 2. **`verso-api`** — the traits + `PortableViewState`/`BackState`/`LayerSet`.
-3. **`verso-serval` + `verso-scry`** — the `FlipDonor`/`FlipBack`/`FlipReceiver`
+3. **`verso-genet` + `verso-scry`** — the `FlipDonor`/`FlipBack`/`FlipReceiver`
    impls over the plain engine APIs.
-4. **`verso`** — the `ServalToScrying` carrier + flip choreography + registry. Lean,
+4. **`verso`** — the `GenetToScrying` carrier + flip choreography + registry. Lean,
    well under the 600-LOC ceiling (the engines do the heavy lifting).
 5. **Host wiring** — meerkat/pelt build the carrier from the variant's adapters; the
    tile texture cross-fade. Both prerequisites shipped 2026-06-15: P4 (the scry tile)
    and the inker picker, which folded the old ad-hoc `compat_pins` path into routing
    (`engine_pins` through `EngineRoutePolicy`). So the flip *trigger* already exists —
    pinning a node to `scrying.web` flips it *statelessly* today; this phase intercepts
-   that `engine_pins` serval→`scrying.web` transition to capture the donor and inject
+   that `engine_pins` genet→`scrying.web` transition to capture the donor and inject
    into the receiver, turning the switch into a flip.
 6. **Flip-back** lands alongside forward (same carrier, the `Back` direction).
 
@@ -193,9 +193,9 @@ same page, same session, same place — never the same running program.
 
 ## 8. Progress
 
-- **2026-06-23**: verified scry receiver (ready) and serval donor (three export
-  gaps). Resolved all four open questions — serval export as plain verso-unaware
-  methods on `serval-scripted-dom`; traits standalone in `verso-api`; crate layering
+- **2026-06-23**: verified scry receiver (ready) and genet donor (three export
+  gaps). Resolved all four open questions — genet export as plain verso-unaware
+  methods on `genet-scripted-dom`; traits standalone in `verso-api`; crate layering
   as `verso-api` + per-engine `verso-*` adapters + a `verso` orchestrator
   (host-wired, feature-gated); texture swap rides the capture cadence after
   `NavigationFinished`. Designed the flip-back re-root path + `BackState`.
@@ -204,17 +204,17 @@ same page, same session, same place — never the same running program.
   the live flip is unblocked, not picker-gated. Minted `crates/verso-api`
   — `PortableViewState`/`BackState`/`LayerSet` + `FlipDonor`/`FlipBack`/`FlipReceiver`,
   engine-agnostic with zero deps; `cargo test -p verso-api` green.
-- **2026-06-23 (phase 1)**: serval-side donor DOM extraction landed and tested —
+- **2026-06-23 (phase 1)**: genet-side donor DOM extraction landed and tested —
   `ScriptedDom::outer_html`/`inner_html` via html5ever's serializer (no hand-rolled
-  escaping; serval-scripted-dom `fdac70f2b10`) and `form_values` keyed by name/id
+  escaping; genet-scripted-dom `fdac70f2b10`) and `form_values` keyed by name/id
   (`3a35b5cc4aa`). The remaining phase-1 url/scroll are host-side and belong with the
-  `verso-serval` adapter.
-- **2026-06-23 (phase 3, donor)**: minted `crates/verso-serval` — `ServalDonor`, the
-  serval `FlipDonor`. Fills the FORM + DOM layers itself from the scripted DOM
+  `verso-genet` adapter.
+- **2026-06-23 (phase 3, donor)**: minted `crates/verso-genet` — `GenetDonor`, the
+  genet `FlipDonor`. Fills the FORM + DOM layers itself from the scripted DOM
   (`form_values` / `outer_html` over `LayoutDom::document`) and takes the NAV
   (url+scroll), SESSION (cookies), and VISUAL (frame) layers host-fed via `with_*`
   setters — those live in the script runtime / netfetcher / compositor, not the DOM,
-  so the crate depends only on `serval-scripted-dom` + `verso-api` (no runtime, no GPU
+  so the crate depends only on `genet-scripted-dom` + `verso-api` (no runtime, no GPU
   layer). `donates()` advertises FORM|DOM always plus the fed host layers. 3 tests
   green.
 - **2026-06-23 (phase 4, carrier)**: minted `crates/verso` — the engine-agnostic
@@ -225,10 +225,10 @@ same page, same session, same place — never the same running program.
   re-root (no NAV). `forward_carried` previews the crossing layers for the host.
   Degrade-never-block and one-hop are both encoded in the signatures (forward takes a
   `FlipDonor`, back takes a `FlipBack`); 4 tests green. The non-host-coupled half of
-  verso is now done (`verso-api` + `verso-serval` + `verso`). The single remaining
+  verso is now done (`verso-api` + `verso-genet` + `verso`). The single remaining
   chunk is host-coupled: `verso-scry` (FlipReceiver/FlipBack over the WebView2 producer
   and the host frame loop) and the meerkat `ScryingHost` hook that fires the carrier on
-  the `engine_pins` serval→`scrying.web` transition (§1, §6.5).
+  the `engine_pins` genet→`scrying.web` transition (§1, §6.5).
 - **2026-06-23 (phase 3+5, scry receiver + host wiring)**: the forward flip is live.
   Minted `crates/verso-scry` — `ScryForward`, a two-phase forward-inject state machine
   (set cookies → navigate → restore scroll/forms on `Completed`) over a thin
@@ -242,13 +242,13 @@ same page, same session, same place — never the same running program.
   `execute_script_with_result`), a `pending_flips` map + per-tile `flip`, and the
   `drive` loop now runs the flip's cookies-then-navigate on spawn (skipping the blank
   load) and pumps `NavigationEvent::Completed` into the restore. The trigger is
-  `node_ops::toggle_focus_compat`: on the serval→`scrying.web` pin it stages a
+  `node_ops::toggle_focus_compat`: on the genet→`scrying.web` pin it stages a
   `PortableViewState` (URL + scroll, host-reachable). **v1 carries URL + scroll** (same
   page, same place — better than the stateless switch that loads blank at the top);
   SESSION (cookies) and FORM degrade until a host-side cookie jar and a synchronous
-  serval-DOM read are wired (the donor's deeper layers). `cargo check -p meerkat`
+  genet-DOM read are wired (the donor's deeper layers). `cargo check -p meerkat`
   green. Remaining: cookie-jar wiring (the high-value SESSION layer), the full
-  `verso-serval` donor capture (DOM/forms, needs the off-thread serval document), the
+  `verso-genet` donor capture (DOM/forms, needs the off-thread genet document), the
   visual cross-fade, and flip-back (§5).
 - **2026-06-23 (SESSION layer)**: the flip now carries the login, not just the place.
   Root cause of the "no host-side cookie jar" gap: meerkat built a throwaway

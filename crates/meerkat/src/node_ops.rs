@@ -234,7 +234,7 @@ impl WindowCtx<'_> {
         &mut self,
         member: GraphMemberId,
         url: &str,
-        core: &serval_winit_host::RenderCore,
+        core: &genet_winit_host::RenderCore,
         peek_w: u32,
         peek_h: u32,
         render_h: u32,
@@ -474,11 +474,11 @@ impl WindowCtx<'_> {
             true
         };
         if on {
-            // Capture the serval side's place + session and stage it as a flip, so the
+            // Capture the genet side's place + session and stage it as a flip, so the
             // system WebView loads where the user was — same URL, same scroll, same
             // login — rather than blank and signed-out. This turns the stateless
             // engine-switch into a verso flip. Forms still degrade (they need the
-            // off-thread serval DOM); the SESSION cookies come from the shared jar.
+            // off-thread genet DOM); the SESSION cookies come from the shared jar.
             // (Verso flip; native session store plan.)
             if let Some(url) = self
                 .orrery()
@@ -498,7 +498,7 @@ impl WindowCtx<'_> {
                     },
                 );
             }
-            // The system WebView renders this node, so reap any serval actor, then open
+            // The system WebView renders this node, so reap any genet actor, then open
             // it as a pelt tile: the workbench surface-tier path drives the off-window
             // WebView and composites its captured texture at the tile rect — no floating
             // live card, no on-window DWM visual. (Scry-in-pelt.)
@@ -666,33 +666,33 @@ impl WindowCtx<'_> {
     }
 
     /// Whether engine `id` is **present** on this host: a registered document engine,
-    /// the serval html lane, the host-handled internal / external / ingest lanes, or
+    /// the genet html lane, the host-handled internal / external / ingest lanes, or
     /// a known surface engine available on this platform. (engine-picker Phase 0.)
     fn engine_present(&self, id: &str) -> bool {
-        use inker::routing::{ENGINE_EXTERNAL_PROTOCOL, ENGINE_SCRYING_WEB, ENGINE_SERVAL_WEB};
+        use inker::routing::{ENGINE_EXTERNAL_PROTOCOL, ENGINE_SCRYING_WEB, ENGINE_GENET_WEB};
         use mere::routing::{ENGINE_GRAPHSHELL_INTERNAL, ENGINE_LINKED_DATA_INGEST};
         if self.shared.content.engine_registry.contains(id) {
             return true; // nematic.* document engines, registered at startup
         }
-        // Lanes meerkat handles without a document-registry entry: the serval html
+        // Lanes meerkat handles without a document-registry entry: the genet html
         // lane, mere:// internal pages, the OS hand-off fallback, and JSON-LD ingest.
         if matches!(
             id,
-            ENGINE_SERVAL_WEB
+            ENGINE_GENET_WEB
                 | ENGINE_GRAPHSHELL_INTERNAL
                 | ENGINE_EXTERNAL_PROTOCOL
                 | ENGINE_LINKED_DATA_INGEST
         ) {
             return true;
         }
-        // The scripted serval rung is a host-handled lane like the static one, present
+        // The scripted genet rung is a host-handled lane like the static one, present
         // only in the `scripted` build (the base build links no JS engine). (Ladder.)
         #[cfg(feature = "scripted")]
-        if id == inker::routing::ENGINE_SERVAL_SCRIPTED {
+        if id == inker::routing::ENGINE_GENET_SCRIPTED {
             return true;
         }
         #[cfg(feature = "scripted-nova")]
-        if id == inker::routing::ENGINE_SERVAL_SCRIPTED_NOVA {
+        if id == inker::routing::ENGINE_GENET_SCRIPTED_NOVA {
             return true;
         }
         // Graft (Servo) / weld (CEF) surface engines: present when their cargo feature
@@ -732,7 +732,7 @@ impl WindowCtx<'_> {
     /// (the surface / web engines headline, then the nematic document engines) with
     /// its active state. Host lanes are structural and not listed. (Phase 2.)
     pub(super) fn engine_rows(&self) -> Vec<crate::settings_lane::EngineRow> {
-        use inker::routing::{ENGINE_SCRYING_WEB, ENGINE_SERVAL_WEB};
+        use inker::routing::{ENGINE_SCRYING_WEB, ENGINE_GENET_WEB};
         let row = |id: &str, name: String| crate::settings_lane::EngineRow {
             id: id.to_string(),
             name,
@@ -740,26 +740,26 @@ impl WindowCtx<'_> {
         };
         let mut rows = Vec::new();
         for &(id, name) in &[
-            (ENGINE_SERVAL_WEB, "Serval (web)"),
+            (ENGINE_GENET_WEB, "Genet (web)"),
             (ENGINE_SCRYING_WEB, "System WebView"),
         ] {
             if self.engine_present(id) {
                 rows.push(row(id, name.to_string()));
             }
         }
-        // The scripted serval rung (only in the `scripted` build). (Render ladder.)
+        // The scripted genet rung (only in the `scripted` build). (Render ladder.)
         #[cfg(feature = "scripted")]
         {
-            let id = inker::routing::ENGINE_SERVAL_SCRIPTED;
+            let id = inker::routing::ENGINE_GENET_SCRIPTED;
             if self.engine_present(id) {
-                rows.push(row(id, "Serval (scripted, Boa)".to_string()));
+                rows.push(row(id, "Genet (scripted, Boa)".to_string()));
             }
         }
         #[cfg(feature = "scripted-nova")]
         {
-            let id = inker::routing::ENGINE_SERVAL_SCRIPTED_NOVA;
+            let id = inker::routing::ENGINE_GENET_SCRIPTED_NOVA;
             if self.engine_present(id) {
-                rows.push(row(id, "Serval (scripted, Nova)".to_string()));
+                rows.push(row(id, "Genet (scripted, Nova)".to_string()));
             }
         }
         // The nematic document engines (protocol renderers), sorted for a stable order.

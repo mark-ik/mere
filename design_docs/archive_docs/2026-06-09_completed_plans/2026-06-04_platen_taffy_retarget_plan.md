@@ -2,14 +2,14 @@
 
 **Date**: 2026-06-04
 **Status**: **Complete.** All phases shipped (P1–P4 + mere/app retirement); morphorm
-dropped; the tiled workbench renders through serval/taffy. Ready to archive once the
+dropped; the tiled workbench renders through genet/taffy. Ready to archive once the
 DOC_README index line lands.
-**Decision provenance**: the [serval-as-host evaluation §7](../technical_architecture/2026-05-29_serval_as_host_evaluation.md)
+**Decision provenance**: the [genet-as-host evaluation §7](../technical_architecture/2026-05-29_genet_as_host_evaluation.md)
 owns the call ("Morphorm is obviated; platen survives, reshaped"); the
-[serval host flip plan, Phase 2](2026-06-01_serval_host_flip_plan.md) is the
+[genet host flip plan, Phase 2](2026-06-01_genet_host_flip_plan.md) is the
 execution frame; [modular integration plan, S4](2026-06-02_modular_integration_plan.md)
 schedules it. Mark's 2026-06-04 calls: **full Phase-2 in platen** (platen takes the
-serval dep and emits the tile-tree DOM), **move the tiling model into platen now**,
+genet dep and emits the tile-tree DOM), **move the tiling model into platen now**,
 and **replace the legacy frame model now** (not coexist) per DOC_POLICY §3.
 
 > Note: this doc's `DOC_README.md` index line is pending. Another agent is mid-edit
@@ -20,7 +20,7 @@ and **replace the legacy frame model now** (not coexist) per DOC_POLICY §3.
 
 ## Goal
 
-Drop morphorm from platen. The workbench tile geometry comes from serval's taffy
+Drop morphorm from platen. The workbench tile geometry comes from genet's taffy
 (the engine that already lays out the chrome), and platen owns the tiling model +
 the DOM emission. One layout engine in the stack, not two.
 
@@ -32,20 +32,20 @@ the DOM emission. One layout engine in the stack, not two.
   morphorm `Node` glue) are the whole of it. `project_tree` (forme `Arrangement` →
   geometry-free `WorkbenchPlan`) is **not** morphorm and stays.
 - **The authoring layer is `xilem_serval`** (`el`, `on_click`, `lens`, `AnyView`,
-  `ServalAppRunner`) + `serval_scripted_dom`. meerkat already runs it for the chrome
+  `GenetAppRunner`) + `genet_scripted_dom`. meerkat already runs it for the chrome
   and already reads laid-out rects back from a `ScriptedDom` (`measure_class_bottom`,
   `fragments_from_scripted_dom`, `hit_test_node`). So "tile-tree as taffy-laid-out
   DOM, read content rects back" reuses paths that already exist.
-- **serval can composite external textures** (`PaintCmd::DrawExternalTexture` +
+- **genet can composite external textures** (`PaintCmd::DrawExternalTexture` +
   `install_external_texture`, `components/paint/netrender_painter.rs`), but
   **`xilem_serval` exposes no element that emits one** (only the generic `el`), and
-  serval is a clear field for documentation only right now. So tile **content**
-  cannot live fully inside the serval DOM this pass without serval work.
+  genet is a clear field for documentation only right now. So tile **content**
+  cannot live fully inside the genet DOM this pass without genet work.
 - **platen-core is GUI-free** and deliberately keeps the renderer host-side (its
   Cargo.toml: "the heavy renderer stays host-side and this dep does not propagate
   through the contract crates"). Its dependents are `meerkat`, `orrery-host`, the
   legacy `mere/app`, and `platen/domain/workbench`. Putting `xilem_serval` in
-  platen-core would push serval into all of them.
+  platen-core would push genet into all of them.
 - **`platen/domain/workbench` is not the tiling state** — it is the a11y/uxtree
   projection of platen's `WorkbenchProjection`. The tiling model belongs in
   platen-core.
@@ -78,18 +78,18 @@ the DOM emission. One layout engine in the stack, not two.
 - **platen-core (`crates/platen/platen`), stays GUI-free.** Gains the tiling
   **model**: slots, tab-stacks, active tab, per-slot weights, serialization, over
   forme's `Arrangement` + the existing `project_tree` / `WorkbenchPlan`. The morphorm
-  layout is **deleted**; platen-core carries no layout engine (serval lays the DOM
+  layout is **deleted**; platen-core carries no layout engine (genet lays the DOM
   out downstream).
-- **New crate `platen-view` (serval-coupled), only meerkat depends on it.** A
+- **New crate `platen-view` (genet-coupled), only meerkat depends on it.** A
   `workbench_view(&model) -> View` that emits the tile tree as flex DOM: a row of
   slot columns, each a tab strip + a content-slot placeholder tagged with its
   member (and texture key). Depends on platen-core + `xilem_serval` +
-  `serval_scripted_dom`. This keeps the serval dependency off orrery-host and the
+  `genet_scripted_dom`. This keeps the genet dependency off orrery-host and the
   legacy app, matching platen-core's existing host-side-renderer discipline. (A
   feature gate on platen-core was rejected: workspace feature unification would pull
-  serval into the other dependents anyway, and a dead cfg gate is the pattern Mark
+  genet into the other dependents anyway, and a dead cfg gate is the pattern Mark
   dislikes.)
-- **meerkat** drives the platen model, owns a second `ServalAppRunner` over
+- **meerkat** drives the platen model, owns a second `GenetAppRunner` over
   `platen-view`'s view (a "workbench root", composited in the content band in Tree
   mode the way chrome + orrery are), reads each content slot's rect back from that
   DOM, and composites the constellation actor's texture there. This is today's
@@ -97,10 +97,10 @@ the DOM emission. One layout engine in the stack, not two.
 
 ### Deferred (flagged, not in this pass)
 
-- **In-DOM content-roots.** Tile content as a real serval external-texture element
-  (so serval paints it), gated on a serval/`xilem_serval` canvas-or-external-texture
+- **In-DOM content-roots.** Tile content as a real genet external-texture element
+  (so genet paints it), gated on a genet/`xilem_serval` canvas-or-external-texture
   element. Until then, content is host-composited at the DOM-derived rect.
-- **Draggable dividers.** flex-basis updated on an `on_pointer` drag (serval has the
+- **Draggable dividers.** flex-basis updated on an `on_pointer` drag (genet has the
   pointer-drag foundation). First cut is equal-weight, matching current behavior.
 - **Floaters / sticky-notes.** The hybrid absolute-positioning modes (eval §7's
   sub-choice). Docked flex tree first.
@@ -122,20 +122,20 @@ the DOM emission. One layout engine in the stack, not two.
   N slot columns, each strip + content placeholder, tagged per member).
   *Done*: the view crate builds + tests the DOM shape.
 - **P3 — meerkat runs the workbench root (parallel to morphorm).** A second
-  `ServalAppRunner` lays out `platen-view`'s DOM; meerkat composites the band and
+  `GenetAppRunner` lays out `platen-view`'s DOM; meerkat composites the band and
   reads content rects back, compositing actor textures there. Gated behind the
   existing morphorm path so both can be compared on screen.
-  *Done*: the tiled view renders through serval, at parity with the morphorm path.
-- **P4 — Flip + delete morphorm.** meerkat's Tree branch uses the serval path; give
+  *Done*: the tiled view renders through genet, at parity with the morphorm path.
+- **P4 — Flip + delete morphorm.** meerkat's Tree branch uses the genet path; give
   the legacy `mere/app` `panes.rs` a trivial inline equal-weight split so it no longer
   calls `platen::layout`; delete `platen::layout` + `platen::layout_node`; drop the
   `morphorm` workspace dep. *Done*: morphorm is gone, the tiled view renders through
-  serval/taffy, the whole workspace builds + tests green.
+  genet/taffy, the whole workspace builds + tests green.
 
 ## Risks
 
-- **serval dep propagation** — mitigated by the separate `platen-view` crate
-  (platen-core stays serval-free).
+- **genet dep propagation** — mitigated by the separate `platen-view` crate
+  (platen-core stays genet-free).
 - **DOM-rect readback timing** — the workbench root is laid out after its scene is
   built, so content rects are one frame behind, the same one-frame-lag pattern the
   current tile strips already use (`set_tile_strips` requests a redraw on change).
@@ -147,7 +147,7 @@ the DOM emission. One layout engine in the stack, not two.
 
 - **2026-06-04** — Approach decided with Mark (full Phase-2 in platen; model moves
   into platen now; replace the legacy frame model). Plan grounded in the code
-  (morphorm seam, xilem_serval authoring layer, serval external-texture gap, platen
+  (morphorm seam, xilem_serval authoring layer, genet external-texture gap, platen
   dependents). Recon confirmed the legacy frame model is contained (live host chain
   insulated; only the a11y leaf + a signal name consume it).
 - **2026-06-04 — `mere/app` retired** (`0066070`). Mark's call: only meerkat. The
@@ -167,9 +167,9 @@ the DOM emission. One layout engine in the stack, not two.
   `WorkbenchScene` is the geometry-free runner state, built from the model via
   `from_workbench(&Workbench, &Graph)`; clicks record a `WorkbenchAction` to drain.
   `WORKBENCH_SHEET` carries the flex CSS. 5 headless DOM-shape tests green. platen-core
-  stays serval-free; only platen-view couples. Confirms the xilem_serval API
+  stays genet-free; only platen-view couples. Confirms the xilem_serval API
   understanding (the crate compiles + diffs against the real authoring layer).
-- **2026-06-04 — P3 done** (`cf8fe30`). meerkat flips Tree mode to the serval
+- **2026-06-04 — P3 done** (`cf8fe30`). meerkat flips Tree mode to the genet
   workbench root: a second runner over the `WorkbenchScene`, synced from the model +
   graph + pin state each frame; the workbench DOM is rasterized as the content band
   (taffy lays the tiles out), and each `wb-content` placeholder's rect + `data-member`
@@ -178,12 +178,12 @@ the DOM emission. One layout engine in the stack, not two.
   close / pin is drained onto the model. platen-view gained pin parity (no regression).
   Decided to flip directly (not run parallel to morphorm) since mere/app was retired.
 - **2026-06-04 — P3 cleanup** (`d9ea25f`). Removed the now-dead chrome-composited tile
-  strips (TileStrip/TileTab/TileAction + methods + view + styles + test) — the serval
+  strips (TileStrip/TileTab/TileAction + methods + view + styles + test) — the genet
   workbench root owns the strips now.
 - **2026-06-04 — P4 done** (`7fce7b9`). **morphorm dropped.** Deleted the morphorm
   files (`platen::layout`, `layout_node`) and the laid_out_slots/PlacedSlot/PlacedTab
   geometry from the model; removed the workspace pin + platen's dep (gone from
-  Cargo.lock). The workbench is geometry-free; layout is serval/taffy via platen-view.
+  Cargo.lock). The workbench is geometry-free; layout is genet/taffy via platen-view.
   `tree_projection` kept (the spine projection, not morphorm). Whole workspace builds;
   all crate tests green.
   - *Follow-on logged*: `slot_views` (P1) and `project_tree`/`WorkbenchPlan` are now

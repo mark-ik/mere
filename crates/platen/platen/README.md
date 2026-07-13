@@ -13,7 +13,7 @@ prints what it presses.
   tab-stacks: `PlanSlot`, `TilePlan`, `project_tree`).
 - **`workbench`** — the tiled-workbench model (`Workbench`, `SlotView`):
   slots of tab-stacks, active tab per stack, projection mode. Geometry-free;
-  concrete rects come from `platen-view`'s flex DOM laid out by serval.
+  concrete rects come from `platen-view`'s flex DOM laid out by genet.
 - **`cartography_scene`** — cartography projection-request derivation and
   layout-strategy dispatch (the `arrangements` catalog seam).
 - **`scene_paint`** / **`orrery`** — render a cartography `Projection` /
@@ -31,7 +31,7 @@ prints what it presses.
  forme::Arrangement ──► platen (tree_projection / workbench)
                           │ WorkbenchPlan / Workbench
                           ▼
-                     platen-view ──► serval flex DOM ──► netrender
+                     platen-view ──► genet flex DOM ──► netrender
  kernel::Graph ──► platen (orrery / scene_paint)
                           │ paint list (underlay)
                           ▼
@@ -39,7 +39,7 @@ prints what it presses.
 ```
 
 - **`forme`** — owns the arrangement platen projects; platen never mutates it.
-- **`platen-view`** (`crates/platen/view`) — the serval-coupled view layer;
+- **`platen-view`** (`crates/platen/view`) — the genet-coupled view layer;
   platen-core stays engine-free.
 - **`paint_list_api`** — the engine-neutral paint vocabulary platen emits.
 - **`document-canvas`** / **`cartography`** / **`arrangements`** — the

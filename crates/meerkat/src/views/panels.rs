@@ -103,7 +103,7 @@ pub(crate) fn context_menu_view(menu: &ContextMenu) -> ChromeView {
 
     // Depth-1 submenu: a second panel of the open parent's children. The render pass anchors it
     // off the parent row each frame (it starts at the overlay origin). Pushed after the root so
-    // serval's stacking paints it over the root panel. (Nested submenus.)
+    // genet's stacking paints it over the root panel. (Nested submenus.)
     let mut layer: Vec<ChromeView> = vec![Box::new(root_panel) as ChromeView];
     if let Some(sub) = &menu.submenu {
         if let Some(parent) = menu.items.get(sub.parent) {
@@ -491,7 +491,7 @@ pub(crate) fn new_message_form(form: &comms::NewMessageForm) -> ChromeView {
     ));
 
     // Recipient: misfin needs a server address; Cable targets the cabal. A small
-    // subheading labels each field (serval's input has no placeholder ghost text).
+    // subheading labels each field (genet's input has no placeholder ghost text).
     if form.protocol == ProtocolKind::Misfin {
         rows.push(Box::new(
             el::<_, Chrome, ()>("div", "To — a misfin address (mailbox@server)")

@@ -1,7 +1,7 @@
 # Meerkat onto one state, N windows: the migration plan
 
 **Date**: 2026-07-06
-**Status**: **COMPLETE 2026-07-07 — archived** (to `archive_docs/2026-07-07_one_state_migration/`). All slices landed + verified headless (302 meerkat + 89 xilem-serval tests) and headed (the mk-harness primary+leaf drive). The framework half (serval `ServalMultiRunner`) landed
+**Status**: **COMPLETE 2026-07-07 — archived** (to `archive_docs/2026-07-07_one_state_migration/`). All slices landed + verified headless (302 meerkat + 89 xilem-serval tests) and headed (the mk-harness primary+leaf drive). The framework half (genet `GenetMultiRunner`) landed
 2026-07-06. Consumer migration: **Slices 0-3 landed** (0-2 on 2026-07-06; **Slice 3 —
 the atomic multi-runner flip — on 2026-07-07**: `cargo check -p meerkat --all-targets`
 0 errors, `cargo test -p meerkat` 302 tests pass (72 + 230), `xilem-serval` 89 tests
@@ -11,14 +11,14 @@ rebuild order) holds by construction — see its entry. Workspace toolchain bump
 `rust-toolchain.toml` pinned to 1.96).
 **Related**: [one_state_n_windows_design](../design/2026-07-05_one_state_n_windows_design.md)
 (the design this executes step 2's second half + steps 3-4 of),
-[movebefore plan](../../../../serval/docs/2026-07-05_movebefore_dom_standard_plan.md)
+[movebefore plan](../../../../genet/docs/2026-07-05_movebefore_dom_standard_plan.md)
 (S1-S5 landed; `PortableKeyed` is the tile-move mechanism this eventually
 consumes), [multi_window_plan](2026-06-10_multi_window_plan.md) (built the
 N-runner shape this replaces).
 
 ## The finding: the framework is ready, no extension needed
 
-`ServalMultiRunner<State, Logic, V>` takes `Logic: FnMut(&State) -> V`. A
+`GenetMultiRunner<State, Logic, V>` takes `Logic: FnMut(&State) -> V`. A
 `Box<dyn FnMut(&AppState) -> ShellView>` satisfies that, so each window's
 projection is a **boxed closure capturing its projection index**, reading
 `&app.windows[i]`. The design doc's `FnMut(&AppState, &WindowLocal) -> V` lens
@@ -27,7 +27,7 @@ locals, each projection's closure indexing its own.
 
 `ShellView` is already `Box<dyn AnyView<…>>` (erased `V`); the only type change
 is `ShellLogic`, from `fn(&ShellState) -> ShellView` to
-`Box<dyn Fn(&AppState) -> ShellView>`. Nothing in `ServalMultiRunner` changes.
+`Box<dyn Fn(&AppState) -> ShellView>`. Nothing in `GenetMultiRunner` changes.
 
 Consequence for message-time mutation: xilem threads **one** `&mut State`
 through `View::message`, and shared truth is one object across N windows, so it
@@ -50,7 +50,7 @@ struct AppState {
 // panes, gloss, settings, object_card_keys.
 
 // Shell owns:
-ServalMultiRunner<AppState, Box<dyn Fn(&AppState) -> ShellView>, ShellView>
+GenetMultiRunner<AppState, Box<dyn Fn(&AppState) -> ShellView>, ShellView>
 // per window i, pushed at spawn:
 //   |app| shell_view(&app.shared, &app.windows[i])
 ```
@@ -93,7 +93,7 @@ so those ~3 view functions take the shared value as a **param** (read from
 `s.shared` in `shell_view` and threaded down) rather than off `Chrome`; move
 `sync` + `crawl` out of `Chrome`. The fan-out loop + spawn seeding collapse to
 a single `shell.shared_chrome.borrow_mut().sync = …` — every window sees it
-because they share the `Rc`. Per-window `ServalAppRunner`s stay. **Done
+because they share the `Rc`. Per-window `GenetAppRunner`s stay. **Done
 when**: the sync/crawl fan-out in `handler_user.rs` is gone, both chips still
 update live across two windows in a headed drive, build + `-- gloss
 pane_session` green. This seam is what Slice 3 lifts: the `Rc<RefCell<
@@ -138,8 +138,8 @@ state_impl}.rs` plus the direct external reads (`frame_a11y_panes`, `shell_acces
 both, `meerkat --all-targets` green. `WindowLocal` is the type Slice 3's multi-runner
 holds one-per-window in `AppState.windows`.
 
-**Slice 3 — flip to `ServalMultiRunner`.** `Shell` owns
-`ServalMultiRunner<AppState, BoxedLogic, ShellView>`; `AppState.shared`
+**Slice 3 — flip to `GenetMultiRunner`.** `Shell` owns
+`GenetMultiRunner<AppState, BoxedLogic, ShellView>`; `AppState.shared`
 absorbs the `Rc<RefCell<SharedChrome>>` contents; `AppState.windows` holds the
 `WindowLocal`s; `WindowView` drops `runner`; the dispatch/focus/state sites
 reroute through the projection id; spawn/close become
@@ -148,20 +148,20 @@ reroute through the projection id; spawn/close become
 `WindowView.runner` forces the ~25 view-state accessor methods off `WindowView`,
 changing their **~215** callers, on top of the **73** `view.runner` dispatch
 sites; the lens routing rules out a cheap `Rc` facade. A dedicated execution
-sub-plan decomposes it into green checkpoints (serval `update_local` → accessor
+sub-plan decomposes it into green checkpoints (genet `update_local` → accessor
 relocation while runner-backed → the atomic structural flip):
 [2026-07-06_slice3_multirunner_flip_subplan](2026-07-06_slice3_multirunner_flip_subplan.md).
-**Done when**: no `ServalAppRunner` remains in meerkat, one `update` diffs every
+**Done when**: no `GenetAppRunner` remains in meerkat, one `update` diffs every
 window, and a primary plus a torn-out leaf both drive correctly in a headed run.
-**Landed 2026-07-07**: `Shell.multi: ServalMultiRunner<AppState, BoxedLogic,
+**Landed 2026-07-07**: `Shell.multi: GenetMultiRunner<AppState, BoxedLogic,
 ShellView>`; `WindowView.projection_id` replaced `runner`; the 29 accessor bodies +
 dispatch/focus sites route through the projection id; spawn/close →
 `push_projection`/`remove_projection` (index-aligned dual collections); the S0
 `Rc<RefCell<SharedChrome>>` collapsed into owned `AppState.shared`;
-`ShellState`/`ShellRunner`/`ShellLogic`/`shell_runner` deleted; serval gained
+`ShellState`/`ShellRunner`/`ShellLogic`/`shell_runner` deleted; genet gained
 `ProjectionId(pub usize)`. Build + 302 meerkat tests + 89 `xilem-serval` tests green.
 **Headed check done 2026-07-07**: on the rebuilt exe, the primary + a Ctrl+Shift+N leaf both
-render from the one `ServalMultiRunner` (leaf slim, primary full, both on the shared graph
+render from the one `GenetMultiRunner` (leaf slim, primary full, both on the shared graph
 through their own cameras), no crash — driven by the unified
 `testing/mere/scripts/mk-harness.ps1` after fixing the partitioned-mode self-capture in
 `render/paint.rs`. Shots: `testing/mere/images/s3c-{1-primary,3-both}.png`. All four slices
@@ -169,7 +169,7 @@ are now verified headless (302 tests) and headed.
 
 **Slice 4 — source-first rebuild order (holds by construction).** A tear-out appends
 the target projection after its source exists and `ProjectionId`s never reuse, so a
-target always has a higher index than its source; `ServalMultiRunner` rebuilds in
+target always has a higher index than its source; `GenetMultiRunner` rebuilds in
 insertion order, so the source rebuilds before the target with **no code change**. The
 dedicated window-order test + the actual `PortableKeyed` cross-window survival are
 deferred to the forest-dom slice (until then a cross-window tile move degrades to

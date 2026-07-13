@@ -8,7 +8,7 @@
 //! `AppState` holds the window-invariant chrome chips (`shared`) once, plus one
 //! [`WindowLocal`] per OS window in `windows`. Each window is a **projection**: the
 //! shell view lensed onto `windows[i]`, reading `shared` for the crawl chip. The flip
-//! replaced the N per-window `ServalAppRunner`s with this one [`ServalMultiRunner`], so
+//! replaced the N per-window `GenetAppRunner`s with this one [`GenetMultiRunner`], so
 //! multi-window synced panels stop being a sync feature — there is one state, so there is
 //! nothing to synchronize. (One state, N windows — Slice 3.)
 
@@ -33,18 +33,18 @@ pub(crate) struct AppState {
 
 /// The erased per-window view, over one window's [`WindowLocal`]. The inner shell builders
 /// produce this; [`shell_view`] lenses it up to [`AppState`].
-pub(crate) type WindowLocalView = Box<dyn AnyView<WindowLocal, (), ServalCtx, ServalElement>>;
+pub(crate) type WindowLocalView = Box<dyn AnyView<WindowLocal, (), GenetCtx, GenetElement>>;
 
 /// The erased shell root view, over the whole [`AppState`] (a per-window lens into
 /// `windows[i]`). This is what each projection's logic returns.
-pub(crate) type ShellView = Box<dyn AnyView<AppState, (), ServalCtx, ServalElement>>;
+pub(crate) type ShellView = Box<dyn AnyView<AppState, (), GenetCtx, GenetElement>>;
 
 /// One projection's view logic: the shell view over [`AppState`], closed over the window's
 /// index. Boxed because each window captures a distinct index. (Slice 3.)
 pub(crate) type BoxedLogic = Box<dyn FnMut(&AppState) -> ShellView>;
 
 /// The one runner the shell holds: [`AppState`] projected into N windows. (Slice 3.)
-pub(crate) type ShellMultiRunner = ServalMultiRunner<AppState, BoxedLogic, ShellView>;
+pub(crate) type ShellMultiRunner = GenetMultiRunner<AppState, BoxedLogic, ShellView>;
 
 impl WindowLocal {
     /// A window's local view-state at rest, seeded with `chrome`. Everything else starts

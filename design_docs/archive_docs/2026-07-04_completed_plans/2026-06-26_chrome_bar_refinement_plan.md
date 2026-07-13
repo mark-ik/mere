@@ -56,7 +56,7 @@ centering + missing glyphs.
   CSS *already* sets `justify-content: center` + 44×44 sizing ([main.rs:471](../../../crates/meerkat/src/main.rs#L471)),
   flex-direction set inline per edge ([render.rs:660](../../../crates/meerkat/src/render.rs#L660)).
   Yet the 2026-06-24 screenshot shows glyphs left-stuck, no 44×44 button grounds,
-  and one tofu box. **Two suspects**: (a) serval not honoring flex-item width/height
+  and one tofu box. **Two suspects**: (a) genet not honoring flex-item width/height
   or `justify-content` on these buttons; (b) font lacks coverage for some symbol
   glyphs (`⇝` U+21DD, `⚗` U+2697, `✉` U+2709, `⚒` U+2692). **Runtime verification
   required — do not resolve by static tracing.**
@@ -93,7 +93,7 @@ Done when:
 ### P3 — Shellbar centering + glyph coverage (self-contained; runtime-verify first)
 Done when:
 - The cause of the left-stick + missing button grounds is identified at runtime
-  (serval flex-item sizing/justify vs CSS not applied), then fixed so each glyph is
+  (genet flex-item sizing/justify vs CSS not applied), then fixed so each glyph is
   centered in its 44×44 cell and the button column is centered in the strip.
 - Every shellbar glyph renders (no tofu): either swap the offenders for
   font-covered glyphs or add a symbol-font fallback to the host text stack. Confirm
@@ -128,7 +128,7 @@ sync rows, (2) P2 process list + per-row retry/stop/pin, (3) shellbar centering 
 glyph coverage — all in one driven session. (Decided 2026-06-26.)
 
 **2026-06-26 — P3 landed (+ batched P1/P2 headed confirmation).**
-- Shellbar centering: serval's flex does **not** centre a bare text child via
+- Shellbar centering: genet's flex does **not** centre a bare text child via
   `justify-content` (confirmed at runtime — the prior `width: 44px` + `justify-content:
   center` left every glyph hugging the button's left edge). Fix: content-width buttons
   with *symmetric* `padding: 0 13px` (centres the glyph whatever its width) centred in

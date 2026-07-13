@@ -8,7 +8,7 @@ use super::*;
 
 /// Find every occurrence of `query` in the focused node's HTML content, returning the
 /// highlight rects per match in full-document px (`[x0, y0, x1, y1]`). Only the
-/// HTML/serval lane is searched here: it ships a flat scene the host cannot query, so
+/// HTML/genet lane is searched here: it ships a flat scene the host cannot query, so
 /// the actor runs the search where the layout lives. Document-lane content returns no
 /// matches (its find rides the retained packet, a separate path). An empty query, or
 /// non-Ready / non-HTML content, yields nothing. (Find-in-page.)
@@ -26,7 +26,7 @@ pub fn find_content(
         return Vec::new();
     };
     if route_document_engine(url, fetched.content_type.as_deref(), registry, policy)
-        != inker::routing::ENGINE_SERVAL_WEB
+        != inker::routing::ENGINE_GENET_WEB
     {
         return Vec::new();
     }
@@ -36,7 +36,7 @@ pub fn find_content(
     let mut sheets: Vec<&str> = HTML_SHEET.to_vec();
     sheets.extend(inline.iter().map(String::as_str));
     sheets.extend(linked.iter().map(String::as_str));
-    serval_layout::find_text_rects_from_layout_dom(&doc, &sheets, loader, w, h, query)
+    genet_layout::find_text_rects_from_layout_dom(&doc, &sheets, loader, w, h, query)
 }
 
 #[derive(Clone, Debug, PartialEq)]

@@ -1,9 +1,9 @@
 # Overlay primitive adoption
 
 **Date**: 2026-06-25
-**Status**: Done 2026-06-25 (P1 + serval `overlay_rect` + P2 card + P3 helper, committed). From the
-[serval capability-misuse sweep](2026-06-25_context_submenus_plan.md).
-**Owners**: serval (overlay docs + a size-carrying variant) + meerkat (adopt `overlay_at`/`anchor_point`).
+**Status**: Done 2026-06-25 (P1 + genet `overlay_rect` + P2 card + P3 helper, committed). From the
+[genet capability-misuse sweep](2026-06-25_context_submenus_plan.md).
+**Owners**: genet (overlay docs + a size-carrying variant) + meerkat (adopt `overlay_at`/`anchor_point`).
 
 ## Problem
 
@@ -21,7 +21,7 @@ Surfaces and the right primitive:
 - **Comms pane + shellbar** ([render.rs:690](../../../crates/meerkat/src/render.rs), `659`) — re-stamp position **and** width/height/flex each frame. `overlay_at` only emits left/top, so these motivate a size/edge-carrying variant rather than per-surface re-stamps.
 
 Also stale: the overlay's own docs describe the **pre-z-index** stacking model (must be last sibling), which
-directly misled the submenu work (it caused the `.context-menu-layer` wrapper bug). serval-layout now has
+directly misled the submenu work (it caused the `.context-menu-layer` wrapper bug). genet-layout now has
 full CSS 2.1 Appendix E stacking + z-index (`paint_stacking.rs`).
 
 ## Plan
@@ -42,7 +42,7 @@ full CSS 2.1 Appendix E stacking + z-index (`paint_stacking.rs`).
   `Placement`, feeding `overlay_at` in `focus_card_view`. Keep the card-specific vertical-center + band
   clamp. Removes a second copy of the side/flip logic the submenu now shares.
 
-**P3 — a size/edge-carrying overlay variant (serval).**
+**P3 — a size/edge-carrying overlay variant (genet).**
 - The comms pane and shellbar need width/height (and the shellbar a flex edge), beyond `overlay_at`'s
   left/top. Add an overlay variant that carries size (e.g. `overlay_rect(rect, content)`), then adopt it
   in render for those two surfaces so they stop re-stamping a full geometry string each frame.
@@ -64,12 +64,12 @@ full CSS 2.1 Appendix E stacking + z-index (`paint_stacking.rs`).
 - 2026-06-25: **P2/P3 finding (sequencing).** P2 wants `focus_card_view` to feed `overlay_at`, but the
   focus card needs width/height + shadow and `overlay_at` emits only left/top — adding a `.attr("style",
   ..)` would clobber the position. That is exactly P3's size-carrying variant. So the natural order is
-  **P3 first** (add serval `overlay_rect(rect, content)`), then P2 adopts it in the card (with
+  **P3 first** (add genet `overlay_rect(rect, content)`), then P2 adopts it in the card (with
   `anchor_point` + `Placement` for the right/flip-left math, keeping the vertical-center + band clamp),
   then P3 also lands comms-pane + shellbar. `anchored_card_rect` is host-side (called from render), and
   the shell view already rebuilds each frame, so there is no per-frame-rebuild regression in moving the
   card's position into the view.
-- 2026-06-25: **P3 serval + P2 done (committed).** serval `overlay_rect(x, y, w, h, content)` added +
+- 2026-06-25: **P3 genet + P2 done (committed).** genet `overlay_rect(x, y, w, h, content)` added +
   tested (`edafb400`); the focus card adopts it (`2bd6336`) — `anchored_card_rect` routes its right/
   flip-left through `anchor_point` + `Placement` (node as a gap-wide keep-out box), and the three card
   kinds build via `overlay_rect` (geometry) with visuals on an inner fill div. 160 bin tests green.
@@ -89,5 +89,5 @@ full CSS 2.1 Appendix E stacking + z-index (`paint_stacking.rs`).
   two hand-written comms / shellbar geometry strings now route through one `overlay_geometry_style(x, y,
   w, h, flex)` (`6e7a142`), mirroring `overlay_rect`'s geometry (the shellbar's optional flex edge
   included). No behaviour change; the surfaces stay render-patched because their rect is a layout output.
-  **Overlay plan done:** P1 (`fa5f32a`/`79dc637`), serval `overlay_rect` (`edafb400`), P2 card
+  **Overlay plan done:** P1 (`fa5f32a`/`79dc637`), genet `overlay_rect` (`edafb400`), P2 card
   (`2bd6336`), P3 helper (`6e7a142`).

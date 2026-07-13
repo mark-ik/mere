@@ -8,7 +8,7 @@ projection layer (cartography + arrangements) relates to the physics substrate
 seam-doc shape, one layer over).
 **Related**: [cartography layer brief](../research/2026-05-10_cartography_layer_brief.md),
 [composition spine](2026-05-21_mere_composition_spine.md),
-[serval-as-host eval](2026-05-29_serval_as_host_evaluation.md),
+[genet-as-host eval](2026-05-29_genet_as_host_evaluation.md),
 [adoption roadmap](../implementation_strategy/2026-05-27_adoption_roadmap.md) R1.
 
 ---
@@ -123,8 +123,8 @@ let projection = Projection {
 
 This glue, the strategy selection, and the actual seeded-ring replacement are
 host concerns, so they stay thin and wait on the host flip (the
-[serval-as-host eval](2026-05-29_serval_as_host_evaluation.md)'s standing rule),
-where the orrery becomes a serval custom element fed by this same seed/read pair.
+[genet-as-host eval](2026-05-29_genet_as_host_evaluation.md)'s standing rule),
+where the orrery becomes a genet custom element fed by this same seed/read pair.
 
 ## What this settles
 

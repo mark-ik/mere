@@ -22,7 +22,7 @@ pass already wired. The theme choice persists.
   (`PersistedSettings { tab_cap }`) is the sidecar; each field is serde-default,
   so adding `theme_id` reads old files cleanly.
 - **The `apparatus` crate is a uxtree a11y skeleton**, not a render view-model.
-  So the apparatus *pane* renders in meerkat like the `roster` pane (a serval DOM
+  So the apparatus *pane* renders in meerkat like the `roster` pane (a genet DOM
   themed from the chrome tokens), not via the domain crate.
 - **The orrery's colors are hardcoded** (`build.rs`: `surface_bg`,
   `dark_scene_style`, the `NODE_SHEET` gnode fills). They don't read theme tokens,
@@ -39,7 +39,7 @@ pass already wired. The theme choice persists.
     host-drawn caches (window controls, divider), redraws, and persists the id.
   - `PersistedSettings.theme_id: Option<String>`; restore on launch.
   - The apparatus pane: a frame leaf (`PaneContent::Apparatus`) summoned beside
-    the graph (Ctrl+,), rendered as a serval DOM with a **Theme** section (the
+    the graph (Ctrl+,), rendered as a genet DOM with a **Theme** section (the
     four themes as buttons, the active one highlighted) and a **System** section
     (diagnostics: node count, active actors, sync status). Theme buttons
     hit-tested like roster rows.
@@ -77,7 +77,7 @@ shellbar (F2; panes summon via keybind for now).
 - 2026-06-08: **A1 landed + confirmed.** `ThemeRegistry` + `active_theme_id` in
   App; `set_theme` rebuilds the chrome sheet/tokens, drops the host-drawn caches,
   persists; `PersistedSettings.theme_id` (restored on launch). Apparatus pane
-  (`apparatus` module, serval DOM) with a Theme section (4 buttons, active
+  (`apparatus` module, genet DOM) with a Theme section (4 buttons, active
   highlighted) + a System section (nodes / active actors / tab cap / theme),
   Ctrl+, summon, theme-button hit-test. `toggle_roster` generalized to
   `toggle_pane(content)` anchored at the graph leaf (so a second pane nests).

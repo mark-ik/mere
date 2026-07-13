@@ -2,7 +2,7 @@
 
 **Date**: 2026-07-09
 **Status**: design, pre-build. The rung-3 *infrastructure* (arrangement leaf +
-`VirtualWindow`) is already built in serval; this plan is the editor that consumes it,
+`VirtualWindow`) is already built in genet; this plan is the editor that consumes it,
 so the knot editor can fold sections, show a gutter, and scale to large files. The one
 gating decision (the text-editing layer) is called out below and wants a call before the
 large build. Grew out of the [djot editor plan](2026-06-24_djot_editor_knot_nodes_plan.md)
@@ -11,7 +11,7 @@ Phase 3 (folds), which is blocked on this.
 ## Why (what the textarea cannot do)
 
 The knot editor today is a single `<textarea>` (`xilem_serval::styled_textarea` over a
-`TextInput`), laid out by serval-layout/parley as one element. That is why it edits so
+`TextInput`), laid out by genet-layout/parley as one element. That is why it edits so
 cheaply: `TextInput` + parley give **caret, anchor selection, IME, word motion, soft-wrap
 vertical nav, and click-to-place for free**. But a textarea is one element the engine lays
 out whole, so it cannot:
@@ -23,10 +23,10 @@ out whole, so it cannot:
 - **Scale** — a 10k-line file lays out entirely; only visible rows should materialize.
 
 The chisel catalog's "djot-to-IDE editor ladder" names this: rung 1 highlighting (done,
-serval `highlight`), **rung 2 gutter**, **rung 3 virtualized buffer**, rung 4 structure
+genet `highlight`), **rung 2 gutter**, **rung 3 virtualized buffer**, rung 4 structure
 decorations. Folds sit on rungs 2–3.
 
-## What already exists (serval-side, built)
+## What already exists (genet-side, built)
 
 - `xilem_serval::arrangement(width, height, children)` — a `position: relative` container
   claiming an explicit content extent (keeps the scrollbar honest while only visible rows
@@ -105,14 +105,14 @@ B stays the door if pixel-exact editing control is ever wanted.
   work on the virtualized editor with folds.
 - **P4 — migrate + retire.** Make the virtualized editor the knot editor's edit surface,
   retire the plain `styled_textarea` path (or keep it as a fallback). Promote the reusable
-  pieces (the line-render view, the gutter, the fold-glyph) to serval so every host — an
+  pieces (the line-render view, the gutter, the fold-glyph) to genet so every host — an
   IDE pane, Isometry's log/console, a Strophe list — gets a virtualized code view.
 - **Deferred:** the chisel Path-A fold glyph (polish over the Unicode arrow); a rope buffer
   for very large files (djot plan Phase 6); diagnostics dots in the gutter.
 
 ## Decisions
 
-1. **The infra is serval's `arrangement` + `VirtualWindow`** — built; the editor consumes
+1. **The infra is genet's `arrangement` + `VirtualWindow`** — built; the editor consumes
    it, does not rebuild it.
 2. **Display before editing (C then A).** Land folding/gutter/scale read-only, then adopt
    hidden-textarea input; avoid a from-scratch editing rewrite (B) unless proven necessary.
@@ -137,7 +137,7 @@ B stays the door if pixel-exact editing control is ever wanted.
 
 - [djot editor plan](2026-06-24_djot_editor_knot_nodes_plan.md): Phase 3 folds/gutter,
   blocked on this; the illume `folds`/`outline`/container-tree the model reads.
-- serval `docs/2026-07-08_chisel_widget_catalog.md`: the editor ladder + the arrangement /
+- genet `docs/2026-07-08_chisel_widget_catalog.md`: the editor ladder + the arrangement /
   `VirtualWindow` tier-3 mechanism this consumes.
 - [illume text lexer plan](2026-06-26_illume_text_lexer_plan.md): the per-line highlight +
   `folds` the render uses.
@@ -145,6 +145,6 @@ B stays the door if pixel-exact editing control is ever wanted.
 ## Progress
 
 - **2026-07-09, design written.** Confirmed the rung-3 infra (arrangement + `VirtualWindow`
-  + `placed`) is built serval-side with no meerkat consumer yet; framed the editor over it;
+  + `placed`) is built genet-side with no meerkat consumer yet; framed the editor over it;
   surfaced the editing-layer as the gating decision (A hidden-textarea / B full custom / C
   read-only-first) and recommended C→A. No code yet — the editing-layer call gates P3+.

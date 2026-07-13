@@ -15,8 +15,19 @@
 
 use identity::Ed25519Keypair;
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
+use p2panda_core::prune::PruneFlag;
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Timestamp};
 use serde::{Deserialize, Serialize};
+
+use crate::retention::RetentionCheckpoint;
+
+/// Separate per-author logs keep checkpoint authority available while event
+/// prefixes are pruned.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum MeshLogId {
+    Events,
+    Checkpoints,
+}
 
 /// The signed addressing extension on a mesh operation: which mesh (personal
 /// space) the job traffic belongs to.
@@ -24,6 +35,14 @@ use serde::{Deserialize, Serialize};
 pub struct MeshExt {
     /// The mesh / space this event addresses.
     pub mesh_id: [u8; 32],
+    /// Upstream-compatible signal that this operation survives its event-log
+    /// prefix. Omitted from legacy wire bytes while false.
+    #[serde(
+        rename = "p",
+        skip_serializing_if = "PruneFlag::is_not_set",
+        default = "PruneFlag::default"
+    )]
+    pub prune_flag: PruneFlag,
 }
 
 /// What a job asks for. M1 ships the two pure, deterministic kinds that prove
@@ -59,6 +78,13 @@ pub enum MeshEvent {
         result: Vec<u8>,
         at_ms: u64,
     },
+    /// Owner-authorized current state and retained per-log frontier.
+    RetentionCheckpoint {
+        checkpoint: Box<RetentionCheckpoint>,
+    },
+    /// An author's event-log prune point. The referenced checkpoint remains in
+    /// the separate checkpoint log.
+    HistoryPruned { checkpoint: [u8; 32], at_ms: u64 },
 }
 
 impl MeshEvent {
@@ -66,7 +92,16 @@ impl MeshEvent {
         match self {
             MeshEvent::JobPosted { at_ms, .. }
             | MeshEvent::JobClaimed { at_ms, .. }
-            | MeshEvent::JobDone { at_ms, .. } => *at_ms,
+            | MeshEvent::JobDone { at_ms, .. }
+            | MeshEvent::HistoryPruned { at_ms, .. } => *at_ms,
+            MeshEvent::RetentionCheckpoint { checkpoint } => checkpoint.at_ms,
+        }
+    }
+
+    pub(crate) fn log_id(&self) -> MeshLogId {
+        match self {
+            Self::RetentionCheckpoint { .. } => MeshLogId::Checkpoints,
+            _ => MeshLogId::Events,
         }
     }
 }
@@ -92,6 +127,36 @@ pub fn to_operation(
     seq_num: u64,
     backlink: Option<[u8; 32]>,
 ) -> Operation<MeshExt> {
+    to_operation_with_prune(keypair, mesh_id, event, seq_num, backlink, false)
+}
+
+/// Sign a `HistoryPruned` event with p2panda's prune flag set.
+pub fn to_prune_operation(
+    keypair: &Ed25519Keypair,
+    mesh_id: [u8; 32],
+    checkpoint: [u8; 32],
+    at_ms: u64,
+    seq_num: u64,
+    backlink: Option<[u8; 32]>,
+) -> Operation<MeshExt> {
+    to_operation_with_prune(
+        keypair,
+        mesh_id,
+        &MeshEvent::HistoryPruned { checkpoint, at_ms },
+        seq_num,
+        backlink,
+        true,
+    )
+}
+
+fn to_operation_with_prune(
+    keypair: &Ed25519Keypair,
+    mesh_id: [u8; 32],
+    event: &MeshEvent,
+    seq_num: u64,
+    backlink: Option<[u8; 32]>,
+    prune: bool,
+) -> Operation<MeshExt> {
     let signing_key = SigningKey::from_bytes(&keypair.to_seed());
     let body_bytes = encode_cbor(event).expect("a MeshEvent always CBOR-encodes");
     let body = Body::new(&body_bytes);
@@ -104,7 +169,10 @@ pub fn to_operation(
         timestamp: Timestamp::from(event.at_ms()),
         seq_num,
         backlink: backlink.map(Hash::from),
-        extensions: MeshExt { mesh_id },
+        extensions: MeshExt {
+            mesh_id,
+            prune_flag: PruneFlag::new(prune),
+        },
     };
     header.sign(&signing_key);
     let hash = header.hash();
@@ -133,6 +201,7 @@ pub fn verify(op: &Operation<MeshExt>) -> bool {
 mod tests {
     use super::*;
     use identity::{IdentityProvider, InMemoryProvider};
+    use serde::{Deserialize, Serialize};
 
     const MESH: [u8; 32] = [0x4d; 32];
 
@@ -194,5 +263,49 @@ mod tests {
         assert!(validate_header(&op0.header).is_ok());
         assert!(validate_header(&op1.header).is_ok());
         assert!(validate_backlink(&op0.header, &op1.header).is_ok());
+    }
+
+    #[test]
+    fn default_prune_flag_preserves_legacy_mesh_header_identity() {
+        #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+        struct LegacyMeshExt {
+            mesh_id: [u8; 32],
+        }
+
+        let kp = keypair(7);
+        let signing_key = SigningKey::from_bytes(&kp.to_seed());
+        let event = posted();
+        let body = Body::new(&encode_cbor(&event).unwrap());
+        let mut legacy = Header {
+            version: 1,
+            verifying_key: signing_key.verifying_key(),
+            signature: None,
+            payload_size: body.size(),
+            payload_hash: Some(body.hash()),
+            timestamp: Timestamp::from(event.at_ms()),
+            seq_num: 0,
+            backlink: None,
+            extensions: LegacyMeshExt { mesh_id: MESH },
+        };
+        legacy.sign(&signing_key);
+        let current = to_operation(&kp, MESH, &event, 0, None);
+
+        assert_eq!(legacy.to_bytes(), current.header.to_bytes());
+        assert_eq!(legacy.hash(), current.header.hash());
+        assert_eq!(legacy.signature, current.header.signature);
+    }
+
+    #[test]
+    fn history_pruned_event_sets_the_upstream_flag() {
+        let kp = keypair(7);
+        let operation = to_prune_operation(&kp, MESH, [9; 32], 42, 3, Some([8; 32]));
+        assert!(operation.header.extensions.prune_flag.is_set());
+        assert_eq!(
+            from_operation(&operation).unwrap().1,
+            MeshEvent::HistoryPruned {
+                checkpoint: [9; 32],
+                at_ms: 42
+            }
+        );
     }
 }

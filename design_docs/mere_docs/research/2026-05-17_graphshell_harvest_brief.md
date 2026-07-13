@@ -6,7 +6,7 @@
 
 **Source repo**: [`../../../../graphshell/design_docs/`](../../../../graphshell/design_docs/) (donor; per project memory `project_graphshell_donor_not_authority`, treat as grab-bag, never as prescriptive).
 
-> **Update note (2026-06-09 audit):** the donor source repo is now GitHub-archived (read-only; local clone deleted 2026-05-27), so the `../../../../graphshell/design_docs/` path no longer resolves. The "Xilem-host lane" framing is stale (the host is now `meerkat` on serval-as-host), and the spatial-chrome adoption plan this brief cites was archived under `archive_docs/2026-06-09_pivot_superseded/` (the register-renderer/Masonry pivot). This remains the canonical donor concept-index per DOC_POLICY.
+> **Update note (2026-06-09 audit):** the donor source repo is now GitHub-archived (read-only; local clone deleted 2026-05-27), so the `../../../../graphshell/design_docs/` path no longer resolves. The "Xilem-host lane" framing is stale (the host is now `meerkat` on genet-as-host), and the spatial-chrome adoption plan this brief cites was archived under `archive_docs/2026-06-09_pivot_superseded/` (the register-renderer/Masonry pivot). This remains the canonical donor concept-index per DOC_POLICY.
 
 ---
 
@@ -130,7 +130,7 @@ Separate tracks rather than one monolithic focus state. Cross-track handoff rule
 
 ### T2-9. Frame scheduler with priority queue
 
-User-input paint ≫ animation ≫ background work, not free-running per-tenant. Prevents subsystem starvation when NetRender composition is driving multiple embedded-frame renderers (Serval + scrying) concurrently with intelligence-signal compute.
+User-input paint ≫ animation ≫ background work, not free-running per-tenant. Prevents subsystem starvation when NetRender composition is driving multiple embedded-frame renderers (Genet + scrying) concurrently with intelligence-signal compute.
 
 - Source: [`graphshell graphshell_gpu_spec.md:299`](../../../../graphshell/design_docs/graphshell_docs/technical_architecture/2026-04-20_graphshell_gpu_spec.md#L299).
 - Applies to: spatial-chrome plan Phase 3 done conditions don't yet specify scheduling; under single-tenant test data the prototype works fine, but Phase 4 (multi-renderer interop) needs this before stress testing.
@@ -200,7 +200,7 @@ Cluster-level reasons for non-adoption:
 - **Egui-specific anything**: `egui_graphs` StableGraph coupling, MetadataFrame-based zoom, `egui_tiles` tree composition. Mere host is Xilem; chrome composition is substrate + masonry.
 - **Iced renderer-boot options and Iced chrome migration vision**: superseded by the Xilem decision (per project memory `project_host_framework_glass_gpui`).
 - **GPUI-coupled infrastructure**: `Entity<T>`-shaped reactive runtime, gpui platform integration. The [xilem embedding spike](2026-05-15_xilem_embedding_spike.md) resolves the reactive-runtime question via `xilem_core` + `masonry_core`.
-- **Servoshell webview-id identity scheme and Servo internals coupling**: serval is now a peer renderer tenant (`serval.web`), not the host's child surface.
+- **Servoshell webview-id identity scheme and Servo internals coupling**: genet is now a peer renderer tenant (`genet.web`), not the host's child surface.
 - **Graphshell's HTML / Servo / Direct lane *split***: replaced by renderer-registry composition modes. The *concept* (lane architecture) survives.
 - **Verse P2P protocol internals**: identity model reusable (T2-7, Tier 3 person-node aggregation); protocol implementation not.
 - **Wasmtime scripting**: Mere uses Rhai (per project memory `project_browser_pwa_shapes_scripting`).

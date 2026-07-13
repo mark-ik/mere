@@ -103,13 +103,13 @@ step is **R1a — gyre graduation**, and only then **R1b — the spike**.
   `tick()` now resets forces each pass. 10 tests pass (each field's effect, a
   triangle settling separated+bounded, orrery-scale queries). *Not* done: driving
   a tick in the app — deliberately deferred (the app-binding retargets to whichever
-  host wins; kept thin per the [serval-as-host eval](../technical_architecture/2026-05-29_serval_as_host_evaluation.md)).
+  host wins; kept thin per the [genet-as-host eval](../technical_architecture/2026-05-29_genet_as_host_evaluation.md)).
 - **R1b — Spike** — **RESOLVED by inspection + runtime, 2026-05-29: rapier's
   `QueryPipeline` suffices; no second index.** The decisive facts: (1) every node
   is already a rapier collider, so the QBVH rapier maintains *for collision anyway*
   hit-tests nodes for free; (2) `query_pipeline_handles_orrery_scale` confirms it
-  resolves hit-test + cull correctly at ~1024 nodes, fast; (3) under serval-as-host
-  (the now-decided destination) node *content* hit-testing is serval's DOM, leaving
+  resolves hit-test + cull correctly at ~1024 nodes, fast; (3) under genet-as-host
+  (the now-decided destination) node *content* hit-testing is genet's DOM, leaving
   gyre's `QueryPipeline` only the scene-geometry role (edges, empty space, cull)
   it already serves. So `understory_index` would be a redundant second index and
   does not earn the hot-phase seat. understory's value narrows to *steal-the-shape*
@@ -119,7 +119,7 @@ step is **R1a — gyre graduation**, and only then **R1b — the spike**.
   rapier hot spot.
 - **Scene renderer — DONE (host-agnostic), 2026-05-30.** `platen::scene_paint`
   renders a cartography `Projection` to a `paint_list_api` `PaintList` (the
-  serval-eval's scene underlay: camera `PushTransform`, an edge stroke per edge,
+  genet-eval's scene underlay: camera `PushTransform`, an edge stroke per edge,
   a node rect per node), consumed by netrender regardless of host. Scoping
   finding: `graph-canvas` (9.6k LOC) is a *whole* overlapping scene+physics+
   projection system whose physics is superseded by gyre and projection overlaps
@@ -160,7 +160,7 @@ this continues the [verso adoption plan](2026-05-27_verso_adoption_plan.md).
 
 ### R3 — Renderer/protocol/mod registry wiring
 
-**Trigger**: a host dispatch seam + a second engine (serval) or mod lane. Makes
+**Trigger**: a host dispatch seam + a second engine (genet) or mod lane. Makes
 the latent `register-*` cluster *live*.
 
 - `register-viewer` (content-kind → renderer routing) + `register-protocol`
@@ -210,14 +210,14 @@ because they're near.
 - **Spine ontology is fixed**: adoption sharpens `kernel → forme → platen → verso
   → inker → host`; nothing here adds a parallel spine (the understory "no second
   presentation tree" call is the canonical example).
-- **Host is under an evaluated flip (2026-05-29)**: serval-as-host (architecture
+- **Host is under an evaluated flip (2026-05-29)**: genet-as-host (architecture
   3) is the destination for the bottom of the spine, replacing Masonry as the
   chrome substrate; the flip is gated and deliberate (see the
-  [serval-as-host evaluation](../technical_architecture/2026-05-29_serval_as_host_evaluation.md)).
+  [genet-as-host evaluation](../technical_architecture/2026-05-29_genet_as_host_evaluation.md)).
   The operative constraint on every rung below: **do not deepen Masonry-specific
   investment; keep new host-coupling retargetable.** R1's gyre work is
   host-agnostic and proceeds; its app-wiring stays thin. platen's Morphorm layout
-  (R1/the between-tiles seam) is the piece that retargets to serval's taffy.
+  (R1/the between-tiles seam) is the piece that retargets to genet's taffy.
 - **Pull eagerly, wire on consumer** (§1): the reconciliation above.
 - **Borrow boundaries, not crates, when youth is a risk** (understory): steal the
   shape unless a probe earns a pin.

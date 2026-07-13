@@ -2,13 +2,13 @@
 
 **Date**: 2026-05-09
 **Status**: Research / decision brief
-**Scope**: Whether to wire `netrender` into Mere as a general dep — split as "vello for graph, netrender for docs" — and whether `nematic` engines should grow display-list output for netrender consumption. Or alternatively keep netrender inside Serval and skip the cross-cutting integration.
+**Scope**: Whether to wire `netrender` into Mere as a general dep — split as "vello for graph, netrender for docs" — and whether `nematic` engines should grow display-list output for netrender consumption. Or alternatively keep netrender inside Genet and skip the cross-cutting integration.
 
 **Related**:
 
 - Inherited: [`netrender/netrender-notes/2026-04-30_netrender_design_plan.md`](../../../../netrender/netrender-notes/2026-04-30_netrender_design_plan.md) — sole forward-looking netrender plan
-- Inherited: [`netrender/netrender-notes/2026-05-04_feature_roadmap.md`](../../../../netrender/netrender-notes/2026-05-04_feature_roadmap.md) — Phase B is "consumer-pull-imminent: things nematic and serval will surface"
-- Inherited: [`serval/docs/2026-05-05_serval_netrender_cut_plan.md`](../../../../serval/docs/2026-05-05_serval_netrender_cut_plan.md) — Serval's netrender adoption
+- Inherited: [`netrender/netrender-notes/2026-05-04_feature_roadmap.md`](../../../../netrender/netrender-notes/2026-05-04_feature_roadmap.md) — Phase B is "consumer-pull-imminent: things nematic and genet will surface"
+- Inherited: [`genet/docs/2026-05-05_genet_netrender_cut_plan.md`](../../../../genet/docs/2026-05-05_genet_netrender_cut_plan.md) — Genet's netrender adoption
 - [`../implementation_strategy/2026-05-09_post_engine_layer_priorities.md`](../implementation_strategy/2026-05-09_post_engine_layer_priorities.md) — current forward plan
 
 ---
@@ -19,13 +19,13 @@ A wgpu-native 2D renderer in the form of a workspace crate (`netrender`) plus a 
 
 Consumer-ready surface (per the design plan §1):
 
-> Hand in a `wgpu::Device`/`Queue`, configure a `wgpu::Surface`, feed display lists, get pixels. serval, Graphshell, anything else.
+> Hand in a `wgpu::Device`/`Queue`, configure a `wgpu::Surface`, feed display lists, get pixels. genet, Graphshell, anything else.
 
 `Scene` is the main display-list type. It carries `SceneOp::Shape`, glyph runs, alpha modifiers, blend modes, clips, filters — a full 2D rendering vocabulary. Capture / replay exists (`Scene::snapshot_postcard`, `snapshot_json`) so authored fixtures round-trip and consumers can dump regression artifacts.
 
 Phase B of the feature roadmap is explicit:
 
-> Things nematic (Gemini, Gopher, Scroll, Markdown, feeds, Finger) and serval (full web) will surface as parley wiring stabilizes and graphshell-shaped consumers wire in. Nematic is the smolweb engine in the Mere workspace (`mere/crates/nematic`); each protocol surfaces…
+> Things nematic (Gemini, Gopher, Scroll, Markdown, feeds, Finger) and genet (full web) will surface as parley wiring stabilizes and graphshell-shaped consumers wire in. Nematic is the smolweb engine in the Mere workspace (`mere/crates/nematic`); each protocol surfaces…
 
 So **netrender already plans for nematic to be a first-class consumer**. Mark's "could nematic produce display lists for netrender" isn't a stretch — it's the design intent.
 
@@ -42,7 +42,7 @@ Both routes use the same vello underneath — they just choose different abstrac
 For Mere's current shape:
 
 - **Graph canvas** (force-directed nodes / edges / labels) wants direct, frame-rate-sensitive rasterizer access. Vello directly is the right level: build a `vello::Scene`, draw the graph, rasterize. No display-list intermediary buys anything; the graph is *not* a static document.
-- **Document tiles** (the rendered output of nematic / serval) want display lists if there's any point in capture / replay / inspector tooling. Netrender's `Scene` + capture is purpose-built for this case.
+- **Document tiles** (the rendered output of nematic / genet) want display lists if there's any point in capture / replay / inspector tooling. Netrender's `Scene` + capture is purpose-built for this case.
 
 So the answer is: **don't split — stack**. Add vello as a direct workspace dep for the graph canvas (probably already there via `graph-canvas`); add netrender as a separate workspace dep for document tile rendering. They share a vello version through cargo unification, but they expose different API levels to different callers.
 
@@ -87,16 +87,16 @@ This is the right shape if and when platen grows up. **It's the right answer to 
 
 Three options, smallest first:
 
-1. **Status quo: keep netrender inside Serval.** Serval consumes netrender for its own HTML rendering; nematic / mere-host render documents themselves (currently gpui-shaped). Lowest commitment; Mere adds no new deps; the renderer cross-pollination Mark imagined doesn't happen yet.
+1. **Status quo: keep netrender inside Genet.** Genet consumes netrender for its own HTML rendering; nematic / mere-host render documents themselves (currently gpui-shaped). Lowest commitment; Mere adds no new deps; the renderer cross-pollination Mark imagined doesn't happen yet.
 2. **Add vello as a workspace dep for the graph canvas, only.** Probably already present via `graph-canvas`; if not, this is a one-line addition. No netrender involvement. Keeps the graph canvas using vello directly without layering display-list machinery on a non-document workload. **Trivial regardless of (3).**
 3. **Add netrender as a workspace dep + grow platen toward `Scene` output.** This is the "produce display lists from the protocols" path Mark asked about. Substantial commitment: needs parley wiring for text layout, platen growing real layout passes, mere-host learning to consume `Scene`s instead of bespoke gpui rendering. Pays off when:
    - Document tiles need consistent rendering across hosts (gpui / iced / future / wasm)
    - Capture/replay debug tooling becomes valuable
-   - Serval and nematic share a rendering pipeline (matches the netrender Phase B intent)
+   - Genet and nematic share a rendering pipeline (matches the netrender Phase B intent)
 
 **My pick: (1) + verify (2) is already done, defer (3) until the gpui host's bespoke layout starts hurting.** The gpui host is the current bottleneck; growing platen + netrender integration *now* would race the host without making it land sooner. Once the host is real and a consistent rendering pipeline becomes valuable, (3) is well-prepared by netrender's design and Phase B roadmap — and the engine layer's `EngineDocument` is the right input shape.
 
-The "three-head Hekate Serval" framing is independent of (3): Serval already consumes netrender for its own rendering, regardless of whether Mere-side document tiles do.
+The "three-head Hekate Genet" framing is independent of (3): Genet already consumes netrender for its own rendering, regardless of whether Mere-side document tiles do.
 
 ## 5. Open questions worth tracking
 

@@ -12,14 +12,14 @@ use mere::forme::GraphMemberId;
 use mere::canvas::NodeState;
 use mere::canvas::palette;
 use register_theme::chrome::{ChromeTheme, Color32};
-use xilem_serval::{AnyView, PointerClick, ServalCtx, ServalElement, clickable, el};
+use xilem_serval::{AnyView, PointerClick, GenetCtx, GenetElement, clickable, el};
 
 use mere::gloss::{
     GlossOutlineNode, GlossOutlineRow, GlossOutlineSnapshot, GlossRowIntent, OUTLINE_HEADER_H,
     OUTLINE_ROW_H, cap_outline_rows,
 };
 
-pub type GlossOutlineView = Box<dyn AnyView<GlossOutlineState, (), ServalCtx, ServalElement>>;
+pub type GlossOutlineView = Box<dyn AnyView<GlossOutlineState, (), GenetCtx, GenetElement>>;
 
 #[derive(Default)]
 pub struct GlossOutlineState {
@@ -178,7 +178,7 @@ pub fn gloss_outline_sheet(c: &ChromeTheme) -> Vec<String> {
 mod tests {
     use layout_dom_api::LayoutDom;
     use register_theme::chrome::ChromeTheme;
-    use serval_scripted_dom::{NodeId, ScriptedDom};
+    use genet_scripted_dom::{NodeId, ScriptedDom};
     use xilem_serval::PointerClick;
 
     use super::*;

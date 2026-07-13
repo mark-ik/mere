@@ -46,11 +46,11 @@ Sibling docs:
   static-snapshot decision is a **dormancy/memory** choice it justifies; cross-reference, do not
   restate.
 - tearout-composability / window-composition: owns the external-texture-**input** bridge (spine line
-  139) — the input-bearing `<external-texture>` element that forwards a serval hit-test hit in
+  139) — the input-bearing `<external-texture>` element that forwards a genet hit-test hit in
   texture-local coords to the producer. This plan's **API-forwarded input** on the off-window host
   (`SendMouseInput` / CDP keyboard+IME / `MoveFocus`, finding 5) is the **compositing-side
   complement** to that, *not* a duplicate: the live pelt tile uses this plan's API-forwarding route,
-  distinct from the serval-hit-relay route tearout-composability owns.
+  distinct from the genet-hit-relay route tearout-composability owns.
 
 ---
 
@@ -119,8 +119,8 @@ lost in that region.
    while normal-flow chrome content — the omnibar **suggestions dropdown**, and latently the
    palette / find / settings flex overlays — paints at the earlier "in-flow block" step, so it lands
    **under** the cards regardless of the chrome being document-last. The context menu escaped this
-   only because the host sets `position:absolute` on it inline. Serval implements real CSS stacking
-   (`serval-layout` `paint_stacking` tests: `negative_z_index_paints_behind_in_flow`,
+   only because the host sets `position:absolute` on it inline. Genet implements real CSS stacking
+   (`genet-layout` `paint_stacking` tests: `negative_z_index_paints_behind_in_flow`,
    `z_index_is_scoped_to_its_stacking_context`), so z-index is the clean lever. Fix:
    `.orrery { z-index:0 }` (the base layer — a stacking context that *contains* its node/focus cards
    so they cannot hoist) and `.chrome { position:relative; z-index:10 }` (the top layer) — so
@@ -138,7 +138,7 @@ lost in that region.
 Host surfaces are a **layered mix split BY NATURE**, not "every surface becomes a document
 external-texture element." The four-way split (this plan is the canonical owner of it):
 
-- **(a) serval-rendered content** → a **real DOM subtree** in the shell document (rides a11y,
+- **(a) genet-rendered content** → a **real DOM subtree** in the shell document (rides a11y,
   find-in-page, selection, true scroll). Owned by
   [unified_document_host_plan](2026-06-17_unified_document_host_plan.md).
 - **(b) genuinely-external content** (scrying = a system WebView2 visual) → a **native composition
@@ -152,7 +152,7 @@ external-texture element." The four-way split (this plan is the canonical owner 
 Chrome composites **above all**. This plan owns only kind **(b)** plus the **snapshot half of (c)**.
 The "both surfaces become texture consumers of render.rs:1398" claim below is scoped **explicitly to
 genuinely-external WebView2 content** — it is correct there and is *not* a blanket claim over
-serval-rendered DOM (a), which never becomes a host texture.
+genet-rendered DOM (a), which never becomes a host texture.
 
 ## The direction
 
@@ -258,7 +258,7 @@ Both are answered, kept for the routing record, not open work:
 - **Which interactive-node case routes here.** node-representation's P2-interactive names two kinds
   of interactive node body. The **compat-WebView-node** (a live System WebView as a node) is
   genuinely-external content that rides **this plan's API-forwarding path** (finding 5), distinct
-  from a serval-rendered textured DOM body, which needs tearout-composability's serval-hit-relay
+  from a genet-rendered textured DOM body, which needs tearout-composability's genet-hit-relay
   external-texture-*input* bridge (spine line 139). See
   [node_representation_arrangement_plan](2026-06-18_node_representation_arrangement_plan.md) P2.
 - macOS / Linux: this is Windows/DWM-specific (WebView2). The other targets' embedded-surface story
@@ -302,9 +302,9 @@ Both are answered, kept for the routing record, not open work:
   finding 5 (CDP keyboard/IME retires the keyboard gap; the P3 spike is dropped). This is the
   same-session DOC_README update required by DOC_POLICY rule 7 (a correction of the existing entry,
   no doc added/moved). (2) Added an explicit **Scope / layering** section stating the four-way
-  by-nature split (serval DOM subtree / genuinely-external WebView2 native visual / dormant snapshot /
+  by-nature split (genet DOM subtree / genuinely-external WebView2 native visual / dormant snapshot /
   orrery gyre texture) and scoping the "texture consumers of render.rs:1398" claim to
-  genuinely-external WebView2 content only — never serval-rendered DOM. (3) Sharpened the
+  genuinely-external WebView2 content only — never genet-rendered DOM. (3) Sharpened the
   static-snapshot bullet to a **dormancy/memory** justification (not per-frame perf), cross-referenced
   to the parallelism research doc §4(b) as the owner (bake-vs-live, per-lane ceilings); did not
   restate it. (4) Extended the unified-document-host sibling bullet to flag that this layering
@@ -315,7 +315,7 @@ Both are answered, kept for the routing record, not open work:
   external-texture-**input** bridge; this plan's API-forwarded input on the off-window host is the
   **compositing-side complement**, not a duplicate. (6) Added an Open-questions entry routing
   node-representation's compat-WebView-node (P2-interactive) to this plan's API-forwarding path,
-  distinct from the serval-hit-relay textured-DOM-body case. No prior progress entry edited; no doc
+  distinct from the genet-hit-relay textured-DOM-body case. No prior progress entry edited; no doc
   added or moved.
 - 2026-06-19 (P2 implemented): off-window composition host built. **scrying:**
   `CompositionRoot::new_offscreen(size)` (webview2_composition_producer/setup.rs) creates a private

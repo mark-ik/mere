@@ -4,7 +4,7 @@
 
 //! `ScriptedDom` → [`UxTree`]: the chrome's accessibility subtree.
 //!
-//! The projection itself is the engine's — [`serval_layout::build_subtree`] walks
+//! The projection itself is the engine's — [`genet_layout::build_subtree`] walks
 //! the live chrome `ScriptedDom`, mapping each element to a [`Role`] by ARIA
 //! `role=` then tag, folding its direct text into the accessible name, reading
 //! bounds from the chrome session's retained [`FragmentPlane`], and declaring the
@@ -25,8 +25,8 @@
 
 use accesskit::NodeId as AccessNodeId;
 use layout_dom_api::LayoutDom;
-use serval_layout::FragmentPlane;
-use serval_scripted_dom::{NodeId, ScriptedDom};
+use genet_layout::FragmentPlane;
+use genet_scripted_dom::{NodeId, ScriptedDom};
 use uxtree::UxTree;
 
 /// Salt that places chrome a11y ids in a high range distinct from the path-hashed
@@ -75,7 +75,7 @@ fn is_folded_pane(dom: &ScriptedDom, node: NodeId) -> bool {
 /// Project the chrome `dom` into a [`UxTree`] using `fragments` (the chrome
 /// session's retained layout) for node geometry, returning the tree paired with
 /// the chrome nodes that advertise a host action (buttons, fields). The engine
-/// walk ([`serval_layout::build_subtree`]) does the projection; the chrome supplies
+/// walk ([`genet_layout::build_subtree`]) does the projection; the chrome supplies
 /// the salted id scheme ([`chrome_a11y_id`], so ids stay disjoint from the
 /// path-hashed content/host ids) and the folded-pane skip ([`is_folded_pane`], so
 /// each pane appears once via its own richer frame-tree projection). The document
@@ -88,7 +88,7 @@ pub(crate) fn chrome_a11y_tree(
     fragments: &FragmentPlane<NodeId>,
 ) -> (UxTree, Vec<NodeId>) {
     let root = dom.document();
-    let (nodes, root_id, actionable) = serval_layout::build_subtree(
+    let (nodes, root_id, actionable) = genet_layout::build_subtree(
         dom,
         fragments,
         root,
@@ -136,7 +136,7 @@ mod tests {
         let label = dom.create_text("Go");
         dom.append_child(button, label);
 
-        let frags = serval_layout::render(
+        let frags = genet_layout::render(
             &dom,
             &["div, input, button { display: block; }"],
             400.0,

@@ -4,7 +4,7 @@
 
 //! Card rendering tests.
 
-use serval_layout::NoImageLoader;
+use genet_layout::NoImageLoader;
 
 use super::*;
 
@@ -175,17 +175,17 @@ fn route_document_engine_maps_known_types() {
         route(Some("application/gopher-menu")).as_str(),
         nematic::ENGINE_GOPHER
     );
-    // HTML routes to the serval web lane by content-type, regardless of scheme.
+    // HTML routes to the genet web lane by content-type, regardless of scheme.
     assert_eq!(
         route(Some("text/html")).as_str(),
-        inker::routing::ENGINE_SERVAL_WEB
+        inker::routing::ENGINE_GENET_WEB
     );
     assert_eq!(
         route(Some("application/xhtml+xml")).as_str(),
-        inker::routing::ENGINE_SERVAL_WEB
+        inker::routing::ENGINE_GENET_WEB
     );
-    // No content-type over an https url falls to the scheme rule (serval).
-    assert_eq!(route(None).as_str(), inker::routing::ENGINE_SERVAL_WEB);
+    // No content-type over an https url falls to the scheme rule (genet).
+    assert_eq!(route(None).as_str(), inker::routing::ENGINE_GENET_WEB);
 }
 
 fn glyph_runs(scene: &netrender::Scene) -> usize {
@@ -198,7 +198,7 @@ fn glyph_runs(scene: &netrender::Scene) -> usize {
 
 #[test]
 fn html_with_an_unloaded_image_stays_scene_consistent() {
-    // Repro for the crash Mark hit (serval -> scry -> serval, open a new node):
+    // Repro for the crash Mark hit (genet -> scry -> genet, open a new node):
     // the dormant-node snapshot renders HTML through an empty image loader
     // (render.rs), so an `<img>` whose bytes are not cached has no source. The
     // lowered scene must NOT carry a `SceneImage` op whose key is absent from
@@ -227,7 +227,7 @@ fn html_with_an_unloaded_image_stays_scene_consistent() {
         360,
         &card_sheet(card_vocabulary()),
     ) else {
-        panic!("text/html routes to the serval HTML lane");
+        panic!("text/html routes to the genet HTML lane");
     };
     let missing = unsourced_image_keys(&scene);
     assert!(
@@ -240,10 +240,10 @@ fn html_with_an_unloaded_image_stays_scene_consistent() {
 #[test]
 fn html_with_an_undecodable_image_stays_scene_consistent() {
     // The decode-failure case: the loader returns bytes, but they are not a valid
-    // image. If serval emits a SceneImage op without sourcing it (because the
+    // image. If genet emits a SceneImage op without sourcing it (because the
     // decode failed), the rasterizer panics. The scene must stay consistent.
     struct GarbageLoader;
-    impl serval_layout::ImageLoader for GarbageLoader {
+    impl genet_layout::ImageLoader for GarbageLoader {
         fn load(&self, _url: &str) -> Option<Vec<u8>> {
             Some(vec![0xDE, 0xAD, 0xBE, 0xEF, 0, 1, 2, 3, 4, 5]) // not a valid image
         }
@@ -271,7 +271,7 @@ fn html_with_an_undecodable_image_stays_scene_consistent() {
         360,
         &card_sheet(card_vocabulary()),
     ) else {
-        panic!("text/html routes to the serval HTML lane");
+        panic!("text/html routes to the genet HTML lane");
     };
     let missing = unsourced_image_keys(&scene);
     assert!(
@@ -415,8 +415,8 @@ fn document_lane_selection_prefers_nested_block_rects_over_group_bounds() {
 }
 
 #[test]
-fn html_routes_through_serval_to_glyph_runs() {
-    // The serval lane needs no document engine registered.
+fn html_routes_through_genet_to_glyph_runs() {
+    // The genet lane needs no document engine registered.
     let registry = EngineRegistry::new();
     let ready = ContentState::Ready(Fetched {
         content_type: Some("text/html".into()),
@@ -435,13 +435,13 @@ fn html_routes_through_serval_to_glyph_runs() {
     );
     assert!(
         glyph_runs(&scene) >= 1,
-        "HTML renders text via the serval lane"
+        "HTML renders text via the genet lane"
     );
 }
 
 #[test]
 fn html_lane_harvests_link_hit_regions() {
-    // The HTML/serval lane has no retained packet, so it ships a parallel
+    // The HTML/genet lane has no retained packet, so it ships a parallel
     // `LinkHit` table harvested off the fragment plane; the host hit-tests a
     // click against it via `Constellation::link_at`'s HTML branch. (Inline-link
     // nav; Phase 5 lane parity.)
@@ -463,7 +463,7 @@ fn html_lane_harvests_link_hit_regions() {
         360,
         &card_sheet(card_vocabulary()),
     ) else {
-        panic!("text/html routes to the serval HTML lane");
+        panic!("text/html routes to the genet HTML lane");
     };
     let hit = links
         .iter()

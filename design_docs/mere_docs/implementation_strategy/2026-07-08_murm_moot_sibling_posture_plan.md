@@ -1,6 +1,10 @@
 # Murm/Moot Sibling Posture Plan
 
-**Status**: Active plan.
+**Status**: **Superseded 2026-07-12** by
+[`2026-07-12_murm_peer_runtime_and_moot_domain_plan.md`](2026-07-12_murm_peer_runtime_and_moot_domain_plan.md).
+The completed R, N, and S receipts below remain historical implementation
+evidence. The sibling purity rule, the host as the sole composition point, and
+the target standalone package boundary are retired.
 **Date**: 2026-07-08.
 **Scope**: Reorganize the comms families so `murm` and `moot` sit as sibling service families (the netfetcher/netrender posture), consolidate the triplicated log-sync substrate by aligning on upstream p2panda, define the store substrate over muniment (desktop redb, wasm IndexedDB + OPFS), execute the naming payload (gazette, cabal, gerund law), and gate promotion to standalone repos on a purity check.
 **Related**:
@@ -15,9 +19,18 @@
 
 ## 1. Decision record
 
+> **Supersession note (2026-07-12):** Mere is now treated as an offline graph
+> library and Merecat as one reference host. Requiring every host to compose
+> Murm's pump with Moot's store would export a fragile protocol invariant to
+> every consumer. The replacement plan moves `SyncedSpace`, `MunimentStore`,
+> the accepted-operation processor, retention mechanics, and native drop into
+> a reusable Murm replication foundation. Moot becomes a governed-space domain
+> over that foundation. The numbered decisions in this section record the old
+> posture and are not current authority.
+
 Settled in the 2026-07-08 session, in force for this plan:
 
-1. **Sibling posture.** `murm` and `moot` are peer service families, shaped like netfetcher and netrender relative to serval: murm talks to remote endpoints (iroh, p2panda-net, the sync pump), moot materializes the durable artifact (log grammar, stores, folds, tiers). Neither depends on the other. The host composes them, exactly as serval composes fetch and render.
+1. **Sibling posture.** `murm` and `moot` are peer service families, shaped like netfetcher and netrender relative to genet: murm talks to remote endpoints (iroh, p2panda-net, the sync pump), moot materializes the durable artifact (log grammar, stores, folds, tiers). Neither depends on the other. The host composes them, exactly as genet composes fetch and render.
 2. **The shared substrate is upstream p2panda.** No new neutral crate. The triplicated glue (murm `gossip_sync`, tessera `sync`, mesh sync) retires into upstream reliance plus one pump. Every crate takes `p2panda-store` with `default-features = false` (traits only); murmuring already does.
 3. **One pump, folds stay home.** The LogSync/gossip drive loop lives once in the murm family, generic over the p2panda store traits, endpoint injected. Each domain keeps its own `Ext`, wire bridge, and fold (PostKind/channel_history, TesseraEvent/fold_moot, MeshEvent/JobBoard).
 4. **Stores ride muniment.** The p2panda store traits get one shared implementation over muniment's Backend seam, living in the moot family (logs are press-side). murm never depends on moot: murm stays generic over the traits and the **host injects** the concrete store, same as it injects the endpoint.
@@ -37,11 +50,11 @@ Settled in the 2026-07-08 session, in force for this plan:
 
 ## 3. Target architecture
 
-| serval family | comms family | owns | never owns |
+| genet family | comms family | owns | never owns |
 |---|---|---|---|
 | netfetcher | **murm** | transport (iroh + p2panda-net), the sync pump, gossip lanes, tickets/blobs, chat domain (murmuring: PostKind, fold, MurmurExt), Murm facade | a store of record |
 | netrender | **moot** | log grammar + the muniment-backed p2panda store adapter (mooting), tessera events + folds, tiers/federation (moothold) | a socket |
-| serval (host) | meerkat comms host | composition: constructs backends, injects endpoint + store into the pump, stitches adapters | protocol logic |
+| genet (host) | meerkat comms host | composition: constructs backends, injects endpoint + store into the pump, stitches adapters | protocol logic |
 
 Dependency rules (the purity contract):
 
@@ -149,7 +162,7 @@ Gate: R1 and S2 landed, R2 purity check green. Do not found repos around the pre
 - **R1 landed (murm + mesh).** Wrote `transport::SyncedSpace` (the `drive(subscription, accept)` seam + `SyncStatus`/`SyncRound`/`resync`/drop-abort); `cargo check -p transport` green. Migrated both consumers onto it, deleting the two drain copies:
   - **mesh** `sync.rs`: dropped the drain loop, status structs, `now_ms`, `Drop`; kept the session build, `author`, `board`; re-exported `SyncStatus`/`SyncRound` from transport to keep `mesh::*` stable. Promoted `transport` dev→normal dep (the flagged decoupling reversal). `cargo test -p mesh` green: 17/17, incl. both two-peer convergence tests over real p2panda-net loopback peers.
   - **murm** `gossip_sync.rs` (dual-lane): kept the gossip live lane + its `posts_received` murm-side (new private `GossipCounters`), moved the LogSync drain to `SyncedSpace`, merged both in `sync_status`/`resync`, and held `LogSync`+`SyncHandle` as a type-erased `Box<dyn Any + Send>` keepalive (murm publishes on gossip, not the handle). `cargo test -p murm` green: 15/15, incl. `two_murm_peers_converge_over_gossip` (gossip lane) and `two_murm_peers_catch_up_over_logsync` (SyncedSpace drain + merged status + resync).
-  - murm's public surface is byte-identical (same `SyncedCabal` methods, same `SyncStatus` fields), so the meerkat/comms_host consumer is expected-clean; a full `-p meerkat` check was not run this pass (heavy serval/netrender build) — R2 touches comms_host and will exercise it. Workspace was briefly blocked by a stale `illume` pin (`branch = "main"` vs remote `master`); resolved when Mark renamed illume's branch to `main`.
+  - murm's public surface is byte-identical (same `SyncedCabal` methods, same `SyncStatus` fields), so the meerkat/comms_host consumer is expected-clean; a full `-p meerkat` check was not run this pass (heavy genet/netrender build) — R2 touches comms_host and will exercise it. Workspace was briefly blocked by a stale `illume` pin (`branch = "main"` vs remote `master`); resolved when Mark renamed illume's branch to `main`.
   - **Net:** three near-identical drain copies → one `SyncedSpace`; tessera's copy remains (R2). Next: **R2** (tessera host-move + moot purity) or **S** (store substrate).
 - **R2 landed (moot purity).** Scope was bigger than the plan's line: moothold had **two** pumps (tessera `SyncedMoot`, receive-only redb; moot-object `SyncedMootSpace`, author+receive sqlite), and the tessera pump is **live** in meerkat's `SyncHost` (chrome sync chip). Authoring resolved via **option (a)** (Mark's call): moot signs+stores (`MootStore::author`), the host publishes on its own `SyncHandle` — moot names no p2panda-net type. Executed:
   - Dissolved both `SyncedMoot`/`SyncedMootSpace`; moothold now provides only stores + folds + `verify` + `MootStore::author`. The two lanes' `sync.rs` became `#[cfg(test)]`-only, holding the two-peer convergence tests as host-composed (build `LogSync` + `SyncedSpace::drive`, publish via handle). Rewired `moot-peer` example + the live `meerkat/src/sync.rs` (`SyncedMoot::join` → inline pump + a small `TesseraSync` holding the `SyncedSpace` + store + a `Send` keepalive; `SyncStatus` now from `transport`).

@@ -24,11 +24,12 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use murm_replication::SyncedSpace;
 use p2panda_core::Topic;
 use p2panda_net::LogSync;
 use tokio::task::JoinHandle;
 use tokio_stream::StreamExt;
-use transport::{GossipHandle, P2pandaTransport, SyncedSpace};
+use transport::{GossipHandle, P2pandaTransport};
 
 use crate::{CabalHandle, CabalKey, Murm, MurmError, Post, PostId, decode_post, encode_post};
 
@@ -70,7 +71,7 @@ pub struct SyncRound {
 }
 
 /// The gossip live lane's own counters (posts received + last activity), merged
-/// with the shared LogSync drain's [`transport::SyncStatus`] in
+/// with the shared LogSync drain's [`murm_replication::SyncStatus`] in
 /// [`SyncedCabal::sync_status`]. The LogSync side has no notion of gossip posts,
 /// so murm tracks them here.
 #[derive(Default)]

@@ -8,7 +8,7 @@ use super::*;
 
 /// Build the chrome root's author CSS from a resolved [`ChromeTheme`] (theming
 /// pass). The toolbar is a flex row (back / forward buttons + a growing omnibar)
-/// that serval lays out via taffy's flexbox; the `.chrome` container itself has
+/// that genet lays out via taffy's flexbox; the `.chrome` container itself has
 /// no background, so the host composites it over the content root and only the
 /// toolbar + the (opaque) dropdowns paint over the page. The toolbar band sits a
 /// step above the graph backdrop, fields/buttons a step above that, dropdowns +
@@ -154,7 +154,7 @@ pub(crate) fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
             rgb(c.active_bg)
         ),
         // Command palette: a centered panel floated over the page (flex centering;
-        // serval maps justify-content through stylo_taffy).
+        // genet maps justify-content through stylo_taffy).
         ".palette-overlay { display: flex; justify-content: center; padding-top: 56px; }"
             .to_string(),
         format!(
@@ -175,7 +175,7 @@ pub(crate) fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
             rgb(c.strong_text),
             rgb(c.active_bg)
         ),
-        // The generic serval overlay `menu` (the editor's `/` slash + `[[` completion popup):
+        // The generic genet overlay `menu` (the editor's `/` slash + `[[` completion popup):
         // a small floated list at the caret. `overlay_at` sets its absolute position; these
         // give it a surface, a lift above the editor pane (z 100 > the pane's 90), and a row
         // highlight. (Phase 3 completion.)
@@ -221,7 +221,7 @@ pub(crate) fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
             rgb(c.menu_bg)
         ),
         // The wrapper holding the root menu + its submenu panel. It MUST be positioned (absolute at
-        // the chrome origin), not in-flow: serval resolves an absolute child's inset against its
+        // the chrome origin), not in-flow: genet resolves an absolute child's inset against its
         // tree parent, so an in-flow wrapper would push both panels down by the toolbar height.
         // Zero-offset, so it contributes nothing to the panels' painted origin. (Nested submenus.)
         ".context-menu-layer { position: absolute; left: 0; top: 0; }".to_string(),
@@ -388,7 +388,7 @@ pub(crate) fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
                 align-items: center; justify-content: flex-start; padding: 2px 4px; box-sizing: border-box; }}",
             rgb(c.toolbar_bg)
         ),
-        // Centred glyphs: serval's flex does not centre a bare text child via
+        // Centred glyphs: genet's flex does not centre a bare text child via
         // `justify-content`, so a fixed-width button leaves the glyph hugging its left
         // edge. Instead the button is content-width with *symmetric* horizontal
         // padding — which centres the glyph inside it whatever its width — and the

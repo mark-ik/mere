@@ -106,7 +106,7 @@ document engines and emitted through parley glyph layout instead of a GTK
 
 The parse/layout split is correct and matches Geopard's. Do not introduce a CSS
 engine for this: smolweb is word-processor-faithful, and CSS cascade is
-Serval's job for HTML. A role-keyed sheet is the right altitude. The
+Genet's job for HTML. A role-keyed sheet is the right altitude. The
 `InlineStyle`-as-brush seam in parley is the right place to carry color once
 the brush grows a color field (§3.3).
 

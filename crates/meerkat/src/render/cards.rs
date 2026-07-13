@@ -13,7 +13,7 @@ use std::hash::{Hash, Hasher};
 
 use layout_dom_api::{DomMutation, LayoutDom};
 use rustc_hash::FxHashSet;
-use serval_winit_host::RenderCore;
+use genet_winit_host::RenderCore;
 
 impl crate::WindowCtx<'_> {
     /// Full scrollable height for a composited member in document px. The content
@@ -187,7 +187,7 @@ impl crate::WindowCtx<'_> {
             let base_scene = if !base_dirty && !base_stale {
                 None
             } else {
-                Some(crate::serval_render::scene_from_session_excluding_subtrees(
+                Some(crate::genet_render::scene_from_session_excluding_subtrees(
                     session.layout(),
                     &dom,
                     cursor,
@@ -200,7 +200,7 @@ impl crate::WindowCtx<'_> {
             let orrery_scene = if !orrery_dirty && !orrery_stale {
                 None
             } else {
-                crate::serval_render::scene_from_session_subtree(
+                crate::genet_render::scene_from_session_subtree(
                     session.layout(),
                     &dom,
                     root,
@@ -219,7 +219,7 @@ impl crate::WindowCtx<'_> {
                 }
             } else {
                 super::paint::ChromeRasterPlan::Full(
-                    crate::serval_render::scene_from_session_with_masks(
+                    crate::genet_render::scene_from_session_with_masks(
                         session.layout(),
                         &dom,
                         cursor,
@@ -231,7 +231,7 @@ impl crate::WindowCtx<'_> {
             }
         } else {
             super::paint::ChromeRasterPlan::Full(
-                crate::serval_render::scene_from_session_with_masks(
+                crate::genet_render::scene_from_session_with_masks(
                     session.layout(),
                     &dom,
                     cursor,
@@ -487,7 +487,7 @@ impl crate::WindowCtx<'_> {
 
     /// Rasterize each content card as a vertical band of its content (centred on the
     /// scroll, with overscan), caching the texture per member and reusing it when the
-    /// version + size + coverage are unchanged. The HTML/serval lane windows actor-side
+    /// version + size + coverage are unchanged. The HTML/genet lane windows actor-side
     /// (request_scroll then composite the delivered band); the document lane windows the
     /// retained packet host-side. Returns `composite` — the dest rect + member to draw, in
     /// order. (Extracted from `render()`.)
@@ -522,10 +522,10 @@ impl crate::WindowCtx<'_> {
         // lowers + rasterizes only the band the scroll sits in (centred, with
         // overscan), UV-shifts within it for fine scroll, and re-rasters when the
         // scroll leaves the band. The full scroll range is the document's real height.
-        // (Retained-text / tiled render; document lane. The HTML/serval lane uses
+        // (Retained-text / tiled render; document lane. The HTML/genet lane uses
         // actor-side band re-emit below.)
         const BAND_CAP: u32 = 6144;
-        // The HTML/serval lane re-emits its band actor-side, culled to the band
+        // The HTML/genet lane re-emits its band actor-side, culled to the band
         // viewport, so the constraint is the band's *op density* (the whole dense
         // page's op count overflowed vello's encode budget even capped to a 6144
         // texture), not the texture size. Keep the band near twice the visible window
@@ -587,7 +587,7 @@ impl crate::WindowCtx<'_> {
                 .copied()
                 .unwrap_or(0.0)
                 .clamp(0.0, (content_h - visible_h).max(0.0));
-            // The HTML/serval lane windows actor-side (the host cannot lower an
+            // The HTML/genet lane windows actor-side (the host cannot lower an
             // arbitrary band of a flat scene, so the actor re-emits the band it is
             // told); the document lane windows host-side (the host lowers any band of
             // the retained packet itself). Branch on which lane this node is.
@@ -596,12 +596,12 @@ impl crate::WindowCtx<'_> {
             // lane's lower_window below.
             let card_bg = crate::chrome_to_wgpu(self.shared.presentation.chrome_theme.surface_bg);
             let doc_palette = self.shared.presentation.document_palette;
-            // B: a knot note tile renders through serval (note_view -> ScriptedDom ->
+            // B: a knot note tile renders through genet (note_view -> ScriptedDom ->
             // netrender), the reframe's native path — not document-canvas. Re-derive the
             // EngineDocument from the node's body and lay it out with note_scene. (Slice B.)
             // While the editor is live on this member, render its tile from the uncommitted
             // buffer regardless of scheme (a .md / .txt note previews here too); otherwise only
-            // knot:// notes use this native serval note lane, as before. (Phase 2.)
+            // knot:// notes use this native genet note lane, as before. (Phase 2.)
             let live_body = self.knot_editor_live_body(*member);
             let node_url = self
                 .orrery()
@@ -922,7 +922,7 @@ impl crate::WindowCtx<'_> {
 }
 
 fn mutation_is_under_root(
-    dom: &serval_scripted_dom::ScriptedDom,
+    dom: &genet_scripted_dom::ScriptedDom,
     m: &DomMutation<NodeId>,
     root: NodeId,
 ) -> bool {
@@ -941,11 +941,11 @@ fn mutation_is_under_root(
             to_parent,
             ..
         } => {
-            return crate::serval_render::node_under_root(dom, to_parent, root)
-                || crate::serval_render::node_under_root(dom, from_parent, root);
+            return crate::genet_render::node_under_root(dom, to_parent, root)
+                || crate::genet_render::node_under_root(dom, from_parent, root);
         }
     };
-    crate::serval_render::node_under_root(dom, anchor, root)
+    crate::genet_render::node_under_root(dom, anchor, root)
 }
 
 /// Signature of the (sheet, scheme) pair the chrome base texture renders from.

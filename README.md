@@ -24,7 +24,7 @@ relationships. The graph (the *orrery*) is the root surface; everything else
   </tr>
 </table>
 
-This repository is a Cargo workspace of 53 member crates organized by concern.
+This repository is a Cargo workspace of 58 member crates organized by concern.
 (That count is the `[workspace] members` list; the `probes` directory in
 `[workspace.exclude]` is not a member and is not counted.)
 The on-screen host is the `meerkat` binary; most other crates are libraries it
@@ -41,7 +41,7 @@ License: Mozilla Public License 2.0 (see `LICENSE-MPL`).
   each node is a page or piece of content and edges are relationships.
 - Protocol-agnostic: a Gemini node and an HTTP node can live in the same graph
   and be navigated through the same interface. HTML rides a Servo-derived engine
-  lane (`serval`); smolweb protocols (gemini, gopher, finger, spartan, nex,
+  lane (`genet`); smolweb protocols (gemini, gopher, finger, spartan, nex,
   guppy, titan) ride the in-repo `nematic` engine and the `errand` transport.
 - A composable workbench: tabs become tiles in nested split trees, projected
   from the graph.
@@ -97,15 +97,15 @@ Up and down the stack, this pattern repeats:
 
 - Rust edition 2024. `meerkat` declares `rust-version = "1.92.0"`.
 - The workspace pulls several sibling repositories as git dependencies on the
-  `mark-ik/*` GitHub org (`serval`, `netrender`, `netfetcher`, `errand`,
+  `mark-ik/*` GitHub org (`genet`, `netrender`, `netfetcher`, `errand`,
   `wgpu-scry`). A plain `cargo build` fetches them; no local sibling checkouts
   are required. A local checkout, if present, is picked up via a gitignored
   `.cargo/config.toml` `[paths]` override.
 - The root `[patch.crates-io]` redirects `stylo`, `stylo_atoms` (to the
   `servo/stylo` git rev `8bde0e96`, the v0.18.0 release tag), and `taffy` /
   `ipc-channel` (to forks
-  vendored in the `mark-ik/serval` repo, tracked by branch) so the Stylo/taffy
-  stack unifies with serval rather than conflicting.
+  vendored in the `mark-ik/genet` repo, tracked by branch) so the Stylo/taffy
+  stack unifies with genet rather than conflicting.
 
 ## Build, run, test
 
@@ -130,7 +130,7 @@ There are two `[[bin]]` targets in the workspace:
 
 - `meerkat` (`crates/meerkat`): the full Mere host. A winit window that draws one
   shell document (chrome plus folded panes plus orrery node-cards) through
-  serval, composites the orrery graph scene and content cards beneath it, and
+  genet, composites the orrery graph scene and content cards beneath it, and
   presents via netrender.
 - `orrery` (`crates/orrery/orrery`): a thin winit shell over the reusable
   `Orrery` graph field-canvas, kept launchable on its own for development and
@@ -160,10 +160,10 @@ graph kernel's package name is `kernel`, at `crates/graph/graph-kernel`).
 | `crates/eidetic` | `eidetic` (`eidetic-core`), `eidetic-fjall`, `eidetic-https-fetcher`, `eidetic-iroh-fetcher`, `eidetic-search` | Durable private local memory: the typed-payload store vocabulary, the fjall backend, HTTPS and iroh fetchers, and the tantivy/BM25 lexical search index |
 | `crates/import` | `import` | Browser-data import: bookmark / history / session models and Chrome-JSON / Netscape-HTML parsers, producing portable page seeds |
 | `crates/intel` | `embed` | Local intelligence: the embedding-provider trait and vector index over eidetic artifacts (pure-Rust, with a future Burn-backed provider slot) |
-| `crates/murm` | `murm`, `murmuring`, `transport`, `misfin`, `gazette` | Bilateral peer-to-peer comms: the supercrate, the protocol-selection core, the iroh-based transport, gemini-style mail, and the handle-resolution layer (WebFinger today) |
-| `crates/moot` | `moothold`, `mooting` | Community/federation: the holding supercrate (tessera trust token, constitution primitive) and the social-primitives core |
-| `crates/mesh` | `mesh` | The personal-space compute mesh: signed job operations over a LogSync event-DAG plus a deterministic job board and worker loop |
-| `crates/persona` | `identity` | Persona identity: master Ed25519 keypair, OS-keychain integration, per-protocol identity derivation |
+| `crates/murm` | `murm`, `murmuring`, `murm-replication`, `transport` | Peer exchange: direct conversation, the current native conversation engine, shared p2panda replication over muniment, and Iroh-based transport |
+| `crates/moot` | `moothold`, `mooting` | Governed community spaces: Moot event grammar, roster, tessera, constitution primitives, and recognition policy over `murm-replication` |
+| `crates/mesh` | `mesh` | The personal-space compute mesh: signed job operations over LogSync, a deterministic job board and worker loop, plus policy-bound retention checkpoints and prunable event history |
+| `crates/persona` | `identity`, `gazetteer` | Persona identity and handle resolution: master Ed25519 keypair, OS-keychain integration, per-protocol identity derivation, and WebFinger today |
 | `crates/script` | `script-rhai` | The Rhai backend for the block-evaluator lane (pure Rust, sandboxed); the privileged omnibar command shell layers verb bindings on top |
 | `crates/probes` | (excluded) | Spike/probe crates; referenced in `[workspace.exclude]` and not product crates. The directory is not present in the repo today |
 
@@ -171,7 +171,7 @@ graph kernel's package name is `kernel`, at `crates/graph/graph-kernel`).
 
 The data flow runs in two threads:
 
-- Per-node content production: engines (`serval` for HTML, `nematic` for smolweb,
+- Per-node content production: engines (`genet` for HTML, `nematic` for smolweb,
   the scrying engine for system WebViews) produce content; `inker` selects and
   orchestrates the engine and routing for each node.
 - Per-graph-view arrangement: graph truth (`kernel`) is locked into an
@@ -210,9 +210,9 @@ Set once in `[workspace.dependencies]` and consumed via `dep.workspace = true`:
 Mere consumes several sibling repos one-way (it depends on them; they never
 depend on Mere):
 
-- `serval` (`mark-ik/serval`): the Servo-derived web engine and host layer.
-  Mere uses `xilem-serval`, `serval-scripted-dom`, `serval-static-dom`,
-  `serval-layout`, `serval-winit-host`, `pelt-core`, `pelt-desktop`, and
+- `genet` (`mark-ik/genet`): the Servo-derived web engine and host layer.
+  Mere uses `xilem-serval`, `genet-scripted-dom`, `genet-static-dom`,
+  `genet-layout`, `genet-winit-host`, `pelt-core`, `pelt-desktop`, and
   `layout-dom-api` from it. The `taffy` and `ipc-channel` forks are vendored
   here and patched in.
 - `netrender` (`mark-ik/netrender`): the renderer (`netrender`,
@@ -249,7 +249,7 @@ Crate versions are pinned at `0.0.1` and binaries are `publish = false`.
   <tr>
     <td width="50%">
       <img src="assets/screenshots/web-page.png" alt="A full HTML page rendered in a tile"><br>
-      <sub>The web lane: a full HTML page rendered in a tile by the serval engine.</sub>
+      <sub>The web lane: a full HTML page rendered in a tile by the genet engine.</sub>
     </td>
     <td width="50%">
       <img src="assets/screenshots/graph-favicons.png" alt="A fuller orrery graph with per-site favicons on the nodes"><br>

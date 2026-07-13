@@ -71,7 +71,7 @@ the host rasterizes scene → texture, cached by `scene_version`
   COM/HWND-bound; producer methods are sync), so scrying activations live on
   the UI thread and are driven in the frame loop, not on pool workers;
 - input is **forwarded into** the producer (send_mouse/keyboard, move_focus),
-  not dispatched in serval — the tile is a black box with its own cursor and
+  not dispatched in genet — the tile is a black box with its own cursor and
   focus;
 - frames arrive on the WebView's own schedule; v1 acquires per redraw while
   the tile is visible (continuous redraw), with a frame-arrival wake as a
@@ -165,12 +165,12 @@ Linux box.
 
 ### Later (not this plan)
 
-- The verso flip carriers (serval → scrying with state carry) — charter step
+- The verso flip carriers (genet → scrying with state carry) — charter step
   3; this plan deliberately lands the scrying lane *without* verso.
 - **The external-texture element view in xilem-serval** (the audit's "one
   missing primitive"): tile content, cards, and scrying textures placeable as
   DOM children at DOM-computed rects, retiring meerkat's hand-summed rect
-  compositing. The *rendering* version is one medium PR (serval already
+  compositing. The *rendering* version is one medium PR (genet already
   lowers `DrawExternalTexture`; netrender's compose pass works). The
   *interactive* version — what this lane wants under the orrery camera —
   additionally needs transform-aware hit-testing and the pointer propagation
@@ -235,7 +235,7 @@ Linux box.
     handle), and keeps sampling the imported texture on reused frames. Spawn
     failures are recorded once (no respawn storm); unpin / multi-graph switch
     reap.
-  - `serval-winit-host` gained a `queue()` accessor beside `device()`.
+  - `genet-winit-host` gained a `queue()` accessor beside `device()`.
   - New palette command `Compatibility view (system WebView, focused node)`
     (host action). Pinning opens the live card and reaps the node's content
     actor; the render path routes a pinned member's live card to
