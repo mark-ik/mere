@@ -72,16 +72,15 @@ name = "meerkat"
 path = "src/main.rs"
 
 [dependencies]
-# The chrome-as-DOM view layer: a xilem_core backend that diffs a Xilem view
-# tree into genet's mutable ScriptedDom. Cross-repo path dep on the sibling
-# genet checkout — mere and genet share the vello 0.9 / wgpu 29 pins, so there
-# is no renderer-stack reconciliation (genet-as-host flip plan, Findings).
-xilem-serval = { package = "serval-xilem", git = "https://github.com/mark-ik/genet.git", branch = "main", features = ["highlight"] }
-# Chisel widget leaves: the toolbar status cluster (frame-time Meter + recent
-# GraphGlyph) as `<chisel-leaf>` elements in the chrome DOM, plus the grid
+# The chrome-as-DOM view layer: Cambium diffs a Meristem view tree into Genet's
+# mutable ScriptedDom. Mere and Genet share the vello 0.9 / wgpu 29 pins, so
+# there is no renderer-stack reconciliation (Genet-as-host flip plan, Findings).
+xilem-serval = { package = "cambium", git = "https://github.com/mark-ik/cambium.git", branch = "main", features = ["highlight"] }
+# Sprigging widget leaves: the toolbar status cluster (frame-time Meter + recent
+# GraphGlyph) as custom leaf elements in the chrome DOM, plus the grid
 # widget (GridSpec) for the nodes/recent table. The chrome emit splices leaf
 # commands via IncrementalLayout::emit_paint_list_with_leaves.
-chisel = { package = "serval-chisel", git = "https://github.com/mark-ik/genet.git", branch = "main" }
+chisel = { package = "sprigging", git = "https://github.com/mark-ik/cambium.git", branch = "main" }
 genet-scripted-dom = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 # The content card parses fetched pages as full HTML documents (keeping <head>,
 # so head <style> / <link> are seen) and renders them through the shared genet
@@ -141,7 +140,7 @@ linebender_resource_handle = "0.1"
 netrender_text = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
 # The `LayoutDom` trait: `document()` + `element_name` / `dom_children` to walk
 # and measure the chrome band (toolbar split + click-region gate). ScriptedDom
-# implements it; same cross-repo path as xilem-serval.
+# implements it; same cross-repo boundary as Cambium.
 layout_dom_api = { package = "layout-dom-api", git = "https://github.com/mark-ik/genet.git", branch = "main" }
 
 # Shared genet-on-winit present plumbing (SurfaceHost: boot / resize / rasterize
@@ -324,12 +323,12 @@ hex = "0.4"
 # postcard encoder, but the update wrapper needs its own flat byte envelope.
 postcard = { version = "1", features = ["alloc"] }
 # Seed colour manipulation for the in-app theme editor (HSL nudges on seeds). The
-# perceptual syntax palette now derives inside xilem-serval's `highlight` feature
+# perceptual syntax palette now derives inside Cambium's `highlight` feature
 # (illume + tinct), so meerkat no longer maps kinds to roles itself.
 tincture = { workspace = true }
 # illume's container tree for structural editor ops (expand-selection to the enclosing
 # djot container). This is host editing logic, distinct from the highlight bridge that
-# lives in xilem-serval's `highlight` feature.
+# lives in Cambium's `highlight` feature.
 illume = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 # Unique ids for forked user themes.
 uuid = { workspace = true }
