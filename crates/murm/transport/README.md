@@ -14,7 +14,7 @@ consumes generically.
   32-byte Ed25519 signing seed from Personae or another provider. In both cases
   the peer ID is derived from the corresponding public key.
 - **Streams are byte-oriented.** `Transport::Stream: AsyncRead + AsyncWrite`.
-  Higher protocols layer their own framing on top — `murmuring` carries
+  Higher protocols layer their own framing on top. `murm` carries
   signed p2panda-core Operations; co-op sessions carry their own format.
 - **ALPNs are explicit.** Each protocol registers its own ALPN string
   (`mere/cable/v1`, `mere/coop/v1`, …) so multiple protocols share one peer
@@ -88,7 +88,7 @@ the substrate.
   conversation, carrying signed p2panda-core Operations over the byte
   stream, and reconciles the cabal log over gossip + LogSync. Each cabal
   claims an ALPN.
-- [`moothold`](https://crates.io/crates/moothold) (planned) — uses transport
+- [`gemot`](https://crates.io/crates/gemot) (planned) — uses transport
   streams + iroh-gossip topics for moot-scoped event sync.
 - [`eidetic`](https://crates.io/crates/eidetic) — large local-memory
   artifacts (engram payloads, graph snapshots) are stored as content-addressed

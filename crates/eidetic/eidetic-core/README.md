@@ -31,7 +31,7 @@ draw inferences, and distill engrams (portable, durable, schematicized memories)
 - Schema layer — [`SchemaDefinition`], meta-schema bootstrap, Mere-native
   structural validation, JSON Schema validation, and JSON-LD parse/type checks.
 - Engram layer — [`Engram`] + [`TimeBounds`] for immutable, schema-typed,
-  content-hashed snapshots that can later cross murm / moothold boundaries.
+  content-hashed snapshots that can later cross murm / gemot boundaries.
 - Bundle layer — [`Bundle`] and required-member verification for composite
   engram-style payloads.
 - Model layer — [`ModelManifest`], [`ModelLibrary`], and [`ModelComponents`]
@@ -90,7 +90,7 @@ eidetic occupies a different scope from these adjacent crates:
 - [`transport`](https://crates.io/crates/transport) carries an
   `iroh-blobs` content-addressed blob store — networked / shared between
   peers, not owner-private.
-- [`moothold`](https://crates.io/crates/moothold) owns community flora
+- [`gemot`](https://crates.io/crates/gemot) owns community flora
   (engrams composing a moot's geist) — shared across community members, not
   owner-private.
 - Host UI state (open dialogs, focus, transient overlays) — runtime-only,

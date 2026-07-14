@@ -89,7 +89,7 @@ only third-party crypto. Consumers reach for it as the identity trust root.
   for a per-cabal Ed25519 keypair. Each bilateral conversation gets its own
   derived identity; a vulnerability in the conversation protocol does not
   leak the master.
-- [`moothold`](https://crates.io/crates/moothold) (planned) —
+- [`gemot`](https://crates.io/crates/gemot) (planned) —
   moot / moothold / coalition credentials across the tier framework
   (t1 orrery → t2 moot → t3 moothold → t4 coalition), including
   capability-based delegation per the meadowcap pattern.

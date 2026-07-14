@@ -1,5 +1,5 @@
 [package]
-name = "forme"
+name = "mere-forme"
 version = "0.1.0"
 edition = "2024"
 license = "MPL-2.0"
@@ -14,6 +14,13 @@ petgraph = ["dep:petgraph"]
 # pull `std::fs` paths); the native host enables it. `serde_json` is already
 # a base dep, so this gates only the module.
 store = []
+
+# The crates.io name is `mere-forme` (the bare `forme` is owned by someone
+# else), but the LIB stays `forme`, so every `use forme::...` in the tree is
+# untouched and this rename never reaches the code.
+[lib]
+name = "forme"
+path = "src/lib.rs"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
