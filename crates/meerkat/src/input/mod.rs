@@ -14,7 +14,7 @@ use meerkat::{Chrome, ContextAction, ContextItem, HistoryStep, nav, submit_omnib
 use mere::canvas::PointerButton;
 use genet_layout::ScrollOffsets;
 use genet_scripted_dom::NodeId;
-use genet_winit_host::key_event_from_winit;
+use cambium_winit::key_event_from_winit;
 use winit::event::{ElementState, MouseButton};
 use winit::keyboard::{Key as WinitKey, NamedKey as WinitNamedKey};
 use cambium::PointerClick;

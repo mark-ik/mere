@@ -9,7 +9,8 @@ use std::sync::Arc;
 
 use netrender::NetrenderOptions;
 use mere::canvas::WHEEL_PAN_SCALE;
-use genet_winit_host::{RenderCore, modifiers_from_winit};
+use cambium_winit::modifiers_from_winit;
+use genet_winit_host::RenderCore;
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalPosition, PhysicalSize};
 use winit::event::{ElementState, MouseScrollDelta, WindowEvent};

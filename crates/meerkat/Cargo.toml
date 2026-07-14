@@ -76,6 +76,7 @@ path = "src/main.rs"
 # mutable ScriptedDom. Mere and Genet share the vello 0.9 / wgpu 29 pins, so
 # there is no renderer-stack reconciliation (Genet-as-host flip plan, Findings).
 cambium = { git = "https://github.com/mark-ik/cambium.git", branch = "main", features = ["highlight"] }
+cambium-winit = { git = "https://github.com/mark-ik/cambium.git", branch = "main" }
 # Sprigging widget leaves: the toolbar status cluster (frame-time Meter + recent
 # GraphGlyph) as custom leaf elements in the chrome DOM, plus the grid
 # widget (GridSpec) for the nodes/recent table. The chrome emit splices leaf
@@ -144,7 +145,7 @@ netrender_text = { git = "https://github.com/mark-ik/netrender.git", branch = "m
 layout_dom_api = { package = "layout-dom-api", git = "https://github.com/mark-ik/genet.git", branch = "main" }
 
 # Shared genet-on-winit present plumbing (SurfaceHost: boot / resize / rasterize
-# / acquire, + winit->genet key & modifier mapping), shared with the orrery host.
+# / acquire), shared with the orrery host. Cambium owns winit input translation.
 genet-winit-host = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 
 # The content-card pipeline: a focused node's media as a document. inker supplies
@@ -329,7 +330,7 @@ tincture = { workspace = true }
 # illume's container tree for structural editor ops (expand-selection to the enclosing
 # djot container). This is host editing logic, distinct from the highlight bridge that
 # lives in Cambium's `highlight` feature.
-illume = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+illume = "=0.0.2"
 # Unique ids for forked user themes.
 uuid = { workspace = true }
 
