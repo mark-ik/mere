@@ -1,5 +1,5 @@
 [package]
-name = "fetch"
+name = "mere-fetch"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,6 +8,7 @@ publish = false
 description = "Host-neutral fetch actor and session-cookie runtime for Mere."
 
 [lib]
+name = "fetch"
 path = "src/lib.rs"
 
 [dependencies]

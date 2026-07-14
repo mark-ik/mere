@@ -1,5 +1,5 @@
 [package]
-name = "glossary"
+name = "mere-glossary"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,6 +11,7 @@ keywords = ["graph", "mere", "outline", "djot", "metrics"]
 categories = ["text-processing", "visualization"]
 
 [lib]
+name = "glossary"
 path = "src/lib.rs"
 
 [dependencies]

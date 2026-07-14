@@ -1,5 +1,5 @@
 [package]
-name = "cartography"
+name = "mere-cartography"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,6 +11,7 @@ keywords = ["cartography", "graph", "layout", "projection", "browser"]
 categories = ["graphics", "rendering"]
 
 [lib]
+name = "cartography"
 path = "src/lib.rs"
 
 # The `graph-canvas-adapters` feature retired 2026-05-18 when its

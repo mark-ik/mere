@@ -1,5 +1,5 @@
 [package]
-name = "apparatus"
+name = "mere-apparatus"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,6 +11,7 @@ keywords = ["apparatus", "inspector", "diagnostics", "mere", "uxtree"]
 categories = ["accessibility", "gui", "development-tools::debugging"]
 
 [lib]
+name = "apparatus"
 path = "src/lib.rs"
 
 [dependencies]

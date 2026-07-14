@@ -1,5 +1,5 @@
 [package]
-name = "roster"
+name = "mere-roster"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,6 +8,7 @@ description = "Roster domain vocabulary for Mere: pane tabs, subjects, rows, car
 publish = false
 
 [lib]
+name = "roster"
 path = "src/lib.rs"
 
 [dependencies]

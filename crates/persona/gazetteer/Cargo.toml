@@ -1,5 +1,5 @@
 [package]
-name = "gazetteer"
+name = "mere-gazetteer"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -17,4 +17,5 @@ reqwest = { version = "0.12", default-features = false, features = ["blocking", 
 url = "2.5"
 
 [lib]
+name = "gazetteer"
 path = "src/lib.rs"

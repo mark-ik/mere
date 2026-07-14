@@ -1,5 +1,5 @@
 [package]
-name = "linked-data"
+name = "mere-linked-data"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,6 +10,7 @@ keywords = ["json-ld", "rdf", "linked-data", "graph", "semantic-web"]
 categories = ["web-programming", "data-structures"]
 
 [lib]
+name = "linked_data"
 path = "src/lib.rs"
 
 [features]

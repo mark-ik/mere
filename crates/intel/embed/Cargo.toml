@@ -1,5 +1,5 @@
 [package]
-name = "embed"
+name = "mere-embed"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,6 +10,7 @@ keywords = ["embeddings", "vector-search", "intelligence", "mere"]
 categories = ["data-structures"]
 
 [lib]
+name = "embed"
 path = "src/lib.rs"
 
 [dependencies]

@@ -1,5 +1,5 @@
 [package]
-name = "kernel"
+name = "mere-kernel"
 version = "0.0.1"
 authors = ["@mark-ik"]
 license = "MPL-2.0"
@@ -19,6 +19,10 @@ fixtures = []
 # via GraphSnapshot). Off by default so the kernel stays portable-by-default;
 # the native host enables it. serde_json is already a base dep.
 store = []
+
+[lib]
+name = "kernel"
+path = "src/lib.rs"
 
 [dependencies]
 # Navigation lineage over the substrate: stemma (the promoted, MIT/Apache lineage

@@ -1,5 +1,5 @@
 [package]
-name = "trail"
+name = "mere-trail"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,4 +8,5 @@ description = "Trail domain vocabulary for Mere: the recently-visited / node-his
 publish = false
 
 [lib]
+name = "trail"
 path = "src/lib.rs"

@@ -1,5 +1,5 @@
 [package]
-name = "gloss"
+name = "mere-gloss"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,6 +11,7 @@ keywords = ["gloss", "outline", "mere", "uxtree"]
 categories = ["accessibility", "gui"]
 
 [lib]
+name = "gloss"
 path = "src/lib.rs"
 
 [dependencies]

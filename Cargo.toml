@@ -56,6 +56,7 @@ members = [
     "crates/murm/transport",
     "crates/persona/gazetteer",
     "crates/moot/gemot",
+    "crates/moot/moothold",
     "crates/moot/mooting",
     "crates/mesh/mesh",
     "crates/script/rhai",
@@ -84,19 +85,19 @@ repository = "https://github.com/mark-ik/mere"
 # update both this list and consumer references in one shot.
 quint = { path = "crates/canvas/quint" }
 seiche = { path = "crates/canvas/seiche" }
-cartography = { path = "crates/canvas/cartography" }
+cartography = { package = "mere-cartography", path = "crates/canvas/cartography" }
 # Deterministic graph arrangements (penrose / l-system / phyllotaxis /
 # kanban-timeline / radial-grid / semantic), recaptured from the retired
 # graph-layout; seiche owns live force physics.
 arrangements = { path = "crates/canvas/arrangements" }
-linked-data = { path = "crates/graph/linked-data" }
-kernel = { path = "crates/graph/graph-kernel" }
+linked-data = { package = "mere-linked-data", path = "crates/graph/linked-data" }
+kernel = { package = "mere-kernel", path = "crates/graph/graph-kernel" }
 graphlets = { path = "crates/graph/graphlets" }
 # The graph-canvas content-root (was `orrery`; that name retired to the Merely
 # product tier ladder, 2026-07-09 — see the boundary pass plan amendments).
-canvas = { path = "crates/canvas/canvas" }
+canvas = { package = "mere-canvas", path = "crates/canvas/canvas" }
 # Graph digest projections (djot outline, metrics) — `glossary` (was `mere-orrery`).
-glossary = { path = "crates/graph/glossary" }
+glossary = { package = "mere-glossary", path = "crates/graph/glossary" }
 
 # The actor-kernel runtime (host-neutral): the !Send host-kernel boundary + the
 # Send actor harness the constellation is built on. Promoted to its standalone
@@ -106,14 +107,14 @@ armillary = { git = "https://github.com/mark-ik/armillary.git", branch = "main" 
 mere = { path = "crates/mere" }
 meerkat-browser-worker = { path = "crates/meerkat-browser-worker" }
 
-fetch = { path = "crates/system/fetch" }
+fetch = { package = "mere-fetch", path = "crates/system/fetch" }
 content-contract = { path = "crates/system/content-contract" }
-proofs = { path = "crates/system/proofs" }
+proofs = { package = "mere-proofs", path = "crates/system/proofs" }
 shell-state = { path = "crates/system/shell-state" }
 frisket = { path = "crates/shell/frisket" }
 incipit = { path = "crates/incipit" }
-chrome = { path = "crates/shell/chrome" }
-comms = { path = "crates/shell/comms" }
+chrome = { package = "mere-chrome", path = "crates/shell/chrome" }
+comms = { package = "mere-comms", path = "crates/shell/comms" }
 session-runtime = { path = "crates/system/session-runtime" }
 ux-events = { path = "crates/system/ux-events" }
 register-diagnostics = { path = "crates/system/registry/register-diagnostics" }
@@ -137,10 +138,10 @@ forme = { package = "mere-forme", path = "crates/forme/forme" }
 uxtree = { path = "crates/forme/uxtree" }
 
 platen = { path = "crates/platen/platen" }
-apparatus = { path = "crates/domain/apparatus" }
-gloss = { path = "crates/domain/gloss" }
-roster = { path = "crates/domain/roster" }
-trail = { path = "crates/domain/trail" }
+apparatus = { package = "mere-apparatus", path = "crates/domain/apparatus" }
+gloss = { package = "mere-gloss", path = "crates/domain/gloss" }
+roster = { package = "mere-roster", path = "crates/domain/roster" }
+trail = { package = "mere-trail", path = "crates/domain/trail" }
 workbench = { path = "crates/platen/domain/workbench" }
 
 eidetic = { path = "crates/eidetic/eidetic-core" }
@@ -154,32 +155,33 @@ eidetic-search = { path = "crates/eidetic/eidetic-search" }
 # Browser-data ingest (bookmarks/history/session models + parsers); consumed
 # by the eidetic-recall bridge and, later, the shell's import verbs.
 import = { path = "crates/import" }
-crawl = { path = "crates/crawl" }
+crawl = { package = "mere-crawl", path = "crates/crawl" }
 
-embed = { path = "crates/intel/embed" }
-infer = { path = "crates/intel/infer" }
-signals = { path = "crates/intel/signals" }
+embed = { package = "mere-embed", path = "crates/intel/embed" }
+infer = { package = "mere-infer", path = "crates/intel/infer" }
+signals = { package = "mere-signals", path = "crates/intel/signals" }
 
 # Standalone spec-B misfin implementation (promoted out of this workspace
 # 2026-07-03); an owned mark-ik repo, tracked by branch per convention.
 misfin = { git = "https://github.com/mark-ik/misfin", branch = "main", features = ["ring"] }
 murm = { path = "crates/murm/murm" }
 murm-replication = { path = "crates/murm/replication" }
-transport = { path = "crates/murm/transport" }
+transport = { package = "mere-transport", path = "crates/murm/transport" }
 
-gemot = { path = "crates/moot/gemot" }
+gemot = { version = "0.1.0", path = "crates/moot/gemot" }
+moothold = { version = "0.1.0", path = "crates/moot/moothold" }
 mooting = { path = "crates/moot/mooting" }
 
 # The personal-space compute mesh (resource-coordination M1): signed job ops
 # over the tessera-proven LogSync lane + the deterministic job board.
-mesh = { path = "crates/mesh/mesh" }
+mesh = { package = "mere-mesh", path = "crates/mesh/mesh" }
 
-identity = { path = "crates/persona/identity" }
+identity = { package = "mere-identity", path = "crates/persona/identity" }
 # Handle-resolution index (WebFinger today; NIP-05 / atproto-did / moot
 # web-of-trust to come). Incubating, promoted out of the murm supercrate
 # 2026-07-08 (a gazetteer is a directory, not a broadcast gazette); no consumer
 # yet, and its blocking reqwest needs an async port before one wires it.
-gazetteer = { path = "crates/persona/gazetteer" }
+gazetteer = { package = "mere-gazetteer", path = "crates/persona/gazetteer" }
 
 # Rhai backend for the knot block-evaluator lane (the thin BlockEvaluator
 # slice, distinct from genet's full ScriptEngine seam). Pure Rust, sandboxed.

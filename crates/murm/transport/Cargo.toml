@@ -1,5 +1,5 @@
 [package]
-name = "transport"
+name = "mere-transport"
 readme = "README.md"
 version.workspace = true
 edition.workspace = true
@@ -16,6 +16,7 @@ categories = ["network-programming"]
 reticulum = ["dep:reticulum", "dep:x25519-dalek", "dep:hkdf", "dep:sha2", "dep:rand_core"]
 
 [lib]
+name = "transport"
 path = "src/lib.rs"
 
 [dependencies]

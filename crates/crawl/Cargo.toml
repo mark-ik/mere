@@ -1,5 +1,5 @@
 [package]
-name = "crawl"
+name = "mere-crawl"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,6 +8,7 @@ publish = false
 description = "Host-neutral crawl frontier and bounded crawl runtime for Mere."
 
 [lib]
+name = "crawl"
 path = "src/lib.rs"
 
 [dependencies]

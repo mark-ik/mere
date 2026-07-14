@@ -1,5 +1,5 @@
 [package]
-name = "infer"
+name = "mere-infer"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,6 +8,7 @@ publish = false
 description = "Mere's statistical-intelligence glue over the standalone vates inference crate: re-exports the InferenceProvider seam, the burn llama-family decoder, and the armillary streaming actor under the established infer:: paths, keeping only the mere-side eidetic model corridor."
 
 [lib]
+name = "infer"
 path = "src/lib.rs"
 
 [dependencies]
