@@ -5,7 +5,7 @@
 //! Engram envelope — schema-typed, immutable, time-bounded snapshot.
 //!
 //! An [`Engram`] wraps a schema-conformant payload with the integrity and
-//! classification metadata required to ship it across the moothold/murm
+//! classification metadata required to ship it across the gemot/murm
 //! federation tiers. Engrams are **immutable** by design: edits do not
 //! exist; refreshing produces a new engram with a fresh content hash. See
 //! the eidetic design pass §7.1 for the conceptual model.
@@ -43,7 +43,7 @@ impl TimeBounds {
 }
 
 /// Schema-typed, immutable, content-hashed snapshot. The portable payload
-/// the moothold/murm federation tiers exchange.
+/// the gemot/murm federation tiers exchange.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Engram {
     /// Schema reference — content-addressed pointer to a schema engram

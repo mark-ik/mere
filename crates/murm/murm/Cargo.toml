@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Bilateral peer-to-peer comms supercrate for the Mere browser — one-to-one messaging across protocols."
+description = "Direct peer-to-peer conversation service for the Mere browser."
 documentation = "https://docs.rs/murm"
 readme = "README.md"
 keywords = ["p2p", "messaging", "bilateral", "comms", "browser"]
@@ -16,17 +16,22 @@ path = "src/lib.rs"
 [dependencies]
 # Path + version: path for local workspace builds; version for `cargo publish`.
 identity.workspace = true
+muniment = { git = "https://github.com/mark-ik/muniment.git", branch = "main", features = ["redb"] }
 murm-replication = { workspace = true }
 transport.workspace = true
-murmuring.workspace = true
 blake3 = "1.5"
-# LogSync (offline catch-up) is assembled here over a cabal's redb store: the
+hex = "0.4"
+async-trait = "0.1"
+serde = { version = "1", features = ["derive"] }
+# LogSync (offline catch-up) is assembled here over the shared conversation store: the
 # protocol (`p2panda-net`), its sync-event types (`p2panda-sync`), and `Topic`
-# (`p2panda-core`). The store traits live in murmuring; murm only drives the
-# session and drains received operations into the engine.
+# (`p2panda-core`). Murm owns the operation grammar, store, session, and
+# received-operation admission path.
 p2panda-net = "0.6.1"
 p2panda-sync = "0.6.1"
 p2panda-core = "0.6.1"
+p2panda-encryption = { version = "0.6.1", default-features = false }
+zeroize = "1"
 # `rt` for the sync tasks (`tokio::spawn`); `time` bounds the manual `resync`
 # round; `sync` for the cabal `subscribe` broadcast receiver; `tokio-stream` for
 # the gossip + LogSync subscription streams.
@@ -36,3 +41,4 @@ thiserror = "1"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["io-util", "macros", "rt", "rt-multi-thread", "time"] }
+tempfile = "3"

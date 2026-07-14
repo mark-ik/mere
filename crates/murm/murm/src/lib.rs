@@ -1,13 +1,11 @@
 //! # Murm
 //!
-//! Bilateral peer-to-peer comms supercrate for the
-//! [`mere`](https://crates.io/crates/mere) browser. One-to-one (and small-
-//! group) messaging across pluggable protocols (Cable in Phase 2B; MLS, Tox,
-//! and others later).
+//! Direct peer-to-peer conversation service for the
+//! [`mere`](https://crates.io/crates/mere) browser.
 //!
-//! See the workspace's
-//! [`MURM_AS_BILATERAL.md`](../../../design_docs/murm_docs/technical_architecture/MURM_AS_BILATERAL.md)
-//! for the full architectural specification.
+//! See the workspace's active
+//! [Murm peer-runtime plan](../../../design_docs/mere_docs/implementation_strategy/2026-07-12_murm_peer_runtime_and_moot_domain_plan.md)
+//! for the architectural specification.
 //!
 //! ## What Murm owns
 //!
@@ -19,8 +17,6 @@
 //! - **Transport orchestration** — uses [`transport::Transport`] for
 //!   stream-level peer connections; Murm is generic over the transport
 //!   implementation
-//! - **Per-protocol routing** — dispatches conversation operations to
-//!   whichever [`murmuring::BilateralProtocol`] backs a given cabal
 //! - **Co-op session lifecycle** (Phase 2B) — host-led ephemeral sessions
 //!   over bilateral transport
 //!
@@ -28,13 +24,13 @@
 //!
 //! - Master keypair / OS keychain → [`identity`]
 //! - iroh / QUIC / ALPN → [`transport`]
-//! - Cable wire protocol, MLS, etc. → [`murmuring`] protocol modules
+//! - Alternate protocol adapters → the comms integration boundary
 //! - User-facing chat panel UI → graphshell-side Comms applet (separate)
-//! - Many-to-many federation → `moothold`
+//! - Many-to-many federation → `gemot`
 //!
 //! ## Status
 //!
-//! Pre-1.0. Phase 2B: the Cable concrete protocol is in place, and a cabal has a
+//! Pre-1.0. Phase 2B: the Cable-shaped Murm dialect is in place, and a cabal has a
 //! real **send** ([`CabalHandle::send_text`] and siblings), **history**
 //! ([`CabalHandle::history`]), and live **subscribe** ([`CabalHandle::subscribe`])
 //! API. With a [`P2pandaTransport`], [`SyncedCabal`] adds the two sync lanes
@@ -44,32 +40,52 @@
 #![warn(missing_docs)]
 
 mod cabal;
+mod conversation_backend;
+mod conversation_engine;
+mod conversation_store;
+mod drop_export;
 mod error;
 mod gossip_sync;
+mod key_epoch;
+mod post;
+mod post_hash;
+mod post_sign;
+mod post_wire;
 
 pub use crate::cabal::{CabalHandle, CabalId, CabalKey, CabalMembership};
+pub use crate::conversation_backend::{ConversationBackend, ConversationStorage};
+pub use crate::conversation_engine::{ConversationEngine, ConversationRefresh};
+pub use crate::conversation_store::{ConversationStore, ConversationStoreError};
+pub use crate::drop_export::{
+    ConversationDropPriorities, ConversationDropPrivacy, ConversationDropProfile,
+    ConversationDropSelector, ConversationFrontier,
+};
 pub use crate::error::MurmError;
 pub use crate::gossip_sync::SyncedCabal;
+pub use crate::key_epoch::{CABAL_DROP_SUITE, CabalKeyEpoch, CabalKeyring, CabalKeyringError};
+pub use crate::post::{ChannelName, InfoEntry, Post, PostId, PostKind};
+pub use crate::post_hash::hash_cabal_id;
+pub use crate::post_sign::{sign_post, verify_post};
+pub use crate::post_wire::{
+    CabalExt, decode_post, encode_post, operation_id, operation_to_post, post_to_operation,
+};
 
 // Re-export key types from the layers we sit on, so consumers don't all
 // need direct dependencies on the lower crates.
 pub use identity::{Ed25519PublicKey, IdentityProvider};
-pub use murmuring::{BilateralProtocol, ChannelName, InfoEntry, Post, PostId, PostKind};
 pub use transport::{Alpn, PeerID, Transport};
 
-// Re-export Cable's primary entry points so murm consumers don't need a
-// direct dependency on murmuring just to send/receive Cable posts.
-pub use murmuring::cable::{decode_post, encode_post, hash_post, sign_post, verify_post};
+/// Compute a post's signed-header identity.
+pub fn hash_post(post: &Post) -> PostId {
+    operation_id(post)
+}
 
 use std::sync::Arc;
 
-use murmuring::CableEngine;
-
 /// The Mere bilateral-comms supercrate entry point.
 ///
-/// `Murm` orchestrates identity (via [`IdentityProvider`]), transport (via
-/// [`Transport`]), and pluggable bilateral protocols (via
-/// [`BilateralProtocol`]).
+/// `Murm` orchestrates identity, transport, conversation admission, storage,
+/// materialization, and sync.
 ///
 /// ## Generic over transport
 ///
@@ -95,17 +111,26 @@ use murmuring::CableEngine;
 pub struct Murm<T: Transport> {
     identity: Arc<dyn IdentityProvider>,
     transport: T,
-    cable: Arc<CableEngine>,
+    conversation: Arc<ConversationEngine>,
 }
 
 impl<T: Transport> Murm<T> {
     /// Construct a `Murm` with a given identity provider and transport.
     pub fn new(identity: Arc<dyn IdentityProvider>, transport: T) -> Self {
-        let cable = Arc::new(CableEngine::new(identity.clone()));
+        Self::with_storage(identity, transport, ConversationStorage::Memory)
+    }
+
+    /// Construct Murm with host-selected conversation persistence.
+    pub fn with_storage(
+        identity: Arc<dyn IdentityProvider>,
+        transport: T,
+        storage: ConversationStorage,
+    ) -> Self {
+        let conversation = Arc::new(ConversationEngine::with_storage(identity.clone(), storage));
         Self {
             identity,
             transport,
-            cable,
+            conversation,
         }
     }
 
@@ -125,16 +150,16 @@ impl<T: Transport> Murm<T> {
         &self.transport
     }
 
-    /// Access the underlying [`CableEngine`].
+    /// Access the underlying native conversation runtime.
     ///
     /// Useful for advanced operations not yet exposed on
     /// [`CabalHandle`] (e.g. inspecting all open cabals, custom post
     /// composition).
-    pub fn cable(&self) -> &Arc<CableEngine> {
-        &self.cable
+    pub fn conversation_engine(&self) -> &Arc<ConversationEngine> {
+        &self.conversation
     }
 
-    /// Open or join a Cable cabal by its secret cabal key.
+    /// Open or join a cabal in Mere's Cable-shaped dialect by its secret key.
     ///
     /// Derives the per-cabal Ed25519 keypair (Cable spec §2.2),
     /// computes the public cabal id (BLAKE3 of the key), and creates an
@@ -143,10 +168,10 @@ impl<T: Transport> Murm<T> {
     /// session.
     ///
     /// Returns a [`CabalHandle`] for sending and querying posts.
-    pub fn open_cabal(&self, cabal_key: &CabalKey) -> Result<CabalHandle, MurmError> {
-        let id_bytes = self.cable.open_cabal(*cabal_key.as_bytes())?;
+    pub async fn open_cabal(&self, cabal_key: &CabalKey) -> Result<CabalHandle, MurmError> {
+        let id_bytes = self.conversation.open(*cabal_key.as_bytes()).await?;
         let cabal_id = CabalId::new(id_bytes);
-        Ok(CabalHandle::new(cabal_id, Arc::clone(&self.cable)))
+        Ok(CabalHandle::new(cabal_id, Arc::clone(&self.conversation)))
     }
 
     /// Compute the per-cabal keypair for a given cabal key.
@@ -174,7 +199,14 @@ pub const STAGE: &str = "pre-alpha";
 mod tests {
     use super::*;
     use identity::InMemoryProvider;
+    use murm_replication::{
+        DropExportProfile, DropLimits, export_topic_operations, write_plain_drop,
+        write_protected_drop,
+    };
+    use p2panda_core::Topic;
+    use std::io::Cursor;
     use std::sync::Arc;
+    use tempfile::tempdir;
     use tokio::io::DuplexStream;
 
     /// A no-op transport for foundation tests. Connect/accept always
@@ -240,26 +272,26 @@ mod tests {
         assert_eq!(murm.local_peer_id(), murm.transport().local_peer_id());
     }
 
-    #[test]
-    fn open_cabal_derives_id_from_key() {
+    #[tokio::test]
+    async fn open_cabal_derives_id_from_key() {
         let murm = make_murm();
         let key = CabalKey::new([42; 32]);
-        let cabal = murm.open_cabal(&key).unwrap();
+        let cabal = murm.open_cabal(&key).await.unwrap();
         // The id is BLAKE3 of the key — independent of which Murm
         // instance opened it. Two different Murms with the same cabal_key
         // see the same id.
         let murm2 = make_murm();
-        let cabal2 = murm2.open_cabal(&key).unwrap();
+        let cabal2 = murm2.open_cabal(&key).await.unwrap();
         assert_eq!(cabal.id(), cabal2.id());
     }
 
-    #[test]
-    fn open_cabal_send_text_history_round_trip() {
+    #[tokio::test]
+    async fn open_cabal_send_text_history_round_trip() {
         let murm = make_murm();
-        let cabal = murm.open_cabal(&CabalKey::new([7; 32])).unwrap();
+        let cabal = murm.open_cabal(&CabalKey::new([7; 32])).await.unwrap();
 
-        let id1 = cabal.send_text_at("session", "first", 1).unwrap();
-        let id2 = cabal.send_text_at("session", "second", 2).unwrap();
+        let id1 = cabal.send_text_at("session", "first", 1).await.unwrap();
+        let id2 = cabal.send_text_at("session", "second", 2).await.unwrap();
         assert_ne!(id1, id2);
 
         let history = cabal.history("session");
@@ -275,6 +307,172 @@ mod tests {
         assert!(cabal.history("links").is_empty());
     }
 
+    #[tokio::test]
+    async fn durable_cabal_reopens_history_and_author_head() {
+        let directory = tempdir().unwrap();
+        let storage = ConversationStorage::redb(directory.path());
+        let key = CabalKey::new([0x73; 32]);
+
+        let provider: Arc<dyn IdentityProvider> = Arc::new(InMemoryProvider::from_seed([0x31; 32]));
+        let peer_id = PeerID::from_public_key(provider.master_public_key());
+        let murm = Murm::with_storage(provider, StubTransport::new(peer_id), storage.clone());
+        let cabal = murm.open_cabal(&key).await.unwrap();
+        cabal
+            .send_text_at("session", "before restart", 1)
+            .await
+            .unwrap();
+        drop(cabal);
+        drop(murm);
+
+        let provider: Arc<dyn IdentityProvider> = Arc::new(InMemoryProvider::from_seed([0x31; 32]));
+        let peer_id = PeerID::from_public_key(provider.master_public_key());
+        let reopened = Murm::with_storage(provider, StubTransport::new(peer_id), storage);
+        let cabal = reopened.open_cabal(&key).await.unwrap();
+        assert_eq!(cabal.history("session").len(), 1);
+        cabal
+            .send_text_at("session", "after restart", 2)
+            .await
+            .unwrap();
+        let history = cabal.history("session");
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0].seq_num, 0);
+        assert_eq!(history[1].seq_num, 1);
+    }
+
+    #[tokio::test]
+    async fn imported_drop_refreshes_history_and_subscription_once() {
+        let key = CabalKey::new([0x74; 32]);
+        let source = make_murm();
+        let source_cabal = source.open_cabal(&key).await.unwrap();
+        let post_id = source_cabal
+            .send_text_at("session", "carried by a drop", 1)
+            .await
+            .unwrap();
+        let source_store = source
+            .conversation_engine()
+            .sync_store(source_cabal.id().as_bytes())
+            .unwrap();
+        let records = export_topic_operations::<_, _, u64>(
+            &source_store,
+            &Topic::from(*source_cabal.id().as_bytes()),
+            DropExportProfile::default(),
+        )
+        .await
+        .unwrap();
+        let mut bytes = Vec::new();
+        write_plain_drop(&mut bytes, &records, DropLimits::default()).unwrap();
+
+        let target_provider: Arc<dyn IdentityProvider> =
+            Arc::new(InMemoryProvider::from_seed([0x75; 32]));
+        let target_id = PeerID::from_public_key(target_provider.master_public_key());
+        let target = Murm::new(target_provider, StubTransport::new(target_id));
+        let target_cabal = target.open_cabal(&key).await.unwrap();
+        let mut events = target_cabal.subscribe().unwrap();
+        let (import, refresh) = target_cabal
+            .import_plain_drop(Cursor::new(bytes.clone()), DropLimits::default())
+            .await
+            .unwrap();
+        assert_eq!(import.accepted, 1);
+        assert_eq!(refresh.added, 1);
+        assert_eq!(target_cabal.history("session").len(), 1);
+        assert_eq!(hash_post(&events.try_recv().unwrap()), post_id);
+
+        let (repeat, refresh) = target_cabal
+            .import_plain_drop(Cursor::new(bytes), DropLimits::default())
+            .await
+            .unwrap();
+        assert!(repeat.receipt_hit);
+        assert_eq!(refresh.added, 0);
+        assert!(events.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn protected_drop_refresh_survives_key_rotation() {
+        let key = CabalKey::new([0x76; 32]);
+        let source = make_murm();
+        let source_cabal = source.open_cabal(&key).await.unwrap();
+        source_cabal
+            .send_text_at("session", "old epoch", 1)
+            .await
+            .unwrap();
+
+        let source_store = source
+            .conversation_engine()
+            .sync_store(source_cabal.id().as_bytes())
+            .unwrap();
+        let topic = Topic::from(*source_cabal.id().as_bytes());
+        let old_records = export_topic_operations::<_, _, u64>(
+            &source_store,
+            &topic,
+            DropExportProfile::default(),
+        )
+        .await
+        .unwrap();
+        let mut old_drop = Vec::new();
+        write_protected_drop(
+            &mut old_drop,
+            &old_records,
+            DropLimits::default(),
+            &source_cabal.keyring().unwrap(),
+        )
+        .unwrap();
+
+        let rotated_key = [0x77; 32];
+        source_cabal
+            .install_key_epoch(CabalKeyEpoch(1), rotated_key)
+            .unwrap();
+        source_cabal
+            .send_text_at("session", "new epoch", 2)
+            .await
+            .unwrap();
+        let new_records = export_topic_operations::<_, _, u64>(
+            &source_store,
+            &topic,
+            DropExportProfile::default(),
+        )
+        .await
+        .unwrap();
+        let mut new_drop = Vec::new();
+        write_protected_drop(
+            &mut new_drop,
+            &new_records,
+            DropLimits::default(),
+            &source_cabal.keyring().unwrap(),
+        )
+        .unwrap();
+
+        let target = make_murm();
+        let target_cabal = target.open_cabal(&key).await.unwrap();
+        target_cabal
+            .install_key_epoch(CabalKeyEpoch(1), rotated_key)
+            .unwrap();
+        let (_, old_refresh) = target_cabal
+            .import_protected_drop(Cursor::new(old_drop.clone()), DropLimits::default())
+            .await
+            .unwrap();
+        let (_, new_refresh) = target_cabal
+            .import_protected_drop(Cursor::new(new_drop), DropLimits::default())
+            .await
+            .unwrap();
+        assert_eq!(old_refresh.added, 1);
+        assert_eq!(new_refresh.added, 1);
+        assert_eq!(target_cabal.history("session").len(), 2);
+
+        assert_eq!(
+            target_cabal
+                .keyring()
+                .unwrap()
+                .forget_before(CabalKeyEpoch(1)),
+            1
+        );
+        assert!(
+            target_cabal
+                .import_protected_drop(Cursor::new(old_drop), DropLimits::default())
+                .await
+                .is_err()
+        );
+    }
+
     #[test]
     fn open_cabal_handle_is_clone_and_send() {
         // Compile-check: CabalHandle should be Clone + Send + Sync, so it
@@ -283,8 +481,8 @@ mod tests {
         assert_send_sync::<CabalHandle>();
     }
 
-    #[test]
-    fn two_murms_on_same_cabal_key_can_exchange_posts_via_ingest() {
+    #[tokio::test]
+    async fn two_murms_on_same_cabal_key_can_exchange_posts_via_ingest() {
         // Alice's murm posts; bob's murm ingests via the post object
         // (simulating transport delivery without yet wiring the actual
         // transport-level sync code).
@@ -299,19 +497,22 @@ mod tests {
         let bob = Murm::new(bob_provider, StubTransport::new(bob_id));
 
         let cabal_key = CabalKey::new([0xab; 32]);
-        let alice_cabal = alice.open_cabal(&cabal_key).unwrap();
-        let bob_cabal = bob.open_cabal(&cabal_key).unwrap();
+        let alice_cabal = alice.open_cabal(&cabal_key).await.unwrap();
+        let bob_cabal = bob.open_cabal(&cabal_key).await.unwrap();
         // Same cabal_key → same cabal id (public).
         assert_eq!(alice_cabal.id(), bob_cabal.id());
 
         // Alice posts. Bob's history is still empty (no sync yet).
-        let post_id = alice_cabal.send_text_at("session", "hi bob", 1).unwrap();
+        let post_id = alice_cabal
+            .send_text_at("session", "hi bob", 1)
+            .await
+            .unwrap();
         assert_eq!(alice_cabal.history("session").len(), 1);
         assert!(bob_cabal.history("session").is_empty());
 
         // Simulate transport delivery: bob receives the post object.
         let post = alice_cabal.get_post(&post_id).unwrap();
-        let bob_post_id = bob_cabal.ingest_post(post).unwrap();
+        let bob_post_id = bob_cabal.ingest_post(post).await.unwrap();
         assert_eq!(post_id, bob_post_id);
 
         // Bob's history now contains alice's post; signatures verify
@@ -319,8 +520,8 @@ mod tests {
         assert_eq!(bob_cabal.history("session").len(), 1);
     }
 
-    #[test]
-    fn cabal_subscribe_emits_authored_and_ingested_posts() {
+    #[tokio::test]
+    async fn cabal_subscribe_emits_authored_and_ingested_posts() {
         // Two peers on the same cabal. Bob subscribes, then sees both a post he
         // authors locally and a post he ingests from alice — each once.
         let alice_provider: Arc<dyn IdentityProvider> =
@@ -334,30 +535,34 @@ mod tests {
         let bob = Murm::new(bob_provider, StubTransport::new(bob_id));
 
         let key = CabalKey::new([0xcd; 32]);
-        let alice_cabal = alice.open_cabal(&key).unwrap();
-        let bob_cabal = bob.open_cabal(&key).unwrap();
+        let alice_cabal = alice.open_cabal(&key).await.unwrap();
+        let bob_cabal = bob.open_cabal(&key).await.unwrap();
 
         let mut bob_rx = bob_cabal.subscribe().unwrap();
 
         // Bob authors locally → his subscriber sees it.
-        let local_id = bob_cabal.send_text_at("session", "bob local", 1).unwrap();
+        let local_id = bob_cabal
+            .send_text_at("session", "bob local", 1)
+            .await
+            .unwrap();
         let got_local = bob_rx.try_recv().expect("local authored post emitted");
         assert_eq!(hash_post(&got_local), local_id);
 
         // Alice authors; bob ingests the post object → subscriber sees it.
         let remote_id = alice_cabal
             .send_text_at("session", "from alice", 2)
+            .await
             .unwrap();
         let post = alice_cabal.get_post(&remote_id).unwrap();
-        bob_cabal.ingest_post(post).unwrap();
+        bob_cabal.ingest_post(post).await.unwrap();
         let got_remote = bob_rx.try_recv().expect("ingested post emitted");
         assert_eq!(hash_post(&got_remote), remote_id);
 
         assert!(bob_rx.try_recv().is_err(), "nothing else is pending");
     }
 
-    #[test]
-    fn cabal_membership_folds_signed_join_leave_by_author_sequence() {
+    #[tokio::test]
+    async fn cabal_membership_folds_signed_join_leave_by_author_sequence() {
         let alice_provider: Arc<dyn IdentityProvider> =
             Arc::new(identity::InMemoryProvider::from_seed([70; 32]));
         let alice_id = PeerID::from_public_key(alice_provider.master_public_key());
@@ -369,18 +574,20 @@ mod tests {
         let bob = Murm::new(bob_provider, StubTransport::new(bob_id));
 
         let key = CabalKey::new([0xce; 32]);
-        let alice_cabal = alice.open_cabal(&key).unwrap();
-        let bob_cabal = bob.open_cabal(&key).unwrap();
+        let alice_cabal = alice.open_cabal(&key).await.unwrap();
+        let bob_cabal = bob.open_cabal(&key).await.unwrap();
         let alice_author = alice_cabal.author_public_key().unwrap().to_bytes();
         let bob_author = bob_cabal.author_public_key().unwrap().to_bytes();
 
-        let alice_join = alice_cabal.send_join_at("secrets", 30).unwrap();
-        let bob_join = bob_cabal.send_join_at("secrets", 10).unwrap();
+        let alice_join = alice_cabal.send_join_at("secrets", 30).await.unwrap();
+        let bob_join = bob_cabal.send_join_at("secrets", 10).await.unwrap();
         bob_cabal
             .ingest_post(alice_cabal.get_post(&alice_join).unwrap())
+            .await
             .unwrap();
         alice_cabal
             .ingest_post(bob_cabal.get_post(&bob_join).unwrap())
+            .await
             .unwrap();
 
         let alice_view = alice_cabal.membership("secrets");
@@ -392,9 +599,10 @@ mod tests {
 
         // Alice's later per-author operation wins even with an older asserted
         // timestamp; membership never uses wall-clock last-writer-wins.
-        let alice_leave = alice_cabal.send_leave_at("secrets", 1).unwrap();
+        let alice_leave = alice_cabal.send_leave_at("secrets", 1).await.unwrap();
         bob_cabal
             .ingest_post(alice_cabal.get_post(&alice_leave).unwrap())
+            .await
             .unwrap();
         let left = bob_cabal.membership("secrets");
         assert!(!left.contains(&alice_author));

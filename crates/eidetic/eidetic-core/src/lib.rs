@@ -32,7 +32,7 @@
 //!
 //! - [`transport`](https://crates.io/crates/transport) (peer
 //!   transport state — networked, not local-private),
-//! - [`moothold`](https://crates.io/crates/moothold) (community/federation
+//! - [`gemot`](https://crates.io/crates/gemot) (community/federation
 //!   flora — shared, not private),
 //! - host UI state (transient, not durable).
 //!

@@ -1,5 +1,5 @@
 use super::*;
-use crate::cable::sign::sign_post;
+use crate::post_sign::sign_post;
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
 
 fn keypair() -> Ed25519Keypair {
@@ -24,7 +24,7 @@ fn assert_round_trip(kind: PostKind, links: Vec<PostId>) {
         "post round-trip changed bytes"
     );
     assert!(
-        crate::cable::sign::verify_post(&decoded),
+        crate::post_sign::verify_post(&decoded),
         "decoded post failed verification"
     );
 }
@@ -140,12 +140,9 @@ fn round_trip_text_with_unicode() {
 fn garbage_bytes_are_malformed() {
     assert!(matches!(
         decode_post(&[0xff, 0x00, 0x13, 0x37]),
-        Err(MurmuringError::MalformedPost)
+        Err(MurmError::MalformedPost)
     ));
-    assert!(matches!(
-        decode_post(&[]),
-        Err(MurmuringError::MalformedPost)
-    ));
+    assert!(matches!(decode_post(&[]), Err(MurmError::MalformedPost)));
 }
 
 #[test]
@@ -242,7 +239,7 @@ fn operation_to_post_inverts_post_to_operation() {
         "post survives the operation round-trip"
     );
     assert!(
-        crate::cable::sign::verify_post(&back),
+        crate::post_sign::verify_post(&back),
         "reconstructed post verifies"
     );
 }

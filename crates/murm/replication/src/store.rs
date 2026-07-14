@@ -48,6 +48,25 @@ pub struct BlobGcReport {
     pub collected: u64,
 }
 
+/// One already-authorized operation prepared for an atomic batch insert.
+pub(crate) struct IndexedOperation<'a, E, L> {
+    pub topic: &'a Topic,
+    pub operation: &'a Operation<E>,
+    pub log_id: &'a L,
+    pub prune_before_current: bool,
+    pub erase_payloads: &'a [Hash],
+}
+
+struct PlannedOperation<E> {
+    pointer: String,
+    log_key: String,
+    log_prefix: String,
+    payload_ref: Option<String>,
+    seq_num: u64,
+    header: Header<E>,
+    has_body: bool,
+}
+
 /// A p2panda operation store over a muniment [`Backend`].
 ///
 /// Generic over the backend `B` and the operation extensions `E`. Cheap to clone
@@ -130,6 +149,22 @@ fn topic_key<L: LogId>(
     ))
 }
 
+fn payload_ref_prefix(payload_hash: &Hash) -> String {
+    format!("payload-ref/{}/", payload_hash.to_hex())
+}
+
+fn payload_ref_key(payload_hash: &Hash, operation_hash: &Hash) -> String {
+    format!(
+        "{}{}",
+        payload_ref_prefix(payload_hash),
+        operation_hash.to_hex()
+    )
+}
+
+pub(crate) fn pending_payload_key(payload_hash: &Hash) -> String {
+    format!("pending-payload/{}", payload_hash.to_hex())
+}
+
 /// Whether `seq` falls in the half-open sync range. `after` is exclusive (and,
 /// when absent, includes sequence 0); `until` is inclusive.
 fn in_range(seq: u64, after: Option<u64>, until: Option<u64>) -> bool {
@@ -138,6 +173,17 @@ fn in_range(seq: u64, after: Option<u64>, until: Option<u64>) -> bool {
 
 fn codec(err: impl std::fmt::Display) -> StoreError {
     StoreError::Codec(err.to_string())
+}
+
+fn record_write(writes: &mut BTreeMap<String, Option<Vec<u8>>>, write: WriteOp) {
+    match write {
+        WriteOp::Put { key, value } => {
+            writes.insert(key, Some(value));
+        }
+        WriteOp::Delete { key } => {
+            writes.insert(key, None);
+        }
+    }
 }
 
 // ── operation encode / decode ─────────────────────────────────────────────────
@@ -187,16 +233,25 @@ where
         // The blob and its pointer land together so a reader never sees one
         // without the other.
         self.backend
-            .apply(&[
-                WriteOp::Put {
-                    key: log_key.clone(),
-                    value: blob,
-                },
-                WriteOp::Put {
-                    key: ptr,
-                    value: log_key.into_bytes(),
-                },
-            ])
+            .apply(&{
+                let mut writes = vec![
+                    WriteOp::Put {
+                        key: log_key.clone(),
+                        value: blob,
+                    },
+                    WriteOp::Put {
+                        key: ptr,
+                        value: log_key.clone().into_bytes(),
+                    },
+                ];
+                if let Some(payload_hash) = operation.header.payload_hash.as_ref() {
+                    writes.push(WriteOp::Put {
+                        key: payload_ref_key(payload_hash, &operation.hash),
+                        value: log_key.into_bytes(),
+                    });
+                }
+                writes
+            })
             .await?;
         Ok(true)
     }
@@ -259,6 +314,161 @@ where
         Ok(inserted)
     }
 
+    /// Atomically index several admitted operations and caller-supplied trailing
+    /// writes.
+    ///
+    /// The processor performs policy and continuity checks first. This method
+    /// rechecks that every operation is still absent, then submits all topic,
+    /// log, pointer, staging-cleanup, and receipt writes in one backend batch.
+    pub(crate) async fn apply_indexed_operation_batch<L: LogId>(
+        &self,
+        operations: &[IndexedOperation<'_, E, L>],
+        leading_writes: &[WriteOp],
+        trailing_writes: &[WriteOp],
+    ) -> Result<(), StoreError> {
+        let mut pointers = BTreeSet::new();
+        let mut writes: BTreeMap<String, Option<Vec<u8>>> = BTreeMap::new();
+        let mut planned: BTreeMap<String, PlannedOperation<E>> = BTreeMap::new();
+        for write in leading_writes {
+            record_write(&mut writes, write.clone());
+        }
+        for entry in operations {
+            let pointer = op_ptr(&entry.operation.hash);
+            if !pointers.insert(pointer.clone()) {
+                return Err(codec("atomic operation batch contains a duplicate id"));
+            }
+            if self.backend.get(&pointer).await?.is_some() {
+                return Err(codec(
+                    "operation store changed after atomic batch validation",
+                ));
+            }
+            let topic = topic_key(
+                entry.topic,
+                &entry.operation.header.verifying_key,
+                entry.log_id,
+            )?;
+            let prefix = log_prefix(&entry.operation.header.verifying_key, entry.log_id)?;
+            let log_key = format!("{prefix}{:016x}", entry.operation.header.seq_num);
+
+            if entry.prune_before_current {
+                let (live_prune, _) = self
+                    .prefix_prune_writes(
+                        &entry.operation.header.verifying_key,
+                        entry.log_id,
+                        entry.operation.header.seq_num,
+                    )
+                    .await?;
+                for write in live_prune {
+                    record_write(&mut writes, write);
+                }
+                let planned_prefix: Vec<_> = planned
+                    .iter()
+                    .filter(|(_, operation)| {
+                        operation.log_prefix == prefix
+                            && operation.seq_num < entry.operation.header.seq_num
+                    })
+                    .map(|(id, _)| id.clone())
+                    .collect();
+                for id in planned_prefix {
+                    if let Some(operation) = planned.remove(&id) {
+                        writes.insert(operation.pointer, None);
+                        writes.insert(operation.log_key, None);
+                        if let Some(payload_ref) = operation.payload_ref {
+                            writes.insert(payload_ref, None);
+                        }
+                    }
+                }
+            }
+
+            for id in entry.erase_payloads {
+                let id_hex = id.to_hex();
+                if let Some(operation) = planned.get_mut(&id_hex) {
+                    if let Some(payload_ref) = operation.payload_ref.as_ref() {
+                        writes.insert(payload_ref.clone(), None);
+                    }
+                    if operation.has_body {
+                        writes.insert(
+                            operation.log_key.clone(),
+                            Some(
+                                encode_cbor(&(&operation.header, &None::<Vec<u8>>))
+                                    .map_err(codec)?,
+                            ),
+                        );
+                        operation.has_body = false;
+                    }
+                    continue;
+                }
+                let payload_pointer = op_ptr(id);
+                if matches!(writes.get(&payload_pointer), Some(None)) {
+                    continue;
+                }
+                let Some(payload_log_key) = self.log_key_for(id).await? else {
+                    continue;
+                };
+                let payload_blob = match writes.get(&payload_log_key) {
+                    Some(Some(bytes)) => Some(bytes.clone()),
+                    Some(None) => None,
+                    None => self.backend.get(&payload_log_key).await?,
+                };
+                let Some(payload_blob) = payload_blob else {
+                    continue;
+                };
+                let (header, body): (Header<E>, Option<Vec<u8>>) =
+                    decode_cbor(&payload_blob[..]).map_err(codec)?;
+                if let Some(payload_hash) = header.payload_hash.as_ref() {
+                    writes.insert(payload_ref_key(payload_hash, id), None);
+                }
+                if body.is_some() {
+                    writes.insert(
+                        payload_log_key.clone(),
+                        Some(encode_cbor(&(&header, &None::<Vec<u8>>)).map_err(codec)?),
+                    );
+                }
+            }
+
+            writes.insert(topic, Some(Vec::new()));
+            writes.insert(log_key.clone(), Some(encode_op(entry.operation)?));
+            writes.insert(pointer.clone(), Some(log_key.clone().into_bytes()));
+            let payload_ref = entry
+                .operation
+                .header
+                .payload_hash
+                .as_ref()
+                .map(|payload_hash| {
+                    (
+                        payload_ref_key(payload_hash, &entry.operation.hash),
+                        log_key.clone().into_bytes(),
+                    )
+                });
+            if let Some((key, value)) = payload_ref.as_ref() {
+                writes.insert(key.clone(), Some(value.clone()));
+            }
+            planned.insert(
+                entry.operation.hash.to_hex(),
+                PlannedOperation {
+                    pointer,
+                    log_key,
+                    log_prefix: prefix,
+                    payload_ref: payload_ref.map(|(key, _)| key),
+                    seq_num: entry.operation.header.seq_num,
+                    header: entry.operation.header.clone(),
+                    has_body: entry.operation.body.is_some(),
+                },
+            );
+        }
+        for write in trailing_writes {
+            record_write(&mut writes, write.clone());
+        }
+        let writes: Vec<_> = writes
+            .into_iter()
+            .map(|(key, value)| match value {
+                Some(value) => WriteOp::Put { key, value },
+                None => WriteOp::Delete { key },
+            })
+            .collect();
+        self.backend.apply(&writes).await
+    }
+
     /// Atomically index one operation and optionally remove its preceding log.
     pub(crate) async fn insert_indexed_operation_with_prune<L: LogId>(
         &self,
@@ -317,12 +527,17 @@ where
             };
             let (header, body): (Header<E>, Option<Vec<u8>>) =
                 decode_cbor(&payload_blob[..]).map_err(codec)?;
+            if let Some(payload_hash) = header.payload_hash.as_ref() {
+                writes.push(WriteOp::Delete {
+                    key: payload_ref_key(payload_hash, id),
+                });
+            }
             if body.is_none() {
                 continue;
             }
             let stripped = encode_cbor(&(&header, &None::<Vec<u8>>)).map_err(codec)?;
             writes.push(WriteOp::Put {
-                key: payload_log_key,
+                key: payload_log_key.clone(),
                 value: stripped,
             });
             erased_payloads += 1;
@@ -338,9 +553,15 @@ where
             },
             WriteOp::Put {
                 key: ptr,
-                value: log_key.into_bytes(),
+                value: log_key.clone().into_bytes(),
             },
         ]);
+        if let Some(payload_hash) = operation.header.payload_hash.as_ref() {
+            writes.push(WriteOp::Put {
+                key: payload_ref_key(payload_hash, &operation.hash),
+                value: log_key.into_bytes(),
+            });
+        }
         self.backend.apply(&writes).await?;
         Ok((true, pruned_entries, erased_payloads))
     }
@@ -362,9 +583,15 @@ where
             if let Some(blob) = self.backend.get(&key).await? {
                 let (header, _): (Header<E>, Option<Vec<u8>>) =
                     decode_cbor(&blob[..]).map_err(codec)?;
+                let operation_hash = header.hash();
                 writes.push(WriteOp::Delete {
-                    key: op_ptr(&header.hash()),
+                    key: op_ptr(&operation_hash),
                 });
+                if let Some(payload_hash) = header.payload_hash.as_ref() {
+                    writes.push(WriteOp::Delete {
+                        key: payload_ref_key(payload_hash, &operation_hash),
+                    });
+                }
             }
             writes.push(WriteOp::Delete { key });
             pruned += 1;
@@ -402,12 +629,22 @@ where
         let Some(log_key) = self.log_key_for(id).await? else {
             return Ok(false);
         };
-        self.backend
-            .apply(&[
-                WriteOp::Delete { key: ptr },
-                WriteOp::Delete { key: log_key },
-            ])
-            .await?;
+        let mut writes = vec![
+            WriteOp::Delete { key: ptr },
+            WriteOp::Delete {
+                key: log_key.clone(),
+            },
+        ];
+        if let Some(blob) = self.backend.get(&log_key).await? {
+            let (header, _): (Header<E>, Option<Vec<u8>>) =
+                decode_cbor(&blob[..]).map_err(codec)?;
+            if let Some(payload_hash) = header.payload_hash.as_ref() {
+                writes.push(WriteOp::Delete {
+                    key: payload_ref_key(payload_hash, id),
+                });
+            }
+        }
+        self.backend.apply(&writes).await?;
         Ok(true)
     }
 
@@ -422,8 +659,99 @@ where
         let (header, _body): (Header<E>, Option<Vec<u8>>) =
             decode_cbor(&blob[..]).map_err(codec)?;
         let stripped = encode_cbor(&(&header, &None::<Vec<u8>>)).map_err(codec)?;
-        self.backend.put(&log_key, &stripped).await?;
+        let mut writes = vec![WriteOp::Put {
+            key: log_key,
+            value: stripped,
+        }];
+        if let Some(payload_hash) = header.payload_hash.as_ref() {
+            writes.push(WriteOp::Delete {
+                key: payload_ref_key(payload_hash, id),
+            });
+        }
+        self.backend.apply(&writes).await?;
         Ok(true)
+    }
+
+    /// Read a payload chunk-set retained until its signed header arrives.
+    pub(crate) async fn pending_payload(
+        &self,
+        payload_hash: &Hash,
+    ) -> Result<Option<Vec<u8>>, StoreError> {
+        self.backend.get(&pending_payload_key(payload_hash)).await
+    }
+
+    /// Prepare writes that attach verified bytes to every eligible retained
+    /// header naming this payload hash.
+    ///
+    /// Retention erasure removes the `payload-ref` key, so a later chunk cannot
+    /// resurrect an intentionally erased body.
+    pub(crate) async fn payload_attachment_writes(
+        &self,
+        payload_hash: &Hash,
+        bytes: &[u8],
+    ) -> Result<(Vec<WriteOp>, u64), StoreError> {
+        if Hash::digest(bytes) != *payload_hash {
+            return Err(codec("payload chunk-set has a false digest"));
+        }
+        let mut writes = Vec::new();
+        let mut attached = 0;
+        for reference_key in self.backend.list(&payload_ref_prefix(payload_hash)).await? {
+            let Some(log_key) = self.backend.get(&reference_key).await? else {
+                writes.push(WriteOp::Delete { key: reference_key });
+                continue;
+            };
+            let log_key = String::from_utf8(log_key).map_err(codec)?;
+            let Some(blob) = self.backend.get(&log_key).await? else {
+                writes.push(WriteOp::Delete { key: reference_key });
+                continue;
+            };
+            let (header, body): (Header<E>, Option<Vec<u8>>) =
+                decode_cbor(&blob[..]).map_err(codec)?;
+            if header.payload_hash.as_ref() != Some(payload_hash) {
+                return Err(codec("payload reference points at another digest"));
+            }
+            if header.payload_size != bytes.len() as u64 {
+                return Err(codec("payload bytes do not match the signed size"));
+            }
+            if body.is_none() {
+                writes.push(WriteOp::Put {
+                    key: log_key,
+                    value: encode_cbor(&(&header, &Some(bytes.to_vec()))).map_err(codec)?,
+                });
+                attached += 1;
+            }
+        }
+        Ok((writes, attached))
+    }
+
+    /// Attach verified payload bytes to eligible retained headers atomically.
+    ///
+    /// A removed payload-reference key is the retention barrier: this returns
+    /// zero instead of recreating a body that policy has erased.
+    pub(crate) async fn attach_payload(
+        &self,
+        payload_hash: &Hash,
+        bytes: &[u8],
+    ) -> Result<u64, StoreError> {
+        let (writes, attached) = self.payload_attachment_writes(payload_hash, bytes).await?;
+        if !writes.is_empty() {
+            self.backend.apply(&writes).await?;
+        }
+        Ok(attached)
+    }
+
+    /// Prepare one verified content-addressed blob write for an import batch.
+    pub(crate) fn imported_blob_write(
+        blob_hash: [u8; 32],
+        bytes: &[u8],
+    ) -> Result<WriteOp, StoreError> {
+        if *blake3::hash(bytes).as_bytes() != blob_hash {
+            return Err(codec("blob chunk-set has a false digest"));
+        }
+        Ok(WriteOp::Put {
+            key: format!("blob/{}", hex::encode(blob_hash)),
+            value: bytes.to_vec(),
+        })
     }
 
     /// Store content-addressed bytes in the shared muniment backend.

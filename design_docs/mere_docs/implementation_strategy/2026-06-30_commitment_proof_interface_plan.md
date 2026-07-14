@@ -1,7 +1,7 @@
 # Commitment Proof Interface Plan
 
 **Date**: 2026-06-30  
-**Status**: Planned shared interface.  
+**Status**: Shared type interface landed 2026-07-13; proof backends remain planned.
 **Related**:
 [`../research/2026-06-04_resource_coordination_brief.md`](../research/2026-06-04_resource_coordination_brief.md),
 [`2026-06-30_kith_capability_sharing_plan.md`](2026-06-30_kith_capability_sharing_plan.md),
@@ -210,3 +210,9 @@ Do not:
   Merkle as the first backend while preserving MMR, sparse Merkle, accumulator,
   vector-commitment, and private-set-cardinality lanes behind one typed proof
   surface.
+- **2026-07-13** - Landed the neutral `proofs` crate with typed `Digest`,
+  `Commitment`, `CommitmentScheme`, `CommitmentDomain`, and `BlobRef`. Added
+  `DigestV1` for direct commitments to canonical bytes so callers do not make a
+  false Merkle claim. Mesh retention checkpoints now bind both a content
+  reference and a `StorageCheckpoints` commitment while keeping their p2panda
+  operation identity separate. Scheme-specific proof verification remains.

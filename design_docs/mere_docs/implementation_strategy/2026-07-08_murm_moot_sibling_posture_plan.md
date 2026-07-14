@@ -119,7 +119,9 @@ Gate: R1 and S2 landed, R2 purity check green. Do not found repos around the pre
 ## 6. Open questions (Mark's calls)
 
 1. Drop the p2panda-store `sqlite` feature from moothold and the full crate from mesh once S2 lands (removes sqlx + libsqlite3-sys). Dependency removal: needs explicit sign-off.
-2. `InMemoryCabalStore`: retire, or document as a supported public test fixture.
+2. **Resolved 2026-07-14:** `InMemoryCabalStore` retired with the duplicate
+   `CableEngine`, persistent store, and redb LogSync adapter. Tests use
+   `ConversationStore<MemoryBackend>` through the live Murm runtime.
 3. Timing of the cabal-to-murmur identifier sweep (N2 keeps it opportunistic; a dedicated pass is available once the slice is quieter).
 4. redb long-term: S3 keeps it as muniment's desktop backend; whether it remains the store of record after the muniment convergence proves out is open.
 5. Final repo name for the moot family if `repos/moot` reads wrong against the taken crate name.
@@ -144,6 +146,16 @@ Gate: R1 and S2 landed, R2 purity check green. Do not found repos around the pre
 - **mesh-decoupling reversal (flagged for veto):** the pump's only sensible home under "no neutral crate" is `transport` (the p2panda-net owner), so every pump consumer must depend on `transport`. murm already does; mesh did not (it kept `transport` a dev-only dep, deliberately). R1's dedup only has value with a second consumer, so mesh reversing that decoupling is on the critical path. Judged fair and reversible under the sibling posture (mesh = host-composed glue consuming murm's p2panda-net home); mesh stays endpoint-decoupled (still takes injected `Endpoint`/`Gossip`), it just no longer re-rolls the drain. If vetoed, the pump needs a different home (revisits no-neutral-crate for this substrate).
 
 ## Progress
+
+### 2026-07-14
+
+- **S2b-murm legacy retirement landed.** Murm's live authoring, history,
+  subscriptions, gossip receipt, and LogSync were already on
+  `ConversationEngine` + `ConversationStore`. Deleted the superseded
+  `CableEngine`, `PersistentCabalStore`, `InMemoryCabalStore`, hand-written
+  redb store traits, and the unused `BilateralProtocol` abstraction from
+  `murmuring`. Folded the remaining signed post grammar and validation tests
+  into `murm`, then removed `murmuring` from the workspace. Murm 52/52 pass.
 
 ### 2026-07-12
 

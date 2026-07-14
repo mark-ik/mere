@@ -40,7 +40,7 @@
 //!   keypairs for bilateral chat
 //! - [`transport`](https://crates.io/crates/transport) — derives
 //!   the iroh `NodeId` from the master public key
-//! - Future: [`moothold`](https://crates.io/crates/moothold), [`eidetic`](https://crates.io/crates/eidetic)
+//! - Future: [`gemot`](https://crates.io/crates/gemot), [`eidetic`](https://crates.io/crates/eidetic)
 //!
 //! ## Status
 //!

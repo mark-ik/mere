@@ -4,7 +4,7 @@
 
 //! Mesh operation-wire bridge — job events as signed p2panda operations.
 //!
-//! Mirrors tessera's `wire` (and murmuring's `Post` ↔ `Operation<CabalExt>`
+//! Mirrors tessera's `wire` (and Murm's `Post` ↔ `Operation<CabalExt>`
 //! split): a [`MeshEvent`] (the logical form the [board](crate::board) folds)
 //! rides the synced event-DAG as a signed `Operation<MeshExt>`. The mesh id is
 //! the signed addressing extension, so a job posted into one mesh cannot be

@@ -5,7 +5,7 @@
 //! plain BLAKE3-256 hash of the (secret) cabal key.
 //!
 //! Post (operation) ids are *not* here: a post's id is its signed-header hash
-//! (`Header::hash()`), computed in [`crate::cable::wire::operation_id`], so the
+//! (`Header::hash()`), computed in [`crate::post_wire::operation_id`], so the
 //! id doubles as the p2panda log/backlink identity.
 
 /// Derive a public cabal-id from a (secret) cabal key.

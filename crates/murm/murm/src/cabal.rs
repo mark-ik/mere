@@ -1,7 +1,8 @@
 //! Cabal-level types for bilateral comms.
 //!
 //! A *cabal* in Murm terminology is a long-lived bilateral or small-group
-//! conversation — Cable's primary unit of organization. A cabal has:
+//! conversation in Mere's Cable-shaped dialect. These words name the domain
+//! grammar; they do not assert cabal-club wire compatibility. A cabal has:
 //!
 //! - A 32-byte symmetric **cabal key** ([`CabalKey`], shared secret,
 //!   distributed out-of-band among members)
@@ -17,13 +18,17 @@
 //! [`identity::IdentityProvider::derive_keypair`].
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::io::Read;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use murmuring::CableEngine;
-
 use crate::error::MurmError;
-use crate::{Post, PostId, PostKind, hash_post};
+use murm_replication::{DropImportReport, DropLimits};
+
+use crate::{
+    CabalKeyEpoch, CabalKeyring, ConversationEngine, ConversationRefresh, InfoEntry, Post, PostId,
+    PostKind, hash_post,
+};
 
 /// Current wall-clock time as milliseconds since UNIX epoch. Returns 0 if
 /// the system clock is before the epoch (effectively unreachable on
@@ -117,18 +122,18 @@ impl CabalMembership {
 /// Handle to an open cabal.
 ///
 /// Returned by [`crate::Murm::open_cabal`]. Holds the cabal's public id and
-/// a shared reference to the underlying [`CableEngine`] that backs the
+/// a shared reference to the underlying [`ConversationEngine`] that backs the
 /// cabal's storage and signing. `CabalHandle` is `Send + Sync + 'static`
 /// (no lifetime tied to `Murm`), so you can clone it across tasks.
 #[derive(Clone)]
 pub struct CabalHandle {
     cabal_id: CabalId,
-    engine: Arc<CableEngine>,
+    engine: Arc<ConversationEngine>,
 }
 
 impl CabalHandle {
     /// Construct a cabal handle. Internal — `Murm::open_cabal` creates these.
-    pub(crate) fn new(cabal_id: CabalId, engine: Arc<CableEngine>) -> Self {
+    pub(crate) fn new(cabal_id: CabalId, engine: Arc<ConversationEngine>) -> Self {
         Self { cabal_id, engine }
     }
 
@@ -140,99 +145,121 @@ impl CabalHandle {
     /// The author public key this user posts under in this cabal —
     /// derived from `(master_secret, cabal_key)` per Cable spec §2.2.
     pub fn author_public_key(&self) -> Result<identity::Ed25519PublicKey, MurmError> {
-        Ok(self.engine.cabal_author_pubkey(self.cabal_id.as_bytes())?)
+        self.engine.author_public_key(self.cabal_id.as_bytes())
+    }
+
+    /// The cabal's epoch-aware native-drop protector.
+    pub fn keyring(&self) -> Result<CabalKeyring, MurmError> {
+        self.engine.keyring(self.cabal_id.as_bytes())
+    }
+
+    /// Install the next key produced by the cabal's group-state owner.
+    ///
+    /// This is deliberately an installation hook, not an authorization API:
+    /// p2panda DCGKA / Moot policy decides whether a rotation is valid.
+    pub fn install_key_epoch(&self, epoch: CabalKeyEpoch, key: [u8; 32]) -> Result<(), MurmError> {
+        self.engine
+            .install_key_epoch(self.cabal_id.as_bytes(), epoch, key)
     }
 
     /// Compose, sign, and store a `post/text` message at the current wall
     /// clock.
-    pub fn send_text(&self, channel: &str, text: &str) -> Result<PostId, MurmError> {
-        self.send_text_at(channel, text, now_ms())
+    pub async fn send_text(&self, channel: &str, text: &str) -> Result<PostId, MurmError> {
+        self.send_text_at(channel, text, now_ms()).await
     }
 
     /// Compose, sign, and store a `post/text` message with an explicit
     /// timestamp (useful for tests and replays).
-    pub fn send_text_at(
+    pub async fn send_text_at(
         &self,
         channel: &str,
         text: &str,
         timestamp_ms: u64,
     ) -> Result<PostId, MurmError> {
-        Ok(self
-            .engine
-            .post_text(self.cabal_id.as_bytes(), channel, text, timestamp_ms)?)
+        self.engine
+            .post_text(self.cabal_id.as_bytes(), channel, text, timestamp_ms)
+            .await
     }
 
     /// Compose, sign, and store a `post/topic` at the current wall clock.
-    pub fn send_topic(&self, channel: &str, topic: &str) -> Result<PostId, MurmError> {
-        self.send_topic_at(channel, topic, now_ms())
+    pub async fn send_topic(&self, channel: &str, topic: &str) -> Result<PostId, MurmError> {
+        self.send_topic_at(channel, topic, now_ms()).await
     }
 
     /// Compose, sign, and store a `post/topic` with an explicit timestamp.
-    pub fn send_topic_at(
+    pub async fn send_topic_at(
         &self,
         channel: &str,
         topic: &str,
         timestamp_ms: u64,
     ) -> Result<PostId, MurmError> {
-        Ok(self
-            .engine
-            .post_topic(self.cabal_id.as_bytes(), channel, topic, timestamp_ms)?)
+        self.engine
+            .post_topic(self.cabal_id.as_bytes(), channel, topic, timestamp_ms)
+            .await
     }
 
     /// Compose, sign, and store a `post/join` at the current wall clock.
-    pub fn send_join(&self, channel: &str) -> Result<PostId, MurmError> {
-        self.send_join_at(channel, now_ms())
+    pub async fn send_join(&self, channel: &str) -> Result<PostId, MurmError> {
+        self.send_join_at(channel, now_ms()).await
     }
 
     /// Compose, sign, and store a `post/join` with an explicit timestamp.
-    pub fn send_join_at(&self, channel: &str, timestamp_ms: u64) -> Result<PostId, MurmError> {
-        Ok(self
-            .engine
-            .post_join(self.cabal_id.as_bytes(), channel, timestamp_ms)?)
+    pub async fn send_join_at(
+        &self,
+        channel: &str,
+        timestamp_ms: u64,
+    ) -> Result<PostId, MurmError> {
+        self.engine
+            .post_join(self.cabal_id.as_bytes(), channel, timestamp_ms)
+            .await
     }
 
     /// Compose, sign, and store a `post/leave` at the current wall clock.
-    pub fn send_leave(&self, channel: &str) -> Result<PostId, MurmError> {
-        self.send_leave_at(channel, now_ms())
+    pub async fn send_leave(&self, channel: &str) -> Result<PostId, MurmError> {
+        self.send_leave_at(channel, now_ms()).await
     }
 
     /// Compose, sign, and store a `post/leave` with an explicit timestamp.
-    pub fn send_leave_at(&self, channel: &str, timestamp_ms: u64) -> Result<PostId, MurmError> {
-        Ok(self
-            .engine
-            .post_leave(self.cabal_id.as_bytes(), channel, timestamp_ms)?)
+    pub async fn send_leave_at(
+        &self,
+        channel: &str,
+        timestamp_ms: u64,
+    ) -> Result<PostId, MurmError> {
+        self.engine
+            .post_leave(self.cabal_id.as_bytes(), channel, timestamp_ms)
+            .await
     }
 
     /// Compose, sign, and store a `post/info` at the current wall clock.
-    pub fn send_info(&self, entries: Vec<murmuring::InfoEntry>) -> Result<PostId, MurmError> {
-        self.send_info_at(entries, now_ms())
+    pub async fn send_info(&self, entries: Vec<InfoEntry>) -> Result<PostId, MurmError> {
+        self.send_info_at(entries, now_ms()).await
     }
 
     /// Compose, sign, and store a `post/info` with an explicit timestamp.
-    pub fn send_info_at(
+    pub async fn send_info_at(
         &self,
-        entries: Vec<murmuring::InfoEntry>,
+        entries: Vec<InfoEntry>,
         timestamp_ms: u64,
     ) -> Result<PostId, MurmError> {
-        Ok(self
-            .engine
-            .post_info(self.cabal_id.as_bytes(), entries, timestamp_ms)?)
+        self.engine
+            .post_info(self.cabal_id.as_bytes(), entries, timestamp_ms)
+            .await
     }
 
     /// Compose, sign, and store a `post/delete` at the current wall clock.
-    pub fn send_delete(&self, posts: Vec<PostId>) -> Result<PostId, MurmError> {
-        self.send_delete_at(posts, now_ms())
+    pub async fn send_delete(&self, posts: Vec<PostId>) -> Result<PostId, MurmError> {
+        self.send_delete_at(posts, now_ms()).await
     }
 
     /// Compose, sign, and store a `post/delete` with an explicit timestamp.
-    pub fn send_delete_at(
+    pub async fn send_delete_at(
         &self,
         posts: Vec<PostId>,
         timestamp_ms: u64,
     ) -> Result<PostId, MurmError> {
-        Ok(self
-            .engine
-            .post_delete(self.cabal_id.as_bytes(), posts, timestamp_ms)?)
+        self.engine
+            .post_delete(self.cabal_id.as_bytes(), posts, timestamp_ms)
+            .await
     }
 
     /// Look up a post by id.
@@ -242,8 +269,7 @@ impl CabalHandle {
 
     /// All posts in a channel, in insertion order.
     pub fn history(&self, channel: &str) -> Vec<Post> {
-        self.engine
-            .channel_history(self.cabal_id.as_bytes(), channel)
+        self.engine.history(self.cabal_id.as_bytes(), channel)
     }
 
     /// Fold signed Join/Leave posts into the channel's current audience.
@@ -310,7 +336,44 @@ impl CabalHandle {
     /// Verifies the signature, computes the post id, and stores it.
     /// Returns the computed post id on success; rejects with
     /// [`MurmError::Protocol`] if the signature is invalid.
-    pub fn ingest_post(&self, post: Post) -> Result<PostId, MurmError> {
-        Ok(self.engine.ingest_post(self.cabal_id.as_bytes(), post)?)
+    pub async fn ingest_post(&self, post: Post) -> Result<PostId, MurmError> {
+        self.engine
+            .ingest_post(self.cabal_id.as_bytes(), post)
+            .await
+    }
+
+    /// Import a verified native plaintext/public drop and refresh live views.
+    ///
+    /// Newly materialized posts are emitted to subscribers exactly once. The
+    /// returned refresh report also exposes removals if retention changed the
+    /// underlying store before this reconciliation.
+    pub async fn import_plain_drop<R: Read>(
+        &self,
+        reader: R,
+        limits: DropLimits,
+    ) -> Result<(DropImportReport, ConversationRefresh), MurmError> {
+        self.engine
+            .import_plain_drop(self.cabal_id.as_bytes(), reader, limits)
+            .await
+    }
+
+    /// Import a native drop protected by this cabal's retained key epochs.
+    ///
+    /// The envelope selects its epoch. Old drops remain readable until the
+    /// corresponding key is explicitly forgotten. View refresh and subscriber
+    /// delivery match [`import_plain_drop`](Self::import_plain_drop).
+    pub async fn import_protected_drop<R: Read>(
+        &self,
+        reader: R,
+        limits: DropLimits,
+    ) -> Result<(DropImportReport, ConversationRefresh), MurmError> {
+        self.engine
+            .import_protected_drop(self.cabal_id.as_bytes(), reader, limits)
+            .await
+    }
+
+    /// Reconcile materialized history after advanced out-of-band store work.
+    pub async fn refresh(&self) -> Result<ConversationRefresh, MurmError> {
+        self.engine.refresh(self.cabal_id.as_bytes()).await
     }
 }

@@ -15,7 +15,7 @@ use crate::{Alpn, PeerID, TransportError};
 ///
 /// ## Generic over implementation
 ///
-/// Consumers (`murm`, `moothold`, etc.) take a `Transport` as a generic
+/// Consumers (`murm`, `gemot`, etc.) take a `Transport` as a generic
 /// parameter rather than `Box<dyn Transport>`, so the same code works
 /// against real iroh in production and against an in-memory transport in
 /// tests:

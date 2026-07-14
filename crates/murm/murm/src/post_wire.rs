@@ -19,11 +19,11 @@
 //! - `kind`      ↔ `CabalExt::{channel, post_type, timestamp_ms, info, deletes}`
 //!   plus the operation `Body` (text / topic bytes; empty for the others)
 //!
-//! The post id ([`crate::cable::hash`]) stays the plain BLAKE3-256 of these
+//! The post id ([`crate::post_hash`]) stays the plain BLAKE3-256 of these
 //! canonical CBOR bytes.
 //!
 //! The construction is deterministic in `(author, links, kind)`, so signing
-//! ([`crate::cable::sign`]), verification, and encoding all reconstruct
+//! ([`crate::post_sign`]), verification, and encoding all reconstruct
 //! byte-identical headers — content addressing is stable across peers.
 
 use identity::{Ed25519PublicKey, Ed25519Signature};
@@ -31,7 +31,7 @@ use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use p2panda_core::{Body, Hash, Header, Operation, Signature, Timestamp, VerifyingKey};
 use serde::{Deserialize, Serialize};
 
-use crate::{ChannelName, InfoEntry, MurmuringError, Post, PostId, PostKind};
+use crate::{ChannelName, InfoEntry, MurmError, Post, PostId, PostKind};
 
 /// Cabal-event metadata carried in the signed p2panda `Header` extension.
 ///
@@ -72,12 +72,12 @@ struct WirePost {
 // ── identity ed25519 ↔ p2panda-core ed25519 ──────────────────────────────────
 // Both are ed25519-dalek underneath; convert through canonical bytes.
 
-fn to_p2_vk(author: &Ed25519PublicKey) -> Result<VerifyingKey, MurmuringError> {
-    VerifyingKey::from_bytes(&author.to_bytes()).map_err(|_| MurmuringError::MalformedPost)
+fn to_p2_vk(author: &Ed25519PublicKey) -> Result<VerifyingKey, MurmError> {
+    VerifyingKey::from_bytes(&author.to_bytes()).map_err(|_| MurmError::MalformedPost)
 }
 
-fn from_p2_vk(vk: &VerifyingKey) -> Result<Ed25519PublicKey, MurmuringError> {
-    Ed25519PublicKey::from_bytes(vk.as_bytes()).map_err(|_| MurmuringError::MalformedPost)
+fn from_p2_vk(vk: &VerifyingKey) -> Result<Ed25519PublicKey, MurmError> {
+    Ed25519PublicKey::from_bytes(vk.as_bytes()).map_err(|_| MurmError::MalformedPost)
 }
 
 pub(crate) fn to_p2_sig(sig: &Ed25519Signature) -> Signature {
@@ -129,9 +129,9 @@ fn decompose(cabal_id: [u8; 32], links: &[PostId], kind: &PostKind) -> (CabalExt
 }
 
 /// Rebuild a [`PostKind`] from a header extension and body bytes.
-fn recompose(ext: &CabalExt, body: &[u8]) -> Result<PostKind, MurmuringError> {
+fn recompose(ext: &CabalExt, body: &[u8]) -> Result<PostKind, MurmError> {
     let timestamp_ms = ext.timestamp_ms;
-    let text_body = || String::from_utf8(body.to_vec()).map_err(|_| MurmuringError::MalformedPost);
+    let text_body = || String::from_utf8(body.to_vec()).map_err(|_| MurmError::MalformedPost);
     match ext.post_type {
         0 => Ok(PostKind::Text {
             channel: ChannelName::new(ext.channel.clone()),
@@ -166,7 +166,7 @@ fn recompose(ext: &CabalExt, body: &[u8]) -> Result<PostKind, MurmuringError> {
             channel: ChannelName::new(ext.channel.clone()),
             timestamp_ms,
         }),
-        _ => Err(MurmuringError::MalformedPost),
+        _ => Err(MurmError::MalformedPost),
     }
 }
 
@@ -208,7 +208,7 @@ pub(crate) fn unsigned_header(
 }
 
 /// Rebuild the *signed* header (+ body bytes) for an existing [`Post`].
-fn signed_header(post: &Post) -> Result<(Header<CabalExt>, Vec<u8>), MurmuringError> {
+fn signed_header(post: &Post) -> Result<(Header<CabalExt>, Vec<u8>), MurmError> {
     let (mut header, body) = unsigned_header(
         to_p2_vk(&post.author)?,
         post.cabal_id,
@@ -239,7 +239,7 @@ pub fn operation_id(post: &Post) -> PostId {
 /// `Header<CabalExt>` and body so a stored post can be served to p2panda-net's
 /// LogSync, which reconciles `Operation`s, not `Post`s. `body` is `Some` iff the
 /// post carries a payload (text/topic), matching the header's `payload_hash`.
-pub fn post_to_operation(post: &Post) -> Result<Operation<CabalExt>, MurmuringError> {
+pub fn post_to_operation(post: &Post) -> Result<Operation<CabalExt>, MurmError> {
     let (header, body_bytes) = signed_header(post)?;
     let hash = header.hash();
     let body = if body_bytes.is_empty() {
@@ -256,20 +256,19 @@ pub fn post_to_operation(post: &Post) -> Result<Operation<CabalExt>, MurmuringEr
 /// operation's signed header (`author`, `signature`, `seq_num`, `backlink`,
 /// `links`) and its `CabalExt` extension + body (the `PostKind`). Used by the
 /// sync drain to land operations LogSync delivers. Returns
-/// [`MurmuringError::MalformedPost`] for a missing signature, an unknown
+/// [`MurmError::MalformedPost`] for a missing signature, an unknown
 /// `post_type`, invalid key bytes, or non-UTF-8 text/topic content.
 ///
-/// This does **not** verify the signature; the ingest path
-/// ([`crate::cable::CableEngine::ingest_post`]) does, alongside the cabal-id and
-/// log-position checks.
-pub fn operation_to_post(op: &Operation<CabalExt>) -> Result<Post, MurmuringError> {
+/// This does **not** verify the signature. Runtime admission in `murm` does so
+/// alongside the conversation-id and log-position checks.
+pub fn operation_to_post(op: &Operation<CabalExt>) -> Result<Post, MurmError> {
     let header = &op.header;
     let author = from_p2_vk(&header.verifying_key)?;
     let signature = header
         .signature
         .as_ref()
         .map(from_p2_sig)
-        .ok_or(MurmuringError::MalformedPost)?;
+        .ok_or(MurmError::MalformedPost)?;
     let links = header
         .extensions
         .parents
@@ -302,18 +301,18 @@ pub fn encode_post(post: &Post) -> Vec<u8> {
 
 /// Decode a [`Post`] from canonical wire bytes.
 ///
-/// Returns [`MurmuringError::MalformedPost`] for any structural problem
+/// Returns [`MurmError::MalformedPost`] for any structural problem
 /// (CBOR error, missing signature, unknown `post_type`, invalid public-key
 /// bytes, non-UTF-8 in a text/topic field).
-pub fn decode_post(bytes: &[u8]) -> Result<Post, MurmuringError> {
-    let wire: WirePost = decode_cbor(bytes).map_err(|_| MurmuringError::MalformedPost)?;
+pub fn decode_post(bytes: &[u8]) -> Result<Post, MurmError> {
+    let wire: WirePost = decode_cbor(bytes).map_err(|_| MurmError::MalformedPost)?;
     let author = from_p2_vk(&wire.header.verifying_key)?;
     let signature = wire
         .header
         .signature
         .as_ref()
         .map(from_p2_sig)
-        .ok_or(MurmuringError::MalformedPost)?;
+        .ok_or(MurmError::MalformedPost)?;
     let links = wire
         .header
         .extensions

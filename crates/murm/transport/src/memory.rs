@@ -2,7 +2,7 @@
 //!
 //! [`MemoryTransport`] connects two simulated peers via tokio
 //! [`DuplexStream`]s, with per-ALPN channels lazily created. It's the
-//! test fixture for protocol-level integration tests in `murmuring`,
+//! test fixture for protocol-level integration tests in `murm`,
 //! `murm`, and elsewhere — exercise full Cable (or future protocol)
 //! flows between two peers without bringing up real iroh / network I/O.
 //!

@@ -1,7 +1,7 @@
 //! Cabal post signing and verification — p2panda-core operation semantics.
 //!
 //! A post's signature is the Ed25519 signature its author's per-cabal key
-//! places over the canonical operation header (see [`crate::cable::wire`]).
+//! places over the canonical operation header (see [`crate::post_wire`]).
 //! Signing and verification go through p2panda-core's [`Header::sign`] /
 //! [`Header::verify`], so murm posts are authenticated exactly like any other
 //! operation on the substrate.
@@ -13,7 +13,7 @@
 use identity::Ed25519Keypair;
 use p2panda_core::{Signature, SigningKey, VerifyingKey};
 
-use crate::cable::wire::{from_p2_sig, to_p2_sig, unsigned_header};
+use crate::post_wire::{from_p2_sig, to_p2_sig, unsigned_header};
 use crate::{Post, PostId, PostKind};
 
 /// Sign a new [`Post`] in the given cabal with the given per-cabal keypair.
@@ -82,7 +82,7 @@ pub fn verify_post(post: &Post) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cable::wire::{decode_post, encode_post, operation_id};
+    use crate::post_wire::{decode_post, encode_post, operation_id};
     use crate::{ChannelName, InfoEntry};
     use identity::{IdentityProvider, InMemoryProvider};
 

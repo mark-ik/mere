@@ -70,13 +70,13 @@ files, or other store-and-forward paths.
 
 | Concern | Live owner | Current fact | Gap this plan closes |
 |---|---|---|---|
-| Signed replication | p2panda-core operations in murmuring, moothold, mesh | Per-author `seq_num` and `backlink`; LogSync reconciles them | Domain extensions do not carry `PruneFlag` |
+| Signed replication | p2panda-core operations in murm, moothold, mesh | Per-author `seq_num` and `backlink`; LogSync reconciles them | Domain extensions do not carry `PruneFlag` |
 | Shared persistence | `mooting::MunimentStore`, moving to `murm-replication` | Implements `OperationStore`, `LogStore`, and `TopicStore`; can strip a payload or prune a log prefix | Pruning is callable but not governed by one application law |
 | Live receive | `transport::SyncedSpace`, moving to `murm-replication`, plus domain `accept` closures | Signature, address, and insert checks differ by consumer | No common prune-aware ingest processor |
-| Murmur history | `PersistentCabalStore` | Header and payload are bundled; `prune_entries` is a deliberate no-op | The Murm direct-exchange rebase must separate its domain view from the shared muniment sync store |
+| Murmur history | `ConversationEngine` over `ConversationStore` | Shared muniment operations are the sync authority; Meerkat selects redb, and open/drop import rebuild the post view | Governed retention policy remains |
 | Materialization | Domain folds; generic graph snapshots elsewhere | Several areas already use snapshot plus tail replay | No shared checkpoint contract for replicated spaces |
 | Off-grid bytes | feature-gated `ReticulumTransport`; future Retinue resources | Bilateral streams work; sync and blobs stay Iroh-only | No delay-tolerant application bundle |
-| Group security | constitution/capability plans; p2panda encryption is a candidate | Structural caps and live key state are not production-wired | Private drops must stay gated until a real protector is injected |
+| Group security | constitution/capability plans plus Murm's cabal keyring | Native drops have real epoch protection; authorized group-state distribution is not wired | Personae/p2panda must install and persist authorized epoch keys |
 
 Ownership after this plan:
 
@@ -345,13 +345,13 @@ segment, retry, and resume the opaque protected stream. File and removable-media
 carriers write the stream directly. Exact field widths and magic bytes are
 frozen only after golden-vector tests.
 
-Private drops require an injected protector. The intended production protector
-wraps a fresh drop content key to a p2panda-encryption epoch or explicit
-recipients. Until that layer is live, plaintext drops are limited to public data
-and explicit local test/export flows. The UI must refuse a private export rather
-than imply encryption. Personae/wallet supplies the key and capability
-envelopes; the drop codec does not define device enrollment, persona recovery,
-or wallet backup semantics.
+Private drops require an injected protector. Murm now supplies an epoch-aware
+cabal protector using p2panda-encryption's XChaCha20 primitive. It binds the
+stable cabal identity and epoch into the authenticated context, while personae
+or a future p2panda group-state adapter supplies authorized epoch keys. Plaintext
+drops remain limited to public data and explicit local test/export flows. The UI
+must refuse a private export rather than imply encryption. The drop codec does
+not define device enrollment, persona recovery, or wallet backup semantics.
 
 An optional exporter signature authenticates the completeness claim of this
 particular package. It never grants authority to the contained operations, which
@@ -435,8 +435,8 @@ Done when:
 Add the generic prune-aware processor to `murm-replication`, beside
 `MunimentStore`, with injected domain verification and authorization. Route the
 mesh vertical slice through it first. Then route LogSync, gossip, local
-authoring, and drop import through the same API. Murm direct exchange migrates
-after its coupled redb sync index is replaced by the shared store.
+authoring, and drop import through the same API. Murm direct exchange now uses
+that store for local authoring, gossip receipt, and LogSync.
 
 Implementation status, 2026-07-13: the processor and atomic retention-effect
 path are landed. Domain admission returns `Keep`, an authorized
@@ -445,8 +445,9 @@ prune-aware backlink law, separately rejects any operation at or below the
 retained frontier, and commits prefix deletion with the surviving operation,
 topic, log entry, operation pointer, and body erasure in one muniment backend
 batch. Mesh local authoring, LogSync receipt, checkpoint acceptance, and
-authorized pruning share this path. The D0 proof is complete. Gossip receipt
-and drop import remain.
+authorized pruning share this path. Murm local authoring, gossip receipt,
+LogSync, and native-drop import also share it. The D0 proof and generic D1
+pipeline are complete; remaining domains still need their own policy cutovers.
 
 Done when:
 
@@ -475,12 +476,17 @@ trust root that authorizes the cut. The policy vocabulary separates an
 availability floor from an erasure ceiling, and process outcomes distinguish
 body erasure from prefix pruning.
 
-The general D2 contract is still partial. The mesh snapshot is inline and uses
-a mesh-local `CheckpointDigest`; it must move to the shared typed
-`Commitment`/`BlobRef` vocabulary when that proof interface lands. Blob
-reference tracing and collection are also absent. The current configured
-authority is one key, suitable for the personal mesh, while Moot still needs
-constitution-authorized checkpoint adoption.
+The shared proof vocabulary is now landed. Mesh checkpoints bind the canonical
+snapshot with both a typed `BlobRef` and a direct `StorageCheckpoints`
+commitment, while p2panda operation identity stays separate. The snapshot
+remains inline until live blob carriage can guarantee its availability before
+checkpoint admission. Generic blob collection is landed, but each domain still
+owes complete live/checkpoint reference tracing. The personal mesh uses one
+owner-key authority revision. Moot's founder-signed constitution event, fold,
+and muniment-backed store now produce the accepted revision and signer set for
+its checkpoint-authority seam. `MootGovernance` exposes that state through plain
+snapshots and checkpoint authorization. Authoring and applying the full Moot
+retention event remains.
 
 Done when:
 
@@ -508,10 +514,13 @@ writer makes bounded per-record passes rather than buffering the full body; the
 reader visits one verified record at a time through an explicitly staging-only
 callback. Configurable limits are checked before manifest or record allocation.
 
-This is a partial D3 landing. Suite `0` is deliberately plaintext and suitable
-only for public data and local tests. The injected protector and compression
-layers are not yet implemented, so private export remains unavailable and
-decompression-bomb handling remains a future protected-suite concern.
+Suite `0` remains deliberately plaintext and suitable only for public data and
+local tests. Private writing and reading now require an injected, non-zero
+`DropProtector`; the codec supplies authenticated cover context and verifies the
+outer digest before recovery. Murm supplies the first real protector through
+that seam; group authorization and distribution remain outside the codec. A
+suite may compose compression with encryption, and its recovery API must enforce
+the configured plaintext bound before expanding output.
 
 Done when:
 
@@ -529,6 +538,79 @@ Add export selection over `MunimentStore` and a temporary muniment staging
 namespace for import. Apply accepted records through D1, never directly to
 domain tables.
 
+Implementation status, 2026-07-13: the operation transaction slice is landed.
+Export walks one retained topic and selects headers with or without bodies
+according to a profile. Import verifies the complete carrier, canonically
+decodes every operation, and preflights the entire corpus for structural
+validity and domain authorization. Verified records then stage durably under
+their semantic `DropId`. New operations are ordered by author, domain log, and
+sequence and checked against a virtual frontier. The batch planner folds
+authorized prefix pruning and payload erasure over both live and earlier
+in-drop operations. Operation and retention writes, staging cleanup, and the
+cached receipt reach muniment in one backend batch. Receipt hits avoid repeating
+per-operation admission. Unauthorized input does not stage; continuity failure
+leaves a durable stage for diagnosis or retry and changes no live operation
+keys.
+
+Payload and blob chunk assembly is also landed. Chunks may arrive out of record
+order but must form one contiguous byte range and match their BLAKE3 digest.
+Payload chunks hydrate headers in the same drop, attach to an earlier retained
+header through a payload-reference index, or wait in a one-shot pending slot for
+a later header. Blob chunks commit through the ordinary content-addressed
+`blob/` namespace. Retention erasure deletes the payload-reference index entry,
+so a later chunk cannot restore the erased body.
+
+Ordinary processor receipt now closes the same ordering gap. When a full
+operation repeats an already-retained header, the processor attaches its
+verified body atomically and returns `HydratedPayload`; atomic drop batches
+report `hydrated_payloads` separately. Once retention erases the reference, the
+same repeat remains a contentless duplicate and cannot restore the body.
+
+Stage lifecycle is caller-driven rather than time-hardcoded. Replication exposes
+list, retry, and discard operations over verified staged corpora. A retry reads
+the bounded staged records and re-runs current policy and frontier checks; a
+caller can apply its own storage settings before discarding. Receipt hits also
+clean any orphaned copy of the corresponding stage.
+
+D4's file carrier is now landed for both explicit plaintext/public export and
+injected protected suites. A focused test exports one topic from a fresh store,
+imports it into another through the shared processor, and proves receipt-based
+idempotence on the same file. The helpers flush and sync the file before
+returning its semantic receipt.
+
+Portable receipt coordination is also landed at the library boundary. A
+successful atomic import exposes its canonical completion statement through a
+bounded `MERERCP\0` control frame with BLAKE3 integrity. Received statements are
+stored only under a stable authenticated-peer scope and can be purged according
+to caller settings. They are advisory for resend suppression: they cannot enter
+the local import-receipt namespace, authorize retention, or bypass operation
+admission. Wiring these calls into a live peer command remains peer-runtime
+work, rather than another drop semantic.
+
+The generic D4 selection edge is landed. A domain-supplied selector maps each
+retained operation to omit, header, or full carriage plus a settings-derived
+priority. Replication sorts equal inputs deterministically, fits canonical
+record bytes into an optional budget, and reports policy omissions separately
+from budget omissions. Protected file export requires this selector; the
+unfiltered plaintext helper remains explicitly limited to public/local use. A
+focused radio test omits a privacy-ineligible operation, places a high-priority
+header before a lower-priority full body, and proves that the byte budget keeps
+only the former.
+
+This completes generic D4. Each domain still owns its privacy classifications,
+profile names, and priority mapping. Those are domain rollout work rather than
+defaults in the operation store.
+
+The first concrete mapping is now landed in mesh. `MeshDropSelector` provides
+catch-up, archive, and radio profiles from explicit input/result privacy and
+per-event priority settings. Catch-up selects only the latest accepted
+checkpoint plus operations beyond its per-author/log frontier. Mesh admission
+needs the CBOR event body, so privacy-ineligible inputs or results omit the
+whole event; the selector does not emit a header that mesh cannot presently
+admit. It also rejects a checkpoint snapshot that still contains a forbidden
+input or result. Radio selection runs through the shared exporter and its byte
+budget.
+
 Done when:
 
 - export never includes data beyond the privacy ceiling or below the retained
@@ -541,10 +623,21 @@ Done when:
 
 ### Phase D5: carriers, security, and domain rollout
 
-Carry the same bytes through Iroh blob transfer and Retinue R4 resources. Wire a
-real protector only when p2panda group encryption or an equivalent Mere trait is
-production-ready. Then migrate murm, moot/tessera, and remaining mesh records,
-with each domain supplying its own authority and checkpoint fold.
+Carry the same bytes through Iroh blob transfer and Retinue R4 resources. Feed
+Murm's protector from authorized p2panda group state or an equivalent Mere
+provider. Then migrate moot/tessera and remaining mesh records, with each domain
+supplying its own authority and checkpoint fold.
+
+Domain rollout status, 2026-07-13: mesh and direct conversation now supply
+concrete catch-up/archive/radio selectors. Conversation catch-up uses the live
+per-author sequence frontier because its retention checkpoint contract has not
+landed. It can carry a signed message or topic header after excluding its body,
+while profile and membership switches gate their header-resident data. The
+  live `ConversationEngine` now uses `ConversationStore` for authoring, gossip
+  receipt, LogSync, and export selection. Configured redb reopen, imported-drop
+  view refresh, and an epoch-aware cabal drop protector are landed. Iroh/Retinue
+  carriage, group authorization/key distribution, and the Moot mapping remain
+  D5 work.
 
 Done when:
 
@@ -665,15 +758,81 @@ and Retinue remain opaque carriers; domain folds remain the semantic owners.
   closed its test pipe. An immediate rerun passed. The only migration residue
   in these package graphs is unused-patch warnings for Genet's `graft-engine`
   and `weld-engine`.
-- D2 remains partial at the cross-domain boundary: mesh still uses an inline
-  snapshot and mesh-local digest pending the shared commitment interface;
-  referenced-blob tracing/GC and Moot constitution authorization remain.
+- Landed the neutral `proofs` crate and moved mesh checkpoints onto typed
+  `BlobRef`, `Commitment`, and authority revisions. Snapshots remain inline
+  pending live blob carriage.
+- Landed domain-driven blob collection in `MunimentStore`: domains supply the
+  complete retained set and replication atomically deletes unreferenced blob
+  keys. Reference tracing remains domain work.
 - Landed the D3 plaintext/public native drop framing in `murm-replication`:
   fixed cover, canonical semantic manifest, BLAKE3 `DropId`, four record kinds,
   self-delimiting frames, bounded streaming visit, and structured errors.
 - Golden cover/identity vectors and failure tests cover bit corruption,
   truncation, false lengths, allocation limits, unsupported protection suites,
   unknown optional skipping, unknown critical rejection, and header-first body
-  carriage. The shared replication suite now passes twenty tests.
-- D3 remains partial until a real injected protector and compression suite land.
-  The D4 staged importer/export selector remains unimplemented.
+  carriage.
+- Added the non-zero `DropProtector` seam and protected read/write path. The
+  codec continues to refuse an implicit plaintext protector. Murm now implements
+  the seam with epoch-aware XChaCha20 protection; p2panda group authorization
+  and epoch distribution remain external.
+- Landed the D4 operation exporter/importer with body-selection settings,
+  canonical operation reconstruction, full-corpus preflight, sequence ordering,
+  ordinary processor admission, idempotent reports, and rejection-before-
+  mutation for unauthorized batches.
+- Added durable `DropId` staging and receipt caching. Operation writes, stage
+  cleanup, and receipt persistence now land in one muniment batch;
+  virtual frontiers admit several operations from one log without exposing an
+  intermediate live state.
+- Extended the atomic drop planner across retention effects. Authorized prefix
+  pruning and payload erasure now compose with operations, stage cleanup, and
+  receipt persistence in the same backend batch, including effects over an
+  earlier operation in the imported corpus.
+- Added contiguous digest-checked payload/blob assembly. Payloads hydrate a
+  same-drop header, attach to an earlier header, or wait once for a later header;
+  blobs land through the content-addressed store. Payload-reference deletion
+  makes late chunks unable to resurrect a retention-erased body.
+- Extended hydration to ordinary and atomic-batch duplicate receipt. A full
+  operation can complete its retained header while its payload reference is
+  live; `ProcessOutcome` and `DropImportReport` distinguish that from insertion
+  and ordinary duplication. Erasure still wins by removing the reference.
+- Added bounded stage listing, retry, and discard APIs. Stage expiry stays a
+  caller setting rather than a replication constant; a missing-predecessor
+  corpus can resume after its frontier arrives.
+- Added explicit plaintext/public and injected protected file helpers over the
+  existing D4 selector and importer. A fresh-profile round trip retains the
+  semantic `DropId`, imports through `OperationProcessor`, and returns a receipt
+  hit when the same file is presented again.
+- Generic file carriage does not invent archive/radio privacy ordering. That
+  remains settings-driven selection policy supplied by each domain.
+- Added authority-neutral receipt exchange at the D4 boundary. Local atomic
+  receipts can be encoded as bounded, digest-checked `MERERCP\0` frames;
+  authenticated peer services can retain them in a peer-scoped advisory
+  namespace and explicitly discard that coordination state. Remote receipts
+  remain separate from local import markers and cannot skip processor admission.
+- Completed the generic D4 selection edge with `DropExportSelector`. Domains
+  decide omit/header/full and priority from their own privacy and profile
+  settings; replication applies deterministic ordering and a configurable
+  canonical-record byte budget. Private file export requires the selector.
+- Landed `MeshDropSelector` as the first domain mapping. Catch-up binds the
+  latest checkpoint and frontier tail; archive and radio apply explicit
+  input/result privacy plus settings-provided event priorities. Mesh omits an
+  event when its inseparable body contains forbidden data rather than emitting
+  an unusable header-only record.
+- Landed `ConversationDropSelector` in `murm`. Catch-up filters against an
+  explicit per-author frontier; archive and radio use caller-supplied privacy
+  and post-kind priorities. Message and topic bodies can disappear while their
+  signed headers remain portable. `ConversationStore` now provides the
+  muniment-backed processor/export substrate and rejects cross-conversation
+  replay before mutation. `ConversationEngine` now uses it as the live sync
+  authority. The duplicate `CableEngine`, legacy cabal stores, and hand-written
+  redb LogSync adapter are retired. Configured redb reopen and imported-view
+  refresh now pass focused tests.
+- Added `CheckpointAuthority` and a Moot `GovernedCheckpointAuthority` fed only
+  by a constitution revision and signer set. Roster membership alone grants
+  nothing. The live constitution log/fold remains the governance gap.
+- Current focused verification passes thirty-eight `murm-replication` tests
+  and fifty-seven Murm tests, with the former `murmuring` grammar coverage folded
+  into Murm. Two `proofs` tests, twenty-nine mesh tests, and the Moot
+  authority test passed earlier in this chain; the downstream mesh/Moot rerun
+  after payload hydration stalled in the workspace build and was terminated
+  without a source diagnostic.

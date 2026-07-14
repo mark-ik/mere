@@ -13,6 +13,7 @@ mod drop_io;
 mod processor;
 #[cfg(test)]
 mod prune_proof;
+mod receipt;
 mod store;
 mod synced_space;
 
@@ -23,12 +24,21 @@ pub use drop::{
     visit_plain_drop, visit_protected_drop, write_plain_drop, write_protected_drop,
 };
 pub use drop_io::{
-    DropExportProfile, DropImportReport, DropIoError, decode_operation_record,
-    export_topic_operations, import_plain_drop, import_protected_drop, operation_record,
+    DropExportBudget, DropExportDecision, DropExportProfile, DropExportSelector, DropExportStats,
+    DropFileExportReport, DropImportReport, DropIoError, StagedDrop, decode_operation_record,
+    discard_peer_drop_receipts, discard_staged_drop, export_plain_topic_file,
+    export_protected_topic_file, export_selected_plain_topic_file, export_topic_operations,
+    export_topic_operations_selected, import_plain_drop, import_plain_drop_file,
+    import_protected_drop, import_protected_drop_file, list_staged_drops, local_drop_receipt,
+    operation_record, peer_drop_receipt, resume_staged_drop, store_peer_drop_receipt,
 };
 pub use processor::{
     Admission, HistoryAction, OperationPolicy, OperationProcessor, ProcessError, ProcessOutcome,
     Reject, StoreTarget,
+};
+pub use receipt::{
+    DropReceipt, DropReceiptError, DropReceiptLimits, ReceiptPeer, read_drop_receipt,
+    write_drop_receipt,
 };
 pub use store::{BlobGcReport, MunimentStore};
 pub use synced_space::{SyncRound, SyncStatus, SyncedSpace};

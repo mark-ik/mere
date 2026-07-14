@@ -41,10 +41,9 @@ For terms not addressed here, see the donor harvest indexes ([full harvest](mere
     p2panda sessions and processing, muniment-backed replicated storage,
     retention mechanics, and native drop. The planned package is
     `murm-replication`.
-  - **Murmuring** — current inner crate for the native conversation engine.
-    Its former status as a permanent protocol-selector layer is retired. It
-    folds into Murm unless a second concrete native protocol establishes a
-    useful shared contract.
+  - **Murmuring** — retired inner crate. Its signed-operation grammar and
+    conversation engine were folded into `murm` on 2026-07-14. Internal
+    mechanics use `ConversationEngine` and `ConversationStore`.
 - **Moot** — the governed-space domain over Murm replication. It owns community
   identity, membership, constitution, governed settings, moderation,
   recognition, tessera, and community projections.
@@ -56,8 +55,9 @@ For terms not addressed here, see the donor harvest indexes ([full harvest](mere
   that code becomes the public Moot service during the peer-runtime reframe.
 - **Gerund law (retired 2026-07-12)** — `murmuring`:`murm` ::
   `mooting`:`moothold` described the old workspace partition, not a durable
-  semantic rule. Use role-descriptive internal names and keep the product words
-  for product concepts.
+  semantic rule. The `murmuring` package was folded into `murm` on 2026-07-14.
+  Use role-descriptive internal names and keep the product words for product
+  concepts.
 - **Gazetteer** — handle-resolution index: turns a name / handle / key into reachable, trust-stated endpoints (WebFinger today; NIP-05 / atproto-did / moot web-of-trust to come). An index / *directory*, not a broadcast *gazette*, so it sits on the persona / identity tier (`crates/persona/gazetteer`), promoted out of the murm supercrate 2026-07-08. Incubating — no consumer wired yet, and its blocking HTTP needs an async port first.
 
 ## In-product vocabulary
@@ -66,8 +66,15 @@ For terms not addressed here, see the donor harvest indexes ([full harvest](mere
   between identified participants. A murmur is the container, and individual
   posts are utterances within it. Participant count does not select Murm versus
   Moot; a Moot is distinguished by durable governance. Product surfaces say
-  murmur. The current `Cabal*` identifiers are residue of the retired Cable
-  wire and migrate as their files are touched.
+  murmur.
+- **cabal** — the stable protocol and code word for an invitation-scoped
+  shared conversation. `CabalId`, `CabalKey`, and `CabalHandle` are deliberate
+  domain names, not UI copy.
+- **Cable** — the semantic ancestry for cabals, channels, and signed posts.
+  `mere/cable/v1` names Mere's Cable-shaped p2panda dialect. It does not claim
+  wire interoperability with the cabal-club Cable protocol. Use `Conversation*`
+  for storage/runtime mechanics and keep Cable terminology at this explicit
+  protocol boundary.
 - **moot** *(count noun)* — a single persistent themed federatable graph-view community
 - **coalition** *(count noun)* — a sovereign cluster of mootholds (t4; renamed from *demesne* 2026-06-04)
 - **suzerainty** *(relation)* — the outer-tier ↔ inner-member relationship (moothold ↔ moot, coalition ↔ moothold); overlordship without absorbing internal sovereignty

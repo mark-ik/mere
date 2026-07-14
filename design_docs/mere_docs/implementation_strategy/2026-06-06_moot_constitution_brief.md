@@ -1,7 +1,8 @@
 # Moot Constitution: the governance DNA
 
 **Date**: 2026-06-06
-**Status**: Proposal (design probe)
+**Status**: Active implementation. The v0 founder-signed event, fold, store,
+authorization seam, and checkpoint-authority projection landed 2026-07-14.
 **Scope**: Defines the **constitution** primitive: the per-moot ruleset that says
 how capabilities are granted and how reputation gates them, plus the rule for
 changing the ruleset itself. Consolidates the scattered "the moot's constitution
@@ -12,7 +13,7 @@ tessera's event-sourced fold. The governance organ identified as the keystone in
 the moot-synthesis discussion: today a moot can *remember and rank* (tessera), and
 has a reference gate (`tessera::gate::authorize`), but cannot yet *durably decide*
 or amend its own law.
-**Grounded in**: a read of the live tree (2026-06-06) confirming no constitution /
+**Original grounding**: a read of the live tree on 2026-06-06 confirmed no constitution /
 amendment / role-bundle / cap-grant primitive exists in code; tessera is the sole
 built coordination layer (`Ledger::scores`, `composite_score`) and already includes
 a configurable preset authorizer (`tessera::gate::Policy` +
@@ -317,7 +318,18 @@ quorum nor a remote gate.
 
 ---
 
-## 11. First slice (done-conditions, not dates)
+## 11. First slice (landed 2026-07-14)
+
+The signed wire grammar, deterministic fold, muniment-backed store, and
+founder-only authorization seam now live in `moothold::constitution`. Genesis
+binds the Moot, founder, optional parent and divergence point, and canonical
+rules digest. The accepted revision and governed signer set feed
+`GovernedCheckpointAuthority` directly. Store-level convergence and rejection
+before mutation are covered. A live constitution-specific LogSync test now
+proves late-peer catch-up and identical checkpoint authority. `MootGovernance`
+now exposes plain founding, amendment, snapshot, durable reopen, and checkpoint
+authorization commands without p2panda types. The larger Moot service still
+needs to absorb roster, Tessera, retention-event authoring, and peer commands.
 
 In `moothold`, beside `tessera`:
 
@@ -455,3 +467,21 @@ S5.3's moot surface (a constitution is what a moot surface would *display* and
   than assuming `SyncedMoot` itself accepts constitution ops unchanged. DOC_README
   index updated. Next: Mark's steer on building the v0 fold beside tessera, or
   refining the layer model further first.
+
+### 2026-07-14
+
+- Landed `ConstitutionEvent::{Genesis, Amended}`, canonical rules digests,
+  signed p2panda operation encoding, and a deterministic prior-rule fold in
+  `moothold` beside tessera.
+- Added memory and redb `ConstitutionStore` variants over the shared
+  `MunimentStore` and `OperationProcessor`. Genesis is rooted in the already
+  declared Moot founder; unauthorized and stale amendments fail before store
+  mutation.
+- Added the founder-only `authorize_governed` seam and derived Moot checkpoint
+  authority from the accepted constitution revision and signer set.
+- Added `MootGovernance`, a high-level consumer service over the constitution
+  store. Its public commands and snapshots contain domain types only; focused
+  coverage proves governed checkpoint authorization and redb reopen.
+- The isolated Moothold suite passes 80 tests. Remaining work is the aggregate
+  Moot service, retention-event authoring, additional governed actions, quorum
+  rules, and membership/capability inputs.

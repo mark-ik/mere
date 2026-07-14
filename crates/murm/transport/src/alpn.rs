@@ -9,7 +9,7 @@
 /// - `mere/cable/v1` — Cable bilateral chat
 /// - `mere/coop/v1` — co-op session presence
 /// - `mere/mls/v1` — future MLS bilateral E2EE chat
-/// - `mere/community/v1` — future moothold federation
+/// - `mere/community/v1` — future gemot federation
 ///
 /// ## Why a wrapper type?
 ///

@@ -69,9 +69,9 @@ The live dependency graph has already crossed the former purity boundary:
 - `mesh` depends on both families to obtain one replication path.
 - the old host builds the tessera `LogSync` session and its `SyncedSpace`
   callback directly. A new Mere consumer would have to reproduce that wiring.
-- `murmuring` still presents a speculative protocol abstraction whose only
-  required method is `name()`, while its sole substantial implementation is
-  the native p2panda conversation model formerly called Cable.
+- `murmuring` presented a speculative protocol abstraction whose only required
+  method was `name()`. It has since been folded into `murm`; the native model is
+  a Cable-shaped p2panda dialect owned by the conversation service.
 
 The sibling plan solved duplicated code, but placed the resulting halves under
 different product domains and made the application restore the invariant. That
@@ -154,10 +154,12 @@ Murm's public conversation service owns:
 - private-group policy and key rotation;
 - adapters for Misfin or other exchange protocols at the edge.
 
-The current p2panda-native conversation is not Cable interoperable. Its domain
-types should migrate from `Cabal*` and `Cable*` toward `Murmur*` and
-`Conversation*` as touched. External protocols retain their own semantics
-behind the existing comms adapter boundary.
+The current p2panda-native conversation does not claim cabal-club Cable wire
+interoperability. Keep `Cabal*` for the invitation-scoped protocol object and
+Cable for the inherited cabal/channel/post grammar and namespaced Mere dialect.
+Use `Conversation*` for runtime and storage mechanics and **murmur** in product
+surfaces. External protocols retain their own semantics behind the existing
+comms adapter boundary.
 
 ### 3.3 Moot
 
@@ -213,9 +215,10 @@ move. They are removed before standalone promotion.
 
 ### Phase A: establish the replication crate
 
-**Implementation status (2026-07-12):** structural move landed. The new crate
-and its own tests are green; full workspace consumer checks remain pending the
-workspace resolver issue recorded in Progress.
+**Implementation status (updated 2026-07-14):** structural move landed and the
+Murm, Comms, and Meerkat consumer checks are green. Compatibility re-exports in
+`transport` and `mooting`, plus mesh's direct transport/p2panda dependencies,
+still keep this phase from being cleanly closed.
 
 Create `murm-replication` in the current workspace. Move, rather than copy:
 
@@ -248,9 +251,10 @@ does not claim Moot membership or constitutional authorization. The upstream
 prune proof passes against `MunimentStore`, and the production processor now
 accepts an authorized prune action, enforces a strictly advancing retained
 frontier, and commits the surviving operation plus prefix removal in one
-backend batch. Mesh continues to request `Keep`. The reusable runtime service,
-checkpoint law, production domain flag wiring, gossip receipt, and drop import
-remain.
+backend batch. Mesh now exercises checkpoint, erasure, and prefix-prune actions;
+Murm routes local authoring, gossip, LogSync, and drop import through the shared
+processor. A reusable multi-domain service API, remaining domain checkpoint
+laws, and peer command wiring remain.
 
 Order operations as follows:
 
@@ -281,7 +285,8 @@ Move the native conversation engine onto `murm-replication`:
 - retain a supported in-memory backend for tests;
 - fold `murmuring` into `murm` unless a concrete second native protocol has
   appeared by this phase;
-- migrate user-facing and touched code from Cable/cabal vocabulary;
+- keep Cable/Cabal at the explicit domain boundary, `Conversation*` in the
+  machinery, and **murmur** in user-facing copy;
 - preserve the high-level send, history, membership, and subscribe behavior.
 
 Done when:
@@ -291,9 +296,34 @@ Done when:
 - membership revision and key rotation are distinct and tested;
 - the comms adapter consumes only the high-level Murm service.
 
+Implementation status, 2026-07-14: the runtime cutover is landed. Murm-owned
+`ConversationEngine` uses `ConversationStore` as the single
+authority for local authoring, gossip receipt, and LogSync, then materializes
+history and subscription events only after `OperationProcessor` reports an
+insert or payload hydration. `CabalHandle` send and ingest are async; history,
+membership, and subscriptions remain synchronous views. The comms adapter now
+awaits the high-level send API. The duplicate `murmuring::CableEngine`, both
+legacy cabal stores, their hand-written p2panda store adapter, and the
+single-implementation `BilateralProtocol` trait are retired. A configured redb
+backend now reopens history and the author head; native-drop import refreshes
+history and subscriptions through the same processor. The Cabal/Cable naming
+boundary above is deliberate. Meerkat selects that redb backend under its
+per-user comms directory. Epoch-aware native-drop key rotation preserves
+`CabalId`; group authorization and key distribution remain external. The
+signed-operation grammar is now part of `murm`; the `murmuring` package has been
+removed from the workspace.
+
 ### Phase D: rebase Moot as a domain service
 
 Separate Moot policy from generic machinery and expose a high-level service:
+
+Implementation status, 2026-07-14: the first governance substrate is landed.
+`moothold::constitution` now owns signed genesis and amendment events, a
+deterministic founder-only fold, memory/redb stores over `MunimentStore`, and
+the governed authorization seam. The accepted constitution revision and signer
+set now construct Moot checkpoint authority. Moot's declaration/roster lane is
+still SQLite-backed, and the high-level service, retention commands, live
+constitution LogSync test, and broader membership/capability policy remain.
 
 - keep declaration, roster, recognition, constitution, tessera, and moderation
   with Moot;
@@ -312,6 +342,14 @@ Done when:
 - unauthorized membership, checkpoint, retention, and prune operations fail
   before mutation;
 - tessera and constitution remain separate policy rings with explicit inputs.
+
+Implementation status, 2026-07-14: the constitution portion is landed. Signed
+genesis and amendment events feed a deterministic muniment-backed fold, converge
+over LogSync, and project checkpoint authority from the accepted revision.
+`MootGovernance` exposes founding, amendment, snapshots, durable reopen, and
+checkpoint authorization without p2panda types. The aggregate service still
+needs to replace the SQLite Moot-object lane and compose roster, Tessera,
+retention-event authoring, native drop, and peer commands.
 
 ### Phase E: move the remaining consumers
 
@@ -481,9 +519,75 @@ protocol design.
 - Landed the mesh retention vertical slice over that boundary: separate event
   and checkpoint logs, policy-bound checkpoints, monotone frontiers,
   snapshot-plus-tail replay, flagged prune points, and terminal-input erasure
-  with compact results retained. Shared commitment/blob references, blob GC,
-  and Moot checkpoint governance remain later work.
+  with compact results retained. Shared commitment/blob types and generic blob
+  collection are now landed; complete domain reference tracing remains.
 - Landed the first native drop slice in `murm-replication`: the plaintext/public
   cover, canonical manifest identity, operation/payload/blob/evidence records,
   bounded staged visitation, and golden/error vectors. This is carrier framing
-  only. Protected suites and the D4 importer/export selector remain open.
+  plus an injected protected-suite seam. The D4 operation selector/importer is
+  also landed. Verified records now stage durably by `DropId`; operations,
+  authorized prefix pruning and payload erasure, stage cleanup, and
+  a cached receipt commit in one backend batch. Digest-checked blob/payload
+  assembly is landed, including later matching of headers and payloads without
+  reopening erased bodies. Callers can list, retry, or discard staged corpora
+  according to their own storage settings.
+- Added file carriage as a thin D4 edge: explicit plaintext/public and injected
+  protected exports flush the same native bytes to disk, while file imports
+  enter the existing staged processor path. Fresh-store transfer and repeated
+  receipt behavior are covered. Archive/radio priority remains domain policy.
+- Added the receipt-coordination seam below the peer runtime. Atomic local
+  completion markers encode as bounded, digest-checked control frames; remote
+  statements are retained only under an authenticated-peer scope with explicit
+  cleanup. They remain advisory and cannot stand in for local import or domain
+  admission. Peer command wiring still belongs to Phase C.
+- Completed the generic D4 selector. Domains provide omit/header/full decisions
+  and settings-derived priority; replication orders them deterministically,
+  applies an optional canonical-record byte budget, and reports why records
+  were omitted. Private file export requires this policy input. Concrete
+  catch-up/archive/radio mappings remain with each domain.
+- Added the first concrete mapping in mesh. Its catch-up selector binds the
+  latest accepted checkpoint and per-log tail; archive and radio use explicit
+  input/result privacy and settings-owned event priorities. The mesh selector
+  drives the shared exporter directly.
+- Added the direct-conversation mapping in `murm`. It uses the actual
+  per-author sequence frontier for catch-up and settings-owned privacy and
+  post-kind priorities for archive/radio. Message and topic headers may remain
+  after their bodies are excluded.
+- Added `ConversationStore`, the muniment-backed direct-conversation substrate.
+  It admits through `OperationProcessor`, rejects cross-conversation replay
+  before mutation, is idempotent, exposes the shared LogSync store, and drives
+  the native-drop exporter.
+- Added Murm-owned `ConversationEngine` and cut the live in-memory runtime over
+  to that store. Local sends, gossip receipt, and LogSync now share the same
+  processor and operation store; post history and broadcast subscriptions are
+  derived views. The legacy `murmuring::CableEngine` is no longer Murm's live
+  authority. The Moot mapping remains.
+- Retired the legacy direct runtime completely: `CableEngine`,
+  `PersistentCabalStore`, `InMemoryCabalStore`, the redb LogSync adapter, and
+  the name-only `BilateralProtocol` trait are deleted. Folded the remaining
+  signed-operation grammar and validation coverage into `murm`, then removed
+  the `murmuring` package. All fifty-seven Murm tests pass, including two-peer
+  gossip and LogSync.
+- Added configurable memory/redb conversation storage. Redb reopen rebuilds
+  retained history and restores the local author sequence before the handle is
+  returned. Native-drop import now rebuilds the same derived view and emits
+  newly visible posts exactly once.
+- Added an epoch-aware native-drop keyring using p2panda-encryption's XChaCha20
+  primitive. Rotation preserves the stable cabal identity and old epochs remain
+  recoverable until the caller forgets them. Personae or a group-state adapter
+  still owns authorization, key distribution, and persisted key history.
+- Added the native Moot constitution producer: signed founder-rooted genesis and
+  amendment events, canonical rule commitments, a muniment-backed store, a
+  deterministic prior-rule fold, and checkpoint authority projected from the
+  accepted revision. A real two-peer LogSync test proves late-peer constitution
+  catch-up and identical authority on both peers. `MootGovernance` now provides
+  the plain application boundary and durable reopen; aggregate Moot service and
+  retention-event cutover remain.
+- Closed the header-before-body gap in the shared processor. A later full
+  operation hydrates an already-retained header and reports `HydratedPayload`;
+  atomic imports expose their hydration count. Removed payload references still
+  prevent post-retention resurrection.
+- Added the constitution producer behind Moot checkpoint authority. Signed
+  founder-rooted genesis and amendments fold through a muniment-backed store;
+  the accepted revision and governed signer set construct the authority. It
+  still intentionally cannot infer authority from roster membership.

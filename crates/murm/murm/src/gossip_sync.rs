@@ -7,11 +7,11 @@
 //!
 //! - **Live (gossip), Phase 3:** each authored post is broadcast to the cabal's
 //!   gossip topic, and a background task ingests posts peers broadcast (verified
-//!   + idempotent via [`CableEngine::ingest_post`]).
+//!   + idempotent via [`crate::ConversationEngine::ingest_post`]).
 //! - **Offline catch-up (LogSync / RBSR), Phase 4:** a `LogSync` session over the
-//!   cabal's redb store reconciles operations missed while a peer was away,
+//!   conversation's shared muniment store reconciles operations missed while a peer was away,
 //!   draining each received operation into the engine via
-//!   [`CableEngine::ingest_operation`]. LogSync joins gossip on the *derived*
+//!   [`crate::ConversationEngine::ingest_operation`]. LogSync joins gossip on the *derived*
 //!   overlay topic ([`transport::sync_overlay_topic`]), so explicit bootstrap
 //!   must tag peers with it.
 //!
@@ -31,7 +31,9 @@ use tokio::task::JoinHandle;
 use tokio_stream::StreamExt;
 use transport::{GossipHandle, P2pandaTransport};
 
-use crate::{CabalHandle, CabalKey, Murm, MurmError, Post, PostId, decode_post, encode_post};
+use crate::{
+    CabalExt, CabalHandle, CabalKey, Murm, MurmError, Post, PostId, decode_post, encode_post,
+};
 
 /// Unix-epoch milliseconds, for stamping the last sync activity.
 fn now_ms() -> u64 {
@@ -92,7 +94,7 @@ impl Murm<P2pandaTransport> {
     /// this path, peers must be tagged with the cabal topic via the transport's
     /// explicit bootstrap (`add_peer` + `set_topics`).
     pub async fn subscribe_cabal(&self, cabal_key: &CabalKey) -> Result<SyncedCabal, MurmError> {
-        let handle = self.open_cabal(cabal_key)?;
+        let handle = self.open_cabal(cabal_key).await?;
         let cabal_id = *handle.id().as_bytes();
 
         // ── Live lane: the cabal's gossip overlay (topic = cabal_id) ──
@@ -102,7 +104,7 @@ impl Murm<P2pandaTransport> {
         // rule, and is idempotent — duplicate, foreign, or malformed posts are
         // rejected and dropped. Successful ingests bump the gossip counters.
         let gossip = self.transport().subscribe(cabal_id).await?;
-        let engine = Arc::clone(self.cable());
+        let engine = Arc::clone(self.conversation_engine());
         let gossip_counters = Arc::new(Mutex::new(GossipCounters::default()));
         let task_counters = Arc::clone(&gossip_counters);
         let mut received = gossip.subscribe();
@@ -112,7 +114,7 @@ impl Murm<P2pandaTransport> {
                 let Ok(post) = decode_post(&bytes) else {
                     continue;
                 };
-                if engine.ingest_post(&cabal_id, post).is_ok() {
+                if engine.ingest_post(&cabal_id, post).await.is_ok() {
                     let mut c = task_counters.lock().unwrap();
                     c.posts_received += 1;
                     c.last_activity_ms = Some(now_ms());
@@ -121,7 +123,7 @@ impl Murm<P2pandaTransport> {
         });
 
         // ── Offline catch-up lane: a LogSync (RBSR) session over the cabal's
-        // redb store, drained by the shared [`SyncedSpace`] ──
+        // shared muniment store, drained by the shared [`SyncedSpace`] ──
         //
         // Reconciles operations missed while a peer was away; the injected
         // `accept` closure ingests each received operation (idempotent with the
@@ -132,14 +134,12 @@ impl Murm<P2pandaTransport> {
         // the handle — so they are type-erased into a keepalive box.
         let (space, keepalive) = match self.transport().sync_parts() {
             Some((endpoint, gossip_actor)) => {
-                let store = self
-                    .cable()
-                    .cabal_store(&cabal_id)
-                    .ok_or_else(|| MurmError::Backend("cabal store missing".to_string()))?;
-                let log_sync = LogSync::builder(store, endpoint, gossip_actor)
-                    .spawn()
-                    .await
-                    .map_err(|e| MurmError::Backend(format!("logsync spawn: {e}")))?;
+                let store = self.conversation_engine().sync_store(&cabal_id)?;
+                let log_sync: LogSync<_, u64, CabalExt> =
+                    LogSync::builder(store, endpoint, gossip_actor)
+                        .spawn()
+                        .await
+                        .map_err(|e| MurmError::Backend(format!("logsync spawn: {e}")))?;
                 let sync_handle = log_sync
                     .stream(Topic::from(cabal_id), true)
                     .await
@@ -148,9 +148,10 @@ impl Murm<P2pandaTransport> {
                     .subscribe()
                     .await
                     .map_err(|e| MurmError::Backend(format!("logsync subscribe: {e}")))?;
-                let accept_engine = Arc::clone(self.cable());
+                let accept_engine = Arc::clone(self.conversation_engine());
                 let space = SyncedSpace::drive(sub, move |op| {
-                    std::future::ready(accept_engine.ingest_operation(&cabal_id, &op).is_ok())
+                    let accept_engine = Arc::clone(&accept_engine);
+                    async move { accept_engine.ingest_operation(&cabal_id, &op).await.is_ok() }
                 });
                 // `Send + Sync`: `SyncedCabal` must stay `Sync` for comms's
                 // `CabalSink: Send + Sync` bound. The LogSync session + handle are
@@ -205,7 +206,7 @@ impl SyncedCabal {
     /// Author a text post: store it locally and broadcast it to peers in the
     /// cabal. Returns the post id.
     pub async fn send_text(&self, channel: &str, text: &str) -> Result<PostId, MurmError> {
-        let id = self.handle.send_text(channel, text)?;
+        let id = self.handle.send_text(channel, text).await?;
         if let Some(post) = self.handle.get_post(&id) {
             self.gossip
                 .publish(encode_post(&post))
@@ -360,7 +361,7 @@ mod tests {
             .expect("bind bob");
 
         let cabal_key = CabalKey::new([0x77; 32]);
-        let cabal_id = murmuring::cable::hash_cabal_id(cabal_key.as_bytes());
+        let cabal_id = crate::hash_cabal_id(cabal_key.as_bytes());
 
         // Explicit bootstrap: cross-register transport addresses + tag the cabal
         // topic so gossip can form the overlay (discovery does this in prod).
@@ -414,7 +415,7 @@ mod tests {
     async fn two_murm_peers_catch_up_over_logsync() {
         // Offline catch-up: alice authors three posts *before* bob is connected,
         // so the gossip overlay never delivers them to bob. Bob then comes online
-        // and catches up via LogSync (RBSR) over the redb store.
+        // and catches up via LogSync (RBSR) over the shared store.
         let alice_provider = Arc::new(InMemoryProvider::from_seed([40; 32]));
         let bob_provider = Arc::new(InMemoryProvider::from_seed([41; 32]));
         let alice_id = PeerID::from_public_key(alice_provider.master_public_key());
@@ -434,7 +435,7 @@ mod tests {
             .expect("bind bob");
 
         let cabal_key = CabalKey::new([0x88; 32]);
-        let cabal_id = murmuring::cable::hash_cabal_id(cabal_key.as_bytes());
+        let cabal_id = crate::hash_cabal_id(cabal_key.as_bytes());
         // LogSync joins gossip on the *derived* overlay topic — tag peers with it
         // (not the raw cabal id), or the catch-up overlay never forms.
         let overlay = transport::sync_overlay_topic(cabal_id);

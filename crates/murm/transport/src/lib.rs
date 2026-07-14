@@ -32,7 +32,7 @@
 //!
 //! - [`murm`](https://crates.io/crates/murm) — Cable rides on transport
 //!   streams (per inherited Cable spec §2.1)
-//! - [`moothold`](https://crates.io/crates/moothold) — community/federation
+//! - [`gemot`](https://crates.io/crates/gemot) — community/federation
 //!   sync (planned)
 //! - Future: [`eidetic`](https://crates.io/crates/eidetic) sync, co-op session orchestration
 

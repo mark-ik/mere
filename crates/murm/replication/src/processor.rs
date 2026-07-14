@@ -6,13 +6,16 @@
 //! write with optional prefix removal. A domain policy owns addressing,
 //! authorization, body semantics, and permission to prune preceding history.
 
-use muniment::{Backend, StoreError};
+use std::collections::{BTreeMap, BTreeSet};
+
+use muniment::{Backend, StoreError, WriteOp};
 use p2panda_core::operation::validate_operation;
 use p2panda_core::prune::validate_prunable_backlink;
 use p2panda_core::{Extensions, Hash, LogId, Operation, Topic};
 use p2panda_store::logs::LogStore;
 
 use crate::MunimentStore;
+use crate::store::IndexedOperation;
 
 /// The topic and per-author log selected by an admitted operation.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -131,8 +134,18 @@ pub enum ProcessOutcome {
         /// Number of retained operation headers whose payloads were erased.
         erased_payloads: u64,
     },
+    /// The header was already retained and this call attached its verified body.
+    HydratedPayload,
     /// The same operation hash was already present.
     Duplicate,
+}
+
+/// Counts returned after one atomic operation batch.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct BatchProcessOutcome {
+    pub inserted: u64,
+    pub duplicate: u64,
+    pub hydrated_payloads: u64,
 }
 
 impl ProcessOutcome {
@@ -141,11 +154,16 @@ impl ProcessOutcome {
         matches!(self, Self::Inserted { .. })
     }
 
+    /// Whether this call attached a previously absent operation body.
+    pub fn hydrated_payload(self) -> bool {
+        matches!(self, Self::HydratedPayload)
+    }
+
     /// Number of preceding log entries removed by this call.
     pub fn pruned_entries(self) -> u64 {
         match self {
             Self::Inserted { pruned_entries, .. } => pruned_entries,
-            Self::Duplicate => 0,
+            Self::HydratedPayload | Self::Duplicate => 0,
         }
     }
 
@@ -155,7 +173,7 @@ impl ProcessOutcome {
             Self::Inserted {
                 erased_payloads, ..
             } => erased_payloads,
-            Self::Duplicate => 0,
+            Self::HydratedPayload | Self::Duplicate => 0,
         }
     }
 }
@@ -238,6 +256,17 @@ where
         let admission = self.preflight(operation)?;
 
         if self.store.has_operation(&operation.hash).await? {
+            if let (Some(payload_hash), Some(body)) = (
+                operation.header.payload_hash.as_ref(),
+                operation.body.as_ref(),
+            ) && self
+                .store
+                .attach_payload(payload_hash, &body.to_bytes())
+                .await?
+                > 0
+            {
+                return Ok(ProcessOutcome::HydratedPayload);
+            }
             return Ok(ProcessOutcome::Duplicate);
         }
 
@@ -285,6 +314,113 @@ where
             ProcessOutcome::Duplicate
         })
     }
+
+    /// Validate and commit an operation corpus in one backend batch.
+    ///
+    /// Duplicate ids are reported but omitted from the write set. New
+    /// operations are ordered by author, domain log, and sequence, then checked
+    /// against a virtual frontier that includes earlier operations in this
+    /// corpus. `trailing_writes` lets native-drop import remove its staging keys
+    /// and persist its receipt in the same commit.
+    pub(crate) async fn process_batch_atomic(
+        &self,
+        operations: &[Operation<E>],
+        leading_writes: &[WriteOp],
+        trailing_writes: &[WriteOp],
+    ) -> Result<BatchProcessOutcome, ProcessError> {
+        let mut prepared = Vec::with_capacity(operations.len());
+        for operation in operations {
+            let admission = self.preflight(operation)?;
+            prepared.push((operation, admission));
+        }
+        prepared.sort_by(|(left, left_admission), (right, right_admission)| {
+            left.header
+                .verifying_key
+                .cmp(&right.header.verifying_key)
+                .then_with(|| {
+                    left_admission
+                        .target
+                        .log_id
+                        .cmp(&right_admission.target.log_id)
+                })
+                .then_with(|| left.header.seq_num.cmp(&right.header.seq_num))
+        });
+
+        let mut frontiers: BTreeMap<_, Option<Operation<E>>> = BTreeMap::new();
+        let mut seen = BTreeSet::new();
+        let mut accepted = Vec::new();
+        let mut hydration_writes = leading_writes.to_vec();
+        let mut outcome = BatchProcessOutcome::default();
+        for (operation, admission) in prepared {
+            let id = operation.hash.to_hex();
+            if !seen.insert(id) {
+                outcome.duplicate += 1;
+                continue;
+            }
+            if self.store.has_operation(&operation.hash).await? {
+                if let (Some(payload_hash), Some(body)) = (
+                    operation.header.payload_hash.as_ref(),
+                    operation.body.as_ref(),
+                ) {
+                    let (writes, attached) = self
+                        .store
+                        .payload_attachment_writes(payload_hash, &body.to_bytes())
+                        .await?;
+                    hydration_writes.extend(writes);
+                    outcome.hydrated_payloads += attached;
+                }
+                outcome.duplicate += 1;
+                continue;
+            }
+            let key = (
+                operation.header.verifying_key,
+                admission.target.log_id.clone(),
+            );
+            if !frontiers.contains_key(&key) {
+                let latest = self.store.get_latest_entry(&key.0, &key.1).await?;
+                frontiers.insert(key.clone(), latest);
+            }
+            let latest = frontiers.get(&key).and_then(Option::as_ref);
+            if let Some(previous) = latest
+                && operation.header.seq_num <= previous.header.seq_num
+            {
+                return Err(ProcessError::StaleOperation {
+                    seq_num: operation.header.seq_num,
+                    frontier: previous.header.seq_num,
+                });
+            }
+            match (operation.header.seq_num, latest, admission.history) {
+                (0, None, _) => {}
+                (seq_num, None, HistoryAction::Keep) => {
+                    return Err(ProcessError::MissingPredecessor { seq_num });
+                }
+                (_, previous, history) => validate_prunable_backlink(
+                    previous.map(|operation| &operation.header),
+                    &operation.header,
+                    history.prunes(),
+                )
+                .map_err(|err| ProcessError::Backlink(err.to_string()))?,
+            }
+            frontiers.insert(key, Some(operation.clone()));
+            accepted.push((operation, admission));
+            outcome.inserted += 1;
+        }
+
+        let indexed: Vec<_> = accepted
+            .iter()
+            .map(|(operation, admission)| IndexedOperation {
+                topic: &admission.target.topic,
+                operation,
+                log_id: &admission.target.log_id,
+                prune_before_current: admission.history.prunes(),
+                erase_payloads: &admission.erase_payloads,
+            })
+            .collect();
+        self.store
+            .apply_indexed_operation_batch(&indexed, &hydration_writes, trailing_writes)
+            .await?;
+        Ok(outcome)
+    }
 }
 
 #[cfg(test)]
@@ -303,6 +439,7 @@ mod tests {
     #[derive(Clone, Copy)]
     struct TestPolicy {
         space: u64,
+        require_body: bool,
     }
 
     impl OperationPolicy<TestExt> for TestPolicy {
@@ -315,7 +452,7 @@ mod tests {
                     "operation addresses another space",
                 ));
             }
-            if operation.body.is_none() {
+            if self.require_body && operation.body.is_none() {
                 return Err(Reject::new("missing-body", "test events require a body"));
             }
             Ok(Admission::keep(StoreTarget::new(
@@ -354,7 +491,20 @@ mod tests {
     fn processor() -> OperationProcessor<MemoryBackend, TestExt, TestPolicy> {
         OperationProcessor::new(
             MunimentStore::new(MemoryBackend::new()),
-            TestPolicy { space: 7 },
+            TestPolicy {
+                space: 7,
+                require_body: true,
+            },
+        )
+    }
+
+    fn header_processor() -> OperationProcessor<MemoryBackend, TestExt, TestPolicy> {
+        OperationProcessor::new(
+            MunimentStore::new(MemoryBackend::new()),
+            TestPolicy {
+                space: 7,
+                require_body: false,
+            },
         )
     }
 
@@ -384,6 +534,57 @@ mod tests {
                 .await
                 .unwrap();
             assert_eq!(resolved.get(&signing_key.verifying_key()), Some(&vec![7]));
+        });
+    }
+
+    #[test]
+    fn duplicate_full_operation_hydrates_a_retained_header() {
+        pollster::block_on(async {
+            let processor = header_processor();
+            let full = make_op(&SigningKey::generate(), 7, 0, None);
+            let mut header_only = full.clone();
+            header_only.body = None;
+
+            assert!(processor.process(&header_only).await.unwrap().inserted());
+            assert_eq!(
+                processor.process(&full).await.unwrap(),
+                ProcessOutcome::HydratedPayload
+            );
+            assert!(
+                processor
+                    .store()
+                    .get_operation(&full.hash)
+                    .await
+                    .unwrap()
+                    .is_some_and(|operation| operation.body.is_some())
+            );
+        });
+    }
+
+    #[test]
+    fn atomic_batch_reports_payload_hydration_of_a_duplicate_header() {
+        pollster::block_on(async {
+            let processor = header_processor();
+            let full = make_op(&SigningKey::generate(), 7, 0, None);
+            let mut header_only = full.clone();
+            header_only.body = None;
+            processor.process(&header_only).await.unwrap();
+
+            let outcome = processor
+                .process_batch_atomic(&[full.clone()], &[], &[])
+                .await
+                .unwrap();
+            assert_eq!(outcome.inserted, 0);
+            assert_eq!(outcome.duplicate, 1);
+            assert_eq!(outcome.hydrated_payloads, 1);
+            assert!(
+                processor
+                    .store()
+                    .get_operation(&full.hash)
+                    .await
+                    .unwrap()
+                    .is_some_and(|operation| operation.body.is_some())
+            );
         });
     }
 

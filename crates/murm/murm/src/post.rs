@@ -8,7 +8,7 @@
 
 use identity::{Ed25519PublicKey, Ed25519Signature};
 
-use crate::MurmuringError;
+use crate::MurmError;
 
 /// Maximum channel name length in bytes. Picked to fit in a single varint
 /// byte and to match common chat-protocol limits. The Cable spec is silent
@@ -17,7 +17,7 @@ use crate::MurmuringError;
 pub const MAX_CHANNEL_NAME_BYTES: usize = 255;
 
 /// A post identifier — the BLAKE3-256 hash of a post's canonical wire
-/// encoding (see [`crate::cable::hash`]).
+/// encoding (see [`crate::post_hash`]).
 ///
 /// Per Cable's content-addressing model, posts are identified by their
 /// hash; references to posts (in subsequent posts' `links` field, or in
@@ -57,7 +57,7 @@ impl PostId {
 /// [`ChannelName::new`] is permissive (always succeeds; the channel name
 /// may be invalid but tests of older Murm versions still compile).
 /// [`ChannelName::try_new`] validates and returns
-/// [`MurmuringError::MissingField`] on failure.
+/// [`MurmError::MissingField`] on failure.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct ChannelName(String);
 
@@ -75,23 +75,21 @@ impl ChannelName {
     /// Construct a channel name, validating against the rules in the
     /// type-level docs.
     ///
-    /// Returns [`MurmuringError::MissingField`] (with a description of
+    /// Returns [`MurmError::MissingField`] (with a description of
     /// the failing rule) if the name is invalid.
-    pub fn try_new(name: impl Into<String>) -> Result<Self, MurmuringError> {
+    pub fn try_new(name: impl Into<String>) -> Result<Self, MurmError> {
         let name = name.into();
         if name.is_empty() {
-            return Err(MurmuringError::MissingField("channel name (empty)"));
+            return Err(MurmError::MissingField("channel name (empty)"));
         }
         if name.len() > MAX_CHANNEL_NAME_BYTES {
-            return Err(MurmuringError::MissingField("channel name (too long)"));
+            return Err(MurmError::MissingField("channel name (too long)"));
         }
         if name
             .chars()
             .any(|c| (c as u32) < 0x20 || (c as u32) == 0x7F)
         {
-            return Err(MurmuringError::MissingField(
-                "channel name (control character)",
-            ));
+            return Err(MurmError::MissingField("channel name (control character)"));
         }
         Ok(Self(name))
     }
@@ -151,7 +149,7 @@ impl InfoEntry {
 
 /// A signed Cable post.
 ///
-/// On the wire a post is a p2panda-core operation (see [`crate::cable::wire`]):
+/// On the wire a post is a p2panda-core operation (see [`crate::post_wire`]):
 /// content-addressed via its `PostId` (the operation's **signed-header hash** =
 /// `Header::hash()`, which transitively binds the body via `payload_hash`),
 /// belonging to a cabal (`cabal_id`), positioned in its author's per-cabal log
@@ -305,5 +303,111 @@ impl PostKind {
             PostKind::Join { .. } => "join",
             PostKind::Leave { .. } => "leave",
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn post_id_round_trips_through_bytes() {
+        let bytes = [42u8; 32];
+        let id = PostId::new(bytes);
+        assert_eq!(id.as_bytes(), &bytes);
+    }
+
+    #[test]
+    fn channel_name_validation_covers_limits_and_controls() {
+        assert_eq!(ChannelName::try_new("session").unwrap().as_str(), "session");
+        assert!(ChannelName::try_new("会議").is_ok());
+        assert!(matches!(
+            ChannelName::try_new(""),
+            Err(MurmError::MissingField(_))
+        ));
+        assert!(matches!(
+            ChannelName::try_new("a\nline"),
+            Err(MurmError::MissingField(_))
+        ));
+        assert!(matches!(
+            ChannelName::try_new("a\x7fb"),
+            Err(MurmError::MissingField(_))
+        ));
+        assert!(ChannelName::try_new("a".repeat(255)).is_ok());
+        assert!(matches!(
+            ChannelName::try_new("a".repeat(256)),
+            Err(MurmError::MissingField(_))
+        ));
+    }
+
+    #[test]
+    fn channel_name_predicate_matches_constructor() {
+        assert!(ChannelName::is_valid_name("session"));
+        assert!(ChannelName::is_valid_name("会議"));
+        assert!(!ChannelName::is_valid_name(""));
+        assert!(!ChannelName::is_valid_name("a\nb"));
+        assert!(!ChannelName::is_valid_name(&"a".repeat(256)));
+    }
+
+    #[test]
+    fn post_kind_accessors_cover_channel_and_channelless_posts() {
+        let text = PostKind::Text {
+            channel: ChannelName::new("session"),
+            text: "hello".to_string(),
+            timestamp_ms: 1_700_000_000_000,
+        };
+        assert_eq!(text.timestamp_ms(), 1_700_000_000_000);
+        assert_eq!(text.channel().unwrap().as_str(), "session");
+        assert_eq!(text.kind_name(), "text");
+
+        let info = PostKind::Info {
+            entries: vec![InfoEntry::name("alice")],
+            timestamp_ms: 0,
+        };
+        assert!(info.channel().is_none());
+
+        let delete = PostKind::Delete {
+            posts: vec![PostId::new([0; 32])],
+            timestamp_ms: 0,
+        };
+        assert!(delete.channel().is_none());
+    }
+
+    #[test]
+    fn all_post_kinds_have_distinct_names_and_wire_discriminants() {
+        let kinds = [
+            PostKind::Text {
+                channel: ChannelName::new("c"),
+                text: String::new(),
+                timestamp_ms: 0,
+            },
+            PostKind::Delete {
+                posts: vec![PostId::new([0; 32])],
+                timestamp_ms: 0,
+            },
+            PostKind::Info {
+                entries: vec![],
+                timestamp_ms: 0,
+            },
+            PostKind::Topic {
+                channel: ChannelName::new("c"),
+                topic: String::new(),
+                timestamp_ms: 0,
+            },
+            PostKind::Join {
+                channel: ChannelName::new("c"),
+                timestamp_ms: 0,
+            },
+            PostKind::Leave {
+                channel: ChannelName::new("c"),
+                timestamp_ms: 0,
+            },
+        ];
+
+        let names: std::collections::HashSet<_> = kinds.iter().map(PostKind::kind_name).collect();
+        let discriminants: std::collections::HashSet<_> =
+            kinds.iter().map(PostKind::post_type).collect();
+        assert_eq!(names.len(), 6);
+        assert_eq!(discriminants.len(), 6);
     }
 }

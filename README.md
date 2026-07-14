@@ -24,7 +24,7 @@ relationships. The graph (the *orrery*) is the root surface; everything else
   </tr>
 </table>
 
-This repository is a Cargo workspace of 58 member crates organized by concern.
+This repository is a Cargo workspace of 60 member crates organized by concern.
 (That count is the `[workspace] members` list; the `probes` directory in
 `[workspace.exclude]` is not a member and is not counted.)
 The on-screen host is the `meerkat` binary; most other crates are libraries it
@@ -153,14 +153,14 @@ graph kernel's package name is `kernel`, at `crates/graph/graph-kernel`).
 | `crates/graph` | `kernel`, `linked-data`, `node-lineage` | Graph truth: the identity/authority/mutation kernel, the RDF/JSON-LD ingest-export and SPARQL bridge, and per-node navigation lineage |
 | `crates/orrery` | `orrery` (bin + lib), `mere-orrery`, `arrangements`, `cartography`, `gyre`, `aether` | The spatial graph view: the graph field-canvas host, its a11y/uxtree projection, deterministic layout strategies, non-destructive projection, rapier-backed physics, and the field algebra that feeds the physics |
 | `crates/shell` | `chrome`, `comms`, `frame` | Host-neutral domain models: chrome view-models, the comms pane model, and the frame (split-tree) model |
-| `crates/system` | `session-runtime`, `shell-state`, `ux-events`, `registry/register-*` | Runtime services: session settings/manifest, shell state, the UX event/probe taxonomy, and the capability registries (diagnostics, input, knowledge, layout, lens, mod-loader, protocol, theme, viewer) |
+| `crates/system` | `session-runtime`, `shell-state`, `proofs`, `ux-events`, `registry/register-*` | Runtime services: session settings/manifest, shell state, typed proof and content-reference vocabulary, the UX event/probe taxonomy, and the capability registries (diagnostics, input, knowledge, layout, lens, mod-loader, protocol, theme, viewer) |
 | `crates/inker` | `inker`, `document-canvas`, `engines/nematic`, `engines/scrying-engine` | Engine selection and content rendering: the engine controller, the parley-based document canvas, the smolweb engine, and the system-WebView scrying engine seam |
 | `crates/forme` | `forme`, `uxtree` | Per-graph-view workbench arrangement authority and the UX-tree projection |
 | `crates/platen` | `platen`, `domain/apparatus`, `domain/gloss`, `domain/workbench` | Composition surface: compiles arrangements into presentation plans, plus the domain panels (apparatus inspector, gloss navigator, tiled workbench) |
 | `crates/eidetic` | `eidetic` (`eidetic-core`), `eidetic-fjall`, `eidetic-https-fetcher`, `eidetic-iroh-fetcher`, `eidetic-search` | Durable private local memory: the typed-payload store vocabulary, the fjall backend, HTTPS and iroh fetchers, and the tantivy/BM25 lexical search index |
 | `crates/import` | `import` | Browser-data import: bookmark / history / session models and Chrome-JSON / Netscape-HTML parsers, producing portable page seeds |
 | `crates/intel` | `embed` | Local intelligence: the embedding-provider trait and vector index over eidetic artifacts (pure-Rust, with a future Burn-backed provider slot) |
-| `crates/murm` | `murm`, `murmuring`, `murm-replication`, `transport` | Peer exchange: direct conversation, the current native conversation engine, shared p2panda replication over muniment, and Iroh-based transport |
+| `crates/murm` | `murm`, `murm-replication`, `transport` | Peer exchange: direct conversation, the native conversation engine and signed grammar, shared p2panda replication over muniment, and Iroh-based transport |
 | `crates/moot` | `moothold`, `mooting` | Governed community spaces: Moot event grammar, roster, tessera, constitution primitives, and recognition policy over `murm-replication` |
 | `crates/mesh` | `mesh` | The personal-space compute mesh: signed job operations over LogSync, a deterministic job board and worker loop, plus policy-bound retention checkpoints and prunable event history |
 | `crates/persona` | `identity`, `gazetteer` | Persona identity and handle resolution: master Ed25519 keypair, OS-keychain integration, per-protocol identity derivation, and WebFinger today |
