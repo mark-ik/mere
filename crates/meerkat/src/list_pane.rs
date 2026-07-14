@@ -14,7 +14,7 @@
 
 use std::collections::HashMap;
 
-use xilem_serval::{AnyView, Keyed, PointerClick, GenetCtx, GenetElement, clickable, el};
+use cambium::{AnyView, Keyed, PointerClick, GenetCtx, GenetElement, clickable, el};
 
 // The `ListPane` bundle is a #[cfg(test)] harness now that the four list panes fold into
 // the shell document; its DOM / layout imports come along under the gate. (Phase 1, step 2.)
@@ -416,7 +416,7 @@ impl Default for ListPane {
 
 #[cfg(test)]
 mod tests {
-    use xilem_serval::PointerClick;
+    use cambium::PointerClick;
 
     use super::*;
 

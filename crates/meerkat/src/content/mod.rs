@@ -375,7 +375,7 @@ pub enum ContentCommand {
     /// document: a host-laid-out satellite paint list anchored to a page node,
     /// composited engine-side after content + highlights (top-layer order) and
     /// tracking its anchor across scroll/relayout for free. The host's satellite
-    /// runner (an xilem_serval view over app state) produces `content` by laying
+    /// runner (an cambium view over app state) produces `content` by laying
     /// its own isolated `ScriptedDom` out; the actor only registers it on the
     /// retained [`ContentLayout`] and re-emits the band. No-op off the HTML lane.
     /// Desktop-host only in v1: the wasm content-worker lane does not carry

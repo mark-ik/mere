@@ -360,7 +360,7 @@ impl Presentation {
                     let mut seeds = def.seeds;
                     seeds.dark = mode.dark();
                     let mut sheet = scale_px(chrome_sheet(tokens), scale);
-                    sheet.extend(xilem_serval::syntax_css(&seeds));
+                    sheet.extend(cambium::syntax_css(&seeds));
                     sheet
                 };
                 // CUSTOM MODES (T5): a registered calculator produces the
@@ -384,7 +384,7 @@ impl Presentation {
                             let mut seeds = def.seeds;
                             seeds.dark = custom_dark;
                             let mut sheet = scale_px(chrome_sheet(&tokens), scale);
-                            sheet.extend(xilem_serval::syntax_css(&seeds));
+                            sheet.extend(cambium::syntax_css(&seeds));
                             self.chrome_sheet = sheet;
                             return;
                         }
@@ -414,7 +414,7 @@ impl Presentation {
                             let mut seeds = def.seeds;
                             seeds.dark = active_mode.dark();
                             let mut sheet = scale_px(rules.clone(), scale);
-                            sheet.extend(xilem_serval::syntax_css(&seeds));
+                            sheet.extend(cambium::syntax_css(&seeds));
                             sheet
                         }
                         None => side(active_tokens, active_mode),
@@ -429,7 +429,7 @@ impl Presentation {
                 self.chrome_theme_light = self.chrome_theme;
                 self.chrome_theme_dark = self.chrome_theme;
                 let mut sheet = scale_px(chrome_sheet(&self.chrome_theme), scale);
-                sheet.extend(xilem_serval::syntax_css(&fallback_seeds()));
+                sheet.extend(cambium::syntax_css(&fallback_seeds()));
                 sheet
             }
         };
@@ -449,7 +449,7 @@ impl Presentation {
 
 /// Brand-coherent dark seed triad the syntax palette falls back to when no theme
 /// def resolves (the shouldn't-happen `None` arm). Matches the default chrome; the
-/// syntax colours derive from it via `xilem_serval::syntax_css`. (Kept host-side
+/// syntax colours derive from it via `cambium::syntax_css`. (Kept host-side
 /// because it is mere's brand default, not a genet concern.)
 fn fallback_seeds() -> tincture::Seeds {
     tincture::Seeds {

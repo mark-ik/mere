@@ -4,7 +4,7 @@
 
 //! IME (input-method editor) wiring for the chrome (grab-bag G2.1).
 //!
-//! The library half is complete one layer down: [`xilem_serval::TextInput`] holds
+//! The library half is complete one layer down: [`cambium::TextInput`] holds
 //! an IME preedit (rendered inline at the caret, out of the committed buffer), and
 //! the C1 caret seam ([`crate::pane_session::PaneSession::caret_rect`]) gives the
 //! caret's screen rect. This is the meerkat call site, mirroring pelt-live: enable
@@ -19,7 +19,7 @@
 
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::Ime;
-use xilem_serval::{Key, KeyEvent};
+use cambium::{Key, KeyEvent};
 
 use crate::genet_render::CARET_WIDTH;
 

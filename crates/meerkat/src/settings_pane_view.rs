@@ -19,7 +19,7 @@
 //! `2026-06-21_settings_lane_consolidation_plan` (P1 render arm).
 
 use mere::forme::GraphMemberId;
-use xilem_serval::{AnyView, PointerClick, GenetCtx, GenetElement, clickable, el, on_click};
+use cambium::{AnyView, PointerClick, GenetCtx, GenetElement, clickable, el, on_click};
 
 use crate::list_pane::{PaneItem, ReorderSpec, SliderSpec};
 use crate::swatch::{SwatchSpec, swatch_view};
@@ -319,7 +319,7 @@ mod tests {
     use layout_dom_api::LayoutDom;
     use genet_layout::ScrollOffsets;
     use genet_scripted_dom::NodeId;
-    use xilem_serval::PointerClick;
+    use cambium::PointerClick;
 
     type Pane = ViewPane<
         SettingsPanesState,

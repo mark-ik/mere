@@ -39,7 +39,7 @@ impl WindowView {
             pelt_theme: None,
             pelt_ui_scale: None,
             scene_textures: Default::default(),
-            chrome_cluster: chisel::LeafRegistry::new(),
+            chrome_cluster: sprigging::LeafRegistry::new(),
             last_frame_us: 0.0,
             cluster_frame_peak: 0.0,
             cluster_recent_sig: 0,

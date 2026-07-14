@@ -30,7 +30,7 @@ use meerkat::submit_omnibar;
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::keyboard::{Key as WinitKey, NamedKey as WinitNamedKey};
 use winit::window::WindowId;
-use xilem_serval::TextInput;
+use cambium::TextInput;
 
 use super::{Assertion, KeyChord, KeySym, NamedKey, Step, parse};
 use crate::observability::Severity;

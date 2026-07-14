@@ -184,7 +184,7 @@ impl crate::WindowCtx<'_> {
             }
         }
         // The open submenu panel sits beside its parent row. Anchor it off the parent row's rect
-        // (the `.context-submenu-anchor` marker) with xilem-serval's geometry helper: default to
+        // (the `.context-submenu-anchor` marker) with Cambium's geometry helper: default to
         // the parent's right (frame-1 correct — RightOf ignores the popup size), flipping left when
         // it would overflow the window. (Nested submenus.)
         let submenu_pos = if self
@@ -221,10 +221,10 @@ impl crate::WindowCtx<'_> {
                         // and clamped on-screen — one `anchor_point_clamped`. The y stays at the
                         // parent row's top (the panel scrolls via the max-height set below), so
                         // only the x is taken. (Nested submenus / upstreaming P5.)
-                        let (sx, _) = xilem_serval::anchor_point_clamped(
+                        let (sx, _) = cambium::anchor_point_clamped(
                             (panel_x, row_y, panel_w, row_h),
                             (sub_w, sub_h),
-                            xilem_serval::Placement::RightOf,
+                            cambium::Placement::RightOf,
                             (0.0, 0.0, w as f32, h as f32),
                         );
                         Some((sub, sx, row_y))

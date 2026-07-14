@@ -19,8 +19,8 @@ use genet_layout::ScrollOffsets;
 #[cfg(test)]
 use genet_scripted_dom::NodeId;
 #[cfg(test)]
-use xilem_serval::PointerClick;
-use xilem_serval::{AnyView, GenetCtx, GenetElement, el};
+use cambium::PointerClick;
+use cambium::{AnyView, GenetCtx, GenetElement, el};
 
 #[cfg(test)]
 use crate::roster::RosterSnapshot;
@@ -213,7 +213,7 @@ mod tests {
     use layout_dom_api::LayoutDom;
     use register_theme::chrome::ChromeTheme;
     use genet_scripted_dom::{NodeId, ScriptedDom};
-    use xilem_serval::PointerClick;
+    use cambium::PointerClick;
 
     use super::*;
     use crate::roster::{

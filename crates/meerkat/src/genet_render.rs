@@ -35,7 +35,7 @@ use genet_scripted_dom::{NodeId, ScriptedDom};
 /// Adapts chisel's rendered leaf buffers to genet-layout's paint-list source
 /// (the orphan-rule-legal home: this crate owns the newtype). See the chisel
 /// toolbar cluster — `<chisel-leaf>` elements in the chrome DOM.
-struct LeafSource<'a>(&'a chisel::RenderedLeaves);
+struct LeafSource<'a>(&'a sprigging::RenderedLeaves);
 
 impl LeafPaintSource for LeafSource<'_> {
     fn leaf_commands(&self, key: u64) -> Option<&[paint_list_api::PaintCmd]> {
@@ -54,8 +54,8 @@ pub(crate) fn paint_list_from_session_with_leaves(
     scroll: &ScrollOffsets<NodeId>,
     width: u32,
     height: u32,
-    registry: &mut chisel::LeafRegistry<u64>,
-    cache: &mut chisel::RenderedLeaves,
+    registry: &mut sprigging::LeafRegistry<u64>,
+    cache: &mut sprigging::RenderedLeaves,
 ) -> GenetPaintList {
     let sizes: std::collections::HashMap<u64, (f32, f32)> =
         session.chisel_leaf_boxes().into_iter().collect();
@@ -63,7 +63,7 @@ pub(crate) fn paint_list_from_session_with_leaves(
         |key| {
             sizes
                 .get(&key)
-                .map(|&(w, h)| chisel::Size { width: w, height: h })
+                .map(|&(w, h)| sprigging::Size { width: w, height: h })
         },
         cache,
     );
@@ -90,8 +90,8 @@ pub(crate) fn scene_from_session_with_leaves_and_masks(
     scroll: &ScrollOffsets<NodeId>,
     width: u32,
     height: u32,
-    registry: &mut chisel::LeafRegistry<u64>,
-    cache: &mut chisel::RenderedLeaves,
+    registry: &mut sprigging::LeafRegistry<u64>,
+    cache: &mut sprigging::RenderedLeaves,
 ) -> (Scene, Vec<paint_list_render::BoxShadowMaskRequest>) {
     let plist = paint_list_from_session_with_leaves(
         session, dom, cursor, scroll, width, height, registry, cache,

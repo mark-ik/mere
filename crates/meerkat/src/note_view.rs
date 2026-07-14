@@ -5,7 +5,7 @@
 //! `EngineDocument` → genet views: the **document-family** block→view mapper.
 //!
 //! Maps the portable block model (`Block` / `InlineSpan`, what
-//! `DjotKnotEngine` and every other engine produce) into xilem_serval element
+//! `DjotKnotEngine` and every other engine produce) into cambium element
 //! views, so a document renders through genet-layout + netrender like any web
 //! page — the same `ScriptedDom` path the chrome builds every frame.
 //!
@@ -22,7 +22,7 @@
 //! djot/markdown tile. The render-to-`Scene` surface is `crate::note_surface`.
 
 use inker::{Block, EngineDocument, InlineSpan};
-use xilem_serval::{AnyView, GenetCtx, GenetElement, el, text};
+use cambium::{AnyView, GenetCtx, GenetElement, el, text};
 
 /// A type-erased note view child: a genet element or text node.
 ///

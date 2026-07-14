@@ -14,7 +14,7 @@
 
 use mere::forme::GraphMemberId;
 use register_theme::chrome::{ChromeTheme, Color32};
-use xilem_serval::{AnyView, Keyed, PointerClick, GenetCtx, GenetElement, clickable, el};
+use cambium::{AnyView, Keyed, PointerClick, GenetCtx, GenetElement, clickable, el};
 
 use super::WindowCtx;
 use mere::gloss::GlossRowIntent;
@@ -250,7 +250,7 @@ mod tests {
     use layout_dom_api::LayoutDom;
     use register_theme::chrome::ChromeTheme;
     use genet_scripted_dom::{NodeId, ScriptedDom};
-    use xilem_serval::PointerClick;
+    use cambium::PointerClick;
 
     use super::*;
     use crate::view_pane::ViewPane;

@@ -5,7 +5,7 @@
 //! # meerkat
 //!
 //! Mere's genet-as-host shell — the chrome (toolbar, omnibar, command palette,
-//! frametree) built as [`xilem_serval`] views over the **reused** `graphshell`
+//! frametree) built as [`cambium`] views over the **reused** `graphshell`
 //! chrome domain, presented by genet. This is flip Phase 3 (chrome-as-DOM): the
 //! eventual replacement for the Xilem + Masonry `mere-app` host.
 //!
@@ -22,7 +22,7 @@
 //! ## Shell document vs content roots
 //!
 //! The **shell document** (this crate's view tree: chrome plus the folded panes
-//! and orrery gnodes, diffed by `xilem_serval` from app state) and each
+//! and orrery gnodes, diffed by `cambium` from app state) and each
 //! **content-root** (a fetched page mutated by its engine, or the orrery graph
 //! scene) stay distinct document authorities; neither sees the other's tree (flip
 //! plan, Phase 3 + Standing constraints). Unified-document-host Phase 1 folded the
@@ -33,7 +33,7 @@
 //! The chrome renders from the reused [`chrome`] view-models into a genet
 //! `ScriptedDom` via [`GenetAppRunner`]: toolbar, an editable omnibar
 //! ([`TextInput`] lensed into the view), command palette, find bar, settings,
-//! comms pane, shellbar, and context menu are all `xilem_serval` views. The
+//! comms pane, shellbar, and context menu are all `cambium` views. The
 //! omnibar drives a real linear [`History`](nav::History) (text classified and
 //! resolved to a URL, `can_go_*` mirrored back into the toolbar), and
 //! [`Chrome::content_location`] is the entry a content-root loads. The bin
@@ -48,7 +48,7 @@ use comms::{CommsPane, ConversationId, Draft, ProtocolKind};
 use mere::forme::GraphMemberId;
 use frame::SessionId;
 pub use session_runtime::ShellbarEdge;
-use xilem_serval::TextInput;
+use cambium::TextInput;
 
 pub mod command;
 pub mod crawl_indicator;
@@ -75,7 +75,7 @@ pub struct Chrome {
     /// omnibar submits into.
     pub toolbar: ToolbarState,
     /// The omnibar's live editing buffer (caret / selection / IME), edited by the
-    /// `text_field`. `xilem_serval` text editing rides a `TextInput`, while the
+    /// `text_field`. `cambium` text editing rides a `TextInput`, while the
     /// reused `ToolbarState.editable.location` is a `String`; the host syncs the
     /// buffer into the session state on submit (Enter), keeping the domain
     /// unchanged.
@@ -233,7 +233,7 @@ pub struct Chrome {
     /// for any `TextInput` field (snapshot + coalesced typing + undo/redo). The buffer stays
     /// [`knot_source`](Self::knot_source); this drives it. Cleared on open/close.
     /// (Djot editor — Phase 2 undo/redo; promoted to genet.)
-    pub knot_history: xilem_serval::EditHistory,
+    pub knot_history: cambium::EditHistory,
     /// Prior selection byte-ranges for structural expand/shrink (Alt-Up / Alt-Down): each
     /// grow pushes the pre-grow range; a shrink pops back to it. Cleared by any edit or
     /// ordinary caret move, so the chain only lives across an uninterrupted Alt-arrow run.

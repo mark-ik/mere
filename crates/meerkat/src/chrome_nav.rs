@@ -60,7 +60,7 @@ impl Chrome {
             knot_save_requested: false,
             knot_close_after_save: false,
             knot_editor_preview: false,
-            knot_history: xilem_serval::EditHistory::new(),
+            knot_history: cambium::EditHistory::new(),
             knot_expand_stack: Vec::new(),
             knot_completion: None,
             sessions: Vec::new(),

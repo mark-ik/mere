@@ -316,7 +316,7 @@ impl PaneSession {
     /// [`caret_rect`](Self::caret_rect). `(x, y)` are in the chrome's (window) space,
     /// the same `caret_rect` returns. `None` before the session is built or when the
     /// node carries no laid-out text. The host maps a pointer event to a byte here,
-    /// then drives [`TextInput::set_caret_byte`](xilem_serval::TextInput::set_caret_byte).
+    /// then drives [`TextInput::set_caret_byte`](cambium::TextInput::set_caret_byte).
     pub(crate) fn caret_byte_at_point(
         &self,
         dom: &ScriptedDom,

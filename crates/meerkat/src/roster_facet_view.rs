@@ -4,7 +4,7 @@
 
 //! Facet rows and Facet Card rendering for the graph-object Roster.
 
-use xilem_serval::{PointerClick, clickable, el, on_click};
+use cambium::{PointerClick, clickable, el, on_click};
 
 use crate::roster::{FacetAction, FacetActionIntent, FacetCard, FacetEntry, RosterSubject};
 use crate::roster_view::{RosterIntent, RosterState, RosterView};

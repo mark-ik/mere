@@ -135,7 +135,7 @@ impl WindowCtx<'_> {
     /// DOM focus for this press, snap the caret to the clicked point when focus
     /// landed on a text field (the omnibar, palette, comms fields, or the knot
     /// editor source). Shift-click extends the selection instead of collapsing it,
-    /// matching every other caret motion on [`TextInput`](xilem_serval::TextInput).
+    /// matching every other caret motion on [`TextInput`](cambium::TextInput).
     /// `arm_drag` additionally arms the drag-select gesture (press path only —
     /// subsequent moves extend the selection until release). A no-op off a text
     /// field, before the first render, or when `(x, y)` falls outside the field's

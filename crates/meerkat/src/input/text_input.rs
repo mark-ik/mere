@@ -385,7 +385,7 @@ impl WindowCtx<'_> {
         name == Some("input") || name == Some("textarea")
     }
 
-    pub(crate) fn caret_field(&self, node: NodeId) -> &xilem_serval::TextInput {
+    pub(crate) fn caret_field(&self, node: NodeId) -> &cambium::TextInput {
         let focus = Some(node);
         let c = self.chrome();
         if focus == self.input_under_class("comms-new-to") {

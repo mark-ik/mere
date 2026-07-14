@@ -25,7 +25,7 @@
 //! annotation pin), which supplies a real anchor and view instead of this toy.
 
 use genet_layout::{ScrollOffsets, GenetPaintList};
-use xilem_serval::{AnyView, PointerClick, GenetCtx, GenetElement, clickable, el};
+use cambium::{AnyView, PointerClick, GenetCtx, GenetElement, clickable, el};
 
 use crate::view_pane::ViewPane;
 

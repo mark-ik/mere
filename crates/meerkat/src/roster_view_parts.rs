@@ -8,7 +8,7 @@
 //! ([`crate::roster_view_links`]) and Graphlets ([`crate::roster_view_graphlets`])
 //! tabs also build on. Split out of one file per the 600-LOC ceiling.
 
-use xilem_serval::{Keyed, PointerClick, GenetCtx, GenetElement, clickable, el, on_click};
+use cambium::{Keyed, PointerClick, GenetCtx, GenetElement, clickable, el, on_click};
 
 use crate::roster::{
     FieldDetail, FieldRow, NodeDetail, RosterDetail, RosterRow, RosterSubject, RosterTab,
@@ -269,7 +269,7 @@ fn field_step(
     id: mere::kernel::graph::FieldId,
     label: &'static str,
     delta: f32,
-) -> impl xilem_serval::View<RosterState, (), GenetCtx, Element = GenetElement> {
+) -> impl cambium::View<RosterState, (), GenetCtx, Element = GenetElement> {
     on_click(
         el::<_, RosterState, ()>("span", label).attr("class", "roster-field-step"),
         move |st: &mut RosterState, ev: PointerClick| {

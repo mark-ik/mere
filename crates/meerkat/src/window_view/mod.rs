@@ -29,7 +29,7 @@ use genet_scripted_dom::{NodeId, ScriptedDom};
 use genet_winit_host::WindowSurface;
 use session_runtime::{StartupUnlockMode, settings_store::ScriptPermissionPrefs};
 use winit::window::CursorIcon;
-use xilem_serval::{
+use cambium::{
     AnyView, Modifiers, PointerClick, ProjectionId, GenetCtx, GenetElement, GenetMultiRunner,
     WheelEvent, el, external_texture, host_pool, lens, on_click, on_wheel, overlay_rect,
 };
@@ -220,7 +220,7 @@ pub(crate) struct WindowView {
     /// recent-trail `GraphGlyph`), rendered to a small overlay scene composited
     /// top-right each frame — a host overlay, so the live meter never dirties
     /// the cached chrome base. (Chisel toolbar cluster.)
-    pub(crate) chrome_cluster: chisel::LeafRegistry<u64>,
+    pub(crate) chrome_cluster: sprigging::LeafRegistry<u64>,
     /// Last frame's total wall time (micros), fed to the cluster meter next frame.
     pub(crate) last_frame_us: f32,
     /// Rolling, slowly-decaying frame-time peak for the meter's peak tick.

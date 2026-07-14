@@ -211,7 +211,7 @@ pub(crate) fn find_bar(c: &Chrome) -> ChromeView {
 pub(crate) fn knot_completion_menu(comp: &crate::knot_completion::KnotCompletion) -> ChromeView {
     let labels: Vec<String> = comp.items.iter().map(|it| it.label.clone()).collect();
     let (x, y) = comp.anchor;
-    Box::new(xilem_serval::menu(x, y, labels, comp.selected, |c: &mut Chrome, i| {
+    Box::new(cambium::menu(x, y, labels, comp.selected, |c: &mut Chrome, i| {
         c.accept_knot_completion(i)
     }))
 }
@@ -280,7 +280,7 @@ pub(crate) fn knot_editor_pane(c: &Chrome) -> ChromeView {
     // A multi-line styled textarea (Enter inserts a newline, Up/Down move between lines),
     // with illume's highlight + entity spans painted as `syntax-*` classes tinct colours.
     let make: fn(&mut TextInput) -> TextField =
-        |t: &mut TextInput| xilem_serval::highlighted_textarea(t, xilem_serval::Highlight::Note);
+        |t: &mut TextInput| cambium::highlighted_textarea(t, cambium::Highlight::Note);
     let to_source: fn(&mut Chrome) -> &mut TextInput = |c: &mut Chrome| &mut c.knot_source;
     let field = lens(make, to_source);
     let source = el::<_, Chrome, ()>("div", field)

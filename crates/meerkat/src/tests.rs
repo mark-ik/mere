@@ -6,7 +6,7 @@ use super::command::Command;
 use super::*;
 use layout_dom_api::LayoutDom;
 use genet_scripted_dom::{NodeId, ScriptedDom};
-use xilem_serval::{Key, KeyEvent, NamedKey, PointerClick, GenetAppRunner, TextInput};
+use cambium::{Key, KeyEvent, NamedKey, PointerClick, GenetAppRunner, TextInput};
 
 /// Count elements with local tag `tag` in the subtree rooted at `id`.
 fn count_tag(dom: &ScriptedDom, id: NodeId, tag: &str) -> usize {
@@ -23,7 +23,7 @@ fn count_tag(dom: &ScriptedDom, id: NodeId, tag: &str) -> usize {
 /// The toolbar view diffs into the ScriptedDom from a reused `ToolbarState`:
 /// two buttons (back / forward) and one omnibar input, inside the chrome /
 /// toolbar / (empty) suggestions div scaffold. The reuse smoke test — the
-/// graphshell chrome domain renders through `xilem_serval`.
+/// graphshell chrome domain renders through `cambium`.
 #[test]
 fn toolbar_renders_from_reused_state() {
     let runner = runner("mere://welcome");
@@ -689,7 +689,7 @@ fn first_tag(dom: &ScriptedDom, id: NodeId, tag: &str) -> Option<NodeId> {
 fn shell_container_hosts_chrome_and_pane_under_one_runner() {
     use std::cell::RefCell;
     use std::rc::Rc;
-    use xilem_serval::{AnyView, GenetCtx, GenetElement, el, lens, on_click};
+    use cambium::{AnyView, GenetCtx, GenetElement, el, lens, on_click};
 
     struct DemoPane {
         clicks: u32,
@@ -763,7 +763,7 @@ fn shell_container_hosts_chrome_and_pane_under_one_runner() {
 fn orrery_element_reserves_a_retained_host_pool_over_the_external_texture_underlay() {
     use std::cell::RefCell;
     use std::rc::Rc;
-    use xilem_serval::{AnyView, GenetCtx, GenetElement, el, external_texture, host_pool};
+    use cambium::{AnyView, GenetCtx, GenetElement, el, external_texture, host_pool};
 
     struct OrreryDemo;
     type OrreryView = Box<dyn AnyView<OrreryDemo, (), GenetCtx, GenetElement>>;

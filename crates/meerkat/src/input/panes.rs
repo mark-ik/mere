@@ -31,7 +31,7 @@ impl WindowCtx<'_> {
         };
         if let Some(node) = target {
             // The orrery element's handler reads only `delta`; `local` / `size` are unused here.
-            let event = xilem_serval::WheelEvent::new((dx, dy), (0.0, 0.0), (0.0, 0.0));
+            let event = cambium::WheelEvent::new((dx, dy), (0.0, 0.0), (0.0, 0.0));
             self.multi
                 .dispatch_wheel(self.view.projection_id, node, event);
         }

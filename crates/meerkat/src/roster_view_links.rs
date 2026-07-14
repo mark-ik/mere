@@ -8,7 +8,7 @@
 
 use mere::forme::GraphMemberId;
 use mere::kernel::graph::EdgeFamily;
-use xilem_serval::{Keyed, PointerClick, clickable, el};
+use cambium::{Keyed, PointerClick, clickable, el};
 
 use crate::roster::{LinkCard, LinkRelationRow, LinkRow, RELATE_PICKER_KINDS, RosterSubject};
 use crate::roster_view::{RosterIntent, RosterState, RosterView};

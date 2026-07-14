@@ -21,7 +21,7 @@ use std::rc::Rc;
 use netrender::Scene;
 use genet_layout::{FragmentPlane, ScrollOffsets, GenetPaintList};
 use genet_scripted_dom::{NodeId, ScriptedDom};
-use xilem_serval::{PointerClick, GenetAppRunner, GenetCtx, GenetElement, View};
+use cambium::{PointerClick, GenetAppRunner, GenetCtx, GenetElement, View};
 
 use crate::pane_session::PaneSession;
 

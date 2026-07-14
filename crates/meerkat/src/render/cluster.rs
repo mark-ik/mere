@@ -12,7 +12,7 @@
 //! trail carries node identity. (Chisel toolbar cluster; Representations carry
 //! node identity.)
 
-use chisel::{ColorF, GraphGlyph, GraphGlyphNode, Leaf, Meter, PaintCx, Size};
+use sprigging::{ColorF, GraphGlyph, GraphGlyphNode, Leaf, Meter, PaintCx, Size};
 use mere::canvas::NodeState;
 use paint_list_api::specs::{TransformKind, TransformSpec};
 use paint_list_api::{DeviceIntSize, LayoutPoint, LayoutTransform, PaintCmd};

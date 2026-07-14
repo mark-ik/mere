@@ -7,7 +7,7 @@
 //! of `roster_view_parts.rs` per the 600-LOC ceiling.
 
 use mere::kernel::graph::EdgeFamily;
-use xilem_serval::{Keyed, PointerClick, clickable, el};
+use cambium::{Keyed, PointerClick, clickable, el};
 
 use crate::roster::{self, GraphletCard, GraphletRow, RosterSubject};
 use crate::roster_view::{RosterIntent, RosterState, RosterView};

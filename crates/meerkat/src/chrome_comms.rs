@@ -232,9 +232,9 @@ impl Chrome {
     /// whether it wrapped; `false` (no selection, or not a pair char) falls through to a
     /// normal insert. (Djot editor — Phase 3 auto-pairs.)
     pub fn wrap_selection_if_pair(&mut self, open: char) -> bool {
-        if self.knot_source.has_selection() && xilem_serval::pair_close(open).is_some() {
+        if self.knot_source.has_selection() && cambium::pair_close(open).is_some() {
             self.knot_edit_snapshot(false);
-            xilem_serval::wrap_selection(&mut self.knot_source, open)
+            cambium::wrap_selection(&mut self.knot_source, open)
         } else {
             false
         }

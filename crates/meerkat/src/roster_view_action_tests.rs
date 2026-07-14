@@ -3,7 +3,7 @@ use mere::kernel::graph::{EdgeFamily, RelationSelector, SemanticSubKind};
 use layout_dom_api::LayoutDom;
 use register_theme::chrome::ChromeTheme;
 use genet_scripted_dom::{NodeId, ScriptedDom};
-use xilem_serval::PointerClick;
+use cambium::PointerClick;
 
 use super::*;
 use crate::roster::{

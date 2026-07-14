@@ -22,7 +22,7 @@ use netrender::Scene;
 use paint_list_api::PaintList;
 use genet_layout::{NoImageLoader, ScrollOffsets};
 use genet_scripted_dom::ScriptedDom;
-use xilem_serval::{GenetAppRunner, el};
+use cambium::{GenetAppRunner, el};
 
 use meerkat::note_view::document_views;
 

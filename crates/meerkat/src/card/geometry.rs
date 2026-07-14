@@ -322,7 +322,7 @@ pub fn anchored_card_rect(
     // placed `RightOf` and flipped `LeftOf` + clamped into the band's horizontal margins by the
     // shared `anchor_point_clamped` — the same side+flip+clamp the submenu drives, instead of a
     // hand-rolled copy. Only the x is taken; the y is the card-specific node-centred clamp below.
-    use xilem_serval::{Placement, anchor_point_clamped};
+    use cambium::{Placement, anchor_point_clamped};
     let gap = 28.0;
     let keepout = (nx - gap, ny, 2.0 * gap, 0.0);
     let (x0, _) = anchor_point_clamped(

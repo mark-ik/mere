@@ -17,7 +17,7 @@ use genet_scripted_dom::NodeId;
 use genet_winit_host::key_event_from_winit;
 use winit::event::{ElementState, MouseButton};
 use winit::keyboard::{Key as WinitKey, NamedKey as WinitNamedKey};
-use xilem_serval::PointerClick;
+use cambium::PointerClick;
 
 use frame::PaneContent;
 

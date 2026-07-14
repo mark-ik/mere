@@ -6,7 +6,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use genet_scripted_dom::ScriptedDom;
-use xilem_serval::{
+use cambium::{
     AnyView, El, OnClick, OptionalAction, PointerClick, GenetAppRunner, GenetCtx, GenetElement,
     TextField, TextInput, el, lens, memoize, on_click, overlay_at, text_field_typed,
 };
@@ -41,7 +41,7 @@ fn go_forward(c: &mut Chrome, _: PointerClick) {
     c.history_step = Some(HistoryStep::Forward);
 }
 
-/// A chrome `<button>`: the shared [`xilem_serval::button`] pinned to the chrome's
+/// A chrome `<button>`: the shared [`cambium::button`] pinned to the chrome's
 /// `(Chrome, ())` view domain and carrying `class`. The single spot meerkat spells
 /// a button element, replacing the hand-rolled `on_click(el("button", ..), h)` form
 /// at every chrome button. The `<button>` tag stamps `role="button"` for the a11y
@@ -55,7 +55,7 @@ where
     F: Fn(&mut Chrome, PointerClick) -> OA + 'static,
     OA: OptionalAction<()>,
 {
-    xilem_serval::button(label, handler).attr("class", class)
+    cambium::button(label, handler).attr("class", class)
 }
 
 /// Mirror the current history entry into the reused chrome state: the toolbar
@@ -79,7 +79,7 @@ pub(super) fn sync_chrome_from_history(c: &mut Chrome, submitted: bool) {
 }
 
 /// The toolbar chrome as genet DOM: back / forward buttons and an **editable**
-/// omnibar — a reused `xilem_serval` [`text_field`](xilem_serval::text_field)
+/// omnibar — a reused `cambium` [`text_field`](cambium::text_field)
 /// over [`Chrome::omnibar`], composed via [`lens`] exactly like pelt-live's
 /// field. The host paints its caret and syncs it into the reused `ToolbarState`
 /// on submit.

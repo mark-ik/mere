@@ -32,7 +32,7 @@ pub(super) struct FrameRects {
 
 /// The inline `style` for a host-positioned overlay surface: an absolute box at
 /// `(x, y)` sized `w`×`h`, optionally with a `flex-direction`. Mirrors the
-/// `xilem_serval::overlay_rect` geometry for the surfaces whose rect is a **layout
+/// `cambium::overlay_rect` geometry for the surfaces whose rect is a **layout
 /// output** (the comms pane fills its frame leaf; the shellbar docks to a window
 /// edge) — render patches these post-layout rather than building them with the
 /// rect at view time, so this is the one spot that formats their geometry. (Overlay

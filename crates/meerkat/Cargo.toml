@@ -6,7 +6,7 @@ license.workspace = true
 repository.workspace = true
 publish = false
 rust-version = "1.92.0"
-description = "Mere's genet-as-host shell (the eventual replacement for the Xilem + Masonry mere-app host): chrome — toolbar / omnibar / command palette / frametree — built as xilem_serval views over the reused graphshell chrome domain, presented by genet. Holds the separate-roots discipline (chrome-root vs content-roots) from commit one."
+description = "Mere's Genet-hosted shell: chrome built as Cambium views over the reused graphshell chrome domain, presented by Genet with separate chrome and content roots."
 
 [features]
 default = ["engine-scry"]
@@ -75,12 +75,12 @@ path = "src/main.rs"
 # The chrome-as-DOM view layer: Cambium diffs a Meristem view tree into Genet's
 # mutable ScriptedDom. Mere and Genet share the vello 0.9 / wgpu 29 pins, so
 # there is no renderer-stack reconciliation (Genet-as-host flip plan, Findings).
-xilem-serval = { package = "cambium", git = "https://github.com/mark-ik/cambium.git", branch = "main", features = ["highlight"] }
+cambium = { git = "https://github.com/mark-ik/cambium.git", branch = "main", features = ["highlight"] }
 # Sprigging widget leaves: the toolbar status cluster (frame-time Meter + recent
 # GraphGlyph) as custom leaf elements in the chrome DOM, plus the grid
 # widget (GridSpec) for the nodes/recent table. The chrome emit splices leaf
 # commands via IncrementalLayout::emit_paint_list_with_leaves.
-chisel = { package = "sprigging", git = "https://github.com/mark-ik/cambium.git", branch = "main" }
+sprigging = { git = "https://github.com/mark-ik/cambium.git", branch = "main" }
 genet-scripted-dom = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 # The content card parses fetched pages as full HTML documents (keeping <head>,
 # so head <style> / <link> are seen) and renders them through the shared genet

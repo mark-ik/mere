@@ -80,7 +80,7 @@ fn scrying_vk(event: &winit::event::KeyEvent) -> u32 {
 /// one state, N windows — Slice 3.)
 fn apply_comms_to_chrome(
     multi: &mut super::window_view::ShellMultiRunner,
-    pid: xilem_serval::ProjectionId,
+    pid: cambium::ProjectionId,
     update: &comms_host::CommsUpdate,
 ) {
     multi.update_local(pid, |app| {

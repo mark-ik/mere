@@ -5,7 +5,7 @@
 //! In-editor completion popups for the knot source: the `/` slash menu (block templates)
 //! and (later) `[[` node-link completion. The state + detection + accept live here; the
 //! host (`WindowCtx`) drives the refresh (candidate items + caret anchor) and the keyboard,
-//! and the chrome view renders it through `xilem_serval::menu`. (Djot editor — Phase 3.)
+//! and the chrome view renders it through `cambium::menu`. (Djot editor — Phase 3.)
 
 use super::*;
 

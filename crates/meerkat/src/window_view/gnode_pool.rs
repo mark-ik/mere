@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use layout_dom_api::{LayoutDom, LayoutDomMut, Namespace};
 use genet_scripted_dom::{NodeId, ScriptedDom};
-use xilem_serval::{attr_qual, html_qual};
+use cambium::{attr_qual, html_qual};
 
 use super::*;
 

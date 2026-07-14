@@ -21,7 +21,7 @@
 //! carries no state-bound view callbacks. (Node body & face — the shape editor; swatch template #1.)
 
 use mere::kernel::graph::{EdgeFamily, RelationKind};
-use xilem_serval::{AnyView, GenetCtx, GenetElement, el};
+use cambium::{AnyView, GenetCtx, GenetElement, el};
 
 /// What a node swatch shows: the sprite face (a PNG data-URI) and its collider hull (the
 /// opaque-region convex polygon in face-normalized coords, `[-0.5, 0.5]`). A node without a

@@ -1271,7 +1271,7 @@ fn omnibar_ctrl_a_selects_all() {
             .input_under_class("toolbar")
             .expect("the omnibar input exists in the chrome DOM");
         wc.multi.set_focus(wc.view.projection_id, Some(omnibar));
-        wc.chrome_update(|c| c.omnibar = xilem_serval::TextInput::new("hello world"));
+        wc.chrome_update(|c| c.omnibar = cambium::TextInput::new("hello world"));
         wc.view.modifiers.ctrl = true;
         wc.on_key_pressed(&winit::keyboard::Key::Character("a".into()));
     }
@@ -1447,7 +1447,7 @@ fn knot_editor_saves_the_focused_note_body() {
     {
         let mut wc = app.ctx();
         wc.chrome_update(|c| {
-            c.knot_source = xilem_serval::TextInput::new(updated);
+            c.knot_source = cambium::TextInput::new(updated);
             c.request_knot_editor_save();
         });
         wc.drain_chrome_intents();
@@ -1490,7 +1490,7 @@ fn knot_editor_close_autosaves_the_note_body() {
     {
         let mut wc = app.ctx();
         wc.chrome_update(|c| {
-            c.knot_source = xilem_serval::TextInput::new(updated);
+            c.knot_source = cambium::TextInput::new(updated);
             // The × button's action: request a close, which autosaves first (no Save click).
             c.request_knot_editor_close();
         });
@@ -1539,7 +1539,7 @@ fn knot_editor_edits_a_markdown_note_and_saves_as_markdown() {
     {
         let mut wc = app.ctx();
         wc.chrome_update(|c| {
-            c.knot_source = xilem_serval::TextInput::new(updated);
+            c.knot_source = cambium::TextInput::new(updated);
             c.request_knot_editor_save();
         });
         wc.drain_chrome_intents();
@@ -1598,7 +1598,7 @@ fn omnibar_right_arrow_accepts_the_ghost_completion() {
             .expect("the omnibar input exists in the chrome DOM");
         wc.multi.set_focus(wc.view.projection_id, Some(omnibar));
         wc.chrome_update(|c| {
-            c.omnibar = xilem_serval::TextInput::new(">ros");
+            c.omnibar = cambium::TextInput::new(">ros");
             c.refresh_suggestions();
         });
         assert_eq!(wc.chrome().omnibar.ghost(), "ter", "the ghost is shown");
@@ -1652,7 +1652,7 @@ fn ctrl_l_focuses_and_selects_the_omnibar() {
         .input_under_class("toolbar")
         .expect("the omnibar input exists in the chrome DOM");
     // Seed the bar with a shown location and put the caret at its end (focused).
-    wc.chrome_update(|c| c.omnibar = xilem_serval::TextInput::new("gemini://shown.example/"));
+    wc.chrome_update(|c| c.omnibar = cambium::TextInput::new("gemini://shown.example/"));
     wc.multi.set_focus(wc.view.projection_id, None);
     wc.view.modifiers.ctrl = true;
     wc.on_key_pressed(&winit::keyboard::Key::Character("l".into()));
@@ -1951,7 +1951,7 @@ fn omnibar_relate_without_a_pair_reports_a_note() {
             .expect("the omnibar input exists in the chrome DOM");
         wc.multi.set_focus(wc.view.projection_id, Some(omnibar));
         wc.chrome_update(|c| {
-            c.omnibar = xilem_serval::TextInput::new(">relate");
+            c.omnibar = cambium::TextInput::new(">relate");
             c.refresh_suggestions();
         });
         wc.on_key_pressed(&winit::keyboard::Key::Named(
