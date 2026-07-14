@@ -80,6 +80,6 @@ pub use stub::StubEmbeddingProvider;
     note = "renamed to StubEmbeddingProvider (it is a test double); use LexicalEmbeddingProvider for a real burn-free signal"
 )]
 pub type HashedEmbeddingProvider = StubEmbeddingProvider;
-pub use persistence::{load_from_eidetic, save_to_eidetic};
+pub use persistence::{list_from_eidetic, load_from_eidetic, save_to_eidetic};
 pub use provider::{EmbedError, EmbeddingProvider, SimilarityMetric};
 pub use search::SemanticSearch;

@@ -52,6 +52,7 @@ mod tests {
     use kernel::geometry::PortablePoint;
     use kernel::graph::{Graph, NodeKey};
     use std::collections::HashMap;
+    use kernel::graph::fixtures::GraphFixtures;
     use uuid::Uuid;
 
     fn four_nodes() -> (Graph, [NodeKey; 4]) {

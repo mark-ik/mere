@@ -26,3 +26,7 @@ tracing = "0.1"
 
 [dev-dependencies]
 uuid = { workspace = true }
+# The adapter tests build graphs through the raw mutators, which are `pub(crate)`
+# on the kernel and reachable only through the `GraphFixtures` extension trait
+# behind this feature. Same pattern graphlets uses.
+kernel = { workspace = true, features = ["fixtures"] }

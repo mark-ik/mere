@@ -276,7 +276,16 @@ async fn run<B: Backend + Clone + Send + Sync + 'static>(
                     }
                     WorkerAction::Execute(id) => {
                         let job = board.job(id).expect("execute targets a known job");
-                        let result = execute(job.kind, &job.payload);
+                        // `payload` is `None` only after an accepted checkpoint erased a
+                        // TERMINAL job's input (`PayloadRule::EraseTerminalAtCheckpoint`), and
+                        // `next_action` already guards on `payload.is_some()` before handing
+                        // back `Execute`. So a missing payload here is a broken invariant, not
+                        // a case to skip quietly.
+                        let payload = job
+                            .payload
+                            .as_deref()
+                            .expect("execute targets a job whose input is retained");
+                        let result = execute(job.kind, payload);
                         println!(
                             "executing job {} [{:?}] → {:?}",
                             hex8(&id.0),

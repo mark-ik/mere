@@ -229,6 +229,7 @@ fn start_value(i: usize, eigen_idx: usize, n: usize) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kernel::graph::fixtures::GraphFixtures;
     use cartography::request::ViewIntent;
     use cartography::signals::IntelligenceSignals;
     use kernel::geometry::PortablePoint;

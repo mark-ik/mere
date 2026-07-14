@@ -53,6 +53,7 @@ mod tests {
     use euclid::default::Point2D;
     use kernel::geometry::PortablePoint;
     use kernel::graph::{Graph, NodeKey};
+    use kernel::graph::fixtures::GraphFixtures;
     use uuid::Uuid;
 
     fn small_graph(n: usize) -> (Graph, Vec<NodeKey>) {

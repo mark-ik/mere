@@ -126,6 +126,7 @@ mod tests {
     use cartography::signals::{IntelligenceSignals, NodeEmbeddings};
     use kernel::geometry::PortablePoint;
     use kernel::graph::Graph;
+    use kernel::graph::fixtures::GraphFixtures;
     use uuid::Uuid;
 
     fn small_graph() -> (Graph, [NodeKey; 3]) {

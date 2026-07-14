@@ -235,7 +235,7 @@ fn load_provider(model_dir: &str, backend: &str) -> Result<Box<dyn EmbeddingProv
 
 /// The newest stored vector-index engram, if any.
 async fn load_vector_index(store: &mut FjallStore) -> Result<Option<VectorIndex<String>>, String> {
-    let manifests = eidetic::list_typed::<VectorIndex<String>>(store)
+    let manifests = embed::persistence::list_from_eidetic::<String>(store)
         .await
         .map_err(|e| format!("list vector indices: {e}"))?;
     let Some(newest) = manifests.iter().max_by_key(|m| m.created_at) else {

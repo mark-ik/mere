@@ -22,8 +22,9 @@
 use std::hash::Hash;
 
 use eidetic::{
-    BlobFetcher, BlobSource, Hash as ContentHash, ManifestId, PrivacyClass, ProvenanceRecord,
-    SchemaRef, Timestamp, TrustEnvelope, TypedPayload, load_typed, save_typed,
+    BlobFetcher, BlobManifest, BlobSource, Hash as ContentHash, ManifestId, PrivacyClass,
+    ProvenanceRecord, SchemaRef, Timestamp, TrustEnvelope, TypedPayload, list_typed, load_typed,
+    save_typed,
 };
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -98,6 +99,21 @@ where
         created_at,
     )
     .await
+}
+
+/// List the manifests of every stored vector index. Ordering is the store's;
+/// callers pick (typically the newest by `created_at`).
+///
+/// This is the listing counterpart to [`save_to_eidetic`] / [`load_from_eidetic`],
+/// and it has to live here: `eidetic::list_typed` is generic over the
+/// [`TypedPayload`] that carries the schema, and the only type carrying
+/// `VectorIndex`'s schema is the private `PersistedIndex` newtype above. A caller
+/// outside this module cannot name it, so it cannot list without this.
+pub async fn list_from_eidetic<K>(store: &mut dyn eidetic::Store) -> eidetic::Result<Vec<BlobManifest>>
+where
+    K: Hash + Eq + Clone + Serialize + DeserializeOwned,
+{
+    list_typed::<PersistedIndex<K>>(store).await
 }
 
 /// Load a vector index by its manifest id. Returns `Ok(None)` if no

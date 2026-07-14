@@ -51,6 +51,7 @@ mod tests {
     use cartography::signals::IntelligenceSignals;
     use kernel::geometry::PortablePoint;
     use kernel::graph::{Graph, NodeKey};
+    use kernel::graph::fixtures::GraphFixtures;
     use uuid::Uuid;
 
     fn small_graph(n: usize) -> (Graph, Vec<NodeKey>) {
