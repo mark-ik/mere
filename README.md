@@ -59,7 +59,8 @@ host (`meerkat`) renders the result and composites it.
 The whole stack is arenas for ownership, id-linked trees for structure,
 and delta streams for change, repeated at every layer
 from the JS heap (forked Nova) up to the orrery graph.
-Have a look at `xilem_serval`, a component in that repository, too.
+Have a look at Cambium, the Genet-native GUI toolkit hosted in its own
+repository, too.
 Up and down the stack, this pattern repeats:  
 - Identity is an index, not an address.
 - Meaning is a kind, not a class.
