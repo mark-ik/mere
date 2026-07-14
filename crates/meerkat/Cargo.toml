@@ -38,10 +38,10 @@ scripted = ["pelt-desktop/scripted", "dep:script-engine-api", "dep:script-engine
 # the Boa rung and the shared scripted host path. Mirrors pelt-desktop's split so the
 # host can route to Nova explicitly rather than silently swapping engines under one id.
 scripted-nova = ["scripted", "pelt-desktop/scripted-nova", "dep:script-engine-nova"]
-# The genet smolweb render lane: a focused gemini/gopher/feed capsule renders
-# natively through pelt's `SmolwebDocument` (errand parse -> smolweb-views ->
-# ScriptedDom -> genet-layout), the genet lane rather than the block card. Off by
-# default so the base build stays clear of the smolweb transport/parse stack.
+# The Genet smolweb document lane: a focused Gemini/Gopher/feed capsule lowers
+# through Nematic -> EngineDocument -> document-canvas -> PaintList -> Scene,
+# retaining scroll and link regions. Off by default so the base build stays
+# clear of the smolweb transport/parse stack.
 smolweb = ["pelt-desktop/smolweb", "dep:genet-documents", "genet-documents/smolweb"]
 # Local LLM inference for the `>ask` omnibar verb. Off by default: it pulls the
 # burn-wgpu tree (cubecl), a multi-minute cold build. Without it, `>ask` still

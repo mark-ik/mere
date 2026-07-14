@@ -2,7 +2,9 @@ param(
     [ValidateSet("check", "build", "run", "test-roster", "drive")]
     [string]$Command = "run",
     [switch]$Release,
-    [string]$TargetDir = "C:\t\meerkat-target"
+    [string]$TargetDir = "C:\t\meerkat-target",
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$CargoArgs = @()
 )
 
 $ErrorActionPreference = "Stop"
@@ -29,6 +31,7 @@ function Invoke-Cargo {
 
 function Build-Meerkat {
     $args = @("build", "-p", "meerkat", "--bin", "meerkat")
+    $args += $CargoArgs
     if ($Release) {
         $args += "--release"
     }
@@ -38,7 +41,7 @@ function Build-Meerkat {
 
 switch ($Command) {
     "check" {
-        Invoke-Cargo @("check", "-p", "meerkat", "--bin", "meerkat", "--message-format=short")
+        Invoke-Cargo (@("check", "-p", "meerkat", "--bin", "meerkat", "--message-format=short") + $CargoArgs)
     }
     "build" {
         Build-Meerkat
