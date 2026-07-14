@@ -244,6 +244,8 @@ all = "warn"
 # and genet's vendored stylo_taffy adapter consumes those registry packages
 # directly. The only remaining root redirect in this cone is the Taffy fork.
 [patch.crates-io]
+layout-dom-api = { git = "https://github.com/mark-ik/genet.git", branch = "main", version = "=0.1.0" }
+genet-scripted-dom = { git = "https://github.com/mark-ik/genet.git", branch = "main", version = "=0.1.0" }
 # genet-layout requires taffy =0.11.0-experimental-cache-fix.3 (genet's vendored
 # float-layout fork, not on crates.io). genet patches it in its own workspace; mere
 # does not inherit that, so redirect taffy to the fork from the owned genet repo by

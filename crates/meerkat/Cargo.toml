@@ -75,13 +75,13 @@ path = "src/main.rs"
 # The chrome-as-DOM view layer: Cambium diffs a Meristem view tree into Genet's
 # mutable ScriptedDom. Mere and Genet share the vello 0.9 / wgpu 29 pins, so
 # there is no renderer-stack reconciliation (Genet-as-host flip plan, Findings).
-cambium = { git = "https://github.com/mark-ik/cambium.git", branch = "main", features = ["highlight"] }
-cambium-winit = { git = "https://github.com/mark-ik/cambium.git", branch = "main" }
+cambium = { version = "0.2.0", features = ["highlight"] }
+cambium-winit = "0.2.0"
 # Sprigging widget leaves: the toolbar status cluster (frame-time Meter + recent
 # GraphGlyph) as custom leaf elements in the chrome DOM, plus the grid
 # widget (GridSpec) for the nodes/recent table. The chrome emit splices leaf
 # commands via IncrementalLayout::emit_paint_list_with_leaves.
-sprigging = { git = "https://github.com/mark-ik/cambium.git", branch = "main" }
+sprigging = "0.1.0"
 genet-scripted-dom = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 # The content card parses fetched pages as full HTML documents (keeping <head>,
 # so head <style> / <link> are seen) and renders them through the shared genet
