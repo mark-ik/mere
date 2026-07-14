@@ -6,10 +6,10 @@
 //! [`Shell`](super::Shell). Factored from `main.rs` to keep files under the
 //! workspace 600-LOC ceiling.
 
-use mere::forme::GraphMemberId;
-use frame::{GraphId, InsertSide, PaneContent, PaneId, PaneNode};
+use frisket::{GraphId, InsertSide, PaneContent, PaneId, PaneNode};
 use meerkat::Chrome;
 use mere::canvas::Canvas;
+use mere::forme::GraphMemberId;
 use session_runtime::{PersistedSettings, settings_store};
 
 use super::observability::ObservabilitySnapshot;

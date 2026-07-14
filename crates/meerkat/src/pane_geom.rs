@@ -9,8 +9,8 @@
 //! against; the pane lifecycle (open / close / toggle / sync) stays in
 //! `frame_ops`. Factored out to keep files under the 600-LOC ceiling.
 
+use frisket::{GraphId, PaneContent, PaneId, SplitAxis, SplitChoice};
 use mere::forme::GraphMemberId;
-use frame::{GraphId, PaneContent, PaneId, SplitAxis, SplitChoice};
 
 use super::{WindowCtx, frame_view};
 

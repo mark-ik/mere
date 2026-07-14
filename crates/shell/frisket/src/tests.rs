@@ -10,7 +10,7 @@ use uxtree::{UxTree, node_id_for_path};
 
 use crate::*;
 
-fn fixture_three_pane_frame() -> FrameLayout {
+fn fixture_three_pane_frame() -> FrisketLayout {
     // Layout:
     //   ┌──────────┬─────────┐
     //   │          │ orrery  │
@@ -18,8 +18,8 @@ fn fixture_three_pane_frame() -> FrameLayout {
     //   │          │apparatus│
     //   └──────────┴─────────┘
     let g = GraphId::from_uuid(uuid::Uuid::from_u128(0xc01));
-    FrameLayout {
-        id: FrameId::new("reading"),
+    FrisketLayout {
+        id: FrisketId::new("reading"),
         label: "Reading".to_string(),
         root: PaneNode::Split {
             axis: SplitAxis::Horizontal,
@@ -50,7 +50,7 @@ fn fixture_three_pane_frame() -> FrameLayout {
 #[test]
 fn root_carries_frame_label() {
     let layout = fixture_three_pane_frame();
-    let tree = project_frame(&layout);
+    let tree = project_frisket(&layout);
     let (_, root) = tree.nodes.iter().find(|(id, _)| *id == tree.root).unwrap();
     assert_eq!(root.role(), Role::Group);
     assert_eq!(root.label(), Some("Reading"));
@@ -59,7 +59,7 @@ fn root_carries_frame_label() {
 #[test]
 fn each_leaf_emits_a_pane_node_with_content_tag_label() {
     let layout = fixture_three_pane_frame();
-    let tree = project_frame(&layout);
+    let tree = project_frisket(&layout);
     let labels: Vec<_> = tree
         .nodes
         .iter()
@@ -73,7 +73,7 @@ fn each_leaf_emits_a_pane_node_with_content_tag_label() {
 #[test]
 fn split_nodes_carry_axis_and_ratio_in_description() {
     let layout = fixture_three_pane_frame();
-    let tree = project_frame(&layout);
+    let tree = project_frisket(&layout);
     let split_descriptions: Vec<_> = tree
         .nodes
         .iter()
@@ -95,8 +95,8 @@ fn split_nodes_carry_axis_and_ratio_in_description() {
 #[test]
 fn ids_are_deterministic_across_runs() {
     let layout = fixture_three_pane_frame();
-    let a = project_frame(&layout);
-    let b = project_frame(&layout);
+    let a = project_frisket(&layout);
+    let b = project_frisket(&layout);
     assert_eq!(a.root, b.root);
     let a_ids: Vec<_> = a.nodes.iter().map(|(id, _)| *id).collect();
     let b_ids: Vec<_> = b.nodes.iter().map(|(id, _)| *id).collect();
@@ -107,7 +107,7 @@ fn ids_are_deterministic_across_runs() {
 fn project_frame_with_attaches_subtree_to_matching_leaf() {
     let layout = fixture_three_pane_frame();
 
-    let tree = project_frame_with(&layout, |content, _| match content {
+    let tree = project_frisket_with(&layout, |content, _| match content {
         PaneContent::Workbench => {
             // Build a fresh subtree on each call so the closure can be
             // FnMut without needing Clone on UxTree.
@@ -125,7 +125,7 @@ fn project_frame_with_attaches_subtree_to_matching_leaf() {
         tree.nodes
             .iter()
             .any(|(_, n)| n.label() == Some("workbench-content")),
-        "expected attached workbench subtree to merge into frame"
+        "expected attached workbench subtree to merge into the frisket"
     );
 }
 
@@ -163,7 +163,7 @@ fn set_split_ratio_clamps_and_finds_path() {
 fn frame_layout_round_trips_through_serde() {
     let layout = fixture_three_pane_frame();
     let json = serde_json::to_string(&layout).expect("serialize");
-    let restored: FrameLayout = serde_json::from_str(&json).expect("deserialize");
+    let restored: FrisketLayout = serde_json::from_str(&json).expect("deserialize");
     assert_eq!(layout, restored);
 }
 
@@ -281,8 +281,8 @@ fn retag_graph_bound_from_repoints_only_the_outgoing_graph() {
     let a = GraphId::from_uuid(uuid::Uuid::from_u128(0xa));
     let b = GraphId::from_uuid(uuid::Uuid::from_u128(0xb));
     let c = GraphId::from_uuid(uuid::Uuid::from_u128(0xc));
-    let mut layout = FrameLayout {
-        id: FrameId::new("content"),
+    let mut layout = FrisketLayout {
+        id: FrisketId::new("content"),
         label: "content".to_string(),
         root: PaneNode::Split {
             axis: SplitAxis::Horizontal,
@@ -316,8 +316,8 @@ fn dedupe_graph_panes_keeps_one_orrery_per_graph() {
     let a = GraphId::from_uuid(uuid::Uuid::from_u128(0xa));
     let b = GraphId::from_uuid(uuid::Uuid::from_u128(0xb));
     // [ [orrery@a | orrery@a(dup)] | orrery@b ] — three Orrery panes, two on `a`.
-    let mut layout = FrameLayout {
-        id: FrameId::new("content"),
+    let mut layout = FrisketLayout {
+        id: FrisketId::new("content"),
         label: "content".to_string(),
         root: PaneNode::Split {
             axis: SplitAxis::Horizontal,

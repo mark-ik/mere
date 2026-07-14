@@ -42,7 +42,7 @@ use misfin::{
     MisfinServerConfig, ServedMailbox, certificate_fingerprint, deterministic_identity,
     identity_salt,
 };
-use murm::{CabalKey, Murm, Post};
+use murm::{CabalKey, ConversationStorage, Murm, Post};
 use rustls_pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use tokio::sync::broadcast;
 use transport::{P2pandaTransport, sync_overlay_topic};
@@ -372,16 +372,18 @@ async fn build_comms(dir: &Path) -> Result<CommsSetup, String> {
     // murm: a networked cabal over a real p2panda transport. Bind failure disables
     // the cabal (misfin still works); otherwise the cabal works locally and syncs
     // once a peer connects.
-    let (murm, cabal_id, cabal_live, cabal_ticket) = match build_cabal(&provider, seed).await {
-        Ok((murm, adapter, rx, conversation, ticket, cabal_id)) => {
-            comms = comms.with_adapter(adapter);
-            (Some(murm), Some(cabal_id), Some((rx, conversation)), ticket)
-        }
-        Err(err) => {
-            tracing::warn!(%err, "comms: murm cabal unavailable; misfin only");
-            (None, None, None, None)
-        }
-    };
+    let murm_dir = comms_dir.join("murm");
+    let (murm, cabal_id, cabal_live, cabal_ticket) =
+        match build_cabal(&provider, seed, &murm_dir).await {
+            Ok((murm, adapter, rx, conversation, ticket, cabal_id)) => {
+                comms = comms.with_adapter(adapter);
+                (Some(murm), Some(cabal_id), Some((rx, conversation)), ticket)
+            }
+            Err(err) => {
+                tracing::warn!(%err, "comms: murm cabal unavailable; misfin only");
+                (None, None, None, None)
+            }
+        };
 
     Ok(CommsSetup {
         backends: CommsBackends {
@@ -442,6 +444,7 @@ async fn start_misfin_server(sender: &MisfinSendIdentity, address: &str, store: 
 async fn build_cabal(
     provider: &Arc<dyn IdentityProvider>,
     seed: [u8; 32],
+    storage_dir: &Path,
 ) -> Result<
     (
         Murm<P2pandaTransport>,
@@ -463,7 +466,11 @@ async fn build_cabal(
     if let Some(ticket) = &ticket {
         tracing::info!(%ticket, "comms: murm cabal up — share this ticket to join the cabal");
     }
-    let murm = Murm::new(provider.clone(), transport);
+    let murm = Murm::with_storage(
+        provider.clone(),
+        transport,
+        ConversationStorage::redb(storage_dir),
+    );
     let synced = murm
         .subscribe_cabal(&CabalKey::new(DEMO_CABAL_KEY))
         .await

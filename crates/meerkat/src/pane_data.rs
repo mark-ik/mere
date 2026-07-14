@@ -11,7 +11,7 @@
 //! 600-LOC ceiling.
 
 use eidetic::{BlobManifest, DeletedNode};
-use frame::PaneContent;
+use frisket::PaneContent;
 use mere::kernel::graph::Node;
 
 use super::WindowCtx;
@@ -366,5 +366,4 @@ mod tests {
         });
         assert_eq!(rows, vec![("Lane".to_string(), "off".to_string())]);
     }
-
 }

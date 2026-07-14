@@ -2,20 +2,32 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! # frame
+//! # frisket
 //!
-//! Frame domain layer — defines the savable layout of resizable panes
-//! and projects it into a uxtree subtree.
+//! The pane model: a savable tree of resizable panes, projected into a uxtree
+//! subtree. On a hand press the *frisket* is the hinged frame whose cut-out
+//! apertures decide what prints where; this is the same frame, over a window.
 //!
-//! See the crate README for the conceptual scope and the relationship
-//! to legacy `platen::FrameState` / `shell-state`.
+//! Renamed from `frame` (2026-07-14), which was overloaded three ways in this
+//! family (a rendered frame, a `TileFrame`, a window's pane arrangement) and which
+//! also fused in the workspace id vocabulary. The ids now live in [`incipit`];
+//! this crate is the panes alone.
+//!
+//! The tiers, which nest rather than compete:
+//!
+//! - `frisket` is pane-ness: kinds, ids, the split tree, the persisted layout.
+//! - `platen` tiles graph nodes *inside* one [`PaneContent::Workbench`] leaf.
+//! - The host turns this ratio tree into rects. Frisket emits no geometry.
 //!
 //! Split across submodules to keep each file under the workspace's
-//! 600-LOC ceiling: [`layout`] holds the [`FrameLayout`] operations
-//! ([`FrameLayout::summon_leaf`], `reparent_leaf`, `close_leaf`, …);
-//! [`projection`] holds [`project_frame`] + [`project_frame_with`].
+//! 600-LOC ceiling: [`layout`] holds the [`FrisketLayout`] operations
+//! ([`FrisketLayout::summon_leaf`], `reparent_leaf`, `close_leaf`, …);
+//! [`projection`] holds [`project_frisket`] + [`project_frisket_with`].
+//!
+//! [`incipit`]: https://docs.rs/incipit
+//! [`platen`]: https://docs.rs/platen
 
-#![doc(html_root_url = "https://docs.rs/frame/0.0.1")]
+#![doc(html_root_url = "https://docs.rs/frisket/0.0.1")]
 
 use serde::{Deserialize, Serialize};
 
@@ -25,7 +37,12 @@ mod projection;
 #[cfg(test)]
 mod tests;
 
-pub use projection::{project_frame, project_frame_with};
+pub use projection::{project_frisket, project_frisket_with};
+
+/// The workspace identity vocabulary this crate binds panes to. Re-exported for
+/// convenience: a pane leaf carries a [`GraphId`], and hosts that hold a
+/// [`FrisketLayout`] invariably hold graph ids beside it.
+pub use incipit::{GraphId, SessionId};
 
 /// Crate version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -33,11 +50,11 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Lifecycle stage marker.
 pub const STAGE: &str = "pre-alpha";
 
-/// Stable identifier for a saved frame layout.
+/// Stable identifier for a saved pane layout.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct FrameId(pub String);
+pub struct FrisketId(pub String);
 
-impl FrameId {
+impl FrisketId {
     pub fn new(value: impl Into<String>) -> Self {
         Self(value.into())
     }
@@ -47,79 +64,9 @@ impl FrameId {
     }
 }
 
-/// Stable identifier for an individual pane within a frame layout.
+/// Stable identifier for an individual pane within a layout.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PaneId(pub u64);
-
-/// Stable identifier for a graph at app scope. Every leaf in a
-/// `FrameLayout` carries one so the host can resolve "which graph
-/// does this panel render?" against the app's `GraphRegistry`.
-///
-/// Frame layouts persist with serialized graph IDs so a saved
-/// arrangement reattaches to the right graphs on next launch.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct GraphId(pub uuid::Uuid);
-
-impl GraphId {
-    pub fn new() -> Self {
-        Self(uuid::Uuid::new_v4())
-    }
-
-    pub fn from_uuid(uuid: uuid::Uuid) -> Self {
-        Self(uuid)
-    }
-
-    /// The nil (all-zero) id — the "unbound" marker a window-chrome leaf carries
-    /// (it follows no graph), distinct from any real graph's id. (Multi-graph MG5.)
-    pub fn nil() -> Self {
-        Self(uuid::Uuid::nil())
-    }
-
-    pub fn as_uuid(&self) -> &uuid::Uuid {
-        &self.0
-    }
-}
-
-impl Default for GraphId {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Durable session identity. Wraps the runtime/session shape: a
-/// session owns a root graph (and may grow sub-graph references),
-/// holds the worker manifest, engine profile binding, and policy
-/// overrides. v0 of session-persistence maps one `SessionId` 1:1
-/// to one root `GraphId`; the type distinction is enforced from
-/// day one so later phases (sub-graphs, fork-on-divergence,
-/// multi-graph-per-session) don't require a painful retrofit.
-///
-/// See `design_docs/mere_docs/research/2026-05-11_browser_multiplexer_framing.md`
-/// §2 (identity matrix) for the broader identity model and
-/// `design_docs/mere_docs/implementation_strategy/2026-05-11_graph_session_manifest_plan.md`
-/// for storage / lifecycle.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct SessionId(pub uuid::Uuid);
-
-impl SessionId {
-    pub fn new() -> Self {
-        Self(uuid::Uuid::new_v4())
-    }
-
-    pub fn from_uuid(uuid: uuid::Uuid) -> Self {
-        Self(uuid)
-    }
-
-    pub fn as_uuid(&self) -> &uuid::Uuid {
-        &self.0
-    }
-}
-
-impl Default for SessionId {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 /// Direction of a split between two child panes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -132,7 +79,7 @@ pub enum SplitAxis {
 
 /// Identity of a single node within a graph. Mirrors petgraph's
 /// `NodeIndex` but kept as an opaque wrapped `u32` here so
-/// `frame` doesn't depend on `kernel` / petgraph. The
+/// `frisket` does not depend on `kernel` / petgraph. The
 /// host resolves these against the leaf's `graph_id` to get the
 /// real node entity. v0: `usize` index as a `u32` — matches
 /// petgraph's `NodeIndex::index()`.
@@ -207,7 +154,7 @@ impl PaneContent {
     /// node tiles. Window-chrome panes are about the *window / system*, not any one
     /// graph: the Steward's running jobs, Comms messaging, the Apparatus / System
     /// diagnostics. On a multi-graph switch the host re-points graph-bound leaves to
-    /// the new active graph (see [`FrameLayout::retag_graph_bound`]) and leaves
+    /// the new active graph (see [`FrisketLayout::retag_graph_bound`]) and leaves
     /// window-chrome untouched. (Multi-graph MG5; the model-B re-sourcing policy.)
     pub fn follows_active_graph(&self) -> bool {
         match self {
@@ -272,20 +219,20 @@ pub type SplitPath = Vec<SplitChoice>;
 
 /// A complete frame: identity, label, and the layout tree.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct FrameLayout {
-    pub id: FrameId,
+pub struct FrisketLayout {
+    pub id: FrisketId,
     pub label: String,
     pub root: PaneNode,
 }
 
-impl Default for FrameLayout {
+impl Default for FrisketLayout {
     /// A single Orrery pane bound to the nil (unbound) graph — a placeholder the
     /// host overwrites with the real content frame at startup. It exists so
-    /// per-window state can hold a `FrameLayout` by value (the host carve uses
+    /// per-window state can hold a `FrisketLayout` by value (the host carve uses
     /// `Default` + assignment). (Multi-window plan.)
     fn default() -> Self {
-        FrameLayout {
-            id: FrameId::new("content"),
+        FrisketLayout {
+            id: FrisketId::new("content"),
             label: "content".to_string(),
             root: PaneNode::Leaf {
                 pane_id: PaneId(0),
@@ -297,7 +244,7 @@ impl Default for FrameLayout {
 }
 
 /// Where to insert a new leaf relative to an existing leaf at a
-/// `SplitPath`. Used by [`FrameLayout::summon_leaf`].
+/// `SplitPath`. Used by [`FrisketLayout::summon_leaf`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InsertSide {
     /// New leaf goes left of the existing leaf (horizontal split).

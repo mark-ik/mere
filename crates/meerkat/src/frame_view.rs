@@ -4,12 +4,12 @@
 
 //! Geometry for the frame tree (F1). The `frame` crate is geometry-free — it
 //! owns the split *tree* (axis + ratio), not pixels — so meerkat projects a
-//! [`FrameLayout`] onto the content band here: each leaf's screen rect, the
+//! [`FrisketLayout`] onto the content band here: each leaf's screen rect, the
 //! draggable divider gutters, and a maximize override that gives one leaf the
 //! whole band. Rendering + input walk these results; nothing else in the host
 //! needs to know the tree shape.
 
-use frame::{FrameLayout, GraphId, PaneContent, PaneId, PaneNode, SplitAxis, SplitChoice};
+use frisket::{FrisketLayout, GraphId, PaneContent, PaneId, PaneNode, SplitAxis, SplitChoice};
 
 /// Width (px) of the gutter reserved between split siblings — the draggable
 /// frame divider (distinct from the workbench tile tree's slot dividers).
@@ -46,7 +46,7 @@ pub struct LaidDivider {
 /// leaf present in the layout, that leaf fills the whole band and the rest are
 /// omitted (the maximize override).
 pub fn leaf_rects(
-    layout: &FrameLayout,
+    layout: &FrisketLayout,
     band: [f32; 4],
     maximized: Option<PaneId>,
 ) -> Vec<LaidLeaf> {
@@ -68,7 +68,7 @@ pub fn leaf_rects(
 /// Lay every divider gutter out within `band`. Empty when a leaf is maximized
 /// (no visible splits then).
 pub fn divider_rects(
-    layout: &FrameLayout,
+    layout: &FrisketLayout,
     band: [f32; 4],
     maximized: Option<PaneId>,
 ) -> Vec<LaidDivider> {
@@ -227,7 +227,7 @@ fn leaf_min_extent(content: &PaneContent, axis: SplitAxis) -> f32 {
 }
 
 /// The split path to leaf `pane`, if present (for close / maximize / divider ops).
-pub fn pane_path(layout: &FrameLayout, pane: PaneId) -> Option<Vec<SplitChoice>> {
+pub fn pane_path(layout: &FrisketLayout, pane: PaneId) -> Option<Vec<SplitChoice>> {
     find_leaf(&layout.root, pane, &mut Vec::new()).map(|(_, _, path)| path)
 }
 
@@ -262,7 +262,7 @@ fn find_leaf(
 
 #[cfg(test)]
 mod tests {
-    use frame::{FrameId, GraphId};
+    use frisket::{FrisketId, GraphId};
 
     use super::*;
 
@@ -274,9 +274,9 @@ mod tests {
         }
     }
 
-    fn layout(root: PaneNode) -> FrameLayout {
-        FrameLayout {
-            id: FrameId::new("t"),
+    fn layout(root: PaneNode) -> FrisketLayout {
+        FrisketLayout {
+            id: FrisketId::new("t"),
             label: "t".into(),
             root,
         }

@@ -4,7 +4,7 @@
 
 //! Deferred shell-level operations requested by per-window handlers.
 
-use frame::{GraphId, SessionId};
+use incipit::{GraphId, SessionId};
 use winit::window::WindowId;
 
 /// A per-window handler requests these when work needs full `&mut Shell`, the

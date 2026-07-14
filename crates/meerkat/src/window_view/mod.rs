@@ -21,18 +21,18 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use armillary::Generations;
-use mere::forme::GraphMemberId;
-use frame::{FrameLayout, GraphId, PaneId, SessionId, SplitAxis, SplitChoice};
-use meerkat::{Chrome, ChromeView, CrawlIndicator, SharedChrome, chrome_view};
-use mere::platen::Workbench;
-use genet_scripted_dom::{NodeId, ScriptedDom};
-use genet_winit_host::WindowSurface;
-use session_runtime::{StartupUnlockMode, settings_store::ScriptPermissionPrefs};
-use winit::window::CursorIcon;
 use cambium::{
-    AnyView, Modifiers, PointerClick, ProjectionId, GenetCtx, GenetElement, GenetMultiRunner,
+    AnyView, GenetCtx, GenetElement, GenetMultiRunner, Modifiers, PointerClick, ProjectionId,
     WheelEvent, el, external_texture, host_pool, lens, on_click, on_wheel, overlay_rect,
 };
+use frisket::{FrisketLayout, GraphId, PaneId, SessionId, SplitAxis, SplitChoice};
+use genet_scripted_dom::{NodeId, ScriptedDom};
+use genet_winit_host::WindowSurface;
+use meerkat::{Chrome, ChromeView, CrawlIndicator, SharedChrome, chrome_view};
+use mere::forme::GraphMemberId;
+use mere::platen::Workbench;
+use session_runtime::{StartupUnlockMode, settings_store::ScriptPermissionPrefs};
+use winit::window::CursorIcon;
 
 use super::{CachedTile, ContentPane, ResizeDrag};
 use crate::gloss_outline_view::{GlossOutlineState, GlossOutlineView, gloss_outline_view};
@@ -436,7 +436,7 @@ pub(crate) struct WindowView {
 
     // ── Frame: this window's pane arrangement + its companions. ──────────────────
     /// The content region's split tree of resizable panes (window-scoped, MG5).
-    pub(crate) frame_layout: FrameLayout,
+    pub(crate) frame_layout: FrisketLayout,
     /// Next pane id to mint when summoning a sibling pane in this window.
     pub(crate) next_pane_id: u64,
     /// The leaf maximized to the whole content band, if any (the maximize toggle).

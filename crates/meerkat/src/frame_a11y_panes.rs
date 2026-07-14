@@ -11,10 +11,10 @@
 use std::collections::HashMap;
 
 use accesskit::{Action, Node, NodeId as AccessNodeId, Role};
-use mere::forme::GraphMemberId;
-use frame::{PaneContent, PaneId};
-use layout_dom_api::{LayoutDom, Namespace, NodeKind};
+use frisket::{PaneContent, PaneId};
 use genet_scripted_dom::NodeId;
+use layout_dom_api::{LayoutDom, Namespace, NodeKind};
+use mere::forme::GraphMemberId;
 use uxtree::{UxTree, node_id_for_path};
 
 use super::frame_a11y::rect;
@@ -530,7 +530,7 @@ impl WindowCtx<'_> {
 }
 
 pub(super) fn generic_pane_content_tree(
-    layout: &frame::FrameLayout,
+    layout: &frisket::FrisketLayout,
     pane_id: PaneId,
     content: &PaneContent,
 ) -> UxTree {
@@ -544,7 +544,7 @@ pub(super) fn generic_pane_content_tree(
     }
 }
 
-fn pane_content_root_path(layout: &frame::FrameLayout, pane_id: PaneId, tag: &str) -> String {
+fn pane_content_root_path(layout: &frisket::FrisketLayout, pane_id: PaneId, tag: &str) -> String {
     format!(
         "meerkat/frame/{}/pane/{}/content/{tag}",
         layout.id.as_str(),

@@ -11,7 +11,7 @@
 use std::collections::HashMap;
 
 use accesskit::{Action, Node, NodeId as AccessNodeId, Rect, Role, TreeUpdate};
-use frame::{PaneContent, PaneId, PaneNode};
+use frisket::{PaneContent, PaneId, PaneNode};
 use uxtree::{UxTree, node_id_for_path};
 
 use super::observability::A11ySnapshot;
@@ -165,7 +165,7 @@ impl WindowCtx<'_> {
             .map(|leaf| (leaf.pane_id, leaf.rect))
             .collect();
         let mut frame_tree =
-            frame::project_frame_with(&self.view.frame_layout, |content, pane_id| {
+            frisket::project_frisket_with(&self.view.frame_layout, |content, pane_id| {
                 Some(self.a11y_content_tree(content, pane_id, &mut action_routes))
             });
         attach_frame_bounds(
@@ -336,7 +336,7 @@ fn format_access_node(id: AccessNodeId) -> String {
 
 fn attach_frame_bounds(
     tree: &mut UxTree,
-    layout: &frame::FrameLayout,
+    layout: &frisket::FrisketLayout,
     leaf_bounds: &HashMap<PaneId, [f32; 4]>,
     content_band: [f32; 4],
 ) {
@@ -360,11 +360,11 @@ fn attach_frame_bounds(
     }
 }
 
-fn frame_leaf_id(layout: &frame::FrameLayout, pane_id: PaneId) -> Option<AccessNodeId> {
+fn frame_leaf_id(layout: &frisket::FrisketLayout, pane_id: PaneId) -> Option<AccessNodeId> {
     frame_leaf_id_at(
         &layout.root,
         pane_id,
-        &format!("frame/{}", layout.id.as_str()),
+        &format!("frisket/{}", layout.id.as_str()),
     )
 }
 
@@ -402,11 +402,11 @@ pub(super) fn rect(bounds: [f32; 4]) -> Rect {
 mod a11y_tests {
     use super::*;
     use crate::frame_a11y_panes::generic_pane_content_tree;
-    use frame::{GraphId, SplitAxis};
+    use frisket::{GraphId, SplitAxis};
 
-    fn layout_with_two_panes() -> frame::FrameLayout {
-        frame::FrameLayout {
-            id: frame::FrameId::new("content"),
+    fn layout_with_two_panes() -> frisket::FrisketLayout {
+        frisket::FrisketLayout {
+            id: frisket::FrisketId::new("content"),
             label: "content".to_string(),
             root: PaneNode::Split {
                 axis: SplitAxis::Horizontal,
@@ -428,7 +428,7 @@ mod a11y_tests {
     #[test]
     fn frame_leaf_ids_match_frame_projection_paths() {
         let layout = layout_with_two_panes();
-        let tree = frame::project_frame(&layout);
+        let tree = frisket::project_frisket(&layout);
         assert!(
             tree.nodes
                 .iter()
@@ -444,7 +444,7 @@ mod a11y_tests {
     #[test]
     fn host_attaches_bounds_to_frame_leaves_and_content_roots() {
         let layout = layout_with_two_panes();
-        let mut tree = frame::project_frame_with(&layout, |content, pane_id| {
+        let mut tree = frisket::project_frisket_with(&layout, |content, pane_id| {
             Some(generic_pane_content_tree(&layout, pane_id, content))
         });
         let bounds = HashMap::from([
@@ -478,7 +478,7 @@ mod a11y_tests {
     #[test]
     fn a11y_audit_reports_focus_membership_and_bound_gaps() {
         let layout = layout_with_two_panes();
-        let mut tree = frame::project_frame(&layout);
+        let mut tree = frisket::project_frisket(&layout);
         let bounds = HashMap::from([(PaneId(0), [0.0, 40.0, 400.0, 600.0])]);
         attach_frame_bounds(&mut tree, &layout, &bounds, [0.0, 40.0, 800.0, 600.0]);
 

@@ -2,16 +2,16 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Project a [`FrameLayout`] into a uxtree subtree. Split out of
+//! Project a [`FrisketLayout`] into a uxtree subtree. Split out of
 //! `lib.rs` to keep the parent module under the workspace's 600-LOC
 //! ceiling.
 
 use accesskit::{Node, Role};
 use uxtree::{UxTree, node_id_for_path};
 
-use crate::{FrameLayout, PaneContent, PaneId, PaneNode};
+use crate::{FrisketLayout, PaneContent, PaneId, PaneNode};
 
-/// Project a [`FrameLayout`] into a uxtree subtree describing the
+/// Project a [`FrisketLayout`] into a uxtree subtree describing the
 /// pane structure.
 ///
 /// Splits become `Role::Group` nodes annotated with axis + ratio in
@@ -21,25 +21,25 @@ use crate::{FrameLayout, PaneContent, PaneId, PaneNode};
 /// stitch each leaf's content subtree (workbench / orrery / …) under
 /// the corresponding leaf node, or render content separately while
 /// keeping uxtree structurally aware of the layout.
-pub fn project_frame(layout: &FrameLayout) -> UxTree {
-    project_frame_with(layout, |_, _| None)
+pub fn project_frisket(layout: &FrisketLayout) -> UxTree {
+    project_frisket_with(layout, |_, _| None)
 }
 
 /// Project a frame layout, calling `content_for` at each leaf to ask
 /// for a content subtree to attach. The returned subtree's root becomes
 /// the leaf's accesskit child; its nodes are merged into the frame's
 /// node list. Resolver returning `None` leaves the leaf empty (same as
-/// [`project_frame`]).
+/// [`project_frisket`]).
 ///
 /// Use this when the host wants the frame's leaf nodes to actually
 /// carry their content's a11y / automation tree (workbench in pane 1,
 /// orrery in pane 2, …) rather than tracking parallel subtrees.
-pub fn project_frame_with<F>(layout: &FrameLayout, mut content_for: F) -> UxTree
+pub fn project_frisket_with<F>(layout: &FrisketLayout, mut content_for: F) -> UxTree
 where
     F: FnMut(&PaneContent, PaneId) -> Option<UxTree>,
 {
     let mut nodes = Vec::new();
-    let root_path = format!("frame/{}", layout.id.as_str());
+    let root_path = format!("frisket/{}", layout.id.as_str());
     let root_id = node_id_for_path(&root_path);
 
     let root_child = project_node(&layout.root, &root_path, &mut nodes, &mut content_for);
@@ -52,7 +52,7 @@ where
     tracing::debug!(
         frame_id = %layout.id.as_str(),
         node_count = nodes.len(),
-        "projected FrameLayout into uxtree subtree"
+        "projected FrisketLayout into uxtree subtree"
     );
 
     UxTree {

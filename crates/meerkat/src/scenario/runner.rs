@@ -25,12 +25,12 @@
 
 use std::path::{Path, PathBuf};
 
+use cambium::TextInput;
 use meerkat::command::{Command, context_action_from_id};
 use meerkat::submit_omnibar;
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::keyboard::{Key as WinitKey, NamedKey as WinitNamedKey};
 use winit::window::WindowId;
-use cambium::TextInput;
 
 use super::{Assertion, KeyChord, KeySym, NamedKey, Step, parse};
 use crate::observability::Severity;
@@ -244,7 +244,10 @@ impl Shell {
             }
             Step::Theme { id, win } => {
                 let ok = self.scenario_theme(&id, win);
-                self.scenario_log(format!("theme {id} @{win}: {}", if ok { "set" } else { "no window" }));
+                self.scenario_log(format!(
+                    "theme {id} @{win}: {}",
+                    if ok { "set" } else { "no window" }
+                ));
                 self.request_window_redraw(win);
                 self.scenario_mut().cursor += 1;
                 false
@@ -643,7 +646,10 @@ impl Shell {
                 }
                 Step::Theme { id, win } => {
                     let ok = self.scenario_theme(id, *win);
-                    log.push(format!("theme {id} @{win}: {}", if ok { "set" } else { "no window" }));
+                    log.push(format!(
+                        "theme {id} @{win}: {}",
+                        if ok { "set" } else { "no window" }
+                    ));
                 }
                 Step::Assert(Assertion::Windows { op, n }) => {
                     let actual = self.scenario_window_count();
@@ -716,9 +722,15 @@ log fin
         // scenario invoke reaches the same host effect the palette does, not a stub.
         let steps = parse("invoke roster").expect("parses");
         let mut app = test_app();
-        let opened_before = app.ctx().pane_of_content(&frame::PaneContent::Roster).is_some();
+        let opened_before = app
+            .ctx()
+            .pane_of_content(&frisket::PaneContent::Roster)
+            .is_some();
         app.run_scenario_headless(&steps);
-        let opened_after = app.ctx().pane_of_content(&frame::PaneContent::Roster).is_some();
+        let opened_after = app
+            .ctx()
+            .pane_of_content(&frisket::PaneContent::Roster)
+            .is_some();
         assert_ne!(opened_before, opened_after, "roster pane toggled");
     }
 

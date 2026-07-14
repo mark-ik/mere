@@ -6,19 +6,19 @@
 //! from `main.rs` to keep files under the workspace 600-LOC ceiling.
 
 use crate::genet_render::TextCursor;
-use mere::forme::GraphMemberId;
-use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
-use netrender::ColorLoad;
-use netrender::external_texture::{ExternalTexturePlacement, SourceAlpha};
 use genet_layout::ScrollOffsets;
 use genet_scripted_dom::NodeId;
+use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
+use mere::forme::GraphMemberId;
+use netrender::ColorLoad;
+use netrender::external_texture::{ExternalTexturePlacement, SourceAlpha};
 
 use std::cell::RefCell;
 use std::time::Instant;
 
 use super::fetch::{ContentState, Fetched};
 use super::resources::{ResourceLoader, ResourceStore};
-use frame::{PaneContent, SessionId};
+use frisket::{PaneContent, SessionId};
 
 use super::{
     CARD_BG, FALLBACK_TOOLBAR_H, WindowCtx, first_with_class, frame_view, measure_class_bottom,

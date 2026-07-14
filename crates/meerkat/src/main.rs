@@ -49,21 +49,21 @@ use std::time::Instant;
 use crate::genet_render::fragments_from_scripted_dom;
 use accesskit::NodeId as AccessNodeId;
 use eidetic_fjall::FjallStore;
-use mere::forme::GraphMemberId;
-use frame::{FrameId, FrameLayout, GraphId, PaneContent, PaneId, PaneNode, SessionId};
+use frisket::{FrisketId, FrisketLayout, GraphId, PaneContent, PaneId, PaneNode, SessionId};
+use genet_layout::FragmentPlane;
+use genet_scripted_dom::{NodeId, ScriptedDom};
+use genet_winit_host::RenderCore;
 use inker::EngineRegistry;
 use layout_dom_api::LayoutDom;
 use meerkat::{Chrome, ChromeLogic, chrome_view};
 use mere::canvas::{CameraView, Canvas};
+use mere::forme::GraphMemberId;
 use mere::platen::Workbench;
 use register_diagnostics::{DiagnosticEvent, install_global_sender};
 use register_theme::chrome::{ChromeTheme, Color32};
 use register_theme::theme::ThemeRegistry;
-use genet_layout::FragmentPlane;
-use genet_scripted_dom::{NodeId, ScriptedDom};
-use genet_winit_host::RenderCore;
 use session_runtime::{
-    ManifestStore, frame_layout_store, manifest::GraphSessionManifest, session_graph_store,
+    ManifestStore, frisket_store, manifest::GraphSessionManifest, session_graph_store,
     settings_store, view_intent_store,
 };
 use tracing_subscriber::prelude::*;
@@ -150,10 +150,10 @@ mod web_clip;
 // `ViewPane` is the shared base for the `RosterPane` / `ListPane` test harnesses only;
 // every product pane now folds into the shell document, so the module is test-gated.
 // (Phase 1, step 2.)
-mod mode_store;
-mod scrying_host;
 mod genet_a11y;
 mod genet_render;
+mod mode_store;
+mod scrying_host;
 mod session_ops;
 mod session_thumbs;
 mod shell_command;
@@ -453,9 +453,9 @@ fn default_menu_actions() -> Vec<String> {
 /// The default content frame: a single orrery pane filling the band, bound to the
 /// active `graph_id`. Used at first launch and when no window layout is saved.
 /// (Frame tree F1 / MG2; graph-bound leaf per MG5.)
-fn default_content_frame(graph_id: GraphId) -> FrameLayout {
-    FrameLayout {
-        id: FrameId::new("content"),
+fn default_content_frame(graph_id: GraphId) -> FrisketLayout {
+    FrisketLayout {
+        id: FrisketId::new("content"),
         label: "content".to_string(),
         root: PaneNode::Leaf {
             pane_id: GRAPH_PANE,
@@ -469,9 +469,9 @@ fn default_content_frame(graph_id: GraphId) -> FrameLayout {
 /// pane of its own (the leaf shows the torn node's tile, not the whole graph). The pane
 /// still binds the donor's `graph_id`, so its tile resolves to the shared pooled orrery.
 /// (Tear-out gestures G2.)
-fn leaf_workbench_frame(graph_id: GraphId) -> FrameLayout {
-    FrameLayout {
-        id: FrameId::new("content"),
+fn leaf_workbench_frame(graph_id: GraphId) -> FrisketLayout {
+    FrisketLayout {
+        id: FrisketId::new("content"),
         label: "content".to_string(),
         root: PaneNode::Leaf {
             pane_id: GRAPH_PANE,
@@ -578,9 +578,8 @@ fn main() {
     // floor so its per-frame `frame rendered` debug does not flood the ring (only its faults pass).
     // The layer's `interesting_target` scopes which targets it actually mirrors into the ring, and
     // its `on_enter` records span starts idempotently (a re-entrant span must not double-insert).
-    let ring_filter = tracing_subscriber::EnvFilter::new(
-        "info,netfetcher=debug,errand=debug,genet_layout=debug",
-    );
+    let ring_filter =
+        tracing_subscriber::EnvFilter::new("info,netfetcher=debug,errand=debug,genet_layout=debug");
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer().with_filter(env_filter))
         .with(tracing_layer::ApparatusTracingLayer::new(diagnostics_tx).with_filter(ring_filter))

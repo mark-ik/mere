@@ -18,7 +18,7 @@ use super::*;
 pub(super) struct FrameRects {
     pub leaves: Vec<frame_view::LaidLeaf>,
     pub orrery_rect: [f32; 4],
-    pub orrery_gid: frame::GraphId,
+    pub orrery_gid: frisket::GraphId,
     pub workbench_rect: Option<[f32; 4]>,
     pub roster_rect: Option<[f32; 4]>,
     pub gloss_rect: Option<[f32; 4]>,

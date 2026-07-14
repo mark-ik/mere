@@ -282,7 +282,7 @@ impl crate::Shell {
             .focused_view()
             .frame_layout
             .iter_leaves()
-            .any(|(_, c, gid)| matches!(c, frame::PaneContent::Orrery) && gid == graph_id)
+            .any(|(_, c, gid)| matches!(c, frisket::PaneContent::Orrery) && gid == graph_id)
         {
             return;
         }
@@ -302,18 +302,18 @@ impl crate::Shell {
         // Summon a second Orrery leaf bound to this graph, split right of the
         // primary graph pane (an even split — two graphs share the band).
         let view = self.focused_view_mut();
-        let pane_id = frame::PaneId(view.next_pane_id);
+        let pane_id = frisket::PaneId(view.next_pane_id);
         view.next_pane_id += 1;
-        let leaf = frame::PaneNode::Leaf {
+        let leaf = frisket::PaneNode::Leaf {
             pane_id,
-            content: frame::PaneContent::Orrery,
+            content: frisket::PaneContent::Orrery,
             graph_id,
         };
         let anchor =
             crate::frame_view::pane_path(&view.frame_layout, crate::GRAPH_PANE).unwrap_or_default();
         if view
             .frame_layout
-            .summon_leaf(&anchor, frame::InsertSide::Right, leaf)
+            .summon_leaf(&anchor, frisket::InsertSide::Right, leaf)
         {
             view.frame_layout.set_split_ratio(&anchor, 0.5);
         }
@@ -368,18 +368,18 @@ impl crate::Shell {
         // Summon an Orrery leaf bound to the thawed graph, split right of the primary graph pane
         // (an even split), without switching focus — the same shape as `open_graph_beside`.
         let view = self.focused_view_mut();
-        let pane_id = frame::PaneId(view.next_pane_id);
+        let pane_id = frisket::PaneId(view.next_pane_id);
         view.next_pane_id += 1;
-        let leaf = frame::PaneNode::Leaf {
+        let leaf = frisket::PaneNode::Leaf {
             pane_id,
-            content: frame::PaneContent::Orrery,
+            content: frisket::PaneContent::Orrery,
             graph_id,
         };
         let anchor =
             crate::frame_view::pane_path(&view.frame_layout, crate::GRAPH_PANE).unwrap_or_default();
         if view
             .frame_layout
-            .summon_leaf(&anchor, frame::InsertSide::Right, leaf)
+            .summon_leaf(&anchor, frisket::InsertSide::Right, leaf)
         {
             view.frame_layout.set_split_ratio(&anchor, 0.5);
         }

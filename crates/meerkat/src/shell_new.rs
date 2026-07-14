@@ -447,11 +447,11 @@ impl Shell {
         // not the session. A pre-MG5 install saved it per-session, so carry the active
         // session's layout up once if the shared one is absent.
         let mut next_pane_id = 1u64;
-        let restored_frame = frame_layout_store::load_frame_layout(&mere_root)
+        let restored_frame = frisket_store::load_frisket_layout(&mere_root)
             .ok()
             .flatten()
             .or_else(|| {
-                frame_layout_store::load_frame_layout(&session_dir)
+                frisket_store::load_frisket_layout(&session_dir)
                     .ok()
                     .flatten()
             });

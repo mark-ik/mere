@@ -7,7 +7,7 @@
 //! [`ListPane`](crate::list_pane::ListPane): a title, the data rows, and a muted
 //! status line, all inert text (these panes are display-only).
 
-use frame::PaneContent;
+use frisket::PaneContent;
 use register_theme::chrome::{ChromeTheme, Color32};
 
 use crate::list_pane::PaneItem;

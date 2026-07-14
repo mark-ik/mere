@@ -1,0 +1,20 @@
+[package]
+name = "incipit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Workspace identity vocabulary for Mere: the stable ids of a graph and a session, with no dependency on the graph itself."
+documentation = "https://docs.rs/incipit"
+keywords = ["identity", "graph", "session", "mere"]
+categories = ["data-structures"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+serde.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+serde_json = "1"

@@ -22,7 +22,7 @@
 
 use std::collections::HashMap;
 
-use frame::SessionId;
+use incipit::SessionId;
 
 use crate::manifest::WorkerKind;
 

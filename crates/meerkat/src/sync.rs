@@ -34,7 +34,7 @@ use std::time::Duration;
 
 use armillary::{ActorHandle, Emitter, Wake, spawn};
 use identity::{IdentityProvider, InMemoryProvider};
-use moothold::tessera::{
+use gemot::tessera::{
     ChainRoot, CommitmentId, Ledger, Scope, TesseraConfig, TesseraEvent, TesseraExt,
     TesseraFileStore, TesseraStoreError, to_operation, verify,
 };
@@ -52,7 +52,7 @@ pub const LANE_LABEL: &str = "tessera";
 
 /// The host-composed tessera sync session: the shared [`SyncedSpace`] drain (for
 /// status), the [`TesseraStore`] to fold, the moot it syncs, and the `LogSync`
-/// session + handle held for liveness. moothold owns no p2panda-net after the
+/// session + handle held for liveness. gemot owns no p2panda-net after the
 /// sibling-posture purity split, so the host builds the pump; the tessera lane
 /// is receive-only, so nothing publishes on the handle.
 struct TesseraSync {

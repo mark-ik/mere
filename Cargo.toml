@@ -16,7 +16,8 @@ members = [
     "crates/graph/linked-data",
     "crates/shell/chrome",
     "crates/shell/comms",
-    "crates/shell/frame",
+    "crates/incipit",
+    "crates/shell/frisket",
     "crates/system/session-runtime",
     "crates/system/fetch",
     "crates/system/content-contract",
@@ -51,11 +52,10 @@ members = [
     "crates/intel/infer",
     "crates/intel/signals",
     "crates/murm/murm",
-    "crates/murm/murmuring",
     "crates/murm/replication",
     "crates/murm/transport",
     "crates/persona/gazetteer",
-    "crates/moot/moothold",
+    "crates/moot/gemot",
     "crates/moot/mooting",
     "crates/mesh/mesh",
     "crates/script/rhai",
@@ -110,7 +110,8 @@ fetch = { path = "crates/system/fetch" }
 content-contract = { path = "crates/system/content-contract" }
 proofs = { path = "crates/system/proofs" }
 shell-state = { path = "crates/system/shell-state" }
-frame = { path = "crates/shell/frame" }
+frisket = { path = "crates/shell/frisket" }
+incipit = { path = "crates/incipit" }
 chrome = { path = "crates/shell/chrome" }
 comms = { path = "crates/shell/comms" }
 session-runtime = { path = "crates/system/session-runtime" }
@@ -129,7 +130,10 @@ scrying-engine = { git = "https://github.com/mark-ik/genet.git", branch = "main"
 graft-engine = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 weld-engine = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 
-forme = { path = "crates/forme/forme" }
+# Published as `mere-forme`: the crates.io name `forme` is owned by someone else
+# (an HTML template engine). The `package =` alias keeps every `use forme::...`
+# in the tree working, so this rename is one line, not a sweep.
+forme = { package = "mere-forme", path = "crates/forme/forme" }
 uxtree = { path = "crates/forme/uxtree" }
 
 platen = { path = "crates/platen/platen" }
@@ -160,11 +164,10 @@ signals = { path = "crates/intel/signals" }
 # 2026-07-03); an owned mark-ik repo, tracked by branch per convention.
 misfin = { git = "https://github.com/mark-ik/misfin", branch = "main", features = ["ring"] }
 murm = { path = "crates/murm/murm" }
-murmuring = { path = "crates/murm/murmuring" }
 murm-replication = { path = "crates/murm/replication" }
 transport = { path = "crates/murm/transport" }
 
-moothold = { path = "crates/moot/moothold" }
+gemot = { path = "crates/moot/gemot" }
 mooting = { path = "crates/moot/mooting" }
 
 # The personal-space compute mesh (resource-coordination M1): signed job ops
@@ -235,17 +238,10 @@ all = "warn"
 
 # ─── Cross-repo render-stack alignment (meerkat → genet) ────────────────────
 # meerkat pulls genet-layout (via pelt-live) for the cascade → layout → paint
-# path. genet-layout's `stylo_taffy` deps crates.io `stylo`/`stylo_atoms`, and
-# genet-layout itself git-deps the mark-ik/stylo fork (`main`, realigned to
-# v0.19.0 plus Genet's additive media features). `stylo` declares
-# `links = "servo_style_crate"`
-# (only one Stylo allowed per graph), so redirect the crates.io deps to the same
-# fork so every transitive stylo unifies with genet-layout's rather than
-# conflicting with a second (servo/stylo) source — a root-workspace patch applies
-# graph-wide. Mirrors genet's own crates.io patch (repos/genet Cargo.toml).
+# path. Genet's fork family is published under distinct `genet-stylo*` names,
+# and genet's vendored stylo_taffy adapter consumes those registry packages
+# directly. The only remaining root redirect in this cone is the Taffy fork.
 [patch.crates-io]
-stylo = { git = "https://github.com/mark-ik/stylo", branch = "main", package = "genet-stylo" }
-stylo_atoms = { git = "https://github.com/mark-ik/stylo", branch = "main", package = "genet-stylo-atoms" }
 # genet-layout requires taffy =0.11.0-experimental-cache-fix.3 (genet's vendored
 # float-layout fork, not on crates.io). genet patches it in its own workspace; mere
 # does not inherit that, so redirect taffy to the fork from the owned genet repo by

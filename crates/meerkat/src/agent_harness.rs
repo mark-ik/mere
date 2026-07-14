@@ -10,7 +10,7 @@
 
 #![allow(dead_code)]
 
-use frame::PaneContent;
+use frisket::PaneContent;
 use meerkat::ContextAction;
 use meerkat::command::{Command, context_action_from_id, context_action_palette_label};
 

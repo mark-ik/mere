@@ -14,7 +14,7 @@ impl WindowCtx<'_> {
     /// host complement of the orrery pane element's `on_wheel`. (cond 5 input bridge.)
     pub(crate) fn orrery_wheel_through_document(
         &mut self,
-        gid: frame::GraphId,
+        gid: frisket::GraphId,
         cx: f32,
         cy: f32,
         dx: f32,
@@ -619,7 +619,11 @@ impl WindowCtx<'_> {
         self.set_roster_tab(crate::roster::RosterTab::Links);
     }
 
-    fn relation_bundle_exists(&self, from: mere::forme::GraphMemberId, to: mere::forme::GraphMemberId) -> bool {
+    fn relation_bundle_exists(
+        &self,
+        from: mere::forme::GraphMemberId,
+        to: mere::forme::GraphMemberId,
+    ) -> bool {
         let graph = self.orrery().graph();
         let Some(from_key) = graph.get_node_key_by_id(from) else {
             return false;

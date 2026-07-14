@@ -202,7 +202,8 @@ import = { workspace = true }
 # resizable panes). meerkat hosts the graph pane plus summoned sibling panes
 # (roster now; gloss / inspector / apparatus later) as frame leaves, computing
 # each leaf's rect from the split ratios (the frame crate is geometry-free).
-frame = { workspace = true }
+frisket = { workspace = true }
+incipit = { workspace = true }
 
 # Pelt's tile-tree contract + the GPU-free tile surface (V6): meerkat hosts the
 # standalone pelt `TileSurface` as its workbench pane, driven entirely through the
@@ -248,15 +249,15 @@ tokio = { version = "1", features = ["rt-multi-thread", "time", "io-util", "sync
 # session, surfacing real sync status in the chrome. The sync subsystem mirrors
 # the netfetcher seam (background tokio work -> mpsc channel -> EventLoopProxy
 # wake -> user_event drain) — see the host p2p wiring plan. `transport` is the
-# P2pandaTransport adapter + the shared `SyncedSpace` drain; `moothold` supplies
+# P2pandaTransport adapter + the shared `SyncedSpace` drain; `gemot` supplies
 # the tessera store + fold + `verify`; `identity` the (ephemeral) signing keypair.
-# After the sibling-posture purity split moothold owns no p2panda-net, so the
+# After the sibling-posture purity split gemot owns no p2panda-net, so the
 # host builds the `LogSync` pump directly — hence the p2panda-net / p2panda-core
 # deps here.
 identity = { workspace = true }
 murm-replication = { workspace = true }
 transport = { workspace = true }
-moothold = { workspace = true }
+gemot = { workspace = true }
 p2panda-net = "0.6.1"
 p2panda-core = "0.6.1"
 

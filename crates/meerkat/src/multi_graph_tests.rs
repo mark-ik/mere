@@ -37,7 +37,7 @@ fn migrates_a_flat_graph_into_a_session() {
         br#"{"flat":true}"#,
     )
     .unwrap();
-    std::fs::write(root.join(frame_layout_store::FRAME_FILE), b"{}").unwrap();
+    std::fs::write(root.join(frisket_store::FRAME_FILE), b"{}").unwrap();
     let flat_views = root.join(view_intent_store::VIEW_INTENT_DIR);
     std::fs::create_dir_all(&flat_views).unwrap();
     std::fs::write(flat_views.join("pane.json"), b"{}").unwrap();
@@ -61,11 +61,11 @@ fn migrates_a_flat_graph_into_a_session() {
     // The frame layout is window-scoped (MG5): it stays at the root, not the
     // session dir.
     assert!(
-        root.join(frame_layout_store::FRAME_FILE).exists(),
+        root.join(frisket_store::FRAME_FILE).exists(),
         "the window-scoped frame stays at the root"
     );
     assert!(
-        !session_dir.join(frame_layout_store::FRAME_FILE).exists(),
+        !session_dir.join(frisket_store::FRAME_FILE).exists(),
         "the frame is not pulled into the session"
     );
     let moved = std::fs::read_to_string(session_dir.join(session_graph_store::GRAPH_FILE)).unwrap();

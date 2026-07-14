@@ -10,7 +10,7 @@
 use std::collections::VecDeque;
 use std::time::{Instant, SystemTime};
 
-use frame::PaneContent;
+use frisket::PaneContent;
 use register_diagnostics::{
     ChannelRegistrationPolicy, DiagnosticEvent, DiagnosticsCapability, DiagnosticsChannelOwner,
     DiagnosticsInvariant, DiagnosticsRegistry, RuntimeChannelDescriptor, SpanPhase,

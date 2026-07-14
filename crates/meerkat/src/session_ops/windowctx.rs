@@ -115,7 +115,7 @@ impl WindowCtx<'_> {
         // **window-scoped** (Model B, MG5): it persists at the shared root and stays
         // put across session switches, so a graph swap re-sources the panes without
         // rearranging them.
-        if let Err(err) = frame_layout_store::save_frame_layout(
+        if let Err(err) = frisket_store::save_frisket_layout(
             &self.shared.session.mere_root,
             &self.view.frame_layout,
         ) {
@@ -169,7 +169,10 @@ impl WindowCtx<'_> {
     /// Restore the focused graph's persisted workbench tiling from its sidecar,
     /// pruned to the live graph's members. Thin wrapper over [`load_workbench`] for
     /// the session-switch path (which has a live `ctx`). (A3 persistence.)
-    pub(crate) fn restore_workbench(&self, session_dir: &std::path::Path) -> mere::platen::Workbench {
+    pub(crate) fn restore_workbench(
+        &self,
+        session_dir: &std::path::Path,
+    ) -> mere::platen::Workbench {
         let present = self
             .orrery()
             .graph()
@@ -317,14 +320,16 @@ impl WindowCtx<'_> {
                 // them from its cartography sidecar (origin when absent).
                 let present: std::collections::HashSet<mere::forme::GraphMemberId> =
                     graph.nodes().map(|(_, n)| n.id).collect();
-                let positions: std::collections::HashMap<mere::forme::GraphMemberId, PortablePoint> =
-                    super::load_cartography(&dir, &present)
-                        .map(|g| {
-                            g.iter()
-                                .map(|(m, (x, y))| (m, PortablePoint::new(x, y)))
-                                .collect()
-                        })
-                        .unwrap_or_default();
+                let positions: std::collections::HashMap<
+                    mere::forme::GraphMemberId,
+                    PortablePoint,
+                > = super::load_cartography(&dir, &present)
+                    .map(|g| {
+                        g.iter()
+                            .map(|(m, (x, y))| (m, PortablePoint::new(x, y)))
+                            .collect()
+                    })
+                    .unwrap_or_default();
                 let thumb = session_runtime::build_switcher_thumbnail_with(
                     &graph,
                     |k| {

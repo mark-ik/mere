@@ -170,8 +170,8 @@ fn torn_leaf_is_a_workbench_pane_with_the_node_tile() {
     assert!(
         matches!(
             view.frame_layout.root,
-            frame::PaneNode::Leaf {
-                content: frame::PaneContent::Workbench,
+            frisket::PaneNode::Leaf {
+                content: frisket::PaneContent::Workbench,
                 ..
             }
         ),
@@ -667,18 +667,18 @@ fn switching_keeps_the_window_panes_and_resources_graph_bound_leaves() {
     let first = app.shared.session.active_session_id;
     let first_graph = app.ctx().active_graph_id();
     // Open a second pane: the window now holds an orrery + a roster.
-    app.ctx().toggle_pane(frame::PaneContent::Roster);
+    app.ctx().toggle_pane(frisket::PaneContent::Roster);
     let has_roster = |app: &Shell| {
         app.view()
             .frame_layout
             .iter_leaves()
-            .any(|(_, c, _)| matches!(c, frame::PaneContent::Roster))
+            .any(|(_, c, _)| matches!(c, frisket::PaneContent::Roster))
     };
     let orrery_graph = |app: &Shell| {
         app.view()
             .frame_layout
             .iter_leaves()
-            .find(|(_, c, _)| matches!(c, frame::PaneContent::Orrery))
+            .find(|(_, c, _)| matches!(c, frisket::PaneContent::Orrery))
             .map(|(_, _, g)| g)
             .expect("the orrery pane is always present")
     };
@@ -1312,8 +1312,8 @@ fn soft_wrap_nav_declines_outside_the_knot_editor() {
 /// path, so it verifies the chrome-sheet rule without a window. (Knot editor header.)
 #[test]
 fn knot_editor_close_button_is_small_and_right_of_the_title() {
-    use layout_dom_api::LayoutDom;
     use genet_layout::ScrollOffsets;
+    use layout_dom_api::LayoutDom;
     let mut app = test_app();
     let mut wc = app.ctx();
     wc.chrome_update(|c| c.open_knot_editor("a note"));
@@ -1364,8 +1364,8 @@ fn knot_editor_close_button_is_small_and_right_of_the_title() {
 
 #[test]
 fn knot_editor_uses_bound_tile_rect_when_available() {
-    use layout_dom_api::LayoutDom;
     use genet_layout::ScrollOffsets;
+    use layout_dom_api::LayoutDom;
     let mut app = test_app();
     let mut wc = app.ctx();
     wc.chrome_update(|c| {
@@ -1484,7 +1484,10 @@ fn knot_editor_close_autosaves_the_note_body() {
 
     let step = app.apply_agent_action(AgentAction::InvokeCommand(Command::ToggleKnotEditor));
     assert!(step.result.applied);
-    assert!(app.window_local().chrome.knot_editor_open, "the editor opens");
+    assert!(
+        app.window_local().chrome.knot_editor_open,
+        "the editor opens"
+    );
 
     let updated = "# Updated\n\nAutosaved on close.";
     {
@@ -1499,7 +1502,10 @@ fn knot_editor_close_autosaves_the_note_body() {
 
     // The editor closed, and the edit persisted without an explicit Save.
     let chrome = &app.window_local().chrome;
-    assert!(!chrome.knot_editor_open, "requesting close closes the editor");
+    assert!(
+        !chrome.knot_editor_open,
+        "requesting close closes the editor"
+    );
     assert_eq!(chrome.knot_target, None);
     let node = app
         .orrery()
@@ -1564,7 +1570,10 @@ fn wikilink_completion_lists_matching_nodes() {
     // `[[` completion candidates are titled graph nodes filtered by the query, inserting the
     // wikilink form. (Phase 3 node-link completion.)
     let mut app = test_app();
-    for (i, title) in ["Notebook", "Note taking", "Graph theory"].iter().enumerate() {
+    for (i, title) in ["Notebook", "Note taking", "Graph theory"]
+        .iter()
+        .enumerate()
+    {
         let key = app.orrery_mut().visit(&format!("knot://n{i}"));
         app.orrery_mut().ingest_graph(|g| {
             g.get_node_mut(key).unwrap().title = title.to_string();
@@ -1776,7 +1785,7 @@ fn shellbar_roster_button_toggles_the_roster() {
         app.view()
             .frame_layout
             .iter_leaves()
-            .any(|(_, c, _)| matches!(c, frame::PaneContent::Roster))
+            .any(|(_, c, _)| matches!(c, frisket::PaneContent::Roster))
     };
     let mut app = test_app();
     assert!(!has_roster(&app), "no roster before");
@@ -1979,7 +1988,7 @@ fn omnibar_command_expression_drives_the_command_spine() {
         app.view()
             .frame_layout
             .iter_leaves()
-            .any(|(_, c, _)| matches!(c, frame::PaneContent::Roster))
+            .any(|(_, c, _)| matches!(c, frisket::PaneContent::Roster))
     };
     let mut app = test_app();
     assert!(!has_roster(&app), "no roster pane before the command");

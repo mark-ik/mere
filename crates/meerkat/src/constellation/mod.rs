@@ -23,8 +23,8 @@
 
 use armillary::{Generations, Pool, Wake};
 use document_canvas::{DocumentRenderPacket, DocumentStyleSheet, FontTable};
+use incipit::GraphId;
 use mere::forme::GraphMemberId;
-use frame::GraphId;
 use mere::kernel::permissions::ResolvedPermission;
 use mere::linked_data::GraphContribution;
 use netrender::Scene;

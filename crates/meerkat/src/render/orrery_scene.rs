@@ -9,9 +9,9 @@
 
 use super::*;
 use crate::window_view::{GnodeBuildStats, GnodeHotRow, GnodeSnapshot, GnodeStableRow};
-use frame::GraphId;
-use mere::canvas::Face;
 use genet_scripted_dom::ScriptedDom;
+use incipit::GraphId;
+use mere::canvas::Face;
 
 impl crate::WindowCtx<'_> {
     /// Drive the focused Orrery pane for this frame: push node state/shape colours, resize

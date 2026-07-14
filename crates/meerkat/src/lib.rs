@@ -41,14 +41,14 @@
 //! into that same document under one runner: unified-document-host Phase 1 is
 //! complete (one document, one focus ring, one a11y tree).
 
+use cambium::TextInput;
 use chrome::command_palette::{CommandPaletteSession, SearchPaletteScope};
 use chrome::omnibar::OmnibarMatch;
 use chrome::toolbar::ToolbarState;
 use comms::{CommsPane, ConversationId, Draft, ProtocolKind};
+use incipit::SessionId;
 use mere::forme::GraphMemberId;
-use frame::SessionId;
 pub use session_runtime::ShellbarEdge;
-use cambium::TextInput;
 
 pub mod command;
 pub mod crawl_indicator;
@@ -604,8 +604,8 @@ mod chrome_comms;
 mod chrome_menu;
 mod chrome_nav;
 
-pub mod note_view;
 pub mod knot_completion;
+pub mod note_view;
 mod views;
 use views::sync_chrome_from_history;
 pub use views::{ChromeLogic, ChromeView, chrome_view, runner, submit_omnibar};

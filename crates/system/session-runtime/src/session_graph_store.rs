@@ -19,7 +19,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use frame::SessionId;
+use incipit::SessionId;
 use kernel::graph::Graph;
 use kernel::persistence::GraphSnapshot;
 

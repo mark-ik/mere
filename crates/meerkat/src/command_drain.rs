@@ -13,11 +13,11 @@
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use frame::PaneContent;
-use mere::kernel::graph::SemanticSubKind;
+use frisket::PaneContent;
 use meerkat::CommsIntent;
 use meerkat::command::Command;
 use meerkat::shell_eval::{CommandShell, RemoteAuthPairingAcceptance, ShellContext};
+use mere::kernel::graph::SemanticSubKind;
 use session_runtime::{
     DeviceExposure, DeviceId, DeviceMode, PersonaId, PrivateEpochPlaintext,
     RemoteAuthPairingTicketRequest, issue_remote_auth_device_grant_from_ticket,

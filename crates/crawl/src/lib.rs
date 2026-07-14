@@ -23,7 +23,7 @@ use std::time::{Duration, Instant};
 
 use armillary::{ActorHandle, Emitter, Wake, spawn};
 use fetch::Fetched;
-use frame::GraphId;
+use incipit::GraphId;
 use linked_data::GraphContribution;
 use tokio::runtime::Builder;
 

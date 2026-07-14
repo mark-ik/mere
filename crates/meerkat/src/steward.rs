@@ -13,8 +13,8 @@
 //! co-locate the Steward pane (its status rows, its clickable verbs, and the live
 //! sync readout) as one module. (Chrome bar P2.)
 
+use frisket::PaneContent;
 use mere::forme::GraphMemberId;
-use frame::PaneContent;
 
 use super::{WindowCtx, fetch};
 

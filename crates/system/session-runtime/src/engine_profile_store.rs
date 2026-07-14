@@ -21,7 +21,7 @@
 
 use std::path::{Path, PathBuf};
 
-use frame::{GraphId, SessionId};
+use incipit::{GraphId, SessionId};
 
 use crate::manifest::{EngineProfileBinding, GraphSessionManifest, PersonaId};
 

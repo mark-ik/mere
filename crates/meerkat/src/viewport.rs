@@ -23,7 +23,7 @@
 //! over the *shared* node positions instead of mirroring a single camera + selection.
 
 use crate::WindowCtx;
-use frame::{GraphId, PaneContent};
+use frisket::{GraphId, PaneContent};
 
 impl WindowCtx<'_> {
     /// The graphs this window shows in an Orrery pane right now (the focused pane plus

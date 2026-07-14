@@ -1,13 +1,13 @@
 [package]
-name = "frame"
+name = "frisket"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Frame domain layer for the Mere browser — savable layout of resizable panes (workbench / orrery / gloss / apparatus / system) projected into uxtree."
-documentation = "https://docs.rs/frame"
+description = "The pane model for Mere: a savable tree of resizable panes, projected into uxtree. A frisket is the press frame whose cut-out apertures decide what prints where."
+documentation = "https://docs.rs/frisket"
 readme = "README.md"
-keywords = ["frame", "pane", "layout", "mere", "uxtree"]
+keywords = ["pane", "layout", "tiling", "mere", "uxtree"]
 categories = ["accessibility", "gui"]
 
 [lib]
@@ -15,6 +15,7 @@ path = "src/lib.rs"
 
 [dependencies]
 accesskit.workspace = true
+incipit.workspace = true
 serde.workspace = true
 tracing.workspace = true
 uuid.workspace = true

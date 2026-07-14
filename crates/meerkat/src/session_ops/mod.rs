@@ -9,10 +9,10 @@
 //! The per-window pieces hang off `WindowCtx`; the pool re-keying off `Shell`.
 //! Factored out of `frame_ops.rs` to keep files under the 600-LOC ceiling.
 
-use frame::{GraphId, SessionId};
+use incipit::{GraphId, SessionId};
 use mere::kernel::graph::Graph;
 use session_runtime::{
-    ViewIntent, frame_layout_store, manifest::GraphSessionManifest, session_graph_store,
+    ViewIntent, frisket_store, manifest::GraphSessionManifest, session_graph_store,
     view_intent_store,
 };
 
@@ -71,7 +71,9 @@ pub(crate) fn load_cartography(
     }
     std::fs::read_to_string(session_dir.join(CARTOGRAPHY_FILE))
         .ok()
-        .and_then(|json| mere::canvas::CartographyGeometry::from_persisted_json(json.as_str(), present))
+        .and_then(|json| {
+            mere::canvas::CartographyGeometry::from_persisted_json(json.as_str(), present)
+        })
 }
 
 // Session ops live on `Shell`, not `WindowCtx`: switching a session re-keys the

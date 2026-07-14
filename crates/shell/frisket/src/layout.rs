@@ -2,16 +2,16 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Operations on [`super::FrameLayout`] — split, summon, reparent,
+//! Operations on [`super::FrisketLayout`] — split, summon, reparent,
 //! close, iterate. Split out of `lib.rs` to keep the parent module
 //! under the workspace's 600-LOC ceiling.
 
 use crate::{
-    FrameLayout, GraphId, InsertSide, PaneContent, PaneId, PaneNode, SplitAxis, SplitChoice,
+    FrisketLayout, GraphId, InsertSide, PaneContent, PaneId, PaneNode, SplitAxis, SplitChoice,
     SplitPath,
 };
 
-impl FrameLayout {
+impl FrisketLayout {
     /// Find the split node at `path` and overwrite its ratio. Returns
     /// `true` if the path resolved to a `Split`. The new ratio is
     /// clamped to `[0.05, 0.95]` so panes can't fully collapse.
@@ -363,7 +363,7 @@ fn walk_mut<'a>(node: &'a mut PaneNode, path: &[SplitChoice]) -> Option<&'a mut 
 /// when a child reduces to a duplicate Orrery leaf, fold the split into its other
 /// child (the survivor is then re-examined, so a chain of duplicates collapses).
 /// Returns `true` if `node` *itself* is a duplicate Orrery leaf the caller should
-/// drop. (Backs [`FrameLayout::dedupe_graph_panes`].)
+/// drop. (Backs [`FrisketLayout::dedupe_graph_panes`].)
 fn dedup_node(node: &mut PaneNode, seen: &mut std::collections::HashSet<GraphId>) -> bool {
     match node {
         PaneNode::Leaf {
