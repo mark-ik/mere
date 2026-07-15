@@ -492,7 +492,7 @@ checkpoints:
 
 **Tier 1 milestone** (smallest):
 
-1. A user's orrery is instantiated as a one-member moothold-of-self.
+1. A user's orrery is instantiated as a one-member moot-of-self.
 2. They pin a graph snapshot to their local eidetic.
 3. They publish a node publicly (e.g., bilateral share with kith).
 

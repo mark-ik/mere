@@ -175,9 +175,9 @@ Moot owns:
 - policy for voluntary hosting and federation.
 
 The current `mooting::RecognitionContext` stays in this family. The generic
-`MunimentStore` leaves it. The current `moothold::moot` module becomes the seed
-of the public single-moot service. The `moothold` name is reserved for actual
-multi-moot holding or federation behavior once such behavior exists.
+`MunimentStore` leaves it. The current `gemot::moot` module becomes the seed of
+the public single-moot service. `moothold` is the Tier 3 package for multi-moot
+holding and federation behavior.
 
 ### 3.4 Mere and Merecat
 
@@ -204,8 +204,8 @@ Merecat owns service lifecycle and product interaction:
 | `mooting::RecognitionContext` | Moot policy module | Community authorization semantics |
 | `murmuring` native conversation implementation | `murm` domain modules | One real native protocol does not justify a plugin crate |
 | `BilateralProtocol` | retire unless a second native implementation needs it | The comms adapter is the real cross-protocol boundary |
-| `moothold::moot` | public Moot service | It already contains the single-moot grammar and fold |
-| `moothold` federation name | future multi-moot package | Keep the word aligned with its product meaning |
+| `gemot::moot` | public Moot service | It already contains the single-moot grammar and fold |
+| `gemot::tessera::{concord, reciprocity}` | `moothold` | These compose facts and obligations across moots |
 | host `LogSync` and accept closures | library services | Consumers should not reconstruct protocol invariants |
 
 Compatibility re-exports may preserve current imports during the in-workspace
@@ -318,18 +318,25 @@ removed from the workspace.
 Separate Moot policy from generic machinery and expose a high-level service:
 
 Implementation status, 2026-07-14: the first governance substrate is landed.
-`moothold::constitution` now owns signed genesis and amendment events, a
+`gemot::constitution` now owns signed genesis and amendment events, a
 deterministic founder-only fold, memory/redb stores over `MunimentStore`, and
 the governed authorization seam. The accepted constitution revision and signer
-set now construct Moot checkpoint authority. Moot's declaration/roster lane is
-still SQLite-backed, and the high-level service, retention commands, live
-constitution LogSync test, and broader membership/capability policy remain.
+set construct Moot checkpoint authority. `MootGovernance` supplies plain
+commands and snapshots, and its constitution log has a live late-peer test.
+The declaration/roster lane now also uses `MunimentStore` and the shared
+processor, with separate event/checkpoint logs, monotone snapshot frontiers,
+constitution-bound checkpoint admission, and authorized prefix pruning.
+Broader membership/capability policy remains.
+Federation-level concord composition and reciprocity now live in the distinct
+`moothold` package; `MootId` remains owned by `gemot` and is shared across that
+boundary. `moothold 0.1.0` also owns a founder-signed aggregate with explicit
+member terms, deterministic revision folding, and a durable redb-backed store.
 
 - keep declaration, roster, recognition, constitution, tessera, and moderation
   with Moot;
 - register Moot validation, authorization, checkpoint authority, and folds
   with `murm-replication`;
-- replace the current SQLite Moot store with the shared backend;
+- keep the landed Moot object lane on the shared muniment backend and processor;
 - expose commands and snapshots for declare, join, leave, share, amend,
   withdraw, checkpoint, and inspect retention status;
 - bind retention settings to a governed policy revision authorized by the
@@ -343,13 +350,24 @@ Done when:
   before mutation;
 - tessera and constitution remain separate policy rings with explicit inputs.
 
-Implementation status, 2026-07-14: the constitution portion is landed. Signed
-genesis and amendment events feed a deterministic muniment-backed fold, converge
-over LogSync, and project checkpoint authority from the accepted revision.
-`MootGovernance` exposes founding, amendment, snapshots, durable reopen, and
-checkpoint authorization without p2panda types. The aggregate service still
-needs to replace the SQLite Moot-object lane and compose roster, Tessera,
-retention-event authoring, native drop, and peer commands.
+Implementation status, 2026-07-14: constitution and Moot retention are landed.
+Signed genesis and amendment events feed a deterministic muniment-backed fold,
+converge over LogSync, and project checkpoint authority from the accepted
+revision. `MootGovernance` exposes founding, amendment, snapshots, durable
+reopen, and checkpoint authorization without p2panda types. The Moot object
+lane now shares the muniment processor and has checkpoint-plus-tail roster
+replay, durable redb reopen, separate checkpoint logs, and authorized event
+prefix pruning. Checkpoint v1 deliberately permits one active signer; key
+rotation replaces that signer through a new constitution revision. The
+aggregate `Moot` service now composes governance and roster commands, durable
+snapshots, checkpoint authoring, pruning, and rotation-safe checkpoint ancestry
+behind a p2panda-free command API. Aggregate drops now carry canonical critical
+constitution evidence, admit it before object records, and can bootstrap a
+fresh peer through a rotated checkpoint chain. Plaintext/local and injected
+protected carriage share that dependency order and idempotent import receipt.
+`Moot::record_tessera` returns a lane-tagged receipt whose recovered operation
+is the explicit host publication seam; MeerKat uses the same sign-store-publish
+shape for its starter Tessera log. Quorum rules and capability grants remain.
 
 ### Phase E: move the remaining consumers
 
@@ -458,7 +476,7 @@ protocol design.
 - Reframed Murm and Moot against the current Mere library and Merecat host
   boundary.
 - Audited current dependency edges and the public APIs of `transport`, `murm`,
-  `murmuring`, `mooting`, `moothold`, mesh, and the old host sync lane.
+  `murmuring`, `mooting`, `gemot`, mesh, and the old host sync lane.
 - **Phase A structural move landed.** Created `murm-replication`; moved the
   complete `SyncedSpace`/`SyncStatus`/`SyncRound` drain and
   `MunimentStore` implementation into it; left compatibility re-exports in

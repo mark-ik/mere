@@ -365,7 +365,7 @@ where
     R: Read,
 {
     let (read, records) = read_plain_drop(reader, limits)?;
-    import_records(read.id, records, processor).await
+    import_drop_records(read.id, records, processor).await
 }
 
 /// Import a plaintext/public drop file through the shared operation processor.
@@ -398,7 +398,7 @@ where
     D: DropProtector,
 {
     let (read, records) = read_protected_drop(reader, limits, protector)?;
-    import_records(read.id, records, processor).await
+    import_drop_records(read.id, records, processor).await
 }
 
 /// Import a protected drop file through its suite and the shared processor.
@@ -591,7 +591,7 @@ where
                 .map_err(|error| DropIoError::StagingCodec(error.to_string()))?,
         );
     }
-    import_records(drop_id, records, processor).await
+    import_drop_records(drop_id, records, processor).await
 }
 
 /// Remove a staged corpus selected by caller policy or settings.
@@ -613,7 +613,10 @@ where
     Ok(keys.len() as u64)
 }
 
-async fn import_records<B, E, P>(
+/// Import already integrity-verified native-drop records through the shared
+/// processor. Aggregate domains use this after admitting their own critical
+/// evidence records in dependency order.
+pub async fn import_drop_records<B, E, P>(
     drop_id: DropId,
     records: Vec<DropRecord>,
     processor: &OperationProcessor<B, E, P>,

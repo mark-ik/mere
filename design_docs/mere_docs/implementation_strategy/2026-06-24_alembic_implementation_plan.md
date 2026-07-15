@@ -133,8 +133,8 @@ past state crosses into slice A.
 **Code reality (verified 2026-06-24).** Exists: `GraphSnapshot` to/from (the checkpoint primitive);
 `kernel::persistence::NodeAuditEventKind` (a per-node event taxonomy: TitleChanged / Tagged / Pinned /
 Tombstoned / Restored / ..., serde + rkyv) as a partial mutation vocabulary; the **proven
-event-sourcing substrate** in `tessera` ([`moothold/src/tessera/log_store.rs`](../../../crates/moot/moothold/src/tessera/log_store.rs),
-a `LogStore` trait impl) and `cable` (`murmuring/src/cable/{log_store,persistent_store}.rs`) to mirror;
+event-sourcing substrate** in `tessera` ([`gemot/src/tessera/store.rs`](../../../crates/moot/gemot/src/tessera/store.rs),
+a `TesseraStore` implementation) and `cable` (`murmuring/src/cable/{log_store,persistent_store}.rs`) to mirror;
 the kernel graph mutators (`Graph::add_node` / `add_node_with_id` / `remove_node` + edge / field
 methods) as the capture points; the `ViewIntent` sidecar (`session-runtime/view_intent_store.rs`:
 `CameraSnapshot` + `HiddenRelationRecord`) as the seed for the view-intent stream;

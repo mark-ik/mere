@@ -12,8 +12,9 @@ categories = ["network-programming"]
 
 [features]
 # Optional Reticulum transport backend for off-grid / mesh links. Disabled by
-# default; enable to build and test `ReticulumTransport`.
-reticulum = ["dep:reticulum", "dep:x25519-dalek", "dep:hkdf", "dep:sha2", "dep:rand_core"]
+# default; enable to build and test `ReticulumTransport`. Backed by `retinue`,
+# Mark's own RNS implementation; `hkdf`/`sha2` derive the retinue identity.
+reticulum = ["dep:retinue", "dep:hkdf", "dep:sha2"]
 
 [lib]
 name = "transport"
@@ -42,12 +43,11 @@ bytes = "1"
 # pins iroh 0.98, unifying with the iroh/iroh-blobs deps above.
 p2panda-net = "0.6.1"
 p2panda-core = "0.6.1"
-# Reticulum mesh-networking backend (optional, see [features]).
-reticulum = { workspace = true, optional = true }
-x25519-dalek = { workspace = true, optional = true }
+# Reticulum mesh-networking backend (optional, see [features]). `retinue` is
+# Mark's from-scratch RNS stack; `hkdf`/`sha2` derive its identity from the seed.
+retinue = { workspace = true, optional = true }
 hkdf = { workspace = true, optional = true }
 sha2 = { workspace = true, optional = true }
-rand_core = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["io-util", "sync", "macros", "rt", "rt-multi-thread", "time"] }

@@ -7,8 +7,9 @@ use std::rc::Rc;
 
 use genet_scripted_dom::ScriptedDom;
 use cambium::{
-    AnyView, El, OnClick, OptionalAction, PointerClick, GenetAppRunner, GenetCtx, GenetElement,
-    TextField, TextInput, el, lens, memoize, on_click, overlay_at, text_field_typed,
+    AnyView, El, Focusable, OnClick, OptionalAction, PointerClick, GenetAppRunner, GenetCtx,
+    GenetElement, TextField, TextInput, el, lens, memoize, on_click, overlay_at,
+    text_field_typed,
 };
 
 use comms::{Direction, ProtocolKind};
@@ -50,7 +51,7 @@ fn button<F, OA>(
     label: impl Into<String>,
     class: &'static str,
     handler: F,
-) -> OnClick<El<String, Chrome, ()>, Chrome, (), F>
+) -> Focusable<OnClick<El<String, Chrome, ()>, Chrome, (), F>>
 where
     F: Fn(&mut Chrome, PointerClick) -> OA + 'static,
     OA: OptionalAction<()>,

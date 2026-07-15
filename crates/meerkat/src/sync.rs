@@ -33,14 +33,16 @@ use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
 use armillary::{ActorHandle, Emitter, Wake, spawn};
-use identity::{IdentityProvider, InMemoryProvider};
-use gemot::tessera::{
+use gemot::moot::tessera::{
     ChainRoot, CommitmentId, Ledger, Scope, TesseraConfig, TesseraEvent, TesseraExt,
-    TesseraFileStore, TesseraStoreError, to_operation, verify,
+    TesseraFileStore, TesseraStoreError, verify,
 };
+use identity::{IdentityProvider, InMemoryProvider};
 use murm_replication::{SyncStatus, SyncedSpace};
-use p2panda_core::Topic;
+use p2panda_core::{Operation, Topic};
 use p2panda_net::LogSync;
+use p2panda_net::sync::SyncHandle;
+use p2panda_sync::protocols::TopicLogSyncEvent;
 use transport::{P2pandaTransport, sync_overlay_topic};
 
 use meerkat::SyncIndicator;
@@ -52,13 +54,16 @@ pub const LANE_LABEL: &str = "tessera";
 
 /// The host-composed tessera sync session: the shared [`SyncedSpace`] drain (for
 /// status), the [`TesseraStore`] to fold, the moot it syncs, and the `LogSync`
-/// session + handle held for liveness. gemot owns no p2panda-net after the
-/// sibling-posture purity split, so the host builds the pump; the tessera lane
-/// is receive-only, so nothing publishes on the handle.
+/// session held for liveness. Gemot owns no p2panda-net after the
+/// sibling-posture purity split, so this host builds the pump and publishes
+/// its locally authored Tessera operations on the typed handle.
+type TesseraHandle = SyncHandle<Operation<TesseraExt>, TopicLogSyncEvent<TesseraExt>>;
+
 struct TesseraSync {
     space: SyncedSpace,
     store: TesseraFileStore,
     moot_id: [u8; 32],
+    handle: TesseraHandle,
     // Send + Sync so the poll task can hold `&self` across the async ledger fold.
     _keepalive: Box<dyn std::any::Any + Send + Sync>,
 }
@@ -70,6 +75,22 @@ impl TesseraSync {
 
     async fn ledger(&self, config: TesseraConfig) -> Result<Ledger, TesseraStoreError> {
         self.store.fold_moot(self.moot_id, config).await
+    }
+
+    async fn author_and_publish(
+        &self,
+        signing_seed: [u8; 32],
+        event: TesseraEvent,
+    ) -> Result<(), String> {
+        let operation = self
+            .store
+            .author_seed(signing_seed, self.moot_id, &event)
+            .await
+            .map_err(|error| format!("tessera author: {error}"))?;
+        self.handle
+            .publish(operation)
+            .await
+            .map_err(|error| format!("tessera publish: {error}"))
     }
 }
 
@@ -238,17 +259,13 @@ async fn build_sync_lane(
     let _ = std::fs::create_dir_all(&moots);
     let store = TesseraFileStore::open(moots.join(format!("{}.redb", hex32(&moot_id))))
         .map_err(|e| format!("tessera store: {e}"))?;
-    if store.is_empty().await.unwrap_or(true) {
-        author_starter_log(&provider, moot_id, &store).await;
-    }
+    let bootstrap = store.is_empty().await.unwrap_or(true);
     let host_root = provider
         .derive_keypair(b"tessera-host-author")
         .ok()
         .map(|kp| ChainRoot(kp.public_key().to_bytes()));
     // Host-composed pump: build the tessera LogSync session over the store,
     // drain it via the shared `SyncedSpace`, and keep the session + handle alive.
-    // The tessera lane is receive-only (authoring is a direct store.insert), so
-    // nothing publishes on the handle.
     // The muniment-backed store impls `LogStore` for every log-id type, so pin
     // tessera's (`u64`) here — the type-erased keepalive gives inference nothing
     // to work back from.
@@ -274,8 +291,12 @@ async fn build_sync_lane(
         space,
         store,
         moot_id,
-        _keepalive: Box::new((log_sync, handle)),
+        handle,
+        _keepalive: Box::new(log_sync),
     };
+    if bootstrap {
+        author_starter_log(&provider, &moot).await;
+    }
     Ok((transport, moot, host_root))
 }
 
@@ -328,13 +349,9 @@ fn activate_sync_lane(
 }
 
 /// Author a small `commit -> fulfil -> govern` tessera log for this host's own
-/// persona (derived from its identity) into `store`, so a peer that connects has
-/// a real log to catch up. Best-effort: a derivation / insert failure is skipped.
-async fn author_starter_log(
-    provider: &InMemoryProvider,
-    moot_id: [u8; 32],
-    store: &TesseraFileStore,
-) {
+/// persona (derived from its identity) and publish it live, so a connecting peer
+/// receives the same operations through the hot path and later LogSync catch-up.
+async fn author_starter_log(provider: &InMemoryProvider, moot: &TesseraSync) {
     let Ok(kp) = provider.derive_keypair(b"tessera-host-author") else {
         return;
     };
@@ -354,11 +371,11 @@ async fn author_starter_log(
         at_ms: 1_050,
     };
     let e2 = TesseraEvent::GovernanceParticipation { by, at_ms: 1_100 };
-    let op0 = to_operation(&kp, moot_id, &e0, 0, None);
-    let op1 = to_operation(&kp, moot_id, &e1, 1, Some(*op0.hash.as_bytes()));
-    let op2 = to_operation(&kp, moot_id, &e2, 2, Some(*op1.hash.as_bytes()));
-    for op in [op0, op1, op2] {
-        let _ = store.insert(&op);
+    for event in [e0, e1, e2] {
+        if let Err(error) = moot.author_and_publish(kp.to_seed(), event).await {
+            tracing::warn!(%error, "tessera starter log was not published");
+            break;
+        }
     }
 }
 

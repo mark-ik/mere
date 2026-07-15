@@ -28,9 +28,10 @@ pub use drop_io::{
     DropFileExportReport, DropImportReport, DropIoError, StagedDrop, decode_operation_record,
     discard_peer_drop_receipts, discard_staged_drop, export_plain_topic_file,
     export_protected_topic_file, export_selected_plain_topic_file, export_topic_operations,
-    export_topic_operations_selected, import_plain_drop, import_plain_drop_file,
-    import_protected_drop, import_protected_drop_file, list_staged_drops, local_drop_receipt,
-    operation_record, peer_drop_receipt, resume_staged_drop, store_peer_drop_receipt,
+    export_topic_operations_selected, import_drop_records, import_plain_drop,
+    import_plain_drop_file, import_protected_drop, import_protected_drop_file, list_staged_drops,
+    local_drop_receipt, operation_record, peer_drop_receipt, resume_staged_drop,
+    store_peer_drop_receipt,
 };
 pub use processor::{
     Admission, HistoryAction, OperationPolicy, OperationProcessor, ProcessError, ProcessOutcome,

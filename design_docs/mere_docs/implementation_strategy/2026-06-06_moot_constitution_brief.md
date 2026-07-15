@@ -127,7 +127,7 @@ primitive with different amendment clauses:**
 
 Same type, different amendment clause, nested. This is the recursive-cell shape
 (the moot as the fundamental unit, each tier a moot whose members are moots) made
-concrete in one field. It is also why the primitive lives in `moothold` (§7): the
+concrete in one field. It is also why the primitive lives in `gemot` (§7): the
 holder is the recursive container.
 
 ---
@@ -321,17 +321,22 @@ quorum nor a remote gate.
 ## 11. First slice (landed 2026-07-14)
 
 The signed wire grammar, deterministic fold, muniment-backed store, and
-founder-only authorization seam now live in `moothold::constitution`. Genesis
+founder-only authorization seam now live in `gemot::constitution`. Genesis
 binds the Moot, founder, optional parent and divergence point, and canonical
 rules digest. The accepted revision and governed signer set feed
 `GovernedCheckpointAuthority` directly. Store-level convergence and rejection
 before mutation are covered. A live constitution-specific LogSync test now
 proves late-peer catch-up and identical checkpoint authority. `MootGovernance`
 now exposes plain founding, amendment, snapshot, durable reopen, and checkpoint
-authorization commands without p2panda types. The larger Moot service still
-needs to absorb roster, Tessera, retention-event authoring, and peer commands.
+authorization commands without p2panda types. The Moot object lane has since
+moved to the same muniment processor and gained constitution-bound checkpoint
+authoring, replay, and prefix pruning. The aggregate `Moot` service now composes
+governance, roster commands, snapshots, checkpointing, pruning, and checkpoint
+signer rotation. Public/local native drops now bootstrap an unrotated
+checkpoint and refresh the aggregate snapshot. Tessera commands, protected
+drops, rotated constitution evidence, and peer publication remain.
 
-In `moothold`, beside `tessera`:
+In `gemot`, beside `tessera`:
 
 1. `Constitution`, `ConstitutionEvent::{Genesis, Amended}`, and
    `AmendmentRule::FounderSigned`, folded by a `from_events` / `apply` pair
@@ -450,7 +455,7 @@ S5.3's moot surface (a constitution is what a moot surface would *display* and
   moot-topic shape; generalize the store/session or build a sibling constitution
   store.
 - **`mooting` is not the home.** The constitution is moot DNA, not protocol
-  plumbing; it lives in `moothold` beside tessera.
+  plumbing; it lives in `gemot` beside tessera.
 
 ## Progress
 
@@ -472,7 +477,7 @@ S5.3's moot surface (a constitution is what a moot surface would *display* and
 
 - Landed `ConstitutionEvent::{Genesis, Amended}`, canonical rules digests,
   signed p2panda operation encoding, and a deterministic prior-rule fold in
-  `moothold` beside tessera.
+  `gemot` beside tessera.
 - Added memory and redb `ConstitutionStore` variants over the shared
   `MunimentStore` and `OperationProcessor`. Genesis is rooted in the already
   declared Moot founder; unauthorized and stale amendments fail before store
@@ -482,6 +487,12 @@ S5.3's moot surface (a constitution is what a moot surface would *display* and
 - Added `MootGovernance`, a high-level consumer service over the constitution
   store. Its public commands and snapshots contain domain types only; focused
   coverage proves governed checkpoint authorization and redb reopen.
-- The isolated Moothold suite passes 80 tests. Remaining work is the aggregate
-  Moot service, retention-event authoring, additional governed actions, quorum
-  rules, and membership/capability inputs.
+- A full Gemot library run passed 72 tests after the Moot object store cutover.
+  The suite now contains 76 after adding the explicit single-authority,
+  aggregate-service, and native-drop regressions; its final rerun is temporarily blocked by the concurrent
+  Genet/Cambium `servo_style_crate` links conflict in workspace resolution.
+  Retention checkpoints bind compact roster snapshots and monotone event
+  frontiers to both retention-policy and constitution revisions; authorized
+  prune events remove prefixes while the checkpoint survives in its own log.
+  Remaining work is the aggregate Moot service, native-drop composition,
+  additional governed actions, quorum rules, and membership/capability inputs.

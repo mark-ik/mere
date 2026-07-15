@@ -109,7 +109,7 @@ meerkat-browser-worker = { path = "crates/meerkat-browser-worker" }
 
 fetch = { package = "mere-fetch", path = "crates/system/fetch" }
 content-contract = { path = "crates/system/content-contract" }
-proofs = { package = "mere-proofs", path = "crates/system/proofs" }
+proofs = { package = "mere-proofs", version = "0.1.0", path = "crates/system/proofs" }
 shell-state = { path = "crates/system/shell-state" }
 frisket = { path = "crates/shell/frisket" }
 incipit = { path = "crates/incipit" }
@@ -165,18 +165,19 @@ signals = { package = "mere-signals", path = "crates/intel/signals" }
 # 2026-07-03); an owned mark-ik repo, tracked by branch per convention.
 misfin = { git = "https://github.com/mark-ik/misfin", branch = "main", features = ["ring"] }
 murm = { path = "crates/murm/murm" }
-murm-replication = { path = "crates/murm/replication" }
+murm-replication = { version = "0.1.0", path = "crates/murm/replication" }
 transport = { package = "mere-transport", path = "crates/murm/transport" }
 
 gemot = { version = "0.1.0", path = "crates/moot/gemot" }
 moothold = { version = "0.1.0", path = "crates/moot/moothold" }
-mooting = { path = "crates/moot/mooting" }
+mooting = { version = "0.1.0", path = "crates/moot/mooting" }
 
 # The personal-space compute mesh (resource-coordination M1): signed job ops
 # over the tessera-proven LogSync lane + the deterministic job board.
 mesh = { package = "mere-mesh", path = "crates/mesh/mesh" }
 
-identity = { package = "mere-identity", path = "crates/persona/identity" }
+identity = { package = "personae", version = "0.1.0", path = "../personae" }
+muniment = { version = "0.1.0" }
 # Handle-resolution index (WebFinger today; NIP-05 / atproto-did / moot
 # web-of-trust to come). Incubating, promoted out of the murm supercrate
 # 2026-07-08 (a gazetteer is a directory, not a broadcast gazette); no consumer
@@ -220,17 +221,19 @@ uuid = { version = "1", features = ["serde", "v4"] }
 # so consumers and every `use tincture::` stay unchanged.
 tincture = { package = "tinct", version = "=0.1.2" }
 
-# Off-grid mesh transport probe (optional, default-off). The `reticulum` crate
-# is a Rust implementation of the Reticulum Network Stack; keep the pin here so
-# the probe does not silently drift.
-reticulum = "0.1"
+# Off-grid mesh transport backend (optional, default-off). `retinue` is Mark's
+# own from-scratch Rust Reticulum Network Stack implementation, wire-compatible
+# with RNS 1.3.x (it replaces the stale Beechat `reticulum` 0.1 crate, which
+# could not parse ratcheted announces from real RNS). Sibling repo referenced by
+# relative path, like `identity`/`personae`; move to a git/crates.io pin once
+# retinue is published.
+retinue = { path = "../retinue" }
 
-# Reticulum transport probe helpers: deterministic dual-key identity derivation
-# (HKDF-SHA256), X25519 static secrets, and the RNG source for announce packets.
+# Reticulum identity derivation: HKDF-SHA256 stretches Mere's 32-byte master seed
+# into retinue's 64-byte dual-key private identity. retinue owns the X25519/RNG
+# work, so the probe no longer needs x25519-dalek or a separate rand source.
 hkdf = "0.12"
 sha2 = "0.10"
-x25519-dalek = { version = "2", features = ["static_secrets"] }
-rand_core = "0.6"
 
 [workspace.lints.rust]
 unsafe_code = "warn"

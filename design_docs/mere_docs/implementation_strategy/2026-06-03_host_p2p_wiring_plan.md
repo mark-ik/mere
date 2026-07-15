@@ -41,12 +41,12 @@ pattern, not building one.
    `sync` module with a `SyncHost` that owns its runtime, builds the transport +
    lanes, and delivers a `SyncUpdate` over its own channel + the same wake.
 
-2. **Both lanes are host-ready and identical in shape.** `murm::SyncedCabal` and
-   `moothold::tessera::SyncedMoot` each take the raw `(Endpoint, Gossip)` from one
-   `P2pandaTransport::sync_parts()`, and each exposes a real `SyncStatus`
-   (rounds / items / last-activity) plus a bounded honest `resync`. **One
-   transport, N lanes.** The host builds the transport once and hands `sync_parts`
-   to each lane (tessera done 2026-06-03; murm since the LogSync productization).
+2. **Both lanes are host-composed over the same replication shape.** `murm` and
+   `gemot::tessera` supply their stores, folds, and verification; the host builds
+   `murm_replication::SyncedSpace` pumps over one injected endpoint and projects
+   their real `SyncStatus` values (rounds / items / last-activity). **One
+   transport, N lanes.** The earlier domain-specific `SyncedCabal` / `SyncedMoot`
+   wrappers retired with the sibling-posture purity split.
 
 3. **The chrome is where status shows.** `Chrome` (`lib.rs`) is the host-neutral
    view-model the runner diffs into the toolbar DOM. A sync indicator gets a

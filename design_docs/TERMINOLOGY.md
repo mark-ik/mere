@@ -76,6 +76,9 @@ For terms not addressed here, see the donor harvest indexes ([full harvest](mere
   for storage/runtime mechanics and keep Cable terminology at this explicit
   protocol boundary.
 - **moot** *(count noun)* — a single persistent themed federatable graph-view community
+- **fili** — reserved name for Moot lineage: community ancestry, forks, and
+  genealogy across related moots. Do not use it for ordinary event history,
+  retention, or storage mechanics.
 - **coalition** *(count noun)* — a sovereign cluster of mootholds (t4; renamed from *demesne* 2026-06-04)
 - **suzerainty** *(relation)* — the outer-tier ↔ inner-member relationship (moothold ↔ moot, coalition ↔ moothold); overlordship without absorbing internal sovereignty
 - **volvelle** — UI form factor: a moot expanded radially in the Navigator (medieval rotating-disc knowledge instrument)

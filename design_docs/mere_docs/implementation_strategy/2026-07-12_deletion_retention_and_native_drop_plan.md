@@ -70,7 +70,7 @@ files, or other store-and-forward paths.
 
 | Concern | Live owner | Current fact | Gap this plan closes |
 |---|---|---|---|
-| Signed replication | p2panda-core operations in murm, moothold, mesh | Per-author `seq_num` and `backlink`; LogSync reconciles them | Domain extensions do not carry `PruneFlag` |
+| Signed replication | p2panda-core operations in murm, gemot, mesh | Per-author `seq_num` and `backlink`; LogSync reconciles them | Mesh and Moot carry a default-omitted `PruneFlag`; remaining domains need explicit policy cutovers |
 | Shared persistence | `mooting::MunimentStore`, moving to `murm-replication` | Implements `OperationStore`, `LogStore`, and `TopicStore`; can strip a payload or prune a log prefix | Pruning is callable but not governed by one application law |
 | Live receive | `transport::SyncedSpace`, moving to `murm-replication`, plus domain `accept` closures | Signature, address, and insert checks differ by consumer | No common prune-aware ingest processor |
 | Murmur history | `ConversationEngine` over `ConversationStore` | Shared muniment operations are the sync authority; Meerkat selects redb, and open/drop import rebuild the post view | Governed retention policy remains |
@@ -483,10 +483,26 @@ remains inline until live blob carriage can guarantee its availability before
 checkpoint admission. Generic blob collection is landed, but each domain still
 owes complete live/checkpoint reference tracing. The personal mesh uses one
 owner-key authority revision. Moot's founder-signed constitution event, fold,
-and muniment-backed store now produce the accepted revision and signer set for
-its checkpoint-authority seam. `MootGovernance` exposes that state through plain
-snapshots and checkpoint authorization. Authoring and applying the full Moot
-retention event remains.
+and muniment-backed store produce the accepted revision and signer set for its
+checkpoint-authority seam. `MootGovernance` exposes that state through plain
+snapshots and checkpoint authorization. The Moot object lane now authors and
+applies typed retention checkpoints through the shared processor, separates
+event and checkpoint logs, rejects false or rewinding snapshots, and preserves
+checkpoint-plus-tail roster replay after authorized prefix pruning. Checkpoint
+v1 accepts one active signer so concurrent authorities cannot make latest-state
+selection arrival-dependent; a constitution revision performs signer rotation.
+Each checkpoint names its predecessor operation, so historical checkpoints stay
+valid under their accepted authority revision and a rotated signer continues one
+causal checkpoint chain rather than starting an order-dependent parallel log.
+The aggregate `Moot` service refreshes future admission from the latest
+constitution while retained replay applies only self-contained checkpoint laws.
+Its first native-drop slice is also landed: public/local object drops export the
+retained Moot topic, import atomically through `OperationProcessor`, reuse
+durable drop receipts, and rebuild the aggregate snapshot. A fresh peer can
+bootstrap an unrotated checkpoint and roster from the drop. Rotated bootstrap
+remains a cross-store package problem because the object checkpoint names
+historical constitution authority that the constitution store, rather than the
+object drop, proves.
 
 Done when:
 
@@ -830,6 +846,14 @@ and Retinue remain opaque carriers; domain folds remain the semantic owners.
 - Added `CheckpointAuthority` and a Moot `GovernedCheckpointAuthority` fed only
   by a constitution revision and signer set. Roster membership alone grants
   nothing. The live constitution log/fold remains the governance gap.
+- Landed aggregate Moot drops. A critical canonical constitution-evidence
+  record travels beside retained Moot operations; import admits the evidence
+  first, refreshes the authority history, then atomically admits the object
+  corpus. This makes a fresh recipient able to verify a checkpoint chain across
+  signer rotation. Protected aggregate carriage requires the caller's
+  `DropProtector`; the concrete selector keeps records full-bodied and makes
+  checkpoint/roster priority settings explicit. Tessera authoring now returns a
+  lane-tagged receipt that a host resolves to the signed operation it publishes.
 - Current focused verification passes thirty-eight `murm-replication` tests
   and fifty-seven Murm tests, with the former `murmuring` grammar coverage folded
   into Murm. Two `proofs` tests, twenty-nine mesh tests, and the Moot

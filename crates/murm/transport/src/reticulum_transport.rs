@@ -1,32 +1,35 @@
 //! Reticulum-backed [`Transport`] implementation.
 //!
 //! [`ReticulumTransport`] runs Mere's bilateral peer-to-peer lane over Reticulum
-//! packet links (the Beechat Rust port, crate [`reticulum`]). It is feature-gated
+//! links, using [`retinue`] — Mark's from-scratch Rust implementation of the
+//! Reticulum Network Stack, wire-compatible with RNS 1.3.x. It is feature-gated
 //! behind the `reticulum` cargo feature and is default-off. Sync (gossip / RBSR /
 //! LogSync) and blob transfer remain iroh-only; this is the bilateral stream lane
 //! only.
 //!
 //! ## Identity
 //!
-//! Mere's master key is a single Ed25519 keypair; Reticulum needs a dual-key
-//! identity (X25519 ECDH + Ed25519 signing). [`keys::derive_identity`] stretches
-//! the 32-byte master seed into both keys via HKDF-SHA256, so the same seed always
-//! yields the same Reticulum destination. The Mere [`PeerID`] stays the master
+//! Mere's master key is a single Ed25519 keypair; a retinue identity is dual-key
+//! (X25519 ECDH + Ed25519 signing). [`keys::derive_identity`] stretches the
+//! 32-byte master seed into both keys via HKDF-SHA256, so the same seed always
+//! yields the same retinue destination. The Mere [`PeerID`] stays the master
 //! Ed25519 public key, consistent with the other transports.
 //!
 //! ## Discovery
 //!
 //! A destination hash cannot be synthesized from a [`PeerID`], so peers are learned
-//! from authenticated announces (see [`announce`]). `connect` resolves a peer by
-//! looking it up in the announce-populated address book; `accept` waits for an
-//! inbound link on the ALPN's destination.
+//! from authenticated announces (see [`announce`]). Each announce carries an
+//! `app_data` binding signed by the master key, tying the announcing retinue
+//! identity + destination name to a `PeerID`. `connect` resolves a peer by looking
+//! it up in the announce-populated address book; `accept` waits for an inbound
+//! link on the ALPN's destination.
 //!
 //! ## ALPN mapping
 //!
-//! `mere/cable/v1` maps to `DestinationName::new("mere", "cable.v1")`: the first
+//! `mere/cable/v1` maps to `DestinationName::new("mere", ["cable.v1"])`: the first
 //! path segment is the Reticulum app name, the rest the dotted aspect.
 //!
-//! [`reticulum`]: https://crates.io/crates/reticulum
+//! [`retinue`]: https://github.com/mark-ik/retinue
 
 mod announce;
 mod keys;
@@ -38,21 +41,19 @@ use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 
 use identity::Ed25519Keypair;
-use tokio::sync::{Mutex as TokioMutex, broadcast};
-use tokio::time::{Instant, sleep, timeout};
+use tokio::sync::{Mutex as TokioMutex, mpsc};
+use tokio::task::JoinHandle;
+use tokio::time::{Instant, interval, sleep, timeout};
 
-use reticulum::destination::link::{LinkEvent, LinkEventData, LinkId, LinkStatus};
-use reticulum::destination::{DestinationDesc, DestinationName, SingleInputDestination};
-use reticulum::hash::AddressHash;
-use reticulum::transport::{Transport as ReticulumStack, TransportConfig};
+use retinue::destination::DestinationName;
+use retinue::endpoint::{Endpoint, LinkStream};
+use retinue::hash::AddressHash;
+use retinue::identity::Identity;
 
 use crate::{Alpn, PeerID, Transport, TransportError};
 
-use self::announce::{
-    NameHashKey, announce_listener, announce_sender, build_app_data, name_hash_key,
-};
+use self::announce::{build_app_data, recover_peer_id};
 use self::keys::derive_identity;
-use self::stream::{LinkSide, bridge_link};
 
 pub use self::stream::ReticulumStream;
 
@@ -61,6 +62,9 @@ const ANNOUNCE_INTERVAL: Duration = Duration::from_secs(5);
 
 /// Default time `connect` waits for peer discovery + link activation.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// Learned peers: `PeerID -> (ALPN -> that peer's retinue identity)`.
+type PeerMap = Arc<StdMutex<HashMap<PeerID, HashMap<Alpn, Identity>>>>;
 
 /// A network interface to attach to a [`ReticulumTransport`].
 #[derive(Clone, Debug)]
@@ -74,13 +78,6 @@ pub enum ReticulumInterface {
     TcpClient {
         /// Address to connect to.
         addr: SocketAddr,
-    },
-    /// UDP interface bound to a local address, optionally forwarding to a peer.
-    Udp {
-        /// Address to bind.
-        bind: SocketAddr,
-        /// Optional peer address to forward packets to.
-        forward: Option<SocketAddr>,
     },
 }
 
@@ -111,7 +108,7 @@ impl<'a> ReticulumTransportBuilder<'a> {
         self
     }
 
-    /// Network interfaces to attach (TCP server/client, UDP, ...).
+    /// Network interfaces to attach (TCP server / client).
     pub fn interfaces(mut self, interfaces: Vec<ReticulumInterface>) -> Self {
         self.interfaces = interfaces;
         self
@@ -129,8 +126,8 @@ impl<'a> ReticulumTransportBuilder<'a> {
         self
     }
 
-    /// Bind the transport: create the Reticulum stack, attach interfaces,
-    /// register destinations, and start the announce listener/sender.
+    /// Bind the transport: create the retinue endpoint, attach interfaces,
+    /// register destinations, and start the announce + accept driver tasks.
     pub async fn bind(self) -> Result<ReticulumTransport, TransportError> {
         ReticulumTransport::bind_inner(
             self.master,
@@ -146,11 +143,24 @@ impl<'a> ReticulumTransportBuilder<'a> {
 /// Reticulum-backed implementation of the [`Transport`] trait.
 pub struct ReticulumTransport {
     local_peer_id: PeerID,
-    inner: Arc<ReticulumStack>,
-    destinations: Arc<StdMutex<HashMap<Alpn, Arc<TokioMutex<SingleInputDestination>>>>>,
-    app_data_by_alpn: Arc<HashMap<Alpn, Vec<u8>>>,
-    peers: Arc<StdMutex<HashMap<PeerID, HashMap<Alpn, DestinationDesc>>>>,
+    endpoint: Arc<Endpoint>,
+    peers: PeerMap,
+    /// Per-ALPN inbound accept queue, fed by the accept-router task. Behind an
+    /// async mutex because `accept` takes `&self` yet must own the receiver while
+    /// awaiting.
+    inbound: HashMap<Alpn, Arc<TokioMutex<mpsc::UnboundedReceiver<LinkStream>>>>,
     connect_timeout: Duration,
+    /// Background driver tasks (accept router, announce listener, announce
+    /// sender), aborted on drop.
+    tasks: Vec<JoinHandle<()>>,
+}
+
+impl Drop for ReticulumTransport {
+    fn drop(&mut self) {
+        for task in &self.tasks {
+            task.abort();
+        }
+    }
 }
 
 impl ReticulumTransport {
@@ -168,120 +178,83 @@ impl ReticulumTransport {
     ) -> Result<Self, TransportError> {
         let local_peer_id = PeerID::from_public_key(master.public_key());
         let private_identity = derive_identity(master);
+        let identity = *private_identity.public();
 
-        let config = TransportConfig::new("mere", &private_identity, true);
-        // Owned mutably until every destination is registered: `add_destination`
-        // takes `&mut self`, which is unreachable once the stack is behind `Arc`.
-        let mut inner = ReticulumStack::new(config);
+        let endpoint = Endpoint::new(private_identity);
 
         // Attach interfaces.
-        {
-            let iface_manager = inner.iface_manager();
-            let mut manager = iface_manager.lock().await;
-            for iface in interfaces {
-                match iface {
-                    ReticulumInterface::TcpServer { bind } => {
-                        use reticulum::iface::tcp_server::TcpServer;
-                        manager.spawn(
-                            TcpServer::new(bind.to_string(), inner.iface_manager()),
-                            TcpServer::spawn,
-                        );
-                    }
-                    ReticulumInterface::TcpClient { addr } => {
-                        use reticulum::iface::tcp_client::TcpClient;
-                        manager.spawn(TcpClient::new(addr.to_string()), TcpClient::spawn);
-                    }
-                    ReticulumInterface::Udp { bind, forward } => {
-                        use reticulum::iface::udp::UdpInterface;
-                        let forward = forward.map(|a| a.to_string());
-                        manager.spawn(
-                            UdpInterface::new(bind.to_string(), forward),
-                            UdpInterface::spawn,
-                        );
-                    }
+        for iface in interfaces {
+            match iface {
+                ReticulumInterface::TcpServer { bind } => {
+                    endpoint.listen_tcp(bind).await?;
+                }
+                ReticulumInterface::TcpClient { addr } => {
+                    endpoint.attach_tcp_client(addr).await?;
                 }
             }
         }
 
-        // Register one incoming destination per ALPN, and precompute each
-        // destination's signed announce payload.
-        let mut destinations = HashMap::new();
-        let mut name_to_alpn: HashMap<NameHashKey, Alpn> = HashMap::new();
-        let mut app_data_by_alpn: HashMap<Alpn, Vec<u8>> = HashMap::new();
+        // Register one destination per ALPN. Record each ALPN's destination name
+        // and its precomputed signed announce payload; wire up a per-ALPN inbound
+        // accept queue keyed (for routing) by the destination hash.
+        let mut names: HashMap<Alpn, DestinationName> = HashMap::new();
+        let mut app_data: HashMap<Alpn, Vec<u8>> = HashMap::new();
+        let mut inbound = HashMap::new();
+        let mut inbound_senders: HashMap<AddressHash, mpsc::UnboundedSender<LinkStream>> =
+            HashMap::new();
         for alpn in &alpns {
             let name = destination_name_for_alpn(alpn);
-            let dest = inner.add_destination(private_identity.clone(), name).await;
-            let ret_identity = { dest.lock().await.desc.identity };
-            let app_data = build_app_data(&local_peer_id, &name, &ret_identity, master);
-            name_to_alpn.insert(name_hash_key(&name), alpn.clone());
-            app_data_by_alpn.insert(alpn.clone(), app_data);
-            destinations.insert(alpn.clone(), dest);
+            let data = build_app_data(&local_peer_id, &name, &identity, master);
+            let dest = name.destination_hash(&identity);
+            endpoint.register(name.clone(), &data);
+
+            let (tx, rx) = mpsc::unbounded_channel();
+            inbound_senders.insert(dest, tx);
+            inbound.insert(alpn.clone(), Arc::new(TokioMutex::new(rx)));
+            names.insert(alpn.clone(), name);
+            app_data.insert(alpn.clone(), data);
         }
 
-        let inner = Arc::new(inner);
-        let destinations = Arc::new(StdMutex::new(destinations));
-        let app_data_by_alpn = Arc::new(app_data_by_alpn);
-        let peers = Arc::new(StdMutex::new(HashMap::new()));
+        let endpoint = Arc::new(endpoint);
+        let names = Arc::new(names);
+        let app_data = Arc::new(app_data);
+        let peers: PeerMap = Arc::new(StdMutex::new(HashMap::new()));
 
-        // Announce listener: learn peers from validated announces.
-        let announce_rx = inner.recv_announces().await;
-        tokio::spawn(announce_listener(
-            announce_rx,
-            Arc::new(name_to_alpn),
-            Arc::clone(&peers),
-        ));
-
-        // Announce sender: periodically re-announce our destinations.
-        tokio::spawn(announce_sender(
-            Arc::clone(&inner),
-            Arc::clone(&destinations),
-            Arc::clone(&app_data_by_alpn),
-            announce_interval,
-        ));
+        let tasks = vec![
+            // Accept router: dispatch each inbound link to its ALPN's queue by the
+            // destination it targeted.
+            tokio::spawn(run_accept_router(Arc::clone(&endpoint), inbound_senders)),
+            // Announce listener: learn peers from validated announce bindings.
+            tokio::spawn(run_announce_listener(
+                Arc::clone(&endpoint),
+                Arc::clone(&names),
+                Arc::clone(&peers),
+            )),
+            // Announce sender: periodically re-announce our destinations.
+            tokio::spawn(run_announce_sender(
+                Arc::clone(&endpoint),
+                names,
+                app_data,
+                announce_interval,
+            )),
+        ];
 
         Ok(Self {
             local_peer_id,
-            inner,
-            destinations,
-            app_data_by_alpn,
+            endpoint,
             peers,
+            inbound,
             connect_timeout,
+            tasks,
         })
     }
 
-    /// Immediately (re)announce the destination for one ALPN.
-    ///
-    /// Useful in tests to avoid waiting for the periodic announce timer. Uses the
-    /// precomputed signed payload, so it needs no access to the master secret.
-    pub async fn send_announce_now(&self, alpn: &Alpn) -> Result<(), TransportError> {
-        let dest = self
-            .destinations
-            .lock()
-            .expect("destinations mutex poisoned")
-            .get(alpn)
-            .cloned()
-            .ok_or(TransportError::AlpnNotRegistered)?;
-        let app_data = self
-            .app_data_by_alpn
-            .get(alpn)
-            .cloned()
-            .ok_or(TransportError::AlpnNotRegistered)?;
-        self.inner
-            .send_announce(&dest, Some(app_data.as_slice()))
-            .await;
-        Ok(())
-    }
-
-    /// Poll the announce-populated address book for a peer's destination on an
-    /// ALPN, up to [`connect_timeout`](Self::connect_timeout).
-    async fn resolve_peer(
-        &self,
-        peer: &PeerID,
-        alpn: &Alpn,
-    ) -> Result<DestinationDesc, TransportError> {
+    /// Poll the announce-populated address book for a peer's retinue identity on
+    /// an ALPN, up to [`connect_timeout`](Self::connect_timeout).
+    async fn resolve_peer(&self, peer: &PeerID, alpn: &Alpn) -> Result<Identity, TransportError> {
         let start = Instant::now();
         loop {
-            if let Some(desc) = self
+            if let Some(identity) = self
                 .peers
                 .lock()
                 .expect("peers mutex poisoned")
@@ -289,7 +262,7 @@ impl ReticulumTransport {
                 .and_then(|by_alpn| by_alpn.get(alpn))
                 .copied()
             {
-                return Ok(desc);
+                return Ok(identity);
             }
             if start.elapsed() >= self.connect_timeout {
                 return Err(TransportError::Backend(
@@ -301,56 +274,78 @@ impl ReticulumTransport {
     }
 }
 
-/// Map an ALPN string to a Reticulum destination name: the first `/`-segment is
-/// the app name, the remainder is the dotted aspect (`mere/cable/v1` ->
-/// `("mere", "cable.v1")`).
+/// Map an ALPN string to a retinue destination name: the first `/`-segment is the
+/// app name, the remainder is the dotted aspect (`mere/cable/v1` ->
+/// `("mere", ["cable.v1"])`).
 fn destination_name_for_alpn(alpn: &Alpn) -> DestinationName {
     let text = String::from_utf8_lossy(alpn.as_bytes());
     let mut parts = text.splitn(2, '/');
     let app = parts.next().filter(|s| !s.is_empty()).unwrap_or("mere");
     let aspect = parts.next().unwrap_or("").replace('/', ".");
-    DestinationName::new(app, &aspect)
+    DestinationName::new(app, [aspect.as_str()])
 }
 
-/// Wait for an outbound link to activate, matching by link id.
-async fn wait_for_out_activation(
-    events: &mut broadcast::Receiver<LinkEventData>,
-    link_id: LinkId,
-    dur: Duration,
-) -> Result<(), TransportError> {
-    let wait = async {
-        loop {
-            match events.recv().await {
-                Ok(ev) if ev.id == link_id => match ev.event {
-                    LinkEvent::Activated | LinkEvent::Data(_) => return Ok(()),
-                    LinkEvent::Closed => return Err(TransportError::ConnectionRefused),
-                },
-                Ok(_) => continue,
-                Err(broadcast::error::RecvError::Lagged(_)) => continue,
-                Err(broadcast::error::RecvError::Closed) => return Err(TransportError::Closed),
-            }
+/// Accept-router task: forward each inbound link to the queue for the ALPN whose
+/// destination it targeted. Ends when the endpoint closes.
+async fn run_accept_router(
+    endpoint: Arc<Endpoint>,
+    senders: HashMap<AddressHash, mpsc::UnboundedSender<LinkStream>>,
+) {
+    while let Ok(accepted) = endpoint.accept_on_any().await {
+        if let Some(tx) = senders.get(&accepted.destination) {
+            let _ = tx.send(accepted.stream);
         }
-    };
-    timeout(dur, wait)
-        .await
-        .map_err(|_| TransportError::Backend("link activation timed out".into()))?
+    }
 }
 
-/// Wait for an inbound link to activate on one of our destinations, returning its
-/// link id. Blocks until a peer connects (per the [`Transport::accept`] contract).
-async fn wait_for_in_activation(
-    events: &mut broadcast::Receiver<LinkEventData>,
-    my_addr: AddressHash,
-) -> Result<LinkId, TransportError> {
+/// Announce-listener task: drain validated announces, recover the `PeerID`
+/// binding, and record `peer_id -> (alpn, identity)`.
+async fn run_announce_listener(
+    endpoint: Arc<Endpoint>,
+    names: Arc<HashMap<Alpn, DestinationName>>,
+    peers: PeerMap,
+) {
     loop {
-        match events.recv().await {
-            Ok(ev) if ev.address_hash == my_addr => match ev.event {
-                LinkEvent::Activated | LinkEvent::Data(_) => return Ok(ev.id),
-                LinkEvent::Closed => continue,
-            },
-            Ok(_) => continue,
-            Err(broadcast::error::RecvError::Lagged(_)) => continue,
-            Err(broadcast::error::RecvError::Closed) => return Err(TransportError::Closed),
+        let announce = match endpoint.next_announcement().await {
+            Ok(a) => a,
+            Err(_) => break,
+        };
+        // Match the announce to one of our ALPNs by reconstructing that ALPN's
+        // destination hash from the announcing identity, then verify the binding.
+        for (alpn, name) in names.iter() {
+            if name.destination_hash(&announce.identity) != announce.destination {
+                continue;
+            }
+            if let Some(peer_id) =
+                recover_peer_id(&announce.app_data, name, &announce.identity)
+            {
+                peers
+                    .lock()
+                    .expect("peers mutex poisoned")
+                    .entry(peer_id)
+                    .or_default()
+                    .insert(alpn.clone(), announce.identity);
+            }
+            break;
+        }
+    }
+}
+
+/// Announce-sender task: periodically re-announce every registered destination
+/// with its precomputed, signed `app_data`.
+async fn run_announce_sender(
+    endpoint: Arc<Endpoint>,
+    names: Arc<HashMap<Alpn, DestinationName>>,
+    app_data: Arc<HashMap<Alpn, Vec<u8>>>,
+    period: Duration,
+) {
+    let mut timer = interval(period);
+    loop {
+        timer.tick().await;
+        for (alpn, name) in names.iter() {
+            if let Some(data) = app_data.get(alpn) {
+                endpoint.announce(name, data);
+            }
         }
     }
 }
@@ -363,51 +358,28 @@ impl Transport for ReticulumTransport {
     }
 
     async fn connect(&self, peer: PeerID, alpn: Alpn) -> Result<ReticulumStream, TransportError> {
-        // Resolve the peer's destination for this ALPN from learned announces.
-        let desc = self.resolve_peer(&peer, &alpn).await?;
-        let peer_addr = desc.address_hash;
+        // Resolve the peer's retinue identity for this ALPN from learned announces.
+        let identity = self.resolve_peer(&peer, &alpn).await?;
+        let dest = destination_name_for_alpn(&alpn).destination_hash(&identity);
 
-        // Subscribe before linking so the activation event is not missed.
-        let mut events = self.inner.out_link_events();
+        let stream = timeout(self.connect_timeout, self.endpoint.open(dest, identity))
+            .await
+            .map_err(|_| TransportError::Backend("link setup timed out".into()))??;
 
-        // Create (or reuse) the outbound link.
-        let link = self.inner.link(desc).await;
-        let (link_id, already_active) = {
-            let guard = link.lock().await;
-            (*guard.id(), guard.status() == LinkStatus::Active)
-        };
-
-        if !already_active {
-            wait_for_out_activation(&mut events, link_id, self.connect_timeout).await?;
-        }
-
-        Ok(bridge_link(
-            Arc::clone(&self.inner),
-            events,
-            LinkSide::Out(peer_addr),
-            link_id,
-        ))
+        Ok(ReticulumStream::new(stream))
     }
 
     async fn accept(&self, alpn: Alpn) -> Result<ReticulumStream, TransportError> {
-        let dest = self
-            .destinations
-            .lock()
-            .expect("destinations mutex poisoned")
+        let queue = self
+            .inbound
             .get(&alpn)
             .cloned()
             .ok_or(TransportError::AlpnNotRegistered)?;
-        let my_addr = { dest.lock().await.desc.address_hash };
-
-        let mut events = self.inner.in_link_events();
-        let link_id = wait_for_in_activation(&mut events, my_addr).await?;
-
-        Ok(bridge_link(
-            Arc::clone(&self.inner),
-            events,
-            LinkSide::In(my_addr),
-            link_id,
-        ))
+        let mut rx = queue.lock().await;
+        match rx.recv().await {
+            Some(stream) => Ok(ReticulumStream::new(stream)),
+            None => Err(TransportError::Closed),
+        }
     }
 }
 

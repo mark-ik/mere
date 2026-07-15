@@ -6,7 +6,7 @@
 //!
 //! A small, host-neutral projection of a synced lane's status, rendered as a chip
 //! in the toolbar band. The host owns the mutation (the M4 contract): it maps the
-//! real `gemot::tessera::SyncStatus` into this view-model and folds it into
+//! real `gemot::moot::tessera::SyncStatus` into this view-model and folds it into
 //! [`Chrome::sync`](crate::Chrome::sync) via the runner, so the chrome domain
 //! stays free of any p2p dependency.
 //!
