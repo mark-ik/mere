@@ -1,0 +1,9 @@
+[package]
+name = "servitor"
+version = "0.0.1"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Capability-scoped resident helpers for graph applications: identity, grants, proposals, attribution. Name reservation; under design."
+keywords = ["extension", "plugin", "capability", "agent"]
+
+[dependencies]
