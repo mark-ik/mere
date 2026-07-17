@@ -5,10 +5,13 @@
 //! web node, isometry's entity) implements the traits on its own struct and
 //! instantiates `Graph` with that instead.
 
+use codicil::LogId;
 use muniment::Hash as ContentHash;
 use serde::{Deserialize, Serialize};
 
-use crate::caps::{Address, Addressed, Classified, ContentBearing, Identified, Labeled, Predicated};
+use crate::caps::{
+    Address, Addressed, Classified, ContentBearing, GraphBearing, Identified, Labeled, Predicated,
+};
 use crate::taxonomy::RelationClass;
 
 /// A default content-addressed container node.
@@ -30,6 +33,10 @@ pub struct Container {
     pub title: Option<String>,
     /// Semantic tags.
     pub tags: Vec<String>,
+    /// The log identity of a nested graph contained within this node, if any.
+    /// Absent in pre-nesting data, so old slots load unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nested: Option<LogId>,
 }
 
 impl Container {
@@ -66,6 +73,12 @@ impl Container {
         self.tags.push(tag.into());
         self
     }
+
+    /// Bear a nested graph by its log identity.
+    pub fn with_nested(mut self, id: LogId) -> Self {
+        self.nested = Some(id);
+        self
+    }
 }
 
 impl Identified for Container {
@@ -87,6 +100,12 @@ impl ContentBearing for Container {
     }
     fn media_type(&self) -> Option<&str> {
         self.media_type.as_deref()
+    }
+}
+
+impl GraphBearing for Container {
+    fn nested(&self) -> Option<&LogId> {
+        self.nested.as_ref()
     }
 }
 

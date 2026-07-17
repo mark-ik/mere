@@ -7,8 +7,8 @@
 //!
 //! The design is fully generic. A node needs exactly one capability,
 //! [`Identified`], to live in the graph; everything else is an opt-in trait that
-//! unlocks a feature ([`Addressed`], [`ContentBearing`], [`Labeled`] on nodes,
-//! [`Classified`] and [`Predicated`] on edges). The provided [`Container`] and
+//! unlocks a feature ([`Addressed`], [`ContentBearing`], [`GraphBearing`],
+//! [`Labeled`] on nodes, [`Classified`] and [`Predicated`] on edges). The provided [`Container`] and
 //! [`Relation`] payloads implement them all, so an app can start immediately;
 //! mere's web node and isometry's entity implement the traits on their own types
 //! instead.
@@ -29,6 +29,7 @@ pub mod caps;
 pub mod container;
 pub mod edit;
 pub mod graph;
+pub mod nested;
 
 /// The lineage layer: owner-scoped descent of content through branching visits
 /// (folded in from the standalone `stemma` crate 2026-07-12 — the crates.io
@@ -40,7 +41,7 @@ pub mod spine;
 pub mod taxonomy;
 
 pub use caps::{
-    Address, Addressed, Classified, ContentBearing, Identified, Labeled, Predicated,
+    Address, Addressed, Classified, ContentBearing, GraphBearing, Identified, Labeled, Predicated,
 };
 pub use container::{Container, Relation};
 pub use edit::{DerivationKind, DerivationRecord, EdgeId, GraphEdit};

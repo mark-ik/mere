@@ -8,6 +8,7 @@
 //! | --- | --- | --- |
 //! | [`Addressed`] | node | multi-scheme address lookup, the RDF `@id` |
 //! | [`ContentBearing`] | node | a content-addressed body (a muniment blob) |
+//! | [`GraphBearing`] | node | a nested graph (borne by log identity, see [`nested`](crate::nested)) |
 //! | [`Labeled`] | node | title + tags, the curated RDF literals |
 //! | [`Classified`] | edge | relation-class filtering and render policy |
 //! | [`Predicated`] | edge | a predicate IRI: the edge joins the semantic ring |
@@ -19,6 +20,7 @@
 use std::fmt::Debug;
 use std::hash::Hash;
 
+use codicil::LogId;
 use muniment::Hash as ContentHash;
 
 use crate::taxonomy::RelationClass;
@@ -84,6 +86,20 @@ pub trait ContentBearing {
 
     /// The media type of the content, if known (`text/markdown`, `image/png`).
     fn media_type(&self) -> Option<&str>;
+}
+
+/// A node that contains a graph: the payload carries the log identity of a
+/// *nested graph*, a graph within the node. This is the containment sense of
+/// "subgraph" (a graphlet-style scope over peer nodes is not this). Bearing is
+/// a reference, never an embedding: the nested graph is an ordinary
+/// [`GraphLog`](crate::GraphLog) persisted under the slot convention in
+/// [`nested`](crate::nested), loaded on demand. Its lifecycle is owned by the
+/// bearing node: removal through
+/// [`remove_bearing_node`](crate::GraphLog::remove_bearing_node) archives the
+/// nested graph, so it is never orphaned.
+pub trait GraphBearing {
+    /// The contained graph's log identity, or `None` if this node bears none.
+    fn nested(&self) -> Option<&LogId>;
 }
 
 /// A node with a human-facing title and semantic tags.
