@@ -18,6 +18,7 @@ use codicil::LogId;
 use muniment::{Backend, Codec, SlotStore, StoreError, WriteOp};
 
 use crate::caps::{GraphBearing, Identified};
+use crate::commit::{Author, CommitError, Committed, EditSpec};
 use crate::spine::GraphLog;
 
 /// The live slot for a nested graph's edit log.
@@ -88,22 +89,85 @@ where
     N: Identified + GraphBearing + Clone,
     E: Clone,
 {
+    /// Commit a batch with the self-bearing guard: an inserted node may not
+    /// bear the graph it lives in (`A -> A` is rejected outright; cross-graph
+    /// cycles are TOCTOU-bound across independently-editable graphs, so
+    /// traversal visited-sets stay the primary guard there). Delegates to
+    /// [`commit_batch`](GraphLog::commit_batch) once the guard passes.
+    pub fn commit_bearing_batch(
+        &mut self,
+        author: Author,
+        expected: u64,
+        specs: Vec<EditSpec<N, E>>,
+    ) -> Result<Committed, CommitError<N::Id>> {
+        if let Some(own) = self.id().cloned() {
+            for spec in &specs {
+                if let EditSpec::InsertNode(node) = spec
+                    && node.nested() == Some(&own)
+                {
+                    return Err(CommitError::SelfBearing(own));
+                }
+            }
+        }
+        self.commit_batch(author, expected, specs)
+    }
+
     /// Remove the node with `id`, first archiving the nested graph it bears,
     /// so removal never orphans one. The archive lands before the node leaves
     /// the graph: if archiving fails, the node stays. Returns the archived
     /// graph's identity, or `None` if the node bore none (the node is removed
     /// either way).
+    ///
+    /// **Crash window**: the archive is durable immediately, but the removal
+    /// is an in-memory edit until the caller saves the parent log. A crash
+    /// between the two leaves a bearing whose live slots are empty and archive
+    /// slots populated: *archived-pending-removal*. Run
+    /// [`recover_archived_bearings`](GraphLog::recover_archived_bearings)
+    /// after load to complete such removals idempotently.
     pub async fn remove_bearing_node<B: Backend, C: Codec>(
         &mut self,
         slots: &SlotStore<B, C>,
+        author: &Author,
         id: &N::Id,
     ) -> Result<Option<LogId>, StoreError> {
         let nested = self.nested_of(id);
         if let Some(nested_id) = &nested {
             archive_nested(slots.backend(), nested_id).await?;
         }
-        self.remove_node(id);
+        self.remove_node(author, id);
         Ok(nested)
+    }
+
+    /// Complete removals interrupted between the nested archive and the parent
+    /// save: every live bearing whose nested log slot is empty while its
+    /// archive slot is populated is *archived-pending-removal*, and its
+    /// bearing node is removed (attributed to `author`). Returns the completed
+    /// identities; a second run returns none. The caller saves the parent log
+    /// afterward.
+    pub async fn recover_archived_bearings<B: Backend, C: Codec>(
+        &mut self,
+        slots: &SlotStore<B, C>,
+        author: &Author,
+    ) -> Result<Vec<LogId>, StoreError> {
+        let bearings: Vec<(N::Id, LogId)> = self
+            .graph()
+            .nodes()
+            .filter_map(|(_, node)| node.nested().map(|nid| (node.id().clone(), nid.clone())))
+            .collect();
+        let mut recovered = Vec::new();
+        for (node_id, nested_id) in bearings {
+            let live = slots.backend().get(&log_slot(&nested_id)).await?.is_some();
+            let archived = slots
+                .backend()
+                .get(&archived_log_slot(&nested_id))
+                .await?
+                .is_some();
+            if !live && archived {
+                self.remove_node(author, &node_id);
+                recovered.push(nested_id);
+            }
+        }
+        Ok(recovered)
     }
 }
 
@@ -136,6 +200,10 @@ mod tests {
         Relation::new(RelationClass::recognized(Recognized::Cites))
     }
 
+    fn keeper() -> Author {
+        Author::new("keeper")
+    }
+
     #[test]
     fn bearing_node_round_trips_persist_and_replay() {
         pollster::block_on(async {
@@ -144,14 +212,14 @@ mod tests {
             // The nested graph: a servitor's own small world.
             let nid = LogId::new("servitor.trail");
             let mut nested = GraphLog::<Container, Relation>::with_id(nid.clone());
-            nested.insert_node(Container::new("grant"));
-            nested.insert_node(Container::new("cursor"));
-            nested.connect(&"grant".to_string(), &"cursor".to_string(), cites());
+            nested.insert_node(&keeper(), Container::new("grant"));
+            nested.insert_node(&keeper(), Container::new("cursor"));
+            nested.connect(&keeper(), &"grant".to_string(), &"cursor".to_string(), cites());
             nested.save_log(&slots, &log_slot(&nid)).await.unwrap();
 
             // The parent bears it by identity only.
             let mut parent = GraphLog::<Container, Relation>::new();
-            parent.insert_node(Container::new("servitor").with_nested(nid.clone()));
+            parent.insert_node(&keeper(), Container::new("servitor").with_nested(nid.clone()));
             parent.save_log(&slots, "parent/log").await.unwrap();
 
             // Reload the parent, follow the bearing, reload the nested graph.
@@ -179,16 +247,16 @@ mod tests {
 
             let nid = LogId::new("servitor.trail");
             let mut nested = GraphLog::<Container, Relation>::with_id(nid.clone());
-            nested.insert_node(Container::new("grant"));
+            nested.insert_node(&keeper(), Container::new("grant"));
             nested.save_log(&slots, &log_slot(&nid)).await.unwrap();
             nested.snapshot(&slots, &snap_slot(&nid)).await.unwrap();
 
             let mut parent = GraphLog::<Container, Relation>::new();
-            parent.insert_node(Container::new("servitor").with_nested(nid.clone()));
-            parent.insert_node(Container::new("plain"));
+            parent.insert_node(&keeper(), Container::new("servitor").with_nested(nid.clone()));
+            parent.insert_node(&keeper(), Container::new("plain"));
 
             let archived = parent
-                .remove_bearing_node(&slots, &"servitor".to_string())
+                .remove_bearing_node(&slots, &keeper(), &"servitor".to_string())
                 .await
                 .unwrap();
             assert_eq!(archived, Some(nid.clone()));
@@ -219,11 +287,92 @@ mod tests {
 
             // A node bearing nothing removes through the same API as a no-op archive.
             let none = parent
-                .remove_bearing_node(&slots, &"plain".to_string())
+                .remove_bearing_node(&slots, &keeper(), &"plain".to_string())
                 .await
                 .unwrap();
             assert_eq!(none, None);
             assert_eq!(parent.graph().node_count(), 0);
+        });
+    }
+
+    #[test]
+    fn a_node_cannot_bear_the_graph_it_lives_in() {
+        let own = LogId::new("parent");
+        let mut parent = GraphLog::<Container, Relation>::with_id(own.clone());
+        let err = parent
+            .commit_bearing_batch(
+                keeper(),
+                parent.revision(),
+                vec![EditSpec::InsertNode(
+                    Container::new("ouroboros").with_nested(own.clone()),
+                )],
+            )
+            .unwrap_err();
+        assert_eq!(err, CommitError::SelfBearing(own));
+        assert_eq!(parent.graph().node_count(), 0, "nothing applied");
+
+        // Bearing a different graph passes the guard.
+        let ok = parent.commit_bearing_batch(
+            keeper(),
+            parent.revision(),
+            vec![EditSpec::InsertNode(
+                Container::new("servitor").with_nested(LogId::new("other")),
+            )],
+        );
+        assert!(ok.is_ok());
+    }
+
+    #[test]
+    fn a_crash_between_archive_and_parent_save_recovers_idempotently() {
+        pollster::block_on(async {
+            let slots = JsonSlots::new(MemoryBackend::new());
+
+            let nid = LogId::new("servitor.trail");
+            let mut nested = GraphLog::<Container, Relation>::with_id(nid.clone());
+            nested.insert_node(&keeper(), Container::new("grant"));
+            nested.save_log(&slots, &log_slot(&nid)).await.unwrap();
+
+            let mut parent = GraphLog::<Container, Relation>::new();
+            parent.insert_node(&keeper(), Container::new("servitor").with_nested(nid.clone()));
+            parent.save_log(&slots, "parent/log").await.unwrap();
+
+            // Simulate the crash: the archive landed durably, but the parent's
+            // removal edit never persisted.
+            archive_nested(slots.backend(), &nid).await.unwrap();
+
+            // Next session: the reloaded parent still bears the archived graph.
+            let mut reloaded = GraphLog::<Container, Relation>::load_full(&slots, "parent/log")
+                .await
+                .unwrap();
+            assert_eq!(reloaded.live_nested(), vec![nid.clone()], "the stale bearing survived");
+
+            let recovered = reloaded
+                .recover_archived_bearings(&slots, &keeper())
+                .await
+                .unwrap();
+            assert_eq!(recovered, vec![nid.clone()], "recovery completed the removal");
+            assert!(reloaded.live_nested().is_empty());
+            reloaded.save_log(&slots, "parent/log").await.unwrap();
+
+            // Idempotent: a second run finds nothing to do.
+            let again = reloaded
+                .recover_archived_bearings(&slots, &keeper())
+                .await
+                .unwrap();
+            assert!(again.is_empty());
+
+            // A healthy bearing (live slots present) is never touched.
+            let healthy = LogId::new("servitor.healthy");
+            let mut h = GraphLog::<Container, Relation>::with_id(healthy.clone());
+            h.insert_node(&keeper(), Container::new("grant"));
+            h.save_log(&slots, &log_slot(&healthy)).await.unwrap();
+            reloaded.insert_node(&keeper(), Container::new("s2").with_nested(healthy.clone()));
+            let untouched = reloaded
+                .recover_archived_bearings(&slots, &keeper())
+                .await
+                .unwrap();
+            assert!(untouched.is_empty());
+            assert_eq!(reloaded.live_nested(), vec![healthy]);
         });
     }
 

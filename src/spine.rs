@@ -1,18 +1,26 @@
 //! The edit spine: an event-sourced graph over codicil.
 //!
-//! [`GraphLog`] is the write side of the graph. Every mutation goes through one
-//! path: build a [`GraphEdit`], apply it to the materialized graph, append it to a
-//! [`Codicil`]. The graph is the replay of the log, and because live editing and
-//! replay share the same [`apply`](GraphLog::apply_edit), they cannot diverge.
+//! [`GraphLog`] is the write side of the graph. Every mutation travels one
+//! path: build an attributed [`Batch`], apply it to the materialized graph,
+//! append it to a [`Codicil`]. The graph is the replay of the log, and because
+//! live editing and replay share the same apply, they cannot diverge. The
+//! convenience mutators here are single-spec commits at the current revision
+//! (the trusted-UI path: attributed, no optimistic retry); a gate commits
+//! multi-spec petitions through
+//! [`commit_batch`](GraphLog::commit_batch) in [`commit`](crate::commit).
 //!
 //! Loading has two paths, and they agree:
-//! - [`load_full`](GraphLog::load_full): read the log, replay every edit.
+//! - [`load_full`](GraphLog::load_full): read the log, replay every batch.
 //! - [`load_checkpointed`](GraphLog::load_checkpointed): read a snapshot, then
-//!   replay only the edits after it.
+//!   replay only the batches after it.
 //!
-//! A snapshot is a compacted materialization (the nodes and edges as they stand,
-//! plus the edge-id bookkeeping and the log length it reflects), stored in a
-//! muniment slot. It is an optimization; the log is the authority.
+//! Both migrate pre-gate logs (bare [`GraphEdit`] entries) on load, wrapping
+//! each edit as a single-edit batch authored
+//! [`Author::pre_gate`](crate::commit::Author::pre_gate).
+//!
+//! A snapshot is a compacted materialization (the nodes and edges as they
+//! stand, plus the edge-id bookkeeping and the log length it reflects), stored
+//! in a muniment slot. It is an optimization; the log is the authority.
 
 use std::collections::HashMap;
 
@@ -21,18 +29,19 @@ use muniment::{Backend, Codec, SlotStore, StoreError};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::caps::Identified;
+use crate::commit::{Author, Batch, EditSpec};
 use crate::edit::{DerivationRecord, EdgeId, GraphEdit};
 use crate::graph::{EdgeKey, Graph, NodeKey};
 
-/// An event-sourced graph: a materialized [`Graph`] plus the [`Codicil`] of edits
-/// that produced it.
+/// An event-sourced graph: a materialized [`Graph`] plus the [`Codicil`] of
+/// attributed batches that produced it.
 pub struct GraphLog<N: Identified, E> {
-    graph: Graph<N, E>,
-    log: Codicil<GraphEdit<N, E>>,
-    by_edge_id: HashMap<EdgeId, EdgeKey>,
-    by_edge_key: HashMap<EdgeKey, EdgeId>,
-    derivations: HashMap<N::Id, Vec<DerivationRecord<N::Id>>>,
-    next_edge: u64,
+    pub(crate) graph: Graph<N, E>,
+    pub(crate) log: Codicil<Batch<N, E>>,
+    pub(crate) by_edge_id: HashMap<EdgeId, EdgeKey>,
+    pub(crate) by_edge_key: HashMap<EdgeKey, EdgeId>,
+    pub(crate) derivations: HashMap<N::Id, Vec<DerivationRecord<N::Id>>>,
+    pub(crate) next_edge: u64,
 }
 
 /// A compacted materialization of a [`GraphLog`], for checkpointed load.
@@ -83,8 +92,14 @@ impl<N: Identified, E> GraphLog<N, E> {
     }
 
     /// The edit log.
-    pub fn log(&self) -> &Codicil<GraphEdit<N, E>> {
+    pub fn log(&self) -> &Codicil<Batch<N, E>> {
         &self.log
+    }
+
+    /// The current revision: the number of committed batches. What
+    /// [`commit_batch`](GraphLog::commit_batch) compares `expected` against.
+    pub fn revision(&self) -> u64 {
+        self.log.len() as u64
     }
 
     /// The current graph key for a live edge id, if the edge is present.
@@ -158,64 +173,64 @@ impl<N: Identified + Clone, E: Clone> GraphLog<N, E> {
         }
     }
 
-    /// Insert (or upsert, by identity) a node. Returns its graph key.
-    pub fn insert_node(&mut self, node: N) -> NodeKey {
-        let edit = GraphEdit::InsertNode(node);
-        self.apply_edit(&edit);
-        let key = match &edit {
-            GraphEdit::InsertNode(node) => {
-                self.graph.key_of(node.id()).expect("just inserted")
-            }
-            _ => unreachable!(),
-        };
-        self.log.append(edit);
-        key
-    }
-
-    /// Remove the node with `id` and its incident edges. A no-op if absent.
-    pub fn remove_node(&mut self, id: &N::Id) {
-        let edit = GraphEdit::RemoveNode(id.clone());
-        self.apply_edit(&edit);
-        self.log.append(edit);
-    }
-
-    /// Connect `from` to `to` with `edge`, returning the new edge's stable id, or
-    /// `None` if either endpoint is absent.
-    pub fn connect(&mut self, from: &N::Id, to: &N::Id, edge: E) -> Option<EdgeId> {
-        if self.graph.key_of(from).is_none() || self.graph.key_of(to).is_none() {
-            return None;
+    /// Apply every edit in a batch, in order.
+    pub(crate) fn apply_batch(&mut self, batch: &Batch<N, E>) {
+        for edit in &batch.edits {
+            self.apply_edit(edit);
         }
-        let id = EdgeId(self.next_edge);
-        let edit = GraphEdit::Connect {
-            id,
-            from: from.clone(),
-            to: to.clone(),
-            edge,
-        };
-        self.apply_edit(&edit);
-        self.log.append(edit);
-        Some(id)
     }
 
-    /// Retract the edge with stable id `id`. Returns whether it was present.
-    pub fn disconnect(&mut self, id: EdgeId) -> bool {
-        if !self.by_edge_id.contains_key(&id) {
-            return false;
-        }
-        let edit = GraphEdit::Disconnect(id);
-        self.apply_edit(&edit);
-        self.log.append(edit);
-        true
+    /// Commit a single spec at the current revision (cannot conflict), for the
+    /// convenience mutators. Returns whether it committed.
+    fn commit_one(&mut self, author: &Author, spec: EditSpec<N, E>) -> Option<crate::commit::Committed> {
+        let revision = self.revision();
+        self.commit_batch(author.clone(), revision, vec![spec]).ok()
     }
 
-    /// Record that `node` derives from a node in another graph.
-    pub fn derive(&mut self, node: &N::Id, from: DerivationRecord<N::Id>) {
-        let edit = GraphEdit::Derive {
-            node: node.clone(),
-            from,
-        };
-        self.apply_edit(&edit);
-        self.log.append(edit);
+    /// Insert (or upsert, by identity) a node, attributed. Returns its graph key.
+    pub fn insert_node(&mut self, author: &Author, node: N) -> NodeKey {
+        let id = node.id().clone();
+        self.commit_one(author, EditSpec::InsertNode(node))
+            .expect("a single insert cannot conflict or reference unknowns");
+        self.graph.key_of(&id).expect("just inserted")
+    }
+
+    /// Remove the node with `id` and its incident edges, attributed. A no-op
+    /// (and no journal entry) if absent.
+    pub fn remove_node(&mut self, author: &Author, id: &N::Id) {
+        let _ = self.commit_one(author, EditSpec::RemoveNode(id.clone()));
+    }
+
+    /// Connect `from` to `to` with `edge`, attributed, returning the new edge's
+    /// stable id, or `None` if either endpoint is absent.
+    pub fn connect(&mut self, author: &Author, from: &N::Id, to: &N::Id, edge: E) -> Option<EdgeId> {
+        self.commit_one(
+            author,
+            EditSpec::Connect {
+                from: from.clone(),
+                to: to.clone(),
+                edge,
+            },
+        )
+        .map(|committed| committed.edges[0])
+    }
+
+    /// Retract the edge with stable id `id`, attributed. Returns whether it was
+    /// present.
+    pub fn disconnect(&mut self, author: &Author, id: EdgeId) -> bool {
+        self.commit_one(author, EditSpec::Disconnect(id)).is_some()
+    }
+
+    /// Record that `node` derives from a node in another graph, attributed. A
+    /// no-op (and no journal entry) if `node` is absent.
+    pub fn derive(&mut self, author: &Author, node: &N::Id, from: DerivationRecord<N::Id>) {
+        let _ = self.commit_one(
+            author,
+            EditSpec::Derive {
+                node: node.clone(),
+                from,
+            },
+        );
     }
 
     /// Fork this graph under a new log identity. The fork is self-contained: it
@@ -226,11 +241,11 @@ impl<N: Identified + Clone, E: Clone> GraphLog<N, E> {
         Self::replay(self.log.fork(new_id))
     }
 
-    /// Rebuild a graph by replaying an edit log from empty.
-    pub fn replay(log: Codicil<GraphEdit<N, E>>) -> Self {
+    /// Rebuild a graph by replaying a batch log from empty.
+    pub fn replay(log: Codicil<Batch<N, E>>) -> Self {
         let mut this = Self::new();
-        for edit in log.entries() {
-            this.apply_edit(edit);
+        for batch in log.entries() {
+            this.apply_batch(batch);
         }
         this.log = log;
         this
@@ -265,6 +280,22 @@ where
     N::Id: Serialize + DeserializeOwned,
     E: Clone + Serialize + DeserializeOwned,
 {
+    /// Load the log at `key`, migrating a pre-gate edit log (bare `GraphEdit`
+    /// entries) into single-edit batches if that is what the slot holds.
+    async fn load_log<B: Backend, C: Codec>(
+        slots: &SlotStore<B, C>,
+        key: &str,
+    ) -> Result<Codicil<Batch<N, E>>, StoreError> {
+        match Codicil::load(slots, key).await {
+            Ok(log) => Ok(log),
+            Err(StoreError::Codec(_)) => {
+                let legacy: Codicil<GraphEdit<N, E>> = Codicil::load(slots, key).await?;
+                Ok(crate::commit::migrate_pre_gate(legacy))
+            }
+            Err(other) => Err(other),
+        }
+    }
+
     /// Persist the edit log to a muniment slot.
     pub async fn save_log<B: Backend, C: Codec>(
         &self,
@@ -309,12 +340,12 @@ where
         slots.save(key, &snapshot).await
     }
 
-    /// Load by replaying the whole edit log from the slot at `log_key`.
+    /// Load by replaying the whole log from the slot at `log_key`.
     pub async fn load_full<B: Backend, C: Codec>(
         slots: &SlotStore<B, C>,
         log_key: &str,
     ) -> Result<Self, StoreError> {
-        let log = Codicil::load(slots, log_key).await?;
+        let log = Self::load_log(slots, log_key).await?;
         Ok(Self::replay(log))
     }
 
@@ -326,13 +357,13 @@ where
         snap_key: &str,
     ) -> Result<Self, StoreError> {
         let snapshot: Option<Snapshot<N, E>> = slots.load(snap_key).await?;
-        let log = Codicil::load(slots, log_key).await?;
+        let log = Self::load_log(slots, log_key).await?;
         let (mut this, tail_start) = match snapshot {
             Some(snapshot) => Self::from_snapshot(snapshot),
             None => (Self::new(), 0),
         };
-        for edit in log.from(Seq(tail_start)) {
-            this.apply_edit(edit);
+        for batch in log.from(Seq(tail_start)) {
+            this.apply_batch(batch);
         }
         this.log = log;
         Ok(this)
@@ -371,15 +402,21 @@ mod tests {
         Relation::new(RelationClass::recognized(Recognized::Cites))
     }
 
+    fn me() -> Author {
+        Author::new("test")
+    }
+
     #[test]
     fn replay_reconstructs_the_live_graph() {
         let mut live = GraphLog::new();
-        live.insert_node(Container::new("a"));
-        live.insert_node(Container::new("b"));
-        let e = live.connect(&"a".to_string(), &"b".to_string(), cites()).unwrap();
-        live.insert_node(Container::new("c"));
-        live.connect(&"a".to_string(), &"c".to_string(), cites());
-        live.disconnect(e);
+        live.insert_node(&me(), Container::new("a"));
+        live.insert_node(&me(), Container::new("b"));
+        let e = live
+            .connect(&me(), &"a".to_string(), &"b".to_string(), cites())
+            .unwrap();
+        live.insert_node(&me(), Container::new("c"));
+        live.connect(&me(), &"a".to_string(), &"c".to_string(), cites());
+        live.disconnect(&me(), e);
 
         let replayed = GraphLog::replay(live.log().clone());
         assert_eq!(fingerprint(replayed.graph()), fingerprint(live.graph()));
@@ -388,10 +425,10 @@ mod tests {
     #[test]
     fn removing_a_node_reaps_its_edges_on_replay() {
         let mut live = GraphLog::new();
-        live.insert_node(Container::new("a"));
-        live.insert_node(Container::new("b"));
-        live.connect(&"a".to_string(), &"b".to_string(), cites());
-        live.remove_node(&"b".to_string());
+        live.insert_node(&me(), Container::new("a"));
+        live.insert_node(&me(), Container::new("b"));
+        live.connect(&me(), &"a".to_string(), &"b".to_string(), cites());
+        live.remove_node(&me(), &"b".to_string());
 
         let replayed = GraphLog::replay(live.log().clone());
         assert_eq!(replayed.graph().node_count(), 1);
@@ -405,21 +442,23 @@ mod tests {
             let slots = JsonSlots::new(MemoryBackend::new());
 
             let mut live = GraphLog::new();
-            live.insert_node(Container::new("a").with_tag("keep"));
-            live.insert_node(Container::new("b"));
-            live.insert_node(Container::new("c"));
-            let e_ab = live.connect(&"a".to_string(), &"b".to_string(), cites()).unwrap();
-            live.connect(&"a".to_string(), &"c".to_string(), cites());
+            live.insert_node(&me(), Container::new("a").with_tag("keep"));
+            live.insert_node(&me(), Container::new("b"));
+            live.insert_node(&me(), Container::new("c"));
+            let e_ab = live
+                .connect(&me(), &"a".to_string(), &"b".to_string(), cites())
+                .unwrap();
+            live.connect(&me(), &"a".to_string(), &"c".to_string(), cites());
 
             // Snapshot mid-history.
             live.snapshot(&slots, "snap").await.unwrap();
 
             // Then more edits, including retracting a pre-snapshot edge and removing
             // a pre-snapshot node (which reaps another pre-snapshot edge).
-            live.remove_node(&"c".to_string());
-            live.insert_node(Container::new("d"));
-            live.connect(&"a".to_string(), &"d".to_string(), cites());
-            live.disconnect(e_ab);
+            live.remove_node(&me(), &"c".to_string());
+            live.insert_node(&me(), Container::new("d"));
+            live.connect(&me(), &"a".to_string(), &"d".to_string(), cites());
+            live.disconnect(&me(), e_ab);
 
             live.save_log(&slots, "log").await.unwrap();
 
@@ -449,9 +488,11 @@ mod tests {
         pollster::block_on(async {
             let slots = JsonSlots::new(MemoryBackend::new());
             let mut live = GraphLog::new();
-            live.insert_node(Container::new("a"));
-            live.insert_node(Container::new("b"));
-            let e = live.connect(&"a".to_string(), &"b".to_string(), cites()).unwrap();
+            live.insert_node(&me(), Container::new("a"));
+            live.insert_node(&me(), Container::new("b"));
+            let e = live
+                .connect(&me(), &"a".to_string(), &"b".to_string(), cites())
+                .unwrap();
             live.save_log(&slots, "log").await.unwrap();
 
             // Reload, then retract the edge by the id assigned before the reload.
@@ -459,21 +500,19 @@ mod tests {
                 .await
                 .unwrap();
             assert!(reloaded.edge_key(e).is_some(), "the pre-reload id resolves");
-            assert!(reloaded.disconnect(e), "retract by the stable id works");
+            assert!(reloaded.disconnect(&me(), e), "retract by the stable id works");
             assert_eq!(reloaded.graph().edge_count(), 0);
         });
     }
 
     #[test]
     fn fork_carries_history_and_provenance_then_diverges() {
-        use codicil::{LogId, Seq};
-
         let mut source = GraphLog::new();
         // The source needs an identity for the fork to point back at it.
         source = GraphLog::replay(source.log().clone().fork(LogId::new("source")));
-        source.insert_node(Container::new("a"));
-        source.insert_node(Container::new("b"));
-        source.connect(&"a".to_string(), &"b".to_string(), cites());
+        source.insert_node(&me(), Container::new("a"));
+        source.insert_node(&me(), Container::new("b"));
+        source.connect(&me(), &"a".to_string(), &"b".to_string(), cites());
 
         let mut fork = source.fork(LogId::new("fork"));
         // The fork is a self-contained copy.
@@ -484,8 +523,8 @@ mod tests {
         assert_eq!(provenance.at, Seq(source.log().len() as u64));
 
         // Diverging the fork leaves the source untouched.
-        fork.insert_node(Container::new("c"));
-        fork.connect(&"a".to_string(), &"c".to_string(), cites());
+        fork.insert_node(&me(), Container::new("c"));
+        fork.connect(&me(), &"a".to_string(), &"c".to_string(), cites());
         assert_eq!(source.graph().node_count(), 2, "source unchanged");
         assert_eq!(fork.graph().node_count(), 3);
     }
@@ -493,15 +532,15 @@ mod tests {
     #[test]
     fn derivation_records_survive_round_trip() {
         use crate::edit::DerivationKind;
-        use codicil::LogId;
 
         pollster::block_on(async {
             let slots = JsonSlots::new(MemoryBackend::new());
 
             let mut live: GraphLog<Container, Relation> = GraphLog::new();
-            live.insert_node(Container::new("clip"));
+            live.insert_node(&me(), Container::new("clip"));
             // The node was copied from node "orig" in another graph, "source".
             live.derive(
+                &me(),
                 &"clip".to_string(),
                 DerivationRecord {
                     source_log: LogId::new("source"),

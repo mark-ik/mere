@@ -20,12 +20,15 @@
 //!
 //! G0 is the generic core, the capability traits, the default payloads, and the
 //! two-ring taxonomy. **G1** adds the edit spine ([`GraphLog`]): graph mutations
-//! are [`GraphEdit`] entries in a codicil, the graph is the replay, and muniment
+//! are attributed [`Batch`] entries in a codicil (each batch a group of
+//! [`GraphEdit`]s that applied atomically, committed against an expected
+//! revision — see [`commit`]), the graph is the replay, and muniment
 //! snapshots give checkpoint-plus-tail loading. Lineage (stemma) and the RDF
 //! projection (scholia) are later phases. The canonical plan is mere's
 //! `design_docs/.../2026-07-08_generic_graph_substrate_plan.md`.
 
 pub mod caps;
+pub mod commit;
 pub mod container;
 pub mod edit;
 pub mod graph;
@@ -43,6 +46,7 @@ pub mod taxonomy;
 pub use caps::{
     Address, Addressed, Classified, ContentBearing, GraphBearing, Identified, Labeled, Predicated,
 };
+pub use commit::{Author, Batch, BatchId, CommitError, Committed, EditSpec};
 pub use container::{Container, Relation};
 pub use edit::{DerivationKind, DerivationRecord, EdgeId, GraphEdit};
 pub use graph::{EdgeKey, Graph, NodeKey};
