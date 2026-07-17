@@ -366,8 +366,21 @@ constitution evidence, admit it before object records, and can bootstrap a
 fresh peer through a rotated checkpoint chain. Plaintext/local and injected
 protected carriage share that dependency order and idempotent import receipt.
 `Moot::record_tessera` returns a lane-tagged receipt whose recovered operation
-is the explicit host publication seam; MeerKat uses the same sign-store-publish
-shape for its starter Tessera log. Quorum rules and capability grants remain.
+is the explicit host publication seam; the retiring in-workspace host uses the
+same sign-store-publish shape for its starter Tessera log. As of 2026-07-16,
+the constitution also accepts a frozen-electorate member quorum, and carries
+durable founder-governed grants that narrow the injected live capability
+decision. `gemot::moot::group` now adapts verified p2panda-auth membership to
+that seam and advances a host-owned p2panda-encryption group-secret epoch when
+the resolved member set changes.
+
+Independent delegation is deliberately still open. It needs its own signed
+grant lane, not a `delegated` flag inside a founder amendment: a delegatee's
+device key must prove its relation to the granted persona root; every child
+must attenuate its parent path and lifetime; revocation needs a converged root;
+and accepted grant/revocation records must travel in aggregate native drops.
+The current constitutional grants remain the root-authority source for that
+lane.
 
 ### Phase E: move the remaining consumers
 
