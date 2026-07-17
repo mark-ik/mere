@@ -374,13 +374,17 @@ decision. `gemot::moot::group` now adapts verified p2panda-auth membership to
 that seam and advances a host-owned p2panda-encryption group-secret epoch when
 the resolved member set changes.
 
-Independent delegation is deliberately still open. It needs its own signed
-grant lane, not a `delegated` flag inside a founder amendment: a delegatee's
-device key must prove its relation to the granted persona root; every child
-must attenuate its parent path and lifetime; revocation needs a converged root;
-and accepted grant/revocation records must travel in aggregate native drops.
-The current constitutional grants remain the root-authority source for that
-lane.
+Independent delegation began 2026-07-17. Personae now owns the generic signed
+certificate and revocation grammar, binds resource-scoped derived signing keys
+to identity roots, and verifies path/action/time/depth attenuation. Gemot folds
+those certificates beneath constitutional grant roots, cascades certificate or
+root revocation, and intersects delegated authority with the existing live
+membership/capability and admission checks. Graph statements remain inspection
+projections, never authority. The signed p2panda lane now retains valid pending
+statements, materializes chains independent of arrival order, and survives redb
+reopen. Still open: aggregate native-drop carriage, participant projections,
+live two-peer sync proof, and scope-key rotation for encrypted data affected by
+revocation.
 
 ### Phase E: move the remaining consumers
 
