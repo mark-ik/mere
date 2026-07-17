@@ -258,8 +258,9 @@ identity = { workspace = true }
 murm-replication = { workspace = true }
 transport = { workspace = true }
 gemot = { workspace = true }
-p2panda-net = "0.6.1"
-p2panda-core = "0.6.1"
+p2panda-net = "0.7.0"
+p2panda-core = "0.7.0"
+p2panda-sync = "0.7.0"
 
 # Shell-chrome theme tokens (theming pass): the toolbar / omnibar / palette /
 # pane palette comes from a resolved `ChromeTheme` rather than hardcoded CSS, so

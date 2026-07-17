@@ -175,7 +175,7 @@ pub struct Post {
     pub cabal_id: [u8; 32],
     /// Position in this author's per-cabal log: `0` for the author's first
     /// operation in the cabal, incrementing by exactly 1 thereafter. Signed.
-    pub seq_num: u64,
+    pub seq_num: u32,
     /// The author's previous operation in this cabal (its `PostId`), or `None`
     /// for the first. When set it must equal that operation's signed-header
     /// hash; per the p2panda log rule, `backlink.is_some()` iff `seq_num > 0`.

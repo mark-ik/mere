@@ -224,14 +224,14 @@ mod tests {
         kp.public_key().to_bytes()
     }
 
-    fn post(kp: &Ed25519Keypair, seq: u64, back: Option<[u8; 32]>) -> Operation<MeshExt> {
+    fn post(kp: &Ed25519Keypair, seq: u32, back: Option<[u8; 32]>) -> Operation<MeshExt> {
         to_operation(
             kp,
             MESH,
             &MeshEvent::JobPosted {
                 kind: JobKind::Echo,
                 payload: b"job".to_vec(),
-                nonce: seq,
+                nonce: u64::from(seq),
                 at_ms: 1,
             },
             seq,

@@ -28,7 +28,7 @@ use crate::{Post, PostId, PostKind};
 pub fn sign_post(
     keypair: &Ed25519Keypair,
     cabal_id: [u8; 32],
-    seq_num: u64,
+    seq_num: u32,
     backlink: Option<PostId>,
     links: Vec<PostId>,
     kind: PostKind,

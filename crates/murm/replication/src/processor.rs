@@ -278,14 +278,16 @@ where
             && operation.header.seq_num <= previous.header.seq_num
         {
             return Err(ProcessError::StaleOperation {
-                seq_num: operation.header.seq_num,
-                frontier: previous.header.seq_num,
+                seq_num: u64::from(operation.header.seq_num),
+                frontier: u64::from(previous.header.seq_num),
             });
         }
         match (operation.header.seq_num, latest.as_ref(), admission.history) {
             (0, None, _) => {}
             (seq_num, None, HistoryAction::Keep) => {
-                return Err(ProcessError::MissingPredecessor { seq_num });
+                return Err(ProcessError::MissingPredecessor {
+                    seq_num: u64::from(seq_num),
+                });
             }
             (_, previous, history) => validate_prunable_backlink(
                 previous.map(|operation| &operation.header),
@@ -385,14 +387,16 @@ where
                 && operation.header.seq_num <= previous.header.seq_num
             {
                 return Err(ProcessError::StaleOperation {
-                    seq_num: operation.header.seq_num,
-                    frontier: previous.header.seq_num,
+                    seq_num: u64::from(operation.header.seq_num),
+                    frontier: u64::from(previous.header.seq_num),
                 });
             }
             match (operation.header.seq_num, latest, admission.history) {
                 (0, None, _) => {}
                 (seq_num, None, HistoryAction::Keep) => {
-                    return Err(ProcessError::MissingPredecessor { seq_num });
+                    return Err(ProcessError::MissingPredecessor {
+                        seq_num: u64::from(seq_num),
+                    });
                 }
                 (_, previous, history) => validate_prunable_backlink(
                     previous.map(|operation| &operation.header),
@@ -465,7 +469,7 @@ mod tests {
     fn make_op(
         signing_key: &SigningKey,
         space: u64,
-        seq_num: u64,
+        seq_num: u32,
         backlink: Option<p2panda_core::Hash>,
     ) -> Operation<TestExt> {
         let body = Body::new(format!("event-{seq_num}").as_bytes());
@@ -475,7 +479,6 @@ mod tests {
             signature: None,
             payload_size: body.size(),
             payload_hash: Some(body.hash()),
-            timestamp: seq_num.into(),
             seq_num,
             backlink,
             extensions: TestExt { space },

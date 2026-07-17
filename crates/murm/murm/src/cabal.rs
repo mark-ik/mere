@@ -287,15 +287,16 @@ impl CabalHandle {
             };
             let author = post.author.to_bytes();
             let post_id = hash_post(&post);
+            let post_seq_num = u64::from(post.seq_num);
             let replace = match latest.get(&author) {
                 Some((seq_num, _, prior_id)) => {
-                    post.seq_num > *seq_num
-                        || (post.seq_num == *seq_num && post_id.as_bytes() > prior_id.as_bytes())
+                    post_seq_num > *seq_num
+                        || (post_seq_num == *seq_num && post_id.as_bytes() > prior_id.as_bytes())
                 }
                 None => true,
             };
             if replace {
-                latest.insert(author, (post.seq_num, joined, post_id));
+                latest.insert(author, (post_seq_num, joined, post_id));
             }
         }
 

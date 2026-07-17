@@ -382,9 +382,11 @@ root revocation, and intersects delegated authority with the existing live
 membership/capability and admission checks. Graph statements remain inspection
 projections, never authority. The signed p2panda lane now retains valid pending
 statements, materializes chains independent of arrival order, and survives redb
-reopen. Still open: aggregate native-drop carriage, participant projections,
-live two-peer sync proof, and scope-key rotation for encrypted data affected by
-revocation.
+reopen. Its live two-peer catch-up proof now runs over upstream p2panda 0.7 and
+Iroh 1.0. Aggregate native drops carry the signed lane as critical capability
+evidence and refresh delegated authority on import. Gemot exposes deterministic
+read-only participant projections plus revocation-derived scope-key epochs; the
+host binds those epochs to p2panda-encryption secrets and distributes them.
 
 ### Phase E: move the remaining consumers
 

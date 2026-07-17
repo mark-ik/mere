@@ -28,12 +28,12 @@ pub enum ConversationDropProfile {
 /// deliberately does not pretend that a retention checkpoint has landed.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ConversationFrontier {
-    authors: BTreeMap<[u8; 32], u64>,
+    authors: BTreeMap<[u8; 32], u32>,
 }
 
 impl ConversationFrontier {
     /// Record the highest sequence number already held for `author`.
-    pub fn observe(&mut self, author: [u8; 32], seq_num: u64) {
+    pub fn observe(&mut self, author: [u8; 32], seq_num: u32) {
         self.authors
             .entry(author)
             .and_modify(|current| *current = (*current).max(seq_num))
@@ -41,7 +41,7 @@ impl ConversationFrontier {
     }
 
     /// Return the highest observed sequence number for `author`.
-    pub fn observed(&self, author: &[u8; 32]) -> Option<u64> {
+    pub fn observed(&self, author: &[u8; 32]) -> Option<u32> {
         self.authors.get(author).copied()
     }
 }
@@ -217,7 +217,7 @@ mod tests {
         }
     }
 
-    fn operation(seq_num: u64, backlink: Option<PostId>, kind: PostKind) -> Operation<CabalExt> {
+    fn operation(seq_num: u32, backlink: Option<PostId>, kind: PostKind) -> Operation<CabalExt> {
         let keypair = InMemoryProvider::from_seed([7; 32])
             .derive_keypair(b"conversation-drop")
             .unwrap();

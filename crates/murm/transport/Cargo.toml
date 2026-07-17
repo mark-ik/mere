@@ -29,20 +29,21 @@ murm-replication = { workspace = true }
 tokio = { version = "1", features = ["io-util", "sync", "rt", "macros", "time"] }
 thiserror = "1"
 tracing = "0.1"
-# iroh 0.98 wraps quinn QUIC; ed25519-dalek =3.0.0-pre.6 internally.
-# We cross the dalek-version boundary via raw 32-byte seeds so identity
-# (on dalek 2.x) does not need to track iroh's pre-release dalek dep.
-iroh = "0.98"
-iroh-blobs = "0.100"
+# iroh 1.0 wraps quinn QUIC; ed25519-dalek =3.0.0-rc.0 internally (it still
+# exact-pins a prerelease). We cross the dalek-version boundary via raw 32-byte
+# seeds, so identity/personae and retinue (both on dalek 2.x) do not need to
+# track iroh's prerelease dalek dep; the two majors coexist as separate copies.
+iroh = "1.0.2"
+iroh-blobs = "0.103"
 # Shareable connection tickets: serialize this node's `EndpointAddr` to a string
 # a peer can paste to dial it (the explicit-bootstrap path, e.g. a host's
 # "connect to peer" verb), and parse it back. Pairs with `add_peer` / `set_topics`.
-iroh-tickets = "0.5"
+iroh-tickets = "1.0"
 bytes = "1"
 # p2panda-net is the production endpoint authority (P2pandaTransport); it
-# pins iroh 0.98, unifying with the iroh/iroh-blobs deps above.
-p2panda-net = "0.6.1"
-p2panda-core = "0.6.1"
+# pins iroh 1.0, unifying with the iroh/iroh-blobs deps above.
+p2panda-net = "0.7.0"
+p2panda-core = "0.7.0"
 # Reticulum mesh-networking backend (optional, see [features]). `retinue` is
 # Mark's from-scratch RNS stack; `hkdf`/`sha2` derive its identity from the seed.
 retinue = { workspace = true, optional = true }

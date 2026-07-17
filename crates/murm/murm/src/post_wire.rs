@@ -28,7 +28,7 @@
 
 use identity::{Ed25519PublicKey, Ed25519Signature};
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
-use p2panda_core::{Body, Hash, Header, Operation, Signature, Timestamp, VerifyingKey};
+use p2panda_core::{Body, Hash, Header, Operation, Signature, VerifyingKey};
 use serde::{Deserialize, Serialize};
 
 use crate::{ChannelName, InfoEntry, MurmError, Post, PostId, PostKind};
@@ -179,7 +179,7 @@ fn recompose(ext: &CabalExt, body: &[u8]) -> Result<PostKind, MurmError> {
 pub(crate) fn unsigned_header(
     author: VerifyingKey,
     cabal_id: [u8; 32],
-    seq_num: u64,
+    seq_num: u32,
     backlink: Option<PostId>,
     links: &[PostId],
     kind: &PostKind,
@@ -199,7 +199,6 @@ pub(crate) fn unsigned_header(
         signature: None,
         payload_size,
         payload_hash,
-        timestamp: Timestamp::from(kind.timestamp_ms()),
         seq_num,
         backlink: backlink.map(|id| Hash::from(*id.as_bytes())),
         extensions,

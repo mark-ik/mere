@@ -316,9 +316,7 @@ async fn run_announce_listener(
             if name.destination_hash(&announce.identity) != announce.destination {
                 continue;
             }
-            if let Some(peer_id) =
-                recover_peer_id(&announce.app_data, name, &announce.identity)
-            {
+            if let Some(peer_id) = recover_peer_id(&announce.app_data, name, &announce.identity) {
                 peers
                     .lock()
                     .expect("peers mutex poisoned")

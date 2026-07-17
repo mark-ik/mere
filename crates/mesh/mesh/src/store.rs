@@ -310,7 +310,7 @@ impl<B: Backend + Clone> MeshStore<B> {
                 };
                 frontier
                     .get(&(*op.header.verifying_key.as_bytes(), event.log_id()))
-                    .is_none_or(|seq| op.header.seq_num > *seq)
+                    .is_none_or(|seq| u64::from(op.header.seq_num) > *seq)
             })
             .collect();
         Ok(JobBoard::fold_from_snapshot(
@@ -394,7 +394,7 @@ impl<B: Backend + Clone> MeshStore<B> {
             let entry = LogFrontier {
                 author: key.0,
                 log_id,
-                seq_num: op.header.seq_num,
+                seq_num: u64::from(op.header.seq_num),
                 operation: *op.hash.as_bytes(),
             };
             frontier.insert(key, entry);

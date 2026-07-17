@@ -16,7 +16,7 @@
 use identity::Ed25519Keypair;
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use p2panda_core::prune::PruneFlag;
-use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Timestamp};
+use p2panda_core::{Body, Hash, Header, Operation, SigningKey};
 use serde::{Deserialize, Serialize};
 
 use crate::retention::RetentionCheckpoint;
@@ -88,16 +88,6 @@ pub enum MeshEvent {
 }
 
 impl MeshEvent {
-    fn at_ms(&self) -> u64 {
-        match self {
-            MeshEvent::JobPosted { at_ms, .. }
-            | MeshEvent::JobClaimed { at_ms, .. }
-            | MeshEvent::JobDone { at_ms, .. }
-            | MeshEvent::HistoryPruned { at_ms, .. } => *at_ms,
-            MeshEvent::RetentionCheckpoint { checkpoint } => checkpoint.at_ms,
-        }
-    }
-
     pub(crate) fn log_id(&self) -> MeshLogId {
         match self {
             Self::RetentionCheckpoint { .. } => MeshLogId::Checkpoints,
@@ -124,7 +114,7 @@ pub fn to_operation(
     keypair: &Ed25519Keypair,
     mesh_id: [u8; 32],
     event: &MeshEvent,
-    seq_num: u64,
+    seq_num: u32,
     backlink: Option<[u8; 32]>,
 ) -> Operation<MeshExt> {
     to_operation_with_prune(keypair, mesh_id, event, seq_num, backlink, false)
@@ -136,7 +126,7 @@ pub fn to_prune_operation(
     mesh_id: [u8; 32],
     checkpoint: [u8; 32],
     at_ms: u64,
-    seq_num: u64,
+    seq_num: u32,
     backlink: Option<[u8; 32]>,
 ) -> Operation<MeshExt> {
     to_operation_with_prune(
@@ -153,7 +143,7 @@ fn to_operation_with_prune(
     keypair: &Ed25519Keypair,
     mesh_id: [u8; 32],
     event: &MeshEvent,
-    seq_num: u64,
+    seq_num: u32,
     backlink: Option<[u8; 32]>,
     prune: bool,
 ) -> Operation<MeshExt> {
@@ -166,7 +156,6 @@ fn to_operation_with_prune(
         signature: None,
         payload_size: body.size(),
         payload_hash: Some(body.hash()),
-        timestamp: Timestamp::from(event.at_ms()),
         seq_num,
         backlink: backlink.map(Hash::from),
         extensions: MeshExt {
@@ -282,7 +271,6 @@ mod tests {
             signature: None,
             payload_size: body.size(),
             payload_hash: Some(body.hash()),
-            timestamp: Timestamp::from(event.at_ms()),
             seq_num: 0,
             backlink: None,
             extensions: LegacyMeshExt { mesh_id: MESH },

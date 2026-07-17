@@ -23,16 +23,15 @@ hand where load-bearing.
   a dozen are false positives (multi-line parse artifacts, package renames),
   and ~20 were dead declarations (now deleted, below).
 - **Current on the crates that matter most**: vello 0.9, winit 0.30.13,
-  accesskit 0.24, p2panda 0.6.1, burn 0.21 were all latest stable at audit time.
+  accesskit 0.24 and burn 0.21 were latest stable at audit time. The networking
+  line moved on 2026-07-17 to p2panda 0.7.0 and iroh 1.0.2.
 
 ## Gate rationales (do not re-derive)
 
-- **iroh 0.98, not 1.0 — gated on p2panda.** p2panda-net 0.6.1 (latest release,
-  2026-05-22) requires `iroh ^0.98`; murm shares one endpoint across its
-  transports, so a split-version iroh is not viable. p2panda **main** already
-  bumped to iroh 1.0 / iroh-gossip 0.101 (commits through 2026-06-30), so the
-  unblock is the next p2panda release. Bump iroh + iroh-blobs + iroh-tickets +
-  p2panda-* as one move. Do not switch p2panda to a git dep to get 1.0 early.
+- **iroh/p2panda gate cleared 2026-07-17.** The workspace now follows the
+  upstream p2panda 0.7.0 and iroh 1.0.2 releases as one dependency line. The
+  source migration accepts p2panda's `u32` operation positions, header-resident
+  timestamp removal, and synchronous `SyncHandle::publish` API.
 - **wgpu 29, not 30 — gated on vello + a settling period.** wgpu 30.0.0
   shipped 2026-07-01; vello 0.9 requires `^29.0.3` and vello main has not
   bumped. The expensive part is our own lockstep (scrying/weld sit on wgpu-hal,

@@ -78,7 +78,6 @@ where
         signature: None,
         payload_size: body.size(),
         payload_hash: Some(body.hash()),
-        timestamp: 1.into(),
         seq_num: 0,
         backlink: None,
         extensions,
@@ -89,7 +88,7 @@ where
 
 fn operation(
     signing_key: &SigningKey,
-    seq_num: u64,
+    seq_num: u32,
     backlink: Option<Hash>,
     prune: bool,
 ) -> Operation<PrunableExtension> {
@@ -100,7 +99,6 @@ fn operation(
         signature: None,
         payload_size: body.size(),
         payload_hash: Some(body.hash()),
-        timestamp: seq_num.into(),
         seq_num,
         backlink,
         extensions: PrunableExtension {
@@ -187,7 +185,7 @@ fn valid_prune_flag_removes_prefix_and_blocks_replay() {
             );
         }
 
-        let pruner: LogPrune<_, LogPruneArgs<VerifyingKey, u64, u64>, u64, PrunableExtension> =
+        let pruner: LogPrune<_, LogPruneArgs<VerifyingKey, u64, u32>, u64, PrunableExtension> =
             LogPrune::new(store.clone());
         pruner
             .process(LogPruneArgs::PruneEntriesUntil {

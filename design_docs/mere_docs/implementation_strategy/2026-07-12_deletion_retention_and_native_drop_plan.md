@@ -742,8 +742,8 @@ and Retinue remain opaque carriers; domain folds remain the semantic owners.
 - Batched topic association, log indexing, and the operation pointer into one
   backend apply. Checkpoint and prune effects remain absent from the production
   processor.
-- Completed D0 against p2panda 0.6.1. Eleven `murm-replication` tests now prove
-  default-field wire compatibility, authorized prefix removal, missing-
+- Revalidated D0 against upstream p2panda 0.7.0. The shared replication suite
+  now proves 0.7 default-field wire compatibility, authorized prefix removal, missing-
   predecessor validation at the prune point, stale-prefix rejection, and
   rejection-before-mutation for an unauthorized flag.
 - Confirmed that upstream `LogPrune` performs prefix removal through a separate

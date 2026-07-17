@@ -14,10 +14,10 @@ path = "src/lib.rs"
 
 [dependencies]
 muniment.workspace = true
-p2panda-core = "0.6.1"
-p2panda-net = "0.6.1"
-p2panda-store = { version = "0.6.1", default-features = false }
-p2panda-sync = "0.6.1"
+p2panda-core = "0.7.0"
+p2panda-net = "0.7.0"
+p2panda-store = { version = "0.7.0", default-features = false }
+p2panda-sync = "0.7.0"
 hex = "0.4"
 blake3 = "1.5"
 serde = { version = "1", features = ["derive"] }
@@ -28,4 +28,4 @@ thiserror = "1"
 
 [dev-dependencies]
 pollster = "0.4"
-p2panda-stream = { version = "0.6.1", default-features = false, features = ["log_prune"] }
+p2panda-stream = { version = "0.7.0", default-features = false, features = ["log_prune"] }

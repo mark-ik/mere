@@ -14,7 +14,7 @@ path = "src/lib.rs"
 [dependencies]
 # The operation/signing substrate the job ops ride (the same signed
 # Operation<Ext> wire as tessera and murm posts; mirrors gemot's pin).
-p2panda-core = "0.6.1"
+p2panda-core = "0.7.0"
 # Persona-derived signing keys (the same identity flow tessera's wire uses).
 identity = { workspace = true }
 serde = { version = "1", features = ["derive"] }
@@ -24,7 +24,7 @@ proofs.workspace = true
 # The three sync traits LogSync reconciles against (`LogStore` + `TopicStore`,
 # plus `OperationStore`). Default features off: the mesh brings muniment through
 # the mooting adapter instead of p2panda-store's bundled SQLite backend.
-p2panda-store = { version = "0.6.1", default-features = false }
+p2panda-store = { version = "0.7.0", default-features = false }
 # Shared muniment-backed store and LogSync drain.
 murm-replication = { workspace = true }
 muniment = { git = "https://github.com/mark-ik/muniment.git", branch = "main", features = ["redb"] }
@@ -33,8 +33,8 @@ muniment = { git = "https://github.com/mark-ik/muniment.git", branch = "main", f
 # (endpoint-decoupled), so the lib never builds a `P2pandaTransport`.
 # `p2panda-sync` supplies the event types; `rt` runs the session, `time`
 # bounds the manual `resync`.
-p2panda-net = "0.6.1"
-p2panda-sync = "0.6.1"
+p2panda-net = "0.7.0"
+p2panda-sync = "0.7.0"
 tokio = { version = "1", features = ["rt", "time"] }
 
 [dev-dependencies]

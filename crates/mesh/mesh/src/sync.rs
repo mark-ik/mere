@@ -183,7 +183,6 @@ impl<B: Backend + Clone + Send + Sync + 'static> SyncedMesh<B> {
         }
         self.handle
             .publish(op.clone())
-            .await
             .map_err(|e| MeshSyncError::Backend(format!("publish: {e}")))?;
         Ok(op)
     }

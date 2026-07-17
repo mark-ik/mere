@@ -62,7 +62,7 @@ struct PlannedOperation<E> {
     log_key: String,
     log_prefix: String,
     payload_ref: Option<String>,
-    seq_num: u64,
+    seq_num: u32,
     header: Header<E>,
     has_body: bool,
 }
@@ -128,11 +128,11 @@ fn scan_end(prefix: &str) -> String {
 }
 
 /// Parse the sequence number back out of a `log/.../<seq>` key.
-fn seq_from_key(key: &str, prefix: &str) -> Result<u64, StoreError> {
+fn seq_from_key(key: &str, prefix: &str) -> Result<u32, StoreError> {
     let seq = key
         .strip_prefix(prefix)
         .ok_or_else(|| StoreError::Codec("log key missing its prefix".into()))?;
-    u64::from_str_radix(seq, 16).map_err(codec)
+    u32::from_str_radix(seq, 16).map_err(codec)
 }
 
 /// The `topic/<topic>/<author>/<log>` association key.
@@ -167,7 +167,7 @@ pub(crate) fn pending_payload_key(payload_hash: &Hash) -> String {
 
 /// Whether `seq` falls in the half-open sync range. `after` is exclusive (and,
 /// when absent, includes sequence 0); `until` is inclusive.
-fn in_range(seq: u64, after: Option<u64>, until: Option<u64>) -> bool {
+fn in_range(seq: u32, after: Option<u32>, until: Option<u32>) -> bool {
     after.is_none_or(|a| seq > a) && until.is_none_or(|u| seq <= u)
 }
 
@@ -198,7 +198,11 @@ fn encode_op<E: Extensions>(op: &Operation<E>) -> Result<Vec<u8>, StoreError> {
 /// Decode a stored blob back into an operation, recomputing its id from the
 /// header.
 fn decode_op<E: Extensions>(bytes: &[u8]) -> Result<Operation<E>, StoreError> {
-    let (header, body): (Header<E>, Option<Vec<u8>>) = decode_cbor(bytes).map_err(codec)?;
+    let (header, body): (Header<E>, Option<Vec<u8>>) = decode_cbor(bytes).map_err(|error| {
+        StoreError::Codec(format!(
+            "stored operation is not p2panda 0.7 format; export semantic events with the 0.6 build and re-author them into a fresh 0.7 store: {error}"
+        ))
+    })?;
     Ok(Operation {
         hash: header.hash(),
         header,
@@ -208,15 +212,14 @@ fn decode_op<E: Extensions>(bytes: &[u8]) -> Result<Operation<E>, StoreError> {
 
 // ── OperationStore ────────────────────────────────────────────────────────────
 
-impl<B, E, L> OperationStore<Operation<E>, Hash, L> for MunimentStore<B, E>
+impl<B, E> OperationStore<Operation<E>, Hash> for MunimentStore<B, E>
 where
     B: Backend,
     E: Extensions,
-    L: LogId,
 {
     type Error = StoreError;
 
-    async fn insert_operation(
+    async fn insert_operation<L: LogId>(
         &self,
         id: &Hash,
         operation: &Operation<E>,
@@ -570,7 +573,7 @@ where
         &self,
         author: &VerifyingKey,
         log_id: &L,
-        until: u64,
+        until: u32,
     ) -> Result<(Vec<WriteOp>, u64), StoreError> {
         let prefix = log_prefix(author, log_id)?;
         let keys = self.backend.scan(&prefix, &scan_end(&prefix)).await?;
@@ -710,7 +713,7 @@ where
             if header.payload_hash.as_ref() != Some(payload_hash) {
                 return Err(codec("payload reference points at another digest"));
             }
-            if header.payload_size != bytes.len() as u64 {
+            if header.payload_size != bytes.len() as u32 {
                 return Err(codec("payload bytes do not match the signed size"));
             }
             if body.is_none() {
@@ -821,7 +824,7 @@ where
 
 // ── LogStore ──────────────────────────────────────────────────────────────────
 
-impl<B, E, L> LogStore<Operation<E>, VerifyingKey, L, u64, Hash> for MunimentStore<B, E>
+impl<B, E, L> LogStore<Operation<E>, VerifyingKey, L, u32, Hash> for MunimentStore<B, E>
 where
     B: Backend,
     E: Extensions,
@@ -857,7 +860,7 @@ where
         &self,
         author: &VerifyingKey,
         logs: &[L],
-    ) -> Result<Option<BTreeMap<L, u64>>, StoreError> {
+    ) -> Result<Option<BTreeMap<L, u32>>, StoreError> {
         let mut heights = BTreeMap::new();
         for log_id in logs {
             let prefix = log_prefix(author, log_id)?;
@@ -877,13 +880,13 @@ where
         &self,
         author: &VerifyingKey,
         log_id: &L,
-        after: Option<u64>,
-        until: Option<u64>,
-    ) -> Result<Option<(u64, u64)>, StoreError> {
+        after: Option<u32>,
+        until: Option<u32>,
+    ) -> Result<Option<(u32, u32)>, StoreError> {
         let prefix = log_prefix(author, log_id)?;
         let keys = self.backend.scan(&prefix, &scan_end(&prefix)).await?;
-        let mut count = 0;
-        let mut bytes = 0;
+        let mut count: u32 = 0;
+        let mut bytes: u32 = 0;
         for key in &keys {
             if !in_range(seq_from_key(key, &prefix)?, after, until) {
                 continue;
@@ -891,7 +894,7 @@ where
             if let Some(blob) = self.backend.get(key).await? {
                 let (header, _): (Header<E>, Option<Vec<u8>>) =
                     decode_cbor(&blob[..]).map_err(codec)?;
-                bytes += header.to_bytes().len() as u64 + header.payload_size;
+                bytes += header.to_bytes().len() as u32 + header.payload_size;
                 count += 1;
             }
         }
@@ -902,8 +905,8 @@ where
         &self,
         author: &VerifyingKey,
         log_id: &L,
-        after: Option<u64>,
-        until: Option<u64>,
+        after: Option<u32>,
+        until: Option<u32>,
     ) -> Result<Option<Vec<(Operation<E>, Vec<u8>)>>, StoreError> {
         let prefix = log_prefix(author, log_id)?;
         let keys = self.backend.scan(&prefix, &scan_end(&prefix)).await?;
@@ -929,7 +932,7 @@ where
         &self,
         author: &VerifyingKey,
         log_id: &L,
-        until: &u64,
+        until: &u32,
     ) -> Result<u64, StoreError> {
         let (writes, pruned) = self.prefix_prune_writes(author, log_id, *until).await?;
         self.backend.apply(&writes).await?;
@@ -1009,7 +1012,7 @@ mod tests {
     /// backend. If any part regresses, this stops compiling.
     fn _log_sync_ready<S>()
     where
-        S: LogStore<Operation<Ext>, VerifyingKey, u64, u64, Hash>
+        S: LogStore<Operation<Ext>, VerifyingKey, u64, u32, Hash>
             + TopicStore<Topic, VerifyingKey, u64>
             + Clone
             + Send
@@ -1025,7 +1028,7 @@ mod tests {
     /// A signed operation for one author's log at `seq`, chained onto `backlink`.
     fn make_op(
         sk: &SigningKey,
-        seq: u64,
+        seq: u32,
         backlink: Option<Hash>,
         payload: &[u8],
     ) -> Operation<Ext> {
@@ -1036,7 +1039,6 @@ mod tests {
             signature: None,
             payload_size: body.size(),
             payload_hash: Some(body.hash()),
-            timestamp: 0.into(),
             seq_num: seq,
             backlink,
             extensions: (),
@@ -1047,6 +1049,23 @@ mod tests {
             header,
             body: Some(body),
         }
+    }
+
+    #[test]
+    fn current_stored_operations_round_trip_through_the_v7_codec() {
+        let sk = SigningKey::generate();
+        let operation = make_op(&sk, 0, None, b"current");
+        assert_eq!(
+            decode_op::<Ext>(&encode_op(&operation).unwrap()).unwrap(),
+            operation
+        );
+    }
+
+    #[test]
+    fn legacy_operation_bytes_report_the_reauthoring_boundary() {
+        let error = decode_op::<Ext>(&[0x81, 0x00]).unwrap_err();
+        assert!(error.to_string().contains("re-author"));
+        assert!(error.to_string().contains("fresh 0.7 store"));
     }
 
     #[test]

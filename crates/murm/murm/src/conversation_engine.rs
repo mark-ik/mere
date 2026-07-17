@@ -42,7 +42,7 @@ struct ConversationSession {
     keypair: Ed25519Keypair,
     keyring: CabalKeyring,
     store: ConversationStore<ConversationBackend>,
-    author_head: AsyncMutex<(u64, Option<PostId>)>,
+    author_head: AsyncMutex<(u32, Option<PostId>)>,
     ingest: AsyncMutex<()>,
     posts: Mutex<BTreeMap<[u8; 32], Post>>,
     events: broadcast::Sender<Post>,

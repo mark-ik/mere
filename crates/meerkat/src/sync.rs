@@ -89,7 +89,6 @@ impl TesseraSync {
             .map_err(|error| format!("tessera author: {error}"))?;
         self.handle
             .publish(operation)
-            .await
             .map_err(|error| format!("tessera publish: {error}"))
     }
 }

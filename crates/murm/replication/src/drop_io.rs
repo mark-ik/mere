@@ -935,7 +935,7 @@ mod tests {
 
     fn operation(
         key: &SigningKey,
-        seq: u64,
+        seq: u32,
         backlink: Option<p2panda_core::Hash>,
     ) -> Operation<Ext> {
         let body = Body::new(format!("event-{seq}").as_bytes());
@@ -945,7 +945,6 @@ mod tests {
             signature: None,
             payload_size: body.size(),
             payload_hash: Some(body.hash()),
-            timestamp: seq.into(),
             seq_num: seq,
             backlink,
             extensions: Ext { space: 7 },

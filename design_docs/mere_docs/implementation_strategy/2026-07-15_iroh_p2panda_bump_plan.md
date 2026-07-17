@@ -1,11 +1,23 @@
 # Fork iroh + p2panda; move retinue to the final crypto line — plan
 
-**Status:** planned. **Decided 2026-07-15** (Mark). Strategy is **fork both iroh
-and p2panda and curate what we adopt**, not track upstream. Execution held until
-the in-flight gemot→moot refactor settles (the mere side is now manifest-only, so
-the collision is minimal — see Sequencing).
+**Status:** superseded and executed against upstream releases, 2026-07-17.
+The fork strategy below is retained as the historical decision it replaced.
+Mere now uses p2panda 0.7.0, iroh 1.0.2, iroh-blobs 0.103, and iroh-tickets 1.0.
+The upstream wire is accepted: operation headers omit timestamps and use `u32`
+sequence/payload sizes; p2panda-net session frames use postcard while core
+operations remain canonical CBOR.
 
-## Decision
+The migration is intentionally identity-breaking across the 0.6/0.7 boundary.
+Old signed headers cannot be rewritten without changing operation ids. A 0.6
+profile must export semantic application events with the old build and re-author
+them into fresh 0.7 logs. The shared store reports that boundary explicitly when
+legacy operation bytes fail to decode.
+
+Current completion: the upstream API migration, explicit store boundary,
+delegation live-sync proof, aggregate delegation drop carriage, read-only
+participant projection, and revocation-derived scope-key epochs are landed.
+
+## Superseded decision
 
 mere's retinue-backed reticulum transport (R5, landed 2026-07-15) forced retinue
 onto the **stable dalek-2 / sha2-0.10** line, because the current graph (iroh 0.98

@@ -189,7 +189,17 @@ async fn main() -> Result<(), String> {
             let store = MeshStore::at_path(&path).map_err(|e| format!("store: {e}"))?;
             run(store, transport, author, me, mesh_id, args.mode).await
         }
-        Err(_) => run(MeshStore::in_memory(), transport, author, me, mesh_id, args.mode).await,
+        Err(_) => {
+            run(
+                MeshStore::in_memory(),
+                transport,
+                author,
+                me,
+                mesh_id,
+                args.mode,
+            )
+            .await
+        }
     };
 }
 

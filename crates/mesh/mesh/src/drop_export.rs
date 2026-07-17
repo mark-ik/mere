@@ -150,7 +150,7 @@ impl MeshDropSelector {
         }
         frontier
             .get(&(*operation.header.verifying_key.as_bytes(), event.log_id()))
-            .is_none_or(|seq_num| operation.header.seq_num > *seq_num)
+            .is_none_or(|seq_num| u64::from(operation.header.seq_num) > *seq_num)
     }
 }
 
