@@ -16,6 +16,15 @@ let sig = cabal.sign(b"hello");
 assert!(cabal.public_key().verify(b"hello", &sig));
 ```
 
+Production hosts can compose their unlock policy with
+`SealedIdentityProvider::load_or_create`. The provider owns the versioned master
+seed record; each app chooses where it lives and how its `SealedRecordStorage`
+is unlocked.
+
+`IdentityProvider::attest_derived_key` lets any app prove that a short-lived or
+protocol-scoped derived key was authorized by the durable master identity,
+without signing application traffic directly with the master key.
+
 Promoted from mere's `persona/identity`. The carry layer — device roster,
 capability grants, private-epoch history, the portable-persona spine that lets a
 persona and its data move between your devices — folds in as it lifts out of

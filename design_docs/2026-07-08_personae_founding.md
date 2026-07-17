@@ -31,8 +31,9 @@ From `persona/identity`, verbatim: the master Ed25519 keypair + deterministic
 per-protocol derivation (`IdentityProvider`, `BLAKE3-keyed(seed, salt)`); the
 `IdentityVault` profile/slot store; `PassphraseEncryptedStorage` (Argon2id +
 ChaCha20-Poly1305); the sealed-record store; the passphrase-wrapped vault root
-and the `StartupUnlockMode` OS-store unlock (Windows DPAPI today); and
-`PersonaId`.
+and the `StartupUnlockMode` OS-store unlock (Windows DPAPI today); the reusable
+`SealedIdentityProvider` for app-selected sealed records;
+`DerivedKeyAttestation` for master-authorized protocol keys; and `PersonaId`.
 
 ## Roadmap
 

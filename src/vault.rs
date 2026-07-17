@@ -49,7 +49,9 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use crate::{Ed25519Keypair, Ed25519PublicKey, IdentityError, IdentityProvider};
+use crate::{
+    DerivedKeyAttestation, Ed25519Keypair, Ed25519PublicKey, IdentityError, IdentityProvider,
+};
 
 /// Stable identifier for a profile within a vault.
 ///
@@ -354,6 +356,13 @@ impl<S: IdentityStorage> IdentityProvider for IdentityVault<S> {
 
     fn derive_keypair(&self, salt: &[u8]) -> Result<Ed25519Keypair, IdentityError> {
         Ok(self.current.master.derive_child(salt))
+    }
+
+    fn attest_derived_key(&self, salt: &[u8]) -> Result<DerivedKeyAttestation, IdentityError> {
+        Ok(crate::provider::attest_derived_key(
+            &self.current.master,
+            salt,
+        ))
     }
 }
 

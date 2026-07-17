@@ -69,6 +69,18 @@ tells mere's multi-face story leaves woodshed and half the others unserved.
 
 ## What every app gets for free
 
+**Durable identity roots.** `SealedIdentityProvider` owns the versioned master
+seed record over an app-supplied `SealedRecordStorage`. Each host chooses its
+unlock policy and record namespace without reimplementing key generation,
+reopening, or seed scrubbing. Strophe is the first external consumer; mere
+inherits it when the planned in-tree identity re-base lands.
+
+**Derived-key attestation.** `DerivedKeyAttestation` lets a protocol use a
+session- or group-scoped signing key while proving which durable identity
+authorized it. Strophe hand-off v2 is the first consumer. The same primitive
+fits Isometry table keys and Mere moot/cabal keys without making applications
+sign ordinary traffic with their master key.
+
 **Encrypt-at-rest.** The `PayloadSealer` seam (landed in mere as wallet gap #2,
 promoting to sit over muniment) seals private data under the persona epoch by
 `PrivacyClass`, with no per-app crypto. woodshed practice logs, isometry character

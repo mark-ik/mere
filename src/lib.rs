@@ -49,6 +49,7 @@
 #![doc(html_root_url = "https://docs.rs/personae/0.1.0")]
 #![warn(missing_docs)]
 
+pub mod delegation;
 mod error;
 mod keypair;
 pub mod passphrase_root;
@@ -61,13 +62,15 @@ pub mod vault;
 
 pub use crate::error::IdentityError;
 pub use crate::keypair::{Ed25519Keypair, Ed25519PublicKey, Ed25519Signature};
-pub use crate::seal::{seal_bytes, unseal_bytes};
 pub use crate::passphrase_root::{
     PassphraseWrappedRoot, change_passphrase, load_passphrase_root, passphrase_root_exists,
     save_passphrase_root, unwrap_vault_root, wrap_vault_root,
 };
 pub use crate::passphrase_storage::PassphraseEncryptedStorage;
-pub use crate::provider::{IdentityProvider, InMemoryProvider};
+pub use crate::provider::{
+    DerivedKeyAttestation, IdentityProvider, InMemoryProvider, SealedIdentityProvider,
+};
+pub use crate::seal::{seal_bytes, unseal_bytes};
 pub use crate::sealed_record_storage::SealedRecordStorage;
 pub use crate::startup_unlock::{
     StartupUnlockMode, auto_unlock_backend_available, load_or_create_auto_unlock_root,
