@@ -206,6 +206,20 @@ The field-by-field map (from the 2026-07-18 read of `graph/node.rs`):
 
 ## Progress
 
+- **2026-07-18 (S0 started; quint severed, seiche paused on concurrency):**
+  quint's `kernel-bridge` removed — `commit_to_graph` (the unused inverse bridge)
+  deleted, the optional `kernel` dep and feature gone, so quint's only substrate
+  dep is numen and it is portable/publishable. 35 quint tests green. The change
+  landed swept into another agent's commit `c5f0106` (the meerkat funeral), which
+  is itself the signal: **`canvas/canvas` is under a hot concurrent refactor**
+  (meerkat funeral + "canvas absorbs the guts" + orrery rename, three commits in
+  ~40 min). seiche's severance must edit `canvas/canvas` (the adapter + the
+  `sync_with_graph`/`from_coupling` call sites in build.rs/fields.rs), so it is
+  **paused until the canvas refactor settles** rather than colliding. The seiche
+  plan is unchanged: move `sync_with_graph`/`write_positions_to`/`from_coupling`
+  to canvas-side adapters over the kernel-free core (`sync_nodes`/`positions`/a
+  resolved `CouplingForce` ctor), migrate the in-crate kernel-bridge tests to the
+  kernel-free API, then remove seiche's `kernel` dep + feature.
 - **2026-07-18 (Lane F complete):** `chartulary::{facet, content_class}` landed
   (`0051d7c`, pushed): F0 facet store + `FacetValidator` seam, F1 content-class
   model + registry, both generic and schema-agnostic. 42 chartulary tests (9
