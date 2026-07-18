@@ -26,11 +26,25 @@
 //! snapshots give checkpoint-plus-tail loading. Lineage (stemma) and the RDF
 //! projection (scholia) are later phases. The canonical plan is mere's
 //! `design_docs/.../2026-07-08_generic_graph_substrate_plan.md`.
+//!
+//! **Facets** ([`facet`]) are the runtime tier of node metadata, complementing
+//! the compile-time capability traits: optional, typed, schema-validated records
+//! keyed by node id, so a node carries content-specific metadata (and a modder
+//! defines new metadata) without changing the node type. **Content classes**
+//! ([`content_class`]) type a node by the facets it carries — the node-side
+//! analog of the edge [`taxonomy`] — defined as data so a class ships like any
+//! other content. Validation is injected through the
+//! [`FacetValidator`](facet::FacetValidator) seam; chartulary stays
+//! schema-agnostic. This realizes the one-node ruling (mere design_docs
+//! `2026-07-18_one_node_facets_layer_map.md`): `Container` is the node, and
+//! everything else is a facet.
 
 pub mod caps;
 pub mod commit;
 pub mod container;
+pub mod content_class;
 pub mod edit;
+pub mod facet;
 pub mod graph;
 pub mod nested;
 
@@ -47,6 +61,8 @@ pub use caps::{
     Address, Addressed, Classified, ContentBearing, GraphBearing, Identified, Labeled, Predicated,
 };
 pub use commit::{Author, Batch, BatchId, CommitError, Committed, EditSpec};
+pub use content_class::{ClassId, ClassMembership, ClassRegistry, ContentClass, CLASS_FACET};
+pub use facet::{AcceptAll, FacetError, FacetId, FacetStore, FacetValidator, NodeFacets};
 pub use container::{Container, Relation};
 pub use edit::{DerivationKind, DerivationRecord, EdgeId, GraphEdit};
 pub use graph::{EdgeKey, Graph, NodeKey};

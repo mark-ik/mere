@@ -11,6 +11,10 @@ categories = ["data-structures"]
 [dependencies]
 petgraph = { version = "0.8", features = ["serde-1"] }
 serde = { version = "1", features = ["derive"] }
+# The facet payload (`facet::Facet::value`) is a JSON value: structured,
+# schema-agnostic node metadata. Matches eidetic's `SchemaDefinition` body type,
+# so the mere-side validator seam lines up without an encode/decode boundary.
+serde_json = "1"
 # For the content reference in ContentBearing (the blake3 Hash). default-features
 # off so chartulary does not pull muniment's JSON/postcard codecs, only its Hash.
 muniment = { git = "https://github.com/mark-ik/muniment.git", branch = "main", version = "0.1.0", default-features = false }
@@ -23,4 +27,3 @@ slotmap = { version = "1.0", features = ["serde"] }
 
 [dev-dependencies]
 pollster = "0.4"
-serde_json = "1"
