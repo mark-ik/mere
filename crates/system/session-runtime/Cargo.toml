@@ -11,7 +11,6 @@ description = "Portable graphshell session runtime state: session manifests, ses
 [dependencies]
 # The storage seam (2026-07-12): eidetic's Store is muniment::Backend.
 muniment = { git = "https://github.com/mark-ik/muniment.git", branch = "main", version = "0.1.0" }
-frisket.workspace = true
 incipit.workspace = true
 kernel.workspace = true
 forme.workspace = true

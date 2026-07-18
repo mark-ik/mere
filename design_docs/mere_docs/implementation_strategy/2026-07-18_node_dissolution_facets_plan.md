@@ -56,23 +56,68 @@ when a real class wires into mere). F1's earlier "mere-side" filing meant the
   persisting class definitions as schema engrams. Small; the seam is already in
   place.
 
+## Facet convergence of the per-node sidecars (found 2026-07-18, Mark)
+
+Grounding Lane S surfaced that the position sidecar wants to be a facet, and
+that generalizes: **every bespoke per-node sidecar mere holds is a facet avant
+la lettre.** `browser_node_state` (`web.*`), `denizen_bindings` (`denizen.*`),
+the per-node bits of `view_intent`, and cartography's per-node arrangement data
+(position, size, sprite, sprite-hull, material, face → `arrangement.*`) are all
+typed metadata keyed by node id, which is the facet store's definition. The
+facet work unlocks one mechanism, many namespaces, replacing N hand-rolled JSON
+sidecar files.
+
+Boundaries that hold the convergence honest:
+- **Graph-scoped canvas flags are not facets.** `size_by_degree`,
+  `size_by_importance`, `importance_metric` are view *settings*, not per-node;
+  they stay out of the facet store.
+- **Live vs durable.** The *live* position lives in seiche (runtime, never
+  persisted, not a facet); only the *durable* save-time position becomes an
+  `arrangement.position` facet. So the facet holds cold data and seiche keeps
+  the hot loop — the bulk-numeric perf worry does not arise.
+- **Stored vs derived facets.** mere already uses "facet" for the PMEST
+  projection (`facet_projection.rs`) that *derives* facets (in-degree, domain)
+  from node data. chartulary facets *store* them. Both are real; the facet
+  surface should admit stored and derived through one lens. (Term collision
+  noted; keep the two senses distinct in prose.)
+- **No big-bang.** Working sidecars migrate opportunistically or as explicit
+  rungs. `denizen_bindings` and `browser_node_state` are transitional-bespoke
+  (built to the pattern that existed pre-facet-store) and converge later.
+
+**The enabling rung (new): wire `chartulary::FacetStore` into mere's session
+persistence.** The facet store is in chartulary; mere's sidecars are mere-side
+JSON keyed by node UUID. Convergence needs the store wired into mere first; then
+new metadata lands as facets and the bespoke sidecars migrate behind it. This
+rung sits under Lane S (it is S2's real destination) and under D2/D3 (arrangement
+and semantic facets share it).
+
 ## Lane S — spatial completion
 
+Sequence (Mark, 2026-07-18): **S0 first**, then S1 + review, then the careful S2.
+
 - **S0, extract quint + seiche** to sibling repos + MPL→MIT/Apache relicense
-  (the recorded numen-treatment follow-on; both are kernel-free by design
-  already). Done when: `repos/quint` and `repos/seiche` are green standalone,
-  mere consumes them as git siblings (local checkout via the gitignored
-  `.cargo` patch, per convention), and the canvas suite passes.
-- **S1, positions through the sidecar.** Audit every `Node.position` /
-  `Node.velocity` read/write; route all durable reads through the
-  cartography-geometry sidecar (exists) and live simulation through seiche
-  state. Done when: kernel + canvas tests pass with the fields untouched by
-  anything but a shim.
-- **S2, retire the fields.** Remove `position`/`velocity` from `Node` (rkyv
-  snapshot migration: legacy snapshots load, positions absorb into the
-  sidecar, one-time, the browser_node_state migration is the pattern). Done
-  when: the fields are gone, legacy sessions load with arrangements intact,
-  full mere suite green.
+  (the numen-treatment follow-on). **The wrinkle**: both carry an optional
+  `kernel-bridge` feature depending on mere's `kernel` crate, so a naive
+  extraction makes `mere → seiche → mere/kernel` a cycle. So S0 first **severs
+  kernel-bridge in-workspace** (the mere-`Graph` glue — quint's
+  `commit_to_graph`, seiche's `sync_with_graph`/`write_positions_to`/
+  `CouplingForce::from_coupling` — moves to a mere-side adapter that calls the
+  kernel-free API), verifies mere still builds, *then* lifts the now-kernel-free
+  crates out. Done when: `repos/quint` and `repos/seiche` are green standalone
+  (MIT/Apache, publishable), mere consumes them as git siblings (local checkout
+  via the gitignored `.cargo` patch), and the mere canvas suite passes.
+- **S1, positions through the sidecar** (then review). Audit every
+  `Node.position` / `Node.velocity` read/write; route durable reads through the
+  arrangement-facet path (the convergence above; the cartography sidecar is the
+  transitional store until the facet store is wired) and live simulation through
+  seiche. Done when: kernel + canvas tests pass with the fields untouched by
+  anything but a shim, **and the audit is reviewed** before S2.
+- **S2, retire the fields** (careful pass). Remove `position`/`velocity` from
+  `Node`; the durable destination is the `arrangement.position` facet (via the
+  wired facet store), the cartography sidecar being the transitional bridge.
+  rkyv snapshot migration: legacy snapshots load, positions absorb one-time (the
+  browser_node_state migration is the pattern). Done when: the fields are gone,
+  legacy sessions load with arrangements intact, full mere suite green.
 
 ## Lane D — the dissolution ladder
 

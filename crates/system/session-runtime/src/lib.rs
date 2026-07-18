@@ -73,10 +73,10 @@ pub mod memory_levels;
 // content to evict (pure, R0) and apply it by dropping content blobs (never graph
 // truth or engrams). The pass logic; the armillary actor that schedules it layers on top.
 pub mod athanor;
-// Filesystem persistence of the content frame's pane layout (frame.json);
-// native-only so the crate stays wasm-clean.
-#[cfg(not(target_arch = "wasm32"))]
-pub mod frisket_store;
+// The frame.json pane-layout store moved OUT with the pane model at
+// meerkat's deletion (2026-07-18): it lives in merecat's `frisket::store`
+// now — the pane-coupled half of this crate, split exactly as the
+// boundary-pass plan parked it.
 pub mod manifest;
 pub mod manifest_store;
 // Filesystem persistence of the session graph (graph.json); native-only so the
@@ -95,7 +95,9 @@ pub mod script_bindings_store;
 // distinct from the app-scoped settings_store; first field is the configurable menu.
 pub mod persona_settings_store;
 pub mod switcher_thumbnail;
-pub mod tearout;
+// The tear-out payload types (PaneDragPayload/TileDragPayload) moved out
+// with the pane model at meerkat's deletion: they name frisket::PaneId, so
+// they live in merecat's `frisket::tearout` now.
 pub mod view_intent_store;
 // Identity-level and persona-level wallet manifests (`identity/` + `personas/<id>/wallet.json`)
 // for the carry layer. Storage only; pairing and crypto semantics layer on top.
@@ -131,7 +133,6 @@ pub use switcher_thumbnail::{
     SwitcherThumbnail, SwitcherThumbnailOptions, ThumbnailEdge, ThumbnailNode,
     build_switcher_thumbnail, build_switcher_thumbnail_with,
 };
-pub use tearout::{PaneDragPayload, TileDragPayload};
 pub use view_intent_store::{CameraSnapshot, HiddenRelationRecord, VIEW_INTENT_DIR, ViewIntent};
 pub use wallet_grant::{
     DEVICE_GRANT_SCHEMA_VERSION, DeviceGrantError, DeviceGrantPayload, DeviceGrantSignature,

@@ -15,11 +15,6 @@ serde = { version = "1.0", features = ["derive"] }
 # the runtime algebra over them: it evaluates the definitions and derives forces. This
 # is quint's only hard substrate dependency — quint's default build is portable.
 numen = { git = "https://github.com/mark-ik/numen.git", branch = "main" }
-# kernel is OPTIONAL, behind `kernel-bridge`: it supplies only the mere Graph +
-# apply-delta glue that `FieldProjection::commit_to_graph` uses to write an authored
-# projection into a live graph. Off by default so quint stays kernel-free (portable);
-# a mere host that wants the commit bridge enables the feature. One-way dep.
-kernel = { workspace = true, optional = true }
 # For minting registry-local FieldIds (from_u128, WASM-safe) and serde of the
 # UUID-backed kernel FieldId embedded in FieldRegistry.
 uuid = { version = "1", default-features = false, features = ["serde"] }
@@ -40,10 +35,6 @@ uuid = { version = "1", default-features = false, features = ["js"] }
 
 [features]
 default = []
-# The graph-commit bridge: `FieldProjection::commit_to_graph`, which writes an authored
-# projection's fields/couplings into a mere `kernel::graph::Graph`. Opt-in so quint's
-# default build stays kernel-free and portable; a mere host enables it.
-kernel-bridge = ["dep:kernel"]
 field-burn = ["dep:burn"]
 # Adds the wgpu backend so consumers can target GPU evaluation.
 field-burn-wgpu = ["field-burn", "burn/wgpu", "dep:getrandom"]

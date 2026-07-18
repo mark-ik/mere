@@ -2,8 +2,6 @@
 resolver = "2"
 members = [
     "crates/mere",
-    "crates/meerkat-browser-worker",
-    "crates/meerkat",
     "crates/canvas/canvas",
     "crates/persona/identity",
     "crates/canvas/quint",
@@ -17,7 +15,6 @@ members = [
     "crates/shell/chrome",
     "crates/shell/comms",
     "crates/incipit",
-    "crates/shell/frisket",
     "crates/system/session-runtime",
     "crates/system/fetch",
     "crates/system/content-contract",
@@ -105,13 +102,11 @@ glossary = { package = "mere-glossary", path = "crates/graph/glossary" }
 # consumed one-way, local checkout via the gitignored `.cargo/config.toml` patch.
 armillary = { git = "https://github.com/mark-ik/armillary.git", branch = "main" }
 mere = { path = "crates/mere" }
-meerkat-browser-worker = { path = "crates/meerkat-browser-worker" }
 
 fetch = { package = "mere-fetch", path = "crates/system/fetch" }
 content-contract = { path = "crates/system/content-contract" }
 proofs = { package = "mere-proofs", version = "0.1.0", path = "crates/system/proofs" }
 shell-state = { path = "crates/system/shell-state" }
-frisket = { path = "crates/shell/frisket" }
 incipit = { path = "crates/incipit" }
 chrome = { package = "mere-chrome", path = "crates/shell/chrome" }
 comms = { package = "mere-comms", path = "crates/shell/comms" }

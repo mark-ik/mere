@@ -498,31 +498,8 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "kernel-bridge")]
-    #[test]
-    fn authored_open_coupling_commits_to_the_graph() {
-        // The full author → commit → graph path: a script authors a visual
-        // coupling, committing it lands the field + coupling in the kernel Graph
-        // that seiche and platen read from.
-        let p = build_from_script(
-            r#"
-            let p = new_projection();
-            let f = p.add_scalar("focus", gaussian(0.0, 0.0, 10.0));
-            p.couple_open("paper", f, "https://mere.computer/ns/coupling#visual/halo", 1.0);
-            p
-        "#,
-        )
-        .unwrap();
-
-        let mut g = kernel::graph::Graph::new();
-        let (fields, couplings) = p.commit_to_graph(&mut g);
-        assert_eq!((fields, couplings), (1, 1));
-        let c = g.couplings().next().expect("coupling in graph");
-        assert_eq!(
-            c.response.predicate(),
-            Some("https://mere.computer/ns/coupling#visual/halo"),
-        );
-        // and the field it references is present
-        assert!(g.field(c.field).is_some(), "referenced field committed");
-    }
+    // The full author → commit → graph path (`authored_open_coupling_commits_
+    // to_the_graph`) left with `commit_to_graph`: the graph write is a mere-side
+    // concern now. The authoring half (script → projection) stays covered by the
+    // tests above; committing a projection to a graph is tested host-side.
 }
