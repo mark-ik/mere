@@ -14,7 +14,7 @@
 //!
 //! ## Place in the architecture
 //!
-//! [`kernel::graph::Graph`] is the source of truth for node identity, topology,
+//! The host's graph is the source of truth for node identity, topology,
 //! and the *committed* position used for persistence. seiche holds the rapier
 //! world that drives the *projected* position — bodies bound to nodes, forces
 //! from pluggable [`Force`] implementors, and a tick that mirrors body
@@ -72,7 +72,7 @@ pub use forces::{Boundary, EdgeSpring, NodeExclusion};
 pub mod barnes_hut;
 pub use barnes_hut::{BarnesHutConfig, BarnesHutRepulsion, repulsion_forces};
 
-/// The aether→seiche seam: a kernel [`kernel::graph::Coupling`] compiled to a
+/// The aether→seiche seam: a [`numen::Coupling`] compiled to a
 /// [`Force`] (the general, scriptable path the built-in forces specialize).
 pub mod coupling_force;
 pub use coupling_force::CouplingForce;
@@ -643,11 +643,9 @@ const _: fn() = || {
     assert_send::<LayoutSnapshot>();
 };
 
-// The graph-convenience test suite (builds a mere `Graph` via fixtures, exercises
-// `sync_with_graph` / `write_positions_to` / `from_coupling`) runs under
-// `kernel-bridge`; the graph-free physics core is tested in `sync`'s test module,
-// which the default build runs.
-#[cfg(all(test, feature = "kernel-bridge"))]
+// The simulation + built-in-force test suite, now kernel-free (drives the
+// physics through `sync_nodes` / `sync_edges`, not a mere `Graph`).
+#[cfg(test)]
 mod tests;
 
 /// Integration tests for the scene / fluid / field / emitter tiers (split alongside them).

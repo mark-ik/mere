@@ -120,20 +120,28 @@ impl Force for AffinitySpring {
     }
 }
 
-#[cfg(all(test, feature = "kernel-bridge"))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::{NodeExclusion, Simulation};
     use euclid::default::Point2D;
-    use kernel::graph::Graph;
-    use kernel::graph::fixtures::GraphFixtures;
 
-    fn node_at(g: &mut Graph, id: u128, x: f32, y: f32) -> NodeKey {
-        g.add_node_with_id(
-            uuid::Uuid::from_u128(id),
-            format!("mere://{id}"),
-            Point2D::new(x, y),
-        )
+    /// Kernel-free node-list builder (seiche drives physics from `(NodeKey,
+    /// position)` pairs, not a mere `Graph`).
+    #[derive(Default)]
+    struct Nodes {
+        list: Vec<(NodeKey, Point2D<f32>)>,
+    }
+
+    impl Nodes {
+        fn at(&mut self, x: f32, y: f32) -> NodeKey {
+            let key = NodeKey::new(self.list.len());
+            self.list.push((key, Point2D::new(x, y)));
+            key
+        }
+        fn sync(&self, sim: &mut Simulation) {
+            sim.sync_nodes(self.list.iter().copied());
+        }
     }
 
     fn distance(sim: &Simulation, a: NodeKey, b: NodeKey) -> f32 {
@@ -144,12 +152,12 @@ mod tests {
     fn a_high_affinity_pair_is_pulled_together() {
         // Two nodes far apart, affinity 1.0: the spring draws them in toward the
         // rest length over a settle.
-        let mut g = Graph::new();
-        let a = node_at(&mut g, 1, -300.0, 0.0);
-        let b = node_at(&mut g, 2, 300.0, 0.0);
+        let mut g = Nodes::default();
+        let a = g.at(-300.0, 0.0);
+        let b = g.at(300.0, 0.0);
 
         let mut sim = Simulation::new();
-        sim.sync_with_graph(&g);
+        g.sync(&mut sim);
         let start = distance(&sim, a, b);
         sim.set_affinity_force(Some(AffinitySpring::new([(a, b, 1.0)])));
         for _ in 0..240 {
@@ -166,12 +174,12 @@ mod tests {
     fn a_zero_affinity_pair_exerts_no_force() {
         // Weight 0: the spring is inert, so an otherwise force-free sim keeps the
         // pair where it started (damping bleeds off any residual, no drift).
-        let mut g = Graph::new();
-        let a = node_at(&mut g, 1, -300.0, 0.0);
-        let b = node_at(&mut g, 2, 300.0, 0.0);
+        let mut g = Nodes::default();
+        let a = g.at(-300.0, 0.0);
+        let b = g.at(300.0, 0.0);
 
         let mut sim = Simulation::new();
-        sim.sync_with_graph(&g);
+        g.sync(&mut sim);
         let start = distance(&sim, a, b);
         sim.set_affinity_force(Some(AffinitySpring::new([(a, b, 0.0)])));
         for _ in 0..120 {
@@ -188,11 +196,11 @@ mod tests {
         // A pair already well within the rest length: affinity must not shove them
         // apart (that is NodeExclusion's job). With only the affinity force present
         // they stay put.
-        let mut g = Graph::new();
-        let a = node_at(&mut g, 1, -20.0, 0.0);
-        let b = node_at(&mut g, 2, 20.0, 0.0); // 40 apart, rest length 120
+        let mut g = Nodes::default();
+        let a = g.at(-20.0, 0.0);
+        let b = g.at(20.0, 0.0); // 40 apart, rest length 120
         let mut sim = Simulation::new();
-        sim.sync_with_graph(&g);
+        g.sync(&mut sim);
         let start = distance(&sim, a, b);
         sim.set_affinity_force(Some(AffinitySpring::new([(a, b, 1.0)])));
         for _ in 0..120 {
@@ -210,14 +218,14 @@ mod tests {
         // Two independent pairs at the same start distance, one weight 0.9 one 0.1:
         // the stronger pair ends closer. Exclusion is present (the realistic
         // composition), so this checks affinity wins the tug against it.
-        let mut g = Graph::new();
-        let a = node_at(&mut g, 1, -250.0, -200.0);
-        let b = node_at(&mut g, 2, 250.0, -200.0);
-        let c = node_at(&mut g, 3, -250.0, 200.0);
-        let d = node_at(&mut g, 4, 250.0, 200.0);
+        let mut g = Nodes::default();
+        let a = g.at(-250.0, -200.0);
+        let b = g.at(250.0, -200.0);
+        let c = g.at(-250.0, 200.0);
+        let d = g.at(250.0, 200.0);
 
         let mut sim = Simulation::new();
-        sim.sync_with_graph(&g);
+        g.sync(&mut sim);
         sim.add_force(NodeExclusion::default());
         sim.set_affinity_force(Some(AffinitySpring::new([(a, b, 0.9), (c, d, 0.1)])));
         for _ in 0..300 {
@@ -235,11 +243,11 @@ mod tests {
     fn clearing_the_force_leaves_the_layout_in_place() {
         // Setting the force to None must be position-preserving (forces never touch
         // body state) — the swap leaves the pair exactly where the last tick left it.
-        let mut g = Graph::new();
-        let a = node_at(&mut g, 1, -300.0, 0.0);
-        let b = node_at(&mut g, 2, 300.0, 0.0);
+        let mut g = Nodes::default();
+        let a = g.at(-300.0, 0.0);
+        let b = g.at(300.0, 0.0);
         let mut sim = Simulation::new();
-        sim.sync_with_graph(&g);
+        g.sync(&mut sim);
         sim.set_affinity_force(Some(AffinitySpring::new([(a, b, 1.0)])));
         for _ in 0..120 {
             sim.tick(1.0 / 60.0);

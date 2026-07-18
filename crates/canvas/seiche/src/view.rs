@@ -350,30 +350,19 @@ pub(crate) fn segment_intersects_box(a: Point2D<f32>, b: Point2D<f32>, r: Box2D<
     u1 <= u2
 }
 
-#[cfg(all(test, feature = "kernel-bridge"))]
+#[cfg(test)]
 mod tests {
     use euclid::default::{Box2D, Point2D};
-    use kernel::graph::fixtures::GraphFixtures;
-    use kernel::graph::{Graph, NodeKey};
 
-    use crate::Simulation;
+    use crate::{NodeKey, Simulation};
 
     /// a@(0,0), b@(100,0), one edge a–b — built through a real `Simulation` so
     /// the view-vs-sim parity assertions share one source of truth.
     fn sim_with_edge() -> (Simulation, NodeKey, NodeKey) {
-        let mut g = Graph::new();
-        let a = g.add_node_with_id(
-            uuid::Uuid::from_u128(1),
-            "mere://a".into(),
-            Point2D::new(0.0, 0.0),
-        );
-        let b = g.add_node_with_id(
-            uuid::Uuid::from_u128(2),
-            "mere://b".into(),
-            Point2D::new(100.0, 0.0),
-        );
+        let a = NodeKey::new(0);
+        let b = NodeKey::new(1);
         let mut sim = Simulation::new();
-        sim.sync_with_graph(&g);
+        sim.sync_nodes([(a, Point2D::new(0.0, 0.0)), (b, Point2D::new(100.0, 0.0))]);
         sim.sync_edges([(a, b)]);
         sim.refresh_spatial_index();
         (sim, a, b)

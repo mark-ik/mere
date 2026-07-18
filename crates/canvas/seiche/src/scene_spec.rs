@@ -15,7 +15,7 @@
 use crate::NodeCollider;
 
 /// A stable, opaque handle to a scene-decoration body — a non-graph rapier body sharing the
-/// orrery's world, distinct from a [`NodeKey`](kernel::graph::NodeKey). Minted by
+/// orrery's world, distinct from a [`NodeKey`](crate::NodeKey). Minted by
 /// [`Simulation::add_scene_body`](crate::Simulation::add_scene_body). (Physics scenes P1.)
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct SceneBodyId(pub(crate) u64);

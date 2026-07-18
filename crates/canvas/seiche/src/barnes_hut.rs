@@ -352,10 +352,9 @@ impl Quadtree {
     }
 }
 
-#[cfg(all(test, feature = "kernel-bridge"))]
+#[cfg(test)]
 mod tests {
     use super::*;
-    use kernel::graph::fixtures::GraphFixtures;
 
     #[test]
     fn repulsion_pushes_nearby_bodies_apart() {
@@ -403,33 +402,19 @@ mod tests {
 
     #[test]
     fn repulsion_force_separates_bodies_over_a_tick() {
-        use crate::Simulation;
-        use kernel::graph::Graph;
+        use crate::{NodeKey, Simulation};
 
-        let mut g = Graph::new();
-        g.add_node_with_id(
-            uuid::Uuid::from_u128(1),
-            "mere://a".to_string(),
-            Point2D::new(0.0, 0.0),
-        );
-        g.add_node_with_id(
-            uuid::Uuid::from_u128(2),
-            "mere://b".to_string(),
-            Point2D::new(20.0, 0.0),
-        );
-        let keys: Vec<_> = g.nodes().map(|(k, _)| k).collect();
-
+        let a = NodeKey::new(0);
+        let b = NodeKey::new(1);
         let mut sim = Simulation::new();
-        sim.sync_with_graph(&g);
+        sim.sync_nodes([(a, Point2D::new(0.0, 0.0)), (b, Point2D::new(20.0, 0.0))]);
         sim.add_force(BarnesHutRepulsion::default());
 
-        let dist0 =
-            (sim.position_of(keys[0]).unwrap() - sim.position_of(keys[1]).unwrap()).length();
+        let dist0 = (sim.position_of(a).unwrap() - sim.position_of(b).unwrap()).length();
         for _ in 0..60 {
             sim.tick(1.0 / 60.0);
         }
-        let dist1 =
-            (sim.position_of(keys[0]).unwrap() - sim.position_of(keys[1]).unwrap()).length();
+        let dist1 = (sim.position_of(a).unwrap() - sim.position_of(b).unwrap()).length();
         assert!(
             dist1 > dist0,
             "barnes-hut repulsion should push bodies apart: {dist0} -> {dist1}"

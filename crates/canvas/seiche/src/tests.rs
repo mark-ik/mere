@@ -4,35 +4,62 @@
 
 //! Unit tests for the simulation + built-in forces. Split out of `lib.rs` to
 //! keep both files under the workspace's per-file size ceiling.
+//!
+//! seiche is kernel-free: these tests drive the physics through the
+//! `(NodeKey, position)` API ([`Simulation::sync_nodes`] / `sync_edges`), never a
+//! mere `Graph`. [`Nodes`] is a tiny builder that mints sequential [`NodeKey`]s
+//! and remembers each body's start position, replacing the old graph fixtures.
 
 use super::*;
-use kernel::graph::fixtures::GraphFixtures;
 
-fn graph_with_two_nodes() -> Graph {
-    let mut g = Graph::new();
-    g.add_node_with_id(
-        uuid::Uuid::from_u128(1),
-        "mere://a".to_string(),
-        Point2D::new(0.0, 0.0),
-    );
-    g.add_node_with_id(
-        uuid::Uuid::from_u128(2),
-        "mere://b".to_string(),
-        Point2D::new(100.0, 0.0),
-    );
-    g
+/// A kernel-free stand-in for the graph fixtures: mints sequential node keys and
+/// records each body's start position, so a test drives [`Simulation::sync_nodes`]
+/// directly.
+#[derive(Default)]
+struct Nodes {
+    list: Vec<(NodeKey, Point2D<f32>)>,
 }
 
-fn graph_with_n_nodes(n: usize) -> Graph {
-    let mut g = Graph::new();
-    for i in 0..n {
-        g.add_node_with_id(
-            uuid::Uuid::from_u128(1 + i as u128),
-            format!("mere://n{i}"),
-            Point2D::new(i as f32 * 10.0, 0.0),
-        );
+impl Nodes {
+    /// Add a node at `(x, y)`, returning its minted key.
+    fn at(&mut self, x: f32, y: f32) -> NodeKey {
+        let key = NodeKey::new(self.list.len());
+        self.list.push((key, Point2D::new(x, y)));
+        key
     }
-    g
+
+    /// The keys, in insertion order.
+    fn keys(&self) -> Vec<NodeKey> {
+        self.list.iter().map(|(k, _)| *k).collect()
+    }
+
+    /// Reconcile a simulation's bodies to these nodes.
+    fn sync(&self, sim: &mut Simulation) {
+        sim.sync_nodes(self.list.iter().copied());
+    }
+}
+
+fn two_nodes() -> Nodes {
+    let mut n = Nodes::default();
+    n.at(0.0, 0.0);
+    n.at(100.0, 0.0);
+    n
+}
+
+fn n_nodes(count: usize) -> Nodes {
+    let mut n = Nodes::default();
+    for i in 0..count {
+        n.at(i as f32 * 10.0, 0.0);
+    }
+    n
+}
+
+fn separation(sim: &Simulation, a: NodeKey, b: NodeKey) -> f32 {
+    (sim.position_of(a).unwrap() - sim.position_of(b).unwrap()).length()
+}
+
+fn radius_from_origin(sim: &Simulation, a: NodeKey) -> f32 {
+    sim.position_of(a).unwrap().to_vector().length()
 }
 
 /// A mock `RepulsionSolver` that records its call count and pushes every node a
@@ -53,7 +80,7 @@ fn repulsion_solver_routes_only_above_threshold() {
     // Below the threshold: the solver is installed but never consulted (naive path).
     let mut sim = Simulation::new();
     sim.add_force(NodeExclusion::default());
-    sim.sync_with_graph(&graph_with_n_nodes(3));
+    n_nodes(3).sync(&mut sim);
     let calls = Arc::new(AtomicUsize::new(0));
     sim.set_repulsion_solver(Some(recording_push_solver(calls.clone())), 10);
     for _ in 0..5 {
@@ -66,14 +93,14 @@ fn repulsion_solver_routes_only_above_threshold() {
     // something the symmetric naive repulsion could never do.
     let mut sim = Simulation::new();
     sim.add_force(NodeExclusion::default());
-    let graph = graph_with_n_nodes(3);
-    sim.sync_with_graph(&graph);
+    let nodes = n_nodes(3);
+    nodes.sync(&mut sim);
     let calls = Arc::new(AtomicUsize::new(0));
     sim.set_repulsion_solver(Some(recording_push_solver(calls.clone())), 3);
     for _ in 0..10 {
         sim.tick(1.0 / 60.0);
     }
-    let keys: Vec<_> = graph.nodes().map(|(k, _)| k).collect();
+    let keys = nodes.keys();
     let mean_x: f32 = keys
         .iter()
         .filter_map(|&k| sim.position_of(k).map(|p| p.x))
@@ -107,13 +134,13 @@ fn settle_timing_naive_vs_gpu_solver() {
     });
 
     for n in [2_000usize, 4_000, 8_000, 16_000] {
-        let graph = graph_with_n_nodes(n);
+        let nodes = n_nodes(n);
         let build = || {
             let mut sim = Simulation::new();
             sim.add_force(NodeExclusion::default());
             sim.add_force(EdgeSpring::default());
             sim.add_force(Boundary::default());
-            sim.sync_with_graph(&graph);
+            nodes.sync(&mut sim);
             sim
         };
 
@@ -141,12 +168,12 @@ fn settle_timing_naive_vs_gpu_solver() {
 }
 
 #[test]
-fn sync_with_graph_creates_bodies_for_new_nodes() {
+fn sync_creates_bodies_for_new_nodes() {
     let mut sim = Simulation::new();
-    let graph = graph_with_two_nodes();
-    sim.sync_with_graph(&graph);
+    let nodes = two_nodes();
+    nodes.sync(&mut sim);
     assert_eq!(sim.body_count(), 2);
-    for (key, _) in graph.nodes() {
+    for key in nodes.keys() {
         assert!(sim.body_for(key).is_some());
     }
 }
@@ -154,18 +181,17 @@ fn sync_with_graph_creates_bodies_for_new_nodes() {
 #[test]
 fn sync_is_idempotent() {
     let mut sim = Simulation::new();
-    let graph = graph_with_two_nodes();
-    sim.sync_with_graph(&graph);
-    sim.sync_with_graph(&graph);
-    sim.sync_with_graph(&graph);
+    let nodes = two_nodes();
+    nodes.sync(&mut sim);
+    nodes.sync(&mut sim);
+    nodes.sync(&mut sim);
     assert_eq!(sim.body_count(), 2);
 }
 
 #[test]
 fn empty_simulation_settles_to_rest() {
     let mut sim = Simulation::new();
-    let graph = graph_with_two_nodes();
-    sim.sync_with_graph(&graph);
+    two_nodes().sync(&mut sim);
     for _ in 0..120 {
         sim.tick(1.0 / 60.0);
     }
@@ -173,22 +199,10 @@ fn empty_simulation_settles_to_rest() {
 }
 
 #[test]
-fn write_positions_to_returns_zero_when_nothing_moves() {
-    let mut sim = Simulation::new();
-    let mut graph = graph_with_two_nodes();
-    sim.sync_with_graph(&graph);
-    // No forces, no time elapsed — bodies are at the same
-    // position as the graph reports.
-    let changed = sim.write_positions_to(&mut graph);
-    assert_eq!(changed, 0);
-}
-
-#[test]
 fn hit_test_and_cull_resolve_nodes_by_position() {
     // a@(0,0), b@(100,0), each an 18px-radius ball collider.
     let mut sim = Simulation::new();
-    let graph = graph_with_two_nodes();
-    sim.sync_with_graph(&graph);
+    two_nodes().sync(&mut sim);
     // No tick: refresh the index so queries see the synced positions.
     sim.refresh_spatial_index();
 
@@ -221,31 +235,15 @@ fn hit_test_and_cull_resolve_nodes_by_position() {
     assert!(everything.contains(&a) && everything.contains(&b));
 }
 
-fn node_at(g: &mut Graph, id: u128, x: f32, y: f32) -> NodeKey {
-    g.add_node_with_id(
-        uuid::Uuid::from_u128(id),
-        format!("mere://{id}"),
-        Point2D::new(x, y),
-    )
-}
-
-fn separation(sim: &Simulation, a: NodeKey, b: NodeKey) -> f32 {
-    (sim.position_of(a).unwrap() - sim.position_of(b).unwrap()).length()
-}
-
-fn radius_from_origin(sim: &Simulation, a: NodeKey) -> f32 {
-    sim.position_of(a).unwrap().to_vector().length()
-}
-
 #[test]
 fn node_exclusion_pushes_apart() {
     let mut sim = Simulation::new();
-    let mut g = Graph::new();
     // 50px apart: clear of the 36px contact range, inside the 600px cutoff,
     // so only the repulsion force acts.
-    let a = node_at(&mut g, 1, 0.0, 0.0);
-    let b = node_at(&mut g, 2, 50.0, 0.0);
-    sim.sync_with_graph(&g);
+    let mut nodes = Nodes::default();
+    let a = nodes.at(0.0, 0.0);
+    let b = nodes.at(50.0, 0.0);
+    nodes.sync(&mut sim);
     sim.add_force(NodeExclusion::default());
     let before = separation(&sim, a, b);
     for _ in 0..60 {
@@ -260,11 +258,11 @@ fn node_exclusion_pushes_apart() {
 #[test]
 fn edge_spring_pulls_together() {
     let mut sim = Simulation::new();
-    let mut g = Graph::new();
     // 400px apart, well past the 140px rest length; no repulsion force.
-    let a = node_at(&mut g, 1, 0.0, 0.0);
-    let b = node_at(&mut g, 2, 400.0, 0.0);
-    sim.sync_with_graph(&g);
+    let mut nodes = Nodes::default();
+    let a = nodes.at(0.0, 0.0);
+    let b = nodes.at(400.0, 0.0);
+    nodes.sync(&mut sim);
     sim.sync_edges([(a, b)]);
     assert_eq!(sim.edge_count(), 1);
     sim.add_force(EdgeSpring::default());
@@ -281,9 +279,9 @@ fn edge_spring_pulls_together() {
 #[test]
 fn boundary_centers_toward_origin() {
     let mut sim = Simulation::new();
-    let mut g = Graph::new();
-    let a = node_at(&mut g, 1, 500.0, 0.0);
-    sim.sync_with_graph(&g);
+    let mut nodes = Nodes::default();
+    let a = nodes.at(500.0, 0.0);
+    nodes.sync(&mut sim);
     sim.add_force(Boundary::default());
     let before = radius_from_origin(&sim, a);
     for _ in 0..60 {
@@ -298,12 +296,12 @@ fn boundary_centers_toward_origin() {
 #[test]
 fn full_layout_settles_separated_and_bounded() {
     let mut sim = Simulation::new();
-    let mut g = Graph::new();
     // A connected triangle from distinct, near-coincident starts.
-    let a = node_at(&mut g, 1, 10.0, 0.0);
-    let b = node_at(&mut g, 2, -5.0, 8.0);
-    let c = node_at(&mut g, 3, -5.0, -8.0);
-    sim.sync_with_graph(&g);
+    let mut nodes = Nodes::default();
+    let a = nodes.at(10.0, 0.0);
+    let b = nodes.at(-5.0, 8.0);
+    let c = nodes.at(-5.0, -8.0);
+    nodes.sync(&mut sim);
     sim.sync_edges([(a, b), (b, c), (c, a)]);
     sim.add_force(NodeExclusion::default());
     sim.add_force(EdgeSpring::default());
@@ -335,24 +333,19 @@ fn full_layout_settles_separated_and_bounded() {
 #[test]
 fn node_queries_handle_orrery_scale() {
     let mut sim = Simulation::new();
-    let mut g = Graph::new();
     // 32x32 grid, 60px apart (clear of the 36px contact range): ~1024 nodes.
-    let n: u128 = 32;
+    let n: usize = 32;
     let spacing = 60.0_f32;
+    let mut nodes = Nodes::default();
     let mut keys = Vec::new();
     for i in 0..n {
         for j in 0..n {
-            keys.push(node_at(
-                &mut g,
-                i * n + j + 1,
-                i as f32 * spacing,
-                j as f32 * spacing,
-            ));
+            keys.push(nodes.at(i as f32 * spacing, j as f32 * spacing));
         }
     }
-    sim.sync_with_graph(&g);
+    nodes.sync(&mut sim);
     sim.refresh_spatial_index();
-    assert_eq!(sim.body_count(), (n * n) as usize);
+    assert_eq!(sim.body_count(), n * n);
 
     // Hit-test pinpoints one node among ~1000 (balls don't overlap at 60px).
     let target = keys[500];
@@ -378,9 +371,9 @@ fn seed_positions_overrides_placement_and_round_trips() {
     // The cartography bridge: a strategy's projected positions seed the layout
     // in place of the graph's stored positions.
     let mut sim = Simulation::new();
-    let graph = graph_with_two_nodes(); // a@(0,0), b@(100,0)
-    sim.sync_with_graph(&graph);
-    let keys: Vec<NodeKey> = graph.nodes().map(|(k, _)| k).collect();
+    let nodes = two_nodes(); // a@(0,0), b@(100,0)
+    nodes.sync(&mut sim);
+    let keys = nodes.keys();
 
     sim.seed_positions([
         (keys[0], Point2D::new(300.0, 300.0)),
@@ -401,10 +394,10 @@ fn seeded_overlap_separates_under_physics() {
     // A degenerate strategy output (two nodes nearly coincident) is refined by
     // the physics the pure strategy lacks: collision + repulsion separate them.
     let mut sim = Simulation::new();
-    let mut g = Graph::new();
-    let a = node_at(&mut g, 1, 0.0, 0.0);
-    let b = node_at(&mut g, 2, 0.0, 0.0);
-    sim.sync_with_graph(&g);
+    let mut nodes = Nodes::default();
+    let a = nodes.at(0.0, 0.0);
+    let b = nodes.at(0.0, 0.0);
+    nodes.sync(&mut sim);
     sim.seed_positions([(a, Point2D::new(0.0, 0.0)), (b, Point2D::new(1.0, 0.0))]);
     sim.add_force(NodeExclusion::default());
     for _ in 0..240 {
@@ -422,18 +415,16 @@ fn node_exclusion_scales_to_many_nodes() {
     // spread under cull-based repulsion + centering. Exercises the spatial-index
     // neighbor path at scale; asserts a finite, bounded layout that spread out.
     let mut sim = Simulation::new();
-    let mut g = Graph::new();
-    let mut id: u128 = 0;
+    let mut nodes = Nodes::default();
     for i in 0..10 {
         for j in 0..10 {
-            id += 1;
-            node_at(&mut g, id, (i as f32 - 4.5) * 50.0, (j as f32 - 4.5) * 50.0);
+            nodes.at((i as f32 - 4.5) * 50.0, (j as f32 - 4.5) * 50.0);
         }
     }
-    sim.sync_with_graph(&g);
+    nodes.sync(&mut sim);
     sim.add_force(NodeExclusion::default());
     sim.add_force(Boundary::default());
-    let keys: Vec<NodeKey> = g.nodes().map(|(k, _)| k).collect();
+    let keys = nodes.keys();
     assert_eq!(keys.len(), 100);
 
     for _ in 0..60 {

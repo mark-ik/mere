@@ -4,19 +4,19 @@
 
 //! `CouplingForce` — the aether→seiche seam (field-system Phase 3b).
 //!
-//! A [`kernel::graph::Coupling`] is field-algebra truth: a [`NodeSelector`] of
-//! targets, a [`FieldId`](kernel::graph::FieldId), a [`CouplingResponse`], and a
+//! A [`numen::Coupling`] is field-algebra truth: a node selector of
+//! targets, a field id, a [`CouplingResponse`], and a
 //! strength. This adapter compiles one into a [`Force`] so the same rapier tick
 //! that runs the built-in [`NodeExclusion`](crate::NodeExclusion) /
 //! [`EdgeSpring`](crate::EdgeSpring) / [`Boundary`](crate::Boundary) forces also
 //! runs scriptable couplings. `quint` evaluates the field (closed forms +
 //! finite-difference gradients); seiche supplies bodies and integration.
 //!
-//! Build it against a [`Graph`] with [`CouplingForce::from_coupling`] — it
-//! resolves the field definition and the selector's matching nodes once, at
-//! build time — or from an already-resolved field + target set with
-//! [`CouplingForce::new`]. The captured target set is a snapshot: rebuild the
-//! force when the graph's nodes or the selector's matches change.
+//! Build it from an already-resolved field + target set with
+//! [`CouplingForce::new`] (the host resolves a coupling's field and selector
+//! against its own graph — see mere-canvas's `build::coupling_force_from_graph`).
+//! The captured target set is a snapshot: rebuild the force when the graph's
+//! nodes or the selector's matches change.
 //!
 //! Equivalence: `Boundary` is exactly `AttractToMin` on the radial paraboloid
 //! `½(x² + y²)` (its gradient is `(x, y)`, so `-grad · strength = -pos · strength`).
@@ -184,20 +184,33 @@ impl Force for CouplingForce {
     }
 }
 
-#[cfg(all(test, feature = "kernel-bridge"))]
+// The graph-resolution tests (`from_coupling_resolves_field_and_selector` /
+// `_resolves_sample_through_registry` / `_returns_none_for_unknown_field`) left
+// with `from_coupling`: that logic is now mere-canvas's
+// `build::coupling_force_from_graph`, and its tests live there. What stays here
+// is the kernel-free physics of a resolved [`CouplingForce`].
+#[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Boundary, Simulation};
+    use crate::{Boundary, NodeKey, Simulation};
     use euclid::default::Point2D;
-    use kernel::graph::fixtures::GraphFixtures;
-    use kernel::graph::{Field, FieldId};
 
-    fn node_at(g: &mut Graph, id: u128, x: f32, y: f32) -> NodeKey {
-        g.add_node_with_id(
-            uuid::Uuid::from_u128(id),
-            format!("mere://{id}"),
-            Point2D::new(x, y),
-        )
+    /// Kernel-free node-list builder (seiche drives physics from `(NodeKey,
+    /// position)` pairs).
+    #[derive(Default)]
+    struct Nodes {
+        list: Vec<(NodeKey, Point2D<f32>)>,
+    }
+
+    impl Nodes {
+        fn at(&mut self, x: f32, y: f32) -> NodeKey {
+            let key = NodeKey::new(self.list.len());
+            self.list.push((key, Point2D::new(x, y)));
+            key
+        }
+        fn sync(&self, sim: &mut Simulation) {
+            sim.sync_nodes(self.list.iter().copied());
+        }
     }
 
     fn radius(sim: &Simulation, k: NodeKey) -> f32 {
@@ -229,15 +242,15 @@ mod tests {
         // is -pos·strength — Boundary exactly, up to quint's finite-difference
         // step. The bodies track each other across the whole settle (a ~580-unit
         // journey leaves them within a couple of units).
-        let mut g = Graph::new();
-        let a = node_at(&mut g, 1, 500.0, -300.0);
+        let mut g = Nodes::default();
+        let a = g.at(500.0, -300.0);
 
         let mut boundary_sim = Simulation::new();
-        boundary_sim.sync_with_graph(&g);
+        g.sync(&mut boundary_sim);
         boundary_sim.add_force(Boundary { strength: 1.5 });
 
         let mut coupling_sim = Simulation::new();
-        coupling_sim.sync_with_graph(&g);
+        g.sync(&mut coupling_sim);
         coupling_sim.add_force(CouplingForce::new(
             CouplingResponse::AttractToMin,
             1.5,
@@ -263,102 +276,17 @@ mod tests {
     }
 
     #[test]
-    fn from_coupling_resolves_field_and_selector() {
-        // Full Graph → Coupling → Force path: a field stored on the graph, a
-        // coupling selecting all nodes, resolved into a force that centers them.
-        let mut g = Graph::new();
-        let a = node_at(&mut g, 1, 400.0, 0.0);
-        let b = node_at(&mut g, 2, 0.0, 400.0);
-
-        let fid = FieldId::from_uuid(uuid::Uuid::from_u128(7));
-        g.add_field(Field::new(fid, FieldDefinition::Scalar(paraboloid())));
-        let coupling = Coupling::new(
-            kernel::graph::CouplingId::from_uuid(uuid::Uuid::from_u128(1)),
-            fid,
-            kernel::graph::NodeSelector::All,
-            CouplingResponse::AttractToMin,
-            1.5,
-        );
-
-        let force = CouplingForce::from_coupling(&coupling, &g).expect("field resolves");
-        assert_eq!(force.target_count(), 2, "All selector matches both nodes");
-
-        let mut sim = Simulation::new();
-        sim.sync_with_graph(&g);
-        let ra0 = radius(&sim, a);
-        let rb0 = radius(&sim, b);
-        sim.add_force(force);
-        for _ in 0..120 {
-            sim.tick(1.0 / 60.0);
-        }
-        assert!(radius(&sim, a) < ra0, "node a should center");
-        assert!(radius(&sim, b) < rb0, "node b should center");
-    }
-
-    #[test]
-    fn from_coupling_resolves_sample_through_registry() {
-        // Field "referencing" is just Sample(base); base is the paraboloid. The
-        // coupling targets "referencing", so it only produces motion if
-        // from_coupling seeded the registry with base — exercises the follow-up.
-        let mut g = Graph::new();
-        let a = node_at(&mut g, 1, 400.0, 0.0);
-
-        let base = FieldId::from_uuid(uuid::Uuid::from_u128(10));
-        g.add_field(Field::new(base, FieldDefinition::Scalar(paraboloid())));
-        let referencing = FieldId::from_uuid(uuid::Uuid::from_u128(11));
-        g.add_field(Field::new(
-            referencing,
-            FieldDefinition::Scalar(ScalarField::Sample(base)),
-        ));
-
-        let coupling = Coupling::new(
-            kernel::graph::CouplingId::from_uuid(uuid::Uuid::from_u128(1)),
-            referencing,
-            kernel::graph::NodeSelector::All,
-            CouplingResponse::AttractToMin,
-            1.5,
-        );
-        let force = CouplingForce::from_coupling(&coupling, &g).expect("field resolves");
-
-        let mut sim = Simulation::new();
-        sim.sync_with_graph(&g);
-        let r0 = radius(&sim, a);
-        sim.add_force(force);
-        for _ in 0..120 {
-            sim.tick(1.0 / 60.0);
-        }
-        assert!(
-            radius(&sim, a) < r0,
-            "a Sample-referenced field should resolve and center the node"
-        );
-    }
-
-    #[test]
-    fn from_coupling_returns_none_for_unknown_field() {
-        let mut g = Graph::new();
-        node_at(&mut g, 1, 10.0, 0.0);
-        let coupling = Coupling::new(
-            kernel::graph::CouplingId::from_uuid(uuid::Uuid::from_u128(1)),
-            FieldId::from_uuid(uuid::Uuid::from_u128(99)),
-            kernel::graph::NodeSelector::All,
-            CouplingResponse::AttractToMin,
-            1.0,
-        );
-        assert!(CouplingForce::from_coupling(&coupling, &g).is_none());
-    }
-
-    #[test]
     fn open_response_applies_no_force() {
         // An open-tail response (e.g. a visual coupling) is not a force: the
         // integrator must leave the body where it is, even on a field whose
         // AttractToMin response would otherwise pull it to the origin.
-        let mut g = Graph::new();
-        let a = node_at(&mut g, 1, 300.0, 0.0);
+        let mut g = Nodes::default();
+        let a = g.at(300.0, 0.0);
 
         let mut sim = Simulation::new();
-        sim.sync_with_graph(&g);
+        g.sync(&mut sim);
         sim.add_force(CouplingForce::new(
-            CouplingResponse::open(format!("{}visual/highlight", kernel::graph::COUPLING_VOCAB)),
+            CouplingResponse::open("https://mere.computer/ns/coupling#visual/highlight".to_string()),
             1.0,
             [a],
             FieldDefinition::Scalar(paraboloid()),
