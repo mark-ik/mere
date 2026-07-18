@@ -3,7 +3,11 @@ name = "servitor"
 version = "0.0.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-description = "Capability-scoped resident helpers for graph applications: identity, grants, proposals, attribution. Name reservation; under design."
+description = "Capability-scoped resident helpers for graph applications: a denizen holds a scoped structural capability and proposes changes through a validating gate, attributed and revision-checked."
 keywords = ["extension", "plugin", "capability", "agent"]
+repository = "https://github.com/mark-ik/chartulary"
 
 [dependencies]
+# The nested-graph substrate: a denizen's inner world is a chartulary GraphLog,
+# and petitions commit through its attributed, revision-checked batch seam.
+chartulary = { git = "https://github.com/mark-ik/chartulary.git", branch = "main" }
