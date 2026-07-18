@@ -50,6 +50,11 @@ pub mod image_store;
 // compat mode), keyed by node UUID beside graph.json — browser-runtime state
 // that doesn't belong in graph truth (boundary pass slice C).
 pub mod browser_node_state;
+// Per-node denizen-binding sidecar (denizen_bindings.json): which graph nodes
+// are denizens (servitor / agent / peer / scenario / pack) and where each one's
+// nested graph lives, keyed by node UUID beside graph.json. Host knowledge about
+// a node, not graph truth — the same slice-C doctrine as browser_node_state.
+pub mod denizen_bindings;
 pub mod engine_profile_store;
 // Freeze/thaw a live graph into an immutable, content-addressed graph engram over
 // an eidetic Store (the Alembic memory spine; wasm-clean — store-agnostic, not
@@ -100,6 +105,10 @@ pub mod wallet_store;
 pub use engine_profile_store::{
     ENGINE_PROFILES_DIR, EngineProfileScope, GRAPHS_DIR, PERSONAS_DIR, SESSIONS_DIR,
     engine_profile_path, engine_profile_path_for_session,
+};
+pub use denizen_bindings::{
+    DENIZEN_BINDINGS_FILE, DenizenBinding, DenizenBindings, DenizenKind, denizen_bindings_path,
+    load_denizen_bindings, save_denizen_bindings,
 };
 pub use identity::{StartupUnlockMode, auto_unlock_backend_available};
 pub use manifest::{
