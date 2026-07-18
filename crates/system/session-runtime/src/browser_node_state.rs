@@ -62,6 +62,12 @@ pub struct BrowserNodeState {
     /// platform WebView regardless of the app-level default web backend.
     #[serde(default)]
     pub compat_mode: bool,
+    /// Whether the node's live content was ON at save — the browser's
+    /// handling of the node, so a restart respawns its session (merecat's
+    /// rung-6 content-state restore). Additive with a default, so existing
+    /// sidecars load unchanged.
+    #[serde(default)]
+    pub content_on: bool,
 }
 
 impl BrowserNodeState {
@@ -72,6 +78,7 @@ impl BrowserNodeState {
             && self.form_draft.is_none()
             && self.viewer_override.is_none()
             && !self.compat_mode
+            && !self.content_on
     }
 }
 
