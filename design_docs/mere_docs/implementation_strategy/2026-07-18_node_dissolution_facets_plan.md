@@ -84,12 +84,17 @@ Boundaries that hold the convergence honest:
   rungs. `denizen_bindings` and `browser_node_state` are transitional-bespoke
   (built to the pattern that existed pre-facet-store) and converge later.
 
-**The enabling rung (new): wire `chartulary::FacetStore` into mere's session
-persistence.** The facet store is in chartulary; mere's sidecars are mere-side
-JSON keyed by node UUID. Convergence needs the store wired into mere first; then
-new metadata lands as facets and the bespoke sidecars migrate behind it. This
-rung sits under Lane S (it is S2's real destination) and under D2/D3 (arrangement
-and semantic facets share it).
+**The enabling rung: wire `chartulary::FacetStore` into mere's session
+persistence — LANDED 2026-07-18** (mere `b85aeea`). `session-runtime::facet_store`
+holds a `NodeFacetStore = chartulary::FacetStore<Uuid>` and persists it to
+`facets.json` beside the session graph (atomic write, `Ok(None)` absent, the
+browser_node_state pattern), re-exporting chartulary's facet types; chartulary
+added as a session-runtime dep. Schema-agnostic persistence; validation is a
+write-time host concern (eidetic-backed later). 4 tests, clippy clean, 193
+existing session-runtime tests unaffected; `FacetStore<Uuid>` round-trips through
+JSON. This is the durable home the bespoke sidecars converge onto (`web.*`,
+`denizen.*`, `arrangement.*`); the migrations follow behind it, and it is S2's
+real destination and D2/D3's shared store.
 
 ## Lane S — spatial completion
 
