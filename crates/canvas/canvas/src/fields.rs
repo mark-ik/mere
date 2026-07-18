@@ -60,7 +60,7 @@ impl Canvas {
                 if !self.graph.field(c.field).is_some_and(|f| f.is_active()) {
                     return None;
                 }
-                CouplingForce::from_coupling(c, &self.graph)
+                crate::build::coupling_force_from_graph(c, &self.graph)
             })
             .collect();
         self.physics.set_coupling_forces(forces);

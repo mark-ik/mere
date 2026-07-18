@@ -14,6 +14,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
 use euclid::default::Point2D;
+use quint::FieldRegistry;
 use seiche::{Boundary, CouplingForce, EdgeSpring, LayoutView, NodeExclusion, Simulation};
 use kernel::geometry::PortablePoint;
 use kernel::graph::apply::{self as graph_apply};
@@ -225,7 +226,7 @@ pub(crate) fn dedup_edges_weighted(graph: &Graph) -> Vec<(NodeKey, NodeKey, u32)
 /// into a tight central spiral so the first settle is visible.
 pub(crate) fn build_simulation(graph: &Graph) -> Simulation {
     let mut sim = Simulation::new();
-    sim.sync_with_graph(graph);
+    sync_sim_with_graph(&mut sim, graph);
     // No `Canvas` (and so no hidden-cell set) exists yet at construction time; the first
     // real sync happens once session/view-intent restore runs and calls `reconcile_derived`.
     sim.sync_edges(visible_relation_edges(graph, &HashSet::new()));
@@ -238,12 +239,50 @@ pub(crate) fn build_simulation(graph: &Graph) -> Simulation {
     // re-resolves these via `Physics::set_coupling_forces`. (Field regions.)
     let coupling_forces: Vec<CouplingForce> = graph
         .couplings()
-        .filter_map(|c| CouplingForce::from_coupling(c, graph))
+        .filter_map(|c| coupling_force_from_graph(c, graph))
         .collect();
     sim.set_coupling_forces(coupling_forces);
 
     sim.seed_positions(seed_cluster(graph));
     sim
+}
+
+/// Reconcile a simulation's bodies to a kernel [`Graph`]'s nodes — the canvas-side
+/// bridge now that seiche is kernel-free. seiche's [`Simulation::sync_nodes`] takes
+/// a `(NodeKey, position)` list; the host reads the graph and forwards it. (Was
+/// `seiche::Simulation::sync_with_graph` before the seiche extraction.)
+pub(crate) fn sync_sim_with_graph(sim: &mut Simulation, graph: &Graph) {
+    sim.sync_nodes(graph.nodes().map(|(key, node)| {
+        let p = node.projected_position();
+        (key, Point2D::new(p.x, p.y))
+    }));
+}
+
+/// Resolve a coupling against the graph into a [`CouplingForce`] — the canvas-side
+/// bridge (was `seiche::CouplingForce::from_coupling`). Looks up the field
+/// definition and the selector's matching nodes, seeding the registry from the
+/// whole field layer so inter-field `Sample` references resolve. `None` if the
+/// field id is unknown. The captured target set is a snapshot; rebuild on graph
+/// mutation.
+pub(crate) fn coupling_force_from_graph(
+    coupling: &kernel::graph::Coupling,
+    graph: &Graph,
+) -> Option<CouplingForce> {
+    let field = graph.field(coupling.field)?;
+    let targets: Vec<NodeKey> = graph.nodes_matching(&coupling.selector).collect();
+    let mut registry = FieldRegistry::new();
+    for f in graph.fields() {
+        registry.insert_with_id(f.id, f.definition.clone());
+    }
+    Some(
+        CouplingForce::new(
+            coupling.response.clone(),
+            coupling.strength,
+            targets,
+            field.definition.clone(),
+        )
+        .with_registry(registry),
+    )
 }
 
 /// The tight central spiral (golden-angle) seed for every node, so a ticked

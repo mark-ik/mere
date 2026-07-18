@@ -11,8 +11,6 @@ use std::collections::HashSet;
 
 use euclid::default::Point2D;
 use crate::NodeKey;
-#[cfg(feature = "kernel-bridge")]
-use kernel::graph::Graph;
 use rapier2d::prelude::*;
 
 use crate::{
@@ -90,26 +88,10 @@ impl Simulation {
         })
     }
 
-    /// Make the simulation match the graph: spawn a body for every
-    /// node that doesn't already have one, remove bodies whose nodes
-    /// have vanished. New bodies start at the node's current
-    /// projected position with zero velocity.
-    ///
-    /// Idempotent: safe to call every frame, every graph mutation,
-    /// or once at startup — does nothing when the graph and bimap
-    /// are already in sync. A thin convenience over [`Self::sync_nodes`]
-    /// that reads each node's projected position from the graph.
-    #[cfg(feature = "kernel-bridge")]
-    pub fn sync_with_graph(&mut self, graph: &Graph) {
-        let nodes: Vec<(NodeKey, Point2D<f32>)> = graph
-            .nodes()
-            .map(|(key, node)| {
-                let p = node.projected_position();
-                (key, Point2D::new(p.x, p.y))
-            })
-            .collect();
-        self.sync_nodes(nodes);
-    }
+    // `sync_with_graph(&Graph)` — the thin wrapper that read each node's projected
+    // position from a mere `Graph` and forwarded to [`Self::sync_nodes`] — left when
+    // seiche became kernel-free. The host reads its graph and calls `sync_nodes` with
+    // the `(NodeKey, position)` list (mere-canvas's `build::sync_sim_with_graph`).
 
     /// Reconcile the body set to exactly `nodes` (keyed by [`NodeKey`]): spawn a
     /// body at the given position for every key without one, remove bodies whose

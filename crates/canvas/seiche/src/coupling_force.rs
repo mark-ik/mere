@@ -24,9 +24,7 @@
 
 use quint::{FieldRegistry, ScalarField, VectorField, eval_scalar, eval_vector, grad_scalar};
 use crate::NodeKey;
-#[cfg(feature = "kernel-bridge")]
-use kernel::graph::Graph;
-use numen::{Coupling, CouplingResponse, FieldDefinition};
+use numen::{CouplingResponse, FieldDefinition};
 use rapier2d::prelude::*;
 
 use crate::{Force, ForceContext};
@@ -71,30 +69,11 @@ impl CouplingForce {
         self
     }
 
-    /// Resolve a coupling against the graph: look up its field definition and the
-    /// nodes its selector matches (a snapshot — rebuild on graph mutation).
-    /// Returns `None` if the field id is unknown.
-    #[cfg(feature = "kernel-bridge")]
-    pub fn from_coupling(coupling: &Coupling, graph: &Graph) -> Option<Self> {
-        let field = graph.field(coupling.field)?;
-        let targets: Vec<NodeKey> = graph.nodes_matching(&coupling.selector).collect();
-        // Seed the registry from the whole field layer so the coupling's field can
-        // reference others by `Sample(FieldId)` and resolve them. Without this an
-        // inter-field `Sample` evaluates to zero.
-        let mut registry = FieldRegistry::new();
-        for f in graph.fields() {
-            registry.insert_with_id(f.id, f.definition.clone());
-        }
-        Some(
-            Self::new(
-                coupling.response.clone(),
-                coupling.strength,
-                targets,
-                field.definition.clone(),
-            )
-            .with_registry(registry),
-        )
-    }
+    // `from_coupling(coupling, &Graph)` — which resolved a coupling's field and
+    // selector against a mere `Graph` — left when seiche became a portable,
+    // kernel-free crate. Graph resolution is a host concern: the host reads its
+    // graph and calls [`Self::new`] / [`Self::with_registry`] with the resolved
+    // field + target set (mere-canvas's `build::coupling_force_from_graph`).
 
     /// Number of nodes this force currently acts on.
     pub fn target_count(&self) -> usize {

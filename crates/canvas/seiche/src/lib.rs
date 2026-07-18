@@ -53,8 +53,6 @@
 use std::collections::HashMap;
 
 use euclid::default::{Box2D, Point2D};
-#[cfg(feature = "kernel-bridge")]
-use kernel::graph::Graph;
 use rapier2d::prelude::*;
 
 /// The opaque identifier seiche binds a body to: petgraph's stable node index, the
@@ -590,28 +588,11 @@ impl Simulation {
         self.couple_fluid_to_bodies();
     }
 
-    /// Copy each body's current translation onto its corresponding
-    /// graph node. Returns the number of node positions that were
-    /// actually changed (helpful for "only notify when something
-    /// moved" tick loops).
-    #[cfg(feature = "kernel-bridge")]
-    pub fn write_positions_to(&self, graph: &mut Graph) -> usize {
-        let mut changed = 0;
-        for (key, handle) in &self.bodies_by_node {
-            let Some(body) = self.bodies.get(*handle) else {
-                continue;
-            };
-            let t = body.translation();
-            let next = Point2D::new(t.x, t.y);
-            let prev = graph.get_node(*key).map(|n| n.projected_position());
-            if prev != Some(next) {
-                if graph.set_node_position(*key, next) {
-                    changed += 1;
-                }
-            }
-        }
-        changed
-    }
+    // `write_positions_to(&mut Graph)` — which copied each body's translation back
+    // onto its graph node — left when seiche became kernel-free (it had no mere
+    // consumer). The host reads [`Self::positions`] and writes them into its own
+    // graph; mere's position write-back is a host concern (and a node-dissolution
+    // target).
 
     /// True when every body's linear velocity is below
     /// `velocity_epsilon`. Useful for "suspend the tick when the
