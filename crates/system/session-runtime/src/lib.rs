@@ -55,6 +55,11 @@ pub mod browser_node_state;
 // nested graph lives, keyed by node UUID beside graph.json. Host knowledge about
 // a node, not graph truth — the same slice-C doctrine as browser_node_state.
 pub mod denizen_bindings;
+// Per-node facet-store sidecar (facets.json): the runtime tier of the one-node
+// facet system — typed per-node metadata keyed by node UUID, persisted beside
+// graph.json. The durable home the bespoke per-node sidecars (browser/denizen/
+// arrangement) converge onto. Wraps chartulary's FacetStore.
+pub mod facet_store;
 pub mod engine_profile_store;
 // Freeze/thaw a live graph into an immutable, content-addressed graph engram over
 // an eidetic Store (the Alembic memory spine; wasm-clean — store-agnostic, not
@@ -111,6 +116,10 @@ pub use engine_profile_store::{
 pub use denizen_bindings::{
     DENIZEN_BINDINGS_FILE, DenizenBinding, DenizenBindings, DenizenKind, denizen_bindings_path,
     load_denizen_bindings, save_denizen_bindings,
+};
+pub use facet_store::{
+    AcceptAll, FacetError, FacetId, FacetValidator, NODE_FACETS_FILE, NodeFacetStore, NodeFacets,
+    load_node_facets, node_facets_path, save_node_facets,
 };
 pub use identity::{StartupUnlockMode, auto_unlock_backend_available};
 pub use manifest::{
