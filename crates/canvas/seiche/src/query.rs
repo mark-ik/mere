@@ -23,7 +23,7 @@ use crate::{RectSelection, Simulation};
 impl Simulation {
     /// The live geometry of every edge: each `(a, b)` pair with both endpoints'
     /// current positions. Edges with a missing body (either endpoint absent, e.g.
-    /// before [`Simulation::sync_with_graph`]) are skipped. The orrery underlay
+    /// before [`Simulation::sync_nodes`]) are skipped. The orrery underlay
     /// draws edges from this; [`Simulation::edge_hit_test`] picks from it.
     /// Reflects the most recent [`Simulation::tick`].
     pub fn edge_segments(

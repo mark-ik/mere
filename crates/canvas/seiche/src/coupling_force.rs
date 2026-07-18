@@ -5,7 +5,7 @@
 //! `CouplingForce` — the aether→seiche seam (field-system Phase 3b).
 //!
 //! A [`numen::Coupling`] is field-algebra truth: a node selector of
-//! targets, a field id, a [`CouplingResponse`], and a
+//! targets, a field id, a [`CouplingResponse`](numen::CouplingResponse), and a
 //! strength. This adapter compiles one into a [`Force`] so the same rapier tick
 //! that runs the built-in [`NodeExclusion`](crate::NodeExclusion) /
 //! [`EdgeSpring`](crate::EdgeSpring) / [`Boundary`](crate::Boundary) forces also
@@ -29,7 +29,7 @@ use rapier2d::prelude::*;
 
 use crate::{Force, ForceContext};
 
-/// A kernel [`Coupling`] compiled to a [`Force`]: evaluate the field at each
+/// A [`numen::Coupling`] compiled to a [`Force`]: evaluate the field at each
 /// target node's position and apply the response.
 pub struct CouplingForce {
     response: CouplingResponse,
@@ -46,7 +46,7 @@ pub struct CouplingForce {
 
 impl CouplingForce {
     /// From an already-resolved field definition and target set. Needs no
-    /// [`Graph`]; the field must be self-contained or carry its registry via
+    /// a graph; the field must be self-contained or carry its registry via
     /// [`Self::with_registry`].
     pub fn new(
         response: CouplingResponse,

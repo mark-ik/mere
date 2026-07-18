@@ -58,7 +58,7 @@ impl Simulation {
     /// (radial, astroid, a converged force-directed pass) becomes the physics
     /// starting point instead of the graph's stored positions. Resets each
     /// seeded body's velocity so the settle starts clean. Nodes without a body
-    /// are skipped (seed after [`Self::sync_with_graph`]).
+    /// are skipped (seed after [`Self::sync_nodes`]).
     ///
     /// Takes plain `(NodeKey, Point2D)` rather than a `cartography::Projection`
     /// on purpose: seiche is a kernel-tier substrate and must not depend on the
@@ -99,10 +99,9 @@ impl Simulation {
     /// body keeps its simulated position; use [`Self::seed_positions`] to move
     /// one).
     ///
-    /// Decoupled from [`Graph`] on purpose: a physics actor drives the sim from a
+    /// Decoupled from any graph on purpose: a physics actor drives the sim from a
     /// `Send` node list the host computed, so the graph never crosses the actor
-    /// boundary. [`Self::sync_with_graph`] is the in-thread convenience wrapper.
-    /// Idempotent.
+    /// boundary. Idempotent.
     pub fn sync_nodes(&mut self, nodes: impl IntoIterator<Item = (NodeKey, Point2D<f32>)>) {
         // 1. Add bodies for new nodes (at the supplied position).
         let mut seen = HashSet::with_capacity(self.bodies_by_node.len());

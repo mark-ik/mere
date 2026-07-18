@@ -28,8 +28,8 @@
 //! - [`Simulation`] — owns the rapier world, a [`NodeKey`] ↔
 //!   [`RigidBodyHandle`] bimap, position-based hit-test / cull, and the
 //!   registered forces.
-//! - [`Simulation::sync_with_graph`] / [`Simulation::sync_edges`] — keep bodies
-//!   and edge topology in step with the graph. Idempotent.
+//! - [`Simulation::sync_nodes`] / [`Simulation::sync_edges`] — keep bodies
+//!   and edge topology in step with the host's node/edge lists. Idempotent.
 //! - [`Simulation::tick`] — apply each registered [`Force`], then step the world.
 //! - Built-in forces ([`NodeExclusion`], [`EdgeSpring`], [`Boundary`]) are the
 //!   fast Rust default-path; `quint`'s couplings are the general, scriptable
@@ -507,11 +507,10 @@ impl Simulation {
     }
 
     /// Advance the simulation by `dt` seconds. Walks every registered
-    /// [`Force`] first (so forces accumulate), then steps the world.
-    /// Position writeback to the graph is a separate call —
-    /// [`Simulation::write_positions_to`] — so callers can read
-    /// positions for purposes other than committing to the graph
-    /// (debug overlays, e.g.).
+    /// [`Force`] first (so forces accumulate), then steps the world. Reading
+    /// the settled layout back is a separate call — [`Simulation::positions`]
+    /// — so callers use the positions for whatever they like (write them into
+    /// their own graph, draw debug overlays, and so on).
     pub fn tick(&mut self, dt: f32) {
         if !dt.is_finite() || dt <= 0.0 {
             return;
