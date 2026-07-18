@@ -76,6 +76,12 @@ Nothing here is speculative plumbing; it is what G0-G5 produced:
 
 ## 5. Open questions
 
+> **Amended 2026-07-18** by [one node, atomic facets, and the layer map](2026-07-18_one_node_facets_layer_map.md):
+> 5.1 is retargeted (the kernel `Node` *dissolves* into `chartulary::Container`
+> facet-by-facet; "web page" becomes a merecat-defined content class) and 5.4 is
+> **resolved-redundant** (Container already is the generalized container node,
+> including subgraphs via `GraphBearing`; there is no "above" to build).
+
 1. **merecat extraction scope.** What leaves mere with the browser (genet host,
    rendering, page runtime, the web-runtime node facets: favicon, viewer routing,
    session restore, lifecycle) versus what stays as the orrery (the container graph,

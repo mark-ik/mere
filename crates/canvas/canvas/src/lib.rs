@@ -122,6 +122,10 @@ pub mod coupling_paint;
 pub mod geometry;
 /// Render a cartography `Projection` into a `paint_list_api` paint list.
 pub mod scene_paint;
+
+/// Sprite collider-hull tracing (RGBA → face-normalized convex hull), promoted
+/// from meerkat at the 2026-07-18 harvest so every host shares one tracer.
+pub mod sprite_hull;
 /// The canvas scene-paint underlay (edges + demoted node rects + overlays).
 pub mod underlay;
 
