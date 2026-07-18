@@ -78,10 +78,11 @@ repository = "https://github.com/mark-ik/mere"
 # so only the root Cargo.toml knows where each crate lives. Package names
 # below are the *current* names — rename passes (drop mere-* prefix etc.)
 # update both this list and consumer references in one shot.
-# quint + seiche extracted to sibling repos 2026-07-18 (portable, MIT/Apache);
-# git deps here, local checkout via the gitignored `.cargo/config.toml` patch.
-quint = { git = "https://github.com/mark-ik/quint.git", branch = "main" }
-seiche = { git = "https://github.com/mark-ik/seiche.git", branch = "main" }
+# quint + seiche extracted to sibling repos + published 2026-07-18 (portable,
+# MIT/Apache); crates.io deps, local checkout via the gitignored
+# `.cargo/config.toml` `[patch.crates-io]`. (numen the same, on graph-kernel.)
+quint = "0.0.2"
+seiche = "0.0.2"
 cartography = { package = "mere-cartography", path = "crates/canvas/cartography" }
 # Deterministic graph arrangements (penrose / l-system / phyllotaxis /
 # kanban-timeline / radial-grid / semantic), recaptured from the retired
