@@ -211,6 +211,19 @@ The field-by-field map (from the 2026-07-18 read of `graph/node.rs`):
 
 ## Progress
 
+- **2026-07-18 (S0 severance COMPLETE; extraction remaining):** both crates are
+  now kernel-free and portable. quint (`c5f0106`), then seiche in three commits:
+  the canvas de-coupling (`5b9ac84`, adapters `build::{sync_sim_with_graph,
+  coupling_force_from_graph}` + drop the `kernel-bridge` feature), the
+  seiche-internal migration (`2235e3f`, six test modules moved to the kernel-free
+  `sync_nodes`/`sync_edges` API + drop the `kernel` dep/feature/dev-dep), and doc
+  polish (`91cb126`). seiche depends only on rapier/petgraph/quint/numen/euclid;
+  50 tests pass; mere-canvas green. **Remaining S0**: lift quint+seiche to their
+  own repos (MIT/Apache, publish-ready) and repoint mere (git siblings + `.cargo`
+  patch, drop from workspace members). **Coverage follow-up**: the three removed
+  `from_coupling` graph-resolution tests want a canvas-side test for
+  `build::coupling_force_from_graph` (deferred: build.rs is at 563 LOC, near the
+  600 ceiling, so the adapters + tests want their own `seiche_bridge` module).
 - **2026-07-18 (S0 started; quint severed, seiche paused on concurrency):**
   quint's `kernel-bridge` removed — `commit_to_graph` (the unused inverse bridge)
   deleted, the optional `kernel` dep and feature gone, so quint's only substrate
