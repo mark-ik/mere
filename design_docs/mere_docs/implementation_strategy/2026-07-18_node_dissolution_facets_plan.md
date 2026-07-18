@@ -211,6 +211,15 @@ The field-by-field map (from the 2026-07-18 read of `graph/node.rs`):
 
 ## Progress
 
+- **2026-07-18 (S0 COMPLETE):** quint + seiche extracted to sibling repos
+  (`github.com/mark-ik/{quint,seiche}`, MIT/Apache, relicensed from MPL,
+  publish-ready), pushed; mere drops them from workspace members and consumes
+  them as git deps via `[workspace.dependencies]`, local edit loop through the
+  gitignored `.cargo` patch (numen/chartulary pattern). quint 35 tests + seiche
+  50 tests green standalone; mere-canvas green on the siblings (`a163fc1`). The
+  portable physics stack numen → quint → seiche is fully extracted. **Lane S
+  remaining: S1 + S2** (retire `Node.position/velocity` onto the
+  `arrangement.position` facet — the facet store is wired, `b85aeea`).
 - **2026-07-18 (S0 severance COMPLETE; extraction remaining):** both crates are
   now kernel-free and portable. quint (`c5f0106`), then seiche in three commits:
   the canvas de-coupling (`5b9ac84`, adapters `build::{sync_sim_with_graph,
