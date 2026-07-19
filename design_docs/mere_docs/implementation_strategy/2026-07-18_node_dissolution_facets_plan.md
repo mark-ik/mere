@@ -211,6 +211,21 @@ The field-by-field map (from the 2026-07-18 read of `graph/node.rs`):
 
 ## Progress
 
+- **2026-07-19 (arrangement.* family COMPLETE — mere `89e3ad5`, merecat
+  `86d5d25`):** the remaining five per-node families (size / sprite /
+  sprite-hull / material / face) landed on the shared rewrite-clears-stale
+  helpers (`rewrite_family` / `read_family`); payload shapes match the canvas
+  `apply_cartography_*` seams one-to-one (a hull with any malformed point is
+  skipped whole — a partial polygon is a wrong collider). merecat saves all
+  six from `cartography_geometry()` and re-dresses on adopt in the canvas's
+  documented seam order (positions seed first, sprites before hulls, faces
+  after sprites); sizing flags reset on adopt like the rest of the unpersisted
+  view state. **The cartography convergence is done**: `CartographyGeometry`
+  remains only as the canvas's save-time read surface; its
+  `to_persisted_json`/`from_persisted_json` sidecar half is now dead code (a
+  cleanup candidate), and the graph-scoped flags (`size_by_degree`,
+  `size_by_importance`, `importance_metric`) await a view-settings home
+  (merecat does not yet wire the view-intent store).
 - **2026-07-19 (`arrangement.position` facets LANDED — mere `16fa15a`,
   merecat `ddf066e`):** the first arrangement-family convergence rung, and it
   came out cleaner than the plan assumed: the bespoke cartography sidecar
