@@ -61,6 +61,20 @@ impl Canvas {
         true
     }
 
+    /// Replace the selection with just `member` (member-id identity), if it is
+    /// in the graph. Returns whether it was found. The host calls this on a
+    /// right-click so node-scoped actions apply to whatever the pointer landed
+    /// on. The member-keyed twin of [`Self::select_by_url`].
+    pub fn select_member(&mut self, member: uuid::Uuid) -> bool {
+        match self.graph.get_node_key_by_id(member) {
+            Some(key) => {
+                self.select_only(key);
+                true
+            }
+            None => false,
+        }
+    }
+
     /// Toggle `member` in or out of the selection (a multi-select add), keeping the
     /// rest selected — the member-keyed twin of the canvas's Shift-click. Clears the
     /// edge selection (matching that gesture) so a mixed node+edge selection can't
