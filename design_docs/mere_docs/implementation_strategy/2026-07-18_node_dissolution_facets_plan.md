@@ -211,6 +211,25 @@ The field-by-field map (from the 2026-07-18 read of `graph/node.rs`):
 
 ## Progress
 
+- **2026-07-19 (S2 started; velocity retired, position audited):** the migration
+  wall is **gone** — `PersistedNode` (the graph snapshot's node) carries neither
+  position nor velocity (positions live in the cartography sidecar since the
+  boundary pass), so retiring these `Node` fields is a pure in-memory refactor,
+  no rkyv/snapshot migration. **`Node.velocity` RETIRED** (mere `511883d`): it
+  was dead (set to zero in constructors, asserted zero in one test, never read;
+  seiche's rapier bodies hold live velocity). Field + 3 constructors + the rkyv
+  `Vector2DAsTuple` adapter + the test gone; mere-kernel 274 tests green,
+  mere-canvas green. **`Node.position` audit**: NOT dead — it is the graph-side
+  projected-position store canvas writes seiche into (`cartography.rs`
+  `set_node_projected_position`, replacing seiche's removed `write_positions_to`)
+  and reads as a fallback for not-yet-placed nodes
+  (`position_of(k).or_else(|| graph.node_projected_position(k))`, underlay.rs
+  ×5, cartography_scene.rs, build.rs seed). Retiring it = reroute those ~8
+  canvas sites onto seiche + the cartography sidecar (and later the
+  `arrangement.position` facet), with the unplaced-node fallback/seed semantics
+  preserved. A careful canvas-side pass (the hot concurrent zone); no snapshot
+  migration needed. That plus the accessor cleanup (`projected_position` /
+  `set_node_position` / center-of-mass / cross-graph copy) is the remaining S2.
 - **2026-07-18 (S0 COMPLETE):** quint + seiche extracted to sibling repos
   (`github.com/mark-ik/{quint,seiche}`, MIT/Apache, relicensed from MPL,
   publish-ready), pushed; mere drops them from workspace members and consumes
