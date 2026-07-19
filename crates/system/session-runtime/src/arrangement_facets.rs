@@ -26,13 +26,16 @@
 //! canvas flags (`size_by_degree`, `importance_metric`, …) are view settings,
 //! not per-node facets; they belong to the view-intent/settings stores.
 //!
-//! `arrangement.position` is the first family member wired end-to-end; size /
-//! sprite / sprite-hull / material / face follow the same pattern (one facet
-//! id + payload shape + write/read pair each) as they gain persistence.
+//! The family: `arrangement.position` (first wired), then size / sprite /
+//! sprite-hull / material / face — one facet id + payload shape + write/read
+//! pair each, all with the same rewrite-clears-stale save semantics. The
+//! graph-scoped canvas flags the bespoke geometry carried (`size_by_degree`,
+//! `size_by_importance`, `importance_metric`) are deliberately NOT here; they
+//! await their view-settings home.
 
 use std::collections::BTreeSet;
 
-use serde_json::json;
+use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::facet_store::{AcceptAll, FacetId, NodeFacetStore};
@@ -41,21 +44,38 @@ use crate::facet_store::{AcceptAll, FacetId, NodeFacetStore};
 /// (world coordinates, the semantic geometry — not pixels).
 pub const ARRANGEMENT_POSITION: &str = "arrangement.position";
 
+/// Facet id of a node's explicit face-size override. Payload: a number (px).
+/// Only deliberate overrides persist; degree/importance-derived sizes recompute.
+pub const ARRANGEMENT_SIZE: &str = "arrangement.size";
+
+/// Facet id of a node's custom sprite face. Payload: a string (PNG data-URI).
+pub const ARRANGEMENT_SPRITE: &str = "arrangement.sprite";
+
+/// Facet id of a sprite's collider hull. Payload: `[[x, y], …]` — a
+/// face-normalized convex polygon (coordinates in `[-0.5, 0.5]`), persisted
+/// beside the sprite so the traced collider survives without re-decoding.
+pub const ARRANGEMENT_SPRITE_HULL: &str = "arrangement.sprite_hull";
+
+/// Facet id of a node's physical material override. Payload:
+/// `{"restitution": f32, "friction": f32, "density": f32}`.
+pub const ARRANGEMENT_MATERIAL: &str = "arrangement.material";
+
+/// Facet id of a node's face override. Payload: a string code
+/// (`favicon` / `sprite` / `bare` — the canvas's `Face::from_code` vocabulary).
+pub const ARRANGEMENT_FACE: &str = "arrangement.face";
+
 /// The [`ARRANGEMENT_POSITION`] facet id, constructed.
 pub fn arrangement_position_facet() -> FacetId {
     FacetId::new(ARRANGEMENT_POSITION)
 }
 
-/// Replace the store's `arrangement.position` facets with `positions` — the
-/// save-time write. Every existing position facet is cleared first, so a node
-/// absent from `positions` (deleted, or never placed) carries none afterwards;
-/// facets in other namespaces are untouched. Payloads are written through
-/// [`AcceptAll`]: the shape is fixed here, so schema validation adds nothing.
-pub fn write_arrangement_positions(
-    store: &mut NodeFacetStore,
-    positions: impl IntoIterator<Item = (Uuid, (f32, f32))>,
-) {
-    let facet = arrangement_position_facet();
+/// Replace every facet carrying `facet` with the given `(node, payload)` set —
+/// the shared save-time semantics of the whole family: existing facets of this
+/// id are cleared first, so a node absent from the new set carries none
+/// afterwards; facets in other namespaces (and other family members) are
+/// untouched. Payloads go through [`AcceptAll`]: the shapes are fixed by this
+/// module, so schema validation adds nothing.
+fn rewrite_family(store: &mut NodeFacetStore, facet: FacetId, entries: Vec<(Uuid, Value)>) {
     let stale: Vec<Uuid> = store
         .iter()
         .filter(|(_, facets)| facets.has(&facet))
@@ -64,26 +84,191 @@ pub fn write_arrangement_positions(
     for id in stale {
         store.remove(&id, &facet);
     }
-    for (id, (x, y)) in positions {
-        let _ = store.set(id, facet.clone(), json!({ "x": x, "y": y }), &AcceptAll);
+    for (id, payload) in entries {
+        let _ = store.set(id, facet.clone(), payload, &AcceptAll);
     }
 }
 
-/// The store's `arrangement.position` facets as `(node, (x, y))` pairs — the
-/// load-time read, shaped for `Canvas::seed_cartography`. A malformed payload
-/// (wrong shape, non-finite numbers) is skipped rather than failing the load:
+/// The shared load-time read: every node carrying `facet`, its payload parsed
+/// by `parse`. A malformed payload is skipped rather than failing the load:
 /// one bad facet must not cost the whole session its layout.
-pub fn read_arrangement_positions(store: &NodeFacetStore) -> Vec<(Uuid, (f32, f32))> {
-    let facet = arrangement_position_facet();
+fn read_family<T>(
+    store: &NodeFacetStore,
+    facet: &str,
+    parse: impl Fn(&Value) -> Option<T>,
+) -> Vec<(Uuid, T)> {
+    let facet = FacetId::new(facet);
     store
         .iter()
-        .filter_map(|(id, facets)| {
-            let value = facets.get(&facet)?;
-            let x = value.get("x")?.as_f64()? as f32;
-            let y = value.get("y")?.as_f64()? as f32;
-            (x.is_finite() && y.is_finite()).then_some((*id, (x, y)))
-        })
+        .filter_map(|(id, facets)| parse(facets.get(&facet)?).map(|t| (*id, t)))
         .collect()
+}
+
+/// Save-time write of [`ARRANGEMENT_POSITION`] (rewrite-clears-stale).
+pub fn write_arrangement_positions(
+    store: &mut NodeFacetStore,
+    positions: impl IntoIterator<Item = (Uuid, (f32, f32))>,
+) {
+    rewrite_family(
+        store,
+        arrangement_position_facet(),
+        positions
+            .into_iter()
+            .map(|(id, (x, y))| (id, json!({ "x": x, "y": y })))
+            .collect(),
+    );
+}
+
+/// Load-time read of [`ARRANGEMENT_POSITION`], shaped for
+/// `Canvas::seed_cartography`.
+pub fn read_arrangement_positions(store: &NodeFacetStore) -> Vec<(Uuid, (f32, f32))> {
+    read_family(store, ARRANGEMENT_POSITION, |value| {
+        let x = value.get("x")?.as_f64()? as f32;
+        let y = value.get("y")?.as_f64()? as f32;
+        (x.is_finite() && y.is_finite()).then_some((x, y))
+    })
+}
+
+/// Save-time write of [`ARRANGEMENT_SIZE`] (rewrite-clears-stale).
+pub fn write_arrangement_sizes(
+    store: &mut NodeFacetStore,
+    sizes: impl IntoIterator<Item = (Uuid, f32)>,
+) {
+    rewrite_family(
+        store,
+        FacetId::new(ARRANGEMENT_SIZE),
+        sizes.into_iter().map(|(id, px)| (id, json!(px))).collect(),
+    );
+}
+
+/// Load-time read of [`ARRANGEMENT_SIZE`], shaped for
+/// `Canvas::apply_cartography_sizing` (which clamps).
+pub fn read_arrangement_sizes(store: &NodeFacetStore) -> Vec<(Uuid, f32)> {
+    read_family(store, ARRANGEMENT_SIZE, |value| {
+        let px = value.as_f64()? as f32;
+        px.is_finite().then_some(px)
+    })
+}
+
+/// Save-time write of [`ARRANGEMENT_SPRITE`] (rewrite-clears-stale).
+pub fn write_arrangement_sprites<S: AsRef<str>>(
+    store: &mut NodeFacetStore,
+    sprites: impl IntoIterator<Item = (Uuid, S)>,
+) {
+    rewrite_family(
+        store,
+        FacetId::new(ARRANGEMENT_SPRITE),
+        sprites
+            .into_iter()
+            .map(|(id, uri)| (id, json!(uri.as_ref())))
+            .collect(),
+    );
+}
+
+/// Load-time read of [`ARRANGEMENT_SPRITE`] (owned data-URIs; the host lends
+/// them to `Canvas::apply_cartography_sprites`).
+pub fn read_arrangement_sprites(store: &NodeFacetStore) -> Vec<(Uuid, String)> {
+    read_family(store, ARRANGEMENT_SPRITE, |value| {
+        Some(value.as_str()?.to_string())
+    })
+}
+
+/// Save-time write of [`ARRANGEMENT_SPRITE_HULL`] (rewrite-clears-stale).
+pub fn write_arrangement_sprite_hulls(
+    store: &mut NodeFacetStore,
+    hulls: impl IntoIterator<Item = (Uuid, Vec<(f32, f32)>)>,
+) {
+    rewrite_family(
+        store,
+        FacetId::new(ARRANGEMENT_SPRITE_HULL),
+        hulls
+            .into_iter()
+            .map(|(id, hull)| {
+                let points: Vec<Value> = hull.iter().map(|(x, y)| json!([x, y])).collect();
+                (id, Value::Array(points))
+            })
+            .collect(),
+    );
+}
+
+/// Load-time read of [`ARRANGEMENT_SPRITE_HULL`], shaped for
+/// `Canvas::apply_cartography_sprite_hulls`. A hull with any malformed or
+/// non-finite point is skipped whole (a partial polygon is a wrong collider).
+pub fn read_arrangement_sprite_hulls(store: &NodeFacetStore) -> Vec<(Uuid, Vec<(f32, f32)>)> {
+    read_family(store, ARRANGEMENT_SPRITE_HULL, |value| {
+        value
+            .as_array()?
+            .iter()
+            .map(|point| {
+                let pair = point.as_array()?;
+                let x = pair.first()?.as_f64()? as f32;
+                let y = pair.get(1)?.as_f64()? as f32;
+                (x.is_finite() && y.is_finite()).then_some((x, y))
+            })
+            .collect::<Option<Vec<(f32, f32)>>>()
+    })
+}
+
+/// Save-time write of [`ARRANGEMENT_MATERIAL`] (rewrite-clears-stale). The
+/// tuple is `(restitution, friction, density)`, the geometry sidecar's order.
+pub fn write_arrangement_materials(
+    store: &mut NodeFacetStore,
+    materials: impl IntoIterator<Item = (Uuid, (f32, f32, f32))>,
+) {
+    rewrite_family(
+        store,
+        FacetId::new(ARRANGEMENT_MATERIAL),
+        materials
+            .into_iter()
+            .map(|(id, (restitution, friction, density))| {
+                (
+                    id,
+                    json!({
+                        "restitution": restitution,
+                        "friction": friction,
+                        "density": density,
+                    }),
+                )
+            })
+            .collect(),
+    );
+}
+
+/// Load-time read of [`ARRANGEMENT_MATERIAL`] as
+/// `(restitution, friction, density)`, shaped for
+/// `Canvas::apply_cartography_materials`.
+pub fn read_arrangement_materials(store: &NodeFacetStore) -> Vec<(Uuid, (f32, f32, f32))> {
+    read_family(store, ARRANGEMENT_MATERIAL, |value| {
+        let restitution = value.get("restitution")?.as_f64()? as f32;
+        let friction = value.get("friction")?.as_f64()? as f32;
+        let density = value.get("density")?.as_f64()? as f32;
+        (restitution.is_finite() && friction.is_finite() && density.is_finite())
+            .then_some((restitution, friction, density))
+    })
+}
+
+/// Save-time write of [`ARRANGEMENT_FACE`] (rewrite-clears-stale).
+pub fn write_arrangement_faces<S: AsRef<str>>(
+    store: &mut NodeFacetStore,
+    faces: impl IntoIterator<Item = (Uuid, S)>,
+) {
+    rewrite_family(
+        store,
+        FacetId::new(ARRANGEMENT_FACE),
+        faces
+            .into_iter()
+            .map(|(id, code)| (id, json!(code.as_ref())))
+            .collect(),
+    );
+}
+
+/// Load-time read of [`ARRANGEMENT_FACE`] (owned codes; the host lends them to
+/// `Canvas::apply_cartography_faces`, whose `Face::from_code` owns the
+/// vocabulary — an unknown code degrades there, not here).
+pub fn read_arrangement_faces(store: &NodeFacetStore) -> Vec<(Uuid, String)> {
+    read_family(store, ARRANGEMENT_FACE, |value| {
+        Some(value.as_str()?.to_string())
+    })
 }
 
 /// Drop every facet of every node not in `present` — the load-time reconcile,
@@ -166,6 +351,59 @@ mod tests {
         assert_eq!(
             read_arrangement_positions(&store),
             vec![(good, (7.0, 8.0))]
+        );
+    }
+
+    #[test]
+    fn every_family_member_round_trips() {
+        let mut store = NodeFacetStore::new();
+        let a = Uuid::from_u128(1);
+        write_arrangement_sizes(&mut store, [(a, 48.0)]);
+        write_arrangement_sprites(&mut store, [(a, "data:image/png;base64,AAAA")]);
+        write_arrangement_sprite_hulls(&mut store, [(a, vec![(-0.5, -0.5), (0.5, 0.0), (0.0, 0.5)])]);
+        write_arrangement_materials(&mut store, [(a, (0.8, 0.2, 3.0))]);
+        write_arrangement_faces(&mut store, [(a, "sprite")]);
+
+        assert_eq!(read_arrangement_sizes(&store), vec![(a, 48.0)]);
+        assert_eq!(
+            read_arrangement_sprites(&store),
+            vec![(a, "data:image/png;base64,AAAA".to_string())]
+        );
+        assert_eq!(
+            read_arrangement_sprite_hulls(&store),
+            vec![(a, vec![(-0.5, -0.5), (0.5, 0.0), (0.0, 0.5)])]
+        );
+        assert_eq!(read_arrangement_materials(&store), vec![(a, (0.8, 0.2, 3.0))]);
+        assert_eq!(read_arrangement_faces(&store), vec![(a, "sprite".to_string())]);
+    }
+
+    #[test]
+    fn each_family_rewrite_clears_only_its_own_facet() {
+        let mut store = NodeFacetStore::new();
+        let a = Uuid::from_u128(1);
+        write_arrangement_sizes(&mut store, [(a, 48.0)]);
+        write_arrangement_faces(&mut store, [(a, "bare")]);
+        // Rewriting sizes to empty must not disturb the face facet.
+        write_arrangement_sizes(&mut store, []);
+        assert!(read_arrangement_sizes(&store).is_empty());
+        assert_eq!(read_arrangement_faces(&store), vec![(a, "bare".to_string())]);
+    }
+
+    #[test]
+    fn a_hull_with_a_malformed_point_is_skipped_whole() {
+        let mut store = NodeFacetStore::new();
+        let a = Uuid::from_u128(1);
+        store
+            .set(
+                a,
+                FacetId::new(ARRANGEMENT_SPRITE_HULL),
+                json!([[0.1, 0.2], [null, 0.3]]),
+                &AcceptAll,
+            )
+            .unwrap();
+        assert!(
+            read_arrangement_sprite_hulls(&store).is_empty(),
+            "a partial polygon is a wrong collider; drop the hull"
         );
     }
 

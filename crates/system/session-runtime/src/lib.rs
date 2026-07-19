@@ -121,8 +121,13 @@ pub use denizen_bindings::{
     load_denizen_bindings, save_denizen_bindings,
 };
 pub use arrangement_facets::{
-    ARRANGEMENT_POSITION, arrangement_position_facet, read_arrangement_positions,
-    retain_present_nodes, write_arrangement_positions,
+    ARRANGEMENT_FACE, ARRANGEMENT_MATERIAL, ARRANGEMENT_POSITION, ARRANGEMENT_SIZE,
+    ARRANGEMENT_SPRITE, ARRANGEMENT_SPRITE_HULL, arrangement_position_facet,
+    read_arrangement_faces, read_arrangement_materials, read_arrangement_positions,
+    read_arrangement_sizes, read_arrangement_sprite_hulls, read_arrangement_sprites,
+    retain_present_nodes, write_arrangement_faces, write_arrangement_materials,
+    write_arrangement_positions, write_arrangement_sizes, write_arrangement_sprite_hulls,
+    write_arrangement_sprites,
 };
 pub use facet_store::{
     AcceptAll, FacetError, FacetId, FacetValidator, NODE_FACETS_FILE, NodeFacetStore, NodeFacets,
