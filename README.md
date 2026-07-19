@@ -1,7 +1,7 @@
 # personae
 
 The identity and carry layer for the Merely ecosystem (mere, isometry,
-strophe, woodshed). A person has *personae*, plural — a work face, a research
+hocket, woodshed). A person has *personae*, plural — a work face, a research
 face, a burner — and this crate is the register of them plus the root of trust
 they derive from: the master Ed25519 keypair, deterministic per-protocol key
 derivation (BLAKE3 keyed-hash), a passphrase- and OS-store-unlocked vault, and
