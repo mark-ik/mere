@@ -33,7 +33,7 @@ Transport-neutral (it produces a replayable sequence; shipping it to peers is th
 consumer's job) and linear (a branching edit-tree is a later shape), by design.
 The name: a codicil is an amendment appended to a document, never a rewrite of it.
 
-Built alongside muniment from a survey of four consumers (woodshed, strophe,
+Built alongside muniment from a survey of four consumers (woodshed, hocket,
 isometry, mere). See [`design_docs/`](design_docs/).
 
 License: dual MIT OR Apache-2.0, at your option.
