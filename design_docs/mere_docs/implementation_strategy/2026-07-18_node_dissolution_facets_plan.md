@@ -211,6 +211,23 @@ The field-by-field map (from the 2026-07-18 read of `graph/node.rs`):
 
 ## Progress
 
+- **2026-07-19 (`arrangement.position` facets LANDED — mere `16fa15a`,
+  merecat `ddf066e`):** the first arrangement-family convergence rung, and it
+  came out cleaner than the plan assumed: the bespoke cartography sidecar
+  (`CartographyGeometry` → `cartography.json`) **was never wired by any host**
+  (`seed_cartography` / `apply_cartography_*` had zero production callers), so
+  the durable layout store is **born as facets** — no transitional file, no
+  migration. session-runtime `arrangement_facets`: the `arrangement.position`
+  id + `{x, y}` payload, `write_arrangement_positions` (rewrite-clears-stale) /
+  `read_arrangement_positions` (skips malformed), `retain_present_nodes`
+  (departed node takes its whole facet record). merecat: `App.facets` holds
+  the session's `NodeFacetStore`; save writes `cartography_geometry()`
+  positions as facets, adopt prunes to the live graph and re-places via
+  `seed_cartography`; round-trip tested at the adopt seam. Remaining family
+  (size / sprite / sprite-hull / material / face) follows the same pattern;
+  graph-scoped flags (`size_by_degree`, metric, …) stay view settings per the
+  ruling. The no-op `commit_positions_to_graph` seam resolves the same way:
+  the tear-out fork copies the donor's `arrangement.*` facets.
 - **2026-07-19 (S2 COMPLETE; `Node.position` retired `631b852`):** the kernel
   `Node` carries no geometry. Field, accessors (`projected_position` /
   `set_node_position` / `set_node_projected_position` /
