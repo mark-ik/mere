@@ -211,6 +211,29 @@ The field-by-field map (from the 2026-07-18 read of `graph/node.rs`):
 
 ## Progress
 
+- **2026-07-19 (S2 COMPLETE; `Node.position` retired `631b852`):** the kernel
+  `Node` carries no geometry. Field, accessors (`projected_position` /
+  `set_node_position` / `set_node_projected_position` /
+  `node_projected_position`), and the rkyv `Point2DAsTuple` adapter removed;
+  `add_node`'s position parameter is accepted-and-ignored (`_position`; caller
+  cleanup is a follow-on). Reroutes as mapped, plus what the pass surfaced:
+  (1) underlay live-path fallbacks → `position_of(k)` only;
+  `projection_from_graph` is now the **structural-only** projection (nodes at
+  origin) with `projection_from_positions` the placed path. (2) cartography
+  write-back `commit_positions_to_graph` → **no-op seam** (the tear-out fork
+  should carry layout by copying the cartography sidecar; retire the seam when
+  the fork path does that). (3) `switcher_thumbnail` → only
+  `build_switcher_thumbnail_with(graph, position_of, opts)` remains (the
+  graph-default variant deleted; no production caller — merecat/genet/isometry
+  grep clean). (4) cross-graph copy no longer carries position. (5)
+  `Canvas::{with_graph, set_graph}` park at origin + halt; restore goes
+  through `seed_cartography` (tests now drive that seam). (6) arrangements
+  `LeaveInPlace` fallback parks at `config.origin`; the eight per-adapter
+  `graph_truth_positions_are_never_mutated` tests retired with the field.
+  Full workspace green (mere-kernel 273, mere-canvas 133, arrangements 86;
+  gemot excluded — its `moot-peer` example has an unrelated pre-existing
+  async-call error). **Lane S is done**; the `arrangement.position` facet
+  remains a Lane F consumer (durable save-time position), not a Lane S gate.
 - **2026-07-19 (S2 started; velocity retired, position audited):** the migration
   wall is **gone** — `PersistedNode` (the graph snapshot's node) carries neither
   position nor velocity (positions live in the cartography sidecar since the
