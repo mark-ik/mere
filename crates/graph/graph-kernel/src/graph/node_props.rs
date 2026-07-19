@@ -422,21 +422,10 @@ impl Graph {
         self.get_node(key).map(Node::projected_position)
     }
 
-    pub fn projected_centroid(&self) -> Option<Point2D<f32>> {
-        let mut sum_x = 0.0f32;
-        let mut sum_y = 0.0f32;
-        let mut count = 0.0f32;
-        for (_, node) in self.nodes() {
-            sum_x += node.position.x;
-            sum_y += node.position.y;
-            count += 1.0;
-        }
-        if count == 0.0 {
-            None
-        } else {
-            Some(Point2D::new(sum_x / count, sum_y / count))
-        }
-    }
+    // `projected_centroid` (the mean of node positions) left with S2's position
+    // dissolution: a centroid over positions is a view concern computed from
+    // seiche's live layout host-side, not a kernel method over the transient
+    // `Node.position`. It had no production caller.
 
     pub(crate) fn touch_node_last_visited_now(&mut self, key: NodeKey) -> bool {
         self.set_node_last_visited_at_ms(key, Graph::epoch_ms())
