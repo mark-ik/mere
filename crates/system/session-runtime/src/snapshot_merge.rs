@@ -1,4 +1,4 @@
-// Copyright 2026 Mark Boykin
+// Copyright 2026 Mark AB (markik)
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 //! Snapshot-level merge for engram compose (Alembic tail B7 / decision #1).

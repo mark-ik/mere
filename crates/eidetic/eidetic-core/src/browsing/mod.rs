@@ -1,4 +1,4 @@
-// Copyright 2026 Mark Boykin
+// Copyright 2026 Mark AB (markik)
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 //! Layer 4 — browsing memory, the domain the crate was named for.

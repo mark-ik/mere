@@ -1,4 +1,4 @@
-// Copyright 2026 Mark Boykin
+// Copyright 2026 Mark AB (markik)
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 //! JSON-LD ingest (linked-data plan Phase 2): `application/ld+json` → a

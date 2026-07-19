@@ -1,4 +1,4 @@
-// Copyright 2026 Mark Boykin
+// Copyright 2026 Mark AB (markik)
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 //! [`LayoutStrategy`] adapter for a **spectral** layout: node positions are the two non-trivial

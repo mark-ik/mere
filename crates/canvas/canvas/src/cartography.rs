@@ -1,4 +1,4 @@
-// Copyright 2026 Mark Boykin
+// Copyright 2026 Mark AB (markik)
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 //! Cartography geometry + per-node attribute reads/writes (color, shape, face, sprite, material, size, importance, height).
