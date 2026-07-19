@@ -228,8 +228,25 @@ The field-by-field map (from the 2026-07-18 read of `graph/node.rs`):
   canvas sites onto seiche + the cartography sidecar (and later the
   `arrangement.position` facet), with the unplaced-node fallback/seed semantics
   preserved. A careful canvas-side pass (the hot concurrent zone); no snapshot
-  migration needed. That plus the accessor cleanup (`projected_position` /
-  `set_node_position` / center-of-mass / cross-graph copy) is the remaining S2.
+  migration needed. That plus the accessor cleanup is the remaining S2.
+- **2026-07-19 (position consumer map complete; `projected_centroid` retired
+  `192d497`)**: the *committed*-position path
+  (`underlay::{canvas_paint_list, projection_from_graph}`) is **test-only** —
+  production already uses the seiche-live path
+  (`canvas_paint_list_from_positions`), and that code comment names the
+  transition ("positions transition from committed to seiche-live"). So the
+  production reroutes are narrow: (1) the live-path **fallback**
+  `position_of(k).or_else(|| node_projected_position(k))` (underlay ×4) →
+  `position_of(k)` (seiche-only; invariant: every graph node is synced to
+  seiche); (2) the **cartography write-back** `set_node_projected_position` →
+  removed (seiche is the store); (3) **`switcher_thumbnail`** (session-runtime),
+  which defaults to `node_projected_position` → the host passes seiche positions
+  — a **cross-crate API change**, likely reaching merecat/genet callers, which
+  is why this is a careful pass and not a slice; (4) **cross-graph copy** drops
+  the position carry (the copy is re-laid-out). Then remove the kernel accessors
+  (`projected_position` / `set_node_position` / `set_node_projected_position` /
+  `node_projected_position`) and the `Node.position` field. `projected_centroid`
+  (dead, no production caller) already removed.
 - **2026-07-18 (S0 COMPLETE):** quint + seiche extracted to sibling repos
   (`github.com/mark-ik/{quint,seiche}`, MIT/Apache, relicensed from MPL,
   publish-ready), pushed; mere drops them from workspace members and consumes
