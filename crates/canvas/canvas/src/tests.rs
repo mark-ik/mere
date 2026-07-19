@@ -654,16 +654,22 @@ fn focused_url_is_the_single_selected_nodes_url() {
 
 #[test]
 fn with_graph_restores_nodes_and_positions() {
+    // Positions are no longer graph truth (S2): `with_graph` parks nodes at the
+    // origin and halts, then the host applies the saved layout from the cartography
+    // sidecar via `seed_cartography` — the seam that used to ride the graph snapshot.
     let mut graph = Graph::new();
-    graph.add_node(
+    let one = graph.add_node(
         "https://one.example".to_string(),
         PortablePoint::new(100.0, 50.0),
     );
-    graph.add_node(
+    let two = graph.add_node(
         "https://two.example".to_string(),
         PortablePoint::new(-30.0, 80.0),
     );
-    let canvas = Canvas::with_graph(graph);
+    let one_id = graph.get_node(one).unwrap().id;
+    let two_id = graph.get_node(two).unwrap().id;
+    let mut canvas = Canvas::with_graph(graph);
+    canvas.seed_cartography([(one_id, (100.0, 50.0)), (two_id, (-30.0, 80.0))]);
     assert_eq!(
         canvas.graph().nodes().count(),
         2,
@@ -689,7 +695,7 @@ fn with_graph_restores_nodes_and_positions() {
         .expect("a restored node position");
     assert!(
         (pos.x - 100.0).abs() < 1.0 && (pos.y - 50.0).abs() < 1.0,
-        "the saved position is preserved (no spiral re-seed), got {pos:?}",
+        "the sidecar position is applied (no spiral re-seed), got {pos:?}",
     );
 }
 
@@ -699,11 +705,15 @@ fn fit_to_content_frames_a_far_restored_graph() {
     // world origin, so the boot recenter (which frames the origin) shows
     // empty ground. fit_to_content must frame the content instead.
     let mut graph = Graph::new();
-    graph.add_node(
+    let far = graph.add_node(
         "https://far.example".to_string(),
         PortablePoint::new(4000.0, -2600.0),
     );
+    let far_id = graph.get_node(far).unwrap().id;
     let mut canvas = Canvas::with_graph(graph);
+    // The host restores the far-settled position from the sidecar (positions no
+    // longer ride the graph snapshot, S2).
+    canvas.seed_cartography([(far_id, (4000.0, -2600.0))]);
     canvas.resize(800, 600);
     canvas.recenter();
     assert!(

@@ -147,22 +147,4 @@ mod tests {
         assert!(projection.nodes.is_empty());
         assert!(projection.metadata.settled);
     }
-
-    #[test]
-    fn graph_truth_positions_are_never_mutated() {
-        let (graph, keys) = small_graph(5);
-        let original = graph.get_node(keys[0]).unwrap().projected_position();
-        let signals = IntelligenceSignals::default();
-        let request = ProjectionRequest {
-            graph: &graph,
-            signals: &signals,
-            intent: ViewIntent::default(),
-        };
-        let adapter = LSystemAdapter::default();
-        for _ in 0..5 {
-            adapter.project(&request);
-        }
-        let after = graph.get_node(keys[0]).unwrap().projected_position();
-        assert_eq!(original, after);
-    }
 }

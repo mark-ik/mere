@@ -19,11 +19,10 @@
 
 use std::collections::HashSet;
 
-use euclid::default::Point2D;
 use rkyv::{Archive, Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::identity::{Point2DAsTuple, UuidAsBytes};
+use super::identity::UuidAsBytes;
 use crate::address::{Address, AddressClaim, address_from_url, cached_host_from_url};
 use crate::types::{
     FrameLayoutHint, NodeClassification, NodeDerivation, NodeImportProvenance, NodeProperty,
@@ -42,15 +41,6 @@ pub struct Node {
 
     /// Page title (or URL if no title)
     pub title: String,
-
-    /// Transient projected position in graph space.
-    ///
-    /// Render and physics code may move this continuously between reducer
-    /// commits. `pub(crate)` so `impl Graph` in `graph/mod.rs` can reach
-    /// it directly; external callers use the [`Node::projected_position`]
-    /// accessor.
-    #[rkyv(with = Point2DAsTuple)]
-    pub(crate) position: Point2D<f32>,
 
     /// Canonical durable semantic tags for this node.
     pub tags: HashSet<String>,
@@ -150,10 +140,6 @@ pub struct Node {
 }
 
 impl Node {
-    pub fn projected_position(&self) -> Point2D<f32> {
-        self.position
-    }
-
     /// Returns the node's canonical retrieval address (the Primary claim).
     ///
     /// Panics if the per-node invariant (exactly one Primary claim) is
@@ -182,7 +168,6 @@ impl Node {
             id: Uuid::new_v4(),
             cached_host: cached_host_from_url(url),
             title: url.to_string(),
-            position: Point2D::new(0.0, 0.0),
             tags: HashSet::new(),
             tag_presentation: NodeTagPresentationState::default(),
             import_provenance: Vec::new(),

@@ -23,8 +23,6 @@
 use std::collections::HashSet;
 use std::time::{Duration, UNIX_EPOCH};
 
-use euclid::default::Point2D;
-
 use super::Graph;
 use super::identity::NodeKey;
 use super::node::Node;
@@ -396,31 +394,10 @@ impl Graph {
         }
     }
 
-    pub fn set_node_position(&mut self, key: NodeKey, position: Point2D<f32>) -> bool {
-        let Some(node) = self.inner.node_mut(key) else {
-            return false;
-        };
-        if node.position == position {
-            return false;
-        }
-        node.position = position;
-        true
-    }
-
-    pub fn set_node_projected_position(&mut self, key: NodeKey, position: Point2D<f32>) -> bool {
-        let Some(node) = self.inner.node_mut(key) else {
-            return false;
-        };
-        if node.position == position {
-            return false;
-        }
-        node.position = position;
-        true
-    }
-
-    pub fn node_projected_position(&self, key: NodeKey) -> Option<Point2D<f32>> {
-        self.get_node(key).map(Node::projected_position)
-    }
+    // `set_node_position` / `set_node_projected_position` / `node_projected_position`
+    // left with `Node.position` (S2): a node's position is no longer graph truth.
+    // The live position is seiche's; the durable position is the cartography
+    // sidecar's; the host reads and writes those, not the graph.
 
     // `projected_centroid` (the mean of node positions) left with S2's position
     // dissolution: a centroid over positions is a view concern computed from

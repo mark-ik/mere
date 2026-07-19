@@ -82,21 +82,15 @@ pub struct SwitcherThumbnail {
     pub edges: Vec<ThumbnailEdge>,
 }
 
-/// Build a thumbnail of `graph` at the dimensions in `options`. The
-/// projection is a straight aspect-preserving fit of `graph.nodes()`'
-/// axis-aligned bounding box into the thumbnail box (less padding).
-/// Degenerate cases (no nodes, single node, zero-extent bounds) are
-/// handled without division-by-zero.
-pub fn build_switcher_thumbnail(
-    graph: &Graph,
-    options: SwitcherThumbnailOptions,
-) -> SwitcherThumbnail {
-    build_switcher_thumbnail_with(graph, |key| graph.node_projected_position(key), options)
-}
+// `build_switcher_thumbnail(graph)` (which read positions from the graph via
+// `node_projected_position`) left with `Node.position` (S2): positions are no
+// longer graph truth, so the host must supply them. Use
+// [`build_switcher_thumbnail_with`] with a lookup over the cartography sidecar or
+// the live seiche layout.
 
-/// [`build_switcher_thumbnail`] with an explicit position source, so the host can
-/// draw a thumbnail from the cartography sidecar (or the live orrery) rather than
-/// the graph, now that node positions are no longer graph truth. A node with no
+/// Build a thumbnail of `graph` with an explicit position source, so the host
+/// draws it from the cartography sidecar (or the live orrery) rather than the
+/// graph, since node positions are no longer graph truth. A node with no
 /// position (`position_of` returns `None`) lands at the origin. (Position gut.)
 pub fn build_switcher_thumbnail_with(
     graph: &Graph,
@@ -236,7 +230,7 @@ mod tests {
     fn empty_graph_yields_empty_thumbnail_with_dimensions_preserved() {
         let graph = Graph::new();
         let opts = SwitcherThumbnailOptions::default();
-        let t = build_switcher_thumbnail(&graph, opts);
+        let t = build_switcher_thumbnail_with(&graph, |_| None, opts);
         assert_eq!(t.width, opts.width);
         assert_eq!(t.height, opts.height);
         assert!(t.nodes.is_empty());
@@ -246,9 +240,13 @@ mod tests {
     #[test]
     fn single_node_lands_at_thumbnail_center() {
         let mut graph = Graph::new();
-        graph.add_node("https://a.test".into(), PortablePoint::new(42.0, 99.0));
+        let a = graph.add_node("https://a.test".into(), PortablePoint::new(42.0, 99.0));
         let opts = SwitcherThumbnailOptions::default();
-        let t = build_switcher_thumbnail(&graph, opts);
+        let t = build_switcher_thumbnail_with(
+            &graph,
+            |k| (k == a).then_some(PortablePoint::new(42.0, 99.0)),
+            opts,
+        );
         assert_eq!(t.nodes.len(), 1);
         let n = t.nodes[0];
         assert!((n.position.x - opts.width as f32 * 0.5).abs() < 0.001);
@@ -258,11 +256,16 @@ mod tests {
     #[test]
     fn multi_node_fit_keeps_nodes_inside_thumbnail_box() {
         let mut graph = Graph::new();
-        let _a = graph.add_node("a".into(), PortablePoint::new(-500.0, -500.0));
-        let _b = graph.add_node("b".into(), PortablePoint::new(500.0, 500.0));
-        let _c = graph.add_node("c".into(), PortablePoint::new(0.0, 250.0));
+        let mut positions = std::collections::HashMap::new();
+        for (url, p) in [
+            ("a", PortablePoint::new(-500.0, -500.0)),
+            ("b", PortablePoint::new(500.0, 500.0)),
+            ("c", PortablePoint::new(0.0, 250.0)),
+        ] {
+            positions.insert(graph.add_node(url.into(), p), p);
+        }
         let opts = SwitcherThumbnailOptions::default();
-        let t = build_switcher_thumbnail(&graph, opts);
+        let t = build_switcher_thumbnail_with(&graph, |k| positions.get(&k).copied(), opts);
         assert_eq!(t.nodes.len(), 3);
         for n in &t.nodes {
             assert!(n.position.x >= opts.padding);
@@ -278,10 +281,15 @@ mod tests {
         // The thinner axis (height=120 − 8 padding = 112) limits;
         // the result hugs y but leaves slack on x.
         let mut graph = Graph::new();
-        let _ = graph.add_node("a".into(), PortablePoint::new(0.0, 0.0));
-        let _ = graph.add_node("b".into(), PortablePoint::new(100.0, 100.0));
+        let mut positions = std::collections::HashMap::new();
+        for (url, p) in [
+            ("a", PortablePoint::new(0.0, 0.0)),
+            ("b", PortablePoint::new(100.0, 100.0)),
+        ] {
+            positions.insert(graph.add_node(url.into(), p), p);
+        }
         let opts = SwitcherThumbnailOptions::default();
-        let t = build_switcher_thumbnail(&graph, opts);
+        let t = build_switcher_thumbnail_with(&graph, |k| positions.get(&k).copied(), opts);
         let mut by_x: Vec<f32> = t.nodes.iter().map(|n| n.position.x).collect();
         let mut by_y: Vec<f32> = t.nodes.iter().map(|n| n.position.y).collect();
         by_x.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -297,7 +305,7 @@ mod tests {
         let a = graph.add_node("a".into(), PortablePoint::new(0.0, 0.0));
         let b = graph.add_node("b".into(), PortablePoint::new(100.0, 0.0));
         graph.assert_relation(a, b, hyperlink()).unwrap();
-        let t = build_switcher_thumbnail(&graph, SwitcherThumbnailOptions::default());
+        let t = build_switcher_thumbnail_with(&graph, |_| None, SwitcherThumbnailOptions::default());
         assert_eq!(t.edges.len(), 1);
         // RelationKind::tag()'s top byte is the family ordinal. The
         // Semantic family is 0 per the kernel's tag scheme; the
@@ -325,7 +333,7 @@ mod tests {
             )
             .unwrap();
 
-        let t = build_switcher_thumbnail(&graph, SwitcherThumbnailOptions::default());
+        let t = build_switcher_thumbnail_with(&graph, |_| None, SwitcherThumbnailOptions::default());
         assert_eq!(t.edges.len(), 2);
         let tags: std::collections::HashSet<u8> = t.edges.iter().map(|e| e.family_tag).collect();
         assert!(tags.contains(&expected_family_tag(EdgeFamily::Semantic)));
@@ -345,7 +353,7 @@ mod tests {
             max_nodes: 5,
             ..SwitcherThumbnailOptions::default()
         };
-        let t = build_switcher_thumbnail(&graph, opts);
+        let t = build_switcher_thumbnail_with(&graph, |_| None, opts);
         assert!(t.nodes.len() <= 5, "node count was {}", t.nodes.len());
     }
 
@@ -369,7 +377,7 @@ mod tests {
             max_nodes: 2,
             ..SwitcherThumbnailOptions::default()
         };
-        let t = build_switcher_thumbnail(&graph, opts);
+        let t = build_switcher_thumbnail_with(&graph, |_| None, opts);
         assert_eq!(t.nodes.len(), 2);
         assert!(t.edges.is_empty());
     }
@@ -379,7 +387,7 @@ mod tests {
         let mut graph = Graph::new();
         let a = graph.add_node("a".into(), PortablePoint::new(0.0, 0.0));
         graph.assert_relation(a, a, hyperlink()).unwrap();
-        let t = build_switcher_thumbnail(&graph, SwitcherThumbnailOptions::default());
+        let t = build_switcher_thumbnail_with(&graph, |_| None, SwitcherThumbnailOptions::default());
         assert_eq!(t.nodes.len(), 1);
         assert!(t.edges.is_empty());
     }

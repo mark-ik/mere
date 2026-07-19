@@ -30,19 +30,12 @@ use paint_list_api::DeviceIntSize;
 use crate::coupling_paint::{paint_projection_with_visuals, visual_overlays};
 use crate::scene_paint::{Camera, CanvasPaintList, ScenePaintStyle, paint_projection_filtered};
 
-/// Build a [`Projection`] from the graph's committed node positions and its
-/// relations (collapsed to undirected, de-duplicated pairs — the canvas draws one
-/// line per connected pair, not one per typed sidecar). Node radii are left `0.0`
-/// (the paint layer substitutes the style default); `content_bounds` is the
-/// axis-aligned box of the node positions, for a host that fits the view.
+/// Build a [`Projection`] from a graph with **no positions** — every node lands
+/// at the origin (positions are no longer graph truth; S2). This is the
+/// structural-only projection (edges, dedup, content-bounds); a caller that wants
+/// placed nodes uses [`projection_from_positions`] with a seiche / sidecar lookup.
 pub fn projection_from_graph(graph: &Graph) -> Projection {
-    project(
-        graph,
-        |k| graph.node_projected_position(k),
-        |_| true,
-        "canvas.stored",
-        true,
-    )
+    project(graph, |_| None, |_| true, "canvas.stored", true)
 }
 
 /// Build a [`Projection`] from a caller-supplied *live* position lookup (e.g. the
@@ -62,7 +55,7 @@ where
 {
     project(
         graph,
-        |k| position_of(k).or_else(|| graph.node_projected_position(k)),
+        |k| position_of(k),
         |_| true,
         "canvas.live",
         false,
@@ -110,7 +103,7 @@ where
     project_keys(
         graph,
         &keys,
-        |k| position_of(k).or_else(|| graph.node_projected_position(k)),
+        |k| position_of(k),
         |_| true,
         "canvas.live",
         false,
@@ -302,7 +295,7 @@ where
     // committed-position fallback) so the edge-visibility predicate threads in.
     let projection = project(
         graph,
-        |k| position_of(k).or_else(|| graph.node_projected_position(k)),
+        |k| position_of(k),
         edge_visible,
         "canvas.live",
         false,
@@ -341,7 +334,7 @@ where
     let mut projection = project_keys(
         graph,
         &keys,
-        |k| position_of(k).or_else(|| graph.node_projected_position(k)),
+        |k| position_of(k),
         edge_visible,
         "canvas.live",
         false,

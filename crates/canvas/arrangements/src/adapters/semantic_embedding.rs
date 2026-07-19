@@ -25,9 +25,10 @@
 //! Nodes whose key isn't present in [`NodeEmbeddings::coords`] get
 //! placed per the [`EmbeddingFallback`] config:
 //!
-//! - `LeaveInPlace` — keeps the node's `Graph::node.projected_position()`
-//!   (cartography never mutates graph truth; we just read it for this
-//!   one fallback case).
+//! - `LeaveInPlace` — parks the node at `config.origin`. Positions are no
+//!   longer graph truth (S2), so there is nothing in-graph to leave it at;
+//!   a host that wants true leave-in-place supplies its current (view)
+//!   positions to the arrangement.
 //! - `CollapseToOrigin` — places the node at `config.origin`.
 //! - `RingOutside` — places the node on a deterministic ring outside
 //!   the main embedded cluster, at angle derived from `NodeKey.index()`.
@@ -85,7 +86,11 @@ impl LayoutStrategy for SemanticEmbeddingAdapter {
                     )
                 }
                 None => match self.config.fallback {
-                    EmbeddingFallback::LeaveInPlace => node.projected_position(),
+                    // Positions are no longer graph truth (S2), so there is no
+                    // in-graph position to "leave in place"; an un-embedded node
+                    // falls to the origin. A host that wants true leave-in-place
+                    // supplies current positions to the arrangement (a follow-on).
+                    EmbeddingFallback::LeaveInPlace => self.config.origin,
                     EmbeddingFallback::CollapseToOrigin => self.config.origin,
                     EmbeddingFallback::RingOutside => fallback_ring_position(key, &self.config),
                 },
@@ -195,8 +200,8 @@ mod tests {
     }
 
     #[test]
-    fn leave_in_place_fallback_uses_graph_truth_position() {
-        let (graph, [a, _, _]) = small_graph();
+    fn leave_in_place_fallback_parks_unembedded_at_the_origin() {
+        let (graph, [a, b, c]) = small_graph();
         let signals = IntelligenceSignals {
             embeddings: Some(NodeEmbeddings {
                 coords: vec![(a, (0.0, 0.0))], // only a embedded
@@ -211,17 +216,18 @@ mod tests {
         let adapter = SemanticEmbeddingAdapter::default();
         let projection = adapter.project(&request);
 
-        // b and c had graph-truth positions (30, 40) and (50, 60); the
-        // default fallback is LeaveInPlace, so projection inherits.
+        // The graph carries no positions any more (S2), so LeaveInPlace has no
+        // committed position to inherit: unembedded nodes park at the configured
+        // origin, and the canvas's live view keeps them where they were on screen
+        // (the projection consumer skips origin-parked fallback nodes).
         let nodes_by_pos: HashMap<_, _> = projection
             .nodes
             .iter()
             .map(|n| (n.node, n.position))
             .collect();
-        let pos_b = nodes_by_pos.values().find(|p| (p.x - 30.0).abs() < 0.001);
-        let pos_c = nodes_by_pos.values().find(|p| (p.x - 50.0).abs() < 0.001);
-        assert!(pos_b.is_some(), "expected b at graph-truth (30,40)");
-        assert!(pos_c.is_some(), "expected c at graph-truth (50,60)");
+        let origin = SemanticEmbeddingConfig::default().origin;
+        assert_eq!(nodes_by_pos[&b], origin, "b parks at the fallback origin");
+        assert_eq!(nodes_by_pos[&c], origin, "c parks at the fallback origin");
     }
 
     #[test]
@@ -306,7 +312,8 @@ mod tests {
         };
         let adapter = SemanticEmbeddingAdapter::default();
         let projection = adapter.project(&request);
-        // All nodes get LeaveInPlace fallback (default).
+        // All nodes get the LeaveInPlace fallback (default), which parks at the
+        // configured origin now that the graph carries no positions (S2).
         assert_eq!(projection.nodes.len(), 3);
         let pos_a = projection
             .nodes
@@ -314,24 +321,6 @@ mod tests {
             .find(|n| n.node == a)
             .unwrap()
             .position;
-        assert_eq!(pos_a, Point2D::new(10.0, 20.0));
-    }
-
-    #[test]
-    fn graph_truth_positions_are_never_mutated() {
-        let (graph, [a, _, _]) = small_graph();
-        let original = graph.get_node(a).unwrap().projected_position();
-        let signals = IntelligenceSignals::default();
-        let request = ProjectionRequest {
-            graph: &graph,
-            signals: &signals,
-            intent: ViewIntent::default(),
-        };
-        let adapter = SemanticEmbeddingAdapter::default();
-        for _ in 0..5 {
-            adapter.project(&request);
-        }
-        let after = graph.get_node(a).unwrap().projected_position();
-        assert_eq!(original, after);
+        assert_eq!(pos_a, SemanticEmbeddingConfig::default().origin);
     }
 }

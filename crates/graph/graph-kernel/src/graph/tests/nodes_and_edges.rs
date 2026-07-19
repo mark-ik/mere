@@ -84,8 +84,6 @@ fn test_add_node() {
     let node = graph.get_node(key).unwrap();
     assert_eq!(node.url(), "https://example.com");
     assert_eq!(node.title, "https://example.com");
-    assert_eq!(node.position.x, 100.0);
-    assert_eq!(node.position.y, 200.0);
     assert!(!node.is_pinned);
 }
 
@@ -149,31 +147,17 @@ fn test_get_node_mut() {
 
     {
         let node = graph.get_node_mut(key).unwrap();
-        node.position = Point2D::new(100.0, 200.0);
         node.is_pinned = true;
     }
 
     let node = graph.get_node(key).unwrap();
-    assert_eq!(node.position.x, 100.0);
-    assert_eq!(node.position.y, 200.0);
     assert!(node.is_pinned);
 }
 
-#[test]
-fn test_projected_position_is_the_single_node_position() {
-    // Positions are now a single field; durability is the cartography sidecar's job,
-    // not the kernel's, so a projected move is the position the snapshot persists.
-    let mut graph = Graph::new();
-    let key = graph.add_node("https://example.com".to_string(), Point2D::new(10.0, 20.0));
-
-    assert!(graph.set_node_projected_position(key, Point2D::new(150.0, 250.0)));
-    assert_eq!(
-        graph.node_projected_position(key),
-        Some(Point2D::new(150.0, 250.0))
-    );
-    // Positions are no longer serialized to graph.json (they live in the cartography
-    // sidecar), so the snapshot carries no position fields. (Position gut.)
-}
+// `test_projected_position_is_the_single_node_position` left with `Node.position`
+// (S2): position is no longer graph truth (not a node field, not in the
+// snapshot). The live position is seiche's; the durable one the cartography
+// sidecar's.
 
 #[test]
 fn test_assert_relation() {

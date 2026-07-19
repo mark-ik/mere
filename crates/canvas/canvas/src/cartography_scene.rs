@@ -344,16 +344,16 @@ pub fn project_canvas_subgraph(
 ) -> Vec<(NodeKey, PortablePoint)> {
     let scope_set: HashSet<NodeKey> = scope.iter().copied().collect();
     let mut sub = Graph::new();
-    // Re-add each scoped node by its stable id (so positions remap back), seeded at its live
-    // position. A missing node is simply skipped.
+    // Re-add each scoped node by its stable id (so positions remap back). Positions are
+    // no longer graph truth (S2), so the induced subgraph carries none — the layout
+    // strategy re-derives them from structure. A missing node is simply skipped.
     for &key in scope {
         if let Some(node) = graph.get_node(key) {
-            let p = node.projected_position();
             let _ = kernel::graph::apply::add_node(
                 &mut sub,
                 Some(node.id),
                 node.url().to_string(),
-                PortablePoint::new(p.x, p.y),
+                PortablePoint::zero(),
             );
         }
     }

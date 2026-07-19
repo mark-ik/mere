@@ -183,13 +183,11 @@ fn test_snapshot_roundtrip() {
 
     let (_, ra) = restored.get_node_by_url("https://a.com").unwrap();
     assert_eq!(ra.title, "Site A");
-    // Positions are no longer graph truth (they live in the cartography sidecar), so a
-    // restored node seeds at the origin until the sidecar overrides it. (Position gut.)
-    assert_eq!(ra.position, Point2D::new(0.0, 0.0));
+    // Positions are no longer graph truth (not a node field, not in the snapshot);
+    // they live in the cartography sidecar. (Position gut.)
 
     let (_, rb) = restored.get_node_by_url("https://b.com").unwrap();
     assert!(rb.is_pinned);
-    assert_eq!(rb.position, Point2D::new(0.0, 0.0));
 }
 
 #[test]

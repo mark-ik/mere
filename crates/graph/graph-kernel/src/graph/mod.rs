@@ -386,12 +386,14 @@ impl Graph {
         self.add_node_with_id(Uuid::new_v4(), url, position)
     }
 
-    /// Add a node with a pre-existing UUID.
+    /// Add a node with a pre-existing UUID. `_position` is the caller's initial
+    /// placement hint; it is no longer stored on the node (position is not graph
+    /// truth), so the host applies it to seiche / the cartography sidecar.
     pub(crate) fn add_node_with_id(
         &mut self,
         id: Uuid,
         url: String,
-        position: Point2D<f32>,
+        _position: Point2D<f32>,
     ) -> NodeKey {
         let now = std::time::SystemTime::now();
         let primary_address = address_from_url(&url);
@@ -400,7 +402,6 @@ impl Graph {
             title: url.clone(),
             cached_host: cached_host_from_url(&url),
             body: None,
-            position,
             tags: HashSet::new(),
             tag_presentation: NodeTagPresentationState::default(),
             import_provenance: Vec::new(),

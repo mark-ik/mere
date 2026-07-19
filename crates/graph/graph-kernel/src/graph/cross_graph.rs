@@ -62,7 +62,7 @@ impl Graph {
         id: Uuid,
         source: &Node,
         source_graph: Option<String>,
-        position: Point2D<f32>,
+        _position: Point2D<f32>,
     ) -> NodeKey {
         let derivation = NodeDerivation {
             sub_kind: ProvenanceSubKind::CopiedFrom,
@@ -89,8 +89,6 @@ impl Graph {
             favicon_rgba: source.favicon_rgba.clone(),
             favicon_width: source.favicon_width,
             favicon_height: source.favicon_height,
-            // --- placement: the drop point in this graph ---
-            position,
             // --- provenance: the cross-graph derivation record ---
             derivations: vec![derivation],
             // describes the donor's own external import, not this copy:
@@ -153,7 +151,9 @@ impl Graph {
         let mut new_keys = Vec::with_capacity(component.len());
         for old_key in component {
             if let Some(node) = source.inner.node(old_key) {
-                let new_key = self.copy_node_from(node, source_graph.clone(), node.position);
+                // Position is no longer a node field; the copy is placed by the
+                // destination's layout (seiche / arrangement), not carried over.
+                let new_key = self.copy_node_from(node, source_graph.clone(), Point2D::zero());
                 remap.insert(old_key, new_key);
                 new_keys.push(new_key);
             }
@@ -216,8 +216,8 @@ mod tests {
         assert_eq!(copy.properties, source.properties);
         assert_eq!(copy.url(), source.url(), "same content, same address");
 
-        // Placement reset, not inherited.
-        assert_eq!(copy.projected_position(), Point2D::new(9.0, 9.0));
+        // Position is not a node field (not inherited, not carried); the copy is
+        // placed by the destination's layout.
         assert!(!copy.is_pinned, "pin is per-placement, not copied");
 
         // Derivation records the lineage back to the source.

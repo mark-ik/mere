@@ -23,19 +23,17 @@ impl Canvas {
         Self::from_graph(sample_graph())
     }
 
-    /// Build an canvas over a **restored** session `graph`: keep each node at its
-    /// saved (committed) position and do not auto-settle, so a reloaded session
-    /// looks as it was left rather than re-scrambling into a fresh spiral.
-    /// (Persistence host seam, S3.)
+    /// Build an canvas over a **restored** session `graph`: park every node at the
+    /// origin and halt (do not auto-settle), so the host can then apply the saved
+    /// layout from its cartography sidecar via [`view`](Canvas::view) / physics
+    /// seeding without the sim re-scrambling first. Positions are no longer graph
+    /// truth (S2), so they no longer ride the graph snapshot. (Persistence host seam, S3.)
     pub fn with_graph(graph: Graph) -> Self {
         let mut canvas = Self::from_graph(graph);
         let positions: Vec<(NodeKey, Point2D<f32>)> = canvas
             .graph
             .nodes()
-            .map(|(key, node)| {
-                let p = node.projected_position();
-                (key, Point2D::new(p.x, p.y))
-            })
+            .map(|(key, _node)| (key, Point2D::zero()))
             .collect();
         for &(key, pos) in &positions {
             canvas.view.set_position(key, pos);
@@ -50,8 +48,9 @@ impl Canvas {
     /// graph is replaced wholesale, every derived view is reconciled to it
     /// (departed nodes drop, the spring topology and node pool rebuild), per-graph
     /// interaction state (selection, hidden edges, drags, pushed node states/shapes)
-    /// is cleared, and each node is restored to its committed position and halted
-    /// so the switched-to session looks as it was left rather than re-scrambling.
+    /// is cleared, and every node is parked at the origin and halted so the host can
+    /// re-apply the switched-to session's saved layout from its cartography sidecar
+    /// without the sim re-scrambling first (positions are no longer graph truth, S2).
     /// This is the Model-A graph swap the multi-graph switch drives. (Multi-graph MG2.)
     pub fn set_graph(&mut self, graph: Graph) {
         self.graph = graph;
@@ -78,10 +77,7 @@ impl Canvas {
         let positions: Vec<(NodeKey, Point2D<f32>)> = self
             .graph
             .nodes()
-            .map(|(key, node)| {
-                let p = node.projected_position();
-                (key, Point2D::new(p.x, p.y))
-            })
+            .map(|(key, _node)| (key, Point2D::zero()))
             .collect();
         for &(key, pos) in &positions {
             self.view.set_position(key, pos);
@@ -230,8 +226,10 @@ impl Canvas {
         let mut min = (f32::INFINITY, f32::INFINITY);
         let mut max = (f32::NEG_INFINITY, f32::NEG_INFINITY);
         let mut any = false;
-        for (_, node) in self.graph.nodes() {
-            let p = node.projected_position();
+        for (key, _node) in self.graph.nodes() {
+            let Some(p) = self.view.position_of(key) else {
+                continue;
+            };
             if !p.x.is_finite() || !p.y.is_finite() {
                 continue;
             }
@@ -292,13 +290,13 @@ impl Canvas {
         // The expensive caches (community) gate on `Graph::revision` instead — bumped at the kernel
         // mutation source, so a spurious reconcile (e.g. a selection change) cannot invalidate them.
         self.importance_dirty = true;
+        // New bodies spawn at the origin (positions are no longer graph truth, S2);
+        // `sync_nodes` leaves existing bodies at their simulated position, so a live
+        // node is not teleported by a topology change.
         let nodes: Vec<(NodeKey, Point2D<f32>)> = self
             .graph
             .nodes()
-            .map(|(key, node)| {
-                let p = node.projected_position();
-                (key, Point2D::new(p.x, p.y))
-            })
+            .map(|(key, _node)| (key, Point2D::zero()))
             .collect();
         self.physics.sync_nodes(nodes);
         self.physics
@@ -400,11 +398,11 @@ impl Canvas {
         let positions: Vec<(NodeKey, Point2D<f32>)> = self
             .graph
             .nodes()
-            .map(|(key, node)| {
-                let pos = self.view.position_of(key).unwrap_or_else(|| {
-                    let p = node.projected_position();
-                    Point2D::new(p.x, p.y)
-                });
+            .map(|(key, _node)| {
+                // A node the view has not placed yet (just added) parks at the origin;
+                // positions are no longer graph truth (S2), and a following seed / the
+                // actor snapshot supplies its real position.
+                let pos = self.view.position_of(key).unwrap_or_else(Point2D::zero);
                 (key, pos)
             })
             .collect();

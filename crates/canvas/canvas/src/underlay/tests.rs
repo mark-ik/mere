@@ -13,14 +13,17 @@ use kernel::graph::{
 use paint_list_api::{PaintCmd, PaintList};
 use uuid::Uuid;
 
+// Add a node. `x`/`y` are ignored for graph truth (positions are no longer stored
+// on the node, S2); tests that need placed nodes pass a position lookup to the
+// projection helpers. Kept in the signature so the call sites still read as "node
+// 1 at (10, 20)" — the position the caller then supplies through the lookup.
 fn node(g: &mut Graph, id: u128, x: f32, y: f32) -> kernel::graph::NodeKey {
-    let key = g.add_node_with_id(
+    let _ = (x, y);
+    g.add_node_with_id(
         Uuid::from_u128(id),
         format!("mere://{id}"),
         PortablePoint::new(x, y),
-    );
-    g.set_node_position(key, PortablePoint::new(x, y));
-    key
+    )
 }
 
 fn draw_rect_count(list: &CanvasPaintList) -> usize {
@@ -31,7 +34,7 @@ fn draw_rect_count(list: &CanvasPaintList) -> usize {
 }
 
 #[test]
-fn projection_from_graph_carries_positions_and_dedupes_edges() {
+fn projection_from_graph_is_structural_and_dedupes_edges() {
     let mut g = Graph::new();
     let a = node(&mut g, 1, 10.0, 20.0);
     let b = node(&mut g, 2, 30.0, 40.0);
@@ -39,18 +42,18 @@ fn projection_from_graph_carries_positions_and_dedupes_edges() {
     let _ = g.assert_relation(a, b, hyperlink());
     let _ = g.assert_relation(b, a, hyperlink());
 
+    // projection_from_graph is now structural-only: positions are no longer graph
+    // truth (S2), so every node lands at the origin. The membership + edge dedup
+    // are what this path guarantees; a placed projection uses projection_from_positions.
     let p = projection_from_graph(&g);
     assert_eq!(p.nodes.len(), 2);
     let pa = p.nodes.iter().find(|n| n.node == a).unwrap();
-    assert_eq!(pa.position, PortablePoint::new(10.0, 20.0));
+    assert_eq!(pa.position, PortablePoint::zero());
     assert_eq!(
         p.edges.len(),
         1,
         "the bidirectional pair de-dupes to one edge"
     );
-    // content_bounds spans the two nodes.
-    assert_eq!(p.content_bounds.min_x(), 10.0);
-    assert_eq!(p.content_bounds.max_y(), 40.0);
 }
 
 #[test]
@@ -157,11 +160,12 @@ fn edge_visibility_predicate_hides_relations() {
 }
 
 #[test]
-fn projection_from_positions_overrides_committed_and_falls_back() {
+fn projection_from_positions_places_live_nodes_and_parks_the_rest() {
     let mut g = Graph::new();
-    let a = node(&mut g, 1, 10.0, 20.0); // committed (10, 20)
-    let b = node(&mut g, 2, 30.0, 40.0); // committed (30, 40)
-    // A live position for `a` only; `b` has none → falls back to committed.
+    let a = node(&mut g, 1, 10.0, 20.0);
+    let b = node(&mut g, 2, 30.0, 40.0);
+    // A live position for `a` only; `b` has none → parks at the origin (there is no
+    // committed graph position to fall back to any more, S2).
     let live = move |k: NodeKey| (k == a).then_some(PortablePoint::new(99.0, 99.0));
     let p = projection_from_positions(&g, live);
 
@@ -174,8 +178,8 @@ fn projection_from_positions_overrides_committed_and_falls_back() {
     );
     assert_eq!(
         pb.position,
-        PortablePoint::new(30.0, 40.0),
-        "b falls back to committed"
+        PortablePoint::zero(),
+        "b has no live position → parks at the origin"
     );
     assert_eq!(p.metadata.strategy_id.as_deref(), Some("canvas.live"));
 }

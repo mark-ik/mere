@@ -140,7 +140,7 @@ pub use session_service_runner::{
 pub use settings_store::{PersistedSettings, SETTINGS_FILENAME, ShellbarEdge};
 pub use switcher_thumbnail::{
     SwitcherThumbnail, SwitcherThumbnailOptions, ThumbnailEdge, ThumbnailNode,
-    build_switcher_thumbnail, build_switcher_thumbnail_with,
+    build_switcher_thumbnail_with,
 };
 pub use view_intent_store::{CameraSnapshot, HiddenRelationRecord, VIEW_INTENT_DIR, ViewIntent};
 pub use wallet_grant::{

@@ -114,7 +114,6 @@ pub(crate) fn sample_graph() -> Graph {
             format!("mere://node/{i}"),
             pos,
         );
-        graph.set_node_position(key, pos);
         keys.push(key);
     }
     // Ring edges around the cycle.
@@ -249,13 +248,13 @@ pub(crate) fn build_simulation(graph: &Graph) -> Simulation {
 
 /// Reconcile a simulation's bodies to a kernel [`Graph`]'s nodes — the canvas-side
 /// bridge now that seiche is kernel-free. seiche's [`Simulation::sync_nodes`] takes
-/// a `(NodeKey, position)` list; the host reads the graph and forwards it. (Was
-/// `seiche::Simulation::sync_with_graph` before the seiche extraction.)
+/// a `(NodeKey, position)` list; positions are no longer graph truth (S2), so new
+/// bodies spawn at the origin and the caller places them via [`Simulation::
+/// seed_positions`] (a spiral seed, or the host's cartography sidecar). Existing
+/// bodies keep their simulated position. (Was `seiche::Simulation::sync_with_graph`
+/// before the seiche extraction.)
 pub(crate) fn sync_sim_with_graph(sim: &mut Simulation, graph: &Graph) {
-    sim.sync_nodes(graph.nodes().map(|(key, node)| {
-        let p = node.projected_position();
-        (key, Point2D::new(p.x, p.y))
-    }));
+    sim.sync_nodes(graph.nodes().map(|(key, _node)| (key, Point2D::zero())));
 }
 
 /// Resolve a coupling against the graph into a [`CouplingForce`] — the canvas-side

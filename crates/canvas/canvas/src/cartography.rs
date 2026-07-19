@@ -73,14 +73,11 @@ impl Canvas {
     /// **fork** calls this on the donor before cloning, so the fork opens with the
     /// donor's layout instead of every node piled at the seed. (Tear-out gestures G4.)
     pub fn commit_positions_to_graph(&mut self) {
-        let positions: Vec<(NodeKey, Point2D<f32>)> = self
-            .graph
-            .nodes()
-            .filter_map(|(key, _)| self.view.position_of(key).map(|p| (key, p)))
-            .collect();
-        for (key, pos) in positions {
-            self.graph.set_node_projected_position(key, pos);
-        }
+        // No-op since S2: positions are no longer graph truth, so there is nothing
+        // to write back into the graph. The live layout is `view` (seiche); the
+        // durable layout is the cartography sidecar. A tear-out fork carries the
+        // donor's layout by copying the sidecar, not the graph. (Kept as a seam so
+        // callers need not change; retire when the fork path reads the sidecar.)
     }
 
     /// A node's render color, matching the in-scene gnode's class palette: orange when

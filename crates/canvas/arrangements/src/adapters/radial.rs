@@ -313,23 +313,4 @@ mod tests {
             "first-ring node at radius {r} from center, expected 200.0"
         );
     }
-
-    #[test]
-    fn graph_truth_positions_are_never_mutated() {
-        let (graph, [a, _, _, _, _]) = star_graph();
-        let original = graph.get_node(a).unwrap().projected_position();
-        let signals = IntelligenceSignals::default();
-        let intent = ViewIntent::default().with_focus(a);
-        let request = ProjectionRequest {
-            graph: &graph,
-            signals: &signals,
-            intent,
-        };
-        let adapter = RadialAdapter::default();
-        for _ in 0..5 {
-            adapter.project(&request);
-        }
-        let after = graph.get_node(a).unwrap().projected_position();
-        assert_eq!(original, after);
-    }
 }

@@ -341,24 +341,4 @@ mod tests {
         assert_eq!(adapter.config.scale, 7.0);
         assert_eq!(adapter.config.orientation, SpiralOrientation::Inward);
     }
-
-    #[test]
-    fn graph_truth_positions_are_never_mutated() {
-        let (graph, keys) = small_graph();
-        let original = graph.get_node(keys[0]).unwrap().projected_position();
-        let signals = IntelligenceSignals::default();
-        let request = ProjectionRequest {
-            graph: &graph,
-            signals: &signals,
-            intent: ViewIntent::default(),
-        };
-        let adapter = PhyllotaxisAdapter::default();
-        // Project repeatedly — analytic strategy should produce same
-        // result and never touch graph state.
-        for _ in 0..5 {
-            adapter.project(&request);
-        }
-        let after = graph.get_node(keys[0]).unwrap().projected_position();
-        assert_eq!(original, after);
-    }
 }
