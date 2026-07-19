@@ -1,6 +1,5 @@
-/* This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+// Copyright 2026 Mark Boykin
+// SPDX-License-Identifier: MIT OR Apache-2.0
 
 //! Theme registry — `register_theme` / `unregister_theme` / `resolve_theme`
 //! over a `HashMap<String, ThemeTokenSet>` keyed by `theme:*` ids. Token

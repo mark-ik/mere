@@ -1,5 +1,5 @@
-// Copyright 2026 the Mere authors
-// SPDX-License-Identifier: MPL-2.0
+// Copyright 2026 Mark Boykin
+// SPDX-License-Identifier: MIT OR Apache-2.0
 
 //! Native on-disk persistence of curated [`FormeDocument`]s (the `store`
 //! feature).

@@ -1,6 +1,5 @@
-/* This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+// Copyright 2026 Mark Boykin
+// SPDX-License-Identifier: MIT OR Apache-2.0
 
 //! Per-persona UI settings — the persona-scoped configuration the shell's UI reads and
 //! writes, distinct from the app-scoped [`settings_store`](crate::settings_store) sidecar.

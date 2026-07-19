@@ -1,6 +1,5 @@
-/* This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+// Copyright 2026 Mark Boykin
+// SPDX-License-Identifier: MIT OR Apache-2.0
 
 //! Cross-graph node copy — the kernel half of the tear-out "fork" / cross-graph
 //! composability gesture (tear-out brief §7.5; tearout-composability plan C4).

@@ -109,7 +109,7 @@ intentional and visible:
 
 ## License
 
-[MPL-2.0](../../LICENSE).
+MIT OR Apache-2.0.
 
 [`Request`]: https://docs.rs/eidetic/latest/eidetic/enum.Request.html
 [`Response`]: https://docs.rs/eidetic/latest/eidetic/enum.Response.html

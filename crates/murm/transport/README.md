@@ -123,4 +123,4 @@ Protocol semantics (the cabal log, folds, tiers) live above it, never here.
 
 ## License
 
-MPL-2.0.
+MIT OR Apache-2.0.

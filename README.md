@@ -33,7 +33,7 @@ some capabilities exist in code but are not yet wired into the live host.
 
 **Made with AI**
 
-License: Mozilla Public License 2.0 (see `LICENSE-MPL`).
+License: MIT OR Apache-2.0 (see `LICENSE-MIT` and `LICENSE-APACHE`).
 
 ## What it is
 
@@ -284,4 +284,5 @@ Crate versions are pinned at `0.0.1` and binaries are `publish = false`.
 
 ## License
 
-Mozilla Public License 2.0. See `LICENSE-MPL`.
+Licensed under either of MIT (`LICENSE-MIT`) or Apache-2.0 (`LICENSE-APACHE`)
+at your option.

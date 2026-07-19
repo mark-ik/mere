@@ -1,5 +1,5 @@
-// Copyright 2026 the Mere authors
-// SPDX-License-Identifier: MPL-2.0
+// Copyright 2026 Mark Boykin
+// SPDX-License-Identifier: MIT OR Apache-2.0
 
 //! Tree projection — platen's first projection of a forme [`Arrangement`]
 //! into a workbench presentation plan.

@@ -2,7 +2,7 @@
 name = "mere-forme"
 version = "0.1.0"
 edition = "2024"
-license = "MPL-2.0"
+license = "MIT OR Apache-2.0"
 publish = false
 description = "Per-graph-view workbench arrangement authority for Mere — projects graph members + edges into a workbench arrangement (tree-shaped or otherwise)"
 
