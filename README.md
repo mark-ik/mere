@@ -212,7 +212,7 @@ Mere consumes several sibling repos one-way (it depends on them; they never
 depend on Mere):
 
 - `genet` (`mark-ik/genet`): the Servo-derived web engine and host layer.
-  Mere uses `xilem-serval`, `genet-scripted-dom`, `genet-static-dom`,
+  Mere uses `genet-scripted-dom`, `genet-static-dom`,
   `genet-layout`, `genet-winit-host`, `pelt-core`, `pelt-desktop`, and
   `layout-dom-api` from it. The `taffy` and `ipc-channel` forks are vendored
   here and patched in.
