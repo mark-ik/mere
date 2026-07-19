@@ -24,12 +24,16 @@ relationships. The graph (the *orrery*) is the root surface; everything else
   </tr>
 </table>
 
-This repository is a Cargo workspace of 60 member crates organized by concern.
+This repository is a Cargo workspace of 55 member crates organized by concern.
 (That count is the `[workspace] members` list; the `probes` directory in
 `[workspace.exclude]` is not a member and is not counted.)
-The on-screen host is the `meerkat` binary; most other crates are libraries it
-composes. This is pre-release, AI-assisted development; many crates are partially implemented and
-some capabilities exist in code but are not yet wired into the live host.
+Mere is a library workspace. The reference on-screen host is **merecat**, a
+separate repository (`mark-ik/merecat`) that composes these crates into a
+window; it obviated the former in-repo `meerkat` host, removed 2026-07-18.
+Mere keeps a launchable `canvas` bin for developing the graph view on its own.
+This is pre-release, AI-assisted development; many crates are partially
+implemented and some capabilities exist in code but are not yet wired into a
+host.
 
 **Made with AI**
 
@@ -42,7 +46,7 @@ License: MIT OR Apache-2.0 (see `LICENSE-MIT` and `LICENSE-APACHE`).
 - Protocol-agnostic: a Gemini node and an HTTP node can live in the same graph
   and be navigated through the same interface. HTML rides a Servo-derived engine
   lane (`genet`); smolweb protocols (gemini, gopher, finger, spartan, nex,
-  guppy, titan) ride the in-repo `nematic` engine and the `errand` transport.
+  guppy, titan) ride genet's `nematic` engine and `errand` transport.
 - A composable workbench: tabs become tiles in nested split trees, projected
   from the graph.
 - Built toward private local memory (`eidetic`), peer-to-peer comms (`murm`),
@@ -52,7 +56,7 @@ License: MIT OR Apache-2.0 (see `LICENSE-MIT` and `LICENSE-APACHE`).
 The durable architecture is a composition spine: graph truth (`kernel`) is
 arranged by `forme`, projected into a presentation plan by `platen`, realized as
 surfaces, and backed per-surface by a content engine selected by `inker`. The
-host (`meerkat`) renders the result and composites it.
+host (`merecat`) renders the result and composites it.
 
 ## The stack's technical architecture
 
@@ -96,17 +100,15 @@ Up and down the stack, this pattern repeats:
 
 ## Toolchain
 
-- Rust edition 2024. `meerkat` declares `rust-version = "1.92.0"`.
+- Rust edition 2024. The facade crate `mere` declares `rust-version = "1.92.0"`.
 - The workspace pulls several sibling repositories as git dependencies on the
-  `mark-ik/*` GitHub org (`genet`, `netrender`, `netfetcher`, `errand`,
-  `wgpu-scry`). A plain `cargo build` fetches them; no local sibling checkouts
-  are required. A local checkout, if present, is picked up via a gitignored
-  `.cargo/config.toml` `[paths]` override.
-- The root `[patch.crates-io]` redirects `stylo`, `stylo_atoms` (to the
-  `servo/stylo` git rev `8bde0e96`, the v0.18.0 release tag), and `taffy` /
-  `ipc-channel` (to forks
-  vendored in the `mark-ik/genet` repo, tracked by branch) so the Stylo/taffy
-  stack unifies with genet rather than conflicting.
+  `mark-ik/*` GitHub org (`genet`, `armillary`, `boa`, `misfin`; genet in turn
+  carries the render / fetch / smolweb-transport lanes). A plain `cargo build`
+  fetches them; no local sibling checkouts are required. A local checkout, if
+  present, is picked up via a gitignored `.cargo/config.toml` `[paths]` override.
+- The root `[patch.crates-io]` redirects the Stylo/taffy stack onto genet's
+  forks (the published `genet-stylo` family, plus the vendored `taffy` /
+  `ipc-channel`) so it unifies with genet rather than conflicting.
 
 ## Build, run, test
 
@@ -114,11 +116,8 @@ Up and down the stack, this pattern repeats:
 # Build the whole workspace
 cargo build
 
-# Run the host shell (the Mere window)
-cargo run -p meerkat
-
-# Run the standalone graph canvas on its own window
-cargo run -p orrery
+# Run the standalone graph canvas on its own window (the dev launcher)
+cargo run -p canvas
 
 # Test the whole workspace
 cargo test
@@ -127,18 +126,16 @@ cargo test
 cargo test -p kernel
 ```
 
-There are two `[[bin]]` targets in the workspace:
+The on-screen host, `merecat`, lives in the sibling `mark-ik/merecat`
+repository (it pulls `mere` as a git dependency); run it from there with
+`cargo run`.
 
-- `meerkat` (`crates/meerkat`): the full Mere host. A winit window that draws one
-  shell document (chrome plus folded panes plus orrery node-cards) through
-  genet, composites the orrery graph scene and content cards beneath it, and
-  presents via netrender.
-- `orrery` (`crates/orrery/orrery`): a thin winit shell over the reusable
-  `Orrery` graph field-canvas, kept launchable on its own for development and
-  testing. meerkat hosts the same `Orrery` as a content root.
-  Will likely become the seed of a thin wasm client for browser extension targets.
+The one `[[bin]]` target in this workspace is:
 
-`meerkat` has an `agent-harness` feature for automation/testing.
+- `canvas` (`crates/canvas/canvas`): a thin winit shell over the reusable graph
+  field-canvas, launchable on its own for development and testing. `merecat`
+  hosts the same canvas as its root surface. Likely also the seed of a thin
+  wasm client for browser-extension targets.
 
 ## Workspace layout
 
@@ -149,18 +146,19 @@ graph kernel's package name is `kernel`, at `crates/graph/graph-kernel`).
 
 | Directory | Package(s) | Role |
 |---|---|---|
-| `crates/meerkat` | `meerkat` (bin + lib) | The Mere host shell: winit window, chrome (toolbar / omnibar / command palette / frametree), panes, constellation actors, content cards, present stack |
-| `crates/armillary` | `armillary` | Host-neutral actor-kernel runtime: the `!Send` host-kernel boundary plus the `Send` actor harness the subsystem constellation is built on |
-| `crates/graph` | `kernel`, `linked-data`, `node-lineage` | Graph truth: the identity/authority/mutation kernel, the RDF/JSON-LD ingest-export and SPARQL bridge, and per-node navigation lineage |
-| `crates/orrery` | `orrery` (bin + lib), `mere-orrery`, `arrangements`, `cartography`, `gyre`, `aether` | The spatial graph view: the graph field-canvas host, its a11y/uxtree projection, deterministic layout strategies, non-destructive projection, rapier-backed physics, and the field algebra that feeds the physics |
-| `crates/shell` | `chrome`, `comms`, `frame` | Host-neutral domain models: chrome view-models, the comms pane model, and the frame (split-tree) model |
-| `crates/system` | `session-runtime`, `shell-state`, `proofs`, `ux-events`, `registry/register-*` | Runtime services: session settings/manifest, shell state, typed proof and content-reference vocabulary, the UX event/probe taxonomy, and the capability registries (diagnostics, input, knowledge, layout, lens, mod-loader, protocol, theme, viewer) |
-| `crates/inker` | `inker`, `document-canvas`, `engines/nematic`, `engines/scrying-engine` | Engine selection and content rendering: the engine controller, the parley-based document canvas, the smolweb engine, and the system-WebView scrying engine seam |
-| `crates/forme` | `forme`, `uxtree` | Per-graph-view workbench arrangement authority and the UX-tree projection |
-| `crates/platen` | `platen`, `domain/apparatus`, `domain/gloss`, `domain/workbench` | Composition surface: compiles arrangements into presentation plans, plus the domain panels (apparatus inspector, gloss navigator, tiled workbench) |
+| `crates/mere` | `mere` | The facade crate: the curated public surface downstream hosts (`merecat`) depend on |
+| `crates/canvas` | `canvas` (bin + lib), `arrangements`, `cartography` | The spatial graph view (was `orrery`): the graph field-canvas host + dev bin, deterministic layout strategies, and the non-destructive cartography projection with its scene-paint lane. Physics + the field algebra were extracted to the `numen` sibling stack (2026-07-09) |
+| `crates/graph` | `kernel`, `glossary`, `graphlets`, `linked-data` | Graph truth: the identity/authority/mutation kernel, the term glossary, graphlet subgraphs, and the RDF/JSON-LD ingest-export + SPARQL bridge |
+| `crates/incipit` | `incipit` | Core identity vocabulary: `GraphId`, `SessionId`, and the id/session primitives shared across the stack |
+| `crates/domain` | `apparatus`, `gloss`, `roster`, `trail` | The mere-domain UX panels: facet apparatus, gloss navigator, node roster, and navigation trail |
+| `crates/shell` | `chrome`, `comms` | Host-neutral domain models: chrome view-models and the comms pane model. The pane/split-tree model (`frisket`) moved to `merecat` with meerkat's deletion |
+| `crates/system` | `session-runtime`, `shell-state`, `content-contract`, `fetch`, `proofs`, `ux-events`, `registry/register-*` | Runtime services: session/manifest persistence, shell state, the content-reference and fetch contracts, typed proofs, the UX event/probe taxonomy, and the capability registries |
+| `crates/forme` | `forme`, `uxtree` | Per-graph-view arrangement authority and the UX-tree projection |
+| `crates/platen` | `platen`, `domain/*` | Composition surface: compiles arrangements into presentation plans, plus its workbench/accessory domain panels. (Engine selection — `inker`, `document-canvas`, `nematic` — moved to genet 2026-07-10) |
 | `crates/eidetic` | `eidetic` (`eidetic-core`), `eidetic-fjall`, `eidetic-https-fetcher`, `eidetic-iroh-fetcher`, `eidetic-search` | Durable private local memory: the typed-payload store vocabulary, the fjall backend, HTTPS and iroh fetchers, and the tantivy/BM25 lexical search index |
 | `crates/import` | `import` | Browser-data import: bookmark / history / session models and Chrome-JSON / Netscape-HTML parsers, producing portable page seeds |
-| `crates/intel` | `embed` | Local intelligence: the embedding-provider trait and vector index over eidetic artifacts (pure-Rust, with a future Burn-backed provider slot) |
+| `crates/crawl` | `crawl` | Site crawling into portable page seeds for the graph |
+| `crates/intel` | `embed`, `infer`, `signals` | Local intelligence: the embedding-provider trait + vector index, inference glue, and signal extraction over memory |
 | `crates/murm` | `murm`, `murm-replication`, `transport` | Peer exchange: direct conversation, the native conversation engine and signed grammar, shared p2panda replication over muniment, and Iroh-based transport |
 | `crates/moot` | `moothold`, `mooting` | Governed community spaces: Moot event grammar, roster, tessera, constitution primitives, and recognition policy over `murm-replication` |
 | `crates/mesh` | `mesh` | The personal-space compute mesh: signed job operations over LogSync, a deterministic job board and worker loop, plus policy-bound retention checkpoints and prunable event history |
@@ -211,18 +209,21 @@ Set once in `[workspace.dependencies]` and consumed via `dep.workspace = true`:
 Mere consumes several sibling repos one-way (it depends on them; they never
 depend on Mere):
 
-- `genet` (`mark-ik/genet`): the Servo-derived web engine and host layer.
-  Mere uses `genet-scripted-dom`, `genet-static-dom`,
-  `genet-layout`, `genet-winit-host`, `pelt-core`, `pelt-desktop`, and
-  `layout-dom-api` from it. The `taffy` and `ipc-channel` forks are vendored
-  here and patched in.
-- `netrender` (`mark-ik/netrender`): the renderer (`netrender`,
-  `paint_list_render`, `paint_list_api`, `netrender_text`).
-- `netfetcher` (`mark-ik/netfetcher`): off-thread WHATWG Fetch for http(s).
-- `errand` (`mark-ik/errand`): smolweb transport (gemini / gopher / finger /
-  spartan / nex / guppy / titan).
-- `wgpu-scry` (`mark-ik/wgpu-scry`): the Windows WebView2 compositing producer
-  for the scrying tile (a `cfg(windows)` dependency of `meerkat`).
+- `genet` (`mark-ik/genet`): the Servo-derived web engine and host layer, and
+  now the engine-management family too (`inker`, `nematic`, `document-canvas`
+  moved there 2026-07-10). Genet in turn bundles the render (`netrender`),
+  fetch (`netfetcher`), and smolweb-transport (`errand`) lanes, so Mere no
+  longer names those directly. The `taffy` / `ipc-channel` forks are vendored
+  in genet and patched in.
+- `armillary` (`mark-ik/armillary`): the host-neutral actor-kernel runtime (the
+  `!Send` host-kernel boundary plus the `Send` actor harness), moved out of the
+  workspace and consumed as a git sibling.
+- `boa` (`mark-ik/boa`): the Boa JavaScript document-host lane.
+- `misfin` (`mark-ik/misfin`): the misfin messaging lane, held in stewardship.
+
+Downstream, **`merecat`** (`mark-ik/merecat`) is the reference on-screen host:
+it depends on Mere one-way and composes these crates into the window that was
+formerly `meerkat`.
 
 ## Documentation
 
