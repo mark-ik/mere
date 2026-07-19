@@ -17,7 +17,7 @@
 //! WASM-clean: no host-side dependencies beyond what `graph/mod.rs`
 //! already imports.
 
-use euclid::default::{Point2D, Vector2D};
+use euclid::default::Point2D;
 use petgraph::Directed;
 use petgraph::stable_graph::{EdgeIndex, NodeIndex};
 use rkyv::{
@@ -153,42 +153,6 @@ where
     }
 }
 
-pub(crate) struct Vector2DAsTuple;
-
-impl ArchiveWith<Vector2D<f32>> for Vector2DAsTuple {
-    type Archived = Archived<(f32, f32)>;
-    type Resolver = Resolver<(f32, f32)>;
-
-    fn resolve_with(field: &Vector2D<f32>, resolver: Self::Resolver, out: Place<Self::Archived>) {
-        let value = (field.x, field.y);
-        value.resolve(resolver, out);
-    }
-}
-
-impl<S> SerializeWith<Vector2D<f32>, S> for Vector2DAsTuple
-where
-    S: Fallible + ?Sized,
-    (f32, f32): Serialize<S>,
-{
-    fn serialize_with(
-        field: &Vector2D<f32>,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
-        let value = (field.x, field.y);
-        value.serialize(serializer)
-    }
-}
-
-impl<D> DeserializeWith<Archived<(f32, f32)>, Vector2D<f32>, D> for Vector2DAsTuple
-where
-    D: Fallible + ?Sized,
-    Archived<(f32, f32)>: Deserialize<(f32, f32), D>,
-{
-    fn deserialize_with(
-        field: &Archived<(f32, f32)>,
-        deserializer: &mut D,
-    ) -> Result<Vector2D<f32>, D::Error> {
-        let (x, y) = field.deserialize(deserializer)?;
-        Ok(Vector2D::new(x, y))
-    }
-}
+// `Vector2DAsTuple` (the rkyv with-adapter for `Node.velocity`) left with the
+// velocity field: seiche owns live velocity, so the graph node no longer carries
+// it. `Point2DAsTuple` remains for the transient projected position.

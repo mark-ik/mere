@@ -14,7 +14,7 @@
 //!
 //! WASM-clean: must compile to `wasm32-unknown-unknown` (mirrors `graph/mod.rs`).
 
-use euclid::default::{Point2D, Vector2D};
+use euclid::default::Point2D;
 use uuid::Uuid;
 
 use super::{Graph, Node, NodeKey, ProvenanceSubKind};
@@ -91,7 +91,6 @@ impl Graph {
             favicon_height: source.favicon_height,
             // --- placement: the drop point in this graph ---
             position,
-            velocity: Vector2D::zero(),
             // --- provenance: the cross-graph derivation record ---
             derivations: vec![derivation],
             // describes the donor's own external import, not this copy:

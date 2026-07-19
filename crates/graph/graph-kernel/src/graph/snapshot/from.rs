@@ -11,7 +11,7 @@
 use std::collections::HashMap;
 use std::time::{Duration, UNIX_EPOCH};
 
-use euclid::default::{Point2D, Vector2D};
+use euclid::default::Point2D;
 use uuid::Uuid;
 
 use super::super::*;

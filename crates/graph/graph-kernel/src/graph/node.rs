@@ -19,11 +19,11 @@
 
 use std::collections::HashSet;
 
-use euclid::default::{Point2D, Vector2D};
+use euclid::default::Point2D;
 use rkyv::{Archive, Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::identity::{Point2DAsTuple, UuidAsBytes, Vector2DAsTuple};
+use super::identity::{Point2DAsTuple, UuidAsBytes};
 use crate::address::{Address, AddressClaim, address_from_url, cached_host_from_url};
 use crate::types::{
     FrameLayoutHint, NodeClassification, NodeDerivation, NodeImportProvenance, NodeProperty,
@@ -51,10 +51,6 @@ pub struct Node {
     /// accessor.
     #[rkyv(with = Point2DAsTuple)]
     pub(crate) position: Point2D<f32>,
-
-    /// Velocity for physics simulation
-    #[rkyv(with = Vector2DAsTuple)]
-    pub velocity: Vector2D<f32>,
 
     /// Canonical durable semantic tags for this node.
     pub tags: HashSet<String>,
@@ -187,7 +183,6 @@ impl Node {
             cached_host: cached_host_from_url(url),
             title: url.to_string(),
             position: Point2D::new(0.0, 0.0),
-            velocity: Vector2D::new(0.0, 0.0),
             tags: HashSet::new(),
             tag_presentation: NodeTagPresentationState::default(),
             import_provenance: Vec::new(),

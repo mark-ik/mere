@@ -86,8 +86,6 @@ fn test_add_node() {
     assert_eq!(node.title, "https://example.com");
     assert_eq!(node.position.x, 100.0);
     assert_eq!(node.position.y, 200.0);
-    assert_eq!(node.velocity.x, 0.0);
-    assert_eq!(node.velocity.y, 0.0);
     assert!(!node.is_pinned);
 }
 

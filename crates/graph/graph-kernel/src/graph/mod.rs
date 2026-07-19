@@ -6,12 +6,12 @@
 //!
 //! Core structures:
 //! - `Graph`: Main graph container backed by petgraph::StableGraph
-//! - `Node`: Webpage node with position, velocity, and metadata
+//! - `Node`: Webpage node with a transient projected position and metadata
 //! - `EdgePayload`: Edge semantics and traversal events between nodes
 //!
 //! This module is WASM-clean: it must compile to `wasm32-unknown-unknown`.
 
-use euclid::default::{Point2D, Vector2D};
+use euclid::default::Point2D;
 // `MemoryEntryPrivacy` / `OwnerScopedMemory` / `GraphMemorySnapshot` /
 // `MemoryTransitionKind` were used by the node-history types that
 // moved to `history.rs` (2026-05-11 decomposition pass); `Graph` itself
@@ -401,7 +401,6 @@ impl Graph {
             cached_host: cached_host_from_url(&url),
             body: None,
             position,
-            velocity: Vector2D::zero(),
             tags: HashSet::new(),
             tag_presentation: NodeTagPresentationState::default(),
             import_provenance: Vec::new(),
