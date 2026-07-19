@@ -1,30 +1,29 @@
 // Copyright 2026 Mark AB (markik)
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-//! Cartography geometry — the canvas's settled-layout sidecar.
+//! Cartography geometry — the canvas's settled-layout read surface.
 //!
 //! Moved from platen's `projection_geometry` in the 2026-07-09 platen
 //! decomposition: this is graph-scene material (member-keyed world positions
 //! plus the per-member representation overrides), so it lives with the canvas;
-//! platen keeps the Tree (pane) geometry. Persisted beside the session graph,
-//! keyed `(FormeRef::Identity(GraphId), ProjectionKind::Cartography)` by the
-//! host store.
-
-use std::collections::HashSet;
+//! platen keeps the Tree (pane) geometry. The host persists it as the
+//! `arrangement.*` facet family (session-runtime `arrangement_facets`, in
+//! `facets.json`) — the planned bespoke sidecar file was obviated by the facet
+//! convergence before any host wired it.
 
 use forme::GraphMemberId;
 use serde::{Deserialize, Serialize};
 /// The geometry of the **Cartography** projection (the canvas): each member's world
 /// position, member-keyed. The cartography counterpart of [`TreeGeometry`] for the
 /// Tree projection — "canonical world positions (cartography)" per the composition
-/// spine (§9), keyed `(FormeRef::Identity(GraphId), ProjectionKind::Cartography)` and
-/// persisted beside the session graph. Positions are *world* coordinates (the
-/// semantic geometry), not pixels, so they render responsively at any zoom.
+/// spine (§9). Positions are *world* coordinates (the semantic geometry), not
+/// pixels, so they render responsively at any zoom.
 ///
-/// This is the authoritative store of the canvas's *settled* layout: the live
-/// force-directed positions live in the seiche read model and were never written back
-/// to the kernel graph, so without this sidecar a session's settled layout is lost on
-/// reload (graph.json carries only the load-time seed).
+/// The save-time snapshot of the canvas's *settled* layout: the live positions
+/// live in the seiche read model and the kernel graph carries none at all, so
+/// without persisting this a session's layout is lost on reload. The host
+/// persists it family-by-family as `arrangement.*` facets (session-runtime
+/// `arrangement_facets`), one facet id per field group below.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct CartographyGeometry {
     positions: Vec<(GraphMemberId, (f32, f32))>,
@@ -205,26 +204,10 @@ impl CartographyGeometry {
         self.positions.iter().map(|(m, _)| *m).collect()
     }
 
-    /// Serialize to JSON for session persistence (the host writes it beside the graph).
-    pub fn to_persisted_json(&self) -> Result<String, serde_json::Error> {
-        serde_json::to_string(self)
-    }
-
-    /// Rebuild from persisted JSON, dropping any member the live graph no longer has
-    /// (`present`) so a deleted node's stale position (or size) is reconciled away. `None`
-    /// on a parse error — the host falls back to the graph's own seed.
-    pub fn from_persisted_json(json: &str, present: &HashSet<GraphMemberId>) -> Option<Self> {
-        let mut geom: Self = serde_json::from_str(json).ok()?;
-        geom.positions
-            .retain(|(member, _)| present.contains(member));
-        geom.sizes.retain(|(member, _)| present.contains(member));
-        geom.sprites.retain(|(member, _)| present.contains(member));
-        geom.sprite_hulls
-            .retain(|(member, _)| present.contains(member));
-        geom.materials
-            .retain(|(member, _)| present.contains(member));
-        geom.faces.retain(|(member, _)| present.contains(member));
-        Some(geom)
-    }
+    // `to_persisted_json` / `from_persisted_json` — the bespoke-sidecar half —
+    // left with the facet convergence: no host ever wired the cartography.json
+    // sidecar, and the durable arrangement now persists as `arrangement.*`
+    // facets (session-runtime `arrangement_facets`). This type remains as the
+    // canvas's save-time read surface (`Canvas::cartography_geometry`).
 }
 
