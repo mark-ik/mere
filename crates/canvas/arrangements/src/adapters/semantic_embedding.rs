@@ -68,7 +68,7 @@ impl LayoutStrategy for SemanticEmbeddingAdapter {
         let sin_r = self.config.rotation.sin();
         let mut positions: HashMap<NodeKey, Point2D<f32>> = HashMap::new();
 
-        for (key, node) in request.graph.nodes() {
+        for (key, _node) in request.graph.nodes() {
             let embedding = request
                 .signals
                 .embeddings

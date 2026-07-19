@@ -59,6 +59,10 @@ pub mod denizen_bindings;
 // graph.json. The durable home the bespoke per-node sidecars (browser/denizen/
 // arrangement) converge onto. Wraps chartulary's FacetStore.
 pub mod facet_store;
+// The arrangement.* facet namespace: cartography's per-node data (position
+// first; size/sprite/hull/material/face follow) as facets in facets.json —
+// born as facets, since the bespoke cartography sidecar was never wired.
+pub mod arrangement_facets;
 pub mod engine_profile_store;
 // Freeze/thaw a live graph into an immutable, content-addressed graph engram over
 // an eidetic Store (the Alembic memory spine; wasm-clean — store-agnostic, not
@@ -115,6 +119,10 @@ pub use engine_profile_store::{
 pub use denizen_bindings::{
     DENIZEN_BINDINGS_FILE, DenizenBinding, DenizenBindings, DenizenKind, denizen_bindings_path,
     load_denizen_bindings, save_denizen_bindings,
+};
+pub use arrangement_facets::{
+    ARRANGEMENT_POSITION, arrangement_position_facet, read_arrangement_positions,
+    retain_present_nodes, write_arrangement_positions,
 };
 pub use facet_store::{
     AcceptAll, FacetError, FacetId, FacetValidator, NODE_FACETS_FILE, NodeFacetStore, NodeFacets,
