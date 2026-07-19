@@ -43,6 +43,25 @@ impl Canvas {
         }
     }
 
+    /// Center the camera on the (first) selected node — the restore framing:
+    /// a session switch or boot re-selects where the user was, and this puts
+    /// that node at the viewport's center instead of leaving the camera at
+    /// whatever origin happens to crop it. The node-keyed twin of
+    /// [`Self::center_on_field`]. Returns `false` with nothing selected or no
+    /// position yet.
+    pub fn center_on_selected(&mut self) -> bool {
+        let Some(&key) = self.selected.iter().next() else {
+            return false;
+        };
+        let Some(pos) = self.view.position_of(key) else {
+            return false;
+        };
+        // screen = world * zoom + offset; put the node at the viewport center.
+        self.camera.offset.0 = self.view_w as f32 / 2.0 - pos.x * self.camera.zoom;
+        self.camera.offset.1 = self.view_h as f32 / 2.0 - pos.y * self.camera.zoom;
+        true
+    }
+
     /// Toggle `member` in or out of the selection (a multi-select add), keeping the
     /// rest selected — the member-keyed twin of the canvas's Shift-click. Clears the
     /// edge selection (matching that gesture) so a mixed node+edge selection can't
