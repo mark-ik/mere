@@ -1,10 +1,12 @@
 # Mere
 
-A graph-first browser and knowledge workbench. Your browsing history and content
-are nodes in a spatial graph; html pages, gemini capsules, local media, and notes
-sit side by side in the same canvas, connected by user-created and inferred
-relationships. The graph (the *orrery*) is the root surface; everything else
-(tiles, panes, content cards) is a projection of it.
+Mere is the library behind a graph-first browser. Your history and content become
+nodes in a spatial graph: html pages, gemini capsules, local media, and notes sit
+side by side in one canvas, joined by user-made and inferred relationships. Mere
+composes that world (graph truth, arrangement, persistence, retrieval, identity,
+comms) and hands it to a host; the reference host that renders it is
+[merecat](https://github.com/mark-ik/merecat). The graph (the *orrery*) is the
+root surface; tiles, panes, and content cards are projections of it.
 
 <p align="center">
   <img src="assets/media/mere-demo.gif" alt="The orrery as a live force-directed graph, nodes settling under physics" width="900"><br>
