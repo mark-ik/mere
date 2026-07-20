@@ -320,11 +320,28 @@ impl Canvas {
             .and_then(|key| self.graph.get_node(key).map(|n| n.id))
     }
 
-    /// Re-mint a deleted node from its tombstone: open a fresh unlinked node on
-    /// `url`, then restore its title and tags (node truth that does not re-derive
-    /// from a re-fetch). Returns the new node's id. (Recover-deleted-node, Lane 0.)
-    pub fn recover_node(&mut self, url: &str, title: Option<&str>, tags: &[String]) -> uuid::Uuid {
-        let key = self.mint_node(None, url);
+    /// Re-mint a deleted node from its bin record WITH ITS ORIGINAL member id —
+    /// identity restored, so anything that keyed the node by uuid (facets,
+    /// provenance, a host's sidecars) resolves to the recovered node again.
+    /// Restores title and tags too (node truth that does not re-derive from a
+    /// re-fetch). Edges are not restored (they left with the node); recovering
+    /// a full subgraph is a later fidelity step. (Recover-deleted-node; the
+    /// merecat recycle-bin plan, 2026-07-20 — supersedes the fresh-mint Lane 0.)
+    pub fn recover_node(
+        &mut self,
+        id: uuid::Uuid,
+        url: &str,
+        title: Option<&str>,
+        tags: &[String],
+    ) -> uuid::Uuid {
+        // Idempotent: if the node already exists (an earlier recover, or the
+        // url re-opened by hand under the same id), select it and stand down —
+        // never mint a second node under one identity.
+        if let Some(key) = self.graph.get_node_key_by_id(id) {
+            self.select_only(key);
+            return id;
+        }
+        let key = self.mint_node_as(None, url, id);
         if let Some(title) = title.filter(|t| !t.is_empty()) {
             let _ = apply_graph_delta(
                 &mut self.graph,
@@ -516,18 +533,24 @@ impl Canvas {
     /// and restarts the settle. Shared by [`visit`](Self::visit)'s create branch
     /// and [`open_member_as_new_node`](Self::open_member_as_new_node).
     fn mint_node(&mut self, origin: Option<NodeKey>, url: &str) -> NodeKey {
+        self.mint_node_as(origin, url, uuid::Uuid::new_v4())
+    }
+
+    /// [`Self::mint_node`] with the member id CALLER-CHOSEN: the recovery path
+    /// re-mints a deleted node under its original id (identity restored); every
+    /// fresh-surface path mints a new v4 through the wrapper above.
+    fn mint_node_as(&mut self, origin: Option<NodeKey>, url: &str, id: uuid::Uuid) -> NodeKey {
         let anchor = origin
             .and_then(|k| self.view.position_of(k))
             .unwrap_or(Point2D::new(0.0, 0.0));
         let seed = Point2D::new(anchor.x + 12.0, anchor.y + 12.0);
         // `Graph::add_node` is native-only (it self-generates the UUID); on wasm the
-        // host supplies it via `add_node_with_id`. mint_node opens a fresh surface, so
-        // a new random id is the right one here (node_namespace_id is for convergent
-        // linked-data ingest, not user-minted nodes). new_v4 works on wasm via the
-        // unified uuid `js` backend.
+        // host supplies it via `add_node_with_id`. A fresh surface mints a new random
+        // id (node_namespace_id is for convergent linked-data ingest, not user-minted
+        // nodes); new_v4 works on wasm via the unified uuid `js` backend.
         let key = graph_apply::add_node(
             &mut self.graph,
-            Some(uuid::Uuid::new_v4()),
+            Some(id),
             url.to_string(),
             PortablePoint::new(seed.x, seed.y),
         );

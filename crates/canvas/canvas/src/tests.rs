@@ -430,21 +430,30 @@ fn tag_selected_inserts_the_trimmed_tag_on_every_selected_node() {
 }
 
 #[test]
-fn recover_node_re_mints_with_restored_title_and_tags() {
+fn recover_node_restores_the_original_identity() {
     let mut canvas = Canvas::new();
+    // A real node lives, dies, and its bin record carries its identity.
+    let original = canvas.open_member_as_new_node(None, "https://recovered.test");
+    canvas.remove_focused().expect("the fresh node is focused");
+    assert!(
+        canvas.graph().get_node_by_id(original).is_none(),
+        "deleted from the graph"
+    );
     let before = canvas.graph().nodes().count();
 
     let id = canvas.recover_node(
+        original,
         "https://recovered.test",
         Some("Recovered Page"),
         &["reading".to_string(), "archived".to_string()],
     );
+    assert_eq!(id, original, "recovery restores the ORIGINAL member id");
     assert_eq!(
         canvas.graph().nodes().count(),
         before + 1,
         "a node was re-minted"
     );
-    let (key, node) = canvas.graph().get_node_by_id(id).unwrap();
+    let (key, node) = canvas.graph().get_node_by_id(original).unwrap();
     assert_eq!(node.url(), "https://recovered.test", "the url is restored");
     assert_eq!(node.title, "Recovered Page", "the title is restored");
     let tags = canvas.graph().node_tags(key).unwrap();
@@ -453,9 +462,24 @@ fn recover_node_re_mints_with_restored_title_and_tags() {
         "both tags restored"
     );
 
-    // A tombstone with no stored title still re-mints a node (its title is left to
-    // the mint default / a later fetch, not forced empty).
-    let id2 = canvas.recover_node("https://untitled.test", None, &[]);
+    // Idempotent: recovering an already-recovered id selects it instead of
+    // minting a twin under the same identity.
+    let again = canvas.recover_node(original, "https://recovered.test", None, &[]);
+    assert_eq!(again, original);
+    assert_eq!(
+        canvas.graph().nodes().count(),
+        before + 1,
+        "no twin node under one identity"
+    );
+
+    // A record with no stored title still re-mints (its title is left to the
+    // mint default / a later fetch, not forced empty).
+    let id2 = canvas.recover_node(
+        uuid::Uuid::new_v4(),
+        "https://untitled.test",
+        None,
+        &[],
+    );
     assert!(
         canvas.graph().get_node_by_id(id2).is_some(),
         "the untitled node re-mints"
