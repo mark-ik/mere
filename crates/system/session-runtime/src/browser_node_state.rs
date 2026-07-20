@@ -146,33 +146,15 @@ pub fn browser_node_state_path(session_dir: &Path) -> PathBuf {
     session_dir.join(BROWSER_NODES_FILE)
 }
 
-/// Serialise `states` to JSON and write atomically (tmp + rename).
-/// Empty entries are pruned so the document stays minimal; an entirely
-/// empty map still writes (callers that want to skip should check
-/// [`BrowserNodeStates::is_empty`] first).
-pub fn save_browser_node_states(session_dir: &Path, states: &BrowserNodeStates) -> io::Result<()> {
-    let target = browser_node_state_path(session_dir);
-    if let Some(parent) = target.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let pruned = BrowserNodeStates {
-        nodes: states
-            .nodes
-            .iter()
-            .filter(|(_, s)| !s.is_empty())
-            .map(|(k, v)| (*k, v.clone()))
-            .collect(),
-    };
-    let json = serde_json::to_string_pretty(&pruned)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-    let tmp = target.with_extension("json.tmp");
-    fs::write(&tmp, json)?;
-    fs::rename(&tmp, &target)?;
-    Ok(())
-}
+// `save_browser_node_states` left with the web.* facet convergence
+// (2026-07-20): the host persists this state as `web.*` facets in facets.json
+// (`web_facets::write_web_states`) and never writes browser_nodes.json again.
+// The load below stays as the LEGACY fallback — a pre-convergence profile's
+// sidecar is absorbed into facets on first load, then goes stale on disk.
 
-/// Read the sidecar document. Returns `Ok(None)` when it doesn't exist
-/// (fresh session, or pre-split session awaiting migration).
+/// Read the legacy sidecar document. Returns `Ok(None)` when it doesn't exist
+/// (fresh session, pre-split session awaiting migration, or a post-convergence
+/// profile whose state lives in facets.json).
 pub fn load_browser_node_states(session_dir: &Path) -> io::Result<Option<BrowserNodeStates>> {
     let path = browser_node_state_path(session_dir);
     if !path.exists() {
@@ -195,9 +177,9 @@ pub fn load_browser_node_states(session_dir: &Path) -> io::Result<Option<Browser
 /// errors are the graph loader's to report, not this migration's).
 ///
 /// Returns `(states, migrated)`; when `migrated` is true the caller should
-/// [`save_browser_node_states`] promptly so the migration is visibly one-time
-/// (the next graph re-save drops the legacy fields; the sidecar is the record
-/// from here).
+/// persist promptly (as `web.*` facets, `web_facets::write_web_states` +
+/// `save_node_facets`) so the migration is visibly one-time (the next graph
+/// re-save drops the legacy fields; the facet store is the record from here).
 #[cfg(not(target_arch = "wasm32"))]
 pub fn load_or_migrate_browser_node_states(session_dir: &Path) -> (BrowserNodeStates, bool) {
     let mut states = load_browser_node_states(session_dir)
@@ -257,11 +239,19 @@ mod tests {
         states
     }
 
+    /// Write a legacy `browser_nodes.json` fixture the way the retired save
+    /// half did (pretty JSON of the map), standing in for a pre-convergence
+    /// profile on disk.
+    fn write_legacy_fixture(dir: &Path, states: &BrowserNodeStates) {
+        let json = serde_json::to_string_pretty(states).unwrap();
+        fs::write(browser_node_state_path(dir), json).unwrap();
+    }
+
     #[test]
-    fn save_then_load_round_trips() {
-        let dir = temp_session_dir("round-trip");
+    fn a_legacy_sidecar_still_loads() {
+        let dir = temp_session_dir("legacy-load");
         let original = sample_states();
-        save_browser_node_states(&dir, &original).unwrap();
+        write_legacy_fixture(&dir, &original);
         let restored = load_browser_node_states(&dir)
             .unwrap()
             .expect("sidecar should be present");
@@ -282,18 +272,10 @@ mod tests {
         assert!(states.get(Uuid::from_u128(0xdead)).is_none());
     }
 
-    #[test]
-    fn empty_entries_are_pruned_on_save() {
-        let dir = temp_session_dir("prune");
-        let mut states = sample_states();
-        // A node that was touched but holds nothing persistable.
-        states.entry(Uuid::from_u128(0xc));
-        assert_eq!(states.nodes.len(), 3);
-        save_browser_node_states(&dir, &states).unwrap();
-        let restored = load_browser_node_states(&dir).unwrap().unwrap();
-        assert_eq!(restored.nodes.len(), 2, "empty entry must not persist");
-        fs::remove_dir_all(&dir).ok();
-    }
+    // `empty_entries_are_pruned_on_save` / `removed_node_state_is_gone_after_
+    // round_trip` left with the save half: pruning-on-save lives in
+    // `web_facets` now (default fields write no facet; the whole-set rewrite
+    // clears stale nodes), tested there.
 
     #[test]
     fn absorb_legacy_seeds_unseen_nodes_only() {
@@ -319,17 +301,6 @@ mod tests {
         assert!(states.get(untouched).is_none());
     }
 
-    #[test]
-    fn removed_node_state_is_gone_after_round_trip() {
-        let dir = temp_session_dir("remove");
-        let mut states = sample_states();
-        states.remove(Uuid::from_u128(0xa));
-        save_browser_node_states(&dir, &states).unwrap();
-        let restored = load_browser_node_states(&dir).unwrap().unwrap();
-        assert!(restored.get(Uuid::from_u128(0xa)).is_none());
-        assert!(restored.get(Uuid::from_u128(0xb)).is_some());
-        fs::remove_dir_all(&dir).ok();
-    }
 
     /// A pre-split `graph.json` (the legacy inline session_state form) seeds
     /// the sidecar once; after the sidecar exists its values win on re-runs.
@@ -354,10 +325,11 @@ mod tests {
         assert_eq!(entry.scroll, Some((20.0, 640.0)));
         assert_eq!(entry.form_draft.as_deref(), Some("draft body"));
 
-        // The host persists after a migration; a newer in-session value then
-        // survives a second load (sidecar wins over the still-present legacy).
+        // A newer sidecar value wins over the still-present legacy snapshot on
+        // a second load (the sidecar is authoritative once it exists). Written
+        // as a legacy fixture — the live save path is web.* facets now.
         states.entry(node_id).scroll = Some((0.0, 5.0));
-        save_browser_node_states(&dir, &states).unwrap();
+        write_legacy_fixture(&dir, &states);
         let (states, _) = load_or_migrate_browser_node_states(&dir);
         assert_eq!(states.get(node_id).unwrap().scroll, Some((0.0, 5.0)));
         fs::remove_dir_all(&dir).ok();

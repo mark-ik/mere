@@ -45,15 +45,20 @@ pub mod content_store;
 // snapshots) — the sibling of content_store, keyed by BLAKE3 digest so identical
 // images dedup. The pixels live here; the kernel Node holds only an ImageRef.
 pub mod image_store;
-// Per-node browser-state sidecar (scroll / form draft / viewer override /
-// compat mode), keyed by node UUID beside graph.json — browser-runtime state
-// that doesn't belong in graph truth (boundary pass slice C).
+// Per-node browser-state working set (scroll / form draft / viewer override /
+// compat mode / content-on) — browser-runtime state that doesn't belong in
+// graph truth (boundary pass slice C). Persistence converged onto web.* facets
+// (web_facets); the module's browser_nodes.json IO remains as legacy read-only.
 pub mod browser_node_state;
-// Per-node denizen-binding sidecar (denizen_bindings.json): which graph nodes
-// are denizens (servitor / agent / peer / scenario / pack) and where each one's
-// nested graph lives, keyed by node UUID beside graph.json. Host knowledge about
-// a node, not graph truth — the same slice-C doctrine as browser_node_state.
-pub mod denizen_bindings;
+// The web.* facet namespace: browser_node_state's persistence boundary — one
+// atomic facet per field (web.scroll / form_draft / viewer / compat / content)
+// in facets.json, replacing the bespoke browser_nodes.json document.
+pub mod web_facets;
+// The denizen.* facet namespace: which graph nodes are denizens (servitor /
+// agent / peer / scenario / pack) and where each one's nested graph lives —
+// a facet bundle on the node, in facets.json. Supersedes the transitional
+// denizen_bindings.json sidecar (removed before any host wrote one).
+pub mod denizen_facets;
 // Per-node facet-store sidecar (facets.json): the runtime tier of the one-node
 // facet system — typed per-node metadata keyed by node UUID, persisted beside
 // graph.json. The durable home the bespoke per-node sidecars (browser/denizen/
@@ -120,9 +125,9 @@ pub use engine_profile_store::{
     ENGINE_PROFILES_DIR, EngineProfileScope, GRAPHS_DIR, PERSONAS_DIR, SESSIONS_DIR,
     engine_profile_path, engine_profile_path_for_session,
 };
-pub use denizen_bindings::{
-    DENIZEN_BINDINGS_FILE, DenizenBinding, DenizenBindings, DenizenKind, denizen_bindings_path,
-    load_denizen_bindings, save_denizen_bindings,
+pub use denizen_facets::{
+    DENIZEN_BINDING, DenizenBinding, DenizenKind, is_denizen, read_denizen_binding,
+    read_denizen_bindings, remove_denizen_binding, write_denizen_binding,
 };
 pub use arrangement_facets::{
     ARRANGEMENT_FACE, ARRANGEMENT_MATERIAL, ARRANGEMENT_POSITION, ARRANGEMENT_SIZE,
@@ -136,6 +141,10 @@ pub use arrangement_facets::{
 pub use scene_facets::{
     DEFAULT_PHYSICS_DAMPING, SCENE_IMPORTANCE_METRIC, SCENE_PHYSICS_DAMPING, SCENE_SIZE_BY_DEGREE,
     SCENE_SIZE_BY_IMPORTANCE, SceneFacets, read_scene_facets, write_scene_facets,
+};
+pub use web_facets::{
+    WEB_COMPAT, WEB_CONTENT, WEB_FORM_DRAFT, WEB_SCROLL, WEB_VIEWER, read_web_states,
+    write_web_state, write_web_states,
 };
 pub use facet_store::{
     AcceptAll, FacetError, FacetId, FacetValidator, NODE_FACETS_FILE, NodeFacetStore, NodeFacets,
