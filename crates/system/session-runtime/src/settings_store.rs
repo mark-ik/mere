@@ -63,7 +63,7 @@ pub struct ScriptPermissionPrefs {
 /// Persistable user settings. v0 carried the active-tab cap; `theme_id` joined
 /// with the runtime theme switcher. Future preferences join as their controls
 /// land, each with a serde default so old files keep parsing.
-// Not `Eq`: `physics_damping` is an `f32`. `PartialEq` is all the `==` checks need.
+// Not `Eq`: `ui_zoom` is an `f32`. `PartialEq` is all the `==` checks need.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PersistedSettings {
     /// The most warm tabs the actor pool keeps before LRU eviction.
@@ -88,11 +88,10 @@ pub struct PersistedSettings {
     /// again from the command palette / `>shellbar`. (Hide-shellbar.)
     #[serde(default)]
     pub shellbar_hidden: bool,
-    /// Linear damping for orrery node bodies — the "inertia" physics setting: lower
-    /// keeps more drift after a settle, higher rests sooner. Defaults to the layout
-    /// engine's tuned value.
-    #[serde(default = "default_physics_damping")]
-    pub physics_damping: f32,
+    // `physics_damping` left the app-wide settings store: linear damping is
+    // scene-scoped (a property of one graph scene, not the app), so it lives as
+    // a `scene.physics_damping` container facet now (see `scene_facets`). A
+    // legacy settings.json still carrying the field just ignores it on load.
     /// Globally deactivated engine ids (e.g. `scrying.web`). A present-but-disabled
     /// engine is never routed to and spawns no actors; the picker shows it as off.
     /// Empty = every engine the build carries is active. (engine-picker Phase 1.)
@@ -167,12 +166,6 @@ fn default_ui_zoom() -> f32 {
     1.1
 }
 
-/// The layout engine's tuned default linear damping (mirrors seiche's
-/// `DEFAULT_LINEAR_DAMPING`); the seed when no setting is persisted.
-fn default_physics_damping() -> f32 {
-    2.5
-}
-
 /// The idle-cadence snapshot refresh defaults on: it is what makes the preview
 /// card honest for tiles that sit open a long time without a boundary crossing.
 fn default_snapshot_idle_refresh() -> bool {
@@ -187,7 +180,6 @@ impl Default for PersistedSettings {
             theme_mode: None,
             shellbar_edge: ShellbarEdge::default(),
             shellbar_hidden: false,
-            physics_damping: default_physics_damping(),
             disabled_engines: Vec::new(),
             document_typography: None,
             script_permissions: ScriptPermissionPrefs::default(),
@@ -270,7 +262,6 @@ mod tests {
             theme_mode: Some("dark".to_string()),
             shellbar_edge: ShellbarEdge::Left,
             shellbar_hidden: false,
-            physics_damping: 2.5,
             disabled_engines: vec!["scrying.web".into()],
             document_typography: None,
             script_permissions: ScriptPermissionPrefs {
@@ -326,7 +317,6 @@ mod tests {
                 theme_mode: None,
                 shellbar_edge: ShellbarEdge::Left,
                 shellbar_hidden: false,
-                physics_damping: 2.5,
                 disabled_engines: Vec::new(),
                 document_typography: None,
                 script_permissions: ScriptPermissionPrefs::default(),
@@ -351,7 +341,6 @@ mod tests {
                 theme_mode: None,
                 shellbar_edge: ShellbarEdge::Right,
                 shellbar_hidden: false,
-                physics_damping: 2.5,
                 disabled_engines: Vec::new(),
                 document_typography: None,
                 script_permissions: ScriptPermissionPrefs::default(),

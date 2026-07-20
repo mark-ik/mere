@@ -63,6 +63,10 @@ pub mod facet_store;
 // first; size/sprite/hull/material/face follow) as facets in facets.json —
 // born as facets, since the bespoke cartography sidecar was never wired.
 pub mod arrangement_facets;
+// The scene.* facet namespace: the graph-scene's own view settings (sizing
+// mode, importance metric, physics damping) as facets of the CONTAINER node
+// (keyed by the session's root_graph_id) — scene-scoped, not per-node.
+pub mod scene_facets;
 pub mod engine_profile_store;
 // Freeze/thaw a live graph into an immutable, content-addressed graph engram over
 // an eidetic Store (the Alembic memory spine; wasm-clean — store-agnostic, not
@@ -128,6 +132,10 @@ pub use arrangement_facets::{
     retain_present_nodes, write_arrangement_faces, write_arrangement_materials,
     write_arrangement_positions, write_arrangement_sizes, write_arrangement_sprite_hulls,
     write_arrangement_sprites,
+};
+pub use scene_facets::{
+    DEFAULT_PHYSICS_DAMPING, SCENE_IMPORTANCE_METRIC, SCENE_PHYSICS_DAMPING, SCENE_SIZE_BY_DEGREE,
+    SCENE_SIZE_BY_IMPORTANCE, SceneFacets, read_scene_facets, write_scene_facets,
 };
 pub use facet_store::{
     AcceptAll, FacetError, FacetId, FacetValidator, NODE_FACETS_FILE, NodeFacetStore, NodeFacets,

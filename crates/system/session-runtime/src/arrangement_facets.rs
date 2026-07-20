@@ -276,6 +276,11 @@ pub fn read_arrangement_faces(store: &NodeFacetStore) -> Vec<(Uuid, String)> {
 /// node deleted between sessions takes its whole facet record with it (all
 /// namespaces: its facets describe a node that no longer exists); facets of
 /// live nodes — including foreign/mod namespaces — are untouched.
+///
+/// `present` is every id whose facets should survive — which is the live graph
+/// members **plus any container id** carrying `scene.*` facets (a container is
+/// not a leaf node, so a caller keying scene facets by `root_graph_id` must
+/// include it here, or the reconcile would sweep the whole scene away).
 pub fn retain_present_nodes(store: &mut NodeFacetStore, present: &BTreeSet<Uuid>) {
     let departed: Vec<Uuid> = store
         .iter()
