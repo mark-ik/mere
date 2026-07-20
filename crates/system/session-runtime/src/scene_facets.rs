@@ -117,6 +117,21 @@ pub fn read_scene_facets(store: &NodeFacetStore, container: Uuid) -> SceneFacets
     }
 }
 
+/// Carry the donor container's `scene.*` facets onto the fork's container —
+/// the scene half of the fork's facet-carry (tear-out G4-R R1; the per-node
+/// half is `facet_store::copy_node_facets`). The fork opens with the donor's
+/// sizing mode + metric + damping. Reads through [`read_scene_facets`] (so a
+/// donor with no scene facets writes the defaults) and writes whole.
+pub fn copy_scene_facets(
+    donor: &NodeFacetStore,
+    fork: &mut NodeFacetStore,
+    donor_container: Uuid,
+    fork_container: Uuid,
+) {
+    let scene = read_scene_facets(donor, donor_container);
+    write_scene_facets(fork, fork_container, &scene);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -160,6 +175,31 @@ mod tests {
         assert_eq!(
             read.physics_damping, DEFAULT_PHYSICS_DAMPING,
             "the garbage damping falls back to the default"
+        );
+    }
+
+    #[test]
+    fn copy_scene_facets_carries_donor_settings_to_the_fork_container() {
+        let mut donor = NodeFacetStore::new();
+        let donor_container = Uuid::from_u128(0x9);
+        let fork_container = Uuid::from_u128(0x99);
+        write_scene_facets(
+            &mut donor,
+            donor_container,
+            &SceneFacets {
+                size_by_degree: true,
+                physics_damping: 6.25,
+                ..SceneFacets::default()
+            },
+        );
+        let mut fork = NodeFacetStore::new();
+        copy_scene_facets(&donor, &mut fork, donor_container, fork_container);
+        let carried = read_scene_facets(&fork, fork_container);
+        assert!(carried.size_by_degree);
+        assert_eq!(carried.physics_damping, 6.25);
+        assert!(
+            fork.facets_of(&donor_container).is_none(),
+            "the fork keys scene facets by ITS container, not the donor's"
         );
     }
 

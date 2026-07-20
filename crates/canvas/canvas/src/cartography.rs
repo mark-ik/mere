@@ -65,19 +65,11 @@ impl Canvas {
             .map(|p| PortablePoint::new(p.x, p.y))
     }
 
-    /// Write the live physics positions back into the graph's node records (their
-    /// projected position), so a clone or snapshot of the graph reflects the current
-    /// on-screen layout rather than the spawn seed. The graph's own node positions are
-    /// only the initial seed; physics owns the live layout in `view`. A tear-out
-    /// **fork** calls this on the donor before cloning, so the fork opens with the
-    /// donor's layout instead of every node piled at the seed. (Tear-out gestures G4.)
-    pub fn commit_positions_to_graph(&mut self) {
-        // No-op since S2: positions are no longer graph truth, so there is nothing
-        // to write back into the graph. The live layout is `view` (seiche); the
-        // durable layout is the cartography sidecar. A tear-out fork carries the
-        // donor's layout by copying the sidecar, not the graph. (Kept as a seam so
-        // callers need not change; retire when the fork path reads the sidecar.)
-    }
+    // `commit_positions_to_graph` — the pre-S2 fork-layout write-back — is
+    // retired: positions are not graph truth, and the fork carries the donor's
+    // layout by copying `arrangement.*` facets through the component copy's id
+    // remap (tear-out G4-R; merecat `fork_session_from`). The live layout is
+    // `view` (seiche); the durable layout is the facet store.
 
     /// A node's render color, matching the in-scene gnode's class palette: orange when
     /// selected, else green open / red closed / blue idle. The host colors the canvas

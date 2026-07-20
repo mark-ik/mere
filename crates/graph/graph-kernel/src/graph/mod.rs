@@ -52,6 +52,7 @@ pub mod journal;
 /// Cross-graph node copy (tear-out fork): mints a node in this graph from a
 /// donor node in another graph, recording cross-graph derivation provenance.
 pub mod cross_graph;
+pub use cross_graph::ComponentCopy;
 pub mod edge_data;
 pub mod edge_payload;
 pub mod edge_taxonomy;

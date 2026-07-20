@@ -69,6 +69,30 @@ pub fn save_node_facets(session_dir: &Path, facets: &NodeFacetStore) -> io::Resu
     Ok(())
 }
 
+/// Copy every facet of every donor node named in `remap` onto its fork
+/// counterpart — the fork's facet-carry (tear-out G4-R R1). Whole-record on
+/// purpose: a forked node keeps its entire per-node character (`arrangement.*`
+/// layout, `web.*` browser state, foreign/mod namespaces) without this module
+/// knowing any namespace. `remap` is the `(source id, new id)` list the
+/// kernel's `copy_component_from` returns; donor nodes absent from the store
+/// contribute nothing. The container-scoped `scene.*` carry is separate
+/// (`scene_facets::copy_scene_facets`) — container ids are not graph nodes, so
+/// no remap names them.
+pub fn copy_node_facets(
+    donor: &NodeFacetStore,
+    fork: &mut NodeFacetStore,
+    remap: &[(Uuid, Uuid)],
+) {
+    for (source, new) in remap {
+        let Some(facets) = donor.facets_of(source) else {
+            continue;
+        };
+        for (facet, value) in facets.iter() {
+            let _ = fork.set(*new, facet.clone(), value.clone(), &AcceptAll);
+        }
+    }
+}
+
 /// Read the sidecar document. Returns `Ok(None)` when it doesn't exist (a
 /// session with no facets yet).
 pub fn load_node_facets(session_dir: &Path) -> io::Result<Option<NodeFacetStore>> {
@@ -150,6 +174,44 @@ mod tests {
             Some(&json!({ "k": [1, 2] }))
         );
         fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn copy_node_facets_carries_the_whole_record_through_the_remap() {
+        let mut donor = NodeFacetStore::new();
+        let (src_a, src_b, unforked) = (Uuid::from_u128(1), Uuid::from_u128(2), Uuid::from_u128(3));
+        let (new_a, new_b) = (Uuid::from_u128(0x11), Uuid::from_u128(0x12));
+        donor
+            .set(src_a, FacetId::new("arrangement.position"), json!({"x": 5.0, "y": 6.0}), &AcceptAll)
+            .unwrap();
+        donor
+            .set(src_a, FacetId::new("some-mod.exotic"), json!({"k": 1}), &AcceptAll)
+            .unwrap();
+        donor
+            .set(src_b, FacetId::new("web.content"), json!(true), &AcceptAll)
+            .unwrap();
+        donor
+            .set(unforked, FacetId::new("web.content"), json!(true), &AcceptAll)
+            .unwrap();
+
+        let mut fork = NodeFacetStore::new();
+        copy_node_facets(&donor, &mut fork, &[(src_a, new_a), (src_b, new_b)]);
+
+        assert_eq!(
+            fork.get(&new_a, &FacetId::new("arrangement.position")),
+            Some(&json!({"x": 5.0, "y": 6.0})),
+            "layout rides the carry"
+        );
+        assert_eq!(
+            fork.get(&new_a, &FacetId::new("some-mod.exotic")),
+            Some(&json!({"k": 1})),
+            "foreign namespaces ride too — the whole character"
+        );
+        assert_eq!(fork.get(&new_b, &FacetId::new("web.content")), Some(&json!(true)));
+        assert!(
+            fork.facets_of(&unforked).is_none() && fork.facets_of(&src_a).is_none(),
+            "nodes outside the remap (and donor ids themselves) do not appear"
+        );
     }
 
     #[test]

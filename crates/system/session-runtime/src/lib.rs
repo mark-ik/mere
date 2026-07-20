@@ -140,7 +140,8 @@ pub use arrangement_facets::{
 };
 pub use scene_facets::{
     DEFAULT_PHYSICS_DAMPING, SCENE_IMPORTANCE_METRIC, SCENE_PHYSICS_DAMPING, SCENE_SIZE_BY_DEGREE,
-    SCENE_SIZE_BY_IMPORTANCE, SceneFacets, read_scene_facets, write_scene_facets,
+    SCENE_SIZE_BY_IMPORTANCE, SceneFacets, copy_scene_facets, read_scene_facets,
+    write_scene_facets,
 };
 pub use web_facets::{
     WEB_COMPAT, WEB_CONTENT, WEB_FORM_DRAFT, WEB_SCROLL, WEB_VIEWER, read_web_states,
@@ -148,7 +149,7 @@ pub use web_facets::{
 };
 pub use facet_store::{
     AcceptAll, FacetError, FacetId, FacetValidator, NODE_FACETS_FILE, NodeFacetStore, NodeFacets,
-    load_node_facets, node_facets_path, save_node_facets,
+    copy_node_facets, load_node_facets, node_facets_path, save_node_facets,
 };
 pub use identity::{StartupUnlockMode, auto_unlock_backend_available};
 pub use manifest::{

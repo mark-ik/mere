@@ -122,20 +122,24 @@ impl Graph {
     /// Copy the connected component containing `seed` (a node in `source`) into this
     /// graph: the kernel half of a tear-out **fork** (the reachable-subgraph snapshot,
     /// tear-out brief §4.3). Each node is minted fresh (with a `CopiedFrom`
-    /// [`NodeDerivation`] back to its source) keeping its source layout position; the
-    /// component's internal edges are re-pointed onto the new nodes by cloning each
-    /// edge's payload verbatim. Edges leaving the component are dropped (the snapshot is
-    /// closed under the component). Returns the new node keys. (Tear-out gestures G4.)
+    /// [`NodeDerivation`] back to its source); the component's internal edges are
+    /// re-pointed onto the new nodes by cloning each edge's payload verbatim. Edges
+    /// leaving the component are dropped (the snapshot is closed under the component).
+    /// Returns the [`ComponentCopy`]: the new keys plus the `source id → new id`
+    /// remap the host's facet-carry maps donor facets through (G4-R R0 — positions
+    /// and every other per-node character ride `arrangement.*` / `web.*` / … facets,
+    /// not the graph, so the fork's layout carry needs this mapping).
+    /// (Tear-out gestures G4.)
     #[cfg(not(target_arch = "wasm32"))]
     pub fn copy_component_from(
         &mut self,
         source: &Graph,
         seed: Uuid,
         source_graph: Option<String>,
-    ) -> Vec<NodeKey> {
+    ) -> ComponentCopy {
         use petgraph::visit::{EdgeRef, IntoEdgeReferences};
         let Some(seed_key) = source.get_node_key_by_id(seed) else {
-            return Vec::new();
+            return ComponentCopy::default();
         };
         // The weakly-connected component containing the seed (every node is in exactly
         // one; fall back to the lone seed if the partition somehow omits it).
@@ -144,30 +148,52 @@ impl Graph {
             .into_iter()
             .find(|c| c.contains(&seed_key))
             .unwrap_or_else(|| vec![seed_key]);
-        // Copy each node, mapping its old key to the fresh one for edge re-pointing.
-        let mut remap: std::collections::HashMap<NodeKey, NodeKey> =
+        // Copy each node, mapping its old key to the fresh one for edge re-pointing
+        // (and its old id to the fresh id for the host's facet-carry).
+        let mut key_remap: std::collections::HashMap<NodeKey, NodeKey> =
             std::collections::HashMap::with_capacity(component.len());
-        let mut new_keys = Vec::with_capacity(component.len());
+        let mut copy = ComponentCopy {
+            new_keys: Vec::with_capacity(component.len()),
+            id_remap: Vec::with_capacity(component.len()),
+        };
         for old_key in component {
             if let Some(node) = source.inner.node(old_key) {
+                let source_id = node.id;
                 // Position is no longer a node field; the copy is placed by the
-                // destination's layout (seiche / arrangement), not carried over.
+                // destination's layout (seiche / arrangement facets), not carried over.
                 let new_key = self.copy_node_from(node, source_graph.clone(), Point2D::zero());
-                remap.insert(old_key, new_key);
-                new_keys.push(new_key);
+                key_remap.insert(old_key, new_key);
+                copy.new_keys.push(new_key);
+                if let Some(new_node) = self.inner.node(new_key) {
+                    copy.id_remap.push((source_id, new_node.id));
+                }
             }
         }
         // Re-point the component's internal edges (both endpoints copied): clone each
         // edge's payload verbatim onto the new node pair.
         for edge in source.inner.inner().edge_references() {
-            if let (Some(&from), Some(&to)) = (remap.get(&edge.source()), remap.get(&edge.target()))
+            if let (Some(&from), Some(&to)) =
+                (key_remap.get(&edge.source()), key_remap.get(&edge.target()))
             {
                 self.inner.connect(from, to, edge.weight().clone());
             }
         }
         self.bump_revision();
-        new_keys
+        copy
     }
+}
+
+/// The result of [`Graph::copy_component_from`]: the minted keys plus the
+/// `(source id, new id)` pairs, in copy order. The id remap is the seam the
+/// host's facet-carry maps donor facets through (a forked node keeps its whole
+/// per-node character — `arrangement.*`, `web.*`, foreign namespaces — by
+/// copying facets from `source` to `new`).
+#[derive(Clone, Debug, Default)]
+pub struct ComponentCopy {
+    /// The fresh node keys in this graph, in copy order.
+    pub new_keys: Vec<NodeKey>,
+    /// `(source node id, minted node id)` per copied node, in copy order.
+    pub id_remap: Vec<(Uuid, Uuid)>,
 }
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
@@ -273,11 +299,11 @@ mod tests {
         let seed = a.get_node(k1).unwrap().id;
 
         let mut b = Graph::new();
-        let new = b.copy_component_from(&a, seed, Some("graph-A".to_string()));
+        let copy = b.copy_component_from(&a, seed, Some("graph-A".to_string()));
 
         // The connected component is {k1, k2}; the disconnected k3 is not pulled in.
         assert_eq!(
-            new.len(),
+            copy.new_keys.len(),
             2,
             "copied the 2-node component, not the lone disconnected node"
         );
@@ -289,6 +315,16 @@ mod tests {
             assert_eq!(n.derivations.len(), 1);
             assert_eq!(n.derivations[0].sub_kind, ProvenanceSubKind::CopiedFrom);
             assert_eq!(n.derivations[0].source_graph.as_deref(), Some("graph-A"));
+        }
+        // The id remap pairs each source id with its minted copy's id — the seam
+        // the host's facet-carry maps donor facets through (G4-R R0).
+        assert_eq!(copy.id_remap.len(), 2);
+        for (source_id, new_id) in &copy.id_remap {
+            assert_ne!(source_id, new_id, "a copy is a new entity");
+            let (_, source_node) = a.get_node_by_id(*source_id).map(|(k, n)| (k, n)).unwrap();
+            let (_, new_node) = b.get_node_by_id(*new_id).map(|(k, n)| (k, n)).unwrap();
+            assert_eq!(source_node.url(), new_node.url(), "pairs align by content");
+            assert_eq!(new_node.derivations[0].source_node, source_id.to_string());
         }
     }
 }
