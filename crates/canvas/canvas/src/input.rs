@@ -13,7 +13,8 @@ use kernel::graph::{
     NodeKey, NodeSelector, ScalarField,
 };
 
-use super::build::{hyperlink, seed_cluster};
+use super::build::hyperlink;
+use super::seiche_bridge::seed_cluster;
 use super::edge_cells::{edge_cell_hit_test, edge_cells_in_rect};
 use super::{
     CLICK_SLOP, Drag, EDGE_PICK_TOL, ORBIT_TILT_PER_PX, ORBIT_YAW_PER_PX, Canvas, PointerButton,

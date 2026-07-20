@@ -16,6 +16,7 @@ use genet_layout::IncrementalLayout;
 
 use crate::build::*;
 use crate::palette;
+use crate::seiche_bridge::{build_simulation, visible_relation_edges};
 
 #[test]
 fn sample_graph_has_nodes_and_edges() {

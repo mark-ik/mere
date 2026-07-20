@@ -49,10 +49,12 @@ use genet_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
 mod build;
 #[cfg(test)]
 mod build_tests;
+mod seiche_bridge;
 use build::{
-    build_pool_dom, build_simulation, cluster_color, dark_scene_style, dedup_edges,
-    dedup_edges_weighted, sample_graph, surface_bg, visible_relation_edges,
+    build_pool_dom, cluster_color, dark_scene_style, dedup_edges, dedup_edges_weighted,
+    sample_graph, surface_bg,
 };
+use seiche_bridge::{build_simulation, visible_relation_edges};
 use paint_list_api::ColorF;
 
 /// Build the seiche [`AffinitySpring`] from a cartography [`AffinityScores`](signals::AffinityScores)

@@ -12,9 +12,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
-use euclid::default::Point2D;
-use quint::FieldRegistry;
-use seiche::{Boundary, CouplingForce, EdgeSpring, LayoutView, NodeExclusion, Simulation};
+use seiche::LayoutView;
 use kernel::geometry::PortablePoint;
 use kernel::graph::apply::{self as graph_apply};
 use kernel::graph::{
@@ -156,29 +154,8 @@ pub(crate) fn dedup_edges(graph: &Graph) -> Vec<(NodeKey, NodeKey)> {
         .collect()
 }
 
-/// The relation-cell edges that feed the layout **springs**, respecting this instance's
-/// hidden-cell visibility (swatch-primitive P5 — hiding relaxes the spring in that
-/// instance only, never graph truth). Unlike [`dedup_edges`] (one topology edge per pair,
-/// for graph-algorithm layout strategies that need plain connectivity, not weight), this
-/// keeps one `(NodeKey, NodeKey)` tuple per **visible** relation cell: a pair with three
-/// live cells pulls three times as hard as a pair with one, and hiding one cell drops the
-/// pull by exactly that cell's share. seiche stays relation-taxonomy agnostic — this
-/// multiplicity is how the canvas hands it weight without leaking `RelationSelector` into
-/// seiche's edge type.
-pub(crate) fn visible_relation_edges(
-    graph: &Graph,
-    hidden_edges: &HashSet<crate::EdgeCell>,
-) -> Vec<(NodeKey, NodeKey)> {
-    graph
-        .relations()
-        .filter(|r| {
-            !hidden_edges.contains(&crate::edge_cells::edge_cell_for_relation(
-                r.from, r.to, r.kind,
-            ))
-        })
-        .map(|r| (r.from, r.to))
-        .collect()
-}
+// `visible_relation_edges` moved to `seiche_bridge` (the graph ↔ seiche
+// adapters) with the rest of the simulation construction.
 
 /// Like [`dedup_edges`], but each collapsed pair carries its **statement multiplicity**: the number
 /// of *statement* relations connecting it (more statements between two nodes => a heavier edge — the
@@ -218,86 +195,10 @@ pub(crate) fn dedup_edges_weighted(graph: &Graph) -> Vec<(NodeKey, NodeKey, u32)
     edges
 }
 
-/// Build the force-directed simulation from `graph`: a body per node, one spring
-/// edge per visible relation cell as the topology (see [`visible_relation_edges`]),
-/// the standard force trio (exclusion + edge-springs + a centering boundary), seeded
-/// into a tight central spiral so the first settle is visible.
-pub(crate) fn build_simulation(graph: &Graph) -> Simulation {
-    let mut sim = Simulation::new();
-    sync_sim_with_graph(&mut sim, graph);
-    // No `Canvas` (and so no hidden-cell set) exists yet at construction time; the first
-    // real sync happens once session/view-intent restore runs and calls `reconcile_derived`.
-    sim.sync_edges(visible_relation_edges(graph, &HashSet::new()));
-
-    sim.add_force(NodeExclusion::default());
-    sim.add_force(EdgeSpring::default());
-    sim.add_force(Boundary::default());
-    // Field couplings: each resolves to a CouplingForce seiche integrates, so a placed
-    // field's well actually pulls its nodes. The live place / move / new-node rebuild
-    // re-resolves these via `Physics::set_coupling_forces`. (Field regions.)
-    let coupling_forces: Vec<CouplingForce> = graph
-        .couplings()
-        .filter_map(|c| coupling_force_from_graph(c, graph))
-        .collect();
-    sim.set_coupling_forces(coupling_forces);
-
-    sim.seed_positions(seed_cluster(graph));
-    sim
-}
-
-/// Reconcile a simulation's bodies to a kernel [`Graph`]'s nodes — the canvas-side
-/// bridge now that seiche is kernel-free. seiche's [`Simulation::sync_nodes`] takes
-/// a `(NodeKey, position)` list; positions are no longer graph truth (S2), so new
-/// bodies spawn at the origin and the caller places them via [`Simulation::
-/// seed_positions`] (a spiral seed, or the host's cartography sidecar). Existing
-/// bodies keep their simulated position. (Was `seiche::Simulation::sync_with_graph`
-/// before the seiche extraction.)
-pub(crate) fn sync_sim_with_graph(sim: &mut Simulation, graph: &Graph) {
-    sim.sync_nodes(graph.nodes().map(|(key, _node)| (key, Point2D::zero())));
-}
-
-/// Resolve a coupling against the graph into a [`CouplingForce`] — the canvas-side
-/// bridge (was `seiche::CouplingForce::from_coupling`). Looks up the field
-/// definition and the selector's matching nodes, seeding the registry from the
-/// whole field layer so inter-field `Sample` references resolve. `None` if the
-/// field id is unknown. The captured target set is a snapshot; rebuild on graph
-/// mutation.
-pub(crate) fn coupling_force_from_graph(
-    coupling: &kernel::graph::Coupling,
-    graph: &Graph,
-) -> Option<CouplingForce> {
-    let field = graph.field(coupling.field)?;
-    let targets: Vec<NodeKey> = graph.nodes_matching(&coupling.selector).collect();
-    let mut registry = FieldRegistry::new();
-    for f in graph.fields() {
-        registry.insert_with_id(f.id, f.definition.clone());
-    }
-    Some(
-        CouplingForce::new(
-            coupling.response.clone(),
-            coupling.strength,
-            targets,
-            field.definition.clone(),
-        )
-        .with_registry(registry),
-    )
-}
-
-/// The tight central spiral (golden-angle) seed for every node, so a ticked
-/// settle visibly expands it into a readable layout. Returns the `(node,
-/// position)` pairs; the caller applies them to the simulation (in-thread) or
-/// sends them to the physics actor (offloaded), and mirrors them into the view.
-pub(crate) fn seed_cluster(graph: &Graph) -> Vec<(NodeKey, Point2D<f32>)> {
-    graph
-        .nodes()
-        .enumerate()
-        .map(|(i, (key, _node))| {
-            let r = 6.0 + i as f32 * 3.0;
-            let theta = i as f32 * 2.399_963; // golden angle in radians
-            (key, Point2D::new(r * theta.cos(), r * theta.sin()))
-        })
-        .collect()
-}
+// `build_simulation` / `sync_sim_with_graph` / `coupling_force_from_graph` /
+// `seed_cluster` moved to `seiche_bridge` — the graph ↔ seiche adapter half of
+// this file, split out at the size ceiling (and the home of the deferred
+// coupling graph-resolution tests).
 
 /// Build the pre-materialized node-children pool **once**: a `.stage` container
 /// (the camera transform's element) holding one `.gnode` per graph node, each
