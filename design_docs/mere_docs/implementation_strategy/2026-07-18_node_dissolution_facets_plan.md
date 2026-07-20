@@ -235,7 +235,7 @@ itself at that level rather than growing a parallel session subsystem:
 different aspect of the one node, not competing node classes):
 
 | Aspect | What it is | Existing home |
-|---|---|---|
+| --- | --- | --- |
 | **container** | the node itself; may bear a nested graph | chartulary `Container` / `GraphBearing` |
 | **content** | what a container bears (addressed bytes, typed records) | content classes, content_store, facets |
 | **relation** | typed edges between containers | GraphLog statements / kernel edges |
@@ -266,6 +266,21 @@ v0 that does not gate on any of this: mint + session-switch.
 
 ## Progress
 
+- **2026-07-20 (HEADED RECEIPT: the facet layout arc survives a restart):**
+  scenario pair `merecat/scenarios/facet_layout{,_verify}.scn` (self-drive
+  harness, fresh profile): part 1 settles the sample ring + three `mere://`
+  nodes, `act Save session`, captures; part 2 relaunches on the profile and
+  captures the restore. Green both runs
+  (`testing/merecat/images/scenarios/facet_layout{,_verify}/`). Verified
+  three ways: the restored capture reproduces the saved arrangement (not a
+  fresh spiral); `facets.json` holds all 15 `arrangement.position` facets at
+  settled coordinates + the four `scene.*` container facets; `graph.json`
+  contains zero positions. Two explained deltas: ~5-frame drift (part 1
+  captures after the save), and the restored frame draws per-family relation
+  cells (traversal teal) because boot re-selects the last-visited node
+  (rung-6 restore) while the live session drew the flat underlay — a
+  selection-state render difference, not persistence. This is the missing
+  save-half receipt (the adopt half was already unit-tested).
 - **2026-07-19 (scene.* container facets LANDED — mere `579b5e1`, merecat
   `a832ba6`):** the atomic-facets lens reached the *graph-scoped* view settings
   the geometry sidecar carried alongside the per-node data. `size_by_degree`,
