@@ -523,9 +523,15 @@ gesture at R3):
 - **R2 — the fork operation (merecat).** Re-mint meerkat's `fork_session_from` on merecat: new
   `SessionId` + `GraphId` + manifest (`parent_session = donor`), `copy_component_from` the donor
   graph into a fresh `Graph`, `copy_node_facets` (R1) via the R0 remap, persist the fork's
-  `graph.json` + `facets.json`, and open it. **Open question:** merecat is single-window today, so
-  "open the fork" is either a session-switch or a lens window — sequence against the window model
-  (`multi_window_plan`); a fork that mints-but-doesn't-switch (meerkat's behavior) is the safe v0.
+  `graph.json` + `facets.json`, and open it. *(Correction 2026-07-19: an earlier draft called
+  merecat "single-window" — wrong; merecat has full lens multi-window. The real constraint is
+  that a lens shows the ONE app's panes, and a fork is a new session.)* **"Open the fork"
+  resolved by the overmap reframe (Mark, 2026-07-19; recorded in the facets plan):** the
+  sessions themselves are container nodes in a graph one level up, and fork is node lineage at
+  that level — so opening a fork is *navigating to its container node*, the same enter-nested-
+  graph gesture as any other container, not a window question. Windows stay lenses. **v0 ships
+  as session-switch** (adopt the fork after minting — the existing switch path, no window work);
+  the overmap navigation replaces it when the overmap lands.
 - **R3 — the gesture (merecat).** Ctrl+Shift+drag → `Action::ForkNode { node }`. frisket's
   `TileDragPayload` already scaffolds the modifier branch (leaf / branch / fork at drop); the
   ambiguous no-modifier drag + toast escalation ride the notification-subsystem follow-on, not

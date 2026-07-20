@@ -209,6 +209,61 @@ The field-by-field map (from the 2026-07-18 read of `graph/node.rs`):
 3. `AddressClaim` role mapping onto Container's primary-first address list.
 4. The D-gate acceptance envelope (what load-time regression is tolerable).
 
+## The overmap — sessions as container nodes (Mark, 2026-07-19)
+
+Ruling-shaped direction, sketched while resolving how a fork "opens": **a graph
+fork is node lineage one level up.** Sessions are themselves container nodes in
+a graph of graphs (working name: the overmap), and the machinery re-uses
+itself at that level rather than growing a parallel session subsystem:
+
+- **The nesting primitive already exists.** chartulary B0 `GraphBearing`: a
+  node bears a nested graph. A session's root graph is exactly that — a
+  container node in the overmap bearing the session graph. No new structure.
+- **ManifestStore is the flat precursor.** `GraphSessionManifest` already
+  carries the overmap's adjacency without the graph: `root_graph_id` (the
+  container id — the same id `scene.*` facets key on), `parent_session` (a
+  lineage edge), `sub_graph_refs` (containment edges). Destination: the
+  overmap IS a graph and the manifest table is derived from (or replaced by)
+  it.
+- **Fork = mint container node + derivation edge.** The same `CopiedFrom`
+  provenance shape nodes already carry, applied to containers. The switcher
+  stops being a list and becomes a graph view of the overmap; "open a fork" is
+  *navigating to its container node* (the enter-nested-graph gesture), not a
+  window operation. Windows stay lenses (one_state_n_windows holds).
+
+**The taxonomy under it** (Mark's six, mapped to what exists — each a
+different aspect of the one node, not competing node classes):
+
+| Aspect | What it is | Existing home |
+|---|---|---|
+| **container** | the node itself; may bear a nested graph | chartulary `Container` / `GraphBearing` |
+| **content** | what a container bears (addressed bytes, typed records) | content classes, content_store, facets |
+| **relation** | typed edges between containers | GraphLog statements / kernel edges |
+| **arrangement** | where/how containers present; never graph truth | forme + `arrangement.*` facets, seiche live |
+| **history** | the append-only edit spine | GraphJournal / codicil |
+| **stream** | the live short-term flow; consolidates or is forgotten | engrams (`graph_engram`/`engram_seal`) + athanor/memory_levels |
+
+**"Are graphs denizens?" — the category dissolves.** Denizen is not a node
+class; it is a *facet bundle* (a personae subject + grants + a nested log —
+today's `denizen_bindings`, converging to `denizen.*` facets). Containment is
+structure; denizen-ness is agency; they are orthogonal facets on the one node.
+So: a graph is a container, and it is *also* a denizen exactly when it is
+subject-bound (a servitor's home graph, a pack's graph). Most session graphs
+are containers with no subject — not denizens.
+
+**Scripts / daemons: content at rest, denizen in action.** A script's source
+is content (addressed bytes some container bears). Its *running instance* is a
+denizen (a subject acting through the participant gate). A daemon is a
+servitor whose residency persists (nested log + standing grants). Same object,
+two aspects — no third category needed.
+
+**Open (not ruled):** where the overmap itself persists (a chartulary graph at
+the profile root, with ManifestStore derived from it?); overmap-level deletion
+semantics (deleting a session-node = athanor sweep of its stream + optional
+consolidating engram first?); whether cross-session edges in the overmap are
+the sharing seam murm/moot address. Fork's G4-R plan (tearout doc) takes the
+v0 that does not gate on any of this: mint + session-switch.
+
 ## Progress
 
 - **2026-07-19 (scene.* container facets LANDED — mere `579b5e1`, merecat

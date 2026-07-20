@@ -1,8 +1,10 @@
 # Forest dom (design step 3): one ScriptedDom, N window roots
 
 **Date**: 2026-07-08
-**Status**: Planning, pre-implementation. The gate below (is state-preserving tear-out
-wanted now?) should be answered before F0.
+**Status**: **LANDED 2026-07-18** (see Progress — genet-layout `ForestDom` +
+`layout_subtree`, cambium `push_forest_projection`, merecat chrome as N window-root
+projections of one dom). F4 (multi-DPI) deferred. The body below is the pre-landing
+plan, kept for the design rationale.
 **Parent**: [one_state_n_windows_design](../design/2026-07-05_one_state_n_windows_design.md)
 — this executes its **step 3**. Step 2 (the meerkat one-state migration) landed + is
 verified ([archived](../../archive_docs/2026-07-07_one_state_migration/)); its watch-items
@@ -141,4 +143,17 @@ before committing.
 
 ## Progress
 
-*(none yet — planning stage. F0 spike is the first action once the gate is answered.)*
+- **2026-07-19 (doc catch-up): the forest dom LANDED 2026-07-18** — this doc was
+  never updated at landing. The shipped shape, by evidence in the trees:
+  genet-layout grew `ForestDom` (`forest.rs`) plus `SubtreeView` /
+  `layout_subtree` (`subtree.rs`) — the F0/F2 per-root layout capability;
+  cambium's `GenetMultiRunner::push_forest_projection` (`multi.rs`) mints
+  window-root projections over one shared dom — the F1 runner seam; and the F3
+  consumer is **merecat**, not meerkat (deleted the same day):
+  `merecat/src/chrome_view.rs` renders every window's chrome as a window-root
+  subtree of ONE retained `ScriptedDom` — the primary's omnibar card and each
+  lens window's caption chip are sibling forest projections. Multi-window rides
+  it (lens windows each lay out + paint their own root at their own size).
+  **F4 (multi-DPI) remains deferred** as planned, until a real multi-monitor
+  DPI split is in hand. Slice-level test bookkeeping was not back-filled here;
+  the living receipts are merecat's chrome + lens tests.
