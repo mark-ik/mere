@@ -1,7 +1,7 @@
 # The overmap: sessions as a graph (planning pass)
 
 **Date**: 2026-07-20
-**Status**: PLAN. Executes the overmap ruling (Mark, 2026-07-19 — recorded in
+**Status**: **RUNGS COMPLETE 2026-07-20** (O0-O3 landed; held items dispositioned below). Executes the overmap ruling (Mark, 2026-07-19 — recorded in
 the [node-dissolution facets plan](2026-07-18_node_dissolution_facets_plan.md),
 "The overmap" section): sessions are container nodes in a graph one level up;
 fork is node lineage at that level; the switcher becomes a graph view.
@@ -82,6 +82,39 @@ that work names its edge vocabulary.
 
 ## Progress
 
+- **2026-07-20 (O3 LANDED — mere `3f85112`, merecat `4df6c56`; the plan's
+  rungs are COMPLETE):** session deletion resolved even leaner than planned —
+  **no session-level bin record at all**. `move_to_trash` relocates the whole
+  session directory (graph + facets + its own per-node bin travel inside it),
+  so **the manifest trash IS the removed-sessions record**; a `DeletedSession`
+  record would have duplicated it into the per-session bin, which cannot even
+  hold it (the bin is inside the directory being deleted). mere grew the
+  inverse pair (`list_trash` / `restore_from_trash`, same-identity by
+  construction, never clobbers a live dir). merecat: close is now
+  shell-ordered (`Effect::TrashSession`) — **release the bin store first**
+  (open fjall files block the rename on Windows; the receipt caught
+  `os error 5`), trash the directory whole, adopt WITHOUT the departing save
+  (a post-trash save resurrected the closed session as a zombie dir — the
+  second bug the sequencing fixed). The Trail's Removed-sessions section
+  derives from the trash; a row click lowers `Action::RecoverSession` and the
+  recovered session adopts at its carried facet layout. Receipt
+  `overmap_o3.scn` green. **Engram question resolved**: distillation belongs
+  to athanor's forget (recycle-bin slice 3 — which must sweep `.trash/` and
+  the per-session bins inside it), not to close; close stays light and
+  lossless because the directory survives whole until the oven runs.
+
+### Held items — disposition (2026-07-20)
+
+- **Stored-overmap promotion**: still gated, correctly. O1's pane is a
+  derived view with an analytic layout; no overmap-native *edit* exists yet.
+  First likely trigger: user-arranged overmap layout worth persisting (which
+  would also answer the arrangement-facets-on-the-overmap question — it is
+  just a graph, so `arrangement.*` facets on container ids in a profile-root
+  facets store).
+- **Cross-session edges**: still murm/moot's seam. The overmap renders
+  lineage + containment only until that work names its edge vocabulary;
+  nothing here blocks it, and the derived builder gains an edge family by
+  adding one loop.
 - **2026-07-20 (O0 + O1 LANDED — merecat `058e6aa`; G4-R had already
   pre-paid O2):** `src/overmap.rs` derives the kernel Graph exactly as planned
   (container-id identity, `mere://session/<id>` urls as the DOM-carried
