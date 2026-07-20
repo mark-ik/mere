@@ -318,6 +318,95 @@ impl ManifestStore {
         fs::rename(&source, &target)?;
         Ok(true)
     }
+
+    /// The trashed sessions' manifests, newest trashed-directory first (by
+    /// directory modification time — good enough for a "removed" list). Each
+    /// trash entry is a whole session directory ([`Self::move_to_trash`]
+    /// moves it intact), so its `manifest.json` still describes it; an entry
+    /// whose manifest is missing or malformed is skipped, never fatal. Reads
+    /// the disk on every call — callers that render per frame should cache
+    /// and refresh on trash/restore.
+    pub fn list_trash(&self) -> Vec<GraphSessionManifest> {
+        let Some(root) = &self.root else {
+            return Vec::new();
+        };
+        let trash_root = root.join(TRASH_DIR);
+        let Ok(entries) = fs::read_dir(&trash_root) else {
+            return Vec::new();
+        };
+        let mut found: Vec<(std::time::SystemTime, GraphSessionManifest)> = Vec::new();
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let Ok(text) = fs::read_to_string(path.join(MANIFEST_FILE)) else {
+                continue;
+            };
+            let Ok(manifest) = serde_json::from_str::<GraphSessionManifest>(&text) else {
+                continue;
+            };
+            let when = entry
+                .metadata()
+                .and_then(|m| m.modified())
+                .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+            found.push((when, manifest));
+        }
+        found.sort_by(|(a, _), (b, _)| b.cmp(a));
+        found.into_iter().map(|(_, m)| m).collect()
+    }
+
+    /// Restore a trashed session: move its directory back under the root and
+    /// re-insert its manifest into the in-memory map — the recovery half of
+    /// [`Self::move_to_trash`], same-identity by construction (the directory
+    /// moved intact, `SessionId` and all). Picks the newest trash entry when
+    /// disambiguated duplicates exist. `Ok(false)` when no trash entry holds
+    /// this id; an error when a LIVE session directory already occupies the
+    /// slot (restore must never clobber the living).
+    pub fn restore_from_trash(&mut self, id: SessionId) -> io::Result<bool> {
+        let root = self.root.clone().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                "ManifestStore::restore_from_trash called with no bound root",
+            )
+        })?;
+        let trash_root = root.join(TRASH_DIR);
+        let prefix = id.as_uuid().to_string();
+        // Exact entry, else the newest `-stamp` disambiguated one.
+        let mut candidates: Vec<(std::time::SystemTime, PathBuf)> = Vec::new();
+        if let Ok(entries) = fs::read_dir(&trash_root) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                    continue;
+                };
+                if name == prefix || name.starts_with(&format!("{prefix}-")) {
+                    let when = entry
+                        .metadata()
+                        .and_then(|m| m.modified())
+                        .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+                    candidates.push((when, path));
+                }
+            }
+        }
+        candidates.sort_by(|(a, _), (b, _)| b.cmp(a));
+        let Some((_, source)) = candidates.into_iter().next() else {
+            return Ok(false);
+        };
+        let target = root.join(&prefix);
+        if target.exists() {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "a live session directory already occupies this id",
+            ));
+        }
+        fs::rename(&source, &target)?;
+        let text = fs::read_to_string(target.join(MANIFEST_FILE))?;
+        let manifest: GraphSessionManifest =
+            serde_json::from_str(&text).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        self.manifests.insert(manifest.session_id, manifest);
+        Ok(true)
+    }
 }
 
 #[cfg(test)]
@@ -466,6 +555,58 @@ mod tests {
         assert!(!live_path.exists());
         let trash_path = root.join(TRASH_DIR).join(sid.as_uuid().to_string());
         assert!(trash_path.exists());
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn trash_lists_and_restores_with_identity_intact() {
+        let root = temp_root("trash-restore");
+        let mut store = ManifestStore::with_root(&root);
+        let (sid, gid) = fixture_session(10);
+        let mut m = GraphSessionManifest::new(sid, gid);
+        m.display_name = Some("expedition".to_string());
+        store.insert(m);
+        store.flush_dirty().unwrap();
+        // A sibling session file inside the dir must survive the round trip
+        // (the whole directory moves, sidecars and all).
+        fs::write(root.join(sid.as_uuid().to_string()).join("facets.json"), "{}").unwrap();
+
+        store.move_to_trash(sid).unwrap();
+        let listed = store.list_trash();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].session_id, sid);
+        assert_eq!(listed[0].display_name.as_deref(), Some("expedition"));
+
+        assert!(store.restore_from_trash(sid).unwrap());
+        assert!(store.get(sid).is_some(), "the manifest re-listed in memory");
+        assert_eq!(store.get(sid).unwrap().root_graph_id, gid, "identity intact");
+        assert!(
+            root.join(sid.as_uuid().to_string()).join("facets.json").exists(),
+            "the session's sidecars came back with it"
+        );
+        assert!(store.list_trash().is_empty(), "the trash entry is consumed");
+        assert!(
+            !store.restore_from_trash(sid).unwrap(),
+            "a second restore finds nothing"
+        );
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn restore_never_clobbers_a_live_session() {
+        let root = temp_root("trash-clobber");
+        let mut store = ManifestStore::with_root(&root);
+        let (sid, gid) = fixture_session(11);
+        store.insert(GraphSessionManifest::new(sid, gid));
+        store.flush_dirty().unwrap();
+        store.move_to_trash(sid).unwrap();
+        // The same id comes alive again (a re-mint under a hand-copied id).
+        store.insert(GraphSessionManifest::new(sid, gid));
+        store.flush_dirty().unwrap();
+        assert!(
+            store.restore_from_trash(sid).is_err(),
+            "restore must refuse to overwrite a live session directory"
+        );
         fs::remove_dir_all(&root).ok();
     }
 
