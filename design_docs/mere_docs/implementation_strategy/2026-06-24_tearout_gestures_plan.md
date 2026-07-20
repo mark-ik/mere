@@ -493,7 +493,24 @@ v0 (palette parent link suffices); auto-consolidation policy disabled by default
 
 ## G4-R — Fork re-wiring on merecat (facet-carry)
 
-**Date**: 2026-07-19. **Status**: PLAN (not started). Fork was G4-DONE in meerkat and died with
+**Date**: 2026-07-19. **Status**: PLAN (not started). **Sequenced (Mark, 2026-07-20): after the
+sidecar convergence (denizen/browser → facets), the overmap planning pass, and the hygiene bin —
+then this.** Checklist:
+
+- [ ] **R0** kernel: `copy_component_from` returns the `source → new` id remap (unit test rides
+      the existing `copy_component_*` test)
+- [ ] **R1** session-runtime: `copy_node_facets(donor, fork, remap)` — whole-record per-node
+      carry + `scene.*` donor-container → fork-container carry (unit-tested)
+- [ ] **R2** merecat: `fork_session_from` — mint SessionId/GraphId/manifest
+      (`parent_session = donor`), `copy_component_from` + facet-carry, persist, **v0 opens by
+      session-switch** (adopt); headless test on the adopt pattern
+- [ ] **R3** merecat: Ctrl+Shift+drag → `Action::ForkNode` (headed session; shares the
+      facet-receipt harness)
+- [ ] **Cleanup**: retire the no-op `Canvas::commit_positions_to_graph` seam
+- [ ] **Receipt**: headed fork run — fork a component, switch back, both sessions keep their
+      layouts (facets independent)
+
+Fork was G4-DONE in meerkat and died with
 it; this re-wires it on merecat, and folds in the layout-carry change the position retirement
 (S2) forced. The design (brief §4.3, G4 above) is unchanged: Ctrl+Shift+drag mints a new
 `SessionId` + `GraphId`, snapshots the dragged node's reachable connected component into it, and
