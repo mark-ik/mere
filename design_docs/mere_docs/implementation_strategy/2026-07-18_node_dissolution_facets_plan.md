@@ -68,9 +68,12 @@ facet work unlocks one mechanism, many namespaces, replacing N hand-rolled JSON
 sidecar files.
 
 Boundaries that hold the convergence honest:
-- **Graph-scoped canvas flags are not facets.** `size_by_degree`,
-  `size_by_importance`, `importance_metric` are view *settings*, not per-node;
-  they stay out of the facet store.
+
+- **Graph-scoped canvas flags are not *per-node* facets.** `size_by_degree`,
+  `size_by_importance`, `importance_metric` are scene-scoped, not per-node.
+  (2026-07-19 refinement: they are **container** facets — `scene.*` on the
+  root graph's id — not homeless view settings; see the scene.* progress
+  entry.)
 - **Live vs durable.** The *live* position lives in seiche (runtime, never
   persisted, not a facet); only the *durable* save-time position becomes an
   `arrangement.position` facet. So the facet holds cold data and seiche keeps
@@ -266,6 +269,24 @@ v0 that does not gate on any of this: mint + session-switch.
 
 ## Progress
 
+- **2026-07-20 (SIDECAR CONVERGENCE COMPLETE — mere `10084b3`, merecat
+  `ed75c79`):** the last two bespoke per-node sidecars joined the facet store.
+  **denizen.*: born as facets** — `denizen_bindings.json` removed before any
+  host ever wrote one (the cartography path again); `denizen_facets` holds the
+  `denizen.binding` facet (`{subject, nested_log, kind}`, one coherent record
+  per the `arrangement.material` precedent), with DenizenBinding/DenizenKind
+  unchanged (kebab-case, unknown-forward) and empty-binding-writes-as-remove.
+  **web.*: live migration** — browser_node_state persistence converges onto
+  atomic `web.scroll` / `web.form_draft` / `web.viewer` / `web.compat` /
+  `web.content` facets (non-default only; whole-set rewrite clears stale);
+  the in-memory `BrowserNodeStates` stays the host working set. merecat saves
+  web facets beside arrangement + scene and adopt reads them back, seeding
+  unseen nodes once from a pre-convergence `browser_nodes.json` (facet values
+  win; the stale file is left inert); content-on respawn now flows from the
+  `web.content` facet (asserted at the adopt seam). **Every per-node sidecar
+  is now one store**: facets.json carries `arrangement.*` + `scene.*` +
+  `web.*` + `denizen.*` + foreign namespaces; the bespoke documents remaining
+  beside it are non-per-node (frame/workbench/windows/settings/tombstones).
 - **2026-07-20 (HEADED RECEIPT: the facet layout arc survives a restart):**
   scenario pair `merecat/scenarios/facet_layout{,_verify}.scn` (self-drive
   harness, fresh profile): part 1 settles the sample ring + three `mere://`
