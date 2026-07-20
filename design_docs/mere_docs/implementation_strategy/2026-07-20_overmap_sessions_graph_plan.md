@@ -103,18 +103,6 @@ that work names its edge vocabulary.
   the per-session bins inside it), not to close; close stays light and
   lossless because the directory survives whole until the oven runs.
 
-### Held items — disposition (2026-07-20)
-
-- **Stored-overmap promotion**: still gated, correctly. O1's pane is a
-  derived view with an analytic layout; no overmap-native *edit* exists yet.
-  First likely trigger: user-arranged overmap layout worth persisting (which
-  would also answer the arrangement-facets-on-the-overmap question — it is
-  just a graph, so `arrangement.*` facets on container ids in a profile-root
-  facets store).
-- **Cross-session edges**: still murm/moot's seam. The overmap renders
-  lineage + containment only until that work names its edge vocabulary;
-  nothing here blocks it, and the derived builder gains an edge family by
-  adding one loop.
 - **2026-07-20 (O0 + O1 LANDED — merecat `058e6aa`; G4-R had already
   pre-paid O2):** `src/overmap.rs` derives the kernel Graph exactly as planned
   (container-id identity, `mere://session/<id>` urls as the DOM-carried
@@ -136,3 +124,16 @@ that work names its edge vocabulary.
   highlighted. **Remaining**: O3 (deletion through the bin, gated on merecat
   recycle-bin slice 1) and the held/promotion items above. The list switcher
   (omnibar `>`) deliberately stays until the graph view earns its keep.
+
+### Held items — disposition (2026-07-20)
+
+- **Stored-overmap promotion**: still gated, correctly. O1's pane is a
+  derived view with an analytic layout; no overmap-native *edit* exists yet.
+  First likely trigger: user-arranged overmap layout worth persisting (which
+  would also answer the arrangement-facets-on-the-overmap question — it is
+  just a graph, so `arrangement.*` facets on container ids in a profile-root
+  facets store).
+- **Cross-session edges**: still murm/moot's seam. The overmap renders
+  lineage + containment only until that work names its edge vocabulary;
+  nothing here blocks it, and the derived builder gains an edge family by
+  adding one loop.
