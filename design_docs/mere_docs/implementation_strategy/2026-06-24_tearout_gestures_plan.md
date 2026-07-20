@@ -493,22 +493,30 @@ v0 (palette parent link suffices); auto-consolidation policy disabled by default
 
 ## G4-R — Fork re-wiring on merecat (facet-carry)
 
-**Date**: 2026-07-19. **Status**: PLAN (not started). **Sequenced (Mark, 2026-07-20): after the
-sidecar convergence (denizen/browser → facets), the overmap planning pass, and the hygiene bin —
-then this.** Checklist:
+**Date**: 2026-07-19. **Status**: **COMPLETE 2026-07-20** (mere `c9caf26`, merecat `aa32a24`;
+sequenced after the sidecar convergence, the overmap planning pass, and the hygiene bin, per
+Mark). Checklist:
 
-- [ ] **R0** kernel: `copy_component_from` returns the `source → new` id remap (unit test rides
-      the existing `copy_component_*` test)
-- [ ] **R1** session-runtime: `copy_node_facets(donor, fork, remap)` — whole-record per-node
-      carry + `scene.*` donor-container → fork-container carry (unit-tested)
-- [ ] **R2** merecat: `fork_session_from` — mint SessionId/GraphId/manifest
-      (`parent_session = donor`), `copy_component_from` + facet-carry, persist, **v0 opens by
-      session-switch** (adopt); headless test on the adopt pattern
-- [ ] **R3** merecat: Ctrl+Shift+drag → `Action::ForkNode` (headed session; shares the
-      facet-receipt harness)
-- [ ] **Cleanup**: retire the no-op `Canvas::commit_positions_to_graph` seam
-- [ ] **Receipt**: headed fork run — fork a component, switch back, both sessions keep their
-      layouts (facets independent)
+- [x] **R0** kernel: `copy_component_from` returns `ComponentCopy` (new keys + the
+      `(source id, new id)` remap); the existing component test locks the remap pairing
+- [x] **R1** session-runtime: `copy_node_facets` (whole-record per-node carry through the
+      remap — layout, web state, foreign namespaces) + `copy_scene_facets`
+      (donor-container → fork-container); both unit-tested
+- [x] **R2** merecat: `App::fork_session_from` — fresh `SessionId` + **real** `GraphId`,
+      `parent_session` back-reference, component copy + facet-carry, persisted
+      graph.json/facets.json, v0 opens by `Effect::SwitchSession` (donor saves on the way
+      out); `App::refresh_facets` extracted so the shell save and the fork carry share one
+      live-state refresh; headless test locks remap carry + scene carry + the switch effect
+- [x] **R3** merecat: Ctrl+Shift at the workbench tab drag-out lowers `ForkNode` (plain
+      drag-out stays the branch arm; Shell now tracks Shift); palette arm `ForkFocusedNode`
+      ("Fork from node")
+- [x] **Cleanup**: `Canvas::commit_positions_to_graph` removed
+- [x] **Receipt**: `scenarios/facet_fork.scn` green
+      (`testing/merecat/images/scenarios/facet_fork/`) — the fork adopts with its 2-node
+      component at the carried layout; on disk, donor (14 nodes, no parent) and fork (2
+      remapped nodes, parent back-ref, real GraphId) hold independent facet stores. The
+      overmap's O2 rung is thereby pre-paid: the lineage edge (`parent_session`) is written;
+      the derived overmap renders it when O0/O1 land.
 
 Fork was G4-DONE in meerkat and died with
 it; this re-wires it on merecat, and folds in the layout-carry change the position retirement
