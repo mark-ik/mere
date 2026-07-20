@@ -211,6 +211,20 @@ The field-by-field map (from the 2026-07-18 read of `graph/node.rs`):
 
 ## Progress
 
+- **2026-07-19 (scene.* container facets LANDED — mere `579b5e1`, merecat
+  `a832ba6`):** the atomic-facets lens reached the *graph-scoped* view settings
+  the geometry sidecar carried alongside the per-node data. `size_by_degree`,
+  `size_by_importance`, `importance_metric`, and the physics `damping` are not
+  per-node, so not `arrangement.*` — but the graph IS a container node
+  (one-node model), so they are **facets of the container**, `scene.*`, keyed
+  by `root_graph_id`, in the same `facets.json`. session-runtime `scene_facets`
+  (a `SceneFacets` bundle over four atomic facets, per-field fallback);
+  `retain_present_nodes` keeps the container id through the prune. `physics_damping`
+  **left `PersistedSettings`** (it was scene-scoped and had no reader there) →
+  `scene.physics_damping`, host-held, applied on adopt. This is the first
+  **container** facet — the same mechanism now spans leaf and container nodes,
+  which is the atomic-facets endgame the one-node ruling pointed at. Follow-on:
+  the fork must carry `scene.*` donor→fork container (planned, tearout G4-R).
 - **2026-07-19 (arrangement.* family COMPLETE — mere `89e3ad5`, merecat
   `86d5d25`):** the remaining five per-node families (size / sprite /
   sprite-hull / material / face) landed on the shared rewrite-clears-stale
