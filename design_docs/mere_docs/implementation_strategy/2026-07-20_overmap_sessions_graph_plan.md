@@ -82,5 +82,24 @@ that work names its edge vocabulary.
 
 ## Progress
 
-*(none yet — planning pass complete 2026-07-20; O0 is the first rung and G4-R
-follows it.)*
+- **2026-07-20 (O0 + O1 LANDED — merecat `058e6aa`; G4-R had already
+  pre-paid O2):** `src/overmap.rs` derives the kernel Graph exactly as planned
+  (container-id identity, `mere://session/<id>` urls as the DOM-carried
+  targeting key, `CopiedFrom` lineage + `CollectionMember` containment edges;
+  duplicate containers collapse defensively). **Identity heal folded in**: the
+  plan assumed container ids were real, but merecat's `mint_session` minted
+  `GraphId::nil()` — every pre-overmap session would have collided onto one
+  overmap node (and their `scene.*` facets all keyed the nil uuid).
+  `mint_session` now mints real ids; `session::heal_nil_graph_ids` repairs old
+  manifests at boot; adopt migrates nil-keyed scene facets onto the healed
+  container once. **O1**: `PaneContent::Overmap` ("Open Overmap pane"),
+  rendered on the shared `graph_canvas_swatch` leaf (the Gloss pipeline) —
+  lineage generations left → right in a padded band, current session
+  selected, session id as `data-key` (probe / `click-node` resolvable),
+  Expand jumps to the canvas; a session-node click lowers the ordinary
+  `Action::SwitchSession`. 6 tests (O0 graph shape + paint pipeline +
+  click→Switch); receipt `scenarios/overmap.scn` green — after a fork the
+  pane shows two container nodes joined by the lineage edge, current
+  highlighted. **Remaining**: O3 (deletion through the bin, gated on merecat
+  recycle-bin slice 1) and the held/promotion items above. The list switcher
+  (omnibar `>`) deliberately stays until the graph view earns its keep.
