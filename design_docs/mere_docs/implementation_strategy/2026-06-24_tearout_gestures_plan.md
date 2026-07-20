@@ -1,9 +1,17 @@
 # Tear-out gestures plan (leaf / branch / fork + cross-graph drag)
 
 **Date**: 2026-06-24
-**Status**: **Trichotomy + cross-graph copy/move + cascade DONE + driven** (G1 plumbing, G3
-branch, G4 fork, G5 copy+move, G6 cascade via graphlet #3; graphlet #1 per-window focus also
-landed). **Tile-tab leaf tear-out is now DONE + fresh-headed verified.** The one substantial
+**⚠️ 2026-07-19 — the entire implementation below was meerkat/orrery, deleted with meerkat
+(2026-07-18). The gesture stack is UNWIRED on merecat.** The kernel primitives survive
+(`copy_component_from`, `copy_node_from`, graphlet bindings, `CopiedFrom` provenance); the host
+half (shell commands, `fork_session_from`, the live drag seam) died with meerkat and awaits a
+merecat re-wire. Fork specifically now carries layout through the `arrangement.*` / `scene.*`
+facet families, not the retired `commit_positions_to_graph` write-back — see **G4-R** at the
+tail. The status line below is the meerkat-era record, kept for the design (not the wiring).
+
+**Status (meerkat-era)**: **Trichotomy + cross-graph copy/move + cascade DONE + driven** (G1
+plumbing, G3 branch, G4 fork, G5 copy+move, G6 cascade via graphlet #3; graphlet #1 per-window
+focus also landed). **Tile-tab leaf tear-out is now DONE + fresh-headed verified.** The one substantial
 interactive item still open is the ambiguous **no-modifier orrery drag** path, which now cleanly
 belongs to the notification/toast subsystem plus the pin-vs-drag-out gesture split:
 
@@ -482,3 +490,48 @@ v0 (palette parent link suffices); auto-consolidation policy disabled by default
   runs each ended with a second Meerkat window. That clears the tile-tab trigger from the
   remaining list. The only material tear-out-gesture item still open is the ambiguous
   no-modifier orrery drag path, which stays coupled to the notification/toast work.
+
+## G4-R — Fork re-wiring on merecat (facet-carry)
+
+**Date**: 2026-07-19. **Status**: PLAN (not started). Fork was G4-DONE in meerkat and died with
+it; this re-wires it on merecat, and folds in the layout-carry change the position retirement
+(S2) forced. The design (brief §4.3, G4 above) is unchanged: Ctrl+Shift+drag mints a new
+`SessionId` + `GraphId`, snapshots the dragged node's reachable connected component into it, and
+records a weak `parent_session` on the fork manifest; donor untouched, the two independent.
+
+What changed since meerkat: **positions are no longer graph truth (S2).** The meerkat fork opened
+with the donor's layout by calling `commit_positions_to_graph` to write live positions into the
+donor graph before the clone (G4 "Layout commit" above). That method is now a no-op — the durable
+layout lives in `arrangement.position` facets, and the scene's own settings in `scene.*` container
+facets. So the fork carries layout by **copying facets**, not graph truth.
+
+Rungs (kernel → host, each landable behind the one before; nothing speculative lands without the
+gesture at R3):
+
+- **R0 — expose the fork remap (kernel).** `Graph::copy_component_from` returns only the new
+  `Vec<NodeKey>`; it builds a `source_key → new_key` remap internally and discards it. Return it
+  too (e.g. `Vec<(Uuid /*source id*/, Uuid /*new id*/)>`, or a small `ForkCopy` struct), so the
+  facet-carry can map donor facets onto the fork's fresh node ids. Pure kernel change, unit-tested
+  against the existing `copy_component_*` test; no host needed to land it.
+- **R1 — facet-carry helper (session-runtime).** `copy_node_facets(donor: &NodeFacetStore, fork:
+  &mut NodeFacetStore, remap: &[(Uuid, Uuid)])`: for each `(source, new)` copy every facet of
+  `source` onto `new` — so `arrangement.*` (position/size/sprite/…) rides along automatically, and
+  so do foreign / `web.*` / `denizen.*` namespaces (a forked node keeps its whole character). Plus
+  carry the container's `scene.*` from the donor `root_graph_id` to the fork's, so the fork opens
+  with the donor's sizing mode + damping. This is the replacement for the retired
+  `commit_positions_to_graph` layout carry.
+- **R2 — the fork operation (merecat).** Re-mint meerkat's `fork_session_from` on merecat: new
+  `SessionId` + `GraphId` + manifest (`parent_session = donor`), `copy_component_from` the donor
+  graph into a fresh `Graph`, `copy_node_facets` (R1) via the R0 remap, persist the fork's
+  `graph.json` + `facets.json`, and open it. **Open question:** merecat is single-window today, so
+  "open the fork" is either a session-switch or a lens window — sequence against the window model
+  (`multi_window_plan`); a fork that mints-but-doesn't-switch (meerkat's behavior) is the safe v0.
+- **R3 — the gesture (merecat).** Ctrl+Shift+drag → `Action::ForkNode { node }`. frisket's
+  `TileDragPayload` already scaffolds the modifier branch (leaf / branch / fork at drop); the
+  ambiguous no-modifier drag + toast escalation ride the notification-subsystem follow-on, not
+  this rung.
+- **Cleanup.** Retire the no-op `Canvas::commit_positions_to_graph` seam once R1/R2 land (its only
+  reason to exist was the old graph-truth layout carry).
+
+Out of scope here (later, per brief §5–6): consolidation of a fork's short-term graph into an
+eidetic engram, and the `parent_session` back-reference UI.
