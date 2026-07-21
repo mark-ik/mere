@@ -1,0 +1,24 @@
+[package]
+name = "numen"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "The portable field-primitive definitions for a graph-canvas physics substrate: the scalar/vector field algebra as data, the Field truth primitive (definition + extent + lifecycle), and Coupling (field -> node-selector -> response) with its open response vocabulary. Fields are a third graph primitive beside nodes and edges; `quint` evaluates these definitions and `seiche` integrates the forces. Plain data, WASM-clean."
+repository = "https://github.com/mark-ik/numen"
+keywords = ["field", "physics", "force-directed", "graph", "spatial"]
+categories = ["data-structures", "science"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+# Field / coupling identities are federatable UUIDs.
+uuid = { version = "1", features = ["serde"] }
+# EnumIter over the recognized force-core coupling responses (IRI round-trips).
+strum = { version = "0.28", features = ["derive"] }
+
+# v4 (random) is native-only; WASM hosts mint ids via `from_uuid` with a
+# host-supplied UUID (no OS randomness on wasm32-unknown-unknown).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+serde_json = "1"
