@@ -1,0 +1,14 @@
+# conatus — the portable canvas-physics family.
+#
+# Leibniz's conatus is the instantaneous striving that, integrated over
+# time, becomes motion. The stack follows that shape exactly:
+#
+#   numen   defines what bodies strive under (fields + couplings, plain data)
+#   quint   evaluates the instantaneous striving (field algebra)
+#   seiche  integrates striving into motion (rapier-backed layout)
+#
+# Crates keep their own names and publish individually; this workspace is
+# their shared home. Kernel-free by default, WASM-clean at the numen tier.
+[workspace]
+resolver = "3"
+members = ["crates/numen", "crates/quint", "crates/seiche"]
