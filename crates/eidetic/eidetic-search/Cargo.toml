@@ -23,7 +23,7 @@ thiserror = "1"
 
 [dev-dependencies]
 # The example's store is a muniment backend (2026-07-12).
-muniment = { git = "https://github.com/mark-ik/muniment.git", branch = "main", version = "0.1.0" }
+muniment = { git = "https://github.com/mark-ik/eidetic.git", branch = "main", version = "0.1.0" }
 pollster = "0.4"
 tempfile = "3"
 # The eidetic-recall example (the browsing-derivation rehearsal bin, moved

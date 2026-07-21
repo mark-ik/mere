@@ -27,7 +27,7 @@ proofs.workspace = true
 p2panda-store = { version = "0.7.0", default-features = false }
 # Shared muniment-backed store and LogSync drain.
 murm-replication = { workspace = true }
-muniment = { git = "https://github.com/mark-ik/muniment.git", branch = "main", features = ["redb"] }
+muniment = { git = "https://github.com/mark-ik/eidetic.git", branch = "main", features = ["redb"] }
 # The sync lane (`sync::SyncedMesh`): LogSync over the store. `p2panda-net`
 # is the protocol — its `Endpoint`/`Gossip` still come injected from the host
 # (endpoint-decoupled), so the lib never builds a `P2pandaTransport`.

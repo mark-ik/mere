@@ -16,7 +16,7 @@ path = "src/lib.rs"
 [dependencies]
 # Path + version: path for local workspace builds; version for `cargo publish`.
 identity.workspace = true
-muniment = { git = "https://github.com/mark-ik/muniment.git", branch = "main", features = ["redb"] }
+muniment = { git = "https://github.com/mark-ik/eidetic.git", branch = "main", features = ["redb"] }
 murm-replication = { workspace = true }
 transport.workspace = true
 blake3 = "1.5"

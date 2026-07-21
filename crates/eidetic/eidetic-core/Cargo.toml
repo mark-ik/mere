@@ -18,7 +18,7 @@ path = "src/lib.rs"
 # declared twice — same get/put/delete/list seam. Eidetic now consumes it, and
 # `eidetic::Store` is an alias so the layers above (manifests, schemas, engrams)
 # read unchanged. Plan: design_docs/…/2026-07-12_eidetic_on_muniment_plan.md.
-muniment = { git = "https://github.com/mark-ik/muniment.git", branch = "main", version = "0.1.0" }
+muniment = { git = "https://github.com/mark-ik/eidetic.git", branch = "main", version = "0.1.0" }
 async-trait = "0.1"
 blake3 = "1.5"
 jsonschema = { version = "0.18", default-features = false }
@@ -30,7 +30,7 @@ serde_json = "1.0"
 # stemma is the promoted (MIT/Apache) successor to the retired in-tree
 # node-lineage. Git sibling; local checkout via the gitignored
 # `.cargo/config.toml` patch.
-chartulary = { git = "https://github.com/mark-ik/chartulary.git", branch = "main", version = "0.1.0", optional = true }
+chartulary = { git = "https://github.com/mark-ik/eidetic.git", branch = "main", version = "0.1.0", optional = true }
 
 [features]
 lineage = ["dep:chartulary"]
