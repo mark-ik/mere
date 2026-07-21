@@ -1,0 +1,29 @@
+[package]
+name = "chartulary"
+version = "0.1.1"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "The generic content-addressed container graph (aka chart). Graph<N, E> on petgraph with capability traits (Identified, Addressed, ContentBearing, Labeled, Classified, Predicated) and default Container/Relation payloads. The substrate that binds muniment's blobs and codicil's log into an app-agnostic graph. Carries the lineage layer (`chartulary::stemma`): owner-scoped descent of content through branching visits."
+repository = "https://github.com/mark-ik/chartulary"
+keywords = ["graph", "content-addressed", "knowledge-graph", "petgraph"]
+categories = ["data-structures"]
+
+[dependencies]
+petgraph = { version = "0.8", features = ["serde-1"] }
+serde = { version = "1", features = ["derive"] }
+# The facet payload (`facet::Facet::value`) is a JSON value: structured,
+# schema-agnostic node metadata. Matches eidetic's `SchemaDefinition` body type,
+# so the mere-side validator seam lines up without an encode/decode boundary.
+serde_json = "1"
+# For the content reference in ContentBearing (the blake3 Hash). default-features
+# off so chartulary does not pull muniment's JSON/postcard codecs, only its Hash.
+muniment = { git = "https://github.com/mark-ik/muniment.git", branch = "main", version = "0.1.0", default-features = false }
+# The edit spine (G1): graph edits are a codicil log, persisted through muniment.
+codicil = { git = "https://github.com/mark-ik/codicil.git", branch = "main", version = "0.1.0" }
+# The lineage layer (`chartulary::stemma`, folded in 2026-07-12): rkyv for the
+# zero-copy snapshot, slotmap for the visit arena.
+rkyv = { version = "0.8", features = ["std"] }
+slotmap = { version = "1.0", features = ["serde"] }
+
+[dev-dependencies]
+pollster = "0.4"
