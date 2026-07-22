@@ -1,0 +1,22 @@
+# The B5 distribution probe (participant gate): a signed mere.pack/v1 engram
+# travels publisher -> subscriber over retinue's windowed resource transfer,
+# verifies Trusted on arrival (a tampered copy verifies Broken and is
+# refused), and the hand-off is curated into a moot's fauna via
+# MootEvent::Shared. In-process pair (two identities, one link) — the
+# LAN-pair run over real interfaces is the remaining headed step.
+# Standalone (crates/probes is excluded from the mere workspace).
+[package]
+name = "pack-distribution"
+version = "0.0.1"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[dependencies]
+eidetic = { package = "mere-eidetic", path = "../../eidetic/eidetic-core" }
+identity = { package = "personae", path = "../../../../personae" }
+retinue = { path = "../../../../retinue" }
+serde_json = "1"
+
+[lib]
+path = "src/lib.rs"
