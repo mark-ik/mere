@@ -107,6 +107,7 @@ armillary = { git = "https://github.com/mark-ik/armillary.git", branch = "main" 
 # checkout via the gitignored `.cargo/config.toml` patch. cartography emits
 # sceno scenes (the P2 consumption slice; projection_proofs_plan).
 sceno = { git = "https://github.com/mark-ik/scenograph.git", branch = "main" }
+scenomise = { git = "https://github.com/mark-ik/scenograph.git", branch = "main" }
 mere = { path = "crates/mere" }
 
 fetch = { package = "mere-fetch", path = "crates/system/fetch" }

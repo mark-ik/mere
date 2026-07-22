@@ -31,7 +31,12 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
+use crate::scene_paint::{Camera, ScenePaintStyle};
 use euclid::default::{Box2D, Point2D};
+use genet_layout::IncrementalLayout;
+use genet_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
+use kernel::geometry::PortablePoint;
+use kernel::graph::{EdgeAssertion, FieldId, Graph, NodeKey, RelationSelector, SemanticSubKind};
 use seiche::{AffinitySpring, LayoutSnapshot, LayoutView};
 /// The declarative scene catalog, re-exported so hosts (and the standalone bin) can load
 /// a scene by name without depending on `seiche` directly. (Physics scenes P4a.)
@@ -40,11 +45,6 @@ pub use seiche::{
     cradle_scene, domino_scene, drift_scene, drop_bowl_scene, fountain_scene, funnel_scene,
     galton_scene, mixer_scene, pyramid_scene, whirlpool_scene,
 };
-use kernel::geometry::PortablePoint;
-use kernel::graph::{EdgeAssertion, FieldId, Graph, NodeKey, RelationSelector, SemanticSubKind};
-use crate::scene_paint::{Camera, ScenePaintStyle};
-use genet_layout::IncrementalLayout;
-use genet_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
 
 mod build;
 #[cfg(test)]
@@ -54,8 +54,8 @@ use build::{
     build_pool_dom, cluster_color, dark_scene_style, dedup_edges, dedup_edges_weighted,
     sample_graph, surface_bg,
 };
-use seiche_bridge::{build_simulation, visible_relation_edges};
 use paint_list_api::ColorF;
+use seiche_bridge::{build_simulation, visible_relation_edges};
 
 /// Build the seiche [`AffinitySpring`] from a cartography [`AffinityScores`](signals::AffinityScores)
 /// signal: flatten the `((a, b), weight)` pairs into the force's `(a, b, weight)` triples at the
@@ -131,9 +131,9 @@ pub mod sprite_hull;
 pub mod underlay;
 
 pub use cartography_scene::{
-    CANVAS_LAYOUT_STRATEGIES, CartographySceneOptions, build_projection_request,
-    project_canvas_lens, project_canvas_strategy, project_canvas_subgraph, project_with,
-    signal_overlays,
+    CANVAS_LAYOUT_STRATEGIES, CanvasStrategyProjection, CartographySceneOptions,
+    build_projection_request, project_canvas_lens, project_canvas_strategy,
+    project_canvas_strategy_with_score, project_canvas_subgraph, project_with, signal_overlays,
 };
 pub use geometry::CartographyGeometry;
 
@@ -522,6 +522,9 @@ pub struct Canvas {
     /// frame **after** the physics snapshot (so they win over seiche regardless of the
     /// off-thread actor's timing). `None` under force-directed. (Layout picker.)
     strategy_positions: Option<Vec<(NodeKey, PortablePoint)>>,
+    /// The persisted product-free score that drove the current analytic view.
+    /// This is view state, not graph truth. (Projection proofs — P3.)
+    projection_score: Option<sceno::Score>,
     /// The pane's "scope" lens: when `Some`, the canvas renders only these nodes (a
     /// curated subset), projecting through a curated forme arrangement instead of the
     /// full Identity one. `None` shows the whole graph. (Curated canvas.)

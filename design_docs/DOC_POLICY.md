@@ -13,7 +13,6 @@ mere/design_docs/
 ├── TERMINOLOGY.md                 ← canonical terms (skeleton)
 ├── YYYY-MM-DD_<keyword>_brief.md  ← cross-cutting briefs
 ├── mere_docs/                     ← product-level concerns
-├── graphshell_docs/               ← shell layer + host GUI
 ├── verso_docs/                    ← rendering-surface management
 ├── inker_docs/                    ← engine controller
 ├── platen_docs/                   ← composition surface
@@ -94,6 +93,12 @@ Every implementation pass is also a design probe. After each implementation pass
 ## Inheritance and migration
 
 The donor graphshell repo was **GitHub-archived on 2026-05-27** (read-only at <https://github.com/mark-ik/graphshell>; local clone deleted). Its design docs are no longer a local sibling. Before archiving, all 633 donor docs were swept into two curated indexes that are now the entry points for any remaining pull: the [full docs harvest](mere_docs/research/2026-05-27_graphshell_docs_full_harvest.md) (what to pull, where it lives in the donor, which mere domain wants it) and the [concept brief](mere_docs/research/2026-05-17_graphshell_harvest_brief.md). Treat those indexes as canonical; fetch detail from the GitHub archive when a slice needs it.
+
+The Graphshell name was reclaimed on 2026-07-22 for the new family-wide remote
+projection host. Its founding plan lives temporarily under `mere_docs`; once
+the clean sibling repository exists, new Graphshell documentation belongs
+there. The archived donor and the new product must remain explicitly distinct
+in links and prose.
 
 When pulling a donor doc's content into a mere doc:
 

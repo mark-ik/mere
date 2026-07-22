@@ -14,6 +14,13 @@ invented the sidecar pattern), the
 (packs ship custom content classes; facet grants join its scope vocabulary),
 and the north star as amended.
 
+**2026-07-22 boundary amendment:** S0's extracted numen/quint/seiche stack has
+since consolidated into `repos/conatus`. The trigger-gated wholesale canvas
+promotion is replaced by the
+[Graphshell remote projection host plan](2026-07-22_graphshell_remote_projection_host_plan.md):
+arrangements migrate to `scenomise`, kernel-aware canvas stays in Mere, and
+shared interaction moves through Cambium/Sprigging under the Woodshed consumer.
+
 ## The decision in one line
 
 `chartulary::Container` is the one node; every optional metadatum becomes an
@@ -181,9 +188,9 @@ The field-by-field map (from the 2026-07-18 read of `graph/node.rs`):
 
 ## Trigger-gated tail (not scheduled here)
 
-- **Canvas family promotion** (canvas/cartography/arrangements/swatch as one
-  unit): trigger = a cambium-side consumer actually wires (woodshed-graph
-  already proved the pattern).
+- **Projection/canvas split:** generic arrangements migrate to `scenomise`;
+  the shared Cambium/Sprigging graph view waits for the Woodshed consumer;
+  Mere's graph adapter and kernel-aware canvas remain Mere-side.
 - **The pool surface** (personae-indexed vaults, cross-vault queries, p2p
   share): the north star's step 3; its own plan when it fires.
 - **Merecat palette/install slice**: owned by the participant plan; proceeds
@@ -195,9 +202,9 @@ The field-by-field map (from the 2026-07-18 read of `graph/node.rs`):
   exist in kernel `types.rs` and the content-addressed `image_store` is
   built, but `Node` still carries raw bytes. D0 is that plan's phase 2, not
   new design.
-- quint and seiche live at `crates/canvas/{quint,seiche}` (verified
-  2026-07-18); their extraction is recorded but unstarted. The geometry
-  sidecar exists in `canvas/cartography`.
+- quint and seiche were extracted on 2026-07-18 and consolidated with numen
+  into `repos/conatus` on 2026-07-21. The geometry sidecar remains in
+  Mere's canvas/cartography boundary.
 - The sidecar pattern has two proven instances (browser_node_state,
   denizen_bindings) and one designed migration precedent (absorb-legacy).
 - chartulary's capability-trait table is the compile-time facet tier; the

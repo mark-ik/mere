@@ -24,6 +24,7 @@ default = []
 [dependencies]
 kernel.workspace = true
 sceno.workspace = true
+scenomise.workspace = true
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]

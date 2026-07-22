@@ -10,6 +10,14 @@ browser-shaped?" with a concrete dissolution program. Companion to the
 [boundary pass plan](../implementation_strategy/2026-07-09_mere_merecat_boundary_pass_plan.md)
 (whose slice C invented the sidecar pattern this doc generalizes).
 
+**2026-07-22 boundary amendment:** Conatus has since landed as the family repo
+for numen, quint, and seiche. The former plan to promote Mere's entire canvas
+family as one unit is superseded by the
+[Graphshell remote projection host plan](../implementation_strategy/2026-07-22_graphshell_remote_projection_host_plan.md):
+generic arrangements move to `scenomise`, kernel-neutral scene contracts move
+to `sceno`, the shared interactive view grows through Cambium/Sprigging under a
+real Woodshed consumer, and the kernel-aware `mere-canvas` remains in Mere.
+
 ## 1. The redundancy, named
 
 Three container-ish abstractions were stacking:
@@ -59,23 +67,27 @@ what remains is Container.
 
 ## 3. The layer map (homes)
 
-- **Portable primitives, standalone repos (existing posture, unchanged):**
-  muniment, codicil, chartulary, personae, armillary, numen, scholia,
-  servitor. Promotion gate stays consumer-pull with the sanity check.
-- **Spatial/arrangement:** numen is a sibling; **quint and seiche are still
-  mere-side** (`crates/canvas/{quint,seiche}`), their extraction + MPL→MIT
-  relicense is the recorded, unstarted follow-on. `Node.position/velocity`
-  retire onto the cartography-geometry sidecar (which exists) and seiche
-  state. Position is an arrangement facet, not node essence.
-- **The canvas view family** (`canvas/{canvas, cartography, arrangements}` +
-  the swatch primitive): mere's promotable view layer. Cambium apps and
-  woodshed *consume* it; it promotes as one unit when a cambium-side consumer
-  actually wires (woodshed-graph already proved the pattern).
+- **Portable primitive families and standalone repos:** Eidetic (muniment,
+  codicil, chartulary, scholia), Conatus (numen, quint, seiche), personae,
+  armillary, and servitor. Promotion gate stays consumer-pull with the sanity
+  check.
+- **Spatial/arrangement:** the extraction landed in `repos/conatus` on
+  2026-07-21: numen defines fields, quint evaluates them, and seiche integrates
+  them into dynamic layout. `Node.position/velocity` still retire onto the
+  cartography-geometry sidecar and seiche state. Position is an arrangement
+  facet, not node essence.
+- **The projection and canvas split** (amended 2026-07-22): generic scene
+  contracts live in Scenograph; generic analytic arrangements migrate from
+  Mere `arrangements` to `scenomise`; `mere-cartography` remains Mere's graph
+  adapter; kernel-aware `mere-canvas` remains Mere's graph surface. Shared
+  interactive graph-view behavior promotes through Cambium/Sprigging only when
+  Woodshed consumes it.
 - **mere, the composing library (the pool):** vault + persona indexing,
-  cross-vault semantics (scholia), search (sibylla), sync/p2p (murm, moot,
-  retinue), the canvas family until promotion, eidetic. Multi-crate and
-  legitimately so; not a bucket once the queued subtractions land (meerkat
-  retirement, quint/seiche promotion, Node dissolution).
+  cross-vault semantics (scholia), search (sibylla), the kernel-aware graph
+  canvas and source adapters, private-memory integration, and optional peer
+  projections. Multi-crate and legitimately so; not a bucket once the queued
+  subtractions land (Node dissolution, Murm/Moot promotion, and the
+  Scenograph/canvas split).
 - **Consumers:** merecat, isometry, hocket, woodshed. Merecat's end-state
   dependencies: mere (graph/pool/canvas), genet (engine), servitor (gate),
   session-runtime sidecars, and its own **web content class**. The browser
@@ -98,14 +110,14 @@ what remains is Container.
    Lean: chartulary-generic (facet = typed sidecar keyed by `Identified::Id`)
    with pluggable validation, eidetic supplying the schema validator
    mere-side; decided with code in hand, B0-style spike.
-3. **Spatial completion:** extract quint + seiche to repos (the planned
-   follow-on), move positions fully onto the geometry sidecar, retire
-   `Node.position/velocity`.
+3. **Spatial completion:** Conatus extraction is done. Move positions fully
+   onto the geometry sidecar and retire `Node.position/velocity`.
 4. **Node dissolution ladder:** facet-by-facet along OQ 5.1 (favicon →
    thumbnail → viewer metadata → restore fidelity → ...), each to the
    merecat-side web content class; each move has the sidecar pattern as its
    proven home. The ladder ends when `Node`'s remainder is Container.
-5. **Canvas family promotion** on the cambium/woodshed consumer gate.
+5. **Projection/canvas split:** execute the Scenograph migration and land the
+   shared Cambium/Sprigging interaction surface through the Woodshed consumer.
 6. **The pool surface** (north star step 3): personae-indexed vaults,
    cross-vault queries, p2p share/cooperate.
 

@@ -1,7 +1,10 @@
 # Projection Proofs Plan
 
 **Date**: 2026-07-21
-**Status**: Active. Executes the five-proof sequence from the
+**Status**: P3/P4/P5 code slices are landed in the working tree. P3 has a
+green two-process headed receipt, including score restore after restart. Live
+radio facts remain correctly deferred because no radio product exposes them.
+Executes the five-proof sequence from the
 [projection_engine_prior_art_brief](../research/2026-07-21_projection_engine_prior_art_brief.md)
 §9. Proof 1 landed same-day. The scenograph family repo is founded
 ([mark-ik/scenograph](https://github.com/mark-ik/scenograph), commit `5a730e1`:
@@ -20,20 +23,41 @@ facade, MIT/Apache ed2024, name-holding; crates.io publication is Mark's step).
   §5), landing in `sceno` with mere as first consumer. This is where the
   `cartography::Projection` point+radius ceiling lifts and where P1's overlap
   finding gets its fix.
-- **P3 — browser nodes as pane slots in a configurable phyllotaxis spiral.**
-  Recency drives scale and LOD; focused content stays live; small items
-  degrade to snapshots / cards / glyphs. The "representation measures,
-  projection places" proof. **P3a (recency → scale + ordinal) landed
-  2026-07-22**; P3b (LOD / representation degradation to card/glyph, live
-  focus) remains.
-- **P4 — isometry consumes the same contract** for its overmap and one
-  tile-board projection, deleting its hand-rolled force layout
-  (`isometry-core/src/overmap.rs:123`).
-- **P5 — fixture-driven geographic projection** (facts from fixtures, map
-  underlay), then live retinue/tulle/sennet location facts when they exist.
+- **P3 — pane spiral.** Move the kernel-neutral Spiral solver into
+  `scenomise`; keep the graph-to-scene adaptation in `mere-cartography`.
+  Persist one product-free score and prove that its measurements give
+  footprint-aware placement. Recency drives scale; the realization traverses
+  glyph, card, snapshot, and focused live-pane LOD. **Implemented
+  2026-07-22:** score + solver + graph adapter, durable revisit timestamps,
+  session-sidecar save/rebind, and a two-process headed scenario pair. The
+  score proves selected LOD; a richer host realization of those slots remains
+  separate presentation work, not a type-system claim.
+- **P4 — Isometry consumes that same contract** for its overmap and one
+  tile-board projection. Delete `Overmap::layout` rather than wrapping it;
+  Isometry's adapter keeps campaign truth, authored pins, and paint local.
+  The receipt must serialize the same score/scene vocabulary as P3, and an
+  audit of `sceno`/`scenomise` types must contain neither `mere` nor
+  `isometry`.
+- **Boundary consolidation — after the two-product proof.** Finish moving
+  the generic Spiral out of Mere; tighten `mere-cartography` and
+  `mere-canvas` around the graph-specific remainder. Done for the proved
+  shape: every canvas Spiral dispatch now passes through the shared score and
+  solver, while `arrangements` remains only for its distinct nonportable
+  catalog entries. No Cambium/Sprigging API was extracted: the two consumers
+  presently agree only on the existing `GraphCanvasSwatch` contract. This is a
+  boundary map, not a cleanup queue.
+- **Graphshell — begin only after the second-consumer boundary is real.**
+  Its first work consumes the consolidated Scenograph vocabulary; it does not
+  create a competing abstraction while P3/P4 are still proving one.
+- **P5 — fixture-driven geographic projection** over that consolidated
+  boundary is implemented as a serialized coastal-map fixture: an ordinary
+  low-layer map underlay plus geographic source facts, preserved through
+  score-to-scene realization. Live Retinue/Tulle/Sennet location facts wait
+  for an actual radio fact surface; none exists in those products today.
 
-**Done overall** = the same serialized score drives a mere pane spiral and an
-isometry map, with neither portable crate depending on either product.
+**Done overall** = one persisted, product-free score vocabulary drives the
+Mere pane spiral, the Isometry overmap and board, and the geographic fixture;
+neither portable crate nor serialized scene type mentions either product.
 
 ## Findings
 
@@ -211,3 +235,30 @@ registry.
   (3) camera does not auto-fit analytic layouts (hence `FitView`). P3b (LOD:
   representation degrades card→glyph with recency, focus stays live) is the
   remaining half of P3.
+- 2026-07-22: **P3/P4/P5 boundary proof implementation.** `sceno::Score`
+  now serializes the neutral `Spiral`, `Board`, and `Geographic` arrangements,
+  measured footprints, selected representation slots, opaque source refs, and
+  generation. `scenomise::solve` realizes it footprint-aware. Mere's graph
+  adapter maps durable visit recency to score order, selects
+  glyph/card/snapshot/live-pane slots, persists `projection-score.json`, and
+  rebinds its source UUIDs into the canvas strategy buffer on session restore.
+  Existing-node `visit()` now stamps the replayable visit delta, closing P3a's
+  recorded honesty gap. The old arrangements Phyllotaxis adapter no longer
+  drives *any* canvas Spiral path.
+
+  Isometry deleted `Overmap::layout` and its force solver. Its views adapt
+  authored pins to a geographic score or unpinned sites to the portable
+  spiral, fit only the realized scene to the Cambium viewport, and emit a
+  tactical ground board through the same score/scene types. The Isometry tests
+  serialize both shared types and assert their type paths originate in
+  `sceno`; opaque `isometry.*` adapter strings remain local return addresses.
+
+  P5 adds `scenomise/fixtures/coastal_map.json`, containing a low-layer map
+  underlay plus geographic facts and LOD selections. The fixture verifies
+  disclosed coordinates, generation, LOD, and layer behavior. There is no
+  Retinue/Tulle/Sennet location-fact API to adapt yet, so none was invented.
+  Focused receipts: `sceno` 13 tests, `scenomise` 4 tests,
+  `mere-cartography` 17 tests, `mere-canvas` 140 tests, and
+  `isometry-views` 37 tests, and the Merecat session sidecar test 3 tests.
+  The headed P3 create/save run and independent restart/restore run both
+  report `RESULT ok`.

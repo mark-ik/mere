@@ -15,7 +15,7 @@ For terms not addressed here, see the donor harvest indexes ([full harvest](mere
 - **Inker** — engine controller. Selects which engine renders which content; manages engine lifecycle; routes URIs to engines.
 - **Platen** — graph-aware composition surface. Knows graph semantics; presses node-data into renderable form for the verso-tile layer to receive.
 - **Verso** — rendering-surface manager. Receives engine output (via inker) and places it into tile slots. *Verso* is the brand-level concept (the page that catches the impression); the crate family is `verso` (`verso-core`, `tile-state`).
-- **Graphshell** — the chrome / shell-domain concept, now the `shell` crate family (`chrome`, `comms`, `frame`); no longer a product or a standalone host. The application host is **meerkat** (`crates/meerkat`) on the genet-as-host path, where chrome and content are both rendered by genet via `xilem_serval`.
+- **Graphshell** — the Merely family's remote projection host: a wasm-first web/mobile client that connects to applications running on the user's devices, receives Scenograph scenes and diffs, and returns granted intents. It owns saved remote views and cross-application curation, while each application owns its source truth. This is a new product role, distinct from both the archived donor browser and Mere's internal `shell` crates (`mere-chrome`, `mere-comms`).
 - **Eidetic** — private local memory crate (formerly *Mnem*). Persistence layer for graph snapshots, traversal logs, settings, browsing memory. Distinct from any moot's flora. Name evokes eidetic memory ("remembered with high fidelity"). The substrate engrams are distilled from.
 
 ## Engine layer (inker / nematic / document model)
@@ -102,7 +102,7 @@ For terms not addressed here, see the donor harvest indexes ([full harvest](mere
 
 | Retired | Replacement | Reason |
 |---------|-------------|--------|
-| Graphshell *(as product brand)* | **Mere** | Demoted to crate name (the shell layer) |
+| Graphshell *(the old browser product brand)* | **Mere** | The old product was absorbed into Mere. The name was reclaimed 2026-07-22 for the separate remote projection host. |
 | Verse *(network layer)* | folded into Mere-at-network-scope | The Navigator handles networked-community as a form-factor of the same surface |
 | Murmuration *(community layer)* | **Moothold** + count noun *moot* | TESS wall (Murmuration, Inc., civic-tech) |
 | Gist *(contribution unit)* | **Engram** | Already canonical and richer |

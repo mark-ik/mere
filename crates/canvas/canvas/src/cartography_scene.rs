@@ -157,6 +157,14 @@ pub const CANVAS_LAYOUT_STRATEGIES: &[(&str, &str)] = &[
     ("timeline.default", "Timeline (by order)"),
 ];
 
+/// The main canvas's strategy result. Existing strategies emit positions;
+/// the P3 Spiral also returns the portable score it realized.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CanvasStrategyProjection {
+    pub positions: Vec<(NodeKey, PortablePoint)>,
+    pub score: Option<sceno::Score>,
+}
+
 /// The URL's host/authority — the substring between `://` and the next `/` (or end), else the
 /// whole string. The kanban categorical axis groups nodes by this. (Arrangements — kanban.)
 fn url_host(url: &str) -> String {
@@ -184,8 +192,8 @@ fn project_canvas_dispatch(
     recent_first: bool,
 ) -> cartography::Projection {
     use arrangements::adapters::{
-        GridAdapter, KanbanAdapter, LSystemAdapter, PenroseAdapter, PhyllotaxisAdapter,
-        RadialAdapter, SpectralAdapter, TimelineAdapter,
+        GridAdapter, KanbanAdapter, LSystemAdapter, PenroseAdapter, RadialAdapter, SpectralAdapter,
+        TimelineAdapter,
     };
     // The real signal snapshot from intel/signals (degree-based importance for now), replacing
     // the empty `::default()` — the producer -> snapshot -> strategy spine. Strategies that read
@@ -194,17 +202,13 @@ fn project_canvas_dispatch(
     let signals = signals::produce_cheap_signals(graph);
     let mut options = CartographySceneOptions::canvas_pixels(width, height);
     options.extents = extents.cloned();
-    // The Spiral reads newest-first when recency is the active reading, so ordinal 0 (the center)
-    // is the freshest node and age spirals outward. (Projection proofs — P3.)
-    let phyllotaxis = if recent_first {
-        PhyllotaxisAdapter::default().recent_first()
-    } else {
-        PhyllotaxisAdapter::default()
-    };
+    // P3's Spiral is the product-free score path, not an arrangements adapter.
+    // Its ordinal carries local recency, its score carries measured footprints,
+    // and `scenomise` is the only generic solver that realizes it.
+    if id == "phyllotaxis.default" {
+        return cartography::project_spiral_score(graph, extents, focus, recent_first).projection;
+    }
     let projection = match id {
-        "phyllotaxis.default" => {
-            project_with(graph, &signals, &options, &phyllotaxis)
-        }
         "grid.default" => project_with(graph, &signals, &options, &GridAdapter::default()),
         // Spectral: positions from the graph Laplacian's smallest eigenvectors, so the layout
         // reflects connectivity (clusters separate, paths unroll). The expensive analytic layout the
@@ -440,17 +444,65 @@ pub fn project_canvas_strategy(
     extents: Option<&HashMap<NodeKey, (f32, f32)>>,
     recent_first: bool,
 ) -> Vec<(NodeKey, PortablePoint)> {
-    project_canvas_dispatch(id, graph, focus, width, height, clusters, extents, recent_first)
-        .nodes
-        .iter()
-        .map(|n| (n.node, n.position))
-        .collect()
+    project_canvas_dispatch(
+        id,
+        graph,
+        focus,
+        width,
+        height,
+        clusters,
+        extents,
+        recent_first,
+    )
+    .nodes
+    .iter()
+    .map(|n| (n.node, n.position))
+    .collect()
+}
+
+/// Like [`project_canvas_strategy`], with the product-free score when the
+/// selected strategy has one. Mere builds the score; `scenomise` alone solves
+/// its placement.
+pub fn project_canvas_strategy_with_score(
+    id: &str,
+    graph: &Graph,
+    focus: Option<NodeKey>,
+    width: u32,
+    height: u32,
+    clusters: Option<&cartography::ClusterSet>,
+    extents: Option<&HashMap<NodeKey, (f32, f32)>>,
+    recent_first: bool,
+) -> CanvasStrategyProjection {
+    if id == "phyllotaxis.default" {
+        let result = cartography::project_spiral_score(graph, extents, focus, recent_first);
+        return CanvasStrategyProjection {
+            positions: result
+                .projection
+                .nodes
+                .iter()
+                .map(|node| (node.node, node.position))
+                .collect(),
+            score: Some(result.score),
+        };
+    }
+    CanvasStrategyProjection {
+        positions: project_canvas_strategy(
+            id,
+            graph,
+            focus,
+            width,
+            height,
+            clusters,
+            extents,
+            recent_first,
+        ),
+        score: None,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use arrangements::adapters::PhyllotaxisAdapter;
     use kernel::geometry::PortablePoint;
     use kernel::graph::fixtures::GraphFixtures;
     use uuid::Uuid;
@@ -476,11 +528,18 @@ mod tests {
     }
 
     #[test]
-    fn project_with_phyllotaxis_returns_three_positioned_nodes() {
+    fn project_spiral_uses_the_portable_score_solver() {
         let (graph, _) = triangle_graph();
-        let signals = IntelligenceSignals::default();
-        let options = CartographySceneOptions::canvas_pixels(800, 600);
-        let projection = project_with(&graph, &signals, &options, &PhyllotaxisAdapter::default());
+        let projection = project_canvas_dispatch(
+            "phyllotaxis.default",
+            &graph,
+            None,
+            800,
+            600,
+            None,
+            None,
+            false,
+        );
         assert_eq!(projection.nodes.len(), 3);
         assert_eq!(
             projection.metadata.strategy_id.as_deref(),
@@ -500,7 +559,16 @@ mod tests {
         for &(a, b) in &[(0, 1), (1, 2), (2, 0), (3, 4), (4, 5), (5, 3), (2, 3)] {
             graph.assert_semantic_predicate(n[a], n[b], "links".to_string());
         }
-        let positions = project_canvas_strategy("kanban.community", &graph, None, 800, 600, None, None, false);
+        let positions = project_canvas_strategy(
+            "kanban.community",
+            &graph,
+            None,
+            800,
+            600,
+            None,
+            None,
+            false,
+        );
         assert_eq!(positions.len(), 6, "every node is placed");
         let x_of = |key: NodeKey| positions.iter().find(|(k, _)| *k == key).unwrap().1.x;
         assert!(
@@ -522,7 +590,16 @@ mod tests {
     fn project_canvas_strategy_radial_centers_on_focus_and_no_ops_without_one() {
         let (graph, [a, _, _]) = triangle_graph();
         // With a focus, radial lays out the whole graph (focus at center).
-        let with_focus = project_canvas_strategy("radial.default", &graph, Some(a), 800, 600, None, None, false);
+        let with_focus = project_canvas_strategy(
+            "radial.default",
+            &graph,
+            Some(a),
+            800,
+            600,
+            None,
+            None,
+            false,
+        );
         assert_eq!(
             with_focus.len(),
             3,
@@ -534,7 +611,8 @@ mod tests {
             "the focus sits at the radial center"
         );
         // Without a focus there is nothing to center on, so it leaves the layout alone.
-        let no_focus = project_canvas_strategy("radial.default", &graph, None, 800, 600, None, None, false);
+        let no_focus =
+            project_canvas_strategy("radial.default", &graph, None, 800, 600, None, None, false);
         assert!(no_focus.is_empty(), "radial without a selection no-ops");
     }
 
@@ -608,8 +686,16 @@ mod tests {
             .count();
         assert_eq!(halos, 2, "two communities => two halos ride the projection");
         // The positions-only path is unchanged (it drops the overlays).
-        let positions =
-            project_canvas_strategy("spectral.default", &graph, None, 800, 600, Some(&clusters), None, false);
+        let positions = project_canvas_strategy(
+            "spectral.default",
+            &graph,
+            None,
+            800,
+            600,
+            Some(&clusters),
+            None,
+            false,
+        );
         assert_eq!(
             positions.len(),
             6,

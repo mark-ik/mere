@@ -27,6 +27,8 @@ kernel.workspace = true
 # arrangements.
 cartography.workspace = true
 arrangements.workspace = true
+sceno.workspace = true
+scenomise.workspace = true
 quint.workspace = true
 forme.workspace = true
 # The scene-paint list + the cartography-geometry sidecar serialize (the host

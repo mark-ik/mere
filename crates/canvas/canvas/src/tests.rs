@@ -474,12 +474,7 @@ fn recover_node_restores_the_original_identity() {
 
     // A record with no stored title still re-mints (its title is left to the
     // mint default / a later fetch, not forced empty).
-    let id2 = canvas.recover_node(
-        uuid::Uuid::new_v4(),
-        "https://untitled.test",
-        None,
-        &[],
-    );
+    let id2 = canvas.recover_node(uuid::Uuid::new_v4(), "https://untitled.test", None, &[]);
     assert!(
         canvas.graph().get_node_by_id(id2).is_some(),
         "the untitled node re-mints"
@@ -1074,9 +1069,18 @@ fn size_by_recency_grows_the_newest_node_and_shrinks_the_oldest() {
     use std::time::{Duration, SystemTime};
     // Three nodes staggered in last_visited: oldest / middle / newest.
     let mut graph = Graph::new();
-    let old = graph.add_node("https://old.example".to_string(), PortablePoint::new(0.0, 0.0));
-    let mid = graph.add_node("https://mid.example".to_string(), PortablePoint::new(1.0, 0.0));
-    let new = graph.add_node("https://new.example".to_string(), PortablePoint::new(2.0, 0.0));
+    let old = graph.add_node(
+        "https://old.example".to_string(),
+        PortablePoint::new(0.0, 0.0),
+    );
+    let mid = graph.add_node(
+        "https://mid.example".to_string(),
+        PortablePoint::new(1.0, 0.0),
+    );
+    let new = graph.add_node(
+        "https://new.example".to_string(),
+        PortablePoint::new(2.0, 0.0),
+    );
     graph.get_node_mut(old).unwrap().last_visited = SystemTime::UNIX_EPOCH;
     graph.get_node_mut(mid).unwrap().last_visited =
         SystemTime::UNIX_EPOCH + Duration::from_secs(50);
@@ -1107,7 +1111,11 @@ fn size_by_recency_grows_the_newest_node_and_shrinks_the_oldest() {
     // A manual override still wins.
     let nid = canvas.graph().get_node(nk).unwrap().id;
     canvas.set_node_size(nid, 100.0);
-    assert_eq!(canvas.node_size(nk), 100.0, "an override beats recency size");
+    assert_eq!(
+        canvas.node_size(nk),
+        100.0,
+        "an override beats recency size"
+    );
 
     canvas.set_size_by_recency(false);
     assert_eq!(canvas.node_size(mk), 36.0, "off => uniform again");
@@ -1392,7 +1400,10 @@ fn content_affinity_supersedes_structural_and_reverts() {
 
     // Clear it: structural returns on the next frame.
     canvas.set_content_affinity(None);
-    assert!(!canvas.has_content_affinity(), "back to the structural source");
+    assert!(
+        !canvas.has_content_affinity(),
+        "back to the structural source"
+    );
     let _ = canvas.frame(800, 600);
     assert_eq!(
         canvas.affinity_pair_count(),
@@ -1442,17 +1453,31 @@ fn content_affinity_reinstalls_after_a_toggle_cycle() {
     // content signal (the off branch re-arms it). Two edgeless nodes: structural is empty, so the
     // count `1` can only come from the content signal. (burn brief Lane 5 — P4.)
     let mut graph = Graph::new();
-    let a = graph.add_node("https://a.example".to_string(), PortablePoint::new(0.0, 0.0));
-    let b = graph.add_node("https://b.example".to_string(), PortablePoint::new(1.0, 0.0));
+    let a = graph.add_node(
+        "https://a.example".to_string(),
+        PortablePoint::new(0.0, 0.0),
+    );
+    let b = graph.add_node(
+        "https://b.example".to_string(),
+        PortablePoint::new(1.0, 0.0),
+    );
     let mut canvas = Canvas::with_graph(graph);
     canvas.set_content_affinity(Some(vec![(a, b, 0.8)]));
     canvas.set_cluster_by_affinity(true);
     let _ = canvas.frame(800, 600);
-    assert_eq!(canvas.affinity_pair_count(), 1, "content installed on enable");
+    assert_eq!(
+        canvas.affinity_pair_count(),
+        1,
+        "content installed on enable"
+    );
 
     canvas.set_cluster_by_affinity(false);
     let _ = canvas.frame(800, 600);
-    assert_eq!(canvas.affinity_pair_count(), 0, "toggle off clears the force");
+    assert_eq!(
+        canvas.affinity_pair_count(),
+        0,
+        "toggle off clears the force"
+    );
 
     canvas.set_cluster_by_affinity(true);
     let _ = canvas.frame(800, 600);
@@ -1483,13 +1508,20 @@ fn blend_unions_structural_and_content_pairs() {
         graph.assert_semantic_predicate(n[a], n[b], "links".to_string());
     }
     let mut canvas = Canvas::with_graph(graph);
-    assert_eq!(canvas.affinity_blend(), AffinityBlend::Blend, "Blend is the default");
+    assert_eq!(
+        canvas.affinity_blend(),
+        AffinityBlend::Blend,
+        "Blend is the default"
+    );
     canvas.set_cluster_by_affinity(true);
 
     // Structural-only baseline (no content injected yet): the triangle's pairs.
     let _ = canvas.frame(800, 600);
     let structural = canvas.affinity_pair_count();
-    assert!(structural >= 3, "the triangle's structural pairs, got {structural}");
+    assert!(
+        structural >= 3,
+        "the triangle's structural pairs, got {structural}"
+    );
 
     // Inject one content pair structural does not have (node 3 → node 0, no shared edge).
     canvas.set_content_affinity(Some(vec![(n[3], n[0], 0.9)]));
@@ -1506,9 +1538,18 @@ fn blend_affinity_pairs_noisy_ors_shared_weights() {
     // The merge math directly: a pair in only one signal passes through at its weight; a pair in
     // both is noisy-OR'd (0.8 with 0.8 → 0.96 = 1 − 0.2·0.2). (burn brief Lane 5 — P6.)
     let mut graph = Graph::new();
-    let a = graph.add_node("https://a.example".to_string(), PortablePoint::new(0.0, 0.0));
-    let b = graph.add_node("https://b.example".to_string(), PortablePoint::new(1.0, 0.0));
-    let c = graph.add_node("https://c.example".to_string(), PortablePoint::new(2.0, 0.0));
+    let a = graph.add_node(
+        "https://a.example".to_string(),
+        PortablePoint::new(0.0, 0.0),
+    );
+    let b = graph.add_node(
+        "https://b.example".to_string(),
+        PortablePoint::new(1.0, 0.0),
+    );
+    let c = graph.add_node(
+        "https://c.example".to_string(),
+        PortablePoint::new(2.0, 0.0),
+    );
     let structural = signals::AffinityScores {
         pairs: vec![((a, b), 0.8)],
     };
@@ -1521,9 +1562,15 @@ fn blend_affinity_pairs_noisy_ors_shared_weights() {
             .map(|&(_, _, w)| w)
     };
     let ab = weight(a, b).expect("a-b present");
-    assert!((ab - 0.96).abs() < 1e-5, "noisy-or 0.8,0.8 -> 0.96, got {ab}");
+    assert!(
+        (ab - 0.96).abs() < 1e-5,
+        "noisy-or 0.8,0.8 -> 0.96, got {ab}"
+    );
     let ac = weight(a, c).expect("a-c present");
-    assert!((ac - 0.5).abs() < 1e-5, "content-only pair passes through, got {ac}");
+    assert!(
+        (ac - 0.5).abs() < 1e-5,
+        "content-only pair passes through, got {ac}"
+    );
     assert_eq!(blended.len(), 2, "two distinct unordered pairs");
 }
 
@@ -2536,6 +2583,57 @@ fn select_by_url_selects_existing_or_reports_missing() {
         Some("https://one.example"),
         "a miss leaves selection intact"
     );
+}
+
+#[test]
+fn revisit_stamps_the_durable_recency_clock() {
+    let mut canvas = Canvas::new();
+    let key = canvas.visit("https://recency.example");
+    let id = canvas.graph().get_node(key).unwrap().id;
+    kernel::graph::apply::apply_graph_delta(
+        &mut canvas.graph,
+        kernel::graph::apply::GraphDelta::ReplayTouchNodeLastVisitedById {
+            node_id: id,
+            timestamp_ms: 1,
+        },
+    );
+    canvas.visit("https://recency.example");
+    let stamped = canvas
+        .graph()
+        .get_node(key)
+        .unwrap()
+        .last_visited
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
+    assert!(stamped > 1, "a revisit updates the persisted visit clock");
+}
+
+#[test]
+fn persisted_spiral_score_reinstates_the_local_strategy_positions() {
+    let mut canvas = Canvas::new();
+    let first = canvas.visit("https://score-first.example");
+    let second = canvas.visit("https://score-second.example");
+    let first_id = canvas.graph().get_node(first).unwrap().id;
+    let second_id = canvas.graph().get_node(second).unwrap().id;
+    let mut score = sceno::Score::new(sceno::Arrangement::Spiral(sceno::Spiral::default()));
+    score.items = [first_id, second_id]
+        .into_iter()
+        .enumerate()
+        .map(|(ordinal, id)| sceno::ScoreItem {
+            source: sceno::SourceRef::new(::cartography::MERE_GRAPH_ADAPTER, id.to_string()),
+            ordinal: ordinal as u32,
+            footprint: sceno::Footprint::Circle { radius: 18.0 },
+            representation: sceno::Representation::Glyph,
+            placement: sceno::Placement::Ordinal,
+            layer: 0,
+            visible: true,
+        })
+        .collect();
+    assert!(canvas.restore_projection_score(score));
+    assert_eq!(canvas.layout_strategy(), Some("phyllotaxis.default"));
+    assert_eq!(canvas.strategy_positions.as_ref().unwrap().len(), 2);
+    assert!(canvas.projection_score().is_some());
 }
 
 #[test]

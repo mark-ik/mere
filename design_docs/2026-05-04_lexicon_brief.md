@@ -6,6 +6,13 @@
 
 **Execution status (updated 2026-06-09)**: the workspace has since reorganized from the flat 2026-05-04 scaffolding into supercrate subtrees under `crates/`, with **meerkat** as the host on the genet-as-host path; see the topology table in [`DOC_README.md`](DOC_README.md) for the current layout. The donor `graphshell` repo was GitHub-archived and its local clone deleted 2026-05-27.
 
+**Graphshell amendment (2026-07-22):** the old Graphshell browser product remains
+retired into Mere. The name is reclaimed for a distinct Merely-family product:
+the remote projection host over Scenograph, specified in the
+[Graphshell remote projection host plan](mere_docs/implementation_strategy/2026-07-22_graphshell_remote_projection_host_plan.md).
+Mere's internal chrome is simply its `shell` crate family and does not carry the
+Graphshell product name.
+
 ---
 
 ## 1. Top-level naming
@@ -51,7 +58,7 @@ All scaffolded at `c:\Users\mark_\Code\repos\mere\crates\`. Reserved on crates.i
 | Crate | Role |
 |-------|------|
 | **`mere`** | Product crate — entrypoint composing everything else |
-| **`graphshell`** | Demoted: the chrome / shell-domain concept, now the `shell` crate family. The host is `meerkat`. |
+| **`graphshell`** | Reclaimed 2026-07-22 for the remote projection host application/facade. Mere's chrome remains in its own `shell` crates. |
 | **`verso`** | Tile-rendering-surface management (`verso-core`, `tile-state`) |
 | **`inker`** | Engine controller — selects/orchestrates engines |
 | **`platen`** | Graph-aware composition surface (the press to verso's page) |
@@ -104,7 +111,7 @@ Do not revive:
 
 | Retired | Replacement | Why |
 |---------|-------------|-----|
-| **Graphshell** *(as product brand)* | **Mere** | Demoted to crate name (the shell layer within Mere) |
+| **Graphshell** *(the old browser product brand)* | **Mere** | The old product was absorbed into Mere. The name was reclaimed 2026-07-22 for the separate remote projection host; it does not rename Mere. |
 | **Strophos** *(as product brand)* | **Mere** | Strophos retained at parent-brand level only — itself retired 2026-07-09, see below |
 | **Strophos** *(as parent brand)* | **Merely** | Retired 2026-07-09. The umbrella now derives from the product ("merely a browser!") rather than from a separate Greek root. Strophos survives only in this brief's history sections and in `archive_docs/`; do not reintroduce it. |
 | **Lemni** / **Lemniscate** | — | Lemni Inc. (Sequoia-backed AI-agent SaaS, Class 9 mark) |

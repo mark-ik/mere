@@ -69,6 +69,7 @@ pub mod projection;
 pub mod request;
 pub mod scene_out;
 pub mod signals;
+pub mod spiral_score;
 pub mod strategy;
 
 pub use minimap::{MinimapDescriptor, MinimapOverlayKind};
@@ -78,11 +79,12 @@ pub use request::{
     AxisValue, FormFactor, NodeFilter, ProjectionDimension, ProjectionRequest, TargetSize,
     ViewIntent,
 };
+pub use scene_out::{MERE_GRAPH_ADAPTER, scene_from_projection};
 pub use signals::{
     AffinityScores, BridgeNodes, Cluster, ClusterSet, ImportanceWeights, IntelligenceSignals,
     NodeEmbeddings,
 };
-pub use scene_out::{MERE_GRAPH_ADAPTER, scene_from_projection};
+pub use spiral_score::{MereSpiralProjection, project_spiral_score};
 pub use strategy::LayoutStrategy;
 
 /// Crate version.

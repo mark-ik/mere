@@ -110,6 +110,57 @@ impl Canvas {
         }
     }
 
+    /// Record the portable score that produced the active analytic layout.
+    /// Passing `None` drops a stale score when the host selects another
+    /// strategy or returns to force physics.
+    pub fn set_projection_score(&mut self, score: Option<sceno::Score>) {
+        self.projection_score = score;
+    }
+
+    /// The last score supplied by the product adapter, for persistence and
+    /// proof receipts.
+    pub fn projection_score(&self) -> Option<&sceno::Score> {
+        self.projection_score.as_ref()
+    }
+
+    /// Restore a persisted Mere Spiral score into the live strategy buffer.
+    ///
+    /// The shared score remains product-free. This boundary resolves only the
+    /// `mere.graph` opaque refs back to the graph's current node keys, then
+    /// reinstates the local Spiral strategy. Unknown score shapes are retained
+    /// as sidecar state but deliberately do not invent a local renderer.
+    pub fn restore_projection_score(&mut self, score: sceno::Score) -> bool {
+        self.projection_score = Some(score.clone());
+        if !matches!(score.arrangement, sceno::Arrangement::Spiral(_)) {
+            return false;
+        }
+        let scene = scenomise::solve(&score);
+        let positions: Vec<_> = scene
+            .items
+            .iter()
+            .filter_map(|item| {
+                let source = scene.sources.get(item.source.0 as usize)?;
+                if source.adapter != ::cartography::MERE_GRAPH_ADAPTER {
+                    return None;
+                }
+                let id = uuid::Uuid::parse_str(&source.id).ok()?;
+                let key = self.graph.get_node_key_by_id(id)?;
+                Some((
+                    key,
+                    PortablePoint::new(item.transform.translate.x, item.transform.translate.y),
+                ))
+            })
+            .collect();
+        if positions.is_empty() {
+            return false;
+        }
+        self.active_strategy = Some("phyllotaxis.default".to_string());
+        self.last_strategy_inputs = None;
+        self.physics.halt();
+        self.strategy_positions = Some(positions);
+        true
+    }
+
     /// Refresh the cached community partition if the active strategy needs it (cluster-kanban) and
     /// the topology generation has advanced since it was last computed. The generation-gated cache:
     /// Louvain runs once per structural change, not once per frame (the host calls this before
@@ -355,7 +406,9 @@ impl Canvas {
             if self.affinity_force_installed && !structural_changed && !content_changed {
                 // Nothing that feeds the live force moved; leave it (no per-frame rebuild).
             } else {
-                let structural = use_structural.then(|| self.affinity_cache.as_ref()).flatten();
+                let structural = use_structural
+                    .then(|| self.affinity_cache.as_ref())
+                    .flatten();
                 let content = use_content
                     .then(|| self.content_affinity.as_deref())
                     .flatten();

@@ -174,6 +174,7 @@ impl Canvas {
             view_h: 600,
             active_strategy: None,
             strategy_positions: None,
+            projection_score: None,
             scope: None,
             render_gnodes_as_dom: false,
         }
@@ -594,7 +595,11 @@ impl Canvas {
 
     /// [`set_node_mime_hint`](Self::set_node_mime_hint) keyed by member id
     /// (see [`set_node_favicon_for`](Self::set_node_favicon_for) for why).
-    pub fn set_node_mime_hint_for(&mut self, member: uuid::Uuid, mime_hint: Option<String>) -> bool {
+    pub fn set_node_mime_hint_for(
+        &mut self,
+        member: uuid::Uuid,
+        mime_hint: Option<String>,
+    ) -> bool {
         let Some(key) = self.graph.get_node_key_by_id(member) else {
             return false;
         };
