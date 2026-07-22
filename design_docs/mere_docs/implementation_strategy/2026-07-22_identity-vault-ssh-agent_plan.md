@@ -139,8 +139,35 @@ oversell.
 - 2026-07-22: personae's at-rest layers (sealed records, passphrase storage)
   are already production-exercised by hocket-genet identity, so V1 is backend
   wiring, not new cryptography.
+- 2026-07-22 (V1): `PassphraseEncryptedStorage` already implemented
+  `IdentityStorage` in full (Argon2id + ChaCha20-Poly1305, atomic writes,
+  wrong-passphrase detection, tested end-to-end with `IdentityVault`), so
+  the portable-file half of V1 predated this plan. The missing half was the
+  OS-auto-unlock composition; the vault trait doc claiming
+  "OsKeychainStorage remains the follow-up" was the accurate statement and
+  is now updated.
+- Profile ids are user-chosen strings, so the sealed backend hashes them
+  (blake3 hex) for filenames and stores the id inside the record; listing
+  decrypts each record (it needs display_name anyway).
 
 ## Progress
 
 - 2026-07-22: plan written. Prior art re-read (§3 of the protocol
-  architecture plan); vault.rs verified against it. No code yet.
+  architecture plan); vault.rs verified against it.
+- 2026-07-22: **V1 done.** New `personae::SealedProfileStorage`
+  (src/sealed_profile_storage.rs): `IdentityStorage` composed over
+  `SealedRecordStorage` + the `startup_unlock` AutoOs ladder
+  (`open_with_key` for any key ladder, `open_auto_os` returns Ok(None)
+  where the ladder is unimplemented, honest degraded state). Shared
+  profile wire shape factored into `profile_wire.rs` (used by both on-disk
+  backends; passphrase file format unchanged). 52 tests green including
+  8 new (round-trip, reopen, wrong-key, hashed-filename listing, awkward
+  ids, delete, vault end-to-end, Windows DPAPI auto-os round-trip);
+  clippy clean. Serialization note: the wire is serde JSON inside the
+  encrypted envelopes (inherited from the existing backends), not CBOR as
+  this plan first guessed; staying with the incumbent format, one shape,
+  no migration.
+- Next: V2 agent bin (feature-gated `personae-agent` bin so the published
+  lib keeps a lean default dep tree). The cutover steps that touch the
+  Windows machine state (pipe/service arrangement, deleting the plaintext
+  key) wait for Mark at the keyboard.

@@ -191,10 +191,15 @@ Coordination: the moot (gemot) refactor **settled 2026-07-17** (mere `a4da519` "
   green end-to-end (21 tests) — sample component proposes batches, the
   revision-conflict path exercised (`eight_turns` outcome 5), an ungranted
   import fails at instantiation (`grants.rs`), quotas/guarded intact. These
-  bars were built at P2.3/P2.4 (2026-06-22); B3's remaining substance is the
-  **merecat world** — a wasm component as a merecat denizen through the same
-  gate — which follows once a wasm pack exists to install (B4 vocabulary +
-  B5 transport now provide it).
+  bars were built at P2.3/P2.4 (2026-06-22). **Same day, the one-grant seam
+  landed** (mere, `Grant::from_authority`): document-host's import grant now
+  derives from a servitor authority (`doc/log|document|net` paths, linked only
+  under coverage), so one authority decides both the piccolo face (B2) and
+  the wasm face — the real component instantiates for a covered subject and
+  fails at instantiation for an uncovered one. B3's remaining substance is
+  the **merecat world** — an Action-emitting wit world so a component can BE
+  a merecat denizen end-to-end; which Actions a component may emit is a
+  surface decision for a design round with Mark.
 - **2026-07-22 (B4 COMPLETE — mere `a3a246a8`)**: `mere.pack/v1` frozen in
   eidetic (`pack.rs`): `PackManifest` typed payload (part inventory by content
   hash + contribution manifest with author pubkey + requested scopes), the
