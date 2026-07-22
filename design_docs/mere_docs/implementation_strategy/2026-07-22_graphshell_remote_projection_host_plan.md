@@ -1,14 +1,14 @@
 # Graphshell Remote Projection Host Plan
 
 **Date:** 2026-07-22
-**Status:** the local G0 boundary is sealed, G1's loopback presentation proof
-is complete, and G2's diff/resume/persistence proof is complete as of
-2026-07-22. Publication remains gated on renaming the archived donor and
-repairing its citations. G3, a real Merecat endpoint, is next. Graphshell is
-ruled as the Merely family's remote projection host. It is neither the
-projection engine nor Mere's internal chrome layer. This plan remains
-temporary authority until the new sibling repository is published and this
-document moves there.
+**Status:** the local G0 boundary is sealed; G1's loopback presentation, G2's
+diff/resume/persistence, and G3's real Merecat endpoint proofs are complete as
+of 2026-07-22. Publication remains gated on renaming the archived donor and
+repairing its citations. G4, the already-proven Isometry projection, is next.
+Graphshell is ruled as the Merely family's remote projection host. It is
+neither the projection engine nor Mere's internal chrome layer. This plan
+remains temporary authority until the new sibling repository is published and
+this document moves there.
 
 **Companions:** the
 [projection-engine prior-art brief](../research/2026-07-21_projection_engine_prior_art_brief.md),
@@ -437,6 +437,27 @@ remain later work.
 **Done when:** the Graphshell application displays a live Merecat projection,
 changes its local layout without changing Mere truth, and receives both an
 accepted and a rejected intent receipt.
+
+**Implemented locally 2026-07-22 (Graphshell `5f30502`, Merecat `7996af2`):**
+Graphshell's product-neutral receipt view now realizes disclosed Scenograph
+item origins and relations, resolves the presentation payloads that fill those
+placements, and changes to a semantic card stack on narrow screens. Merecat is
+now a library plus thin desktop binary; its endpoint reads the live Mere graph,
+uses the existing Mere-cartography Spiral score and scene lowering, transfers
+three content-addressed cards, and retains the two graph relationships as
+routed scene relations. Both advertised actions return through one Servitor
+gate. The projected `projection/layout/` grant accepts `FitView`; the
+graph-changing `OpenAddress` petition under `graph/open/` is rejected, leaving
+Mere graph revision 5 and its three nodes unchanged. The accepted audit commit
+is attributed to the endpoint subject. Merecat's 98 library tests and both
+binaries pass; the G3 executable receipt is byte-checked; Graphshell's native,
+Wasm, warning-denying Clippy, and product-dependency walls pass. Headed checks
+at wide and narrow browser sizes found keyboard-reachable actions, responsive
+collapse, no horizontal overflow, and no browser errors. This remains a local
+loopback proof over the Spiral score. The authenticated carrier, negotiated
+grants, revocation, diffs, and durable host store remain later work, and the
+committed Merecat Git dependency becomes independently resolvable only when
+the local Graphshell repository is published.
 
 ### G4. Serve the already-proven Isometry projection
 
