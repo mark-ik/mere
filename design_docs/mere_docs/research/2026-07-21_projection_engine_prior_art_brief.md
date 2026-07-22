@@ -312,12 +312,30 @@ the score/choreography/inhabited-scene stage vocabulary are family-internal and 
 copy stays plain per the plain-vocabulary rule (users see "layout" and "arrangement," never
 "choreography").
 
-**graphshell is parked, not spent.** It tempted as the umbrella, but pelt (its analog) is
-genet's *host shell*, product-coupled and wrapped around the engine, the opposite coupling
-profile from a portable engine family. Read the right way around, "graph shell" names the layer
-*above* the engine: the canvas hosting, chrome, and mere-side adapters, someday a runnable
-spatial host. If resurrected it takes that role, with the serval→genet renaming discipline
-(the name means the donor everywhere in the corpus today).
+**graphshell: the family's remote lens (destination ruled with Mark, 2026-07-22).** It tempted
+as the engine umbrella, but pelt (its analog) is genet's *host shell*, product-coupled and
+wrapped around the engine — the opposite coupling profile from a portable engine family. Read
+the right way around, "graph shell" names the layer *above* the engine, and Mark's extension
+gives that layer its product form: **a wasm-first thin client for web and mobile, connecting to
+your own running apps over p2p — like a cloud service, except the app is the backend, wherever
+it runs.** The wire protocol is what scenograph already builds: scores travel out, scene
+snapshots + scenotime diffs travel back, gestures return as intents through the participant
+gate (persona → grant → typed proposal → attributed apply), so the client holds a revocable
+grant and a lens, never truth. The wasm constraints line up: a thin client is receive-diffs /
+paint / hit-test / send-intents, so single-threaded (no SAB wall), no client-side script engine
+(no-JIT posture costs nothing), and genet's WebGPU-in-browser receipts cover rendering. The
+one-state-N-windows doctrine extends unmodified: ortet and ramets, some ramets on other
+devices. Availability beyond your devices comes from the mesh/moot voluntary-hosting lanes, not
+a datacenter; constrained links get the degenerate form (a LoRa-scale "scene" is a
+management-snapshot of facts). **Three consumers with existing roadmap pull**: isometry-web
+(players joining a DM's session from a browser IS this client), the radio companion app
+(Merely LLC's phone-side management surface — the commercial pull), and the remote merecat
+lens. **Sequencing gate**: behind the proof ladder — needs the contract proven on two products
+(proof 4) and scenotime's diff lane; the new pieces it demands are a gated projection-server
+seam in apps (score subscription → scene stream + intent sink), the diff wire format, and the
+client itself. Reviving the name still takes the serval→genet renaming discipline (the name
+means the donor everywhere in the corpus today), but this use finally deserves it: a shell over
+graphs, thin as a shell.
 
 Migration posture:
 

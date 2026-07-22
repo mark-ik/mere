@@ -418,6 +418,13 @@ impl Canvas {
             let importance = self.node_importance.get(&key).copied().unwrap_or(0.0);
             return DEFAULT + importance * (MAX - DEFAULT);
         }
+        // Recency (temporal channel): newest reads at the cap, oldest at the default. An
+        // un-cached node (mode just enabled, before the next push) reads 0 -> DEFAULT.
+        // (Projection proofs — P3, recency.)
+        if self.size_by_recency {
+            let recency = self.node_recency.get(&key).copied().unwrap_or(0.0);
+            return DEFAULT + recency * (MAX - DEFAULT);
+        }
         if self.size_by_degree {
             let degree = self.graph.neighbors_undirected(key).count();
             return (DEFAULT + 8.0 * degree as f32).min(MAX);
@@ -481,6 +488,27 @@ impl Canvas {
         self.size_by_importance
     }
 
+    /// Toggle **size-by-recency**: when on, node faces grow with how recently the node was
+    /// visited, normalized across the graph so the freshest hits the cap and older content
+    /// shrinks. The temporal size channel (pairs with the Spiral's recent-first ordering: newest
+    /// largest at the center, age shrinking outward). Off by default; loses to a manual override
+    /// and to size-by-importance, wins over size-by-degree. Refreshes the cache + re-separates
+    /// neighbours. (Projection proofs — P3, recency.)
+    pub fn set_size_by_recency(&mut self, on: bool) {
+        self.size_by_recency = on;
+        if on {
+            self.recompute_recency();
+        } else {
+            self.node_recency.clear();
+        }
+        self.resettle_for_size();
+    }
+
+    /// Whether size-by-recency is on. (Projection proofs — P3, recency.)
+    pub fn size_by_recency(&self) -> bool {
+        self.size_by_recency
+    }
+
     /// Choose the importance metric (degree or betweenness) size-by-importance reads. Dirties the
     /// cache + re-separates so the change takes effect immediately when the mode is on; a no-op
     /// effect when off. (Graph signals — importance metric.)
@@ -523,6 +551,44 @@ impl Canvas {
             .into_iter()
             .collect();
         self.importance_dirty = false;
+    }
+
+    /// Recompute the cached per-node recency (normalized `0..=1`, newest = `1.0`) from each node's
+    /// `last_visited`. One O(N) min/max pass, then one map — cheap enough to run each geometry push
+    /// under size-by-recency (no dirty flag). A graph with a single distinct timestamp reads every
+    /// node as newest (`1.0`), so a fresh session is uniform, not collapsed. (Projection proofs — P3.)
+    pub(crate) fn recompute_recency(&mut self) {
+        let times: Vec<(NodeKey, std::time::SystemTime)> = self
+            .graph
+            .nodes()
+            .map(|(key, node)| (key, node.last_visited))
+            .collect();
+        let (Some(oldest), Some(newest)) = (
+            times.iter().map(|(_, t)| *t).min(),
+            times.iter().map(|(_, t)| *t).max(),
+        ) else {
+            self.node_recency.clear();
+            return;
+        };
+        let span = newest
+            .duration_since(oldest)
+            .map(|d| d.as_secs_f32())
+            .unwrap_or(0.0);
+        self.node_recency = times
+            .into_iter()
+            .map(|(key, t)| {
+                // No span (all equal) -> everything newest.
+                let recency = if span <= f32::EPSILON {
+                    1.0
+                } else {
+                    t.duration_since(oldest)
+                        .map(|d| d.as_secs_f32())
+                        .unwrap_or(0.0)
+                        / span
+                };
+                (key, recency)
+            })
+            .collect();
     }
 
     /// A node's render height (px above the ground plane) for the isometric float: `0`

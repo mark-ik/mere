@@ -1,5 +1,5 @@
 [package]
-name = "eidetic-search"
+name = "mere-eidetic-search"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,6 +8,7 @@ publish = false
 description = "Lexical search over eidetic browsing memory — the Phase 9 producer half: a tantivy index minted from BrowsingTrace engrams, BM25 recall, fast-field reports, and the engine-agnostic hybrid-fusion seam."
 
 [lib]
+name = "eidetic_search"
 path = "src/lib.rs"
 
 [dependencies]

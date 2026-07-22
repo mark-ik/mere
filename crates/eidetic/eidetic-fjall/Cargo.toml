@@ -1,5 +1,5 @@
 [package]
-name = "eidetic-fjall"
+name = "mere-eidetic-fjall"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,6 +10,7 @@ keywords = ["eidetic", "fjall", "lsm", "storage", "mere"]
 categories = ["database-implementations"]
 
 [lib]
+name = "eidetic_fjall"
 path = "src/lib.rs"
 
 [dependencies]

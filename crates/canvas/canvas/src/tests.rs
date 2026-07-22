@@ -1070,6 +1070,50 @@ fn size_by_importance_sizes_nodes_by_the_degree_signal() {
 }
 
 #[test]
+fn size_by_recency_grows_the_newest_node_and_shrinks_the_oldest() {
+    use std::time::{Duration, SystemTime};
+    // Three nodes staggered in last_visited: oldest / middle / newest.
+    let mut graph = Graph::new();
+    let old = graph.add_node("https://old.example".to_string(), PortablePoint::new(0.0, 0.0));
+    let mid = graph.add_node("https://mid.example".to_string(), PortablePoint::new(1.0, 0.0));
+    let new = graph.add_node("https://new.example".to_string(), PortablePoint::new(2.0, 0.0));
+    graph.get_node_mut(old).unwrap().last_visited = SystemTime::UNIX_EPOCH;
+    graph.get_node_mut(mid).unwrap().last_visited =
+        SystemTime::UNIX_EPOCH + Duration::from_secs(50);
+    graph.get_node_mut(new).unwrap().last_visited =
+        SystemTime::UNIX_EPOCH + Duration::from_secs(100);
+    let mut canvas = Canvas::with_graph(graph);
+    let key = |url: &str| canvas.graph().get_node_by_url(url).unwrap().0;
+    let (ok, mk, nk) = (
+        key("https://old.example"),
+        key("https://mid.example"),
+        key("https://new.example"),
+    );
+
+    // Off by default: uniform.
+    assert_eq!(canvas.node_size(nk), 36.0, "off => uniform");
+
+    canvas.set_size_by_recency(true);
+    // Newest at the cap (88), oldest at the default (36), middle halfway
+    // (recency 0.5 => 36 + 0.5*(88-36) = 62).
+    assert_eq!(canvas.node_size(nk), 88.0, "newest hits the cap");
+    assert_eq!(canvas.node_size(ok), 36.0, "oldest reads the default");
+    assert!(
+        (canvas.node_size(mk) - 62.0).abs() < 0.1,
+        "middle scales to its 0.5 recency, got {}",
+        canvas.node_size(mk)
+    );
+
+    // A manual override still wins.
+    let nid = canvas.graph().get_node(nk).unwrap().id;
+    canvas.set_node_size(nid, 100.0);
+    assert_eq!(canvas.node_size(nk), 100.0, "an override beats recency size");
+
+    canvas.set_size_by_recency(false);
+    assert_eq!(canvas.node_size(mk), 36.0, "off => uniform again");
+}
+
+#[test]
 fn importance_cache_invalidates_on_topology_change() {
     // a-b, both degree 1 => importance 1.0 each => both at the cap.
     let mut graph = Graph::new();

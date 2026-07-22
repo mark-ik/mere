@@ -340,6 +340,17 @@ pub struct Canvas {
     /// important node hits the cap. The signal-driven size channel; wins over size-by-degree,
     /// loses to a manual override. Default off. (Graph signals — importance encoding.)
     size_by_importance: bool,
+    /// Scene toggle: when on, a node's face grows with how **recently** it was visited, so the
+    /// newest content reads largest and what you left behind shrinks (the brand's "age shrinks
+    /// what you leave behind"; the meristem reading of the spiral). Normalized across the graph so
+    /// the freshest node hits the cap. Loses to a manual override and to size-by-importance; wins
+    /// over size-by-degree. Default off. (Projection proofs — P3, recency.)
+    size_by_recency: bool,
+    /// The cached per-node recency (normalized `0..=1`, newest = `1.0`), recomputed from
+    /// `last_visited` whenever geometry is pushed while [`size_by_recency`](Self::size_by_recency)
+    /// is on. Unlike importance this needs no dirty flag: it is cheap (one O(N) min/max + map) and
+    /// recomputed each push so a visit's fresh timestamp always reads current. Empty when off.
+    node_recency: HashMap<NodeKey, f32>,
     /// Which metric [`size_by_importance`](Self::size_by_importance) reads: degree (cheap default)
     /// or betweenness (structural brokerage). A per-scene choice. (Graph signals — importance metric.)
     importance_metric: signals::ImportanceMetric,

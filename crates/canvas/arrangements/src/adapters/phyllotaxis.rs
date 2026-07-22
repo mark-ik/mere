@@ -30,28 +30,58 @@ use cartography::projection::{PositionedNode, Projection, ProjectionMetadata};
 use cartography::request::ProjectionRequest;
 use cartography::strategy::LayoutStrategy;
 
+/// Which node ordering feeds the spiral's ordinals. Lives on the adapter
+/// (the kernel-aware layer), not on the portable [`PhyllotaxisConfig`]:
+/// recency is a property of mere's node truth, not of the algorithm.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum SpiralOrdering {
+    /// Graph iteration order (deterministic petgraph NodeIndex order) —
+    /// the original behavior.
+    #[default]
+    GraphOrder,
+    /// Most recently visited first: ordinal 0 (the spiral's center under
+    /// `Outward` orientation) is the newest node, age spirals outward —
+    /// the meristem reading of phyllotaxis, and the brand's "age shrinks
+    /// what you leave behind". Ties keep graph order (stable sort).
+    RecentFirst,
+}
+
 /// Cartography-side adapter for [`canvas_ir::layout::Phyllotaxis`].
 ///
 /// Holds a [`PhyllotaxisConfig`] — center, scale, divergence angle,
-/// radius curve, spiral orientation. The default config (golden-angle
-/// divergence + square-root radius curve + outward orientation)
-/// produces classic sunflower / phyllotaxis packing.
+/// radius curve, spiral orientation — plus the [`SpiralOrdering`] that
+/// decides which node takes which ordinal. The default config
+/// (golden-angle divergence + square-root radius curve + outward
+/// orientation) produces classic sunflower / phyllotaxis packing.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct PhyllotaxisAdapter {
     pub config: PhyllotaxisConfig,
+    pub ordering: SpiralOrdering,
 }
 
 impl PhyllotaxisAdapter {
     pub const PROJECTION_ID: &'static str = "phyllotaxis.default";
 
     pub fn new(config: PhyllotaxisConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            ordering: SpiralOrdering::default(),
+        }
+    }
+
+    /// The same adapter with most-recent-first ordinal assignment.
+    pub fn recent_first(mut self) -> Self {
+        self.ordering = SpiralOrdering::RecentFirst;
+        self
     }
 }
 
 impl From<Phyllotaxis> for PhyllotaxisAdapter {
     fn from(p: Phyllotaxis) -> Self {
-        Self { config: p.config }
+        Self {
+            config: p.config,
+            ordering: SpiralOrdering::default(),
+        }
     }
 }
 
@@ -92,7 +122,20 @@ impl LayoutStrategy for PhyllotaxisAdapter {
         // Iteration order is `Graph::nodes()`'s order (petgraph
         // NodeIndex order); analytic strategies are deterministic in
         // that order.
-        let ordered_keys: Vec<NodeKey> = request.graph.nodes().map(|(key, _)| key).collect();
+        let mut ordered_keys: Vec<NodeKey> = request.graph.nodes().map(|(key, _)| key).collect();
+        if self.ordering == SpiralOrdering::RecentFirst {
+            // Newest first; a missing node reads as epoch (oldest). Stable
+            // sort keeps graph order among ties, so determinism holds.
+            ordered_keys.sort_by_key(|key| {
+                std::cmp::Reverse(
+                    request
+                        .graph
+                        .get_node(*key)
+                        .map(|node| node.last_visited)
+                        .unwrap_or(std::time::SystemTime::UNIX_EPOCH),
+                )
+            });
+        }
         let n = ordered_keys.len();
         if n == 0 {
             return Projection {
@@ -279,6 +322,7 @@ mod tests {
                 radius_curve: PhyllotaxisRadiusCurve::SquareRoot,
                 orientation: SpiralOrientation::Outward,
             },
+            ordering: SpiralOrdering::GraphOrder,
         };
         let outward_proj = outward.project(&request);
         let first_key = graph.nodes().next().unwrap().0;
@@ -300,6 +344,7 @@ mod tests {
                 radius_curve: PhyllotaxisRadiusCurve::SquareRoot,
                 orientation: SpiralOrientation::Inward,
             },
+            ordering: SpiralOrdering::GraphOrder,
         };
         let inward_proj = inward.project(&request);
         let last_key = graph.nodes().last().unwrap().0;
@@ -333,6 +378,7 @@ mod tests {
                 radius_curve: PhyllotaxisRadiusCurve::Linear,
                 orientation: SpiralOrientation::Outward,
             },
+            ordering: SpiralOrdering::GraphOrder,
         };
         let projection = adapter.project(&request);
 
@@ -352,6 +398,40 @@ mod tests {
             .position;
         assert!(first_pos.to_vector().length() < 0.001);
         assert!((second_pos.to_vector().length() - 10.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn recent_first_puts_the_newest_node_at_the_center() {
+        use std::time::{Duration, SystemTime};
+        let (mut graph, keys) = small_graph();
+        // Stagger visits: key[i] visited at epoch + i seconds, so the LAST
+        // key is the most recent.
+        for (i, key) in keys.iter().enumerate() {
+            graph.get_node_mut(*key).unwrap().last_visited =
+                SystemTime::UNIX_EPOCH + Duration::from_secs(i as u64);
+        }
+        let signals = IntelligenceSignals::default();
+        let request = ProjectionRequest {
+            graph: &graph,
+            signals: &signals,
+            intent: ViewIntent::default(),
+        };
+        let projection = PhyllotaxisAdapter::default().recent_first().project(&request);
+        // Outward orientation: ordinal 0 sits at the center (radius 0) —
+        // and RecentFirst assigns ordinal 0 to the newest node.
+        let newest = *keys.last().unwrap();
+        let newest_pos = projection
+            .nodes
+            .iter()
+            .find(|n| n.node == newest)
+            .unwrap()
+            .position;
+        assert!(newest_pos.x.abs() < 0.001 && newest_pos.y.abs() < 0.001);
+        // And the default GraphOrder is unchanged: node 0 stays central.
+        let plain = PhyllotaxisAdapter::default().project(&request);
+        let first = keys[0];
+        let first_pos = plain.nodes.iter().find(|n| n.node == first).unwrap().position;
+        assert!(first_pos.x.abs() < 0.001 && first_pos.y.abs() < 0.001);
     }
 
     #[test]

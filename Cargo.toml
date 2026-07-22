@@ -145,13 +145,13 @@ roster = { package = "mere-roster", path = "crates/domain/roster" }
 trail = { package = "mere-trail", path = "crates/domain/trail" }
 workbench = { path = "crates/platen/domain/workbench" }
 
-eidetic = { path = "crates/eidetic/eidetic-core" }
-eidetic-fjall = { path = "crates/eidetic/eidetic-fjall" }
-eidetic-https-fetcher = { path = "crates/eidetic/eidetic-https-fetcher" }
-eidetic-iroh-fetcher = { path = "crates/eidetic/eidetic-iroh-fetcher" }
+eidetic = { package = "mere-eidetic", path = "crates/eidetic/eidetic-core" }
+eidetic-fjall = { package = "mere-eidetic-fjall", path = "crates/eidetic/eidetic-fjall" }
+eidetic-https-fetcher = { package = "mere-eidetic-https-fetcher", path = "crates/eidetic/eidetic-https-fetcher" }
+eidetic-iroh-fetcher = { package = "mere-eidetic-iroh-fetcher", path = "crates/eidetic/eidetic-iroh-fetcher" }
 # Lexical search over the trail (Phase 9 producer half): tantivy index +
 # BM25 recall + fast-field reports + the hybrid-fusion seam.
-eidetic-search = { path = "crates/eidetic/eidetic-search" }
+eidetic-search = { package = "mere-eidetic-search", path = "crates/eidetic/eidetic-search" }
 
 # Browser-data ingest (bookmarks/history/session models + parsers); consumed
 # by the eidetic-recall bridge and, later, the shell's import verbs.

@@ -23,7 +23,9 @@ facade, MIT/Apache ed2024, name-holding; crates.io publication is Mark's step).
 - **P3 — browser nodes as pane slots in a configurable phyllotaxis spiral.**
   Recency drives scale and LOD; focused content stays live; small items
   degrade to snapshots / cards / glyphs. The "representation measures,
-  projection places" proof.
+  projection places" proof. **P3a (recency → scale + ordinal) landed
+  2026-07-22**; P3b (LOD / representation degradation to card/glyph, live
+  focus) remains.
 - **P4 — isometry consumes the same contract** for its overmap and one
   tile-board projection, deleting its hand-rolled force layout
   (`isometry-core/src/overmap.rs:123`).
@@ -175,3 +177,37 @@ registry.
   re-space; add an extents fingerprint to the cache inputs); the subgraph
   path passes no extents (NodeKeys do not survive the re-add; thread ids if
   the gloss wants measured re-layout).
+- 2026-07-22: **P3a landed — recency drives scale + the Spiral's ordinal.**
+  Two channels, both deterministic-tested. **Ordinal**: `SpiralOrdering`
+  on `PhyllotaxisAdapter` (kernel-aware layer, not the portable config) with
+  `RecentFirst` sorting by `last_visited` desc (stable, epoch fallback) so
+  ordinal 0 — the `Outward` center — is the newest node; the meristem /
+  brand "age shrinks what you leave behind" reading. **Scale**: a
+  `size_by_recency` toggle on `Canvas`, mirroring size-by-degree/importance
+  — `recompute_recency` normalizes `last_visited` across the graph
+  (`0..=1`, newest = cap; a single-timestamp graph reads uniform, not
+  collapsed), refreshed each `push_node_geometry` (cheap, no dirty flag),
+  and `node_size` maps it DEFAULT..MAX (36..88) below a manual override and
+  size-by-importance, above size-by-degree. Wiring: canvas dispatch takes
+  `recent_first`, driven by `canvas.size_by_recency()`; merecat
+  `Action::ToggleSizeByRecency` (+ palette + `toggle_size_by_recency` verb)
+  re-selects the active strategy to drop its cache. Added `Action::FitView`
+  (+ palette + `fit_view` verb) exposing the shipped `fit_to_content` —
+  analytic layouts land anywhere in world space and the extent-aware Spiral
+  spreads wide, so the view needs an explicit fit. Tests: `arrangements`
+  recency-ordering + `mere-canvas` recency-size unit tests (89 + 138 green);
+  headed `proof3_recency` scenario `RESULT ok` (uniform → size gradient →
+  newest-at-center Spiral, fitted). **Findings, honest**: (1) **`visit()`
+  does not refresh `last_visited`** on an existing node (input.rs:284 just
+  selects), so live recency currently reflects creation/ingest order, not
+  last interaction — the receipt's gradient is the sample graph's
+  construction order, and closing this is a precondition for recency as a
+  real UX feature. (2) **The DOM gnode face is a fixed 36px** (build.rs
+  `GNODE_BOX`); `node_size` drives underlay rects (demoted nodes),
+  colliders, edge-trims, rings, and hit-testing, but not the primary painted
+  face — so *every* size channel (degree/importance/recency) is only
+  partially visible. Making the gnode face track `node_size` is the
+  rendering follow-up that would make P3a (and its siblings) fully legible.
+  (3) camera does not auto-fit analytic layouts (hence `FitView`). P3b (LOD:
+  representation degrades card→glyph with recency, focus stays live) is the
+  remaining half of P3.

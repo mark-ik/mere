@@ -67,6 +67,7 @@ impl Canvas {
         self.node_materials.clear();
         self.node_importance.clear();
         self.importance_dirty = true;
+        self.node_recency.clear();
         self.community_cache = None;
         self.drag = None;
         self.field_drag = None;
@@ -133,6 +134,8 @@ impl Canvas {
             node_materials: HashMap::new(),
             size_by_degree: false,
             size_by_importance: false,
+            size_by_recency: false,
+            node_recency: HashMap::new(),
             importance_metric: signals::ImportanceMetric::Degree,
             node_importance: HashMap::new(),
             importance_dirty: true,
@@ -327,6 +330,11 @@ impl Canvas {
         // snapshot (the normalization needs all nodes; do it once here, not per `node_size`).
         if self.size_by_importance {
             self.recompute_importance();
+        }
+        // Recency likewise needs all nodes to normalize; recompute unconditionally when on (cheap,
+        // and a visit's fresh timestamp must read current). (Projection proofs — P3.)
+        if self.size_by_recency {
+            self.recompute_recency();
         }
         let radii: Vec<(NodeKey, f32)> = self
             .graph

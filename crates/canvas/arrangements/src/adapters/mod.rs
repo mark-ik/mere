@@ -48,7 +48,7 @@ pub use grid::GridAdapter;
 pub use kanban::KanbanAdapter;
 pub use lsystem::LSystemAdapter;
 pub use penrose::PenroseAdapter;
-pub use phyllotaxis::PhyllotaxisAdapter;
+pub use phyllotaxis::{PhyllotaxisAdapter, SpiralOrdering};
 pub use radial::RadialAdapter;
 pub use semantic_embedding::SemanticEmbeddingAdapter;
 pub use spectral::SpectralAdapter;

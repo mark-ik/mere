@@ -181,6 +181,7 @@ fn project_canvas_dispatch(
     height: u32,
     clusters: Option<&cartography::ClusterSet>,
     extents: Option<&HashMap<NodeKey, (f32, f32)>>,
+    recent_first: bool,
 ) -> cartography::Projection {
     use arrangements::adapters::{
         GridAdapter, KanbanAdapter, LSystemAdapter, PenroseAdapter, PhyllotaxisAdapter,
@@ -193,9 +194,16 @@ fn project_canvas_dispatch(
     let signals = signals::produce_cheap_signals(graph);
     let mut options = CartographySceneOptions::canvas_pixels(width, height);
     options.extents = extents.cloned();
+    // The Spiral reads newest-first when recency is the active reading, so ordinal 0 (the center)
+    // is the freshest node and age spirals outward. (Projection proofs — P3.)
+    let phyllotaxis = if recent_first {
+        PhyllotaxisAdapter::default().recent_first()
+    } else {
+        PhyllotaxisAdapter::default()
+    };
     let projection = match id {
         "phyllotaxis.default" => {
-            project_with(graph, &signals, &options, &PhyllotaxisAdapter::default())
+            project_with(graph, &signals, &options, &phyllotaxis)
         }
         "grid.default" => project_with(graph, &signals, &options, &GridAdapter::default()),
         // Spectral: positions from the graph Laplacian's smallest eigenvectors, so the layout
@@ -332,7 +340,8 @@ pub fn project_canvas_lens(
     clusters: Option<&cartography::ClusterSet>,
     bridges: Option<&cartography::BridgeNodes>,
 ) -> cartography::Projection {
-    let mut projection = project_canvas_dispatch(id, graph, focus, width, height, clusters, None);
+    let mut projection =
+        project_canvas_dispatch(id, graph, focus, width, height, clusters, None, false);
     projection.overlays = signal_overlays(clusters, bridges);
     projection
 }
@@ -406,8 +415,8 @@ pub fn project_canvas_subgraph(
         .and_then(|n| sub.get_node_key_by_id(n.id));
     // Project the subgraph, then remap each position back to the original graph via the node id.
     // Extents are keyed by the original graph's NodeKeys, which do not survive the subgraph
-    // re-add, so the subgraph path stays unmeasured for now.
-    project_canvas_strategy(id, &sub, sub_focus, width, height, None, None)
+    // re-add, so the subgraph path stays unmeasured for now; recency ordering likewise off.
+    project_canvas_strategy(id, &sub, sub_focus, width, height, None, None, false)
         .into_iter()
         .filter_map(|(sub_key, pos)| {
             let nid = sub.get_node(sub_key)?.id;
@@ -429,8 +438,9 @@ pub fn project_canvas_strategy(
     height: u32,
     clusters: Option<&cartography::ClusterSet>,
     extents: Option<&HashMap<NodeKey, (f32, f32)>>,
+    recent_first: bool,
 ) -> Vec<(NodeKey, PortablePoint)> {
-    project_canvas_dispatch(id, graph, focus, width, height, clusters, extents)
+    project_canvas_dispatch(id, graph, focus, width, height, clusters, extents, recent_first)
         .nodes
         .iter()
         .map(|n| (n.node, n.position))
@@ -490,7 +500,7 @@ mod tests {
         for &(a, b) in &[(0, 1), (1, 2), (2, 0), (3, 4), (4, 5), (5, 3), (2, 3)] {
             graph.assert_semantic_predicate(n[a], n[b], "links".to_string());
         }
-        let positions = project_canvas_strategy("kanban.community", &graph, None, 800, 600, None, None);
+        let positions = project_canvas_strategy("kanban.community", &graph, None, 800, 600, None, None, false);
         assert_eq!(positions.len(), 6, "every node is placed");
         let x_of = |key: NodeKey| positions.iter().find(|(k, _)| *k == key).unwrap().1.x;
         assert!(
@@ -512,7 +522,7 @@ mod tests {
     fn project_canvas_strategy_radial_centers_on_focus_and_no_ops_without_one() {
         let (graph, [a, _, _]) = triangle_graph();
         // With a focus, radial lays out the whole graph (focus at center).
-        let with_focus = project_canvas_strategy("radial.default", &graph, Some(a), 800, 600, None, None);
+        let with_focus = project_canvas_strategy("radial.default", &graph, Some(a), 800, 600, None, None, false);
         assert_eq!(
             with_focus.len(),
             3,
@@ -524,7 +534,7 @@ mod tests {
             "the focus sits at the radial center"
         );
         // Without a focus there is nothing to center on, so it leaves the layout alone.
-        let no_focus = project_canvas_strategy("radial.default", &graph, None, 800, 600, None, None);
+        let no_focus = project_canvas_strategy("radial.default", &graph, None, 800, 600, None, None, false);
         assert!(no_focus.is_empty(), "radial without a selection no-ops");
     }
 
@@ -599,7 +609,7 @@ mod tests {
         assert_eq!(halos, 2, "two communities => two halos ride the projection");
         // The positions-only path is unchanged (it drops the overlays).
         let positions =
-            project_canvas_strategy("spectral.default", &graph, None, 800, 600, Some(&clusters), None);
+            project_canvas_strategy("spectral.default", &graph, None, 800, 600, Some(&clusters), None, false);
         assert_eq!(
             positions.len(),
             6,
