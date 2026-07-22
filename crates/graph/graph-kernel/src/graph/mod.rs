@@ -114,7 +114,7 @@ pub use capture::{
     CapturedDelta, GraphTableStats, replay_captured_deltas, replay_captured_deltas_onto,
     set_captured_delta_hook,
 };
-pub use journal::{GraphJournal, journal_capture_hook};
+pub use journal::{AttributedDelta, GraphJournal, USER_AUTHOR, journal_capture_hook};
 pub use edge_data::{
     ArrangementData, ContainmentData, EdgeMetrics, ImportedData, ProvenanceData, REL_VOCAB,
     SemanticData, SemanticStatement, SemanticStatementSpec, StatementAssert, Traversal,

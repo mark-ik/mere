@@ -28,20 +28,54 @@ use std::sync::{Arc, Mutex};
 use codicil::{Codicil, LogId, Provenance, Seq};
 use muniment::{Backend, Codec, SlotStore, StoreError};
 
+use rkyv::{Archive, Deserialize, Serialize};
+
 use super::Graph;
 use super::capture::{CapturedDelta, replay_captured_deltas, replay_captured_deltas_onto};
+
+/// The author every trusted-UI edit records under. Denizen runs scope their
+/// own author (the subject's hex) via [`GraphJournal::set_author`]; entries
+/// migrated from pre-envelope logs carry `pre-gate` (chartulary's convention).
+pub const USER_AUTHOR: &str = "user";
+
+/// One journal entry: a captured delta in the attribution envelope — the
+/// participant-gate plan's B1 adoption of chartulary's `Batch { author, edits }`
+/// shape over mere's edit spine. WHO made a change rides the journal, so a
+/// denizen's edits read back attributed and compensable.
+#[derive(
+    Debug, Clone, PartialEq, Archive, Serialize, Deserialize, serde::Serialize, serde::Deserialize,
+)]
+pub struct AttributedDelta {
+    /// `user` for the trusted UI path, a denizen subject's hex for gated runs,
+    /// `pre-gate` for entries migrated from bare logs.
+    pub author: String,
+    pub delta: CapturedDelta,
+}
 
 /// An append-only journal of a graph's captured edits: the codicil-backed edit
 /// spine. The materialized [`Graph`] is the replay of this log; forking it forks
 /// the graph's whole history with provenance, and it persists whole through one
 /// muniment slot.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct GraphJournal {
-    log: Codicil<CapturedDelta>,
+    log: Codicil<AttributedDelta>,
+    /// The author the next [`record`](Self::record) attributes — `user` by
+    /// default; a host scopes a denizen run with [`set_author`](Self::set_author)
+    /// and restores afterwards.
+    author: String,
+}
+
+impl Default for GraphJournal {
+    fn default() -> Self {
+        Self {
+            log: Codicil::default(),
+            author: USER_AUTHOR.to_string(),
+        }
+    }
 }
 
 impl GraphJournal {
-    /// A fresh, empty journal.
+    /// A fresh, empty journal (author `user`).
     pub fn new() -> Self {
         Self::default()
     }
@@ -51,29 +85,53 @@ impl GraphJournal {
     pub fn with_id(id: LogId) -> Self {
         Self {
             log: Codicil::with_id(id),
+            author: USER_AUTHOR.to_string(),
         }
     }
 
-    /// Adopt an existing codicil of captured deltas (e.g. one just loaded from a
-    /// store or received from a peer).
-    pub fn from_log(log: Codicil<CapturedDelta>) -> Self {
-        Self { log }
+    /// Adopt an existing codicil of attributed deltas (e.g. one just loaded
+    /// from a store or received from a peer).
+    pub fn from_log(log: Codicil<AttributedDelta>) -> Self {
+        Self {
+            log,
+            author: USER_AUTHOR.to_string(),
+        }
     }
 
-    /// Append one captured edit, returning the [`Seq`] it was stamped with. This
-    /// is the write path: a live mutation's capture lands here (usually via
-    /// [`journal_capture_hook`]).
+    /// The author subsequent [`record`](Self::record)s attribute.
+    pub fn author(&self) -> &str {
+        &self.author
+    }
+
+    /// Scope the recording author (a denizen run); the host restores `user`
+    /// when the run ends.
+    pub fn set_author(&mut self, author: impl Into<String>) {
+        self.author = author.into();
+    }
+
+    /// Append one captured edit under the current author, returning the [`Seq`]
+    /// it was stamped with. This is the write path: a live mutation's capture
+    /// lands here (usually via [`journal_capture_hook`]).
     pub fn record(&mut self, delta: CapturedDelta) -> Seq {
-        self.log.append(delta)
+        let author = self.author.clone();
+        self.record_as(author, delta)
+    }
+
+    /// Append one captured edit under an explicit author (the gate path).
+    pub fn record_as(&mut self, author: impl Into<String>, delta: CapturedDelta) -> Seq {
+        self.log.append(AttributedDelta {
+            author: author.into(),
+            delta,
+        })
     }
 
     /// The underlying codicil, for cursors, replication, and persistence.
-    pub fn log(&self) -> &Codicil<CapturedDelta> {
+    pub fn log(&self) -> &Codicil<AttributedDelta> {
         &self.log
     }
 
-    /// Every captured edit, oldest first.
-    pub fn entries(&self) -> &[CapturedDelta] {
+    /// Every attributed edit, oldest first.
+    pub fn entries(&self) -> &[AttributedDelta] {
         self.log.entries()
     }
 
@@ -103,9 +161,10 @@ impl GraphJournal {
         self.log.provenance()
     }
 
-    /// Rebuild the whole graph by replaying every edit from empty.
+    /// Rebuild the whole graph by replaying every edit from empty (attribution
+    /// rides the journal, not the graph — replay strips the envelope).
     pub fn replay(&self) -> Graph {
-        replay_captured_deltas(self.log.entries().iter().cloned())
+        replay_captured_deltas(self.log.entries().iter().map(|e| e.delta.clone()))
     }
 
     /// Advance an already-materialized `graph` by the edits from `since` onward.
@@ -113,7 +172,7 @@ impl GraphJournal {
     /// the journal entries recorded after the snapshot's sequence. The incremental
     /// twin of [`replay`](Self::replay).
     pub fn replay_from(&self, since: Seq, graph: &mut Graph) {
-        replay_captured_deltas_onto(graph, self.log.from(since).iter().cloned());
+        replay_captured_deltas_onto(graph, self.log.from(since).iter().map(|e| e.delta.clone()));
     }
 
     /// Fork this journal under a new identity: copies the whole edit history and
@@ -123,6 +182,7 @@ impl GraphJournal {
     pub fn fork(&self, new_id: LogId) -> Self {
         Self {
             log: self.log.fork(new_id),
+            author: self.author.clone(),
         }
     }
 
@@ -142,6 +202,17 @@ impl GraphJournal {
         key: &str,
     ) -> Result<Self, StoreError> {
         Ok(Self::from_log(Codicil::load(slots, key).await?))
+    }
+
+    /// Adopt a pre-envelope codicil of bare [`CapturedDelta`]s, attributing
+    /// every entry `pre-gate` (chartulary's migration convention): the one-way
+    /// load-time migration for logs recorded before attribution existed.
+    pub fn migrate_bare_log(log: Codicil<CapturedDelta>) -> Self {
+        let mut journal = GraphJournal::new();
+        for delta in log.entries() {
+            journal.record_as("pre-gate", delta.clone());
+        }
+        journal
     }
 }
 
@@ -205,6 +276,34 @@ mod tests {
             .collect();
         edges.sort();
         (nodes, edges)
+    }
+
+    /// The envelope: entries carry their author; the default is `user`, a
+    /// scoped author attributes a denizen run, and replay strips the envelope.
+    #[test]
+    fn entries_are_attributed_and_author_scoping_works() {
+        let mut journal = GraphJournal::new();
+        journal.record(add(1, "https://a.test/"));
+        journal.set_author("aa11");
+        journal.record(add(2, "https://b.test/"));
+        journal.set_author(USER_AUTHOR);
+        journal.record_as("gate", add(3, "https://c.test/"));
+
+        let authors: Vec<&str> = journal.entries().iter().map(|e| e.author.as_str()).collect();
+        assert_eq!(authors, ["user", "aa11", "gate"]);
+        assert_eq!(journal.author(), USER_AUTHOR, "scoping restored");
+        assert_eq!(journal.replay().node_count(), 3, "replay strips the envelope");
+    }
+
+    /// A pre-envelope bare log migrates one-way with the `pre-gate` author.
+    #[test]
+    fn a_bare_log_migrates_as_pre_gate() {
+        let mut bare = Codicil::<CapturedDelta>::default();
+        bare.append(add(1, "https://a.test/"));
+        bare.append(add(2, "https://b.test/"));
+        let journal = GraphJournal::migrate_bare_log(bare);
+        assert!(journal.entries().iter().all(|e| e.author == "pre-gate"));
+        assert_eq!(journal.replay().node_count(), 2);
     }
 
     #[test]
