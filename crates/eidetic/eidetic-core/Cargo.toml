@@ -15,6 +15,10 @@ name = "eidetic"
 path = "src/lib.rs"
 
 [dependencies]
+# The personae signing binding for pack engrams (participant gate B4): the
+# identity crate IS the "concrete shape lands with identity" note on
+# SignatureRef, landed.
+identity = { workspace = true }
 # The storage floor (2026-07-12): eidetic's `Store` was muniment's `Backend`
 # declared twice — same get/put/delete/list seam. Eidetic now consumes it, and
 # `eidetic::Store` is an alias so the layers above (manifests, schemas, engrams)

@@ -59,6 +59,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
+pub mod pack;
 pub mod browsing;
 pub mod bundle;
 pub mod deleted;
