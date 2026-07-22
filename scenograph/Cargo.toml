@@ -1,0 +1,16 @@
+[package]
+name = "scenograph"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Facade for the scenograph projection-engine family: re-exports sceno (core), scenomise (choreography), and scenotime (runtime)."
+readme = "../README.md"
+keywords = ["projection", "scene", "graph", "visualization"]
+categories = ["visualization", "gui"]
+
+[dependencies]
+sceno = { version = "0.0.1", path = "../sceno" }
+scenomise = { version = "0.0.1", path = "../scenomise" }
+scenotime = { version = "0.0.1", path = "../scenotime" }

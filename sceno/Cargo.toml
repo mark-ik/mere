@@ -1,0 +1,13 @@
+[package]
+name = "sceno"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Core contracts for the scenograph projection engine: source references, scores, channels, coordinate spaces, footprints, scene snapshots, and action intents. Name reservation; the contract lands with its first consumers."
+readme = "../README.md"
+keywords = ["projection", "scene", "graph", "visualization"]
+categories = ["visualization", "data-structures"]
+
+[dependencies]

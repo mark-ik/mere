@@ -1,0 +1,13 @@
+[package]
+name = "scenotime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Runtime for the scenograph projection engine: incremental evaluation, caching, signal generations, and scene diffs — the inhabited scene. Name reservation; substance arrives with the engine's later proofs."
+readme = "../README.md"
+keywords = ["projection", "scene", "incremental", "runtime"]
+categories = ["visualization", "caching"]
+
+[dependencies]

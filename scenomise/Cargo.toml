@@ -1,0 +1,13 @@
+[package]
+name = "scenomise"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Choreography for the scenograph projection engine: placement algorithms that realize scores into arranged scenes. Name reservation; the algorithms migrate in with the engine's first consumers."
+readme = "../README.md"
+keywords = ["layout", "projection", "scene", "graph"]
+categories = ["visualization", "algorithms"]
+
+[dependencies]
