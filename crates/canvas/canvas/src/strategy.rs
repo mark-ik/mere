@@ -86,6 +86,20 @@ impl Canvas {
         self.last_strategy_inputs = Some((id.to_string(), self.graph.revision(), w, h, focus));
     }
 
+    /// Per-node visual extents `(w, h)` in px for the extent-aware strategy
+    /// path: each node's resolved face footprint ([`node_size`](Self::node_size),
+    /// so per-node overrides and the size-by-degree/importance channels ride
+    /// along). The host measures, the strategy places. (Projection proofs — P2.)
+    pub fn strategy_extents(&self) -> HashMap<NodeKey, (f32, f32)> {
+        self.graph
+            .nodes()
+            .map(|(key, _)| {
+                let side = self.node_size(key);
+                (key, (side, side))
+            })
+            .collect()
+    }
+
     /// Buffer the active strategy's node positions (host-computed through platen's
     /// cartography dispatch). They are written into the read model each frame after
     /// the physics snapshot, so they take effect regardless of the off-thread sim's

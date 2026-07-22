@@ -55,6 +55,33 @@ impl From<Phyllotaxis> for PhyllotaxisAdapter {
     }
 }
 
+/// Spacing per unit of extent when the intent carries measured extents:
+/// axis-aligned boxes of side `s` are clear of each other at any angle once
+/// centers sit `s·√2` apart, and a golden-angle Vogel spiral's nearest
+/// neighbors compress to ~0.9× the scale constant at depth, so the constant
+/// carries both (√2 ≈ 1.415, ÷0.9 → ~1.6). The projection-proofs P1 fix.
+const SPACING_PER_EXTENT: f32 = 1.6;
+
+impl PhyllotaxisAdapter {
+    /// The effective radial scale: the configured scale, grown to clear the
+    /// largest measured extent when the request carries extents. Without
+    /// extents the config scale stands (the pre-P2 behavior, unchanged).
+    fn effective_scale(&self, request: &ProjectionRequest<'_>) -> f32 {
+        let max_side = request
+            .intent
+            .extents
+            .as_ref()
+            .and_then(|extents| {
+                extents
+                    .values()
+                    .map(|(w, h)| w.max(*h))
+                    .max_by(f32::total_cmp)
+            })
+            .unwrap_or(0.0);
+        self.config.scale.max(max_side * SPACING_PER_EXTENT)
+    }
+}
+
 impl LayoutStrategy for PhyllotaxisAdapter {
     fn projection_id(&self) -> &'static str {
         Self::PROJECTION_ID
@@ -77,13 +104,14 @@ impl LayoutStrategy for PhyllotaxisAdapter {
             };
         }
 
+        let scale = self.effective_scale(request);
         let mut positions: HashMap<NodeKey, Point2D<f32>> = HashMap::with_capacity(n);
         for (idx, key) in ordered_keys.iter().enumerate() {
             let ordinal = match self.config.orientation {
                 SpiralOrientation::Outward => idx,
                 SpiralOrientation::Inward => n - 1 - idx,
             };
-            let radius = radius_from_ordinal(self.config.radius_curve, self.config.scale, ordinal);
+            let radius = radius_from_ordinal(self.config.radius_curve, scale, ordinal);
             let angle = ordinal as f32 * self.config.angle_radians;
             let pos = Point2D::new(
                 self.config.center.x + radius * angle.cos(),
@@ -324,6 +352,47 @@ mod tests {
             .position;
         assert!(first_pos.to_vector().length() < 0.001);
         assert!((second_pos.to_vector().length() - 10.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn measured_extents_spread_the_spiral_clear_of_overlap() {
+        // The P1 finding as a test: 36px boxes on the default scale overlap;
+        // with extents on the intent, no pair of boxes may intersect.
+        let (graph, _) = small_graph();
+        let signals = IntelligenceSignals::default();
+        const SIDE: f32 = 36.0;
+        let extents: HashMap<NodeKey, (f32, f32)> = graph
+            .nodes()
+            .map(|(key, _)| (key, (SIDE, SIDE)))
+            .collect();
+        let mut intent = ViewIntent::default();
+        intent.extents = Some(extents);
+        let request = ProjectionRequest {
+            graph: &graph,
+            signals: &signals,
+            intent,
+        };
+        let projection = PhyllotaxisAdapter::default().project(&request);
+        let positions: Vec<Point2D<f32>> = projection.nodes.iter().map(|n| n.position).collect();
+        for (i, a) in positions.iter().enumerate() {
+            for b in positions.iter().skip(i + 1) {
+                let overlap = (a.x - b.x).abs() < SIDE && (a.y - b.y).abs() < SIDE;
+                assert!(!overlap, "boxes at {a:?} and {b:?} overlap");
+            }
+        }
+    }
+
+    #[test]
+    fn absent_extents_leave_the_configured_scale_untouched() {
+        let (graph, _) = small_graph();
+        let signals = IntelligenceSignals::default();
+        let request = ProjectionRequest {
+            graph: &graph,
+            signals: &signals,
+            intent: ViewIntent::default(),
+        };
+        let adapter = PhyllotaxisAdapter::default();
+        assert_eq!(adapter.effective_scale(&request), adapter.config.scale);
     }
 
     #[test]

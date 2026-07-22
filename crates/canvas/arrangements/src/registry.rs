@@ -284,7 +284,11 @@ fn radial_capability() -> LayoutCapability {
 fn phyllotaxis_capability() -> LayoutCapability {
     LayoutCapability {
         id: "graph_layout:phyllotaxis".into(),
-        display_name: "Phyllotaxis".into(),
+        // Display name is the plain product word (the Merely brand's "spiral"
+        // projection); the id stays `phyllotaxis` (persistence key). Plain
+        // vocabulary for the arrangement register — distinct from the surface
+        // register (orrery / workbench / gloss).
+        display_name: "Spiral".into(),
         description: Some(
             "Fibonacci-family spiral placement. Golden angle by default; configurable for other arm counts."
                 .into(),

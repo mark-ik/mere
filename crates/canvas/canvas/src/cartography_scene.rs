@@ -51,6 +51,11 @@ pub struct CartographySceneOptions {
     pub dimension: ProjectionDimension,
     pub focus: Option<NodeKey>,
     pub target_size: TargetSize,
+    /// Per-node visual extents `(w, h)` in px, threaded onto
+    /// `ViewIntent::extents` so extent-aware strategies space placements to
+    /// clear them. `None` = unmeasured (pre-P2 behavior). (Projection
+    /// proofs — P2.)
+    pub extents: Option<HashMap<NodeKey, (f32, f32)>>,
 }
 
 impl Default for CartographySceneOptions {
@@ -60,6 +65,7 @@ impl Default for CartographySceneOptions {
             dimension: ProjectionDimension::TwoD,
             focus: None,
             target_size: TargetSize::Default,
+            extents: None,
         }
     }
 }
@@ -91,6 +97,7 @@ impl CartographySceneOptions {
         intent.dimension = self.dimension;
         intent.focus = self.focus;
         intent.target_size = self.target_size;
+        intent.extents = self.extents.clone();
         intent
     }
 }
@@ -134,7 +141,9 @@ pub fn project_with<S: LayoutStrategy>(
 /// [`project_canvas_strategy`] all the same. Axis- and signal-driven strategies join
 /// once their inputs are plumbed.
 pub const CANVAS_LAYOUT_STRATEGIES: &[(&str, &str)] = &[
-    ("phyllotaxis.default", "Phyllotaxis"),
+    // Labels use the plain arrangement register (Spiral, not Phyllotaxis)
+    // per the projection-proofs naming table; ids stay technical.
+    ("phyllotaxis.default", "Spiral"),
     ("grid.default", "Grid"),
     ("spectral.default", "Spectral"),
     ("penrose.default", "Penrose"),
@@ -171,6 +180,7 @@ fn project_canvas_dispatch(
     width: u32,
     height: u32,
     clusters: Option<&cartography::ClusterSet>,
+    extents: Option<&HashMap<NodeKey, (f32, f32)>>,
 ) -> cartography::Projection {
     use arrangements::adapters::{
         GridAdapter, KanbanAdapter, LSystemAdapter, PenroseAdapter, PhyllotaxisAdapter,
@@ -181,7 +191,8 @@ fn project_canvas_dispatch(
     // `signals.importance` now see it; the rest ignore it (additive contract). The generation +
     // dirty-bit cache that gates this per-frame recompute is the next slice. (Graph signals — P1.)
     let signals = signals::produce_cheap_signals(graph);
-    let options = CartographySceneOptions::canvas_pixels(width, height);
+    let mut options = CartographySceneOptions::canvas_pixels(width, height);
+    options.extents = extents.cloned();
     let projection = match id {
         "phyllotaxis.default" => {
             project_with(graph, &signals, &options, &PhyllotaxisAdapter::default())
@@ -321,7 +332,7 @@ pub fn project_canvas_lens(
     clusters: Option<&cartography::ClusterSet>,
     bridges: Option<&cartography::BridgeNodes>,
 ) -> cartography::Projection {
-    let mut projection = project_canvas_dispatch(id, graph, focus, width, height, clusters);
+    let mut projection = project_canvas_dispatch(id, graph, focus, width, height, clusters, None);
     projection.overlays = signal_overlays(clusters, bridges);
     projection
 }
@@ -394,7 +405,9 @@ pub fn project_canvas_subgraph(
         .and_then(|f| graph.get_node(f))
         .and_then(|n| sub.get_node_key_by_id(n.id));
     // Project the subgraph, then remap each position back to the original graph via the node id.
-    project_canvas_strategy(id, &sub, sub_focus, width, height, None)
+    // Extents are keyed by the original graph's NodeKeys, which do not survive the subgraph
+    // re-add, so the subgraph path stays unmeasured for now.
+    project_canvas_strategy(id, &sub, sub_focus, width, height, None, None)
         .into_iter()
         .filter_map(|(sub_key, pos)| {
             let nid = sub.get_node(sub_key)?.id;
@@ -415,8 +428,9 @@ pub fn project_canvas_strategy(
     width: u32,
     height: u32,
     clusters: Option<&cartography::ClusterSet>,
+    extents: Option<&HashMap<NodeKey, (f32, f32)>>,
 ) -> Vec<(NodeKey, PortablePoint)> {
-    project_canvas_dispatch(id, graph, focus, width, height, clusters)
+    project_canvas_dispatch(id, graph, focus, width, height, clusters, extents)
         .nodes
         .iter()
         .map(|n| (n.node, n.position))
@@ -476,7 +490,7 @@ mod tests {
         for &(a, b) in &[(0, 1), (1, 2), (2, 0), (3, 4), (4, 5), (5, 3), (2, 3)] {
             graph.assert_semantic_predicate(n[a], n[b], "links".to_string());
         }
-        let positions = project_canvas_strategy("kanban.community", &graph, None, 800, 600, None);
+        let positions = project_canvas_strategy("kanban.community", &graph, None, 800, 600, None, None);
         assert_eq!(positions.len(), 6, "every node is placed");
         let x_of = |key: NodeKey| positions.iter().find(|(k, _)| *k == key).unwrap().1.x;
         assert!(
@@ -498,7 +512,7 @@ mod tests {
     fn project_canvas_strategy_radial_centers_on_focus_and_no_ops_without_one() {
         let (graph, [a, _, _]) = triangle_graph();
         // With a focus, radial lays out the whole graph (focus at center).
-        let with_focus = project_canvas_strategy("radial.default", &graph, Some(a), 800, 600, None);
+        let with_focus = project_canvas_strategy("radial.default", &graph, Some(a), 800, 600, None, None);
         assert_eq!(
             with_focus.len(),
             3,
@@ -510,7 +524,7 @@ mod tests {
             "the focus sits at the radial center"
         );
         // Without a focus there is nothing to center on, so it leaves the layout alone.
-        let no_focus = project_canvas_strategy("radial.default", &graph, None, 800, 600, None);
+        let no_focus = project_canvas_strategy("radial.default", &graph, None, 800, 600, None, None);
         assert!(no_focus.is_empty(), "radial without a selection no-ops");
     }
 
@@ -585,7 +599,7 @@ mod tests {
         assert_eq!(halos, 2, "two communities => two halos ride the projection");
         // The positions-only path is unchanged (it drops the overlays).
         let positions =
-            project_canvas_strategy("spectral.default", &graph, None, 800, 600, Some(&clusters));
+            project_canvas_strategy("spectral.default", &graph, None, 800, 600, Some(&clusters), None);
         assert_eq!(
             positions.len(),
             6,

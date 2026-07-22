@@ -102,6 +102,11 @@ glossary = { package = "mere-glossary", path = "crates/graph/glossary" }
 # repo (code-identical cutover 2026-07-09, boundary pass slice A); git sibling
 # consumed one-way, local checkout via the gitignored `.cargo/config.toml` patch.
 armillary = { git = "https://github.com/mark-ik/armillary.git", branch = "main" }
+# The scenograph projection-engine family's core contract (scene snapshots,
+# footprints, spaces, measurements) — git sibling consumed one-way, local
+# checkout via the gitignored `.cargo/config.toml` patch. cartography emits
+# sceno scenes (the P2 consumption slice; projection_proofs_plan).
+sceno = { git = "https://github.com/mark-ik/scenograph.git", branch = "main" }
 mere = { path = "crates/mere" }
 
 fetch = { package = "mere-fetch", path = "crates/system/fetch" }

@@ -49,6 +49,14 @@ pub struct ViewIntent {
     /// emergent statistical signal.
     #[serde(default)]
     pub axis_values: Option<HashMap<NodeKey, AxisValue>>,
+    /// Per-node visual extents `(w, h)` in target-size units — what each
+    /// node's representation occupies, so extent-aware strategies can
+    /// space placements to clear them (the projection-proofs P1 finding:
+    /// a position-only contract cannot avoid overlap). View-config like
+    /// `axis_values`: the host measures, the strategy places. Strategies
+    /// that ignore extents behave as before (additive contract).
+    #[serde(default)]
+    pub extents: Option<HashMap<NodeKey, (f32, f32)>>,
 }
 
 /// Host-provided axis coordinate for axial strategies that project onto
@@ -151,6 +159,7 @@ impl ViewIntent {
             filter: None,
             target_size: TargetSize::Pixels { width, height },
             axis_values: None,
+            extents: None,
         }
     }
 
@@ -163,6 +172,7 @@ impl ViewIntent {
             filter: None,
             target_size: TargetSize::Logical { width, height },
             axis_values: None,
+            extents: None,
         }
     }
 
