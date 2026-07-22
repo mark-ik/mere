@@ -1,13 +1,14 @@
 # Graphshell Remote Projection Host Plan
 
 **Date:** 2026-07-22
-**Status:** the local G0 boundary is sealed and G1's loopback presentation
-proof is complete as of 2026-07-22. Publication remains gated on renaming the
-archived donor and repairing its citations. G2 has not started. Graphshell is
+**Status:** the local G0 boundary is sealed, G1's loopback presentation proof
+is complete, and G2's diff/resume/persistence proof is complete as of
+2026-07-22. Publication remains gated on renaming the archived donor and
+repairing its citations. G3, a real Merecat endpoint, is next. Graphshell is
 ruled as the Merely family's remote projection host. It is neither the
-projection engine nor Mere's internal chrome layer. This plan remains temporary
-authority until the new sibling repository is published and this document
-moves there.
+projection engine nor Mere's internal chrome layer. This plan remains
+temporary authority until the new sibling repository is published and this
+document moves there.
 
 **Companions:** the
 [projection-engine prior-art brief](../research/2026-07-21_projection_engine_prior_art_brief.md),
@@ -408,6 +409,22 @@ invocation, and Genet/Cambium application composition remain later proofs.
 **Done when:** a randomized snapshot/diff oracle reaches the same final scene as
 a full rebuild, and a disconnected client resumes without duplicating or losing
 an item.
+
+**Implemented locally 2026-07-22 (Scenograph `eba39e3`, Graphshell
+`fb5e690`):** Scenotime now owns typed epochs, revisions, stable slot tables,
+serialized tombstones, transactional idempotent diffs, and a deterministic
+96-revision oracle. Graphshell applies scene, presentation-resource, and status
+changes as one client transaction; acknowledges revisions; keeps the prior
+display on missing-base resync; and accepts replay, current acknowledgements,
+or a full epoch-preserving snapshot. The loopback resume fixture disconnects
+at revision 2, replays revision 3, and matches the endpoint's complete scene
+with two active items and the removed slot still tombstoned. A permitted cache
+and advertised resource restore through an injected encrypted-at-rest store as
+stale; memory-only policy refuses persistence. Native workspace tests, Wasm
+checks, warning-denying Clippy, the G1 byte receipt, and the product-dependency
+audit pass. Encryption is supplied by the injected store contract; a durable
+host store, authenticated carrier, offline intent queue, and product adapter
+remain later work.
 
 ### G3. Serve Merecat through a real endpoint
 
