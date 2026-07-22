@@ -121,20 +121,15 @@ impl Default for Geographic {
 /// Optional placement data an arrangement understands. The source adapter
 /// decides whether an item has an authored cell/location; the solver never
 /// looks behind the opaque source reference.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub enum Placement {
     /// Use the item's ordinal in the arrangement's deterministic order.
+    #[default]
     Ordinal,
     /// An authored cell for [`Board`].
     Cell { column: i32, row: i32 },
     /// A disclosed geographic or local coordinate for [`Geographic`].
     Coordinate(Vec2),
-}
-
-impl Default for Placement {
-    fn default() -> Self {
-        Self::Ordinal
-    }
 }
 
 /// One measured source instance in a score.

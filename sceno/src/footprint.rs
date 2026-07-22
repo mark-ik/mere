@@ -41,10 +41,9 @@ impl Footprint {
                 Vec2::new(-radius, -radius),
                 Size2::new(radius * 2.0, radius * 2.0),
             )),
-            Footprint::Rect { size } => Some(Rect::new(
-                Vec2::new(-size.w / 2.0, -size.h / 2.0),
-                *size,
-            )),
+            Footprint::Rect { size } => {
+                Some(Rect::new(Vec2::new(-size.w / 2.0, -size.h / 2.0), *size))
+            }
             Footprint::Polygon { points } if points.len() >= 3 => points_bounds(points),
             Footprint::Path { points, width } if points.len() >= 2 => {
                 points_bounds(points).map(|r| {

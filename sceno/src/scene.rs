@@ -255,7 +255,11 @@ mod tests {
         let b = scene.push_space(a, Transform2::IDENTITY, None);
         // Corrupt: make `a` a child of `b`.
         scene.spaces[a.0 as usize].parent = Some(b);
-        assert_eq!(scene.to_world(b), None, "cycle resolves to None, not a hang");
+        assert_eq!(
+            scene.to_world(b),
+            None,
+            "cycle resolves to None, not a hang"
+        );
     }
 
     #[test]

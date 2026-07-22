@@ -34,17 +34,16 @@
 pub mod footprint;
 pub mod geometry;
 pub mod measure;
-pub mod score;
 pub mod scene;
+pub mod score;
 
 pub use footprint::Footprint;
 pub use geometry::{Rect, Size2, Transform2, Vec2};
 pub use measure::{Measurement, Measurements};
-pub use score::{
-    Arrangement, Board, Geographic, Placement, Score, ScoreItem, Spiral, SpiralCurve,
-    SCORE_VERSION,
-};
 pub use scene::{
     InstanceId, ProjectedItem, Region, Representation, RoutedRelation, Scene, SourceIx, SourceRef,
     Space, SpaceId,
+};
+pub use score::{
+    Arrangement, Board, Geographic, Placement, SCORE_VERSION, Score, ScoreItem, Spiral, SpiralCurve,
 };

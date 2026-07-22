@@ -60,6 +60,11 @@ dependencies = [
 [[package]]
 name = "scenotime"
 version = "0.0.1"
+dependencies = [
+ "sceno",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "serde"

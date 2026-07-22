@@ -20,19 +20,21 @@ The family shares the `sceno-` stem, one function morpheme each:
   scene snapshots, action intents.
 - **[scenomise](scenomise/)** — choreography: placement solvers that realize
   scores into arranged scenes (mise-en-scène lives in the name).
-- **[scenotime](scenotime/)** — runtime: incremental evaluation, caching,
-  signal generations, scene diffs; the inhabited scene.
+- **[scenotime](scenotime/)** — runtime vocabulary: stable scene epochs,
+  revisions, tombstones, and transactional idempotent diffs.
 - **[scenograph](scenograph/)** — a thin facade re-exporting the three.
 
 Sources keep their native truth behind adapters; what is shared is the scene
 contract, not a data model. The representation measures content; the
 projection places it.
 
-**Status:** the scene contract's first slice is in `sceno` (geometry,
-footprints, spaces, scene snapshots, measurements — see
-[design_docs/2026-07-22_scene_contract_note.md](design_docs/2026-07-22_scene_contract_note.md));
-scenomise and scenotime remain name reservations until the consumer proofs
-pull their contents in.
+**Status:** `sceno` owns the portable scene and serialized score contracts,
+`scenomise` solves spiral, board, and geographic arrangements, and `scenotime`
+owns stable epoch/revision snapshots plus idempotent diffs. Incremental signal
+evaluation, hit-to-intent routing, and renderer realization remain later work.
+See
+[the scene contract note](design_docs/2026-07-22_scene_contract_note.md) and
+[the epoch/diff note](design_docs/2026-07-22_scenotime_epoch_diff_note.md).
 
 ## License
 
