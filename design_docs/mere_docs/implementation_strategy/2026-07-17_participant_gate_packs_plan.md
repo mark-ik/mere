@@ -166,6 +166,56 @@ Coordination: the moot (gemot) refactor **settled 2026-07-17** (mere `a4da519` "
 
 ## Progress
 
+- **2026-07-22 (B1 COMPLETE — mere `e54ca8cf`, merecat `8b3ad31`)**: the
+  user-facing half landed and the done-condition is met with receipts. mere's
+  `GraphJournal` adopted the attribution envelope (`AttributedDelta { author,
+  delta }`; `user` / subject-hex / `pre-gate`; replay strips the envelope).
+  merecat: a dropped `.lua` stages an install with a **content-derived
+  subject** (blake3 of source); nothing mints until the palette's VISIBLE
+  review confirms (the ask is the first, highlighted row — dynamic rows now
+  lead the actions lane); confirm mints node + `denizen.binding` +
+  `scenario.source` facets + a nested chartulary world with the servitor
+  Gate's read-only grant projections, persisted per denizen; **authority
+  derives from the projections on adopt** (never stored twice); Run evaluates
+  via piccolo and lowers Actions through the spine with the journal scoped to
+  the subject, read back in the Inspector's new Journal section. Receipt
+  `denizen_b1.scn` green (review + attribution captures); the resident-gate
+  round trip (in-scope commits attributed / out-of-scope refused) headless.
+- **2026-07-22 (B2 COMPLETE — merecat `9727081`)**: the piccolo lane's
+  `ScriptCapabilities` derive from the denizen's structural caps (each class a
+  path under `app/`: read/dispatch/navigate/panes), install grants + projects
+  `app/` beside the world scope, and the denial surfaces by capability name.
+  The six existing lane tests pass unchanged; derivation + denial +
+  attribution tests on top (104 with piccolo).
+- **2026-07-22 (B3 bars VERIFIED on today's tree)**: document-host's suite
+  green end-to-end (21 tests) — sample component proposes batches, the
+  revision-conflict path exercised (`eight_turns` outcome 5), an ungranted
+  import fails at instantiation (`grants.rs`), quotas/guarded intact. These
+  bars were built at P2.3/P2.4 (2026-06-22); B3's remaining substance is the
+  **merecat world** — a wasm component as a merecat denizen through the same
+  gate — which follows once a wasm pack exists to install (B4 vocabulary +
+  B5 transport now provide it).
+- **2026-07-22 (B4 COMPLETE — mere `a3a246a8`)**: `mere.pack/v1` frozen in
+  eidetic (`pack.rs`): `PackManifest` typed payload (part inventory by content
+  hash + contribution manifest with author pubkey + requested scopes), the
+  personae signing binding in `TrustEnvelope.signatures`
+  (`personae:ed25519:<pub>:<sig>` over canonical bytes — the SignatureRef
+  "lands with identity" note, landed), and `verify_pack`:
+  Trusted/Unsigned/**Broken** (tampered fields, swapped part hashes, widened
+  asks, forged authors all Broken; foreign schemes not ours to judge).
+  Signed round trip through the typed store re-verifies Trusted.
+- **2026-07-22 (B5 pair + curation PROVEN — mere `5a33157f`; the R4 wall
+  OPENED)**: retinue's windowed resource transfer landed upstream (real-RF
+  milestones), so the `pack-distribution` probe ferries a signed pack
+  publisher → subscriber over a real in-process retinue link (advertise →
+  request/HMU → serve → recover), re-verifies **Trusted** on arrival, and
+  proves a mid-flight scope-widening tamper reads **Broken** and is refused.
+  Curation: a `MootEvent::Shared` under `mere.pack/v1` lists in the moot's
+  fauna (gemot roster test) — the flora is pack discovery, no new wire.
+  **Remaining for B5's full done**: the physical LAN-pair run (two instances,
+  real interfaces) and the tessera receipt on that live pair — machinery
+  proven, second machine pending.
+
 - **2026-07-17 (B4/B5 grounding)**: read eidetic's schema machinery and gemot's moot wire. Two findings fold into §4/§5: the pack schema is *authored* as a `SchemaDefinition` (`schema_id = "mere.pack/v1"`) plus a `TypedPayload` struct, not a new envelope or schema system; and the moot hand-off already exists as `MootEvent::Shared { manifest_id, schema_id, title }`, so B5's curation half is mostly wiring that event to the pack schema, with only blob transfer gated on retinue R4. B4 and B5 both shrank materially.
 - **2026-07-17 (push + B4 pre-work, corrected)**: chartulary pushed (`2ced0fb` on GitHub; the remote already carried `3361f0e`), so mere can re-pin whenever B1 starts. Donor engram spec (TransferProfile v1) re-read in full from the GitHub archive and an initial donor-only verdict recorded; **Mark caught that the current implementation had not been checked**, and the verdict was corrected against `eidetic-core` (486 engram references across 58 files in mere, incl. gemot records, meerkat export, session-runtime athanor): the current `Engram` envelope already exists with content-hash identity and schema-by-reference, so a pack is an `Engram` under a **pack schema**, B4 defines a schema not an envelope, and the donor's multi-part inventory imports as payload vocabulary. §4 and open question 2 rewritten accordingly.
 - **2026-07-17 (review round 2, moot agent)**: "the plan survives review" with four tightenings, all applied: journal ownership clarified in §1 (chartulary owns envelope semantics + the `GraphEdit` journal; mere's `GraphJournal` adopts the envelope over `CapturedDelta` at B1; vocabularies stay separate; envelope promotion into codicil recommended, decided at B1), the existing wasm grant bridge explicitly scoped in §4 (import-level enforcement, document lane, zero app-graph authority until B3, becomes the import-level face of the one grant), the pack-manifest to runtime-manifest adapter defined in §4 (ModManifest is derived state from pack manifest + granted subset, one direction, never authority), and the stale pre-B0 lines in §2/Findings updated.
