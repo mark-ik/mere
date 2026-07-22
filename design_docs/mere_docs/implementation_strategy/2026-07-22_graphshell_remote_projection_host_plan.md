@@ -1,10 +1,13 @@
 # Graphshell Remote Projection Host Plan
 
 **Date:** 2026-07-22
-**Status:** G0 local workspace started 2026-07-22. Graphshell is ruled as the
-Merely family's remote projection host. It is neither the projection engine nor
-Mere's internal chrome layer. This plan remains temporary authority until the
-new sibling repository is published and this document moves there.
+**Status:** the local G0 boundary is sealed and G1's loopback presentation
+proof is complete as of 2026-07-22. Publication remains gated on renaming the
+archived donor and repairing its citations. G2 has not started. Graphshell is
+ruled as the Merely family's remote projection host. It is neither the
+projection engine nor Mere's internal chrome layer. This plan remains temporary
+authority until the new sibling repository is published and this document
+moves there.
 
 **Companions:** the
 [projection-engine prior-art brief](../research/2026-07-21_projection_engine_prior_art_brief.md),
@@ -349,7 +352,8 @@ application truth. The facade intentionally contains no renderer or carrier.
 Its manifest rules out Mere, Merecat, Isometry, Genet, Cambium, NetRender, and
 network runtimes. Publishing, donor rename, and citation repair remain an
 external GitHub action, not a local rewrite. Its native workspace tests and
-`wasm32-unknown-unknown` check pass locally.
+`wasm32-unknown-unknown` check pass locally. The boundary is captured in the
+repository's root commit `693fad8`.
 
 ### P5. Geographic projection
 
@@ -376,6 +380,21 @@ portable contract.
 **Done when:** one Graphshell view renders the same scene under two capability
 profiles, remains usable when the richest resource is absent, and contains no
 product-specific rendering code.
+
+**Implemented locally 2026-07-22 (Graphshell `2bc5b59`):**
+`ProjectionSnapshot` carries a Graphshell presentation sidecar rather than
+widening `sceno::Scene`. The manifest binds
+instances to ordered glyph/card/image offers; resource bytes are fetched
+independently, checked by BLAKE3 address and advertised size, and cached within
+the disclosing session. One in-memory endpoint resolves the same scene as a
+portable card plus image under the rich profile and as a native glyph plus
+labeled image placeholder under the compact profile. Both preserve their
+advertised actions in a renderer-neutral accessibility tree and ordinary
+keyboard-focusable buttons. The committed `docs/receipts/g1_loopback.html`
+receipt is generated from the real endpoint/client/view path and compared
+byte-for-byte by test. Headed inspection passed at 1440 × 1000 and 390 × 844
+with zero overflow or browser errors. NetRender fragments, live panes, intent
+invocation, and Genet/Cambium application composition remain later proofs.
 
 ### G2. Land `scenotime` diffs and resume
 
@@ -518,5 +537,10 @@ reorganization.
 - Audited the live `Code/repos` package and cross-repository dependency graph.
 - Defined the four protocol planes, presentation-resource boundary, scene-epoch
   rule, Graphshell-owned curation state, and seven implementation proofs.
-- Recorded repository corrections from live consumers. This planning pass
-  changes documentation only; no repository was founded and no crate moved.
+- Recorded repository corrections from live consumers.
+- Founded the independent local four-crate workspace and sealed its portable
+  boundary in root commit `693fad8`; remote publication still waits for the
+  donor rename and citation repair.
+- Completed G1's loopback presentation proof: sidecar offers, independent
+  content-addressed resources, two capability profiles, semantic fallback,
+  accessibility actions, deterministic receipt, and headed responsive check.
