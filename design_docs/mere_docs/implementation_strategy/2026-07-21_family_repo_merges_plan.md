@@ -13,11 +13,24 @@ Decided with Mark in session; both merges executed same day.
 - **P3. Consumer repoint**: mere, merecat, hocket, isometry, woodshed,
   servitor onto the family repos (manifest URLs, path deps, local `.cargo`
   patches, lockfiles). **DONE** (this session; per-consumer detail below).
-- **P4. Follow-ons** (open):
-  - Rename mere's `crates/eidetic/*` lane to **mere-eidetic** (Mark's ruling:
-    the eidetic name belongs to the family; the mere-specific lane takes the
-    prefix). Crate renames `eidetic-core` etc. ripple through mere's
-    workspace; schedule for a quiet window.
+- **P4. Follow-ons**:
+  - **DONE 2026-07-22 — mere-eidetic rename + publish.** mere's
+    `crates/eidetic/*` lane renamed to **mere-eidetic** (Mark's ruling: the
+    eidetic name belongs to the family; the mere lane takes the prefix). Done
+    the low-churn way so it did NOT ripple through the workspace: the published
+    package names became `mere-eidetic` + `mere-eidetic-{fjall,https-fetcher,
+    iroh-fetcher,search}`, but each crate keeps its old `[lib] name`
+    (`eidetic`, `eidetic_fjall`, …) and mere's `[workspace.dependencies]` keep
+    their `eidetic*` keys via `package = "mere-eidetic*"` — so all `use
+    eidetic::` sites, consumer manifests, the `image-store-check` probe, and
+    the `crates/eidetic/` directory are untouched. merecat's two direct git
+    deps + its gitignored `.cargo` patch keys updated the same way (patch keys
+    are package names, so they became `mere-eidetic*`). **`mere-eidetic` 0.0.1
+    published to crates.io** (mirrors the old `eidetic` 0.0.1). The bare
+    **`eidetic` 0.0.1 stays as an orphaned reservation** — free for a future
+    family facade. Companions were never published, so their rename just
+    reserves the `mere-eidetic-*` names by manifest (not yet published).
+    Verified: `mere-eidetic` lib 85 tests green, consumers + merecat build.
   - GitHub-archive the seven donor repos (numen, quint, seiche, muniment,
     codicil, chartulary, scholia) with tombstone READMEs pointing at the
     family repos; delete the local checkouts after. Left for Mark.
