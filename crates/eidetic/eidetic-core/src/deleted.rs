@@ -13,7 +13,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::manifest::NoFetcher;
+use crate::manifest::{NoFetcher, delete_manifest};
 use crate::schema::{
     ManifestId, ModerationState, PrivacyClass, ProvenanceOrigin, ProvenanceRecord, SchemaRef,
     Timestamp, TrustEnvelope, TrustLevel,
@@ -87,6 +87,47 @@ pub async fn list_deleted(store: &mut dyn Store) -> Result<Vec<DeletedNode>> {
     Ok(out)
 }
 
+/// Permanently forget a node's tombstone(s) — the recycle bin's "delete
+/// permanently". A node deleted more than once carries more than one
+/// tombstone; all matching `node_id` are dropped. Returns how many manifests
+/// were removed (genuine feedback, never a placebo). This is the append-only
+/// bin's one deletion door: Athanor's forgetting pass and a per-item purge
+/// both come through here.
+pub async fn purge_deleted(store: &mut dyn Store, node_id: &str) -> Result<usize> {
+    let manifests = list_typed::<DeletedNode>(store).await?;
+    let mut fetcher = NoFetcher;
+    let mut victims = Vec::new();
+    for manifest in manifests {
+        if let Some(node) = load_typed::<DeletedNode>(store, &mut fetcher, manifest.id).await? {
+            if node.node_id == node_id {
+                victims.push(manifest.id);
+            }
+        }
+    }
+    let mut purged = 0;
+    for id in victims {
+        if delete_manifest(store, id).await? {
+            purged += 1;
+        }
+    }
+    Ok(purged)
+}
+
+/// Permanently forget EVERY tombstone — "empty the recycle bin". Returns how
+/// many were removed. Athanor's on-command oven; the scheduled steady-heat
+/// pass drops only the age-policied subset (via [`purge_deleted`]), never the
+/// whole bin.
+pub async fn clear_deleted(store: &mut dyn Store) -> Result<usize> {
+    let manifests = list_typed::<DeletedNode>(store).await?;
+    let mut cleared = 0;
+    for manifest in manifests {
+        if delete_manifest(store, manifest.id).await? {
+            cleared += 1;
+        }
+    }
+    Ok(cleared)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -142,6 +183,38 @@ mod tests {
         pollster::block_on(async {
             let mut store = InMemoryStore::default();
             assert!(list_deleted(&mut store).await.unwrap().is_empty());
+        });
+    }
+
+    #[test]
+    fn purge_forgets_one_node_and_clear_empties_the_bin() {
+        pollster::block_on(async {
+            let mut store = InMemoryStore::default();
+            record_deleted(&mut store, &tombstone("https://a.test", 1_000))
+                .await
+                .unwrap();
+            record_deleted(&mut store, &tombstone("https://b.test", 2_000))
+                .await
+                .unwrap();
+
+            // Purge by node id drops just that node's tombstone(s).
+            let purged = purge_deleted(&mut store, "id-https://a.test")
+                .await
+                .unwrap();
+            assert_eq!(purged, 1, "one tombstone purged");
+            let listed = list_deleted(&mut store).await.unwrap();
+            assert_eq!(listed.len(), 1);
+            assert_eq!(listed[0].url, "https://b.test", "the other survives");
+            // Purging an absent node forgets nothing (genuine feedback).
+            assert_eq!(
+                purge_deleted(&mut store, "id-https://a.test").await.unwrap(),
+                0
+            );
+
+            // Clear empties the rest; a second clear forgets nothing.
+            assert_eq!(clear_deleted(&mut store).await.unwrap(), 1);
+            assert!(list_deleted(&mut store).await.unwrap().is_empty());
+            assert_eq!(clear_deleted(&mut store).await.unwrap(), 0);
         });
     }
 }

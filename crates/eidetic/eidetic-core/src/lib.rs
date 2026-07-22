@@ -78,7 +78,7 @@ pub use bundle::{
     BUNDLE_SCHEMA_REF, Bundle, BundleMember, bundle_schema_ref, load_bundle, save_bundle,
     verify_required_members,
 };
-pub use deleted::{DeletedNode, list_deleted, record_deleted};
+pub use deleted::{DeletedNode, clear_deleted, list_deleted, purge_deleted, record_deleted};
 pub use engram::{Engram, TimeBounds};
 pub use manifest::{BlobFetcher, BlobManifest, BlobSource, NoFetcher, delete_manifest};
 pub use models::{ModelComponents, ModelLibrary, ModelManifest};
