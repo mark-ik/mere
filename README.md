@@ -28,8 +28,11 @@ Sources keep their native truth behind adapters; what is shared is the scene
 contract, not a data model. The representation measures content; the
 projection places it.
 
-**Status:** founded as a name reservation; the scene contract lands through
-the engine's first consumer proofs.
+**Status:** the scene contract's first slice is in `sceno` (geometry,
+footprints, spaces, scene snapshots, measurements — see
+[design_docs/2026-07-22_scene_contract_note.md](design_docs/2026-07-22_scene_contract_note.md));
+scenomise and scenotime remain name reservations until the consumer proofs
+pull their contents in.
 
 ## License
 
