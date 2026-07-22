@@ -45,3 +45,30 @@ fn granted_names_reflect_the_grant() {
     let denied = Grant::deny_document().granted_names();
     assert_eq!(denied, vec!["mere:script/log".to_string()]);
 }
+
+/// The one-grant unification (participant gate B3): the SAME servitor
+/// authority a denizen's gate consults derives this world's import grant.
+/// A subject whose caps cover doc/ instantiates; a subject granted only its
+/// scenario world fails at instantiation — unimported means unreachable,
+/// decided by the one grant.
+#[tokio::test(flavor = "current_thread")]
+async fn authority_derived_grant_gates_instantiation() {
+    use servitor::{Grant as Cap, Mode, PrefixAuthority, Subject};
+
+    let scripter = Subject::new([1; 32]);
+    let bystander = Subject::new([2; 32]);
+    let authority = PrefixAuthority::new()
+        .with_grant(Cap::new(scripter, "doc/", Mode::Write))
+        .with_grant(Cap::new(bystander, "scenario/", Mode::Write));
+
+    let granted = Grant::from_authority(&authority, scripter);
+    let r = document_host::instantiate_with_grant(&doc_wasm(), &granted).await;
+    assert!(r.is_ok(), "a doc/-covered subject instantiates, got {r:?}");
+
+    let ungranted = Grant::from_authority(&authority, bystander);
+    let r = document_host::instantiate_with_grant(&doc_wasm(), &ungranted).await;
+    assert!(
+        r.is_err(),
+        "a subject without doc/ coverage fails at instantiation (the import is unlinked)"
+    );
+}

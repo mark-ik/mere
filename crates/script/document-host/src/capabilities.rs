@@ -107,6 +107,33 @@ pub struct Grant {
 }
 
 impl Grant {
+    /// Derive this world's import grant from a denizen's structural caps —
+    /// the wasm grant bridge as **the import-level face of the one grant**
+    /// (participant gate B3). Each capability interface maps to a path under
+    /// `doc/` (`doc/log`, `doc/document`, `doc/net`); an interface is linked
+    /// only when the provider covers its path for the subject, so an
+    /// ungranted import fails at instantiation exactly as a hand-written
+    /// Deny does. The same derivation shape as the piccolo lane's (B2):
+    /// one authority, per-lane faces.
+    pub fn from_authority(
+        provider: &impl servitor::AuthorityProvider,
+        subject: servitor::Subject,
+    ) -> Self {
+        use servitor::Mode;
+        let allow = |path: &str, mode: Mode| {
+            if provider.covers(subject, path, mode) {
+                CapPermission::Allow
+            } else {
+                CapPermission::Deny
+            }
+        };
+        Self {
+            log: allow("doc/log", Mode::Write),
+            document: allow("doc/document", Mode::Write),
+            net: allow("doc/net", Mode::Write),
+        }
+    }
+
     /// Everything the document-core world offers (including `net`).
     pub fn allow_all() -> Self {
         Self {

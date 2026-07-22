@@ -17,6 +17,7 @@ publish = false
 path = "src/lib.rs"
 
 [dependencies]
+servitor = { workspace = true }
 # wasmtime 45 (default features: component-model + async always-on). Async exports
 # are invoked via call_async on a fiber so a future sync `fetch` import can suspend
 # a turn without blocking (plan §11.7-7).

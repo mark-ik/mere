@@ -179,6 +179,9 @@ mooting = { version = "0.1.0", path = "crates/moot/mooting" }
 mesh = { package = "mere-mesh", path = "crates/mesh/mesh" }
 
 identity = { package = "personae", version = "0.1.0", path = "../personae" }
+# The denizen authority gate (participant gate B1/B3): document-host derives
+# its import-level Grant from a servitor authority — one grant, two faces.
+servitor = { git = "https://github.com/mark-ik/servitor.git", branch = "main" }
 muniment = { version = "0.1.0" }
 # Handle-resolution index (WebFinger today; NIP-05 / atproto-did / moot
 # web-of-trust to come). Incubating, promoted out of the murm supercrate
