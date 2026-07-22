@@ -8,5 +8,10 @@
 //! emit placed instances with footprints; they never render, and they never
 //! learn a source's native truth.
 //!
-//! Name reservation: the algorithms migrate in with the engine's first
-//! consumers.
+//! The first consumer proof moves the generic Spiral, board, and geographic
+//! solvers here. Product adapters choose sources, translate native facts to a
+//! score, and realize the resulting scene.
+
+mod solve;
+
+pub use solve::solve;

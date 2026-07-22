@@ -52,6 +52,10 @@ dependencies = [
 [[package]]
 name = "scenomise"
 version = "0.0.1"
+dependencies = [
+ "sceno",
+ "serde_json",
+]
 
 [[package]]
 name = "scenotime"
