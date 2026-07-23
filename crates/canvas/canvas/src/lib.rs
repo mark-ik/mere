@@ -525,6 +525,15 @@ pub struct Canvas {
     /// The persisted product-free score that drove the current analytic view.
     /// This is view state, not graph truth. (Projection proofs — P3.)
     projection_score: Option<sceno::Score>,
+    /// A restored score's `(strategy id, graph revision)` claim on the layout.
+    /// [`restore_projection_score`](Self::restore_projection_score) buffers the
+    /// score's own positions; without this the host's very next
+    /// [`needs_strategy_recompute`](Self::needs_strategy_recompute) would report
+    /// stale (the cache is empty after a restore) and recompute the arrangement
+    /// from scratch, discarding the restored score before it ever painted.
+    /// Cleared once the graph actually changes, the user picks a strategy, or a
+    /// recompute is recorded. (Projection proofs — P3 score restore.)
+    restored_score_hold: Option<(String, u64)>,
     /// The pane's "scope" lens: when `Some`, the canvas renders only these nodes (a
     /// curated subset), projecting through a curated forme arrangement instead of the
     /// full Identity one. `None` shows the whole graph. (Curated canvas.)

@@ -175,6 +175,7 @@ impl Canvas {
             active_strategy: None,
             strategy_positions: None,
             projection_score: None,
+            restored_score_hold: None,
             scope: None,
             render_gnodes_as_dom: false,
         }

@@ -262,3 +262,37 @@ registry.
   `isometry-views` 37 tests, and the Merecat session sidecar test 3 tests.
   The headed P3 create/save run and independent restart/restore run both
   report `RESULT ok`.
+- 2026-07-23: **The visible size channel landed, and verifying the receipts
+  found the restore silently broken.** (1) **Gnode face fix**: the `.gnode`
+  class baked `width/height: 36px` and the per-frame style set only the
+  transform, so `node_size` drove colliders, edge trims, rings, and
+  hit-testing but never the painted face — *every* size channel (per-node
+  override, size-by-degree / -importance / -recency) was invisible on the
+  node itself. The inline per-node style now carries width/height from
+  `node_size`; the centring half generalizes `NODE_HALF * z` to
+  `face * 0.5 * z` (identical at the default size); the favicon inset scales
+  off the resolved face. Receipt: `proof3_recency` 02/03 now show the newest
+  node markedly largest and the Spiral seating it largest-at-centre with age
+  shrinking outward — P3a's claim is finally legible rather than inferred.
+  (2) **Restore was recomputing, not restoring.** `restore_projection_score`
+  set `last_strategy_inputs = None`, so the host's very next
+  `needs_strategy_recompute` reported stale and rebuilt the arrangement from
+  *live* inputs (recency off ⇒ uniform extents + graph-order ordinals),
+  discarding the saved score before it painted. The verify scenario still
+  reported `RESULT ok` because `assert nodes >= 14` / `assert visible` pass
+  for any non-empty canvas. Fixed with a `restored_score_hold`
+  `(strategy id, graph revision)` claim that the gate honours until the graph
+  changes, the user picks a layout, or a recompute is recorded; pinned by
+  `a_restored_score_survives_the_hosts_next_recompute_check`. The restart
+  capture now reproduces the saved spiral position-for-position.
+  **Lesson**: a headed `RESULT ok` is only as strong as its asserts — the
+  deterministic unit test, not the scenario, is what guards this invariant.
+  (3) **Receipt audit**: `Overmap::layout` is genuinely deleted (not
+  wrapped); `isometry-views` calls `scenomise::solve`; `isometry-core` 37 +
+  `isometry-views` 56 green; the portability audit finds `mere`/`isometry` in
+  `sceno`/`scenomise`/`scenotime` only in doc-comment examples and one test
+  fixture string — no types, deps, or code paths. **Open**: the restored
+  score carries footprints, but the face still paints from live `node_size`,
+  and `size_by_recency` is not persisted — so a restored spiral comes back
+  uniformly sized. Either persist the size channel or let the restored
+  score's footprints drive the face.

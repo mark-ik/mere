@@ -2637,6 +2637,49 @@ fn persisted_spiral_score_reinstates_the_local_strategy_positions() {
 }
 
 #[test]
+fn a_restored_score_survives_the_hosts_next_recompute_check() {
+    // The host gates its per-frame projection on `needs_strategy_recompute`.
+    // A restore leaves the input cache empty, so without the restored-score
+    // claim the very next frame recomputes the arrangement from *live* inputs
+    // and the saved score never paints — the restore looks green while showing
+    // a different layout.
+    let mut canvas = Canvas::new();
+    let first = canvas.visit("https://hold-first.example");
+    let second = canvas.visit("https://hold-second.example");
+    let ids = [
+        canvas.graph().get_node(first).unwrap().id,
+        canvas.graph().get_node(second).unwrap().id,
+    ];
+    let mut score = sceno::Score::new(sceno::Arrangement::Spiral(sceno::Spiral::default()));
+    score.items = ids
+        .into_iter()
+        .enumerate()
+        .map(|(ordinal, id)| sceno::ScoreItem {
+            source: sceno::SourceRef::new(::cartography::MERE_GRAPH_ADAPTER, id.to_string()),
+            ordinal: ordinal as u32,
+            footprint: sceno::Footprint::Circle { radius: 18.0 },
+            representation: sceno::Representation::Glyph,
+            placement: sceno::Placement::Ordinal,
+            layer: 0,
+            visible: true,
+        })
+        .collect();
+    assert!(canvas.restore_projection_score(score));
+
+    assert!(
+        !canvas.needs_strategy_recompute("phyllotaxis.default", 800, 600, None),
+        "the restored score holds the layout through the host's next check"
+    );
+
+    // A real input change releases the claim, so new content still re-lays out.
+    canvas.visit("https://hold-third.example");
+    assert!(
+        canvas.needs_strategy_recompute("phyllotaxis.default", 800, 600, None),
+        "a graph change releases the restored score's claim"
+    );
+}
+
+#[test]
 fn remove_focused_drops_the_node_and_reports_its_id() {
     let mut canvas = Canvas::new();
     canvas.visit("https://a.example");

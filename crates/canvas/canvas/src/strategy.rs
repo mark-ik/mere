@@ -19,6 +19,8 @@ impl Canvas {
     pub fn set_layout_strategy(&mut self, id: Option<String>) {
         let reverting = id.is_none() && self.active_strategy.is_some();
         self.active_strategy = id;
+        // An explicit pick supersedes a restored score's claim.
+        self.restored_score_hold = None;
         // Any strategy (de)activation forces a fresh layout: the buffered positions are recomputed
         // (or dropped on revert), so the inputs cache must not skip the first recompute of the new
         // strategy. (Arrangements — the layout cache.)
@@ -57,6 +59,16 @@ impl Canvas {
         if id == "kanban.default" {
             return true;
         }
+        // A freshly restored score owns the layout until a real input moves:
+        // recomputing here would replace the saved arrangement with one derived
+        // from live state (losing, e.g., the recency ordering and measured
+        // spacing the score was saved with). (Projection proofs — P3 restore.)
+        if let Some((sid, rev)) = &self.restored_score_hold
+            && sid.as_str() == id
+            && *rev == self.graph.revision()
+        {
+            return false;
+        }
         let focus = if Self::strategy_uses_focus(id) {
             focus
         } else {
@@ -84,6 +96,9 @@ impl Canvas {
             None
         };
         self.last_strategy_inputs = Some((id.to_string(), self.graph.revision(), w, h, focus));
+        // A recorded recompute is the ordinary cache taking over from the
+        // restored score's claim.
+        self.restored_score_hold = None;
     }
 
     /// Per-node visual extents `(w, h)` in px for the extent-aware strategy
@@ -156,6 +171,13 @@ impl Canvas {
         }
         self.active_strategy = Some("phyllotaxis.default".to_string());
         self.last_strategy_inputs = None;
+        // Claim the layout for the restored score: the empty input cache would
+        // otherwise make the host recompute the arrangement on the very next
+        // frame — from *live* inputs, not the saved ones — and the restored
+        // positions would never paint. The claim lapses as soon as the graph
+        // changes or the user picks a layout.
+        self.restored_score_hold =
+            Some(("phyllotaxis.default".to_string(), self.graph.revision()));
         self.physics.halt();
         self.strategy_positions = Some(positions);
         true
