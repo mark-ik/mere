@@ -12,6 +12,8 @@
 //! solvers here. Product adapters choose sources, translate native facts to a
 //! score, and realize the resulting scene.
 
+mod relax;
 mod solve;
 
+pub use relax::{Relaxation, relax};
 pub use solve::solve;
