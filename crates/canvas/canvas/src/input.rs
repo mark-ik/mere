@@ -469,7 +469,18 @@ impl Canvas {
     /// Toggle the layout physics between paused (frozen) and running. Pausing halts
     /// the sim; resuming kicks a fresh settle. (Physics pause — Space / the button.)
     pub fn toggle_physics_paused(&mut self) {
-        self.physics_paused = !self.physics_paused;
+        self.set_physics_paused(!self.physics_paused);
+    }
+
+    /// Pause or run the layout physics. **Global and orthogonal to the
+    /// arrangement**: physics is a capability of the whole graph (like the size
+    /// or shape channels), not a property of one layout mode. Every arrangement
+    /// composes with either state — a paused Spiral holds its analytic
+    /// placement exactly, a running Spiral seeds the sim and lets forces relax
+    /// from there, and "force-directed" is simply *no* analytic arrangement
+    /// with physics running. (Physics as a capability.)
+    pub fn set_physics_paused(&mut self, paused: bool) {
+        self.physics_paused = paused;
         if self.physics_paused {
             self.physics.halt();
         } else {

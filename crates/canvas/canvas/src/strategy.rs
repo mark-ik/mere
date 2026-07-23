@@ -25,11 +25,17 @@ impl Canvas {
         // (or dropped on revert), so the inputs cache must not skip the first recompute of the new
         // strategy. (Arrangements — the layout cache.)
         self.last_strategy_inputs = None;
+        // Physics is a *global* capability, not a property of the arrangement
+        // (see `set_physics_paused`). Picking an analytic arrangement pauses by
+        // default — so its placement reads crisply the moment you choose it —
+        // but that is now an ordinary, visible, reversible pause the user can
+        // play at any time to watch forces relax the arrangement, not a hidden
+        // halt welded to the mode. Returning to no arrangement resumes.
         if self.active_strategy.is_some() {
-            self.physics.halt();
+            self.set_physics_paused(true);
         } else if reverting {
             self.strategy_positions = None;
-            self.settle_physics(SETTLE_TICKS);
+            self.set_physics_paused(false);
         }
     }
 
@@ -122,6 +128,17 @@ impl Canvas {
     pub fn apply_strategy_positions(&mut self, positions: &[(NodeKey, PortablePoint)]) {
         if self.active_strategy.is_some() {
             self.strategy_positions = Some(positions.to_vec());
+            // Seed the *world*, not just the read model, so the arrangement is
+            // a real initial condition: paused, the bodies hold exactly here;
+            // running, the sim relaxes from here instead of snapping back to
+            // wherever the force layout had left them. This is what lets any
+            // arrangement compose with physics. (Physics as a capability.)
+            self.physics.seed(
+                positions
+                    .iter()
+                    .map(|(k, p)| (*k, Point2D::new(p.x, p.y)))
+                    .collect(),
+            );
         }
     }
 
@@ -150,6 +167,13 @@ impl Canvas {
             return false;
         }
         let scene = scenomise::solve(&score);
+        // Rebind the opaque refs, and carry each item's *measured footprint*
+        // back onto the node. The score is the persisted truth for both where a
+        // node sits and how big it was measured; without this a restored spiral
+        // returns correctly placed but uniformly sized, because the face paints
+        // from the live `node_size` and the size mode that produced it is view
+        // state, not score state. (Projection proofs — P3 restore.)
+        let mut faces: Vec<(NodeKey, f32)> = Vec::new();
         let positions: Vec<_> = scene
             .items
             .iter()
@@ -160,6 +184,9 @@ impl Canvas {
                 }
                 let id = uuid::Uuid::parse_str(&source.id).ok()?;
                 let key = self.graph.get_node_key_by_id(id)?;
+                if let Some(side) = footprint_face_side(&item.footprint) {
+                    faces.push((key, side));
+                }
                 Some((
                     key,
                     PortablePoint::new(item.transform.translate.x, item.transform.translate.y),
@@ -178,8 +205,23 @@ impl Canvas {
         // changes or the user picks a layout.
         self.restored_score_hold =
             Some(("phyllotaxis.default".to_string(), self.graph.revision()));
-        self.physics.halt();
-        self.strategy_positions = Some(positions);
+        // Same default as picking an arrangement: hold the restored placement,
+        // via the visible global pause rather than a hidden halt.
+        self.set_physics_paused(true);
+        self.strategy_positions = Some(positions.clone());
+        self.physics.seed(
+            positions
+                .iter()
+                .map(|(k, p)| (*k, Point2D::new(p.x, p.y)))
+                .collect(),
+        );
+        // Restored measurements ride the per-node size channel, the same slot a
+        // manual resize uses, so the face paints at the size the score was saved
+        // with. A later size-mode toggle needs `clear_node_size` to take over.
+        for (key, side) in faces {
+            self.node_sizes.insert(key, side.clamp(16.0, 160.0));
+        }
+        self.push_node_geometry();
         true
     }
 
@@ -463,9 +505,27 @@ impl Canvas {
         let Some(positions) = self.strategy_positions.take() else {
             return;
         };
-        for &(key, p) in &positions {
-            self.view.set_position(key, Point2D::new(p.x, p.y));
+        // Hold the analytic placement only while physics is paused. With physics
+        // running the world was seeded from these same positions and the sim now
+        // owns the motion — re-asserting them every frame would pin the nodes and
+        // make play look broken. (Physics as a capability.)
+        if self.physics_paused {
+            for &(key, p) in &positions {
+                self.view.set_position(key, Point2D::new(p.x, p.y));
+            }
         }
         self.strategy_positions = Some(positions);
+    }
+}
+
+/// The square face side a score item's footprint implies, or `None` for a
+/// point (no measured extent). Faces are square, so a rectangle contributes
+/// its larger side. (Projection proofs — P3 restore.)
+fn footprint_face_side(footprint: &sceno::Footprint) -> Option<f32> {
+    match footprint {
+        sceno::Footprint::Point => None,
+        sceno::Footprint::Circle { radius } => Some(radius * 2.0),
+        sceno::Footprint::Rect { size } => Some(size.w.max(size.h)),
+        other => other.bounds().map(|b| b.size.w.max(b.size.h)),
     }
 }

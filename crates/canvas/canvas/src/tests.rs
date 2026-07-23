@@ -2637,6 +2637,39 @@ fn persisted_spiral_score_reinstates_the_local_strategy_positions() {
 }
 
 #[test]
+fn physics_is_global_and_composes_with_any_arrangement() {
+    // Physics is a capability of the graph, not a property of one layout mode:
+    // every arrangement composes with either state, and "force-directed" is
+    // simply no analytic arrangement with physics running.
+    let mut canvas = Canvas::new();
+    canvas.visit("https://phys-a.example");
+    canvas.visit("https://phys-b.example");
+    assert!(!canvas.physics_paused(), "runs by default");
+
+    // Picking an arrangement pauses *visibly* (the same flag the user drives),
+    // so the analytic placement reads crisply on selection.
+    canvas.set_layout_strategy(Some("phyllotaxis.default".to_string()));
+    assert!(canvas.physics_paused(), "an arrangement pauses by default");
+
+    // ...but the pause is ordinary state: play it and the arrangement stays
+    // selected while the sim takes over from its seeded placement.
+    canvas.set_physics_paused(false);
+    assert!(!canvas.physics_paused());
+    assert_eq!(
+        canvas.layout_strategy(),
+        Some("phyllotaxis.default"),
+        "playing physics does not deselect the arrangement"
+    );
+
+    // And a graph with no arrangement can be frozen — the other half of the
+    // matrix, impossible while physics was welded to the mode.
+    canvas.set_layout_strategy(None);
+    assert!(!canvas.physics_paused(), "reverting resumes");
+    canvas.set_physics_paused(true);
+    assert!(canvas.physics_paused() && canvas.layout_strategy().is_none());
+}
+
+#[test]
 fn a_restored_score_survives_the_hosts_next_recompute_check() {
     // The host gates its per-frame projection on `needs_strategy_recompute`.
     // A restore leaves the input cache empty, so without the restored-score

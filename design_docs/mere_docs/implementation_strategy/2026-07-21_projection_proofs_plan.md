@@ -296,3 +296,42 @@ registry.
   and `size_by_recency` is not persisted — so a restored spiral comes back
   uniformly sized. Either persist the size channel or let the restored
   score's footprints drive the face.
+- 2026-07-23: **Physics promoted from a layout mode to a global capability
+  (ruled with Mark), and the restored score now carries its sizes.**
+  (1) **Footprint → face.** `restore_projection_score` writes each item's
+  measured footprint onto the per-node size channel, so a restored spiral
+  returns at the size it was saved with rather than uniformly. The score is
+  the persisted truth for *both* placement and measured extent. Tradeoff
+  recorded: restored sizes land in `node_sizes` (the manual-resize slot), so
+  a later size-*mode* toggle needs `clear_node_size` to take over.
+  (2) **Physics is a capability, not a mode.** Mark: "whether a given graph is
+  affected by physics should be a global question that can apply to all
+  layouts and arrangements... the idea of 'the mode with the physics' feels
+  like a squandering." The code agreed: `physics_paused` already existed as a
+  proper global gate (`settle_physics` is "the single gate every settle
+  trigger routes through") but was **unexposed in the host**, while
+  `set_layout_strategy` bypassed it with a direct `physics.halt()` — welding
+  physics to the arrangement. Now: `set_physics_paused` is the one global
+  control; picking an arrangement pauses *by default* through that visible,
+  reversible flag rather than a hidden halt; `apply_strategy_positions` seeds
+  the physics **world** (`physics.seed`, which already existed) so an
+  arrangement is a real initial condition; `apply_strategy_to_view` re-asserts
+  positions only while paused, so playing does not pin the nodes. The full 2×2
+  is now reachable and receipted (`proof3_physics_capability`): Spiral paused
+  (crisp analytic placement) → Spiral played (sim relaxes from the seed, the
+  arrangement still selected) → free graph frozen (the cell that was
+  unreachable while physics was welded to the mode). "Force-directed" is
+  demoted to what it always was: *no* analytic arrangement with physics
+  running. Host: `Action::TogglePhysics` + palette "Play/pause physics" +
+  `toggle_physics` verb. Pinned by
+  `physics_is_global_and_composes_with_any_arrangement`; canvas 142 green.
+  **Next rung (Mark's framing)**: arrangements plug into the broader capability
+  set (size, colour, shape, physics), and *any* graph surface should be able to
+  run physics — "even swatches should be able to become physics-directed
+  graphs... a gesture, something like knocking twice on the graph's canvas."
+  Swatch physics is a real build (the swatch contract is a static position map
+  today; it would need a sim per swatch or a shared one) and wants its own
+  slice. The deeper form is **arrangement-as-attractor**: rather than a
+  one-shot seed, an arrangement's targets become spring anchors, which is
+  exactly the coupling/field model — the same mechanism hulls use. That is
+  where arrangements, fields, and physics become one design instead of three.
