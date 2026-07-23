@@ -166,6 +166,42 @@ Coordination: the moot (gemot) refactor **settled 2026-07-17** (mere `a4da519` "
 
 ## Progress
 
+- **2026-07-23 (B3 COMPLETE — the wasm lane runs end to end)**: the ruling
+  above is now plumbed. **mere `app-host`** (new crate, `crates/script/app-host`,
+  sibling of document-host over the same WIT package): bindgens `app-core`,
+  backs `emit` with a host-supplied `ActionSink`, drives
+  activate/on_event/deactivate (async + a blocking face for sync hosts), and
+  contains a bad component the way document-host does (epoch interruption +
+  `Watchdog` + `StoreLimits`). It is app-AGNOSTIC by construction — it has no
+  action vocabulary, so the ring policy cannot drift into two places. A guest
+  fixture crate builds via build.rs to `wasm32-wasip2`; 4 integration tests
+  drive a REAL component (accepted emissions queue, an ungranted ring is
+  denied and never queues, gate management is refused even under a total
+  grant, misfires are typed and loud).
+  **merecat**: `component.rs` implements `ActionSink` as the ring gate
+  (decode → classify → `emit_allowed` → queue) behind a new `wasm` feature
+  (opt-in like piccolo); `RunDenizen` branches on what a resident IS (a
+  script's source facet vs a component's file pointer) while what it may DO
+  stays the grant's business; both lanes share `lower_denizen_actions` (one
+  attributed lowering path). A dropped `.wasm` stages like a `.lua`:
+  `PackBody::{Scenario,Component}` (blake3 over the bytes either way, so
+  identity does not care which lane runs it), the component's bytes are
+  stored beside the worlds at `denizens/<subject>.wasm` with the facet as the
+  pointer, and **install grants one path per REVIEWED ring** — the blanket
+  `app/` grant is gone, so an unnamed ring is an ungranted ring.
+  **Ring preselection**: `default_rings()` = navigate + panes + dispatch;
+  the session ring (fork/close/delete/recover) is destructive and never
+  preselected; host-only is not a profile choice at all. The review row names
+  them and is length-checked to fit one palette row (the first headed run
+  clipped the ask — a review you cannot read is not a review).
+  Receipts: merecat 117 green (both features), app-host 4; headed
+  `denizen_wasm.scn` RESULT ok — the review capture reads
+  `Install app_core_guest (wasm) — grants: navigate, panes, dispatch, own
+  world — Confirm`, and the run log shows `caps.granted()` reporting exactly
+  the three rings, `open-address`/`fit-view` accepted, `close-session`
+  refused (`session: not covered`), `confirm-install-denizen` refused
+  (`host-only: no grantable path exists`), with the accepted emission's node
+  minted and attributed to the subject.
 - **2026-07-23 (the merecat world RULED: total surface, ring-gated envelope —
   Mark)**: the open "which Actions may a component emit" question dissolves.
   A component may potentially emit ALL Actions; what decides is the action's

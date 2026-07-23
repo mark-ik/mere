@@ -51,6 +51,14 @@ impl Guest for Component {
     fn on_event(kind: String, payload: String) {
         log(&format!("guest: event '{kind}'"));
         match kind.as_str() {
+            // The default turn a host drives: one action from each ring, so a
+            // single run shows exactly where this denizen's grant stops.
+            "run" => {
+                try_emit("open-address", "{\"url\": \"mere://kept/note\"}");
+                try_emit("fit-view", "");
+                try_emit("close-session", "");
+                try_emit("confirm-install-denizen", "");
+            }
             // The ordinary case: an action inside the grant.
             "browse" => {
                 try_emit("open-address", &format!("{{\"url\": \"{payload}\"}}"));
