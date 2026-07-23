@@ -81,6 +81,9 @@ pub use affinity_force::{
     AffinitySpring, DEFAULT_AFFINITY_REST_LENGTH, DEFAULT_AFFINITY_STIFFNESS,
 };
 
+pub mod anchor_force;
+pub use anchor_force::{AnchorSpring, DEFAULT_ANCHOR_SLACK, DEFAULT_ANCHOR_STIFFNESS};
+
 /// Position-Based Fluids (PBF): our own small SPH liquid for the orrery (salva lags rapier badly,
 /// so we roll our own). The solver lives here; its seam onto the rigid world (loading + the two-way
 /// coupling) is [`Simulation`]'s fluid tier in [`fluid_coupling`]. (Physics scenes P4c.)
@@ -274,6 +277,10 @@ pub struct Simulation {
     /// affinity signal recomputes — and it applies in the same reset window as the built-ins.
     /// `None` = off (the default). (Graph signals — P4.)
     affinity_force: Option<AffinitySpring>,
+    /// Per-node springs toward arrangement-chosen slots: the layout as a
+    /// participant in the simulation rather than an override of it. Rebuilt
+    /// wholesale via [`set_anchor_force`](Self::set_anchor_force).
+    anchor_force: Option<AnchorSpring>,
     /// Optional host-injected GPU repulsion solver + the node count above which
     /// [`NodeExclusion`] routes to it instead of its naive O(n²) scan. `None` =
     /// always naive (the default). The host builds this from quint's burn pass;
@@ -349,6 +356,7 @@ impl Simulation {
             forces: Vec::new(),
             coupling_forces: Vec::new(),
             affinity_force: None,
+            anchor_force: None,
             repulsion_solver: None,
             gpu_repulsion_threshold: DEFAULT_GPU_REPULSION_THRESHOLD,
             linear_damping: DEFAULT_LINEAR_DAMPING,
@@ -418,6 +426,21 @@ impl Simulation {
     /// the new equilibrium take. (Graph signals — P4.)
     pub fn set_affinity_force(&mut self, force: Option<AffinitySpring>) {
         self.affinity_force = force;
+    }
+
+    /// Install (or clear, with `None`) per-node **anchor** springs toward an
+    /// arrangement's chosen slots. This is how a layout composes with running
+    /// physics: rather than overriding positions, it pulls toward them while
+    /// repulsion, edge springs, collisions, coupled fields, and drag keep
+    /// acting. Position-preserving, like every other force swap; the host
+    /// follows with a `settle` to let the new equilibrium take.
+    pub fn set_anchor_force(&mut self, force: Option<AnchorSpring>) {
+        self.anchor_force = force;
+    }
+
+    /// How many nodes the installed anchor force pulls (`0` when none is set).
+    pub fn anchor_count(&self) -> usize {
+        self.anchor_force.as_ref().map_or(0, AnchorSpring::len)
     }
 
     /// Number of affinity pairs the installed affinity force pulls along (`0` when none is set).
@@ -524,6 +547,7 @@ impl Simulation {
         if !self.forces.is_empty()
             || !self.coupling_forces.is_empty()
             || self.affinity_force.is_some()
+            || self.anchor_force.is_some()
             || self.scene_field.is_some()
         {
             for (_, body) in self.bodies.iter_mut() {
@@ -548,6 +572,12 @@ impl Simulation {
             // The affinity force (if installed) applies last, over the same context — a weighted
             // clustering pull on top of the topology springs. (Graph signals — P4.)
             if let Some(force) = &self.affinity_force {
+                force.apply(&mut ctx, dt);
+            }
+            // Anchor springs last: the arrangement's pull sits on top of the
+            // graph's own forces, so stiffness reads as "how much does the
+            // arrangement win". (Arrangement as attractor.)
+            if let Some(force) = &self.anchor_force {
                 force.apply(&mut ctx, dt);
             }
         }
