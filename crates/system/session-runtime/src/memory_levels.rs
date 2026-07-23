@@ -214,6 +214,7 @@ mod tests {
             properties: Vec::new(),
             derivations: Vec::new(),
             last_session_visited: 0,
+            nested: None,
         }
     }
 

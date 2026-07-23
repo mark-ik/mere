@@ -86,6 +86,24 @@ impl Graph {
         true
     }
 
+    /// Set or clear the node's borne graph (`Node.nested`). Structural
+    /// containment per the one-node ruling; journals as
+    /// `ReplaySetNodeNestedById` so installs replay attributed.
+    pub(crate) fn set_node_nested(
+        &mut self,
+        key: NodeKey,
+        nested: Option<codicil::LogId>,
+    ) -> bool {
+        let Some(node) = self.inner.node_mut(key) else {
+            return false;
+        };
+        if node.nested == nested {
+            return false;
+        }
+        node.nested = nested;
+        true
+    }
+
     pub(crate) fn set_node_mime_hint(&mut self, key: NodeKey, mime_hint: Option<String>) -> bool {
         let Some(node) = self.inner.node_mut(key) else {
             return false;

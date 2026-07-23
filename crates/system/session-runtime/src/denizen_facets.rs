@@ -6,11 +6,14 @@
 //! A **denizen** (a servitor, an agent, a scenario runner, a peer, a pack) can
 //! reside in the graph as a node. What makes a node a denizen is not a graph
 //! fact — it is host knowledge *about* the node: the denizen's keyholder
-//! identity and the id of its nested graph (its inner world, an ordinary
-//! chartulary `GraphLog` of grant projections, storage markers, registered
-//! commands, journal cursors). Per the one-node ruling, denizen-ness is a
-//! **facet bundle, not a node class**: containment is structure, denizen-ness
-//! is agency, orthogonal facets on the one node.
+//! identity and kind. Per the one-node ruling, denizen-ness is a **facet
+//! bundle, not a node class**: containment is structure, denizen-ness is
+//! agency, orthogonal on the one node. The nested graph itself (the inner
+//! world, an ordinary chartulary `GraphLog` of grant projections, storage
+//! markers, registered commands, journal cursors) hangs off the node
+//! STRUCTURALLY — `Node.nested`, the kernel's `GraphBearing` impl — not off
+//! this facet: delete the facet and the denizen is un-resided but its world
+//! stays borne; archive the node and the world rides along.
 //!
 //! This module supersedes the transitional `denizen_bindings.json` sidecar
 //! (removed 2026-07-20 before any host ever wrote one — the same born-as-facets
@@ -30,9 +33,11 @@ use uuid::Uuid;
 use crate::facet_store::{AcceptAll, FacetId, NodeFacetStore};
 
 /// Facet id of a node's denizen binding. Payload:
-/// `{"subject": hex, "nested_log": str, "kind": kebab-case}` — one coherent
-/// record (a subject without a nested graph is not a resident), the
-/// `arrangement.material` precedent, not three fragment facets.
+/// `{"subject": hex, "kind": kebab-case}` — one coherent record, the
+/// `arrangement.material` precedent, not fragment facets. (Bindings written
+/// before the containment ruling also carried `"nested_log"`; it reads as
+/// [`DenizenBinding::legacy_nested_log`] for the one-time heal into
+/// `Node.nested` and is never written again.)
 pub const DENIZEN_BINDING: &str = "denizen.binding";
 
 /// What kind of denizen a node hosts. Descriptive metadata, never a second
@@ -58,40 +63,39 @@ pub enum DenizenKind {
     Unknown,
 }
 
-/// The binding for one denizen node: its keyholder identity and the id of its
-/// nested graph. A binding exists only for a node that is a denizen.
+/// The binding for one denizen node: its keyholder identity and kind — pure
+/// agency. A binding exists only for a node that is a denizen; the node's
+/// borne world lives on `Node.nested` (structure), not here.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DenizenBinding {
     /// The denizen's keyholder identity: lowercase hex of the 32-byte public
     /// key (matches `servitor::Subject::to_hex`). Hand-inspectable in the JSON.
     pub subject: String,
-    /// The chartulary `LogId` (string form) of the denizen's nested graph — its
-    /// inner world, persisted under its own slot.
-    pub nested_log: String,
+    /// LEGACY: the nested-graph log id a pre-containment-ruling binding
+    /// carried. Read-only — loads so a host can heal it into `Node.nested`
+    /// on adopt; [`write_denizen_binding`] never writes it back.
+    #[serde(default, rename = "nested_log", skip_serializing)]
+    pub legacy_nested_log: String,
     /// What kind of denizen this is.
     #[serde(default)]
     pub kind: DenizenKind,
 }
 
 impl DenizenBinding {
-    /// A binding of `subject` to the nested graph at `nested_log`.
-    pub fn new(
-        subject: impl Into<String>,
-        nested_log: impl Into<String>,
-        kind: DenizenKind,
-    ) -> Self {
+    /// A binding of the keyholder `subject`, resident as `kind`.
+    pub fn new(subject: impl Into<String>, kind: DenizenKind) -> Self {
         Self {
             subject: subject.into(),
-            nested_log: nested_log.into(),
+            legacy_nested_log: String::new(),
             kind,
         }
     }
 
-    /// True when this binding names no nested graph — nothing worth persisting.
+    /// True when this binding names no keyholder — nothing worth persisting.
     /// [`write_denizen_binding`] treats these as a remove, so the store only
     /// carries real denizens.
     pub fn is_empty(&self) -> bool {
-        self.nested_log.is_empty()
+        self.subject.is_empty()
     }
 }
 
@@ -105,7 +109,6 @@ pub fn write_denizen_binding(store: &mut NodeFacetStore, node: Uuid, binding: &D
     }
     let payload = json!({
         "subject": binding.subject,
-        "nested_log": binding.nested_log,
         "kind": serde_json::to_value(binding.kind).unwrap_or(serde_json::Value::Null),
     });
     let _ = store.set(node, FacetId::new(DENIZEN_BINDING), payload, &AcceptAll);
@@ -157,12 +160,12 @@ mod tests {
         write_denizen_binding(
             &mut store,
             Uuid::from_u128(0xa),
-            &DenizenBinding::new("aa".repeat(32), "servitor.trail-keeper", DenizenKind::Servitor),
+            &DenizenBinding::new("aa".repeat(32), DenizenKind::Servitor),
         );
         write_denizen_binding(
             &mut store,
             Uuid::from_u128(0xb),
-            &DenizenBinding::new("bb".repeat(32), "agent.gardener", DenizenKind::Agent),
+            &DenizenBinding::new("bb".repeat(32), DenizenKind::Agent),
         );
         store
     }
@@ -173,7 +176,7 @@ mod tests {
         let bindings = read_denizen_bindings(&store);
         assert_eq!(bindings.len(), 2);
         let a = read_denizen_binding(&store, Uuid::from_u128(0xa)).unwrap();
-        assert_eq!(a.nested_log, "servitor.trail-keeper");
+        assert_eq!(a.subject, "aa".repeat(32));
         assert_eq!(a.kind, DenizenKind::Servitor);
         assert!(is_denizen(&store, Uuid::from_u128(0xa)));
     }
@@ -188,7 +191,7 @@ mod tests {
     #[test]
     fn an_empty_binding_writes_as_a_remove() {
         let mut store = sample_store();
-        // Rebinding node a with no nested graph un-resides it.
+        // Rebinding node a with no keyholder un-resides it.
         write_denizen_binding(&mut store, Uuid::from_u128(0xa), &DenizenBinding::default());
         assert!(!is_denizen(&mut store, Uuid::from_u128(0xa)));
         assert_eq!(read_denizen_bindings(&store).len(), 1, "b remains");
@@ -201,15 +204,14 @@ mod tests {
         write_denizen_binding(
             &mut store,
             id,
-            &DenizenBinding::new("aa", "first", DenizenKind::Servitor),
+            &DenizenBinding::new("aa", DenizenKind::Servitor),
         );
         write_denizen_binding(
             &mut store,
             id,
-            &DenizenBinding::new("aa", "second", DenizenKind::Agent),
+            &DenizenBinding::new("aa", DenizenKind::Agent),
         );
         let binding = read_denizen_binding(&store, id).unwrap();
-        assert_eq!(binding.nested_log, "second");
         assert_eq!(binding.kind, DenizenKind::Agent);
     }
 
@@ -238,6 +240,36 @@ mod tests {
             read_denizen_binding(&store, id).unwrap().kind,
             DenizenKind::Unknown
         );
+    }
+
+    #[test]
+    fn a_legacy_binding_reads_its_nested_log_but_never_writes_it_back() {
+        // A binding written before the containment ruling carried the world's
+        // log id; it loads for the one-time heal into `Node.nested`, and a
+        // rewrite drops it (structure lives on the node now).
+        let mut store = NodeFacetStore::new();
+        let id = Uuid::from_u128(0xa);
+        store
+            .set(
+                id,
+                FacetId::new(DENIZEN_BINDING),
+                serde_json::json!({
+                    "subject": "aa".repeat(32),
+                    "nested_log": "servitor.trail-keeper",
+                    "kind": "servitor",
+                }),
+                &AcceptAll,
+            )
+            .unwrap();
+        let legacy = read_denizen_binding(&store, id).unwrap();
+        assert_eq!(legacy.legacy_nested_log, "servitor.trail-keeper");
+
+        write_denizen_binding(&mut store, id, &legacy);
+        let rewritten = store
+            .get(&id, &FacetId::new(DENIZEN_BINDING))
+            .expect("still bound");
+        assert!(rewritten.get("nested_log").is_none(), "the legacy field is gone");
+        assert_eq!(read_denizen_binding(&store, id).unwrap().subject, "aa".repeat(32));
     }
 
     #[test]

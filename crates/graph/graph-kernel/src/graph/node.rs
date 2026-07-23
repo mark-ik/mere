@@ -21,7 +21,7 @@ use std::collections::HashSet;
 use rkyv::{Archive, Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::identity::UuidAsBytes;
+use super::identity::{LogIdAsString, UuidAsBytes};
 use crate::address::{Address, AddressClaim, address_from_url, cached_host_from_url};
 use crate::types::{
     FrameLayoutHint, NodeClassification, NodeDerivation, NodeImportProvenance, NodeProperty,
@@ -136,6 +136,17 @@ pub struct Node {
 
     /// Durable opt-out for split-offer affordances on frame-anchor nodes.
     pub frame_split_offer_suppressed: bool,
+
+    /// The nested graph this node BEARS, by log identity — structural
+    /// containment (chartulary `GraphBearing`; the one-node ruling's
+    /// containment tier). `None` for the ordinary node. A denizen's inner
+    /// world hangs here; the residency facet keeps only agency (subject +
+    /// kind). Graph truth: persists, journals attributed, and is deliberately
+    /// NOT carried by a cross-graph copy (a fork's copy is un-resided rather
+    /// than sharing one world; the slot-convention world move is the
+    /// follow-on that makes forked worlds real copies).
+    #[rkyv(with = rkyv::with::Map<LogIdAsString>)]
+    pub nested: Option<codicil::LogId>,
 }
 
 impl Node {
@@ -187,6 +198,7 @@ impl Node {
             addresses: vec![AddressClaim::primary(address_from_url(url))],
             frame_layout_hints: Vec::new(),
             frame_split_offer_suppressed: false,
+            nested: None,
         }
     }
 }

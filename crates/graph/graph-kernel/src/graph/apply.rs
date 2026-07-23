@@ -82,6 +82,10 @@ pub enum GraphDelta {
         node_id: Uuid,
         mime_hint: Option<String>,
     },
+    ReplaySetNodeNestedById {
+        node_id: Uuid,
+        nested: Option<String>,
+    },
     ReplaySetNodePinnedById {
         node_id: Uuid,
         is_pinned: bool,
@@ -226,6 +230,10 @@ pub enum GraphDelta {
     SetNodeMimeHint {
         key: NodeKey,
         mime_hint: Option<String>,
+    },
+    SetNodeNested {
+        key: NodeKey,
+        nested: Option<codicil::LogId>,
     },
     SetNodePinned {
         key: NodeKey,
@@ -755,6 +763,31 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
                 record_captured_delta(&CapturedDelta::ReplaySetNodeMimeHintById {
                     node_id: node_id.to_string(),
                     mime_hint: capture_mime_hint,
+                });
+            }
+            GraphDeltaResult::NodeMetadataUpdated(updated)
+        }
+        GraphDelta::ReplaySetNodeNestedById { node_id, nested } => {
+            let log = nested.clone().map(codicil::LogId::new);
+            let updated = graph
+                .get_node_key_by_id(node_id)
+                .is_some_and(|key| graph.set_node_nested(key, log.clone()));
+            if updated {
+                record_captured_delta(&CapturedDelta::ReplaySetNodeNestedById {
+                    node_id: node_id.to_string(),
+                    nested,
+                });
+            }
+            GraphDeltaResult::NodeMetadataUpdated(updated)
+        }
+        GraphDelta::SetNodeNested { key, nested } => {
+            let node_id = graph.get_node(key).map(|node| node.id);
+            let capture_nested = nested.as_ref().map(|log| log.as_str().to_string());
+            let updated = graph.set_node_nested(key, nested);
+            if updated && let Some(node_id) = node_id {
+                record_captured_delta(&CapturedDelta::ReplaySetNodeNestedById {
+                    node_id: node_id.to_string(),
+                    nested: capture_nested,
                 });
             }
             GraphDeltaResult::NodeMetadataUpdated(updated)

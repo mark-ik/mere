@@ -96,6 +96,7 @@ impl Graph {
                 node.frame_split_offer_suppressed = pnode.frame_split_offer_suppressed;
                 node.body = pnode.body.clone();
                 node.last_session_visited = pnode.last_session_visited;
+                node.nested = pnode.nested.clone().map(codicil::LogId::new);
                 if let Some(session) = &pnode.session_state {
                     // Legacy scroll / form draft stay on the PersistedNode for
                     // the host's one-time BrowserNodeState migration (the host

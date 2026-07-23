@@ -98,6 +98,7 @@ impl Graph {
                 derivations: node.derivations.clone(),
                 body: node.body.clone(),
                 last_session_visited: node.last_session_visited,
+                nested: node.nested.as_ref().map(|log| log.as_str().to_string()),
             })
             .collect();
 

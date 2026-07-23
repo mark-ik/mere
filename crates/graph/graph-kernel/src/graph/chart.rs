@@ -19,7 +19,8 @@
 //! pages, which live in mere's own cache, not on the node) is the follow-on step.
 
 use chartulary::{
-    Address, Addressed, Classified, ContentBearing, Identified, Labeled, Predicated, RelationClass,
+    Address, Addressed, Classified, ContentBearing, GraphBearing, Identified, Labeled, Predicated,
+    RelationClass,
 };
 use muniment::Hash;
 use uuid::Uuid;
@@ -83,6 +84,15 @@ impl ContentBearing for Node {
 
     fn media_type(&self) -> Option<&str> {
         self.mime_hint.as_deref()
+    }
+}
+
+impl GraphBearing for Node {
+    fn nested(&self) -> Option<&codicil::LogId> {
+        // Structural containment (the one-node ruling): the node BEARS the
+        // graph named by this log identity. A denizen's inner world hangs
+        // here; agency (subject + kind) stays a facet.
+        self.nested.as_ref()
     }
 }
 
@@ -167,6 +177,23 @@ mod tests {
             "content is the body's blake3 hash, the muniment blob address"
         );
         assert_eq!(ContentBearing::media_type(&node), Some("text/markdown"));
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn a_bearing_node_reports_its_nested_graph() {
+        let mut node = Node::test_stub("mere://denizen/ab12");
+        assert_eq!(
+            GraphBearing::nested(&node),
+            None,
+            "an ordinary node bears no graph"
+        );
+        node.nested = Some(codicil::LogId::new("denizens/trail-keeper"));
+        assert_eq!(
+            GraphBearing::nested(&node).map(codicil::LogId::as_str),
+            Some("denizens/trail-keeper"),
+            "containment is structural: the borne world reads off the node itself"
+        );
     }
 
     #[test]

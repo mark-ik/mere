@@ -191,6 +191,11 @@ pub struct PersistedNode {
     /// (Alembic B5.)
     #[serde(default)]
     pub last_session_visited: u64,
+    /// The nested graph this node bears, as a log-id string (`Node.nested`;
+    /// the one-node containment ruling). `#[serde(default)]` so snapshots
+    /// written before containment load with `None`.
+    #[serde(default)]
+    pub nested: Option<String>,
 }
 
 /// Full graph snapshot for periodic saves.

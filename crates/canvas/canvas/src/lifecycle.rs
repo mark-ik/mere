@@ -571,6 +571,27 @@ impl Canvas {
         self.title_at_key(key, title)
     }
 
+    /// Set or clear the borne graph (`Node.nested`) on a member, keyed by
+    /// member id — structural containment per the one-node ruling. Routes
+    /// through the delta spine so the change journals attributed
+    /// (`ReplaySetNodeNestedById`).
+    pub fn set_node_nested_for(
+        &mut self,
+        member: uuid::Uuid,
+        nested: Option<kernel::graph::LogId>,
+    ) -> bool {
+        let Some(key) = self.graph.get_node_key_by_id(member) else {
+            return false;
+        };
+        matches!(
+            kernel::graph::apply::apply_graph_delta(
+                &mut self.graph,
+                kernel::graph::apply::GraphDelta::SetNodeNested { key, nested },
+            ),
+            kernel::graph::apply::GraphDeltaResult::NodeMetadataUpdated(true)
+        )
+    }
+
     fn title_at_key(&mut self, key: NodeKey, title: String) -> bool {
         let updated = matches!(
             kernel::graph::apply::apply_graph_delta(

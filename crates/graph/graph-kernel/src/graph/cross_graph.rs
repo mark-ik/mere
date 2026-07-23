@@ -98,6 +98,10 @@ impl Graph {
             last_session_visited: 0,
             frame_layout_hints: Vec::new(),
             frame_split_offer_suppressed: false,
+            // Deliberately NOT carried: a copy is un-resided. Carrying the
+            // LogId would leave two nodes bearing ONE world file; the fork
+            // instead re-homes worlds when the slot-convention move lands.
+            nested: None,
         });
 
         self.url_to_nodes.entry(url).or_default().push(key);

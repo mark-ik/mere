@@ -254,8 +254,9 @@ different aspect of the one node, not competing node classes):
 | **stream** | the live short-term flow; consolidates or is forgotten | engrams (`graph_engram`/`engram_seal`) + athanor/memory_levels |
 
 **"Are graphs denizens?" — the category dissolves.** Denizen is not a node
-class; it is a *facet bundle* (a personae subject + grants + a nested log —
-today's `denizen_bindings`, converging to `denizen.*` facets). Containment is
+class; it is a *facet bundle* (a personae subject + grants — the
+`denizen.binding` facet, since 2026-07-22 `{subject, kind}` only; the nested
+world hangs on `Node.nested` itself). Containment is
 structure; denizen-ness is agency; they are orthogonal facets on the one node.
 So: a graph is a container, and it is *also* a denizen exactly when it is
 subject-bound (a servitor's home graph, a pack's graph). Most session graphs
@@ -276,6 +277,20 @@ v0 that does not gate on any of this: mint + session-switch.
 
 ## Progress
 
+- **2026-07-22 (CONTAINMENT IS STRUCTURE — `Node.nested` lands on the kernel
+  Node):** the orthogonality ruling above got its structural half. The kernel
+  `Node` gains `nested: Option<LogId>` (rkyv adapter + serde-defaulted
+  `PersistedNode.nested`, old snapshots load unchanged) and implements
+  chartulary's `GraphBearing`; a `SetNodeNested` delta runs the apply/capture
+  spine so bearing a world journals attributed; canvas exposes
+  `set_node_nested_for`. The `denizen.binding` facet slims to pure agency
+  (`{subject, kind}`; legacy `nested_log` reads once for the adopt heal,
+  never writes back). A cross-graph copy does not carry `nested` — a fork's
+  copy is un-resided until the slot-convention world move makes forked worlds
+  real copies. Receipts: kernel 277 / session-runtime 217 / merecat 99;
+  headed `denizen_b1.scn` RESULT ok with `nested` in `graph.json` and the
+  slimmed facet in `facets.json`. Full narrative in the participant plan's
+  progress log.
 - **2026-07-20 (SIDECAR CONVERGENCE COMPLETE — mere `10084b3`, merecat
   `ed75c79`):** the last two bespoke per-node sidecars joined the facet store.
   **denizen.*: born as facets** — `denizen_bindings.json` removed before any

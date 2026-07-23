@@ -51,6 +51,7 @@ fn persisted_node(node_id: Uuid, url: &str) -> crate::persistence::PersistedNode
         derivations: Vec::new(),
         body: None,
         last_session_visited: 0,
+            nested: None,
     }
 }
 

@@ -166,6 +166,28 @@ Coordination: the moot (gemot) refactor **settled 2026-07-17** (mere `a4da519` "
 
 ## Progress
 
+- **2026-07-22 (containment RULED structural — `Node.nested` + `GraphBearing`
+  on the kernel Node)**: Mark's read held: graph-bearing containment is
+  STRUCTURE, so the world pointer moved off the `denizen.binding` facet onto
+  the kernel `Node` itself — `nested: Option<LogId>` (rkyv `LogIdAsString`
+  adapter, serde-defaulted `PersistedNode` twin so old snapshots load
+  unchanged), `impl chartulary::GraphBearing for Node`, and a
+  `SetNodeNested` delta through the apply/capture spine so residency
+  journals attributed like every other graph edit. The 2026-07-18 rejection
+  (rkyv/constructor churn; "mismodels a servitor as a web page") is
+  REVERSED: the one-node ruling landed the same day and dissolved the
+  modeling objection (denizen-ness = facet bundle = agency; containment =
+  structure; orthogonal), and the churn was three constructors. What the
+  facet keeps is pure agency: `{subject, kind}`; a legacy `nested_log`
+  reads for a one-time adopt heal (`Denizens::legacy_heals`) and is never
+  written again. A cross-graph copy deliberately does NOT carry `nested`
+  (two nodes must not bear ONE world file); the fork-carries-worlds move
+  is the slot-convention follow-on. This closes the two pointer-bridge
+  gaps: archive-never-orphan (the world rides the node through archive)
+  and fork-shares-world. Receipts: kernel 277 / session-runtime 217 /
+  merecat 99 green; headed `denizen_b1.scn` RESULT ok on the new shape,
+  with `graph.json` carrying `nested` on the denizen node and the binding
+  facet persisting as `{subject, kind}` only.
 - **2026-07-22 (B1 COMPLETE — mere `e54ca8cf`, merecat `8b3ad31`)**: the
   user-facing half landed and the done-condition is met with receipts. mere's
   `GraphJournal` adopted the attribution envelope (`AttributedDelta { author,

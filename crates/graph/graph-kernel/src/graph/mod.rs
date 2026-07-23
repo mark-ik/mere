@@ -115,6 +115,9 @@ pub use capture::{
     set_captured_delta_hook,
 };
 pub use journal::{AttributedDelta, GraphJournal, USER_AUTHOR, journal_capture_hook};
+// The borne-graph identity type (`Node.nested`): part of the node's public
+// surface, re-exported so consumers name it without a direct codicil dep.
+pub use codicil::LogId;
 pub use edge_data::{
     ArrangementData, ContainmentData, EdgeMetrics, ImportedData, ProvenanceData, REL_VOCAB,
     SemanticData, SemanticStatement, SemanticStatementSpec, StatementAssert, Traversal,
@@ -421,6 +424,7 @@ impl Graph {
             addresses: vec![crate::address::AddressClaim::primary(primary_address)],
             frame_layout_hints: Vec::new(),
             frame_split_offer_suppressed: false,
+            nested: None,
         });
 
         self.url_to_nodes.entry(url).or_default().push(key);

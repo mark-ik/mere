@@ -75,6 +75,36 @@ fn open_predicate_only_edge_survives_snapshot_roundtrip() {
 }
 
 #[test]
+fn nested_graph_survives_snapshot_roundtrip() {
+    // The one-node containment ruling: a node bearing a graph (Node.nested)
+    // keeps its world across save/load, and an unbearing node stays None.
+    let mut graph = Graph::new();
+    let bearer = graph.add_node("mere://denizen/ab12".to_string(), Point2D::new(0.0, 0.0));
+    let plain = graph.add_node("https://a.test/".to_string(), Point2D::new(0.0, 0.0));
+    let _ = apply::apply_graph_delta(
+        &mut graph,
+        apply::GraphDelta::SetNodeNested {
+            key: bearer,
+            nested: Some(codicil::LogId::new("denizens/trail-keeper")),
+        },
+    );
+
+    let restored = Graph::from_snapshot(&graph.to_snapshot());
+
+    let (rb, rnode) = restored.get_node_by_url("mere://denizen/ab12").unwrap();
+    let _ = rb;
+    assert_eq!(
+        rnode.nested.as_ref().map(|log| log.as_str()),
+        Some("denizens/trail-keeper")
+    );
+    let (_, rplain) = restored.get_node_by_url("https://a.test/").unwrap();
+    assert_eq!(rplain.nested, None);
+    // The plain node stayed unbearing in the ORIGINAL too (the setter targeted
+    // one key, not the graph).
+    assert_eq!(graph.get_node(plain).unwrap().nested, None);
+}
+
+#[test]
 fn statement_bucket_survives_snapshot_roundtrip() {
     let mut graph = Graph::new();
     let a = graph.add_node("https://a.test/".to_string(), Point2D::new(0.0, 0.0));
@@ -366,6 +396,7 @@ fn test_snapshot_edge_with_missing_url_is_dropped() {
             properties: Vec::new(),
             derivations: Vec::new(),
             last_session_visited: 0,
+            nested: None,
         }],
         edges: vec![PersistedEdge {
             from_node_id: Uuid::new_v4().to_string(),
@@ -429,6 +460,7 @@ fn test_snapshot_duplicate_urls_last_wins() {
                 properties: Vec::new(),
                 derivations: Vec::new(),
                 last_session_visited: 0,
+            nested: None,
             },
             PersistedNode {
                 node_id: Uuid::new_v4().to_string(),
@@ -455,6 +487,7 @@ fn test_snapshot_duplicate_urls_last_wins() {
                 properties: Vec::new(),
                 derivations: Vec::new(),
                 last_session_visited: 0,
+            nested: None,
             },
         ],
         edges: vec![],

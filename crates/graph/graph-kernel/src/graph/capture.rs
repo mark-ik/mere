@@ -86,6 +86,10 @@ pub enum CapturedDelta {
         node_id: String,
         mime_hint: Option<String>,
     },
+    ReplaySetNodeNestedById {
+        node_id: String,
+        nested: Option<String>,
+    },
     ReplaySetNodePinnedById {
         node_id: String,
         is_pinned: bool,
@@ -291,6 +295,12 @@ impl CapturedDelta {
                 GraphDelta::ReplaySetNodeMimeHintById {
                     node_id: parse_uuid(node_id),
                     mime_hint: mime_hint.clone(),
+                }
+            }
+            Self::ReplaySetNodeNestedById { node_id, nested } => {
+                GraphDelta::ReplaySetNodeNestedById {
+                    node_id: parse_uuid(node_id),
+                    nested: nested.clone(),
                 }
             }
             Self::ReplaySetNodePinnedById { node_id, is_pinned } => {
