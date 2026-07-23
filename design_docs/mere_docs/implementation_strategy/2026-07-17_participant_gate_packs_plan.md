@@ -166,6 +166,21 @@ Coordination: the moot (gemot) refactor **settled 2026-07-17** (mere `a4da519` "
 
 ## Progress
 
+- **2026-07-22 (fork CARRIES worlds)**: the follow-on to the containment
+  ruling, at file granularity. `Graph::bear_nested` (kernel, public) sets
+  `nested` directly WITHOUT the delta spine — for copy/load paths building a
+  graph with no journal yet. merecat's `fork_session_from` re-bears each
+  carried world on the fork's copy and copies the world file into the fork's
+  own `denizens/` — donor and fork evolve independent worlds thereafter, and
+  the fork's denizen rebuilds as a full resident with no legacy heal.
+  Receipts: `fork_carries_denizen_worlds_as_real_copies` (merecat 100 green),
+  headed `denizen_fork.scn` RESULT ok with both sessions verified on disk
+  bearing the same world identity in separate files. Archive-never-orphan at
+  the SESSION tier already holds by construction (trash moves the whole
+  session dir, worlds ride along); the NODE tier stays gated on a node-delete
+  affordance merecat does not have yet, and the deeper chartulary
+  slot-convention storage (worlds inside the parent's muniment store,
+  `nested/<log-id>/{log,snap}`) waits for sessions to move off JSON files.
 - **2026-07-22 (containment RULED structural — `Node.nested` + `GraphBearing`
   on the kernel Node)**: Mark's read held: graph-bearing containment is
   STRUCTURE, so the world pointer moved off the `denizen.binding` facet onto
