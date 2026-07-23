@@ -82,7 +82,7 @@ repository = "https://github.com/mark-ik/mere"
 # MIT/Apache); crates.io deps, local checkout via the gitignored
 # `.cargo/config.toml` `[patch.crates-io]`. (numen the same, on graph-kernel.)
 quint = "0.0.2"
-seiche = "0.0.2"
+seiche = "0.0.3"
 cartography = { package = "mere-cartography", path = "crates/canvas/cartography" }
 # Deterministic graph arrangements (penrose / l-system / phyllotaxis /
 # kanban-timeline / radial-grid / semantic), recaptured from the retired
