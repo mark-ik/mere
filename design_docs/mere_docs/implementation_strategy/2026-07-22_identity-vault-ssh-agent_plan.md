@@ -232,4 +232,38 @@ oversell.
   in-tree with mere/Graphshell, and the fold retires the cross-repo
   path-dep dance for mere itself. Consumers (hocket, woodshed) repoint at
   fold time.
-- Next: V3 (vault CLI).
+- 2026-07-22: **V3 done.** `personae-vault` CLI (bin gated on a new `ssh`
+  feature; `agent` now implies it) with profiles / new-profile / list /
+  show / add-ssh / pub / remove. Secret bytes are never printed (slots
+  report size, kind, category, tier); `show` prints the §3.4 device-loss
+  note, now a library method `CredentialLineage::device_loss_note` so the
+  future vault pane shows the same words. Slot keys accept a unique
+  prefix (`show ssh:SHA256:d3tQ`), with ambiguity listing candidates.
+  Three extractions came out of the work rather than being duplicated:
+  `bootstrap` (backend selection by unlock ladder + profile
+  load-or-create, returning an honest description of what protects the
+  secrets, now used by both bins and ready for the mere/Graphshell host),
+  `ssh_slot` (slot shape + encode/decode/find, shared by agent and CLI),
+  and an `IdentityStorage for &T` blanket impl beside the `Box<T>` one.
+  66 lib tests + 5 CLI tests green, clippy clean on both feature sets.
+- 2026-07-22 V3 receipts: read-only commands against the **real** vault
+  list the live SSH slot; `pub` exported a public key byte-identical to
+  the `.pub` file and to the laptop's `authorized_keys` (the recovery
+  path now that the private file is gone). Mutating commands were
+  exercised against a throwaway vault (add / idempotent re-add with a
+  changed tier / remove / error paths), then deleted. The agent was
+  rebuilt and redeployed after the refactor and re-proved a real login,
+  so the running binary matches the code.
+- Findings from V3: the encrypted-key guard works (a passphrase-protected
+  key is refused with the `ssh-keygen -p` fix, rather than being stored
+  in a form the agent could not sign with); `PassphraseEncryptedStorage`
+  writes its file on first save, not at open, so "vault exists" is not a
+  post-open invariant.
+- Follow-ons noted, not built: interactive passphrase prompt for
+  importing encrypted keys (needs a terminal-prompt dep); a `generate`
+  command that mints a key straight into the vault so no plaintext file
+  ever exists; ShortTtl relock enforcement.
+- Next: V4 (broader item types) is optional and demand-driven; the
+  higher-value next step is the auto-update pressure test from the
+  [auto-update brief](../../2026-07-22_auto-update_brief.md), since it
+  gates load-bearing deployment of any of this.

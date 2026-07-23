@@ -1,0 +1,30 @@
+# The app-core component host: the native side of the `app-core` WIT world —
+# the ENVELOPE lane (ruled 2026-07-23). A component emits app actions through
+# one stable `{name, payload}` record; this crate instantiates the world, backs
+# the `emit` import with a host-supplied [`ActionSink`], and drives the
+# lifecycle. It knows nothing about any particular app's action vocabulary:
+# decoding an envelope and deciding whether it may lower is the sink's job
+# (merecat's ring gate), so the host stays app-agnostic.
+#
+# A sibling of document-host over the same `crates/script/wit` contract: two
+# worlds, two hosts, one WIT package.
+[package]
+name = "app-host"
+version = "0.0.1"
+edition = "2021"
+rust-version = "1.93.0"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+# wasmtime 45, matching document-host (one engine version across the two hosts).
+wasmtime = "45"
+wasmtime-wasi = "45"
+# Drives the async exports from sync callers; the lib stays executor-neutral.
+pollster = "0.4"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "macros"] }

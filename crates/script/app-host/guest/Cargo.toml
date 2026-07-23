@@ -1,0 +1,21 @@
+# The app-core test guest: a component that emits app actions through the
+# envelope. Standalone workspace with its own toolchain pin, built to
+# wasm32-wasip2 by the host's build.rs; the host tests load the artifact.
+[workspace]
+
+[package]
+name = "app-core-guest"
+version = "0.0.1"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.58"
+
+[profile.release]
+opt-level = "s"
+strip = true
