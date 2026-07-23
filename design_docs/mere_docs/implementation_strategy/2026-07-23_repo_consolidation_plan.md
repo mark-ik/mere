@@ -1,0 +1,287 @@
+# Repo Consolidation Plan
+
+**Date:** 2026-07-23
+**Status:** ruled with Mark 2026-07-23; execution started same day. Later
+rulings: the bucket repo is named **smolweb**, and the errand spec crates
+(spartan/nex/guppy protocols) move into it, with gemini, titan, gopher,
+finger, plain, a shared TOFU/client-cert helper, and gemtext listed as
+trigger-gated later extractions from errand. **Personae folds** with a
+dependency-minimal wall and an explicit re-extraction trigger: the first
+external verifier, interop partner, or security-audit engagement pulls it
+back into a dedicated repo. Execution order is adjusted from the phase
+numbering: C4 runs first among code phases (active radio hardware work wants
+the merged workspace), C2 runs last (a live genet livery session holds
+uncommitted edits), consumer repoints happen only after each receiving repo
+is pushed green, and old repos are archived only at the very end, so no
+intermediate state leaves a consumer unresolvable. This plan supersedes the
+repository-boundary posture of the
+[Graphshell remote projection host plan](2026-07-22_graphshell_remote_projection_host_plan.md)
+sections 2, 3, and 9 where they conflict; that plan's protocol design, proof
+sequence, and receipts remain in force.
+
+**Companions:** the
+[projection-engine prior-art brief](../research/2026-07-21_projection_engine_prior_art_brief.md),
+the [projection proofs plan](2026-07-21_projection_proofs_plan.md), the
+[Murm peer-runtime and Moot-domain plan](2026-07-12_murm_peer_runtime_and_moot_domain_plan.md)
+(promotion rows withdrawn by this plan), and the
+[mere/merecat boundary pass plan](2026-07-09_mere_merecat_boundary_pass_plan.md).
+
+## 1. Ruling
+
+Mere is the platform; the family repos that were extracted from it remain its
+components wherever they are packaged. The 2026-07-22 Graphshell plan framed
+the session stack as a product-neutral commons with Mere as one endpoint among
+peers. That framing is withdrawn. Graphshell is Mere's shell and remote port,
+the session protocol is Mere's session grammar, and an application that
+implements the endpoint is participating in Mere. The genet/pelt shape is the
+governing precedent: the platform repo hosts its own contracts, runtime, and
+reference shell, and products consume them from it.
+
+The bar for a separate repository: **real coherent utility and identity apart
+from mere, genet, merecat, woodshed, hocket, and isometry.** A repo below that
+bar folds into mere or genet, or is consumed through them. The dependency
+graph should mostly pull mere or genet.
+
+One structural invariant makes the split between the two buckets: nothing
+genet consumes may move into mere, or genet acquires a cycle. Genet's family
+pulls are netrender, netfetcher, misfin, and wgpu-scry; all stay genet-side or
+independent.
+
+## 2. Target shape
+
+```text
+products     merecat   isometry   woodshed   hocket
+                \         |          |        /   (hocket also -> wavicle, woodshed)
+platform     mere ................................ genet
+             graph domain, murm/moot,             engine, pelt, cambium,
+             graphshell, eidetic, scenograph,     sprigging, meristem,
+             conatus, personae, servitor,         netfetcher, tinct
+             armillary, vates, sibylla
+                \                                  /
+components   netrender   wavicle   radio   wgpu interop   smolweb (misfin)
+```
+
+Products pull mere and genet; the two platforms pull the components that pass
+the bar. Crates.io package names survive every move; only repository homes,
+`repository` fields, and git URLs change.
+
+## 3. What moves
+
+### Into mere (one folder per incoming family under `crates/`)
+
+| Incoming repo | Crates | Consumers to repoint |
+|---|---|---|
+| personae | `personae` | woodshed, hocket, isometry, mere's `identity` alias |
+| armillary | `armillary` | mere, merecat, isometry, hocket, vates |
+| eidetic | `muniment`, `codicil`, `chartulary`, `scholia` | mere (graph-kernel, session-runtime, murm, moot, mesh, intel, eidetic lane), merecat, isometry, woodshed, hocket, servitor |
+| servitor | `servitor` | mere, merecat |
+| vates | `vates` | mere |
+| sibylla | `sibylla` | mere |
+| conatus | `numen`, `quint`, `seiche` | mere (currently crates.io pins; become workspace paths) |
+| scenograph | `sceno`, `scenomise`, `scenotime`, `scenograph` | mere, merecat, isometry, graphshell |
+| graphshell | `graphshell-protocol`, `graphshell-client`, `graphshell-endpoint`, `graphshell-stdio`, `graphshell` | merecat, isometry |
+
+Notes:
+
+- The incoming eidetic four join `crates/eidetic/` beside the existing
+  adapter lane (`eidetic-core`, `eidetic-fjall`, fetchers, search). This
+  settles the mere-eidetic naming: primitives and adapters live in one folder,
+  and the orphaned bare `eidetic` crates.io name is documented where it is
+  reserved.
+- `crates/persona/identity` (the dead duplicate) is deleted in the same change
+  that lands personae; the workspace `identity` alias becomes a workspace path.
+- The graphshell five keep their crate names and land under
+  `crates/graphshell/`; the facade is Mere's reference client, pelt-shaped.
+- Scenograph is below the bar today because every consumer is mere-side. If
+  outside consumers materialize later, extraction is available then; the P3/P4
+  receipts attach to crate contents and survive the move.
+
+### Into genet
+
+| Incoming repo | Crates | Consumers to repoint |
+|---|---|---|
+| cambium | `cambium`, `cambium-nematic`, `cambium-winit`, `meristem`, `sprigging` | merecat; genet's `genet_web_smoke` example path dep becomes a workspace reference |
+| netfetcher | `netfetcher` | genet (genet-documents, genet-wpt become workspace refs), mere (`crates/system/fetch`) |
+
+tinct already lives in genet (`components/tinct`); woodshed and hocket repoint
+from the `mark-ik/tinct` mirror to genet.git and the mirror repo retires with
+a tombstone.
+
+### New smolweb bucket
+
+New repo `smolweb`. `misfin` moves in (MIT, held in stewardship; the transfer
+offer to the protocol author stays visible in the repo README). Candidates to
+join: `spartan-protocol`, `nex-protocol`, `guppy-protocol`, currently inside
+genet's errand component; **decision gate: Mark rules whether they move now or
+stay in genet.** Errand itself stays in genet as the client integration and
+keeps consuming `misfin` from crates.io, unchanged.
+
+### Radio family
+
+Execute the already-ruled merge: `tulle`, `sennet`, `tucket` fold into the
+`retinue` workspace, preserving crate names, histories, provenance files, and
+the license split (crates MIT/Apache, firmware images GPLv3, kept in separate
+folders exactly as today). Mere's `path = "../retinue"` becomes a git pin to
+the merged workspace.
+
+### Stays separate, passing the bar
+
+| Repo | Why it passes |
+|---|---|
+| netrender | Public render engine, servo-upstream lineage, upstream of both platforms. Fold target if ever ruled otherwise is genet, never mere. |
+| wavicle | First pure-Rust WavPack codec; zero family coupling. |
+| radio workspace | Own hardware, firmware, FCC, and business surface. |
+| wgpu-graft, wgpu-scry, wgpu-weld | Standalone public interop libs, one-way deps, consumed via pins. Optional later: one wgpu workspace. |
+| smolweb | Public protocol family with stewardship obligations. |
+| merely-made.github | Brand site; no Rust edges. |
+
+### Withdrawn
+
+The murm/moot promotion to `repos/murm` and `repos/moot` is withdrawn. They
+stay in mere; isometry keeps pulling them from mere.git. The audio-primitives
+standalone promotion is deferred: hocket repoints to woodshed.git, and a
+standalone repo waits for a third consumer.
+
+## 4. Invariants and walls
+
+1. **No cycle:** netrender, netfetcher, misfin, wgpu-* never enter mere.
+2. **The walls travel.** The graphshell crates keep their G0-G4 discipline
+   inside mere as CI checks scoped to those crates plus the scenograph four:
+   no kernel or product dependency from the portable crates, wasm32 check for
+   `graphshell-protocol`/`-client`, warning-denying clippy. Pelt-core is the
+   precedent that contracts stay honest inside a platform repo only when the
+   checks are mechanical.
+3. **History preserved.** Every absorption is a subtree/merge that keeps the
+   incoming repo's history, the technique already used for the eidetic and
+   conatus family merges and graphshell PR #308. Absorbed GitHub repos are
+   archived with a tombstone README naming the new home. crates.io publishes
+   continue from the new home; `repository` fields update at next publish.
+4. **Licenses unchanged per crate.** Incoming mere-side crates are MIT/Apache
+   already; MPL stays genet-side (Servo-derived only), per the founding
+   convention.
+5. **One absorption per change.** Each move lands as one commit pair: subtree
+   plus workspace membership in the receiving repo, consumer repoints in the
+   same session. Targeted `cargo check -p` per touched consumer, not broad
+   workspace checks, while sibling work is in flight. No concurrent test runs.
+
+## 5. Phases
+
+### C0. Record the ruling in the docs
+
+- Amend the Graphshell plan: status note pointing here; section 2's
+  "must not depend on Mere" becomes a crate-linkage rule (portable crates do
+  not link the kernel) rather than a repo rule; section 3's repo layout
+  superseded; section 9 rows updated (murm/moot withdrawn, audio-primitives
+  deferred, boundary map reread against the bar).
+- Amend the prior-art brief with one dated note: the projection
+  compiler/runtime destination is realized as the scenograph family inside
+  mere; Mere names the platform, not one product among peers.
+- Amend DOC_POLICY's inheritance paragraph: new Graphshell documentation
+  belongs in mere's design_docs again once the crates land.
+- DOC_README updated in the same session as each amendment.
+
+**Done when:** no active doc contradicts the target shape in section 2.
+
+### C1. Pin hygiene with non-moving targets
+
+- woodshed and hocket: tinct repointed to genet.git.
+- hocket: audio-primitives to woodshed.git, wavicle to wavicle.git or
+  crates.io.
+
+**Done when:** woodshed and hocket build from clean clones with those pins,
+and no committed sibling path targets a repo that is staying put.
+
+### C2. Genet absorption
+
+- Subtree cambium (five crates) and netfetcher into genet; workspace
+  membership; `genet_web_smoke`'s cambium path dep becomes a workspace
+  reference, removing the example-only cycle.
+- Repoint merecat (cambium, sprigging) and mere (`crates/system/fetch`,
+  netfetcher) to genet.git.
+- Archive the cambium and netfetcher GitHub repos with tombstones.
+
+**Done when:** a fresh genet clone builds the absorbed crates, merecat and
+mere check green on the new pins, and the old repos are read-only.
+
+### C3. Mere absorption, bottom-up
+
+Ordered so mere is green after every sub-step. Coordinate with in-flight
+sibling sessions before C3b; the eidetic step touches every product.
+
+- **C3a personae + armillary.** Delete `crates/persona/identity`; the
+  `identity` alias becomes a workspace path. Repoint woodshed, hocket,
+  isometry.
+- **C3b eidetic four** into `crates/eidetic/`. Repoint merecat, isometry,
+  woodshed, hocket, servitor (interim, until C3c), and mere's own git pins
+  become paths.
+- **C3c servitor, vates, sibylla, conatus.** All their family deps are now
+  workspace-internal. Mere's crates.io pins for numen/quint/seiche become
+  workspace paths.
+- **C3d scenograph four** into `crates/scenograph/`. Repoint merecat and
+  isometry.
+- **C3e graphshell five** into `crates/graphshell/`, with the section 4 CI
+  walls landing in the same change. Repoint merecat and isometry. Re-archive
+  mark-ik/graphshell with a tombstone; its donor lineage and the 2026-07-22
+  portable workspace remain in its read-only history, and the same history
+  arrives in mere via the subtree.
+
+**Done when:** all nine incoming families build as mere workspace members
+from a fresh clone, every consumer is repointed and green, the G1-G4
+receipt tests pass from their new home, and the absorbed repos are
+archived.
+
+### C4. Radio merge
+
+Per the standing ruling: tulle, sennet, tucket into the retinue workspace;
+provenance and license split preserved; mere's transport pin becomes git.
+
+**Done when:** one radio workspace builds all crates and firmware targets,
+and mere clean-clones without the path dep.
+
+### C5. Smolweb bucket
+
+Found `repos/smolweb`; subtree misfin in; stewardship note in the README;
+resolve the errand-protocols decision gate with Mark before or during this
+phase.
+
+**Done when:** misfin builds and publishes from smolweb, genet errand is
+unchanged, and the old misfin repo is tombstoned.
+
+### C6. Verify and disseminate
+
+- Tree-wide gate: no committed cross-repo `path =` dependency remains.
+- Clean-clone builds: mere, genet, merecat, woodshed, hocket, isometry.
+- Regenerate the repo dependency graph and compare against section 2.
+- Update the memory index and any plan that names an old home.
+- Archive this plan per DOC_POLICY on completion.
+
+**Done when:** the regenerated graph matches the target shape and the six
+primary repos build from clean clones.
+
+## Findings
+
+- Manifest sweep of all 28 repos, 2026-07-23: mere is the apex consumer with
+  13 family deps and in-degree 2 (merecat deep, isometry murm/moot lane);
+  every product consumes genet, netrender, and eidetic; mere and graphshell
+  have identical dependents (merecat, isometry).
+- Committed sibling paths found in hocket (woodshed, eidetic, armillary,
+  personae, wavicle), woodshed (chartulary, scholia, personae), and mere
+  (retinue, personae via `identity`), beyond the known radio-family paths.
+  All are eliminated by C1 through C4.
+- conatus reaches mere as crates.io pins today (`numen 0.1`, `quint 0.0.2`,
+  `seiche 0.0.3`); it has no consumer outside mere.
+- The `mark-ik/tinct` mirror duplicates `genet/components/tinct`.
+- `crates/persona/identity` is a dead duplicate; the live alias already
+  targets personae by path.
+- genet's `genet_web_smoke` example reaches cambium by sibling path,
+  a dev-only cycle that C2 removes.
+- The 2026-07-22 Graphshell plan's product-dependency walls are receipts
+  about crate contents, not repo homes; they relocate intact as CI checks.
+
+## Progress
+
+### 2026-07-23
+
+- Ruled with Mark: the separate-repo bar, the mere and genet buckets, the
+  smolweb bucket for misfin, tinct through genet, and the withdrawal of the
+  neutral-commons framing. Plan written; no code or repo moves yet.

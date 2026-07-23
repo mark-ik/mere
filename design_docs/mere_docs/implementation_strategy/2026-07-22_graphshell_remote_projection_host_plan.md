@@ -1,6 +1,17 @@
 # Graphshell Remote Projection Host Plan
 
 **Date:** 2026-07-22
+**Superseded in part 2026-07-23** by the
+[repo consolidation plan](2026-07-23_repo_consolidation_plan.md): Graphshell
+is ruled Mere's shell and remote port, and the session protocol is Mere's
+session grammar; the five crates move into the mere repository with their
+dependency walls intact as CI checks. Section 2's "must not depend on Mere"
+survives as a crate-linkage rule (the portable crates do not link the kernel
+or products), not a repository rule. Section 3's repository layout is
+superseded. Section 9's murm/moot promotion row is withdrawn and the
+audio-primitives row deferred to a git pin. The four protocol planes, the
+disclosure rules, the G-series proof sequence, and all landed receipts remain
+in force unchanged.
 **Status:** the local G0 boundary is sealed; G1's loopback presentation, G2's
 diff/resume/persistence, and G3's real Merecat endpoint proofs are complete as
 of 2026-07-22. The Graphshell workspace is published on the existing

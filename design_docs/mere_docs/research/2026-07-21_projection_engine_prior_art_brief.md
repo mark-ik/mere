@@ -51,6 +51,13 @@ The second critique extends it into a destination:
 > Mere's correct destination is a **projection compiler and runtime for interactive surfaces**.
 > Dots joined by strokes are one representation among many.
 
+**2026-07-23 note:** this destination was realized as the scenograph family
+(sceno, scenomise, scenotime, scenograph), which the
+[repo consolidation plan](../implementation_strategy/2026-07-23_repo_consolidation_plan.md)
+homes inside the mere repository. "Mere" in this brief names the platform,
+not one product among peers; Graphshell is its shell and remote port. Read
+repository boundaries as packaging, never as authority.
+
 The core operation:
 
 ```text

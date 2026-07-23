@@ -94,11 +94,14 @@ Every implementation pass is also a design probe. After each implementation pass
 
 The donor graphshell repo was **GitHub-archived on 2026-05-27** (read-only at <https://github.com/mark-ik/graphshell>; local clone deleted). Its design docs are no longer a local sibling. Before archiving, all 633 donor docs were swept into two curated indexes that are now the entry points for any remaining pull: the [full docs harvest](mere_docs/research/2026-05-27_graphshell_docs_full_harvest.md) (what to pull, where it lives in the donor, which mere domain wants it) and the [concept brief](mere_docs/research/2026-05-17_graphshell_harvest_brief.md). Treat those indexes as canonical; fetch detail from the GitHub archive when a slice needs it.
 
-The Graphshell name was reclaimed on 2026-07-22 for the new family-wide remote
-projection host. Its founding plan lives temporarily under `mere_docs`; once
-the clean sibling repository exists, new Graphshell documentation belongs
-there. The archived donor and the new product must remain explicitly distinct
-in links and prose.
+The Graphshell name was reclaimed on 2026-07-22 for the family-wide remote
+projection host, and on 2026-07-23 the
+[repo consolidation plan](mere_docs/implementation_strategy/2026-07-23_repo_consolidation_plan.md)
+ruled Graphshell as Mere's shell and remote port, homed in this repository.
+Graphshell documentation belongs here under `mere_docs` (a dedicated
+`graphshell_docs/` area-root may be founded when volume warrants). The
+archived donor and the current Graphshell must remain explicitly distinct in
+links and prose.
 
 When pulling a donor doc's content into a mere doc:
 
