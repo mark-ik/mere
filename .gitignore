@@ -73,4 +73,4 @@ mere-sessions/
 
 # Local cargo path overrides (genet/netrender local working copies) - local-dev only
 .cargo/
-/target-proof/
+/target-*/

@@ -167,7 +167,57 @@ oversell.
   encrypted envelopes (inherited from the existing backends), not CBOR as
   this plan first guessed; staying with the incumbent format, one shape,
   no migration.
-- Next: V2 agent bin (feature-gated `personae-agent` bin so the published
-  lib keeps a lean default dep tree). The cutover steps that touch the
-  Windows machine state (pipe/service arrangement, deleting the plaintext
-  key) wait for Mark at the keyboard.
+- 2026-07-22: **V2 built and live-verified.** New `personae::agent` module
+  (feature `agent`) + `personae-agent` bin (`required-features` gated, so
+  the published lib's default dep tree is unchanged). `VaultAgent<S>`
+  implements ssh-agent-lib 0.6's `Session`: request_identities / sign /
+  add_identity / remove_identity / remove_all_identities over the vault's
+  `ssh` slots (Direct slots, payload = OpenSSH-encoded private key,
+  ProtocolKey instance = SHA256 fingerprint, so re-adds are idempotent).
+  Per-use tier refuses to sign (no confirmation UI yet, refusing keeps the
+  tier honest); short-TTL treated as Session until relock lands. 58 tests
+  green (6 new agent tests incl. sign-verify round trip and per-use
+  refusal); clippy clean. Also added the blanket
+  `IdentityStorage for Box<T>` impl so the bin picks its backend at
+  runtime (auto-OS default, `PERSONAE_PASSPHRASE` env for the portable
+  vault).
+- 2026-07-22: **live receipt on the real machine pair.** Stock Windows
+  `ssh-add` imported the session key into the DPAPI-sealed vault
+  (`%LOCALAPPDATA%\personae\vault`, profile auto-created), `ssh-add -l`
+  listed it, and `ssh` to the Fedora laptop succeeded **with the plaintext
+  key file moved aside**, so the signature provably came from the vault
+  through the agent on the stock `\\.\pipe\openssh-ssh-agent` pipe (stock
+  service remains disabled). Plaintext file restored afterward; shredding
+  it is Mark's call at cutover.
+- 2026-07-22 **ruling (Mark): the agent's resident home is
+  mere/Graphshell** (the reclaimed family projection host, not the
+  archived donor). `personae::agent` stays a library module precisely so
+  the resident host process serves the pipe/socket in-process; that host
+  is also where the per-use confirmation UI, the vault pane, and
+  lock/unlock control live. Launch-at-login mechanics come from the host,
+  not from a standalone agent install. A scheduled task (or shell-profile
+  lazy start) is interim dogfood scaffolding only, and is removed when the
+  host adoption lands.
+- 2026-07-22: **interim launch installed (Mark approved the scheduled
+  task).** Release exe + `personae-agent.vbs` at
+  `%LOCALAPPDATA%\personae\bin`; logon-triggered task `personae-agent`
+  for the user (no elevation needed), no execution time limit,
+  battery-safe. **Crash recovery lives in the wrapper, not the task**:
+  the first cut relied on Task Scheduler's restart-on-failure and a
+  kill test proved that policy only covers failure to *launch* (the
+  killed agent's 0xFFFFFFFF exit was recorded as a completion, no
+  restart). The wrapper now relaunches the agent in a loop with a 5s
+  pause; re-test: killed agent back in under 12s and signing logins.
+  Stopping for real = stop the task, then stop the process. Agent logs to `%LOCALAPPDATA%\personae\agent.log` via the
+  new `--log-file` flag. Also implemented the `session-bind@openssh.com`
+  and `query` agent extensions (modern OpenSSH sends session-bind on every
+  connection; v1 verifies the binding signature and acknowledges,
+  constraint enforcement deferred), which cleared the per-connection
+  UnsupportedCommand log error. Live receipts: task-hosted agent answers
+  `ssh-add -l` and signs a real laptop login; redeploy procedure = stop
+  task + stop process, copy exe, start task (the exe stays locked while
+  running). All of this is the interim scaffolding the mere/Graphshell
+  host ruling retires.
+- Remaining for the V2 done condition: delete the plaintext
+  `~/.ssh/id_ed25519` (Mark's explicit call). V3 (vault CLI) is next
+  after that.

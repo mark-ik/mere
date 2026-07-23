@@ -28,7 +28,7 @@ use super::build::{
     marquee_rect_cmds, set_class, set_style,
 };
 use super::edge_cells::{edge_cell_for_relation, relation_cell_overlay, selected_edge_overlay};
-use super::{NODE_HALF, NodeShape, NodeState, Canvas, PAN_DECAY};
+use super::{NodeShape, NodeState, Canvas, PAN_DECAY};
 
 impl Canvas {
     /// Advance one frame at viewport `(w, h)` and return the composited content
@@ -244,7 +244,16 @@ impl Canvas {
             // (Isometric camera P1 — billboards.)
             let (ax, ay) = self.camera.to_screen(pos);
             let z = self.camera.zoom;
-            let half = NODE_HALF * z;
+            // The face paints at the node's resolved footprint, so every size
+            // channel (per-node override, size-by-degree / -importance /
+            // -recency) is visible on the gnode itself — not only in the
+            // collider, edge trim, and rings. The `.gnode` class keeps 36px as
+            // its default; this inline width/height wins per node. `half`
+            // generalizes the old `NODE_HALF * z` (identical at the default
+            // size) so the billboard stays centred on its anchor.
+            // (Projection proofs — P3, the visible size channel.)
+            let face = self.node_size(key);
+            let half = face * 0.5 * z;
             // P3 fake height: raise the gnode above its ground anchor (a stem, drawn under
             // the gnodes, drops back to the ground where the edges meet). Zero unless
             // height-by-degree is on. (Isometric camera P3 — fake height.)
@@ -259,11 +268,13 @@ impl Canvas {
                 &mut self.node_dom,
                 gnode,
                 &format!(
-                    "transform: translate({}px, {}px) scale({}); z-index: {};",
+                    "transform: translate({}px, {}px) scale({}); z-index: {}; width: {}px; height: {}px;",
                     ax - half,
                     (ay - lift) - half,
                     z,
-                    depth
+                    depth,
+                    face,
+                    face
                 ),
             );
             // Selection wins (orange); otherwise color by activation state —
@@ -347,7 +358,9 @@ impl Canvas {
             // selection must stay readable at a glance once an icon lands
             // (representations carry node identity).
             let (cx, cy) = self.camera.to_screen(*pos);
-            let half = NODE_HALF * super::FAVICON_INSET * self.camera.zoom;
+            // Inset within the node's *resolved* face, so a resized node carries
+            // its icon proportionally (identical at the default size).
+            let half = self.node_size(key) * 0.5 * super::FAVICON_INSET * self.camera.zoom;
             let (x0, y0, x1, y1) = (cx - half, cy - half, cx + half, cy + half);
             favicon_cmds.push(PaintCmd::DrawImage(ImageItem {
                 placement: CommonPlacement::new(LayoutRect::new(
