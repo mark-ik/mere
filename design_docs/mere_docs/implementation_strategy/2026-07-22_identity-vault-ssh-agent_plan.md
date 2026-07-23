@@ -218,6 +218,18 @@ oversell.
   task + stop process, copy exe, start task (the exe stays locked while
   running). All of this is the interim scaffolding the mere/Graphshell
   host ruling retires.
-- Remaining for the V2 done condition: delete the plaintext
-  `~/.ssh/id_ed25519` (Mark's explicit call). V3 (vault CLI) is next
-  after that.
+- 2026-07-22: **V2 done condition met.** Plaintext `~/.ssh/id_ed25519`
+  deleted (filesystem delete; a secure wipe would not guarantee physical
+  erasure on SSD anyway); `.pub` kept for reference. Post-deletion login
+  to the laptop verified: the vault is now the only local holder of the
+  key. Recovery story if the vault dir or its DPAPI root is lost:
+  register a replacement key on the laptop, per the
+  LocallyGeneratedExternallyRegistered lineage.
+- 2026-07-22 **intent (Mark): personae folds into the mere repo**
+  (family-repo pattern, like eidetic/conatus). Not executed yet;
+  repos/personae stays the standalone home and publish source until the
+  merge. Shapes V3+: the vault CLI and pane land knowing they end up
+  in-tree with mere/Graphshell, and the fold retires the cross-repo
+  path-dep dance for mere itself. Consumers (hocket, woodshed) repoint at
+  fold time.
+- Next: V3 (vault CLI).

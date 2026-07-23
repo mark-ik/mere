@@ -37,6 +37,18 @@ pub struct DeletedNode {
     pub graph_id: Option<String>,
     /// Deletion time, unix milliseconds.
     pub deleted_at_ms: u64,
+    /// The nested graph the node BORE at deletion (its log id, string form) —
+    /// archive-never-orphan: the world's file moves to the host's archive slot
+    /// with this tombstone as its reference, and recovery re-bears it.
+    /// `#[serde(default)]`: pre-containment tombstones load with `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nested: Option<String>,
+    /// The node's facet bundle at deletion (an opaque `facet-id -> payload`
+    /// map; eidetic does not interpret it) — recovery restores the node's
+    /// character (residency binding, arrangement, web state) alongside its
+    /// identity. `#[serde(default)]`: older tombstones load with `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub facets: Option<serde_json::Value>,
 }
 
 impl TypedPayload for DeletedNode {
@@ -149,6 +161,8 @@ mod tests {
             tags: vec!["reading".to_string()],
             graph_id: Some("graph-1".to_string()),
             deleted_at_ms: at,
+            nested: None,
+            facets: None,
         }
     }
 

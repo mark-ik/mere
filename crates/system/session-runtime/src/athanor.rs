@@ -417,6 +417,8 @@ use muniment::MemoryBackend as MemStore;
             tags: Vec::new(),
             graph_id: None,
             deleted_at_ms: at_ms,
+            nested: None,
+            facets: None,
         }
     }
 
