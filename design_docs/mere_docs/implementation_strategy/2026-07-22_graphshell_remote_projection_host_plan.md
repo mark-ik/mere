@@ -472,6 +472,22 @@ disabled.
 sessions without either product in its dependency graph, proving endpoint and
 client neutrality over the P4 vocabulary.
 
+**Implemented locally 2026-07-22:** Graphshell now owns a product-neutral local
+stdio carrier, endpoint discovery catalog, and generic session switcher.
+Merecat advertises its existing browsing-graph projection through a thin
+endpoint binary. Isometry owns a new endpoint adapter over its campaign world,
+overmap, and tile-board truth; both player scenes lower through the same
+Scenograph score vocabulary already exercised by Merecat. One Graphshell
+process mounted all three advertised sessions from the two endpoint processes,
+resolved their product-owned presentations, and returned both accepted
+curation actions and rejected product actions. The committed Graphshell receipt
+records the exact cross-process run. Graphshell's dependency graph contains
+neither product. Focused native tests and warning-denying Clippy checks pass;
+Graphshell's Wasm check also passes. A headed interaction check remains because
+the execution environment exposed no controllable browser. The local carrier
+remains unauthenticated, so G5 is the next proof rather than a production
+transport claim.
+
 ### G5. Add an authenticated remote carrier
 
 - Bind Personae identity and a local grant to the session handshake.
