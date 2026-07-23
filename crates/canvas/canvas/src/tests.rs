@@ -2637,6 +2637,45 @@ fn persisted_spiral_score_reinstates_the_local_strategy_positions() {
 }
 
 #[test]
+fn a_playing_arrangement_pulls_as_a_field_not_an_override() {
+    // The arrangement stops being an authority and becomes a participant: while
+    // playing, its slots are anchor springs the graph's own forces argue with.
+    let mut canvas = Canvas::new();
+    canvas.visit("https://pull-a.example");
+    canvas.visit("https://pull-b.example");
+    let keys: Vec<_> = canvas.graph().nodes().map(|(k, _)| k).collect();
+    let slots: Vec<_> = keys
+        .iter()
+        .enumerate()
+        .map(|(i, k)| (*k, PortablePoint::new(i as f32 * 40.0, 0.0)))
+        .collect();
+
+    canvas.set_layout_strategy(Some("phyllotaxis.default".to_string()));
+    canvas.apply_strategy_positions(&slots);
+    // Paused: the placement is asserted directly, so no anchor force is needed.
+    assert!(canvas.physics_paused());
+    assert_eq!(canvas.physics.anchor_count(), 0, "paused needs no pull");
+
+    // Playing: the same slots become springs.
+    canvas.set_physics_paused(false);
+    assert_eq!(
+        canvas.physics.anchor_count(),
+        slots.len(),
+        "a playing arrangement anchors its slots"
+    );
+
+    // Zero pull is the seed-only reading: the arrangement is an initial
+    // condition and the graph's own forces take over entirely.
+    canvas.set_arrangement_pull(0.0);
+    assert_eq!(canvas.physics.anchor_count(), 0, "no pull, no anchors");
+    assert_eq!(
+        canvas.layout_strategy(),
+        Some("phyllotaxis.default"),
+        "the arrangement stays selected either way"
+    );
+}
+
+#[test]
 fn physics_is_global_and_composes_with_any_arrangement() {
     // Physics is a capability of the graph, not a property of one layout mode:
     // every arrangement composes with either state, and "force-directed" is

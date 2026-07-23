@@ -139,7 +139,44 @@ impl Canvas {
                     .map(|(k, p)| (*k, Point2D::new(p.x, p.y)))
                     .collect(),
             );
+            self.sync_anchor_force();
         }
+    }
+
+    /// Install the active arrangement's slots as anchor springs, so a *playing*
+    /// graph is pulled toward the arrangement while repulsion, edge springs,
+    /// collisions, coupled fields, and drag all still act — the arrangement as
+    /// a participant, not an override. At zero stiffness the arrangement is a
+    /// pure initial condition (the seed-only reading); the dial in between is
+    /// "how much does the arrangement win". A no-op while paused: the buffered
+    /// positions are asserted directly then, so no force is needed.
+    /// (Arrangement as attractor.)
+    pub(crate) fn sync_anchor_force(&mut self) {
+        let anchors = match (&self.strategy_positions, self.arrangement_pull > 0.0) {
+            (Some(positions), true) if !self.physics_paused => Some(
+                seiche::AnchorSpring::new(
+                    positions.iter().map(|(k, p)| (*k, (p.x, p.y))),
+                )
+                .with_stiffness(self.arrangement_pull),
+            ),
+            _ => None,
+        };
+        self.physics.set_anchor_force(anchors);
+    }
+
+    /// How strongly a playing graph is pulled toward the active arrangement's
+    /// slots. `0.0` = the arrangement only seeds and the graph's own forces take
+    /// over; higher holds its shape against them. (Arrangement as attractor.)
+    pub fn arrangement_pull(&self) -> f32 {
+        self.arrangement_pull
+    }
+
+    /// Set the arrangement pull, re-installing the anchor force and settling so
+    /// the new balance takes. (Arrangement as attractor.)
+    pub fn set_arrangement_pull(&mut self, stiffness: f32) {
+        self.arrangement_pull = stiffness.max(0.0);
+        self.sync_anchor_force();
+        self.settle_physics(SETTLE_TICKS);
     }
 
     /// Record the portable score that produced the active analytic layout.

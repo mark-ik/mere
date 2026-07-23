@@ -525,6 +525,12 @@ pub struct Canvas {
     /// The persisted product-free score that drove the current analytic view.
     /// This is view state, not graph truth. (Projection proofs — P3.)
     projection_score: Option<sceno::Score>,
+    /// How strongly a *playing* graph is pulled toward the active arrangement's
+    /// slots (`seiche::AnchorSpring` stiffness). `0.0` makes an arrangement a
+    /// pure initial condition; higher holds its shape against the graph's own
+    /// forces. The dial between "layout as authority" and "layout as
+    /// participant". (Arrangement as attractor.)
+    arrangement_pull: f32,
     /// A restored score's `(strategy id, graph revision)` claim on the layout.
     /// [`restore_projection_score`](Self::restore_projection_score) buffers the
     /// score's own positions; without this the host's very next

@@ -335,3 +335,29 @@ registry.
   one-shot seed, an arrangement's targets become spring anchors, which is
   exactly the coupling/field model — the same mechanism hulls use. That is
   where arrangements, fields, and physics become one design instead of three.
+- 2026-07-23: **Arrangement-as-attractor landed — arrangements, fields, and
+  physics are now one mechanism.** `seiche::AnchorSpring` (conatus `82ac70f`)
+  gives each node a spring toward the slot its arrangement chose, applied
+  after the graph's own forces so stiffness reads as "how much does the
+  arrangement win". It is deliberately the same shape as `CouplingForce` — a
+  target, a response, a strength — which is what collapses the arrangement
+  lane and the field/hull lane into one design instead of two. Canvas side:
+  `arrangement_pull` (default `DEFAULT_ANCHOR_STIFFNESS`) with
+  `set_arrangement_pull`, and `sync_anchor_force` installing anchors only
+  while *playing* (paused, the buffered positions are asserted directly, so no
+  force is needed). At zero pull the arrangement is a pure initial condition —
+  the seed-only reading — and the graph's forces take over entirely. Pinned by
+  `a_playing_arrangement_pulls_as_a_field_not_an_override`; canvas 143 green.
+  Receipt: the played Spiral now keeps its recognizable shape while relaxing,
+  where the seed-only version dissolved into an unrelated blob.
+  **Build-topology finding (cost of the sibling split)**: merecat could not see
+  the new force at all — mere patches numen/quint/seiche to the local conatus
+  checkout, merecat patched none of them, so it silently built against the
+  published crates. Patching *one* is worse than none: local seiche path-deps
+  local numen/quint, so a partial patch yields two copies of the same types
+  ("expected `numen::coupling::CouplingResponse`, found `CouplingResponse`").
+  The family patches together or not at all; merecat's gitignored
+  `.cargo/config.toml` now mirrors mere's set exactly. Generalizes the
+  cargo-cwd lesson: after extracting a crate, every consumer needs the whole
+  family patched, and a physics change now costs either a publish or a
+  patch-sweep.

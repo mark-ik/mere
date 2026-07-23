@@ -61,6 +61,7 @@ pub(crate) enum PhysicsCommand {
     /// Install (or clear) the pairwise affinity force — the rebuild a fresh affinity signal
     /// triggers ("cluster by affinity"). Position-preserving. (Graph signals — P4.)
     SetAffinityForce(Option<AffinitySpring>),
+    SetAnchorForce(Option<seiche::AnchorSpring>),
     /// Set the linear damping (the "inertia" physics setting) on new + live bodies.
     SetLinearDamping(f32),
     /// Reshape node colliders to per-node face shapes (see [`Simulation::set_node_colliders`]).
@@ -215,6 +216,27 @@ impl Physics {
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::SetAffinityForce(force));
             }
+        }
+    }
+
+    /// Install (or clear, with `None`) per-node **anchor** springs toward an
+    /// arrangement's slots — the layout as a participant in the sim rather than
+    /// an override of it. Position-preserving. (Arrangement as attractor.)
+    pub fn set_anchor_force(&mut self, force: Option<seiche::AnchorSpring>) {
+        match self {
+            Physics::Inline(p) => p.sim.set_anchor_force(force),
+            Physics::Actor(p) => {
+                p.handle.command(PhysicsCommand::SetAnchorForce(force));
+            }
+        }
+    }
+
+    /// The number of anchored nodes (inline backend only). Test introspection.
+    #[cfg(test)]
+    pub(crate) fn anchor_count(&self) -> usize {
+        match self {
+            Physics::Inline(p) => p.sim.anchor_count(),
+            Physics::Actor(_) => 0,
         }
     }
 
@@ -561,6 +583,7 @@ fn apply(
         PhysicsCommand::SetDragging(d) => *dragging = d,
         PhysicsCommand::SetCouplingForces(forces) => sim.set_coupling_forces(forces),
         PhysicsCommand::SetAffinityForce(force) => sim.set_affinity_force(force),
+        PhysicsCommand::SetAnchorForce(force) => sim.set_anchor_force(force),
         PhysicsCommand::SetLinearDamping(damping) => sim.set_linear_damping(damping),
         PhysicsCommand::SetNodeColliders(colliders) => sim.set_node_colliders(colliders),
         PhysicsCommand::SetNodeMaterials(materials) => sim.set_node_materials(materials),

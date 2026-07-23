@@ -481,6 +481,10 @@ impl Canvas {
     /// with physics running. (Physics as a capability.)
     pub fn set_physics_paused(&mut self, paused: bool) {
         self.physics_paused = paused;
+        // The arrangement's anchor springs only exist while playing (paused, the
+        // buffered positions are asserted directly), so the pull follows the
+        // pause. (Arrangement as attractor.)
+        self.sync_anchor_force();
         if self.physics_paused {
             self.physics.halt();
         } else {
