@@ -361,3 +361,28 @@ registry.
   cargo-cwd lesson: after extracting a crate, every consumer needs the whole
   family patched, and a physics change now costs either a publish or a
   patch-sweep.
+- 2026-07-23: **Swatch physics — the capability reaches every graph surface.**
+  Mark: "even swatches should be able to become physics-directed graphs... a
+  gesture, something like knocking twice on the graph's canvas." The blocker
+  was that a swatch is a `GraphCanvasSubgraph` snapshot with no sim, and the
+  obvious fixes were both wrong: rapier does not belong in Cambium (a widget
+  toolkit) nor in the portable projection family (a contract crate). So
+  `scenomise::relax` is dependency-free and deterministic — repulsion between
+  placed items scaled by their measured footprints, springs along routed
+  relations, and a pull back toward the arrangement's own slots. That last
+  term is the `AnchorSpring` idea at swatch scale, so a swatch reads with the
+  *same vocabulary* as the canvas (arrangement as participant, not authority)
+  while the heavyweight sim stays where it belongs. Cost is stated honestly in
+  the docs: `O(steps · n²)`, right for tens of nodes, wrong for thousands —
+  a surface with a real sim keeps using it. **Consumer proof**: isometry's
+  `overmap_positions_relaxed` loosens the realized scene before the viewport
+  fit, locked by a test asserting relaxation changes placement but never
+  membership, stays inside the normalized viewport, and is deterministic
+  (`isometry-views` 38 green; workspace green under `--all-features` per that
+  repo's guard). `None` keeps the analytic path, so the default is unchanged.
+  **Gesture deliberately not invented**: "knock twice" is a good instinct but
+  double-click collides with create-on-canvas in most tools, so the affordance
+  wants its own ruling rather than an inherited default. The capability is
+  reachable by API today; the gesture is a separate, deliberate choice.
+  **Review sweep**: scenograph 29, seiche 53, `mere-canvas` 143,
+  `mere-cartography` 17, `arrangements` 89, `isometry-views` 38 — all green.
