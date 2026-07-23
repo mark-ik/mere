@@ -122,7 +122,9 @@ impl Backend for RedbBackend {
             for op in ops {
                 match op {
                     WriteOp::Put { key, value } => {
-                        table.insert(key.as_str(), value.as_slice()).map_err(backend)?;
+                        table
+                            .insert(key.as_str(), value.as_slice())
+                            .map_err(backend)?;
                     }
                     WriteOp::Delete { key } => {
                         table.remove(key.as_str()).map_err(backend)?;

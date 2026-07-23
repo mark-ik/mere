@@ -153,7 +153,11 @@ impl<Id: Ord + Clone> FacetStore<Id> {
         validator: &impl FacetValidator,
     ) -> Result<(), FacetError> {
         validator.validate(&facet_id, &value)?;
-        self.nodes.entry(node).or_default().facets.insert(facet_id, value);
+        self.nodes
+            .entry(node)
+            .or_default()
+            .facets
+            .insert(facet_id, value);
         Ok(())
     }
 
@@ -253,36 +257,66 @@ mod tests {
     fn a_facet_sets_and_reads_back() {
         let mut store: FacetStore<String> = FacetStore::new();
         store
-            .set("n1".into(), viewer(), json!({ "mode": "reader" }), &AcceptAll)
+            .set(
+                "n1".into(),
+                viewer(),
+                json!({ "mode": "reader" }),
+                &AcceptAll,
+            )
             .unwrap();
         assert_eq!(
             store.get(&"n1".to_string(), &viewer()),
             Some(&json!({ "mode": "reader" }))
         );
-        assert!(store.facets_of(&"n2".to_string()).is_none(), "other nodes have none");
+        assert!(
+            store.facets_of(&"n2".to_string()).is_none(),
+            "other nodes have none"
+        );
     }
 
     #[test]
     fn the_validator_seam_refuses_and_stores_nothing() {
         let mut store: FacetStore<String> = FacetStore::new();
         let err = store
-            .set("n1".into(), viewer(), json!(true), &RejectFacet("web.viewer"))
+            .set(
+                "n1".into(),
+                viewer(),
+                json!(true),
+                &RejectFacet("web.viewer"),
+            )
             .unwrap_err();
         assert_eq!(err.facet, viewer());
-        assert!(store.get(&"n1".to_string(), &viewer()).is_none(), "rejected: nothing stored");
+        assert!(
+            store.get(&"n1".to_string(), &viewer()).is_none(),
+            "rejected: nothing stored"
+        );
         // A different facet passes the same validator.
         store
-            .set("n1".into(), FacetId::new("note.pin"), json!(1), &RejectFacet("web.viewer"))
+            .set(
+                "n1".into(),
+                FacetId::new("note.pin"),
+                json!(1),
+                &RejectFacet("web.viewer"),
+            )
             .unwrap();
-        assert!(store.get(&"n1".to_string(), &FacetId::new("note.pin")).is_some());
+        assert!(
+            store
+                .get(&"n1".to_string(), &FacetId::new("note.pin"))
+                .is_some()
+        );
     }
 
     #[test]
     fn removing_a_facet_prunes_an_emptied_node() {
         let mut store: FacetStore<String> = FacetStore::new();
-        store.set("n1".into(), viewer(), json!("x"), &AcceptAll).unwrap();
+        store
+            .set("n1".into(), viewer(), json!("x"), &AcceptAll)
+            .unwrap();
         assert_eq!(store.remove(&"n1".to_string(), &viewer()), Some(json!("x")));
-        assert!(store.facets_of(&"n1".to_string()).is_none(), "emptied node dropped");
+        assert!(
+            store.facets_of(&"n1".to_string()).is_none(),
+            "emptied node dropped"
+        );
     }
 
     #[test]
@@ -292,8 +326,17 @@ mod tests {
             let mut store: FacetStore<String> = FacetStore::new();
             // A facet id this build has no schema for — arbitrary future/foreign metadata.
             let foreign = FacetId::new("some-other-app.exotic");
-            store.set("n1".into(), foreign.clone(), json!({ "k": [1, 2, 3] }), &AcceptAll).unwrap();
-            store.set("n1".into(), viewer(), json!("reader"), &AcceptAll).unwrap();
+            store
+                .set(
+                    "n1".into(),
+                    foreign.clone(),
+                    json!({ "k": [1, 2, 3] }),
+                    &AcceptAll,
+                )
+                .unwrap();
+            store
+                .set("n1".into(), viewer(), json!("reader"), &AcceptAll)
+                .unwrap();
             store.save(&slots, "facets").await.unwrap();
 
             let restored = FacetStore::<String>::load(&slots, "facets").await.unwrap();
@@ -310,7 +353,9 @@ mod tests {
     fn absent_slot_loads_an_empty_store() {
         pollster::block_on(async {
             let slots = JsonSlots::new(MemoryBackend::new());
-            let store = FacetStore::<String>::load(&slots, "never-saved").await.unwrap();
+            let store = FacetStore::<String>::load(&slots, "never-saved")
+                .await
+                .unwrap();
             assert!(store.is_empty());
         });
     }

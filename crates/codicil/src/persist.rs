@@ -11,7 +11,7 @@
 //! turns an append into one small write instead of a rewrite, and makes entries
 //! immutable by hash.
 
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 
 use muniment::{Backend, Codec, SlotStore, StoreError};
 

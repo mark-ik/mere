@@ -6,7 +6,7 @@
 //! state. Two codecs ship behind features; a consumer can supply its own (CBOR,
 //! rkyv) by implementing this trait.
 
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 
 use crate::error::StoreError;
 

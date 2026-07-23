@@ -25,4 +25,4 @@
 
 pub mod project;
 
-pub use project::{to_jsonld, to_nquads, to_quads, Quad, Term, SCHEMA_KEYWORDS, SCHEMA_NAME};
+pub use project::{Quad, SCHEMA_KEYWORDS, SCHEMA_NAME, Term, to_jsonld, to_nquads, to_quads};

@@ -129,7 +129,11 @@ fn write_entries(path: &Path, entries: &BTreeMap<String, Vec<u8>>) -> Result<(),
 
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
     let counter = TMP_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let tmp = parent.join(format!(".muniment-zip-{}-{}.tmp", std::process::id(), counter));
+    let tmp = parent.join(format!(
+        ".muniment-zip-{}-{}.tmp",
+        std::process::id(),
+        counter
+    ));
 
     if let Err(error) = write_synced(&tmp, &buffer) {
         let _ = std::fs::remove_file(&tmp);
@@ -366,7 +370,10 @@ mod tests {
             ])
             .await
             .unwrap();
-            assert_eq!(b.get("manifest.cbor").await.unwrap(), Some(b"header".to_vec()));
+            assert_eq!(
+                b.get("manifest.cbor").await.unwrap(),
+                Some(b"header".to_vec())
+            );
             assert_eq!(b.get("media/x.wav").await.unwrap(), Some(b"body".to_vec()));
             assert_eq!(b.get("drop").await.unwrap(), None);
             assert_eq!(b.get("keep").await.unwrap(), Some(b"v".to_vec()));
@@ -401,8 +408,14 @@ mod tests {
             // A key ending in '/' but carrying bytes must survive a reopen; only
             // empty directory markers are skipped.
             let reopened = ZipBackend::open(&path).unwrap();
-            assert_eq!(reopened.get("campaign/").await.unwrap(), Some(b"data".to_vec()));
-            assert_eq!(reopened.get("media/a.wav").await.unwrap(), Some(b"audio".to_vec()));
+            assert_eq!(
+                reopened.get("campaign/").await.unwrap(),
+                Some(b"data".to_vec())
+            );
+            assert_eq!(
+                reopened.get("media/a.wav").await.unwrap(),
+                Some(b"audio".to_vec())
+            );
         });
     }
 
@@ -431,7 +444,10 @@ mod tests {
             // Both round-trip regardless of method.
             let store = ZipBackend::open(&path).unwrap();
             assert_eq!(store.get("media/x.wv").await.unwrap().unwrap(), noise);
-            assert_eq!(store.get("manifest.cbor").await.unwrap().unwrap(), structured);
+            assert_eq!(
+                store.get("manifest.cbor").await.unwrap().unwrap(),
+                structured
+            );
 
             // Inspect the real zip: the noise entry is Stored, the structured one
             // Deflated and much smaller.
@@ -442,7 +458,10 @@ mod tests {
             assert!(noise_entry.compressed_size() >= noise.len() as u64);
             drop(noise_entry);
             let struct_entry = archive.by_name("manifest.cbor").unwrap();
-            assert_eq!(struct_entry.compression(), ::zip::CompressionMethod::Deflated);
+            assert_eq!(
+                struct_entry.compression(),
+                ::zip::CompressionMethod::Deflated
+            );
             assert!(struct_entry.compressed_size() < structured.len() as u64 / 10);
         });
     }

@@ -48,26 +48,26 @@ pub mod facet;
 pub mod graph;
 pub mod nested;
 
+pub mod spine;
 /// The lineage layer: owner-scoped descent of content through branching visits
 /// (folded in from the standalone `stemma` crate 2026-07-12 — the crates.io
 /// name was taken by an unrelated DOCX tool, and the module always described
 /// itself as "chartulary's lineage layer, a projection over the edit spine and
 /// never a second store"; the sibling repo archives).
 pub mod stemma;
-pub mod spine;
 pub mod taxonomy;
 
 pub use caps::{
     Address, Addressed, Classified, ContentBearing, GraphBearing, Identified, Labeled, Predicated,
 };
 pub use commit::{Author, Batch, BatchId, CommitError, Committed, EditSpec};
-pub use content_class::{ClassId, ClassMembership, ClassRegistry, ContentClass, CLASS_FACET};
-pub use facet::{AcceptAll, FacetError, FacetId, FacetStore, FacetValidator, NodeFacets};
 pub use container::{Container, Relation};
+pub use content_class::{CLASS_FACET, ClassId, ClassMembership, ClassRegistry, ContentClass};
 pub use edit::{DerivationKind, DerivationRecord, EdgeId, GraphEdit};
+pub use facet::{AcceptAll, FacetError, FacetId, FacetStore, FacetValidator, NodeFacets};
 pub use graph::{EdgeKey, Graph, NodeKey};
 pub use spine::GraphLog;
-pub use taxonomy::{Recognized, RelationClass, Semantic, REL_NS};
+pub use taxonomy::{REL_NS, Recognized, RelationClass, Semantic};
 
 // Re-exported so a consumer can fork and inspect provenance without depending on
 // codicil directly.

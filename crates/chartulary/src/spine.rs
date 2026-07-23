@@ -26,7 +26,7 @@ use std::collections::HashMap;
 
 use codicil::{Codicil, LogId, Provenance, Seq};
 use muniment::{Backend, Codec, SlotStore, StoreError};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use crate::caps::Identified;
 use crate::commit::{Author, Batch, EditSpec};
@@ -120,10 +120,7 @@ impl<N: Identified, E> GraphLog<N, E> {
     /// The derivation records for a node: the other-graph nodes it was derived
     /// from. Empty for a natively-minted node.
     pub fn derivations(&self, node: &N::Id) -> &[DerivationRecord<N::Id>] {
-        self.derivations
-            .get(node)
-            .map(Vec::as_slice)
-            .unwrap_or(&[])
+        self.derivations.get(node).map(Vec::as_slice).unwrap_or(&[])
     }
 }
 
@@ -182,7 +179,11 @@ impl<N: Identified + Clone, E: Clone> GraphLog<N, E> {
 
     /// Commit a single spec at the current revision (cannot conflict), for the
     /// convenience mutators. Returns whether it committed.
-    fn commit_one(&mut self, author: &Author, spec: EditSpec<N, E>) -> Option<crate::commit::Committed> {
+    fn commit_one(
+        &mut self,
+        author: &Author,
+        spec: EditSpec<N, E>,
+    ) -> Option<crate::commit::Committed> {
         let revision = self.revision();
         self.commit_batch(author.clone(), revision, vec![spec]).ok()
     }
@@ -203,7 +204,13 @@ impl<N: Identified + Clone, E: Clone> GraphLog<N, E> {
 
     /// Connect `from` to `to` with `edge`, attributed, returning the new edge's
     /// stable id, or `None` if either endpoint is absent.
-    pub fn connect(&mut self, author: &Author, from: &N::Id, to: &N::Id, edge: E) -> Option<EdgeId> {
+    pub fn connect(
+        &mut self,
+        author: &Author,
+        from: &N::Id,
+        to: &N::Id,
+        edge: E,
+    ) -> Option<EdgeId> {
         self.commit_one(
             author,
             EditSpec::Connect {
@@ -318,7 +325,12 @@ where
             let from_id = self.graph.node(key).expect("node present").id().clone();
             for (edge_key, target, edge) in self.graph.out_edges(key) {
                 if let Some(&edge_id) = self.by_edge_key.get(&edge_key) {
-                    let to_id = self.graph.node(target).expect("target present").id().clone();
+                    let to_id = self
+                        .graph
+                        .node(target)
+                        .expect("target present")
+                        .id()
+                        .clone();
                     edges.push((edge_id, from_id.clone(), to_id, edge.clone()));
                 }
             }
@@ -327,7 +339,9 @@ where
             .derivations
             .iter()
             .flat_map(|(node, records)| {
-                records.iter().map(move |record| (node.clone(), record.clone()))
+                records
+                    .iter()
+                    .map(move |record| (node.clone(), record.clone()))
             })
             .collect();
         let snapshot = Snapshot {
@@ -432,7 +446,11 @@ mod tests {
 
         let replayed = GraphLog::replay(live.log().clone());
         assert_eq!(replayed.graph().node_count(), 1);
-        assert_eq!(replayed.graph().edge_count(), 0, "the edge went with the node");
+        assert_eq!(
+            replayed.graph().edge_count(),
+            0,
+            "the edge went with the node"
+        );
         assert_eq!(fingerprint(replayed.graph()), fingerprint(live.graph()));
     }
 
@@ -471,7 +489,11 @@ mod tests {
                     .unwrap();
 
             let live_fp = fingerprint(live.graph());
-            assert_eq!(fingerprint(full.graph()), live_fp, "full replay matches live");
+            assert_eq!(
+                fingerprint(full.graph()),
+                live_fp,
+                "full replay matches live"
+            );
             assert_eq!(
                 fingerprint(checkpointed.graph()),
                 live_fp,
@@ -500,7 +522,10 @@ mod tests {
                 .await
                 .unwrap();
             assert!(reloaded.edge_key(e).is_some(), "the pre-reload id resolves");
-            assert!(reloaded.disconnect(&me(), e), "retract by the stable id works");
+            assert!(
+                reloaded.disconnect(&me(), e),
+                "retract by the stable id works"
+            );
             assert_eq!(reloaded.graph().edge_count(), 0);
         });
     }

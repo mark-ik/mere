@@ -154,9 +154,10 @@ where
         let mut added: HashSet<N::Id> = HashSet::new();
         let mut removed: HashSet<N::Id> = HashSet::new();
         let mut dropped_edges: HashSet<EdgeId> = HashSet::new();
-        let present = |id: &N::Id, added: &HashSet<N::Id>, removed: &HashSet<N::Id>, this: &Self| {
-            !removed.contains(id) && (added.contains(id) || this.graph().key_of(id).is_some())
-        };
+        let present =
+            |id: &N::Id, added: &HashSet<N::Id>, removed: &HashSet<N::Id>, this: &Self| {
+                !removed.contains(id) && (added.contains(id) || this.graph().key_of(id).is_some())
+            };
         for spec in &specs {
             match spec {
                 EditSpec::InsertNode(node) => {
@@ -281,7 +282,10 @@ mod tests {
             CommitError::RevisionConflict { current: read + 1 },
             "the refusal carries the revision to rebase against"
         );
-        assert!(log.graph().key_of(&"a".to_string()).is_some(), "nothing applied");
+        assert!(
+            log.graph().key_of(&"a".to_string()).is_some(),
+            "nothing applied"
+        );
     }
 
     #[test]
@@ -365,13 +369,19 @@ mod tests {
         let mut log = seeded();
         let mut effects: Vec<(BatchId, &str)> = Vec::new();
 
-        if let Ok(committed) = log.commit_batch(gate(), 999, vec![EditSpec::RemoveNode("a".to_string())]) {
+        if let Ok(committed) =
+            log.commit_batch(gate(), 999, vec![EditSpec::RemoveNode("a".to_string())])
+        {
             effects.push((committed.batch, "navigate"));
         }
         assert!(effects.is_empty(), "a refused petition spawns no effects");
 
         let committed = log
-            .commit_batch(gate(), log.revision(), vec![EditSpec::RemoveNode("a".to_string())])
+            .commit_batch(
+                gate(),
+                log.revision(),
+                vec![EditSpec::RemoveNode("a".to_string())],
+            )
             .unwrap();
         effects.push((committed.batch, "navigate"));
         assert_eq!(effects, vec![(committed.batch, "navigate")]);
@@ -400,10 +410,18 @@ mod tests {
                 .unwrap();
             assert_eq!(loaded.graph().node_count(), 2);
             assert_eq!(loaded.graph().edge_count(), 1);
-            assert_eq!(loaded.id(), Some(&codicil::LogId::new("old")), "identity carried");
+            assert_eq!(
+                loaded.id(),
+                Some(&codicil::LogId::new("old")),
+                "identity carried"
+            );
             assert_eq!(loaded.revision(), 3, "one batch per legacy edit");
             assert!(
-                loaded.log().entries().iter().all(|b| b.author == Author::pre_gate()),
+                loaded
+                    .log()
+                    .entries()
+                    .iter()
+                    .all(|b| b.author == Author::pre_gate()),
                 "migrated entries carry the synthetic pre-gate author"
             );
 

@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::fmt::Display;
 
 use chartulary::{Addressed, Graph, Identified, Labeled, NodeKey, Predicated};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 /// `schema:name` — the curated mapping target for a node's title.
 pub const SCHEMA_NAME: &str = "https://schema.org/name";
@@ -226,7 +226,11 @@ mod tests {
         // c has no address: it must skolemize.
         let c = graph.insert(Container::new("c"));
         // A semantic-ring edge (projects) and an app-private edge (does not).
-        graph.connect(a, b, Relation::new(RelationClass::recognized(Recognized::Cites)));
+        graph.connect(
+            a,
+            b,
+            Relation::new(RelationClass::recognized(Recognized::Cites)),
+        );
         graph.connect(a, c, Relation::new(RelationClass::app("woodshed", 0)));
         graph
     }
@@ -256,7 +260,9 @@ mod tests {
         let quads = to_quads(&seed());
         // The a -> c edge is an app family; no triple points at c's skolem IRI.
         assert!(
-            !quads.iter().any(|q| matches!(&q.object, Term::Iri(iri) if iri == "urn:chart:c")),
+            !quads
+                .iter()
+                .any(|q| matches!(&q.object, Term::Iri(iri) if iri == "urn:chart:c")),
             "app-family edges stay out of RDF"
         );
     }
@@ -270,7 +276,10 @@ mod tests {
             .iter()
             .filter_map(|obj| obj["@id"].as_str())
             .collect();
-        assert!(ids.contains(&"urn:chart:c"), "c has no address, so a urn: id");
+        assert!(
+            ids.contains(&"urn:chart:c"),
+            "c has no address, so a urn: id"
+        );
         assert!(ids.contains(&"https://a.example/"));
     }
 
@@ -283,7 +292,10 @@ mod tests {
             .iter()
             .find(|obj| obj["@id"] == json!("https://a.example/"))
             .expect("node a");
-        assert_eq!(a["https://schema.org/name"], json!([{ "@value": "Paper A" }]));
+        assert_eq!(
+            a["https://schema.org/name"],
+            json!([{ "@value": "Paper A" }])
+        );
         assert_eq!(
             a["urn:chart:rel:cites"],
             json!([{ "@id": "https://b.example/" }])

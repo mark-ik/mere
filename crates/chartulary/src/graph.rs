@@ -2,9 +2,9 @@
 
 use std::collections::HashMap;
 
+use petgraph::Direction;
 use petgraph::stable_graph::{EdgeIndex, NodeIndex, StableGraph};
 use petgraph::visit::{EdgeRef, IntoNodeReferences};
-use petgraph::Direction;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::caps::{Classified, Identified, Labeled};
@@ -275,9 +275,17 @@ mod tests {
                 .with_title("Article A")
                 .with_tag("research"),
         );
-        let b = g.insert(Container::new("b").with_title("Article B").with_tag("research"));
+        let b = g.insert(
+            Container::new("b")
+                .with_title("Article B")
+                .with_tag("research"),
+        );
         let c = g.insert(Container::new("c").with_tag("aside"));
-        g.connect(a, b, Relation::new(RelationClass::recognized(Recognized::Cites)));
+        g.connect(
+            a,
+            b,
+            Relation::new(RelationClass::recognized(Recognized::Cites)),
+        );
         g.connect(a, c, Relation::new(RelationClass::app("mere", 1)));
         g
     }
@@ -317,13 +325,19 @@ mod tests {
         assert_eq!(cites.len(), 1, "one cites edge from a");
         let (edge, target) = cites[0];
         assert_eq!(g.node(target).unwrap().id, "b");
-        assert_eq!(g.edge(edge).unwrap().predicate(), Some("urn:chart:rel:cites"));
+        assert_eq!(
+            g.edge(edge).unwrap().predicate(),
+            Some("urn:chart:rel:cites")
+        );
     }
 
     #[test]
     fn filter_by_tag_via_labeled_capability() {
         let g = seed();
-        let mut tagged: Vec<_> = g.nodes_tagged("research").map(|(_, n)| n.id.clone()).collect();
+        let mut tagged: Vec<_> = g
+            .nodes_tagged("research")
+            .map(|(_, n)| n.id.clone())
+            .collect();
         tagged.sort();
         assert_eq!(tagged, vec!["a".to_string(), "b".to_string()]);
     }
@@ -345,7 +359,9 @@ mod tests {
         assert_eq!(back.node_count(), 3);
         assert_eq!(back.edge_count(), 2);
         // The id index is not serialized; lookup working proves it was rebuilt.
-        let a = back.get(&"a".to_string()).expect("a found by id after load");
+        let a = back
+            .get(&"a".to_string())
+            .expect("a found by id after load");
         assert_eq!(a.title(), Some("Article A"));
     }
 }

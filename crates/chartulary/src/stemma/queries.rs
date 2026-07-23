@@ -104,10 +104,7 @@ where
             .collect()
     }
 
-    pub fn current_index_of_owner(
-        &self,
-        owner_id: OwnerId,
-    ) -> Result<Option<usize>, StemmaError> {
+    pub fn current_index_of_owner(&self, owner_id: OwnerId) -> Result<Option<usize>, StemmaError> {
         let current = match self.current_visit_of_owner(owner_id) {
             Some(visit_id) => visit_id,
             None => return Ok(None),

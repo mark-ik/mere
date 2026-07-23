@@ -115,7 +115,10 @@ impl Backend for MemoryBackend {
     }
 
     async fn put(&self, key: &str, bytes: &[u8]) -> Result<(), StoreError> {
-        self.map.lock().unwrap().insert(key.to_string(), bytes.to_vec());
+        self.map
+            .lock()
+            .unwrap()
+            .insert(key.to_string(), bytes.to_vec());
         Ok(())
     }
 

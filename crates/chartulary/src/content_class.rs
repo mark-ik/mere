@@ -164,7 +164,7 @@ impl ClassRegistry {
 mod tests {
     use super::*;
     use crate::facet::{AcceptAll, FacetStore};
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     /// A validator that requires a facet's value to be an object with a `mode`
     /// string — enough to exercise "validates member instances."
@@ -185,16 +185,28 @@ mod tests {
     fn web_page_class() -> ContentClass {
         ContentClass::new(
             "mere.web-page",
-            [(FacetId::new("web.viewer"), "schema:web-viewer-v1".to_string())],
+            [(
+                FacetId::new("web.viewer"),
+                "schema:web-viewer-v1".to_string(),
+            )],
         )
         .with_label("Web page")
     }
 
     fn facets_with(class: &str, pairs: &[(&str, Value)]) -> NodeFacets {
         let mut store: FacetStore<String> = FacetStore::new();
-        store.set("n".into(), FacetId::new(CLASS_FACET), json!(class), &AcceptAll).unwrap();
+        store
+            .set(
+                "n".into(),
+                FacetId::new(CLASS_FACET),
+                json!(class),
+                &AcceptAll,
+            )
+            .unwrap();
         for (id, value) in pairs {
-            store.set("n".into(), FacetId::new(*id), value.clone(), &AcceptAll).unwrap();
+            store
+                .set("n".into(), FacetId::new(*id), value.clone(), &AcceptAll)
+                .unwrap();
         }
         store.facets_of(&"n".to_string()).unwrap().clone()
     }
@@ -203,7 +215,10 @@ mod tests {
     fn a_class_admits_a_valid_member_and_rejects_a_missing_or_invalid_facet() {
         let class = web_page_class();
 
-        let ok = facets_with("mere.web-page", &[("web.viewer", json!({ "mode": "reader" }))]);
+        let ok = facets_with(
+            "mere.web-page",
+            &[("web.viewer", json!({ "mode": "reader" }))],
+        );
         assert!(class.admits(&ok, &RequiresMode).is_ok());
 
         let missing = facets_with("mere.web-page", &[]);
@@ -224,7 +239,10 @@ mod tests {
         let mut registry = ClassRegistry::new();
         registry.register(web_page_class());
 
-        let facets = facets_with("mere.web-page", &[("web.viewer", json!({ "mode": "reader" }))]);
+        let facets = facets_with(
+            "mere.web-page",
+            &[("web.viewer", json!({ "mode": "reader" }))],
+        );
         match registry.membership(&facets) {
             ClassMembership::Known(class) => {
                 assert_eq!(class.class_id, ClassId::new("mere.web-page"));

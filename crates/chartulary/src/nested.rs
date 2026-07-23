@@ -214,12 +214,20 @@ mod tests {
             let mut nested = GraphLog::<Container, Relation>::with_id(nid.clone());
             nested.insert_node(&keeper(), Container::new("grant"));
             nested.insert_node(&keeper(), Container::new("cursor"));
-            nested.connect(&keeper(), &"grant".to_string(), &"cursor".to_string(), cites());
+            nested.connect(
+                &keeper(),
+                &"grant".to_string(),
+                &"cursor".to_string(),
+                cites(),
+            );
             nested.save_log(&slots, &log_slot(&nid)).await.unwrap();
 
             // The parent bears it by identity only.
             let mut parent = GraphLog::<Container, Relation>::new();
-            parent.insert_node(&keeper(), Container::new("servitor").with_nested(nid.clone()));
+            parent.insert_node(
+                &keeper(),
+                Container::new("servitor").with_nested(nid.clone()),
+            );
             parent.save_log(&slots, "parent/log").await.unwrap();
 
             // Reload the parent, follow the bearing, reload the nested graph.
@@ -234,7 +242,10 @@ mod tests {
                 GraphLog::<Container, Relation>::load_full(&slots, &log_slot(&followed))
                     .await
                     .unwrap();
-            assert_eq!(fingerprint(nested_back.graph()), fingerprint(nested.graph()));
+            assert_eq!(
+                fingerprint(nested_back.graph()),
+                fingerprint(nested.graph())
+            );
             assert_eq!(nested_back.id(), Some(&nid), "identity survives the trip");
             assert_eq!(parent_back.live_nested(), vec![nid]);
         });
@@ -252,7 +263,10 @@ mod tests {
             nested.snapshot(&slots, &snap_slot(&nid)).await.unwrap();
 
             let mut parent = GraphLog::<Container, Relation>::new();
-            parent.insert_node(&keeper(), Container::new("servitor").with_nested(nid.clone()));
+            parent.insert_node(
+                &keeper(),
+                Container::new("servitor").with_nested(nid.clone()),
+            );
             parent.insert_node(&keeper(), Container::new("plain"));
 
             let archived = parent
@@ -333,7 +347,10 @@ mod tests {
             nested.save_log(&slots, &log_slot(&nid)).await.unwrap();
 
             let mut parent = GraphLog::<Container, Relation>::new();
-            parent.insert_node(&keeper(), Container::new("servitor").with_nested(nid.clone()));
+            parent.insert_node(
+                &keeper(),
+                Container::new("servitor").with_nested(nid.clone()),
+            );
             parent.save_log(&slots, "parent/log").await.unwrap();
 
             // Simulate the crash: the archive landed durably, but the parent's
@@ -344,13 +361,21 @@ mod tests {
             let mut reloaded = GraphLog::<Container, Relation>::load_full(&slots, "parent/log")
                 .await
                 .unwrap();
-            assert_eq!(reloaded.live_nested(), vec![nid.clone()], "the stale bearing survived");
+            assert_eq!(
+                reloaded.live_nested(),
+                vec![nid.clone()],
+                "the stale bearing survived"
+            );
 
             let recovered = reloaded
                 .recover_archived_bearings(&slots, &keeper())
                 .await
                 .unwrap();
-            assert_eq!(recovered, vec![nid.clone()], "recovery completed the removal");
+            assert_eq!(
+                recovered,
+                vec![nid.clone()],
+                "recovery completed the removal"
+            );
             assert!(reloaded.live_nested().is_empty());
             reloaded.save_log(&slots, "parent/log").await.unwrap();
 
@@ -378,7 +403,8 @@ mod tests {
 
     #[test]
     fn pre_nesting_containers_still_deserialize() {
-        let old = r#"{"id":"a","addresses":[],"content":null,"media_type":null,"title":null,"tags":[]}"#;
+        let old =
+            r#"{"id":"a","addresses":[],"content":null,"media_type":null,"title":null,"tags":[]}"#;
         let container: Container = serde_json::from_str(old).unwrap();
         assert!(container.nested.is_none(), "absent field defaults to None");
     }

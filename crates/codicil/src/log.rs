@@ -112,7 +112,9 @@ impl<T> Codicil<T> {
     where
         F: FnMut(S, &T) -> S,
     {
-        self.entries.iter().fold(init, |state, entry| f(state, entry))
+        self.entries
+            .iter()
+            .fold(init, |state, entry| f(state, entry))
     }
 
     /// Fold entries from `seq` onward into an existing state. The incremental
@@ -122,7 +124,9 @@ impl<T> Codicil<T> {
     where
         F: FnMut(S, &T) -> S,
     {
-        self.from(seq).iter().fold(init, |state, entry| f(state, entry))
+        self.from(seq)
+            .iter()
+            .fold(init, |state, entry| f(state, entry))
     }
 }
 
@@ -221,6 +225,9 @@ mod tests {
         log.append(10);
         log.append(1);
         let advanced = log.replay_from(at, partial, |s, d| s + d);
-        assert_eq!(advanced, 14, "only the entries after the cursor were applied");
+        assert_eq!(
+            advanced, 14,
+            "only the entries after the cursor were applied"
+        );
     }
 }

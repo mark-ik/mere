@@ -8,7 +8,9 @@ use serde::{Deserialize, Serialize};
 /// Monotonic and stable. Because entries are never removed or reordered, a
 /// `Seq` refers to the same entry for the life of the log, so it is a durable
 /// cursor a peer or a reader can hold across sessions.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
 pub struct Seq(pub u64);
 
 impl Seq {
