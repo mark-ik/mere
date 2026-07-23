@@ -44,10 +44,8 @@ use rand_core::{OsRng, RngCore};
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
-use crate::vault::{
-    CredentialLineage, IdentitySlot, IdentityStorage, Profile, ProfileId, ProfileSummary,
-    ProtocolKey, SecretBytes, UnlockTier,
-};
+use crate::profile_wire::{PlaintextProfile, plaintext_to_slot, slot_to_plaintext};
+use crate::vault::{IdentityStorage, Profile, ProfileId, ProfileSummary};
 use crate::{Ed25519Keypair, IdentityError};
 
 const ARGON2_SALT_LEN: usize = 16;
@@ -75,99 +73,16 @@ struct EncryptedProfile {
     ciphertext: Vec<u8>,
 }
 
-/// Plaintext inner shape — what we serialize then encrypt.
-#[derive(Debug, Serialize, Deserialize)]
-struct PlaintextProfile {
-    display_name: String,
-    /// 32-byte master signing-key seed.
-    master_seed: [u8; 32],
-    /// Slots, encoded.
-    slots: Vec<PlaintextSlot>,
-}
-
-/// Plaintext slot — same structural shape as [`IdentitySlot`] but with
-/// Vec<u8> for the secret payload (since the original `SecretBytes`
-/// doesn't impl serde).
-#[derive(Debug, Serialize, Deserialize)]
-struct PlaintextSlot {
-    mod_id: String,
-    instance: Option<String>,
-    kind: String,
-    payload: Vec<u8>,
-    /// Set iff Bootstrap-category slot. None for Direct.
-    state_dir: Option<PathBuf>,
-    is_bootstrap: bool,
-    lineage: CredentialLineage,
-    unlock_tier: UnlockTier,
-}
-
-fn slot_to_plaintext(key: &ProtocolKey, slot: &IdentitySlot) -> PlaintextSlot {
-    match slot {
-        IdentitySlot::Direct {
-            kind,
-            payload,
-            lineage,
-            unlock_tier,
-        } => PlaintextSlot {
-            mod_id: key.mod_id.clone(),
-            instance: key.instance.clone(),
-            kind: kind.clone(),
-            payload: payload.as_slice().to_vec(),
-            state_dir: None,
-            is_bootstrap: false,
-            lineage: *lineage,
-            unlock_tier: *unlock_tier,
-        },
-        IdentitySlot::Bootstrap {
-            kind,
-            bootstrap,
-            state_dir,
-            lineage,
-            unlock_tier,
-        } => PlaintextSlot {
-            mod_id: key.mod_id.clone(),
-            instance: key.instance.clone(),
-            kind: kind.clone(),
-            payload: bootstrap.as_slice().to_vec(),
-            state_dir: Some(state_dir.clone()),
-            is_bootstrap: true,
-            lineage: *lineage,
-            unlock_tier: *unlock_tier,
-        },
-    }
-}
-
-fn plaintext_to_slot(p: &PlaintextSlot) -> (ProtocolKey, IdentitySlot) {
-    let key = ProtocolKey {
-        mod_id: p.mod_id.clone(),
-        instance: p.instance.clone(),
-    };
-    let slot = if p.is_bootstrap {
-        IdentitySlot::Bootstrap {
-            kind: p.kind.clone(),
-            bootstrap: SecretBytes::new(p.payload.clone()),
-            state_dir: p.state_dir.clone().unwrap_or_else(|| PathBuf::from(".")),
-            lineage: p.lineage,
-            unlock_tier: p.unlock_tier,
-        }
-    } else {
-        IdentitySlot::Direct {
-            kind: p.kind.clone(),
-            payload: SecretBytes::new(p.payload.clone()),
-            lineage: p.lineage,
-            unlock_tier: p.unlock_tier,
-        }
-    };
-    (key, slot)
-}
-
 /// Argon2id-derived KEK.
 ///
 /// Shared with [`crate::passphrase_root`] so the passphrase profile vault and
 /// the passphrase-wrapped vault root derive their key-encryption keys through
 /// one KDF configuration (the "one unlock ladder" rule): same Argon2id
 /// parameters, same zeroize discipline.
-pub(crate) fn derive_kek(passphrase: &[u8], salt: &[u8]) -> Result<Zeroizing<[u8; 32]>, IdentityError> {
+pub(crate) fn derive_kek(
+    passphrase: &[u8],
+    salt: &[u8],
+) -> Result<Zeroizing<[u8; 32]>, IdentityError> {
     let argon = Argon2::default();
     let mut kek = Zeroizing::new([0u8; 32]);
     argon
@@ -395,7 +310,9 @@ impl IdentityStorage for PassphraseEncryptedStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::vault::{IdentityVault, ProtocolKey};
+    use crate::vault::{
+        CredentialLineage, IdentitySlot, IdentityVault, ProtocolKey, SecretBytes, UnlockTier,
+    };
     use tempfile::tempdir;
 
     fn nostr_slot() -> IdentitySlot {

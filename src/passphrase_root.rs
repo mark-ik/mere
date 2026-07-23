@@ -126,9 +126,7 @@ pub fn unwrap_vault_root(
                 },
             )
             .map_err(|_| {
-                IdentityError::Backend(
-                    "incorrect passphrase or corrupt vault root".to_string(),
-                )
+                IdentityError::Backend("incorrect passphrase or corrupt vault root".to_string())
             })?,
     );
     let root: [u8; 32] = plaintext.as_slice().try_into().map_err(|_| {
@@ -184,7 +182,9 @@ pub fn change_passphrase(
 ) -> Result<(), IdentityError> {
     let path = path.as_ref();
     let root = Zeroizing::new(load_passphrase_root(path, old_passphrase)?.ok_or_else(|| {
-        IdentityError::Backend(format!("no passphrase-wrapped vault root at {path:?} to re-key"))
+        IdentityError::Backend(format!(
+            "no passphrase-wrapped vault root at {path:?} to re-key"
+        ))
     })?);
     save_passphrase_root(path, &root, new_passphrase)
 }
@@ -202,7 +202,9 @@ where
     let bytes = serde_json::to_vec(value)
         .map_err(|err| IdentityError::Backend(format!("serialize {path:?}: {err}")))?;
     let parent = path.parent().ok_or_else(|| {
-        IdentityError::Backend(format!("passphrase vault-root path has no parent: {path:?}"))
+        IdentityError::Backend(format!(
+            "passphrase vault-root path has no parent: {path:?}"
+        ))
     })?;
     std::fs::create_dir_all(parent)
         .map_err(|err| IdentityError::Backend(format!("create dir {parent:?}: {err}")))?;
@@ -340,11 +342,10 @@ mod tests {
             .unwrap()
             .unwrap();
         let store = SealedRecordStorage::open_with_key(dir.path(), unlocked);
-        store.save_record("identity/master.seed", &[42u8; 32]).unwrap();
-        let restored: [u8; 32] = store
-            .load_record("identity/master.seed")
-            .unwrap()
+        store
+            .save_record("identity/master.seed", &[42u8; 32])
             .unwrap();
+        let restored: [u8; 32] = store.load_record("identity/master.seed").unwrap().unwrap();
         assert_eq!(restored, [42u8; 32]);
     }
 }

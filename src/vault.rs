@@ -268,10 +268,11 @@ pub struct ProfileSummary {
 
 /// Storage backend for an [`IdentityVault`].
 ///
-/// v0 ships [`InMemoryStorage`] and the real on-disk
-/// [`crate::PassphraseEncryptedStorage`]; production-grade
-/// `OsKeychainStorage` (Windows Credential Manager / macOS Keychain /
-/// kwallet/SecretService) remains the follow-up.
+/// Shipped backends: [`InMemoryStorage`] (tests/ephemeral), the on-disk
+/// [`crate::PassphraseEncryptedStorage`] (portable passphrase vault), and
+/// [`crate::SealedProfileStorage`] (sealed records keyed by the
+/// [`crate::startup_unlock`] `AutoOs` ladder — the desktop default where
+/// that ladder exists; DPAPI on Windows today).
 pub trait IdentityStorage: Send + Sync {
     /// Load a profile by id.
     fn load_profile(&self, id: &ProfileId) -> Result<Profile, IdentityError>;
@@ -284,6 +285,26 @@ pub trait IdentityStorage: Send + Sync {
 
     /// List all profiles in the storage.
     fn list_profiles(&self) -> Result<Vec<ProfileSummary>, IdentityError>;
+}
+
+/// Boxed storage delegates, so callers can pick a backend at runtime
+/// (`IdentityVault<Box<dyn IdentityStorage>>`).
+impl<T: IdentityStorage + ?Sized> IdentityStorage for Box<T> {
+    fn load_profile(&self, id: &ProfileId) -> Result<Profile, IdentityError> {
+        (**self).load_profile(id)
+    }
+
+    fn save_profile(&self, profile: &Profile) -> Result<(), IdentityError> {
+        (**self).save_profile(profile)
+    }
+
+    fn delete_profile(&self, id: &ProfileId) -> Result<(), IdentityError> {
+        (**self).delete_profile(id)
+    }
+
+    fn list_profiles(&self) -> Result<Vec<ProfileSummary>, IdentityError> {
+        (**self).list_profiles()
+    }
 }
 
 /// User-facing identity vault.
@@ -515,6 +536,5 @@ impl IdentityStorage for InMemoryStorage {
     }
 }
 
-#[cfg(test)]
 #[cfg(test)]
 mod tests;

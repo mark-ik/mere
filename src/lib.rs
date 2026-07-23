@@ -49,13 +49,17 @@
 #![doc(html_root_url = "https://docs.rs/personae/0.1.0")]
 #![warn(missing_docs)]
 
+#[cfg(feature = "agent")]
+pub mod agent;
 pub mod delegation;
 mod error;
 mod keypair;
 pub mod passphrase_root;
 pub mod passphrase_storage;
+mod profile_wire;
 mod provider;
 pub mod seal;
+pub mod sealed_profile_storage;
 pub mod sealed_record_storage;
 pub mod startup_unlock;
 pub mod vault;
@@ -71,6 +75,7 @@ pub use crate::provider::{
     DerivedKeyAttestation, IdentityProvider, InMemoryProvider, SealedIdentityProvider,
 };
 pub use crate::seal::{seal_bytes, unseal_bytes};
+pub use crate::sealed_profile_storage::SealedProfileStorage;
 pub use crate::sealed_record_storage::SealedRecordStorage;
 pub use crate::startup_unlock::{
     StartupUnlockMode, auto_unlock_backend_available, load_or_create_auto_unlock_root,

@@ -23,7 +23,13 @@ pub fn seal_bytes(key: &[u8; 32], aad: &[u8], plaintext: &[u8]) -> Result<Vec<u8
     let mut nonce = [0u8; NONCE_LEN];
     OsRng.fill_bytes(&mut nonce);
     let ciphertext = cipher
-        .encrypt(XNonce::from_slice(&nonce), Payload { msg: plaintext, aad })
+        .encrypt(
+            XNonce::from_slice(&nonce),
+            Payload {
+                msg: plaintext,
+                aad,
+            },
+        )
         .map_err(|_| IdentityError::Backend("seal_bytes encryption failed".to_string()))?;
     let mut out = Vec::with_capacity(NONCE_LEN + ciphertext.len());
     out.extend_from_slice(&nonce);
@@ -43,7 +49,13 @@ pub fn unseal_bytes(key: &[u8; 32], aad: &[u8], sealed: &[u8]) -> Result<Vec<u8>
     let (nonce, ciphertext) = sealed.split_at(NONCE_LEN);
     let cipher = XChaCha20Poly1305::new(Key::from_slice(key));
     cipher
-        .decrypt(XNonce::from_slice(nonce), Payload { msg: ciphertext, aad })
+        .decrypt(
+            XNonce::from_slice(nonce),
+            Payload {
+                msg: ciphertext,
+                aad,
+            },
+        )
         .map_err(|_| {
             IdentityError::Backend(
                 "unseal_bytes failed: wrong key, wrong aad, or tampered".to_string(),
@@ -60,7 +72,10 @@ mod tests {
         let key = [7u8; 32];
         let sealed = seal_bytes(&key, b"ctx", b"a private payload").unwrap();
         assert_ne!(sealed.as_slice(), b"a private payload");
-        assert_eq!(unseal_bytes(&key, b"ctx", &sealed).unwrap(), b"a private payload");
+        assert_eq!(
+            unseal_bytes(&key, b"ctx", &sealed).unwrap(),
+            b"a private payload"
+        );
     }
 
     #[test]
@@ -90,6 +105,9 @@ mod tests {
         let key = [5u8; 32];
         let a = seal_bytes(&key, b"ctx", b"same").unwrap();
         let b = seal_bytes(&key, b"ctx", b"same").unwrap();
-        assert_ne!(a, b, "random nonce -> distinct ciphertexts for identical input");
+        assert_ne!(
+            a, b,
+            "random nonce -> distinct ciphertexts for identical input"
+        );
     }
 }
