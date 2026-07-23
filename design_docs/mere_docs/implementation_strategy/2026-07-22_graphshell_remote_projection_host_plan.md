@@ -3,12 +3,13 @@
 **Date:** 2026-07-22
 **Status:** the local G0 boundary is sealed; G1's loopback presentation, G2's
 diff/resume/persistence, and G3's real Merecat endpoint proofs are complete as
-of 2026-07-22. Publication remains gated on renaming the archived donor and
-repairing its citations. G4, the already-proven Isometry projection, is next.
+of 2026-07-22. The Graphshell workspace is published on the existing
+`mark-ik/graphshell` repository; its retired browser donor remains available in
+the same Git history. G4, the already-proven Isometry projection, is next.
 Graphshell is ruled as the Merely family's remote projection host. It is
 neither the projection engine nor Mere's internal chrome layer. This plan
-remains temporary authority until the new sibling repository is published and
-this document moves there.
+remains the cross-repository roadmap; Graphshell's README owns the live package
+boundary.
 
 **Companions:** the
 [projection-engine prior-art brief](../research/2026-07-21_projection_engine_prior_art_brief.md),
@@ -100,15 +101,13 @@ Application adapters remain with their truths. The first Merecat adapter lives
 in `repos/merecat`; an Isometry adapter lives in `repos/isometry`; the same rule
 applies to Woodshed, Hocket, and radio management. An adapter is not a new repo.
 
-The archived donor repository currently occupies the `graphshell` GitHub name.
-Before founding the new repository:
-
-- rename the archived donor to an explicit donor/archive name;
-- update live citations across `Code/repos`, including Mere's canonical harvest
-  links, so historical paths resolve after the old GitHub name is reused;
-- create a clean Graphshell repository rather than placing new code on top of
-  the donor's abandoned host architecture;
-- keep the crates.io `graphshell` name for the new application/facade.
+The retired browser donor occupied the `graphshell` GitHub name. Publication
+kept that repository and joined the new workspace to its history rather than
+renaming or force-replacing it. The donor's source and design documents remain
+recoverable from Git; they do not appear in the active tree. This preserves old
+citations as historical evidence while making the clean portable workspace the
+repository's current `main`. Keep the crates.io `graphshell` name for the new
+application/facade.
 
 ## 4. Four protocol planes
 
@@ -341,20 +340,22 @@ foundation as the geographic exercise of the consolidated boundary.
 - Add protocol compile checks for native and `wasm32-unknown-unknown`.
 
 **Done when:** a fresh clone builds all portable crates without Mere, Genet,
-NetRender, a network runtime, or an application dependency, and every live
-donor citation resolves to the renamed archive rather than the new product.
+NetRender, a network runtime, or an application dependency, and the retired
+donor remains recoverable in repository history without entering the active
+dependency graph.
 
-**Local start, 2026-07-22:** `repos/graphshell` is now an independent Git
+**Published 2026-07-22:** `repos/graphshell` is an independent Git
 workspace containing `graphshell-protocol`, `graphshell-client`,
 `graphshell-endpoint`, and the `graphshell` facade. The protocol serializes
 only Scenograph scores/scenes plus session/status/intent envelopes; client
 state is endpoint-scoped scene curation; endpoint traits are injected beside
 application truth. The facade intentionally contains no renderer or carrier.
 Its manifest rules out Mere, Merecat, Isometry, Genet, Cambium, NetRender, and
-network runtimes. Publishing, donor rename, and citation repair remain an
-external GitHub action, not a local rewrite. Its native workspace tests and
-`wasm32-unknown-unknown` check pass locally. The boundary is captured in the
-repository's root commit `693fad8`.
+network runtimes. PR `mark-ik/graphshell#308` unarchived the existing repository
+and made the portable workspace its active tree through merge commit
+`175084d2`, while preserving the complete donor lineage. Its native workspace
+tests, `wasm32-unknown-unknown` check, and warning-denying Clippy wall pass. The
+boundary begins at root commit `693fad8`.
 
 ### P5. Geographic projection
 
@@ -456,8 +457,9 @@ at wide and narrow browser sizes found keyboard-reachable actions, responsive
 collapse, no horizontal overflow, and no browser errors. This remains a local
 loopback proof over the Spiral score. The authenticated carrier, negotiated
 grants, revocation, diffs, and durable host store remain later work, and the
-committed Merecat Git dependency becomes independently resolvable only when
-the local Graphshell repository is published.
+committed Merecat Git dependencies now resolve from Graphshell `main` at
+`175084d2`; `cargo check --lib` passes with Merecat's local Graphshell patch
+disabled.
 
 ### G4. Serve the already-proven Isometry projection
 
@@ -577,8 +579,10 @@ reorganization.
   rule, Graphshell-owned curation state, and seven implementation proofs.
 - Recorded repository corrections from live consumers.
 - Founded the independent local four-crate workspace and sealed its portable
-  boundary in root commit `693fad8`; remote publication still waits for the
-  donor rename and citation repair.
+  boundary in root commit `693fad8`.
+- Published that workspace through `mark-ik/graphshell#308`; the active tree is
+  small and portable while the retired browser and its documents remain in the
+  same Git history.
 - Completed G1's loopback presentation proof: sidecar offers, independent
   content-addressed resources, two capability profiles, semantic fallback,
   accessibility actions, deterministic receipt, and headed responsive check.
