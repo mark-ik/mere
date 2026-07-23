@@ -9,15 +9,11 @@
 //!
 //! ## Slot shape
 //!
-//! An SSH key is a Direct slot with `kind: "ssh"` whose payload is the
-//! OpenSSH-encoded private key (the same bytes an `id_ed25519` file holds,
-//! comment included). The [`ProtocolKey`] instance is the key's SHA256
-//! fingerprint, so multiple keys coexist and re-adding the same key is
-//! idempotent.
-//!
-//! `ssh-add <file>` is the import path: the OpenSSH client reads the local
-//! file and hands the agent the private key, which lands here as a vault
-//! slot (encrypted at rest by whichever storage backend the vault opened).
+//! [`crate::ssh_slot`] owns it: a Direct `ssh` slot keyed by SHA256
+//! fingerprint. `ssh-add <file>` is the import path — the OpenSSH client
+//! reads the local file and hands the agent the private key, which lands
+//! as a vault slot (encrypted at rest by whichever backend the vault
+//! opened).
 //!
 //! ## Honest v1 limits
 //!
@@ -26,6 +22,8 @@
 //! - [`UnlockTier::PerUse`] slots refuse to sign — the agent has no
 //!   confirmation UI yet, and silently signing would make the tier a lie.
 //!   [`UnlockTier::ShortTtl`] is treated as Session until relock lands.
+//! - `session-bind@openssh.com` signatures are verified and acknowledged,
+//!   but per-session key restrictions are not enforced yet.
 //! - Any local process may connect to the agent endpoint, same as stock
 //!   ssh-agent (plan §threat-model note).
 
@@ -38,24 +36,14 @@ use ssh_agent_lib::proto::extension::{QueryResponse, SessionBind};
 use ssh_agent_lib::proto::{
     AddIdentity, Extension, PrivateCredential, RemoveIdentity, SignRequest, message,
 };
+use ssh_key::Signature;
 use ssh_key::private::PrivateKey;
 use ssh_key::public::PublicKey;
-use ssh_key::{HashAlg, LineEnding, Signature};
 
-use crate::vault::{
-    CredentialLineage, IdentitySlot, IdentityStorage, IdentityVault, ProtocolKey, SecretBytes,
-    UnlockTier,
-};
+use crate::ssh_slot::{self, SshSlot};
+use crate::vault::{IdentityStorage, IdentityVault, ProtocolKey, UnlockTier};
 
-/// The `mod_id` under which the agent stores SSH keys.
-pub const SSH_MOD_ID: &str = "ssh";
-
-/// One vault-held SSH identity, decoded for agent use.
-struct SshIdentity {
-    key: ProtocolKey,
-    private: PrivateKey,
-    tier: UnlockTier,
-}
+pub use crate::ssh_slot::{SSH_MOD_ID, protocol_key_for};
 
 /// Agent session over a shared vault.
 ///
@@ -82,66 +70,13 @@ impl<S: IdentityStorage> VaultAgent<S> {
         }
     }
 
-    /// Decode all `ssh`-kind slots. Slots that fail to parse are skipped
-    /// with a warning rather than poisoning the whole listing.
-    fn ssh_identities(&self) -> Vec<SshIdentity> {
-        let vault = self.vault.lock().unwrap();
-        let mut out = Vec::new();
-        for (key, slot) in &vault.current_profile().slots {
-            if key.mod_id != SSH_MOD_ID {
-                continue;
-            }
-            let IdentitySlot::Direct {
-                payload,
-                unlock_tier,
-                ..
-            } = slot
-            else {
-                continue;
-            };
-            match PrivateKey::from_openssh(payload.as_slice()) {
-                Ok(private) => out.push(SshIdentity {
-                    key: key.clone(),
-                    private,
-                    tier: *unlock_tier,
-                }),
-                Err(err) => {
-                    tracing::warn!(?key, %err, "ssh slot payload failed to parse; skipping");
-                }
-            }
-        }
-        out
+    fn ssh_identities(&self) -> Vec<SshSlot> {
+        ssh_slot::ssh_slots(self.vault.lock().unwrap().current_profile())
     }
 
-    fn find_by_public(&self, wanted: &PublicKey) -> Option<SshIdentity> {
-        self.ssh_identities()
-            .into_iter()
-            // Compare key data, not `PublicKey`, because `PublicKey`
-            // equality includes the comment and the requesting side sends
-            // no comment.
-            .find(|identity| {
-                PublicKey::from(&identity.private).key_data() == wanted.key_data()
-            })
+    fn find_by_public(&self, wanted: &PublicKey) -> Option<SshSlot> {
+        ssh_slot::find_by_public(self.vault.lock().unwrap().current_profile(), wanted)
     }
-}
-
-/// The [`ProtocolKey`] an SSH private key stores under.
-pub fn protocol_key_for(private: &PrivateKey) -> ProtocolKey {
-    let fingerprint = PublicKey::from(private).fingerprint(HashAlg::Sha256);
-    ProtocolKey::new(SSH_MOD_ID, Some(fingerprint.to_string()))
-}
-
-/// Build the vault slot for an SSH private key.
-pub fn slot_for(private: &PrivateKey) -> Result<IdentitySlot, AgentError> {
-    let encoded = private.to_openssh(LineEnding::LF).map_err(AgentError::other)?;
-    Ok(IdentitySlot::Direct {
-        kind: SSH_MOD_ID.to_string(),
-        payload: SecretBytes::new(encoded.as_bytes().to_vec()),
-        // An SSH keypair is generated locally and registered with servers
-        // (authorized_keys); losing it means registering a replacement.
-        lineage: CredentialLineage::LocallyGeneratedExternallyRegistered,
-        unlock_tier: UnlockTier::Session,
-    })
 }
 
 #[ssh_agent_lib::async_trait]
@@ -187,8 +122,9 @@ impl<S: IdentityStorage + 'static> Session for VaultAgent<S> {
         if private.comment().is_empty() && !comment.is_empty() {
             private.set_comment(&comment);
         }
-        let key = protocol_key_for(&private);
-        let slot = slot_for(&private)?;
+        let key = ssh_slot::protocol_key_for(&private);
+        let slot =
+            ssh_slot::slot_for(&private, UnlockTier::Session).map_err(AgentError::other)?;
         tracing::info!(?key, "adding ssh identity to vault");
         self.vault
             .lock()
@@ -333,28 +269,13 @@ mod tests {
         let mut agent = test_agent();
         let key = random_key("guarded");
         let public = PublicKey::from(&key);
-        let protocol_key = protocol_key_for(&key);
-        let IdentitySlot::Direct {
-            kind,
-            payload,
-            lineage,
-            ..
-        } = slot_for(&key).unwrap()
-        else {
-            unreachable!()
-        };
         agent
             .vault
             .lock()
             .unwrap()
             .add_slot(
-                protocol_key,
-                IdentitySlot::Direct {
-                    kind,
-                    payload,
-                    lineage,
-                    unlock_tier: UnlockTier::PerUse,
-                },
+                ssh_slot::protocol_key_for(&key),
+                ssh_slot::slot_for(&key, UnlockTier::PerUse).unwrap(),
             )
             .unwrap();
 

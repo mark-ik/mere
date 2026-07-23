@@ -51,6 +51,7 @@
 
 #[cfg(feature = "agent")]
 pub mod agent;
+pub mod bootstrap;
 pub mod delegation;
 mod error;
 mod keypair;
@@ -61,6 +62,8 @@ mod provider;
 pub mod seal;
 pub mod sealed_profile_storage;
 pub mod sealed_record_storage;
+#[cfg(feature = "ssh")]
+pub mod ssh_slot;
 pub mod startup_unlock;
 pub mod vault;
 

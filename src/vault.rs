@@ -104,6 +104,33 @@ pub enum CredentialLineage {
     ExternallyRootedLocallyHeld,
 }
 
+impl CredentialLineage {
+    /// What losing this device means for a slot of this lineage.
+    ///
+    /// Plan §3.4 requires surfacing this per slot: a single "the recovery
+    /// phrase brings everything back" story is wrong and would mislead
+    /// users into thinking externally-registered credentials survive a
+    /// device loss. Any vault UI (CLI, pane) shows this verbatim.
+    pub fn device_loss_note(&self) -> &'static str {
+        match self {
+            Self::LocallyDerived => {
+                "Recoverable: the master key re-derives this slot deterministically."
+            }
+            Self::LocallyGeneratedExternallyRegistered => {
+                "Not recoverable from the vault alone: register a replacement with the service. \
+                 A recovery phrase unlocks the vault; it does not regenerate this key."
+            }
+            Self::ExternallyIssued => {
+                "Not backupable: credentials of this kind rotate and expire by design. \
+                 Re-authenticate with the issuer."
+            }
+            Self::ExternallyRootedLocallyHeld => {
+                "Upstream's call: the issuing authority revokes and reissues."
+            }
+        }
+    }
+}
+
 /// Unlock tier declared at slot registration. See plan §3.6.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum UnlockTier {
@@ -285,6 +312,27 @@ pub trait IdentityStorage: Send + Sync {
 
     /// List all profiles in the storage.
     fn list_profiles(&self) -> Result<Vec<ProfileSummary>, IdentityError>;
+}
+
+/// Borrowed storage delegates, so a vault can be opened over a backend
+/// the caller keeps (`IdentityVault<&dyn IdentityStorage>`) without
+/// giving up ownership.
+impl<T: IdentityStorage + ?Sized> IdentityStorage for &T {
+    fn load_profile(&self, id: &ProfileId) -> Result<Profile, IdentityError> {
+        (**self).load_profile(id)
+    }
+
+    fn save_profile(&self, profile: &Profile) -> Result<(), IdentityError> {
+        (**self).save_profile(profile)
+    }
+
+    fn delete_profile(&self, id: &ProfileId) -> Result<(), IdentityError> {
+        (**self).delete_profile(id)
+    }
+
+    fn list_profiles(&self) -> Result<Vec<ProfileSummary>, IdentityError> {
+        (**self).list_profiles()
+    }
 }
 
 /// Boxed storage delegates, so callers can pick a backend at runtime

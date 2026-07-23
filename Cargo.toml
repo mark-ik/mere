@@ -11,23 +11,27 @@ categories = ["cryptography", "authentication"]
 [lib]
 path = "src/lib.rs"
 
-# SSH agent front end (2026-07-22 identity-vault-ssh-agent plan V2). Feature-
-# gated so the published lib keeps its lean default dep tree; the bin serves
-# vault `ssh` slots over the OpenSSH agent protocol (Windows named pipe /
-# Unix socket).
+# Bins from the 2026-07-22 identity-vault-ssh-agent plan. Both are feature-
+# gated so the published lib keeps its lean default dep tree.
+#
+# V2: serves vault `ssh` slots over the OpenSSH agent protocol (Windows
+# named pipe / Unix socket).
 [[bin]]
 name = "personae-agent"
 path = "src/bin/personae-agent.rs"
 required-features = ["agent"]
 
+# V3: inspect and manage the vault from a terminal.
+[[bin]]
+name = "personae-vault"
+path = "src/bin/personae-vault.rs"
+required-features = ["ssh"]
+
 [features]
-agent = [
-  "dep:ssh-agent-lib",
-  "dep:ssh-key",
-  "dep:signature",
-  "dep:tokio",
-  "dep:tracing-subscriber",
-]
+# SSH keys as vault slots (encode/decode/import). The CLI needs this much;
+# the agent needs the protocol stack on top.
+ssh = ["dep:ssh-key", "dep:signature"]
+agent = ["ssh", "dep:ssh-agent-lib", "dep:tokio", "dep:tracing-subscriber"]
 
 [dependencies]
 ed25519-dalek = { version = "2", features = ["rand_core", "zeroize"] }

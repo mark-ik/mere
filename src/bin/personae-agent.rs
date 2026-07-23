@@ -28,10 +28,8 @@
 use std::path::PathBuf;
 
 use personae::agent::VaultAgent;
-use personae::{
-    Ed25519Keypair, IdentityStorage, IdentityVault, PassphraseEncryptedStorage, Profile, ProfileId,
-    SealedProfileStorage,
-};
+use personae::bootstrap::{self, Unlock};
+use personae::{IdentityVault, ProfileId};
 #[cfg(windows)]
 use ssh_agent_lib::agent::NamedPipeListener as Listener;
 use ssh_agent_lib::agent::listen;
@@ -49,24 +47,6 @@ struct Args {
     /// scheduled task runs the agent windowless, so stderr goes nowhere;
     /// this keeps the log inspectable.
     log_file: Option<PathBuf>,
-}
-
-fn default_vault_dir() -> PathBuf {
-    #[cfg(windows)]
-    {
-        let base = std::env::var_os("LOCALAPPDATA")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from("."));
-        base.join("personae").join("vault")
-    }
-    #[cfg(not(windows))]
-    {
-        let base = std::env::var_os("XDG_DATA_HOME")
-            .map(PathBuf::from)
-            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))
-            .unwrap_or_else(|| PathBuf::from("."));
-        base.join("personae").join("vault")
-    }
 }
 
 fn default_socket(dir: &std::path::Path) -> String {
@@ -89,7 +69,7 @@ fn default_socket(dir: &std::path::Path) -> String {
 }
 
 fn parse_args() -> Result<Args, String> {
-    let mut dir = default_vault_dir();
+    let mut dir = bootstrap::default_vault_dir();
     let mut profile = "default".to_string();
     let mut socket = None;
     let mut log_file = None;
@@ -126,54 +106,6 @@ fn parse_args() -> Result<Args, String> {
         socket,
         log_file,
     })
-}
-
-fn open_storage(dir: &std::path::Path) -> Result<Box<dyn IdentityStorage>, String> {
-    std::fs::create_dir_all(dir).map_err(|err| format!("create vault dir {dir:?}: {err}"))?;
-    if let Some(passphrase) = std::env::var_os("PERSONAE_PASSPHRASE") {
-        let passphrase = passphrase.to_string_lossy();
-        let storage =
-            PassphraseEncryptedStorage::open(dir.join("vault.json"), passphrase.as_bytes())
-                .map_err(|err| format!("open passphrase vault: {err}"))?;
-        tracing::info!("storage: passphrase vault at {:?}", dir.join("vault.json"));
-        return Ok(Box::new(storage));
-    }
-    match SealedProfileStorage::open_auto_os(dir) {
-        Ok(Some(storage)) => {
-            tracing::info!("storage: OS auto-unlock sealed records at {dir:?}");
-            Ok(Box::new(storage))
-        }
-        Ok(None) => Err(
-            "no OS auto-unlock backend on this platform yet; set PERSONAE_PASSPHRASE to use \
-             the passphrase vault instead"
-                .to_string(),
-        ),
-        Err(err) => Err(format!("open sealed profile storage: {err}")),
-    }
-}
-
-fn load_or_create_profile(
-    storage: &dyn IdentityStorage,
-    id: &ProfileId,
-) -> Result<Profile, String> {
-    let existing = storage
-        .list_profiles()
-        .map_err(|err| format!("list profiles: {err}"))?;
-    if existing.iter().any(|summary| &summary.id == id) {
-        return storage
-            .load_profile(id)
-            .map_err(|err| format!("load profile {:?}: {err}", id.0));
-    }
-    tracing::info!("profile {:?} not found; creating it", id.0);
-    let profile = Profile::new(
-        id.clone(),
-        id.0.clone(),
-        Ed25519Keypair::generate(&mut rand_core::OsRng),
-    );
-    storage
-        .save_profile(&profile)
-        .map_err(|err| format!("save new profile {:?}: {err}", id.0))?;
-    Ok(profile)
 }
 
 #[tokio::main(flavor = "multi_thread")]
@@ -216,9 +148,16 @@ async fn main() {
 }
 
 async fn run(args: Args) -> Result<(), String> {
-    let storage = open_storage(&args.dir)?;
+    let opened = bootstrap::open_storage(&args.dir, Unlock::from_env())
+        .map_err(|err| format!("open vault: {err}"))?;
+    tracing::info!("storage: {}", opened.description);
+
     let id = ProfileId(args.profile.clone());
-    let profile = load_or_create_profile(&*storage, &id)?;
+    let (profile, created) = bootstrap::load_or_create_profile(&*opened.storage, &id)
+        .map_err(|err| format!("open profile {:?}: {err}", args.profile))?;
+    if created {
+        tracing::info!(profile = %args.profile, "profile not found; created it");
+    }
     let ssh_slots = profile
         .slots
         .keys()
@@ -230,7 +169,7 @@ async fn run(args: Args) -> Result<(), String> {
         "vault open; `ssh-add -l` lists keys, `ssh-add <file>` imports one"
     );
 
-    let vault = IdentityVault::with_profile(storage, profile);
+    let vault = IdentityVault::with_profile(opened.storage, profile);
     let agent = VaultAgent::new(vault);
 
     // A stale Unix socket file from a previous run blocks bind; remove it.
