@@ -166,6 +166,46 @@ Coordination: the moot (gemot) refactor **settled 2026-07-17** (mere `a4da519` "
 
 ## Progress
 
+- **2026-07-23 (the merecat world RULED: total surface, ring-gated envelope —
+  Mark)**: the open "which Actions may a component emit" question dissolves.
+  A component may potentially emit ALL Actions; what decides is the action's
+  **ring** — a capability-path family checked against the denizen's grant at
+  emission, the same place piccolo denies. Curating the wit surface would
+  store authority twice and version the ABI per grant; a total surface is one
+  stable ABI, packs compile once, grants vary per install. Landed: the wit
+  `actions` envelope interface + `app-core` world (mere `wit/world.wit`;
+  `{name, payload}` record, `denied`/`unknown`/`malformed` errors,
+  unknown-forward) and merecat's `ring` module — `Ring`
+  {navigate `app/navigate`, panes `app/panes`, dispatch `app/dispatch`
+  (incl. the omnibar: driving the command surface IS dispatch), session
+  `app/session` (new path), **host-only** (NO grantable path: gate
+  management — install/confirm/cancel/run — is structurally unemittable
+  under ANY authority, the self-escalation floor)}; `ring_of` is an
+  exhaustive match with no catch-all (a new Action variant fails to compile
+  until classified); `emit_allowed` is the single deny point (denials name
+  the ring); `decode_envelope` grows incrementally (decode is NOT authority
+  — an undecodable name is a loud unknown). Default profiles per kind/pack
+  shape the install review's PRESELECTION only; the visible review stays the
+  sole place an ask becomes a grant. Tests: host-only resists a total
+  `app/` grant; coverage passes/denies by ring; envelopes decode with loud
+  misfires (merecat 106 green). REMAINING leg: the wasmtime plumbing —
+  instantiate `app-core` in merecat, back `emit` with
+  decode → `emit_allowed` → attributed lowering, an app-core guest fixture,
+  and `app/session`/ring preselection in the review UI.
+- **2026-07-23 (node-tier archive-never-orphan COMPLETE)**: the
+  `DeleteFocusedNode` trigger existed after all (the recycle-bin lane).
+  The tombstone (`eidetic DeletedNode`, serde-defaulted so old tombstones
+  load) now carries the node's borne world id + its whole facet bundle;
+  delete moves the world file to the archive slot
+  (`denizens/archive/<log>.json`, the file-level echo of chartulary's
+  `archive/nested` convention) BEFORE the node leaves — a failed archive
+  aborts the delete — and the live facets go to the tombstone. Recovery
+  restores full residency: facets back whole, world file back live, pointer
+  re-borne through the spine, resident rebuilt (same revision). The forget
+  paths complete it: emptying the bin and athanor's retirement pass purge
+  each tombstone's archived world. Receipts: the delete/recover round-trip
+  test asserts every slot state; merecat 101→106 green, eidetic 88,
+  athanor 9.
 - **2026-07-22 (fork CARRIES worlds)**: the follow-on to the containment
   ruling, at file granularity. `Graph::bear_nested` (kernel, public) sets
   `nested` directly WITHOUT the delta spine — for copy/load paths building a

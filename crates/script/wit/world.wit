@@ -127,6 +127,54 @@ interface document-host {
     inspect: func(query: document-query) -> document-view;
 }
 
+/// The app action ENVELOPE (the app-core world's emission face; ruled with
+/// Mark 2026-07-23). One stable record carries the host app's whole action
+/// surface: `name` is the kebab-case action name, `payload` its JSON
+/// arguments (`""` for unit actions). The host classifies each emission by
+/// RING — a capability-path family (`app/navigate`, `app/panes`,
+/// `app/dispatch`, `app/session`) — and checks the emitting denizen's grant
+/// at that moment, exactly where the piccolo lane already denies. Gate
+/// management (install / confirm / cancel / run) classifies HOST-ONLY: no
+/// grantable path exists, so a component confirming its own install review
+/// is structurally impossible under any authority.
+///
+/// The surface is total and the interface never changes shape when actions
+/// are added (the classifier host-side is the exhaustive thing): an older
+/// component's names keep working; an unknown name is a loud `unknown`, a
+/// bad payload a loud `malformed`, an uncovered ring a `denied` naming the
+/// ring — never a silent drop, never a trap.
+interface actions {
+    record action-envelope {
+        /// The action name, kebab-case (e.g. `open-address`).
+        name: string,
+        /// JSON arguments for the action; empty for unit actions.
+        payload: string,
+    }
+    variant emit-error {
+        /// The action's ring is not covered by this denizen's grant (or is
+        /// host-only); carries the ring-naming reason.
+        denied(string),
+        /// No action by this name in the host build.
+        unknown(string),
+        /// The name is known but the payload did not parse.
+        malformed(string),
+    }
+    emit: func(action: action-envelope) -> result<_, emit-error>;
+}
+
+/// The app-core world: a component that can BE an app denizen. Its runnable
+/// body reacts to host events and emits actions through the envelope; the
+/// ring gate decides what lowers. Lifecycle mirrors document-core.
+world app-core {
+    import log;
+    import caps;
+    import actions;
+
+    export activate: func();
+    export on-event: func(kind: string, payload: string);
+    export deactivate: func();
+}
+
 /// Per-turn outer contract (§10.2): the host delivers an event; the script pulls
 /// the snapshot it needs via `inspect` and returns an atomic, revision-checked
 /// batch. `activate`/`deactivate` are the lifecycle (§6 P1). Funcs are sync in the
