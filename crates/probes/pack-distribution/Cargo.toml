@@ -15,7 +15,9 @@ publish = false
 [dependencies]
 eidetic = { package = "mere-eidetic", path = "../../eidetic/eidetic-core" }
 identity = { package = "personae", path = "../../../../personae" }
-retinue = { path = "../../../../retinue" }
+retinue = { path = "../../../../retinue", features = ["tulle-radio"] }
+tulle = { path = "../../../../tulle", features = ["serial-async"] }
+tokio = { version = "1", features = ["macros", "rt", "time", "io-util"] }
 serde_json = "1"
 
 [lib]

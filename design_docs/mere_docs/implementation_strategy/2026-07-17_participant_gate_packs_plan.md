@@ -217,9 +217,18 @@ Coordination: the moot (gemot) refactor **settled 2026-07-17** (mere `a4da519` "
   proves a mid-flight scope-widening tamper reads **Broken** and is refused.
   Curation: a `MootEvent::Shared` under `mere.pack/v1` lists in the moot's
   fauna (gemot roster test) — the flora is pack discovery, no new wire.
-  **Remaining for B5's full done**: the physical LAN-pair run (two instances,
-  real interfaces) and the tessera receipt on that live pair — machinery
-  proven, second machine pending.
+  **2026-07-22, the physical pair LANDED — over RF, stronger than the LAN
+  bar**: `rf_pack_pair` (pack-distribution probe bin) ran the signed pack
+  between the two bench RNodes (COM6 → COM5, fw 1.86, the tulle_headed LoRa
+  params): destination announced over the air, 591 pack bytes transferred
+  bit-equal, signature re-verified **Trusted** on the subscriber, widened-ask
+  tamper reads **Broken**. `RESULT ok`; log at
+  `testing/mere/rf_pack_pair/run2.log`. Field finding: the resource path
+  stalls to timeout without `set_reliable_max_window(1)` on both endpoints —
+  half-duplex pacing is load-bearing, exactly as the tulle_headed acceptance
+  set it. Remaining B5 residue: the tessera receipt on a live moot over the
+  pair (the fauna half is proven in gemot; the live-pair join/share ride is a
+  bench session with the mesh stack up).
 
 - **2026-07-17 (B4/B5 grounding)**: read eidetic's schema machinery and gemot's moot wire. Two findings fold into §4/§5: the pack schema is *authored* as a `SchemaDefinition` (`schema_id = "mere.pack/v1"`) plus a `TypedPayload` struct, not a new envelope or schema system; and the moot hand-off already exists as `MootEvent::Shared { manifest_id, schema_id, title }`, so B5's curation half is mostly wiring that event to the pack schema, with only blob transfer gated on retinue R4. B4 and B5 both shrank materially.
 - **2026-07-17 (push + B4 pre-work, corrected)**: chartulary pushed (`2ced0fb` on GitHub; the remote already carried `3361f0e`), so mere can re-pin whenever B1 starts. Donor engram spec (TransferProfile v1) re-read in full from the GitHub archive and an initial donor-only verdict recorded; **Mark caught that the current implementation had not been checked**, and the verdict was corrected against `eidetic-core` (486 engram references across 58 files in mere, incl. gemot records, meerkat export, session-runtime athanor): the current `Engram` envelope already exists with content-hash identity and schema-by-reference, so a pack is an `Engram` under a **pack schema**, B4 defines a schema not an envelope, and the donor's multi-part inventory imports as payload vocabulary. §4 and open question 2 rewritten accordingly.
