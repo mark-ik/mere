@@ -145,12 +145,13 @@ standalone repo waits for a third consumer.
 ## 4. Invariants and walls
 
 1. **No cycle:** netrender, netfetcher, misfin, wgpu-* never enter mere.
-2. **The walls travel.** The graphshell crates keep their G0-G4 discipline
-   inside mere as CI checks scoped to those crates plus the scenograph four:
+2. **The walls travel.** The Graphshell session crates keep their G0-G4
+   discipline inside Mere, while the reference application lives at
+   `ports/graphshell`: checks are scoped to those crates plus the Scenograph four:
    no kernel or product dependency from the portable crates, wasm32 check for
-   `graphshell-protocol`/`-client`, warning-denying clippy. Pelt-core is the
-   precedent that contracts stay honest inside a platform repo only when the
-   checks are mechanical.
+   `graphshell-protocol`/`-client`, warning-denying clippy. Genet's
+   `genet-host-api` is the precedent that contracts stay honest inside a
+   platform repo only when the checks are mechanical.
 3. **History preserved.** Every absorption is a subtree/merge that keeps the
    incoming repo's history, the technique already used for the eidetic and
    conatus family merges and graphshell PR #308. Absorbed GitHub repos are
@@ -421,6 +422,19 @@ primary repos build from clean clones.
     into a permanent 404, and archiving already removes them from the active
     repo list. The family's own precedent agreed before this pass: muniment,
     codicil, and chartulary were archived, not deleted, at the eidetic merge.
+
+### 2026-07-24
+
+- The platform/reference-product distinction is now physical. Graphshell's
+  reusable protocol, client, endpoint, and carrier remain under
+  `crates/graphshell`; the `graphshell` reference application and its receipts
+  live under `ports/graphshell`. `scripts/check_port_boundaries.py` rejects any
+  crate-to-port dependency.
+- The governing Genet precedent was corrected at the same time. Pelt and its
+  private desktop support live under `ports/pelt`; the former `pelt-core`
+  contracts are the product-neutral `components/genet-host-api`. Mere and
+  Merecat consume that component and have no dependency on Pelt. Genet's
+  dependency-cone CI rejects component-to-port edges.
 
 ## Open
 

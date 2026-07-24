@@ -186,7 +186,7 @@ fn split_beside_axis_makes_a_vertical_split() {
     let tree = wb.to_tile_tree(actor_tile_for).expect("tree");
     // A single top-level child collapses, so the root is the Column split itself.
     match tree {
-        pelt_core::tile::TileTree::Split { axis, children } => {
+        genet_host_api::tile::TileTree::Split { axis, children } => {
             assert_eq!(axis, SplitAxis::Column, "a vertical split");
             assert_eq!(children.len(), 2);
         }
@@ -252,9 +252,9 @@ fn nested_split_fractions_addressed_by_path() {
     assert!((nested[0] - 0.7).abs() < 1e-5 && (nested[1] - 0.3).abs() < 1e-5);
 }
 
-// ── Workbench -> pelt TileTree projection (the V6 surface builder) ──
+// ── Workbench -> Genet TileTree projection (the V6 surface builder) ──
 
-use pelt_core::tile::{ContentSource, SplitAxis as Axis, TextureKey, Tile, TileId, TileTree};
+use genet_host_api::tile::{ContentSource, SplitAxis as Axis, TextureKey, Tile, TileId, TileTree};
 
 /// A host resolver standing in for meerkat's: a member maps to its actor-texture
 /// lane, keyed (id + texture) by the member's low bits.

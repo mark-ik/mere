@@ -15,14 +15,14 @@
 //! `Row` side-by-side, a `Column` top-to-bottom), each with a fractional share. Splits
 //! nest, so the tree expresses every variation: horizontal, vertical, and combinations.
 //! It is geometry-free; layout is the host's genet/taffy job, reached through
-//! [`Workbench::to_tile_tree`] (the pelt surface) and [`Workbench::slot_views`] (the
+//! [`Workbench::to_tile_tree`] (the Genet tile surface) and [`Workbench::slot_views`] (the
 //! a11y / automation projection).
 //!
 //! Replaces the legacy `FrameState` / `PaneBinding` frame model (the pre-spine
 //! pane-binding workbench), per the 2026-06-04 platen taffy-retarget plan.
 
 use forme::GraphMemberId;
-use pelt_core::tile::SplitAxis;
+use genet_host_api::tile::SplitAxis;
 
 use crate::ProjectionKind;
 
@@ -332,19 +332,19 @@ impl Workbench {
         self.root = None;
     }
 
-    /// Project this workbench onto pelt's [`TileTree`](pelt_core::tile::TileTree)
+    /// Project this workbench onto Genet's [`TileTree`](genet_host_api::tile::TileTree)
     /// contract (V5/V6) — the builder meerkat uses to render the workbench through the
-    /// standalone pelt tile surface. The **structure** is the split tree (nested
+    /// Genet tile surface. The **structure** is the split tree (nested
     /// `Row`/`Column` splits with their fractions, each leaf a stack with its active
     /// tab); the host supplies `tile_for`, resolving each member to its
-    /// [`Tile`](pelt_core::tile::Tile). An empty workbench yields `None`. A projection,
+    /// [`Tile`](genet_host_api::tile::Tile). An empty workbench yields `None`. A projection,
     /// never a second authority: the workbench stays the tiling truth, and the surface
     /// is driven entirely through the contract (the host applies tile events back and
     /// re-projects).
     pub fn to_tile_tree(
         &self,
-        mut tile_for: impl FnMut(GraphMemberId) -> pelt_core::tile::Tile,
-    ) -> Option<pelt_core::tile::TileTree> {
+        mut tile_for: impl FnMut(GraphMemberId) -> genet_host_api::tile::Tile,
+    ) -> Option<genet_host_api::tile::TileTree> {
         self.root.as_ref().map(|r| r.to_tile_tree(&mut tile_for))
     }
 

@@ -113,35 +113,37 @@ pub fn project_tree(arrangement: &Arrangement) -> WorkbenchPlan {
     WorkbenchPlan { slots }
 }
 
-/// Project a [`WorkbenchPlan`] onto pelt's [`TileTree`] contract (V5/V6) — the seam
-/// that lets meerkat host the standalone pelt tile surface as its workbench pane.
+/// Project a [`WorkbenchPlan`] onto Genet's [`TileTree`] contract (V5/V6), the seam
+/// that lets a host use Genet's tile surface as its workbench pane.
 ///
 /// The plan owns the **structure** (the left-to-right slots, each a tile or a
 /// tab-stack); the host owns each tile's **resolution** — its stable [`TileId`], title,
 /// and content lane (a member's actor texture is an
-/// [`ExternalTexture`](pelt_core::tile::ContentSource::ExternalTexture), a document is a
-/// [`Document`](pelt_core::tile::ContentSource::Document)) — supplied by `tile_for`. So
+/// [`ExternalTexture`](genet_host_api::tile::ContentSource::ExternalTexture), a document is a
+/// [`Document`](genet_host_api::tile::ContentSource::Document)) — supplied by `tile_for`. So
 /// this stays a pure projection: forme remains the arrangement authority, this never
 /// writes back (mere applies tile events to forme and re-projects).
 ///
 /// An empty plan yields `None` (the surface has nothing to show). A single slot maps to
 /// that slot's stack directly (no enclosing split); multiple slots map to a `Row` split
 /// with **equal** fractions — the plan is geometry-free, so split ratios start even and
-/// a [`DividerMoved`](pelt_core::tile::TileEvent::DividerMoved) refines them (the real
+/// a [`DividerMoved`](genet_host_api::tile::TileEvent::DividerMoved) refines them (the real
 /// ratios live in platen's projection-state, applied by the host).
 pub fn tile_tree_from_plan(
     plan: &WorkbenchPlan,
-    mut tile_for: impl FnMut(&TilePlan) -> pelt_core::tile::Tile,
-) -> Option<pelt_core::tile::TileTree> {
-    use pelt_core::tile::{SplitAxis, TileBranch, TileTree};
+    mut tile_for: impl FnMut(&TilePlan) -> genet_host_api::tile::Tile,
+) -> Option<genet_host_api::tile::TileTree> {
+    use genet_host_api::tile::{SplitAxis, TileBranch, TileTree};
 
     if plan.slots.is_empty() {
         return None;
     }
     let slot_tree =
-        |slot: &PlanSlot, tile_for: &mut dyn FnMut(&TilePlan) -> pelt_core::tile::Tile| match slot {
-            PlanSlot::Tile(t) => TileTree::single(tile_for(t)),
-            PlanSlot::Tabs(v) => TileTree::stack(v.iter().map(|t| tile_for(t)).collect(), 0),
+        |slot: &PlanSlot, tile_for: &mut dyn FnMut(&TilePlan) -> genet_host_api::tile::Tile| {
+            match slot {
+                PlanSlot::Tile(t) => TileTree::single(tile_for(t)),
+                PlanSlot::Tabs(v) => TileTree::stack(v.iter().map(|t| tile_for(t)).collect(), 0),
+            }
         };
 
     if plan.slots.len() == 1 {
@@ -266,9 +268,9 @@ mod tests {
         assert_eq!(plan, back);
     }
 
-    // ── WorkbenchPlan -> pelt TileTree projection (the V6 surface seam) ──
+    // ── WorkbenchPlan -> Genet TileTree projection (the V6 surface seam) ──
 
-    use pelt_core::tile::{ContentSource, DocumentRef, SplitAxis, Tile, TileId, TileTree};
+    use genet_host_api::tile::{ContentSource, DocumentRef, SplitAxis, Tile, TileId, TileTree};
 
     /// A host resolver standing in for meerkat's: sequential tile ids, the label as
     /// title, a document lane. (The real host resolves a member to its actor-texture

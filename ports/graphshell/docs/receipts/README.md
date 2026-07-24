@@ -5,7 +5,7 @@ state machine, capability resolver, and native HTML view:
 
 ```powershell
 $env:CARGO_TARGET_DIR = 'target-proof'
-cargo run -p graphshell --bin g1_receipt -- docs/receipts/g1_loopback.html
+cargo run -p graphshell --bin g1_receipt -- ports/graphshell/docs/receipts/g1_loopback.html
 ```
 
 The workspace test suite compares fresh output byte-for-byte with the committed

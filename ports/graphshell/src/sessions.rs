@@ -300,7 +300,7 @@ mod tests {
 
     #[test]
     fn committed_g4_receipt_contains_both_products_and_all_three_sessions() {
-        let html = include_str!("../../../docs/receipts/g4_session_switch.html");
+        let html = include_str!("../docs/receipts/g4_session_switch.html");
         assert_eq!(html.matches("role=\"tab\"").count(), 3);
         assert_eq!(html.matches("<iframe").count(), 3);
         assert!(html.contains("Merecat · Browsing graph"));

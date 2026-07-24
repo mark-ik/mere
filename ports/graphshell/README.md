@@ -6,7 +6,7 @@ scenes, and presentation preferences.
 
 ## Current boundary
 
-The workspace is intentionally portable:
+The reusable session stack lives in [`crates/graphshell`](../../crates/graphshell):
 
 - `graphshell-protocol` carries versioned score, epoch-preserving scene,
   presentation, resume, status, and intent messages over an unspecified
@@ -17,9 +17,9 @@ The workspace is intentionally portable:
   applications to implement beside their own truth.
 - `graphshell-stdio` provides the first local carrier: a newline-delimited JSON
   process boundary for discovery, snapshots, resources, resume, and intents.
-- `graphshell` is the presentation host. Its native receipt view can place
-  resolved presentations at disclosed Scenograph origins, draw disclosed
-  relations, and collapse to a semantic card stack on narrow screens.
+This port is the `graphshell` presentation host. Its native receipt view can
+place resolved presentations at disclosed Scenograph origins, draw disclosed
+relations, and collapse to a semantic card stack on narrow screens.
 
 The portable crates may depend on Scenograph contracts, serialization, and
 content-addressing primitives. They must not depend on Mere, Merecat, Isometry,
@@ -45,7 +45,7 @@ Run the proof wall:
 $env:CARGO_TARGET_DIR = 'target-proof'
 cargo test --workspace
 cargo check --workspace --target wasm32-unknown-unknown
-cargo run -p graphshell --bin g1_receipt -- docs/receipts/g1_loopback.html
+cargo run -p graphshell --bin g1_receipt -- ports/graphshell/docs/receipts/g1_loopback.html
 ```
 
 The committed [G1 receipt](docs/receipts/g1_loopback.html) is compared
@@ -68,8 +68,9 @@ scene, routed relations, and content-addressed card offers, and maps advertised
 intents back through Merecat's Servitor gate. Graphshell gains only the generic
 spatial receipt view; this repository still has no Mere or Merecat dependency.
 
-The portable workspace was published on 2026-07-22 as the active Graphshell
-tree. The retired browser donor remains intact in this repository's Git
+The portable stack was published on 2026-07-22 as the active Graphshell tree.
+It joined Mere on 2026-07-23, and the reference application moved under
+`ports/` on 2026-07-24. The retired browser donor remains intact in Mere's Git
 history rather than appearing as current source or documentation.
 
 ## G4 local sessions

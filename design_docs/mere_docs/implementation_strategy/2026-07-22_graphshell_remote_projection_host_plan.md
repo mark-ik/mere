@@ -403,7 +403,8 @@ the disclosing session. One in-memory endpoint resolves the same scene as a
 portable card plus image under the rich profile and as a native glyph plus
 labeled image placeholder under the compact profile. Both preserve their
 advertised actions in a renderer-neutral accessibility tree and ordinary
-keyboard-focusable buttons. The committed `docs/receipts/g1_loopback.html`
+keyboard-focusable buttons. The committed
+`ports/graphshell/docs/receipts/g1_loopback.html`
 receipt is generated from the real endpoint/client/view path and compared
 byte-for-byte by test. Headed inspection passed at 1440 × 1000 and 390 × 844
 with zero overflow or browser errors. NetRender fragments, live panes, intent

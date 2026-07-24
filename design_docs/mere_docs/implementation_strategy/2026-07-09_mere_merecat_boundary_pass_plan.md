@@ -42,7 +42,7 @@ verified against the tree, not carried from docs.
    facade re-exports them today (`crates/mere/src/lib.rs:14-15`); that is
    compatibility scaffolding for the in-workspace host, not the library
    boundary. orrery ships a winit bin over genet/netrender git deps; platen
-   depends on document-canvas, pelt-core, and the netrender paint vocabulary.
+   depends on document-canvas, `genet-host-api`, and the netrender paint vocabulary.
    Both are application surfaces and move out with merecat. The founding
    doc's target shape ("mere = ... forme/platen, orrery ...") is amended
    accordingly this session.
@@ -374,7 +374,7 @@ Verified against the tree, 2026-07-09:
   underlay producer, CartographyGeometry) merged into canvas — the graph-truth
   presentation library across the apps — and platen slimmed to the pane home:
   workbench tiling, tree projection, Tree pane geometry, document scene
-  (deps down to document-canvas/inker/pelt-core/forme/serde). meerkat swept
+  (deps down to document-canvas/inker/genet-host-api/forme/serde). meerkat swept
   mechanically (its internal lowercase orrery vocabulary and the
   PaneContent/ContentPane::Orrery variants stay — donor-internal, dies with
   the port; renaming the frame crate's persisted variant is a separate

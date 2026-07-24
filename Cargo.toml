@@ -80,7 +80,7 @@ members = [
     "crates/graphshell/graphshell-client",
     "crates/graphshell/graphshell-endpoint",
     "crates/graphshell/graphshell-stdio",
-    "crates/graphshell/graphshell",
+    "ports/graphshell",
 ]
 exclude = [
     "crates/probes",
@@ -292,7 +292,7 @@ unsafe_code = "warn"
 all = "warn"
 
 # ─── Cross-repo render-stack alignment (meerkat → genet) ────────────────────
-# meerkat pulls genet-layout (via pelt-live) for the cascade → layout → paint
+# Merecat pulls genet-layout for the cascade → layout → paint
 # path. Genet's fork family is published under distinct `genet-stylo*` names,
 # and genet's vendored stylo_taffy adapter consumes those registry packages
 # directly. The only remaining root redirect in this cone is the Taffy fork.

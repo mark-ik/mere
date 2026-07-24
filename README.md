@@ -132,19 +132,25 @@ The on-screen host, `merecat`, lives in the sibling `mark-ik/merecat`
 repository (it pulls `mere` as a git dependency); run it from there with
 `cargo run`.
 
-The one `[[bin]]` target in this workspace is:
+The workspace's runnable hosts live under `ports/`. Development binaries that
+exercise a reusable crate may remain beside that crate:
 
 - `canvas` (`crates/canvas/canvas`): a thin winit shell over the reusable graph
   field-canvas, launchable on its own for development and testing. `merecat`
   hosts the same canvas as its root surface. Likely also the seed of a thin
   wasm client for browser-extension targets.
+- `graphshell` (`ports/graphshell`): Mere's reference remote projection client.
+  It composes the reusable Graphshell session stack into acceptance views and,
+  as the host grows, the canonical runnable shell.
 
 ## Workspace layout
 
-The workspace is grouped into supercrate directories under `crates/`, each owning
-a single concern. Crate leaf names dropped their `mere-*` / role prefixes in a
-2026-05-19 naming pass, so the directory path disambiguates (for example the
-graph kernel's package name is `kernel`, at `crates/graph/graph-kernel`).
+Reusable code is grouped into supercrate directories under `crates/`, each
+owning a single concern. Runnable reference applications live under `ports/`.
+Ports may depend on crates; crates must never depend on ports. Crate leaf names
+dropped their `mere-*` / role prefixes in a 2026-05-19 naming pass, so the
+directory path disambiguates (for example the graph kernel's package name is
+`kernel`, at `crates/graph/graph-kernel`).
 
 | Directory | Package(s) | Role |
 |---|---|---|
@@ -181,7 +187,8 @@ versions, and licenses are unchanged, and only their repository home moved.
 | `crates/intel` (alongside `embed`/`infer`/`signals`) | `vates`, `sibylla` | Inference and embedding: the decoder/actor lane and the retrieval core with its GPU index |
 | `crates/conatus` | `numen`, `quint`, `seiche` | The portable physics stack: field definitions, evaluation, integration. Kernel-free by default |
 | `crates/scenograph` | `sceno`, `scenomise`, `scenotime`, `scenograph` | The projection engine: scene and score contracts, analytic arrangements, and the incremental runtime |
-| `crates/graphshell` | `graphshell-protocol`, `-client`, `-endpoint`, `-stdio`, `graphshell` | Mere's remote port: the session protocol, its client and endpoint state machines, a local carrier, and the reference client |
+| `crates/graphshell` | `graphshell-protocol`, `-client`, `-endpoint`, `-stdio` | Mere's reusable remote-session stack: its session grammar, client and endpoint state machines, and first local carrier |
+| `ports/graphshell` | `graphshell` | Mere's reference remote projection client and executable acceptance views |
 
 ## The printing-press metaphor
 
@@ -233,7 +240,9 @@ Mere consumes these one-way (it depends on them; they never depend on Mere):
 - `genet` (`mark-ik/genet`): the Servo-derived web engine and host layer. It
   carries the engine-management family (`inker`, `nematic`, `document-canvas`,
   2026-07-10) and, since the consolidation, the reactive UI toolkit
-  (`cambium`, `sprigging`, `meristem`) and the Fetch engine (`netfetcher`).
+  (`cambium`, `sprigging`, `meristem`), the Fetch engine (`netfetcher`), and
+  the product-neutral host contract (`genet-host-api`). Pelt is Genet's
+  reference application; Mere does not depend on Pelt.
   The `taffy` / `ipc-channel` forks are vendored there and patched in.
 - `netrender` (`mark-ik/netrender`): the paint-realization engine. Public, with
   its own upstream lineage.

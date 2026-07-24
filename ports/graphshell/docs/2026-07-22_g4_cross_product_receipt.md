@@ -13,7 +13,7 @@ Neither product appears in Graphshell's dependency graph.
 The three binaries were built independently:
 
 ```powershell
-# repos/graphshell
+# repos/mere
 cargo build -p graphshell --bin g4_sessions
 
 # repos/merecat
@@ -26,7 +26,7 @@ cargo build -p isometry-graphshell --bin isometry_endpoint
 The host was then run against both endpoint processes:
 
 ```powershell
-g4_sessions.exe docs/receipts/g4_session_switch.html `
+g4_sessions.exe ports/graphshell/docs/receipts/g4_session_switch.html `
   graphshell_endpoint.exe `
   isometry_endpoint.exe
 ```
@@ -34,7 +34,7 @@ g4_sessions.exe docs/receipts/g4_session_switch.html `
 The process reported:
 
 ```text
-mounted 3 sessions from 2 endpoints into docs\receipts\g4_session_switch.html
+mounted 3 sessions from 2 endpoints into ports\graphshell\docs\receipts\g4_session_switch.html
 ```
 
 The committed receipt contains:

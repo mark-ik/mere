@@ -10,7 +10,7 @@
 //! inked forme onto the page to produce the impression. Here it is the
 //! layer that holds the pane arrangement — *which content goes in which
 //! frame pane* — and projects that arrangement into the rendering-surface
-//! layer (pelt's tile tree; `platen-view` flex DOM under genet).
+//! layer (Genet's host tile tree; `platen-view` flex DOM under Genet).
 //!
 //! ## Decomposed 2026-07-09
 //!

@@ -16,12 +16,12 @@ path = "src/lib.rs"
 [dependencies]
 document-canvas.workspace = true
 inker.workspace = true
-# Pelt's tile-tree contract (V5/V6): platen projects a forme arrangement's
+# Genet's host tile-tree contract (V5/V6): platen projects a forme arrangement's
 # WorkbenchPlan onto it (`tree_projection::tile_tree_from_plan`), so a host
-# can drive the standalone pelt tile surface as its workbench pane. A
-# zero-dependency contract leaf in genet; the projection is the only seam
+# can drive a Genet tile surface as its workbench pane. A zero-dependency
+# contract leaf in Genet; the projection is the only seam
 # between forme and the surface (the projection-not-a-second-authority rule).
-pelt-core = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+genet-host-api = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 # Platen projects a forme arrangement into a presentation plan (the
 # tree projection — its core role under the composition spine).
 forme.workspace = true

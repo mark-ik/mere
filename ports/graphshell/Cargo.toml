@@ -8,10 +8,10 @@ description = "Graphshell presentation host and loopback acceptance view."
 
 [dependencies]
 base64.workspace = true
-graphshell-client = { path = "../graphshell-client" }
-graphshell-endpoint = { path = "../graphshell-endpoint" }
-graphshell-protocol = { path = "../graphshell-protocol" }
-graphshell-stdio = { path = "../graphshell-stdio" }
+graphshell-client = { path = "../../crates/graphshell/graphshell-client" }
+graphshell-endpoint = { path = "../../crates/graphshell/graphshell-endpoint" }
+graphshell-protocol = { path = "../../crates/graphshell/graphshell-protocol" }
+graphshell-stdio = { path = "../../crates/graphshell/graphshell-stdio" }
 sceno.workspace = true
 scenotime.workspace = true
 serde_json.workspace = true

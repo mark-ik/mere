@@ -435,10 +435,8 @@ mod tests {
 
     #[test]
     fn committed_receipt_matches_the_live_loopback_view() {
-        assert_eq!(
-            render_g1_receipt().unwrap(),
-            include_str!("../../../docs/receipts/g1_loopback.html")
-        );
+        let committed = include_str!("../docs/receipts/g1_loopback.html").replace("\r\n", "\n");
+        assert_eq!(render_g1_receipt().unwrap(), committed);
     }
 
     #[test]
