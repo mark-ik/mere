@@ -1,0 +1,10 @@
+[package]
+name = "graphshell-endpoint"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Application-injected projection and intent boundary for Graphshell."
+
+[dependencies]
+graphshell-protocol = { path = "../graphshell-protocol" }

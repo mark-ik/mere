@@ -1,0 +1,17 @@
+[package]
+name = "graphshell"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Graphshell presentation host and loopback acceptance view."
+
+[dependencies]
+base64.workspace = true
+graphshell-client = { path = "../graphshell-client" }
+graphshell-endpoint = { path = "../graphshell-endpoint" }
+graphshell-protocol = { path = "../graphshell-protocol" }
+graphshell-stdio = { path = "../graphshell-stdio" }
+sceno.workspace = true
+scenotime.workspace = true
+serde_json.workspace = true

@@ -1,0 +1,16 @@
+[package]
+name = "graphshell-stdio"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Native newline-delimited stdio carrier for local Graphshell endpoints."
+
+[dependencies]
+graphshell-endpoint = { path = "../graphshell-endpoint" }
+graphshell-protocol = { path = "../graphshell-protocol" }
+serde_json.workspace = true
+
+[dev-dependencies]
+sceno.workspace = true
+scenotime.workspace = true

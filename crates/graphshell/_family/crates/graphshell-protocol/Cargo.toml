@@ -1,0 +1,16 @@
+[package]
+name = "graphshell-protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Versioned carrier-neutral projection messages for Graphshell."
+
+[dependencies]
+blake3.workspace = true
+sceno.workspace = true
+scenotime.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
