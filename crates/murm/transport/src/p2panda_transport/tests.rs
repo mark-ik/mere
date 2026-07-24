@@ -1,4 +1,5 @@
 use super::*;
+use crate::TransportKind;
 use identity::{IdentityProvider, InMemoryProvider};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -60,7 +61,25 @@ async fn paired_p2panda_transports_round_trip_bytes() {
         })
     };
 
-    let mut bob_stream = bob.accept(alpn).await.expect("bob accept");
+    let accepted = bob.accept(alpn.clone()).await.expect("bob accept");
+
+    // p2panda authenticates its connections, so the accepted session reports
+    // the real initiator (plan D4/V4) — not a claim read off the wire.
+    assert_eq!(
+        accepted.peer,
+        Some(alice_id),
+        "p2panda must report the authenticated initiator"
+    );
+    assert_ne!(
+        accepted.peer,
+        Some(bob_id),
+        "the reported peer must be the initiator, not the acceptor"
+    );
+    assert!(accepted.is_transport_authenticated());
+    assert_eq!(accepted.protocol, alpn);
+    assert_eq!(accepted.ingress.transport, TransportKind::P2panda);
+
+    let mut bob_stream = accepted.into_stream();
     let mut buf = vec![0u8; payload.len()];
     bob_stream.read_exact(&mut buf).await.expect("bob read");
     assert_eq!(buf, payload);

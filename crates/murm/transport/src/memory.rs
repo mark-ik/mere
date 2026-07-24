@@ -48,7 +48,7 @@ use std::sync::{Arc, Mutex};
 use tokio::io::{DuplexStream, duplex};
 use tokio::sync::{Mutex as TokioMutex, mpsc};
 
-use crate::{Alpn, PeerID, Transport, TransportError};
+use crate::{AcceptedSession, Alpn, IngressContext, PeerID, Transport, TransportError};
 
 /// Default duplex buffer size (64 KiB).
 const DUPLEX_BUF: usize = 64 * 1024;
@@ -144,10 +144,19 @@ impl Transport for MemoryTransport {
         Ok(my_end)
     }
 
-    async fn accept(&self, alpn: Alpn) -> Result<DuplexStream, TransportError> {
+    async fn accept(&self, alpn: Alpn) -> Result<AcceptedSession<DuplexStream>, TransportError> {
         let channel = get_or_create_channel(&self.incoming, &alpn);
         let mut rx = channel.rx.lock().await;
-        rx.recv().await.ok_or(TransportError::Closed)
+        let stream = rx.recv().await.ok_or(TransportError::Closed)?;
+        // The fixture is a *pair*, so the counterparty is known by
+        // construction — this is knowledge the fixture genuinely has, not a
+        // claim read off the wire.
+        Ok(AcceptedSession::new(
+            stream,
+            alpn,
+            Some(self.peer_node),
+            IngressContext::memory(),
+        ))
     }
 }
 
@@ -195,7 +204,7 @@ mod tests {
         let accept_fut = bob.accept(alpn);
         let (alice_res, bob_res) = tokio::join!(connect_fut, accept_fut);
         let mut alice_stream = alice_res.unwrap();
-        let mut bob_stream = bob_res.unwrap();
+        let mut bob_stream = bob_res.unwrap().into_stream();
 
         // Alice writes; bob reads.
         let payload = b"hello over the memory transport";

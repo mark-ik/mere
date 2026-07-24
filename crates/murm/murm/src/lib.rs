@@ -238,7 +238,10 @@ mod tests {
             Err(transport::TransportError::ConnectionRefused)
         }
 
-        async fn accept(&self, _alpn: Alpn) -> Result<Self::Stream, transport::TransportError> {
+        async fn accept(
+            &self,
+            _alpn: Alpn,
+        ) -> Result<transport::AcceptedSession<Self::Stream>, transport::TransportError> {
             Err(transport::TransportError::ConnectionRefused)
         }
     }
@@ -716,7 +719,7 @@ mod tests {
         let (alice_stream_res, bob_stream_res) =
             tokio::join!(alice_t.connect(bob_id, alpn.clone()), bob_t.accept(alpn));
         let mut alice_stream = alice_stream_res.expect("alice connect failed");
-        let mut bob_stream = bob_stream_res.expect("bob accept failed");
+        let mut bob_stream = bob_stream_res.expect("bob accept failed").into_stream();
 
         // Wire framing: varint length prefix, then post bytes.
         let len_prefix = encode_varint_to_vec(post_bytes.len() as u64);
@@ -810,7 +813,7 @@ mod tests {
         let (alice_stream_res, bob_stream_res) =
             tokio::join!(alice_t.connect(bob_id, alpn.clone()), bob_t.accept(alpn));
         let mut alice_stream = alice_stream_res.unwrap();
-        let mut bob_stream = bob_stream_res.unwrap();
+        let mut bob_stream = bob_stream_res.unwrap().into_stream();
 
         let len_prefix = encode_varint_to_vec(post_bytes.len() as u64);
         alice_stream.write_all(&len_prefix).await.unwrap();

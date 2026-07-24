@@ -6,7 +6,7 @@ use identity::Ed25519Keypair;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use super::{ReticulumInterface, ReticulumTransport};
-use crate::{Alpn, PeerID, Transport};
+use crate::{Alpn, PeerID, Transport, TransportKind};
 
 /// A distinct-per-test loopback port. Reticulum's TCP interface takes a string
 /// address and does not expose an ephemeral-port readback, so tests pin a port.
@@ -87,10 +87,33 @@ async fn bilateral_round_trip_over_tcp_loopback() {
     // Server accepts an inbound link and echoes a reply.
     let alpn_server = alpn.clone();
     let accept = tokio::spawn(async move {
-        let mut stream = tokio::time::timeout(Duration::from_secs(25), server.accept(alpn_server))
-            .await
-            .expect("accept timed out")
-            .expect("accept failed");
+        let accepted =
+            tokio::time::timeout(Duration::from_secs(25), server.accept(alpn_server.clone()))
+                .await
+                .expect("accept timed out")
+                .expect("accept failed");
+
+        // Best-effort Reticulum acceptance cannot identify its initiator, so
+        // the honest answer is `None` — an application identity arrives later
+        // through a session proof (plan D4/D6). Ingress is still a fact: the
+        // interface and link the session actually arrived on.
+        assert!(
+            !accepted.is_transport_authenticated(),
+            "reticulum best-effort must not claim an authenticated peer"
+        );
+        assert_eq!(accepted.peer, None);
+        assert_eq!(accepted.protocol, alpn_server);
+        assert_eq!(accepted.ingress.transport, TransportKind::Reticulum);
+        assert!(
+            accepted.ingress.interface.is_some(),
+            "the interface the link arrived on must survive accept"
+        );
+        assert!(
+            accepted.ingress.link.is_some(),
+            "the link identity must survive accept"
+        );
+
+        let mut stream = accepted.into_stream();
         let mut buf = [0u8; 5];
         stream.read_exact(&mut buf).await.expect("server read");
         assert_eq!(&buf, b"hello");

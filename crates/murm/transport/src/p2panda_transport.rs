@@ -60,7 +60,7 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::sync::{Mutex as TokioMutex, mpsc};
 
 use crate::blobs::BlobStore;
-use crate::{Alpn, PeerID, Transport, TransportError};
+use crate::{AcceptedSession, Alpn, IngressContext, PeerID, Transport, TransportError};
 
 /// A bidirectional p2panda-net QUIC stream presented as `AsyncRead + AsyncWrite`.
 ///
@@ -105,30 +105,47 @@ impl AsyncWrite for P2pandaStream {
     }
 }
 
+/// A queued inbound p2panda stream and the peer the transport authenticated.
+///
+/// The peer is captured in the handler, where the [`Connection`] is still in
+/// hand: `accept` drains a queue and no longer has it. `None` only if the
+/// remote key fails to decode, which would mean the connection is not usable
+/// as an authenticated peer anyway.
+struct QueuedStream {
+    stream: P2pandaStream,
+    peer: Option<PeerID>,
+}
+
 /// Registered per ALPN on the p2panda-net endpoint; pushes each accepted
 /// bi-stream to a queue that [`Transport::accept`] drains.
 #[derive(Debug, Clone)]
 struct StreamQueueHandler {
-    tx: mpsc::UnboundedSender<P2pandaStream>,
+    tx: mpsc::UnboundedSender<QueuedStream>,
 }
 
 impl ProtocolHandler for StreamQueueHandler {
     async fn accept(&self, connection: Connection) -> Result<(), AcceptError> {
+        // p2panda authenticates its connections, so the remote id is a
+        // transport fact (plan D4) and may be reported as the peer.
+        let peer = PeerID::from_bytes(connection.remote_id().as_bytes()).ok();
         let (send, recv) = connection
             .accept_bi()
             .await
             .map_err(AcceptError::from_err)?;
-        let _ = self.tx.send(P2pandaStream {
-            send,
-            recv,
-            _connection: connection,
+        let _ = self.tx.send(QueuedStream {
+            stream: P2pandaStream {
+                send,
+                recv,
+                _connection: connection,
+            },
+            peer,
         });
         Ok(())
     }
 }
 
 type AlpnQueues =
-    Arc<StdMutex<HashMap<Alpn, Arc<TokioMutex<mpsc::UnboundedReceiver<P2pandaStream>>>>>>;
+    Arc<StdMutex<HashMap<Alpn, Arc<TokioMutex<mpsc::UnboundedReceiver<QueuedStream>>>>>>;
 
 /// Builder for [`P2pandaTransport`]. Use [`P2pandaTransport::builder`].
 pub struct P2pandaTransportBuilder<'a> {
@@ -541,7 +558,7 @@ impl Transport for P2pandaTransport {
         })
     }
 
-    async fn accept(&self, alpn: Alpn) -> Result<P2pandaStream, TransportError> {
+    async fn accept(&self, alpn: Alpn) -> Result<AcceptedSession<P2pandaStream>, TransportError> {
         let rx = self
             .queues
             .lock()
@@ -550,7 +567,13 @@ impl Transport for P2pandaTransport {
             .cloned()
             .ok_or(TransportError::AlpnNotRegistered)?;
         let mut rx = rx.lock().await;
-        rx.recv().await.ok_or(TransportError::Closed)
+        let queued = rx.recv().await.ok_or(TransportError::Closed)?;
+        Ok(AcceptedSession::new(
+            queued.stream,
+            alpn,
+            queued.peer,
+            IngressContext::p2panda(),
+        ))
     }
 }
 

@@ -4,7 +4,7 @@ use std::future::Future;
 
 use tokio::io::{AsyncRead, AsyncWrite};
 
-use crate::{Alpn, PeerID, TransportError};
+use crate::{AcceptedSession, Alpn, PeerID, TransportError};
 
 /// A peer-to-peer transport for the Mere browser.
 ///
@@ -64,20 +64,23 @@ pub trait Transport: Send + Sync {
         alpn: Alpn,
     ) -> impl Future<Output = Result<Self::Stream, TransportError>> + Send;
 
-    /// Accept a single incoming stream for a specific protocol.
+    /// Accept a single incoming session for a specific protocol.
     ///
-    /// Returns once a peer connects on the given ALPN. Typically called in
-    /// a loop by a server-side protocol handler:
+    /// Returns once a peer connects on the given ALPN, with the stream and the
+    /// facts the transport can honestly report about it: the protocol, the
+    /// authenticated peer (if the transport authenticates), and where it
+    /// arrived. See [`AcceptedSession`] for why `peer` is an `Option` and why
+    /// it is never filled from application bytes.
     ///
     /// ```ignore
     /// let alpn = Alpn::new("mere/cable/v1");
     /// loop {
-    ///     let stream = transport.accept(alpn.clone()).await?;
-    ///     tokio::spawn(handle_cable_stream(stream));
+    ///     let session = transport.accept(alpn.clone()).await?;
+    ///     tokio::spawn(handle_cable_stream(session.stream));
     /// }
     /// ```
     fn accept(
         &self,
         alpn: Alpn,
-    ) -> impl Future<Output = Result<Self::Stream, TransportError>> + Send;
+    ) -> impl Future<Output = Result<AcceptedSession<Self::Stream>, TransportError>> + Send;
 }

@@ -39,6 +39,7 @@
 #![doc(html_root_url = "https://docs.rs/transport/0.0.1")]
 #![warn(missing_docs)]
 
+mod accepted;
 mod alpn;
 pub mod blobs;
 mod error;
@@ -50,6 +51,7 @@ pub mod reticulum_transport;
 pub mod synced_space;
 mod transport;
 
+pub use crate::accepted::{AcceptedSession, IngressContext, IngressInterfaceId, TransportKind};
 pub use crate::alpn::Alpn;
 pub use crate::blobs::{BlobError, BlobHash, BlobStore};
 pub use crate::error::TransportError;

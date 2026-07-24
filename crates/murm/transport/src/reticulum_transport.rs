@@ -50,7 +50,9 @@ use retinue::endpoint::{Endpoint, LinkStream};
 use retinue::hash::AddressHash;
 use retinue::identity::Identity;
 
-use crate::{Alpn, PeerID, Transport, TransportError};
+use crate::{
+    AcceptedSession, Alpn, IngressContext, IngressInterfaceId, PeerID, Transport, TransportError,
+};
 
 use self::announce::{build_app_data, recover_peer_id};
 use self::keys::derive_identity;
@@ -148,7 +150,7 @@ pub struct ReticulumTransport {
     /// Per-ALPN inbound accept queue, fed by the accept-router task. Behind an
     /// async mutex because `accept` takes `&self` yet must own the receiver while
     /// awaiting.
-    inbound: HashMap<Alpn, Arc<TokioMutex<mpsc::UnboundedReceiver<LinkStream>>>>,
+    inbound: HashMap<Alpn, Arc<TokioMutex<mpsc::UnboundedReceiver<InboundLink>>>>,
     connect_timeout: Duration,
     /// Background driver tasks (accept router, announce listener, announce
     /// sender), aborted on drop.
@@ -200,7 +202,7 @@ impl ReticulumTransport {
         let mut names: HashMap<Alpn, DestinationName> = HashMap::new();
         let mut app_data: HashMap<Alpn, Vec<u8>> = HashMap::new();
         let mut inbound = HashMap::new();
-        let mut inbound_senders: HashMap<AddressHash, mpsc::UnboundedSender<LinkStream>> =
+        let mut inbound_senders: HashMap<AddressHash, mpsc::UnboundedSender<InboundLink>> =
             HashMap::new();
         for alpn in &alpns {
             let name = destination_name_for_alpn(alpn);
@@ -287,13 +289,32 @@ fn destination_name_for_alpn(alpn: &Alpn) -> DestinationName {
 
 /// Accept-router task: forward each inbound link to the queue for the ALPN whose
 /// destination it targeted. Ends when the endpoint closes.
+/// An inbound Reticulum link queued for `accept`, with the ingress facts
+/// retinue reported when it arrived.
+///
+/// Reticulum best-effort acceptance cannot identify its initiator, so there is
+/// deliberately no peer here: the application identity arrives later through a
+/// session proof (plan D6).
+struct InboundLink {
+    stream: LinkStream,
+    link: AddressHash,
+    interface: IngressInterfaceId,
+}
+
 async fn run_accept_router(
     endpoint: Arc<Endpoint>,
-    senders: HashMap<AddressHash, mpsc::UnboundedSender<LinkStream>>,
+    senders: HashMap<AddressHash, mpsc::UnboundedSender<InboundLink>>,
 ) {
     while let Ok(accepted) = endpoint.accept_on_any().await {
         if let Some(tx) = senders.get(&accepted.destination) {
-            let _ = tx.send(accepted.stream);
+            // Carry the ingress facts retinue reported (plan V3/V4): the
+            // router used to drop them here, which left `accept` unable to say
+            // which bearer a session arrived over.
+            let _ = tx.send(InboundLink {
+                link: accepted.stream.link_id(),
+                interface: IngressInterfaceId(u64::from(accepted.interface)),
+                stream: accepted.stream,
+            });
         }
     }
 }
@@ -367,7 +388,7 @@ impl Transport for ReticulumTransport {
         Ok(ReticulumStream::new(stream))
     }
 
-    async fn accept(&self, alpn: Alpn) -> Result<ReticulumStream, TransportError> {
+    async fn accept(&self, alpn: Alpn) -> Result<AcceptedSession<ReticulumStream>, TransportError> {
         let queue = self
             .inbound
             .get(&alpn)
@@ -375,7 +396,15 @@ impl Transport for ReticulumTransport {
             .ok_or(TransportError::AlpnNotRegistered)?;
         let mut rx = queue.lock().await;
         match rx.recv().await {
-            Some(stream) => Ok(ReticulumStream::new(stream)),
+            Some(inbound) => Ok(AcceptedSession::new(
+                ReticulumStream::new(inbound.stream),
+                alpn,
+                // Best-effort Reticulum acceptance cannot identify its
+                // initiator. Reporting `None` is the honest answer; a session
+                // proof supplies the application identity later (plan D6).
+                None,
+                IngressContext::reticulum(inbound.interface, *inbound.link.as_bytes()),
+            )),
             None => Err(TransportError::Closed),
         }
     }
