@@ -1,12 +1,19 @@
 # Scene Contract Note — the first sceno slice
 
-**Date**: 2026-07-22
-**Status**: Landed (sceno 0.0.1 working tree, 12 tests). Design rationale for
-the P2 type sketch, written for review before mere wires onto it. The proof
-sequence and findings live in mere's
-`design_docs/mere_docs/implementation_strategy/2026-07-21_projection_proofs_plan.md`;
-the direction record is the same repo's
-`2026-07-21_projection_engine_prior_art_brief.md`.
+**Date**: 2026-07-22 (updated 2026-07-24)
+**Status**: Landed and consumed. Written as rationale for the P2 type sketch,
+before mere wired onto it; mere, isometry, and graphshell now all consume the
+contract, so the review question is no longer "is this the right shape to
+build" but "which parts did the consumers actually force". Current: sceno
+0.0.2, 29 family tests (sceno 13, scenomise 9, scenotime 7), verified
+2026-07-24.
+
+The family moved on 2026-07-23: the standalone `scenograph` repo was absorbed
+into mere at `crates/scenograph`, so the proof sequence and findings now live
+in this repo beside it,
+[projection_proofs_plan](../../../design_docs/mere_docs/implementation_strategy/2026-07-21_projection_proofs_plan.md);
+the direction record is the
+[prior-art brief](../../../design_docs/mere_docs/research/2026-07-21_projection_engine_prior_art_brief.md).
 
 ## What landed
 
@@ -21,7 +28,20 @@ the direction record is the same repo's
   override); `RoutedRelation` (full polyline + open kind + weight);
   `Region` (members + optional contour + confidence).
 - `measure`: `Measurement` / `Measurements` — the input half of "the
-  representation measures content; the projection places it."
+  representation measures content; the projection places it." See the open
+  question below: this is the one module no consumer has used.
+- `score` (landed 2026-07-22, after this note's first draft): `Score`,
+  `Arrangement` (`Spiral` | `Board` | `Geographic`), `ScoreItem`, `Placement`,
+  `SCORE_VERSION`. The deferral below expected these at the proof-4 era; the
+  P3/P4/P5 boundary proof pulled them forward, because a product-free
+  *persisted* vocabulary is what makes two adapters comparable.
+
+Beside it in the family: `scenomise::solve` realizes a score footprint-aware
+(the spiral grows its spacing to clear the largest measured item),
+`scenomise::relax` gives any scene dependency-free repulsion/spring/anchor
+relaxation, and `scenotime` wraps a dense scene in epoch-scoped stable slots
+with transactional diffs (see the
+[scenotime note](2026-07-22_scenotime_epoch_diff_note.md)).
 
 ## Decisions, with reasons
 
@@ -57,32 +77,81 @@ the direction record is the same repo's
 
 ## Deliberately deferred
 
-- **Score types** (serialized projection settings): the schema question is
-  open in the brief; it lands when the serialized-settings done condition is
-  exercised (proof 4 era), not before.
-- **Action intents**: the reverse path is scenotime's proof; the contract
-  slot is reserved conceptually (hit shapes exist) but no intent types yet.
-- **Scene diffs**: scenotime's whole reason to exist; the snapshot lands
-  first so there is something to diff.
+- ~~**Score types**~~ **landed 2026-07-22** in `sceno::score`, earlier than
+  this note projected. Proof 4 arrived the same day and needed a persisted
+  score to compare two adapters against, so the schema question was answered
+  by exercise rather than by deliberation: version, arrangement, ordered
+  measured items, generation.
+- **Action intents**: still absent from `sceno`, but no longer unexercised.
+  Graphshell shipped its own reverse path at the protocol layer instead:
+  `IntentReference`, `AdvertisedAction`, `IntentInvocation`, `IntentResult`,
+  with the payload deliberately opaque at G1. So the question has changed
+  shape. It is no longer "when do intent types land in the contract" but
+  "does the contract need them at all, or is a hit shape plus a
+  product-owned action id the whole engine-side story, with authorization and
+  dispatch staying in the protocol and the participant gate?" Answer this
+  before adding a second intent vocabulary that has to agree with the first.
+- ~~**Scene diffs**~~ **landed 2026-07-22** in `scenotime`: epoch-scoped stable
+  slots, tombstones that survive serialization, transactional revision
+  transitions, idempotent replay.
 - **Per-item emphasis channels** (heat, bridge rings): may be a
   `channels: Vec<(String, f32)>` open map per item, or host-side signal
   reads; decide when a consumer forces it rather than guessing.
 - **Volumes / 3D footprints**: per the brief's task-and-display gating; the
   types are shaped so a z-bearing variant extends rather than migrates.
 
-## Open questions for review
+## Open questions, and what two consumers ruled
 
-- Does `Region` want a `SpaceId`-only form (a pure frame group with no
-  members list) or is members-with-space the right single shape?
-- Should `RoutedRelation` endpoints allow attaching to *regions* (hull-to-
-  hull relations) or stay instance-to-instance until a consumer asks?
-- `Measurements` is a flat vec keyed by `SourceIx`; fine at canvas scale,
-  revisit the lookup shape if a consumer measures thousands.
+Verified against the code 2026-07-24, after mere, isometry, and graphshell had
+all wired on.
 
-## Next slice (P2 continues)
+- **`Region`: does it want a members-free, `SpaceId`-only form?** Unforced, so
+  hold the single shape. Only `cartography::scene_out` emits regions at all
+  (`ClusterHalo` → `Region`); isometry emits none. The pure-frame-group case
+  that would have wanted the alternative is already served by `Space`, which
+  is what makes the members list non-redundant. Revisit when hull authoring
+  produces a group before it has members.
+- **Should `RoutedRelation` endpoints attach to regions?** Hold
+  instance-to-instance. Both emitters (`cartography::scene_out`,
+  `isometry-graphshell`) emit instance pairs, and `scenomise::relax` now reads
+  relations as springs between *placed items*, so a region endpoint would owe
+  a relaxation rule as well as a stroke. Two lanes to define, still zero
+  consumers asking.
+- **`Measurements` lookup shape** — the question is moot, and its answer is
+  worth more than the question. Nothing consumes `sceno::measure`: not mere,
+  not isometry, not merecat, not graphshell. The extent lane shipped in two
+  other places instead. Hosts measure and stamp `ScoreItem.footprint`, and
+  mere carries per-node extents through `ViewIntent.extents` →
+  `CartographySceneOptions.extents` → the adapter. "The representation
+  measures, the projection places" held up as a *principle*; the module that
+  encoded it did not, because a score that already carries a measured
+  footprint per item leaves `Measurements` with nothing to say. Decide before
+  0.0.3 whether `measure` earns its place, folds into the score, or ships as
+  documented-but-unused surface. Publishing dead contract surface is the one
+  outcome to avoid.
 
-Mere consumes: a `sceno`-emitting adapter beside `cartography::Projection`
-(the strategy dispatch gains a scene-shaped output path), phyllotaxis reads
-`Measurements` for extent-aware spacing, and the proof-1 scenario re-runs to
-show the spiral clearing its cards. Isometry follows as the second consumer
-(proof 4).
+## Where it went
+
+P2's next slice, and everything the original version of this section
+anticipated, is done. Mere consumes the contract through
+`cartography::scene_out` + `spiral_score`, and the proof-1 scenario re-ran
+with every card clear. Isometry (proof 4) deleted `Overmap::layout` and its
+force solver, adapting authored pins to a geographic score and unpinned sites
+to the portable spiral. P5's coastal fixture exercises the geographic path
+from serialized facts. On 2026-07-23 `scenomise::relax` extended the
+capability to swatch-scale surfaces without a physics dependency, and
+graphshell G2 took `scenotime`'s snapshot/diff pair as its remote replay
+contract.
+
+Remaining before a freeze can be claimed: the intent question and the
+`measure` question above, per-item emphasis channels, and whether hit
+resolution belongs to `scenotime` or the host.
+
+The likely third consumer is **woodshed**, which gates its own scene-contract
+work on this family being proved and frozen (see that repo's
+`2026-07-11_stage_set_tools_plan.md`). The proving half is finished, so the
+freeze list above is what it is actually waiting on. It brings two inputs the
+first two consumers could not: a non-graph frame (a fretboard is a `Space`
+mapping (string, fret) to screen, with notes as point footprints and
+fingerings as paths), and a source whose relations are dense,
+multi-family, and deterministic on day one, with no authoring step.

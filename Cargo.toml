@@ -214,8 +214,11 @@ infer = { package = "mere-infer", path = "crates/intel/infer" }
 signals = { package = "mere-signals", path = "crates/intel/signals" }
 
 # Standalone spec-B misfin implementation (promoted out of this workspace
-# 2026-07-03); an owned mark-ik repo, tracked by branch per convention.
-misfin = { git = "https://github.com/mark-ik/misfin", branch = "main", features = ["ring"] }
+# 2026-07-03). It moved into the smolweb workspace in the 2026-07-23
+# consolidation and its own repo was deleted, so this is a crates.io pin rather
+# than a branch dep — genet's errand consumes it the same way. Held in
+# stewardship, so the published crate is the stable face.
+misfin = { version = "0.0.4", features = ["ring"] }
 murm = { path = "crates/murm/murm" }
 murm-replication = { version = "0.1.0", path = "crates/murm/replication" }
 transport = { package = "mere-transport", path = "crates/murm/transport" }
