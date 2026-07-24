@@ -284,4 +284,36 @@ primary repos build from clean clones.
 
 - Ruled with Mark: the separate-repo bar, the mere and genet buckets, the
   smolweb bucket for misfin, tinct through genet, and the withdrawal of the
-  neutral-commons framing. Plan written; no code or repo moves yet.
+  neutral-commons framing. Plan written.
+- **C0 landed** (mere `73d8b1b1`): supersession notes on the Graphshell plan,
+  the prior-art brief, and DOC_POLICY, plus the DOC_README entry.
+- **C4 landed** (retinue `e071d08`). tulle, sennet, and tucket are subtree
+  members of the retinue workspace with history preserved:
+  `crates/{retinue,tulle,phy-profile,sennet,tucket}`, `firmware/` as
+  non-default members, `vendor/lora-phy` keeping its own MIT/Apache licensing.
+  Sibling `../tulle` path deps resolve unchanged under `crates/`. Gates:
+  fmt, clippy `-D warnings`, 251 tests, retinue and sennet/tucket sans-io
+  builds, and `tulle-t114-phy` for `thumbv7em-none-eabihf`. mere repointed to
+  a branch pin (`9430c441`), `mere-transport --features reticulum` green.
+  Findings worth keeping:
+  - The family was **relicensed MIT/Apache to MPL-2.0** the same day, with a
+    MeshCore NOTICE in tucket and `vendor/lora-phy` untouched. This
+    supersedes section 4's "licenses unchanged per crate" for the radio
+    bucket; `deny.toml` already allows MPL-2.0. The founding MIT/Apache
+    convention now has a deliberate exception, recorded here rather than
+    treated as drift.
+  - Deleting the incoming sub-lockfiles lost pins the firmware needed:
+    `fixed` re-resolved to 1.31.0, which requires rustc 1.93 against a 1.92
+    toolchain. Recovered by pinning 1.30.0 from tulle's old lock. **Every
+    later absorption must diff the incoming lockfile before discarding it.**
+  - tulle, sennet, and tucket had no CI; joining retinue's gated workspace
+    surfaced eight pre-existing lints, now fixed or allowed with reasons.
+    Absorbing an ungated repo into a gated one is a code-change event, not a
+    move. Expect the same in C2 and C3.
+  - Windows held a lock on the freshly written firmware images, so
+    `git mv` of the directory failed; moving each subdirectory worked.
+- **C1 landed** (woodshed `aa8026d` on the `redesign` branch, hocket
+  `7fe70e1`): tinct now comes from genet.git in both, and hocket's
+  audio-primitives and wavicle sibling paths became git pins.
+  `cargo check -p hocket-engine` green. woodshed's active branch is
+  `redesign`, not `main` — hocket's woodshed pin tracks `main` deliberately.
