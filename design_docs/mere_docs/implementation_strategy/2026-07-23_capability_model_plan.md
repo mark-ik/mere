@@ -357,6 +357,47 @@ namespace.
      calls. It lands when a **peer first petitions through the gate** — unbuilt
      product surface — and the leaf-crate extraction happens then.
 
+## Follow-ons found in the closing audit (2026-07-24)
+
+The round is complete and the workspace checks clean; these are named so they
+are not lost, ordered by how much they matter.
+
+1. **The Graphshell projection endpoint still SELF-ISSUES its authority.**
+   `merecat::remote_projection` derives a subject from `blake3(session name)`,
+   projects a grant *to itself*, and rebuilds a `GrantTable` from that
+   projection. It is its own root. Harmless today — a loopback receipt whose
+   "rejected" line is an audit trail, not a trust boundary — but it is exactly
+   the shape this round removed everywhere else, and a "denied" there currently
+   means only "the endpoint did not grant itself". **When Graphshell projection
+   becomes a real boundary (a REMOTE peer projecting into a session), that
+   endpoint must root on a delegation from the profile identity.** Until then
+   `GrantTable` stays live and correct for it.
+
+2. **Sub-delegation has a mechanism and no user.** F4 called `Mode::Delegate`
+   inert for want of an order; the order exists now, and personae carries
+   `remaining_delegation_depth` — but merecat issues install certificates at
+   depth 0 and `MootAuthority` fails closed on Delegate. So nothing in the
+   product issues a delegable grant. That is the right default for an installed
+   helper; it means the sub-delegation path is unexercised end to end, and the
+   first real consumer will be its first test.
+
+3. **The re-root heal's safety is load-bearing on the projection guard.**
+   `denizen::rebuild` re-issues authority from the grant projections in a
+   denizen's own world. A denizen cannot forge one *because* `Gate::petition`
+   refuses any spec touching the reserved `grant:` namespace, and the heal
+   additionally filters projections by subject. Recorded as an invariant: if
+   the projection guard ever weakens, the heal becomes an escalation path.
+
+4. **Headed scenarios are not hermetic in identity.** `App::boot` opens the
+   SHARED personae vault regardless of `MERECAT_ROOT`; only `App::isolated`
+   (unit tests) gets a per-profile vault. That is correct for the product — the
+   browser should use the user's real identity — but it means scenario runs
+   bind to it, and two merecat profiles now share one root key. Profile
+   isolation is by storage location (per-session certificate files, scoped by
+   `resource: denizen:<subject>`), not by key. Verified during the audit:
+   merecat LOADED the existing profile (one profile, mtime unchanged from the
+   vault plan's own work) rather than minting a rival.
+
 ## Progress
 
 ### 2026-07-23
