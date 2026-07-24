@@ -119,13 +119,14 @@ impl Grant {
         provider: &impl servitor::AuthorityProvider,
         subject: servitor::Subject,
     ) -> Self {
-        use servitor::Mode;
-        let allow = |path: &str, mode: Mode| {
-            if provider.covers(subject, path, mode) {
-                CapPermission::Allow
-            } else {
-                CapPermission::Deny
-            }
+        use servitor::{Cap, Mode};
+        // The `doc/` paths are hierarchical scopes, so they cover by segment
+        // prefix. A path that fails to parse denies rather than propagating:
+        // an unrepresentable capability is one the provider cannot have
+        // granted, and this lane is fail-closed by construction.
+        let allow = |path: &str, mode: Mode| match Cap::scope(path) {
+            Ok(cap) if provider.covers(subject, &cap, mode) => CapPermission::Allow,
+            _ => CapPermission::Deny,
         };
         Self {
             log: allow("doc/log", Mode::Write),

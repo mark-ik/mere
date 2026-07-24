@@ -281,6 +281,7 @@ mod tests {
             layer: 0,
             visible: true,
             hit: None,
+            channels: Vec::new(),
         }
     }
 

@@ -97,6 +97,22 @@ pub struct ProjectedItem {
     pub visible: bool,
     /// Hit-test shape override; `None` = use `footprint`.
     pub hit: Option<Footprint>,
+    /// Per-item emphasis, as an open map of named scalars (conventionally
+    /// `0..=1`). Recognized names carry no special meaning here; a host
+    /// renders the ones it knows and ignores the rest, the same
+    /// recognized-core-plus-open-tail shape [`Representation`] uses.
+    ///
+    /// Emphasis belongs *in the scene* because a scene may be realized by a
+    /// viewer with no access to the source: a remote client cannot read a
+    /// host-side signal to shade a node it only knows as an instance. Names
+    /// in use today are `"heat"` (activity or freshness) and `"bridge"`
+    /// (community-spanning emphasis); both come from mere's cartography
+    /// overlays.
+    ///
+    /// Relations deliberately have no equivalent. An item carries several
+    /// simultaneous emphases, but a pair of instances related for several
+    /// reasons is several relations, not one relation with a channel list.
+    pub channels: Vec<(String, f32)>,
 }
 
 /// A routed relationship between two instances: a visible stroke, a route,
@@ -232,6 +248,7 @@ mod tests {
                 layer: 0,
                 visible: true,
                 hit: None,
+                channels: Vec::new(),
             });
         }
         assert_eq!(scene.sources.len(), 1);
@@ -277,6 +294,7 @@ mod tests {
             layer: 1,
             visible: true,
             hit: None,
+            channels: Vec::new(),
         });
         scene.relations.push(RoutedRelation {
             from: InstanceId(0),

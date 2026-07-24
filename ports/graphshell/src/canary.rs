@@ -72,6 +72,7 @@ impl FixtureEndpoint {
             layer: 1,
             visible: true,
             hit: None,
+            channels: Vec::new(),
         });
         scene.items.push(ProjectedItem {
             source: map,
@@ -84,6 +85,7 @@ impl FixtureEndpoint {
             layer: 0,
             visible: true,
             hit: None,
+            channels: Vec::new(),
         });
         scene.bounds = Rect::new(Vec2::new(32.0, 62.0), Size2::new(546.0, 168.0));
         scene.generation = 7;

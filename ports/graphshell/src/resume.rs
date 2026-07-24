@@ -234,6 +234,7 @@ fn item(source: SourceIx, x: f32) -> ProjectedItem {
         layer: 0,
         visible: true,
         hit: None,
+        channels: Vec::new(),
     }
 }
 

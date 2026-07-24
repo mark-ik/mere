@@ -53,13 +53,26 @@ fn granted_names_reflect_the_grant() {
 /// decided by the one grant.
 #[tokio::test(flavor = "current_thread")]
 async fn authority_derived_grant_gates_instantiation() {
-    use servitor::{Grant as Cap, Mode, PrefixAuthority, Subject};
+    use servitor::{Cap, GrantTable, Mode, Subject};
+    use servitor::Grant as IssuedGrant;
 
     let scripter = Subject::new([1; 32]);
     let bystander = Subject::new([2; 32]);
-    let authority = PrefixAuthority::new()
-        .with_grant(Cap::new(scripter, "doc/", Mode::Write))
-        .with_grant(Cap::new(bystander, "scenario/", Mode::Write));
+    // Capabilities are typed now: these are hierarchical scopes, which cover by
+    // segment prefix, so `doc` covers `doc/log` and friends. `PrefixAuthority`
+    // became `GrantTable` in the same round — the matching rule moved onto the
+    // capability, so the table no longer names it.
+    let authority = GrantTable::new()
+        .with_grant(IssuedGrant::new(
+            scripter,
+            Cap::scope("doc").expect("doc is a valid scope"),
+            Mode::Write,
+        ))
+        .with_grant(IssuedGrant::new(
+            bystander,
+            Cap::scope("scenario").expect("scenario is a valid scope"),
+            Mode::Write,
+        ));
 
     let granted = Grant::from_authority(&authority, scripter);
     let r = document_host::instantiate_with_grant(&doc_wasm(), &granted).await;

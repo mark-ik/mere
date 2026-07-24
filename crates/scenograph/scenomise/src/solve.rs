@@ -48,6 +48,7 @@ pub fn solve(score: &Score) -> Scene {
             layer: item.layer,
             visible: item.visible,
             hit: None,
+            channels: Vec::new(),
         };
         if let Some(item_bounds) = placed_bounds(position, &instance.footprint) {
             bounds = Some(match bounds {
