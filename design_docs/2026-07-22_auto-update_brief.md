@@ -120,6 +120,71 @@ off GitHub onto Merely-hosted (or P2P) distribution. P2P distribution of
 update artifacts over iroh/retinue (content-addressed, blake3, fits eidetic)
 is noted as a fit and deferred.
 
+## Findings — Velopack pressure test (2026-07-24)
+
+Ran the mechanism end to end on Windows, on a throwaway minimal Rust app
+(`velo-demo`) rather than hocket first, to isolate the update flow from
+hocket's heavy genet build (and because there was concurrent build churn in
+the tree). A real v0.1 to v0.2 self-update cycle succeeded: an installed
+v0.1 checked a local `FileSource` feed, found v0.2, downloaded, applied, and
+restarted; the installed `current` binary then reported 0.2.0 and the
+velopack log recorded "Installation completed successfully." Demo uninstalled
+cleanly afterward (no stray shortcuts or registry keys).
+
+What this settled:
+
+- **The Rust runtime crate is genuinely clean.** `velopack = "1.2.0"`
+  (matches the `vpk` CLI version). `VelopackApp::build().run()` first in
+  `main`, then `UpdateManager::new(source, None, None)` +
+  `check_for_updates()` -> `download_updates()` -> `apply_updates_and_restart(&*updates)`.
+  About 50 lines for the whole flow. `sources::FileSource` gives a local
+  feed with no server (good for tests and for LAN/mesh distribution later);
+  `HttpSource`/`GithubSource`/`GitlabSource`/`GiteaSource` also exist. API is
+  C#-flavored (PascalCase: `UpdateCheck::UpdateAvailable`/`NoUpdateAvailable`,
+  `updates.TargetFullRelease.Version`).
+- **Packaging needs a .NET runtime, but not an SDK, and not an install.**
+  `vpk` ships only as a `.nupkg` now, but a nupkg is a zip and the tool
+  inside is a framework-dependent .NET app; extracting `tools/net8.0/any/vpk.dll`
+  and running `dotnet vpk.dll ...` works against the .NET 8 runtime already
+  on the machine. `vpk pack -u <id> -v <ver> -p <dir> -e <exe> -o <feed>`
+  produced Setup.exe + full nupkg + portable zip + RELEASES in under a second.
+  So the packaging-side .NET coupling is real but light: CI needs a .NET
+  runtime (GitHub Actions has it), not a Rust-hostile toolchain.
+- **Signing is Authenticode-centric.** Every pack warned "No signing
+  parameters provided, N file(s) will not be signed." Velopack's integrity
+  is the RELEASES/nupkg SHA; *authenticity* on Windows is Authenticode, which
+  needs a code-signing cert. This is the one genuine divergence from this
+  brief's cert-free ed25519/minisign v1 plan. Options if we adopt Velopack:
+  accept Authenticode on Windows (cert cost + friction), or layer an ed25519
+  detached-signature check in the app before `apply` via a download hook.
+  Not blocking, but it's the decision the signing section must revisit.
+- **Install layout is opinionated (as expected) and reasonable.** Per-user
+  `%LOCALAPPDATA%\<id>\{current,packages}`, silent install, no UAC, desktop +
+  start-menu shortcuts by default, uninstall registry key, clean uninstall
+  via `Update.exe --uninstall`. Fine for our apps; nothing fought us.
+
+**Verdict so far: Velopack is the recommended desktop transport.** It
+delivered a working installer + feed + apply + restart in minutes, its runtime
+crate is clean enough to sit behind the shared policy layer unchanged, and the
+only real friction (Authenticode signing, light .NET-in-CI) is manageable. The
+composed path stays the documented fallback if the Authenticode requirement or
+the install-layout opinions become a problem. This verdict is desktop-only and
+mechanism-only; it does not yet cover hocket specifically or the other two
+hosts.
+
+Still open before this is load-bearing:
+
+- Apply the same to **hocket** (real GUI app: the `VelopackApp::build().run()`
+  call must precede winit/genet init; restart-on-update with a live audio
+  engine needs a look). Deferred past the current concurrent build churn.
+- The **other two hosts** (macOS .app bundle + notarization, Linux vs
+  distro/AppImage channels) — needs the Mac and Linux machines.
+- Resolve **signing** (Authenticode vs layered ed25519) per the note above.
+- Test **delta** packages (`vpk delta`) for the large hocket/genet binary.
+- Build the **shared policy layer** (the brief's layer 1) so the honest
+  status state machine and the configurable policy sit above Velopack rather
+  than being called ad hoc.
+
 ## Non-goals now
 
 Omaha-class update servers, staged percentage rollouts, mobile, and P2P
