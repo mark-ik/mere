@@ -110,6 +110,25 @@ impl Transform2 {
             rotate: self.rotate + inner.rotate,
         }
     }
+
+    /// The transform undoing `self`, for carrying a point in an outer space
+    /// back into a local one (what picking needs). `None` when `scale` is
+    /// zero, which collapses the space and cannot be undone.
+    pub fn inverse(&self) -> Option<Transform2> {
+        if self.scale == 0.0 || !self.scale.is_finite() {
+            return None;
+        }
+        let unrotate = Transform2 {
+            translate: Vec2::ZERO,
+            scale: 1.0 / self.scale,
+            rotate: -self.rotate,
+        };
+        let shifted = unrotate.apply(self.translate);
+        Some(Transform2 {
+            translate: Vec2::new(-shifted.x, -shifted.y),
+            ..unrotate
+        })
+    }
 }
 
 #[cfg(test)]
@@ -144,6 +163,27 @@ mod tests {
         let a = outer.then(&inner).apply(p);
         let b = outer.apply(inner.apply(p));
         assert!((a.x - b.x).abs() < 1e-4 && (a.y - b.y).abs() < 1e-4);
+    }
+
+    #[test]
+    fn inverse_undoes_apply() {
+        let t = Transform2 {
+            translate: Vec2::new(3.0, -4.0),
+            scale: 2.5,
+            rotate: 0.9,
+        };
+        let p = Vec2::new(7.0, 11.0);
+        let back = t.inverse().unwrap().apply(t.apply(p));
+        assert!((back.x - p.x).abs() < 1e-3 && (back.y - p.y).abs() < 1e-3);
+    }
+
+    #[test]
+    fn a_collapsed_transform_has_no_inverse() {
+        let t = Transform2 {
+            scale: 0.0,
+            ..Transform2::IDENTITY
+        };
+        assert_eq!(t.inverse(), None);
     }
 
     #[test]

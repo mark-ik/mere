@@ -16,8 +16,11 @@
 //! (`scenograph:design_docs/2026-07-22_scene_contract_note.md`):
 //! `ClusterHalo` → [`sceno::Region`]; per-edge weight rides
 //! [`sceno::RoutedRelation::weight`] (the projection's edges already carry
-//! it); `ImportanceScale` folds into the instance transform;
-//! heat/bridge-emphasis await the channels decision, deliberately.
+//! it); `ImportanceScale` folds into the instance transform; `ActivityHeat`
+//! and `BridgeEmphasis` ride [`sceno::ProjectedItem::channels`] as `"heat"`
+//! and `"bridge"`. The overlay vocabulary is now fully migrated: emphasis
+//! travels inside the scene so a viewer without access to mere's graph can
+//! still shade what it renders.
 
 use std::collections::HashMap;
 
@@ -33,6 +36,12 @@ use crate::projection::Projection;
 /// The adapter lane name mere's graph scenes carry in their
 /// [`sceno::SourceRef`]s.
 pub const MERE_GRAPH_ADAPTER: &str = "mere.graph";
+
+/// Channel name carrying `Overlay::ActivityHeat` intensity.
+pub const HEAT_CHANNEL: &str = "heat";
+
+/// Channel name carrying `Overlay::BridgeEmphasis` weight.
+pub const BRIDGE_CHANNEL: &str = "bridge";
 
 /// Lower `projection` into a [`sceno::Scene`].
 ///
@@ -52,11 +61,28 @@ pub fn scene_from_projection(
     let mut scene = Scene::new();
     let mut instance_of: HashMap<NodeKey, sceno::InstanceId> = HashMap::new();
 
-    // Importance folds into the instance transform's uniform scale.
+    // Importance folds into the instance transform's uniform scale; the
+    // per-node emphases ride the item's open channel map.
     let mut importance: HashMap<NodeKey, f32> = HashMap::new();
+    let mut channels: HashMap<NodeKey, Vec<(String, f32)>> = HashMap::new();
     for overlay in &projection.overlays {
-        if let Overlay::ImportanceScale { node, factor } = overlay {
-            importance.insert(*node, *factor);
+        match overlay {
+            Overlay::ImportanceScale { node, factor } => {
+                importance.insert(*node, *factor);
+            }
+            Overlay::ActivityHeat { node, intensity } => {
+                channels
+                    .entry(*node)
+                    .or_default()
+                    .push((HEAT_CHANNEL.to_string(), *intensity));
+            }
+            Overlay::BridgeEmphasis { node, weight } => {
+                channels
+                    .entry(*node)
+                    .or_default()
+                    .push((BRIDGE_CHANNEL.to_string(), *weight));
+            }
+            _ => {}
         }
     }
 
@@ -88,6 +114,7 @@ pub fn scene_from_projection(
             layer: 0,
             visible: true,
             hit: None,
+            channels: channels.get(&positioned.node).cloned().unwrap_or_default(),
         };
         instance_of.insert(positioned.node, sceno::InstanceId(scene.items.len() as u32));
         scene.items.push(item);
@@ -229,6 +256,43 @@ mod tests {
         assert_eq!(scene.regions.len(), 1);
         assert_eq!(scene.regions[0].members.len(), 2);
         assert_eq!(scene.regions[0].label.as_deref(), Some("Work"));
+    }
+
+    #[test]
+    fn heat_and_bridge_lower_to_channels() {
+        let mut projection = projection_two_nodes();
+        projection.overlays.push(Overlay::ActivityHeat {
+            node: NodeKey::new(0),
+            intensity: 0.75,
+        });
+        projection.overlays.push(Overlay::BridgeEmphasis {
+            node: NodeKey::new(0),
+            weight: 0.4,
+        });
+        let scene = scene_from_projection(&projection, |k| k.index().to_string(), |_| None);
+        let mut channels = scene.items[0].channels.clone();
+        channels.sort_by(|a, b| a.0.cmp(&b.0));
+        assert_eq!(
+            channels,
+            vec![
+                (BRIDGE_CHANNEL.to_string(), 0.4),
+                (HEAT_CHANNEL.to_string(), 0.75)
+            ]
+        );
+    }
+
+    #[test]
+    fn an_unemphasized_node_carries_no_channels() {
+        let mut projection = projection_two_nodes();
+        projection.overlays.push(Overlay::ActivityHeat {
+            node: NodeKey::new(0),
+            intensity: 0.75,
+        });
+        let scene = scene_from_projection(&projection, |k| k.index().to_string(), |_| None);
+        assert!(
+            scene.items[1].channels.is_empty(),
+            "emphasis is per node, not scene-wide"
+        );
     }
 
     #[test]

@@ -495,16 +495,32 @@ rewired it onto `genet-layout` + `genet-winit-host`, which inherit genet's
 archived `graphshell` repo's frozen manifest likewise still names
 `scenograph.git`; it is read-only and never built.
 
+**Consequence caught 2026-07-24: `cambium-winit` being unpublishable is a
+consumer problem, not just a registry one.** woodshed's committed manifest
+pinned `cambium-winit = "0.3.0"` from crates.io — a version that does not
+exist and never can. It built only because the gitignored patch file supplied
+it. All three (`cambium`, `cambium-winit`, `sprigging`) now come from
+genet.git, matching what hocket landed the same day after a clean Linux
+checkout caught a second reason: the published cambium/sprigging depend on the
+crates.io `paint_list_api` while these workspaces git-dep netrender's, so a
+`sprigging::PaintCmd` is not a `paint_list_api::PaintCmd`, and
+`[patch.crates-io]` cannot redirect a published crate's own registry
+dependency. **A crate that inherits `publish = false` through a path dep must
+be consumed by git, never by version** (woodshed `abdf524`).
+
 ## Still open
 
 - Bumping the six primaries' `rust-toolchain.toml` from 1.96.0 to current
   stable (1.97.1), and `wgpu-graft` from 1.95.0. They are unaffected by the
   machine default, so this is a deliberate pass with its own verification —
   genet's Servo-derived tree is the one most likely to surface new lints.
-- `document-host` versus servitor's capability model (`covers` takes `&Cap`,
-  not `&str`), still red as of 2026-07-24. Owned by the session that wrote
-  `2026-07-23_capability_model_plan.md`. It is the last known red in mere's
-  workspace and predates the consolidation.
+- ~~`document-host` versus servitor's capability model~~ **closed 2026-07-24**
+  (mere `4b8d875f`). The `doc/` import bridge now derives its grant through
+  `Cap::scope`, denying on a parse failure so the lane stays fail-closed, and
+  its test moved from the removed `PrefixAuthority` to `GrantTable` with a
+  typed scope. 22 document-host tests pass including the gate itself, and
+  `cargo check --workspace` on mere is green for the first time since the
+  capability round landed.
 - The four `graphshell-*` crates remain unpublished (the facade name is held
   by the retired donor). They will churn through G5-G7, so there is no reason
   to claim the names before the protocol settles.
