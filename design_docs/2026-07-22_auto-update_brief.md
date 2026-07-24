@@ -133,7 +133,7 @@ layers and conflating them is the easy mistake:
 Per-host status:
 
 | Host | OS install trust | Status |
-|------|------------------|--------|
+| --- | --- | --- |
 | macOS | Developer ID Application + notarytool | **Available** — Mark holds Apple developer credentials (2026-07-24) |
 | Windows | Authenticode: signtool cert, or Azure Trusted Signing (`vpk --azureTrustedSignFile`) | Needs a cert; Apple credentials do not cover it. Azure Trusted Signing is the subscription alternative to buying an EV cert |
 | Linux | No OS gate | Our ed25519 signature is the whole story |
@@ -193,6 +193,37 @@ composed path stays the documented fallback if the Authenticode requirement or
 the install-layout opinions become a problem. This verdict is desktop-only and
 mechanism-only; it does not yet cover hocket specifically or the other two
 hosts.
+
+## 2026-07-24 REVERSAL: luggage (Rust everywhere) supersedes the Velopack verdict
+
+Mark's requirement sharpened while setting up the Mac leg: the *whole*
+pipeline should be Rust, including the packing machine (Velopack's runtime is
+Rust, but `vpk` needs a .NET runtime wherever releases are packed). Ruled:
+
+- **Fork `cargo-packager-updater` as `luggage`, homed in mere**
+  (`crates/system/luggage`; provenance and divergences in its README).
+  Packing uses upstream's `cargo-packager` CLI unchanged (`cargo install`able,
+  MIT/Apache, NSIS/MSI/DMG/AppImage) — so no packer fork, and minisign
+  artifact signing is native to the pipeline, which settles this brief's
+  artifact-authenticity layer by construction.
+- **T1 (landed 2026-07-24):** pluggable `Feed`s — HTTP (upstream templating
+  intact), local directory holding `luggage.json`, and `github:owner/repo` —
+  plus an optional per-platform **BLAKE3 digest in the manifest**, verified
+  before the signature. The digest is the content-addressing seam for T3.
+- **T2 (planned):** staged-swap apply mechanics (Velopack-grade `current/` +
+  applier rename dance, portable Rust) replacing installer-over-yourself.
+- **T3 (planned, design constraint carried from day one):** update
+  distribution as signed manifests + content-addressed artifacts over
+  iroh-blobs (mere-transport's `BlobStore` already speaks the ALPN), so
+  chunk-level dedup between versions gives delta efficiency without patch
+  files; retinue/mesh carries manifest announcements only (LoRa bandwidth),
+  IP lanes carry bytes. Rollback/freeze defense: monotonic versions + signed
+  timestamp in the manifest.
+
+Velopack stays wired in hocket as the selectable A/B alternative
+(`HOCKET_UPDATE_TRANSPORT=velopack`) and retires if luggage's H4 cycles hold
+up; its delta packages remain the one capability luggage does not replicate
+(T3 addresses the same need differently).
 
 Still open before this is load-bearing:
 

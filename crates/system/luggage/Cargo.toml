@@ -1,0 +1,47 @@
+[package]
+name = "luggage"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Self-update for packaged apps: signed manifests over pluggable feeds (HTTP, directory, GitHub Releases). A fork of cargo-packager-updater carrying the Merely family's update posture."
+repository = "https://github.com/mark-ik/mere"
+
+# Forked 2026-07-24 from cargo-packager-updater 0.2.3 (Tauri Programme /
+# CrabNebula Ltd, MIT OR Apache-2.0), per the auto-update plan ruling: a
+# Rust-native update pipeline with no .NET anywhere. Divergences are additive
+# and recorded in README.md; upstream copyright headers are preserved on
+# derived files. Packing still uses upstream's cargo-packager CLI unchanged.
+
+[dependencies]
+base64 = "0.22"
+blake3 = "1.5"
+# `current_exe` that resolves symlinks/AppImage correctly; upstream's tiny
+# shared crate, consumed as published rather than forked.
+cargo-packager-utils = "0.1.1"
+dirs = "5.0"
+http = "1"
+log = "0.4"
+minisign-verify = "0.2"
+percent-encoding = "2"
+# rustls instead of upstream's default-features TLS: avoids the OpenSSL
+# system dependency on Linux and keeps the stack pure Rust.
+reqwest = { version = "0.12", default-features = false, features = [
+  "blocking",
+  "json",
+  "rustls-tls",
+] }
+semver = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3.12"
+thiserror = "1"
+time = { version = "0.3", features = ["parsing", "formatting"] }
+url = { version = "2", features = ["serde"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+flate2 = "1.0"
+tar = "0.4"
+
+[dev-dependencies]
+# In-process minisign signing so tests exercise the real verification path.
+minisign = "0.7"

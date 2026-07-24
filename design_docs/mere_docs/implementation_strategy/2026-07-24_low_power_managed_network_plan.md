@@ -75,6 +75,11 @@ The first implementation does not sleep across an Embassy timer deadline. The
 ESP32-S3 time source used by the current runtime does not advance in
 Light-sleep, so timer-aware sleep needs a separate clock-compensation design.
 
+A later sensor-node personality (wake on a timer, read an attached sensor,
+emit one signed reading, sleep) would make timer-aware sleep load-bearing
+rather than optional. The clock-compensation design is therefore deferred,
+not declined, and V2 should avoid choices that preclude it.
+
 ### D3. Network policy axes remain independent
 
 Discovery, incoming services, transit, replication, compute, path selection,

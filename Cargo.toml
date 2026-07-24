@@ -13,6 +13,7 @@ members = [
     "crates/shell/comms",
     "crates/incipit",
     "crates/system/session-runtime",
+    "crates/system/luggage",
     "crates/system/fetch",
     "crates/system/content-contract",
     "crates/system/proofs",
@@ -163,6 +164,10 @@ incipit = { path = "crates/incipit" }
 chrome = { package = "mere-chrome", path = "crates/shell/chrome" }
 comms = { package = "mere-comms", path = "crates/shell/comms" }
 session-runtime = { path = "crates/system/session-runtime" }
+# Self-update over signed manifests (the cargo-packager-updater fork; ruled
+# 2026-07-24: name luggage, home mere). Apps consume it via git dep like the
+# rest of the family; mere itself will when its own packaging lands.
+luggage = { path = "crates/system/luggage" }
 ux-events = { path = "crates/system/ux-events" }
 register-diagnostics = { path = "crates/system/registry/register-diagnostics" }
 register-theme = { path = "crates/system/registry/register-theme" }
