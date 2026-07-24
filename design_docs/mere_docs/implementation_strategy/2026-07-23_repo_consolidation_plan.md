@@ -383,3 +383,23 @@ primary repos build from clean clones.
   - woodshed tracks its `.cargo/config.toml` (unlike mere and the others),
     so its machine-local absolute paths are committed. Pre-existing, noted
     rather than changed.
+- **Toolchain bumped** (retinue `ac2fe43`). The machine's default rustup
+  toolchain was **1.92.0**, five releases behind current stable; it is now
+  **stable 1.97.1**. This closes the C4 firmware failure properly, and the
+  post-mortem corrects what that entry said:
+  - retinue **gitignores `Cargo.lock` while tulle tracked its own**, so the
+    merge silently dropped the firmware's pinned resolution. The `fixed`
+    1.30.0 downgrade recorded in C4 was therefore never committed — it was a
+    local lockfile edit only, and a fresh clone would still have failed. The
+    real fault was two-sided: an ancient default toolchain and a lost
+    lockfile. Both are now closed (default bumped; `Cargo.lock` tracked, with
+    the reason written into `.gitignore`).
+  - **An absorption inherits the receiving repo's ignore rules, and that can
+    silently drop the incoming repo's guarantees.** Diff `.gitignore` as well
+    as manifests. Generalizes the C4 lockfile finding.
+  - The six primary repos plus cambium pin 1.96.0 (wgpu-graft 1.95.0) via
+    `rust-toolchain.toml` and are unaffected by the default. retinue and
+    smolweb deliberately carry no pin and follow the default; both are green
+    on 1.97.1 (retinue: fmt, clippy `-D warnings`, 251 tests, thumbv7em
+    firmware; smolweb: 47 tests). The family pins are now one release behind
+    stable — bumping them is a separate, deliberate pass.
