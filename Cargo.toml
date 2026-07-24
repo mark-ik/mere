@@ -230,10 +230,10 @@ tincture = { package = "tinct", version = "=0.1.2" }
 # Off-grid mesh transport backend (optional, default-off). `retinue` is Mark's
 # own from-scratch Rust Reticulum Network Stack implementation, wire-compatible
 # with RNS 1.3.x (it replaces the stale Beechat `reticulum` 0.1 crate, which
-# could not parse ratcheted announces from real RNS). Sibling repo referenced by
-# relative path, like `identity`/`personae`; move to a git/crates.io pin once
-# retinue is published.
-retinue = { path = "../retinue" }
+# could not parse ratcheted announces from real RNS). Since the 2026-07-23 radio
+# merge the repo is one workspace (retinue, tulle, sennet, tucket, firmware), so
+# this is a branch pin rather than a relative path.
+retinue = { git = "https://github.com/mark-ik/retinue.git", branch = "main" }
 
 # Reticulum identity derivation: HKDF-SHA256 stretches Mere's 32-byte master seed
 # into retinue's 64-byte dual-key private identity. retinue owns the X25519/RNG

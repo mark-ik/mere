@@ -15,8 +15,11 @@ publish = false
 [dependencies]
 eidetic = { package = "mere-eidetic", path = "../../eidetic/eidetic-core" }
 identity = { package = "personae", path = "../../../../personae" }
-retinue = { path = "../../../../retinue", features = ["tulle-radio"] }
-tulle = { path = "../../../../tulle", features = ["serial-async"] }
+# The radio family merged into one workspace on 2026-07-23; both crates now live
+# under retinue/crates/. Probes stay on local paths by design (they are excluded
+# from the mere workspace and never published) and adapt to upstream layout.
+retinue = { path = "../../../../retinue/crates/retinue", features = ["tulle-radio"] }
+tulle = { path = "../../../../retinue/crates/tulle", features = ["serial-async"] }
 tokio = { version = "1", features = ["macros", "rt", "time", "io-util"] }
 serde_json = "1"
 
