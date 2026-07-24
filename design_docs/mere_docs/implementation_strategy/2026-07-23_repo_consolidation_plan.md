@@ -403,3 +403,39 @@ primary repos build from clean clones.
     on 1.97.1 (retinue: fmt, clippy `-D warnings`, 251 tests, thumbv7em
     firmware; smolweb: 47 tests). The family pins are now one release behind
     stable — bumping them is a separate, deliberate pass.
+- **C6 done.** Five absorbed repos still had unpushed work (conatus, eidetic,
+  personae, scenograph, servitor — the last being the capability-model commit
+  that breaks `document-host`); all pushed before anything was archived, so
+  nothing existed only locally. personae's local `main` tracked `origin/master`
+  and needed `push origin main:master`. READMEs updated: mere's workspace-layout
+  table gained the nine families and its sibling section was rewritten around
+  the bar; genet's records cambium/netfetcher in and the protocol crates out;
+  eleven absorbed crate READMEs had links to repositories that no longer hold
+  them. The `pack-distribution` probe still pointed at `../../../../personae`,
+  which deletion would have broken — now `../../persona/personae`. Fifteen
+  GitHub repos carry a tombstone README plus a "moved into X" description and
+  are **archived**; fourteen local checkouts deleted (graphshell's kept, per
+  Mark's history exception). Builds verified green afterward.
+  - **Archive, do not delete.** crates.io shows each published version's
+    `repository` URL forever; deleting the repo turns every one of those links
+    into a permanent 404, and archiving already removes them from the active
+    repo list. The family's own precedent agreed before this pass: muniment,
+    codicil, and chartulary were archived, not deleted, at the eidetic merge.
+
+## Open
+
+- **crates.io publish sweep — deferred, deliberately.** Most absorbed crates
+  changed only their `repository` metadata, which is not worth a permanent
+  version across ~20 crates. Two things should settle first: `document-host`
+  is red on servitor's in-flight capability model, so servitor would publish a
+  half-state, and another session is live across mere and genet. When it runs,
+  it needs path deps carrying `version =` and a dependency-ordered sequence
+  (muniment → codicil → chartulary → scholia; numen → quint → seiche;
+  sceno → scenomise/scenotime → scenograph; graphshell-protocol → client and
+  endpoint → the facade). The one change with real weight is the radio
+  family's MIT/Apache → MPL-2.0 relicense: a license users can see and rely
+  on, so it deserves its own version bump and note rather than riding along.
+- Bumping the six primaries' `rust-toolchain.toml` from 1.96.0 to current
+  stable.
+- `document-host` versus servitor's capability model, owned by the session
+  that wrote `2026-07-23_capability_model_plan.md`.
