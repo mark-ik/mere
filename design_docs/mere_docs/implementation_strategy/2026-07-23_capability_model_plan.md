@@ -508,6 +508,21 @@ namespace.
     expiry), servitor 32, merecat 127 (re-root heal + vault fallback +
     retirement tests); headed `denizen_revoke.scn` and `denizen_wasm.scn`
     RESULT ok rooted on the real DPAPI-sealed vault identity.
-  - **Still open, deliberately**: the peer lane itself (`DenizenKind::Peer`
-    through `servitor::Gate`) remains unbuilt product surface; the typed
-    provider is the moot-side face waiting for it.
+  - **The peer lane landed too**, closing the round with nothing deferred.
+    `TypedMootAuthorization` answers gemot's own seam; its sibling
+    **`MootAuthority` implements `servitor::AuthorityProvider`**, presenting
+    the same moot certificates to the denizen gate. So a moot peer petitions a
+    shared graph through the SAME `servitor::Gate` a script or component uses
+    — same projection guard, same scope check, same attributed
+    revision-checked commit — differing only in where the chain roots. The
+    participant-gate doctrine's "one gate for scripts, wasm, peers, agents"
+    is now a receipt rather than a claim, and it needed no new gate: only the
+    adapter. Mode mapping is honest: the moot vocabulary carries one action
+    (`act`), which satisfies Read and Write, while `Mode::Delegate` FAILS
+    CLOSED because a moot expresses delegability as certificate depth, a
+    different axis — approximating it with `act` would have been the F1
+    ambiguity in a new costume.
+  - Receipts (gemot 99, +3 more): a delegated peer's in-scope petition
+    commits attributed to the peer, an out-of-scope one hits the gate's own
+    scope check, an undelegated identity is refused, revoking the moot
+    certificate stops the peer AT THE GATE, and delegate-mode fails closed.

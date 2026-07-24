@@ -166,6 +166,23 @@ Coordination: the moot (gemot) refactor **settled 2026-07-17** (mere `a4da519` "
 
 ## Progress
 
+- **2026-07-24 (the doctrine's THIRD actor kind: a moot peer through the same
+  gate)**: "one authority gate for every non-UI actor" had two receipts
+  (script via piccolo at B2, wasm component via the envelope at B3) and one
+  claim (moot peer). The claim is now a receipt. `gemot::MootAuthority`
+  implements `servitor::AuthorityProvider` over the moot's signed delegation
+  certificates, so a peer petitions a shared chartulary graph through the
+  SAME `servitor::Gate` — projection guard, scope check, attributed
+  revision-checked commit, all unchanged. No peer-specific gate was written;
+  the adapter was the whole missing piece, which is what the doctrine
+  predicted. Only the ROOT differs per tier: a constitutional capability
+  grant for a moot peer, the profile personae identity for a resident
+  denizen. Receipts in gemot's `typed_authorization` (99 tests): in-scope
+  commit attributed to the peer, out-of-scope refused, undelegated identity
+  refused, moot revocation stopping the peer at the gate. Part of the
+  [capability model round](2026-07-23_capability_model_plan.md), which also
+  retired this plan's OQ6 (moot alignment) and OQ3-era grant model.
+
 - **2026-07-23 (B3 COMPLETE — the wasm lane runs end to end)**: the ruling
   above is now plumbed. **mere `app-host`** (new crate, `crates/script/app-host`,
   sibling of document-host over the same WIT package): bindgens `app-core`,
