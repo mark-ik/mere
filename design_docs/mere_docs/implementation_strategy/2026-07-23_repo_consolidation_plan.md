@@ -436,8 +436,37 @@ primary repos build from clean clones.
   Merecat consume that component and have no dependency on Pelt. Genet's
   dependency-cone CI rejects component-to-port edges.
 
+- **Archived repos will be DELETED, not kept — Mark, 2026-07-24.** This
+  reverses the C6 "archive, do not delete" finding above. Every archived repo
+  is deleted **except `graphshell`**, whose donor docs live nowhere else (mere
+  holds only the harvest indexes). The 404 objection is answered by doing the
+  publish sweep *first*, so each crate's Repository link points at its new home
+  before its old repo disappears; Mark chose the **full sweep** over accepting
+  old-version 404s. Verified before acting: every absorbed repo's docs survive
+  in its destination (the eidetic four, scenograph, vates, sibylla, personae,
+  cambium, and tucket all confirmed — tucket's `design_docs` were lifted to
+  retinue's top-level `design_docs/` by the C4 merge, not kept under
+  `crates/tucket/`).
+  - **Split by blast radius.** Five archived repos need no repoint at all and
+    are safe to delete immediately: `eidetic` and `servitor` (their crates
+    carry no `repository`), and `tulle`/`sennet`/`tucket` (their crates already
+    point at `retinue`, which stays). `misfin` repoints from the clean smolweb
+    workspace. The remaining nine (chartulary, codicil, muniment, scenograph,
+    sibylla, vates, cambium, netfetcher, personae) back **17 published crates**
+    and need the sweep first.
+  - **Blocked 2026-07-24 on two independent things**, neither worked around:
+    (1) `gh repo delete` is refused by the Claude Code auto-mode classifier, so
+    the deletions need an explicit Bash permission rule or Mark's own hand —
+    deleting via the raw API instead would defeat the guardrail; (2) mere and
+    genet were both live under another session (genet 23 dirty files), and
+    publishing 17 crates from a dirty tree can ship a half-state permanently.
+
 ## Open
 
+- **crates.io publish sweep — NOW REQUIRED (was deferred).** Superseded by the
+  2026-07-24 deletion ruling above: the sweep is the precondition for deleting
+  the nine repos, so it runs as soon as mere and genet are quiet. Original
+  deferral note follows.
 - **crates.io publish sweep — deferred, deliberately.** Most absorbed crates
   changed only their `repository` metadata, which is not worth a permanent
   version across ~20 crates. Two things should settle first: `document-host`
