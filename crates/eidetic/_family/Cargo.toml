@@ -1,0 +1,21 @@
+# eidetic — the durable-memory family.
+#
+# Eidetic memory holds what passed through it, exactly. The family is the
+# recording stack beneath the graph apps:
+#
+#   muniment    the persistence floor (byte-backend seam, slots, blobs)
+#   codicil     the append-only, replayable log
+#   chartulary  the content-addressed container graph over both
+#   scholia     the RDF projection over a chartulary's semantic ring
+#
+# Crates keep their own names and publish individually; this workspace is
+# their shared home. Mere's private local-memory lane, which carried the
+# eidetic name first, becomes mere-eidetic.
+[workspace]
+resolver = "3"
+members = [
+    "crates/muniment",
+    "crates/codicil",
+    "crates/chartulary",
+    "crates/scholia",
+]
