@@ -1,6 +1,6 @@
 [package]
 name = "codicil"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "An append-only, replayable log: immutable ordered entries you append and replay to rebuild state, persisted through muniment. The event-source and nondestructive-history primitive. Sibling to muniment (the store)."
