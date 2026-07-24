@@ -317,3 +317,29 @@ primary repos build from clean clones.
   audio-primitives and wavicle sibling paths became git pins.
   `cargo check -p hocket-engine` green. woodshed's active branch is
   `redesign`, not `main` — hocket's woodshed pin tracks `main` deliberately.
+- **C2 landed** (genet `ccb0b5d91df`, pushed). cambium and netfetcher are
+  genet components:
+  `components/cambium/{cambium,cambium-nematic,cambium-winit,meristem,sprigging}`
+  and `components/netfetcher`, histories preserved. Checks green for all six
+  plus `genet-documents --features netfetch`; the standalone
+  `genet_web_smoke` example resolves. Consumers repointed: merecat's cambium
+  and sprigging, mere's netfetcher, both to genet.git. Findings:
+  - **The absorption paid for itself immediately.** cambium carried three
+    `[patch.crates-io]` entries (stylo_taffy, gpu-allocator, taffy) that
+    existed *only* because path patches do not transit to git consumers.
+    Path deps inside one workspace made all three unnecessary. The
+    `genet_web_smoke` sibling path also became in-repo, closing the dev-only
+    cycle between the two repos.
+  - **Workspace inheritance is the real hazard in an absorption, not paths.**
+    genet's `[workspace.package]` is Servo-shaped (version 0.2.0,
+    `repository = servo/servo`, `publish = false`); cambium's crates are
+    independently published at 0.1.0-0.3.0 under three different licenses.
+    Inheriting silently would have mislabelled and unpublishable them. They
+    now spell out version, rust-version, and repository, which is what
+    genet's other adopted components (tinct, errand) already do. **C3 must
+    check the same for every incoming crate against mere's workspace.**
+  - Another session was live in genet throughout; its livery work was
+    committed forward in two batches (`9d366ffefd5`, plus a length-value
+    pass) before each subtree add, since `git subtree` refuses a dirty tree.
+    One `cargo check` failure on untouched code proved transient on retry,
+    as the workflow memory predicts.
