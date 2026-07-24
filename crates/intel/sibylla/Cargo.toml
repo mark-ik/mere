@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "A local-embedding and semantic-retrieval seam: the EmbeddingProvider trait, similarity metrics, a deterministic stub, a pure-Rust vector index, a SemanticSearch facade, a burn-free lexical embedder, an affinity-pairs helper, a batched-cosine GPU index kernel, and a Burn-backed BERT embedder (behind features). Sibling to vates (generation)."
-repository = "https://github.com/mark-ik/sibylla"
+repository = "https://github.com/mark-ik/mere"
 keywords = ["embeddings", "vector-search", "semantic", "retrieval", "rag"]
 categories = ["science", "data-structures"]
 

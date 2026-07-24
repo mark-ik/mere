@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "A local-model inference seam: the InferenceProvider trait, capability descriptors, and a deterministic canned provider. Model-backed backends (burn-wgpu, external llama.cpp/Ollama endpoints, mistral.rs) land behind features, selected by capability, never bound as universal."
-repository = "https://github.com/mark-ik/vates"
+repository = "https://github.com/mark-ik/mere"
 keywords = ["inference", "llm", "local", "seam", "streaming"]
 categories = ["science", "api-bindings"]
 

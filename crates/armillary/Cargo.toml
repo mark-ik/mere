@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "A host-neutral actor-kernel runtime: a !Send host-kernel boundary, a Send actor harness (thread-per-actor or pooled), generation counters for backpressure, and a growable reusing worker pool. GPUI's kernel/actor discipline made structural."
-repository = "https://github.com/mark-ik/armillary"
+repository = "https://github.com/mark-ik/mere"
 keywords = ["actor", "concurrency", "threading", "runtime", "gpui"]
 categories = ["concurrency", "rust-patterns"]
 
