@@ -234,38 +234,62 @@ namespace.
   non-coverage. **Done when** an expired grant stops covering without any
   mutation of the store, and the effective expiry of a chain is its minimum.
 
-- **C3, delegation** (servitor). `Delegation`, `DelegationId`, chain validity
-  with D3's three invariants, user-as-root. Install becomes an attenuating
-  delegation. **Done when** a denizen can delegate a strict subset onward, an
-  attempt to delegate wider than held is refused, and a chain verifies from a
-  cold store.
+- **C3, delegation** (servitor, ADDITIVE). `Delegation`, `DelegationId`,
+  `DelegationTable` implementing `AuthorityProvider` by chain validity (D3's
+  three invariants), `sever` with D4's lazy cascade, and the delegation
+  projection round-trip. Kept additive: `GrantTable` stays the working
+  authority so merecat does not churn here; the swap is C4's. **Done when** a
+  chain verifies from a cold store, an attempt to delegate wider than held is
+  refused, `sever` invalidates a whole subtree, and delegation records
+  round-trip through the projection.
 
-- **C4, revocation** (servitor + merecat). Sever plus D4's lazy cascade, and
-  the user-visible Uninstall row beside Run. **Done when** severing a
-  delegation stops its whole subtree, receipted headed: install, run, uninstall,
-  run refused.
+- **C4, revocation + the merecat swap** (merecat). merecat moves from
+  `GrantTable` to `DelegationTable`; the root subject comes from the active
+  personae identity (OQ2); install issues attenuating root delegations instead
+  of flat grants; re-review replaces-and-cascades (OQ1); the Uninstall row
+  beside Run severs. **Done when** severing stops a denizen's whole subtree,
+  receipted headed: install, run, uninstall, run-refused; and a pre-round
+  session still heals.
 
-- **C5, the merecat migration** (merecat). Rings become `Power`s, `scenario/`
-  stays a `Scope`, legacy read exercised against a pre-round session. **Done
-  when** both denizen lanes still pass and the wasm receipt is green from a
-  session written before this round.
+- **C5 RETIRED.** The migration it named was forced into C0 (see Progress);
+  C4 carries the remaining swap. No separate phase.
 
 ## Open questions
 
-1. **Attenuation on re-review.** When a pack upgrade asks for more, the trust
-   model says "widening upgrades re-review". Does the new delegation replace
-   the old one (losing any onward delegations the denizen made under it), or
-   sit beside it? Proposed: replace, and cascade, since the old chain described
-   a capability set the user has now explicitly reconsidered.
-2. **Root identity.** Is the user's root subject a fixed well-known constant, or
-   the active personae identity? The second is more correct and drags personae
-   into servitor's dependency set; the first is a placeholder that will need
-   migrating. Proposed: a distinguished root subject for C3, personae-backed
-   when the identity vault lands.
-3. **Moot alignment** (inherited as the previous plan's OQ6). Whether the
-   peer-apply path adopts this same order, or gemot's provider stays a parallel
-   implementation. Untouched by this round; the typed `Cap` makes the bridge
-   cheaper, not free.
+1. **RULED (Mark, 2026-07-24): replace and cascade.** A re-review that asks for
+   more replaces the denizen's old root delegations rather than sitting beside
+   them: the old set is severed (cascading to any onward delegations made under
+   it) and the new set issued. The old chain described a capability set the user
+   has now explicitly reconsidered, so keeping it live would be authority the
+   user thinks they revoked.
+2. **RULED (Mark, 2026-07-24): the root is the personae identity**, not a
+   placeholder constant. Servitor stays identity-agnostic — it takes
+   [`Subject`]s and never depends on personae — so "root is personae" is a HOST
+   fact: merecat derives the root subject from the active personae identity's
+   public key and hands it to the delegation table. (Mark: the SSH-key vault in
+   personae is nearly functional, so the identity this roots on is real, not
+   hypothetical.) Servitor's delegation algebra is the same whether the root is
+   a test key or a personae key; only merecat knows which.
+3. **RULED (Mark, 2026-07-24): unify — on the trait, when the caller exists.**
+   gemot's `MootAuthorizationProvider` adopts this order. No fundamental
+   drawback; the cost is a dependency edge, which decides the shape:
+   - Unify on the **trait** ([`Capability`]), not the enum. `cap.rs` is already
+     chartulary-free, so the algebra (`Capability`, `Cap`, `ScopePath`, `Mode`)
+     extracts to a leaf crate both `gemot` and `servitor` depend on, and each
+     keeps its own concrete capability if they ever diverge.
+   - `Cap` fills the **L1 structural slot** of the three-layer stack; gemot's
+     `TesseraFacts` return stays the L2 policy layer, untouched. Unifying does
+     not collapse the layers.
+   - The endgame meadowcap scope (graph-cluster namespaces, leaf-node-id
+     binding) arrives as a new `Capability` impl for BOTH sides at once — a
+     feature of unifying, not a cost.
+   - **Sequencing**: there is no "moot refactor" — moot/murm stay inside mere
+     (the consolidation plan withdrew their promotion). The real gate is that
+     gemot's provider **has no caller today**: grep finds zero external
+     invocations of `MootAuthorizationProvider`, and `DenizenKind::Peer` is an
+     enum variant with no code path. So unifying now is a provider nothing
+     calls. It lands when a **peer first petitions through the gate** — unbuilt
+     product surface — and the leaf-crate extraction happens then.
 
 ## Progress
 
