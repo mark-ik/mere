@@ -162,10 +162,10 @@ pub fn relax(scene: &mut Scene, settings: &Relaxation) {
         }
 
         for (index, item) in scene.items.iter_mut().enumerate() {
-            velocities[index].x = (velocities[index].x + forces[index].x * settings.dt)
-                * settings.damping;
-            velocities[index].y = (velocities[index].y + forces[index].y * settings.dt)
-                * settings.damping;
+            velocities[index].x =
+                (velocities[index].x + forces[index].x * settings.dt) * settings.damping;
+            velocities[index].y =
+                (velocities[index].y + forces[index].y * settings.dt) * settings.damping;
             item.transform.translate.x += velocities[index].x * settings.dt;
             item.transform.translate.y += velocities[index].y * settings.dt;
         }
@@ -187,7 +187,9 @@ pub fn relax(scene: &mut Scene, settings: &Relaxation) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sceno::{InstanceId, ProjectedItem, Representation, RoutedRelation, Size2, SourceRef, Transform2};
+    use sceno::{
+        InstanceId, ProjectedItem, Representation, RoutedRelation, Size2, SourceRef, Transform2,
+    };
 
     fn scene_with(points: &[(f32, f32)]) -> Scene {
         let mut scene = Scene::new();
@@ -220,7 +222,13 @@ mod tests {
     fn zero_steps_leaves_the_scene_untouched() {
         let mut scene = scene_with(&[(0.0, 0.0), (1.0, 0.0)]);
         let before = scene.clone();
-        relax(&mut scene, &Relaxation { steps: 0, ..Default::default() });
+        relax(
+            &mut scene,
+            &Relaxation {
+                steps: 0,
+                ..Default::default()
+            },
+        );
         assert_eq!(scene, before);
     }
 
@@ -252,7 +260,13 @@ mod tests {
         let points = [(0.0, 0.0), (10.0, 0.0), (20.0, 0.0)];
         let mut tethered = scene_with(&points);
         let mut free = scene_with(&points);
-        relax(&mut tethered, &Relaxation { arrangement_pull: 4.0, ..Default::default() });
+        relax(
+            &mut tethered,
+            &Relaxation {
+                arrangement_pull: 4.0,
+                ..Default::default()
+            },
+        );
         relax(&mut free, &Relaxation::default().untethered());
 
         let drift = |scene: &Scene| -> f32 {

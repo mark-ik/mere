@@ -1,6 +1,6 @@
 [package]
 name = "scenograph"
-version = "0.0.2"
+version = "0.0.3"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -11,6 +11,6 @@ keywords = ["projection", "scene", "graph", "visualization"]
 categories = ["visualization", "gui"]
 
 [dependencies]
-sceno = { version = "0.0.2", path = "../sceno" }
-scenomise = { version = "0.0.2", path = "../scenomise" }
-scenotime = { version = "0.0.2", path = "../scenotime" }
+sceno = { version = "0.0.3", path = "../sceno" }
+scenomise = { version = "0.0.3", path = "../scenomise" }
+scenotime = { version = "0.0.3", path = "../scenotime" }

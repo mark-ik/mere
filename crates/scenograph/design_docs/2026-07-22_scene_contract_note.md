@@ -1,12 +1,16 @@
 # Scene Contract Note — the first sceno slice
 
 **Date**: 2026-07-22 (updated 2026-07-24)
-**Status**: Landed and consumed. Written as rationale for the P2 type sketch,
-before mere wired onto it; mere, isometry, and graphshell now all consume the
-contract, so the review question is no longer "is this the right shape to
-build" but "which parts did the consumers actually force". Current: sceno
-0.0.2, 29 family tests (sceno 13, scenomise 9, scenotime 7), verified
-2026-07-24.
+**Status**: **Frozen at 0.0.3.** Landed and consumed. Written as rationale for
+the P2 type sketch, before mere wired onto it; mere, isometry, and graphshell
+now all consume the contract, so the review question is no longer "is this the
+right shape to build" but "which parts did the consumers actually force".
+Current: sceno 0.0.3, 45 family tests (sceno 19, scenomise 9, scenotime 17),
+verified 2026-07-24.
+
+The four questions this note left open are answered below under
+[Rulings](#rulings-2026-07-24-the-freeze), executed per the
+[scenograph freeze plan](../../../design_docs/mere_docs/implementation_strategy/2026-07-24_scenograph_freeze_plan.md).
 
 The family moved on 2026-07-23: the standalone `scenograph` repo was absorbed
 into mere at `crates/scenograph`, so the proof sequence and findings now live
@@ -143,9 +147,67 @@ capability to swatch-scale surfaces without a physics dependency, and
 graphshell G2 took `scenotime`'s snapshot/diff pair as its remote replay
 contract.
 
-Remaining before a freeze can be claimed: the intent question and the
-`measure` question above, per-item emphasis channels, and whether hit
-resolution belongs to `scenotime` or the host.
+## Rulings (2026-07-24, the freeze)
+
+The four remaining items are decided. Each was answered by reading the
+consumers rather than by deliberation, which is the standard the rest of this
+note set; three of the four turned out to be already-answered by code nobody
+had looked at together.
+
+1. **Action intents stay out of the contract, permanently.** Not "not yet".
+   `graphshell-protocol` already carries the whole vocabulary and binds an
+   invocation to `sceno`'s `InstanceId` plus `scenotime`'s `SceneEpoch` and
+   `Revision`. Its `IntentResult::Stale` is expressible *only* because the
+   protocol sees epoch and revision together, so a sceno-side intent type
+   could at best restate identities the contract already supplies, and would
+   then owe agreement with the vocabulary that exists. The seam, recorded in
+   `sceno`'s crate docs: sceno owns instance identity, scenotime owns
+   epoch/revision, the consuming protocol owns advertise/invoke/result, the
+   product's gate owns authority.
+
+2. **`measure` is deleted.** Two findings beyond "no consumer". First,
+   `ScoreItem.footprint` already carries the measured extent, and every host
+   stamps it there. Second and decisive: `Measurements` was keyed by
+   `SourceIx`, which contradicts this note's own decision 1. One source may
+   be placed as many instances at different representation rungs, and a
+   source-keyed map cannot say so. The module was shaped against the
+   commitment it existed to serve. A legibility floor, if one is ever needed,
+   returns as an optional field on `ScoreItem` beside the footprint that is
+   already there, per instance.
+
+3. **Per-item emphasis channels landed** as `ProjectedItem.channels:
+   Vec<(String, f32)>`, an open map with recognized names documented rather
+   than enumerated. The forcing argument was not a local one: graphshell
+   ships scenes to clients with no access to the source, so emphasis kept as
+   a host-side signal read is invisible to a remote viewer. Cartography now
+   maps `ActivityHeat` to `"heat"` and `BridgeEmphasis` to `"bridge"`, which
+   completes the overlay migration this note started.
+
+   **Relations deliberately did not get channels.** The pressure everyone
+   expected from woodshed (one chord pair carrying diatonic, shared-tone,
+   voice-leading, and practiced-after at once, without a winning reason)
+   turns out to need no contract change at all: mere already ruled multi-edge
+   is truth and the collapse is an experience setting, and `canvas::edge_cells`
+   implements it. A pair related for four reasons is four `RoutedRelation`s.
+
+4. **Picking belongs to `scenotime`, and hosts may ignore it.**
+   `SceneTables::pick` resolves a world point to the topmost live instance
+   (layer, then explicit order, then slot), honoring `hit` over `footprint`,
+   skipping invisible items and tombstones, and carrying the point back
+   through the space chain. Sceno gained the two pieces it should have owned
+   all along, `Transform2::inverse` and `Footprint::contains`, so scenotime
+   holds only traversal.
+
+   This finally gives `hit` a reader. It was `None` at every construction
+   site in the workspace, while the consumer that most needs it, a remote
+   client filling `IntentInvocation.target`, has no physics world to ask.
+   Mere keeps resolving against its seiche colliders and is unaffected; the
+   default is a floor for viewers that have nothing better, and is linear in
+   live items by design.
+
+Also settled in passing: `Footprint::Point` contains nothing, so a
+zero-extent item is unpickable unless it supplies a `hit` shape. That is the
+case `hit` exists for, and is now documented rather than implied.
 
 The likely third consumer is **woodshed**, which gates its own scene-contract
 work on this family being proved and frozen (see that repo's

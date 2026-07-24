@@ -3,12 +3,13 @@
 //! A thin re-export of the three members, for consumers that want one
 //! dependency:
 //!
-//! - [`sceno`] — core contracts: sources, scores, channels, coordinate
-//!   spaces, footprints, scenes, intents.
+//! - [`sceno`] — core contracts: sources, scores, coordinate spaces,
+//!   footprints, scenes, and per-item emphasis channels. Deliberately not
+//!   intents; see that crate's docs for where the reverse path lives.
 //! - [`scenomise`] — choreography: placement solvers that realize scores
 //!   into arranged scenes.
-//! - [`scenotime`] — runtime: incremental evaluation and the inhabited
-//!   scene.
+//! - [`scenotime`] — runtime: stable epochs, incremental diffs, and picking
+//!   the instance under a point.
 //!
 //! Products with tight dependency budgets depend on the members directly;
 //! `sceno` alone is the pure-types option.

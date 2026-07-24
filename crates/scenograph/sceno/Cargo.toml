@@ -1,11 +1,11 @@
 [package]
 name = "sceno"
-version = "0.0.2"
+version = "0.0.3"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
-description = "Core contracts for the scenograph projection engine: source references, coordinate spaces, footprints, and scene snapshots with per-instance identity. Scores and action intents arrive with later proofs."
+description = "Core contracts for the scenograph projection engine: source references, coordinate spaces, footprints, persisted scores, and scene instances carrying representation slots and emphasis channels."
 readme = "../README.md"
 keywords = ["projection", "scene", "graph", "visualization"]
 categories = ["visualization", "data-structures"]

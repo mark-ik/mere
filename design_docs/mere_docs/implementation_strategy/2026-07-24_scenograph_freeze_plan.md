@@ -228,6 +228,63 @@ Baseline before any change: 29 family tests green (13 / 9 / 7).
 
 ## Progress
 
-Not started. Written 2026-07-24 after the
+### 2026-07-24 — S1 through S3 landed; S4 local half done, publish pending
+
+Written and executed the same day, after the
 [application prospects brief](../../2026-07-24_application_prospects_brief.md)
 ranked this the highest unlock-per-effort item on the board.
+
+**S1.** `sceno::measure` deleted with its re-exports and test. The lib-level
+commitment now points at `ScoreItem.footprint`, and a "what is deliberately
+absent" section records D1 in the crate docs where a reader meets it.
+
+**S2.** `ProjectedItem.channels` landed as an open `Vec<(String, f32)>`.
+Cartography maps `ActivityHeat` to `"heat"` and `BridgeEmphasis` to
+`"bridge"` behind exported `HEAT_CHANNEL` / `BRIDGE_CHANNEL` constants, which
+completes the overlay migration. Two tests: both emphases reach the item, and
+an unemphasized node carries none.
+
+**S3.** Picking landed, but the factoring moved during the work. Sceno gained
+the two pieces it should have owned all along, `Transform2::inverse` and
+`Footprint::contains` (circle by radius, rect by half-extent, polygon by
+even-odd ray cast, path by distance to segment), so `scenotime::pick` holds
+only traversal: layer then order then slot, `hit` over `footprint`, skipping
+invisible items and tombstones, carrying the point back through the space
+chain. Ten pick tests plus seven for the new sceno primitives.
+
+`Footprint::Point` contains nothing, so a zero-extent item is unpickable
+without a `hit` shape. That is the case `hit` exists for, and it is now
+tested and documented rather than implied.
+
+**S4 (local half).** All four crates bumped to 0.0.3. `sceno`'s published
+description promised "scores and action intents arrive with later proofs",
+which D1 makes permanently wrong, so it and `scenotime`'s were rewritten, as
+was the facade's module doc. The scene contract note's open questions are
+replaced by a Rulings section.
+
+**Verified.** 45 family tests green, up from 29 (sceno 19, scenomise 9,
+scenotime 17), plus mere-cartography, graphshell, graphshell-client and
+graphshell-protocol. `cargo fmt --check` clean across the touched crates,
+which also required normalizing pre-existing failures in `scenomise/relax.rs`
+(4 hunks) and `cartography/scene_out.rs` (3): both already failed at HEAD
+before this work, verified by stashing.
+
+**Two findings worth keeping.**
+
+1. `sceno` 0.0.2 was published to crates.io earlier the same day, so deleting
+   `measure` is a real published break and the 0.0.3 cut is required rather
+   than cosmetic. At `0.0.x` Cargo treats every version as incompatible, so
+   consumers need only re-resolve.
+2. Neither isometry nor merecat constructs a `ProjectedItem` anywhere, so the
+   new field costs them nothing beyond that re-resolve. Every construction
+   site is inside mere.
+
+**Remaining:** publish the four crates (outward-facing and irreversible, so
+left for Mark), then re-resolve isometry and merecat against the new commit,
+and tell woodshed the contract is frozen.
+
+**History note.** A concurrent session's `git add -A` swept most of S1-S3
+into two unrelated commits, `4b8d875f` ("document-host: derive the wasm
+import grant from typed capabilities") and `6d2014b3` ("Consolidation plan:
+document-host closed..."). The content is intact and tested; the history is
+misleading, and was left alone rather than rewritten because it is shared.

@@ -87,10 +87,8 @@ pub fn scene_from_projection(
     }
 
     for positioned in &projection.nodes {
-        let source = scene.intern_source(SourceRef::new(
-            MERE_GRAPH_ADAPTER,
-            id_of(positioned.node),
-        ));
+        let source =
+            scene.intern_source(SourceRef::new(MERE_GRAPH_ADAPTER, id_of(positioned.node)));
         let footprint = match extent_of(positioned.node) {
             Some((w, h)) => Footprint::Rect {
                 size: Size2::new(w, h),
@@ -225,17 +223,15 @@ mod tests {
 
     #[test]
     fn unmeasured_radius_falls_back_to_circle() {
-        let scene = scene_from_projection(&projection_two_nodes(), |k| k.index().to_string(), |_| {
-            None
-        });
+        let scene =
+            scene_from_projection(&projection_two_nodes(), |k| k.index().to_string(), |_| None);
         assert_eq!(scene.items[0].footprint, Footprint::Circle { radius: 12.0 });
     }
 
     #[test]
     fn edges_lower_to_relations_with_weight_and_path() {
-        let scene = scene_from_projection(&projection_two_nodes(), |k| k.index().to_string(), |_| {
-            None
-        });
+        let scene =
+            scene_from_projection(&projection_two_nodes(), |k| k.index().to_string(), |_| None);
         assert_eq!(scene.relations.len(), 1);
         let r = &scene.relations[0];
         assert_eq!(r.weight, Some(2.0));

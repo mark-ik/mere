@@ -7,6 +7,7 @@
 
 mod diff;
 mod ids;
+mod pick;
 mod snapshot;
 
 pub use diff::{ApplyOutcome, DiffError, SceneDiff, SceneOp};
