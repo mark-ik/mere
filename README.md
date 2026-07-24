@@ -166,7 +166,22 @@ graph kernel's package name is `kernel`, at `crates/graph/graph-kernel`).
 | `crates/mesh` | `mesh` | The personal-space compute mesh: signed job operations over LogSync, a deterministic job board and worker loop, plus policy-bound retention checkpoints and prunable event history |
 | `crates/persona` | `identity`, `gazetteer` | Persona identity and handle resolution: master Ed25519 keypair, OS-keychain integration, per-protocol identity derivation, and WebFinger today |
 | `crates/script` | `script-rhai` | The Rhai backend for the block-evaluator lane (pure Rust, sandboxed); the privileged omnibar command shell layers verb bindings on top |
-| `crates/probes` | (excluded) | Spike/probe crates; referenced in `[workspace.exclude]` and not product crates. The directory is not present in the repo today |
+| `crates/probes` | (excluded) | Spike/probe crates; referenced in `[workspace.exclude]` and not product crates |
+
+Nine component families joined the workspace in the 2026-07-23 repo
+consolidation. They were sibling repositories until then; their crate names,
+versions, and licenses are unchanged, and only their repository home moved.
+
+| Directory | Package(s) | Role |
+|---|---|---|
+| `crates/persona/personae` | `personae` | The trust-plane spine: identity and carry in one crate |
+| `crates/armillary` | `armillary` | The host-neutral actor-kernel runtime: the `!Send` host-kernel boundary plus the `Send` actor harness |
+| `crates/eidetic` (alongside the adapters above) | `muniment`, `codicil`, `chartulary`, `scholia` | The memory primitives: the storage-backend seam, the append-only log, the container-graph substrate, and its annotations |
+| `crates/servitor` | `servitor` | The resident-helper unit and the authority gate over a denizen's nested graph |
+| `crates/intel` (alongside `embed`/`infer`/`signals`) | `vates`, `sibylla` | Inference and embedding: the decoder/actor lane and the retrieval core with its GPU index |
+| `crates/conatus` | `numen`, `quint`, `seiche` | The portable physics stack: field definitions, evaluation, integration. Kernel-free by default |
+| `crates/scenograph` | `sceno`, `scenomise`, `scenotime`, `scenograph` | The projection engine: scene and score contracts, analytic arrangements, and the incremental runtime |
+| `crates/graphshell` | `graphshell-protocol`, `-client`, `-endpoint`, `-stdio`, `graphshell` | Mere's remote port: the session protocol, its client and endpoint state machines, a local carrier, and the reference client |
 
 ## The printing-press metaphor
 
@@ -208,24 +223,32 @@ Set once in `[workspace.dependencies]` and consumed via `dep.workspace = true`:
 
 ## Relationship to sibling repositories
 
-Mere consumes several sibling repos one-way (it depends on them; they never
-depend on Mere):
+Mere is a platform, not one product among peers. The 2026-07-23 repo
+consolidation set the bar for staying a separate repository: **real coherent
+utility and identity apart from mere, genet, and the products.** Everything
+below that bar folds into mere or genet, so this list is short by design.
 
-- `genet` (`mark-ik/genet`): the Servo-derived web engine and host layer, and
-  now the engine-management family too (`inker`, `nematic`, `document-canvas`
-  moved there 2026-07-10). Genet in turn bundles the render (`netrender`),
-  fetch (`netfetcher`), and smolweb-transport (`errand`) lanes, so Mere no
-  longer names those directly. The `taffy` / `ipc-channel` forks are vendored
-  in genet and patched in.
-- `armillary` (`mark-ik/armillary`): the host-neutral actor-kernel runtime (the
-  `!Send` host-kernel boundary plus the `Send` actor harness), moved out of the
-  workspace and consumed as a git sibling.
+Mere consumes these one-way (it depends on them; they never depend on Mere):
+
+- `genet` (`mark-ik/genet`): the Servo-derived web engine and host layer. It
+  carries the engine-management family (`inker`, `nematic`, `document-canvas`,
+  2026-07-10) and, since the consolidation, the reactive UI toolkit
+  (`cambium`, `sprigging`, `meristem`) and the Fetch engine (`netfetcher`).
+  The `taffy` / `ipc-channel` forks are vendored there and patched in.
+- `netrender` (`mark-ik/netrender`): the paint-realization engine. Public, with
+  its own upstream lineage.
+- `retinue` (`mark-ik/retinue`): the radio family in one workspace — the
+  Reticulum implementation plus `tulle`, `sennet`, `tucket`, and the firmware.
+  MPL-2.0, unlike the rest of the family.
+- `smolweb` (`mark-ik/smolweb`): the small-web wire layer (`misfin` and the
+  spartan / nex / guppy protocol crates). Held in stewardship for their
+  protocols' communities.
 - `boa` (`mark-ik/boa`): the Boa JavaScript document-host lane.
-- `misfin` (`mark-ik/misfin`): the misfin messaging lane, held in stewardship.
 
-Downstream, **`merecat`** (`mark-ik/merecat`) is the reference on-screen host:
-it depends on Mere one-way and composes these crates into the window that was
-formerly `meerkat`.
+Downstream, four products depend on Mere one-way: **`merecat`** (the reference
+on-screen host, formerly `meerkat`), **`isometry`**, **`woodshed`**, and
+**`hocket`**. Each owns its own truth and reaches Mere for the graph,
+projection, memory, identity, and session layers.
 
 ## Documentation
 

@@ -3,8 +3,8 @@
 The generic content-addressed container graph (aka **chart**). A `Graph<N, E>`
 where nodes are content-addressed containers and edges are typed relations, over
 one shared, app-agnostic model. The substrate that binds
-[muniment](https://github.com/mark-ik/muniment)'s blobs and
-[codicil](https://github.com/mark-ik/codicil)'s log into a graph.
+[muniment](https://github.com/mark-ik/mere)'s blobs and
+[codicil](https://github.com/mark-ik/mere)'s log into a graph.
 
 Fully generic: a node needs one capability, `Identified`, to live in the graph.
 Everything else is an opt-in trait that unlocks a feature.

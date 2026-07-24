@@ -14,7 +14,7 @@ publish = false
 
 [dependencies]
 eidetic = { package = "mere-eidetic", path = "../../eidetic/eidetic-core" }
-identity = { package = "personae", path = "../../../../personae" }
+identity = { package = "personae", path = "../../persona/personae" }
 # The radio family merged into one workspace on 2026-07-23; both crates now live
 # under retinue/crates/. Probes stay on local paths by design (they are excluded
 # from the mere workspace and never published) and adapt to upstream layout.

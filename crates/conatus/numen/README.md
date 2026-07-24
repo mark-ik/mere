@@ -10,7 +10,7 @@ it does not evaluate them (that is `aether`) and it does not integrate the force
 (that is `gyre`).
 
 Fields are the third graph primitive, beside nodes and edges. The node and edge
-primitives live in the content substrate ([chartulary](https://github.com/mark-ik/chartulary));
+primitives live in the content substrate ([chartulary](https://github.com/mark-ik/mere));
 the field primitives live here, at the same portable tier, because a field is
 *spatial* (it reads positions) and so stays out of the position-free content graph.
 
