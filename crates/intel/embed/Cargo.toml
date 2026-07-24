@@ -20,7 +20,7 @@ path = "src/lib.rs"
 # (persistence / field_bridge / canvas_search). Git sibling consumed one-way; a
 # local checkout is picked up via the gitignored `.cargo/config.toml` patch
 # (mirrors netfetcher / errand).
-sibylla = { git = "https://github.com/mark-ik/sibylla.git" }
+sibylla = { path = "../sibylla" }
 async-trait = "0.1"
 eidetic.workspace = true
 # The field algebra (FieldProjection / FieldId / eval) the embedding→field
@@ -45,6 +45,6 @@ bert-wgpu = ["bert", "sibylla/bert-wgpu"]
 
 [dev-dependencies]
 # Test stores are muniment backends now (2026-07-12).
-muniment = { git = "https://github.com/mark-ik/eidetic.git", branch = "main", version = "0.1.0" }
+muniment = { path = "../../eidetic/muniment", version = "0.1.0" }
 pollster = "0.4"
 serde_json = "1.0"

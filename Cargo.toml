@@ -3,7 +3,6 @@ resolver = "2"
 members = [
     "crates/mere",
     "crates/canvas/canvas",
-    "crates/persona/identity",
     "crates/canvas/cartography",
     "crates/canvas/arrangements",
     "crates/graph/glossary",
@@ -57,6 +56,31 @@ members = [
     "crates/script/rhai",
     "crates/script/document-host",
     "crates/script/app-host",
+    # ─── Absorbed 2026-07-23 (design_docs/.../2026-07-23_repo_consolidation_plan.md) ───
+    # Mere is the platform; these families are its components, packaged here
+    # rather than as siblings. Crate names, versions, and licenses are unchanged;
+    # only their repository home moved. Products consume them from mere.git.
+    "crates/persona/personae",
+    "crates/armillary",
+    "crates/eidetic/muniment",
+    "crates/eidetic/codicil",
+    "crates/eidetic/chartulary",
+    "crates/eidetic/scholia",
+    "crates/servitor",
+    "crates/intel/vates",
+    "crates/intel/sibylla",
+    "crates/conatus/numen",
+    "crates/conatus/quint",
+    "crates/conatus/seiche",
+    "crates/scenograph/sceno",
+    "crates/scenograph/scenomise",
+    "crates/scenograph/scenotime",
+    "crates/scenograph/scenograph",
+    "crates/graphshell/graphshell-protocol",
+    "crates/graphshell/graphshell-client",
+    "crates/graphshell/graphshell-endpoint",
+    "crates/graphshell/graphshell-stdio",
+    "crates/graphshell/graphshell",
 ]
 exclude = [
     "crates/probes",
@@ -67,6 +91,9 @@ version = "0.0.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/mark-ik/mere"
+# The scenograph crates inherit this; it matches what their own workspace
+# declared before the 2026-07-23 absorption.
+authors = ["Mark AB (markik)"]
 
 # Centralized load-bearing pins. Every crate that uses one of these declares
 # it directly with `<dep>.workspace = true` rather than via transitive
@@ -82,8 +109,8 @@ repository = "https://github.com/mark-ik/mere"
 # quint + seiche extracted to sibling repos + published 2026-07-18 (portable,
 # MIT/Apache); crates.io deps, local checkout via the gitignored
 # `.cargo/config.toml` `[patch.crates-io]`. (numen the same, on graph-kernel.)
-quint = "0.0.2"
-seiche = "0.0.3"
+quint = { path = "crates/conatus/quint" }
+seiche = { path = "crates/conatus/seiche" }
 cartography = { package = "mere-cartography", path = "crates/canvas/cartography" }
 # Deterministic graph arrangements (penrose / l-system / phyllotaxis /
 # kanban-timeline / radial-grid / semantic), recaptured from the retired
@@ -102,13 +129,30 @@ glossary = { package = "mere-glossary", path = "crates/graph/glossary" }
 # Send actor harness the constellation is built on. Promoted to its standalone
 # repo (code-identical cutover 2026-07-09, boundary pass slice A); git sibling
 # consumed one-way, local checkout via the gitignored `.cargo/config.toml` patch.
-armillary = { git = "https://github.com/mark-ik/armillary.git", branch = "main" }
+armillary = { path = "crates/armillary" }
 # The scenograph projection-engine family's core contract (scene snapshots,
 # footprints, spaces, measurements) — git sibling consumed one-way, local
 # checkout via the gitignored `.cargo/config.toml` patch. cartography emits
 # sceno scenes (the P2 consumption slice; projection_proofs_plan).
-sceno = { git = "https://github.com/mark-ik/scenograph.git", branch = "main" }
-scenomise = { git = "https://github.com/mark-ik/scenograph.git", branch = "main" }
+sceno = { path = "crates/scenograph/sceno" }
+scenomise = { path = "crates/scenograph/scenomise" }
+scenotime = { path = "crates/scenograph/scenotime" }
+# The remaining families absorbed 2026-07-23. Consumers keep using
+# `<dep>.workspace = true`, so only this block knows where each one lives.
+personae = { path = "crates/persona/personae" }
+codicil = { path = "crates/eidetic/codicil" }
+chartulary = { path = "crates/eidetic/chartulary" }
+scholia = { path = "crates/eidetic/scholia" }
+numen = { path = "crates/conatus/numen" }
+vates = { path = "crates/intel/vates" }
+sibylla = { path = "crates/intel/sibylla" }
+graphshell-protocol = { path = "crates/graphshell/graphshell-protocol" }
+graphshell-client = { path = "crates/graphshell/graphshell-client" }
+graphshell-endpoint = { path = "crates/graphshell/graphshell-endpoint" }
+graphshell-stdio = { path = "crates/graphshell/graphshell-stdio" }
+# Shared pins the graphshell crates inherit.
+base64 = "0.22"
+blake3 = "1"
 mere = { path = "crates/mere" }
 
 fetch = { package = "mere-fetch", path = "crates/system/fetch" }
@@ -179,11 +223,11 @@ mooting = { version = "0.1.0", path = "crates/moot/mooting" }
 # over the tessera-proven LogSync lane + the deterministic job board.
 mesh = { package = "mere-mesh", path = "crates/mesh/mesh" }
 
-identity = { package = "personae", version = "0.1.0", path = "../personae" }
+identity = { package = "personae", version = "0.1.0", path = "crates/persona/personae" }
 # The denizen authority gate (participant gate B1/B3): document-host derives
 # its import-level Grant from a servitor authority — one grant, two faces.
-servitor = { git = "https://github.com/mark-ik/servitor.git", branch = "main" }
-muniment = { version = "0.1.0" }
+servitor = { path = "crates/servitor" }
+muniment = { path = "crates/eidetic/muniment" }
 # Handle-resolution index (WebFinger today; NIP-05 / atproto-did / moot
 # web-of-trust to come). Incubating, promoted out of the murm supercrate
 # 2026-07-08 (a gazetteer is a directory, not a broadcast gazette); no consumer

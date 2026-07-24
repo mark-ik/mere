@@ -18,7 +18,7 @@ async-trait = "0.1"
 eidetic.workspace = true
 # The seam this crate now implements (2026-07-12): FjallStore is a muniment
 # backend, so it serves every family consumer, not just eidetic.
-muniment = { git = "https://github.com/mark-ik/eidetic.git", branch = "main", version = "0.1.0" }
+muniment = { path = "../muniment", version = "0.1.0" }
 fjall = "2"
 
 [dev-dependencies]

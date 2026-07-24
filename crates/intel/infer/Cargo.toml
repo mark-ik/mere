@@ -16,7 +16,7 @@ path = "src/lib.rs"
 # (boundary pass slice B, 2026-07-09). infer re-exports the surface and keeps
 # the mere glue. Git sibling consumed one-way; a local checkout is picked up
 # via the gitignored `.cargo/config.toml` patch (mirrors sibylla / netfetcher).
-vates = { git = "https://github.com/mark-ik/vates.git", branch = "main" }
+vates = { path = "../vates" }
 # The mere-side corridor test's backend/tensor types (embed's `dep:burn`
 # pattern: the model tree lives in vates; these are only what the test
 # instantiates). Pulled only by the `decoder` feature.
@@ -31,7 +31,7 @@ decoder-wgpu = ["decoder", "vates/decoder-wgpu"]
 
 [dev-dependencies]
 # Test stores are muniment backends now (2026-07-12).
-muniment = { git = "https://github.com/mark-ik/eidetic.git", branch = "main", version = "0.1.0" }
+muniment = { path = "../../eidetic/muniment", version = "0.1.0" }
 serde_json = "1.0"
 # The P2 corridor test: model artifacts through eidetic's typed store and
 # back into a working provider (embed's bert_full_pipeline pattern).

@@ -10,7 +10,7 @@ description = "Portable graphshell session runtime state: session manifests, ses
 
 [dependencies]
 # The storage seam (2026-07-12): eidetic's Store is muniment::Backend.
-muniment = { git = "https://github.com/mark-ik/eidetic.git", branch = "main", version = "0.1.0" }
+muniment = { path = "../../eidetic/muniment", version = "0.1.0" }
 incipit.workspace = true
 kernel.workspace = true
 forme.workspace = true
@@ -25,7 +25,7 @@ eidetic.workspace = true
 # The facet store: the runtime tier of the one-node facet system (typed per-node
 # metadata). session-runtime persists a `FacetStore<Uuid>` beside the session
 # graph — the durable home the per-node sidecars (browser/denizen) converge onto.
-chartulary = { git = "https://github.com/mark-ik/eidetic.git", branch = "main" }
+chartulary = { path = "../../eidetic/chartulary" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
