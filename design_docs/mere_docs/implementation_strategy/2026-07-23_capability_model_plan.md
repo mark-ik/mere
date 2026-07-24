@@ -468,7 +468,46 @@ namespace.
     still reporting exactly its three rings — now derived from verified
     certificate chains rather than a flat table.
 
-- **Remaining after C4**: the unsealed-seed → `IdentityVault` swap (needs an
-  unlock path in merecat's shell), and OQ3's moot unification, which is now
-  mostly a matter of pointing gemot's authorization at the same typed view,
-  since both tiers already speak personae certificates.
+- **Both follow-ons LANDED, closing the round.**
+  - **The vault swap needed no shell unlock path after all**: personae's
+    bootstrap ceremony already carries `Unlock::AutoOs` (DPAPI on Windows,
+    no prompt) with `PERSONAE_PASSPHRASE` as the portable alternative — the
+    gap named at C4 was already closed upstream. `merecat::identity` is now
+    `RootIdentity::{Vault, Unsealed}`: vault-first via the SAME ceremony the
+    personae bins use (`open_storage` + `load_or_create_profile`), against
+    the SHARED default vault and the `default` profile — the profile the SSH
+    agent serves — so merecat's root identity IS the user's personae
+    identity, not a browser-local key. The unsealed path remains as a LOUD
+    fallback for platforms with no sealed backend, and once the vault opens,
+    the legacy plaintext seed is retired from disk. The boot log prints
+    personae's honest protection description; the headed receipt shows the
+    real thing: `OS auto-unlock sealed records at
+    %LOCALAPPDATA%\personae\vault (DPAPI-wrapped root)`.
+  - **The re-root heal** makes the migration safe: a stored chain that fails
+    to verify under the current root (pre-delegation session, or the vault
+    identity superseding the stopgap seed) re-issues from the grant
+    projections — the record of what the user reviewed — under the new root,
+    and rewrites the certificate file so the next adopt verifies without
+    healing. Preserves the review exactly; nothing widens, nothing re-asks.
+    Found and fixed in the process: rebuild issued heal certificates at a
+    fresh clock read that could land after the table's `set_now`, leaving
+    `not_before` in the table's future — one clock read per rebuild now.
+  - **OQ3 landed as `gemot::TypedMootAuthorization`**: the moot authorization
+    seam parses the request's `capability_path` as a servitor `Cap` at the
+    boundary (D2's rule) and answers it from the moot's own delegation
+    certificates through the same `power/...`/`scope/...` encoding the
+    denizen tier writes. `MootGroup`'s membership impl was path-blind (any
+    Write member covered every capability); the typed provider composes
+    membership facts from any inner provider with per-path delegated
+    coverage. Typed means typed: no silent bridge between vocabularies — a
+    bare-string request parses as the scope it always was, never accidentally
+    a power. One capability question, two tiers, differing only in root
+    (constitution grant vs profile identity).
+  - Receipts: gemot 96 (3 new: chain-answered coverage with a path-blind
+    membership stub, closed powers at the moot tier, certificate-side
+    expiry), servitor 32, merecat 127 (re-root heal + vault fallback +
+    retirement tests); headed `denizen_revoke.scn` and `denizen_wasm.scn`
+    RESULT ok rooted on the real DPAPI-sealed vault identity.
+  - **Still open, deliberately**: the peer lane itself (`DenizenKind::Peer`
+    through `servitor::Gate`) remains unbuilt product surface; the typed
+    provider is the moot-side face waiting for it.
