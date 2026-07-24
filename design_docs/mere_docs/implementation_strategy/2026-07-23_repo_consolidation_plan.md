@@ -463,22 +463,48 @@ primary repos build from clean clones.
 
 ## Open
 
-- **crates.io publish sweep — NOW REQUIRED (was deferred).** Superseded by the
-  2026-07-24 deletion ruling above: the sweep is the precondition for deleting
-  the nine repos, so it runs as soon as mere and genet are quiet. Original
-  deferral note follows.
-- **crates.io publish sweep — deferred, deliberately.** Most absorbed crates
-  changed only their `repository` metadata, which is not worth a permanent
-  version across ~20 crates. Two things should settle first: `document-host`
-  is red on servitor's in-flight capability model, so servitor would publish a
-  half-state, and another session is live across mere and genet. When it runs,
-  it needs path deps carrying `version =` and a dependency-ordered sequence
-  (muniment → codicil → chartulary → scholia; numen → quint → seiche;
-  sceno → scenomise/scenotime → scenograph; graphshell-protocol → client and
-  endpoint → the facade). The one change with real weight is the radio
-  family's MIT/Apache → MPL-2.0 relicense: a license users can see and rely
-  on, so it deserves its own version bump and note rather than riding along.
+**Closed since:** the publish sweep ran (21 crates republished at their new
+homes) and every absorbed repository is deleted except `graphshell`, which
+stays archived because its donor design docs live nowhere else — mere holds
+only the harvest indexes.
+
+### Dangling-reference audit, 2026-07-24
+
+Deleting the repos turned every surviving reference to them into a hard
+break, and three had been missed. **`git ls-remote` against each retired
+URL is the check; a build passing locally proves nothing**, because a cached
+`~/.cargo/git` checkout plus a pinned lockfile hides a deleted remote until
+someone clones fresh.
+
+- **mere git-dep'd the deleted `mark-ik/misfin`** (`Cargo.toml`, the
+  workspace `misfin` entry). A clean clone could not have fetched it. Now a
+  crates.io pin at `0.0.4`, which is how genet's errand already consumed it
+  (mere `0086c9c3`).
+- **errand pinned misfin `0.0.3` while mere pinned `0.0.4`.** `0.0.x`
+  versions never unify, so mere's graph carried two copies. errand moved to
+  `0.0.4`; `0.0.4` is `0.0.3` plus a repository field, so nothing else moved
+  (genet `890c4e86612`).
+- **Three fulfilled name-claim placeholders** (`support/name-claims/`
+  cambium, meristem, sprigging) still declared `repository = mark-ik/cambium`.
+  Repointed at genet, where those crates now live.
+
+Accepted, not fixable: **`cambium-winit 0.2.0` is yanked with its
+`repository` pointing at the deleted cambium repo.** The consolidation
+rewired it onto `genet-layout` + `genet-winit-host`, which inherit genet's
+`publish = false`, so no corrected version can ever be published. The
+archived `graphshell` repo's frozen manifest likewise still names
+`scenograph.git`; it is read-only and never built.
+
+## Still open
+
 - Bumping the six primaries' `rust-toolchain.toml` from 1.96.0 to current
-  stable.
-- `document-host` versus servitor's capability model, owned by the session
-  that wrote `2026-07-23_capability_model_plan.md`.
+  stable (1.97.1), and `wgpu-graft` from 1.95.0. They are unaffected by the
+  machine default, so this is a deliberate pass with its own verification —
+  genet's Servo-derived tree is the one most likely to surface new lints.
+- `document-host` versus servitor's capability model (`covers` takes `&Cap`,
+  not `&str`), still red as of 2026-07-24. Owned by the session that wrote
+  `2026-07-23_capability_model_plan.md`. It is the last known red in mere's
+  workspace and predates the consolidation.
+- The four `graphshell-*` crates remain unpublished (the facade name is held
+  by the retired donor). They will churn through G5-G7, so there is no reason
+  to claim the names before the protocol settles.

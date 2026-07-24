@@ -378,9 +378,20 @@ crates.io publication beyond name-holding 0.0.1s.
   time-as-coordinate-space as a *design requirement* on sceno; building hocket's timeline
   projection is gated by hocket's cap rule, not by this engine's roadmap. ("Score" also
   collides softly with hocket's musical domain; qualify it there when the day comes.)
-- **Woodshed: instrument coordinate systems and paths.** A fretboard is a mapping from
-  (string, fret) to screen coordinates; notes are projected marks, fingerings paths; the
-  related-material swatch currently hand-builds its radial placement.
+- **Woodshed: instrument coordinate systems and paths, and the source-model sanity check.**
+  A fretboard is a mapping from (string, fret) to screen coordinates; notes are projected
+  marks, fingerings paths; the related-material swatch currently hand-builds its radial
+  placement. That is the scene-side reading, and it undersells the product. Woodshed is also
+  the only consumer whose *source model* is dense on day one: every other product (merecat,
+  hocket, isometry) needs content authored or generated before the engine has anything to
+  project, while music theory hands Woodshed one chord pair carrying diatonic, shared-tone,
+  voice-leading, and practiced-after relations at once, deterministically, with no authoring
+  step. That makes it the natural stress test of the **projection-graph** structure of §5 —
+  selection, multi-family edges, ranking that must not deduplicate reasons — where isometry
+  stresses the **scene** structure. Its relations are static, so it does not exercise
+  late-arriving signals or streaming uncertainty; it is the clean first fixture, not the
+  whole proof. Woodshed's own plan (`2026-07-11_stage_set_tools_plan.md`) records the
+  reciprocal decision: it consumes this contract and does not import mere's graph kernel.
 - **Retinue: streaming, uncertain, capability-controlled facts.** A management snapshot exposes
   destinations, interfaces, routes, links, radios, battery, signal quality, GNSS position,
   accuracy, observation time, trust. Gestures emit commands (connect, ping, transfer,
@@ -423,6 +434,15 @@ positions only, so wiring that path alone would reinforce the old boundary.
 **Done means**: the same serialized projection settings drive a mere pane spiral and an
 isometry map, with neither portable crate depending on either product. At that point "one
 projection engine" is an implemented boundary rather than an expanded graph canvas.
+
+**The ladder's blind spot.** These five prove the scene half thoroughly and the
+projection-graph half only incidentally: mere's and isometry's sources arrive as authored
+content, so selection and derived relationships are exercised at whatever density the author
+happened to create. The projection-graph structure wants a source that is dense before anyone
+authors anything, which is woodshed's contribution per §7. That does not add a sixth proof
+here (woodshed's typed-relation work proceeds on its own plan, wall-side, and its
+scene-contract consumption is gated on this family freezing), but it does mean **"done" above
+is a scene-contract done, not a projection-graph done**. Say which one is claimed.
 
 Continuous: hull authoring (§5's gesture, on the shipped field-region machinery) can proceed
 independently and converge when frames enter the scene contract; burn rides existing seams.
@@ -517,3 +537,15 @@ ProjectionLens), `crates/forme/forme/src/tree/layout.rs` (SplitPanes), numen
   Execution + findings tracked in the
   [projection_proofs_plan](../implementation_strategy/2026-07-21_projection_proofs_plan.md);
   this brief stays the direction record.
+- 2026-07-24: **woodshed reconciliation, both directions.** Woodshed's plan already named the
+  scenograph family, reframed its `StageGraphSnapshot` as a source adapter (the analog of
+  cartography's), and recorded the fretboard-as-frame mapping; this brief still described
+  woodshed only as a scene-side forcing function. Elevated §7 to record what woodshed
+  actually supplies that the other consumers cannot: a source model that is dense,
+  multi-relational, and deterministic before any authoring step, which is the
+  projection-graph half of §5. Flagged the matching blind spot in §9 — the five proofs are a
+  scene-contract done, not a projection-graph done. Sequencing unchanged: woodshed's typed
+  relations proceed on its own plan; its scene-contract consumption waits on the freeze list
+  in the [scene contract note](../../../crates/scenograph/design_docs/2026-07-22_scene_contract_note.md),
+  whose open questions were themselves re-checked against the consumers the same day
+  (`measure` has no consumer; intents shipped in graphshell's protocol instead).
