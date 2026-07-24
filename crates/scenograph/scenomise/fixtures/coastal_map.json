@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "arrangement": {
+    "Geographic": {
+      "origin": { "x": 100.0, "y": 200.0 },
+      "units_per_coordinate": 2.0,
+      "invert_y": true
+    }
+  },
+  "items": [
+    {
+      "source": { "adapter": "fixture.map-underlay", "id": "coastal-outline" },
+      "ordinal": 0,
+      "footprint": { "Rect": { "size": { "w": 240.0, "h": 180.0 } } },
+      "representation": "Sprite",
+      "placement": { "Coordinate": { "x": 0.0, "y": 0.0 } },
+      "layer": -10,
+      "visible": true
+    },
+    {
+      "source": { "adapter": "fixture.map", "id": "harbor" },
+      "ordinal": 0,
+      "footprint": { "Rect": { "size": { "w": 28.0, "h": 18.0 } } },
+      "representation": "Card",
+      "placement": { "Coordinate": { "x": -5.0, "y": 3.0 } },
+      "layer": 1,
+      "visible": true
+    },
+    {
+      "source": { "adapter": "fixture.map", "id": "beacon" },
+      "ordinal": 1,
+      "footprint": { "Circle": { "radius": 6.0 } },
+      "representation": "Glyph",
+      "placement": { "Coordinate": { "x": 4.0, "y": -2.0 } },
+      "layer": 2,
+      "visible": true
+    },
+    {
+      "source": { "adapter": "fixture.map", "id": "ridge" },
+      "ordinal": 2,
+      "footprint": { "Rect": { "size": { "w": 48.0, "h": 30.0 } } },
+      "representation": "Snapshot",
+      "placement": { "Coordinate": { "x": 9.0, "y": 8.0 } },
+      "layer": 0,
+      "visible": true
+    }
+  ],
+  "generation": 17
+}

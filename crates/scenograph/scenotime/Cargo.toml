@@ -1,0 +1,18 @@
+[package]
+name = "scenotime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Runtime for the scenograph projection engine: stable scene epochs, revisions, and idempotent diffs."
+readme = "../README.md"
+keywords = ["projection", "scene", "incremental", "runtime"]
+categories = ["visualization", "caching"]
+
+[dependencies]
+sceno = { version = "0.0.1", path = "../sceno" }
+serde = { version = "1.0.219", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1.0.140"
