@@ -12,9 +12,12 @@
 //!
 //! - [`Subject`] — a keyholder identity (a 32-byte public key), the same shape
 //!   the moot authorization seam uses (`gemot::MootAuthorizationRequest.subject`).
+//! - [`cap`] — what a capability IS: [`Cap`], a type with a coverage order
+//!   (a closed set of named powers, or a hierarchical scope), never a string
+//!   with a prefix test.
 //! - [`grant`] — a scoped structural capability ([`Grant`]) and the replaceable
 //!   [`AuthorityProvider`] seam that answers "does this subject's capability
-//!   cover this path?", mirroring `gemot::MootAuthorizationProvider`.
+//!   cover this one?", mirroring `gemot::MootAuthorizationProvider`.
 //! - [`gate`] — the one authority pipeline: refuse petitions that touch a
 //!   grant projection, check authority, check scope, then commit attributed.
 //!
@@ -24,18 +27,25 @@
 //! nested graph; wiring a denizen node in a host graph to bear it is the host's
 //! job (mere's `Node` implementing `chartulary::GraphBearing`).
 //!
-//! The capability model is deliberately minimal here: a `capability_path` is an
-//! opaque string and coverage is prefix-shaped over the node-id namespace. The
-//! full model (meadowcap-shaped structural caps over graph-cluster-derived
-//! namespaces, binding to leaf node ids) lands when mere's namespace layer is
-//! built; this crate consumes an [`AuthorityProvider`], so that richer provider
-//! drops in without changing the gate.
+//! The capability model is typed but still small: [`Cap`] carries the two shapes
+//! real consumers hold at once (an app's closed ring set, and a graph's
+//! unbounded node-id namespace), and coverage is the partial order that same
+//! type owns. The full model (meadowcap-shaped structural caps over
+//! graph-cluster-derived namespaces, binding to leaf node ids) lands when
+//! mere's namespace layer is built; this crate consumes an
+//! [`AuthorityProvider`], so that richer provider drops in without changing
+//! the gate. See the capability model plan (mere design_docs, 2026-07-23) for
+//! the order's laws and the delegation/revocation rounds it enables.
 
+pub mod cap;
 pub mod gate;
 pub mod grant;
 
-pub use gate::{Gate, GateError, GRANT_PREFIX};
-pub use grant::{AuthorityProvider, Grant, Mode, PrefixAuthority};
+pub use cap::{Cap, CapError, Capability, ScopePath, assert_capability_laws};
+pub use gate::{
+    GRANT_PREFIX, Gate, GateError, PROJECTION_MEDIA_TYPE, PROJECTION_TAG, read_projection,
+};
+pub use grant::{AuthorityProvider, Grant, GrantTable, Mode};
 
 /// A keyholder identity: the 32-byte public key of whoever acts. A device, a
 /// servitor, a persona, a peer, an agent are all subjects; what *kind* of
@@ -48,6 +58,20 @@ impl Subject {
     /// Wrap a raw public key.
     pub fn new(key: [u8; 32]) -> Self {
         Self(key)
+    }
+
+    /// Parse a 64-char lowercase-hex key. `None` on any malformed input, so a
+    /// corrupt record yields no subject rather than a wrong one.
+    pub fn from_hex(hex: &str) -> Option<Self> {
+        if hex.len() != 64 {
+            return None;
+        }
+        let mut key = [0u8; 32];
+        for (byte, pair) in key.iter_mut().zip(hex.as_bytes().chunks(2)) {
+            let text = std::str::from_utf8(pair).ok()?;
+            *byte = u8::from_str_radix(text, 16).ok()?;
+        }
+        Some(Self(key))
     }
 
     /// Lowercase hex of the key.
