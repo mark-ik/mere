@@ -472,6 +472,45 @@ Plan ordering is explicit:
 
 ## Findings
 
+### 2026-07-24: a moot's commons is unauthorized, and there is no shared-graph record
+
+Surveyed on entering this lane from the [capability model
+round](2026-07-23_capability_model_plan.md), which had just made a moot peer's
+petition authorizable (`gemot::MootAuthority`). Two structural facts, both
+verified against the tree rather than inferred:
+
+1. **`MootEvent::Shared` is admitted with no authorization.** `MootPolicy::admit`
+   handles `RetentionCheckpoint` and `HistoryPruned` explicitly and falls
+   through to `_ => Ok(Admission::keep(target))` for everything else, checking
+   only the prune flag. `MootRoster`'s fold then pushes the entry into `fauna`
+   unconditionally. So **any author whose operation reaches the store can place
+   a reference in a moot's commons** — no membership check, no capability
+   check. This plan already says as much for Tessera ("does not claim Moot
+   membership or constitutional authorization"); it is equally true of the
+   roster lane, and the delegation machinery to close it now exists.
+
+2. **No moot record carries a graph edit.** The event vocabulary is
+   `Declared` / `Joined` / `Shared` / `RetentionCheckpoint` / `HistoryPruned`:
+   governance, plus *references* to content (`Shared` names a manifest id).
+   A moot replicates who-may-decide and what-is-pointed-at; it does not
+   replicate live graph petitions. So "a peer's petition arrives over the wire
+   and applies through the gate" — the connective slice the capability round
+   left dangling — **has no substrate today**. It would need a new event kind
+   carrying an edit batch, which is a product decision about whether moots
+   host live shared graphs at all, not an implementation detail to invent.
+
+**The available slice is (1), and it needs one ruling first:** whether an
+unauthorized share is *refused at admission* (fail closed; every existing moot
+rejects shares until it issues fauna capabilities, and the check must thread
+through `MootStore::process` AND every drop-import path or it has a documented
+bypass) or *filtered at read* (fail open in storage, authoritative in the view;
+consistent with how delegation validity and revocation cascade are already
+evaluated lazily at read, and non-breaking). The second is architecturally
+closer to what gemot already does; the first is what "commons" usually means.
+Not built pending that ruling — a capability check with a bypass is worse than
+none, and flipping admission closed by default is a policy change, not a fix.
+
+
 ### 2026-07-12: library extraction changes the useful purity rule
 
 The former `murm has no store` and `moot has no socket` rules forced reusable
