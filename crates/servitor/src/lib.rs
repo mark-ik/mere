@@ -43,7 +43,7 @@ pub mod gate;
 pub mod grant;
 
 pub use cap::{Cap, CapError, Capability, ScopePath, assert_capability_laws};
-pub use delegation::{Delegation, DelegationError, DelegationId, DelegationTable};
+pub use delegation::{ChainError, DelegationTable, cap_path, mode_action, mode_actions, scope_for};
 pub use gate::{
     GRANT_PREFIX, Gate, GateError, PROJECTION_MEDIA_TYPE, PROJECTION_TAG, read_projection,
 };

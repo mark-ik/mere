@@ -1,157 +1,175 @@
-//! Delegation: the one mechanism behind install, expiry, and revocation.
+//! Delegation: the one mechanism behind install, expiry, and revocation —
+//! **personae's signed certificates, viewed through the typed capability**.
 //!
 //! The capability-model round's D3 ruling (2026-07-24): the user is not an
 //! implicit infinite authority that "writes some grants" — the user is a
-//! **root subject**, and everything else is delegation from it.
+//! **root subject**, and everything else is delegation from it. Install is an
+//! attenuating delegation; expiry is a delegation with a bound; revocation is
+//! severing one, cascading to its subtree.
 //!
-//! - The visible install review is an **attenuating delegation** (user →
-//!   denizen): the denizen receives a strict subset of what the user holds.
-//! - **Expiry** is a delegation with a bound ([`Grant::expires_at_ms`]).
-//! - **Revocation** is severing a delegation, and a sever cascades: a
-//!   descendant whose ancestor is gone is invalid by construction, evaluated
-//!   lazily on read, with no marking pass.
+//! **This module owns none of that machinery.** `personae::delegation` already
+//! provides the whole signed grammar — [`DelegationCertificate`] with
+//! `attenuates` / `covers`, chain parents, expiry bounds, delegation depth,
+//! content-addressed ids, `DelegationRevocation`, and the derived-key identity
+//! proof beneath it — and gemot's moot store already consumes it. Servitor
+//! contributes exactly one thing personae lacks: the **typed capability**
+//! ([`Cap`], with its closed-set powers and hierarchical scopes) as a view over
+//! personae's `(path_prefix, actions)` pair. One delegation system, two tiers.
 //!
-//! A [`Delegation`] confers one [`Grant`] from `from` to the grant's subject.
-//! Validity is an unbroken chain of attenuating links to a root delegation
-//! issued by the table's root subject. The three invariants (D3) are checked
-//! at issue AND re-checked at verify, because a stored chain is never trusted:
+//! ## How a `Cap` becomes a personae scope
 //!
-//! 1. **attenuation** — the parent's capability covers the child's;
-//! 2. **delegability** — the parent held [`Mode::Delegate`] (only a delegable
-//!    grant can be delegated onward);
-//! 3. **expiry** — a child cannot outlive its parent (falls out of chain
-//!    validity: an expired ancestor invalidates the whole subtree).
+//! personae's [`CapabilityScope`] is two-dimensional — *where*
+//! (`path_prefix`, matched with a slash boundary) and *what* (`actions`, a set
+//! attenuated by subset). A [`Cap`] encodes into the path, and [`Mode`] into
+//! the actions:
 //!
-//! Servitor stays identity-agnostic: the root is just a [`Subject`]. Whether
-//! it is a test key or the active personae identity is the host's fact
-//! (merecat roots the table on the user's personae public key, OQ2).
+//! | servitor | personae `path_prefix` | personae `actions` |
+//! | --- | --- | --- |
+//! | `Cap::Power("navigate")` at `Write` | `power/navigate` | `{read, write}` |
+//! | `Cap::Scope("scenario/a")` at `Read` | `scope/scenario/a` | `{read}` |
+//!
+//! Both halves of the capability order survive the encoding:
+//!
+//! - **powers stay closed** — personae's `path_covers` requires a `/`
+//!   boundary, so `power/nav` does not cover `power/navigate`, and no power
+//!   has anything beneath it;
+//! - **scopes stay hierarchical** — `scope/scenario` covers
+//!   `scope/scenario/a`, which is what a scope is for;
+//! - **modes stay ordered** — a `Write` grant carries `{read, write}`, so
+//!   subset attenuation reproduces `Write` covering `Read` without personae
+//!   knowing the ordering.
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashMap, HashSet};
 
-use crate::cap::{Cap, Capability};
-use crate::grant::{AuthorityProvider, Grant, Mode};
+use identity::delegation::{
+    CapabilityScope, DelegationCertificate, DelegationId, DelegationParent,
+    SignedDelegationCertificate,
+};
+
+use crate::cap::Cap;
+use crate::grant::{AuthorityProvider, Mode};
 use crate::Subject;
 
-/// A delegation's stable identity. Host-minted (servitor mints nothing, to
-/// stay deterministic): merecat derives it from the delegation's content, a
-/// test supplies a literal.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct DelegationId(pub String);
+/// The application family servitor's denizen capabilities live under, in
+/// personae's `domain` dimension. Keeps denizen certificates from ever being
+/// confused with a moot's or a mesh's.
+pub const DENIZEN_DOMAIN: &str = "mere.denizen";
 
-impl DelegationId {
-    pub fn new(id: impl Into<String>) -> Self {
-        Self(id.into())
-    }
+const POWER_PATH: &str = "power";
+const SCOPE_PATH: &str = "scope";
 
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-/// One link in a delegation chain: `from` confers `grant` (whose subject is
-/// the delegate). A root link has no `parent` and must be issued by the
-/// table's root subject.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Delegation {
-    pub id: DelegationId,
-    /// The delegation this one narrows, or `None` for a root delegation.
-    pub parent: Option<DelegationId>,
-    /// Who issued this delegation.
-    pub from: Subject,
-    /// The conferred capability; `grant.subject` is the delegate.
-    pub grant: Grant,
-}
-
-impl Delegation {
-    /// A root delegation: the user (`from`, the table's root) confers `grant`
-    /// directly to a denizen.
-    pub fn root(id: impl Into<String>, from: Subject, grant: Grant) -> Self {
-        Self {
-            id: DelegationId::new(id),
-            parent: None,
-            from,
-            grant,
+/// The `path_prefix` a capability encodes to.
+///
+/// A power becomes `power/<name>`; because personae matches paths on a slash
+/// boundary, a power covers only itself (nothing sits beneath it), which is
+/// the closed-set semantics [`Cap::Power`] exists for. A scope becomes
+/// `scope/<path>`, keeping its hierarchy.
+pub fn cap_path(cap: &Cap) -> String {
+    match cap {
+        Cap::Power(name) => format!("{POWER_PATH}/{name}"),
+        Cap::Scope(path) => {
+            let path = path.to_string();
+            if path.is_empty() {
+                // The root scope: the `scope` segment itself, which covers
+                // every `scope/...` beneath it.
+                SCOPE_PATH.to_string()
+            } else {
+                format!("{SCOPE_PATH}/{path}")
+            }
         }
     }
+}
 
-    /// A child delegation: `from` (who must hold `parent` at
-    /// [`Mode::Delegate`]) confers a narrower `grant` onward.
-    pub fn child(
-        id: impl Into<String>,
-        parent: &DelegationId,
-        from: Subject,
-        grant: Grant,
-    ) -> Self {
-        Self {
-            id: DelegationId::new(id),
-            parent: Some(parent.clone()),
-            from,
-            grant,
-        }
-    }
-
-    /// The delegate this confers to.
-    pub fn to(&self) -> Subject {
-        self.grant.subject
+/// The action one mode is checked as.
+pub fn mode_action(mode: Mode) -> &'static str {
+    match mode {
+        Mode::Read => "read",
+        Mode::Write => "write",
+        Mode::Delegate => "delegate",
     }
 }
 
-/// Why a delegation could not be issued.
+/// The action SET a mode confers: every mode it implies, so personae's subset
+/// attenuation reproduces servitor's `Read < Write < Delegate` ordering
+/// without personae having to know it.
+pub fn mode_actions(mode: Mode) -> BTreeSet<String> {
+    let mut actions = BTreeSet::new();
+    actions.insert("read".to_string());
+    if mode >= Mode::Write {
+        actions.insert("write".to_string());
+    }
+    if mode >= Mode::Delegate {
+        actions.insert("delegate".to_string());
+    }
+    actions
+}
+
+/// Build the personae scope for `cap` at `mode` over `resource` (the opaque
+/// id of the governed space — a session graph, a denizen's world).
+pub fn scope_for(cap: &Cap, mode: Mode, resource: Vec<u8>) -> CapabilityScope {
+    CapabilityScope {
+        domain: DENIZEN_DOMAIN.to_string(),
+        resource,
+        path_prefix: cap_path(cap),
+        actions: mode_actions(mode),
+    }
+}
+
+/// Why a chain did not verify. Reported rather than silently denied, so a
+/// broken delegation is attributable.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum DelegationError {
-    /// A child named a parent the table does not hold.
-    UnknownParent(DelegationId),
-    /// A root delegation was issued by a subject other than the table's root.
-    NotRoot,
-    /// The child's capability is not covered by the parent's (widening).
-    NotAttenuating {
-        /// The parent's capability.
-        parent: Cap,
-        /// The child's (wider) capability.
-        child: Cap,
-    },
-    /// The parent's holder does not hold [`Mode::Delegate`], so it cannot
-    /// delegate at all.
-    NotDelegable,
-    /// The child's mode exceeds the parent's.
-    ModeExceedsParent,
-    /// The child would outlive its parent (a later or absent expiry).
-    OutlivesParent,
-    /// `from` on a child does not match whom the parent delegated to.
-    WrongDelegator,
-    /// An id already in the table.
-    DuplicateId(DelegationId),
+pub enum ChainError {
+    /// The certificate's own signature or identity proof did not verify.
+    BadSignature(DelegationId),
+    /// A parent certificate the chain names is not held.
+    MissingParent(DelegationId),
+    /// A link does not attenuate its parent (widening, depth, or expiry).
+    NotAttenuating(DelegationId),
+    /// A root link names an authority other than this table's root.
+    WrongRoot(DelegationId),
+    /// The certificate, or one of its ancestors, is revoked.
+    Revoked(DelegationId),
+    /// The chain loops.
+    Cycle(DelegationId),
 }
 
-/// A set of delegations rooted at one subject, answering coverage by chain
-/// validity. Implements [`AuthorityProvider`], so it drops into the gate
-/// exactly where [`GrantTable`](crate::GrantTable) does.
-#[derive(Clone, Debug)]
+/// A set of signed delegation certificates rooted at one authority, answering
+/// coverage by verified chain validity. Implements [`AuthorityProvider`], so it
+/// drops into the gate exactly where [`GrantTable`](crate::GrantTable) does.
+///
+/// Validity is evaluated on read, so a revocation cascades to a whole subtree
+/// with no marking pass (D4's lazy cascade): a descendant whose ancestor is
+/// revoked or missing simply stops verifying.
+#[derive(Clone, Debug, Default)]
 pub struct DelegationTable {
-    /// The ceiling: a root delegation is valid only if issued by this subject.
-    root: Subject,
+    /// The root authority id: a root certificate is valid only if it names
+    /// this. In merecat this is the user's personae master public key.
+    root: [u8; 32],
     /// The host-set clock (servitor reads no clock of its own).
     now_ms: u64,
-    delegations: Vec<Delegation>,
+    certificates: HashMap<DelegationId, SignedDelegationCertificate>,
+    revoked: HashSet<DelegationId>,
 }
 
 impl DelegationTable {
-    /// A table whose root delegations must come from `root` (merecat: the
-    /// user's personae subject).
-    pub fn new(root: Subject) -> Self {
+    /// A table whose root certificates must name `root` — merecat passes the
+    /// active personae identity's master public key (OQ2).
+    pub fn new(root: [u8; 32]) -> Self {
         Self {
             root,
             now_ms: 0,
-            delegations: Vec::new(),
+            certificates: HashMap::new(),
+            revoked: HashSet::new(),
         }
     }
 
-    /// The root subject this table trusts.
-    pub fn root(&self) -> Subject {
+    /// The root authority this table trusts.
+    pub fn root(&self) -> [u8; 32] {
         self.root
     }
 
-    /// Set the clock expiry is judged against (see [`GrantTable::set_now`]).
+    /// Set the clock expiry is judged against. personae's `covers` takes the
+    /// evaluation time explicitly, so this is simply what servitor passes it.
     pub fn set_now(&mut self, now_ms: u64) {
         self.now_ms = now_ms;
     }
@@ -161,408 +179,450 @@ impl DelegationTable {
         self.now_ms
     }
 
-    /// The delegations held, in issue order.
-    pub fn delegations(&self) -> &[Delegation] {
-        &self.delegations
+    /// Adopt a certificate (a fresh issue, or one replayed from a cold store).
+    /// Validity is re-derived on read, never trusted from storage.
+    pub fn adopt(&mut self, signed: SignedDelegationCertificate) {
+        self.certificates.insert(signed.certificate.id(), signed);
     }
 
-    fn get(&self, id: &DelegationId) -> Option<&Delegation> {
-        self.delegations.iter().find(|d| &d.id == id)
+    /// The certificates held.
+    pub fn certificates(&self) -> impl Iterator<Item = &SignedDelegationCertificate> {
+        self.certificates.values()
     }
 
-    /// Check that `delegation` attenuates its parent (D3's issue-time rules).
-    /// Pure, so [`issue`](Self::issue) and a rebuild-time verify share it.
-    fn check_attenuation(&self, delegation: &Delegation) -> Result<(), DelegationError> {
-        match &delegation.parent {
-            None => {
-                if delegation.from != self.root {
-                    return Err(DelegationError::NotRoot);
-                }
-            }
-            Some(parent_id) => {
-                let parent = self
-                    .get(parent_id)
-                    .ok_or_else(|| DelegationError::UnknownParent(parent_id.clone()))?;
-                if parent.to() != delegation.from {
-                    return Err(DelegationError::WrongDelegator);
-                }
-                if parent.grant.mode != Mode::Delegate {
-                    return Err(DelegationError::NotDelegable);
-                }
-                if !parent.grant.cap.covers(&delegation.grant.cap) {
-                    return Err(DelegationError::NotAttenuating {
-                        parent: parent.grant.cap.clone(),
-                        child: delegation.grant.cap.clone(),
-                    });
-                }
-                if !parent.grant.mode.covers(delegation.grant.mode) {
-                    return Err(DelegationError::ModeExceedsParent);
-                }
-                if !expiry_within(delegation.grant.expires_at_ms, parent.grant.expires_at_ms) {
-                    return Err(DelegationError::OutlivesParent);
-                }
-            }
-        }
-        Ok(())
+    /// Look one up by id.
+    pub fn get(&self, id: &DelegationId) -> Option<&SignedDelegationCertificate> {
+        self.certificates.get(id)
     }
 
-    /// Issue a delegation, refusing any widening (D3). The parent, if named,
-    /// must already be in the table.
-    pub fn issue(&mut self, delegation: Delegation) -> Result<(), DelegationError> {
-        if self.get(&delegation.id).is_some() {
-            return Err(DelegationError::DuplicateId(delegation.id.clone()));
-        }
-        self.check_attenuation(&delegation)?;
-        self.delegations.push(delegation);
-        Ok(())
+    /// Record a revocation. The certificate stays in the table (the record of
+    /// what once was), but neither it nor anything beneath it verifies again.
+    pub fn revoke(&mut self, id: DelegationId) -> bool {
+        self.revoked.insert(id)
     }
 
-    /// Insert a delegation read back from storage WITHOUT the issue-time
-    /// attenuation check — a cold rebuild replays what was already validated,
-    /// and [`is_valid`](Self::is_valid) re-checks the chain at read time
-    /// regardless. Order matters only in that a parent should precede its
-    /// child for the eventual lookups; validity does not depend on order.
-    pub fn adopt(&mut self, delegation: Delegation) {
-        self.delegations.push(delegation);
+    /// Whether `id` is revoked directly (not counting an ancestor).
+    pub fn is_revoked(&self, id: &DelegationId) -> bool {
+        self.revoked.contains(id)
     }
 
-    /// Whether `delegation` is valid now: unexpired, attenuating, and chained
-    /// to a root the table trusts. Lazily evaluated, so a severed ancestor
-    /// invalidates the whole subtree with no marking pass. Cycle-guarded.
-    pub fn is_valid(&self, delegation: &Delegation) -> bool {
-        let mut seen = HashSet::new();
-        self.valid_inner(delegation, &mut seen)
-    }
-
-    fn valid_inner<'a>(
-        &'a self,
-        delegation: &'a Delegation,
-        seen: &mut HashSet<&'a DelegationId>,
-    ) -> bool {
-        if !seen.insert(&delegation.id) {
-            return false; // a cycle in stored data is not a valid chain
-        }
-        if delegation.grant.expired_at(self.now_ms) {
-            return false;
-        }
-        match &delegation.parent {
-            None => delegation.from == self.root,
-            Some(parent_id) => {
-                let Some(parent) = self.get(parent_id) else {
-                    return false; // severed / absent -> cascade
-                };
-                parent.to() == delegation.from
-                    && parent.grant.mode == Mode::Delegate
-                    && parent.grant.cap.covers(&delegation.grant.cap)
-                    && parent.grant.mode.covers(delegation.grant.mode)
-                    && expiry_within(delegation.grant.expires_at_ms, parent.grant.expires_at_ms)
-                    && self.valid_inner(parent, seen)
-            }
-        }
-    }
-
-    /// Sever one delegation by id, returning whether it was present. Its
-    /// descendants are not touched — they simply stop being valid, because
-    /// their chain to the root is now broken (lazy cascade).
-    pub fn sever(&mut self, id: &DelegationId) -> bool {
-        let before = self.delegations.len();
-        self.delegations.retain(|d| &d.id != id);
-        self.delegations.len() != before
-    }
-
-    /// Revoke everything the ROOT granted `subject` directly: sever every root
-    /// delegation conferring to `subject`. Onward delegations `subject` made
-    /// cascade. Returns how many root delegations were severed. This is
+    /// Revoke every certificate the ROOT issued directly to `subject`:
     /// uninstall, and the "replace" half of replace-and-cascade (OQ1).
+    /// Everything `subject` delegated onward cascades. Returns how many root
+    /// certificates were revoked.
     pub fn revoke_root_grants(&mut self, subject: Subject) -> usize {
-        let before = self.delegations.len();
-        self.delegations
-            .retain(|d| !(d.parent.is_none() && d.to() == subject));
-        before - self.delegations.len()
+        let ids: Vec<DelegationId> = self
+            .certificates
+            .values()
+            .filter(|signed| {
+                signed.certificate.subject == subject.0
+                    && matches!(signed.certificate.parent, DelegationParent::Root(_))
+            })
+            .map(|signed| signed.certificate.id())
+            .collect();
+        let mut revoked = 0;
+        for id in ids {
+            if self.revoke(id) {
+                revoked += 1;
+            }
+        }
+        revoked
+    }
+
+    /// Verify one certificate's whole chain: its own signature and identity
+    /// proof, that each link attenuates its parent, that nothing on the path
+    /// is revoked, and that it terminates at this table's root.
+    pub fn verify_chain(&self, signed: &SignedDelegationCertificate) -> Result<(), ChainError> {
+        let mut seen = HashSet::new();
+        self.verify_inner(signed, &mut seen)
+    }
+
+    fn verify_inner(
+        &self,
+        signed: &SignedDelegationCertificate,
+        seen: &mut HashSet<DelegationId>,
+    ) -> Result<(), ChainError> {
+        let id = signed.certificate.id();
+        if !seen.insert(id) {
+            return Err(ChainError::Cycle(id));
+        }
+        if self.revoked.contains(&id) {
+            return Err(ChainError::Revoked(id));
+        }
+        // personae owns the cryptography: signature, derived-key attestation,
+        // and issuer binding all verify here, not in servitor.
+        if !signed.verify() {
+            return Err(ChainError::BadSignature(id));
+        }
+        match signed.certificate.parent {
+            DelegationParent::Root(root) => {
+                if root == self.root {
+                    Ok(())
+                } else {
+                    Err(ChainError::WrongRoot(id))
+                }
+            }
+            DelegationParent::Certificate(parent_id) => {
+                let parent = self
+                    .certificates
+                    .get(&parent_id)
+                    .ok_or(ChainError::MissingParent(parent_id))?;
+                // personae owns attenuation too: scope narrowing, action
+                // subset, expiry containment, and delegation depth.
+                if !signed.certificate.attenuates(&parent.certificate) {
+                    return Err(ChainError::NotAttenuating(id));
+                }
+                self.verify_inner(parent, seen)
+            }
+        }
+    }
+
+    /// Whether `subject` holds `needed` at `mode` right now, by a verified,
+    /// unrevoked chain to the root.
+    fn covers_inner(&self, subject: Subject, needed: &Cap, mode: Mode) -> bool {
+        let path = cap_path(needed);
+        let action = mode_action(mode);
+        self.certificates.values().any(|signed| {
+            signed.certificate.subject == subject.0
+                && signed.certificate.covers(&path, action, self.now_ms)
+                && self.verify_chain(signed).is_ok()
+        })
     }
 }
 
 impl AuthorityProvider for DelegationTable {
     fn covers(&self, subject: Subject, needed: &Cap, mode: Mode) -> bool {
-        self.delegations.iter().any(|d| {
-            d.to() == subject
-                && d.grant.cap.covers(needed)
-                && d.grant.mode.covers(mode)
-                && self.is_valid(d)
-        })
+        self.covers_inner(subject, needed, mode)
     }
 }
 
-/// Whether `child` expiry is no later than `parent` expiry. `None` is
-/// open-ended (the latest possible), so a child may not be open-ended unless
-/// its parent is, and a bounded child must end at or before its parent.
-fn expiry_within(child: Option<u64>, parent: Option<u64>) -> bool {
-    match (child, parent) {
-        (_, None) => true,             // an open-ended parent bounds nothing
-        (None, Some(_)) => false,      // an open-ended child outlives a bounded parent
-        (Some(c), Some(p)) => c <= p,
-    }
+/// Build a root delegation certificate: the user (`root_provider`'s identity)
+/// conferring `cap` at `mode` over `resource` to `subject`. Sign it with
+/// [`SignedDelegationCertificate::issue`].
+///
+/// `depth` is how many further delegation steps the subject may take — `0`
+/// forbids sub-delegation entirely, which is the right default for an
+/// installed helper.
+#[allow(clippy::too_many_arguments)]
+pub fn root_certificate(
+    issuer: [u8; 32],
+    subject: Subject,
+    cap: &Cap,
+    mode: Mode,
+    resource: Vec<u8>,
+    issued_at_ms: u64,
+    expires_at_ms: Option<u64>,
+    depth: u16,
+    nonce: [u8; 32],
+) -> DelegationCertificate {
+    DelegationCertificate::new(
+        DelegationParent::Root(issuer),
+        issuer,
+        subject.0,
+        scope_for(cap, mode, resource),
+        issued_at_ms,
+        issued_at_ms,
+        expires_at_ms,
+        depth,
+        nonce,
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use identity::{IdentityProvider, InMemoryProvider};
 
-    fn subject(tag: u8) -> Subject {
-        Subject::new([tag; 32])
+    fn provider(seed: u8) -> InMemoryProvider {
+        InMemoryProvider::from_seed([seed; 32])
     }
 
-    const ROOT: u8 = 0;
-    const HELPER: u8 = 1;
-    const SUB: u8 = 2;
+    fn root_key(provider: &InMemoryProvider) -> [u8; 32] {
+        provider.master_public_key().to_bytes()
+    }
 
     fn scope(raw: &str) -> Cap {
         Cap::scope(raw).unwrap()
     }
 
-    /// A table rooted at ROOT, with the user delegating `trail` at `mode` to
-    /// the helper.
-    fn table_with_root_grant(mode: Mode) -> DelegationTable {
-        let mut table = DelegationTable::new(subject(ROOT));
-        table
-            .issue(Delegation::root(
-                "d-helper",
-                subject(ROOT),
-                Grant::new(subject(HELPER), scope("trail"), mode),
-            ))
-            .unwrap();
-        table
+    fn subject_of(provider: &InMemoryProvider) -> Subject {
+        Subject::new(provider.master_public_key().to_bytes())
+    }
+
+    /// The user delegates `trail` at `mode` to the helper, with `depth`
+    /// further steps allowed.
+    fn rooted(mode: Mode, depth: u16) -> (DelegationTable, InMemoryProvider, InMemoryProvider) {
+        let user = provider(0);
+        let helper = provider(1);
+        let mut table = DelegationTable::new(root_key(&user));
+        let cert = root_certificate(
+            root_key(&user),
+            subject_of(&helper),
+            &scope("trail"),
+            mode,
+            b"session-1".to_vec(),
+            1_000,
+            None,
+            depth,
+            [7; 32],
+        );
+        table.adopt(SignedDelegationCertificate::issue(&user, cert).unwrap());
+        table.set_now(2_000);
+        (table, user, helper)
     }
 
     #[test]
     fn a_root_delegation_covers_within_its_scope() {
-        let table = table_with_root_grant(Mode::Write);
-        assert!(table.covers(subject(HELPER), &scope("trail/step"), Mode::Write));
-        assert!(!table.covers(subject(HELPER), &scope("notes"), Mode::Write));
-        assert!(!table.covers(subject(SUB), &scope("trail/step"), Mode::Write), "not the delegate");
-    }
-
-    #[test]
-    fn only_the_root_may_issue_a_root_delegation() {
-        let mut table = DelegationTable::new(subject(ROOT));
-        let err = table
-            .issue(Delegation::root(
-                "forged",
-                subject(HELPER), // not the root
-                Grant::new(subject(SUB), scope("trail"), Mode::Write),
-            ))
-            .unwrap_err();
-        assert_eq!(err, DelegationError::NotRoot);
-    }
-
-    #[test]
-    fn a_child_narrows_to_a_sub_scope() {
-        // The user gives the helper `trail` at Delegate, so it can sub-delegate.
-        let mut table = table_with_root_grant(Mode::Delegate);
-        table
-            .issue(Delegation::child(
-                "d-sub",
-                &DelegationId::new("d-helper"),
-                subject(HELPER),
-                Grant::new(subject(SUB), scope("trail/step"), Mode::Write),
-            ))
-            .unwrap();
-        assert!(table.covers(subject(SUB), &scope("trail/step/a"), Mode::Write));
+        let (table, _user, helper) = rooted(Mode::Write, 0);
+        let subject = subject_of(&helper);
+        assert!(table.covers(subject, &scope("trail/step"), Mode::Write));
+        assert!(table.covers(subject, &scope("trail/step"), Mode::Read), "write implies read");
+        assert!(!table.covers(subject, &scope("notes"), Mode::Write), "outside the scope");
         assert!(
-            !table.covers(subject(SUB), &scope("trail/other"), Mode::Write),
-            "outside the narrower scope"
+            !table.covers(subject, &scope("trail/step"), Mode::Delegate),
+            "a Write grant confers no delegate action"
         );
     }
 
     #[test]
-    fn widening_the_capability_is_refused() {
-        let mut table = table_with_root_grant(Mode::Delegate);
-        let err = table
-            .issue(Delegation::child(
-                "d-wide",
-                &DelegationId::new("d-helper"),
-                subject(HELPER),
-                // `trail` covers `trail/step`, not the other way: the root
-                // scope would be wider than what the helper holds.
-                Grant::new(subject(SUB), Cap::root_scope(), Mode::Write),
-            ))
-            .unwrap_err();
-        assert!(matches!(err, DelegationError::NotAttenuating { .. }), "{err:?}");
-    }
+    fn powers_stay_closed_through_the_personae_encoding() {
+        // The F1 hazard, checked at the ENCODED layer: personae's path match
+        // requires a slash boundary, so `power/nav` cannot cover
+        // `power/navigate`.
+        let user = provider(0);
+        let helper = provider(1);
+        let mut table = DelegationTable::new(root_key(&user));
+        let cert = root_certificate(
+            root_key(&user),
+            subject_of(&helper),
+            &Cap::power("nav").unwrap(),
+            Mode::Write,
+            b"app".to_vec(),
+            1_000,
+            None,
+            0,
+            [9; 32],
+        );
+        table.adopt(SignedDelegationCertificate::issue(&user, cert).unwrap());
+        table.set_now(2_000);
 
-    #[test]
-    fn a_write_only_holder_cannot_delegate_at_all() {
-        // The helper holds Write, not Delegate: it may act, never grant.
-        let mut table = table_with_root_grant(Mode::Write);
-        let err = table
-            .issue(Delegation::child(
-                "d-sub",
-                &DelegationId::new("d-helper"),
-                subject(HELPER),
-                Grant::new(subject(SUB), scope("trail/step"), Mode::Read),
-            ))
-            .unwrap_err();
-        assert_eq!(err, DelegationError::NotDelegable);
-    }
-
-    #[test]
-    fn a_child_may_not_outlive_its_parent() {
-        let mut table = DelegationTable::new(subject(ROOT));
-        table
-            .issue(Delegation::root(
-                "d-helper",
-                subject(ROOT),
-                Grant::new(subject(HELPER), scope("trail"), Mode::Delegate).expiring_at(1_000),
-            ))
-            .unwrap();
-        // Open-ended child under a bounded parent: refused.
-        let err = table
-            .issue(Delegation::child(
-                "d-open",
-                &DelegationId::new("d-helper"),
-                subject(HELPER),
-                Grant::new(subject(SUB), scope("trail/step"), Mode::Read),
-            ))
-            .unwrap_err();
-        assert_eq!(err, DelegationError::OutlivesParent);
-        // A child ending at or before the parent is fine.
-        table
-            .issue(Delegation::child(
-                "d-bounded",
-                &DelegationId::new("d-helper"),
-                subject(HELPER),
-                Grant::new(subject(SUB), scope("trail/step"), Mode::Read).expiring_at(900),
-            ))
-            .unwrap();
-    }
-
-    #[test]
-    fn severing_a_link_cascades_to_the_whole_subtree() {
-        let mut table = table_with_root_grant(Mode::Delegate);
-        table
-            .issue(Delegation::child(
-                "d-sub",
-                &DelegationId::new("d-helper"),
-                subject(HELPER),
-                Grant::new(subject(SUB), scope("trail/step"), Mode::Write),
-            ))
-            .unwrap();
-        assert!(table.covers(subject(HELPER), &scope("trail/x"), Mode::Write));
-        assert!(table.covers(subject(SUB), &scope("trail/step/y"), Mode::Write));
-
-        // Sever the ROOT link: both the helper AND its sub-delegate lose
-        // authority, though only one link was removed.
-        assert!(table.sever(&DelegationId::new("d-helper")));
-        assert!(!table.covers(subject(HELPER), &scope("trail/x"), Mode::Write), "the helper is revoked");
+        let subject = subject_of(&helper);
+        assert!(table.covers(subject, &Cap::power("nav").unwrap(), Mode::Write));
         assert!(
-            !table.covers(subject(SUB), &scope("trail/step/y"), Mode::Write),
-            "and the whole subtree cascades, with no second sever"
+            !table.covers(subject, &Cap::power("navigate").unwrap(), Mode::Write),
+            "a longer power name is a different power"
+        );
+        assert!(
+            !table.covers(subject, &scope("nav"), Mode::Write),
+            "a scope spelled like the power is not the power"
         );
     }
 
     #[test]
-    fn revoke_root_grants_is_uninstall_and_cascades() {
-        let mut table = table_with_root_grant(Mode::Delegate);
-        table
-            .issue(Delegation::child(
-                "d-sub",
-                &DelegationId::new("d-helper"),
-                subject(HELPER),
-                Grant::new(subject(SUB), scope("trail/step"), Mode::Write),
-            ))
-            .unwrap();
-
-        let severed = table.revoke_root_grants(subject(HELPER));
-        assert_eq!(severed, 1, "one root delegation removed");
-        assert!(!table.covers(subject(HELPER), &scope("trail/x"), Mode::Write));
-        assert!(!table.covers(subject(SUB), &scope("trail/step/y"), Mode::Write), "the sub cascaded");
-    }
-
-    #[test]
-    fn a_bounded_chain_expires_at_its_earliest_link() {
-        let mut table = DelegationTable::new(subject(ROOT));
-        table
-            .issue(Delegation::root(
-                "d-helper",
-                subject(ROOT),
-                Grant::new(subject(HELPER), scope("trail"), Mode::Delegate).expiring_at(1_000),
-            ))
-            .unwrap();
-        table
-            .issue(Delegation::child(
-                "d-sub",
-                &DelegationId::new("d-helper"),
-                subject(HELPER),
-                Grant::new(subject(SUB), scope("trail/step"), Mode::Read).expiring_at(900),
-            ))
-            .unwrap();
-
-        table.set_now(899);
-        assert!(table.covers(subject(SUB), &scope("trail/step"), Mode::Read));
-        // The child's own bound bites first.
-        table.set_now(900);
-        assert!(!table.covers(subject(SUB), &scope("trail/step"), Mode::Read));
-        // The helper still stands until the parent bound.
-        assert!(table.covers(subject(HELPER), &scope("trail/x"), Mode::Read));
-        // Past the parent bound, the parent falls and the child would too.
-        table.set_now(1_000);
-        assert!(!table.covers(subject(HELPER), &scope("trail/x"), Mode::Read));
-    }
-
-    #[test]
-    fn a_chain_verifies_from_a_cold_store_via_adopt() {
-        // Rebuild: delegations arrive already-validated, out of issue order,
-        // and validity is re-derived without the issue-time gate.
-        let mut table = DelegationTable::new(subject(ROOT));
-        table.adopt(Delegation::child(
-            "d-sub",
-            &DelegationId::new("d-helper"),
-            subject(HELPER),
-            Grant::new(subject(SUB), scope("trail/step"), Mode::Write),
-        ));
-        table.adopt(Delegation::root(
-            "d-helper",
-            subject(ROOT),
-            Grant::new(subject(HELPER), scope("trail"), Mode::Delegate),
-        ));
-        assert!(table.covers(subject(SUB), &scope("trail/step/y"), Mode::Write));
-
-        // A forged cold record (child claiming a parent that grants less) is
-        // rejected by the read-time re-check, not trusted because it is stored.
-        let mut forged = DelegationTable::new(subject(ROOT));
-        forged.adopt(Delegation::root(
-            "d-narrow",
-            subject(ROOT),
-            Grant::new(subject(HELPER), scope("trail/step"), Mode::Delegate),
-        ));
-        forged.adopt(Delegation::child(
-            "d-forged",
-            &DelegationId::new("d-narrow"),
-            subject(HELPER),
-            Grant::new(subject(SUB), scope("trail"), Mode::Write), // wider than the parent
-        ));
+    fn a_forged_root_is_refused() {
+        // A certificate signed by someone who is not this table's root.
+        let user = provider(0);
+        let intruder = provider(5);
+        let helper = provider(1);
+        let mut table = DelegationTable::new(root_key(&user));
+        let cert = root_certificate(
+            root_key(&intruder),
+            subject_of(&helper),
+            &scope("trail"),
+            Mode::Write,
+            b"session-1".to_vec(),
+            1_000,
+            None,
+            0,
+            [3; 32],
+        );
+        let signed = SignedDelegationCertificate::issue(&intruder, cert).unwrap();
+        assert!(signed.verify(), "it is a validly SIGNED certificate");
+        table.adopt(signed);
+        table.set_now(2_000);
         assert!(
-            !forged.covers(subject(SUB), &scope("trail/other"), Mode::Write),
-            "a stored chain is re-verified, never trusted"
+            !table.covers(subject_of(&helper), &scope("trail/x"), Mode::Write),
+            "signed by the wrong authority: not this table's root"
         );
     }
 
     #[test]
-    fn a_cycle_in_stored_data_is_not_a_valid_chain() {
-        let mut table = DelegationTable::new(subject(ROOT));
-        // Two children naming each other as parent: no root, so no validity.
-        table.adopt(Delegation {
-            id: DelegationId::new("a"),
-            parent: Some(DelegationId::new("b")),
-            from: subject(HELPER),
-            grant: Grant::new(subject(HELPER), scope("trail"), Mode::Delegate),
-        });
-        table.adopt(Delegation {
-            id: DelegationId::new("b"),
-            parent: Some(DelegationId::new("a")),
-            from: subject(HELPER),
-            grant: Grant::new(subject(HELPER), scope("trail"), Mode::Delegate),
-        });
-        assert!(!table.covers(subject(HELPER), &scope("trail"), Mode::Write), "a cycle terminates false");
+    fn a_child_narrows_and_a_widening_child_never_verifies() {
+        // The helper holds `trail` at Delegate with one step available.
+        let (mut table, _user, helper) = rooted(Mode::Delegate, 1);
+        let sub = provider(2);
+        let parent_id = table.certificates().next().unwrap().certificate.id();
+
+        // A strict narrowing verifies.
+        let narrow = DelegationCertificate::new(
+            DelegationParent::Certificate(parent_id),
+            helper.master_public_key().to_bytes(),
+            subject_of(&sub).0,
+            scope_for(&scope("trail/step"), Mode::Write, b"session-1".to_vec()),
+            1_000,
+            1_000,
+            None,
+            0,
+            [11; 32],
+        );
+        table.adopt(SignedDelegationCertificate::issue(&helper, narrow).unwrap());
+        assert!(table.covers(subject_of(&sub), &scope("trail/step/a"), Mode::Write));
+        assert!(!table.covers(subject_of(&sub), &scope("trail/other"), Mode::Write));
+
+        // A widening child (the root scope) does not verify, however well signed.
+        let wide = DelegationCertificate::new(
+            DelegationParent::Certificate(parent_id),
+            helper.master_public_key().to_bytes(),
+            subject_of(&sub).0,
+            scope_for(&Cap::root_scope(), Mode::Write, b"session-1".to_vec()),
+            1_000,
+            1_000,
+            None,
+            0,
+            [12; 32],
+        );
+        let wide_signed = SignedDelegationCertificate::issue(&helper, wide).unwrap();
+        assert!(wide_signed.verify(), "signed correctly, but still not authorized");
+        let err = table.verify_chain(&wide_signed).unwrap_err();
+        assert!(matches!(err, ChainError::NotAttenuating(_)), "{err:?}");
+    }
+
+    #[test]
+    fn a_holder_without_delegation_depth_cannot_delegate() {
+        // depth 0: the helper may act, never grant.
+        let (mut table, _user, helper) = rooted(Mode::Delegate, 0);
+        let sub = provider(2);
+        let parent_id = table.certificates().next().unwrap().certificate.id();
+        let child = DelegationCertificate::new(
+            DelegationParent::Certificate(parent_id),
+            helper.master_public_key().to_bytes(),
+            subject_of(&sub).0,
+            scope_for(&scope("trail/step"), Mode::Read, b"session-1".to_vec()),
+            1_000,
+            1_000,
+            None,
+            0,
+            [13; 32],
+        );
+        let signed = SignedDelegationCertificate::issue(&helper, child).unwrap();
+        table.adopt(signed.clone());
+        assert!(matches!(
+            table.verify_chain(&signed).unwrap_err(),
+            ChainError::NotAttenuating(_)
+        ));
+        assert!(!table.covers(subject_of(&sub), &scope("trail/step"), Mode::Read));
+    }
+
+    #[test]
+    fn revoking_a_link_cascades_to_the_whole_subtree() {
+        let (mut table, _user, helper) = rooted(Mode::Delegate, 1);
+        let sub = provider(2);
+        let parent_id = table.certificates().next().unwrap().certificate.id();
+        let child = DelegationCertificate::new(
+            DelegationParent::Certificate(parent_id),
+            helper.master_public_key().to_bytes(),
+            subject_of(&sub).0,
+            scope_for(&scope("trail/step"), Mode::Write, b"session-1".to_vec()),
+            1_000,
+            1_000,
+            None,
+            0,
+            [14; 32],
+        );
+        table.adopt(SignedDelegationCertificate::issue(&helper, child).unwrap());
+        assert!(table.covers(subject_of(&helper), &scope("trail/x"), Mode::Write));
+        assert!(table.covers(subject_of(&sub), &scope("trail/step/y"), Mode::Write));
+
+        // Revoke the ROOT link only.
+        assert!(table.revoke(parent_id));
+        assert!(!table.covers(subject_of(&helper), &scope("trail/x"), Mode::Write));
+        assert!(
+            !table.covers(subject_of(&sub), &scope("trail/step/y"), Mode::Write),
+            "the subtree cascades from one revocation, with no marking pass"
+        );
+    }
+
+    #[test]
+    fn revoke_root_grants_is_uninstall() {
+        let (mut table, _user, helper) = rooted(Mode::Write, 0);
+        assert_eq!(table.revoke_root_grants(subject_of(&helper)), 1);
+        assert!(!table.covers(subject_of(&helper), &scope("trail/x"), Mode::Write));
+    }
+
+    #[test]
+    fn a_bounded_grant_stops_covering_when_the_clock_passes_it() {
+        let user = provider(0);
+        let helper = provider(1);
+        let mut table = DelegationTable::new(root_key(&user));
+        let cert = root_certificate(
+            root_key(&user),
+            subject_of(&helper),
+            &scope("trail"),
+            Mode::Write,
+            b"session-1".to_vec(),
+            1_000,
+            Some(5_000),
+            0,
+            [15; 32],
+        );
+        table.adopt(SignedDelegationCertificate::issue(&user, cert).unwrap());
+
+        table.set_now(4_999);
+        assert!(table.covers(subject_of(&helper), &scope("trail/x"), Mode::Write));
+        table.set_now(5_001);
+        assert!(
+            !table.covers(subject_of(&helper), &scope("trail/x"), Mode::Write),
+            "expiry needs no mutation of the store"
+        );
+    }
+
+    #[test]
+    fn a_chain_verifies_from_a_cold_store_in_any_order() {
+        // Rebuild: certificates arrive out of order and validity is re-derived
+        // from the signatures, not trusted because they were stored.
+        let (table, user, helper) = rooted(Mode::Delegate, 1);
+        let sub = provider(2);
+        let parent_id = table.certificates().next().unwrap().certificate.id();
+        let child = DelegationCertificate::new(
+            DelegationParent::Certificate(parent_id),
+            helper.master_public_key().to_bytes(),
+            subject_of(&sub).0,
+            scope_for(&scope("trail/step"), Mode::Write, b"session-1".to_vec()),
+            1_000,
+            1_000,
+            None,
+            0,
+            [16; 32],
+        );
+        let child_signed = SignedDelegationCertificate::issue(&helper, child).unwrap();
+        let root_signed = table.certificates().next().unwrap().clone();
+
+        let mut cold = DelegationTable::new(root_key(&user));
+        cold.adopt(child_signed); // child first
+        cold.adopt(root_signed);
+        cold.set_now(2_000);
+        assert!(cold.covers(subject_of(&sub), &scope("trail/step/y"), Mode::Write));
+    }
+
+    #[test]
+    fn a_child_whose_parent_is_absent_does_not_verify() {
+        let (table, _user, helper) = rooted(Mode::Delegate, 1);
+        let sub = provider(2);
+        let orphan = DelegationCertificate::new(
+            DelegationParent::Certificate(DelegationId([0xAB; 32])),
+            helper.master_public_key().to_bytes(),
+            subject_of(&sub).0,
+            scope_for(&scope("trail/step"), Mode::Write, b"session-1".to_vec()),
+            1_000,
+            1_000,
+            None,
+            0,
+            [17; 32],
+        );
+        let signed = SignedDelegationCertificate::issue(&helper, orphan).unwrap();
+        assert!(matches!(
+            table.verify_chain(&signed).unwrap_err(),
+            ChainError::MissingParent(_)
+        ));
     }
 }

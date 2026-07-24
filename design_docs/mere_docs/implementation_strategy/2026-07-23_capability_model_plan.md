@@ -76,6 +76,38 @@ The mode is hardcoded. No live bug (merecat only ever grants `Write`), but a
 does not survive adopt is not an expiry, so this blocks the revocation work
 rather than sitting beside it.
 
+### F5. personae ALREADY owns signed delegation (found 2026-07-24, the hard way)
+
+`personae::delegation` is a mature (~750 LOC) **signed** capability delegation
+grammar, and it predates this round:
+
+- `DelegationCertificate` / `SignedDelegationCertificate` (Ed25519, via
+  master-attested derived signing keys), content-addressed `id()`;
+- `DelegationParent::{Root([u8;32]), Certificate(DelegationId)}` — parent
+  chains;
+- `CapabilityScope { domain, resource, path_prefix, actions }` with
+  `attenuates()` (path containment + action subset) and
+  `covers(path, action, at_ms)`;
+- `not_before_ms` / `expires_at_ms`, `remaining_delegation_depth`, `nonce`;
+- `DelegationRevocation`;
+- and an `expiry_within(child, parent)` **byte-identical** to the one written
+  for C3 before this was found.
+
+**gemot already consumes it**: a 1,378-LOC subsystem
+(`moot/delegation/{store,sync,wire}.rs`) with a muniment-backed
+`MootDelegationStore`. So the moot tier is already built on this grammar.
+
+Its `path_covers` requires a `/` boundary (`path == prefix || suffix starts
+with '/'`), so personae **already avoids the F1 hazard** for paths by a
+different route than F2's segment vectors. What it does not have is the
+power/scope type distinction.
+
+**This invalidates the C3 built above it.** C3 shipped a parallel unsigned
+delegation algebra — parent chains, attenuation, expiry, revocation — that
+duplicates personae's. It was written without grepping for an existing
+implementation, against this repo's own standing rule (check existing crates
+first; extend, don't duplicate). The correction is F5's ruling below.
+
 ### F4. `Mode::Delegate` is inert because the order does not exist
 
 `Delegate` is defined, ordered above `Write`, and nothing delegates. It cannot:
@@ -166,6 +198,40 @@ chain):
    `Mode::Delegate` on that cap.
 3. **Expiry**: `child.expires_at <= parent.expires_at`. A child cannot outlive
    its parent.
+
+### D3b. One delegation system: servitor adapts to personae (RULED, Mark, 2026-07-24)
+
+Given F5, the layering choice was put to Mark as three options (servitor adapts
+to personae / two tiers with a promotion seam / personae adopts the typed Cap).
+**Ruled: option 1 — servitor adapts.**
+
+personae owns the delegation machinery; servitor contributes the one thing
+personae lacks, the **typed capability**, as a view over personae's
+two-dimensional `(path_prefix, actions)`:
+
+| servitor | personae `path_prefix` | personae `actions` |
+| --- | --- | --- |
+| `Cap::Power("navigate")` at `Write` | `power/navigate` | `{read, write}` |
+| `Cap::Scope("scenario/a")` at `Read` | `scope/scenario/a` | `{read}` |
+
+Both halves of the order survive the encoding, which is why this is a view and
+not a lossy mapping:
+
+- **powers stay closed** — personae's slash-boundary match means `power/nav`
+  does not cover `power/navigate`, and nothing sits beneath a power;
+- **scopes stay hierarchical** — `scope/scenario` covers `scope/scenario/a`;
+- **modes stay ordered** — a `Write` grant carries `{read, write}`, so subset
+  attenuation reproduces `Write` covering `Read` without personae knowing the
+  ordering.
+
+What servitor therefore does NOT own any more: signatures, chain walking
+semantics, attenuation rules, expiry containment, delegation depth,
+revocation records. It keeps: `Cap`, the encoding, a rooted table that
+verifies chains through personae, and the `AuthorityProvider` seam.
+
+This also makes OQ3 (moot unification) nearly free rather than a project:
+gemot already speaks these certificates, so denizen and moot authority are one
+system with two consumers.
 
 ### D4. Revocation cascades, lazily
 
@@ -341,3 +407,39 @@ namespace.
 - Deferred here and still open: **C3 delegation** and **C4 revocation**,
   plus the three open questions above, which want ruling before the
   cascade is written.
+
+### 2026-07-24
+
+- OQ1/2/3 ruled by Mark: replace-and-cascade, personae as the root identity,
+  and unify the moot path on the order.
+- **C3 landed, then was SUPERSEDED the same session** (commit `04529a59`).
+  It shipped a standalone unsigned delegation algebra; then F5 turned up
+  `personae::delegation`, which already had all of it, signed, with gemot
+  consuming it. My error: built before grepping. Recorded rather than quietly
+  rewritten, because the commit is in the history and the lesson is the
+  reusable part.
+- **C3' landed: servitor's delegation is now an ADAPTER over personae's signed
+  certificates** (D3b). `DelegationTable` holds `SignedDelegationCertificate`s,
+  verifies each chain through personae (signature, derived-key attestation,
+  issuer binding, attenuation, depth, expiry), tracks revocations, and answers
+  `AuthorityProvider::covers` through the `Cap` encoding. servitor's own
+  duplicated chain/expiry logic is deleted. The tests now exercise real
+  cryptography: a certificate signed by the wrong authority is refused
+  (`a_forged_root_is_refused`), a widening child never verifies however well
+  signed, a zero-depth holder cannot delegate at all, revoking one link
+  cascades to its subtree, and a cold store verifies in any adopt order.
+  servitor 34 -> 32 tests (fewer, because personae now owns what several of
+  them were testing), clippy clean.
+- **Sequencing correction**: the earlier note that "gemot's provider has no
+  caller" was true only of the `MootAuthorizationProvider` trait; the
+  delegation machinery beneath it is fully wired. OQ3's unification is
+  therefore much closer than that note implied.
+- **Still open — C4**, which needs the piece servitor deliberately does not
+  own: an **identity**. Issuing an install certificate requires an
+  `IdentityProvider` (personae's `InMemoryProvider` in tests,
+  `IdentityVault` in production — where Mark's SSH key already lives).
+  merecat has no personae dependency yet, so C4 is: add it, root the table on
+  the active identity's master key, issue install certificates, persist them
+  (the signed cert is a blob, so the browsable grant projection stays the
+  audit record and the certificates persist beside the world), and wire the
+  Uninstall row to `revoke_root_grants`.

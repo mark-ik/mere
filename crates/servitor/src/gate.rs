@@ -48,10 +48,6 @@ const MODE_TAG: &str = "mode:";
 const SUBJECT_TAG: &str = "subject:";
 const EXPIRES_TAG: &str = "expires:";
 const EXPIRES_NEVER: &str = "never";
-const DELEG_TAG: &str = "delegation:";
-const PARENT_TAG: &str = "parent:";
-const FROM_TAG: &str = "from:";
-const PARENT_ROOT: &str = "root";
 
 fn mode_wire(mode: Mode) -> &'static str {
     match mode {
@@ -117,29 +113,6 @@ pub fn read_projection(node: &Container) -> Option<Grant> {
         return None;
     }
     read_grant(node)
-}
-
-/// Read a delegation back out of a projection node, or `None` if it is not a
-/// well-formed delegation record (not tagged, or missing/unparseable fields).
-/// Same fail-closed discipline as [`read_projection`].
-pub fn read_delegation(node: &Container) -> Option<crate::delegation::Delegation> {
-    use crate::delegation::{Delegation, DelegationId};
-    if !node.tags.iter().any(|t| t == PROJECTION_TAG) {
-        return None;
-    }
-    let id = tag_value(node, DELEG_TAG)?;
-    let from = Subject::from_hex(tag_value(node, FROM_TAG)?)?;
-    let grant = read_grant(node)?;
-    let parent = match tag_value(node, PARENT_TAG)? {
-        PARENT_ROOT => None,
-        raw => Some(DelegationId::new(raw)),
-    };
-    Some(Delegation {
-        id: DelegationId::new(id),
-        parent,
-        from,
-        grant,
-    })
 }
 
 /// Why the gate refused a petition. Nothing was applied.
@@ -214,13 +187,6 @@ impl Gate {
         format!("{GRANT_PREFIX}{}", cap.to_wire())
     }
 
-    /// The projection node id for a delegation, keyed by its id (unique per
-    /// delegation, so two grants of overlapping caps do not collide). Under
-    /// [`GRANT_PREFIX`], so the projection guard still bites.
-    pub fn delegation_id(id: &crate::delegation::DelegationId) -> String {
-        format!("{GRANT_PREFIX}{}", id.as_str())
-    }
-
     fn commit_projection(
         &self,
         nested: &mut GraphLog<Container, Relation>,
@@ -257,40 +223,6 @@ impl Gate {
             grant.cap,
             grant.subject.to_hex()
         ));
-        self.commit_projection(nested, node)
-    }
-
-    /// Render a [`Delegation`](crate::delegation::Delegation) into `nested` as a
-    /// read-only record, so the whole authority chain is browsable and
-    /// [`read_delegation`] reconstructs it exactly on a cold rebuild — the
-    /// persistence half of C3. Carries the grant tags plus the delegation's
-    /// id, parent, and issuer.
-    pub fn project_delegation(
-        &self,
-        nested: &mut GraphLog<Container, Relation>,
-        delegation: &crate::delegation::Delegation,
-    ) -> Result<Committed, GateError> {
-        let mut node =
-            Container::new(Self::delegation_id(&delegation.id)).with_tag(PROJECTION_TAG);
-        for tag in grant_tags(&delegation.grant) {
-            node = node.with_tag(tag);
-        }
-        node = node
-            .with_tag(format!("{DELEG_TAG}{}", delegation.id.as_str()))
-            .with_tag(format!(
-                "{PARENT_TAG}{}",
-                match &delegation.parent {
-                    Some(parent) => parent.as_str(),
-                    None => PARENT_ROOT,
-                }
-            ))
-            .with_tag(format!("{FROM_TAG}{}", delegation.from.to_hex()))
-            .with_title(format!(
-                "{:?} {} -> {}",
-                delegation.grant.mode,
-                delegation.grant.cap,
-                delegation.to().to_hex()
-            ));
         self.commit_projection(nested, node)
     }
 
@@ -410,49 +342,6 @@ mod tests {
                 read_projection(node),
                 Some(grant),
                 "{cap:?} at {mode:?} must survive the round trip exactly"
-            );
-        }
-    }
-
-    #[test]
-    fn a_delegation_round_trips_including_its_lineage() {
-        use crate::delegation::{Delegation, DelegationId};
-        let gate = Gate::new();
-        let root = subject(0);
-        let helper = subject(1);
-        for delegation in [
-            Delegation::root(
-                "d-helper",
-                root,
-                Grant::new(helper, trail(), Mode::Delegate).expiring_at(5_000),
-            ),
-            Delegation::child(
-                "d-sub",
-                &DelegationId::new("d-helper"),
-                helper,
-                Grant::new(subject(2), Cap::power("navigate").unwrap(), Mode::Write),
-            ),
-        ] {
-            let mut nested = GraphLog::<Container, Relation>::new();
-            gate.project_delegation(&mut nested, &delegation).unwrap();
-
-            let key = nested
-                .graph()
-                .key_of(&Gate::delegation_id(&delegation.id))
-                .unwrap();
-            let node = nested.graph().node(key).unwrap();
-            assert_eq!(
-                read_delegation(node),
-                Some(delegation.clone()),
-                "the delegation and its lineage survive the round trip"
-            );
-            // A delegation record is not mistaken for a bare grant, and vice
-            // versa: read_projection returns the conferred grant, but the
-            // lineage only comes back through read_delegation.
-            assert_eq!(
-                read_projection(node).as_ref(),
-                Some(&delegation.grant),
-                "the conferred grant is also readable as a plain projection"
             );
         }
     }
