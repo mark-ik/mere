@@ -120,6 +120,28 @@ off GitHub onto Merely-hosted (or P2P) distribution. P2P distribution of
 update artifacts over iroh/retinue (content-addressed, blake3, fits eidetic)
 is noted as a fit and deferred.
 
+**Two signatures, two jobs (clarified 2026-07-24).** These are complementary
+layers and conflating them is the easy mistake:
+
+- *OS install trust* — Authenticode on Windows, Developer ID + notarization on
+  macOS. This is what stops SmartScreen and Gatekeeper warning users at
+  install. It is per-platform, costs money, and Velopack drives it.
+- *Update-artifact authenticity* — our own detached ed25519 over the release
+  bytes, verified before apply. Platform-independent, free, and the thing that
+  makes a compromised feed insufficient to ship us a binary.
+
+Per-host status:
+
+| Host | OS install trust | Status |
+|------|------------------|--------|
+| macOS | Developer ID Application + notarytool | **Available** — Mark holds Apple developer credentials (2026-07-24) |
+| Windows | Authenticode: signtool cert, or Azure Trusted Signing (`vpk --azureTrustedSignFile`) | Needs a cert; Apple credentials do not cover it. Azure Trusted Signing is the subscription alternative to buying an EV cert |
+| Linux | No OS gate | Our ed25519 signature is the whole story |
+
+So the macOS install-trust question is answered; the Windows one is a
+purchasing decision, and the ed25519 layer remains wanted on every host
+regardless of either.
+
 ## Findings — Velopack pressure test (2026-07-24)
 
 Ran the mechanism end to end on Windows, on a throwaway minimal Rust app
