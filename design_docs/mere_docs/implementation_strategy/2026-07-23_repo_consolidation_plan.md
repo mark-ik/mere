@@ -343,3 +343,43 @@ primary repos build from clean clones.
     pass) before each subtree add, since `git subtree` refuses a dirty tree.
     One `cargo check` failure on untouched code proved transient on retry,
     as the workflow memory predicts.
+- **C5 landed** (smolweb founded and pushed; genet `2a7c34c7b98`). The
+  workspace holds misfin (history preserved via subtree) plus
+  spartan-protocol, nex-protocol, and guppy-protocol; 47 tests pass. genet
+  keeps errand and nematic and pins the wire layer from crates.io at `=0.1.1`,
+  matching how it already consumed misfin. Finding: the three crates were
+  copied rather than subtree-split — `git subtree split` over genet's history
+  did not finish in ten minutes, so their 2026-07-10 to 2026-07-23 history
+  stays in genet under `components/errand/protocols/`, recorded in the
+  smolweb README. **A split out of a large repo is not a viable history move;
+  plan for copy-plus-pointer.**
+- **C3 landed** (mere `6a37de6b`, pushed). All nine families are mere
+  workspace members with history preserved; the dead
+  `crates/persona/identity` duplicate is deleted. `cargo check --workspace`
+  is green except `document-host`, which is red on servitor's in-flight
+  capability model from another session's unpushed commit — a break that
+  predates the move, since mere already built against the local servitor
+  through its patch file. Products repointed to mere.git: hocket, woodshed,
+  and isometry committed and green (`isometry-genet`, which consumes
+  scenograph and graphshell, builds clean); merecat verified last. Findings:
+  - **The gitignored `.cargo/config.toml` patch files are the sharp edge of
+    an absorption, and they are invisible to `git status`.** In mere, a
+    redirect pointing at a path that is now a workspace member is a hard
+    lockfile collision (`package collision in the lockfile`), not a warning,
+    so every absorbed entry had to be deleted. In the four products the same
+    entries had to be *redirected* to the new in-mere paths instead. Five
+    files, none of them tracked in mere's case. Any future move must treat
+    them as part of the change.
+  - **Absorbing half a version-unified family splits it.** `graph-kernel`
+    pulled numen from crates.io while quint used the workspace copy, so two
+    numen versions landed in one graph and `mere-canvas` failed with
+    "expected `quint::FieldId`, found `kernel::graph::FieldId`". The old
+    crates.io patch had been hiding this. graph-kernel and moothold now take
+    the workspace deps.
+  - mere's `[workspace.package]` needed an `authors` key so the scenograph
+    crates could keep inheriting; unlike genet's Servo-shaped defaults, the
+    rest of mere's values already matched what the incoming families
+    declared.
+  - woodshed tracks its `.cargo/config.toml` (unlike mere and the others),
+    so its machine-local absolute paths are committed. Pre-existing, noted
+    rather than changed.
