@@ -263,6 +263,17 @@ oversell.
   importing encrypted keys (needs a terminal-prompt dep); a `generate`
   command that mints a key straight into the vault so no plaintext file
   ever exists; ShortTtl relock enforcement.
+- 2026-07-24 **fold executed.** The 2026-07-23 repo consolidation absorbed
+  personae into mere; `repos/personae` is gone, authoritative source is now
+  `crates/persona/personae` (workspace member, subtree-merged from V3 commit
+  8b45848 so all code + this plan's progress landed). Re-verified in the mere
+  workspace: `cargo test -p personae --features agent` = 71 green. The running
+  Windows agent was rebuilt from mere's copy, reinstalled, and re-proved a
+  real laptop login, so the live system is anchored to the authoritative
+  source. Added `crates/persona/personae/install-agent-windows.ps1` (builds
+  from mere → installs → manages the logon task) so the source→install path
+  is documented now that it moved. hocket already git-deps personae from mere
+  main, so its build gets this work.
 - Next: V4 (broader item types) is optional and demand-driven; the
   higher-value next step is the auto-update pressure test from the
   [auto-update brief](../../2026-07-22_auto-update_brief.md), since it
