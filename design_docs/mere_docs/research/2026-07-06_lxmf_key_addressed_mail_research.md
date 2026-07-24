@@ -107,6 +107,24 @@ discipline live in the
 [reticulum transport plan](../implementation_strategy/2026-06-29_reticulum_transport_plan.md)
 Direction section.
 
+**Addendum (2026-07-24):** the landscape shifted under option C's bridge
+clause. Retinue now exists (R0-R7, oracle-verified against the Python
+reference; reliable link and byte-exact Resource transfer over real RF,
+2026-07-21/23), so the bridge prerequisite is no longer migrating to a
+third-party stack: an LXMF codec would be a small spec-based sibling in the
+radio workspace, the same clean-room posture as sennet. Two demand arguments
+recorded in the 2026-07-24 application brainstorm: day-one interop for Merely
+radios (a freshly flashed radio can message existing Sideband/MeshChat users,
+answering the hardware cold-start problem), and LXMF propagation as an
+offered role in the
+[managed-network plan](../implementation_strategy/2026-07-24_low_power_managed_network_plan.md)'s
+V9 offers, its propagation store matching V10's store-and-forward with
+expiration. Posture otherwise unchanged: LXMF stays a boundary format and an
+offered service; the internal spine is the shared engram (see the
+[shared-engram commons brief](2026-07-24_shared_engram_commons_brief.md)),
+and LXMF's message-shaped model must not leak inward, the same discipline
+sennet holds against Meshtastic framing.
+
 ## Sources
 
 - LXMF spec/README: github.com/markqvist/LXMF (message structure, delivery methods,
