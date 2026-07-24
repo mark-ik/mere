@@ -220,6 +220,18 @@ Rust, but `vpk` needs a .NET runtime wherever releases are packed). Ruled:
   IP lanes carry bytes. Rollback/freeze defense: monotonic versions + signed
   timestamp in the manifest.
 
+**Finding 2026-07-24 (from hocket's H4 run): the signature covers the
+artifact, not the manifest.** Demonstrated live — a manifest claiming
+version 0.3.0 while serving a genuinely-signed 0.2.0 artifact is accepted,
+since digest and signature both check out against the bytes served. A feed
+controller without the key therefore cannot ship arbitrary code (modified
+bytes are refused, also demonstrated) but *can* lie about the version and
+replay any previously signed artifact: a downgrade attack. This makes T3's
+"monotonic versions + signed timestamp" a correctness requirement rather
+than a nicety, and it means the manifest itself must be signed. Recorded in
+luggage's README; until then feed integrity (HTTPS/GitHub over an untrusted
+share) is load-bearing.
+
 Velopack stays wired in hocket as the selectable A/B alternative
 (`HOCKET_UPDATE_TRANSPORT=velopack`) and retires if luggage's H4 cycles hold
 up; its delta packages remain the one capability luggage does not replicate

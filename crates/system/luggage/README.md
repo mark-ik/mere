@@ -33,6 +33,30 @@ the P2P lane) are tracked in
 [hocket's auto-update plan](https://github.com/mark-ik/hocket/blob/main/design_docs/2026-07-24_auto-update_plan.md)
 and mere's auto-update brief.
 
+## Security: what the signature covers, and what it does not
+
+The minisign signature covers the **artifact bytes**. The manifest around it
+(version, url, notes) is **not signed** — inherited from upstream, and true
+of most simple updaters. Demonstrated on 2026-07-24: a manifest claiming
+version 0.3.0 while pointing at a genuinely-signed 0.2.0 artifact is
+accepted, because both the BLAKE3 digest and the signature check out
+against the bytes actually served.
+
+So an attacker who controls the feed but **not** the signing key can:
+
+- lie about the version, and
+- serve any *previously signed* artifact as though it were newer — a
+  downgrade/rollback attack, e.g. back to a release with a known flaw.
+
+They cannot ship arbitrary code: unsigned or modified bytes fail
+verification (also demonstrated, with a nonzero exit and nothing installed).
+
+The fix is to sign the manifest itself, so version and url are covered
+too — planned with the T3 work (which already calls for a signed timestamp
+and monotonic versions) rather than bolted on now. Until then, treat feed
+integrity as load-bearing: prefer HTTPS or a GitHub feed over an untrusted
+file share, and do not assume a version number is authenticated.
+
 ## Manifest
 
 `luggage.json`, same shape upstream documents, plus the optional `blake3`:
