@@ -434,12 +434,41 @@ namespace.
   caller" was true only of the `MootAuthorizationProvider` trait; the
   delegation machinery beneath it is fully wired. OQ3's unification is
   therefore much closer than that note implied.
-- **Still open — C4**, which needs the piece servitor deliberately does not
-  own: an **identity**. Issuing an install certificate requires an
-  `IdentityProvider` (personae's `InMemoryProvider` in tests,
-  `IdentityVault` in production — where Mark's SSH key already lives).
-  merecat has no personae dependency yet, so C4 is: add it, root the table on
-  the active identity's master key, issue install certificates, persist them
-  (the signed cert is a blob, so the browsable grant projection stays the
-  audit record and the certificates persist beside the world), and wire the
-  Uninstall row to `revoke_root_grants`.
+- **C4 LANDED.** merecat's denizen authority is now signed delegation.
+  - **The root identity**: `merecat::identity` loads-or-creates a persisted
+    Ed25519 master seed in the profile (`<data_root>/identity/master.key`).
+    Persistence is load-bearing, not a nicety: every install certificate names
+    this key as its root, so a key that changed across restarts would fail
+    every chain as `WrongRoot` and silently un-authorize every denizen. The
+    seed sits **unsealed** for now; personae's `IdentityVault` (sealed, where
+    the SSH key already lives) implements the same `IdentityProvider` trait,
+    so the swap is a constructor change once merecat has an unlock path in the
+    shell. Named rather than invented.
+  - **Install is a delegation**: `issue_install_certificates` signs one root
+    certificate per reviewed capability (world scope, read face, one per ring)
+    at `depth = 0`, so an installed helper may act but never sub-delegate.
+    Certificates persist beside the world
+    (`denizens/<subject>.certs.json`); the browsable grant projections stay as
+    the human-readable audit record of the same facts.
+  - **Uninstall revokes**: `Action::UninstallDenizen` calls
+    `revoke_root_grants` (cascading to anything the denizen delegated onward),
+    removes the binding facet, drops the runtime entry, and deletes the
+    certificate file so a later adopt cannot resurrect revoked authority. The
+    node and its world are untouched — revoking authority destroys nothing.
+  - **Pre-delegation sessions heal**: a session installed before C4 carries
+    only projections, so adopt re-issues certificates from them under the
+    profile root. The projection IS the record of what the user reviewed, so
+    this preserves exactly the reviewed grant rather than re-asking.
+  - The lanes went provider-generic (`impl AuthorityProvider`), so neither the
+    ring gate nor the piccolo face names a concrete table.
+  - Receipts: merecat 124 tests (both features); headed `denizen_revoke.scn`
+    RESULT ok (install → run → uninstall, with the node surviving and the
+    certificate file gone); `denizen_b1.scn` and `denizen_wasm.scn` still
+    RESULT ok on the new authority, with the wasm guest's `caps.granted()`
+    still reporting exactly its three rings — now derived from verified
+    certificate chains rather than a flat table.
+
+- **Remaining after C4**: the unsealed-seed → `IdentityVault` swap (needs an
+  unlock path in merecat's shell), and OQ3's moot unification, which is now
+  mostly a matter of pointing gemot's authorization at the same typed view,
+  since both tiers already speak personae certificates.
