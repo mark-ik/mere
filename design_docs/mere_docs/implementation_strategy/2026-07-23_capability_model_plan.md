@@ -362,24 +362,50 @@ namespace.
 The round is complete and the workspace checks clean; these are named so they
 are not lost, ordered by how much they matter.
 
-1. **The Graphshell projection endpoint still SELF-ISSUES its authority.**
+1. **FIXED 2026-07-24 (merecat).** ~~The Graphshell projection endpoint
+   self-issues its authority.~~ The endpoint now derives a **per-session
+   keypair** from the profile identity (personae `derive_keypair`, salt
+   `merecat/projection-endpoint/<session>`) and holds a **signed delegation**
+   from the user's master key for `scope:projection/layout`, depth 0. Two
+   things were wrong and both are gone: the subject was `blake3(session
+   name)` — not a key, so nothing could ever prove it was this endpoint — and
+   the endpoint granted itself the capability it then checked. The G3 golden
+   receipt is unchanged byte-for-byte (the refusal reads the same), but it now
+   MEANS something: a test adopts the endpoint's own certificates under a
+   different root and they authorize nothing, which a self-issued grant could
+   not fail. `GrantTable`'s remaining users are test doubles, which is the
+   honest role for the unsigned provider.
+   *Original finding:* the endpoint derived a subject from `blake3(session
+   name)`, projected a grant to itself, and rebuilt a `GrantTable` from that
+   projection — harmless for a loopback receipt, wrong the moment a remote
+   peer projects.
+
+   <details><summary>superseded wording</summary>
    `merecat::remote_projection` derives a subject from `blake3(session name)`,
    projects a grant *to itself*, and rebuilds a `GrantTable` from that
    projection. It is its own root. Harmless today — a loopback receipt whose
    "rejected" line is an audit trail, not a trust boundary — but it is exactly
-   the shape this round removed everywhere else, and a "denied" there currently
-   means only "the endpoint did not grant itself". **When Graphshell projection
-   becomes a real boundary (a REMOTE peer projecting into a session), that
-   endpoint must root on a delegation from the profile identity.** Until then
-   `GrantTable` stays live and correct for it.
+   the shape this round removed everywhere else.</details>
 
-2. **Sub-delegation has a mechanism and no user.** F4 called `Mode::Delegate`
-   inert for want of an order; the order exists now, and personae carries
-   `remaining_delegation_depth` — but merecat issues install certificates at
-   depth 0 and `MootAuthority` fails closed on Delegate. So nothing in the
-   product issues a delegable grant. That is the right default for an installed
-   helper; it means the sub-delegation path is unexercised end to end, and the
-   first real consumer will be its first test.
+2. **Sub-delegation: the consumer is named, and it is the endpoint above.**
+   F4 called `Mode::Delegate` inert for want of an order; the order exists now,
+   and personae carries `remaining_delegation_depth` — but every issuer in the
+   product uses depth 0, so nothing delegates onward. Asked for a better
+   consumer than "an installed helper", the answer is the one the fix just
+   built: **the projection endpoint delegating to a remote viewer.** It is the
+   only edge in the system where a second identity should hold *strictly less*
+   than the delegator for a *specific* reason — the endpoint may present this
+   session's layout; a connected viewer should hold read-only presentation of
+   one scene, not the endpoint's whole capability. That makes the endpoint's
+   certificate depth 1 and the viewer's 0, a one-line change at the point the
+   viewer gains its own key.
+   Rejected alternatives, both speculative (no code either side): a pack
+   installing sub-packs, and an agent spawning sub-agents. A third is real but
+   belongs elsewhere — a moot peer re-delegating to their own second device is
+   the kith device tier's business, not this round's.
+   **Gate:** lands with the Graphshell remote lane. Building it before a viewer
+   has a key would be capability written against an imaginary consumer, which
+   is how the self-issued grant happened in the first place.
 
 3. **The re-root heal's safety is load-bearing on the projection guard.**
    `denizen::rebuild` re-issues authority from the grant projections in a
