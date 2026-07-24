@@ -1,6 +1,6 @@
 [package]
 name = "seiche"
-version = "0.0.3"
+version = "0.0.4"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Kernel-free, rapier-backed force-directed graph layout: bodies bound to node keys, themable forces (exclusion, springs, boundary), and quint field couplings. A host feeds node keys + positions; seiche integrates."
@@ -25,7 +25,7 @@ petgraph = "0.8"
 # finite-difference gradients) to drive rapier bodies. quint (default features only,
 # no rhai/burn) is the portable field source, seiche the integrator. numen supplies
 # the field-definition types the CouplingForce carries.
-quint = { path = "../quint", version = "0.0.2" }
+quint = { path = "../quint", version = "0.0.3" }
 numen = { path = "../numen", version = "0.1" }
 euclid = "0.22"
 tracing = "0.1"
