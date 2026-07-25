@@ -472,6 +472,76 @@ Plan ordering is explicit:
 
 ## Findings
 
+### 2026-07-25: verification is restored, and Phase B's first criterion is false as written
+
+**The 07-13/07-14 resolver stall is repaired.** Those entries record that
+`cargo test -p murm-replication` "again stalled during workspace dependency
+resolution before compilation and was stopped", leaving Murm, Moot, and mesh
+package tests pending "a normal workspace rerun after that resolver state is
+repaired". The [repo consolidation](2026-07-23_repo_consolidation_plan.md) did
+repair it — every one of them now runs from a normal workspace command:
+
+| package | result |
+| --- | --- |
+| `murm-replication` | 40 passed |
+| `murm` | 57 passed |
+| `mere-mesh` | 29 passed |
+| `mooting` | 5 passed |
+| `gemot` | 101 passed |
+
+So the isolated-manifest workaround the plan leaned on is no longer needed,
+and the pending consumer verification it names is done.
+
+**Phase B done-when #1 does not hold, and should not.** It asks that "local
+authoring, LogSync receipt, gossip receipt, and drop import return the same
+decision for one operation corpus". `MootPolicy` carries
+`allow_historical_checkpoint_authority` and `allow_historical_prune`, both
+`false` for live processing and plain-drop import and both **`true`** for
+`import_drop_records`, the aggregate carrier path. That divergence is
+deliberate and this plan explains why elsewhere: an aggregate drop bootstraps
+a fresh peer *through a rotated checkpoint chain*, so it must accept
+checkpoints that were authoritative at their time and that live intake
+correctly rejects as stale.
+
+The criterion should therefore read: **the intake paths return the same
+decision for one operation corpus, except that aggregate-drop import accepts
+historical checkpoint authority and prune ancestry which live intake rejects
+as stale — and that exception is pinned by a test rather than left as two
+booleans someone might "fix".** No such conformance test exists today
+(searched); writing it is the concrete next step, and its shape is: build a
+rotated checkpoint chain, construct one prune operation naming the superseded
+checkpoint via `to_prune_operation`, then assert live `process` rejects it
+`checkpoint-stale` while `import_drop_records` admits it.
+
+### 2026-07-25: refinement — the read-time rule does not cover destructive operations
+
+The [commons ruling](#2026-07-24-a-moots-commons-is-unauthorized-and-there-is-no-shared-graph-record)
+above states that authority belongs at read because authority state converges
+separately from the operations it authorizes. That is right for
+**contributions**, and it is stated too absolutely. gemot already authorizes
+checkpoints and prunes **at admission**, against convergent constitutional
+state, and is correct to:
+
+> A share that is filtered at read can become visible later when its
+> certificate lands. **A prune cannot be un-pruned.** For destructive
+> operations there is no later state in which to re-decide, so authority must
+> be established before the mutation, accepting the risk that a legitimately
+> early-arriving prune is rejected and must be re-sent.
+
+The full rule, then: *admission validates what one operation can prove about
+itself, plus authority for anything irreversible; the fold and its projections
+decide what converged authority makes effective for everything else.* Phase D's
+"unauthorized membership, checkpoint, retention, and prune operations fail
+before mutation" is consistent with this for the destructive three.
+
+Membership is the open edge: `MootEvent::Joined` is admitted by the same
+catch-all arm as `Shared`, so a roster's `members` is who *claims* to be
+present. The authority is `MootGroup` (verified p2panda-auth membership) at the
+authorization seam, not the roster projection — worth stating explicitly
+wherever the roster is consumed, since "members" reads like a decision and is
+not one.
+
+
 ### 2026-07-24: a moot's commons is unauthorized, and there is no shared-graph record
 
 Surveyed on entering this lane from the [capability model
