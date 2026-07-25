@@ -511,6 +511,20 @@ But this is a boundary ruling about who owns transport, not an implementation
 detail, so it is recorded rather than guessed. Note that murm would hold
 `Option<JoinedSpace>` (it supports a no-transport mode), which composes.
 
+**RULED (b), Mark, 2026-07-25**: `JoinedSpace` lands in `murm-replication`,
+subject to a deeper look at that crate's goals before building. Two facts
+found while recording the ruling strengthen it. First, `murm-replication`
+already production-depends on `p2panda-net` 0.7.0 — the crate already owns
+the p2panda surface, so (b) changes no dependency posture anywhere; it
+completes the crate's own charter sentence ("owns the reusable p2panda
+receive drain") by owning the drain's construction too. Second, the ceremony
+count was undercounted: gemot carries it in FOUR `#[cfg(test)]` sync modules
+(constitution, delegation, records, tessera) plus the `moot-peer` example,
+alongside mesh's and murm's production copies — seven hand-written sites, and
+knot K5 would be the eighth. A done-condition worth adding when this builds:
+mesh's and murm's direct `p2panda-net` imports shrink to types the drain
+cannot carry, or vanish.
+
 **3. NON-finding: murm's `SyncStatus` / `SyncRound` are not stale duplicates.**
 They look like copies of `murm_replication`'s and are not: murm's carry
 `posts_received`, and its own doc states the gossip counters are "merged with
