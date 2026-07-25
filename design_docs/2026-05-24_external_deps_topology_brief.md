@@ -124,10 +124,11 @@ validation**.
   conflicts where independent edits touch different functions/structs/keys in
   the same file. **Enabled repo-wide** as of 2026-05-24, and **completed
   2026-07-24**: every repo in `repos/` (genet, hocket, isometry, mere,
-  merecat, merely-made.github, netrender, smolweb, wavicle, wgpu-graft,
-  wgpu-scry, wgpu-weld, woodshed — graphshell is archived) has a committed
-  `.gitattributes` mapping ~46-54 file types (`*.rs`, `*.toml`, `*.md`, …) to
-  `merge=weave`.
+  merecat, merely-made.github, netrender, retinue, smolweb, wavicle,
+  wgpu-graft, wgpu-scry, wgpu-weld, woodshed — graphshell is archived) has a
+  committed `.gitattributes` mapping ~46-54 file types (`*.rs`, `*.toml`,
+  `*.md`, …) to `merge=weave`. `retinue` was cloned after the initial sweep
+  and wired the same day once it appeared.
 - **`sem`** — semantic version control (entity-level diff / listing / context /
   impact queries on top of Git). **Fully adopted 2026-07-24**, superseding the
   original ad-hoc-npx posture below: installed via `cargo install --git
