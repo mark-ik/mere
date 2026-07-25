@@ -499,16 +499,38 @@ verified against the tree rather than inferred:
    carrying an edit batch, which is a product decision about whether moots
    host live shared graphs at all, not an implementation detail to invent.
 
-**The available slice is (1), and it needs one ruling first:** whether an
-unauthorized share is *refused at admission* (fail closed; every existing moot
-rejects shares until it issues fauna capabilities, and the check must thread
-through `MootStore::process` AND every drop-import path or it has a documented
-bypass) or *filtered at read* (fail open in storage, authoritative in the view;
-consistent with how delegation validity and revocation cascade are already
-evaluated lazily at read, and non-breaking). The second is architecturally
-closer to what gemot already does; the first is what "commons" usually means.
-Not built pending that ruling — a capability check with a bypass is worse than
-none, and flipping admission closed by default is a policy change, not a fix.
+**RULED 2026-07-24 (Mark): filter at read.** And the reason is stronger than
+consistency with `chain_is_live` — it is a correctness requirement of a
+replicated log. Authority state (delegation certificates, constitution
+amendments) converges *separately* from the operations it authorizes, so an
+operation can legitimately arrive before the certificate that authorizes it:
+out-of-order sync, a late-joining peer, a drop import. Refusing at admission
+would permanently discard operations that become authorized moments later,
+with no retry, because the operation is gone. Read-time evaluation cannot fail
+that way: the entry becomes visible when its certificate lands and vanishes
+when it is revoked.
+
+The division of labour this settles, worth holding to elsewhere in the lane:
+
+> **Admission validates what one operation can prove about itself** —
+> signature, moot address, wire grammar, prune flag, all self-contained.
+> **The fold and its projections decide what converged authority makes
+> effective.**
+
+**Landed** (gemot, 101 tests): `records::fauna_cap()` (the typed scope
+`moot/fauna`), `MootRoster::authorized_fauna(&impl AuthorityProvider)` — the
+commons as converged authority sees it — and `Moot::authorized_fauna(at_ms)`
+composing rules + delegations + roster through `MootAuthority`. Both views stay
+available on purpose: the unfiltered `roster.fauna` is still the convergent
+record, so a surface can show an unauthorized contribution as *pending* rather
+than making it vanish. Receipts: a delegated sharer's entry counts and an
+ungranted identity's does not; revoking the sharer's certificate withdraws
+their contribution **with no change to stored operations** — authority decided,
+not the log.
+
+Remaining in this thread: no surface reads the authorized view yet (the product
+call of which view a UI shows), and admission still accepts any well-formed
+`Shared`, which is now deliberate rather than an oversight.
 
 
 ### 2026-07-12: library extraction changes the useful purity rule
