@@ -873,6 +873,29 @@ a wrong-peer assertion and a real TCP-loopback reticulum round trip.
 Next code slice is **V5** (the `network-policy` crate and its evaluator),
 which is pure Rust with no hardware dependency.
 
+### 2026-07-25 — V1, V2, and V8 landed ahead of V5; blocker 2 cleared
+
+Recorded during a workspace audit so this section stops under-reporting its
+own lane:
+
+**V8 (Retinue, commits `1f767b8` + `5b2dbbc`).** Transit is an owner setting,
+not a switch: `RoutingPolicy` replaced the routing boolean
+(`enable_routing()` kept as shorthand), and the transit scheduler gives
+forwarded traffic a share of a busy interface, never priority over local
+classes.
+
+**V1 + V2 (Retinue, commits `a67472a` + `88c55cc`).** The UART host
+personality and guarded Light-sleep are implemented and compile-verified on
+both firmware targets, with the wake protocol host-tested. Every power and
+wake claim remains UNPROVEN pending the V0 bench; the receipt-shaped record
+of what is and is not established is
+`retinue/design_docs/2026-07-24_low_power_uart_personality.md`. Blocker 1
+(the bench session) still stands and is now the head of the lane.
+
+**Blocker 2 is resolved:** retinue's V3 work is pushed; `main` and
+`origin/main` agree, so the reticulum-feature arm builds from a clean
+checkout.
+
 ## Completion
 
 The round is complete when all of the following are true:
