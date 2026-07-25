@@ -279,9 +279,13 @@ before this work, verified by stashing.
    new field costs them nothing beyond that re-resolve. Every construction
    site is inside mere.
 
-**Remaining:** publish the four crates (outward-facing and irreversible, so
-left for Mark), then re-resolve isometry and merecat against the new commit,
-and tell woodshed the contract is frozen.
+**Remaining:** ~~publish the four crates~~ **published 2026-07-24 23:45 UTC**
+(all four 0.0.3s went up in dependency order four minutes after the freeze
+commit; verified 2026-07-25 against the registry — the published sceno has no
+`measure.rs` and the published scenotime carries `pick.rs`, so the artifacts
+are this cut. A second publish attempt on 2026-07-25 correctly errored
+"already exists"; nothing was missing). Still remaining: re-resolve isometry
+and merecat against 0.0.3, and tell woodshed the contract is frozen.
 
 **History note.** A concurrent session's `git add -A` swept most of S1-S3
 into two unrelated commits, `4b8d875f` ("document-host: derive the wasm
