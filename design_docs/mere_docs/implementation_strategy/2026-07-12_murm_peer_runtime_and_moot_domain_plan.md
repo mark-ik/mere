@@ -507,11 +507,17 @@ The criterion should therefore read: **the intake paths return the same
 decision for one operation corpus, except that aggregate-drop import accepts
 historical checkpoint authority and prune ancestry which live intake rejects
 as stale — and that exception is pinned by a test rather than left as two
-booleans someone might "fix".** No such conformance test exists today
-(searched); writing it is the concrete next step, and its shape is: build a
-rotated checkpoint chain, construct one prune operation naming the superseded
-checkpoint via `to_prune_operation`, then assert live `process` rejects it
-`checkpoint-stale` while `import_drop_records` admits it.
+booleans someone might "fix".**
+
+**Pinned 2026-07-25** (gemot 102 tests):
+`aggregate_import_admits_the_historical_prune_that_live_intake_rejects` builds
+a rotated checkpoint chain, constructs ONE prune operation naming the
+superseded checkpoint (via `to_prune_operation_seed`, so it is built without
+being accepted), then puts that same operation through both paths against the
+same store: `accept` refuses it `checkpoint-stale` and leaves the operation
+count unchanged, `import_drop_records` admits it (`accepted == 1`). The
+divergence is now a property with a stated reason rather than a discrepancy
+waiting to be tidied away.
 
 ### 2026-07-25: refinement — the read-time rule does not cover destructive operations
 
