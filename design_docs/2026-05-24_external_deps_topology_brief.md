@@ -122,17 +122,38 @@ validation**.
 
 - **`weave`** — entity-level semantic git **merge driver**. Resolves false
   conflicts where independent edits touch different functions/structs/keys in
-  the same file. **Enabled repo-wide** as of 2026-05-24: every repo (mere,
-  genet, netrender, strophe, woodshed, graphshell, wgpu-graft/scry/weld) has a
-  committed `.gitattributes` mapping ~50 file types (`*.rs`, `*.toml`, `*.md`,
-  …) to `merge=weave`.
+  the same file. **Enabled repo-wide** as of 2026-05-24, and **completed
+  2026-07-24**: every repo in `repos/` (genet, hocket, isometry, mere,
+  merecat, merely-made.github, netrender, smolweb, wavicle, wgpu-graft,
+  wgpu-scry, wgpu-weld, woodshed — graphshell is archived) has a committed
+  `.gitattributes` mapping ~46-54 file types (`*.rs`, `*.toml`, `*.md`, …) to
+  `merge=weave`.
 - **`sem`** — semantic version control (entity-level diff / listing / context /
-  impact queries on top of Git). Run ad-hoc via `npx @ataraxy-labs/sem …` or
-  the binary; **not committed-wired** into any repo.
+  impact queries on top of Git). **Fully adopted 2026-07-24**, superseding the
+  original ad-hoc-npx posture below: installed via `cargo install --git
+  https://github.com/Ataraxy-Labs/sem sem-cli` and registered as a
+  user-scoped Claude Code MCP server (`claude mcp add sem -s user -- sem
+  mcp`), exposing `sem_diff`/`sem_context`/`sem_impact`/`sem_entities`/
+  `sem_blame`/`sem_log` as native tools in every session, not just via CLI.
 
-**Non-evident prerequisite (the reason this is recorded):** the `merge=weave`
-attribute is committed, but the driver definition is **local `.git/config` per
-clone** —
+**Update 2026-07-24 — fresh-clone gap closed.** The prerequisite recorded
+below (driver definition living in per-repo local `.git/config`, so fresh
+clones silently fell back to plain git merge) is fixed on this machine: the
+driver is now set via `git config --global merge.weave.driver "weave-driver
+%O %A %B %L %P"` (and `merge.weave.name`), which covers every repo,
+including future fresh clones, without any per-repo step. The committed
+`.gitattributes` still travels with each clone as before. The one remaining
+gap is genuinely unavoidable: a **new machine** still needs `weave-driver`
+(and `sem`) installed and the global git config set once — see each repo's
+`CLAUDE.md` ("Workspace Tooling: sem & weave" section) for the install
+commands. Per-repo local `.git/config` driver entries from the original
+rollout are still present in the already-wired repos; they're redundant with
+the global config now but harmless (local overrides global with an identical
+value).
+
+**Original non-evident prerequisite (superseded by the update above, kept for
+history):** the `merge=weave` attribute is committed, but the driver
+definition is **local `.git/config` per clone** —
 `merge.weave.driver = ~/.cargo/bin/weave-driver %O %A %B %L %P` — and depends on
 `weave-driver` being installed (`~/.cargo/bin/`, via `crates/weave`). On a fresh
 clone or a machine without it installed, `merge=weave` is a dangling pointer and
