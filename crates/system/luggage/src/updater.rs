@@ -254,6 +254,31 @@ impl Updater {
         Ok(update)
     }
 
+    /// Check a manifest's own signature before anything in it is believed.
+    ///
+    /// The artifact signature cannot cover the version and URL announced
+    /// around it, so without this a feed controller can replay an old signed
+    /// build under a new version number. `signature` is the contents of the
+    /// feed's `luggage.json.sig`, or `None` when the feed had none.
+    fn verify_manifest(&self, bytes: &[u8], signature: Option<&str>) -> Result<()> {
+        match signature {
+            Some(signature) => {
+                crate::signing::verify_bytes(
+                    bytes,
+                    &crate::signing::wrap_signature_file(signature),
+                    &self.config.pubkey,
+                )
+                .map_err(|_| Error::ManifestSignatureInvalid)
+            }
+            None if self.config.require_signed_manifest => Err(Error::ManifestUnsigned),
+            // Explicitly opted out: the caller accepted the downgrade risk.
+            None => {
+                log::warn!("feed manifest is unsigned and verification is disabled");
+                Ok(())
+            }
+        }
+    }
+
     /// Fetch a release from an HTTP feed. `Ok(None)` is a definitive
     /// 204 No Content.
     fn fetch_http(&self, url: Url) -> Result<Option<RemoteRelease>> {
@@ -284,6 +309,7 @@ impl Updater {
 
         log::debug!("checking for updates at {url}");
 
+        let signature_url: Url = format!("{url}.sig").parse()?;
         let mut request = Client::new().get(url).headers(headers);
         if let Some(timeout) = self.timeout {
             request = request.timeout(timeout);
@@ -301,11 +327,42 @@ impl Updater {
             return Ok(None);
         }
 
-        let update_response: serde_json::Value = response.json()?;
-        log::debug!("update response: {update_response:?}");
-        Ok(Some(serde_json::from_value::<RemoteRelease>(
-            update_response,
+        // Take the bytes, not the parsed JSON: the signature is over exactly
+        // what the feed served, and re-serializing would not reproduce it.
+        let manifest_bytes = response.bytes()?;
+
+        // Fetch the detached signature from `<url>.sig`. A feed that has none
+        // is refused unless the caller opted out.
+        let signature = self.fetch_manifest_signature(&signature_url);
+        self.verify_manifest(&manifest_bytes, signature.as_deref())?;
+
+        log::debug!("update response verified, {} bytes", manifest_bytes.len());
+        Ok(Some(serde_json::from_slice::<RemoteRelease>(
+            &manifest_bytes,
         )?))
+    }
+
+    /// Best-effort fetch of a detached manifest signature.
+    ///
+    /// A missing signature is `None` rather than an error here;
+    /// [`Self::verify_manifest`] decides whether that is acceptable, so the
+    /// policy lives in one place.
+    fn fetch_manifest_signature(&self, url: &Url) -> Option<String> {
+        let mut request = Client::new().get(url.clone());
+        if let Some(timeout) = self.timeout {
+            request = request.timeout(timeout);
+        }
+        match request.send() {
+            Ok(response) if response.status().is_success() => response.text().ok(),
+            Ok(response) => {
+                log::debug!("no manifest signature at {url}: {}", response.status());
+                None
+            }
+            Err(err) => {
+                log::debug!("no manifest signature at {url}: {err}");
+                None
+            }
+        }
     }
 
     /// Read a release from a directory feed's manifest.
@@ -317,7 +374,9 @@ impl Updater {
             });
         }
         let bytes = std::fs::read(&manifest)?;
-        log::debug!("read manifest from {}", manifest.display());
+        let signature = std::fs::read_to_string(dir.join(format!("{MANIFEST_NAME}.sig"))).ok();
+        self.verify_manifest(&bytes, signature.as_deref())?;
+        log::debug!("read and verified manifest from {}", manifest.display());
         Ok(Some(serde_json::from_slice::<RemoteRelease>(&bytes)?))
     }
 }

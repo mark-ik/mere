@@ -18,6 +18,16 @@ pub enum Error {
     /// A feed string could not be parsed.
     #[error("invalid feed {0}")]
     InvalidFeed(String),
+    /// The feed served no manifest signature and one is required.
+    #[error(
+        "the feed's manifest is unsigned: sign {manifest} and serve {manifest}.sig beside it, \
+         or set require_signed_manifest = false to accept the downgrade risk",
+        manifest = crate::MANIFEST_NAME
+    )]
+    ManifestUnsigned,
+    /// The manifest signature did not verify against the configured key.
+    #[error("the feed's manifest signature does not verify against the configured public key")]
+    ManifestSignatureInvalid,
     /// A directory feed has no manifest.
     #[error("no {manifest} in feed directory {dir}", manifest = crate::MANIFEST_NAME)]
     ManifestNotFound {

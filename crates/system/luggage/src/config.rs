@@ -148,7 +148,7 @@ pub struct WindowsConfig {
 }
 
 /// Updater configuration.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Config {
     /// The feeds to check, in order; the first that yields a release wins.
     pub feeds: Vec<Feed>,
@@ -156,6 +156,29 @@ pub struct Config {
     pub pubkey: String,
     /// The Windows configuration for the updater.
     pub windows: Option<WindowsConfig>,
+    /// Require the *manifest* to be signed, not just the artifact it names.
+    ///
+    /// **Defaults to true, and should stay that way.** The artifact
+    /// signature proves the bytes are ours; it says nothing about the
+    /// version or URL claimed around them. Without a signed manifest, whoever
+    /// controls the feed can announce any version for any
+    /// previously-signed artifact and roll a client *backwards* onto a
+    /// release with a known flaw — demonstrated 2026-07-24. Feeds must
+    /// therefore serve `luggage.json.sig` beside `luggage.json`.
+    pub require_signed_manifest: bool,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            feeds: Vec::new(),
+            pubkey: String::new(),
+            windows: None,
+            // Secure by default: opting out has to be a visible choice in
+            // the caller's code, not something you get by forgetting.
+            require_signed_manifest: true,
+        }
+    }
 }
 
 #[cfg(test)]

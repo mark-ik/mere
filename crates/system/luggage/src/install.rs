@@ -120,7 +120,7 @@ impl Update {
         }
 
         let mut update_buffer = Cursor::new(&buffer);
-        verify_signature(&mut update_buffer, &self.signature, &self.config.pubkey)?;
+        crate::signing::verify_reader(&mut update_buffer, &self.signature, &self.config.pubkey)?;
 
         Ok(buffer)
     }
@@ -509,33 +509,6 @@ impl Update {
 
         Ok(())
     }
-}
-
-// Validate the minisign signature.
-//
-// NOTE: the buffer position is not reset.
-fn verify_signature<R>(archive_reader: &mut R, release_signature: &str, pub_key: &str) -> Result<bool>
-where
-    R: Read,
-{
-    let pub_key_decoded = base64_to_string(pub_key)?;
-    let public_key = PublicKey::decode(&pub_key_decoded)?;
-    let signature_base64_decoded = base64_to_string(release_signature)?;
-    let signature = Signature::decode(&signature_base64_decoded)?;
-
-    let mut data = Vec::new();
-    archive_reader.read_to_end(&mut data)?;
-
-    public_key.verify(&data, &signature, true)?;
-    Ok(true)
-}
-
-fn base64_to_string(base64_string: &str) -> Result<String> {
-    let decoded_string = &base64::engine::general_purpose::STANDARD.decode(base64_string)?;
-    let result = std::str::from_utf8(decoded_string)
-        .map_err(|_| Error::SignatureUtf8(base64_string.into()))?
-        .to_string();
-    Ok(result)
 }
 
 #[cfg(test)]

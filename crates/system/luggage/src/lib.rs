@@ -53,11 +53,14 @@ mod config;
 mod error;
 mod install;
 mod release;
+mod signing;
+mod staging;
 mod updater;
 
 pub use config::{Config, Feed, WindowsConfig, WindowsUpdateInstallMode};
 pub use error::{Error, Result};
 pub use install::Update;
+pub use staging::StagedUpdate;
 pub use release::{
     MANIFEST_NAME, ReleaseManifestPlatform, RemoteRelease, RemoteReleaseData, UpdateFormat,
 };
