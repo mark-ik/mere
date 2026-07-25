@@ -46,13 +46,26 @@ pub(crate) fn base64_to_string(base64_string: &str) -> Result<String> {
     Ok(result)
 }
 
-/// A minisign signature file's contents, base64-wrapped for transport.
+/// Normalise a `.sig` file's contents into the base64 form
+/// [`verify_bytes`] wants, accepting either convention in the wild.
 ///
-/// `cargo packager signer sign` writes the raw minisign text; the manifest
-/// and the updater both carry it base64-wrapped, so this is the adapter
-/// between a `.sig` on disk and what [`verify_bytes`] wants.
-pub(crate) fn wrap_signature_file(contents: &str) -> String {
-    base64::engine::general_purpose::STANDARD.encode(contents.trim())
+/// `cargo packager signer sign` writes the signature **already
+/// base64-wrapped**; plain `minisign -S` writes the raw text block. Wrapping
+/// unconditionally double-encodes the former, which fails verification with
+/// a signature that is in fact perfectly good — found end to end on
+/// 2026-07-24, after a unit test using the raw form passed happily.
+pub(crate) fn normalize_signature_file(contents: &str) -> String {
+    let trimmed = contents.trim();
+    let already_wrapped = base64::engine::general_purpose::STANDARD
+        .decode(trimmed)
+        .ok()
+        .and_then(|bytes| String::from_utf8(bytes).ok())
+        .is_some_and(|text| text.trim_start().starts_with("untrusted comment:"));
+    if already_wrapped {
+        trimmed.to_string()
+    } else {
+        base64::engine::general_purpose::STANDARD.encode(trimmed)
+    }
 }
 
 #[cfg(test)]
@@ -92,17 +105,31 @@ mod tests {
         assert!(verify_bytes(data, &signature, &other_pubkey).is_err());
     }
 
+    /// Both `.sig` conventions must verify: `minisign -S` writes the raw
+    /// text block, `cargo packager signer sign` writes it base64-wrapped.
+    /// Wrapping unconditionally breaks the second, which is the one our own
+    /// pipeline produces.
     #[test]
-    fn a_raw_sig_file_wraps_into_the_transport_form() {
-        let data = b"bytes";
+    fn both_sig_file_conventions_normalise_and_verify() {
+        let data = b"release manifest bytes";
         let keypair = minisign::KeyPair::generate_unencrypted_keypair().unwrap();
         let signature =
             minisign::sign(None, &keypair.sk, std::io::Cursor::new(data), None, None).unwrap();
-        // What `cargo packager signer sign` leaves on disk, trailing newline
-        // and all, must verify once wrapped.
-        let on_disk = format!("{}\n", signature);
         let engine = base64::engine::general_purpose::STANDARD;
         let pubkey = engine.encode(keypair.pk.to_box().unwrap().to_string());
-        assert!(verify_bytes(data, &wrap_signature_file(&on_disk), &pubkey).is_ok());
+
+        // Raw text on disk, trailing newline and all.
+        let raw = format!("{}\n", signature.to_string());
+        assert!(
+            verify_bytes(data, &normalize_signature_file(&raw), &pubkey).is_ok(),
+            "raw minisign text must verify"
+        );
+
+        // Already base64-wrapped, as cargo-packager writes it.
+        let wrapped = format!("{}\n", engine.encode(signature.to_string()));
+        assert!(
+            verify_bytes(data, &normalize_signature_file(&wrapped), &pubkey).is_ok(),
+            "an already-wrapped signature must not be wrapped again"
+        );
     }
 }

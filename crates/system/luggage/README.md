@@ -33,29 +33,46 @@ the P2P lane) are tracked in
 [hocket's auto-update plan](https://github.com/mark-ik/hocket/blob/main/design_docs/2026-07-24_auto-update_plan.md)
 and mere's auto-update brief.
 
-## Security: what the signature covers, and what it does not
+## Security: two signatures, and why both
 
-The minisign signature covers the **artifact bytes**. The manifest around it
-(version, url, notes) is **not signed** — inherited from upstream, and true
-of most simple updaters. Demonstrated on 2026-07-24: a manifest claiming
-version 0.3.0 while pointing at a genuinely-signed 0.2.0 artifact is
-accepted, because both the BLAKE3 digest and the signature check out
-against the bytes actually served.
+Every release carries two minisign signatures, and luggage checks both:
 
-So an attacker who controls the feed but **not** the signing key can:
+1. **The artifact signature** (in the manifest, per platform) proves the
+   downloaded bytes are ours. A BLAKE3 digest is checked first when present,
+   so a corrupt download fails with a clearer error than a crypto failure.
+2. **The manifest signature** (`luggage.json.sig`, detached) proves the
+   *version and URL announced around* those bytes are ours.
 
-- lie about the version, and
-- serve any *previously signed* artifact as though it were newer — a
-  downgrade/rollback attack, e.g. back to a release with a known flaw.
+The second exists because the first cannot cover it. Demonstrated
+2026-07-24 before it was fixed: a manifest claiming version 0.3.0 while
+pointing at a genuinely-signed 0.2.0 artifact was accepted, since digest and
+signature both checked out against the bytes actually served. Whoever
+controls the feed could therefore never ship arbitrary code, but *could*
+advertise an old signed build as new and roll a client **backwards** onto a
+release with a known flaw.
 
-They cannot ship arbitrary code: unsigned or modified bytes fail
-verification (also demonstrated, with a nonzero exit and nothing installed).
+[`Config::require_signed_manifest`] defaults to `true`, so an unsigned feed
+is refused with a message naming the fix. Opting out is possible and has to
+be written down in the caller's code, which is the point.
 
-The fix is to sign the manifest itself, so version and url are covered
-too — planned with the T3 work (which already calls for a signed timestamp
-and monotonic versions) rather than bolted on now. Until then, treat feed
-integrity as load-bearing: prefer HTTPS or a GitHub feed over an untrusted
-file share, and do not assume a version number is authenticated.
+Sign the manifest **last**, after every host has added its platform entry —
+any later edit invalidates it:
+
+```sh
+cargo packager signer sign <feed>/luggage.json
+```
+
+Both `.sig` conventions are accepted: the raw minisign text block that
+`minisign -S` writes, and the base64-wrapped form `cargo packager signer
+sign` writes.
+
+## Staging
+
+`Update::stage` writes a verified artifact into an app-owned directory, so
+"downloaded, ready to restart" survives the app closing rather than being a
+claim about bytes held in memory. `StagedUpdate::take_verified` re-hashes
+the file at apply time, closing the gap between staging and applying;
+staging requires a manifest digest for exactly that reason.
 
 ## Manifest
 

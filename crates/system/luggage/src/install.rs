@@ -17,9 +17,7 @@ use std::{
     time::Duration,
 };
 
-use base64::Engine;
 use http::header::{ACCEPT, USER_AGENT};
-use minisign_verify::{PublicKey, Signature};
 use reqwest::{
     blocking::Client,
     header::{HeaderMap, HeaderValue},
@@ -517,6 +515,7 @@ mod tests {
     use crate::config::Feed;
     use crate::release::MANIFEST_NAME;
     use crate::{Config, UpdaterBuilder};
+    use base64::Engine as _;
     use std::io::Write as _;
 
     /// Sign bytes with a fresh in-process minisign key, returning the
@@ -572,7 +571,10 @@ mod tests {
             Config {
                 feeds: vec![Feed::Directory(dir.to_path_buf())],
                 pubkey,
-                windows: None,
+                // These tests are about artifact verification; the manifest
+                // signature has its own tests in `updater`.
+                require_signed_manifest: false,
+                ..Default::default()
             },
         )
         .target("test-target".to_string())

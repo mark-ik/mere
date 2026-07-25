@@ -20,7 +20,6 @@
 //! artifact (what a directory feed wants), `--out` is `luggage.json` beside
 //! the artifact.
 
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -205,6 +204,17 @@ fn run() -> Result<PathBuf, String> {
     println!("  version:  {}", args.version);
     println!("  target:   {target}");
     println!("  blake3:   {digest}");
+
+    // The manifest must be signed too, or a feed controller can rewrite the
+    // version around a genuinely-signed artifact and roll clients backwards.
+    // Updaters refuse an unsigned manifest by default, so say the next step
+    // out loud rather than leaving it to be discovered as a failure.
+    if !out.with_extension("json.sig").exists() {
+        println!(
+            "\nnow sign it, or the feed will be refused:\n  cargo packager signer sign {}",
+            out.display()
+        );
+    }
     Ok(out)
 }
 

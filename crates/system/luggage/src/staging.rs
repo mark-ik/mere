@@ -204,7 +204,9 @@ mod tests {
             Config {
                 feeds: vec![Feed::Directory(dir.to_path_buf())],
                 pubkey: engine.encode(keypair.pk.to_box().unwrap().to_string()),
-                windows: None,
+                // Staging is what is under test here, not manifest signing.
+                require_signed_manifest: false,
+                ..Default::default()
             },
         )
         .target("t".to_string())

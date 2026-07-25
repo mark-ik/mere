@@ -46,6 +46,19 @@
 //! The JSON shape upstream documents (`version`, `platforms.<target>.url` /
 //! `signature` / `format`, optional `notes` / `pub_date`), plus an optional
 //! per-platform `blake3` hex digest verified before the signature.
+//!
+//! **The manifest itself is signed too**, as a detached `luggage.json.sig`
+//! served beside it, and is verified before anything in it is believed. A
+//! per-artifact signature cannot cover the version and URL announced around
+//! it, so without this a feed can advertise an old signed build as a new
+//! version and roll a client backwards. See
+//! [`Config::require_signed_manifest`], which defaults to `true`.
+//!
+//! ## Staging
+//!
+//! [`Update::stage`] writes a verified artifact into an app-owned directory
+//! so "ready to restart" survives the app closing, and
+//! [`StagedUpdate::take_verified`] re-checks its digest at apply time.
 
 #![deny(missing_docs)]
 
