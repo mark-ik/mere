@@ -333,3 +333,17 @@ re-saves the workbench forme on every edit).
 > `control-plane`, `tile-state`) the re-scaffold is retiring. Projection
 > geometry + pane view-intent stores stay in `session-runtime` for now; they
 > migrate when their substrate consumers are cut.
+
+> **Pane-tier update, 2026-07-24.** The `frame` tier in the table above is now
+> `frisket` (renamed 2026-07-14), and it left this repo: it relocated to merecat
+> on 2026-07-18 because its `PaneContent` enumerates that app's panes. Ruled the
+> same day with Mark: the *reusable* pane model belongs in genet, beside the
+> tile contract, the Cambium split/tab furniture, and the surface currently
+> trapped in `ports/pelt`. Pelt needs panes and cannot depend on mere, so the
+> shared home has to sit at or below genet. **The name frisket travels to that
+> genet component; merecat's crate retires into it, and its graph binding
+> becomes content payload rather than tree structure.** forme and platen do not
+> move: forme's compare/mirror/focus-path relations only mean something over
+> graph members, and platen carries the document lane. Direction recorded in
+> genet's
+> [frisket pane component doc](../../../../genet/docs/2026-07-24_frisket_pane_component_direction.md).

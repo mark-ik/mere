@@ -510,10 +510,61 @@ be consumed by git, never by version** (woodshed `abdf524`).
 
 ## Still open
 
-- Bumping the six primaries' `rust-toolchain.toml` from 1.96.0 to current
-  stable (1.97.1), and `wgpu-graft` from 1.95.0. They are unaffected by the
-  machine default, so this is a deliberate pass with its own verification —
-  genet's Servo-derived tree is the one most likely to surface new lints.
+- ~~Bumping the toolchain pins~~ **partly done 2026-07-24.** Bumped and
+  verified: **mere**, **genet**, **woodshed** (1.96.0) and **wgpu-graft**
+  (1.95.0), all to **1.97.1**. Still on 1.96.0: **isometry**, **hocket**,
+  **merecat** — each fails to compile *before* the bump, so there was nothing
+  to verify against; see below. Findings:
+  - **The expected lint problem never materialised.** Only wgpu-graft gates on
+    warnings among the pinned repos (`RUSTFLAGS: -D warnings`), and its
+    published crate `grafting` is clean on both toolchains. mere, merecat,
+    hocket, and isometry have **no CI at all**; genet and woodshed gate on
+    check/test only. So the real bar was "does it still compile", not "are
+    there new lints".
+  - **rustup targets are per-toolchain.** genet's `wasm32-unknown-unknown`
+    gate went from clean to failing purely because that target was not
+    installed for 1.97.1. `rustup target add wasm32-unknown-unknown` fixed it.
+    Worth knowing before reading a cross-compile failure as a code regression.
+  - Pre-existing breakage found while verifying, none of it caused by the
+    bump and none of it mine to fix: **isometry** has a truncated
+    `isometry-net/src/session.rs` committed (ends on a dangling `#[derive]`);
+    **hocket** misses `Config.require_signed_manifest`, the in-flight luggage
+    auto-update work; **merecat** has an unclosed delimiter. genet's CI
+    `--all-targets` step has 9 errors on both toolchains, all from
+    `tests/unit/style`, which is pinned to an older Stylo surface and uses
+    `#![feature]` on stable. wgpu-graft's CI names a package
+    (`wgpu-native-texture-interop`) that does not exist in the workspace.
+
+### MSRV, ruled and defended 2026-07-24
+
+**1.88, on the nine community-facing crates only** — smolweb's four
+(`bcc70c7`) and retinue's five (`97eef7d`). Not a family-wide number: mere's
+graph floors at 1.96 (p2panda-auth) and a single `max()` would pessimise every
+leaf crate.
+
+The number is measured, not chosen. 1.85, the edition-2024 floor, was tried
+first and fails: `time` (through misfin's TLS lane) declares 1.88 itself, and
+the protocol crates plus retinue/sennet/tucket use let-chains, stabilized in
+1.88.
+
+**Cargo records `rust-version` but never checks the code builds on it**, so an
+undefended MSRV drifts silently and downstream meets a compile error instead of
+a clean "requires a newer rustc". Both repos now run an `msrv` CI job on
+exactly 1.88. retinue's job names its five host crates rather than running at
+the workspace root: the firmware is a workspace member that reaches rustc 1.93
+through `fixed`, and it is unpublished, so it deliberately does not inherit the
+floor.
+
+Everything else stays silent on purpose. Apps (merecat, hocket, woodshed's
+binary, isometry, pelt) have no downstream consumers, so the toolchain pin is
+the real control; isometry's stale `rust-version = "1.80"` survives only
+because it is still edition 2021. The ~21 published mere/genet crates have no
+external consumers yet either, so an MSRV there would be maintenance for an
+audience that does not exist.
+
+Smolweb had no CI at all and had never been formatted or lint-gated — it
+carried genet's house style without genet's rustfmt config. It now has the
+full gate set, and the MSRV work cleared ten clippy lints along the way.
 - ~~`document-host` versus servitor's capability model~~ **closed 2026-07-24**
   (mere `4b8d875f`). The `doc/` import bridge now derives its grant through
   `Cap::scope`, denying on a parse failure so the lane stays fail-closed, and
