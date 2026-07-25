@@ -472,6 +472,56 @@ Plan ordering is explicit:
 
 ## Findings
 
+### 2026-07-25: the reusable runtime service needs a ruling on who owns transport
+
+Surveyed toward Phase B's remaining "reusable multi-domain service API". Three
+things checked; two are real, and the third is a non-finding worth recording
+because I was one commit from "fixing" it.
+
+**1. The join ceremony is hand-written four times.** Every consumer of
+`SyncedSpace` repeats the same sequence — `LogSync::builder(store.sync_store(),
+endpoint, gossip).spawn()` → `.stream(Topic::from(id), true)` → `.subscribe()`
+→ `SyncedSpace::drive(sub, accept)` → hold `_log_sync` + `_handle` for
+liveness, drop-order-sensitive. It appears in mesh's `SyncedMesh::join`
+(production), murm's `SyncedCabal` (production), gemot's constitution
+convergence test, and gemot's `moot-peer` example. The domain-specific part is
+three values: the store handle, the topic, and the accept closure.
+
+**2. The blocker is not code, it is a posture conflict.** gemot's manifest
+states p2panda-net is **dev-only by design** — "It provides the stores + folds
++ `verify`; the host builds the ... p2panda-net / p2panda-sync / tokio-stream /
+tokio are dev-only". mesh made the opposite choice and depends on p2panda-net
+for its production `sync` module. So Phase D's done-when — "a consumer joins a
+Moot through one domain API and imports no p2panda crate" — cannot be satisfied
+as written without one of:
+
+  - **(a) gemot takes the dependency**, gaining a `SyncedMoot` mirroring
+    `SyncedMesh`, and its "host builds the transport" note is retired;
+  - **(b) the shared service lives in `murm-replication`** as a host-facing
+    `JoinedSpace { store_handle, topic, accept }`, so gemot stays
+    transport-free and the *consumer* imports the replication crate rather
+    than p2panda directly — which satisfies the criterion's letter and keeps
+    gemot's posture;
+  - **(c) the criterion is wrong for Moot** and joining is explicitly a host
+    concern, in which case Phase D should say so.
+
+**(b) is the shape the four call sites point at** — the ceremony is identical
+and the variation is exactly the three values a `JoinedSpace::join` would take.
+But this is a boundary ruling about who owns transport, not an implementation
+detail, so it is recorded rather than guessed. Note that murm would hold
+`Option<JoinedSpace>` (it supports a no-transport mode), which composes.
+
+**3. NON-finding: murm's `SyncStatus` / `SyncRound` are not stale duplicates.**
+They look like copies of `murm_replication`'s and are not: murm's carry
+`posts_received`, and its own doc states the gossip counters are "merged with
+the shared LogSync drain's `murm_replication::SyncStatus`" because "the LogSync
+side has no notion of gossip posts". They are documented domain supersets that
+compose the shared type. Recorded because the resemblance is close enough to
+invite exactly the well-meaning unification the
+[intake-divergence test](#2026-07-25-verification-is-restored-and-phase-bs-first-criterion-is-false-as-written)
+was just written to prevent one section above — and I nearly did it here.
+
+
 ### 2026-07-25: verification is restored, and Phase B's first criterion is false as written
 
 **The 07-13/07-14 resolver stall is repaired.** Those entries record that
