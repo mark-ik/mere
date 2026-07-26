@@ -128,6 +128,18 @@ pub enum DenyReason {
     /// The service rule requires a transport-authenticated peer.
     #[error("transport identity required")]
     TransportIdentityRequired,
+    /// The transport authenticated a peer, and the claimed subject is not it
+    /// (plan D6). Presenting someone else's authority over your own
+    /// authenticated connection is exactly what this refuses.
+    #[error("claimed subject is not the transport-authenticated peer")]
+    SubjectNotTransportPeer,
+    /// The hello frame was oversized, truncated, or not decodable.
+    #[error("malformed session hello")]
+    MalformedHello,
+    /// The session proof did not verify against the claimed subject and the
+    /// responder's own view of the connection.
+    #[error("session proof invalid")]
+    SessionProofInvalid,
     /// The delegation chain failed validation.
     #[error("delegation rejected: {0}")]
     Delegation(#[source] ChainFault),

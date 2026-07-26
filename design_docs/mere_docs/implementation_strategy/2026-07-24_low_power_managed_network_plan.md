@@ -917,8 +917,48 @@ determinism and ledger-abuse cases: 17 tests green, clippy and fmt clean,
 `cargo test -p personae` untouched and green. The first supported action
 is exactly the planned narrow one: `mere.network` / `/services/murm` /
 `connect`, with the leaf's scope resource required to equal the network
-id. Next slice: **V6** (the bounded handshake and one authorized Murm
-service over Memory and p2panda).
+id.
+
+### 2026-07-26 — V6 landed (handshake), with two deviations
+
+**V6 (Mere).** `SessionHello` / `SessionReply` / `respond` in
+`network-policy::handshake`, postcard-encoded and bounded on both sides.
+The transcript binds D6's fields, including the responder's **own**
+observation of the connection (`SessionBinding`: protocol, transport peer,
+ingress interface, link) plus the delegation certificate ids, signed by a
+personae-derived key attested to the subject master. 30 tests green.
+
+Two deviations from the plan text, both deliberate:
+
+1. **The handshake is sans-io, and the async half is an optional
+   `tokio` feature** (`accept_session` / `initiate_session`, one bounded
+   `u32` length prefix). The plan sketched
+   `policy.accept(accepted_session, ...)`, which would have made
+   `network-policy` depend on `mere-transport` and therefore on iroh,
+   p2panda, and QUIC. A policy crate should not carry a transport stack, and
+   retinue already proves the sans-io-core-plus-shell shape in this
+   ecosystem. Consequence: the caller supplies a `SessionBinding` rather
+   than an `AcceptedSession`, so the adapter converting one to the other is
+   a few lines at each transport call site.
+2. **D6's subject/peer rule became a policy check, not a handshake check.**
+   `evaluate` now denies `SubjectNotTransportPeer` whenever the transport
+   proved a peer and the claimed subject is not it. It belongs there because
+   it holds for any request, handshake or not.
+
+The plan's p2panda-specific proof ("a valid Personae signature from the
+wrong transport peer is rejected") is covered twice at the policy layer,
+where the property actually lives: a stranger presenting the member's
+certificate over their own authenticated connection is refused
+(`ChainFault::SubjectMismatch`), and a hello claiming the member's subject
+while signed by the stranger fails its proof. A replay of a valid hello on a
+different Reticulum link is refused too, since the link is in the transcript.
+
+**Still open for V6:** the done-condition names "one real Murm connection".
+What exists is the transport-shaped proof over a `tokio::io::duplex` pair
+(`tests/over_transport.rs`): an admitted session carries application bytes,
+and a refused one delivers **zero** application bytes. Wiring the adapter
+into murm's real accept path, and running it over p2panda's endpoint, is the
+remaining work and is the natural head of V7.
 
 ## Completion
 

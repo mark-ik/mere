@@ -8,11 +8,23 @@ description = "Owner-controlled session admission for Mere services: local polic
 keywords = ["policy", "capability", "delegation", "local-first"]
 categories = ["network-programming", "authentication"]
 
+[features]
+default = []
+# Async framing for the handshake. The decision core stays sans-io; enable
+# this when a caller wants the socket half instead of writing its own.
+tokio = ["dep:tokio"]
+
 [lib]
 name = "network_policy"
 path = "src/lib.rs"
 
 [dependencies]
 personae = { workspace = true }
+blake3 = { workspace = true }
+postcard = { version = "1", features = ["alloc"] }
 serde = { version = "1", features = ["derive"] }
 thiserror = "1"
+tokio = { version = "1", features = ["io-util"], optional = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["io-util", "macros", "rt", "sync"] }

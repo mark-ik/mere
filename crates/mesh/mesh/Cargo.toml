@@ -23,18 +23,20 @@ blake3 = "1.5"
 proofs.workspace = true
 # The three sync traits LogSync reconciles against (`LogStore` + `TopicStore`,
 # plus `OperationStore`). Default features off: the mesh brings muniment through
-# the mooting adapter instead of p2panda-store's bundled SQLite backend.
+# `murm-replication`'s `MunimentStore`, not p2panda-store's bundled SQLite
+# backend. (This said "the mooting adapter" until 2026-07-26; mooting stopped
+# being a mesh dependency when the shared store moved to murm-replication.)
 p2panda-store = { version = "0.7.0", default-features = false }
 # Shared muniment-backed store and LogSync drain.
 murm-replication = { workspace = true }
 muniment = { path = "../../eidetic/muniment", features = ["redb"] }
-# The sync lane (`sync::SyncedMesh`): LogSync over the store. `p2panda-net`
-# is the protocol — its `Endpoint`/`Gossip` still come injected from the host
+# The sync lane (`sync::SyncedMesh`): `murm-replication::JoinedSpace` over the
+# store. `p2panda-net` stays for the `Endpoint`/`Gossip` the host injects
 # (endpoint-decoupled), so the lib never builds a `P2pandaTransport`.
-# `p2panda-sync` supplies the event types; `rt` runs the session, `time`
-# bounds the manual `resync`.
+# `p2panda-sync`'s event types belong to the drain now, so mesh stopped
+# referencing them and the dependency was dropped 2026-07-26. `rt` runs the
+# session, `time` bounds the manual `resync`.
 p2panda-net = "0.7.0"
-p2panda-sync = "0.7.0"
 tokio = { version = "1", features = ["rt", "time"] }
 
 [dev-dependencies]

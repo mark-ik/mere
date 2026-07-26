@@ -271,8 +271,13 @@ Done when:
 - local authoring, LogSync receipt, gossip receipt, and drop import return the
   same decision for one operation corpus;
 - unauthorized or stale operations leave the live store unchanged;
-- the runtime can join, leave, resync, and report one space without exposing a
-  p2panda type to its consumer;
+- **(amended 2026-07-26)** the runtime can join, leave, resync, and report one
+  space without its consumer naming a session, subscription, or topic type.
+  Was "without exposing a p2panda type", which cannot hold and should not: the
+  `accept` closure is handed the domain's own `Operation<E>`, and `Endpoint` +
+  `Gossip` pass through from the host's `sync_parts`. **Met** by
+  `JoinedSpace`; the session types now appear in two files, both inside
+  `murm-replication`. Reasoning in the JoinedSpace finding below;
 - injected settings control limits and transport preference.
 
 ### Phase C: rebase Murm direct exchange
@@ -344,7 +349,12 @@ member terms, deterministic revision folding, and a durable redb-backed store.
 
 Done when:
 
-- a consumer joins a Moot through one domain API and imports no p2panda crate;
+- **(met 2026-07-26, under ruling (b))** a consumer joins a Moot through one
+  domain API and imports no p2panda crate. The constitution and delegation
+  convergence proofs are the standing receipt. "One API" reads as one per
+  layer: the gemot store plus `JoinedSpace::join`. A single `Moot::join` would
+  put the ceremony in gemot, which the transport-ownership ruling declined and
+  no consumer has asked for;
 - the same Moot converges through live sync and native drop;
 - unauthorized membership, checkpoint, retention, and prune operations fail
   before mutation;
@@ -396,39 +406,68 @@ store assembly.
 
 Done when:
 
-- mesh depends on `murm-replication` rather than both `transport` and `mooting`;
+- **(met, verified 2026-07-26)** mesh depends on `murm-replication` rather than
+  both `transport` and `mooting`. `mooting` is absent from mesh's manifest and
+  `transport` is dev-only. The same check dropped mesh's now-unreferenced
+  `p2panda-sync` and murm's `p2panda-net` + `p2panda-sync`, which the
+  `JoinedSpace` extraction had made dead;
 - one backend and processor implementation serves conversation, Moot, and mesh;
 - each domain's two-peer tests cover online exchange, offline catch-up,
   withdrawal, checkpoint, and late-peer return.
 
-### Phase F: remove host protocol assembly
+### Phase F: keep host protocol assembly from being built
 
-Replace `meerkat/src/sync.rs` and future Merecat equivalents with service
-adapters. The app provides configuration and receives typed status/events.
+**Restated 2026-07-26. Both of this phase's original subjects are gone.**
+It was written to replace `meerkat/src/sync.rs`, and meerkat was deleted
+2026-07-18; merecat has one manifest naming no p2panda, murm, gemot, or
+mooting dependency, so it has no peer lane to clean up. There is no host
+protocol assembly left to remove.
+
+So this is now a forward constraint rather than a removal task, which is the
+cheaper direction anyway: when merecat grows a peer lane it consumes services
+from the start and never assembles protocol. The app provides configuration
+and receives typed status and events.
 
 Done when:
 
-- Merecat and the retiring in-workspace host have no direct `p2panda-net`,
-  `p2panda-sync`, or store-trait dependencies;
+- **(vacuously true today, and to be held)** Merecat has no direct
+  `p2panda-net`, `p2panda-sync`, or store-trait dependencies. True now because
+  the lane does not exist; the criterion earns its keep by still holding once
+  it does. The reference for what the lane consumes instead is
+  `murm-replication::JoinedSpace` plus the domain store;
 - connect, disconnect, resync, import, export, and status are ordinary service
   commands;
 - the app can run fully offline with peer services disabled;
 - a headed receipt shows honest connected, catching-up, retained, body-erased,
   and prefix-pruned states.
 
-### Phase G: promote the corrected families
+### Phase G: promote the corrected families (WITHDRAWN 2026-07-23)
 
-Promote only after Phases A through F establish the public seams:
+**This phase is void, and nothing replaces it.** The
+[repo consolidation ruling](2026-07-23_repo_consolidation_plan.md) settled that
+Mere is the platform and its extracted families stay its components, with the
+bar for a separate repository being coherent identity apart from the six
+primaries. It withdraws the murm/moot promotion by name. `repos/murm` and
+`repos/moot` will not be founded, so the standalone-clone done-conditions
+below describe repositories that will never exist.
 
-- `repos/murm`: peer transport, `murm-replication`, and direct exchange;
-- `repos/moot`: governed-space domain over the branch-tracked Murm dependency;
-- Mere: optional projection adapters, with peer dependencies absent from its
-  default core;
-- Merecat: direct dependencies on Mere, Murm, Moot, Personae, and Serval.
+Marked here rather than deleted because Phases A through F were sequenced
+"promote only after", and a reader needs to know that gate was lifted rather
+than left unmet. The parts worth keeping outlived the phase and are ordinary
+requirements now: **Mere builds offline without peer features**, and
+**committed manifests contain no local paths**.
 
-Done when fresh standalone clones build and test, committed manifests contain
-no local paths, Mere builds offline without peer features, and Merecat performs
-the same two-peer scenario through the promoted libraries.
+The original text, for the record:
+
+> Promote only after Phases A through F establish the public seams:
+> `repos/murm` (peer transport, `murm-replication`, direct exchange);
+> `repos/moot` (governed-space domain over the branch-tracked Murm
+> dependency); Mere (optional projection adapters, peer dependencies absent
+> from its default core); Merecat (direct dependencies on Mere, Murm, Moot,
+> Personae, and Serval). Done when fresh standalone clones build and test,
+> committed manifests contain no local paths, Mere builds offline without peer
+> features, and Merecat performs the same two-peer scenario through the
+> promoted libraries.
 
 ## 6. Deletion and native-drop consequences
 
@@ -472,11 +511,50 @@ Plan ordering is explicit:
 
 ## Findings
 
+### 2026-07-26: the done-conditions were audited against the tree, and three had drifted
+
+Prompted by asking what is actually left in this lane. Checking the phase
+criteria against the code rather than against memory found three in a state no
+reader could infer, so the phase text now carries current truth and this entry
+carries why. Rule applied, per DOC_POLICY §3: correct a live plan in place,
+never leave a criterion pointing at something that no longer exists.
+
+- **Phase E #1 was already met** and had been for some time. `mooting` is
+  absent from mesh's manifest; `transport` is dev-only. Nobody had said so.
+- **Phase F's subjects are both gone.** It was written to replace
+  `meerkat/src/sync.rs`, and meerkat was deleted 2026-07-18. merecat, its other
+  subject, has one manifest naming no p2panda, murm, gemot, or mooting
+  dependency, so there is no peer lane to clean up either. Restated as a
+  forward constraint: when merecat grows that lane it consumes services from
+  the start. Its first criterion is true vacuously today and earns its keep by
+  still holding once the lane exists.
+- **Phase G is void.** The 2026-07-23 consolidation ruling withdrew the
+  murm/moot promotion by name, so its standalone-clone conditions describe
+  repositories that will never be founded. Marked withdrawn rather than
+  deleted, because Phases A-F were gated on "promote only after" and a reader
+  needs to know that gate was lifted rather than unmet. Two requirements
+  survive it as ordinary ones: Mere builds offline without peer features, and
+  committed manifests carry no local paths.
+
+**The pattern worth naming.** All three drifted the same way: the plan was
+right when written, and the *world* moved (a crate deleted, a promotion
+withdrawn, a dependency quietly satisfied). A criterion is a claim about the
+tree, and it decays exactly like the manifest comment this lane caught
+yesterday. Auditing them costs one pass and is worth doing whenever a phase is
+declared complete.
+
+**Two dead dependencies fell out of the same pass**, both made dead by
+`JoinedSpace`: mesh's `p2panda-sync` and murm's `p2panda-net` + `p2panda-sync`
+were declared but unreferenced. Removed with Mark's go-ahead; 86 tests green
+after (mesh 29, murm 57). This is the done-condition recorded with the
+transport ruling, now measured: the consumers' direct p2panda surface shrank
+to what the drain cannot carry, and for murm it vanished.
+
 ### 2026-07-25: JoinedSpace landed; the seven ceremonies are one call
 
 Executes the (b) ruling below, same day. `murm_replication::JoinedSpace<E>` is
 generic over extensions only: the store and log-id types are erased at
-construction (the session is kept alive as an opaque `Send + Sync` box — the
+construction (the session is kept alive as an opaque `Send + Sync` box, so the
 erasure murm hand-rolled is now the crate's implementation detail), so a
 holder names one type and the drop order (drain → stream handle → session
 actor) is fixed in one place instead of by field position at every site. The
@@ -493,7 +571,7 @@ collapsed to one call.
 
 **The done-condition, measured rather than asserted.** The first write-up of
 this entry claimed the gemot proofs imported no p2panda crate; a grep proved
-that false — `join` took a `Topic`, so every site still imported
+that false: `join` took a `Topic`, so every site still imported
 `p2panda_core`. Fixed at the source rather than in the prose: `join` now takes
 `impl Into<Topic>`, callers pass their raw 32-byte space id, and the claim is
 true by construction. Verified after the change:
@@ -527,7 +605,7 @@ p2panda-net v0.7.0
 p2panda-net has been in gemot's **production** graph since murm-replication
 became a normal dependency there. The manifest comment was describing an
 intent the graph already contradicted, and reading the comment plus the
-dev-dependency block — without the transitive check — is how it went
+dev-dependency block, without the transitive check, is how it went
 unnoticed. gemot's manifest now states the version that is true.
 
 This does not change the ruling; it changes its reason. (b) is right because

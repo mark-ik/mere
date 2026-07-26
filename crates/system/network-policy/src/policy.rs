@@ -152,6 +152,14 @@ impl LocalNetworkPolicy {
         if rule.require_transport_identity && request.transport_peer.is_none() {
             return deny(DenyReason::TransportIdentityRequired);
         }
+        // D6: where the transport proved a peer, the claimed subject must be
+        // that peer. Without this, a valid certificate issued to someone else
+        // could be replayed over an attacker's own authenticated connection.
+        if let Some(peer) = request.transport_peer
+            && peer != request.subject
+        {
+            return deny(DenyReason::SubjectNotTransportPeer);
+        }
 
         if rule.access == ServiceAccess::MemberOnly {
             let depth = self

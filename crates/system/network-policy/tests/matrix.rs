@@ -140,7 +140,8 @@ fn request(delegations: Vec<SignedDelegationCertificate>) -> SessionRequest {
         },
         class: TrafficClass::Interactive,
         subject: member().master_public_key().to_bytes(),
-        transport_peer: Some([9; 32]),
+        // D6: where the transport proved a peer, it must be the subject.
+        transport_peer: Some(member().master_public_key().to_bytes()),
         delegations,
     }
 }
@@ -339,6 +340,20 @@ fn capacity_refuses_after_otherwise_valid_authority() {
         denial(policy.evaluate(&ledger, &admitted, NOW_MS, 1)),
         DenyReason::CapacityExhausted,
         "the same valid authority is refused only for capacity"
+    );
+}
+
+#[test]
+fn a_subject_that_is_not_the_authenticated_peer_is_refused() {
+    // D6, at the policy layer: holding valid authority does not let you use it
+    // over a connection the transport proved belongs to someone else.
+    let policy = policy_with(member_only_rule());
+    let ledger = RevocationLedger::new();
+    let mut impersonating = request(vec![member_grant()]);
+    impersonating.transport_peer = Some([0xcd; 32]);
+    assert_eq!(
+        denial(policy.evaluate(&ledger, &impersonating, NOW_MS, 0)),
+        DenyReason::SubjectNotTransportPeer
     );
 }
 

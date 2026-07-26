@@ -22,10 +22,16 @@
 //! enforces the rest.
 
 mod chain;
+mod handshake;
+#[cfg(feature = "tokio")]
+mod io;
 mod policy;
 mod types;
 
 pub use chain::{RevocationLedger, TrustedRoot, validate_chain};
+pub use handshake::{HandshakeError, SessionBinding, SessionHello, SessionReply, respond};
+#[cfg(feature = "tokio")]
+pub use io::{IoHandshakeError, accept_session, initiate_session};
 pub use policy::{
     DiscoveryPolicy, LocalNetworkPolicy, POLICY_VERSION, ServiceAccess, ServiceRule, TransitPolicy,
 };

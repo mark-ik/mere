@@ -1,0 +1,183 @@
+//! V6 done-condition: an owner rule admits or rejects a real connection
+//! **before** the application above ever sees the stream.
+//!
+//! Runs over a `tokio::io::duplex` pair, which is the same stream shape
+//! `MemoryTransport` hands back from `accept`, so the sequence exercised here
+//! is exactly what a Murm acceptance adapter performs: accept the session,
+//! run the handshake on the raw stream, and only then hand it upward.
+
+#![cfg(feature = "tokio")]
+
+use std::collections::BTreeMap;
+
+use network_policy::{
+    DenyReason, LocalNetworkPolicy, NetworkId, ProfileRef, RequestedAction, RevocationLedger,
+    ServiceAccess, ServiceRule, SessionBinding, SessionDecision, SessionHello, TrafficClass,
+    TrustedRoot, accept_session, initiate_session,
+};
+use personae::delegation::{
+    CapabilityScope, DelegationCertificate, DelegationParent, SignedDelegationCertificate,
+};
+use personae::{IdentityProvider, InMemoryProvider};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+const NETWORK: NetworkId = NetworkId([3; 32]);
+const ROOT_AUTHORITY: [u8; 32] = [7; 32];
+const MURM: &str = "/services/murm";
+const PROTOCOL: &[u8] = b"mere/murm/v1";
+const NOW_MS: u64 = 50;
+/// What the service sends once a session is admitted.
+const APPLICATION_BYTES: &[u8] = b"murm-application-payload";
+
+fn root() -> InMemoryProvider {
+    InMemoryProvider::from_seed([1; 32])
+}
+
+fn member() -> InMemoryProvider {
+    InMemoryProvider::from_seed([4; 32])
+}
+
+fn grant_to(subject: [u8; 32]) -> SignedDelegationCertificate {
+    SignedDelegationCertificate::issue(
+        &root(),
+        DelegationCertificate::new(
+            DelegationParent::Root(ROOT_AUTHORITY),
+            root().master_public_key().to_bytes(),
+            subject,
+            CapabilityScope {
+                domain: "mere.network".into(),
+                resource: NETWORK.0.to_vec(),
+                path_prefix: MURM.into(),
+                actions: ["connect".to_string()].into_iter().collect(),
+            },
+            5,
+            10,
+            Some(100),
+            1,
+            [1; 32],
+        ),
+    )
+    .expect("issue certificate")
+}
+
+fn policy(access: ServiceAccess) -> LocalNetworkPolicy {
+    let mut policy = LocalNetworkPolicy::closed(NETWORK);
+    policy.accepted_profiles = vec![ProfileRef {
+        id: "mere.base".into(),
+        revision: 1,
+    }];
+    policy.trusted_roots = vec![TrustedRoot {
+        authority: ROOT_AUTHORITY,
+        issuer: root().master_public_key().to_bytes(),
+    }];
+    policy.services = BTreeMap::from([(
+        MURM.to_string(),
+        ServiceRule {
+            access,
+            require_transport_identity: false,
+            max_sessions: None,
+        },
+    )]);
+    policy
+}
+
+fn hello(binding: &SessionBinding, delegations: Vec<SignedDelegationCertificate>) -> SessionHello {
+    SessionHello::issue(
+        &member(),
+        NETWORK,
+        ProfileRef {
+            id: "mere.base".into(),
+            revision: 2,
+        },
+        RequestedAction {
+            domain: "mere.network".into(),
+            path: MURM.into(),
+            action: "connect".into(),
+        },
+        TrafficClass::Interactive,
+        [42; 32],
+        binding,
+        delegations,
+    )
+    .expect("issue hello")
+}
+
+/// Drive both halves over one duplex pair. Returns the responder decision and
+/// whatever the initiator managed to read from the application afterwards.
+async fn exchange(access: ServiceAccess) -> (SessionDecision, Vec<u8>) {
+    let policy = policy(access);
+    let ledger = RevocationLedger::new();
+    let binding = SessionBinding::authenticated(PROTOCOL, member().master_public_key().to_bytes());
+    let subject = member().master_public_key().to_bytes();
+    let (mut client, mut server) = tokio::io::duplex(4096);
+
+    let server_policy = policy.clone();
+    let server_binding = binding.clone();
+    let responder = tokio::spawn(async move {
+        let decision = accept_session(
+            &mut server,
+            &server_policy,
+            &ledger,
+            &server_binding,
+            NOW_MS,
+            0,
+        )
+        .await
+        .expect("responder handshake");
+        // The service layer sits here: it only ever receives an admitted
+        // stream, so a refusal must never reach it.
+        if decision.is_accept() {
+            server
+                .write_all(APPLICATION_BYTES)
+                .await
+                .expect("service write");
+            server.flush().await.expect("flush");
+        }
+        drop(server);
+        decision
+    });
+
+    let reply = initiate_session(
+        &mut client,
+        &hello(&binding, vec![grant_to(subject)]),
+        &policy.limits,
+    )
+    .await
+    .expect("initiator handshake");
+
+    let mut application = Vec::new();
+    client
+        .read_to_end(&mut application)
+        .await
+        .expect("read application bytes");
+    let decision = responder.await.expect("responder task");
+    assert_eq!(
+        reply.is_accept(),
+        decision.is_accept(),
+        "both ends agree on the outcome"
+    );
+    (decision, application)
+}
+
+#[tokio::test]
+async fn an_authorized_session_is_admitted_and_then_carries_application_bytes() {
+    let (decision, application) = exchange(ServiceAccess::MemberOnly).await;
+    assert!(decision.is_accept());
+    assert_eq!(
+        application, APPLICATION_BYTES,
+        "the service speaks only after admission"
+    );
+}
+
+#[tokio::test]
+async fn a_refused_session_never_reaches_the_application() {
+    let (decision, application) = exchange(ServiceAccess::Disabled).await;
+    match decision {
+        SessionDecision::Deny { reason } => assert_eq!(reason, DenyReason::ServiceNotOffered),
+        SessionDecision::Accept { .. } => panic!("the owner did not offer this service"),
+    }
+    assert!(
+        application.is_empty(),
+        "not one application byte crosses a refused session"
+    );
+}
