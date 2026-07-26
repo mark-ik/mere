@@ -24,7 +24,8 @@
 
 use network_policy::{
     AdmittedPrincipal, DenyReason, HandshakeError, LocalNetworkPolicy, NetworkId, ProfileRef,
-    RequestedAction, RevocationLedger, SessionBinding, SessionHello, TrafficClass, admit,
+    CarrierKind, ProofBinding, RequestedAction, RevocationLedger, SessionFacts,
+    SessionHello, TrafficClass, admit,
 };
 use personae::IdentityProvider;
 use personae::delegation::SignedDelegationCertificate;
@@ -67,7 +68,7 @@ pub fn open_session<P: IdentityProvider>(
     profile: ProfileRef,
     class: TrafficClass,
     nonce: [u8; 32],
-    binding: &SessionBinding,
+    binding: &ProofBinding,
     delegations: Vec<SignedDelegationCertificate>,
 ) -> Result<SessionHello, HandshakeError> {
     SessionHello::issue(
@@ -94,11 +95,11 @@ pub fn admit_session(
     policy: &LocalNetworkPolicy,
     ledger: &RevocationLedger,
     hello_bytes: &[u8],
-    binding: &SessionBinding,
+    facts: &SessionFacts,
     now_ms: u64,
     active_sessions: u32,
 ) -> (Vec<u8>, Result<AdmittedPrincipal, DenyReason>) {
-    let (reply, outcome) = admit(policy, ledger, hello_bytes, binding, now_ms, active_sessions);
+    let (reply, outcome) = admit(policy, ledger, hello_bytes, facts, now_ms, active_sessions);
     let outcome = outcome.and_then(|principal| {
         if principal.action == connect_action() {
             Ok(principal)
@@ -107,7 +108,12 @@ pub fn admit_session(
             // action, so reaching here means a hello was admitted for a
             // different service on a Graphshell listener. Refuse rather than
             // serve projections on someone else's grant.
-            Err(DenyReason::ActionNotCovered)
+            //
+            // `ActionNotOffered`, not `ActionNotCovered`: the authority did
+            // not fall short — it was fine for what it asked. This listener
+            // simply does not serve that action, which is a different fact and
+            // deserves a different word to whoever reads the refusal.
+            Err(DenyReason::ActionNotOffered)
         }
     });
     (reply, outcome)
@@ -188,13 +194,20 @@ mod tests {
         policy
     }
 
-    fn binding() -> SessionBinding {
-        SessionBinding::protocol_only(PROJECTION_PROTOCOL)
+    /// What the initiator signs against: an unauthenticated carrier here, so
+    /// only the protocol is bound.
+    fn binding() -> ProofBinding {
+        ProofBinding::initiator(PROJECTION_PROTOCOL, None, None)
+    }
+
+    /// What the responder observed for that same connection.
+    fn facts() -> SessionFacts {
+        SessionFacts::new(PROJECTION_PROTOCOL, CarrierKind::P2panda)
     }
 
     fn hello_from<P: IdentityProvider>(
         identity: &P,
-        binding: &SessionBinding,
+        binding: &ProofBinding,
         delegations: Vec<SignedDelegationCertificate>,
     ) -> Vec<u8> {
         open_session(
@@ -225,7 +238,7 @@ mod tests {
             &policy(),
             &RevocationLedger::default(),
             &hello,
-            &binding(),
+            &facts(),
             NOW_MS,
             0,
         );
@@ -244,7 +257,7 @@ mod tests {
             &policy(),
             &RevocationLedger::default(),
             &hello,
-            &binding(),
+            &facts(),
             NOW_MS,
             0,
         );
@@ -269,7 +282,7 @@ mod tests {
             &policy(),
             &RevocationLedger::default(),
             &hello,
-            &binding(),
+            &facts(),
             NOW_MS,
             0,
         );
@@ -292,7 +305,8 @@ mod tests {
             vec![projection_grant(subject, PROJECTION_SERVICE, GRAPHSHELL_DOMAIN)],
         );
 
-        let elsewhere = SessionBinding::authenticated(PROJECTION_PROTOCOL, [42; 32]);
+        let elsewhere =
+            SessionFacts::authenticated(PROJECTION_PROTOCOL, CarrierKind::P2panda, [42; 32]);
         let (_, outcome) = admit_session(
             &policy(),
             &RevocationLedger::default(),
