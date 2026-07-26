@@ -4,7 +4,7 @@
 //! The lane-D gate measurement: can Container + facets match the current rkyv
 //! `Node` on snapshot load and hot graph ops?
 //!
-//! Run: `cargo run --release -p graph-kernel --example dissolution_gate`
+//! Run: `cargo run --release -p mere-kernel --example dissolution_gate`
 //! Node count overrides with `DISSOLUTION_GATE_NODES` (default 50_000, the
 //! scale the node-image plan measured at).
 //!
@@ -167,7 +167,10 @@ fn thin_session(count: usize) -> (Vec<ThinContainer>, Vec<FacetRow>) {
         let mut rows: Vec<(String, String)> = Vec::new();
         rows.push(("web.compat".into(), format!("example-{}.test", i % 997)));
         if i % 5 != 0 {
-            rows.push(("image.thumbnail".into(), format!("blake3:{:064x}/320x200", i)));
+            rows.push((
+                "image.thumbnail".into(),
+                format!("blake3:{:064x}/320x200", i),
+            ));
         }
         if i % 10 != 0 {
             rows.push(("image.favicon".into(), format!("blake3:{:064x}/16x16", i)));
@@ -182,7 +185,10 @@ fn thin_session(count: usize) -> (Vec<ThinContainer>, Vec<FacetRow>) {
             "visit.history".into(),
             format!("{},{}", 1_750_000_000_000u64 + i as u64, i),
         ));
-        facets.push(FacetRow { node: id, facets: rows });
+        facets.push(FacetRow {
+            node: id,
+            facets: rows,
+        });
     }
     (containers, facets)
 }
@@ -250,10 +256,17 @@ fn main() {
     // --- Arm A: today, images inline -------------------------------------
     {
         println!("A  fat node, images inline, rkyv");
-        let snapshot = FatSnapshot { nodes: fat_nodes(count, true), timestamp_secs: 1 };
+        let snapshot = FatSnapshot {
+            nodes: fat_nodes(count, true),
+            timestamp_secs: 1,
+        };
         let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&snapshot).unwrap();
         let encoded = bytes.len();
-        println!("    {:<28} {:>10.1} MiB", "encoded", encoded as f64 / 1048576.0);
+        println!(
+            "    {:<28} {:>10.1} MiB",
+            "encoded",
+            encoded as f64 / 1048576.0
+        );
         let load = time_it("load (deserialize)", || {
             let s = rkyv::from_bytes::<FatSnapshot, rkyv::rancor::Error>(&bytes).unwrap();
             std::hint::black_box(&s);
@@ -261,8 +274,15 @@ fn main() {
         let loaded = rkyv::from_bytes::<FatSnapshot, rkyv::rancor::Error>(&bytes).unwrap();
         let hot = time_it("hot: tag filter + by-id", || {
             let wanted = tag_for(11);
-            let n = loaded.nodes.iter().filter(|n| n.tags.contains(&wanted)).count();
-            let found = loaded.nodes.iter().find(|n| n.node_id.ends_with("000000042"));
+            let n = loaded
+                .nodes
+                .iter()
+                .filter(|n| n.tags.contains(&wanted))
+                .count();
+            let found = loaded
+                .nodes
+                .iter()
+                .find(|n| n.node_id.ends_with("000000042"));
             std::hint::black_box((n, found));
         });
         results.push(ArmResult {
@@ -276,10 +296,17 @@ fn main() {
     // --- Arm A-post-D0: today's shape, images as refs ---------------------
     {
         println!("\nA' fat node, images as refs (post-D0), rkyv");
-        let snapshot = FatSnapshot { nodes: fat_nodes(count, false), timestamp_secs: 1 };
+        let snapshot = FatSnapshot {
+            nodes: fat_nodes(count, false),
+            timestamp_secs: 1,
+        };
         let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&snapshot).unwrap();
         let encoded = bytes.len();
-        println!("    {:<28} {:>10.1} MiB", "encoded", encoded as f64 / 1048576.0);
+        println!(
+            "    {:<28} {:>10.1} MiB",
+            "encoded",
+            encoded as f64 / 1048576.0
+        );
         let load = time_it("load (deserialize)", || {
             let s = rkyv::from_bytes::<FatSnapshot, rkyv::rancor::Error>(&bytes).unwrap();
             std::hint::black_box(&s);
@@ -287,8 +314,15 @@ fn main() {
         let loaded = rkyv::from_bytes::<FatSnapshot, rkyv::rancor::Error>(&bytes).unwrap();
         let hot = time_it("hot: tag filter + by-id", || {
             let wanted = tag_for(11);
-            let n = loaded.nodes.iter().filter(|n| n.tags.contains(&wanted)).count();
-            let found = loaded.nodes.iter().find(|n| n.node_id.ends_with("000000042"));
+            let n = loaded
+                .nodes
+                .iter()
+                .filter(|n| n.tags.contains(&wanted))
+                .count();
+            let found = loaded
+                .nodes
+                .iter()
+                .find(|n| n.node_id.ends_with("000000042"));
             std::hint::black_box((n, found));
         });
         results.push(ArmResult {
@@ -303,10 +337,18 @@ fn main() {
     {
         println!("\nB  container + facet sidecar, image refs, rkyv");
         let (containers, facets) = thin_session(count);
-        let snapshot = ThinSnapshot { containers, facets, timestamp_secs: 1 };
+        let snapshot = ThinSnapshot {
+            containers,
+            facets,
+            timestamp_secs: 1,
+        };
         let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&snapshot).unwrap();
         let encoded = bytes.len();
-        println!("    {:<28} {:>10.1} MiB", "encoded", encoded as f64 / 1048576.0);
+        println!(
+            "    {:<28} {:>10.1} MiB",
+            "encoded",
+            encoded as f64 / 1048576.0
+        );
         let load = time_it("load (deserialize)", || {
             let s = rkyv::from_bytes::<ThinSnapshot, rkyv::rancor::Error>(&bytes).unwrap();
             std::hint::black_box(&s);
@@ -314,8 +356,15 @@ fn main() {
         let loaded = rkyv::from_bytes::<ThinSnapshot, rkyv::rancor::Error>(&bytes).unwrap();
         let hot = time_it("hot: tag filter + by-id", || {
             let wanted = tag_for(11);
-            let n = loaded.containers.iter().filter(|c| c.tags.contains(&wanted)).count();
-            let found = loaded.containers.iter().find(|c| c.id.ends_with("000000042"));
+            let n = loaded
+                .containers
+                .iter()
+                .filter(|c| c.tags.contains(&wanted))
+                .count();
+            let found = loaded
+                .containers
+                .iter()
+                .find(|c| c.id.ends_with("000000042"));
             std::hint::black_box((n, found));
         });
         results.push(ArmResult {
@@ -346,7 +395,11 @@ fn main() {
         let payload = (containers, facets);
         let json = serde_json::to_vec(&payload).unwrap();
         let encoded = json.len();
-        println!("    {:<28} {:>10.1} MiB", "encoded", encoded as f64 / 1048576.0);
+        println!(
+            "    {:<28} {:>10.1} MiB",
+            "encoded",
+            encoded as f64 / 1048576.0
+        );
         type Payload = (
             Vec<ThinContainerJson>,
             Vec<(String, BTreeMap<String, serde_json::Value>)>,

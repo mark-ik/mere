@@ -198,6 +198,57 @@ The field-by-field map (from the 2026-07-18 read of `graph/node.rs`):
 
 ## Findings
 
+### D-gate: the rkyv measurement (2026-07-26) — VERDICT: structural dissolution passes
+
+Run with `cargo run --release -p mere-kernel --example dissolution_gate`
+(`crates/graph/graph-kernel/examples/dissolution_gate.rs`), 50,000 nodes, the
+scale the node-image plan measured at. Best of three, release, one machine.
+
+| arm | MiB | load ms | hot ms |
+| --- | --- | --- | --- |
+| A — fat node, inline images, rkyv (today) | 302.6 | 185.8 | 0.78 |
+| A' — fat node, image refs, rkyv (post-D0) | 16.8 | 48.3 | 1.39 |
+| B — container + facet sidecar, image refs, rkyv | 27.3 | 81.5 | 1.11 |
+| C — container + facet sidecar, JSON facets | 25.7 | 134.6 | 1.48 |
+
+**The plan's wording needed sharpening before it could be measured.** "Container
++ facet-sidecar equivalents" compares two variables at once, because today's
+`PersistedNode` is rkyv while `Container` is serde-only and `NodeFacets` holds
+`serde_json::Value`. Measured naively the dissolved shape loses on *codec
+choice* and says nothing about dissolution. The arms above hold the codec
+constant (A' vs B) and price the codec separately (B vs C).
+
+**The structural question (B vs A'): 1.63x size, 1.69x load, 0.80x hot.**
+Dissolution genuinely costs something on load, and *saves* on hot ops, because
+a tag scan over thin containers touches less memory than over fat nodes. Hot
+ops run constantly and load runs once, so the trade leans further toward
+dissolution than the load ratio alone suggests.
+
+**The ratio is the wrong frame, though, because D0 dominates everything.**
+Removing inline images is an 18x size cut and a 3.8x load cut on its own. Post
+D0 *and* dissolved, load is 81.5 ms against today's 185.8 ms: the combined path
+is **2.3x faster than the status quo** even though dissolution taxes the
+post-D0 baseline. There is no envelope in which D0 lands and dissolution then
+makes things worse than today.
+
+**Verdict: proceed with structural dissolution.** The physical-representation
+fallback is not needed. In absolute terms the dissolution tax is 33 ms on a
+50k-node session load, which is not user-visible, and it buys the class system.
+
+**Secondary finding: JSON facets cost 1.65x load over binary facets** (C vs B)
+at roughly equal size. Not gating, since C still loads faster than today, but it
+prices a future move of the facet sidecar to a binary codec. Worth knowing
+before the sidecar grows.
+
+**What this does not prove.** Synthetic data through mirrored types, not the
+real `PersistedNode`/`Container`. The enum-typed columns (`tag_presentation`,
+`import_provenance`, `classifications`, `frame_layout_hints`, `properties`,
+`derivations`) are omitted; they are empty in a default session and would add
+to both arms. It measures snapshot encode/decode and flat scans, not live
+petgraph traversal. It is an order-of-magnitude gate, not a regression budget.
+
+### Other findings
+
 - Image externalization is half-executed prior art: `ImageRef`/`ImageRole`
   exist in kernel `types.rs` and the content-addressed `image_store` is
   built, but `Node` still carries raw bytes. D0 is that plan's phase 2, not
