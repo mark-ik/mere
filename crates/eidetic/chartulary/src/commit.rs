@@ -337,8 +337,14 @@ mod tests {
         }
         let merged = GraphLog::<Container, Relation>::replay(merged);
 
-        assert_eq!(merged.graph().edge_count(), 2, "both edges survive the merge");
-        let a_key = merged.edge_key(a_edge).expect("alice's edge is addressable");
+        assert_eq!(
+            merged.graph().edge_count(),
+            2,
+            "both edges survive the merge"
+        );
+        let a_key = merged
+            .edge_key(a_edge)
+            .expect("alice's edge is addressable");
         let b_key = merged.edge_key(b_edge).expect("bob's edge is addressable");
         assert_ne!(a_key, b_key, "each id names a different edge");
     }

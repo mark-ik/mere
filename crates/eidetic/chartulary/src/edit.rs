@@ -98,7 +98,10 @@ impl<'de> Deserialize<'de> for EdgeId {
                     .map_err(|_| E::custom("negative edge counter"))
             }
 
-            fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<EdgeId, A::Error> {
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> Result<EdgeId, A::Error> {
                 let mut writer = None;
                 let mut counter = None;
                 while let Some(key) = map.next_key::<String>()? {
