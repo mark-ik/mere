@@ -408,17 +408,25 @@ Remaining for N2: Murm's real accept path, and Graphshell G5d over
 
 The Reticulum arm of `session_policy.rs` was intermittently timing out with
 the responder having decided `accept` and written its reply. The cause is not
-in the policy layer: **dropping a retinue `LinkStream` discards outbound bytes
-that `flush()` already reported as written.** `flush` only pushes into the
-duplex that the relay task drains, and dropping the stream ends that relay
-(documented in retinue `endpoint.rs`: "Dropping the stream ends its relay").
+in the policy layer.
 
-Any service that writes a reply and closes can therefore lose it silently.
-The test now holds the session open until the client has read, which is what a
-real service does anyway, and it passes repeatably. The underlying footgun is
-worth fixing retinue-side — a graceful close that drains the relay before
-ending it — and is filed here because N2 wires real services onto exactly this
-path.
+The first diagnosis here was wrong and is corrected: dropping a retinue
+`LinkStream` is **safe**. Its outbound relay reads the duplex to EOF, so
+buffered bytes are drained and sent before the link closes. Verified by
+dropping the stream immediately while keeping the transport alive: everything
+written still arrives.
+
+The actual hazard is one level up. **Dropping a `ReticulumTransport` tears
+down its endpoint and aborts the relay tasks it is tracking, discarding
+outbound bytes that `flush()` already reported as written.** In the failing
+version the responder task owned `server`, so returning dropped the endpoint
+the instant the reply had been handed to the relay.
+
+The consequence for real services: a short-lived accept task must not own the
+transport, and an endpoint being shut down needs a graceful path that drains
+in-flight relays before aborting them. Retinue has no such path today; that is
+the fix worth making, and it is filed here because N2 wires real services onto
+exactly this seam.
 
 Note for whoever writes the next transport test: bound every await. An
 unbounded `read_to_end` on a link that never signals EOF is indistinguishable

@@ -318,38 +318,30 @@ fn test_snapshot_preserves_generic_semantic_relations() {
 fn test_snapshot_preserves_favicon_data() {
     let mut graph = Graph::new();
     let key = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
-    let favicon = vec![255, 0, 0, 255];
+    let favicon = crate::types::ImageRef::new([255u8; 32], 1, 1);
     if let Some(node) = graph.get_node_mut(key) {
-        node.favicon_rgba = Some(favicon.clone());
-        node.favicon_width = 1;
-        node.favicon_height = 1;
+        node.set_image(crate::types::ImageRole::Favicon, favicon);
     }
 
     let snapshot = graph.to_snapshot();
     let restored = Graph::from_snapshot(&snapshot);
     let (_, restored_node) = restored.get_node_by_url("https://a.com").unwrap();
-    assert_eq!(restored_node.favicon_rgba.as_ref(), Some(&favicon));
-    assert_eq!(restored_node.favicon_width, 1);
-    assert_eq!(restored_node.favicon_height, 1);
+    assert_eq!(restored_node.favicon(), Some(&favicon));
 }
 
 #[test]
 fn test_snapshot_preserves_thumbnail_data() {
     let mut graph = Graph::new();
     let key = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
-    let thumbnail = vec![137, 80, 78, 71];
+    let thumbnail = crate::types::ImageRef::new([137u8; 32], 64, 48);
     if let Some(node) = graph.get_node_mut(key) {
-        node.thumbnail_png = Some(thumbnail.clone());
-        node.thumbnail_width = 64;
-        node.thumbnail_height = 48;
+        node.set_image(crate::types::ImageRole::Preview, thumbnail);
     }
 
     let snapshot = graph.to_snapshot();
     let restored = Graph::from_snapshot(&snapshot);
     let (_, restored_node) = restored.get_node_by_url("https://a.com").unwrap();
-    assert_eq!(restored_node.thumbnail_png.as_ref(), Some(&thumbnail));
-    assert_eq!(restored_node.thumbnail_width, 64);
-    assert_eq!(restored_node.thumbnail_height, 48);
+    assert_eq!(restored_node.preview(), Some(&thumbnail));
 }
 
 #[test]
@@ -381,12 +373,13 @@ fn test_snapshot_edge_with_missing_url_is_dropped() {
             tag_presentation: NodeTagPresentationState::default(),
             import_provenance: vec![],
             is_pinned: false,
-            thumbnail_png: None,
-            thumbnail_width: 0,
-            thumbnail_height: 0,
-            favicon_rgba: None,
-            favicon_width: 0,
-            favicon_height: 0,
+            images: Default::default(),
+            legacy_thumbnail_png: None,
+            legacy_thumbnail_width: 0,
+            legacy_thumbnail_height: 0,
+            legacy_favicon_rgba: None,
+            legacy_favicon_width: 0,
+            legacy_favicon_height: 0,
             session_state: None,
             mime_hint: None,
             address: PersistedAddress::Http("https://a.com".to_string()),
@@ -445,12 +438,13 @@ fn test_snapshot_duplicate_urls_last_wins() {
                 tag_presentation: NodeTagPresentationState::default(),
                 import_provenance: vec![],
                 is_pinned: false,
-                thumbnail_png: None,
-                thumbnail_width: 0,
-                thumbnail_height: 0,
-                favicon_rgba: None,
-                favicon_width: 0,
-                favicon_height: 0,
+                images: Default::default(),
+                legacy_thumbnail_png: None,
+                legacy_thumbnail_width: 0,
+                legacy_thumbnail_height: 0,
+                legacy_favicon_rgba: None,
+                legacy_favicon_width: 0,
+                legacy_favicon_height: 0,
                 session_state: None,
                 mime_hint: None,
                 address: PersistedAddress::Http("https://same.com".to_string()),
@@ -472,12 +466,13 @@ fn test_snapshot_duplicate_urls_last_wins() {
                 tag_presentation: NodeTagPresentationState::default(),
                 import_provenance: vec![],
                 is_pinned: false,
-                thumbnail_png: None,
-                thumbnail_width: 0,
-                thumbnail_height: 0,
-                favicon_rgba: None,
-                favicon_width: 0,
-                favicon_height: 0,
+                images: Default::default(),
+                legacy_thumbnail_png: None,
+                legacy_thumbnail_width: 0,
+                legacy_thumbnail_height: 0,
+                legacy_favicon_rgba: None,
+                legacy_favicon_width: 0,
+                legacy_favicon_height: 0,
                 session_state: None,
                 mime_hint: None,
                 address: PersistedAddress::Http("https://same.com".to_string()),

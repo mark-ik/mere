@@ -268,14 +268,14 @@ mod reticulum {
                     .expect("service write");
                 session.stream.flush().await.expect("flush");
             }
-            // Hold the session open until the client has read.
-            //
-            // Not politeness: `flush` on a retinue link only pushes bytes into
-            // the duplex the relay task drains, and dropping the stream ends
-            // that relay ("Dropping the stream ends its relay", retinue
-            // endpoint.rs). Dropping straight after a flush therefore discards
-            // bytes the caller was told had been written. A real service holds
-            // its session open, so the test does too.
+            // Dropping the stream here is safe: the outbound relay drains the
+            // duplex before it closes the link. What is *not* safe is dropping
+            // the transport, which tears the endpoint down and aborts those
+            // relays mid-flight, discarding bytes `flush` already reported as
+            // written. `server` is owned by this task, so returning early
+            // would do exactly that. A real service outlives its sessions;
+            // holding here until the client has read models that.
+            drop(session);
             let _ = read_done.await;
             (decision, facts)
         });

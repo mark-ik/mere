@@ -1237,15 +1237,8 @@ mod tests {
         let node = graph.get_node(from).expect("node payload");
         assert_eq!(node.title, "Alpha");
         assert_eq!(node.url(), "https://a.test/next");
-        assert_eq!(
-            node.thumbnail_png.as_deref(),
-            Some(&[0x89, b'P', b'N', b'G'][..])
-        );
-        assert_eq!(node.thumbnail_width, 1);
-        assert_eq!(node.thumbnail_height, 1);
-        assert_eq!(node.favicon_rgba.as_deref(), Some(&[255, 0, 0, 255][..]));
-        assert_eq!(node.favicon_width, 1);
-        assert_eq!(node.favicon_height, 1);
+        assert_eq!(node.preview(), Some(&ImageRef::new([7u8; 32], 1, 1)));
+        assert_eq!(node.favicon(), Some(&ImageRef::new([9u8; 32], 1, 1)));
         assert_eq!(node.mime_hint.as_deref(), Some("text/html"));
         assert!(node.is_pinned);
         assert_eq!(node.body.as_deref(), Some("body"));
@@ -1511,20 +1504,18 @@ mod tests {
         );
         let _ = crate::graph::apply::apply_graph_delta(
             &mut graph,
-            GraphDelta::SetNodeThumbnail {
+            GraphDelta::SetNodeImage {
                 key: a,
-                png_bytes: vec![0x89, b'P', b'N', b'G'],
-                width: 1,
-                height: 1,
+                role: ImageRole::Preview,
+                image: ImageRef::new([7u8; 32], 1, 1),
             },
         );
         let _ = crate::graph::apply::apply_graph_delta(
             &mut graph,
-            GraphDelta::SetNodeFavicon {
+            GraphDelta::SetNodeImage {
                 key: a,
-                rgba: vec![255, 0, 0, 255],
-                width: 1,
-                height: 1,
+                role: ImageRole::Favicon,
+                image: ImageRef::new([9u8; 32], 1, 1),
             },
         );
         let _ = crate::graph::apply::apply_graph_delta(
