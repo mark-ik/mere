@@ -641,6 +641,52 @@ the low-power lane, landed the same week):
   demanded a decision at every consumer, which is why these are decisions
   rather than defaults. Receipts: protocol 8 tests, merecat 145, graphshell
   port and stdio green.
+
+- **G5a.1 — corrected after review, 2026-07-25.** The first cut added
+  *vocabulary*, not an authenticated runtime principal, and four things were
+  wrong:
+  1. **Admission was duplicated.** `SessionOpen` repeated a claimed subject and
+     grant, bound to nothing, beside `network-policy`'s handshake, which
+     already binds subject, attested signer, delegation chain, action, nonce,
+     and transport to *this* connection and withholds the stream until that
+     verifies. A second, weaker admission path is how an identity ends up
+     trusted for having been asserted twice rather than proved once — the same
+     duplication mistake as building a delegation algebra beside personae's,
+     one layer up. **Fixed:** `network-policy` is the sole admission handshake
+     and now yields the conclusion — `AdmittedPrincipal { subject, class,
+     session_id, action }` from a new additive `admit()` (`respond` unchanged
+     for callers that only gate the stream). It is deliberately non-`Serialize`:
+     a conclusion drawn from a verified transcript, never something that
+     travels. `SessionOpen` negotiates version and capabilities only, and a
+     test asserts the words `subject` and `grant` do not appear on that wire.
+  2. **The resynchronize mapping was wrong.** Recorded as
+     `resynchronize → Snapshot`; it is `resynchronize → Resume`.
+     `graphshell-client` already names its recovery path
+     `Resynchronize(ResumeRequest)` and emits it when an epoch or base revision
+     disagrees, while `Snapshot` is the projection plane's request and carries
+     a score. The error came from mapping the plan's prose onto the protocol
+     enum without reading the client that implements the concept.
+  3. **`endpoint_subject` was unauthenticated and unconsumed.** Removed rather
+     than kept: a key asserted in that frame is unverified by construction, so
+     a client pins the peer its carrier proved. G5b owns the endpoint-key proof.
+  4. **The stdio judgment was untested.** "stdio green" meant only that nothing
+     regressed. Now behavioural: `Open` and `Suspend` fail with reasons, and
+     `Close` is answered and *ends the loop* (a request after it is never
+     served).
+
+  Receipts: network-policy 11, protocol 8, stdio 4 (3 new), client/endpoint/
+  port green, merecat 145.
+
+  **Sequence recut** (review): G5a.1 as above → **G5b** selected Graphshell
+  profile plus explicit endpoint-key proof → **G5c** `network-policy` producing
+  the admitted principal under the Graphshell action triple → **G5d** carrying
+  that accepted context over `P2pandaTransport`.
+
+  **G5b's open question is answered by §3 and needs no invention:**
+  `graphshell-client` stays transport-independent and gains **no** personae
+  dependency; the Graphshell *application* (`ports/graphshell`) composes
+  Personae, loading a user-selected profile from the shared vault, defaulting
+  to `default` while remaining configurable.
   *Boundary rule:* the protocol crate should carry the principal and grant as
   **opaque bytes**, never a `network-policy` or personae dependency. §3 sealed a
   portable boundary; admission belongs to the endpoint/host crate. (The same

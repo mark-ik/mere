@@ -373,53 +373,38 @@ pub enum SessionStatus {
     Revoked,
 }
 
-/// An authenticated principal and the grant it acts under — **opaque to this
-/// crate on purpose**.
+/// Open a session **after** the carrier has admitted it.
 ///
-/// Section 4.1 puts "authenticated principal and grant reference" in the
-/// session plane's minimum vocabulary, and G5 binds a real Personae identity to
-/// the handshake. This crate carries both as bytes and interprets neither:
-/// admission is the host's business (`network-policy` evaluating a personae
-/// delegation chain), and the portable boundary sealed in section 3 must not
-/// acquire an identity or policy dependency merely to move a session forward.
+/// This message carries no principal, and that absence is the design. The
+/// carrier's own handshake (`network-policy`) is the sole admission step: it
+/// binds a Personae subject, its attested signer, its delegation chain, the
+/// requested action, and a nonce to *this* connection, and withholds the
+/// application stream until that verifies. A principal repeated here would be
+/// a claim bound to nothing — a second, weaker admission path beside the real
+/// one, which is how an identity ends up trusted because it was asserted twice
+/// rather than proved once.
 ///
-/// `subject` is 32 bytes to match the shape the rest of the family already
-/// speaks (`servitor::Subject`, `network-policy`'s `SessionRequest.subject`),
-/// not because this crate knows it is an Ed25519 key.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SessionPrincipal {
-    /// The claimed subject, as the carrier's handshake authenticated it. A
-    /// carrier that cannot authenticate a peer must not fill this from
-    /// application bytes — the same rule `network-policy` states for its own
-    /// transport-peer field.
-    pub subject: [u8; 32],
-    /// Opaque proof that `subject` may open this session. The grammar
-    /// (personae certificates today) is deliberately not this crate's to know.
-    pub grant: Vec<u8>,
-}
-
-/// Open an authenticated session (section 4.1's `open`).
-///
-/// Sent before any other request on a carrier that authenticates. The loopback
-/// and stdio profiles may skip it — a subprocess of the same user is not a
-/// trust boundary — which is why every other request stays well-formed without
-/// one; enforcement is the endpoint's, not the vocabulary's.
+/// So the session plane spans two layers: the carrier establishes **who**, and
+/// this message negotiates **what we can both speak**. On a carrier that
+/// cannot authenticate (loopback, stdio), there is no principal to have, and
+/// `open` is refused rather than answered.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SessionOpen {
     pub version: ProtocolVersion,
-    pub principal: SessionPrincipal,
     /// What the client can render, so an endpoint may refuse early rather than
     /// after a snapshot it cannot present.
     pub capabilities: CapabilityProfile,
 }
 
 /// An accepted session.
+///
+/// Carries no endpoint key either: the peer's identity is whatever the
+/// carrier authenticated, and a key asserted in this frame would be
+/// unverified by construction. A client pins the peer its transport proved,
+/// never a field its peer chose.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SessionOpened {
     pub version: ProtocolVersion,
-    /// The endpoint's own subject, so a client can pin the peer it reached
-    /// rather than trusting a label.
-    pub endpoint_subject: [u8; 32],
     pub descriptor: EndpointDescriptor,
     pub status: SessionStatus,
     /// When the admitting grant expires, if it is bounded. A hint for
@@ -431,13 +416,16 @@ pub struct SessionOpened {
 /// Carrier-neutral requests used by the local process proof and future
 /// transports. The carrier supplies framing; these variants supply meaning.
 ///
-/// Section 4.1's five session verbs map here as: `open` → [`CarrierRequestBody::Open`],
-/// `close` → [`CarrierRequestBody::Close`], `suspend` →
-/// [`CarrierRequestBody::Suspend`], `resume` → [`CarrierRequestBody::Resume`]
-/// (reconnect from a client's last acknowledged epoch), and `resynchronize` →
-/// [`CarrierRequestBody::Snapshot`] (ask for current state outright). The last
-/// two already existed; adding a separate `Resynchronize` would have been a
-/// second spelling of `Snapshot`.
+/// Section 4.1's five session verbs map here as: `open` →
+/// [`CarrierRequestBody::Open`], `close` → [`CarrierRequestBody::Close`],
+/// `suspend` → [`CarrierRequestBody::Suspend`], and **both** `resume` and
+/// `resynchronize` → [`CarrierRequestBody::Resume`]. That last pairing is not
+/// a shortcut: a client that finds its epoch or base revision disagreeing
+/// emits a `ResumeRequest` and the endpoint answers with diffs, an ack, or a
+/// full snapshot — `graphshell-client` already names that path
+/// `Resynchronize(ResumeRequest)`. [`CarrierRequestBody::Snapshot`] is the
+/// projection plane's request and carries a score, so it selects a projection
+/// rather than recovering a session.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum CarrierRequestBody {
     Discover,
@@ -445,8 +433,7 @@ pub enum CarrierRequestBody {
     Resource(ResourceRequest),
     Resume(ResumeRequest),
     Intent(IntentInvocation),
-    /// Authenticate and open (section 4.1). Boxed: it is much larger than its
-    /// siblings and would otherwise set the whole enum's size.
+    /// Negotiate version and capabilities on an already-admitted carrier.
     Open(Box<SessionOpen>),
     /// Tear the session down; the endpoint may release its state.
     Close,
@@ -490,15 +477,11 @@ mod tests {
     use sceno::{Arrangement, Scene, Spiral};
 
     #[test]
-    fn an_open_round_trips_and_keeps_its_grant_opaque() {
-        // The protocol moves the principal and never reads it: `grant` is
-        // bytes whose grammar belongs to the host's admission layer.
+    fn an_open_negotiates_capabilities_and_carries_no_principal() {
+        // The absence is the assertion: admission belongs to the carrier's
+        // handshake, so this message has nowhere to put a claimed identity.
         let open = SessionOpen {
             version: ProtocolVersion::V1,
-            principal: SessionPrincipal {
-                subject: [7; 32],
-                grant: b"an opaque personae certificate".to_vec(),
-            },
             capabilities: CapabilityProfile::new([PresentationCapability::PortableCard]),
         };
         let request = CarrierRequest {
@@ -506,80 +489,81 @@ mod tests {
             body: CarrierRequestBody::Open(Box::new(open.clone())),
         };
         let wire = serde_json::to_string(&request).unwrap();
-        let decoded: CarrierRequest = serde_json::from_str(&wire).unwrap();
-        assert_eq!(decoded, request);
-        match decoded.body {
-            CarrierRequestBody::Open(decoded) => {
-                assert_eq!(decoded.principal.grant, open.principal.grant);
-                assert_eq!(decoded.principal.subject, [7; 32]);
-            }
-            other => panic!("expected an open: {other:?}"),
-        }
+        assert_eq!(
+            serde_json::from_str::<CarrierRequest>(&wire).unwrap(),
+            request
+        );
+        assert!(
+            !wire.contains("subject") && !wire.contains("grant"),
+            "no principal travels in the application protocol: {wire}"
+        );
     }
 
     #[test]
-    fn an_accepted_session_names_the_endpoint_it_reached() {
-        // A client pins the peer's subject rather than trusting a label; the
-        // expiry is a renewal hint, never authority (a grant can be revoked
-        // long before it expires).
-        let opened = SessionOpened {
-            version: ProtocolVersion::V1,
-            endpoint_subject: [9; 32],
-            descriptor: EndpointDescriptor {
-                label: "merecat".into(),
-                projections: Vec::new(),
-            },
-            status: SessionStatus::Live,
-            expires_at_ms: Some(1_000),
-        };
+    fn an_accepted_session_asserts_no_endpoint_key() {
+        // A key in this frame would be unverified by construction; the peer's
+        // identity is whatever the carrier authenticated.
         let response = CarrierResponse {
             id: 1,
-            body: Ok(CarrierResponseBody::Opened(Box::new(opened))),
+            body: Ok(CarrierResponseBody::Opened(Box::new(SessionOpened {
+                version: ProtocolVersion::V1,
+                descriptor: EndpointDescriptor {
+                    label: "merecat".into(),
+                    projections: Vec::new(),
+                },
+                status: SessionStatus::Live,
+                expires_at_ms: Some(1_000),
+            }))),
         };
         let wire = serde_json::to_string(&response).unwrap();
         assert_eq!(
             serde_json::from_str::<CarrierResponse>(&wire).unwrap(),
             response
         );
+        assert!(
+            !wire.contains("endpoint_subject"),
+            "the endpoint does not assert its own key: {wire}"
+        );
     }
 
     #[test]
-    fn the_session_plane_has_all_five_verbs() {
-        // Section 4.1 lists open, close, suspend, resume, resynchronize. Three
-        // are new; the other two already had spellings, and giving
-        // resynchronize its own variant would have duplicated Snapshot.
+    fn resynchronize_is_resume_not_snapshot() {
+        // The client's own recovery path is `Resynchronize(ResumeRequest)`:
+        // when an epoch or base revision disagrees it resumes, and the
+        // endpoint may answer with diffs, an ack, or a snapshot. `Snapshot`
+        // belongs to the projection plane and carries a score, so it selects a
+        // projection rather than recovering a session.
         let session = ProjectionSession("s".into());
-        let verbs = [
+        let resync = CarrierRequestBody::Resume(ResumeRequest {
+            session: session.clone(),
+            epoch: SceneEpoch(1),
+            revision: Revision(4),
+        });
+        match &resync {
+            CarrierRequestBody::Resume(request) => {
+                assert_eq!(request.epoch, SceneEpoch(1));
+                assert_eq!(request.revision, Revision(4));
+            }
+            other => panic!("resynchronize recovers a session: {other:?}"),
+        }
+        // Every session verb still round-trips.
+        for verb in [
             CarrierRequestBody::Open(Box::new(SessionOpen {
                 version: ProtocolVersion::V1,
-                principal: SessionPrincipal {
-                    subject: [1; 32],
-                    grant: Vec::new(),
-                },
                 capabilities: CapabilityProfile::default(),
             })),
             CarrierRequestBody::Close,
             CarrierRequestBody::Suspend,
-            CarrierRequestBody::Resume(ResumeRequest {
-                session: session.clone(),
-                epoch: SceneEpoch(1),
-                revision: Revision(1),
-            }),
-            CarrierRequestBody::Snapshot(ProjectionRequest {
-                version: ProtocolVersion::V1,
-                session,
-                score: Score::new(Arrangement::Spiral(Spiral::default())),
-            }),
-        ];
-        for verb in verbs {
+            resync,
+        ] {
             let request = CarrierRequest { id: 0, body: verb };
             let wire = serde_json::to_string(&request).unwrap();
             assert_eq!(
                 serde_json::from_str::<CarrierRequest>(&wire).unwrap(),
-                request,
-                "every session verb round-trips"
+                request
             );
         }
+        let _ = session;
     }
 
     #[test]

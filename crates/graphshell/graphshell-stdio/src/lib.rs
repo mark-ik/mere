@@ -262,7 +262,8 @@ mod native {
         };
         use graphshell_protocol::{
             CachePolicy, CarrierRequest, CarrierRequestBody, CarrierResponse, CarrierResponseBody,
-            EndpointDescriptor, IntentInvocation, IntentResult, ProjectionOffer, ProjectionRequest,
+            CapabilityProfile, EndpointDescriptor, IntentInvocation, IntentResult, ProjectionOffer,
+            ProjectionRequest, SessionOpen,
             ProjectionSession, ProjectionSnapshot, ProtocolVersion, ResourceRequest,
             ResourceResponse,
         };
@@ -335,6 +336,86 @@ mod native {
             fn invoke(&mut self, _: IntentInvocation) -> Result<IntentResult, Self::Error> {
                 Ok(IntentResult::Accepted)
             }
+        }
+
+        /// Drive `serve_basic` over a list of requests and return the replies.
+        fn exchange(requests: &[CarrierRequest]) -> Vec<CarrierResponse> {
+            let mut fixture = Fixture {
+                session: ProjectionSession("fixture:scene".into()),
+                resources: BTreeMap::new(),
+            };
+            let input: String = requests
+                .iter()
+                .map(|request| format!("{}
+", serde_json::to_string(request).unwrap()))
+                .collect();
+            let mut output = Vec::new();
+            serve_basic(&mut fixture, Cursor::new(input), &mut output).unwrap();
+            String::from_utf8(output)
+                .unwrap()
+                .lines()
+                .map(|line| serde_json::from_str(line).unwrap())
+                .collect()
+        }
+
+        #[test]
+        fn stdio_refuses_to_open_because_it_cannot_authenticate() {
+            // The far end is a subprocess of the same user over inherited
+            // pipes: there is no key exchange anywhere in this profile. A
+            // carrier that cannot verify a principal must not answer `Opened`,
+            // or every client above it inherits a false belief.
+            let responses = exchange(&[CarrierRequest {
+                id: 1,
+                body: CarrierRequestBody::Open(Box::new(SessionOpen {
+                    version: ProtocolVersion::V1,
+                    capabilities: CapabilityProfile::default(),
+                })),
+            }]);
+            match &responses[0].body {
+                Err(failure) => assert!(
+                    failure.message.contains("does not authenticate"),
+                    "the refusal says why: {}",
+                    failure.message
+                ),
+                Ok(body) => panic!("stdio must not answer an open: {body:?}"),
+            }
+        }
+
+        #[test]
+        fn stdio_refuses_to_suspend_because_the_session_is_the_process() {
+            // Suspend promises a session that outlives its transport. Over
+            // stdio the session IS the process and its pipes.
+            let responses = exchange(&[CarrierRequest {
+                id: 1,
+                body: CarrierRequestBody::Suspend,
+            }]);
+            match &responses[0].body {
+                Err(failure) => assert!(
+                    failure.message.contains("outlives its process"),
+                    "the refusal says why: {}",
+                    failure.message
+                ),
+                Ok(body) => panic!("stdio must not answer a suspend: {body:?}"),
+            }
+        }
+
+        #[test]
+        fn close_is_answered_and_ends_the_session() {
+            // Close is the one verb stdio can honour, and honouring it means
+            // the loop stops: a request after it is never served.
+            let responses = exchange(&[
+                CarrierRequest {
+                    id: 1,
+                    body: CarrierRequestBody::Close,
+                },
+                CarrierRequest {
+                    id: 2,
+                    body: CarrierRequestBody::Discover,
+                },
+            ]);
+            assert_eq!(responses.len(), 1, "nothing is served after a close");
+            assert_eq!(responses[0].id, 1);
+            assert!(matches!(responses[0].body, Ok(CarrierResponseBody::Closed)));
         }
 
         #[test]

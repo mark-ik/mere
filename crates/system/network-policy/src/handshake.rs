@@ -325,6 +325,68 @@ fn verify_signature(public_key: Ed25519PublicKey, signature: &[u8], message: &[u
     public_key.verify(message, &Ed25519Signature::from_bytes(&signature))
 }
 
+/// What an accepted session established, for the application above.
+///
+/// `respond` answers the *wire* question ("what do I write back?"); this
+/// answers the caller's question ("who am I now talking to, and under what?").
+/// Without it every consumer would decode the hello a second time to learn the
+/// subject, and the obvious way to do that reads the subject from a frame it
+/// has not verified — the exact mistake this handshake exists to prevent.
+///
+/// Deliberately local and non-`Serialize`: it is a conclusion drawn from a
+/// verified transcript, never something that travels. An application protocol
+/// above this one should carry no principal of its own; if it did, it would be
+/// asserting an identity nothing bound to the connection.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AdmittedPrincipal {
+    /// The subject whose signature over the bound transcript verified.
+    pub subject: [u8; 32],
+    /// The class the session actually runs under, which may be narrower than
+    /// the one requested.
+    pub class: TrafficClass,
+    /// Digest of the bound transcript: stable for this connection, and
+    /// different for the same hello replayed onto another one.
+    pub session_id: [u8; 32],
+    /// The action the subject was admitted for. Admission is per-action, so an
+    /// application must not reuse this session for a different one.
+    pub action: RequestedAction,
+}
+
+/// Run the responder half and report *who* was admitted.
+///
+/// The same evaluation as [`respond`], returning the established principal
+/// instead of only the decision. Prefer this wherever the application needs to
+/// know its peer; [`respond`] remains for callers that only gate the stream.
+pub fn admit(
+    policy: &LocalNetworkPolicy,
+    ledger: &RevocationLedger,
+    hello_bytes: &[u8],
+    binding: &SessionBinding,
+    now_ms: u64,
+    active_sessions: u32,
+) -> (Vec<u8>, Result<AdmittedPrincipal, DenyReason>) {
+    let (reply, decision) = respond(policy, ledger, hello_bytes, binding, now_ms, active_sessions);
+    let outcome = match decision {
+        SessionDecision::Deny { reason } => Err(reason),
+        SessionDecision::Accept { class } => {
+            // Re-decoding is safe here and only here: `respond` accepted, which
+            // means this frame decoded and its proof verified against this
+            // binding. Anything else is a bug in `respond`, not a hostile
+            // frame, so a decode failure denies rather than panicking.
+            match SessionHello::decode(hello_bytes, &policy.limits.clamped()) {
+                Ok(hello) => Ok(AdmittedPrincipal {
+                    subject: hello.subject,
+                    class,
+                    session_id: hello.session_id(binding),
+                    action: hello.action.clone(),
+                }),
+                Err(_) => Err(DenyReason::MalformedHello),
+            }
+        }
+    };
+    (reply, outcome)
+}
+
 /// Run the responder half: decode, verify, evaluate, and answer.
 ///
 /// Returns the encoded reply and the decision behind it. A refusal is still a
