@@ -654,6 +654,23 @@ and no consumer has asked for one).
 
 ### 2026-07-25: the reusable runtime service needs a ruling on who owns transport
 
+> **RESOLVED the same day — see [the JoinedSpace
+> entry](#2026-07-25-joinedspace-landed-the-seven-ceremonies-are-one-call)
+> above.** Transport ownership was ruled **(b)** and `JoinedSpace` landed in
+> `murm-replication`, collapsing what this survey counted as four ceremonies
+> and the executing lane counted as seven. Read that entry, not this one, for
+> the current state; this stays for the survey evidence.
+>
+> **And correct one premise below before reusing it.** Point 2 reports gemot's
+> manifest as keeping p2panda-net "dev-only by design". The *direct* entry is
+> indeed dev-only, but the comment it quoted was itself wrong about the build
+> graph: `cargo tree -p gemot -e normal -i p2panda-net` shows p2panda-net in
+> gemot's production graph transitively through `murm-replication`. So the
+> "posture conflict" this survey framed as the blocker was softer than stated
+> — option (b) was available all along. The posture that actually holds is
+> about SOURCE (gemot's code names no session type), not the dependency graph.
+> Fixed at the source in `617ff648`.
+
 Surveyed toward Phase B's remaining "reusable multi-domain service API". Three
 things checked; two are real, and the third is a non-finding worth recording
 because I was one commit from "fixing" it.
