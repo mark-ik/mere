@@ -6,7 +6,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use seiche::NodeCollider;
+use crate::underlay::{canvas_paint_list_demoted_from_arrangement, identity_arrangement};
+use genet_layout::{Applied, IncrementalLayout, ScrollOffsets};
+use genet_scripted_dom::NodeId as DomNodeId;
 use kernel::geometry::PortablePoint;
 use kernel::graph::NodeKey;
 use layout_dom_api::LayoutDomMut;
@@ -19,16 +21,14 @@ use paint_list_api::{
     TransformSpec,
 };
 use paint_list_render::{CompositeLayer, composite_paint_layers};
-use crate::underlay::{identity_arrangement, canvas_paint_list_demoted_from_arrangement};
-use genet_layout::{Applied, IncrementalLayout, ScrollOffsets};
-use genet_scripted_dom::NodeId as DomNodeId;
+use seiche::NodeCollider;
 
 use super::build::{
     NODE_SHEET, background_cmds, bridge_ring_overlay, community_ring_overlay, field_overlay,
     marquee_rect_cmds, set_class, set_style,
 };
 use super::edge_cells::{edge_cell_for_relation, relation_cell_overlay, selected_edge_overlay};
-use super::{NodeShape, NodeState, Canvas, PAN_DECAY};
+use super::{Canvas, NodeShape, NodeState, PAN_DECAY};
 
 impl Canvas {
     /// Advance one frame at viewport `(w, h)` and return the composited content
@@ -338,17 +338,23 @@ impl Canvas {
             let Some(node) = self.graph.get_node(key) else {
                 continue;
             };
-            let Some(rgba) = node.favicon_rgba.as_ref() else {
+            // The node carries a reference; the pixels come from the
+            // host-registered cache. An unresolved reference does not paint.
+            let Some(favicon) = node.favicon() else {
                 continue;
             };
-            if rgba.is_empty() || node.favicon_width == 0 || node.favicon_height == 0 {
+            let Some((rgba, fav_w, fav_h)) = self.resolved_images.get(&favicon.digest) else {
+                continue;
+            };
+            if rgba.is_empty() || *fav_w == 0 || *fav_h == 0 {
                 continue;
             }
+            let (fav_w, fav_h) = (*fav_w, *fav_h);
             let img_key = ImageKey::new(IdNamespace(0), favicon_images.len() as u32);
             favicon_images.push(ImageResource {
                 key: img_key,
-                width: node.favicon_width,
-                height: node.favicon_height,
+                width: fav_w,
+                height: fav_h,
                 data: rgba.clone(),
             });
             // Billboard the favicon too: an upright screen-space square centered on the
@@ -715,9 +721,11 @@ mod tests {
     #[test]
     fn favicon_node_emits_an_image_op() {
         let (mut graph, key) = graph_with_one_node("https://ex.test/");
-        // A tiny 2x2 opaque favicon (RGBA8, 16 bytes).
-        assert!(graph.set_node_favicon(key, vec![255u8; 2 * 2 * 4], 2, 2));
+        // The node carries a reference; the host registers the decoded pixels.
+        let favicon = kernel::types::ImageRef::new([42u8; 32], 2, 2);
+        assert!(graph.set_node_image(key, kernel::types::ImageRole::Favicon, favicon));
         let mut canvas = Canvas::with_graph(graph);
+        canvas.register_resolved_image([42u8; 32], vec![255u8; 2 * 2 * 4], 2, 2);
         let (scene, _) = canvas.frame(800, 600);
         assert!(
             image_op_count(&scene) >= 1,
@@ -743,8 +751,11 @@ mod tests {
         canvas.register_scene_sprite("crate", vec![255u8; 4 * 4 * 4], 4, 4);
         let spec = seiche::SceneSpec {
             bodies: vec![
-                seiche::SceneBodySpec::dynamic(seiche::NodeCollider::Square { half: 30.0 }, (0.0, 0.0))
-                    .sprite("crate"),
+                seiche::SceneBodySpec::dynamic(
+                    seiche::NodeCollider::Square { half: 30.0 },
+                    (0.0, 0.0),
+                )
+                .sprite("crate"),
             ],
             gravity: (0.0, 0.0),
             default_tangible: false,
@@ -767,8 +778,11 @@ mod tests {
         let mut canvas = Canvas::with_graph(graph);
         let spec = seiche::SceneSpec {
             bodies: vec![
-                seiche::SceneBodySpec::dynamic(seiche::NodeCollider::Square { half: 30.0 }, (0.0, 0.0))
-                    .sprite("missing"),
+                seiche::SceneBodySpec::dynamic(
+                    seiche::NodeCollider::Square { half: 30.0 },
+                    (0.0, 0.0),
+                )
+                .sprite("missing"),
             ],
             gravity: (0.0, 0.0),
             default_tangible: false,

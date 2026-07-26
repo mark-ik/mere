@@ -35,12 +35,13 @@ fn persisted_node(node_id: Uuid, url: &str) -> crate::persistence::PersistedNode
         tag_presentation: NodeTagPresentationState::default(),
         import_provenance: vec![],
         is_pinned: false,
-        thumbnail_png: None,
-        thumbnail_width: 0,
-        thumbnail_height: 0,
-        favicon_rgba: None,
-        favicon_width: 0,
-        favicon_height: 0,
+        images: Default::default(),
+        legacy_thumbnail_png: None,
+        legacy_thumbnail_width: 0,
+        legacy_thumbnail_height: 0,
+        legacy_favicon_rgba: None,
+        legacy_favicon_width: 0,
+        legacy_favicon_height: 0,
         session_state: None,
         mime_hint: None,
         address: PersistedAddress::Http(url.to_string()),
@@ -51,7 +52,7 @@ fn persisted_node(node_id: Uuid, url: &str) -> crate::persistence::PersistedNode
         derivations: Vec::new(),
         body: None,
         last_session_visited: 0,
-            nested: None,
+        nested: None,
     }
 }
 

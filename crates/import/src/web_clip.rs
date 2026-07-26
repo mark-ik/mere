@@ -10,6 +10,7 @@ use inker::{
     EngineRoutePolicy, EngineRouteRequest, InlineSpan, WorkspaceRouteId,
 };
 use kernel::graph::{EdgeAssertion, Graph, NodeKey, ProvenanceSubKind};
+use kernel::types::{ImageRef, ImageRole};
 use serde::Deserialize;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -266,6 +267,7 @@ pub fn write_clip_node(
     source_key: NodeKey,
     clip_url: &str,
     fragment: &ClipFragment,
+    visual: Option<ImageRef>,
 ) -> Option<GraphMemberId> {
     if graph.get_node(source_key).is_none() {
         return None;
@@ -295,14 +297,16 @@ pub fn write_clip_node(
         },
     );
     let member = graph.get_node(clip_key).map(|n| n.id);
-    if let Some(visual) = &fragment.visual {
+    // The caller stores `fragment.visual`'s bytes (it holds the image store,
+    // and saving is async) and hands back the reference; the graph carries the
+    // handle only.
+    if let Some(visual) = visual {
         let _ = apply_graph_delta(
             graph,
-            GraphDelta::SetNodeThumbnail {
+            GraphDelta::SetNodeImage {
                 key: clip_key,
-                png_bytes: visual.png_bytes.clone(),
-                width: visual.width,
-                height: visual.height,
+                role: ImageRole::Preview,
+                image: visual,
             },
         );
     }
@@ -811,12 +815,11 @@ mod tests {
             blocks: None,
         };
 
-        let member =
-            write_clip_node(&mut graph, source, "knot://clip/test", &clip).expect("clip member");
+        let stored = ImageRef::new([21u8; 32], 2, 2);
+        let member = write_clip_node(&mut graph, source, "knot://clip/test", &clip, Some(stored))
+            .expect("clip member");
         let (clip_key, clip_node) = graph.get_node_by_id(member).expect("clip node");
-        assert_eq!(clip_node.thumbnail_png.as_ref(), Some(&png));
-        assert_eq!(clip_node.thumbnail_width, 2);
-        assert_eq!(clip_node.thumbnail_height, 2);
+        assert_eq!(clip_node.preview(), Some(&stored));
         assert!(
             clip_node
                 .body

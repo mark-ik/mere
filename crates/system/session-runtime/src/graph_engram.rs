@@ -25,6 +25,7 @@ use eidetic::{
 };
 use kernel::graph::Graph;
 use kernel::persistence::GraphSnapshot;
+use kernel::types::{ImageRef, ImageRole};
 
 /// Schema id bytes for the graph-snapshot engram schema. The [`SchemaRef`] is the
 /// BLAKE3 of these bytes, so it is stable across builds and machines.
@@ -101,15 +102,15 @@ impl RedactionPolicy {
     /// Strip the excluded fields from every node in `snapshot`, in place.
     pub fn apply(&self, snapshot: &mut GraphSnapshot) {
         for node in &mut snapshot.nodes {
+            // Redaction drops the *reference*; the blob is the orphan sweep's
+            // business. An exported engram therefore names no image the
+            // recipient could resolve, which is what redaction owes.
             if !self.include_thumbnails {
-                node.thumbnail_png = None;
-                node.thumbnail_width = 0;
-                node.thumbnail_height = 0;
+                node.images.remove(&ImageRole::Preview);
+                node.images.remove(&ImageRole::Snapshot);
             }
             if !self.include_favicons {
-                node.favicon_rgba = None;
-                node.favicon_width = 0;
-                node.favicon_height = 0;
+                node.images.remove(&ImageRole::Favicon);
             }
             if !self.include_session_state {
                 node.session_state = None;
@@ -324,11 +325,8 @@ mod tests {
     /// In-memory `Store` for the round-trip tests — the same shape
     /// `content_store`'s tests and eidetic's own tests use.
     // The in-memory test store is muniment's (2026-07-12): the
-// hand-rolled one was the same map behind the same seam.
-use muniment::MemoryBackend as InMemoryStore;
-
-
-
+    // hand-rolled one was the same map behind the same seam.
+    use muniment::MemoryBackend as InMemoryStore;
 
     fn sample_graph() -> Graph {
         let mut graph = Graph::new();
@@ -368,12 +366,10 @@ use muniment::MemoryBackend as InMemoryStore;
         // form draft); the default policy must drop all three but keep structure.
         let mut snapshot = sample_graph().to_snapshot();
         for node in &mut snapshot.nodes {
-            node.thumbnail_png = Some(vec![1, 2, 3]);
-            node.thumbnail_width = 2;
-            node.thumbnail_height = 2;
-            node.favicon_rgba = Some(vec![4, 5, 6]);
-            node.favicon_width = 1;
-            node.favicon_height = 1;
+            node.images
+                .insert(ImageRole::Preview, ImageRef::new([1u8; 32], 2, 2));
+            node.images
+                .insert(ImageRole::Favicon, ImageRef::new([4u8; 32], 1, 1));
             node.session_state = Some(PersistedNodeSessionState {
                 scroll_x: Some(10.0),
                 scroll_y: Some(20.0),
@@ -386,11 +382,11 @@ use muniment::MemoryBackend as InMemoryStore;
 
         for node in &snapshot.nodes {
             assert!(
-                node.thumbnail_png.is_none() && node.thumbnail_width == 0,
+                !node.images.contains_key(&ImageRole::Preview),
                 "thumbnail stripped",
             );
             assert!(
-                node.favicon_rgba.is_none() && node.favicon_width == 0,
+                !node.images.contains_key(&ImageRole::Favicon),
                 "favicon stripped",
             );
             assert!(
@@ -405,12 +401,17 @@ use muniment::MemoryBackend as InMemoryStore;
     fn include_all_keeps_private_fields() {
         let mut snapshot = sample_graph().to_snapshot();
         for node in &mut snapshot.nodes {
-            node.thumbnail_png = Some(vec![9]);
-            node.favicon_rgba = Some(vec![9]);
+            node.images
+                .insert(ImageRole::Preview, ImageRef::new([9u8; 32], 1, 1));
+            node.images
+                .insert(ImageRole::Favicon, ImageRef::new([9u8; 32], 1, 1));
         }
         RedactionPolicy::include_all().apply(&mut snapshot);
         assert!(
-            snapshot.nodes.iter().all(|n| n.thumbnail_png.is_some()),
+            snapshot
+                .nodes
+                .iter()
+                .all(|n| n.images.contains_key(&ImageRole::Preview)),
             "include_all keeps thumbnails (opt-in, never the default)",
         );
     }

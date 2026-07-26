@@ -336,6 +336,60 @@ Verified against the code, 2026-07-06:
 
 ## Progress
 
+- **2026-07-26 — Phases 2 and 3 landed; phase 4 has its seam, not its cache.**
+  Executed as lane D0 of the
+  [node dissolution plan](2026-07-18_node_dissolution_facets_plan.md), after
+  its D-gate measured inline imagery at 18x the snapshot size and 3.8x its
+  load time.
+
+  **Phase 2.** `Node` and `PersistedNode` lost the six inline fields for
+  `images: BTreeMap<ImageRole, ImageRef>`, with role accessors
+  (`image`/`favicon`/`preview`/`set_image`/`clear_image`) so call sites name a
+  role. Migration is a **host-side pre-pass**, not a kernel one:
+  `image_store::migrate_legacy_images` externalizes a legacy snapshot's bytes
+  before `Graph::from(snapshot)`, because hashing and blob storage are async
+  and the store's business. The legacy fields survive on `PersistedNode` as
+  `#[serde(rename, skip_serializing)]` shadows, so old snapshots still load
+  and a re-saved one emits references only. `GraphSnapshot::legacy_image_count`
+  exists so a host can assert the pass ran — a skipped migration would
+  otherwise drop pixels silently.
+
+  **Phase 3.** The delta spine carries handles, not bytes:
+  `SetNodeThumbnail`/`SetNodeFavicon` collapsed into one
+  `SetNodeImage { key, role, image }`, likewise the captured/replay pair. An
+  unchanged re-deposit now compares equal on the reference and reports "no
+  change", which is the content-addressed no-op the plan predicted.
+
+  **Journal compatibility, decided.** `CapturedDelta` is persisted and the
+  graph is its replay, so the legacy variants are **kept readable** and
+  `replay_delta` returns `None` for them. An old journal still replays; only
+  the regenerable pixels are dropped. That follows this plan's own premise —
+  preview imagery is experience, not truth — and losing the ability to read an
+  existing journal would have been the far worse failure. Tested both ways.
+
+  **Phase 4 is seamed, not finished.** `Canvas` gained
+  `resolved_images: HashMap<[u8; 32], (Vec<u8>, u32, u32)>` plus
+  `register_resolved_image`, mirroring the existing `scene_sprite_textures`
+  pattern: the host resolves a reference through the store and registers
+  decoded pixels; an unresolved reference simply does not paint. **The map is
+  unbounded** — the plan's bounded LRU is policy on this same seam and remains
+  open.
+
+  **Receipts.** kernel 278, session-runtime 219, canvas 145, import 9, all
+  green. The migration test asserts a legacy snapshot externalizes, that a
+  re-saved snapshot's JSON contains neither `thumbnail_png` nor
+  `favicon_rgba`, and that a second pass writes nothing.
+
+  **One trap worth remembering.** `GraphFixtures::set_node_favicon` forwarded
+  to `Graph::set_node_favicon`; deleting the inherent method silently turned
+  that forward into self-recursion. It compiled, then blew the stack in a
+  canvas test. Removing an inherent method that a same-named trait method
+  forwards to is a compile-clean infinite loop.
+
+  **Not done:** turnstone's ~28 read sites (it patches mere locally, so its
+  build is broken until they are updated), the bounded cache, favicon
+  capture's RGBA→PNG-at-store-time write site, and phase 5's orphan GC.
+
 - **2026-07-06** — Plan authored from the Phase 4 footprint measurement plus a
   codebase investigation. Key outcome of the investigation: the entire blob /
   content-address / forgetting substrate already exists (eidetic `Store`,

@@ -129,6 +129,7 @@ impl Canvas {
             node_sprites: HashMap::new(),
             node_sprite_hulls: HashMap::new(),
             scene_sprite_textures: HashMap::new(),
+            resolved_images: HashMap::new(),
             ambient: None,
             ambient_tincture: ColorF::new(0.0, 0.0, 0.0, 0.0),
             node_materials: HashMap::new(),
@@ -510,11 +511,11 @@ impl Canvas {
     /// or edge is added), so a favicon arriving mid-browse does not jostle the field.
     /// The tile reads the stamped favicon on the next frame. Returns whether a node
     /// was found and its favicon changed. (Favicon-on-tile.)
-    pub fn set_node_favicon(&mut self, url: &str, rgba: Vec<u8>, width: u32, height: u32) -> bool {
+    pub fn set_node_favicon(&mut self, url: &str, image: kernel::types::ImageRef) -> bool {
         let Some(key) = self.graph.get_node_by_url(url).map(|(k, _)| k) else {
             return false;
         };
-        self.favicon_at_key(key, rgba, width, height)
+        self.favicon_at_key(key, image)
     }
 
     /// [`set_node_favicon`](Self::set_node_favicon) keyed by the node's stable
@@ -524,25 +525,22 @@ impl Canvas {
     pub fn set_node_favicon_for(
         &mut self,
         member: uuid::Uuid,
-        rgba: Vec<u8>,
-        width: u32,
-        height: u32,
+        image: kernel::types::ImageRef,
     ) -> bool {
         let Some(key) = self.graph.get_node_key_by_id(member) else {
             return false;
         };
-        self.favicon_at_key(key, rgba, width, height)
+        self.favicon_at_key(key, image)
     }
 
-    fn favicon_at_key(&mut self, key: NodeKey, rgba: Vec<u8>, width: u32, height: u32) -> bool {
+    fn favicon_at_key(&mut self, key: NodeKey, image: kernel::types::ImageRef) -> bool {
         matches!(
             kernel::graph::apply::apply_graph_delta(
                 &mut self.graph,
-                kernel::graph::apply::GraphDelta::SetNodeFavicon {
+                kernel::graph::apply::GraphDelta::SetNodeImage {
                     key,
-                    rgba,
-                    width,
-                    height
+                    role: kernel::types::ImageRole::Favicon,
+                    image,
                 },
             ),
             kernel::graph::apply::GraphDeltaResult::NodeMetadataUpdated(true)
@@ -646,9 +644,7 @@ impl Canvas {
     pub fn set_node_thumbnail(
         &mut self,
         member: uuid::Uuid,
-        png_bytes: Vec<u8>,
-        width: u32,
-        height: u32,
+        image: kernel::types::ImageRef,
     ) -> bool {
         let Some((key, _)) = self.graph.get_node_by_id(member) else {
             return false;
@@ -656,11 +652,10 @@ impl Canvas {
         matches!(
             kernel::graph::apply::apply_graph_delta(
                 &mut self.graph,
-                kernel::graph::apply::GraphDelta::SetNodeThumbnail {
+                kernel::graph::apply::GraphDelta::SetNodeImage {
                     key,
-                    png_bytes,
-                    width,
-                    height
+                    role: kernel::types::ImageRole::Preview,
+                    image,
                 },
             ),
             kernel::graph::apply::GraphDeltaResult::NodeMetadataUpdated(true)

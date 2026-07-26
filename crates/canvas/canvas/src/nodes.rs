@@ -34,6 +34,25 @@ impl Canvas {
     /// to the abstract orb / polygon). The registry persists across scene loads, so a host registers
     /// its props' textures once at startup. A re-register under the same handle replaces it. (Physics
     /// scenes — scene-prop sprites.)
+    /// Supply decoded pixels for one content-addressed image so the paint path
+    /// can draw it. The host loads the blob (`image_store::load_image`),
+    /// decodes it, and registers it under the reference's digest; nodes
+    /// holding that reference then paint. Registering is idempotent.
+    pub fn register_resolved_image(
+        &mut self,
+        digest: [u8; 32],
+        rgba: Vec<u8>,
+        width: u32,
+        height: u32,
+    ) {
+        self.resolved_images.insert(digest, (rgba, width, height));
+    }
+
+    /// Whether decoded pixels are available for a digest.
+    pub fn has_resolved_image(&self, digest: &[u8; 32]) -> bool {
+        self.resolved_images.contains_key(digest)
+    }
+
     pub fn register_scene_sprite(
         &mut self,
         handle: impl Into<String>,
@@ -142,11 +161,12 @@ impl Canvas {
     /// both. (Physics scenes P4 — force-field tier.)
     pub fn load_whirlpool(&mut self) {
         self.physics.load_scene(whirlpool_scene());
-        self.physics.set_scene_field(Some(seiche::SceneField::Vortex {
-            center: (0.0, 0.0),
-            strength: 90.0,
-            inward: 30.0,
-        }));
+        self.physics
+            .set_scene_field(Some(seiche::SceneField::Vortex {
+                center: (0.0, 0.0),
+                strength: 90.0,
+                inward: 30.0,
+            }));
         self.settle_physics(SETTLE_TICKS);
     }
 

@@ -14,8 +14,8 @@
 use std::cell::RefCell;
 use std::sync::Arc;
 
-use euclid::default::Point2D;
 use chartulary::stemma::TransitionKind;
+use euclid::default::Point2D;
 use rkyv::{Archive, Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -835,6 +835,21 @@ mod tests {
 
     #[test]
     fn node_media_captured_delta_round_trips_through_postcard() {
+        let delta = CapturedDelta::ReplaySetNodeImageById {
+            node_id: Uuid::from_u128(7).to_string(),
+            role: ImageRole::Preview,
+            image: ImageRef::new([4u8; 32], 2, 2),
+        };
+        let bytes = postcard::to_allocvec(&delta).expect("encode");
+        let restored: CapturedDelta = postcard::from_bytes(&bytes).expect("decode");
+        assert_eq!(restored, delta);
+    }
+
+    /// A journal written before the node-image externalization must still
+    /// decode — losing the ability to read an existing journal would be a
+    /// far worse failure than losing a regenerable preview.
+    #[test]
+    fn a_legacy_inline_image_record_still_decodes_and_is_skipped_on_replay() {
         let delta = CapturedDelta::ReplaySetNodeThumbnailById {
             node_id: Uuid::from_u128(7).to_string(),
             png_bytes: vec![1, 2, 3, 4],
@@ -843,7 +858,11 @@ mod tests {
         };
         let bytes = postcard::to_allocvec(&delta).expect("encode");
         let restored: CapturedDelta = postcard::from_bytes(&bytes).expect("decode");
-        assert_eq!(restored, delta);
+        assert_eq!(restored, delta, "an old journal entry still reads");
+        assert!(
+            restored.replay_delta().is_none(),
+            "it has no live delta: the pixels are dropped, not restored"
+        );
     }
 
     #[test]
@@ -981,17 +1000,15 @@ mod tests {
                 node_id: a_id.to_string(),
                 new_url: "https://a.test/next".into(),
             },
-            CapturedDelta::ReplaySetNodeThumbnailById {
+            CapturedDelta::ReplaySetNodeImageById {
                 node_id: a_id.to_string(),
-                png_bytes: vec![0x89, b'P', b'N', b'G'],
-                width: 1,
-                height: 1,
+                role: ImageRole::Preview,
+                image: ImageRef::new([7u8; 32], 1, 1),
             },
-            CapturedDelta::ReplaySetNodeFaviconById {
+            CapturedDelta::ReplaySetNodeImageById {
                 node_id: a_id.to_string(),
-                rgba: vec![255, 0, 0, 255],
-                width: 1,
-                height: 1,
+                role: ImageRole::Favicon,
+                image: ImageRef::new([9u8; 32], 1, 1),
             },
             CapturedDelta::ReplaySetNodeMimeHintById {
                 node_id: a_id.to_string(),
@@ -1891,11 +1908,11 @@ mod tests {
         assert!(matches!(out[6], CapturedDelta::ReplaySetNodeUrlById { .. }));
         assert!(matches!(
             out[7],
-            CapturedDelta::ReplaySetNodeThumbnailById { .. }
+            CapturedDelta::ReplaySetNodeImageById { .. }
         ));
         assert!(matches!(
             out[8],
-            CapturedDelta::ReplaySetNodeFaviconById { .. }
+            CapturedDelta::ReplaySetNodeImageById { .. }
         ));
         assert!(matches!(
             out[9],

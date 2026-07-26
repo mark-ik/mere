@@ -149,11 +149,41 @@ mod tests {
     /// Minimal in-memory [`Store`] for the round-trip tests (mirrors the ones in
     /// `content_store` / `athanor`, with `iter_keys` for the sweep helper).
     // The in-memory test store is muniment's (2026-07-12): the
-// hand-rolled one was the same map behind the same seam.
-use muniment::MemoryBackend as MemStore;
+    // hand-rolled one was the same map behind the same seam.
+    use muniment::MemoryBackend as MemStore;
 
-
-
+    /// A `PersistedNode` shaped like one a pre-externalization snapshot held:
+    /// no `images`, legacy fields free for the caller to fill.
+    fn legacy_node(id: &str) -> kernel::persistence::PersistedNode {
+        kernel::persistence::PersistedNode {
+            node_id: id.to_string(),
+            address: kernel::persistence::PersistedAddress::default(),
+            url: format!("https://{id}.example"),
+            cached_host: None,
+            title: id.to_string(),
+            body: None,
+            tags: Vec::new(),
+            tag_presentation: Default::default(),
+            import_provenance: Vec::new(),
+            is_pinned: false,
+            images: Default::default(),
+            legacy_thumbnail_png: None,
+            legacy_thumbnail_width: 0,
+            legacy_thumbnail_height: 0,
+            legacy_favicon_rgba: None,
+            legacy_favicon_width: 0,
+            legacy_favicon_height: 0,
+            session_state: None::<kernel::persistence::PersistedNodeSessionState>,
+            mime_hint: None,
+            classifications: Vec::new(),
+            frame_layout_hints: Vec::new(),
+            frame_split_offer_suppressed: false,
+            properties: Vec::new(),
+            derivations: Vec::new(),
+            last_session_visited: 0,
+            nested: None,
+        }
+    }
 
     #[test]
     fn save_then_load_round_trips_the_bytes() {
@@ -199,6 +229,88 @@ use muniment::MemoryBackend as MemStore;
             assert_eq!(hexes.len(), 2);
             assert!(hexes.contains(&a.hex()));
             assert!(hexes.contains(&b.hex()));
+        });
+    }
+
+    /// A snapshot from before the externalization loads, externalizes, and
+    /// re-saves carrying references only — the phase-2 done-condition.
+    #[test]
+    fn a_legacy_snapshot_externalizes_and_keeps_no_pixels() {
+        pollster::block_on(async {
+            let mut store = MemStore::default();
+            let mut snapshot = kernel::graph::Graph::new().to_snapshot();
+            snapshot.nodes.push({
+                let mut n = legacy_node("https://a.test/");
+                n.legacy_thumbnail_png = Some(vec![0x89, b'P', b'N', b'G']);
+                n.legacy_thumbnail_width = 64;
+                n.legacy_thumbnail_height = 48;
+                n.legacy_favicon_rgba = Some(vec![255, 0, 0, 255]);
+                n.legacy_favicon_width = 1;
+                n.legacy_favicon_height = 1;
+                n
+            });
+            assert_eq!(snapshot.legacy_image_count(), 1, "starts legacy");
+
+            let written =
+                migrate_legacy_images(&mut snapshot, &mut store, |rgba, _, _| Some(rgba.to_vec()))
+                    .await
+                    .unwrap();
+
+            assert_eq!(written, 2, "one preview blob and one favicon blob");
+            assert_eq!(
+                snapshot.legacy_image_count(),
+                0,
+                "nothing inline survives, so nothing is silently dropped later"
+            );
+            let node = &snapshot.nodes[0];
+            let preview = node.images.get(&ImageRole::Preview).expect("preview ref");
+            assert_eq!((preview.width, preview.height), (64, 48));
+            assert_eq!(
+                load_image(&mut store, preview).await.unwrap().as_deref(),
+                Some(&[0x89, b'P', b'N', b'G'][..]),
+                "the pixels are in the blob store, reachable by reference"
+            );
+            assert!(node.images.contains_key(&ImageRole::Favicon));
+
+            // Re-saving now emits references only: the legacy fields are
+            // `skip_serializing`, so no pixels reach the JSON.
+            let json = serde_json::to_string(&snapshot).unwrap();
+            assert!(
+                !json.contains("thumbnail_png") && !json.contains("favicon_rgba"),
+                "a re-saved snapshot carries no inline imagery"
+            );
+
+            // Idempotent: content-addressing means a second pass writes nothing.
+            let again =
+                migrate_legacy_images(&mut snapshot, &mut store, |rgba, _, _| Some(rgba.to_vec()))
+                    .await
+                    .unwrap();
+            assert_eq!(again, 0, "re-running the migration is a no-op");
+        });
+    }
+
+    /// An un-encodable favicon is left in place rather than vanishing.
+    #[test]
+    fn an_unencodable_favicon_is_left_behind_not_dropped() {
+        pollster::block_on(async {
+            let mut store = MemStore::default();
+            let mut snapshot = kernel::graph::Graph::new().to_snapshot();
+            snapshot.nodes.push({
+                let mut n = legacy_node("https://b.test/");
+                n.legacy_favicon_rgba = Some(vec![1, 2, 3, 4]);
+                n.legacy_favicon_width = 1;
+                n.legacy_favicon_height = 1;
+                n
+            });
+            let written = migrate_legacy_images(&mut snapshot, &mut store, |_, _, _| None)
+                .await
+                .unwrap();
+            assert_eq!(written, 0);
+            assert_eq!(
+                snapshot.legacy_image_count(),
+                1,
+                "still counted, so the loss stays visible"
+            );
         });
     }
 

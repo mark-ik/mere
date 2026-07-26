@@ -319,6 +319,21 @@ pub struct Canvas {
     /// not cleared on `clear_scene`), populated via [`register_scene_sprite`](Self::register_scene_sprite).
     /// (Physics scenes — scene-prop sprites.)
     scene_sprite_textures: HashMap<String, (Vec<u8>, u32, u32)>,
+    /// Decoded pixels for the content-addressed images nodes now reference,
+    /// keyed by [`kernel::types::ImageRef`] digest.
+    ///
+    /// After the node-image externalization a node carries a ~40-byte handle,
+    /// not bytes, so the paint path cannot read pixels off the node any more.
+    /// The host resolves a handle through `session_runtime::image_store` (that
+    /// read is async and store-backed, neither of which belongs in the frame
+    /// loop) and registers the decoded RGBA here via
+    /// [`register_resolved_image`](Self::register_resolved_image). An
+    /// unresolved handle simply does not paint, which is the correct behavior
+    /// for a blob that is missing, not yet synced, or swept.
+    ///
+    /// Unbounded today; the plan's phase 4 bounds it by an LRU on the same
+    /// seam, so bounding it changes this map's policy and nothing else.
+    resolved_images: HashMap<[u8; 32], (Vec<u8>, u32, u32)>,
     /// An optional ambient-sim backdrop (a non-rapier sim painted behind the graph for atmosphere):
     /// any [`AmbientSim`] (Game of Life, n-body drift, particle-life), advanced + painted as the
     /// bottom layer each [`frame`](Self::frame). `None` until one is loaded. (Physics scenes P5.)

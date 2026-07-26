@@ -56,14 +56,12 @@ pub trait GraphFixtures {
     fn set_node_title(&mut self, key: NodeKey, title: String) -> bool;
     fn set_node_body(&mut self, key: NodeKey, body: Option<String>) -> bool;
     fn set_node_mime_hint(&mut self, key: NodeKey, mime_hint: Option<String>) -> bool;
-    fn set_node_thumbnail(
+    fn set_node_image(
         &mut self,
         key: NodeKey,
-        png_bytes: Vec<u8>,
-        width: u32,
-        height: u32,
+        role: crate::types::ImageRole,
+        image: crate::types::ImageRef,
     ) -> bool;
-    fn set_node_favicon(&mut self, key: NodeKey, rgba: Vec<u8>, width: u32, height: u32) -> bool;
     fn add_field(&mut self, field: Field);
     fn add_coupling(&mut self, coupling: Coupling);
     fn get_node_mut(&mut self, key: NodeKey) -> Option<&mut Node>;
@@ -132,17 +130,13 @@ impl GraphFixtures for Graph {
     fn set_node_mime_hint(&mut self, key: NodeKey, mime_hint: Option<String>) -> bool {
         Graph::set_node_mime_hint(self, key, mime_hint)
     }
-    fn set_node_thumbnail(
+    fn set_node_image(
         &mut self,
         key: NodeKey,
-        png_bytes: Vec<u8>,
-        width: u32,
-        height: u32,
+        role: crate::types::ImageRole,
+        image: crate::types::ImageRef,
     ) -> bool {
-        Graph::set_node_thumbnail(self, key, png_bytes, width, height)
-    }
-    fn set_node_favicon(&mut self, key: NodeKey, rgba: Vec<u8>, width: u32, height: u32) -> bool {
-        Graph::set_node_favicon(self, key, rgba, width, height)
+        Graph::set_node_image(self, key, role, image)
     }
     fn add_field(&mut self, field: Field) {
         Graph::add_field(self, field)
