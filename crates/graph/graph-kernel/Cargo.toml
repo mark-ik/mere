@@ -74,6 +74,9 @@ uuid = { version = "1", features = ["serde", "v4"] }
 [dev-dependencies]
 futures-util = { version = "0.3", features = ["std"] }
 postcard = { version = "1", features = ["alloc"] }
+# The dissolution-gate harness's CBOR arm (binary facet-sidecar candidate:
+# self-describing like JSON, so unknown-forward foreign facets survive).
+ciborium = "0.2"
 tempfile = "3"
 # Block on the journal's async muniment save/load in tests (matches the substrate
 # crates' test harness).

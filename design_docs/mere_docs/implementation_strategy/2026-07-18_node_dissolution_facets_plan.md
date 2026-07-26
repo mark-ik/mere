@@ -235,10 +235,31 @@ makes things worse than today.
 fallback is not needed. In absolute terms the dissolution tax is 33 ms on a
 50k-node session load, which is not user-visible, and it buys the class system.
 
-**Secondary finding: JSON facets cost 1.65x load over binary facets** (C vs B)
-at roughly equal size. Not gating, since C still loads faster than today, but it
-prices a future move of the facet sidecar to a binary codec. Worth knowing
-before the sidecar grows.
+**Secondary finding: JSON facets cost ~1.65x load over closed-typed binary
+facets** (C vs B) at roughly equal size. Not gating, since C still loads faster
+than today.
+
+**Follow-up (2026-07-26, arm D): the obvious binary fix fails the measurement.**
+The candidate codec for an *open* facet map has to be self-describing
+(unknown-forward foreign facets rule out postcard and rkyv), which means CBOR,
+and `ciborium::Value` is the drop-in for `serde_json::Value`. Measured
+same-shape, same-run: CBOR is **1.28x slower to load than JSON** at only 0.91x
+the size. serde_json's parser is simply better optimized than ciborium's
+reader, and the real cost of the open map is the per-node `Value`/`BTreeMap`
+allocation, which a binary text encoding does not remove. Conclusions:
+
+- `facets.json` stays JSON. The codec intrigue is resolved, negatively, for
+  the price of one dev-dependency and an afternoon arm.
+- If the sidecar ever needs speed, the lever is **shape, not encoding**:
+  closed-typed rows for recognized namespaces (arm B's form, ~1.65x load win)
+  with an opaque-bytes escape lane for foreign facets, the
+  schema-at-the-boundary pattern eidetic already uses. Do not reach for that
+  until the sidecar measurably hurts, because it trades away the store's
+  one-representation simplicity.
+
+Run-to-run noise caveat: cross-run load numbers drift ±15-30% on this machine
+(concurrent builds), so only same-run ratios are quoted; the run-1 table above
+stands as the order-of-magnitude gate.
 
 **What this does not prove.** Synthetic data through mirrored types, not the
 real `PersistedNode`/`Container`. The enum-typed columns (`tag_presentation`,
