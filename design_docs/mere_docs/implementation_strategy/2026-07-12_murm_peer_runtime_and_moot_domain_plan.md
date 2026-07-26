@@ -618,7 +618,7 @@ one](2026-07-23_repo_consolidation_plan.md) in a new place: a manifest comment
 is a claim about the graph, and only `cargo tree` settles it.
 
 **Receipts:** 228 tests green across the four crates, run before and after the
-Topic change — murm-replication 40, gemot 102 (including the four two-peer
+Topic change: murm-replication 40, gemot 102 (including the four two-peer
 convergence proofs over live loopback), mesh 29 (both two-peer network
 tests), murm 57. `cargo fmt` clean (the pass also normalized pre-existing
 unformatted hunks in five gemot files from the concurrent commons-capability
@@ -633,15 +633,15 @@ stay:
 - `Endpoint` + `Gossip` are pass-through values from the host's `sync_parts`.
   Erasing them means murm-replication depending on `transport`, inverting the
   layer for two opaque arguments a caller never constructs.
-- `accept` is handed an `Operation<E>`. That IS the domain's operation — a
+- `accept` is handed an `Operation<E>`. That IS the domain's operation. A
   lane that verifies and signs its own operations should see them, and
-  wrapping it would be ceremony, not a boundary.
+  wrapping it would be ceremony rather than a boundary.
 
 So #3 is met for the space lifecycle and deliberately unmet for the
 operation payload. **The criterion should read: *without naming a session,
-subscription, or topic type* — the things that are p2panda's business — and
-that version is now enforced, since those types appear in exactly two files,
-both inside this crate.**
+subscription, or topic type*, the things that are p2panda's business. That
+version is now enforced, since those types appear in exactly two files, both
+inside this crate.**
 
 **Phase D done-when #1** ("a consumer joins a Moot through one domain API and
 imports no p2panda crate") holds under (b): the constitution and delegation
@@ -694,13 +694,13 @@ detail, so it is recorded rather than guessed. Note that murm would hold
 **RULED (b), Mark, 2026-07-25**: `JoinedSpace` lands in `murm-replication`,
 subject to a deeper look at that crate's goals before building. Two facts
 found while recording the ruling strengthen it. First, `murm-replication`
-already production-depends on `p2panda-net` 0.7.0 — the crate already owns
-the p2panda surface, so (b) changes no dependency posture anywhere; it
+already production-depends on `p2panda-net` 0.7.0, so the crate already owns
+the p2panda surface and (b) changes no dependency posture anywhere; it
 completes the crate's own charter sentence ("owns the reusable p2panda
 receive drain") by owning the drain's construction too. Second, the ceremony
 count was undercounted: gemot carries it in FOUR `#[cfg(test)]` sync modules
 (constitution, delegation, records, tessera) plus the `moot-peer` example,
-alongside mesh's and murm's production copies — seven hand-written sites, and
+alongside mesh's and murm's production copies, for seven hand-written sites.
 knot K5 would be the eighth. A done-condition worth adding when this builds:
 mesh's and murm's direct `p2panda-net` imports shrink to types the drain
 cannot carry, or vanish.
