@@ -15,8 +15,8 @@ use super::{
 };
 use crate::persistence::{PersistedCoupling, PersistedField};
 use crate::types::{
-    BadgeIcon, ClassificationScheme, ClassificationStatus, GraphScope, ImportRecord,
-    NodeClassification, NodeDerivation, NodeImportProvenance, NodeProperty,
+    BadgeIcon, ClassificationScheme, ClassificationStatus, GraphScope, ImageRef, ImageRole,
+    ImportRecord, NodeClassification, NodeDerivation, NodeImportProvenance, NodeProperty,
 };
 
 #[derive(Debug, Clone)]

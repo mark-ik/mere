@@ -1,9 +1,9 @@
 //! V7: the same owner policy, over real transports.
 //!
 //! The V6 suite proved the handshake over a duplex pair. This runs it through
-//! actual `Transport` implementations, so the adapter step (turning an
-//! [`AcceptedSession`] into a [`SessionBinding`]) is exercised for real and
-//! the ingress facts come from the transport rather than a fixture.
+//! actual `Transport` implementations, exercising the real N1 adapter
+//! (`AcceptedSession::session_facts`) so the ingress facts come from the
+//! carrier rather than a fixture.
 //!
 //! The Reticulum arm is behind the `reticulum` feature because it needs the
 //! retinue stack; it is the arm that matters most, since Reticulum acceptance
@@ -17,13 +17,13 @@ use identity::delegation::{
 };
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
 use network_policy::{
-    CarrierKind, DenyReason, LocalNetworkPolicy, NetworkId, ProfileRef, ProofBinding,
-    RequestedAction, RevocationLedger, ServiceAccess, ServiceRule, SessionDecision, SessionFacts,
-    SessionHello, TrafficClass, TrustedRoot, accept_session, initiate_session,
+    DenyReason, LocalNetworkPolicy, NetworkId, ProfileRef, ProofBinding, RequestedAction,
+    RevocationLedger, ServiceAccess, ServiceRule, SessionDecision, SessionHello, TrafficClass,
+    TrustedRoot, accept_session, initiate_session,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use transport::memory::MemoryTransport;
-use transport::{AcceptedSession, Alpn, PeerID, Transport, TransportKind};
+use transport::{Alpn, PeerID, Transport, initiator_binding, initiator_link_binding};
 
 const NETWORK: NetworkId = NetworkId([3; 32]);
 const ROOT_AUTHORITY: [u8; 32] = [7; 32];
@@ -39,27 +39,6 @@ fn root() -> InMemoryProvider {
 /// the same key, which is what D6 requires on an authenticating transport.
 fn member() -> InMemoryProvider {
     InMemoryProvider::from_seed([4; 32])
-}
-
-/// The adapter under test: carrier observations in, [`SessionFacts`] out.
-///
-/// Notochord N1 will move this into `mere-transport` as one audited
-/// construction site; until then it lives here so the shape is exercised.
-fn facts_for<S>(session: &AcceptedSession<S>) -> SessionFacts {
-    let carrier = match session.ingress.transport {
-        TransportKind::Memory => CarrierKind::Memory,
-        TransportKind::P2panda => CarrierKind::P2panda,
-        TransportKind::Reticulum => CarrierKind::Reticulum,
-    };
-    SessionFacts {
-        protocol: session.protocol.as_bytes().to_vec(),
-        transport: carrier,
-        authenticated_initiator: session.peer.map(|peer| peer.to_bytes()),
-        ingress: network_policy::IngressFacts {
-            local_interface: session.ingress.interface.map(|iface| iface.0),
-            shared_link: session.ingress.link,
-        },
-    }
 }
 
 fn grant_to(subject: [u8; 32]) -> SignedDelegationCertificate {
@@ -148,7 +127,7 @@ async fn memory_transport_admits_and_refuses_by_owner_rule() {
                 .accept(server_alpn)
                 .await
                 .expect("accept a session");
-            let facts = facts_for(&session);
+            let facts = session.session_facts();
             let decision = accept_session(
                 &mut session.stream,
                 &server_policy,
@@ -177,11 +156,7 @@ async fn memory_transport_admits_and_refuses_by_owner_rule() {
             .expect("connect");
         // The initiator knows the same facts: this transport authenticates, so
         // the peer it will be seen as is its own id.
-        let binding = ProofBinding::initiator(
-            alpn.as_bytes().to_vec(),
-            Some(member().master_public_key().to_bytes()),
-            None,
-        );
+        let binding = initiator_binding(&alpn, member_peer);
         let reply = initiate_session(&mut stream, &hello_for(&binding), &policy.limits)
             .await
             .expect("initiator handshake");
@@ -270,7 +245,7 @@ mod reticulum {
                 session.peer, None,
                 "reticulum acceptance cannot name its initiator"
             );
-            let facts = facts_for(&session);
+            let facts = session.session_facts();
             assert!(
                 facts.ingress.shared_link.is_some(),
                 "the transcript must have a link to bind to"
@@ -316,8 +291,7 @@ mod reticulum {
         // The initiator learns the link it opened from its own stream. Both
         // ends of a retinue link compute the same id, so this matches what the
         // responder independently observed, and the proof verifies there.
-        let binding =
-            ProofBinding::initiator(alpn.as_bytes().to_vec(), None, Some(stream.link_id()));
+        let binding = initiator_link_binding(&alpn, stream.link_id());
         let stream_link = stream.link_id();
         let reply = tokio::time::timeout(
             Duration::from_secs(30),

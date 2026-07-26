@@ -362,6 +362,48 @@ transport arms.
    asymmetry the plan warns about is enforced by having only these two ways to
    build one, and a unit test asserts both roles derive identical bytes.
 
+### 2026-07-26 — N1 landed (one audited adapter)
+
+`crates/murm/transport/src/session_policy.rs`, behind an optional
+`session-policy` feature, owns the only conversion from an acceptance record
+into carrier facts:
+
+```rust
+impl<S> AcceptedSession<S> {
+    pub fn session_facts(&self) -> SessionFacts;
+    pub fn into_session(self) -> (S, SessionFacts);
+}
+```
+
+plus the two role-specific initiator constructors, `initiator_binding` (a
+carrier that authenticates peers, from the node's **own** identity) and
+`initiator_link_binding` (a link-oriented carrier that cannot, so the shared
+link carries the weight). The hand-built `facts_for` in
+`tests/session_policy.rs` is deleted; both arms now exercise the real adapter.
+
+The dependency runs mere-transport -> network-policy, as the plan requires, so
+the policy core still knows nothing about iroh, p2panda, or retinue and the
+default `mere-transport` build does not pull it in at all.
+
+**Receipt.** Seven unit tests over Memory, p2panda, and Reticulum fixtures:
+p2panda and Memory carry their authenticated initiator, Reticulum keeps its
+honest `None` and its bearer detail, the local interface is carried but two
+sessions differing only in interface produce identical bindings, both roles
+derive the same binding, a different link is a different binding, and
+`into_session` returns the same facts as the borrowing accessor. A forged
+application frame cannot alter any of it structurally: facts are built from
+the acceptance record before a single application byte is read, and
+`SessionFacts` has no deserializer.
+
+**Deviation:** the method is `session_facts()` / `into_session()` rather than
+`into_notochord()`, since the crate is still `network-policy` through N2 and
+naming the method for an unearned promotion would be the same mistake the plan
+warns about. The feature is `session-policy` for the same reason. Both rename
+with the promotion.
+
+Remaining for N2: Murm's real accept path, and Graphshell G5d over
+`P2pandaTransport`.
+
 ### A transport bug this uncovered
 
 The Reticulum arm of `session_policy.rs` was intermittently timing out with

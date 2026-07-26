@@ -29,8 +29,8 @@ use crate::persistence::{
     PersistedFieldLifecycle, PersistedNodeSelector,
 };
 use crate::types::{
-    BadgeIcon, ClassificationScheme, ClassificationStatus, ImportRecord, NodeClassification,
-    NodeDerivation, NodeProperty,
+    BadgeIcon, ClassificationScheme, ClassificationStatus, ImageRef, ImageRole, ImportRecord,
+    NodeClassification, NodeDerivation, NodeProperty,
 };
 
 /// The stable-id, serializable mirror of the replayable graph deltas.
@@ -70,6 +70,19 @@ pub enum CapturedDelta {
         node_id: String,
         new_url: String,
     },
+    ReplaySetNodeImageById {
+        node_id: String,
+        role: ImageRole,
+        image: ImageRef,
+    },
+    // --- Pre-phase-2 inline imagery: readable, never written ---------------
+    //
+    // Journals recorded before the node-image externalization carry raw bytes
+    // in these. They are kept so an existing journal still deserializes and
+    // replays; `replay_delta` returns `None` for them, so the pixels are
+    // dropped rather than restored. That is deliberate: a preview is
+    // experience, not truth, and the next capture re-deposits it. Nothing
+    // emits these variants any more.
     ReplaySetNodeThumbnailById {
         node_id: String,
         png_bytes: Vec<u8>,
@@ -220,8 +233,11 @@ pub enum CapturedDelta {
 
 impl CapturedDelta {
     /// The graph-kernel replay delta this captured record folds back into.
-    pub fn replay_delta(&self) -> GraphDelta {
-        match self {
+    ///
+    /// `None` for records with no live equivalent (pre-phase-2 inline
+    /// imagery), which a replay skips.
+    pub fn replay_delta(&self) -> Option<GraphDelta> {
+        Some(match self {
             Self::ReplayAddNodeWithIdIfMissing { id, url, position } => {
                 GraphDelta::ReplayAddNodeWithIdIfMissing {
                     id: parse_uuid(id),
@@ -269,28 +285,21 @@ impl CapturedDelta {
                 node_id: parse_uuid(node_id),
                 new_url: new_url.clone(),
             },
-            Self::ReplaySetNodeThumbnailById {
+            Self::ReplaySetNodeImageById {
                 node_id,
-                png_bytes,
-                width,
-                height,
-            } => GraphDelta::ReplaySetNodeThumbnailById {
+                role,
+                image,
+            } => GraphDelta::ReplaySetNodeImageById {
                 node_id: parse_uuid(node_id),
-                png_bytes: png_bytes.clone(),
-                width: *width,
-                height: *height,
+                role: *role,
+                image: *image,
             },
-            Self::ReplaySetNodeFaviconById {
-                node_id,
-                rgba,
-                width,
-                height,
-            } => GraphDelta::ReplaySetNodeFaviconById {
-                node_id: parse_uuid(node_id),
-                rgba: rgba.clone(),
-                width: *width,
-                height: *height,
-            },
+            // Legacy inline imagery has no live delta to fold into: the kernel
+            // cannot store a blob (that is async, and the store's job), so the
+            // bytes are dropped and the preview regenerates on next capture.
+            Self::ReplaySetNodeThumbnailById { .. } | Self::ReplaySetNodeFaviconById { .. } => {
+                return None;
+            }
             Self::ReplaySetNodeMimeHintById { node_id, mime_hint } => {
                 GraphDelta::ReplaySetNodeMimeHintById {
                     node_id: parse_uuid(node_id),
@@ -500,7 +509,7 @@ impl CapturedDelta {
                     coupling_id: coupling_id.clone(),
                 }
             }
-        }
+        })
     }
 }
 
@@ -674,7 +683,9 @@ where
     I: IntoIterator<Item = CapturedDelta>,
 {
     for delta in deltas {
-        let _ = apply_graph_delta(graph, delta.replay_delta());
+        if let Some(delta) = delta.replay_delta() {
+            let _ = apply_graph_delta(graph, delta);
+        }
     }
 }
 
