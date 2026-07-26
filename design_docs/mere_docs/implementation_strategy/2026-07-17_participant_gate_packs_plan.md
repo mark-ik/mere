@@ -1,8 +1,8 @@
 # Participant Gate and Packs Plan
 
 **Founded:** 2026-07-17 (design round with Mark; no code changed this round).
-**Scope:** cross-repo (mere, merecat, chartulary, retinue, personae); canonical copy lives here per the moot/retinue precedent.
-**Companions:** the archived [document script substrate plan](../../archive_docs/2026-07-03_completed_plans/2026-06-21_document_script_substrate_plan.md) (the proven wasm host + §11 P2 roadmap this plan builds on), the [runtime mod authoring loop plan](2026-06-30_runtime_mod_authoring_loop_plan.md) (the authoring ergonomics for the same artifacts), the [commitment proof interface plan](2026-06-30_commitment_proof_interface_plan.md) (the proof surface tessera receipts ride), the [kith capability sharing plan](2026-06-30_kith_capability_sharing_plan.md) (grants, revocation/expiry, live capability refs vs offline signed proofs: the trust-widening slice participant grants should reuse), and `merecat/design_docs/2026-07-10_merecat_architecture_plan.md` (doctrine 2: one Action vocabulary; the piccolo lane).
+**Scope:** cross-repo (mere, turnstone, chartulary, retinue, personae); canonical copy lives here per the moot/retinue precedent.
+**Companions:** the archived [document script substrate plan](../../archive_docs/2026-07-03_completed_plans/2026-06-21_document_script_substrate_plan.md) (the proven wasm host + §11 P2 roadmap this plan builds on), the [runtime mod authoring loop plan](2026-06-30_runtime_mod_authoring_loop_plan.md) (the authoring ergonomics for the same artifacts), the [commitment proof interface plan](2026-06-30_commitment_proof_interface_plan.md) (the proof surface tessera receipts ride), the [kith capability sharing plan](2026-06-30_kith_capability_sharing_plan.md) (grants, revocation/expiry, live capability refs vs offline signed proofs: the trust-widening slice participant grants should reuse), and `turnstone/design_docs/2026-07-10_turnstone_architecture_plan.md` (doctrine 2: one Action vocabulary; the piccolo lane).
 
 ## The decision in one line
 
@@ -32,7 +32,7 @@ One authority pipeline for every petition, regardless of who petitions (transact
 authorize (personae proof + grant scope) -> compare revision -> commit attributed graph batch -> enqueue idempotent app effects
 ```
 
-- A **petition** is a typed batch with two halves that commit on two different disciplines: graph edits, which lower to chartulary `GraphEdit`/`CapturedDelta` and commit atomically through the journal, and app effects (fetch, navigation, windows, network), which **cannot roll back** and therefore never precede the commit: they enqueue after the graph batch lands, idempotent, each carrying the batch id. The stringly forms (`dispatch(string)`) are rejected by construction; the WIT and script surfaces mirror the typed Action vocabulary (merecat's piccolo lane already proves the emit-typed-Actions-apply-later half at `src/script.rs`).
+- A **petition** is a typed batch with two halves that commit on two different disciplines: graph edits, which lower to chartulary `GraphEdit`/`CapturedDelta` and commit atomically through the journal, and app effects (fetch, navigation, windows, network), which **cannot roll back** and therefore never precede the commit: they enqueue after the graph batch lands, idempotent, each carrying the batch id. The stringly forms (`dispatch(string)`) are rejected by construction; the WIT and script surfaces mirror the typed Action vocabulary (turnstone's piccolo lane already proves the emit-typed-Actions-apply-later half at `src/script.rs`).
 - **Revision check** is compare-and-append against the journal. Conflicts return the current revision so the proposer can rebase (adopt `document-core`'s `turn-error::revision-conflict(u64)` shape, already proven in `mere/crates/script/document-host`).
 - **Attribution**: every committed batch records the denizen's identity in the journal envelope; stemma carries provenance; scholia carries the user's own annotations on what a denizen did. Honesty bound (2026-07-17): today's `GraphEdit` retains no inverses (a `RemoveNode` keeps neither the payload nor its edges), so the promise at B1 is **auditability plus compensating actions**, never universal undo; universal undo waits for a journal that records pre-state or reversible operations. Prefix replay reconstructs any historical state, but selective inversion of one batch with later edits retained is not available today.
 - **Trust tiers, one authority model, more than one code path**: the live UI is the maximally trusted actor and skips the petition queue and optimistic retry (it cannot pay round-trips per keystroke), but it still writes through the **same attributed commit path**, so every journal entry has an author regardless of tier. Scripts, components, remote moot peers, and agents petition through the gate. The *vocabulary* is uniform (doctrine 2); the mechanism is tiered.
@@ -67,7 +67,7 @@ A participant lives in the graph as a node bearing a nested graph.
 | 3 | wasm component | wasmtime (native), jco later | yes | later |
 | 4 | native crate | compiled in | no | n/a |
 
-Every rung emits the same proposals through the same gate and surfaces in the same palette. Rung 1 is the cheapest extension and needs zero new runtime ("open my research trail" is a rung-1 pack). Rung 3 rides the substrate plan's P2.3 (linker policy) and P2.4 (`WasmModRuntime` bridge) unchanged, plus a typed merecat world beside `document-core`.
+Every rung emits the same proposals through the same gate and surfaces in the same palette. Rung 1 is the cheapest extension and needs zero new runtime ("open my research trail" is a rung-1 pack). Rung 3 rides the substrate plan's P2.3 (linker policy) and P2.4 (`WasmModRuntime` bridge) unchanged, plus a typed turnstone world beside `document-core`.
 
 ### 4. The envelope: packs are (probably) engrams
 
@@ -117,7 +117,7 @@ Mark's framing: the participant concept is the PSO MAG, a small resident compani
 
 ### 7. What this plan does not change
 
-The near-term build order stands: P2.3, P2.4, the typed merecat world. This plan wraps residency, envelope, and distribution around them, and *deletes* future work by unification: moot needs no separate ACL system (a remote peer is a participant), agents need no separate sandbox (an agent is a participant), apps need no per-app package format (one envelope, many worlds).
+The near-term build order stands: P2.3, P2.4, the typed turnstone world. This plan wraps residency, envelope, and distribution around them, and *deletes* future work by unification: moot needs no separate ACL system (a remote peer is a participant), agents need no separate sandbox (an agent is a participant), apps need no per-app package format (one envelope, many worlds).
 
 ## Build order (targets, not durations)
 
@@ -125,11 +125,11 @@ The near-term build order stands: P2.3, P2.4, the typed merecat world. This plan
 - **B0.5, the live gate seam** (chartulary + first consumer): the review's keystone insertion, because the gate is a design until the journal has a transactional, attributed batch API. Contents: (1) revision-checked batch commit on the journal (envelope: batch id + denizen identity + expected seq; refusal carries the current revision for rebase; the log entry type gains an attributed envelope, and migration of existing bare-`GraphEdit` logs is decided here, see open question 7); (2) the post-commit effect queue discipline (idempotent app effects carrying the batch id, drained only after the graph batch lands); (3) authority materialization (signed personae/moot/kith evidence in, grant projections out into the denizen's nested graph; petitions touching projections refused); (4) the B0 follow-ups: archived-pending-removal recovery and self-reference rejection at attach. Done when: a stale-revision batch is refused with the current revision; a committed batch reads back attributed to its denizen; effects demonstrably drain only post-commit; a self-bearing attach is rejected; a simulated crash between archive and parent-save recovers idempotently.
   **Substrate half DONE 2026-07-17** (chartulary `2ced0fb`): journal entry type is now `Batch { author, edits }`; `commit_batch(author, expected, specs)` prechecks every spec against graph + batch-local state before anything mutates, mints edge ids during lowering, refuses stale wholesale with the current revision; convenience mutators became attributed single-spec commits at current revision (the trusted-UI path: same envelope, no optimistic retry); pre-gate logs migrate on load (single-edit batches, author `pre-gate`, identity carried); `commit_bearing_batch` rejects self-bearing; `recover_archived_bearings` completes archived-pending-removal idempotently. Receipts: 33 tests (8 new, covering every done-condition above), clippy clean on the new files. **Remaining half, moves with B1**: authority materialization (signed personae/moot/kith evidence in, grant projections out) is gate-side and cannot live in chartulary (which attributes but does not authenticate), so it lands with the first consumer.
 - **B1 grounding (2026-07-17), the keystone interlock**: exploring mere for the residency home turned up `session-runtime/src/wallet_grant.rs` (2767 LOC), the **device-tier** of the kith capability-sharing plan: `DeviceGrantPayload { personas, scopes: Vec<String>, attenuations, expires_at_ms, wrapped_private_epochs }`, Ed25519-signed over canonical CBOR, with `issue_device_grant` / `verify_device_grant` / revocation-with-epoch-rotation and per-persona `capability_slots`. This is precisely the signed-evidence-to-grant shape the denizen gate needs, one tier up (subject = a denizen, not a paired device; scopes = graph/app capabilities, not `identity.act`/`private.read`). `persona/identity` supplies `PersonaId` + `Ed25519Keypair::{sign,verify}`. mere's `Node` (graph-kernel, 179 LOC) does not implement `GraphBearing` yet; adding it plus a `nested` field is the residency hook. **Note (corrected below)**: `DeviceGrantPayload` is the device tier and does NOT umbrella denizens; the grant model resolved against prior design (open question 8) is the three-layer capability stack + the `gemot::MootAuthorizationProvider` seam, not a wallet_grant derivation. The residency data-model (denizen node + grant *projection* into the nested graph + the gate refusing projection edits, authority read from the provider's `capability_covers`) is the proposed first commit and needs no wallet_grant edit.
-- **B1 residency CORE landed 2026-07-18** (servitor `1af0c91`, the reserved crate's first real content, built headless so it touches neither mere's tree nor wallet_grant): `Subject` (32-byte keyholder, the shape gemot's authorization seam speaks), `Grant` + `AuthorityProvider` (scoped structural cap + replaceable coverage boundary mirroring `gemot::MootAuthorizationProvider`; `PrefixAuthority` the minimal stand-in until the meadowcap layer is built; the gate depends on the trait so the richer provider drops in unchanged), and the `Gate` (one pipeline over a denizen's nested chartulary `GraphLog`: refuse petitions touching a grant projection → check authority → check scope → attributed revision-checked `commit_batch`; grants project read-only, gate-authored, so authority is browsable from the graph). 9 tests green, clippy clean. Remaining for B1: the host residency binding (below), then the merecat palette + install slice.
-- **B1 residency BINDING landed 2026-07-18** (mere `953bf09`): reading the kernel `Node` corrected the approach. `Node` is a web-page anchor (rkyv-archived; favicon/thumbnail/mime/addresses), and its own doc records the slice-C doctrine that browser-runtime state *left* the struct in 2026-07-09 for a host sidecar keyed by node id, "the graph library holds graph facts; what the host knows about a node rides beside the graph." A denizen binding is exactly that host knowledge, so it is a **sidecar mirroring `browser_node_state`**, not a `GraphBearing`/`nested` field on the kernel Node (which would force rkyv and every-constructor churn and mismodel a servitor as a web page). `session-runtime::denizen_bindings`: `DenizenBinding { subject (keyholder hex), nested_log (the node's inner chartulary graph's LogId), kind }`, keyed by node UUID in `denizen_bindings.json` beside `graph.json`, atomic write, prune-empty, forward-compatible kind. 8 tests green, clippy clean. The plan's earlier "GraphBearing + nested on the kernel Node" wording is superseded by this (the `GraphBearing` trait remains chartulary's mechanism for `Container`; mere's web Node does not implement it). Remaining for B1: the merecat palette + install slice (the user-facing half).
-- **B1, rung-1 residency** (mere/merecat; depends on B0.5): denizen nodes, grant projections, palette populated from denizen nested graphs, attributed commit. Done when a local scenario pack installs from file after a visible grant review, runs from the palette, shows attributed journal entries, and its effects are compensable (auditability plus compensating actions; universal undo is explicitly not the B1 bar).
-- **B2, gate the piccolo lane** (merecat): grants read from the participant node instead of feature-flag config. Done when the existing four piccolo tests pass rerouted through the gate, plus an attribution test.
-- **B3, wasm rung** (mere document-host P2.3/P2.4 + merecat world): done when a sample component proposes a batch, the revision-conflict path is exercised, and an ungranted import fails at instantiation.
+- **B1 residency CORE landed 2026-07-18** (servitor `1af0c91`, the reserved crate's first real content, built headless so it touches neither mere's tree nor wallet_grant): `Subject` (32-byte keyholder, the shape gemot's authorization seam speaks), `Grant` + `AuthorityProvider` (scoped structural cap + replaceable coverage boundary mirroring `gemot::MootAuthorizationProvider`; `PrefixAuthority` the minimal stand-in until the meadowcap layer is built; the gate depends on the trait so the richer provider drops in unchanged), and the `Gate` (one pipeline over a denizen's nested chartulary `GraphLog`: refuse petitions touching a grant projection → check authority → check scope → attributed revision-checked `commit_batch`; grants project read-only, gate-authored, so authority is browsable from the graph). 9 tests green, clippy clean. Remaining for B1: the host residency binding (below), then the turnstone palette + install slice.
+- **B1 residency BINDING landed 2026-07-18** (mere `953bf09`): reading the kernel `Node` corrected the approach. `Node` is a web-page anchor (rkyv-archived; favicon/thumbnail/mime/addresses), and its own doc records the slice-C doctrine that browser-runtime state *left* the struct in 2026-07-09 for a host sidecar keyed by node id, "the graph library holds graph facts; what the host knows about a node rides beside the graph." A denizen binding is exactly that host knowledge, so it is a **sidecar mirroring `browser_node_state`**, not a `GraphBearing`/`nested` field on the kernel Node (which would force rkyv and every-constructor churn and mismodel a servitor as a web page). `session-runtime::denizen_bindings`: `DenizenBinding { subject (keyholder hex), nested_log (the node's inner chartulary graph's LogId), kind }`, keyed by node UUID in `denizen_bindings.json` beside `graph.json`, atomic write, prune-empty, forward-compatible kind. 8 tests green, clippy clean. The plan's earlier "GraphBearing + nested on the kernel Node" wording is superseded by this (the `GraphBearing` trait remains chartulary's mechanism for `Container`; mere's web Node does not implement it). Remaining for B1: the turnstone palette + install slice (the user-facing half).
+- **B1, rung-1 residency** (mere/turnstone; depends on B0.5): denizen nodes, grant projections, palette populated from denizen nested graphs, attributed commit. Done when a local scenario pack installs from file after a visible grant review, runs from the palette, shows attributed journal entries, and its effects are compensable (auditability plus compensating actions; universal undo is explicitly not the B1 bar).
+- **B2, gate the piccolo lane** (turnstone): grants read from the participant node instead of feature-flag config. Done when the existing four piccolo tests pass rerouted through the gate, plus an attribution test.
+- **B3, wasm rung** (mere document-host P2.3/P2.4 + turnstone world): done when a sample component proposes a batch, the revision-conflict path is exercised, and an ungranted import fails at instantiation.
 - **B4, pack schema freeze** (renamed from "envelope freeze": the envelope already exists as eidetic's `Engram`): spec re-read DONE 2026-07-17 against both the donor spec and the current implementation (verdict in §4). Remaining: the pack schema (typed part inventory + contribution manifest as payload vocabulary, large parts as muniment blobs by hash), personae signing bound into `TrustEnvelope`, the adapter to the runtime manifest. Done when a signed pack round-trips and a tampered pack is rejected with `Broken`.
 - **B5, retinue distribution** (gated on retinue R4): publish/announce/fetch/install between two instances, tessera receipt visible via a moot's flora. Done when that works on a LAN pair.
 
@@ -138,13 +138,13 @@ Coordination: the moot (gemot) refactor **settled 2026-07-17** (mere `a4da519` "
 ## Findings
 
 - `document-host` P2.0 is green: per-instance Store, revision-checked atomic apply, typed turn-errors, capability-by-linker (unlinked imports fail instantiation), `call_async` fiber foundation. The gate generalizes this contract; it does not replace it.
-- `register-mod-loader` (mere, `crates/system/registry`) is deliberately runtime-free with the `WasmModRuntime` DI trait: the seed of the eventual substrate extraction (sibling repo, per the armillary/numen precedent; extraction happens when the merecat world becomes the second consumer, not before).
+- `register-mod-loader` (mere, `crates/system/registry`) is deliberately runtime-free with the `WasmModRuntime` DI trait: the seed of the eventual substrate extraction (sibling repo, per the armillary/numen precedent; extraction happens when the turnstone world becomes the second consumer, not before).
 - chartulary at plan founding (pre-B0 observation, since landed): capability traits `Identified`/`Addressed`/`ContentBearing`/`Labeled`/`Classified`/`Predicated`; Container/Relation payloads; stemma present; nothing for containment. `GraphBearing` extended the existing pattern rather than adding a new mechanism kind, and B0/B0.5 built containment plus the attributed commit on it.
 - TERMINOLOGY already supplies: engram, flora, tessera, kith/kin, the DocumentTrustState trust ladder, orrery, gnode, link-as-statement. This plan coins as little as possible and flags what it must.
-- The piccolo control lane landed in merecat 2026-07-16 (typed Actions, capability denial, step budgets, four tests): the cheapest place to prove the gate before wasm arrives.
+- The piccolo control lane landed in turnstone 2026-07-16 (typed Actions, capability denial, step budgets, four tests): the cheapest place to prove the gate before wasm arrives.
 - retinue: R0-R7 routing complete and oracle-verified; R4 resources partial (advertisement codec done; windowed transfer + RNS hash/compression derivations remain). Distribution is designed against the spec but gated on that work.
 - hocket is out of scope by doctrine (V1 ships zero plugin hosting); if it ever takes participants they are control-scope, never audio devices.
-- **Moot-agent review (2026-07-17, relayed by Mark), five corrections accepted, citations verified**: (1) `GraphLog` mutators append single edits with neither a revision-checked batch API nor an attributed envelope (spine.rs), so "atomic apply" needed the B0.5 transaction boundary, and app effects (unrollbackable) move strictly post-commit; merecat's `src/script.rs` already proves the emit-typed-Actions half. (2) Grants in a self-editable nested graph would be self-escalation: authority materializes from signed evidence, the graph holds projections. (3) `GraphEdit` retains no inverses (edit.rs), so B1 promises auditability + compensating actions, not universal undo. (4) B0's archive-then-remove has a crash window (nested.rs), and attachment permits self-reference/cycles: recovery invariant + attach guards recorded, owned by B0.5. (5) Pack `Trusted` = signature verifies only; install mints a local grant after visible review, widening upgrades re-review.
+- **Moot-agent review (2026-07-17, relayed by Mark), five corrections accepted, citations verified**: (1) `GraphLog` mutators append single edits with neither a revision-checked batch API nor an attributed envelope (spine.rs), so "atomic apply" needed the B0.5 transaction boundary, and app effects (unrollbackable) move strictly post-commit; turnstone's `src/script.rs` already proves the emit-typed-Actions half. (2) Grants in a self-editable nested graph would be self-escalation: authority materializes from signed evidence, the graph holds projections. (3) `GraphEdit` retains no inverses (edit.rs), so B1 promises auditability + compensating actions, not universal undo. (4) B0's archive-then-remove has a crash window (nested.rs), and attachment permits self-reference/cycles: recovery invariant + attach guards recorded, owned by B0.5. (5) Pack `Trusted` = signature verifies only; install mints a local grant after visible review, widening upgrades re-review.
 - Capability-vocabulary confirmation (Mark, 2026-07-17): the once-suspected split inside `ContentBearing` (externally addressed content vs content stored on the node, like notes) is dissolved by construction. A node's stored body is content-addressed (a muniment blob hash) and external references are scheme-addressed (`Addressed`), so all content is addressed and one body capability suffices; no `StoredContent`/`AddressedContent` fork is wanted.
 
 ## Open questions
@@ -195,7 +195,7 @@ Coordination: the moot (gemot) refactor **settled 2026-07-17** (mere `a4da519` "
   drive a REAL component (accepted emissions queue, an ungranted ring is
   denied and never queues, gate management is refused even under a total
   grant, misfires are typed and loud).
-  **merecat**: `component.rs` implements `ActionSink` as the ring gate
+  **turnstone**: `component.rs` implements `ActionSink` as the ring gate
   (decode → classify → `emit_allowed` → queue) behind a new `wasm` feature
   (opt-in like piccolo); `RunDenizen` branches on what a resident IS (a
   script's source facet vs a component's file pointer) while what it may DO
@@ -211,7 +211,7 @@ Coordination: the moot (gemot) refactor **settled 2026-07-17** (mere `a4da519` "
   preselected; host-only is not a profile choice at all. The review row names
   them and is length-checked to fit one palette row (the first headed run
   clipped the ask — a review you cannot read is not a review).
-  Receipts: merecat 117 green (both features), app-host 4; headed
+  Receipts: turnstone 117 green (both features), app-host 4; headed
   `denizen_wasm.scn` RESULT ok — the review capture reads
   `Install app_core_guest (wasm) — grants: navigate, panes, dispatch, own
   world — Confirm`, and the run log shows `caps.granted()` reporting exactly
@@ -219,7 +219,7 @@ Coordination: the moot (gemot) refactor **settled 2026-07-17** (mere `a4da519` "
   refused (`session: not covered`), `confirm-install-denizen` refused
   (`host-only: no grantable path exists`), with the accepted emission's node
   minted and attributed to the subject.
-- **2026-07-23 (the merecat world RULED: total surface, ring-gated envelope —
+- **2026-07-23 (the turnstone world RULED: total surface, ring-gated envelope —
   Mark)**: the open "which Actions may a component emit" question dissolves.
   A component may potentially emit ALL Actions; what decides is the action's
   **ring** — a capability-path family checked against the denizen's grant at
@@ -228,7 +228,7 @@ Coordination: the moot (gemot) refactor **settled 2026-07-17** (mere `a4da519` "
   stable ABI, packs compile once, grants vary per install. Landed: the wit
   `actions` envelope interface + `app-core` world (mere `wit/world.wit`;
   `{name, payload}` record, `denied`/`unknown`/`malformed` errors,
-  unknown-forward) and merecat's `ring` module — `Ring`
+  unknown-forward) and turnstone's `ring` module — `Ring`
   {navigate `app/navigate`, panes `app/panes`, dispatch `app/dispatch`
   (incl. the omnibar: driving the command surface IS dispatch), session
   `app/session` (new path), **host-only** (NO grantable path: gate
@@ -241,8 +241,8 @@ Coordination: the moot (gemot) refactor **settled 2026-07-17** (mere `a4da519` "
   shape the install review's PRESELECTION only; the visible review stays the
   sole place an ask becomes a grant. Tests: host-only resists a total
   `app/` grant; coverage passes/denies by ring; envelopes decode with loud
-  misfires (merecat 106 green). REMAINING leg: the wasmtime plumbing —
-  instantiate `app-core` in merecat, back `emit` with
+  misfires (turnstone 106 green). REMAINING leg: the wasmtime plumbing —
+  instantiate `app-core` in turnstone, back `emit` with
   decode → `emit_allowed` → attributed lowering, an app-core guest fixture,
   and `app/session`/ring preselection in the review UI.
 - **2026-07-23 (node-tier archive-never-orphan COMPLETE)**: the
@@ -257,21 +257,21 @@ Coordination: the moot (gemot) refactor **settled 2026-07-17** (mere `a4da519` "
   re-borne through the spine, resident rebuilt (same revision). The forget
   paths complete it: emptying the bin and athanor's retirement pass purge
   each tombstone's archived world. Receipts: the delete/recover round-trip
-  test asserts every slot state; merecat 101→106 green, eidetic 88,
+  test asserts every slot state; turnstone 101→106 green, eidetic 88,
   athanor 9.
 - **2026-07-22 (fork CARRIES worlds)**: the follow-on to the containment
   ruling, at file granularity. `Graph::bear_nested` (kernel, public) sets
   `nested` directly WITHOUT the delta spine — for copy/load paths building a
-  graph with no journal yet. merecat's `fork_session_from` re-bears each
+  graph with no journal yet. turnstone's `fork_session_from` re-bears each
   carried world on the fork's copy and copies the world file into the fork's
   own `denizens/` — donor and fork evolve independent worlds thereafter, and
   the fork's denizen rebuilds as a full resident with no legacy heal.
-  Receipts: `fork_carries_denizen_worlds_as_real_copies` (merecat 100 green),
+  Receipts: `fork_carries_denizen_worlds_as_real_copies` (turnstone 100 green),
   headed `denizen_fork.scn` RESULT ok with both sessions verified on disk
   bearing the same world identity in separate files. Archive-never-orphan at
   the SESSION tier already holds by construction (trash moves the whole
   session dir, worlds ride along); the NODE tier stays gated on a node-delete
-  affordance merecat does not have yet, and the deeper chartulary
+  affordance turnstone does not have yet, and the deeper chartulary
   slot-convention storage (worlds inside the parent's muniment store,
   `nested/<log-id>/{log,snap}`) waits for sessions to move off JSON files.
 - **2026-07-22 (containment RULED structural — `Node.nested` + `GraphBearing`
@@ -293,14 +293,14 @@ Coordination: the moot (gemot) refactor **settled 2026-07-17** (mere `a4da519` "
   is the slot-convention follow-on. This closes the two pointer-bridge
   gaps: archive-never-orphan (the world rides the node through archive)
   and fork-shares-world. Receipts: kernel 277 / session-runtime 217 /
-  merecat 99 green; headed `denizen_b1.scn` RESULT ok on the new shape,
+  turnstone 99 green; headed `denizen_b1.scn` RESULT ok on the new shape,
   with `graph.json` carrying `nested` on the denizen node and the binding
   facet persisting as `{subject, kind}` only.
-- **2026-07-22 (B1 COMPLETE — mere `e54ca8cf`, merecat `8b3ad31`)**: the
+- **2026-07-22 (B1 COMPLETE — mere `e54ca8cf`, turnstone `8b3ad31`)**: the
   user-facing half landed and the done-condition is met with receipts. mere's
   `GraphJournal` adopted the attribution envelope (`AttributedDelta { author,
   delta }`; `user` / subject-hex / `pre-gate`; replay strips the envelope).
-  merecat: a dropped `.lua` stages an install with a **content-derived
+  turnstone: a dropped `.lua` stages an install with a **content-derived
   subject** (blake3 of source); nothing mints until the palette's VISIBLE
   review confirms (the ask is the first, highlighted row — dynamic rows now
   lead the actions lane); confirm mints node + `denizen.binding` +
@@ -311,7 +311,7 @@ Coordination: the moot (gemot) refactor **settled 2026-07-17** (mere `a4da519` "
   the subject, read back in the Inspector's new Journal section. Receipt
   `denizen_b1.scn` green (review + attribution captures); the resident-gate
   round trip (in-scope commits attributed / out-of-scope refused) headless.
-- **2026-07-22 (B2 COMPLETE — merecat `9727081`)**: the piccolo lane's
+- **2026-07-22 (B2 COMPLETE — turnstone `9727081`)**: the piccolo lane's
   `ScriptCapabilities` derive from the denizen's structural caps (each class a
   path under `app/`: read/dispatch/navigate/panes), install grants + projects
   `app/` beside the world scope, and the denial surfaces by capability name.
@@ -327,8 +327,8 @@ Coordination: the moot (gemot) refactor **settled 2026-07-17** (mere `a4da519` "
   under coverage), so one authority decides both the piccolo face (B2) and
   the wasm face — the real component instantiates for a covered subject and
   fails at instantiation for an uncovered one. B3's remaining substance is
-  the **merecat world** — an Action-emitting wit world so a component can BE
-  a merecat denizen end-to-end; which Actions a component may emit is a
+  the **turnstone world** — an Action-emitting wit world so a component can BE
+  a turnstone denizen end-to-end; which Actions a component may emit is a
   surface decision for a design round with Mark.
 - **2026-07-22 (B4 COMPLETE — mere `a3a246a8`)**: `mere.pack/v1` frozen in
   eidetic (`pack.rs`): `PackManifest` typed payload (part inventory by content
@@ -364,13 +364,13 @@ Coordination: the moot (gemot) refactor **settled 2026-07-17** (mere `a4da519` "
 - **2026-07-17 (push + B4 pre-work, corrected)**: chartulary pushed (`2ced0fb` on GitHub; the remote already carried `3361f0e`), so mere can re-pin whenever B1 starts. Donor engram spec (TransferProfile v1) re-read in full from the GitHub archive and an initial donor-only verdict recorded; **Mark caught that the current implementation had not been checked**, and the verdict was corrected against `eidetic-core` (486 engram references across 58 files in mere, incl. gemot records, meerkat export, session-runtime athanor): the current `Engram` envelope already exists with content-hash identity and schema-by-reference, so a pack is an `Engram` under a **pack schema**, B4 defines a schema not an envelope, and the donor's multi-part inventory imports as payload vocabulary. §4 and open question 2 rewritten accordingly.
 - **2026-07-17 (review round 2, moot agent)**: "the plan survives review" with four tightenings, all applied: journal ownership clarified in §1 (chartulary owns envelope semantics + the `GraphEdit` journal; mere's `GraphJournal` adopts the envelope over `CapturedDelta` at B1; vocabularies stay separate; envelope promotion into codicil recommended, decided at B1), the existing wasm grant bridge explicitly scoped in §4 (import-level enforcement, document lane, zero app-graph authority until B3, becomes the import-level face of the one grant), the pack-manifest to runtime-manifest adapter defined in §4 (ModManifest is derived state from pack manifest + granted subset, one direction, never authority), and the stale pre-B0 lines in §2/Findings updated.
 - **2026-07-20 (B1 binding SUPERSEDED by the facet convergence)**: `session-runtime::denizen_bindings` (the `953bf09` sidecar) was removed before any host wrote one; the binding is now the **`denizen.binding` facet** (`session_runtime::denizen_facets`, mere `10084b3`): `{subject, nested_log, kind}` as one coherent record in `facets.json`, per the one-node ruling that denizen-ness is a facet bundle, not a node class. Same fields, same host-knowledge doctrine, one store.
-- **2026-07-18 (B1 residency binding, historical)**: added `session-runtime::denizen_bindings` (mere `953bf09`), the host sidecar binding a node to its denizen (subject + nested-graph LogId + kind), mirroring `browser_node_state` per the slice-C doctrine. Reading the kernel `Node` corrected the plan: no `GraphBearing`/`nested` on the web Node (rkyv + constructor churn + mismodeling); the binding is host knowledge in a sidecar. 8 tests, clippy clean, 188 existing session-runtime tests unaffected. Remaining for B1: the merecat palette + install slice.
+- **2026-07-18 (B1 residency binding, historical)**: added `session-runtime::denizen_bindings` (mere `953bf09`), the host sidecar binding a node to its denizen (subject + nested-graph LogId + kind), mirroring `browser_node_state` per the slice-C doctrine. Reading the kernel `Node` corrected the plan: no `GraphBearing`/`nested` on the web Node (rkyv + constructor churn + mismodeling); the binding is host knowledge in a sidecar. 8 tests, clippy clean, 188 existing session-runtime tests unaffected. Remaining for B1: the turnstone palette + install slice.
 - **2026-07-18 (B1 residency core)**: after reading the prior capability design (Mark's steer), built the denizen residency core in the reserved `servitor` crate (`1af0c91`): `Subject`/`Grant`/`AuthorityProvider`/`Gate` over a chartulary nested graph, 9 tests, clippy clean. Headless, zero mere-tree or wallet_grant impact. The grant model rides the existing three-layer stack through an `AuthorityProvider` seam mirroring `gemot::MootAuthorizationProvider`; `PrefixAuthority` stands in until the meadowcap structural-cap layer lands. Servitor moves from name-reservation placeholder to real first content.
 - **2026-07-17 (B0.5 substrate)**: the live gate seam landed in chartulary (`2ced0fb`, committed, push pending with `3361f0e`). Attributed `Batch` journal, `commit_batch` with full precheck + stale refusal carrying current revision, attributed convenience mutators (UI path), pre-gate log migration on load, self-bearing rejection, archived-pending-removal recovery. 33 tests green, clippy clean on new files. Authority materialization deliberately left gate-side, lands with B1. OQ7 largely resolved (migrate-on-load; fork-provenance residue documented). Next release is 0.2.0 (entry type + Container field are breaking).
 - **2026-07-17 (nomenclature + review)**: Mark ruled the remaining names: **denizen** (umbrella, replacing working *participant*), **petition** (replacing *proposal*), **pack** kept plain for rungs 1-2 with **mod** for rung 3+, swatch wording finalized with the gloss correction (a pane containing a swatch). All entries landed in TERMINOLOGY. Same session, the moot-agent review's five corrections were verified against the cited code and folded in: **B0.5 (the live gate seam) inserted as the keystone before B1** (attributed revision-checked batch commit + post-commit effect queue + authority materialization with grant projections + B0 lifecycle follow-ups), undo language softened to auditability + compensating actions, install review separated from pack trust, uninstall retention rule recorded. Open question 7 (journal-envelope migration) opened.
-- **2026-07-17 (post-B0)**: `GraphBearing` blessed as final. chartulary spike committed (`3361f0e`; push pending, and mere's git dep only sees it after the push). Back pointer added to merecat's architecture plan progress log. ContentBearing all-content-is-addressed confirmation recorded in Findings.
+- **2026-07-17 (post-B0)**: `GraphBearing` blessed as final. chartulary spike committed (`3361f0e`; push pending, and mere's git dep only sees it after the push). Back pointer added to turnstone's architecture plan progress log. ContentBearing all-content-is-addressed confirmation recorded in Findings.
 - **2026-07-17 (depth ruling)**: Mark ruled **no cap** on nesting depth (open question 4 resolved): unbounded recursion is substrate-legal; guards live consumer-side, and bearing-cycle traversal must track visited `LogId`s.
 - **2026-07-17 (B0)**: nesting spike landed in chartulary (uncommitted, Mark's tree). `GraphBearing` + `Container.nested` + `nested` module (slot convention, atomic archive, `remove_bearing_node`). 25 tests green. Decisions: no `GraphId` newtype (identity = `LogId`); the slot convention is the registry; archive is a raw-backend atomic move, so nothing is ever destroyed or orphaned. Nesting depth (open question 4) note: recursion is now possible (a nested graph's own nodes can bear graphs); the sanity cap remains undecided and unenforced.
 - **2026-07-17 (naming)**: Mark chose **servitor** for the resident helper; reserved on crates.io (`servitor` 0.0.1, MIT/Apache, published from the new `repos/servitor` placeholder). Animula banked as runner-up. Vocabulary section and open question 5 updated.
 - **2026-07-17 (later)**: §6 added: agents as participants via Mark's MAG framing (feeding = grants + scoped memory, evolution = earned trust, photon blast = prompt tier, raised helpers as packs). Naming round logged in open question 5.
-- **2026-07-17**: Plan founded after a three-round design conversation (extension host shape, substrate placement, free-imagining round). Vocabulary rulings recorded (nested graph / graphlet / swatch). Grounding verified against document-host, chartulary caps, TERMINOLOGY, retinue README, and the merecat architecture plan. No code changed. Next concrete step: B0 spike in chartulary.
+- **2026-07-17**: Plan founded after a three-round design conversation (extension host shape, substrate placement, free-imagining round). Vocabulary rulings recorded (nested graph / graphlet / swatch). Grounding verified against document-host, chartulary caps, TERMINOLOGY, retinue README, and the turnstone architecture plan. No code changed. Next concrete step: B0 spike in chartulary.

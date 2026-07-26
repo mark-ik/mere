@@ -7,9 +7,9 @@
 //! identity lives, which is the opposite of the portable boundary. The
 //! *application* composes Personae; the protocol crates never see it.
 //!
-//! ## Fail closed, unlike Merecat
+//! ## Fail closed, unlike Turnstone
 //!
-//! Merecat's equivalent falls back to an unsealed profile seed when no vault
+//! Turnstone's equivalent falls back to an unsealed profile seed when no vault
 //! backend exists, because a browser refusing to start over a key store is
 //! worse than one that says plainly what protects its key. **Graphshell must
 //! not copy that.** It serves sessions to remote peers who pin the key they
@@ -111,7 +111,7 @@ impl GraphshellIdentity {
 
     /// A per-session endpoint keypair, derived from the profile identity.
     ///
-    /// The same shape Merecat's projection endpoint uses: a session acts under
+    /// The same shape Turnstone's projection endpoint uses: a session acts under
     /// its own key rather than the master, so a compromised session key is not
     /// the profile.
     pub fn session_key(&self, session: &str) -> Result<Ed25519Keypair, IdentityError> {
@@ -237,7 +237,7 @@ mod tests {
 
     #[test]
     fn an_unopenable_vault_is_an_error_not_an_invented_identity() {
-        // A vault path under a FILE cannot be created. Merecat would fall back
+        // A vault path under a FILE cannot be created. Turnstone would fall back
         // to an unsealed seed here; Graphshell must not, because a peer pins
         // the key it reached and a silently different one is an impostor.
         let dir = scratch("closed");

@@ -10,7 +10,7 @@ critique claims code-verified before adoption (see Progress). No code changed th
 **Code touched (read-only survey)**: `crates/canvas/arrangements`, `crates/canvas/canvas`
 (underlay, cartography_scene, fields, sprite_hull), `crates/canvas/cartography` (strategy,
 request, projection), `crates/forme` (topology, SplitPanes), numen `field.rs`/`coupling.rs`,
-`merecat/src/shell.rs`, `isometry-core/src/overmap.rs`, `woodshed-views/src/stage.rs`.
+`turnstone/src/shell.rs`, `isometry-core/src/overmap.rs`, `woodshed-views/src/stage.rs`.
 
 **Related**:
 
@@ -42,7 +42,7 @@ request, projection), `crates/forme` (topology, SplitPanes), numen `field.rs`/`c
 
 The sentence that survived the first review:
 
-> Mere's distinctive subsystem is a graph-to-surface **projection engine**. Merecat composes its
+> Mere's distinctive subsystem is a graph-to-surface **projection engine**. Turnstone composes its
 > surfaces **beside** genet's document-engine surfaces, over a **shared scene, raster, and
 > compositor substrate**.
 
@@ -116,7 +116,7 @@ multiply them.
   (radius is a proto-scale channel), polyline `PositionedEdge`s, `overlays`, `minimap`,
   `content_bounds`, open `metadata`. One `NodeKey` = one instance; no footprints beyond radius;
   no representation slot; no hit/action model. This is the ceiling the §5 scene contract lifts.
-- **Host wiring**: merecat never calls `project_canvas_strategy`; that function itself returns
+- **Host wiring**: turnstone never calls `project_canvas_strategy`; that function itself returns
   `Vec<(NodeKey, PortablePoint)>`, discarding radius/edges/overlays/bounds. The gloss's
   `project_canvas_lens` keeps the overlay channel; the main view keeps positions only.
 - **Geometry is sidecar truth** (S2 complete): placement persists as `arrangement.position`
@@ -336,7 +336,7 @@ devices. Availability beyond your devices comes from the mesh/moot voluntary-hos
 a datacenter; constrained links get the degenerate form (a LoRa-scale "scene" is a
 management-snapshot of facts). **Three consumers with existing roadmap pull**: isometry-web
 (players joining a DM's session from a browser IS this client), the radio companion app
-(Merely LLC's phone-side management surface — the commercial pull), and the remote merecat
+(Merely LLC's phone-side management surface — the commercial pull), and the remote turnstone
 lens. **Sequencing gate**: behind the proof ladder — needs the contract proven on two products
 (proof 4) and scenotime's diff lane; the new pieces it demands are a gated projection-server
 seam in apps (score subscription → scene stream + intent sink), the diff wire format, and the
@@ -382,7 +382,7 @@ crates.io publication beyond name-holding 0.0.1s.
   A fretboard is a mapping from (string, fret) to screen coordinates; notes are projected
   marks, fingerings paths; the related-material swatch currently hand-builds its radial
   placement. That is the scene-side reading, and it undersells the product. Woodshed is also
-  the only consumer whose *source model* is dense on day one: every other product (merecat,
+  the only consumer whose *source model* is dense on day one: every other product (turnstone,
   hocket, isometry) needs content authored or generated before the engine has anything to
   project, while music theory hands Woodshed one chord pair carrying diatonic, shared-tone,
   voice-leading, and practiced-after relations at once, deterministically, with no authoring
@@ -419,7 +419,7 @@ The earlier P0 wiring probe survives as a smoke test, with its decisiveness demo
 examples already establish that footprints are needed, and `project_canvas_strategy` returns
 positions only, so wiring that path alone would reinforce the old boundary.
 
-1. **Wire the existing analytic catalog through merecat** (the smoke test: one strategy exposed
+1. **Wire the existing analytic catalog through turnstone** (the smoke test: one strategy exposed
    as a setting/action, projection applied, headed receipt).
 2. **Introduce the portable scene contract** with point, rectangle, and polygon footprints
    (instance ids, coordinate spaces, representation slots per §5), consumed by mere.
@@ -487,7 +487,7 @@ requirement; ViewIntent.dimension), `crates/canvas/cartography/src/projection.rs
 `crates/system/session-runtime/src/arrangement_facets.rs` (arrangement.position +
 ARRANGEMENT_SPRITE_HULL), `crates/forme/forme/src/topology.rs` (visible_walk ignoring
 ProjectionLens), `crates/forme/forme/src/tree/layout.rs` (SplitPanes), numen
-`field.rs`/`coupling.rs`, `merecat/src/shell.rs` (per-surface rasterize + ordered composite),
+`field.rs`/`coupling.rs`, `turnstone/src/shell.rs` (per-surface rasterize + ordered composite),
 `isometry-core/src/overmap.rs:123` (hand-rolled deterministic force layout),
 `woodshed-views/src/stage.rs:48` (hand-built radial GraphCanvasSwatch).
 
@@ -531,7 +531,7 @@ ProjectionLens), `crates/forme/forme/src/tree/layout.rs` (SplitPanes), numen
   graphshell umbrella (fragment + topos-theory baggage + donor-name ambiguity).
 - 2026-07-21 (same session): **scenograph founded; proof 1 executed.** Family repo pushed
   ([mark-ik/scenograph](https://github.com/mark-ik/scenograph) `5a730e1`; crates.io publication
-  = Mark's step). Proof 1 landed in merecat (palette action → canvas strategy seam →
+  = Mark's step). Proof 1 landed in turnstone (palette action → canvas strategy seam →
   recompute-gated host loop → headed receipt, `RESULT ok`); the spiral packs 15 fixed-extent
   nodes into overlap, making the footprint channel an **empirical finding, not a prediction**.
   Execution + findings tracked in the

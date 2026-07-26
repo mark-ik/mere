@@ -77,7 +77,7 @@ it once, because every content class inherits the answer.
 
 Knot documents (nematic's djot engine) are the natural "page" content class:
 small textual diffs make small codicil ops, which is what LoRa budgets want,
-and one document renders in pelt over http and in merecat over the mesh. The
+and one document renders in pelt over http and in turnstone over the mesh. The
 editor-side sequencing (text-editing primitives at the cambium/genet layer)
 is genet's, recorded in
 [`docs/2026-07-24_pelt_knot_direction.md`](https://github.com/mark-ik/genet/blob/main/docs/2026-07-24_pelt_knot_direction.md).

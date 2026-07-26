@@ -98,9 +98,9 @@ The prospects compose because the stack meets at three seams:
 3. **the sceno scene contract**: spatial arrangement travels between
    products.
 
-Products (pelt, merecat, isometry, hocket, woodshed, graphshell endpoints)
+Products (pelt, turnstone, isometry, hocket, woodshed, graphshell endpoints)
 are thin hosts wiring the three seams together. Knot documents illustrate the
-composition: one document is a page in pelt over http, an engram in merecat
+composition: one document is a page in pelt over http, an engram in turnstone
 over the mesh, and a placed item in a score.
 
 ## Separators, with dispositions (2026-07-24)
@@ -114,7 +114,7 @@ over the mesh, and a placed item in a score.
 3. **Publishing.** Gated on livery obviating stylo; then the genet publish
    rings plan applies.
 4. **Pelt's daily-drive 80 percent.** Ruled as a split: engine-side fact
-   surfaces land in genet components (merecat and pelt both benefit);
+   surfaces land in genet components (turnstone and pelt both benefit);
    per-host persistence (history, bookmarks, sessions, settings) diverges by
    design. Detail in the genet direction doc.
 5. **Text editing.** Ruled table stakes for the engine and toolkit: one

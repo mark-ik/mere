@@ -140,7 +140,7 @@ impl GrantTable {
     ///
     /// Staleness window: a grant that expires between two calls keeps
     /// answering until the next one, so a host must tick this at every moment
-    /// authority is consulted (merecat does it per denizen run).
+    /// authority is consulted (turnstone does it per denizen run).
     pub fn set_now(&mut self, now_ms: u64) {
         self.now_ms = now_ms;
     }

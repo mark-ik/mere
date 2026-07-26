@@ -306,7 +306,7 @@ mod tests {
         let html = include_str!("../docs/receipts/g4_session_switch.html");
         assert_eq!(html.matches("role=\"tab\"").count(), 3);
         assert_eq!(html.matches("<iframe").count(), 3);
-        assert!(html.contains("Merecat · Browsing graph"));
+        assert!(html.contains("Turnstone · Browsing graph"));
         assert!(html.contains("Isometry · Player overmap"));
         assert!(html.contains("Isometry · Moor crossing"));
         assert!(html.contains("open-address requires an address"));

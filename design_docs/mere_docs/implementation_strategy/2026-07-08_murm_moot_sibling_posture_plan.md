@@ -20,7 +20,7 @@ the target standalone package boundary are retired.
 ## 1. Decision record
 
 > **Supersession note (2026-07-12):** Mere is now treated as an offline graph
-> library and Merecat as one reference host. Requiring every host to compose
+> library and Turnstone as one reference host. Requiring every host to compose
 > Murm's pump with Moot's store would export a fragile protocol invariant to
 > every consumer. The replacement plan moves `SyncedSpace`, `MunimentStore`,
 > the accepted-operation processor, retention mechanics, and native drop into

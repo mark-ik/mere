@@ -231,7 +231,7 @@ mod tests {
     /// host never reaches for `resize` (which re-centres) to set the size of a
     /// camera it is only borrowing.
     ///
-    /// The regression: merecat's lens installed a camera and then resized to
+    /// The regression: turnstone's lens installed a camera and then resized to
     /// the lens rect, so the re-centring shift landed on the borrowed camera,
     /// was read back, and was stored. Both windows' graphs walked off-screen a
     /// little per frame.

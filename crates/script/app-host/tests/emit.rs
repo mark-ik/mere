@@ -4,7 +4,7 @@
 //! The envelope lane end to end over a real component: a guest emits app
 //! actions, the host's sink decides, and the guest reads each refusal.
 //!
-//! The sink here is a STUB of merecat's ring gate (this crate is
+//! The sink here is a STUB of turnstone's ring gate (this crate is
 //! app-agnostic — it has no action vocabulary of its own). What it proves is
 //! the mechanism: an accepted emission is queued for the app to lower after
 //! the turn, a refused one never enters the queue, and the guest learns
@@ -30,7 +30,7 @@ fn guest_component() -> PathBuf {
     path
 }
 
-/// A stand-in for merecat's ring gate: `granted` names pass, known-but-
+/// A stand-in for turnstone's ring gate: `granted` names pass, known-but-
 /// ungranted names are denied by ring, unknown names are unknown, and
 /// `open-address` needs a `url` in its payload.
 struct StubGate {

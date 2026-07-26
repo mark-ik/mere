@@ -68,7 +68,7 @@ impl Canvas {
     // `commit_positions_to_graph` — the pre-S2 fork-layout write-back — is
     // retired: positions are not graph truth, and the fork carries the donor's
     // layout by copying `arrangement.*` facets through the component copy's id
-    // remap (tear-out G4-R; merecat `fork_session_from`). The live layout is
+    // remap (tear-out G4-R; turnstone `fork_session_from`). The live layout is
     // `view` (seiche); the durable layout is the facet store.
 
     /// A node's render color, matching the in-scene gnode's class palette: orange when

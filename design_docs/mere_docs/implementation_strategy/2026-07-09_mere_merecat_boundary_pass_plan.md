@@ -1,18 +1,18 @@
-# Mere/Merecat Boundary Pass Plan
+# Mere/Turnstone Boundary Pass Plan
 
 **Date**: 2026-07-09
 **Status**: **Landed** (same day). Slices A/B/C all implemented and verified;
 see Progress for the receipts and the two scope refinements implementation
 forced (mime_hint stays kernel-side; lifecycle removed outright, no sidecar
 runtime enum). Remaining follow-ons are listed in the decisions, not phases.
-**Scope**: Sharpen the mere/merecat boundary ahead of the meerkat port:
+**Scope**: Sharpen the mere/turnstone boundary ahead of the meerkat port:
 (A) finish the armillary promotion (delete the in-mere copy), (B) finish the
 vates promotion (move the decoder and the actor), and (C) split browser-runtime
 state out of `kernel::graph::Node` into a host-owned sidecar. Also records the
 boundary decisions this pass fixes, including the correction to the
-[merecat founding](../../../../merecat/design_docs/2026-07-08_merecat_founding.md)
+[turnstone founding](../../../../turnstone/design_docs/2026-07-08_turnstone_founding.md)
 target shape.
-**Relates to**: the merecat founding doc (amended this session), the
+**Relates to**: the turnstone founding doc (amended this session), the
 [generic graph substrate plan](../technical_architecture/2026-07-08_generic_graph_substrate_plan.md)
 and [G5 rebase progress](../technical_architecture/2026-07-08_g5_mere_rebase_progress.md)
 (the library seam this boundary rides), the
@@ -29,38 +29,38 @@ pass landed), and vates's own
 
 ## Boundary decisions (fixed by this pass)
 
-Recorded 2026-07-09 from the merecat-boundary review with Mark. Each was
+Recorded 2026-07-09 from the turnstone-boundary review with Mark. Each was
 verified against the tree, not carried from docs.
 
-1. **Merecat is a new host architecture fed by promotions, not a copied
+1. **Turnstone is a new host architecture fed by promotions, not a copied
    crate.** meerkat is 174 files / 57,904 lines; its largest modules
    (`command_drain` 1,196, `render/cards` 948, `shell_eval` 884,
    `graph_delta_log` 864) are imperative crossroads. Donor material, wrong
-   shape to preserve. repos/merecat stays a stub until the seam holds
+   shape to preserve. repos/turnstone stays a stub until the seam holds
    (founding doc sequencing, unchanged).
 2. **orrery and platen do not become permanent parts of mere.** The `mere`
    facade re-exports them today (`crates/mere/src/lib.rs:14-15`); that is
    compatibility scaffolding for the in-workspace host, not the library
    boundary. orrery ships a winit bin over genet/netrender git deps; platen
    depends on document-canvas, `genet-host-api`, and the netrender paint vocabulary.
-   Both are application surfaces and move out with merecat. The founding
+   Both are application surfaces and move out with turnstone. The founding
    doc's target shape ("mere = ... forme/platen, orrery ...") is amended
    accordingly this session.
 
    *Amended 2026-07-09 (inker-adoption session): orrery stays in mere.* It
    wants to be the graph-truth presentation library across the apps
-   (merecat, strophe, isometry, woodshed), not a merecat-private surface.
+   (turnstone, strophe, isometry, woodshed), not a turnstone-private surface.
    platen's destination is reopened, undecided. Point 3's split is adjusted
    below. (The crate was subsequently renamed `crates/canvas`, freeing the
    orrery name to the Merely tier ladder; same boundary, new name.)
 
-   *Resolved 2026-07-10 (Mark): platen goes to merecat*, in its refactored
+   *Resolved 2026-07-10 (Mark): platen goes to turnstone*, in its refactored
    shape (the pane home: workbench tiling, tree projection, pane geometry,
    document scene; its graph-scene lane already merged into canvas in the
    07-09 decomposition). Canvas stays in mere per the orrery amendment.
 3. **Moving orrery splits `crates/orrery/` three ways.** quint and seiche
    leave for their own repos (already-decided numen-stack publish follow-on,
-   not this plan); the orrery scene host goes to the merecat canvas lane;
+   not this plan); the orrery scene host goes to the turnstone canvas lane;
    arrangements and cartography travel with platen (platen depends on both;
    they are layout strategies and projection, same lane).
 
@@ -71,11 +71,11 @@ verified against the tree, not carried from docs.
 
    *Superseded by the 07-09 late-session decomposition + the 2026-07-10
    platen resolution:* the graph-scene/cartography lane lives in canvas
-   (mere); platen, as the pane home, goes to merecat.
-4. **The verso family is the heart of the merecat web lane.** verso,
+   (mere); platen, as the pane home, goes to turnstone.
+4. **The verso family is the heart of the turnstone web lane.** verso,
    verso-api, verso-scry, verso-genet, and meerkat-browser-worker are the
-   engine multiplexer and belong to merecat's engine-routing boundary. Any
-   merecat crate sketch that omits them is drawing around the hole. The
+   engine multiplexer and belong to turnstone's engine-routing boundary. Any
+   turnstone crate sketch that omits them is drawing around the hole. The
    port's first vertical path (open address to visible surface) routes
    through verso-api from day one.
 
@@ -85,7 +85,7 @@ verified against the tree, not carried from docs.
    2026-07-09_inker_genet_adoption_plan.md. They are engine machinery (the
    flip is inker's multiplexer's dynamic counterpart), not app boundary.
    meerkat-browser-worker stays app-side. The first-vertical-path statement
-   survives with the import path changed; merecat consumes verso-tile via
+   survives with the import path changed; turnstone consumes verso-tile via
    the genet git dep.
 5. **eidetic stays mere-side, over muniment.** eidetic-core carries its own
    storage-backend-agnostic blob store trait and does not sit on muniment.
@@ -301,10 +301,10 @@ Verified against the tree, 2026-07-09:
 
 ## Progress
 
-- **2026-07-09**: Plan authored from the merecat-boundary review session
+- **2026-07-09**: Plan authored from the turnstone-boundary review session
   (extraction reframed as promotions + new host architecture; orrery/platen
   correction; sidecar design; slice ordering). Facts above verified in-tree
-  this session. merecat founding doc amended (target shape: orrery/platen
+  this session. turnstone founding doc amended (target shape: orrery/platen
   move out with the app; verso family named). No code yet.
 - **2026-07-09 (inker-adoption session): slate amendments.** Decisions from
   the pelt/inker discussion (genet's
@@ -316,7 +316,7 @@ Verified against the tree, 2026-07-09:
   (with its protocol crates as members) and illume rehome to genet. No code
   yet.
 - **2026-07-10: platen resolved.** Platen (refactored 07-09 late session
-  into the pane home; graph-scene lane merged into canvas) goes to merecat.
+  into the pane home; graph-scene lane merged into canvas) goes to turnstone.
   With that, the slate's only open destination question is pane content
   (gloss/trail/apparatus/steward/comms), tracked in the canvas/platen
   decomposition notes.
@@ -379,7 +379,7 @@ Verified against the tree, 2026-07-09:
   PaneContent/ContentPane::Orrery variants stay — donor-internal, dies with
   the port; renaming the frame crate's persisted variant is a separate
   vocabulary decision). Receipts: canvas 128 / platen 50 / meerkat 248 tests
-  green; merecat renamed fully (it is the living host) and smoke-verified on
+  green; turnstone renamed fully (it is the living host) and smoke-verified on
   the restored session.
 - **2026-07-10: pane-content placement DECIDED (with Mark).** Each pane's
   content lives by its truth source; platen owns the furniture (pane-ness:
@@ -390,8 +390,8 @@ Verified against the tree, 2026-07-09:
   alembic + steward vocabulary is session-runtime's (persistence truth),
   views app-side; apparatus splits its natures (settings/config vocabulary =
   `domain/apparatus`, mere; the diagnostics feed is HostObservability = app
-  runtime, so the live pane is merecat's); inspector is merecat's outright
+  runtime, so the live pane is turnstone's); inspector is turnstone's outright
   (fetch/content introspection); comms consumes the Murm and Moot domain
   services (pane view with the app). One sentence: mere owns what a pane says
-  when it speaks graph or persistence truth, merecat owns panes that speak
+  when it speaks graph or persistence truth, turnstone owns panes that speak
   app-runtime truth, platen owns how any of them dock and tile.

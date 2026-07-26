@@ -331,7 +331,7 @@ impl Canvas {
     /// Restores title and tags too (node truth that does not re-derive from a
     /// re-fetch). Edges are not restored (they left with the node); recovering
     /// a full subgraph is a later fidelity step. (Recover-deleted-node; the
-    /// merecat recycle-bin plan, 2026-07-20 — supersedes the fresh-mint Lane 0.)
+    /// turnstone recycle-bin plan, 2026-07-20 — supersedes the fresh-mint Lane 0.)
     pub fn recover_node(
         &mut self,
         id: uuid::Uuid,

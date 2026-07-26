@@ -4,15 +4,15 @@
 **Date**: 2026-07-12.
 **Scope**: Recast Murm as the reusable peer-exchange family, make Moot a
 governed-space domain over Murm's replication foundation, and remove p2panda
-session assembly from Merecat. Preserve Mere as an offline-first graph library.
+session assembly from Turnstone. Preserve Mere as an offline-first graph library.
 **Supersedes**:
 [`2026-07-08_murm_moot_sibling_posture_plan.md`](2026-07-08_murm_moot_sibling_posture_plan.md).
 That plan's completed consolidation and store work remain valid receipts. Its
 purity rule and host-composition target are retired.
 **Related**:
 
-- [`../../../../merecat/design_docs/2026-07-08_merecat_founding.md`](../../../../merecat/design_docs/2026-07-08_merecat_founding.md)
-  fixes Mere as the offline graph library and Merecat as a reference host.
+- [`../../../../turnstone/design_docs/2026-07-08_turnstone_founding.md`](../../../../turnstone/design_docs/2026-07-08_turnstone_founding.md)
+  fixes Mere as the offline graph library and Turnstone as a reference host.
 - [`2026-07-12_deletion_retention_and_native_drop_plan.md`](2026-07-12_deletion_retention_and_native_drop_plan.md)
   defines pruning, retention, checkpoints, and asynchronous carriage over the
   replication foundation established here.
@@ -41,7 +41,7 @@ purity rule and host-composition target are retired.
 4. **Mere stays offline-first.** Mere's core graph, storage, and projection
    libraries remain useful without network dependencies. Optional adapters may
    project Murm or Moot state into Mere graph facts.
-5. **Merecat configures services.** It supplies persona and wallet handles,
+5. **Turnstone configures services.** It supplies persona and wallet handles,
    storage roots, settings, transport availability, executor access, and wake
    integration. It consumes domain commands, snapshots, events, and status.
    It does not build `LogSync`, drain p2panda events, or decide retention law.
@@ -98,7 +98,7 @@ repos/murm
                 |
         optional Mere projections
                 |
-             Merecat
+             Turnstone
         settings, UI, lifecycle
 ```
 
@@ -179,13 +179,13 @@ The current `mooting::RecognitionContext` stays in this family. The generic
 the public single-moot service. `moothold` is the Tier 3 package for multi-moot
 holding and federation behavior.
 
-### 3.4 Mere and Merecat
+### 3.4 Mere and Turnstone
 
 Mere may provide graph-facing adapters such as `MootProjection` or
 `ConversationProjection`. They consume stable domain snapshots and events.
 They do not own peer sessions or group policy.
 
-Merecat owns service lifecycle and product interaction:
+Turnstone owns service lifecycle and product interaction:
 
 - enable, disable, and configure peer services;
 - select persona, storage root, transport preference, and retention settings;
@@ -419,18 +419,18 @@ Done when:
 
 **Restated 2026-07-26. Both of this phase's original subjects are gone.**
 It was written to replace `meerkat/src/sync.rs`, and meerkat was deleted
-2026-07-18; merecat has one manifest naming no p2panda, murm, gemot, or
+2026-07-18; turnstone has one manifest naming no p2panda, murm, gemot, or
 mooting dependency, so it has no peer lane to clean up. There is no host
 protocol assembly left to remove.
 
 So this is now a forward constraint rather than a removal task, which is the
-cheaper direction anyway: when merecat grows a peer lane it consumes services
+cheaper direction anyway: when turnstone grows a peer lane it consumes services
 from the start and never assembles protocol. The app provides configuration
 and receives typed status and events.
 
 Done when:
 
-- **(vacuously true today, and to be held)** Merecat has no direct
+- **(vacuously true today, and to be held)** Turnstone has no direct
   `p2panda-net`, `p2panda-sync`, or store-trait dependencies. True now because
   the lane does not exist; the criterion earns its keep by still holding once
   it does. The reference for what the lane consumes instead is
@@ -463,10 +463,10 @@ The original text, for the record:
 > `repos/murm` (peer transport, `murm-replication`, direct exchange);
 > `repos/moot` (governed-space domain over the branch-tracked Murm
 > dependency); Mere (optional projection adapters, peer dependencies absent
-> from its default core); Merecat (direct dependencies on Mere, Murm, Moot,
+> from its default core); Turnstone (direct dependencies on Mere, Murm, Moot,
 > Personae, and Serval). Done when fresh standalone clones build and test,
 > committed manifests contain no local paths, Mere builds offline without peer
-> features, and Merecat performs the same two-peer scenario through the
+> features, and Turnstone performs the same two-peer scenario through the
 > promoted libraries.
 
 ## 6. Deletion and native-drop consequences
@@ -502,7 +502,7 @@ Plan ordering is explicit:
 - Do not move generic replication machinery into Moot under a community-shaped
   name.
 - Do not make `moot` depend on the direct-conversation Murm facade.
-- Do not leave operation verification or insertion callbacks in Merecat.
+- Do not leave operation verification or insertion callbacks in Turnstone.
 - Do not preserve `murmuring` solely for a hypothetical future protocol.
 - Do not make Mere's default graph library depend on network runtimes.
 - Do not combine key custody, carrier framing, social authorization, and blob
@@ -522,10 +522,10 @@ never leave a criterion pointing at something that no longer exists.
 - **Phase E #1 was already met** and had been for some time. `mooting` is
   absent from mesh's manifest; `transport` is dev-only. Nobody had said so.
 - **Phase F's subjects are both gone.** It was written to replace
-  `meerkat/src/sync.rs`, and meerkat was deleted 2026-07-18. merecat, its other
+  `meerkat/src/sync.rs`, and meerkat was deleted 2026-07-18. turnstone, its other
   subject, has one manifest naming no p2panda, murm, gemot, or mooting
   dependency, so there is no peer lane to clean up either. Restated as a
-  forward constraint: when merecat grows that lane it consumes services from
+  forward constraint: when turnstone grows that lane it consumes services from
   the start. Its first criterion is true vacuously today and earns its keep by
   still holding once the lane exists.
 - **Phase G is void.** The 2026-07-23 consolidation ruling withdrew the
@@ -874,7 +874,7 @@ call of which view a UI shows), and admission still accepts any well-formed
 
 The former `murm has no store` and `moot has no socket` rules forced reusable
 mechanism into two product families and required the application to join it
-again. That is the wrong cost placement once Mere is a library and Merecat is
+again. That is the wrong cost placement once Mere is a library and Turnstone is
 one consumer among several. The durable purity rule is now: the replication
 foundation owns mechanism, domains own meaning and authority, and applications
 own settings and interaction.
@@ -890,7 +890,7 @@ protocol design.
 
 ### 2026-07-12
 
-- Reframed Murm and Moot against the current Mere library and Merecat host
+- Reframed Murm and Moot against the current Mere library and Turnstone host
   boundary.
 - Audited current dependency edges and the public APIs of `transport`, `murm`,
   `murmuring`, `mooting`, `gemot`, mesh, and the old host sync lane.

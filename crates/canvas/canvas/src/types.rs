@@ -74,7 +74,7 @@ pub struct Viewport {
     /// separately, and the only way to do that was
     /// [`resize`](crate::Canvas::resize) — which RE-CENTRES, so the shift landed
     /// on the freshly installed camera and, read back and stored, drifted it a
-    /// little every frame (merecat's lens walked both windows' graphs
+    /// little every frame (turnstone's lens walked both windows' graphs
     /// off-screen this way, 2026-07-26). Setting them together makes that
     /// unrepresentable.
     pub view: (u32, u32),

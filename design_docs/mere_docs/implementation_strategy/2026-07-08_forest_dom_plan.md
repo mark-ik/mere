@@ -2,7 +2,7 @@
 
 **Date**: 2026-07-08
 **Status**: **LANDED 2026-07-18** (see Progress — genet-layout `ForestDom` +
-`layout_subtree`, cambium `push_forest_projection`, merecat chrome as N window-root
+`layout_subtree`, cambium `push_forest_projection`, turnstone chrome as N window-root
 projections of one dom). F4 (multi-DPI) deferred. The body below is the pre-landing
 plan, kept for the design rationale.
 **Parent**: [one_state_n_windows_design](../design/2026-07-05_one_state_n_windows_design.md)
@@ -149,11 +149,11 @@ before committing.
   `layout_subtree` (`subtree.rs`) — the F0/F2 per-root layout capability;
   cambium's `GenetMultiRunner::push_forest_projection` (`multi.rs`) mints
   window-root projections over one shared dom — the F1 runner seam; and the F3
-  consumer is **merecat**, not meerkat (deleted the same day):
-  `merecat/src/chrome_view.rs` renders every window's chrome as a window-root
+  consumer is **turnstone**, not meerkat (deleted the same day):
+  `turnstone/src/chrome_view.rs` renders every window's chrome as a window-root
   subtree of ONE retained `ScriptedDom` — the primary's omnibar card and each
   lens window's caption chip are sibling forest projections. Multi-window rides
   it (lens windows each lay out + paint their own root at their own size).
   **F4 (multi-DPI) remains deferred** as planned, until a real multi-monitor
   DPI split is in hand. Slice-level test bookkeeping was not back-filled here;
-  the living receipts are merecat's chrome + lens tests.
+  the living receipts are turnstone's chrome + lens tests.

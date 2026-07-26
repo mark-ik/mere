@@ -46,7 +46,7 @@ pub const PACK_SCHEMA: &str = "mere.pack/v1";
 pub const PACK_SIG_PREFIX: &str = "personae:ed25519:";
 
 /// What one part of a pack is for — the donor inventory's role vocabulary,
-/// trimmed to what merecat consumes. Unknown-forward so a newer pack loads.
+/// trimmed to what turnstone consumes. Unknown-forward so a newer pack loads.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum PackPartRole {

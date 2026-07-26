@@ -13,11 +13,11 @@ facade, MIT/Apache ed2024, name-holding; crates.io publication is Mark's step).
 
 ## Plan
 
-- **P1 — wire the analytic catalog through merecat (DONE 2026-07-21).** The
+- **P1 — wire the analytic catalog through turnstone (DONE 2026-07-21).** The
   smoke test: one strategy exposed as a palette action, projected through the
   canvas's recompute gate, applied per frame, headed receipt. Done condition
   met: `RESULT ok` +
-  `testing/merecat/images/scenarios/proof1_projection/{01_force_baseline,02_phyllotaxis,03_force_restored}.png`.
+  `testing/turnstone/images/scenarios/proof1_projection/{01_force_baseline,02_phyllotaxis,03_force_restored}.png`.
 - **P2 — the portable scene contract.** Point, rectangle, and polygon
   footprints; instance ids; coordinate spaces; representation slots (brief
   §5), landing in `sceno` with mere as first consumer. This is where the
@@ -64,7 +64,7 @@ neither portable crate nor serialized scene type mentions either product.
 - **P1 confirmed the "separate lanes" diagnosis exactly.** The canvas strategy
   seam (`set_layout_strategy` / `needs_strategy_recompute` /
   `apply_strategy_positions` / `note_strategy_computed`) was complete,
-  documented, and host-ready; the entire gap was the host loop. The merecat
+  documented, and host-ready; the entire gap was the host loop. The turnstone
   wiring is ~60 lines: an `Action::SetLayoutStrategy(Option<&'static str>)`
   variant + two palette entries (`action.rs`), a dispatch arm + an
   `App::drive_layout_strategy(w, h)` host loop (`app.rs`), the drive call
@@ -132,19 +132,19 @@ consumes scenograph (P4) it keeps "overmap" and may render via the Atlas
 arrangement. Only Phyllotaxis→Spiral is renamed now (wired + greenlit); the
 `Board`/`Fractal` proposals await Mark's ratification, not applied unilaterally.
 The proper consistency end-state is the checkmarked layout picker deriving its
-labels from the registry `display_name` (owed follow-up), so merecat stops
+labels from the registry `display_name` (owed follow-up), so turnstone stops
 hardcoding labels; today the hardcoded palette label is kept *matching* the
 registry.
 
 ## Progress
 
 - 2026-07-21: **P1 landed.** Scenograph family founded and pushed
-  (`5a730e1`). Merecat wiring per Findings; `cargo check` green (bin, own
+  (`5a730e1`). Turnstone wiring per Findings; `cargo check` green (bin, own
   cwd); headed receipt via the self-drive scenario lane
-  (`scenarios/proof1_projection.scn`, fresh `MERECAT_ROOT` profile):
+  (`scenarios/proof1_projection.scn`, fresh `TURNSTONE_ROOT` profile):
   force-directed baseline → phyllotaxis applied (physics halted, analytic
   layout holds still) → revert re-settles. `RESULT ok`, three captures,
-  whole-frame check clean. Merecat changes left uncommitted for Mark's
+  whole-frame check clean. Turnstone changes left uncommitted for Mark's
   review.
 - 2026-07-22: **Merely brand read + plain-vocabulary rename (with Mark).** The
   brand doc's animated mark *is* this engine (one graph re-projecting between
@@ -152,7 +152,7 @@ registry.
   *is*"), and its projection grid supplies plain product names. Ruled: brand
   palette + NODE_SHEET re-color are deferred to tinct theming / stylesheet
   customization (not hardcoded now). Applied the arrangement rename
-  Phyllotaxis→**Spiral** consistently — registry `display_name`, merecat palette
+  Phyllotaxis→**Spiral** consistently — registry `display_name`, turnstone palette
   label, scenario `act` label, script verb `layout_spiral` — after the
   stack-consistency survey that produced the two-register model + naming table
   above. Registry rename is display-only (id/tags unchanged); `Board`/`Fractal`
@@ -183,7 +183,7 @@ registry.
   clearance ÷ ~0.9 Vogel neighbor compression), locked by a
   no-pair-overlaps unit test; `Canvas::strategy_extents()` measures from
   `node_size` (per-node overrides + degree/importance channels ride along);
-  merecat's drive loop passes them. Scene lane: `cartography::scene_out`
+  turnstone's drive loop passes them. Scene lane: `cartography::scene_out`
   (`scene_from_projection` + `MERE_GRAPH_ADAPTER`): positioned nodes →
   items with Rect-from-measurement / Circle-from-radius / Point footprints,
   caller-supplied stable ids (Uuid, never NodeKey), edges → routed
@@ -192,7 +192,7 @@ registry.
   (stated honestly — the swatch/cambium consumer is a later slice). Label
   consistency: `CANVAS_LAYOUT_STRATEGIES` "Phyllotaxis" → "Spiral" (the
   second display-name table, now matching the registry). Tests: cartography
-  16 + arrangements 88 + canvas 137 green; merecat rebuilt; scenario re-run
+  16 + arrangements 88 + canvas 137 green; turnstone rebuilt; scenario re-run
   fresh-profile `RESULT ok` — capture 02 now shows a legible golden-angle
   spiral with every 36px box clear (the P1 overlap capture is overwritten
   on disk; the finding text stands as its record). **Follow-ups surfaced**:
@@ -213,7 +213,7 @@ registry.
   collapsed), refreshed each `push_node_geometry` (cheap, no dirty flag),
   and `node_size` maps it DEFAULT..MAX (36..88) below a manual override and
   size-by-importance, above size-by-degree. Wiring: canvas dispatch takes
-  `recent_first`, driven by `canvas.size_by_recency()`; merecat
+  `recent_first`, driven by `canvas.size_by_recency()`; turnstone
   `Action::ToggleSizeByRecency` (+ palette + `toggle_size_by_recency` verb)
   re-selects the active strategy to drop its cache. Added `Action::FitView`
   (+ palette + `fit_view` verb) exposing the shipped `fit_to_content` —
@@ -259,7 +259,7 @@ registry.
   Retinue/Tulle/Sennet location-fact API to adapt yet, so none was invented.
   Focused receipts: `sceno` 13 tests, `scenomise` 4 tests,
   `mere-cartography` 17 tests, `mere-canvas` 140 tests, and
-  `isometry-views` 37 tests, and the Merecat session sidecar test 3 tests.
+  `isometry-views` 37 tests, and the Turnstone session sidecar test 3 tests.
   The headed P3 create/save run and independent restart/restore run both
   report `RESULT ok`.
 - 2026-07-23: **The visible size channel landed, and verifying the receipts
@@ -350,13 +350,13 @@ registry.
   `a_playing_arrangement_pulls_as_a_field_not_an_override`; canvas 143 green.
   Receipt: the played Spiral now keeps its recognizable shape while relaxing,
   where the seed-only version dissolved into an unrelated blob.
-  **Build-topology finding (cost of the sibling split)**: merecat could not see
+  **Build-topology finding (cost of the sibling split)**: turnstone could not see
   the new force at all — mere patches numen/quint/seiche to the local conatus
-  checkout, merecat patched none of them, so it silently built against the
+  checkout, turnstone patched none of them, so it silently built against the
   published crates. Patching *one* is worse than none: local seiche path-deps
   local numen/quint, so a partial patch yields two copies of the same types
   ("expected `numen::coupling::CouplingResponse`, found `CouplingResponse`").
-  The family patches together or not at all; merecat's gitignored
+  The family patches together or not at all; turnstone's gitignored
   `.cargo/config.toml` now mirrors mere's set exactly. Generalizes the
   cargo-cwd lesson: after extracting a crate, every consumer needs the whole
   family patched, and a physics change now costs either a publish or a

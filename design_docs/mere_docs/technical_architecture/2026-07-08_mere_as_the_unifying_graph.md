@@ -10,11 +10,11 @@ built serve it. Companion to `2026-07-08_generic_graph_substrate_plan.md` and
 
 Two moves, one idea.
 
-- **meerkat extracts out as merecat.** The browser application peels off into its
-  own thing. mere keeps the graph; merecat is one consumer of it.
+- **meerkat extracts out as turnstone.** The browser application peels off into its
+  own thing. mere keeps the graph; turnstone is one consumer of it.
 - **mere becomes the graph.** Not "a browser," but the graph library that every
   xilem-serval app with graph-shaped data uses. mere is the unifying orrery for
-  strophe, merecat, woodshed, and isometry.
+  strophe, turnstone, woodshed, and isometry.
 
 "The graph is the mere." An open naming call follows: the term *orrery* (mere's
 current word for the graph-canvas tier) may retire, or narrow to the *view* of the
@@ -30,7 +30,7 @@ graph, once mere itself names the graph. Flagged, not decided.
   graph with mere's web-and-beyond node model, the RDF projection, the lineage, and
   the vault-and-persona indexing. This is the app-facing graph lib. mere *consumes*
   chartulary (the G5 re-base) and *is consumed by* the apps.
-- **Consumers.** merecat (the web graph), strophe (the loop / session graph),
+- **Consumers.** turnstone (the web graph), strophe (the loop / session graph),
   woodshed (the theory graph, already proven in woodshed-graph), isometry (the
   entity / world graph). Each brings graph-shaped data; mere unifies it.
 
@@ -49,7 +49,7 @@ This is the payoff, and it is why the substrate was built the way it was.
 - **Data is semantically intelligible across vaults.** Because content is
   content-addressed (shareable by hash) and semantic relations are IRIs (scholia's
   ring), data from different vaults and different apps interoperates as real linked
-  data. A woodshed practice note can cite a merecat page; an isometry campaign can
+  data. A woodshed practice note can cite a turnstone page; an isometry campaign can
   reference a strophe loop; a persona's notes span all their vaults. The private,
   app-specific relations stay private (the two-ring split); only the shared semantic
   ring crosses vault boundaries.
@@ -78,11 +78,11 @@ Nothing here is speculative plumbing; it is what G0-G5 produced:
 
 > **Amended 2026-07-18** by [one node, atomic facets, and the layer map](2026-07-18_one_node_facets_layer_map.md):
 > 5.1 is retargeted (the kernel `Node` *dissolves* into `chartulary::Container`
-> facet-by-facet; "web page" becomes a merecat-defined content class) and 5.4 is
+> facet-by-facet; "web page" becomes a turnstone-defined content class) and 5.4 is
 > **resolved-redundant** (Container already is the generalized container node,
 > including subgraphs via `GraphBearing`; there is no "above" to build).
 
-1. **merecat extraction scope.** What leaves mere with the browser (genet host,
+1. **turnstone extraction scope.** What leaves mere with the browser (genet host,
    rendering, page runtime, the web-runtime node facets: favicon, viewer routing,
    session restore, lifecycle) versus what stays as the orrery (the container graph,
    RDF, lineage, vault and persona indexing). The capability-trait work already drew
@@ -103,11 +103,11 @@ Nothing here is speculative plumbing; it is what G0-G5 produced:
 1. Finish G5: graph adoption (`chartulary::Graph<Node, EdgePayload>` behind a seam),
    history over the spine, analytics retarget. mere's graph becomes a chartulary
    graph.
-2. merecat extraction: peel the browser off along the seam step 5.1 identifies.
+2. turnstone extraction: peel the browser off along the seam step 5.1 identifies.
 3. The vault / persona layer: personae indexes muniment vaults; cross-vault semantic
    queries via scholia (and semantic search via sibylla).
 4. Onboard the apps as vaults in the pool: woodshed (proven), then strophe, isometry,
-   merecat.
+   turnstone.
 
 The through-line: the substrate program was never just "extract mere's graph." It
 was "build the orrery that unifies every app's graph-shaped data into one

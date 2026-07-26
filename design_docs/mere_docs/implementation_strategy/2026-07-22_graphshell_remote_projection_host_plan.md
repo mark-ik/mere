@@ -13,7 +13,7 @@ audio-primitives row deferred to a git pin. The four protocol planes, the
 disclosure rules, the G-series proof sequence, and all landed receipts remain
 in force unchanged.
 **Status:** the local G0 boundary is sealed; G1's loopback presentation, G2's
-diff/resume/persistence, and G3's real Merecat endpoint proofs are complete as
+diff/resume/persistence, and G3's real Turnstone endpoint proofs are complete as
 of 2026-07-22. The Graphshell workspace is published on the existing
 `mark-ik/graphshell` repository; its retired browser donor remains available in
 the same Git history. G4, the already-proven Isometry projection, is next.
@@ -33,7 +33,7 @@ and the
 ## 1. Product ruling
 
 Graphshell is one web-first client for projections served by applications
-running on the user's own devices. Merecat, Woodshed, Isometry, Hocket, and a
+running on the user's own devices. Turnstone, Woodshed, Isometry, Hocket, and a
 radio-management application remain the authorities over their native data.
 They expose granted projection sessions. Graphshell discovers those sessions,
 opens saved views, realizes their scenes, and sends typed intents back.
@@ -108,8 +108,8 @@ Apache-2.0, edition 2024. Start with four packages:
    Genet, and NetRender. Split a `graphshell-genet` adapter later only if a
    second presentation host creates real pull.
 
-Application adapters remain with their truths. The first Merecat adapter lives
-in `repos/merecat`; an Isometry adapter lives in `repos/isometry`; the same rule
+Application adapters remain with their truths. The first Turnstone adapter lives
+in `repos/turnstone`; an Isometry adapter lives in `repos/isometry`; the same rule
 applies to Woodshed, Hocket, and radio management. An adapter is not a new repo.
 
 The retired browser donor occupied the `graphshell` GitHub name. Publication
@@ -361,7 +361,7 @@ workspace containing `graphshell-protocol`, `graphshell-client`,
 only Scenograph scores/scenes plus session/status/intent envelopes; client
 state is endpoint-scoped scene curation; endpoint traits are injected beside
 application truth. The facade intentionally contains no renderer or carrier.
-Its manifest rules out Mere, Merecat, Isometry, Genet, Cambium, NetRender, and
+Its manifest rules out Mere, Turnstone, Isometry, Genet, Cambium, NetRender, and
 network runtimes. PR `mark-ik/graphshell#308` unarchived the existing repository
 and made the portable workspace its active tree through merge commit
 `175084d2`, while preserving the complete donor lineage. Its native workspace
@@ -439,22 +439,22 @@ audit pass. Encryption is supplied by the injected store contract; a durable
 host store, authenticated carrier, offline intent queue, and product adapter
 remain later work.
 
-### G3. Serve Merecat through a real endpoint
+### G3. Serve Turnstone through a real endpoint
 
-- Add a Merecat adapter over one existing score and scene path.
-- Reuse Merecat's current source references and presentation-resource work;
+- Add a Turnstone adapter over one existing score and scene path.
+- Reuse Turnstone's current source references and presentation-resource work;
   decompose `content-contract` only as far as the proof demands.
 - Map one harmless action and one graph-changing action through the live gate.
 - Add a headed loopback scenario before adding network variability.
 
-**Done when:** the Graphshell application displays a live Merecat projection,
+**Done when:** the Graphshell application displays a live Turnstone projection,
 changes its local layout without changing Mere truth, and receives both an
 accepted and a rejected intent receipt.
 
-**Implemented locally 2026-07-22 (Graphshell `5f30502`, Merecat `7996af2`):**
+**Implemented locally 2026-07-22 (Graphshell `5f30502`, Turnstone `7996af2`):**
 Graphshell's product-neutral receipt view now realizes disclosed Scenograph
 item origins and relations, resolves the presentation payloads that fill those
-placements, and changes to a semantic card stack on narrow screens. Merecat is
+placements, and changes to a semantic card stack on narrow screens. Turnstone is
 now a library plus thin desktop binary; its endpoint reads the live Mere graph,
 uses the existing Mere-cartography Spiral score and scene lowering, transfers
 three content-addressed cards, and retains the two graph relationships as
@@ -462,34 +462,34 @@ routed scene relations. Both advertised actions return through one Servitor
 gate. The projected `projection/layout/` grant accepts `FitView`; the
 graph-changing `OpenAddress` petition under `graph/open/` is rejected, leaving
 Mere graph revision 5 and its three nodes unchanged. The accepted audit commit
-is attributed to the endpoint subject. Merecat's 98 library tests and both
+is attributed to the endpoint subject. Turnstone's 98 library tests and both
 binaries pass; the G3 executable receipt is byte-checked; Graphshell's native,
 Wasm, warning-denying Clippy, and product-dependency walls pass. Headed checks
 at wide and narrow browser sizes found keyboard-reachable actions, responsive
 collapse, no horizontal overflow, and no browser errors. This remains a local
 loopback proof over the Spiral score. The authenticated carrier, negotiated
 grants, revocation, diffs, and durable host store remain later work, and the
-committed Merecat Git dependencies now resolve from Graphshell `main` at
-`175084d2`; `cargo check --lib` passes with Merecat's local Graphshell patch
+committed Turnstone Git dependencies now resolve from Graphshell `main` at
+`175084d2`; `cargo check --lib` passes with Turnstone's local Graphshell patch
 disabled.
 
 ### G4. Serve the already-proven Isometry projection
 
 - Add an Isometry endpoint for the overmap and one tile-board scene.
-- Drive it from the same serialized score vocabulary used by Merecat.
+- Drive it from the same serialized score vocabulary used by Turnstone.
 - Keep Isometry rules, campaign data, and rendering adapters inside Isometry.
 - Run the browser-sized Graphshell view as an Isometry player surface.
 
-**Done when:** the same Graphshell binary switches between Merecat and Isometry
+**Done when:** the same Graphshell binary switches between Turnstone and Isometry
 sessions without either product in its dependency graph, proving endpoint and
 client neutrality over the P4 vocabulary.
 
 **Implemented locally 2026-07-22:** Graphshell now owns a product-neutral local
 stdio carrier, endpoint discovery catalog, and generic session switcher.
-Merecat advertises its existing browsing-graph projection through a thin
+Turnstone advertises its existing browsing-graph projection through a thin
 endpoint binary. Isometry owns a new endpoint adapter over its campaign world,
 overmap, and tile-board truth; both player scenes lower through the same
-Scenograph score vocabulary already exercised by Merecat. One Graphshell
+Scenograph score vocabulary already exercised by Turnstone. One Graphshell
 process mounted all three advertised sessions from the two endpoint processes,
 resolved their product-owned presentations, and returned both accepted
 curation actions and rejected product actions. The committed Graphshell receipt
@@ -543,7 +543,7 @@ independence. Keep product adapters beside their source truth.
 
 | Current boundary | Ruling | Trigger or consequence |
 |---|---|---|
-| `repos/scenograph` | **Keep and fill.** Move Mere's generic `arrangements` algorithms into `scenomise`; move only kernel-neutral scene contracts into `sceno`; build diffs in `scenotime`. | The family already has Merecat consumption and Isometry pull. |
+| `repos/scenograph` | **Keep and fill.** Move Mere's generic `arrangements` algorithms into `scenomise`; move only kernel-neutral scene contracts into `sceno`; build diffs in `scenotime`. | The family already has Turnstone consumption and Isometry pull. |
 | Mere `canvas/{canvas,cartography,arrangements}` | **Withdraw the old wholesale-promotion plan.** `mere-canvas` is visibly Mere-specific: it owns a kernel graph, signals, seiche bridge, Genet DOM, NetRender paint, and a native bin. Keep that graph surface in Mere. `mere-cartography` becomes the Mere-to-Scenograph adapter. | Scenograph now owns the portable scene/layout boundary. |
 | Shared graph-view UI | **Promote through Cambium/Sprigging only after a second consumer, initially Woodshed, agrees on the interaction contract.** Reuse camera, selection, semantic children, and scene realization; keep Mere graph mutation adapters in Mere. | Woodshed currently has its own graph swatch and is the real second consumer. |
 | Mere `content-contract` | **Decompose instead of exporting.** Move NetRender scene/font/image serialization to NetRender; move generic document-worker messages to Genet; keep Mere graph contributions in Mere. Graphshell consumes the renderer wire through a presentation codec. | The crate currently depends on `document-canvas`, Mere kernel, linked-data, and NetRender, so it is not a portable remote contract. |
@@ -557,7 +557,7 @@ independence. Keep product adapters beside their source truth.
 | Mere `register-*` microcrates | **Do not promote this donor cluster as Graphshell infrastructure.** Move live contracts to owners: layout descriptors to Scenograph, viewer selection to Inker, presentation codecs to Graphshell/Genet, app lenses/themes/knowledge to Mere. Retire islands with no callers. | `register-layout` is currently used only through `register-viewer`; `register-renderer-types` has no live consumer; several others are workspace roots rather than integrated services. |
 | `uxtree` | **Keep in Mere for now.** It is browser-shaped and depends on Inker. Extract a renderer-neutral semantic core into Meristem only after Graphshell and another app prove the same structure. | Accessibility reuse is desirable; rebranding an application projection as a wire protocol is not reuse. |
 | `armillary`, `personae`, `servitor`, `sibylla`, `vates`, `wavicle`, `netfetcher`, `misfin` | **Keep standalone.** Each has a narrow dependency direction, an independent protocol or runtime contract, and more than one plausible consumer. | Graphshell consumes some directly but does not become their family repo. |
-| Merecat, Woodshed, Hocket, Isometry | **Keep product workspaces.** Their model, driver, view, and host crates share product acceptance and should move together. | Shared substrate leaves through proven public seams; product truth stays local. |
+| Turnstone, Woodshed, Hocket, Isometry | **Keep product workspaces.** Their model, driver, view, and host crates share product acceptance and should move together. | Shared substrate leaves through proven public seams; product truth stays local. |
 | `merely-made.github` | **Keep as the brand/site repository.** It has no place in the Rust dependency graph. | Product and architecture docs may cite it; crates do not depend on it. |
 | `wgpu-graft`, `wgpu-scry`, `wgpu-weld` | **Keep as low-level interop repositories.** Graphshell reaches them only through Genet/NetRender adapters. | Pulling experiments or foreign-surface backends into Graphshell would invert the renderer boundary. |
 
@@ -639,7 +639,7 @@ the low-power lane, landed the same week):
   session IS the process, so nothing would survive to resume. `Close` is
   honoured — it ends the loop. The exhaustive matches meant the compiler
   demanded a decision at every consumer, which is why these are decisions
-  rather than defaults. Receipts: protocol 8 tests, merecat 145, graphshell
+  rather than defaults. Receipts: protocol 8 tests, turnstone 145, graphshell
   port and stdio green.
 
 - **G5a.1 — corrected after review, 2026-07-25.** The first cut added
@@ -675,7 +675,7 @@ the low-power lane, landed the same week):
      served).
 
   Receipts: network-policy 11, protocol 8, stdio 4 (3 new), client/endpoint/
-  port green, merecat 145.
+  port green, turnstone 145.
 
   **Sequence recut** (review): G5a.1 as above → **G5b** selected Graphshell
   profile plus explicit endpoint-key proof → **G5c** `network-policy` producing
@@ -699,7 +699,7 @@ the low-power lane, landed the same week):
   identity minted behind their back) from the shared vault. `graphshell-client`
   and `graphshell-protocol` still declare **zero** personae dependencies, per
   §3; the application composes identity, the protocol crates never see it.
-  **It fails closed, deliberately unlike Merecat.** Merecat falls back to an
+  **It fails closed, deliberately unlike Turnstone.** Turnstone falls back to an
   unsealed seed because a browser refusing to start over a key store is worse
   than one that says what protects its key. Graphshell must not copy that: it
   serves peers who *pin* the key they reached, so an invented identity is
@@ -719,7 +719,7 @@ the low-power lane, landed the same week):
   `PROJECTION_PROTOCOL` label that rides the signed transcript, `open_session`
   (initiator) and `admit_session` (responder, returning the
   `AdmittedPrincipal`). The first real consumer of the capability round outside
-  merecat, and it required **no change to `network-policy`'s vocabulary** —
+  turnstone, and it required **no change to `network-policy`'s vocabulary** —
   adding a service really was a new triple, as its open `RequestedAction`
   promised.
   `open_session` returns a `SessionHello` rather than encoded bytes so it

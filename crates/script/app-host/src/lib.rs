@@ -16,7 +16,7 @@
 //! What decides an emission is therefore NOT this crate. This host is
 //! app-agnostic: it moves the envelope across the boundary and hands it to a
 //! host-supplied [`ActionSink`], which decodes it, classifies it into a
-//! capability RING, and checks the emitting denizen's grant (merecat's `ring`
+//! capability RING, and checks the emitting denizen's grant (turnstone's `ring`
 //! module). A [`Refusal`] comes straight back to the guest as a typed error,
 //! so a component learns "denied: session" synchronously rather than trapping
 //! or silently no-op'ing.
@@ -259,7 +259,7 @@ impl<S: ActionSink + 'static> AppScript<S> {
     }
 }
 
-/// The blocking face of [`AppScript`] for sync hosts (merecat's spine is
+/// The blocking face of [`AppScript`] for sync hosts (turnstone's spine is
 /// sync): a minimal `block_on` with no global runtime, matching
 /// document-host's `WasmModRuntime` bridge. With no async import in this
 /// world, every call completes in a single poll.

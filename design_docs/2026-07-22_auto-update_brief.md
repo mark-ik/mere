@@ -29,7 +29,7 @@ alongside the identity vault
 
 ## Prior art by surface
 
-### Desktop (hocket, merecat, isometry, woodshed, mere, strophe)
+### Desktop (hocket, turnstone, isometry, woodshed, mere, strophe)
 
 - **Velopack** (MIT, active as of July 2026): installer + auto-update
   framework, Win/macOS/Linux, delta packages, background apply. Core is

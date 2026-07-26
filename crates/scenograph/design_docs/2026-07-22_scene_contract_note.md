@@ -123,7 +123,7 @@ all wired on.
   consumers asking.
 - **`Measurements` lookup shape** — the question is moot, and its answer is
   worth more than the question. Nothing consumes `sceno::measure`: not mere,
-  not isometry, not merecat, not graphshell. The extent lane shipped in two
+  not isometry, not turnstone, not graphshell. The extent lane shipped in two
   other places instead. Hosts measure and stamp `ScoreItem.footprint`, and
   mere carries per-node extents through `ViewIntent.extents` →
   `CartographySceneOptions.extents` → the adapter. "The representation

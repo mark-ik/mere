@@ -19,7 +19,7 @@
 //! cartography geometry). That lane merged into the `canvas` crate — the
 //! graph-truth presentation library that absorbed the old `orrery`
 //! content-root — leaving platen the pane composition home. See the
-//! mere/merecat boundary pass plan's amendments.
+//! mere/turnstone boundary pass plan's amendments.
 //!
 //! ## What platen does NOT own
 //!

@@ -2,10 +2,10 @@
 
 **Date**: 2026-06-24
 **⚠️ 2026-07-19 — the entire implementation below was meerkat/orrery, deleted with meerkat
-(2026-07-18). The gesture stack is UNWIRED on merecat.** The kernel primitives survive
+(2026-07-18). The gesture stack is UNWIRED on turnstone.** The kernel primitives survive
 (`copy_component_from`, `copy_node_from`, graphlet bindings, `CopiedFrom` provenance); the host
 half (shell commands, `fork_session_from`, the live drag seam) died with meerkat and awaits a
-merecat re-wire. Fork specifically now carries layout through the `arrangement.*` / `scene.*`
+turnstone re-wire. Fork specifically now carries layout through the `arrangement.*` / `scene.*`
 facet families, not the retired `commit_positions_to_graph` write-back — see **G4-R** at the
 tail. The status line below is the meerkat-era record, kept for the design (not the wiring).
 
@@ -491,9 +491,9 @@ v0 (palette parent link suffices); auto-consolidation policy disabled by default
   remaining list. The only material tear-out-gesture item still open is the ambiguous
   no-modifier orrery drag path, which stays coupled to the notification/toast work.
 
-## G4-R — Fork re-wiring on merecat (facet-carry)
+## G4-R — Fork re-wiring on turnstone (facet-carry)
 
-**Date**: 2026-07-19. **Status**: **COMPLETE 2026-07-20** (mere `c9caf26`, merecat `aa32a24`;
+**Date**: 2026-07-19. **Status**: **COMPLETE 2026-07-20** (mere `c9caf26`, turnstone `aa32a24`;
 sequenced after the sidecar convergence, the overmap planning pass, and the hygiene bin, per
 Mark). Checklist:
 
@@ -502,24 +502,24 @@ Mark). Checklist:
 - [x] **R1** session-runtime: `copy_node_facets` (whole-record per-node carry through the
       remap — layout, web state, foreign namespaces) + `copy_scene_facets`
       (donor-container → fork-container); both unit-tested
-- [x] **R2** merecat: `App::fork_session_from` — fresh `SessionId` + **real** `GraphId`,
+- [x] **R2** turnstone: `App::fork_session_from` — fresh `SessionId` + **real** `GraphId`,
       `parent_session` back-reference, component copy + facet-carry, persisted
       graph.json/facets.json, v0 opens by `Effect::SwitchSession` (donor saves on the way
       out); `App::refresh_facets` extracted so the shell save and the fork carry share one
       live-state refresh; headless test locks remap carry + scene carry + the switch effect
-- [x] **R3** merecat: Ctrl+Shift at the workbench tab drag-out lowers `ForkNode` (plain
+- [x] **R3** turnstone: Ctrl+Shift at the workbench tab drag-out lowers `ForkNode` (plain
       drag-out stays the branch arm; Shell now tracks Shift); palette arm `ForkFocusedNode`
       ("Fork from node")
 - [x] **Cleanup**: `Canvas::commit_positions_to_graph` removed
 - [x] **Receipt**: `scenarios/facet_fork.scn` green
-      (`testing/merecat/images/scenarios/facet_fork/`) — the fork adopts with its 2-node
+      (`testing/turnstone/images/scenarios/facet_fork/`) — the fork adopts with its 2-node
       component at the carried layout; on disk, donor (14 nodes, no parent) and fork (2
       remapped nodes, parent back-ref, real GraphId) hold independent facet stores. The
       overmap's O2 rung is thereby pre-paid: the lineage edge (`parent_session`) is written;
       the derived overmap renders it when O0/O1 land.
 
 Fork was G4-DONE in meerkat and died with
-it; this re-wires it on merecat, and folds in the layout-carry change the position retirement
+it; this re-wires it on turnstone, and folds in the layout-carry change the position retirement
 (S2) forced. The design (brief §4.3, G4 above) is unchanged: Ctrl+Shift+drag mints a new
 `SessionId` + `GraphId`, snapshots the dragged node's reachable connected component into it, and
 records a weak `parent_session` on the fork manifest; donor untouched, the two independent.
@@ -545,11 +545,11 @@ gesture at R3):
   carry the container's `scene.*` from the donor `root_graph_id` to the fork's, so the fork opens
   with the donor's sizing mode + damping. This is the replacement for the retired
   `commit_positions_to_graph` layout carry.
-- **R2 — the fork operation (merecat).** Re-mint meerkat's `fork_session_from` on merecat: new
+- **R2 — the fork operation (turnstone).** Re-mint meerkat's `fork_session_from` on turnstone: new
   `SessionId` + `GraphId` + manifest (`parent_session = donor`), `copy_component_from` the donor
   graph into a fresh `Graph`, `copy_node_facets` (R1) via the R0 remap, persist the fork's
   `graph.json` + `facets.json`, and open it. *(Correction 2026-07-19: an earlier draft called
-  merecat "single-window" — wrong; merecat has full lens multi-window. The real constraint is
+  turnstone "single-window" — wrong; turnstone has full lens multi-window. The real constraint is
   that a lens shows the ONE app's panes, and a fork is a new session.)* **"Open the fork"
   resolved by the overmap reframe (Mark, 2026-07-19; recorded in the facets plan):** the
   sessions themselves are container nodes in a graph one level up, and fork is node lineage at
@@ -557,7 +557,7 @@ gesture at R3):
   graph gesture as any other container, not a window question. Windows stay lenses. **v0 ships
   as session-switch** (adopt the fork after minting — the existing switch path, no window work);
   the overmap navigation replaces it when the overmap lands.
-- **R3 — the gesture (merecat).** Ctrl+Shift+drag → `Action::ForkNode { node }`. frisket's
+- **R3 — the gesture (turnstone).** Ctrl+Shift+drag → `Action::ForkNode { node }`. frisket's
   `TileDragPayload` already scaffolds the modifier branch (leaf / branch / fork at drop); the
   ambiguous no-modifier drag + toast escalation ride the notification-subsystem follow-on, not
   this rung.

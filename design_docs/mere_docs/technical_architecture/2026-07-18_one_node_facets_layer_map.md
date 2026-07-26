@@ -7,7 +7,7 @@ its open question 5.4, retargets 5.1, and answers "is mere still too
 browser-shaped?" with a concrete dissolution program. Companion to the
 [participant gate + packs plan](../implementation_strategy/2026-07-17_participant_gate_packs_plan.md)
 (whose facet/pack/gate machinery this doc leans on) and the
-[boundary pass plan](../implementation_strategy/2026-07-09_mere_merecat_boundary_pass_plan.md)
+[boundary pass plan](../implementation_strategy/2026-07-09_mere_turnstone_boundary_pass_plan.md)
 (whose slice C invented the sidecar pattern this doc generalizes).
 
 **2026-07-22 boundary amendment:** Conatus has since landed as the family repo
@@ -56,7 +56,7 @@ what remains is Container.
    compile-time capabilities (chartulary's trait table) for structural
    features, runtime facets (schema-validated records) for everything else.
 4. **The browser dogfoods the facet system.** The web-page content class
-   (favicon, thumbnail, viewer metadata, restore fidelity) is merecat's facet
+   (favicon, thumbnail, viewer metadata, restore fidelity) is turnstone's facet
    bundle, defined with the same machinery a modder would use. If the facet
    system cannot carry the browser, it cannot carry modders.
 5. **The lake is the name.** mere *means* a small lake (seiche, its
@@ -88,7 +88,7 @@ what remains is Container.
   projections. Multi-crate and legitimately so; not a bucket once the queued
   subtractions land (Node dissolution, Murm/Moot promotion, and the
   Scenograph/canvas split).
-- **Consumers:** merecat, isometry, hocket, woodshed. Merecat's end-state
+- **Consumers:** turnstone, isometry, hocket, woodshed. Turnstone's end-state
   dependencies: mere (graph/pool/canvas), genet (engine), servitor (gate),
   session-runtime sidecars, and its own **web content class**. The browser
   becomes the platform's first and best mod.
@@ -114,14 +114,14 @@ what remains is Container.
    onto the geometry sidecar and retire `Node.position/velocity`.
 4. **Node dissolution ladder:** facet-by-facet along OQ 5.1 (favicon →
    thumbnail → viewer metadata → restore fidelity → ...), each to the
-   merecat-side web content class; each move has the sidecar pattern as its
+   turnstone-side web content class; each move has the sidecar pattern as its
    proven home. The ladder ends when `Node`'s remainder is Container.
 5. **Projection/canvas split:** execute the Scenograph migration and land the
    shared Cambium/Sprigging interaction surface through the Woodshed consumer.
 6. **The pool surface** (north star step 3): personae-indexed vaults,
    cross-vault queries, p2p share/cooperate.
 
-The participant-gate lane continues in parallel on the current seam (merecat
+The participant-gate lane continues in parallel on the current seam (turnstone
 palette + install next); nothing above blocks it, and denizens already sit on
 the end-state side of every line drawn here.
 

@@ -91,7 +91,7 @@ pub mod memory_levels;
 // truth or engrams). The pass logic; the armillary actor that schedules it layers on top.
 pub mod athanor;
 // The frame.json pane-layout store moved OUT with the pane model at
-// meerkat's deletion (2026-07-18): it lives in merecat's `frisket::store`
+// meerkat's deletion (2026-07-18): it lives in turnstone's `frisket::store`
 // now — the pane-coupled half of this crate, split exactly as the
 // boundary-pass plan parked it.
 pub mod manifest;
@@ -114,7 +114,7 @@ pub mod persona_settings_store;
 pub mod switcher_thumbnail;
 // The tear-out payload types (PaneDragPayload/TileDragPayload) moved out
 // with the pane model at meerkat's deletion: they name frisket::PaneId, so
-// they live in merecat's `frisket::tearout` now.
+// they live in turnstone's `frisket::tearout` now.
 pub mod view_intent_store;
 // Identity-level and persona-level wallet manifests (`identity/` + `personas/<id>/wallet.json`)
 // for the carry layer. Storage only; pairing and crypto semantics layer on top.

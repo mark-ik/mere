@@ -22,7 +22,7 @@ place resolved presentations at disclosed Scenograph origins, draw disclosed
 relations, and collapse to a semantic card stack on narrow screens.
 
 The portable crates may depend on Scenograph contracts, serialization, and
-content-addressing primitives. They must not depend on Mere, Merecat, Isometry,
+content-addressing primitives. They must not depend on Mere, Turnstone, Isometry,
 Genet, Cambium, NetRender, a network runtime, or an application model. Product
 adapters depend on `graphshell-endpoint` in the other direction.
 
@@ -62,11 +62,11 @@ revision 3, and reaches the same scene as the endpoint's complete snapshot.
 Its removed item remains a tombstone at slot 0 while later items stay at slots
 1 and 2. See the [G2 receipt note](docs/2026-07-22_g2_diff_resume_receipt.md).
 
-G3 lives in Merecat, in the required dependency direction. Its endpoint reads
+G3 lives in Turnstone, in the required dependency direction. Its endpoint reads
 live Mere graph truth through Mere cartography, returns the resulting score,
 scene, routed relations, and content-addressed card offers, and maps advertised
-intents back through Merecat's Servitor gate. Graphshell gains only the generic
-spatial receipt view; this repository still has no Mere or Merecat dependency.
+intents back through Turnstone's Servitor gate. Graphshell gains only the generic
+spatial receipt view; this repository still has no Mere or Turnstone dependency.
 
 The portable stack was published on 2026-07-22 as the active Graphshell tree.
 It joined Mere on 2026-07-23, and the reference application moved under
@@ -82,7 +82,7 @@ client state machine, resolves resources, invokes advertised actions, and puts
 the resulting sessions behind keyboard-reachable tabs.
 
 The committed [G4 receipt](docs/receipts/g4_session_switch.html) was generated
-from the Merecat browsing endpoint and Isometry's player-overmap and tile-board
+from the Turnstone browsing endpoint and Isometry's player-overmap and tile-board
 endpoints. It proves three independently owned projections through one
 Graphshell binary. The [receipt note](docs/2026-07-22_g4_cross_product_receipt.md)
 records the commands and acceptance boundary.

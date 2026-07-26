@@ -41,6 +41,6 @@ archived donor rename required by G0.
 ## Deliberate limits
 
 This is still an in-memory loopback source. There is no authenticated carrier,
-Merecat adapter, queued offline intent replay, live-pane codec, or durable host
+Turnstone adapter, queued offline intent replay, live-pane codec, or durable host
 store implementation. G3 is the first real product endpoint and headed
 application proof.

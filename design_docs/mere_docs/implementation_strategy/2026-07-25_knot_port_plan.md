@@ -19,7 +19,7 @@ the [application prospects brief](../../2026-07-24_application_prospects_brief.m
 ## 1. Ruling
 
 **Knot is a Mere port at `ports/knot`, beside `ports/graphshell`.** It ships a
-host plus a `knot_endpoint` binary, the shape Merecat and Isometry already
+host plus a `knot_endpoint` binary, the shape Turnstone and Isometry already
 use and G4 already proved.
 
 Not a standalone repository: it has no identity apart from Mere, consuming
@@ -30,7 +30,7 @@ one-way direction, and Pelt's graph-free discipline is deliberate, so anything
 carrying a vault and a graph is disqualified from living there.
 
 A port is also the reversible choice, which is what an incubator wants. It can
-be promoted into Merecat as a pane, or spun out to its own repository if it
+be promoted into Turnstone as a pane, or spun out to its own repository if it
 graduates into a product. Founding a repository intended to dissolve is the
 expensive direction.
 
@@ -40,8 +40,8 @@ pool. The port shares its word with the document format (`.knot`,
 
 ## 2. What it is
 
-The second half of Merecat, incubated behind a protocol boundary instead of
-inside the app. Merecat browses; Knot holds and authors. Five properties, from
+The second half of Turnstone, incubated behind a protocol boundary instead of
+inside the app. Turnstone browses; Knot holds and authors. Five properties, from
 the originating question of what a local-first alternative to Obsidian and
 Anytype would take:
 
@@ -54,7 +54,7 @@ Anytype would take:
 The endpoint shape earns four of these for free. `ProjectionSource`
 implementations "authorize selection before they disclose a score or scene and
 retain ownership of native source data", which is property 1 stated as a
-protocol boundary. The vault key lives in the endpoint, so Merecat mounts
+protocol boundary. The vault key lives in the endpoint, so Turnstone mounts
 disclosures without ever holding it, which is a better security shape than a
 vault inside the app rather than merely a cheaper one.
 
@@ -84,7 +84,7 @@ vault inside the app rather than merely a cheaper one.
   pack.
 - **Boundary.** graphshell-protocol, -client, -endpoint, and -stdio, with the
   stdio carrier giving a child-process JSON boundary. The G4 receipt mounted
-  Merecat and Isometry sessions into one host with neither product in
+  Turnstone and Isometry sessions into one host with neither product in
   Graphshell's dependency graph.
 
 **Missing, and the reason this plan exists.**
@@ -127,7 +127,7 @@ focus allows; K7 waits.
 
 - **K0. Port scaffold.** `ports/knot` exists as a workspace member with a
   `knot_endpoint` binary that discloses a fixed fixture. Done when
-  `g4_sessions` mounts it beside the Merecat and Isometry endpoints and the
+  `g4_sessions` mounts it beside the Turnstone and Isometry endpoints and the
   receipt is committed and byte-compared like G1's.
 - **K1. Disk lane.** A directory `Backend` plus a watcher. The watcher acts
   autonomously under its own servitor identity: its journal ops carry
@@ -183,11 +183,11 @@ need; the change itself is graphshell-protocol work.
 
 ## 6. Non-goals
 
-Not a new repository. Not a Merecat fork, and not a rival to it: the protocol
+Not a new repository. Not a Turnstone fork, and not a rival to it: the protocol
 boundary is what keeps this a pressure vessel that promotes stable pieces
 rather than inverting into a second product, the same rule Strophe holds for
 the audio layer. Not an IDE, per the Genet ruling that knot's destination is
-the authoring browser. No separate notes product competing with Merecat for
+the authoring browser. No separate notes product competing with Turnstone for
 the same users.
 
 ## Progress

@@ -109,7 +109,7 @@ adoption, not construction.
 actor. Its generated-campaign commit path also supplied the first non-browser
 correlation requirement: `RequestId`/`RequestIds` and `Correlated<T>` now pair a
 host command with its eventual typed outcome. The primitive is deliberately
-outcome-neutral so Strophe project I/O and Merecat action/effect execution can
+outcome-neutral so Strophe project I/O and Turnstone action/effect execution can
 reuse it without moving their command taxonomies into Armillary.
 
 P2 and P3 are independent. P1 is the immediate motivation and the reason this

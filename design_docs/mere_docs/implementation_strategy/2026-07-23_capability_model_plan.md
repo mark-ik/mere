@@ -33,7 +33,7 @@ revocation is what happens when a link in a delegation chain dies.
 | `app/session` | `app/session-admin` | **true** |
 | `scenario/` | `scenario/../app/session` | **true** |
 
-No live bug: merecat queries only the five fixed ring paths
+No live bug: turnstone queries only the five fixed ring paths
 (`app/read|navigate|panes|dispatch|session`) and grants exactly those, and none
 is a prefix of another. The hazard is in the shape, not today's data. **Adding
 a capability path that extends an existing one silently widens every grant
@@ -64,13 +64,13 @@ construction rather than by careful naming.
 
 `Gate::project_grant` writes the durable record as a node id
 `grant:<path_prefix>` and puts the **mode in the node's display title**, which
-nothing parses. On adopt, merecat reconstructs authority as:
+nothing parses. On adopt, turnstone reconstructs authority as:
 
 ```rust
 Grant::new(subject, path, Mode::Write)   // denizen.rs, rebuild()
 ```
 
-The mode is hardcoded. No live bug (merecat only ever grants `Write`), but a
+The mode is hardcoded. No live bug (turnstone only ever grants `Write`), but a
 `Read` grant would come back as `Write` after a restart, and more to the point
 **every richer field would be dropped on replay the same way**. An expiry that
 does not survive adopt is not an expiry, so this blocks the revocation work
@@ -131,7 +131,7 @@ Laws, enforced by a reusable test harness rather than by prose: **reflexive**
 `a.covers(c)`). Any implementation that breaks either is a hole in the gate.
 
 Servitor ships one concrete sum, because the real consumers hold both kinds at
-once (merecat grants app rings *and* a `scenario/` scope) and generics would
+once (turnstone grants app rings *and* a `scenario/` scope) and generics would
 infect `Gate`'s signature and every call site for no gain:
 
 ```rust
@@ -164,7 +164,7 @@ scope:trail/step
 ```
 
 Legacy read: an unprefixed string parses as `Scope`, which is what it meant
-before this round. Merecat maps its four known `app/<ring>` paths to
+before this round. Turnstone maps its four known `app/<ring>` paths to
 `Power(<ring>)` on adopt, so existing installs keep working without a
 re-install.
 
@@ -254,7 +254,7 @@ signature untouched so gemot's mirror-shaped seam is unaffected. Expired means
 not covered.
 
 Known window: a grant expiring mid-session is not noticed until the next
-`set_now`. Merecat sets it at every denizen run, which is the only moment
+`set_now`. Turnstone sets it at every denizen run, which is the only moment
 authority is consulted, so the window is not observable there. Any future
 consumer that holds authority across long idles must tick it.
 
@@ -291,7 +291,7 @@ namespace.
   inverts (every row false except a genuine segment-prefix), the law tests
   pass, and servitor's 9 existing tests still pass.
 
-- **C1, lossless projection** (servitor + merecat). D6's tag encoding, a
+- **C1, lossless projection** (servitor + turnstone). D6's tag encoding, a
   reader that parses it back, `rebuild` consuming the reader instead of
   hardcoding `Mode::Write`. **Done when** a `Read` grant projects, replays, and
   is still `Read`, and a round-trip test covers every field.
@@ -304,12 +304,12 @@ namespace.
   `DelegationTable` implementing `AuthorityProvider` by chain validity (D3's
   three invariants), `sever` with D4's lazy cascade, and the delegation
   projection round-trip. Kept additive: `GrantTable` stays the working
-  authority so merecat does not churn here; the swap is C4's. **Done when** a
+  authority so turnstone does not churn here; the swap is C4's. **Done when** a
   chain verifies from a cold store, an attempt to delegate wider than held is
   refused, `sever` invalidates a whole subtree, and delegation records
   round-trip through the projection.
 
-- **C4, revocation + the merecat swap** (merecat). merecat moves from
+- **C4, revocation + the turnstone swap** (turnstone). turnstone moves from
   `GrantTable` to `DelegationTable`; the root subject comes from the active
   personae identity (OQ2); install issues attenuating root delegations instead
   of flat grants; re-review replaces-and-cascades (OQ1); the Uninstall row
@@ -331,11 +331,11 @@ namespace.
 2. **RULED (Mark, 2026-07-24): the root is the personae identity**, not a
    placeholder constant. Servitor stays identity-agnostic — it takes
    [`Subject`]s and never depends on personae — so "root is personae" is a HOST
-   fact: merecat derives the root subject from the active personae identity's
+   fact: turnstone derives the root subject from the active personae identity's
    public key and hands it to the delegation table. (Mark: the SSH-key vault in
    personae is nearly functional, so the identity this roots on is real, not
    hypothetical.) Servitor's delegation algebra is the same whether the root is
-   a test key or a personae key; only merecat knows which.
+   a test key or a personae key; only turnstone knows which.
 3. **RULED (Mark, 2026-07-24): unify — on the trait, when the caller exists.**
    gemot's `MootAuthorizationProvider` adopts this order. No fundamental
    drawback; the cost is a dependency edge, which decides the shape:
@@ -362,10 +362,10 @@ namespace.
 The round is complete and the workspace checks clean; these are named so they
 are not lost, ordered by how much they matter.
 
-1. **FIXED 2026-07-24 (merecat).** ~~The Graphshell projection endpoint
+1. **FIXED 2026-07-24 (turnstone).** ~~The Graphshell projection endpoint
    self-issues its authority.~~ The endpoint now derives a **per-session
    keypair** from the profile identity (personae `derive_keypair`, salt
-   `merecat/projection-endpoint/<session>`) and holds a **signed delegation**
+   `turnstone/projection-endpoint/<session>`) and holds a **signed delegation**
    from the user's master key for `scope:projection/layout`, depth 0. Two
    things were wrong and both are gone: the subject was `blake3(session
    name)` — not a key, so nothing could ever prove it was this endpoint — and
@@ -381,7 +381,7 @@ are not lost, ordered by how much they matter.
    peer projects.
 
    <details><summary>superseded wording</summary>
-   `merecat::remote_projection` derives a subject from `blake3(session name)`,
+   `turnstone::remote_projection` derives a subject from `blake3(session name)`,
    projects a grant *to itself*, and rebuilds a `GrantTable` from that
    projection. It is its own root. Harmless today — a loopback receipt whose
    "rejected" line is an audit trail, not a trust boundary — but it is exactly
@@ -415,13 +415,13 @@ are not lost, ordered by how much they matter.
    the projection guard ever weakens, the heal becomes an escalation path.
 
 4. **Headed scenarios are not hermetic in identity.** `App::boot` opens the
-   SHARED personae vault regardless of `MERECAT_ROOT`; only `App::isolated`
+   SHARED personae vault regardless of `TURNSTONE_ROOT`; only `App::isolated`
    (unit tests) gets a per-profile vault. That is correct for the product — the
    browser should use the user's real identity — but it means scenario runs
-   bind to it, and two merecat profiles now share one root key. Profile
+   bind to it, and two turnstone profiles now share one root key. Profile
    isolation is by storage location (per-session certificate files, scoped by
    `resource: denizen:<subject>`), not by key. Verified during the audit:
-   merecat LOADED the existing profile (one profile, mtime unchanged from the
+   turnstone LOADED the existing profile (one profile, mtime unchanged from the
    vault plan's own work) rather than minting a rival.
 
 ## Progress
@@ -434,7 +434,7 @@ are not lost, ordered by how much they matter.
 - Design D1-D6 proposed for Mark; D4's cascade rule and the three open
   questions are the parts wanted ruled rather than inferred.
 
-- **C0, C1 and C2 LANDED.** servitor 9 tests → 22, clippy clean; merecat 119
+- **C0, C1 and C2 LANDED.** servitor 9 tests → 22, clippy clean; turnstone 119
   with both features, 108 without; headed `denizen_b1.scn` and
   `denizen_wasm.scn` both RESULT ok.
   - **C0**: `cap.rs` with the `Capability` trait, `assert_capability_laws`
@@ -455,7 +455,7 @@ are not lost, ordered by how much they matter.
     named instant and needs no mutation of the store.
 
 - **Structural finding: the phases are not independently landable.** C0
-  changed a type merecat consumes live, so merecat's migration (planned as
+  changed a type turnstone consumes live, so turnstone's migration (planned as
   C5) had to land in the same change or the tree would not compile. Rings
   became `Cap::Power`s, the world stayed a `Cap::Scope`, and `capabilities_from_grant`
   (the piccolo face) now asks the same questions `emit_allowed` (the wasm
@@ -501,15 +501,15 @@ are not lost, ordered by how much they matter.
   caller" was true only of the `MootAuthorizationProvider` trait; the
   delegation machinery beneath it is fully wired. OQ3's unification is
   therefore much closer than that note implied.
-- **C4 LANDED.** merecat's denizen authority is now signed delegation.
-  - **The root identity**: `merecat::identity` loads-or-creates a persisted
+- **C4 LANDED.** turnstone's denizen authority is now signed delegation.
+  - **The root identity**: `turnstone::identity` loads-or-creates a persisted
     Ed25519 master seed in the profile (`<data_root>/identity/master.key`).
     Persistence is load-bearing, not a nicety: every install certificate names
     this key as its root, so a key that changed across restarts would fail
     every chain as `WrongRoot` and silently un-authorize every denizen. The
     seed sits **unsealed** for now; personae's `IdentityVault` (sealed, where
     the SSH key already lives) implements the same `IdentityProvider` trait,
-    so the swap is a constructor change once merecat has an unlock path in the
+    so the swap is a constructor change once turnstone has an unlock path in the
     shell. Named rather than invented.
   - **Install is a delegation**: `issue_install_certificates` signs one root
     certificate per reviewed capability (world scope, read face, one per ring)
@@ -528,7 +528,7 @@ are not lost, ordered by how much they matter.
     this preserves exactly the reviewed grant rather than re-asking.
   - The lanes went provider-generic (`impl AuthorityProvider`), so neither the
     ring gate nor the piccolo face names a concrete table.
-  - Receipts: merecat 124 tests (both features); headed `denizen_revoke.scn`
+  - Receipts: turnstone 124 tests (both features); headed `denizen_revoke.scn`
     RESULT ok (install → run → uninstall, with the node surviving and the
     certificate file gone); `denizen_b1.scn` and `denizen_wasm.scn` still
     RESULT ok on the new authority, with the wasm guest's `caps.granted()`
@@ -539,11 +539,11 @@ are not lost, ordered by how much they matter.
   - **The vault swap needed no shell unlock path after all**: personae's
     bootstrap ceremony already carries `Unlock::AutoOs` (DPAPI on Windows,
     no prompt) with `PERSONAE_PASSPHRASE` as the portable alternative — the
-    gap named at C4 was already closed upstream. `merecat::identity` is now
+    gap named at C4 was already closed upstream. `turnstone::identity` is now
     `RootIdentity::{Vault, Unsealed}`: vault-first via the SAME ceremony the
     personae bins use (`open_storage` + `load_or_create_profile`), against
     the SHARED default vault and the `default` profile — the profile the SSH
-    agent serves — so merecat's root identity IS the user's personae
+    agent serves — so turnstone's root identity IS the user's personae
     identity, not a browser-local key. The unsealed path remains as a LOUD
     fallback for platforms with no sealed backend, and once the vault opens,
     the legacy plaintext seed is retired from disk. The boot log prints
@@ -572,7 +572,7 @@ are not lost, ordered by how much they matter.
     (constitution grant vs profile identity).
   - Receipts: gemot 96 (3 new: chain-answered coverage with a path-blind
     membership stub, closed powers at the moot tier, certificate-side
-    expiry), servitor 32, merecat 127 (re-root heal + vault fallback +
+    expiry), servitor 32, turnstone 127 (re-root heal + vault fallback +
     retirement tests); headed `denizen_revoke.scn` and `denizen_wasm.scn`
     RESULT ok rooted on the real DPAPI-sealed vault identity.
   - **The peer lane landed too**, closing the round with nothing deferred.

@@ -11,7 +11,7 @@ description = "The mere graph canvas: the graph-truth presentation library (cont
 # The reusable canvas content-root (window-agnostic): graph + seiche physics + camera
 # + the abs-pos node-children pool, with `frame(w, h) -> (Scene, needs_redraw)` and
 # semantic input methods. The bin below is a thin winit shell over it; meerkat and
-# merecat host the same `Canvas` as their content-root.
+# turnstone host the same `Canvas` as their content-root.
 [lib]
 name = "canvas"
 path = "src/lib.rs"

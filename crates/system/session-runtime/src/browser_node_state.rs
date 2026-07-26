@@ -9,7 +9,7 @@
 //! *browser* knows about a node — restore fidelity (scroll offset,
 //! form draft) and viewing preference (viewer override, compat mode) —
 //! lives here, keyed by the node's stable UUID, per the
-//! [mere/merecat boundary pass plan](../../../../design_docs/mere_docs/implementation_strategy/2026-07-09_mere_merecat_boundary_pass_plan.md)
+//! [mere/turnstone boundary pass plan](../../../../design_docs/mere_docs/implementation_strategy/2026-07-09_mere_turnstone_boundary_pass_plan.md)
 //! slice C. A browser engine id must never become a graph-library fact.
 //!
 //! Same shape as the `view_intent_store` sidecar: one JSON document
@@ -62,7 +62,7 @@ pub struct BrowserNodeState {
     #[serde(default)]
     pub compat_mode: bool,
     /// Whether the node's live content was ON at save — the browser's
-    /// handling of the node, so a restart respawns its session (merecat's
+    /// handling of the node, so a restart respawns its session (turnstone's
     /// rung-6 content-state restore). Additive with a default, so existing
     /// sidecars load unchanged.
     #[serde(default)]

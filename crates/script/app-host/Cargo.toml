@@ -4,7 +4,7 @@
 # the `emit` import with a host-supplied [`ActionSink`], and drives the
 # lifecycle. It knows nothing about any particular app's action vocabulary:
 # decoding an envelope and deciding whether it may lower is the sink's job
-# (merecat's ring gate), so the host stays app-agnostic.
+# (turnstone's ring gate), so the host stays app-agnostic.
 #
 # A sibling of document-host over the same `crates/script/wit` contract: two
 # worlds, two hosts, one WIT package.

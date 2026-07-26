@@ -24,7 +24,7 @@ sequence, and receipts remain in force.
 the [projection proofs plan](2026-07-21_projection_proofs_plan.md), the
 [Murm peer-runtime and Moot-domain plan](2026-07-12_murm_peer_runtime_and_moot_domain_plan.md)
 (promotion rows withdrawn by this plan), and the
-[mere/merecat boundary pass plan](2026-07-09_mere_merecat_boundary_pass_plan.md).
+[mere/turnstone boundary pass plan](2026-07-09_mere_turnstone_boundary_pass_plan.md).
 
 ## 1. Ruling
 
@@ -38,7 +38,7 @@ governing precedent: the platform repo hosts its own contracts, runtime, and
 reference shell, and products consume them from it.
 
 The bar for a separate repository: **real coherent utility and identity apart
-from mere, genet, merecat, woodshed, hocket, and isometry.** A repo below that
+from mere, genet, turnstone, woodshed, hocket, and isometry.** A repo below that
 bar folds into mere or genet, or is consumed through them. The dependency
 graph should mostly pull mere or genet.
 
@@ -50,7 +50,7 @@ independent.
 ## 2. Target shape
 
 ```text
-products     merecat   isometry   woodshed   hocket
+products     turnstone   isometry   woodshed   hocket
                 \         |          |        /   (hocket also -> wavicle, woodshed)
 platform     mere ................................ genet
              graph domain, murm/moot,             engine, pelt, cambium,
@@ -72,14 +72,14 @@ the bar. Crates.io package names survive every move; only repository homes,
 | Incoming repo | Crates | Consumers to repoint |
 |---|---|---|
 | personae | `personae` | woodshed, hocket, isometry, mere's `identity` alias |
-| armillary | `armillary` | mere, merecat, isometry, hocket, vates |
-| eidetic | `muniment`, `codicil`, `chartulary`, `scholia` | mere (graph-kernel, session-runtime, murm, moot, mesh, intel, eidetic lane), merecat, isometry, woodshed, hocket, servitor |
-| servitor | `servitor` | mere, merecat |
+| armillary | `armillary` | mere, turnstone, isometry, hocket, vates |
+| eidetic | `muniment`, `codicil`, `chartulary`, `scholia` | mere (graph-kernel, session-runtime, murm, moot, mesh, intel, eidetic lane), turnstone, isometry, woodshed, hocket, servitor |
+| servitor | `servitor` | mere, turnstone |
 | vates | `vates` | mere |
 | sibylla | `sibylla` | mere |
 | conatus | `numen`, `quint`, `seiche` | mere (currently crates.io pins; become workspace paths) |
-| scenograph | `sceno`, `scenomise`, `scenotime`, `scenograph` | mere, merecat, isometry, graphshell |
-| graphshell | `graphshell-protocol`, `graphshell-client`, `graphshell-endpoint`, `graphshell-stdio`, `graphshell` | merecat, isometry |
+| scenograph | `sceno`, `scenomise`, `scenotime`, `scenograph` | mere, turnstone, isometry, graphshell |
+| graphshell | `graphshell-protocol`, `graphshell-client`, `graphshell-endpoint`, `graphshell-stdio`, `graphshell` | turnstone, isometry |
 
 Notes:
 
@@ -100,7 +100,7 @@ Notes:
 
 | Incoming repo | Crates | Consumers to repoint |
 |---|---|---|
-| cambium | `cambium`, `cambium-nematic`, `cambium-winit`, `meristem`, `sprigging` | merecat; genet's `genet_web_smoke` example path dep becomes a workspace reference |
+| cambium | `cambium`, `cambium-nematic`, `cambium-winit`, `meristem`, `sprigging` | turnstone; genet's `genet_web_smoke` example path dep becomes a workspace reference |
 | netfetcher | `netfetcher` | genet (genet-documents, genet-wpt become workspace refs), mere (`crates/system/fetch`) |
 
 tinct already lives in genet (`components/tinct`); woodshed and hocket repoint
@@ -197,11 +197,11 @@ and no committed sibling path targets a repo that is staying put.
 - Subtree cambium (five crates) and netfetcher into genet; workspace
   membership; `genet_web_smoke`'s cambium path dep becomes a workspace
   reference, removing the example-only cycle.
-- Repoint merecat (cambium, sprigging) and mere (`crates/system/fetch`,
+- Repoint turnstone (cambium, sprigging) and mere (`crates/system/fetch`,
   netfetcher) to genet.git.
 - Archive the cambium and netfetcher GitHub repos with tombstones.
 
-**Done when:** a fresh genet clone builds the absorbed crates, merecat and
+**Done when:** a fresh genet clone builds the absorbed crates, turnstone and
 mere check green on the new pins, and the old repos are read-only.
 
 ### C3. Mere absorption, bottom-up
@@ -212,16 +212,16 @@ sibling sessions before C3b; the eidetic step touches every product.
 - **C3a personae + armillary.** Delete `crates/persona/identity`; the
   `identity` alias becomes a workspace path. Repoint woodshed, hocket,
   isometry.
-- **C3b eidetic four** into `crates/eidetic/`. Repoint merecat, isometry,
+- **C3b eidetic four** into `crates/eidetic/`. Repoint turnstone, isometry,
   woodshed, hocket, servitor (interim, until C3c), and mere's own git pins
   become paths.
 - **C3c servitor, vates, sibylla, conatus.** All their family deps are now
   workspace-internal. Mere's crates.io pins for numen/quint/seiche become
   workspace paths.
-- **C3d scenograph four** into `crates/scenograph/`. Repoint merecat and
+- **C3d scenograph four** into `crates/scenograph/`. Repoint turnstone and
   isometry.
 - **C3e graphshell five** into `crates/graphshell/`, with the section 4 CI
-  walls landing in the same change. Repoint merecat and isometry. Re-archive
+  walls landing in the same change. Repoint turnstone and isometry. Re-archive
   mark-ik/graphshell with a tombstone; its donor lineage and the 2026-07-22
   portable workspace remain in its read-only history, and the same history
   arrives in mere via the subtree.
@@ -251,7 +251,7 @@ unchanged, and the old misfin repo is tombstoned.
 ### C6. Verify and disseminate
 
 - Tree-wide gate: no committed cross-repo `path =` dependency remains.
-- Clean-clone builds: mere, genet, merecat, woodshed, hocket, isometry.
+- Clean-clone builds: mere, genet, turnstone, woodshed, hocket, isometry.
 - Regenerate the repo dependency graph and compare against section 2.
 - Update the memory index and any plan that names an old home.
 - Archive this plan per DOC_POLICY on completion.
@@ -262,9 +262,9 @@ primary repos build from clean clones.
 ## Findings
 
 - Manifest sweep of all 28 repos, 2026-07-23: mere is the apex consumer with
-  13 family deps and in-degree 2 (merecat deep, isometry murm/moot lane);
+  13 family deps and in-degree 2 (turnstone deep, isometry murm/moot lane);
   every product consumes genet, netrender, and eidetic; mere and graphshell
-  have identical dependents (merecat, isometry).
+  have identical dependents (turnstone, isometry).
 - Committed sibling paths found in hocket (woodshed, eidetic, armillary,
   personae, wavicle), woodshed (chartulary, scholia, personae), and mere
   (retinue, personae via `identity`), beyond the known radio-family paths.
@@ -323,7 +323,7 @@ primary repos build from clean clones.
   `components/cambium/{cambium,cambium-nematic,cambium-winit,meristem,sprigging}`
   and `components/netfetcher`, histories preserved. Checks green for all six
   plus `genet-documents --features netfetch`; the standalone
-  `genet_web_smoke` example resolves. Consumers repointed: merecat's cambium
+  `genet_web_smoke` example resolves. Consumers repointed: turnstone's cambium
   and sprigging, mere's netfetcher, both to genet.git. Findings:
   - **The absorption paid for itself immediately.** cambium carried three
     `[patch.crates-io]` entries (stylo_taffy, gpu-allocator, taffy) that
@@ -362,7 +362,7 @@ primary repos build from clean clones.
   predates the move, since mere already built against the local servitor
   through its patch file. Products repointed to mere.git: hocket, woodshed,
   and isometry committed and green (`isometry-genet`, which consumes
-  scenograph and graphshell, builds clean); merecat verified last. Findings:
+  scenograph and graphshell, builds clean); turnstone verified last. Findings:
   - **The gitignored `.cargo/config.toml` patch files are the sharp edge of
     an absorption, and they are invisible to `git status`.** In mere, a
     redirect pointing at a path that is now a workspace member is a hard
@@ -433,7 +433,7 @@ primary repos build from clean clones.
 - The governing Genet precedent was corrected at the same time. Pelt and its
   private desktop support live under `ports/pelt`; the former `pelt-core`
   contracts are the product-neutral `components/genet-host-api`. Mere and
-  Merecat consume that component and have no dependency on Pelt. Genet's
+  Turnstone consume that component and have no dependency on Pelt. Genet's
   dependency-cone CI rejects component-to-port edges.
 
 - **Archived repos will be DELETED, not kept — Mark, 2026-07-24.** This
@@ -513,11 +513,11 @@ be consumed by git, never by version** (woodshed `abdf524`).
 - ~~Bumping the toolchain pins~~ **partly done 2026-07-24.** Bumped and
   verified: **mere**, **genet**, **woodshed** (1.96.0) and **wgpu-graft**
   (1.95.0), all to **1.97.1**. Still on 1.96.0: **isometry**, **hocket**,
-  **merecat** — each fails to compile *before* the bump, so there was nothing
+  **turnstone** — each fails to compile *before* the bump, so there was nothing
   to verify against; see below. Findings:
   - **The expected lint problem never materialised.** Only wgpu-graft gates on
     warnings among the pinned repos (`RUSTFLAGS: -D warnings`), and its
-    published crate `grafting` is clean on both toolchains. mere, merecat,
+    published crate `grafting` is clean on both toolchains. mere, turnstone,
     hocket, and isometry have **no CI at all**; genet and woodshed gate on
     check/test only. So the real bar was "does it still compile", not "are
     there new lints".
@@ -529,7 +529,7 @@ be consumed by git, never by version** (woodshed `abdf524`).
     bump and none of it mine to fix: **isometry** has a truncated
     `isometry-net/src/session.rs` committed (ends on a dangling `#[derive]`);
     **hocket** misses `Config.require_signed_manifest`, the in-flight luggage
-    auto-update work; **merecat** has an unclosed delimiter. genet's CI
+    auto-update work; **turnstone** has an unclosed delimiter. genet's CI
     `--all-targets` step has 9 errors on both toolchains, all from
     `tests/unit/style`, which is pinned to an older Stylo surface and uses
     `#![feature]` on stable. wgpu-graft's CI names a package
@@ -555,7 +555,7 @@ the workspace root: the firmware is a workspace member that reaches rustc 1.93
 through `fixed`, and it is unpublished, so it deliberately does not inherit the
 floor.
 
-Everything else stays silent on purpose. Apps (merecat, hocket, woodshed's
+Everything else stays silent on purpose. Apps (turnstone, hocket, woodshed's
 binary, isometry, pelt) have no downstream consumers, so the toolchain pin is
 the real control; isometry's stale `rust-version = "1.80"` survives only
 because it is still edition 2021. The ~21 published mere/genet crates have no

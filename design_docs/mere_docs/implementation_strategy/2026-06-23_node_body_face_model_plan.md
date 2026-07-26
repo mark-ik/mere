@@ -254,12 +254,12 @@ fidelity) = a directly-authored hull, convex now, concave/compound as the B3 fid
   Resolves the node-editor probe's Q3 / Q6 / Q7. Predecessor plan marked superseded (kept in place,
   since active siblings cite it) in the same pass.
 - 2026-07-09: **Favicon face inset landed (status-communication design space, with Mark).**
-  Merecat's favicon-on-node slice surfaced that the cover-fit `Face::Favicon` quad hid the node
+  Turnstone's favicon-on-node slice surfaced that the cover-fit `Face::Favicon` quad hid the node
   accent behind the icon — activation state / selection amber survived only at the icon's corner
   cutouts, breaking the representations-carry-node-identity read. Mark's call: the icon now insets
   within the face (`FAVICON_INSET` 0.72 in orrery's lib.rs, a settings-candidate knob) so the
   accent reads as a frame around it (receipt:
-  `testing/merecat/images/2026-07-09_favicon_inset_frame.png`). Cover-fit stays available as
+  `testing/turnstone/images/2026-07-09_favicon_inset_frame.png`). Cover-fit stays available as
   `Face::Sprite` (the "alive graph" form is deliberately full-bleed). Alternatives tracked, not
   chosen: a state-colored caption chip (loud; long titles become big colored bars), a hover ring
   (state on demand only — loses the at-a-glance constellation read the status-cluster glyphs and

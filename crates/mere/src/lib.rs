@@ -2,7 +2,7 @@
 //!
 //! Applications depend on this crate for graph truth and its portable
 //! projections. It deliberately does not expose browser-window, input, render,
-//! or session-host concerns; those belong to a consumer such as Merecat.
+//! or session-host concerns; those belong to a consumer such as Turnstone.
 
 /// Mere's routing vocabulary over inker's host-neutral policy: the
 /// app-flavored host-handled ids + [`routing::route_policy`].

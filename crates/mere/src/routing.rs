@@ -7,7 +7,7 @@
 //! nematic formats, surface engines) plus the neutral hand-to-OS fallback.
 //! The app-flavored, host-handled ids live here (moved out of inker with the
 //! 2026-07-10 genet adoption): internal pages and the JSON-LD
-//! graph-contribution marker. Hosts (meerkat today, merecat next) route with
+//! graph-contribution marker. Hosts (meerkat today, turnstone next) route with
 //! [`route_policy`] instead of `EngineRoutePolicy::default()`.
 
 use inker::routing::{EngineRoutePolicy, EngineRouteRule, SurfaceContractMode};

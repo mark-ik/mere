@@ -22,7 +22,7 @@ F3 channels (add, forced)     F4 pick (add, forced)   -> 0.0.3 freeze
 
 **Baseline.** 29 family tests green: sceno 13, scenomise 9, scenotime 7.
 Family is 2,113 LOC across four crates at 0.0.2. Live consumers are mere (by
-path), isometry and merecat (git, `mark-ik/mere` branch `main`), and mere's
+path), isometry and turnstone (git, `mark-ik/mere` branch `main`), and mere's
 own `ports/graphshell`. The archived `repos/graphshell` still pins
 `scenograph.git`, a repository the 2026-07-23 consolidation absorbed; that
 copy is dead (its last commit is "Archived: moved in the 2026-07-23 repo
@@ -196,7 +196,7 @@ and update `sceno`'s package description, which currently promises that
 "scores and action intents arrive with later proofs" and is now wrong on the
 second half.
 
-Re-resolve isometry and merecat against the new commit, since both track
+Re-resolve isometry and turnstone against the new commit, since both track
 `mark-ik/mere` branch `main`.
 
 **Done when:** the note has no open questions, `woodshed` can adopt against a
@@ -275,7 +275,7 @@ before this work, verified by stashing.
    `measure` is a real published break and the 0.0.3 cut is required rather
    than cosmetic. At `0.0.x` Cargo treats every version as incompatible, so
    consumers need only re-resolve.
-2. Neither isometry nor merecat constructs a `ProjectedItem` anywhere, so the
+2. Neither isometry nor turnstone constructs a `ProjectedItem` anywhere, so the
    new field costs them nothing beyond that re-resolve. Every construction
    site is inside mere.
 
@@ -285,7 +285,7 @@ commit; verified 2026-07-25 against the registry — the published sceno has no
 `measure.rs` and the published scenotime carries `pick.rs`, so the artifacts
 are this cut. A second publish attempt on 2026-07-25 correctly errored
 "already exists"; nothing was missing). Still remaining: re-resolve isometry
-and merecat against 0.0.3, and tell woodshed the contract is frozen.
+and turnstone against 0.0.3, and tell woodshed the contract is frozen.
 
 **History note.** A concurrent session's `git add -A` swept most of S1-S3
 into two unrelated commits, `4b8d875f` ("document-host: derive the wasm

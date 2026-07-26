@@ -86,7 +86,7 @@ Ownership after this plan:
   prune mechanics, checkpoint storage, and native drop machinery.
 - **Murm and Moot services** compose their domain policy with the replication
   foundation and expose typed commands, snapshots, events, and status.
-- **Merecat** supplies settings and resources. It does not assemble p2panda
+- **Turnstone** supplies settings and resources. It does not assemble p2panda
   sessions or operation callbacks.
 - **Murm peer transport** moves live bytes and exposes endpoints. It does not
   interpret retention or drop records.

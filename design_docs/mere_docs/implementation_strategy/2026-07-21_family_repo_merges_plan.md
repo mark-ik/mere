@@ -10,7 +10,7 @@ Decided with Mark in session; both merges executed same day.
   `mark-ik/conatus`, one workspace, histories preserved. **DONE.**
 - **P2. eidetic** (durable-memory family): merge repos muniment + codicil +
   chartulary + scholia into `mark-ik/eidetic`, same shape. **DONE.**
-- **P3. Consumer repoint**: mere, merecat, hocket, isometry, woodshed,
+- **P3. Consumer repoint**: mere, turnstone, hocket, isometry, woodshed,
   servitor onto the family repos (manifest URLs, path deps, local `.cargo`
   patches, lockfiles). **DONE** (this session; per-consumer detail below).
 - **P4. Follow-ons**:
@@ -23,14 +23,14 @@ Decided with Mark in session; both merges executed same day.
     (`eidetic`, `eidetic_fjall`, …) and mere's `[workspace.dependencies]` keep
     their `eidetic*` keys via `package = "mere-eidetic*"` — so all `use
     eidetic::` sites, consumer manifests, the `image-store-check` probe, and
-    the `crates/eidetic/` directory are untouched. merecat's two direct git
+    the `crates/eidetic/` directory are untouched. turnstone's two direct git
     deps + its gitignored `.cargo` patch keys updated the same way (patch keys
     are package names, so they became `mere-eidetic*`). **`mere-eidetic` 0.0.1
     published to crates.io** (mirrors the old `eidetic` 0.0.1). The bare
     **`eidetic` 0.0.1 stays as an orphaned reservation** — free for a future
     family facade. Companions were never published, so their rename just
     reserves the `mere-eidetic-*` names by manifest (not yet published).
-    Verified: `mere-eidetic` lib 85 tests green, consumers + merecat build.
+    Verified: `mere-eidetic` lib 85 tests green, consumers + turnstone build.
   - GitHub-archive the seven donor repos (numen, quint, seiche, muniment,
     codicil, chartulary, scholia) with tombstone READMEs pointing at the
     family repos; delete the local checkouts after. Left for Mark.
@@ -45,7 +45,7 @@ Decided with Mark in session; both merges executed same day.
 
 - **Bucket analysis** (the reorg's scope ruling): of 31 repos, only two
   satellite groups are true lockstep families. Everything else keeps its
-  posture: engines (mere, genet, cambium, netrender) as-is; apps (merecat,
+  posture: engines (mere, genet, cambium, netrender) as-is; apps (turnstone,
   isometry, hocket, woodshed) as-is; deliberate standalones (wgpu-graft,
   wgpu-weld, wgpu-scry, misfin, wavicle, personae, armillary, netfetcher,
   vates, sibylla, servitor) as-is. **retinue + tulle + tucket + sennet
@@ -81,5 +81,5 @@ Decided with Mark in session; both merges executed same day.
   `.cargo/config.toml` patches moved to family paths plus a new
   `[patch."…/eidetic.git"]` section; lock refreshed (zero references to old
   URLs); `mere-kernel` lib **273 tests green** on both family paths.
-- Remaining consumers (merecat, hocket, isometry, woodshed, servitor):
+- Remaining consumers (turnstone, hocket, isometry, woodshed, servitor):
   repointed this session; see the commit trail in each repo.

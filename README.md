@@ -5,7 +5,7 @@ nodes in a spatial graph: html pages, gemini capsules, local media, and notes si
 side by side in one canvas, joined by user-made and inferred relationships. Mere
 composes that world (graph truth, arrangement, persistence, retrieval, identity,
 comms) and hands it to a host; the reference host that renders it is
-[merecat](https://github.com/mark-ik/merecat). The graph (the *orrery*) is the
+[turnstone](https://github.com/mark-ik/turnstone). The graph (the *orrery*) is the
 root surface; tiles, panes, and content cards are projections of it.
 
 <p align="center">
@@ -29,8 +29,8 @@ root surface; tiles, panes, and content cards are projections of it.
 This repository is a Cargo workspace of 55 member crates organized by concern.
 (That count is the `[workspace] members` list; the `probes` directory in
 `[workspace.exclude]` is not a member and is not counted.)
-Mere is a library workspace. The reference on-screen host is **merecat**, a
-separate repository (`mark-ik/merecat`) that composes these crates into a
+Mere is a library workspace. The reference on-screen host is **turnstone**, a
+separate repository (`mark-ik/turnstone`) that composes these crates into a
 window; it obviated the former in-repo `meerkat` host, removed 2026-07-18.
 Mere keeps a launchable `canvas` bin for developing the graph view on its own.
 This is pre-release, AI-assisted development; many crates are partially
@@ -58,7 +58,7 @@ License: MIT OR Apache-2.0 (see `LICENSE-MIT` and `LICENSE-APACHE`).
 The durable architecture is a composition spine: graph truth (`kernel`) is
 arranged by `forme`, projected into a presentation plan by `platen`, realized as
 surfaces, and backed per-surface by a content engine selected by `inker`. The
-host (`merecat`) renders the result and composites it.
+host (`turnstone`) renders the result and composites it.
 
 ## The stack's technical architecture
 
@@ -128,7 +128,7 @@ cargo test
 cargo test -p kernel
 ```
 
-The on-screen host, `merecat`, lives in the sibling `mark-ik/merecat`
+The on-screen host, `turnstone`, lives in the sibling `mark-ik/turnstone`
 repository (it pulls `mere` as a git dependency); run it from there with
 `cargo run`.
 
@@ -136,7 +136,7 @@ The workspace's runnable hosts live under `ports/`. Development binaries that
 exercise a reusable crate may remain beside that crate:
 
 - `canvas` (`crates/canvas/canvas`): a thin winit shell over the reusable graph
-  field-canvas, launchable on its own for development and testing. `merecat`
+  field-canvas, launchable on its own for development and testing. `turnstone`
   hosts the same canvas as its root surface. Likely also the seed of a thin
   wasm client for browser-extension targets.
 - `graphshell` (`ports/graphshell`): Mere's reference remote projection client.
@@ -154,12 +154,12 @@ directory path disambiguates (for example the graph kernel's package name is
 
 | Directory | Package(s) | Role |
 |---|---|---|
-| `crates/mere` | `mere` | The facade crate: the curated public surface downstream hosts (`merecat`) depend on |
+| `crates/mere` | `mere` | The facade crate: the curated public surface downstream hosts (`turnstone`) depend on |
 | `crates/canvas` | `canvas` (bin + lib), `arrangements`, `cartography` | The spatial graph view (was `orrery`): the graph field-canvas host + dev bin, deterministic layout strategies, and the non-destructive cartography projection with its scene-paint lane. Physics + the field algebra were extracted to the `numen` sibling stack (2026-07-09) |
 | `crates/graph` | `kernel`, `glossary`, `graphlets`, `linked-data` | Graph truth: the identity/authority/mutation kernel, the term glossary, graphlet subgraphs, and the RDF/JSON-LD ingest-export + SPARQL bridge |
 | `crates/incipit` | `incipit` | Core identity vocabulary: `GraphId`, `SessionId`, and the id/session primitives shared across the stack |
 | `crates/domain` | `apparatus`, `gloss`, `roster`, `trail` | The mere-domain UX panels: facet apparatus, gloss navigator, node roster, and navigation trail |
-| `crates/shell` | `chrome`, `comms` | Host-neutral domain models: chrome view-models and the comms pane model. The pane/split-tree model (`frisket`) moved to `merecat` with meerkat's deletion |
+| `crates/shell` | `chrome`, `comms` | Host-neutral domain models: chrome view-models and the comms pane model. The pane/split-tree model (`frisket`) moved to `turnstone` with meerkat's deletion |
 | `crates/system` | `session-runtime`, `shell-state`, `content-contract`, `fetch`, `proofs`, `ux-events`, `registry/register-*` | Runtime services: session/manifest persistence, shell state, the content-reference and fetch contracts, typed proofs, the UX event/probe taxonomy, and the capability registries |
 | `crates/forme` | `forme`, `uxtree` | Per-graph-view arrangement authority and the UX-tree projection |
 | `crates/platen` | `platen`, `domain/*` | Composition surface: compiles arrangements into presentation plans, plus its workbench/accessory domain panels. (Engine selection — `inker`, `document-canvas`, `nematic` — moved to genet 2026-07-10) |
@@ -254,7 +254,7 @@ Mere consumes these one-way (it depends on them; they never depend on Mere):
   protocols' communities.
 - `boa` (`mark-ik/boa`): the Boa JavaScript document-host lane.
 
-Downstream, four products depend on Mere one-way: **`merecat`** (the reference
+Downstream, four products depend on Mere one-way: **`turnstone`** (the reference
 on-screen host, formerly `meerkat`), **`isometry`**, **`woodshed`**, and
 **`hocket`**. Each owns its own truth and reaches Mere for the graph,
 projection, memory, identity, and session layers.

@@ -508,7 +508,7 @@ mod tests {
             body: Ok(CarrierResponseBody::Opened(Box::new(SessionOpened {
                 version: ProtocolVersion::V1,
                 descriptor: EndpointDescriptor {
-                    label: "merecat".into(),
+                    label: "turnstone".into(),
                     projections: Vec::new(),
                 },
                 status: SessionStatus::Live,

@@ -6,7 +6,7 @@ license.workspace = true
 repository.workspace = true
 publish = false
 rust-version = "1.92.0"
-description = "The composed graph library behind Merecat and other graph-shaped applications."
+description = "The composed graph library behind Turnstone and other graph-shaped applications."
 
 [features]
 default = []

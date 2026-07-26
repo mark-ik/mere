@@ -143,7 +143,7 @@ pub enum ChainError {
 #[derive(Clone, Debug, Default)]
 pub struct DelegationTable {
     /// The root authority id: a root certificate is valid only if it names
-    /// this. In merecat this is the user's personae master public key.
+    /// this. In turnstone this is the user's personae master public key.
     root: [u8; 32],
     /// The host-set clock (servitor reads no clock of its own).
     now_ms: u64,
@@ -152,7 +152,7 @@ pub struct DelegationTable {
 }
 
 impl DelegationTable {
-    /// A table whose root certificates must name `root` — merecat passes the
+    /// A table whose root certificates must name `root` — turnstone passes the
     /// active personae identity's master public key (OQ2).
     pub fn new(root: [u8; 32]) -> Self {
         Self {

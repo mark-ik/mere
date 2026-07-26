@@ -12,7 +12,7 @@
 //! Browser-runtime state (scroll/form restore, viewer override, compat
 //! mode, webview lifecycle) left this struct on 2026-07-09 for the
 //! host-owned `BrowserNodeState` sidecar (session-runtime
-//! `browser_node_state`), per the mere/merecat boundary pass plan
+//! `browser_node_state`), per the mere/turnstone boundary pass plan
 //! slice C: the graph library holds graph facts; what the browser
 //! knows about a node rides beside the graph, keyed by node id.
 

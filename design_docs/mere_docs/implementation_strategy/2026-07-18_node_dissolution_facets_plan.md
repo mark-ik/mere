@@ -8,7 +8,7 @@ independently workable; D depends on F0 for its facet destinations and on the
 D-gate measurement for its hot fields.
 **Companions:** the [image externalization plan](2026-07-06_node_image_externalization_plan.md)
 (D0 executes its phase 2; its phase 1 store is built), the
-[boundary pass plan](2026-07-09_mere_merecat_boundary_pass_plan.md) (slice C
+[boundary pass plan](2026-07-09_mere_turnstone_boundary_pass_plan.md) (slice C
 invented the sidecar pattern), the
 [participant gate + packs plan](2026-07-17_participant_gate_packs_plan.md)
 (packs ship custom content classes; facet grants join its scope vocabulary),
@@ -26,7 +26,7 @@ shared interaction moves through Cambium/Sprigging under the Woodshed consumer.
 `chartulary::Container` is the one node; every optional metadatum becomes an
 atomic **facet** (typed record keyed by node id + facet id, schema-validated);
 mere's kernel `Node` dissolves facet-by-facet until its remainder is Container,
-and "web page" becomes merecat's content class defined with the same machinery
+and "web page" becomes turnstone's content class defined with the same machinery
 a modder would use.
 
 ## Lane F — the facet store (LANDED 2026-07-18, chartulary `0051d7c`)
@@ -171,11 +171,11 @@ The field-by-field map (from the 2026-07-18 read of `graph/node.rs`):
   designed: `images: BTreeMap<ImageRole, ImageRef>`, migration included).
   Done when: no pixels ride `Node` or the graph snapshot; sessions migrate
   one-time; switcher/preview surfaces render unchanged.
-- **D1, the web content class founded** (merecat-side definition, mere-side
+- **D1, the web content class founded** (turnstone-side definition, mere-side
   storage): mime/addresses/body land in their Container homes; cached_host
   and viewer-adjacent metadata become the **web-page facet bundle**, the
-  first content class defined as F1 data. The dogfood rung: merecat defines
-  it exactly as a modder would. Done when: merecat browses normally with the
+  first content class defined as F1 data. The dogfood rung: turnstone defines
+  it exactly as a modder would. Done when: turnstone browses normally with the
   class in force and a second toy class (a note class) coexists in one graph.
 - **D2, arrangement + presentation + visit facets.** Done when: the fields
   leave `Node`, their consumers read facets, sessions migrate.
@@ -193,7 +193,7 @@ The field-by-field map (from the 2026-07-18 read of `graph/node.rs`):
   Mere's graph adapter and kernel-aware canvas remain Mere-side.
 - **The pool surface** (personae-indexed vaults, cross-vault queries, p2p
   share): the north star's step 3; its own plan when it fires.
-- **Merecat palette/install slice**: owned by the participant plan; proceeds
+- **Turnstone palette/install slice**: owned by the participant plan; proceeds
   in parallel, unblocked by all of the above.
 
 ## Findings
@@ -379,11 +379,11 @@ v0 that does not gate on any of this: mint + session-switch.
   (`{subject, kind}`; legacy `nested_log` reads once for the adopt heal,
   never writes back). A cross-graph copy does not carry `nested` — a fork's
   copy is un-resided until the slot-convention world move makes forked worlds
-  real copies. Receipts: kernel 277 / session-runtime 217 / merecat 99;
+  real copies. Receipts: kernel 277 / session-runtime 217 / turnstone 99;
   headed `denizen_b1.scn` RESULT ok with `nested` in `graph.json` and the
   slimmed facet in `facets.json`. Full narrative in the participant plan's
   progress log.
-- **2026-07-20 (SIDECAR CONVERGENCE COMPLETE — mere `10084b3`, merecat
+- **2026-07-20 (SIDECAR CONVERGENCE COMPLETE — mere `10084b3`, turnstone
   `ed75c79`):** the last two bespoke per-node sidecars joined the facet store.
   **denizen.*: born as facets** — `denizen_bindings.json` removed before any
   host ever wrote one (the cartography path again); `denizen_facets` holds the
@@ -393,7 +393,7 @@ v0 that does not gate on any of this: mint + session-switch.
   **web.*: live migration** — browser_node_state persistence converges onto
   atomic `web.scroll` / `web.form_draft` / `web.viewer` / `web.compat` /
   `web.content` facets (non-default only; whole-set rewrite clears stale);
-  the in-memory `BrowserNodeStates` stays the host working set. merecat saves
+  the in-memory `BrowserNodeStates` stays the host working set. turnstone saves
   web facets beside arrangement + scene and adopt reads them back, seeding
   unseen nodes once from a pre-convergence `browser_nodes.json` (facet values
   win; the stale file is left inert); content-on respawn now flows from the
@@ -402,11 +402,11 @@ v0 that does not gate on any of this: mint + session-switch.
   `web.*` + `denizen.*` + foreign namespaces; the bespoke documents remaining
   beside it are non-per-node (frame/workbench/windows/settings/tombstones).
 - **2026-07-20 (HEADED RECEIPT: the facet layout arc survives a restart):**
-  scenario pair `merecat/scenarios/facet_layout{,_verify}.scn` (self-drive
+  scenario pair `turnstone/scenarios/facet_layout{,_verify}.scn` (self-drive
   harness, fresh profile): part 1 settles the sample ring + three `mere://`
   nodes, `act Save session`, captures; part 2 relaunches on the profile and
   captures the restore. Green both runs
-  (`testing/merecat/images/scenarios/facet_layout{,_verify}/`). Verified
+  (`testing/turnstone/images/scenarios/facet_layout{,_verify}/`). Verified
   three ways: the restored capture reproduces the saved arrangement (not a
   fresh spiral); `facets.json` holds all 15 `arrangement.position` facets at
   settled coordinates + the four `scene.*` container facets; `graph.json`
@@ -416,7 +416,7 @@ v0 that does not gate on any of this: mint + session-switch.
   (rung-6 restore) while the live session drew the flat underlay — a
   selection-state render difference, not persistence. This is the missing
   save-half receipt (the adopt half was already unit-tested).
-- **2026-07-19 (scene.* container facets LANDED — mere `579b5e1`, merecat
+- **2026-07-19 (scene.* container facets LANDED — mere `579b5e1`, turnstone
   `a832ba6`):** the atomic-facets lens reached the *graph-scoped* view settings
   the geometry sidecar carried alongside the per-node data. `size_by_degree`,
   `size_by_importance`, `importance_metric`, and the physics `damping` are not
@@ -430,12 +430,12 @@ v0 that does not gate on any of this: mint + session-switch.
   **container** facet — the same mechanism now spans leaf and container nodes,
   which is the atomic-facets endgame the one-node ruling pointed at. Follow-on:
   the fork must carry `scene.*` donor→fork container (planned, tearout G4-R).
-- **2026-07-19 (arrangement.* family COMPLETE — mere `89e3ad5`, merecat
+- **2026-07-19 (arrangement.* family COMPLETE — mere `89e3ad5`, turnstone
   `86d5d25`):** the remaining five per-node families (size / sprite /
   sprite-hull / material / face) landed on the shared rewrite-clears-stale
   helpers (`rewrite_family` / `read_family`); payload shapes match the canvas
   `apply_cartography_*` seams one-to-one (a hull with any malformed point is
-  skipped whole — a partial polygon is a wrong collider). merecat saves all
+  skipped whole — a partial polygon is a wrong collider). turnstone saves all
   six from `cartography_geometry()` and re-dresses on adopt in the canvas's
   documented seam order (positions seed first, sprites before hulls, faces
   after sprites); sizing flags reset on adopt like the rest of the unpersisted
@@ -444,9 +444,9 @@ v0 that does not gate on any of this: mint + session-switch.
   `to_persisted_json`/`from_persisted_json` sidecar half is now dead code (a
   cleanup candidate), and the graph-scoped flags (`size_by_degree`,
   `size_by_importance`, `importance_metric`) await a view-settings home
-  (merecat does not yet wire the view-intent store).
+  (turnstone does not yet wire the view-intent store).
 - **2026-07-19 (`arrangement.position` facets LANDED — mere `16fa15a`,
-  merecat `ddf066e`):** the first arrangement-family convergence rung, and it
+  turnstone `ddf066e`):** the first arrangement-family convergence rung, and it
   came out cleaner than the plan assumed: the bespoke cartography sidecar
   (`CartographyGeometry` → `cartography.json`) **was never wired by any host**
   (`seed_cartography` / `apply_cartography_*` had zero production callers), so
@@ -454,7 +454,7 @@ v0 that does not gate on any of this: mint + session-switch.
   migration. session-runtime `arrangement_facets`: the `arrangement.position`
   id + `{x, y}` payload, `write_arrangement_positions` (rewrite-clears-stale) /
   `read_arrangement_positions` (skips malformed), `retain_present_nodes`
-  (departed node takes its whole facet record). merecat: `App.facets` holds
+  (departed node takes its whole facet record). turnstone: `App.facets` holds
   the session's `NodeFacetStore`; save writes `cartography_geometry()`
   positions as facets, adopt prunes to the live graph and re-places via
   `seed_cartography`; round-trip tested at the adopt seam. Remaining family
@@ -475,7 +475,7 @@ v0 that does not gate on any of this: mint + session-switch.
   should carry layout by copying the cartography sidecar; retire the seam when
   the fork path does that). (3) `switcher_thumbnail` → only
   `build_switcher_thumbnail_with(graph, position_of, opts)` remains (the
-  graph-default variant deleted; no production caller — merecat/genet/isometry
+  graph-default variant deleted; no production caller — turnstone/genet/isometry
   grep clean). (4) cross-graph copy no longer carries position. (5)
   `Canvas::{with_graph, set_graph}` park at origin + halt; restore goes
   through `seed_cartography` (tests now drive that seam). (6) arrangements
@@ -515,7 +515,7 @@ v0 that does not gate on any of this: mint + session-switch.
   seiche); (2) the **cartography write-back** `set_node_projected_position` →
   removed (seiche is the store); (3) **`switcher_thumbnail`** (session-runtime),
   which defaults to `node_projected_position` → the host passes seiche positions
-  — a **cross-crate API change**, likely reaching merecat/genet callers, which
+  — a **cross-crate API change**, likely reaching turnstone/genet callers, which
   is why this is a careful pass and not a slice; (4) **cross-graph copy** drops
   the position carry (the copy is re-laid-out). Then remove the kernel accessors
   (`projected_position` / `set_node_position` / `set_node_projected_position` /
