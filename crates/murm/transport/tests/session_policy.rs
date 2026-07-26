@@ -120,11 +120,14 @@ fn hello_for(binding: &SessionBinding) -> SessionHello {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn memory_transport_admits_and_refuses_by_owner_rule() {
-    for (access, expect_accept) in [(ServiceAccess::MemberOnly, true), (ServiceAccess::Disabled, false)]
-    {
+    for (access, expect_accept) in [
+        (ServiceAccess::MemberOnly, true),
+        (ServiceAccess::Disabled, false),
+    ] {
         let alpn = Alpn::new("mere/murm/v1");
         let member_peer = PeerID::from_public_key(member().master_public_key());
-        let server_peer = PeerID::from_public_key(InMemoryProvider::from_seed([9; 32]).master_public_key());
+        let server_peer =
+            PeerID::from_public_key(InMemoryProvider::from_seed([9; 32]).master_public_key());
         let (client_side, server_side) = MemoryTransport::pair(member_peer, server_peer);
 
         let policy = policy(access);
@@ -246,13 +249,11 @@ mod reticulum {
 
         let server_alpn = alpn.clone();
         let responder = tokio::spawn(async move {
-            let mut session = tokio::time::timeout(
-                Duration::from_secs(25),
-                server.accept(server_alpn),
-            )
-            .await
-            .expect("accept timed out")
-            .expect("accept failed");
+            let mut session =
+                tokio::time::timeout(Duration::from_secs(25), server.accept(server_alpn))
+                    .await
+                    .expect("accept timed out")
+                    .expect("accept failed");
             assert_eq!(
                 session.peer, None,
                 "reticulum acceptance cannot name its initiator"
@@ -301,24 +302,31 @@ mod reticulum {
             link: Some(stream.link_id()),
         };
         let stream_link = stream.link_id();
-        let reply = initiate_session(
-            &mut stream,
-            &hello_for(&binding),
-            &policy(ServiceAccess::MemberOnly).limits,
+        let reply = tokio::time::timeout(
+            Duration::from_secs(30),
+            initiate_session(
+                &mut stream,
+                &hello_for(&binding),
+                &policy(ServiceAccess::MemberOnly).limits,
+            ),
         )
         .await
+        .expect("handshake timed out: no reply from the responder")
         .expect("initiator handshake");
 
-        let mut application = Vec::new();
-        tokio::time::timeout(
-            Duration::from_secs(20),
-            stream.read_to_end(&mut application),
-        )
-        .await
-        .expect("read timed out")
-        .expect("read application bytes");
+        // read_exact, not read_to_end: a retinue link does not necessarily
+        // signal EOF promptly when the far side drops it, and waiting for a
+        // close we never arranged is what hung this test the first time.
+        let mut application = vec![0u8; APPLICATION_BYTES.len()];
+        tokio::time::timeout(Duration::from_secs(30), stream.read_exact(&mut application))
+            .await
+            .expect("application read timed out")
+            .expect("read application bytes");
 
-        let (decision, server_binding) = responder.await.expect("responder task");
+        let (decision, server_binding) = tokio::time::timeout(Duration::from_secs(30), responder)
+            .await
+            .expect("responder task timed out")
+            .expect("responder task");
         assert!(
             decision.is_accept(),
             "a member proof admits over best-effort Reticulum acceptance"

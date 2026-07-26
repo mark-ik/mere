@@ -146,6 +146,13 @@ pub enum DenyReason {
     /// The chain is valid but does not cover the requested action now.
     #[error("action not covered by the presented authority")]
     ActionNotCovered,
+    /// The session was admitted, but for a different action than this listener
+    /// serves. Distinct from [`DenyReason::ServiceNotOffered`], which is the
+    /// owner declining to offer a service at all, and from
+    /// [`DenyReason::ActionNotCovered`], which is the authority falling short:
+    /// this is a listener refusing to serve one grant under another service.
+    #[error("this listener does not serve the admitted action")]
+    ActionNotOffered,
     /// The service is at its configured session capacity.
     #[error("service capacity exhausted")]
     CapacityExhausted,

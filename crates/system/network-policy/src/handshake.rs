@@ -365,7 +365,14 @@ pub fn admit(
     now_ms: u64,
     active_sessions: u32,
 ) -> (Vec<u8>, Result<AdmittedPrincipal, DenyReason>) {
-    let (reply, decision) = respond(policy, ledger, hello_bytes, binding, now_ms, active_sessions);
+    let (reply, decision) = respond(
+        policy,
+        ledger,
+        hello_bytes,
+        binding,
+        now_ms,
+        active_sessions,
+    );
     let outcome = match decision {
         SessionDecision::Deny { reason } => Err(reason),
         SessionDecision::Accept { class } => {

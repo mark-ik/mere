@@ -953,6 +953,35 @@ certificate over their own authenticated connection is refused
 while signed by the stranger fails its proof. A replay of a valid hello on a
 different Reticulum link is refused too, since the link is in the transcript.
 
+### 2026-07-26 — V7 first half: the matrix over real transports
+
+`crates/murm/transport/tests/session_policy.rs` runs the handshake through
+actual `Transport` implementations. The Memory arm admits and refuses by
+owner rule, and the **Reticulum/TCP arm passes**: acceptance there is
+best-effort (`peer: None`), so the session proof is the only thing that
+names a subject, and it admits on that basis alone, carries application
+bytes, and both ends independently agree on the link id they bound to. The
+adapter turning an `AcceptedSession` into a `SessionBinding` is five lines
+at the call site, as the V6 note predicted.
+
+**A design bug this arm caught.** The transcript originally bound the
+responder's *local* interface id. `mere-transport` documents that id as
+meaningful only to the assigning node and never on the wire, so an initiator
+could not know it and every honest Reticulum session would have been
+refused. Only values both ends derive independently may be signed: the
+interface is now context-only, and the link id, which both ends of a retinue
+link compute, stays in the proof. `ReticulumStream::link_id()` was added
+because an initiator otherwise cannot learn the link it is about to speak
+on — `accept` reports ingress on the responder side only.
+
+**Bench note for whoever writes the next transport test:** the first version
+hung overnight. `read_to_end` waits for a close a retinue link does not
+promptly signal, and `initiate_session` had no timeout. Bound every await in
+a transport test; a hang is indistinguishable from a slow build.
+
+**Still open for V7:** the p2panda arm, and the direct-PHY/RF arm, which
+waits on the V0/V2 bench.
+
 **Still open for V6:** the done-condition names "one real Murm connection".
 What exists is the transport-shaped proof over a `tokio::io::duplex` pair
 (`tests/over_transport.rs`): an admitted session carries application bytes,
