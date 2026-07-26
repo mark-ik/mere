@@ -623,10 +623,24 @@ the low-power lane, landed the same week):
 
 **Ordered work for G5, none of it assigned:**
 
-- **G5a — protocol.** Add the session plane's missing vocabulary: an
-  authenticated `Open` carrying principal + grant reference, plus close /
-  suspend / resynchronize. Must precede the carrier, because the carrier framing
-  is what the handshake binds to.
+- **G5a — protocol. LANDED 2026-07-25.** `SessionPrincipal { subject, grant }`
+  with both fields **opaque** (`grant` is bytes; the protocol crate's deps stay
+  blake3/sceno/scenotime/serde, no personae, no policy), `SessionOpen` /
+  `SessionOpened`, and carrier verbs `Open` / `Close` / `Suspend`.
+  *Corrected while building:* the plan said to add all five §4.1 verbs, but
+  `resume` already existed as `Resume` (reconnect from a client's last ack) and
+  `resynchronize` is what `Snapshot` already does — a fifth variant would have
+  been a second spelling. Three added, not five; the mapping is documented on
+  the enum and covered by a test.
+  *stdio refuses two of them rather than stubbing:* it cannot authenticate a
+  same-user subprocess over inherited pipes, so `Open` returns a failure
+  instead of answering `Opened` (a carrier that cannot verify a principal must
+  not reply as though it had), and `Suspend` is refused because over stdio the
+  session IS the process, so nothing would survive to resume. `Close` is
+  honoured — it ends the loop. The exhaustive matches meant the compiler
+  demanded a decision at every consumer, which is why these are decisions
+  rather than defaults. Receipts: protocol 8 tests, merecat 145, graphshell
+  port and stdio green.
   *Boundary rule:* the protocol crate should carry the principal and grant as
   **opaque bytes**, never a `network-policy` or personae dependency. §3 sealed a
   portable boundary; admission belongs to the endpoint/host crate. (The same

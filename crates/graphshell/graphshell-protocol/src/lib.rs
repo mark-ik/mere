@@ -373,8 +373,71 @@ pub enum SessionStatus {
     Revoked,
 }
 
+/// An authenticated principal and the grant it acts under — **opaque to this
+/// crate on purpose**.
+///
+/// Section 4.1 puts "authenticated principal and grant reference" in the
+/// session plane's minimum vocabulary, and G5 binds a real Personae identity to
+/// the handshake. This crate carries both as bytes and interprets neither:
+/// admission is the host's business (`network-policy` evaluating a personae
+/// delegation chain), and the portable boundary sealed in section 3 must not
+/// acquire an identity or policy dependency merely to move a session forward.
+///
+/// `subject` is 32 bytes to match the shape the rest of the family already
+/// speaks (`servitor::Subject`, `network-policy`'s `SessionRequest.subject`),
+/// not because this crate knows it is an Ed25519 key.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SessionPrincipal {
+    /// The claimed subject, as the carrier's handshake authenticated it. A
+    /// carrier that cannot authenticate a peer must not fill this from
+    /// application bytes — the same rule `network-policy` states for its own
+    /// transport-peer field.
+    pub subject: [u8; 32],
+    /// Opaque proof that `subject` may open this session. The grammar
+    /// (personae certificates today) is deliberately not this crate's to know.
+    pub grant: Vec<u8>,
+}
+
+/// Open an authenticated session (section 4.1's `open`).
+///
+/// Sent before any other request on a carrier that authenticates. The loopback
+/// and stdio profiles may skip it — a subprocess of the same user is not a
+/// trust boundary — which is why every other request stays well-formed without
+/// one; enforcement is the endpoint's, not the vocabulary's.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SessionOpen {
+    pub version: ProtocolVersion,
+    pub principal: SessionPrincipal,
+    /// What the client can render, so an endpoint may refuse early rather than
+    /// after a snapshot it cannot present.
+    pub capabilities: CapabilityProfile,
+}
+
+/// An accepted session.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SessionOpened {
+    pub version: ProtocolVersion,
+    /// The endpoint's own subject, so a client can pin the peer it reached
+    /// rather than trusting a label.
+    pub endpoint_subject: [u8; 32],
+    pub descriptor: EndpointDescriptor,
+    pub status: SessionStatus,
+    /// When the admitting grant expires, if it is bounded. A hint for
+    /// pre-emptive renewal — never a substitute for the endpoint's own check,
+    /// since a grant can be revoked long before it expires.
+    pub expires_at_ms: Option<u64>,
+}
+
 /// Carrier-neutral requests used by the local process proof and future
 /// transports. The carrier supplies framing; these variants supply meaning.
+///
+/// Section 4.1's five session verbs map here as: `open` → [`CarrierRequestBody::Open`],
+/// `close` → [`CarrierRequestBody::Close`], `suspend` →
+/// [`CarrierRequestBody::Suspend`], `resume` → [`CarrierRequestBody::Resume`]
+/// (reconnect from a client's last acknowledged epoch), and `resynchronize` →
+/// [`CarrierRequestBody::Snapshot`] (ask for current state outright). The last
+/// two already existed; adding a separate `Resynchronize` would have been a
+/// second spelling of `Snapshot`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum CarrierRequestBody {
     Discover,
@@ -382,6 +445,13 @@ pub enum CarrierRequestBody {
     Resource(ResourceRequest),
     Resume(ResumeRequest),
     Intent(IntentInvocation),
+    /// Authenticate and open (section 4.1). Boxed: it is much larger than its
+    /// siblings and would otherwise set the whole enum's size.
+    Open(Box<SessionOpen>),
+    /// Tear the session down; the endpoint may release its state.
+    Close,
+    /// Going away, but keep the session resumable.
+    Suspend,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -397,6 +467,9 @@ pub enum CarrierResponseBody {
     Resource(ResourceResponse),
     Resume(ResumeReply),
     Intent(IntentResult),
+    Opened(Box<SessionOpened>),
+    Closed,
+    Suspended,
 }
 
 /// A failure reported by an endpoint without exposing its native error type.
@@ -415,6 +488,99 @@ pub struct CarrierResponse {
 mod tests {
     use super::*;
     use sceno::{Arrangement, Scene, Spiral};
+
+    #[test]
+    fn an_open_round_trips_and_keeps_its_grant_opaque() {
+        // The protocol moves the principal and never reads it: `grant` is
+        // bytes whose grammar belongs to the host's admission layer.
+        let open = SessionOpen {
+            version: ProtocolVersion::V1,
+            principal: SessionPrincipal {
+                subject: [7; 32],
+                grant: b"an opaque personae certificate".to_vec(),
+            },
+            capabilities: CapabilityProfile::new([PresentationCapability::PortableCard]),
+        };
+        let request = CarrierRequest {
+            id: 1,
+            body: CarrierRequestBody::Open(Box::new(open.clone())),
+        };
+        let wire = serde_json::to_string(&request).unwrap();
+        let decoded: CarrierRequest = serde_json::from_str(&wire).unwrap();
+        assert_eq!(decoded, request);
+        match decoded.body {
+            CarrierRequestBody::Open(decoded) => {
+                assert_eq!(decoded.principal.grant, open.principal.grant);
+                assert_eq!(decoded.principal.subject, [7; 32]);
+            }
+            other => panic!("expected an open: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn an_accepted_session_names_the_endpoint_it_reached() {
+        // A client pins the peer's subject rather than trusting a label; the
+        // expiry is a renewal hint, never authority (a grant can be revoked
+        // long before it expires).
+        let opened = SessionOpened {
+            version: ProtocolVersion::V1,
+            endpoint_subject: [9; 32],
+            descriptor: EndpointDescriptor {
+                label: "merecat".into(),
+                projections: Vec::new(),
+            },
+            status: SessionStatus::Live,
+            expires_at_ms: Some(1_000),
+        };
+        let response = CarrierResponse {
+            id: 1,
+            body: Ok(CarrierResponseBody::Opened(Box::new(opened))),
+        };
+        let wire = serde_json::to_string(&response).unwrap();
+        assert_eq!(
+            serde_json::from_str::<CarrierResponse>(&wire).unwrap(),
+            response
+        );
+    }
+
+    #[test]
+    fn the_session_plane_has_all_five_verbs() {
+        // Section 4.1 lists open, close, suspend, resume, resynchronize. Three
+        // are new; the other two already had spellings, and giving
+        // resynchronize its own variant would have duplicated Snapshot.
+        let session = ProjectionSession("s".into());
+        let verbs = [
+            CarrierRequestBody::Open(Box::new(SessionOpen {
+                version: ProtocolVersion::V1,
+                principal: SessionPrincipal {
+                    subject: [1; 32],
+                    grant: Vec::new(),
+                },
+                capabilities: CapabilityProfile::default(),
+            })),
+            CarrierRequestBody::Close,
+            CarrierRequestBody::Suspend,
+            CarrierRequestBody::Resume(ResumeRequest {
+                session: session.clone(),
+                epoch: SceneEpoch(1),
+                revision: Revision(1),
+            }),
+            CarrierRequestBody::Snapshot(ProjectionRequest {
+                version: ProtocolVersion::V1,
+                session,
+                score: Score::new(Arrangement::Spiral(Spiral::default())),
+            }),
+        ];
+        for verb in verbs {
+            let request = CarrierRequest { id: 0, body: verb };
+            let wire = serde_json::to_string(&request).unwrap();
+            assert_eq!(
+                serde_json::from_str::<CarrierRequest>(&wire).unwrap(),
+                request,
+                "every session verb round-trips"
+            );
+        }
+    }
 
     #[test]
     fn request_serializes_a_product_free_score() {

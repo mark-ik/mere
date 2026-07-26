@@ -115,6 +115,38 @@ mod native {
                     .invoke(intent)
                     .map(CarrierResponseBody::Intent)
                     .map_err(|error| error.to_string()),
+                // stdio cannot authenticate a peer: the far end is a
+                // subprocess of the same user, reached over inherited pipes,
+                // with no key exchange anywhere in the profile. So it REFUSES
+                // to open rather than answering `Opened` — a carrier that
+                // cannot verify a principal must not reply as though it had,
+                // or every client above it inherits a false belief. The
+                // authenticated open lands with the full-peer carrier (G5d),
+                // and every other request stays well-formed without one.
+                CarrierRequestBody::Open(_) => Err(
+                    "the stdio carrier does not authenticate; `open` requires a carrier                      that proves its peer"
+                        .to_string(),
+                ),
+                // Close is honest here: end the session by leaving the loop
+                // after the reply is written.
+                CarrierRequestBody::Close => {
+                    write_response(
+                        &mut writer,
+                        &CarrierResponse {
+                            id,
+                            body: Ok(CarrierResponseBody::Closed),
+                        },
+                    )?;
+                    return Ok(());
+                }
+                // Suspend promises the session survives to be resumed. Over
+                // stdio the session IS the process and its pipes, so nothing
+                // would survive; saying `Suspended` would be a promise this
+                // profile cannot keep.
+                CarrierRequestBody::Suspend => Err(
+                    "the stdio carrier has no session that outlives its process;                      `suspend` requires a carrier that can reconnect"
+                        .to_string(),
+                ),
             };
             write_response(
                 &mut writer,
