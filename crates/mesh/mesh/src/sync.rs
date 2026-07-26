@@ -28,7 +28,7 @@
 use identity::Ed25519Keypair;
 use muniment::Backend;
 use murm_replication::JoinedSpace;
-use p2panda_core::{Operation, SigningKey, Topic};
+use p2panda_core::{Operation, SigningKey};
 use p2panda_net::{Endpoint, Gossip};
 
 use crate::board::JobBoard;
@@ -85,7 +85,7 @@ impl<B: Backend + Clone + Send + Sync + 'static> SyncedMesh<B> {
             store.sync_store(),
             endpoint,
             gossip,
-            Topic::from(mesh_id),
+            mesh_id,
             move |op: Operation<MeshExt>| {
                 let store = accept_store.clone();
                 async move { matches!(store.accept(mesh_id, &op).await, Ok(true)) }

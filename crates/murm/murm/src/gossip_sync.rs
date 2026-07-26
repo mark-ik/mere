@@ -25,7 +25,6 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use murm_replication::JoinedSpace;
-use p2panda_core::Topic;
 use tokio::task::JoinHandle;
 use tokio_stream::StreamExt;
 use transport::{GossipHandle, P2pandaTransport};
@@ -139,7 +138,7 @@ impl Murm<P2pandaTransport> {
                     store,
                     endpoint,
                     gossip_actor,
-                    Topic::from(cabal_id),
+                    cabal_id,
                     move |op| {
                         let accept_engine = Arc::clone(&accept_engine);
                         async move { accept_engine.ingest_operation(&cabal_id, &op).await.is_ok() }

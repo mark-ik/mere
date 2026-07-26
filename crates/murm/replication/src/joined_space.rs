@@ -75,11 +75,15 @@ where
     /// `accept` returns whether the operation counted (verified and new); a
     /// synchronous consumer hands back [`std::future::ready`]. `endpoint` +
     /// `gossip` come from the host transport's `sync_parts`.
+    ///
+    /// `topic` takes anything convertible, so a caller passes its raw 32-byte
+    /// space id and never names a p2panda type — which is what lets a domain
+    /// lane join without importing p2panda at all.
     pub async fn join<S, L, A, Fut>(
         store: S,
         endpoint: Endpoint,
         gossip: Gossip,
-        topic: Topic,
+        topic: impl Into<Topic>,
         accept: A,
     ) -> Result<Self, JoinError>
     where
@@ -98,7 +102,7 @@ where
             .await
             .map_err(|e| JoinError::Spawn(e.to_string()))?;
         let handle = log_sync
-            .stream(topic, true)
+            .stream(topic.into(), true)
             .await
             .map_err(|e| JoinError::Stream(e.to_string()))?;
         let sub = handle
@@ -120,6 +124,12 @@ where
             .publish(operation)
             .map_err(|e| JoinError::Publish(e.to_string()))
     }
+
+    /// Leave the space: abort the drain, close the stream, stop the session.
+    ///
+    /// Exactly what dropping does — named so a caller can say it, and so a
+    /// deliberate leave reads differently from a value going out of scope.
+    pub fn leave(self) {}
 
     /// The drain, for callers composing their own status across a second
     /// lane (murm's gossip counters, say).

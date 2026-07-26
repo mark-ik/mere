@@ -489,17 +489,90 @@ drop-order-sensitive fields into one and publishes through
 `JoinedSpace::publish`; murm's `SyncedCabal` deleted its `Box<dyn Any>`
 keepalive and holds `Option<JoinedSpace<CabalExt>>` (the no-transport mode
 composes as ruled); gemot's four lane proofs and the `moot-peer` example each
-collapsed to one call. The done-condition recorded with the ruling is met:
-`LogSync` / `SyncHandle` / `TopicLogSyncEvent` imports are gone from every
-consumer, mesh and murm are down to the `Endpoint` + `Gossip` pass-through
-values their join signatures carry, and gemot's constitution and delegation
-proofs import no p2panda crate at all.
+collapsed to one call.
 
-**Receipts:** 228 tests green across the four crates — murm-replication 40,
-gemot 102 (including the four two-peer convergence proofs over live
-loopback), mesh 29 (both two-peer network tests), murm 57. `cargo fmt` clean
-(the pass also normalized pre-existing unformatted hunks in five gemot files
-from the concurrent commons-capability work; verified format-only).
+**The done-condition, measured rather than asserted.** The first write-up of
+this entry claimed the gemot proofs imported no p2panda crate; a grep proved
+that false — `join` took a `Topic`, so every site still imported
+`p2panda_core`. Fixed at the source rather than in the prose: `join` now takes
+`impl Into<Topic>`, callers pass their raw 32-byte space id, and the claim is
+true by construction. Verified after the change:
+
+- `LogSync`, `SyncHandle`, `TopicLogSyncEvent`, and `SyncSubscription` are
+  imported in exactly two files workspace-wide, both inside
+  `murm-replication`. No consumer names a session type.
+- Three files are now fully p2panda-free, one of them **production**: murm's
+  `gossip_sync.rs`, plus gemot's constitution and delegation proofs.
+- What remains is honest rather than residual. `Operation` / `SigningKey` /
+  `Hash` stay where a domain signs and verifies its own operations (mesh
+  authoring, the tessera and records fixtures, the example); `Endpoint` +
+  `Gossip` stay as the pass-through values those join signatures carry from
+  the host's `sync_parts`.
+
+`leave()` was added alongside, completing Phase B's named vocabulary (join,
+leave, resync, report). It is exactly what dropping does, named so a
+deliberate leave reads differently from a value going out of scope.
+
+**The posture conflict that motivated the ruling did not exist.** The finding
+below reads gemot's manifest comment ("gemot owns no p2panda-net ... p2panda-net
+is dev-only") and mesh's opposite choice, and calls that a conflict needing a
+boundary ruling. `cargo tree -p gemot -e normal -i p2panda-net` says otherwise:
+
+```text
+p2panda-net v0.7.0
+└── murm-replication v0.1.0
+    └── gemot v0.1.0
+```
+
+p2panda-net has been in gemot's **production** graph since murm-replication
+became a normal dependency there. The manifest comment was describing an
+intent the graph already contradicted, and reading the comment plus the
+dev-dependency block — without the transitive check — is how it went
+unnoticed. gemot's manifest now states the version that is true.
+
+This does not change the ruling; it changes its reason. (b) is right because
+murm-replication is where the mechanics belong, not because it keeps a
+dependency out of gemot that was never out. And the posture worth holding is
+about **source**: gemot's code names no session type, which is now enforced by
+the two-file import result above, rather than about a build graph that stopped
+being clean some time ago. The general lesson is the [cambium-winit
+one](2026-07-23_repo_consolidation_plan.md) in a new place: a manifest comment
+is a claim about the graph, and only `cargo tree` settles it.
+
+**Receipts:** 228 tests green across the four crates, run before and after the
+Topic change — murm-replication 40, gemot 102 (including the four two-peer
+convergence proofs over live loopback), mesh 29 (both two-peer network
+tests), murm 57. `cargo fmt` clean (the pass also normalized pre-existing
+unformatted hunks in five gemot files from the concurrent commons-capability
+work; verified format-only).
+
+**Where this leaves Phase B done-when #3** ("the runtime can join, leave,
+resync, and report one space without exposing a p2panda type to its
+consumer"). The four verbs exist on one type. The session and topic types are
+erased. Two things are still p2panda-shaped at the seam, and both should
+stay:
+
+- `Endpoint` + `Gossip` are pass-through values from the host's `sync_parts`.
+  Erasing them means murm-replication depending on `transport`, inverting the
+  layer for two opaque arguments a caller never constructs.
+- `accept` is handed an `Operation<E>`. That IS the domain's operation — a
+  lane that verifies and signs its own operations should see them, and
+  wrapping it would be ceremony, not a boundary.
+
+So #3 is met for the space lifecycle and deliberately unmet for the
+operation payload. **The criterion should read: *without naming a session,
+subscription, or topic type* — the things that are p2panda's business — and
+that version is now enforced, since those types appear in exactly two files,
+both inside this crate.**
+
+**Phase D done-when #1** ("a consumer joins a Moot through one domain API and
+imports no p2panda crate") holds under (b): the constitution and delegation
+proofs join a Moot lane, import no p2panda crate, and are the standing
+receipt. What is honestly still two calls rather than one is `gemot` store +
+`JoinedSpace::join`; a single `Moot::join` would need gemot to own the
+ceremony, which the ruling deliberately declined. Either the criterion means
+"one API per layer" (met) or Phase D wants a gemot-side wrapper (not built,
+and no consumer has asked for one).
 
 ### 2026-07-25: the reusable runtime service needs a ruling on who owns transport
 
