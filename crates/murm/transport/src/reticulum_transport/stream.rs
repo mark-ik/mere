@@ -24,6 +24,17 @@ impl ReticulumStream {
     pub(super) fn new(inner: LinkStream) -> Self {
         Self(inner)
     }
+
+    /// The id of the link carrying this stream.
+    ///
+    /// Both ends of a retinue link compute the same id, which is what lets an
+    /// initiator bind a session proof to the link it is about to speak on and
+    /// a responder verify that proof against the link it observed. The
+    /// initiator has no other way to learn it: `accept` reports ingress on the
+    /// responder side only.
+    pub fn link_id(&self) -> [u8; 16] {
+        *self.0.link_id().as_bytes()
+    }
 }
 
 impl std::fmt::Debug for ReticulumStream {

@@ -51,5 +51,6 @@ hkdf = { workspace = true, optional = true }
 sha2 = { workspace = true, optional = true }
 
 [dev-dependencies]
+network-policy = { workspace = true, features = ["tokio"] }
 tokio = { version = "1", features = ["io-util", "sync", "macros", "rt", "rt-multi-thread", "time"] }
 tokio-stream = "0.1"

@@ -223,6 +223,35 @@ fn a_proof_replayed_on_a_different_link_is_rejected() {
 }
 
 #[test]
+fn a_differing_local_interface_does_not_break_the_proof() {
+    // The deliberate asymmetry: the link is shared and therefore signed, but
+    // the interface id is local to whoever assigned it and the initiator
+    // cannot know it. Binding it would reject every honest Reticulum session.
+    let policy = policy(ServiceAccess::MemberOnly);
+    let ledger = RevocationLedger::new();
+    let subject = member().master_public_key().to_bytes();
+    let link = [0xaa; 16];
+
+    let initiator_view = SessionBinding {
+        protocol: PROTOCOL.to_vec(),
+        transport_peer: None,
+        interface: None,
+        link: Some(link),
+    };
+    let hello = hello_from(&member(), &initiator_view, vec![member_grant_to(subject)]);
+    let bytes = hello.encode(&policy.limits).expect("encode");
+
+    // The responder saw the same link over one of its own interfaces.
+    let responder_view = reticulum_binding(link);
+    assert_ne!(initiator_view.interface, responder_view.interface);
+    let (_, decision) = respond(&policy, &ledger, &bytes, &responder_view, NOW_MS, 0);
+    assert!(
+        decision.is_accept(),
+        "the two ends need not agree on a purely local interface number"
+    );
+}
+
+#[test]
 fn a_tampered_hello_field_fails_its_proof() {
     let policy = policy(ServiceAccess::MemberOnly);
     let ledger = RevocationLedger::new();

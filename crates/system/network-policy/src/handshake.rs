@@ -46,6 +46,9 @@ pub struct SessionBinding {
     /// The transport-authenticated peer, when the transport proved one.
     pub transport_peer: Option<[u8; 32]>,
     /// Opaque local interface identifier, when the bearer tracks one.
+    ///
+    /// Context only: deliberately **not** signed, because it is local to the
+    /// node that assigned it and the far end cannot know it. See [`transcript`].
     pub interface: Option<u64>,
     /// Link identifier, when the bearer has link identity.
     pub link: Option<[u8; 16]>,
@@ -130,8 +133,18 @@ pub enum HandshakeError {
     TooLarge,
 }
 
-/// Canonical transcript bytes. Every field the decision depends on is here,
-/// length-prefixed so no two different field sets can collide.
+/// Canonical transcript bytes, length-prefixed so no two different field sets
+/// can collide.
+///
+/// Only values **both ends derive independently** may appear here. That rules
+/// out [`SessionBinding::interface`]: a local interface id is meaningful only
+/// to the node that assigned it, is not stable across restarts, and never goes
+/// on the wire, so an initiator could not sign it and a responder that
+/// demanded it would reject every honest session. The interface stays on the
+/// binding as policy and diagnostic context; it is not part of the proof.
+///
+/// A Reticulum link id, by contrast, *is* shared: both ends of a link compute
+/// the same value, which is what lets the transcript pin a proof to one link.
 fn transcript(hello: &SessionHello, binding: &SessionBinding) -> Vec<u8> {
     let mut bytes = Vec::new();
     push_bytes(&mut bytes, TRANSCRIPT_DOMAIN);
@@ -147,14 +160,6 @@ fn transcript(hello: &SessionHello, binding: &SessionBinding) -> Vec<u8> {
     bytes.extend_from_slice(&hello.nonce);
     bytes.extend_from_slice(&hello.subject);
     push_option(&mut bytes, binding.transport_peer.as_ref().map(|p| &p[..]));
-    push_option(
-        &mut bytes,
-        binding
-            .interface
-            .map(|i| i.to_le_bytes())
-            .as_ref()
-            .map(|b| &b[..]),
-    );
     push_option(&mut bytes, binding.link.as_ref().map(|l| &l[..]));
     bytes.extend_from_slice(&(hello.delegations.len() as u64).to_le_bytes());
     for signed in &hello.delegations {
