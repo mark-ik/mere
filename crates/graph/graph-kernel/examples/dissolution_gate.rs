@@ -26,6 +26,11 @@
 //! - **C** — dissolved, but encoded the way the facet types are actually shaped
 //!   today (JSON). This is a codec cost, reported separately so it cannot be
 //!   mistaken for the cost of dissolving.
+//! - **C..G, the codec race** — the *same* open payload (containers +
+//!   `serde_json::Value` facet maps) through serde_json, ciborium, cbor4ii,
+//!   rmp-serde (named), and minicbor-serde. Identical in-memory target, so the
+//!   only variable is codec engineering; "is ciborium letting CBOR down" is
+//!   answered by measurement, not intuition.
 //!
 //! Arms are built, measured, and dropped one at a time; the image-bearing arm
 //! alone is a few hundred MB.
@@ -209,6 +214,30 @@ fn json_facets(count: usize) -> Vec<(String, BTreeMap<String, serde_json::Value>
         .collect()
 }
 
+/// The open-map payload every self-describing codec races on: identical
+/// in-memory types, so decode cost differences are pure codec engineering.
+type OpenPayload = (
+    Vec<ThinContainerJson>,
+    Vec<(String, BTreeMap<String, serde_json::Value>)>,
+);
+
+fn open_payload(count: usize) -> OpenPayload {
+    let (containers, _) = thin_session(count);
+    let containers = containers
+        .into_iter()
+        .map(|c| ThinContainerJson {
+            id: c.id,
+            addresses: c.addresses,
+            content: c.content,
+            media_type: c.media_type,
+            title: c.title,
+            tags: c.tags,
+            nested: c.nested,
+        })
+        .collect();
+    (containers, json_facets(count))
+}
+
 // ---------------------------------------------------------------------------
 // Measurement
 // ---------------------------------------------------------------------------
@@ -375,107 +404,26 @@ fn main() {
         });
     }
 
-    // --- Arm C: dissolved, JSON facets (today's facet shape) --------------
-    {
-        println!("\nC  container + facet sidecar, JSON facets (today's facet types)");
-        let (containers, _) = thin_session(count);
-        let containers: Vec<ThinContainerJson> = containers
-            .into_iter()
-            .map(|c| ThinContainerJson {
-                id: c.id,
-                addresses: c.addresses,
-                content: c.content,
-                media_type: c.media_type,
-                title: c.title,
-                tags: c.tags,
-                nested: c.nested,
-            })
-            .collect();
-        let facets = json_facets(count);
-        let payload = (containers, facets);
-        let json = serde_json::to_vec(&payload).unwrap();
-        let encoded = json.len();
-        println!(
-            "    {:<28} {:>10.1} MiB",
-            "encoded",
-            encoded as f64 / 1048576.0
-        );
-        type Payload = (
-            Vec<ThinContainerJson>,
-            Vec<(String, BTreeMap<String, serde_json::Value>)>,
-        );
-        let load = time_it("load (deserialize)", || {
-            let s: Payload = serde_json::from_slice(&json).unwrap();
-            std::hint::black_box(&s);
-        });
-        let loaded: Payload = serde_json::from_slice(&json).unwrap();
-        let hot = time_it("hot: tag filter + by-id", || {
-            let wanted = tag_for(11);
-            let n = loaded.0.iter().filter(|c| c.tags.contains(&wanted)).count();
-            let found = loaded.0.iter().find(|c| c.id.ends_with("000000042"));
-            std::hint::black_box((n, found));
-        });
-        results.push(ArmResult {
-            name: "C   container + JSON facets",
-            bytes: encoded,
-            load_ms: load.as_secs_f64() * 1000.0,
-            hot_ms: hot.as_secs_f64() * 1000.0,
-        });
-    }
+    // --- The open-map codec race: C..G, identical in-memory target --------
+    let payload = open_payload(count);
 
-    // --- Arm D: dissolved, CBOR facets (the binary open-map candidate) ----
-    {
-        println!("\nD  container + facet sidecar, CBOR facets (ciborium::Value)");
-        let (containers, _) = thin_session(count);
-        let containers: Vec<ThinContainerJson> = containers
-            .into_iter()
-            .map(|c| ThinContainerJson {
-                id: c.id,
-                addresses: c.addresses,
-                content: c.content,
-                media_type: c.media_type,
-                title: c.title,
-                tags: c.tags,
-                nested: c.nested,
-            })
-            .collect();
-        // Same open-map shape as arm C (self-describing, unknown-forward),
-        // binary text encoding. Isolates text-vs-binary with the Value
-        // allocation cost held constant.
-        let facets: Vec<(String, BTreeMap<String, ciborium::Value>)> = json_facets(count)
-            .into_iter()
-            .map(|(node, map)| {
-                let map = map
-                    .into_iter()
-                    .map(|(k, v)| {
-                        let v = match v {
-                            serde_json::Value::String(s) => ciborium::Value::Text(s),
-                            other => ciborium::Value::serialized(&other).unwrap(),
-                        };
-                        (k, v)
-                    })
-                    .collect();
-                (node, map)
-            })
-            .collect();
-        let payload = (containers, facets);
-        let mut cbor: Vec<u8> = Vec::new();
-        ciborium::into_writer(&payload, &mut cbor).unwrap();
-        let encoded = cbor.len();
+    let mut race = |name: &'static str,
+                    banner: &str,
+                    encode: &dyn Fn(&OpenPayload) -> Vec<u8>,
+                    decode: &dyn Fn(&[u8]) -> OpenPayload| {
+        println!("\n{banner}");
+        let bytes = encode(&payload);
+        let encoded = bytes.len();
         println!(
             "    {:<28} {:>10.1} MiB",
             "encoded",
             encoded as f64 / 1048576.0
         );
-        type PayloadD = (
-            Vec<ThinContainerJson>,
-            Vec<(String, BTreeMap<String, ciborium::Value>)>,
-        );
         let load = time_it("load (deserialize)", || {
-            let s: PayloadD = ciborium::from_reader(cbor.as_slice()).unwrap();
+            let s = decode(&bytes);
             std::hint::black_box(&s);
         });
-        let loaded: PayloadD = ciborium::from_reader(cbor.as_slice()).unwrap();
+        let loaded = decode(&bytes);
         let hot = time_it("hot: tag filter + by-id", || {
             let wanted = tag_for(11);
             let n = loaded.0.iter().filter(|c| c.tags.contains(&wanted)).count();
@@ -483,12 +431,47 @@ fn main() {
             std::hint::black_box((n, found));
         });
         results.push(ArmResult {
-            name: "D   container + CBOR facets",
+            name,
             bytes: encoded,
             load_ms: load.as_secs_f64() * 1000.0,
             hot_ms: hot.as_secs_f64() * 1000.0,
         });
-    }
+    };
+
+    race(
+        "C   open map, serde_json",
+        "C  open map, serde_json (today's facet types)",
+        &|p| serde_json::to_vec(p).unwrap(),
+        &|b| serde_json::from_slice(b).unwrap(),
+    );
+    race(
+        "D   open map, ciborium (CBOR)",
+        "D  open map, ciborium (CBOR)",
+        &|p| {
+            let mut out = Vec::new();
+            ciborium::into_writer(p, &mut out).unwrap();
+            out
+        },
+        &|b| ciborium::from_reader(b).unwrap(),
+    );
+    race(
+        "E   open map, cbor4ii (CBOR)",
+        "E  open map, cbor4ii (CBOR)",
+        &|p| cbor4ii::serde::to_vec(Vec::new(), p).unwrap(),
+        &|b| cbor4ii::serde::from_slice(b).unwrap(),
+    );
+    race(
+        "F   open map, rmp-serde (MessagePack)",
+        "F  open map, rmp-serde (MessagePack, named structs)",
+        &|p| rmp_serde::to_vec_named(p).unwrap(),
+        &|b| rmp_serde::from_slice(b).unwrap(),
+    );
+    race(
+        "G   open map, minicbor-serde (CBOR)",
+        "G  open map, minicbor-serde (CBOR)",
+        &|p| minicbor_serde::to_vec(p).unwrap(),
+        &|b| minicbor_serde::from_slice(b).unwrap(),
+    );
 
     // --- Verdict table ----------------------------------------------------
     println!("\n{:-<78}", "");
@@ -526,19 +509,24 @@ fn main() {
         json.load_ms / dissolved.load_ms,
         json.hot_ms / dissolved.hot_ms,
     );
-    let cbor = &results[4];
+    println!("\nCodec race vs C (same in-memory payload; <1.00 load = faster than JSON):");
+    for r in &results[4..] {
+        println!(
+            "  {:<40} size {:.2}x   load {:.2}x",
+            r.name,
+            r.bytes as f64 / json.bytes as f64,
+            r.load_ms / json.load_ms,
+        );
+    }
+    let best = results[3..]
+        .iter()
+        .min_by(|a, b| a.load_ms.total_cmp(&b.load_ms))
+        .unwrap();
     println!(
-        "\nD vs C (binary vs text for the open map; Value alloc held constant):\n  \
-         size {:.2}x   load {:.2}x   hot {:.2}x",
-        cbor.bytes as f64 / json.bytes as f64,
-        cbor.load_ms / json.load_ms,
-        cbor.hot_ms / json.hot_ms,
-    );
-    println!(
-        "\nD vs B (what self-description costs over closed-typed rkyv):\n  \
-         size {:.2}x   load {:.2}x",
-        cbor.bytes as f64 / dissolved.bytes as f64,
-        cbor.load_ms / dissolved.load_ms,
+        "\nBest open-map codec: {} at {:.1} ms — vs closed-typed rkyv (B) {:.2}x load",
+        best.name.trim(),
+        best.load_ms,
+        best.load_ms / dissolved.load_ms,
     );
 }
 

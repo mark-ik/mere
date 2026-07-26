@@ -239,23 +239,43 @@ fallback is not needed. In absolute terms the dissolution tax is 33 ms on a
 facets** (C vs B) at roughly equal size. Not gating, since C still loads faster
 than today.
 
-**Follow-up (2026-07-26, arm D): the obvious binary fix fails the measurement.**
-The candidate codec for an *open* facet map has to be self-describing
-(unknown-forward foreign facets rule out postcard and rkyv), which means CBOR,
-and `ciborium::Value` is the drop-in for `serde_json::Value`. Measured
-same-shape, same-run: CBOR is **1.28x slower to load than JSON** at only 0.91x
-the size. serde_json's parser is simply better optimized than ciborium's
-reader, and the real cost of the open map is the per-node `Value`/`BTreeMap`
-allocation, which a binary text encoding does not remove. Conclusions:
+**Follow-up (2026-07-26, arms D-G): the codec race.** The candidate codec for
+an *open* facet map has to be self-describing (unknown-forward foreign facets
+rule out postcard and rkyv). The first attempt (ciborium) lost to JSON, which
+raised the right suspicion: bad codec, or hopeless idea? The race answers it —
+five codecs deserializing the **identical** payload (containers +
+`serde_json::Value` facet maps), so the only variable is codec engineering.
+Same run, 50k nodes:
 
-- `facets.json` stays JSON. The codec intrigue is resolved, negatively, for
-  the price of one dev-dependency and an afternoon arm.
-- If the sidecar ever needs speed, the lever is **shape, not encoding**:
-  closed-typed rows for recognized namespaces (arm B's form, ~1.65x load win)
-  with an opaque-bytes escape lane for foreign facets, the
-  schema-at-the-boundary pattern eidetic already uses. Do not reach for that
-  until the sidecar measurably hurts, because it trades away the store's
-  one-representation simplicity.
+| codec | MiB | load ms | vs JSON load |
+| --- | --- | --- | --- |
+| serde_json | 25.7 | 139.5 | 1.00x |
+| ciborium (CBOR) | 23.3 | 180.2 | 1.29x |
+| cbor4ii (CBOR) | 23.3 | 123.5 | 0.89x |
+| minicbor-serde (CBOR) | 23.3 | 122.7 | 0.88x |
+| rmp-serde (MessagePack) | 23.3 | 115.7 | 0.83x |
+| *(closed-typed rkyv, arm B)* | *27.3* | *73.3* | *0.53x* |
+
+Three conclusions, in order of importance:
+
+1. **Ciborium was indeed letting CBOR down**: cbor4ii and minicbor decode the
+   same CBOR bytes ~1.46x faster than ciborium and beat serde_json by ~11%.
+   If the sidecar ever flips to binary, the picks are rmp-serde or cbor4ii.
+2. **But the ceiling is structural.** The best self-describing codec is still
+   **1.58x slower than closed-typed rkyv** into thin rows. Codec engineering
+   recovered barely half the JSON-vs-closed gap; the rest is the per-node
+   `Value`/`BTreeMap` allocation, which no parser can remove. A 17% load win
+   does not justify a format migration, so `facets.json` stays JSON until the
+   sidecar measurably hurts.
+3. **An own codec is not the alternative worth building.** The headroom above
+   rmp-serde for a heroically optimized parser into the same open map is
+   bounded by that allocation floor, well short of B. If the family ever
+   builds something here, the superior alternative is architectural, not a
+   parser: **lazy per-node raw-byte rows** (facet bytes decoded on first
+   access), which turns sidecar load into a near-memcpy and charges `Value`
+   cost only for nodes actually touched. That is a shape change with a real
+   design cost (two representations, invalidation), recorded here so it is
+   reached for deliberately, not speculatively.
 
 Run-to-run noise caveat: cross-run load numbers drift ±15-30% on this machine
 (concurrent builds), so only same-run ratios are quoted; the run-1 table above

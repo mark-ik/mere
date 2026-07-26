@@ -74,9 +74,13 @@ uuid = { version = "1", features = ["serde", "v4"] }
 [dev-dependencies]
 futures-util = { version = "0.3", features = ["std"] }
 postcard = { version = "1", features = ["alloc"] }
-# The dissolution-gate harness's CBOR arm (binary facet-sidecar candidate:
-# self-describing like JSON, so unknown-forward foreign facets survive).
+# The dissolution-gate harness's open-map codec race (binary facet-sidecar
+# candidates must be self-describing so unknown-forward foreign facets
+# survive; the race answers whether the codec or the shape is the cost).
 ciborium = "0.2"
+cbor4ii = { version = "1.2", features = ["serde1", "use_alloc"] }
+rmp-serde = "1.3"
+minicbor-serde = { version = "0.7", features = ["std"] }
 tempfile = "3"
 # Block on the journal's async muniment save/load in tests (matches the substrate
 # crates' test harness).
