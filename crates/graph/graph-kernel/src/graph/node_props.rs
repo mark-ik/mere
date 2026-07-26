@@ -27,7 +27,8 @@ use super::identity::NodeKey;
 use super::node::Node;
 use crate::types::{
     ClassificationProvenance, ClassificationScheme, ClassificationStatus, FrameLayoutHint,
-    NodeClassification, NodeImportProvenance, NodeProperty, NodeTagPresentationState,
+    ImageRef, ImageRole, NodeClassification, NodeImportProvenance, NodeProperty,
+    NodeTagPresentationState,
 };
 
 impl Graph {
@@ -42,47 +43,27 @@ impl Graph {
         true
     }
 
-    pub(crate) fn set_node_thumbnail(
+    /// Attach a stored image reference under `role`, reporting whether the
+    /// node changed.
+    ///
+    /// The caller stores the blob first (`session_runtime::image_store::
+    /// save_image`) and passes the handle; the kernel neither hashes nor
+    /// holds pixels. Because references are content-addressed, re-depositing
+    /// an unchanged image compares equal here and reports `false`, so an
+    /// identical re-capture is a no-op instead of a graph-dirtying rewrite.
+    pub(crate) fn set_node_image(
         &mut self,
         key: NodeKey,
-        png_bytes: Vec<u8>,
-        width: u32,
-        height: u32,
+        role: ImageRole,
+        image: ImageRef,
     ) -> bool {
         let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
-        if node.thumbnail_png.as_ref() == Some(&png_bytes)
-            && node.thumbnail_width == width
-            && node.thumbnail_height == height
-        {
+        if node.images.get(&role) == Some(&image) {
             return false;
         }
-        node.thumbnail_png = Some(png_bytes);
-        node.thumbnail_width = width;
-        node.thumbnail_height = height;
-        true
-    }
-
-    pub(crate) fn set_node_favicon(
-        &mut self,
-        key: NodeKey,
-        rgba: Vec<u8>,
-        width: u32,
-        height: u32,
-    ) -> bool {
-        let Some(node) = self.inner.node_mut(key) else {
-            return false;
-        };
-        if node.favicon_rgba.as_ref() == Some(&rgba)
-            && node.favicon_width == width
-            && node.favicon_height == height
-        {
-            return false;
-        }
-        node.favicon_rgba = Some(rgba);
-        node.favicon_width = width;
-        node.favicon_height = height;
+        node.images.insert(role, image);
         true
     }
 

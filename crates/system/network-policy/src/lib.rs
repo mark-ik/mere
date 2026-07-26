@@ -16,12 +16,15 @@
 //! budget (D7), so [`LocalNetworkPolicy::permits_transit`] is a separate axis
 //! the endpoint consults, never a branch inside session evaluation.
 //!
-//! Transport facts are facts, not claims (D4): `SessionRequest.transport_peer`
-//! must only ever be filled from transport authentication, never from
-//! application bytes. This crate trusts its caller on that boundary and
-//! enforces the rest.
+//! Transport facts are facts, not claims (D4), and since Notochord N0 the
+//! types enforce it rather than asking callers to be careful:
+//! [`SessionFacts`] is what the carrier observed and cannot be decoded from a
+//! frame, [`SessionClaims`] is what a hello asserts and is worth only what its
+//! proof is worth, and [`ProofBinding`] is the intersection both peers can
+//! derive independently and therefore the only thing a signature can cover.
 
 mod chain;
+mod facts;
 mod handshake;
 #[cfg(feature = "tokio")]
 mod io;
@@ -29,8 +32,9 @@ mod policy;
 mod types;
 
 pub use chain::{RevocationLedger, TrustedRoot, validate_chain};
+pub use facts::{CarrierKind, IngressFacts, ProofBinding, SessionFacts};
 pub use handshake::{
-    AdmittedPrincipal, HandshakeError, SessionBinding, SessionHello, SessionReply, admit, respond,
+    AdmittedPrincipal, HandshakeError, SessionHello, SessionReply, admit, respond,
 };
 #[cfg(feature = "tokio")]
 pub use io::{IoHandshakeError, accept_session, initiate_session};
@@ -39,5 +43,5 @@ pub use policy::{
 };
 pub use types::{
     ChainFault, DenyReason, HandshakeLimits, NetworkId, ProfileRef, RequestedAction,
-    SUPPORTED_WIRE_VERSION, SessionDecision, SessionRequest, TrafficClass, limit_ceilings,
+    SUPPORTED_WIRE_VERSION, SessionClaims, SessionDecision, TrafficClass, limit_ceilings,
 };

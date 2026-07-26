@@ -11,67 +11,29 @@
 //!
 //! The initiator signs a canonical transcript with a personae-derived key,
 //! attested to its master identity. The transcript binds every field of the
-//! hello *and* the responder's own view of the connection ([`SessionBinding`]):
-//! the protocol, the transport-authenticated peer if there is one, and the
-//! ingress interface and link if the bearer has them. The responder rebuilds
-//! the transcript from what it independently observed, so a proof minted for
-//! one connection does not verify on another. That is what makes a captured
-//! hello useless when replayed over a different link.
+//! hello *and* the facts both peers can independently derive
+//! ([`ProofBinding`]): the protocol, the initiator's carrier-proved identity
+//! if there is one, and the shared link if the carrier has link identity. The
+//! responder rebuilds the transcript from what it observed itself, so a proof
+//! minted for one connection does not verify on another. That is what makes a
+//! captured hello useless when replayed over a different link.
 
 use personae::delegation::SignedDelegationCertificate;
 use personae::{DerivedKeyAttestation, Ed25519PublicKey, Ed25519Signature, IdentityProvider};
 use serde::{Deserialize, Serialize};
 
 use crate::chain::RevocationLedger;
+use crate::facts::{ProofBinding, SessionFacts};
 use crate::policy::LocalNetworkPolicy;
 use crate::types::{
     DenyReason, HandshakeLimits, NetworkId, ProfileRef, RequestedAction, SUPPORTED_WIRE_VERSION,
-    SessionDecision, SessionRequest, TrafficClass,
+    SessionClaims, SessionDecision, TrafficClass,
 };
 
 /// Derivation salt for the key that signs session transcripts.
 const SESSION_SIGNING_SALT: &[u8] = b"mere/network-policy/session-signer/v1";
 /// Domain separator for the signed transcript.
 const TRANSCRIPT_DOMAIN: &[u8] = b"mere/network-policy/session-transcript/v1";
-
-/// The responder's own view of the connection a hello arrived on.
-///
-/// Every field here is a local observation, never something the initiator
-/// asserted. Both sides construct it independently and the signature only
-/// verifies if they agree.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct SessionBinding {
-    /// The protocol (ALPN) the session was accepted for.
-    pub protocol: Vec<u8>,
-    /// The transport-authenticated peer, when the transport proved one.
-    pub transport_peer: Option<[u8; 32]>,
-    /// Opaque local interface identifier, when the bearer tracks one.
-    ///
-    /// Context only: deliberately **not** signed, because it is local to the
-    /// node that assigned it and the far end cannot know it. See [`transcript`].
-    pub interface: Option<u64>,
-    /// Link identifier, when the bearer has link identity.
-    pub link: Option<[u8; 16]>,
-}
-
-impl SessionBinding {
-    /// Binding for a transport with no peer authentication or bearer detail.
-    pub fn protocol_only(protocol: impl Into<Vec<u8>>) -> Self {
-        Self {
-            protocol: protocol.into(),
-            ..Self::default()
-        }
-    }
-
-    /// Binding for a transport that authenticated its peer.
-    pub fn authenticated(protocol: impl Into<Vec<u8>>, peer: [u8; 32]) -> Self {
-        Self {
-            protocol: protocol.into(),
-            transport_peer: Some(peer),
-            ..Self::default()
-        }
-    }
-}
 
 /// The initiator's opening frame.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -136,16 +98,16 @@ pub enum HandshakeError {
 /// Canonical transcript bytes, length-prefixed so no two different field sets
 /// can collide.
 ///
-/// Only values **both ends derive independently** may appear here. That rules
-/// out [`SessionBinding::interface`]: a local interface id is meaningful only
-/// to the node that assigned it, is not stable across restarts, and never goes
-/// on the wire, so an initiator could not sign it and a responder that
-/// demanded it would reject every honest session. The interface stays on the
-/// binding as policy and diagnostic context; it is not part of the proof.
+/// Only values **both ends derive independently** may appear here. That is why
+/// a local interface id is absent: it is meaningful only to the node that
+/// assigned it, is not stable across restarts, and never goes on the wire, so
+/// an initiator could not sign it and a responder demanding it would reject
+/// every honest session. It stays on [`SessionFacts`] as policy context and
+/// never reaches a [`ProofBinding`].
 ///
 /// A Reticulum link id, by contrast, *is* shared: both ends of a link compute
 /// the same value, which is what lets the transcript pin a proof to one link.
-fn transcript(hello: &SessionHello, binding: &SessionBinding) -> Vec<u8> {
+fn transcript(hello: &SessionHello, binding: &ProofBinding) -> Vec<u8> {
     let mut bytes = Vec::new();
     push_bytes(&mut bytes, TRANSCRIPT_DOMAIN);
     bytes.extend_from_slice(&hello.version.to_le_bytes());
@@ -159,8 +121,14 @@ fn transcript(hello: &SessionHello, binding: &SessionBinding) -> Vec<u8> {
     bytes.push(class_tag(hello.class));
     bytes.extend_from_slice(&hello.nonce);
     bytes.extend_from_slice(&hello.subject);
-    push_option(&mut bytes, binding.transport_peer.as_ref().map(|p| &p[..]));
-    push_option(&mut bytes, binding.link.as_ref().map(|l| &l[..]));
+    push_option(
+        &mut bytes,
+        binding
+            .initiator_transport_identity
+            .as_ref()
+            .map(|p| &p[..]),
+    );
+    push_option(&mut bytes, binding.shared_link.as_ref().map(|l| &l[..]));
     bytes.extend_from_slice(&(hello.delegations.len() as u64).to_le_bytes());
     for signed in &hello.delegations {
         bytes.extend_from_slice(&signed.certificate.id().0);
@@ -206,7 +174,7 @@ impl SessionHello {
         action: RequestedAction,
         class: TrafficClass,
         nonce: [u8; 32],
-        binding: &SessionBinding,
+        binding: &ProofBinding,
         delegations: Vec<SignedDelegationCertificate>,
     ) -> Result<Self, HandshakeError> {
         let session_signer = provider
@@ -274,7 +242,7 @@ impl SessionHello {
     ///
     /// Checks the derived-key attestation, that the attested master is the
     /// claimed subject, and the transcript signature over `binding`.
-    pub fn verify_proof(&self, binding: &SessionBinding) -> bool {
+    pub fn verify_proof(&self, binding: &ProofBinding) -> bool {
         if !self.session_signer.verify(SESSION_SIGNING_SALT) {
             return false;
         }
@@ -294,26 +262,25 @@ impl SessionHello {
         )
     }
 
-    /// The policy request this hello represents, as seen from `binding`.
+    /// What this hello asserts.
     ///
-    /// The transport peer comes from the responder's observation, never from
-    /// the frame, which is what keeps [`SessionRequest::transport_peer`] a
-    /// transport fact (plan D4).
-    pub fn to_request(&self, binding: &SessionBinding) -> SessionRequest {
-        SessionRequest {
+    /// Claims only: every carrier observation lives in [`SessionFacts`], which
+    /// no decoded frame can construct, so there is no way for a hello to
+    /// supply one (plan D4, Notochord N0).
+    pub fn claims(&self) -> SessionClaims {
+        SessionClaims {
             wire_version: self.version,
             network: self.network,
             profile: self.profile.clone(),
             action: self.action.clone(),
             class: self.class,
             subject: self.subject,
-            transport_peer: binding.transport_peer,
             delegations: self.delegations.clone(),
         }
     }
 
     /// Identifier for the admitted session: a digest of the bound transcript.
-    pub fn session_id(&self, binding: &SessionBinding) -> [u8; 32] {
+    pub fn session_id(&self, binding: &ProofBinding) -> [u8; 32] {
         *blake3::hash(&transcript(self, binding)).as_bytes()
     }
 }
@@ -361,18 +328,11 @@ pub fn admit(
     policy: &LocalNetworkPolicy,
     ledger: &RevocationLedger,
     hello_bytes: &[u8],
-    binding: &SessionBinding,
+    facts: &SessionFacts,
     now_ms: u64,
     active_sessions: u32,
 ) -> (Vec<u8>, Result<AdmittedPrincipal, DenyReason>) {
-    let (reply, decision) = respond(
-        policy,
-        ledger,
-        hello_bytes,
-        binding,
-        now_ms,
-        active_sessions,
-    );
+    let (reply, decision) = respond(policy, ledger, hello_bytes, facts, now_ms, active_sessions);
     let outcome = match decision {
         SessionDecision::Deny { reason } => Err(reason),
         SessionDecision::Accept { class } => {
@@ -384,7 +344,7 @@ pub fn admit(
                 Ok(hello) => Ok(AdmittedPrincipal {
                     subject: hello.subject,
                     class,
-                    session_id: hello.session_id(binding),
+                    session_id: hello.session_id(&facts.proof_binding()),
                     action: hello.action.clone(),
                 }),
                 Err(_) => Err(DenyReason::MalformedHello),
@@ -403,11 +363,14 @@ pub fn respond(
     policy: &LocalNetworkPolicy,
     ledger: &RevocationLedger,
     hello_bytes: &[u8],
-    binding: &SessionBinding,
+    facts: &SessionFacts,
     now_ms: u64,
     active_sessions: u32,
 ) -> (Vec<u8>, SessionDecision) {
     let limits = policy.limits.clamped();
+    // The responder's binding is always derived from what it observed; there
+    // is no path by which a frame supplies it.
+    let binding = &facts.proof_binding();
     let decision = match SessionHello::decode(hello_bytes, &limits) {
         Err(_) => SessionDecision::Deny {
             reason: DenyReason::MalformedHello,
@@ -418,12 +381,11 @@ pub fn respond(
                     reason: DenyReason::SessionProofInvalid,
                 }
             } else {
-                let request = hello.to_request(binding);
-                match policy.evaluate(ledger, &request, now_ms, active_sessions) {
+                match policy.evaluate(facts, &hello.claims(), ledger, now_ms, active_sessions) {
                     SessionDecision::Accept { class } => {
                         return (
                             encode_reply(&SessionReply::Accept {
-                                session_id: hello.session_id(binding),
+                                session_id: hello.session_id(&facts.proof_binding()),
                                 class,
                                 limits,
                                 profile_revision: policy

@@ -80,7 +80,7 @@ Mere's social-graph structures form a four-tier scale. Full design in
 
 | Tier | Term | What it is |
 | --- | --- | --- |
-| **T1** | **orrery** | A single user's root graph view. *"Your orrery is your moot."* Backed by `eidetic`. |
+| **T1** | **mere** | A single user's root dataspace, *their root mere*. *"Your mere is your moot."* Backed by `eidetic`. (Was **orrery** until 2026-07-26; see §4.2.) |
 | **T2** | **moot** | A persistent themed federatable graph-view community. Members pin and govern. Dissolves if nobody pins. |
 | **T3** | **moothold** | A federation of moots — *a holding of moots*, in the Anglo-Saxon sense (cf. household, stronghold, freehold). ILL-shaped reciprocity between member moots. |
 | **T4** | **coalition** | A sovereign coalition of mootholds. Provides organizing defaults; per-moothold override + clean fork-out always possible. |
@@ -91,7 +91,9 @@ All four tiers are **forkable**.
 
 | Term | Role |
 | --- | --- |
-| **orrery** *(t1)* | A user's root graph view — the whole knowledge-cosmos seen at once. Their personal moot-of-one. |
+| **mere** *(count noun)* | **A configurable spatial dataspace.** The unit an application integrates: Isometry's overmap, Woodshed's stage, Strophe's arrangement, Merecat's canvas are each a mere. Many per user. The platform is named for its unit, so capital **Mere** is the platform and lowercase **a mere** is one dataspace. Ruled with Mark 2026-07-26: the concept had no name and was informally covered by *orrery* while Merecat was the only application, which is why the word stopped stretching once four products each integrated one. The word is the lake sense already carried in the product's positioning (see [`TERMINOLOGY.md`](TERMINOLOGY.md)), and it pluralizes, which *orrery* never did. |
+| **your root mere** *(t1)* | The tier-1 mere: a user's own, their personal moot-of-one. Replaces *orrery* at this tier. |
+| **orrery** *(form factor)* | The cosmos-style spatial form factor — the whole knowledge-cosmos seen at once, force-directed, in-scene. A way a mere can be *rendered*, exactly as **volvelle** names the radial-moot form factor; not a tier and not a container. Narrowed from "a user's root graph view" 2026-07-26. Code that says `Scope::Orrery`, "orrery root", or "the orrery's tick" already means this and is correct as written. |
 | **moot** *(t2, count noun)* | A single persistent themed federatable graph-view community |
 | **moothold** *(t3, count noun)* | A federation of moots — a sovereign holding (Anglo-Saxon *-hold* sense) |
 | **coalition** *(t4, count noun)* | A sovereign cluster of mootholds (renamed from *demesne* 2026-06-04 for familiarity; *demesne* sounds like *domain*, which already names the domain layer) |

@@ -17,13 +17,13 @@ use identity::delegation::{
 };
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
 use network_policy::{
-    DenyReason, LocalNetworkPolicy, NetworkId, ProfileRef, RequestedAction, RevocationLedger,
-    ServiceAccess, ServiceRule, SessionBinding, SessionDecision, SessionHello, TrafficClass,
-    TrustedRoot, accept_session, initiate_session,
+    CarrierKind, DenyReason, LocalNetworkPolicy, NetworkId, ProfileRef, ProofBinding,
+    RequestedAction, RevocationLedger, ServiceAccess, ServiceRule, SessionDecision, SessionFacts,
+    SessionHello, TrafficClass, TrustedRoot, accept_session, initiate_session,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use transport::memory::MemoryTransport;
-use transport::{AcceptedSession, Alpn, PeerID, Transport};
+use transport::{AcceptedSession, Alpn, PeerID, Transport, TransportKind};
 
 const NETWORK: NetworkId = NetworkId([3; 32]);
 const ROOT_AUTHORITY: [u8; 32] = [7; 32];
@@ -41,14 +41,24 @@ fn member() -> InMemoryProvider {
     InMemoryProvider::from_seed([4; 32])
 }
 
-/// The adapter under test: transport facts in, binding out. This is the whole
-/// of what a service's accept path has to write.
-fn binding_for<S>(session: &AcceptedSession<S>) -> SessionBinding {
-    SessionBinding {
+/// The adapter under test: carrier observations in, [`SessionFacts`] out.
+///
+/// Notochord N1 will move this into `mere-transport` as one audited
+/// construction site; until then it lives here so the shape is exercised.
+fn facts_for<S>(session: &AcceptedSession<S>) -> SessionFacts {
+    let carrier = match session.ingress.transport {
+        TransportKind::Memory => CarrierKind::Memory,
+        TransportKind::P2panda => CarrierKind::P2panda,
+        TransportKind::Reticulum => CarrierKind::Reticulum,
+    };
+    SessionFacts {
         protocol: session.protocol.as_bytes().to_vec(),
-        transport_peer: session.peer.map(|peer| peer.to_bytes()),
-        interface: session.ingress.interface.map(|iface| iface.0),
-        link: session.ingress.link,
+        transport: carrier,
+        authenticated_initiator: session.peer.map(|peer| peer.to_bytes()),
+        ingress: network_policy::IngressFacts {
+            local_interface: session.ingress.interface.map(|iface| iface.0),
+            shared_link: session.ingress.link,
+        },
     }
 }
 
@@ -96,7 +106,7 @@ fn policy(access: ServiceAccess) -> LocalNetworkPolicy {
     policy
 }
 
-fn hello_for(binding: &SessionBinding) -> SessionHello {
+fn hello_for(binding: &ProofBinding) -> SessionHello {
     let subject = member().master_public_key().to_bytes();
     SessionHello::issue(
         &member(),
@@ -138,12 +148,12 @@ async fn memory_transport_admits_and_refuses_by_owner_rule() {
                 .accept(server_alpn)
                 .await
                 .expect("accept a session");
-            let binding = binding_for(&session);
+            let facts = facts_for(&session);
             let decision = accept_session(
                 &mut session.stream,
                 &server_policy,
                 &RevocationLedger::new(),
-                &binding,
+                &facts,
                 NOW_MS,
                 0,
             )
@@ -167,9 +177,10 @@ async fn memory_transport_admits_and_refuses_by_owner_rule() {
             .expect("connect");
         // The initiator knows the same facts: this transport authenticates, so
         // the peer it will be seen as is its own id.
-        let binding = SessionBinding::authenticated(
+        let binding = ProofBinding::initiator(
             alpn.as_bytes().to_vec(),
-            member().master_public_key().to_bytes(),
+            Some(member().master_public_key().to_bytes()),
+            None,
         );
         let reply = initiate_session(&mut stream, &hello_for(&binding), &policy.limits)
             .await
@@ -248,6 +259,7 @@ mod reticulum {
             .expect("bind client");
 
         let server_alpn = alpn.clone();
+        let (read_done_tx, read_done) = tokio::sync::oneshot::channel::<()>();
         let responder = tokio::spawn(async move {
             let mut session =
                 tokio::time::timeout(Duration::from_secs(25), server.accept(server_alpn))
@@ -258,16 +270,16 @@ mod reticulum {
                 session.peer, None,
                 "reticulum acceptance cannot name its initiator"
             );
-            let binding = binding_for(&session);
+            let facts = facts_for(&session);
             assert!(
-                binding.link.is_some(),
+                facts.ingress.shared_link.is_some(),
                 "the transcript must have a link to bind to"
             );
             let decision = accept_session(
                 &mut session.stream,
                 &policy(ServiceAccess::MemberOnly),
                 &RevocationLedger::new(),
-                &binding,
+                &facts,
                 NOW_MS,
                 0,
             )
@@ -281,7 +293,16 @@ mod reticulum {
                     .expect("service write");
                 session.stream.flush().await.expect("flush");
             }
-            (decision, binding)
+            // Hold the session open until the client has read.
+            //
+            // Not politeness: `flush` on a retinue link only pushes bytes into
+            // the duplex the relay task drains, and dropping the stream ends
+            // that relay ("Dropping the stream ends its relay", retinue
+            // endpoint.rs). Dropping straight after a flush therefore discards
+            // bytes the caller was told had been written. A real service holds
+            // its session open, so the test does too.
+            let _ = read_done.await;
+            (decision, facts)
         });
 
         let mut stream = tokio::time::timeout(
@@ -295,12 +316,8 @@ mod reticulum {
         // The initiator learns the link it opened from its own stream. Both
         // ends of a retinue link compute the same id, so this matches what the
         // responder independently observed, and the proof verifies there.
-        let binding = SessionBinding {
-            protocol: alpn.as_bytes().to_vec(),
-            transport_peer: None,
-            interface: None,
-            link: Some(stream.link_id()),
-        };
+        let binding =
+            ProofBinding::initiator(alpn.as_bytes().to_vec(), None, Some(stream.link_id()));
         let stream_link = stream.link_id();
         let reply = tokio::time::timeout(
             Duration::from_secs(30),
@@ -322,8 +339,10 @@ mod reticulum {
             .await
             .expect("application read timed out")
             .expect("read application bytes");
+        // Release the responder now that everything it sent has been read.
+        let _ = read_done_tx.send(());
 
-        let (decision, server_binding) = tokio::time::timeout(Duration::from_secs(30), responder)
+        let (decision, server_facts) = tokio::time::timeout(Duration::from_secs(30), responder)
             .await
             .expect("responder task timed out")
             .expect("responder task");
@@ -333,7 +352,7 @@ mod reticulum {
         );
         assert!(reply.is_accept(), "both ends agree");
         assert_eq!(
-            server_binding.link,
+            server_facts.ingress.shared_link,
             Some(stream_link),
             "both ends bound the same link id"
         );

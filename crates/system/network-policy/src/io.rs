@@ -12,7 +12,8 @@
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use crate::chain::RevocationLedger;
-use crate::handshake::{HandshakeError, SessionBinding, SessionHello, SessionReply, respond};
+use crate::facts::SessionFacts;
+use crate::handshake::{HandshakeError, SessionHello, SessionReply, respond};
 use crate::policy::LocalNetworkPolicy;
 use crate::types::{HandshakeLimits, SessionDecision};
 
@@ -65,7 +66,7 @@ pub async fn accept_session<S>(
     stream: &mut S,
     policy: &LocalNetworkPolicy,
     ledger: &RevocationLedger,
-    binding: &SessionBinding,
+    facts: &SessionFacts,
     now_ms: u64,
     active_sessions: u32,
 ) -> Result<SessionDecision, IoHandshakeError>
@@ -74,7 +75,7 @@ where
 {
     let limits = policy.limits.clamped();
     let hello = read_frame(stream, limits.max_hello_bytes).await?;
-    let (reply, decision) = respond(policy, ledger, &hello, binding, now_ms, active_sessions);
+    let (reply, decision) = respond(policy, ledger, &hello, facts, now_ms, active_sessions);
     write_frame(stream, &reply).await?;
     Ok(decision)
 }

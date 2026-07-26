@@ -23,9 +23,9 @@
 //! `domain` and `path_prefix` are part of what the chain has to cover.
 
 use network_policy::{
-    AdmittedPrincipal, DenyReason, HandshakeError, LocalNetworkPolicy, NetworkId, ProfileRef,
-    CarrierKind, ProofBinding, RequestedAction, RevocationLedger, SessionFacts,
-    SessionHello, TrafficClass, admit,
+    AdmittedPrincipal, CarrierKind, DenyReason, HandshakeError, LocalNetworkPolicy, NetworkId,
+    ProfileRef, ProofBinding, RequestedAction, RevocationLedger, SessionFacts, SessionHello,
+    TrafficClass, admit,
 };
 use personae::IdentityProvider;
 use personae::delegation::SignedDelegationCertificate;
@@ -153,7 +153,11 @@ mod tests {
     }
 
     /// A grant from the owner letting `subject` open projection sessions.
-    fn projection_grant(subject: [u8; 32], path: &str, domain: &str) -> SignedDelegationCertificate {
+    fn projection_grant(
+        subject: [u8; 32],
+        path: &str,
+        domain: &str,
+    ) -> SignedDelegationCertificate {
         SignedDelegationCertificate::issue(
             &owner(),
             DelegationCertificate::new(
@@ -231,7 +235,11 @@ mod tests {
         let hello = hello_from(
             &viewer,
             &binding(),
-            vec![projection_grant(subject, PROJECTION_SERVICE, GRAPHSHELL_DOMAIN)],
+            vec![projection_grant(
+                subject,
+                PROJECTION_SERVICE,
+                GRAPHSHELL_DOMAIN,
+            )],
         );
 
         let (_, outcome) = admit_session(
@@ -302,7 +310,11 @@ mod tests {
         let hello = hello_from(
             &viewer,
             &binding(),
-            vec![projection_grant(subject, PROJECTION_SERVICE, GRAPHSHELL_DOMAIN)],
+            vec![projection_grant(
+                subject,
+                PROJECTION_SERVICE,
+                GRAPHSHELL_DOMAIN,
+            )],
         );
 
         let elsewhere =

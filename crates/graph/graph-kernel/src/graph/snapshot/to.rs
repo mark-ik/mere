@@ -60,12 +60,14 @@ impl Graph {
                 tag_presentation: node.tag_presentation.clone(),
                 import_provenance: node.import_provenance.clone(),
                 is_pinned: node.is_pinned,
-                thumbnail_png: node.thumbnail_png.clone(),
-                thumbnail_width: node.thumbnail_width,
-                thumbnail_height: node.thumbnail_height,
-                favicon_rgba: node.favicon_rgba.clone(),
-                favicon_width: node.favicon_width,
-                favicon_height: node.favicon_height,
+                images: node.images.clone(),
+                // Never written: a saved snapshot carries references only.
+                legacy_thumbnail_png: None,
+                legacy_thumbnail_width: 0,
+                legacy_thumbnail_height: 0,
+                legacy_favicon_rgba: None,
+                legacy_favicon_width: 0,
+                legacy_favicon_height: 0,
                 // Scroll / form draft left for the host's BrowserNodeState
                 // sidecar (boundary pass slice C); the snapshot now carries
                 // only the last-visited clock here. `session_state` itself

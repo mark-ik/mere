@@ -82,12 +82,10 @@ impl Graph {
             addresses: source.addresses.clone(),
             mime_hint: source.mime_hint.clone(),
             body: source.body.clone(),
-            thumbnail_png: source.thumbnail_png.clone(),
-            thumbnail_width: source.thumbnail_width,
-            thumbnail_height: source.thumbnail_height,
-            favicon_rgba: source.favicon_rgba.clone(),
-            favicon_width: source.favicon_width,
-            favicon_height: source.favicon_height,
+            // References copy freely: the blob is content-addressed and shared,
+            // so a cross-graph copy costs ~40 bytes per role, not a duplicated
+            // image.
+            images: source.images.clone(),
             // --- provenance: the cross-graph derivation record ---
             derivations: vec![derivation],
             // describes the donor's own external import, not this copy:

@@ -126,7 +126,10 @@ impl GraphshellIdentity {
     /// checkable against the master identity the carrier authenticated, which
     /// is what lets a client believe that the session key it is talking to and
     /// the peer its transport proved are the same party.
-    pub fn attest_session_key(&self, session: &str) -> Result<DerivedKeyAttestation, IdentityError> {
+    pub fn attest_session_key(
+        &self,
+        session: &str,
+    ) -> Result<DerivedKeyAttestation, IdentityError> {
         self.vault.attest_derived_key(&Self::session_salt(session))
     }
 }
@@ -171,8 +174,8 @@ mod tests {
     use super::*;
 
     fn scratch(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir()
-            .join(format!("graphshell-profile-{tag}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("graphshell-profile-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         dir
     }

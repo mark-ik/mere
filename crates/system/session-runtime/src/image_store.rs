@@ -18,7 +18,8 @@
 //! references it — the Athanor orphan sweep, not a per-node drop.
 
 use eidetic::{Hash, Result, Store};
-use kernel::types::ImageRef;
+use kernel::persistence::GraphSnapshot;
+use kernel::types::{ImageRef, ImageRole};
 
 /// Blob-key prefix, namespacing image blobs away from `content_store` bodies and
 /// the manifests / schemas that share the same store.
@@ -75,6 +76,68 @@ pub async fn stored_image_hexes(store: &mut dyn Store) -> Result<Vec<String>> {
         .into_iter()
         .filter_map(|key| key.strip_prefix(IMAGE_PREFIX).map(str::to_string))
         .collect())
+}
+
+/// Externalize pre-phase-2 inline imagery in `snapshot`, in place.
+///
+/// Snapshots written before the node-image externalization carried raw
+/// `thumbnail_png` / `favicon_rgba` bytes on every node. Conversion into a
+/// `Graph` keeps references only, so this pass must run **before**
+/// `Graph::from(snapshot)` or those pixels are dropped. It is one-time and
+/// lossless: bytes go to the blob store, the resulting handles land in
+/// `images` under `Preview` (the legacy thumbnail slot) and `Favicon`, and the
+/// legacy fields are cleared so a re-saved snapshot emits references only.
+///
+/// Content-addressing makes it idempotent and self-deduplicating: re-running
+/// it is a no-op, and a favicon shared by 200 nodes becomes one blob.
+///
+/// `encode_rgba_png` converts the legacy favicon's raw RGBA into PNG, supplied
+/// by the caller because encoding images is not this crate's business. An
+/// encode that returns `None` leaves that node's favicon behind rather than
+/// dropping it silently, and it stays counted by
+/// [`GraphSnapshot::legacy_image_count`].
+///
+/// Returns the number of blobs written.
+pub async fn migrate_legacy_images(
+    snapshot: &mut GraphSnapshot,
+    store: &mut dyn Store,
+    encode_rgba_png: impl Fn(&[u8], u32, u32) -> Option<Vec<u8>>,
+) -> Result<usize> {
+    let mut written = 0usize;
+    for node in &mut snapshot.nodes {
+        if let Some(png) = node.legacy_thumbnail_png.take() {
+            let image = save_image(
+                store,
+                &png,
+                node.legacy_thumbnail_width,
+                node.legacy_thumbnail_height,
+            )
+            .await?;
+            node.images.insert(ImageRole::Preview, image);
+            node.legacy_thumbnail_width = 0;
+            node.legacy_thumbnail_height = 0;
+            written += 1;
+        }
+        // The legacy favicon is raw RGBA; the store holds PNG.
+        if let Some(rgba) = node.legacy_favicon_rgba.take() {
+            let (w, h) = (node.legacy_favicon_width, node.legacy_favicon_height);
+            match encode_rgba_png(&rgba, w, h) {
+                Some(png) => {
+                    let image = save_image(store, &png, w, h).await?;
+                    node.images.insert(ImageRole::Favicon, image);
+                    node.legacy_favicon_width = 0;
+                    node.legacy_favicon_height = 0;
+                    written += 1;
+                }
+                None => {
+                    // Put it back: an un-encodable favicon is a visible
+                    // leftover, not a silent loss.
+                    node.legacy_favicon_rgba = Some(rgba);
+                }
+            }
+        }
+    }
+    Ok(written)
 }
 
 #[cfg(test)]

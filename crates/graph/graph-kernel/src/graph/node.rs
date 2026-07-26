@@ -16,7 +16,7 @@
 //! slice C: the graph library holds graph facts; what the browser
 //! knows about a node rides beside the graph, keyed by node id.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use rkyv::{Archive, Deserialize, Serialize};
 use uuid::Uuid;
@@ -24,8 +24,8 @@ use uuid::Uuid;
 use super::identity::{LogIdAsString, UuidAsBytes};
 use crate::address::{Address, AddressClaim, address_from_url, cached_host_from_url};
 use crate::types::{
-    FrameLayoutHint, NodeClassification, NodeDerivation, NodeImportProvenance, NodeProperty,
-    NodeTagPresentationState,
+    FrameLayoutHint, ImageRef, ImageRole, NodeClassification, NodeDerivation, NodeImportProvenance,
+    NodeProperty, NodeTagPresentationState,
 };
 
 /// A webpage node in the graph
@@ -82,23 +82,21 @@ pub struct Node {
     /// (Alembic B5.)
     pub last_session_visited: u64,
 
-    /// Optional thumbnail bytes (PNG), persisted in snapshots.
-    pub thumbnail_png: Option<Vec<u8>>,
-
-    /// Thumbnail width in pixels (valid when `thumbnail_png` is `Some`).
-    pub thumbnail_width: u32,
-
-    /// Thumbnail height in pixels (valid when `thumbnail_png` is `Some`).
-    pub thumbnail_height: u32,
-
-    /// Optional favicon pixel data (RGBA8), persisted in snapshots.
-    pub favicon_rgba: Option<Vec<u8>>,
-
-    /// Favicon width in pixels (valid when `favicon_rgba` is `Some`).
-    pub favicon_width: u32,
-
-    /// Favicon height in pixels (valid when `favicon_rgba` is `Some`).
-    pub favicon_height: u32,
+    /// Content-addressed preview imagery, keyed by role. The node carries
+    /// ~40-byte [`ImageRef`] handles; the pixels live in the durable blob
+    /// store under `content/image/<hex>` (see
+    /// `session-runtime::image_store`).
+    ///
+    /// This is the node-image externalization plan's phase 2. Inline
+    /// `thumbnail_png` / `favicon_rgba` bytes used to ride here and dominated
+    /// the graph: at 50k nodes they were 64% of live heap, and the lane-D gate
+    /// measured them at 18x the snapshot size and 3.8x its load time. A
+    /// preview is *experience*, not truth, so it belongs in a bounded,
+    /// collectable cache rather than in every node forever.
+    ///
+    /// Read through [`Node::image`] / [`Node::favicon`] / [`Node::preview`]
+    /// rather than indexing the map, so call sites name a role.
+    pub images: BTreeMap<ImageRole, ImageRef>,
 
     /// Optional declared or sniffed MIME type — content classification
     /// (what kind of content this node holds), consumed by mere-domain
@@ -150,6 +148,36 @@ pub struct Node {
 }
 
 impl Node {
+    /// The image reference held for `role`, if any.
+    pub fn image(&self, role: ImageRole) -> Option<&ImageRef> {
+        self.images.get(&role)
+    }
+
+    /// The favicon reference, if one has been stored.
+    pub fn favicon(&self) -> Option<&ImageRef> {
+        self.image(ImageRole::Favicon)
+    }
+
+    /// The preview reference, if one has been stored. This is the role the
+    /// legacy inline `thumbnail_png` migrates into.
+    pub fn preview(&self) -> Option<&ImageRef> {
+        self.image(ImageRole::Preview)
+    }
+
+    /// Attach (or replace) the reference for `role`, returning any prior one.
+    /// The pixels must already be in the blob store; the node only carries
+    /// the handle.
+    pub fn set_image(&mut self, role: ImageRole, image: ImageRef) -> Option<ImageRef> {
+        self.images.insert(role, image)
+    }
+
+    /// Drop the reference for `role`, returning it. The blob itself is left
+    /// for the orphan-GC pass, per the manifest-deletion doctrine: dropping a
+    /// reference is not a delete.
+    pub fn clear_image(&mut self, role: ImageRole) -> Option<ImageRef> {
+        self.images.remove(&role)
+    }
+
     /// Returns the node's canonical retrieval address (the Primary claim).
     ///
     /// Panics if the per-node invariant (exactly one Primary claim) is
@@ -187,12 +215,7 @@ impl Node {
             is_pinned: false,
             last_visited: std::time::SystemTime::now(),
             last_session_visited: 0,
-            thumbnail_png: None,
-            thumbnail_width: 0,
-            thumbnail_height: 0,
-            favicon_rgba: None,
-            favicon_width: 0,
-            favicon_height: 0,
+            images: BTreeMap::new(),
             mime_hint: None,
             body: None,
             addresses: vec![AddressClaim::primary(address_from_url(url))],

@@ -6,7 +6,11 @@
 //! These types define the portable snapshot and edge schema shared by all hosts.
 //! Storage adapters (fjall, IndexedDB, etc.) live in the host, not here.
 
+use std::collections::BTreeMap;
+
 use rkyv::{Archive, Deserialize, Serialize};
+
+use crate::types::{ImageRef, ImageRole};
 
 // Field-layer DTOs live in their own file (per-file ceiling) but belong to this
 // module's vocabulary; re-export so `crate::persistence::PersistedField` resolves.
@@ -156,12 +160,29 @@ pub struct PersistedNode {
     #[serde(default)]
     pub import_provenance: Vec<NodeImportProvenance>,
     pub is_pinned: bool,
-    pub thumbnail_png: Option<Vec<u8>>,
-    pub thumbnail_width: u32,
-    pub thumbnail_height: u32,
-    pub favicon_rgba: Option<Vec<u8>>,
-    pub favicon_width: u32,
-    pub favicon_height: u32,
+    /// Content-addressed preview imagery by role. Snapshots carry handles,
+    /// never pixels (node-image externalization, phase 2).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub images: BTreeMap<ImageRole, ImageRef>,
+
+    // --- Legacy inline imagery: deserialize-only migration shadows ---------
+    //
+    // Snapshots written before phase 2 carry raw PNG/RGBA bytes here. They
+    // load, get externalized into the blob store, and are never written back:
+    // `skip_serializing` means a re-saved snapshot emits references only. Once
+    // no snapshot in the wild carries them these can go.
+    #[serde(default, skip_serializing, rename = "thumbnail_png")]
+    pub legacy_thumbnail_png: Option<Vec<u8>>,
+    #[serde(default, skip_serializing, rename = "thumbnail_width")]
+    pub legacy_thumbnail_width: u32,
+    #[serde(default, skip_serializing, rename = "thumbnail_height")]
+    pub legacy_thumbnail_height: u32,
+    #[serde(default, skip_serializing, rename = "favicon_rgba")]
+    pub legacy_favicon_rgba: Option<Vec<u8>>,
+    #[serde(default, skip_serializing, rename = "favicon_width")]
+    pub legacy_favicon_width: u32,
+    #[serde(default, skip_serializing, rename = "favicon_height")]
+    pub legacy_favicon_height: u32,
     pub session_state: Option<PersistedNodeSessionState>,
     /// Optional MIME type hint; drives renderer selection.
     pub mime_hint: Option<String>,
@@ -223,6 +244,21 @@ pub struct GraphSnapshot {
     /// with an empty history rather than failing.
     #[serde(default)]
     pub navigation: SharedNavigationMemory,
+}
+
+impl GraphSnapshot {
+    /// How many nodes still carry pre-phase-2 inline image bytes.
+    ///
+    /// Conversion into a `Graph` keeps references only, so a non-zero count
+    /// here means the host has not run its externalization pass yet and those
+    /// pixels are about to be dropped. Assert it is zero after migrating; a
+    /// silent loss is the failure mode this exists to make loud.
+    pub fn legacy_image_count(&self) -> usize {
+        self.nodes
+            .iter()
+            .filter(|n| n.legacy_thumbnail_png.is_some() || n.legacy_favicon_rgba.is_some())
+            .count()
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -5,9 +5,10 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::chain::{RevocationLedger, TrustedRoot, validate_chain};
+use crate::facts::SessionFacts;
 use crate::types::{
-    DenyReason, HandshakeLimits, NetworkId, ProfileRef, SUPPORTED_WIRE_VERSION, SessionDecision,
-    SessionRequest, TrafficClass,
+    DenyReason, HandshakeLimits, NetworkId, ProfileRef, SUPPORTED_WIRE_VERSION, SessionClaims,
+    SessionDecision, TrafficClass,
 };
 
 /// Version of the serialized policy shape.
@@ -114,7 +115,12 @@ impl LocalNetworkPolicy {
 
     /// Decide one incoming session.
     ///
-    /// Deterministic over its inputs: the request, the caller-supplied clock
+    /// Takes the carrier's observations and the initiator's claims as separate
+    /// arguments, which is the whole point of the split: a caller physically
+    /// cannot put an application claim where a carrier fact belongs, because
+    /// [`SessionFacts`] is not decodable (Notochord N0).
+    ///
+    /// Deterministic over its inputs: facts, claims, the caller-supplied clock
     /// `now_ms`, the revocation ledger, and `active_sessions` (the caller's
     /// honest count of live sessions already admitted under this action's
     /// rule). Evaluation order follows the plan: wire version, profile,
@@ -122,41 +128,43 @@ impl LocalNetworkPolicy {
     /// capacity.
     pub fn evaluate(
         &self,
+        facts: &SessionFacts,
+        claims: &SessionClaims,
         ledger: &RevocationLedger,
-        request: &SessionRequest,
         now_ms: u64,
         active_sessions: u32,
     ) -> SessionDecision {
-        if request.wire_version != SUPPORTED_WIRE_VERSION {
+        if claims.wire_version != SUPPORTED_WIRE_VERSION {
             return deny(DenyReason::UnsupportedWireVersion {
-                requested: request.wire_version,
+                requested: claims.wire_version,
                 supported: SUPPORTED_WIRE_VERSION,
             });
         }
-        if request.network != self.network {
+        if claims.network != self.network {
             return deny(DenyReason::UnknownNetwork);
         }
-        if !self.accepts_profile(&request.profile) {
+        if !self.accepts_profile(&claims.profile) {
             return deny(DenyReason::ProfileNotAccepted);
         }
-        if request.class == TrafficClass::Transit {
+        if claims.class == TrafficClass::Transit {
             return deny(DenyReason::TransitNotASession);
         }
 
-        let Some(rule) = self.services.get(&request.action.path) else {
+        let Some(rule) = self.services.get(&claims.action.path) else {
             return deny(DenyReason::ServiceNotOffered);
         };
         if rule.access == ServiceAccess::Disabled {
             return deny(DenyReason::ServiceNotOffered);
         }
-        if rule.require_transport_identity && request.transport_peer.is_none() {
+        if rule.require_transport_identity && facts.authenticated_initiator.is_none() {
             return deny(DenyReason::TransportIdentityRequired);
         }
-        // D6: where the transport proved a peer, the claimed subject must be
-        // that peer. Without this, a valid certificate issued to someone else
-        // could be replayed over an attacker's own authenticated connection.
-        if let Some(peer) = request.transport_peer
-            && peer != request.subject
+        // D6: where the carrier proved the initiator, the claimed subject must
+        // be that initiator. Without this, a valid certificate issued to
+        // someone else could be replayed over an attacker's own authenticated
+        // connection. The fact wins over the claim, always.
+        if let Some(initiator) = facts.authenticated_initiator
+            && initiator != claims.subject
         {
             return deny(DenyReason::SubjectNotTransportPeer);
         }
@@ -167,8 +175,8 @@ impl LocalNetworkPolicy {
                 .max_delegation_depth
                 .min(self.limits.max_certificates);
             if let Err(fault) = validate_chain(
-                &request.delegations,
-                request.subject,
+                &claims.delegations,
+                claims.subject,
                 &self.trusted_roots,
                 ledger,
                 depth,
@@ -176,10 +184,10 @@ impl LocalNetworkPolicy {
             ) {
                 return deny(DenyReason::Delegation(fault));
             }
-            let leaf = &request.delegations[request.delegations.len() - 1].certificate;
-            let covered = leaf.scope.domain == request.action.domain
-                && leaf.scope.resource == request.network.0
-                && leaf.covers(&request.action.path, &request.action.action, now_ms);
+            let leaf = &claims.delegations[claims.delegations.len() - 1].certificate;
+            let covered = leaf.scope.domain == claims.action.domain
+                && leaf.scope.resource == claims.network.0
+                && leaf.covers(&claims.action.path, &claims.action.action, now_ms);
             if !covered {
                 return deny(DenyReason::ActionNotCovered);
             }
@@ -192,7 +200,7 @@ impl LocalNetworkPolicy {
         }
 
         SessionDecision::Accept {
-            class: request.class,
+            class: claims.class,
         }
     }
 }

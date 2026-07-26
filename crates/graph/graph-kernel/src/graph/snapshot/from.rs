@@ -84,12 +84,13 @@ impl Graph {
                 node.properties = pnode.properties.clone();
                 node.derivations = pnode.derivations.clone();
                 node.is_pinned = pnode.is_pinned;
-                node.thumbnail_png = pnode.thumbnail_png.clone();
-                node.thumbnail_width = pnode.thumbnail_width;
-                node.thumbnail_height = pnode.thumbnail_height;
-                node.favicon_rgba = pnode.favicon_rgba.clone();
-                node.favicon_width = pnode.favicon_width;
-                node.favicon_height = pnode.favicon_height;
+                // References only. Legacy inline bytes are externalized by the
+                // host before conversion (`session_runtime::image_store::
+                // migrate_legacy_images`), because hashing and blob storage
+                // are the store's job, not the kernel's. A snapshot that still
+                // carries them here has skipped that pass — see
+                // `GraphSnapshot::legacy_image_count`.
+                node.images = pnode.images.clone();
                 node.mime_hint = pnode.mime_hint.clone();
                 // address was already set by add_node_with_id from pnode.url; no re-derivation needed.
                 node.frame_layout_hints = pnode.frame_layout_hints.clone();

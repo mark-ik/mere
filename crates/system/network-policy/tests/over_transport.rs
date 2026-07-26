@@ -11,9 +11,9 @@
 use std::collections::BTreeMap;
 
 use network_policy::{
-    DenyReason, LocalNetworkPolicy, NetworkId, ProfileRef, RequestedAction, RevocationLedger,
-    ServiceAccess, ServiceRule, SessionBinding, SessionDecision, SessionHello, TrafficClass,
-    TrustedRoot, accept_session, initiate_session,
+    CarrierKind, DenyReason, LocalNetworkPolicy, NetworkId, ProfileRef, ProofBinding,
+    RequestedAction, RevocationLedger, ServiceAccess, ServiceRule, SessionDecision, SessionFacts,
+    SessionHello, TrafficClass, TrustedRoot, accept_session, initiate_session,
 };
 use personae::delegation::{
     CapabilityScope, DelegationCertificate, DelegationParent, SignedDelegationCertificate,
@@ -81,7 +81,7 @@ fn policy(access: ServiceAccess) -> LocalNetworkPolicy {
     policy
 }
 
-fn hello(binding: &SessionBinding, delegations: Vec<SignedDelegationCertificate>) -> SessionHello {
+fn hello(binding: &ProofBinding, delegations: Vec<SignedDelegationCertificate>) -> SessionHello {
     SessionHello::issue(
         &member(),
         NETWORK,
@@ -107,18 +107,20 @@ fn hello(binding: &SessionBinding, delegations: Vec<SignedDelegationCertificate>
 async fn exchange(access: ServiceAccess) -> (SessionDecision, Vec<u8>) {
     let policy = policy(access);
     let ledger = RevocationLedger::new();
-    let binding = SessionBinding::authenticated(PROTOCOL, member().master_public_key().to_bytes());
     let subject = member().master_public_key().to_bytes();
+    // Responder view (facts) and initiator view (binding) of one connection.
+    let facts = SessionFacts::authenticated(PROTOCOL, CarrierKind::Memory, subject);
+    let binding = ProofBinding::initiator(PROTOCOL, Some(subject), None);
     let (mut client, mut server) = tokio::io::duplex(4096);
 
     let server_policy = policy.clone();
-    let server_binding = binding.clone();
+    let server_facts = facts.clone();
     let responder = tokio::spawn(async move {
         let decision = accept_session(
             &mut server,
             &server_policy,
             &ledger,
-            &server_binding,
+            &server_facts,
             NOW_MS,
             0,
         )

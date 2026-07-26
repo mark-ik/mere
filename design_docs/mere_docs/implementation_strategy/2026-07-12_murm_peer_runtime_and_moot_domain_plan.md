@@ -11,6 +11,10 @@ That plan's completed consolidation and store work remain valid receipts. Its
 purity rule and host-composition target are retired.
 **Related**:
 
+- The
+  [`2026-07-26_stickleback_replication_promotion_plan.md`](./2026-07-26_stickleback_replication_promotion_plan.md)
+  promotes the shared `murm-replication` machinery under its earned neutral
+  name. This plan's completed receipts retain the historical package name.
 - [`../../../../turnstone/design_docs/2026-07-08_turnstone_founding.md`](../../../../turnstone/design_docs/2026-07-08_turnstone_founding.md)
   fixes Mere as the offline graph library and Turnstone as a reference host.
 - [`2026-07-12_deletion_retention_and_native_drop_plan.md`](2026-07-12_deletion_retention_and_native_drop_plan.md)

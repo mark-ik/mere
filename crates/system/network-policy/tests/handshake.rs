@@ -1,11 +1,16 @@
-//! V6: the bounded session handshake, and the attacks it must refuse.
+//! V6/N0: the bounded session handshake, and the attacks it must refuse.
+//!
+//! Note the two-role shape throughout: the responder passes [`SessionFacts`]
+//! (what its carrier observed), while the initiator signs against a
+//! [`ProofBinding`] built from its *own* transport identity. The proof
+//! verifies only when the two independently derive the same bytes.
 
 use std::collections::BTreeMap;
 
 use network_policy::{
-    ChainFault, DenyReason, HandshakeLimits, LocalNetworkPolicy, NetworkId, ProfileRef,
-    RequestedAction, RevocationLedger, ServiceAccess, ServiceRule, SessionBinding, SessionDecision,
-    SessionHello, SessionReply, TrafficClass, TrustedRoot, respond,
+    CarrierKind, ChainFault, DenyReason, HandshakeLimits, LocalNetworkPolicy, NetworkId,
+    ProfileRef, ProofBinding, RequestedAction, RevocationLedger, ServiceAccess, ServiceRule,
+    SessionDecision, SessionFacts, SessionHello, SessionReply, TrafficClass, TrustedRoot, respond,
 };
 use personae::delegation::{
     CapabilityScope, DelegationCertificate, DelegationParent, SignedDelegationCertificate,
@@ -84,7 +89,7 @@ fn action() -> RequestedAction {
 
 fn hello_from(
     provider: &InMemoryProvider,
-    binding: &SessionBinding,
+    binding: &ProofBinding,
     delegations: Vec<SignedDelegationCertificate>,
 ) -> SessionHello {
     SessionHello::issue(
@@ -103,19 +108,27 @@ fn hello_from(
     .expect("issue hello")
 }
 
-/// A p2panda-shaped connection: the transport proved the member identity.
-fn authenticated_binding() -> SessionBinding {
-    SessionBinding::authenticated(PROTOCOL, member().master_public_key().to_bytes())
+/// A p2panda-shaped connection, as the responder observes it.
+fn carrier_authenticating(initiator: [u8; 32]) -> SessionFacts {
+    SessionFacts::authenticated(PROTOCOL, CarrierKind::P2panda, initiator)
 }
 
-/// A Reticulum-shaped connection: no transport identity, but a link to bind to.
-fn reticulum_binding(link: [u8; 16]) -> SessionBinding {
-    SessionBinding {
-        protocol: PROTOCOL.to_vec(),
-        transport_peer: None,
-        interface: Some(3),
-        link: Some(link),
-    }
+/// The same connection as the initiator signs it: from its own identity.
+fn initiator_binding(own_identity: [u8; 32]) -> ProofBinding {
+    ProofBinding::initiator(PROTOCOL, Some(own_identity), None)
+}
+
+/// A Reticulum-shaped connection: no carrier identity, but a shared link.
+fn reticulum_facts(link: [u8; 16]) -> SessionFacts {
+    SessionFacts::new(PROTOCOL, CarrierKind::Reticulum).with_ingress(Some(3), Some(link))
+}
+
+fn reticulum_binding(link: [u8; 16]) -> ProofBinding {
+    ProofBinding::initiator(PROTOCOL, None, Some(link))
+}
+
+fn member_key() -> [u8; 32] {
+    member().master_public_key().to_bytes()
 }
 
 fn reason(decision: &SessionDecision) -> DenyReason {
@@ -129,12 +142,12 @@ fn reason(decision: &SessionDecision) -> DenyReason {
 fn an_authorized_hello_is_admitted_and_the_reply_decodes() {
     let policy = policy(ServiceAccess::MemberOnly);
     let ledger = RevocationLedger::new();
-    let binding = authenticated_binding();
-    let subject = member().master_public_key().to_bytes();
-    let hello = hello_from(&member(), &binding, vec![member_grant_to(subject)]);
+    let binding = initiator_binding(member_key());
+    let facts = carrier_authenticating(member_key());
+    let hello = hello_from(&member(), &binding, vec![member_grant_to(member_key())]);
     let bytes = hello.encode(&policy.limits).expect("encode");
 
-    let (reply_bytes, decision) = respond(&policy, &ledger, &bytes, &binding, NOW_MS, 0);
+    let (reply_bytes, decision) = respond(&policy, &ledger, &bytes, &facts, NOW_MS, 0);
     assert!(decision.is_accept(), "a valid member hello is admitted");
 
     let reply = SessionReply::decode(&reply_bytes, &policy.limits).expect("decode reply");
@@ -161,22 +174,22 @@ fn an_authorized_hello_is_admitted_and_the_reply_decodes() {
 }
 
 #[test]
-fn a_valid_certificate_presented_by_the_wrong_transport_peer_is_rejected() {
+fn a_valid_certificate_presented_by_the_wrong_carrier_peer_is_rejected() {
     // The p2panda property the plan names: a stranger holds a perfectly good
     // certificate issued to the member, and replays that authority over their
     // own authenticated connection.
     let policy = policy(ServiceAccess::MemberOnly);
     let ledger = RevocationLedger::new();
-    let subject = member().master_public_key().to_bytes();
+    let stranger_key = stranger().master_public_key().to_bytes();
 
-    // The connection is authenticated as the stranger, not the member.
-    let binding =
-        SessionBinding::authenticated(PROTOCOL, stranger().master_public_key().to_bytes());
+    // The carrier authenticated the stranger, not the member.
+    let facts = carrier_authenticating(stranger_key);
+    let binding = initiator_binding(stranger_key);
     // The stranger signs honestly, for themself, but presents the member grant.
-    let hello = hello_from(&stranger(), &binding, vec![member_grant_to(subject)]);
+    let hello = hello_from(&stranger(), &binding, vec![member_grant_to(member_key())]);
     let bytes = hello.encode(&policy.limits).expect("encode");
 
-    let (_, decision) = respond(&policy, &ledger, &bytes, &binding, NOW_MS, 0);
+    let (_, decision) = respond(&policy, &ledger, &bytes, &facts, NOW_MS, 0);
     assert_eq!(
         reason(&decision),
         DenyReason::Delegation(ChainFault::SubjectMismatch),
@@ -185,66 +198,112 @@ fn a_valid_certificate_presented_by_the_wrong_transport_peer_is_rejected() {
 }
 
 #[test]
+fn a_claimed_subject_cannot_overwrite_a_carrier_authenticated_peer() {
+    // N0 receipt. The carrier proved the stranger; the hello claims to be the
+    // member and carries the member's grant. The fact must win over the claim.
+    let policy = policy(ServiceAccess::Public);
+    let ledger = RevocationLedger::new();
+    let stranger_key = stranger().master_public_key().to_bytes();
+    let facts = carrier_authenticating(stranger_key);
+    let binding = initiator_binding(stranger_key);
+
+    let mut hello = hello_from(&stranger(), &binding, Vec::new());
+    hello.subject = member_key();
+    let bytes = hello.encode(&policy.limits).expect("encode");
+
+    let (_, decision) = respond(&policy, &ledger, &bytes, &facts, NOW_MS, 0);
+    // The forged subject breaks the proof before policy even weighs in, which
+    // is the stronger of the two refusals available here.
+    assert_eq!(reason(&decision), DenyReason::SessionProofInvalid);
+}
+
+#[test]
 fn a_hello_claiming_another_identity_fails_its_proof() {
     // The subject field says "member", but the signer is the stranger. The
     // attestation binds the derived key to its own master, so this cannot pass.
     let policy = policy(ServiceAccess::MemberOnly);
     let ledger = RevocationLedger::new();
-    let binding = authenticated_binding();
-    let subject = member().master_public_key().to_bytes();
-    let mut hello = hello_from(&stranger(), &binding, vec![member_grant_to(subject)]);
-    hello.subject = subject;
+    let binding = initiator_binding(member_key());
+    let facts = carrier_authenticating(member_key());
+    let mut hello = hello_from(&stranger(), &binding, vec![member_grant_to(member_key())]);
+    hello.subject = member_key();
     let bytes = hello.encode(&policy.limits).expect("encode");
 
-    let (_, decision) = respond(&policy, &ledger, &bytes, &binding, NOW_MS, 0);
+    let (_, decision) = respond(&policy, &ledger, &bytes, &facts, NOW_MS, 0);
     assert_eq!(reason(&decision), DenyReason::SessionProofInvalid);
 }
 
 #[test]
-fn a_proof_replayed_on_a_different_link_is_rejected() {
-    // The Reticulum property: the transcript binds the link, so a hello
-    // captured on one link does not verify on another.
+fn reticulum_admits_a_proved_subject_with_no_carrier_identity() {
+    // N0 receipt: best-effort acceptance reports no authenticated initiator,
+    // and the session proof alone establishes the subject.
     let policy = policy(ServiceAccess::MemberOnly);
     let ledger = RevocationLedger::new();
-    let subject = member().master_public_key().to_bytes();
-    let original = reticulum_binding([0xaa; 16]);
-    let hello = hello_from(&member(), &original, vec![member_grant_to(subject)]);
+    let link = [0xaa; 16];
+    let facts = reticulum_facts(link);
+    assert!(facts.authenticated_initiator.is_none());
+
+    let hello = hello_from(
+        &member(),
+        &reticulum_binding(link),
+        vec![member_grant_to(member_key())],
+    );
     let bytes = hello.encode(&policy.limits).expect("encode");
 
-    let (_, admitted) = respond(&policy, &ledger, &bytes, &original, NOW_MS, 0);
+    let (_, decision) = respond(&policy, &ledger, &bytes, &facts, NOW_MS, 0);
+    assert!(decision.is_accept());
+}
+
+#[test]
+fn a_proof_replayed_on_a_different_link_is_rejected() {
+    // The transcript binds the shared link, so a hello captured on one link
+    // does not verify on another.
+    let policy = policy(ServiceAccess::MemberOnly);
+    let ledger = RevocationLedger::new();
+    let link = [0xaa; 16];
+    let hello = hello_from(
+        &member(),
+        &reticulum_binding(link),
+        vec![member_grant_to(member_key())],
+    );
+    let bytes = hello.encode(&policy.limits).expect("encode");
+
+    let (_, admitted) = respond(&policy, &ledger, &bytes, &reticulum_facts(link), NOW_MS, 0);
     assert!(
         admitted.is_accept(),
         "it is good on the link it was minted for"
     );
 
-    let replayed = reticulum_binding([0xbb; 16]);
-    let (_, decision) = respond(&policy, &ledger, &bytes, &replayed, NOW_MS, 0);
+    let (_, decision) = respond(
+        &policy,
+        &ledger,
+        &bytes,
+        &reticulum_facts([0xbb; 16]),
+        NOW_MS,
+        0,
+    );
     assert_eq!(reason(&decision), DenyReason::SessionProofInvalid);
 }
 
 #[test]
 fn a_differing_local_interface_does_not_break_the_proof() {
-    // The deliberate asymmetry: the link is shared and therefore signed, but
-    // the interface id is local to whoever assigned it and the initiator
-    // cannot know it. Binding it would reject every honest Reticulum session.
+    // N0 receipt, and the deliberate asymmetry: the link is shared and signed,
+    // but the interface id is local to whoever assigned it. Binding it would
+    // reject every honest session.
     let policy = policy(ServiceAccess::MemberOnly);
     let ledger = RevocationLedger::new();
-    let subject = member().master_public_key().to_bytes();
     let link = [0xaa; 16];
-
-    let initiator_view = SessionBinding {
-        protocol: PROTOCOL.to_vec(),
-        transport_peer: None,
-        interface: None,
-        link: Some(link),
-    };
-    let hello = hello_from(&member(), &initiator_view, vec![member_grant_to(subject)]);
+    let hello = hello_from(
+        &member(),
+        &reticulum_binding(link),
+        vec![member_grant_to(member_key())],
+    );
     let bytes = hello.encode(&policy.limits).expect("encode");
 
-    // The responder saw the same link over one of its own interfaces.
-    let responder_view = reticulum_binding(link);
-    assert_ne!(initiator_view.interface, responder_view.interface);
-    let (_, decision) = respond(&policy, &ledger, &bytes, &responder_view, NOW_MS, 0);
+    // The responder saw the same link over a wildly different interface number.
+    let responder_facts =
+        SessionFacts::new(PROTOCOL, CarrierKind::Reticulum).with_ingress(Some(9_999), Some(link));
+    let (_, decision) = respond(&policy, &ledger, &bytes, &responder_facts, NOW_MS, 0);
     assert!(
         decision.is_accept(),
         "the two ends need not agree on a purely local interface number"
@@ -255,13 +314,13 @@ fn a_differing_local_interface_does_not_break_the_proof() {
 fn a_tampered_hello_field_fails_its_proof() {
     let policy = policy(ServiceAccess::MemberOnly);
     let ledger = RevocationLedger::new();
-    let binding = authenticated_binding();
-    let subject = member().master_public_key().to_bytes();
-    let mut hello = hello_from(&member(), &binding, vec![member_grant_to(subject)]);
+    let binding = initiator_binding(member_key());
+    let facts = carrier_authenticating(member_key());
+    let mut hello = hello_from(&member(), &binding, vec![member_grant_to(member_key())]);
     hello.action.path = "/services/secret".into();
     let bytes = hello.encode(&policy.limits).expect("encode");
 
-    let (_, decision) = respond(&policy, &ledger, &bytes, &binding, NOW_MS, 0);
+    let (_, decision) = respond(&policy, &ledger, &bytes, &facts, NOW_MS, 0);
     assert_eq!(reason(&decision), DenyReason::SessionProofInvalid);
 }
 
@@ -273,9 +332,9 @@ fn an_oversized_hello_is_refused_without_being_parsed() {
         ..HandshakeLimits::default()
     };
     let ledger = RevocationLedger::new();
-    let binding = authenticated_binding();
-    let subject = member().master_public_key().to_bytes();
-    let hello = hello_from(&member(), &binding, vec![member_grant_to(subject)]);
+    let binding = initiator_binding(member_key());
+    let facts = carrier_authenticating(member_key());
+    let hello = hello_from(&member(), &binding, vec![member_grant_to(member_key())]);
     let bytes = hello
         .encode(&HandshakeLimits::default())
         .expect("encode at the default bound");
@@ -284,7 +343,7 @@ fn an_oversized_hello_is_refused_without_being_parsed() {
         "the fixture must exceed the tightened bound"
     );
 
-    let (_, decision) = respond(&policy, &ledger, &bytes, &binding, NOW_MS, 0);
+    let (_, decision) = respond(&policy, &ledger, &bytes, &facts, NOW_MS, 0);
     assert_eq!(reason(&decision), DenyReason::MalformedHello);
 }
 
@@ -298,9 +357,9 @@ fn too_many_certificates_are_refused_by_both_sides() {
         ..HandshakeLimits::default()
     };
     let ledger = RevocationLedger::new();
-    let binding = authenticated_binding();
-    let subject = member().master_public_key().to_bytes();
-    let chain = vec![member_grant_to(subject); 6];
+    let binding = initiator_binding(member_key());
+    let facts = carrier_authenticating(member_key());
+    let chain = vec![member_grant_to(member_key()); 6];
     let hello = hello_from(&member(), &binding, chain);
 
     assert!(
@@ -319,7 +378,8 @@ fn too_many_certificates_are_refused_by_both_sides() {
         bytes.len() <= policy.limits.max_hello_bytes as usize,
         "the frame must fit the responder byte budget so only the count can fail"
     );
-    let (_, decision) = respond(&policy, &ledger, &bytes, &binding, NOW_MS, 0);
+
+    let (_, decision) = respond(&policy, &ledger, &bytes, &facts, NOW_MS, 0);
     assert_eq!(
         reason(&decision),
         DenyReason::MalformedHello,
@@ -335,7 +395,7 @@ fn garbage_bytes_are_refused_cleanly() {
         &policy,
         &ledger,
         &[0xff; 64],
-        &authenticated_binding(),
+        &carrier_authenticating(member_key()),
         NOW_MS,
         0,
     );
@@ -350,11 +410,12 @@ fn garbage_bytes_are_refused_cleanly() {
 fn a_public_service_admits_a_hello_carrying_no_authority() {
     let policy = policy(ServiceAccess::Public);
     let ledger = RevocationLedger::new();
-    let binding = authenticated_binding();
+    let binding = initiator_binding(member_key());
+    let facts = carrier_authenticating(member_key());
     let hello = hello_from(&member(), &binding, Vec::new());
     let bytes = hello.encode(&policy.limits).expect("encode");
 
-    let (_, decision) = respond(&policy, &ledger, &bytes, &binding, NOW_MS, 0);
+    let (_, decision) = respond(&policy, &ledger, &bytes, &facts, NOW_MS, 0);
     assert!(decision.is_accept());
 }
 
@@ -362,11 +423,11 @@ fn a_public_service_admits_a_hello_carrying_no_authority() {
 fn a_good_proof_does_not_open_a_service_the_owner_has_not_offered() {
     let policy = policy(ServiceAccess::Disabled);
     let ledger = RevocationLedger::new();
-    let binding = authenticated_binding();
-    let subject = member().master_public_key().to_bytes();
-    let hello = hello_from(&member(), &binding, vec![member_grant_to(subject)]);
+    let binding = initiator_binding(member_key());
+    let facts = carrier_authenticating(member_key());
+    let hello = hello_from(&member(), &binding, vec![member_grant_to(member_key())]);
     let bytes = hello.encode(&policy.limits).expect("encode");
 
-    let (_, decision) = respond(&policy, &ledger, &bytes, &binding, NOW_MS, 0);
+    let (_, decision) = respond(&policy, &ledger, &bytes, &facts, NOW_MS, 0);
     assert_eq!(reason(&decision), DenyReason::ServiceNotOffered);
 }

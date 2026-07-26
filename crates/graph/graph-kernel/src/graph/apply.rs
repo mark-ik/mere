@@ -66,17 +66,10 @@ pub enum GraphDelta {
         node_id: Uuid,
         new_url: String,
     },
-    ReplaySetNodeThumbnailById {
+    ReplaySetNodeImageById {
         node_id: Uuid,
-        png_bytes: Vec<u8>,
-        width: u32,
-        height: u32,
-    },
-    ReplaySetNodeFaviconById {
-        node_id: Uuid,
-        rgba: Vec<u8>,
-        width: u32,
-        height: u32,
+        role: ImageRole,
+        image: ImageRef,
     },
     ReplaySetNodeMimeHintById {
         node_id: Uuid,
@@ -215,17 +208,13 @@ pub enum GraphDelta {
         key: NodeKey,
         new_url: String,
     },
-    SetNodeThumbnail {
+    /// Attach a stored image reference under a role. The host stores the blob
+    /// first and passes the handle; no pixels travel through the delta spine
+    /// (node-image externalization, phase 3).
+    SetNodeImage {
         key: NodeKey,
-        png_bytes: Vec<u8>,
-        width: u32,
-        height: u32,
-    },
-    SetNodeFavicon {
-        key: NodeKey,
-        rgba: Vec<u8>,
-        width: u32,
-        height: u32,
+        role: ImageRole,
+        image: ImageRef,
     },
     SetNodeMimeHint {
         key: NodeKey,
@@ -667,78 +656,31 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
             }
             GraphDeltaResult::NodeUrlUpdated(updated)
         }
-        GraphDelta::ReplaySetNodeThumbnailById {
+        GraphDelta::ReplaySetNodeImageById {
             node_id,
-            png_bytes,
-            width,
-            height,
+            role,
+            image,
         } => {
             let updated = graph
                 .get_node_key_by_id(node_id)
-                .is_some_and(|key| graph.set_node_thumbnail(key, png_bytes.clone(), width, height));
+                .is_some_and(|key| graph.set_node_image(key, role, image));
             if updated {
-                record_captured_delta(&CapturedDelta::ReplaySetNodeThumbnailById {
+                record_captured_delta(&CapturedDelta::ReplaySetNodeImageById {
                     node_id: node_id.to_string(),
-                    png_bytes,
-                    width,
-                    height,
+                    role,
+                    image,
                 });
             }
             GraphDeltaResult::NodeMetadataUpdated(updated)
         }
-        GraphDelta::SetNodeThumbnail {
-            key,
-            png_bytes,
-            width,
-            height,
-        } => {
+        GraphDelta::SetNodeImage { key, role, image } => {
             let node_id = graph.get_node(key).map(|node| node.id);
-            let capture_png_bytes = png_bytes.clone();
-            let updated = graph.set_node_thumbnail(key, png_bytes, width, height);
+            let updated = graph.set_node_image(key, role, image);
             if updated && let Some(node_id) = node_id {
-                record_captured_delta(&CapturedDelta::ReplaySetNodeThumbnailById {
+                record_captured_delta(&CapturedDelta::ReplaySetNodeImageById {
                     node_id: node_id.to_string(),
-                    png_bytes: capture_png_bytes,
-                    width,
-                    height,
-                });
-            }
-            GraphDeltaResult::NodeMetadataUpdated(updated)
-        }
-        GraphDelta::ReplaySetNodeFaviconById {
-            node_id,
-            rgba,
-            width,
-            height,
-        } => {
-            let updated = graph
-                .get_node_key_by_id(node_id)
-                .is_some_and(|key| graph.set_node_favicon(key, rgba.clone(), width, height));
-            if updated {
-                record_captured_delta(&CapturedDelta::ReplaySetNodeFaviconById {
-                    node_id: node_id.to_string(),
-                    rgba,
-                    width,
-                    height,
-                });
-            }
-            GraphDeltaResult::NodeMetadataUpdated(updated)
-        }
-        GraphDelta::SetNodeFavicon {
-            key,
-            rgba,
-            width,
-            height,
-        } => {
-            let node_id = graph.get_node(key).map(|node| node.id);
-            let capture_rgba = rgba.clone();
-            let updated = graph.set_node_favicon(key, rgba, width, height);
-            if updated && let Some(node_id) = node_id {
-                record_captured_delta(&CapturedDelta::ReplaySetNodeFaviconById {
-                    node_id: node_id.to_string(),
-                    rgba: capture_rgba,
-                    width,
-                    height,
+                    role,
+                    image,
                 });
             }
             GraphDeltaResult::NodeMetadataUpdated(updated)

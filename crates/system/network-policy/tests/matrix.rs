@@ -4,9 +4,9 @@
 use std::collections::BTreeMap;
 
 use network_policy::{
-    ChainFault, DenyReason, HandshakeLimits, LocalNetworkPolicy, NetworkId, ProfileRef,
-    RequestedAction, RevocationLedger, ServiceAccess, ServiceRule, SessionDecision, SessionRequest,
-    TrafficClass, TrustedRoot,
+    CarrierKind, ChainFault, DenyReason, HandshakeLimits, LocalNetworkPolicy, NetworkId,
+    ProfileRef, RequestedAction, RevocationLedger, ServiceAccess, ServiceRule, SessionClaims,
+    SessionDecision, SessionFacts, TrafficClass, TrustedRoot,
 };
 use personae::delegation::{
     CapabilityScope, DelegationCertificate, DelegationParent, DelegationRevocation,
@@ -125,8 +125,17 @@ fn member_only_rule() -> ServiceRule {
     }
 }
 
-fn request(delegations: Vec<SignedDelegationCertificate>) -> SessionRequest {
-    SessionRequest {
+/// Carrier facts for an authenticating carrier that proved the member.
+fn facts() -> SessionFacts {
+    SessionFacts::authenticated(
+        b"mere/murm/v1".to_vec(),
+        CarrierKind::Memory,
+        member().master_public_key().to_bytes(),
+    )
+}
+
+fn request(delegations: Vec<SignedDelegationCertificate>) -> SessionClaims {
+    SessionClaims {
         wire_version: 1,
         network: NETWORK,
         profile: ProfileRef {
@@ -140,8 +149,6 @@ fn request(delegations: Vec<SignedDelegationCertificate>) -> SessionRequest {
         },
         class: TrafficClass::Interactive,
         subject: member().master_public_key().to_bytes(),
-        // D6: where the transport proved a peer, it must be the subject.
-        transport_peer: Some(member().master_public_key().to_bytes()),
         delegations,
     }
 }
@@ -161,7 +168,7 @@ fn public_service_admits_while_transit_stays_disabled() {
         max_sessions: None,
     });
     let ledger = RevocationLedger::new();
-    let decision = policy.evaluate(&ledger, &request(Vec::new()), NOW_MS, 0);
+    let decision = policy.evaluate(&facts(), &request(Vec::new()), &ledger, NOW_MS, 0);
     assert!(
         decision.is_accept(),
         "public service admits without authority"
@@ -183,7 +190,7 @@ fn transit_enabled_while_the_service_stays_private() {
     let ledger = RevocationLedger::new();
     assert!(policy.permits_transit());
     assert_eq!(
-        denial(policy.evaluate(&ledger, &request(Vec::new()), NOW_MS, 0)),
+        denial(policy.evaluate(&facts(), &request(Vec::new()), &ledger, NOW_MS, 0)),
         DenyReason::ServiceNotOffered,
         "offering transit must not open the service"
     );
@@ -195,11 +202,11 @@ fn member_only_service_admits_a_valid_chain_and_refuses_none() {
     let ledger = RevocationLedger::new();
     assert!(
         policy
-            .evaluate(&ledger, &request(vec![member_grant()]), NOW_MS, 0)
+            .evaluate(&facts(), &request(vec![member_grant()]), &ledger, NOW_MS, 0)
             .is_accept()
     );
     assert_eq!(
-        denial(policy.evaluate(&ledger, &request(Vec::new()), NOW_MS, 0)),
+        denial(policy.evaluate(&facts(), &request(Vec::new()), &ledger, NOW_MS, 0)),
         DenyReason::Delegation(ChainFault::Empty)
     );
 }
@@ -212,10 +219,9 @@ fn missing_transport_identity_where_one_is_required() {
         max_sessions: None,
     });
     let ledger = RevocationLedger::new();
-    let mut anonymous = request(Vec::new());
-    anonymous.transport_peer = None;
+    let anonymous_carrier = SessionFacts::new(b"mere/murm/v1".to_vec(), CarrierKind::Reticulum);
     assert_eq!(
-        denial(policy.evaluate(&ledger, &anonymous, NOW_MS, 0)),
+        denial(policy.evaluate(&anonymous_carrier, &request(Vec::new()), &ledger, NOW_MS, 0)),
         DenyReason::TransportIdentityRequired
     );
 }
@@ -234,7 +240,7 @@ fn an_expired_certificate_is_refused() {
         4,
     );
     assert_eq!(
-        denial(policy.evaluate(&ledger, &request(vec![expired]), NOW_MS, 0)),
+        denial(policy.evaluate(&facts(), &request(vec![expired]), &ledger, NOW_MS, 0)),
         DenyReason::Delegation(ChainFault::Expired)
     );
 }
@@ -248,7 +254,7 @@ fn revoking_a_parent_cascades_to_its_child() {
     // The chain is good until the root withdraws the intermediate's grant.
     assert!(
         policy
-            .evaluate(&ledger, &request(chain.clone()), NOW_MS, 0)
+            .evaluate(&facts(), &request(chain.clone()), &ledger, NOW_MS, 0)
             .is_accept()
     );
     let statement = SignedDelegationRevocation::issue(
@@ -264,7 +270,7 @@ fn revoking_a_parent_cascades_to_its_child() {
     .expect("issue revocation");
     assert!(ledger.fold(&statement));
     assert_eq!(
-        denial(policy.evaluate(&ledger, &request(chain), NOW_MS, 0)),
+        denial(policy.evaluate(&facts(), &request(chain), &ledger, NOW_MS, 0)),
         DenyReason::Delegation(ChainFault::Revoked)
     );
 }
@@ -293,7 +299,13 @@ fn a_widened_child_scope_is_refused() {
         7,
     );
     assert_eq!(
-        denial(policy.evaluate(&ledger, &request(vec![parent, widened]), NOW_MS, 0)),
+        denial(policy.evaluate(
+            &facts(),
+            &request(vec![parent, widened]),
+            &ledger,
+            NOW_MS,
+            0
+        )),
         DenyReason::Delegation(ChainFault::NotAttenuated)
     );
 }
@@ -307,7 +319,7 @@ fn excessive_delegation_depth_is_refused() {
     };
     let ledger = RevocationLedger::new();
     assert_eq!(
-        denial(policy.evaluate(&ledger, &request(two_step_chain()), NOW_MS, 0)),
+        denial(policy.evaluate(&facts(), &request(two_step_chain()), &ledger, NOW_MS, 0)),
         DenyReason::Delegation(ChainFault::DepthExceeded)
     );
 }
@@ -322,7 +334,7 @@ fn an_incompatible_profile_is_refused_before_authority_is_read() {
         revision: 9,
     };
     assert_eq!(
-        denial(policy.evaluate(&ledger, &exotic, NOW_MS, 0)),
+        denial(policy.evaluate(&facts(), &exotic, &ledger, NOW_MS, 0)),
         DenyReason::ProfileNotAccepted
     );
 }
@@ -335,9 +347,13 @@ fn capacity_refuses_after_otherwise_valid_authority() {
     });
     let ledger = RevocationLedger::new();
     let admitted = request(vec![member_grant()]);
-    assert!(policy.evaluate(&ledger, &admitted, NOW_MS, 0).is_accept());
+    assert!(
+        policy
+            .evaluate(&facts(), &admitted, &ledger, NOW_MS, 0)
+            .is_accept()
+    );
     assert_eq!(
-        denial(policy.evaluate(&ledger, &admitted, NOW_MS, 1)),
+        denial(policy.evaluate(&facts(), &admitted, &ledger, NOW_MS, 1)),
         DenyReason::CapacityExhausted,
         "the same valid authority is refused only for capacity"
     );
@@ -349,10 +365,17 @@ fn a_subject_that_is_not_the_authenticated_peer_is_refused() {
     // over a connection the transport proved belongs to someone else.
     let policy = policy_with(member_only_rule());
     let ledger = RevocationLedger::new();
-    let mut impersonating = request(vec![member_grant()]);
-    impersonating.transport_peer = Some([0xcd; 32]);
+    // The carrier proved somebody else; the claim cannot talk its way past it.
+    let stranger_carrier =
+        SessionFacts::authenticated(b"mere/murm/v1".to_vec(), CarrierKind::Memory, [0xcd; 32]);
     assert_eq!(
-        denial(policy.evaluate(&ledger, &impersonating, NOW_MS, 0)),
+        denial(policy.evaluate(
+            &stranger_carrier,
+            &request(vec![member_grant()]),
+            &ledger,
+            NOW_MS,
+            0
+        )),
         DenyReason::SubjectNotTransportPeer
     );
 }
@@ -362,8 +385,11 @@ fn decisions_are_deterministic_over_identical_inputs() {
     let policy = policy_with(member_only_rule());
     let ledger = RevocationLedger::new();
     let admitted = request(vec![member_grant()]);
-    let first = policy.evaluate(&ledger, &admitted, NOW_MS, 0);
+    let first = policy.evaluate(&facts(), &admitted, &ledger, NOW_MS, 0);
     for _ in 0..8 {
-        assert_eq!(first, policy.evaluate(&ledger, &admitted, NOW_MS, 0));
+        assert_eq!(
+            first,
+            policy.evaluate(&facts(), &admitted, &ledger, NOW_MS, 0)
+        );
     }
 }

@@ -53,15 +53,16 @@ pub struct RequestedAction {
     pub action: String,
 }
 
-/// Everything the evaluator may consider for one incoming session.
+/// What a hello asserts about itself.
 ///
-/// `transport_peer` is a transport fact, not a claim (plan D4): callers fill
-/// it only when the transport authenticated the peer. A subject named by
-/// application bytes never goes there; Reticulum best-effort acceptance
-/// passes `None` and proves its subject through the session handshake
-/// instead.
+/// Claims are worth exactly what the proof over them is worth: nothing here is
+/// believed until [`crate::SessionHello::verify_proof`] checks the signature
+/// against the responder's own [`crate::ProofBinding`]. Deliberately carries
+/// no carrier observation: an authenticated peer and an ingress interface are
+/// facts, and live in [`crate::SessionFacts`], which cannot be decoded from
+/// application bytes (plan D4, Notochord N0).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SessionRequest {
+pub struct SessionClaims {
     /// Admission wire version the initiator speaks.
     pub wire_version: u16,
     /// Network this session claims to belong to.
@@ -74,8 +75,6 @@ pub struct SessionRequest {
     pub class: TrafficClass,
     /// Personae master public key of the claimed subject.
     pub subject: [u8; 32],
-    /// Transport-authenticated peer key, when the transport proved one.
-    pub transport_peer: Option<[u8; 32]>,
     /// Delegation chain backing the request, root grant first, subject last.
     pub delegations: Vec<SignedDelegationCertificate>,
 }

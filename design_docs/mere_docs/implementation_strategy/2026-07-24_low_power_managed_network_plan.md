@@ -1,6 +1,8 @@
 # Low-Power Radio and Managed Network Plan
 
-**Status (2026-07-24): planned; implementation has not started.**
+**Status (2026-07-26): in execution. V1-V6 and V8 have landed; V7 passes
+over Memory and Reticulum/TCP. The V0 power bench, p2panda, real Murm accept
+path, and direct-PHY/RF acceptance remain open.**
 
 This round joins two pieces that are useful independently and stronger
 together:
@@ -24,6 +26,11 @@ boundary. The radio, Reticulum, and queue work lands in the Retinue workspace.
 
 ## Related work
 
+- The
+  [`2026-07-26_notochord_session_policy_spine_plan.md`](./2026-07-26_notochord_session_policy_spine_plan.md)
+  takes the landed V3-V7 session-admission pieces through a shared facts and
+  admitted-session boundary. The `network-policy` name remains authoritative
+  until that plan's two-consumer promotion gate passes.
 - Retinue's existing direct-PHY Resource receipt:
   [`2026-07-23_direct_phy_resource_acceptance.md`](https://github.com/mark-ik/retinue/blob/main/design_docs/2026-07-23_direct_phy_resource_acceptance.md)
 - Tulle/RNode headed receipt:
