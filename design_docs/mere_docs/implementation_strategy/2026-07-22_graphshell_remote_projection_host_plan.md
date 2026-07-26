@@ -569,6 +569,88 @@ reorganization.
 
 ## Findings
 
+### 2026-07-25: G5 readiness, measured — the identity substrate arrived from another lane
+
+Examined because the capability round wanted the projection endpoint to
+sub-delegate to a remote viewer, and that turned out to be blocked on
+Graphshell rather than on capabilities. Written against the tree, not against
+the plan's prose.
+
+**Correction to how this was being reasoned about.** Graphshell's skeleton was
+briefly read as settled shape — "no client identity, stdio only" stated as if
+it were a designed boundary. It is a young tree with holes, and holes do not
+fill themselves: nothing below happens because it is needed, only because it
+is planned and assigned. G5 exists in §8 and is unstarted; this entry makes it
+orderable.
+
+**What G5 needs that already exists** (more than expected — a windfall from
+the low-power lane, landed the same week):
+
+- `crates/system/network-policy` (V5/V6): a **bounded session handshake** that
+  is exactly G5's "bind Personae identity and a local grant to the session
+  handshake". The initiator signs a canonical transcript with a personae-derived
+  key attested to its master identity; the responder rebuilds the transcript
+  from what it independently observed, so a captured hello does not verify on
+  another connection. It carries a delegation-chain evaluator and a revocation
+  ledger. Sans-io by design, so it drops in above any carrier.
+- Its action vocabulary is **open**: `RequestedAction { domain, path, action }`
+  (`mere.network` / `/services/murm` / `connect` is only the first). A
+  Graphshell service is a new triple, not a change to that crate.
+- `murm-transport::P2pandaTransport` — `builder`/`bind`/`sync_parts` over Iroh,
+  i.e. G5's "promoted Murm transport", plus `ReticulumTransport` for the
+  constrained profile later.
+- The protocol already has §4.1's full status vocabulary:
+  `SessionStatus { Live, Stale, Disconnected, Expired, Revoked }`.
+- The capability round supplies the grant side: typed `Cap`, signed delegation,
+  read-time revocation.
+
+**What is genuinely absent** (verified by reading the crates):
+
+1. **Graphshell has no principal.** `ProjectionSession` is a `String` label and
+   `EndpointDescriptor` is `{label, projections}`. No subject, no grant
+   reference anywhere in `graphshell-protocol`, though §4.1 lists
+   "authenticated principal and grant reference" in the session plane's
+   *minimum* vocabulary.
+2. **`graphshell-client` holds no identity at all** — a grep for
+   identity/keypair/personae finds only `Transform2::IDENTITY`, a matrix
+   constant.
+3. **No session lifecycle on the wire.** `CarrierRequestBody` is
+   `{Discover, Snapshot, Resource, Resume, Intent}`; §4.1 requires open, close,
+   suspend, resume, resynchronize, and there is no authenticated *open* at all.
+4. **Stdio is the only carrier**, so "remote" is still aspirational and a
+   stdio viewer is a subprocess of the same user — least-privilege hygiene, not
+   a trust boundary.
+
+**Ordered work for G5, none of it assigned:**
+
+- **G5a — protocol.** Add the session plane's missing vocabulary: an
+  authenticated `Open` carrying principal + grant reference, plus close /
+  suspend / resynchronize. Must precede the carrier, because the carrier framing
+  is what the handshake binds to.
+  *Boundary rule:* the protocol crate should carry the principal and grant as
+  **opaque bytes**, never a `network-policy` or personae dependency. §3 sealed a
+  portable boundary; admission belongs to the endpoint/host crate. (The same
+  distinction gemot got wrong in prose — posture is about source, not the build
+  graph — so state it in the manifest comment when the dep lands.)
+- **G5b — identity.** Give the client and the endpoint personae identities.
+  There is a working pattern to copy rather than invent: merecat's projection
+  endpoint derives a per-session keypair from the profile identity
+  (`derive_keypair`, salt `merecat/projection-endpoint/<session>`) and holds a
+  delegation for it.
+- **G5c — admission.** Wire `network-policy`'s handshake as Graphshell's
+  session admission under a new action triple (`mere.graphshell` /
+  `/services/projection` / `connect`). This is the first real consumer of the
+  capability round outside merecat.
+- **G5d — carrier.** One full-peer carrier over `P2pandaTransport`.
+- **G5e — lifecycle.** Reconnect, expiry, revocation, cache purge, denied
+  score, stale intent, per G5's done-when.
+
+**Only after G5b+G5c does the capability round's deferred sub-delegation become
+buildable**: the endpoint's certificate goes to depth 1 and issues a narrower
+one to the viewer (read-only presentation of one scene). Recorded there as "one
+line when the viewer has a key"; the honest distance is this list.
+
+
 - `sceno::Representation` currently names a slot while `ProjectedItem` carries
   no presentation reference. That is the right portable posture, but a remote
   client needs the separate offer/resource resolution designed in section 4.3.
