@@ -896,6 +896,30 @@ of what is and is not established is
 `origin/main` agree, so the reticulum-feature arm builds from a clean
 checkout.
 
+### 2026-07-25 (evening) — V5 landed
+
+**V5 (Mere).** `crates/system/network-policy` exists (package
+`network-policy`, no prefix needed) with the planned vocabulary
+(`NetworkId`, `ProfileRef`, `LocalNetworkPolicy`, `SessionRequest`,
+`SessionDecision`, `DenyReason` + granular `ChainFault`, `TrafficClass`,
+`HandshakeLimits` with compile-time ceilings and a `clamped()`
+constructor), the personae adapter (`validate_chain`: signatures and
+attestations, trusted-root termination as an (authority, issuer) pair,
+link integrity, strict attenuation, ledger revocation with parent
+cascade, caller-clock validity, leaf-subject binding), and a local
+`RevocationLedger` that folds only verifiable statements and honors a
+revocation only from the certificate's own issuer. Evaluation follows the
+plan's order; transit is deliberately NOT a session decision
+(`permits_transit()` is a separate axis per D3/D7, and a session asking
+for the Transit class is refused as such). The full ten-case matrix
+passes as an integration test over real personae statements, plus
+determinism and ledger-abuse cases: 17 tests green, clippy and fmt clean,
+`cargo test -p personae` untouched and green. The first supported action
+is exactly the planned narrow one: `mere.network` / `/services/murm` /
+`connect`, with the leaf's scope resource required to equal the network
+id. Next slice: **V6** (the bounded handshake and one authorized Murm
+service over Memory and p2panda).
+
 ## Completion
 
 The round is complete when all of the following are true:

@@ -18,6 +18,7 @@ members = [
     "crates/system/content-contract",
     "crates/system/proofs",
     "crates/system/shell-state",
+    "crates/system/network-policy",
     "crates/system/registry/register-diagnostics",
     "crates/system/registry/register-input",
     "crates/system/registry/register-knowledge",
@@ -141,6 +142,7 @@ scenotime = { path = "crates/scenograph/scenotime" }
 # The remaining families absorbed 2026-07-23. Consumers keep using
 # `<dep>.workspace = true`, so only this block knows where each one lives.
 personae = { path = "crates/persona/personae" }
+network-policy = { path = "crates/system/network-policy" }
 codicil = { path = "crates/eidetic/codicil" }
 chartulary = { path = "crates/eidetic/chartulary" }
 scholia = { path = "crates/eidetic/scholia" }
