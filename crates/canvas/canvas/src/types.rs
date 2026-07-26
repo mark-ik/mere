@@ -65,6 +65,19 @@ pub struct Viewport {
     /// Inertial pan velocity (px/frame); per-view so one window's fling does not
     /// drift another window sharing the same canvas.
     pub pan_velocity: (f32, f32),
+    /// The view size (px) this camera was framed for.
+    ///
+    /// Carried so [`Canvas::set_viewport`](crate::Canvas::set_viewport) installs
+    /// the camera and its size together. A camera and the size it was framed for
+    /// are one fact: an offset means nothing without the viewport it centres. A
+    /// host swapping between two panes' viewports used to have to set the size
+    /// separately, and the only way to do that was
+    /// [`resize`](crate::Canvas::resize) — which RE-CENTRES, so the shift landed
+    /// on the freshly installed camera and, read back and stored, drifted it a
+    /// little every frame (merecat's lens walked both windows' graphs
+    /// off-screen this way, 2026-07-26). Setting them together makes that
+    /// unrepresentable.
+    pub view: (u32, u32),
 }
 
 /// A node's coarse activation state, for the canvas to color its on-screen

@@ -46,6 +46,7 @@ impl Canvas {
             yaw: self.camera.yaw,
             tilt: self.camera.tilt,
             pan_velocity: self.pan_velocity,
+            view: (self.view_w, self.view_h),
         }
     }
 
@@ -63,6 +64,12 @@ impl Canvas {
         self.camera.yaw = v.yaw;
         self.camera.tilt = v.tilt.clamp(0.05, 1.0);
         self.pan_velocity = v.pan_velocity;
+        // The size the camera was framed for, installed WITH it and without
+        // re-centring: this is a swap between views, not a resize of one. Use
+        // `resize` when a window actually changed size and the centre should
+        // hold; use this to install a pane's stashed viewport.
+        self.view_w = v.view.0.max(1);
+        self.view_h = v.view.1.max(1);
     }
 
     /// Toggle the isometric (foreshortened-ground) projection. `on` reclines the
@@ -212,5 +219,64 @@ impl Canvas {
             max.y = max.y.max(p.y);
         }
         Box2D::new(min, max)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::Canvas;
+
+    /// Swapping between two panes' viewports must move NEITHER camera, at any
+    /// size. The camera and the size it was framed for install together, so a
+    /// host never reaches for `resize` (which re-centres) to set the size of a
+    /// camera it is only borrowing.
+    ///
+    /// The regression: merecat's lens installed a camera and then resized to
+    /// the lens rect, so the re-centring shift landed on the borrowed camera,
+    /// was read back, and was stored. Both windows' graphs walked off-screen a
+    /// little per frame.
+    #[test]
+    fn swapping_viewports_between_sizes_moves_neither_camera() {
+        let mut canvas = Canvas::with_sample_graph();
+        canvas.resize(800, 600);
+        let primary = canvas.viewport();
+
+        // A second view at a different size, framed its own way.
+        canvas.resize(400, 900);
+        canvas.wheel(37.0, -11.0);
+        let lens = canvas.viewport();
+        assert_ne!(primary.view, lens.view, "the two views differ in size");
+
+        // Swap back and forth the way a two-window host does, many times.
+        for _ in 0..64 {
+            canvas.set_viewport(primary);
+            assert_eq!(canvas.viewport(), primary, "the primary is installed exactly");
+            canvas.set_viewport(lens);
+            assert_eq!(canvas.viewport(), lens, "the lens is installed exactly");
+        }
+
+        // Neither drifted, and each still carries its own size.
+        canvas.set_viewport(primary);
+        assert_eq!(canvas.viewport(), primary);
+        assert_eq!(primary.view, (800, 600));
+        assert_eq!(lens.view, (400, 900));
+    }
+
+    /// `resize` still re-centres: a genuine window resize holds whatever sits
+    /// at the middle. That behaviour is the reason the swap path had to stop
+    /// borrowing it, so pin it here beside its counterpart.
+    #[test]
+    fn resize_still_recentres() {
+        let mut canvas = Canvas::with_sample_graph();
+        canvas.resize(800, 600);
+        let before = canvas.viewport();
+        canvas.resize(1000, 600);
+        let after = canvas.viewport();
+        assert_eq!(
+            after.offset.0 - before.offset.0,
+            100.0,
+            "grew 200px wide, so the centre holds by shifting half that"
+        );
+        assert_eq!(after.view, (1000, 600));
     }
 }
