@@ -129,12 +129,16 @@ spine, which makes it the obvious wrong choice to reach for.
 
 Done-conditions, not dates.
 
-- **M0. The property test, against today's code.** Generate two authors'
-  edit sequences over one container, deliver them in every permutation, and
-  assert equal final graphs. Done when it **fails** on the Gap 1 collision,
-  because a merge rule whose test passes before the fix is not testing the
-  merge. This is the receipt that the collision is real rather than
-  theoretical.
+- **M0. Demonstrate the collision. DONE 2026-07-26.** Two receipts landed in
+  `chartulary::commit::tests`, both green, both documenting present behavior:
+  `two_offline_writers_mint_the_same_edge_id_for_different_edges` (two
+  partitioned replicas each mint `EdgeId(0)` for unrelated edges) and
+  `a_merged_journal_cannot_address_both_colliding_edges` (replaying both
+  journals gives a graph with **two edges and one addressable id**, so the
+  second edge is unreachable by any retraction). chartulary 42 -> 44 tests.
+  The collision is now measured rather than inferred from reading the mint.
+  When M1 lands, the first test flips to asserting the ids **differ** and the
+  second to two addressable keys.
 - **M1. Author-scoped `EdgeId`.** The type change, the mint, the snapshot
   field, and the single-writer migration. Done when M0's property test passes
   and chartulary's existing suite stays green.

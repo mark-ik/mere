@@ -268,6 +268,94 @@ mod tests {
         log
     }
 
+    /// M0 of the commons multi-writer convergence plan (mere design_docs,
+    /// 2026-07-26). `EdgeId` is minted from a per-log counter, which is correct
+    /// for the single-writer design G1 chose and collides the moment one
+    /// container has two writers.
+    ///
+    /// This is the receipt that the collision is real rather than inferred from
+    /// reading the mint. It documents present behavior; when M1 makes edge
+    /// identity `(author, counter)` this test flips to asserting the ids DIFFER.
+    #[test]
+    fn two_offline_writers_mint_the_same_edge_id_for_different_edges() {
+        let alice = Author::new("alice");
+        let bob = Author::new("bob");
+
+        // Two replicas of one container, edited while partitioned.
+        let mut a = GraphLog::<Container, Relation>::new();
+        a.insert_node(&alice, Container::new("a"));
+        a.insert_node(&alice, Container::new("b"));
+        let a_edge = a
+            .connect(&alice, &"a".to_string(), &"b".to_string(), cites())
+            .expect("alice connects her own pair");
+
+        let mut b = GraphLog::<Container, Relation>::new();
+        b.insert_node(&bob, Container::new("c"));
+        b.insert_node(&bob, Container::new("d"));
+        let b_edge = b
+            .connect(&bob, &"c".to_string(), &"d".to_string(), cites())
+            .expect("bob connects his own pair");
+
+        assert_eq!(
+            a_edge, b_edge,
+            "two writers mint one id for two different edges: the collision M1 fixes"
+        );
+    }
+
+    /// The consequence of the collision: merging both journals yields a graph
+    /// whose edges outnumber its addressable edge ids, so a retraction cannot
+    /// name which edge it retracts.
+    #[test]
+    fn a_merged_journal_cannot_address_both_colliding_edges() {
+        let alice = Author::new("alice");
+        let bob = Author::new("bob");
+
+        let mut a = GraphLog::<Container, Relation>::new();
+        a.insert_node(&alice, Container::new("a"));
+        a.insert_node(&alice, Container::new("b"));
+        let collided = a
+            .connect(&alice, &"a".to_string(), &"b".to_string(), cites())
+            .expect("alice connects");
+
+        let mut b = GraphLog::<Container, Relation>::new();
+        b.insert_node(&bob, Container::new("c"));
+        b.insert_node(&bob, Container::new("d"));
+        b.connect(&bob, &"c".to_string(), &"d".to_string(), cites())
+            .expect("bob connects");
+
+        // Merge: one journal carrying both writers' batches, in the deterministic
+        // order the replication layer would impose. Ids are carried in the
+        // `Connect` edits, so replay reuses them rather than re-minting.
+        let mut merged = codicil::Codicil::new();
+        for batch in a.log().entries().iter().chain(b.log().entries()) {
+            merged.append(batch.clone());
+        }
+        let merged = GraphLog::<Container, Relation>::replay(merged);
+
+        assert_eq!(
+            merged.graph().edge_count(),
+            2,
+            "both edges exist in the merged graph"
+        );
+        assert!(
+            merged.edge_key(collided).is_some(),
+            "the shared id resolves to one edge"
+        );
+
+        // The two distinct edges answer to one id, so one of them is unreachable
+        // by any retraction. That is the addressability loss no ordering rule can
+        // repair, which is why M1 changes the identity rather than the merge.
+        let addressable: std::collections::HashSet<_> = [EdgeId(0), EdgeId(1)]
+            .into_iter()
+            .filter_map(|id| merged.edge_key(id))
+            .collect();
+        assert_eq!(
+            addressable.len(),
+            1,
+            "two edges, one addressable key: the second is unreachable"
+        );
+    }
+
     #[test]
     fn stale_revision_is_refused_with_the_current_revision() {
         let mut log = seeded();
