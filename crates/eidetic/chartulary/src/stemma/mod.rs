@@ -108,6 +108,26 @@ pub enum EntryPrivacy {
     Serialize,
     Deserialize,
 )]
+/// How an owner *moved* to a visit: navigation vocabulary.
+///
+/// Generalizing this is the module doc's declared open decision. Two findings
+/// from 2026-07-26, weighing woodshed's practice history against this crate:
+///
+/// 1. **If it is generalized, make it a type parameter**, the first option the
+///    module doc lists — not an open `Open { kind: String }` tail. A parameter
+///    keeps `Copy`, `Hash`, and the rkyv derives per instantiation, which
+///    `AggregatedEntryEdgeView`'s `HashMap<TransitionKind, u64>` key and the
+///    `visit.inbound.map(|r| r.kind)` reads all rely on; a `String` variant
+///    costs every one of them. Mere's consumers would instantiate the browser
+///    vocabulary and read exactly as they do now.
+/// 2. **An app's engagement kinds are not a reason to do it.** These variants
+///    answer "how did you get here", and `eidetic-core` maps them one-to-one
+///    onto a browsing `TraceTransition`. Woodshed's previewed / staged /
+///    rehearsed / completed answer "what did you do with it", which is a
+///    different question — and the slot for it already exists: the generic
+///    per-visit `context: X` on [`VisitRecord`], typed, aggregated over
+///    [`Stemma::edge_views`] when the built-in per-kind counts do not fit. So
+///    that consumer pull does not reach this enum.
 pub enum TransitionKind {
     LinkClick,
     UrlTyped,
