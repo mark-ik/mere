@@ -3,6 +3,7 @@
 //! G1 adds a native semantic view over the portable client state. Networking,
 //! product models, and source authority remain injected at the edge.
 
+pub mod admission;
 pub mod canary;
 pub mod profile;
 pub mod resume;

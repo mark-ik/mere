@@ -714,10 +714,28 @@ the low-power lane, landed the same week):
   another master; an unopenable vault yields no identity. The attestation test
   is `expect`-hard on Windows rather than skippable, so "the proof verifies" is
   never reported without evidence. graphshell 14 tests.
-- **G5c — admission.** Wire `network-policy`'s handshake as Graphshell's
-  session admission under a new action triple (`mere.graphshell` /
-  `/services/projection` / `connect`). This is the first real consumer of the
-  capability round outside merecat.
+- **G5c — admission. LANDED 2026-07-25.** `ports/graphshell::admission`: the
+  triple `mere.graphshell` / `/services/projection` / `connect`, a
+  `PROJECTION_PROTOCOL` label that rides the signed transcript, `open_session`
+  (initiator) and `admit_session` (responder, returning the
+  `AdmittedPrincipal`). The first real consumer of the capability round outside
+  merecat, and it required **no change to `network-policy`'s vocabulary** —
+  adding a service really was a new triple, as its open `RequestedAction`
+  promised.
+  `open_session` returns a `SessionHello` rather than encoded bytes so it
+  composes with `network_policy::initiate_session` instead of standing up a
+  second encode path beside it — that crate already owns the framed stream
+  handshake (`initiate_session` / `accept_session`), which G5d builds on.
+  `admit_session` re-checks the action after admission: the policy already
+  evaluates it, so a mismatch means a hello admitted for another service
+  reached a Graphshell listener, and it is refused rather than served.
+  Receipts (graphshell 18): a granted viewer is admitted **and named** (the
+  principal is the peer the handshake established, not a claim); an ungranted
+  stranger is refused; **a Murm grant does not open projections** for the same
+  subject, which is the point of a per-service triple; and a captured hello
+  replayed onto a different connection fails, so admission is per-connection
+  rather than per-credential. `graphshell-client` and `graphshell-protocol`
+  still declare zero personae and zero network-policy dependencies.
 - **G5d — carrier.** One full-peer carrier over `P2pandaTransport`.
 - **G5e — lifecycle.** Reconnect, expiry, revocation, cache purge, denied
   score, stale intent, per G5's done-when.

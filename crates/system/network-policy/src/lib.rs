@@ -29,7 +29,9 @@ mod policy;
 mod types;
 
 pub use chain::{RevocationLedger, TrustedRoot, validate_chain};
-pub use handshake::{HandshakeError, SessionBinding, SessionHello, SessionReply, respond};
+pub use handshake::{
+    AdmittedPrincipal, HandshakeError, SessionBinding, SessionHello, SessionReply, admit, respond,
+};
 #[cfg(feature = "tokio")]
 pub use io::{IoHandshakeError, accept_session, initiate_session};
 pub use policy::{
