@@ -139,9 +139,27 @@ Done-conditions, not dates.
   The collision is now measured rather than inferred from reading the mint.
   When M1 lands, the first test flips to asserting the ids **differ** and the
   second to two addressable keys.
-- **M1. Author-scoped `EdgeId`.** The type change, the mint, the snapshot
-  field, and the single-writer migration. Done when M0's property test passes
-  and chartulary's existing suite stays green.
+- **M1. Writer-scoped `EdgeId`. DONE 2026-07-26, chartulary 0.2.0.**
+  `EdgeId { writer: WriterId, counter: u64 }`, where `WriterId([u8; 32])` is
+  opaque to chartulary and bound by the host to the replication identity.
+  `GraphLog::for_writer` declares which replica this is; a log left at
+  `WriterId::LOCAL` asserts it is the only writer, which every graph predating
+  multi-writer containers was.
+  - **The load-bearing half is the counter restore.** Replay advances
+    `next_edge` only past ids **this** writer minted, so replaying a peer's
+    journal cannot consume our range. Without that, the type change alone
+    would still collide after a merge;
+    `replaying_a_peers_edits_does_not_advance_our_counter` pins it.
+  - **0.1.x data still loads.** A hand-written `Deserialize` reads both the
+    bare integer 0.1.x wrote and the current struct, so an existing journal or
+    snapshot returns as the single-writer graph it always was. Verified by
+    `a_legacy_bare_counter_deserializes_as_a_local_id`. This needs a
+    self-describing format; every chartulary store in the tree is JSON, and a
+    postcard store would need its legacy data converted rather than sniffed.
+  - Receipts: chartulary 44 -> 46 tests, plus scholia 88 and mere-eidetic 5
+    green against the new type. The M0 receipts flipped from asserting the
+    collision to asserting distinct ids and two addressable edges, the same
+    tests now reading the fix.
 - **M2. The two stated rules.** Remove-wins tombstones and whole-node LWW
   under the section-1 order, each with a property test that pins the losing
   side rather than only asserting equality.

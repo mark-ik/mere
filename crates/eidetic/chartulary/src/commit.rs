@@ -201,7 +201,7 @@ where
                 EditSpec::InsertNode(node) => GraphEdit::InsertNode(node),
                 EditSpec::RemoveNode(id) => GraphEdit::RemoveNode(id),
                 EditSpec::Connect { from, to, edge } => {
-                    let id = EdgeId(self.next_edge);
+                    let id = EdgeId::new(self.writer, self.next_edge);
                     self.next_edge += 1;
                     minted.push(id);
                     GraphEdit::Connect { id, from, to, edge }
@@ -249,6 +249,7 @@ where
 mod tests {
     use super::*;
     use crate::container::{Container, Relation};
+    use crate::edit::WriterId;
     use crate::taxonomy::{Recognized, RelationClass};
     use muniment::{JsonSlots, MemoryBackend};
 
@@ -268,59 +269,63 @@ mod tests {
         log
     }
 
-    /// M0 of the commons multi-writer convergence plan (mere design_docs,
-    /// 2026-07-26). `EdgeId` is minted from a per-log counter, which is correct
-    /// for the single-writer design G1 chose and collides the moment one
-    /// container has two writers.
-    ///
-    /// This is the receipt that the collision is real rather than inferred from
-    /// reading the mint. It documents present behavior; when M1 makes edge
-    /// identity `(author, counter)` this test flips to asserting the ids DIFFER.
+    fn writer(tag: u8) -> WriterId {
+        WriterId([tag; 32])
+    }
+
+    /// M0/M1 of the commons multi-writer convergence plan (mere design_docs,
+    /// 2026-07-26). Through 0.1.x `EdgeId` was a bare per-log counter, so two
+    /// partitioned replicas both minted `EdgeId(0)` for unrelated edges. The
+    /// identity is now `(writer, counter)`, and this asserts the ids differ.
     #[test]
-    fn two_offline_writers_mint_the_same_edge_id_for_different_edges() {
+    fn two_offline_writers_mint_distinct_edge_ids() {
         let alice = Author::new("alice");
         let bob = Author::new("bob");
 
         // Two replicas of one container, edited while partitioned.
-        let mut a = GraphLog::<Container, Relation>::new();
+        let mut a = GraphLog::<Container, Relation>::new().for_writer(writer(0xa1));
         a.insert_node(&alice, Container::new("a"));
         a.insert_node(&alice, Container::new("b"));
         let a_edge = a
             .connect(&alice, &"a".to_string(), &"b".to_string(), cites())
             .expect("alice connects her own pair");
 
-        let mut b = GraphLog::<Container, Relation>::new();
+        let mut b = GraphLog::<Container, Relation>::new().for_writer(writer(0xb2));
         b.insert_node(&bob, Container::new("c"));
         b.insert_node(&bob, Container::new("d"));
         let b_edge = b
             .connect(&bob, &"c".to_string(), &"d".to_string(), cites())
             .expect("bob connects his own pair");
 
-        assert_eq!(
+        assert_ne!(
             a_edge, b_edge,
-            "two writers mint one id for two different edges: the collision M1 fixes"
+            "distinct replicas mint distinct ids for distinct edges"
+        );
+        assert_eq!(
+            a_edge.counter, b_edge.counter,
+            "the counters still collide; the writer half is what separates them"
         );
     }
 
-    /// The consequence of the collision: merging both journals yields a graph
-    /// whose edges outnumber its addressable edge ids, so a retraction cannot
-    /// name which edge it retracts.
+    /// The payoff: merging both journals leaves every edge addressable, so a
+    /// retraction names exactly one edge.
     #[test]
-    fn a_merged_journal_cannot_address_both_colliding_edges() {
+    fn a_merged_journal_addresses_both_writers_edges() {
         let alice = Author::new("alice");
         let bob = Author::new("bob");
 
-        let mut a = GraphLog::<Container, Relation>::new();
+        let mut a = GraphLog::<Container, Relation>::new().for_writer(writer(0xa1));
         a.insert_node(&alice, Container::new("a"));
         a.insert_node(&alice, Container::new("b"));
-        let collided = a
+        let a_edge = a
             .connect(&alice, &"a".to_string(), &"b".to_string(), cites())
             .expect("alice connects");
 
-        let mut b = GraphLog::<Container, Relation>::new();
+        let mut b = GraphLog::<Container, Relation>::new().for_writer(writer(0xb2));
         b.insert_node(&bob, Container::new("c"));
         b.insert_node(&bob, Container::new("d"));
-        b.connect(&bob, &"c".to_string(), &"d".to_string(), cites())
+        let b_edge = b
+            .connect(&bob, &"c".to_string(), &"d".to_string(), cites())
             .expect("bob connects");
 
         // Merge: one journal carrying both writers' batches, in the deterministic
@@ -332,28 +337,58 @@ mod tests {
         }
         let merged = GraphLog::<Container, Relation>::replay(merged);
 
-        assert_eq!(
-            merged.graph().edge_count(),
-            2,
-            "both edges exist in the merged graph"
-        );
-        assert!(
-            merged.edge_key(collided).is_some(),
-            "the shared id resolves to one edge"
-        );
+        assert_eq!(merged.graph().edge_count(), 2, "both edges survive the merge");
+        let a_key = merged.edge_key(a_edge).expect("alice's edge is addressable");
+        let b_key = merged.edge_key(b_edge).expect("bob's edge is addressable");
+        assert_ne!(a_key, b_key, "each id names a different edge");
+    }
 
-        // The two distinct edges answer to one id, so one of them is unreachable
-        // by any retraction. That is the addressability loss no ordering rule can
-        // repair, which is why M1 changes the identity rather than the merge.
-        let addressable: std::collections::HashSet<_> = [EdgeId(0), EdgeId(1)]
-            .into_iter()
-            .filter_map(|id| merged.edge_key(id))
-            .collect();
+    /// Replaying a peer's edits must not consume this replica's counter range,
+    /// or the next local mint would reuse an id the peer already used.
+    #[test]
+    fn replaying_a_peers_edits_does_not_advance_our_counter() {
+        let alice = Author::new("alice");
+        let bob = Author::new("bob");
+
+        let mut b = GraphLog::<Container, Relation>::new().for_writer(writer(0xb2));
+        b.insert_node(&bob, Container::new("c"));
+        b.insert_node(&bob, Container::new("d"));
+        for _ in 0..5 {
+            b.connect(&bob, &"c".to_string(), &"d".to_string(), cites())
+                .expect("bob connects repeatedly");
+        }
+
+        // Alice replays bob's whole journal, then mints her own edge.
+        let mut merged = codicil::Codicil::new();
+        for batch in b.log().entries() {
+            merged.append(batch.clone());
+        }
+        let mut a = GraphLog::<Container, Relation>::replay(merged).for_writer(writer(0xa1));
+        a.insert_node(&alice, Container::new("a"));
+        a.insert_node(&alice, Container::new("b"));
+        let a_edge = a
+            .connect(&alice, &"a".to_string(), &"b".to_string(), cites())
+            .expect("alice connects");
+
         assert_eq!(
-            addressable.len(),
-            1,
-            "two edges, one addressable key: the second is unreachable"
+            a_edge,
+            EdgeId::new(writer(0xa1), 0),
+            "alice starts her own range at zero, undisturbed by bob's five edges"
         );
+    }
+
+    /// A 0.1.x journal wrote `EdgeId` as a bare integer. Those stores still
+    /// load, as the single-writer graphs they always were.
+    #[test]
+    fn a_legacy_bare_counter_deserializes_as_a_local_id() {
+        let legacy: EdgeId = serde_json::from_str("7").expect("bare counter still reads");
+        assert_eq!(legacy, EdgeId::local(7));
+        assert!(legacy.writer.is_local());
+
+        let current: EdgeId =
+            serde_json::from_str(&serde_json::to_string(&EdgeId::new(writer(0xa1), 3)).unwrap())
+                .expect("current form round-trips");
+        assert_eq!(current, EdgeId::new(writer(0xa1), 3));
     }
 
     #[test]
@@ -486,7 +521,7 @@ mod tests {
             legacy.append(GraphEdit::InsertNode(Container::new("a")));
             legacy.append(GraphEdit::InsertNode(Container::new("b")));
             legacy.append(GraphEdit::Connect {
-                id: EdgeId(0),
+                id: EdgeId::local(0),
                 from: "a".to_string(),
                 to: "b".to_string(),
                 edge: cites(),

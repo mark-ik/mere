@@ -30,7 +30,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use crate::caps::Identified;
 use crate::commit::{Author, Batch, EditSpec};
-use crate::edit::{DerivationRecord, EdgeId, GraphEdit};
+use crate::edit::{DerivationRecord, EdgeId, GraphEdit, WriterId};
 use crate::graph::{EdgeKey, Graph, NodeKey};
 
 /// An event-sourced graph: a materialized [`Graph`] plus the [`Codicil`] of
@@ -41,6 +41,10 @@ pub struct GraphLog<N: Identified, E> {
     pub(crate) by_edge_id: HashMap<EdgeId, EdgeKey>,
     pub(crate) by_edge_key: HashMap<EdgeKey, EdgeId>,
     pub(crate) derivations: HashMap<N::Id, Vec<DerivationRecord<N::Id>>>,
+    /// This replica's identity, the writer half of every id it mints.
+    pub(crate) writer: WriterId,
+    /// This replica's own counter. Advanced only past ids **this** writer
+    /// minted, so replaying another replica's edits never consumes our range.
     pub(crate) next_edge: u64,
 }
 
@@ -54,6 +58,9 @@ struct Snapshot<N: Identified, E> {
     nodes: Vec<N>,
     edges: Vec<(EdgeId, N::Id, N::Id, E)>,
     derivations: Vec<(N::Id, DerivationRecord<N::Id>)>,
+    /// Absent in 0.1.x snapshots, which were single-writer.
+    #[serde(default)]
+    writer: WriterId,
     next_edge: u64,
     /// The number of log entries baked into this snapshot; replay resumes here.
     at_seq: u64,
@@ -67,6 +74,7 @@ impl<N: Identified, E> Default for GraphLog<N, E> {
             by_edge_id: HashMap::new(),
             by_edge_key: HashMap::new(),
             derivations: HashMap::new(),
+            writer: WriterId::LOCAL,
             next_edge: 0,
         }
     }
@@ -84,6 +92,22 @@ impl<N: Identified, E> GraphLog<N, E> {
         let mut this = Self::new();
         this.log = Codicil::with_id(id);
         this
+    }
+
+    /// Declare which replica this is, so the ids it mints cannot collide with
+    /// another replica's.
+    ///
+    /// Required for any container with more than one writer; a graph left at
+    /// [`WriterId::LOCAL`] is asserting it is the only one. Bind `writer` to
+    /// the replication identity, not to an [`Author`] label.
+    pub fn for_writer(mut self, writer: WriterId) -> Self {
+        self.writer = writer;
+        self
+    }
+
+    /// This replica's identity.
+    pub fn writer(&self) -> WriterId {
+        self.writer
     }
 
     /// The materialized graph (read-only; mutate through the edit methods).
@@ -152,8 +176,12 @@ impl<N: Identified + Clone, E: Clone> GraphLog<N, E> {
                     self.by_edge_key.insert(edge_key, *id);
                 }
                 // Advance past this id even on a dangling connect, so replay keeps
-                // assigning ids monotonically.
-                self.next_edge = self.next_edge.max(id.0 + 1);
+                // assigning ids monotonically. Only for ids THIS replica minted:
+                // replaying a peer's edits must not consume our counter range,
+                // which is what keeps two writers' ids disjoint after a merge.
+                if id.writer == self.writer {
+                    self.next_edge = self.next_edge.max(id.counter + 1);
+                }
             }
             GraphEdit::Disconnect(id) => {
                 if let Some(edge_key) = self.by_edge_id.remove(id) {
@@ -275,6 +303,7 @@ impl<N: Identified + Clone, E: Clone> GraphLog<N, E> {
         for (node, record) in snapshot.derivations {
             this.derivations.entry(node).or_default().push(record);
         }
+        this.writer = snapshot.writer;
         this.next_edge = snapshot.next_edge;
         (this, snapshot.at_seq)
     }
@@ -348,6 +377,7 @@ where
             nodes,
             edges,
             derivations,
+            writer: self.writer,
             next_edge: self.next_edge,
             at_seq: self.log.len() as u64,
         };
