@@ -472,6 +472,35 @@ Plan ordering is explicit:
 
 ## Findings
 
+### 2026-07-25: JoinedSpace landed; the seven ceremonies are one call
+
+Executes the (b) ruling below, same day. `murm_replication::JoinedSpace<E>` is
+generic over extensions only: the store and log-id types are erased at
+construction (the session is kept alive as an opaque `Send + Sync` box — the
+erasure murm hand-rolled is now the crate's implementation detail), so a
+holder names one type and the drop order (drain → stream handle → session
+actor) is fixed in one place instead of by field position at every site. The
+one cost of erasure: a store implementing `LogStore` for every log id cannot
+pin `L` by inference, so each call site carries one turbofish
+(`JoinedSpace::join::<_, u64, _, _>`).
+
+All seven call sites migrated. mesh's `SyncedMesh` collapsed three
+drop-order-sensitive fields into one and publishes through
+`JoinedSpace::publish`; murm's `SyncedCabal` deleted its `Box<dyn Any>`
+keepalive and holds `Option<JoinedSpace<CabalExt>>` (the no-transport mode
+composes as ruled); gemot's four lane proofs and the `moot-peer` example each
+collapsed to one call. The done-condition recorded with the ruling is met:
+`LogSync` / `SyncHandle` / `TopicLogSyncEvent` imports are gone from every
+consumer, mesh and murm are down to the `Endpoint` + `Gossip` pass-through
+values their join signatures carry, and gemot's constitution and delegation
+proofs import no p2panda crate at all.
+
+**Receipts:** 228 tests green across the four crates — murm-replication 40,
+gemot 102 (including the four two-peer convergence proofs over live
+loopback), mesh 29 (both two-peer network tests), murm 57. `cargo fmt` clean
+(the pass also normalized pre-existing unformatted hunks in five gemot files
+from the concurrent commons-capability work; verified format-only).
+
 ### 2026-07-25: the reusable runtime service needs a ruling on who owns transport
 
 Surveyed toward Phase B's remaining "reusable multi-domain service API". Three

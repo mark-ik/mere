@@ -1,0 +1,145 @@
+//! The join ceremony over [`SyncedSpace`], owned once.
+//!
+//! Every LogSync consumer used to hand-write the same sequence: build the
+//! session over its store, open a live stream on its topic, subscribe, hand
+//! the subscription to [`SyncedSpace::drive`], then keep the session and
+//! stream handle alive in drop-order-sensitive fields. Seven copies existed
+//! (mesh, murm, gemot's four lane proofs plus its example) and the
+//! domain-specific part was three values: the store, the topic, and the
+//! `accept` closure. [`JoinedSpace`] is that ceremony as one call.
+//!
+//! ## Type shape
+//!
+//! Generic over the extensions `E` only. The store and log-id types are
+//! erased at construction (the session is kept alive as an opaque box), so a
+//! holder names one type — `JoinedSpace<CabalExt>` — instead of the full
+//! `LogSync<Store, LogId, Ext>` triple, and stays `Send + Sync` without
+//! hand-rolled keepalive erasure. The cost is that `L` cannot be inferred
+//! from a store that implements `LogStore` for every log id (muniment's
+//! does), so a call site pins it: `JoinedSpace::join::<_, u64, _, _>(…)`.
+//!
+//! ## Ownership and drop order
+//!
+//! Dropping a `JoinedSpace` aborts the drain task first, then closes the
+//! stream handle, then stops the session actor — the ordering every copy had
+//! to get right by field position is now fixed here once.
+
+use std::fmt::Debug;
+use std::future::Future;
+
+use p2panda_core::{Extensions, Hash, LogId, Operation, SeqNum, Topic, VerifyingKey};
+use p2panda_net::sync::SyncHandle;
+use p2panda_net::{Endpoint, Gossip, LogSync};
+use p2panda_store::logs::LogStore;
+use p2panda_store::topics::TopicStore;
+use p2panda_sync::protocols::TopicLogSyncEvent;
+
+use crate::synced_space::{SyncRound, SyncStatus, SyncedSpace};
+
+/// A join failure, staged: session spawn, stream open, subscription, or a
+/// later live publish. Sources are formatted to strings at the boundary so
+/// the error stays free of p2panda's generic parameters.
+#[derive(Debug, thiserror::Error)]
+pub enum JoinError {
+    #[error("logsync spawn: {0}")]
+    Spawn(String),
+    #[error("logsync stream: {0}")]
+    Stream(String),
+    #[error("logsync subscribe: {0}")]
+    Subscribe(String),
+    #[error("publish: {0}")]
+    Publish(String),
+}
+
+/// A joined reconciling-log session: the LogSync session, its live stream
+/// handle, and the [`SyncedSpace`] drain, held together with the correct
+/// drop order.
+pub struct JoinedSpace<E>
+where
+    E: Extensions + Send + 'static,
+{
+    /// Dropped first: aborts the drain task before the session ends.
+    space: SyncedSpace,
+    handle: SyncHandle<Operation<E>, TopicLogSyncEvent<E>>,
+    /// Keeps the session actor alive; store and log-id types erased.
+    _log_sync: Box<dyn std::any::Any + Send + Sync>,
+}
+
+impl<E> JoinedSpace<E>
+where
+    E: Extensions + Send + 'static,
+{
+    /// Join a topic's LogSync session over `store`, in live mode, draining
+    /// received operations into `accept`.
+    ///
+    /// `accept` returns whether the operation counted (verified and new); a
+    /// synchronous consumer hands back [`std::future::ready`]. `endpoint` +
+    /// `gossip` come from the host transport's `sync_parts`.
+    pub async fn join<S, L, A, Fut>(
+        store: S,
+        endpoint: Endpoint,
+        gossip: Gossip,
+        topic: Topic,
+        accept: A,
+    ) -> Result<Self, JoinError>
+    where
+        S: LogStore<Operation<E>, VerifyingKey, L, SeqNum, Hash>
+            + TopicStore<Topic, VerifyingKey, L>
+            + Clone
+            + Send
+            + Sync
+            + 'static,
+        L: LogId + Debug + Send + Sync + 'static,
+        A: FnMut(Operation<E>) -> Fut + Send + 'static,
+        Fut: Future<Output = bool> + Send,
+    {
+        let log_sync = LogSync::<S, L, E>::builder(store, endpoint, gossip)
+            .spawn()
+            .await
+            .map_err(|e| JoinError::Spawn(e.to_string()))?;
+        let handle = log_sync
+            .stream(topic, true)
+            .await
+            .map_err(|e| JoinError::Stream(e.to_string()))?;
+        let sub = handle
+            .subscribe()
+            .await
+            .map_err(|e| JoinError::Subscribe(e.to_string()))?;
+        let space = SyncedSpace::drive(sub, accept);
+        Ok(Self {
+            space,
+            handle,
+            _log_sync: Box::new(log_sync),
+        })
+    }
+
+    /// Push a newly authored operation onto the live lane so connected peers
+    /// receive it without waiting for a reconciliation round.
+    pub fn publish(&self, operation: Operation<E>) -> Result<(), JoinError> {
+        self.handle
+            .publish(operation)
+            .map_err(|e| JoinError::Publish(e.to_string()))
+    }
+
+    /// The drain, for callers composing their own status across a second
+    /// lane (murm's gossip counters, say).
+    pub fn space(&self) -> &SyncedSpace {
+        &self.space
+    }
+
+    /// A snapshot of this session's sync activity.
+    pub fn sync_status(&self) -> SyncStatus {
+        self.space.sync_status()
+    }
+
+    /// The running accepted-operation count.
+    pub fn ops_received(&self) -> u64 {
+        self.space.ops_received()
+    }
+
+    /// Run a manual "sync now" checkpoint and report what arrived. Delegates
+    /// to the drain's settle-based checkpoint.
+    pub async fn resync(&self) -> SyncRound {
+        self.space.resync().await
+    }
+}

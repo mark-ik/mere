@@ -13,11 +13,11 @@
 //! operation onto the live lane so connected peers see it now. RBSR covers
 //! whoever was away.
 //!
-//! The drain half (the loop, the [`SyncStatus`] counters, `resync`, the
-//! task lifetime) is [`murm_replication::SyncedSpace`], shared with murm's cabal
-//! sync. This module keeps only the mesh-specific parts: building the session
-//! over the [`MeshStore`], the domain admission policy and addressed-mesh
-//! guard, the authoring path, and the [`JobBoard`] fold.
+//! The join ceremony and drain (session + live lane + loop, the
+//! [`SyncStatus`] counters, `resync`, the task lifetimes) are
+//! [`murm_replication::JoinedSpace`], shared with murm's cabal sync. This
+//! module keeps only the mesh-specific parts: the domain admission policy and
+//! addressed-mesh guard, the authoring path, and the [`JobBoard`] fold.
 //!
 //! It is **endpoint-decoupled**: `join` takes the raw p2panda-net [`Endpoint`]
 //! + [`Gossip`] (the host pulls them from its `P2pandaTransport` via
@@ -27,11 +27,9 @@
 
 use identity::Ed25519Keypair;
 use muniment::Backend;
-use murm_replication::{MunimentStore, SyncedSpace};
+use murm_replication::JoinedSpace;
 use p2panda_core::{Operation, SigningKey, Topic};
-use p2panda_net::sync::SyncHandle;
-use p2panda_net::{Endpoint, Gossip, LogSync};
-use p2panda_sync::protocols::TopicLogSyncEvent;
+use p2panda_net::{Endpoint, Gossip};
 
 use crate::board::JobBoard;
 use crate::retention::RetentionCheckpoint;
@@ -41,12 +39,6 @@ use crate::wire::{MeshEvent, MeshExt, MeshLogId, to_operation, to_prune_operatio
 // The shared drain's status + checkpoint types are re-exported so the mesh
 // public surface (`mesh::SyncStatus` / `mesh::SyncRound`) stays stable.
 pub use murm_replication::{SyncRound, SyncStatus};
-
-/// The mesh's LogSync session type: the muniment-backed store, one log per
-/// author per mesh (the log id is the mesh id), mesh extensions on every
-/// operation.
-type MeshLogSync<B> = LogSync<MunimentStore<B, MeshExt>, MeshLogId, MeshExt>;
-type MeshSyncHandle = SyncHandle<Operation<MeshExt>, TopicLogSyncEvent<MeshExt>>;
 
 /// A mesh sync failure (LogSync session setup, publish, or the store).
 #[derive(Debug, thiserror::Error)]
@@ -65,14 +57,10 @@ pub enum MeshSyncError {
 pub struct SyncedMesh<B: Backend + Clone + Send + 'static> {
     store: MeshStore<B>,
     mesh_id: [u8; 32],
-    /// The shared LogSync drain: reconciled operations flow through the
-    /// `accept` closure below into the store. Dropped first (aborts the task).
-    space: SyncedSpace,
-    /// The live lane: newly authored operations are pushed here so connected
-    /// peers receive them without waiting for a reconciliation round.
-    handle: MeshSyncHandle,
-    /// Keeps the session actor alive; dropped with the struct (ends the session).
-    _log_sync: MeshLogSync<B>,
+    /// The joined LogSync session (session + live lane + drain, drop-ordered):
+    /// reconciled operations flow through the `accept` closure below into the
+    /// store, and authored operations publish onto the live lane.
+    joined: JoinedSpace<MeshExt>,
 }
 
 impl<B: Backend + Clone + Send + Sync + 'static> SyncedMesh<B> {
@@ -89,34 +77,27 @@ impl<B: Backend + Clone + Send + Sync + 'static> SyncedMesh<B> {
         store: MeshStore<B>,
         mesh_id: [u8; 32],
     ) -> Result<Self, MeshSyncError> {
-        let log_sync = MeshLogSync::builder(store.sync_store(), endpoint, gossip)
-            .spawn()
-            .await
-            .map_err(|e| MeshSyncError::Backend(format!("logsync spawn: {e}")))?;
-        let handle = log_sync
-            .stream(Topic::from(mesh_id), true)
-            .await
-            .map_err(|e| MeshSyncError::Backend(format!("logsync stream: {e}")))?;
-        let sub = handle
-            .subscribe()
-            .await
-            .map_err(|e| MeshSyncError::Backend(format!("logsync subscribe: {e}")))?;
-
         // Remote receipt and local authoring use the same shared processor.
         // `accept` counts an operation only when policy admits it and the atomic
         // indexed write reports it as new.
         let accept_store = store.clone();
-        let space = SyncedSpace::drive(sub, move |op: Operation<MeshExt>| {
-            let store = accept_store.clone();
-            async move { matches!(store.accept(mesh_id, &op).await, Ok(true)) }
-        });
+        let joined = JoinedSpace::join::<_, MeshLogId, _, _>(
+            store.sync_store(),
+            endpoint,
+            gossip,
+            Topic::from(mesh_id),
+            move |op: Operation<MeshExt>| {
+                let store = accept_store.clone();
+                async move { matches!(store.accept(mesh_id, &op).await, Ok(true)) }
+            },
+        )
+        .await
+        .map_err(|e| MeshSyncError::Backend(e.to_string()))?;
 
         Ok(Self {
             store,
             mesh_id,
-            space,
-            handle,
-            _log_sync: log_sync,
+            joined,
         })
     }
 
@@ -180,9 +161,9 @@ impl<B: Backend + Clone + Send + Sync + 'static> SyncedMesh<B> {
                 "authored operation was already present".into(),
             ));
         }
-        self.handle
+        self.joined
             .publish(op.clone())
-            .map_err(|e| MeshSyncError::Backend(format!("publish: {e}")))?;
+            .map_err(|e| MeshSyncError::Backend(e.to_string()))?;
         Ok(op)
     }
 
@@ -237,7 +218,7 @@ impl<B: Backend + Clone + Send + Sync + 'static> SyncedMesh<B> {
     /// whether a round is in progress, rounds finished, operations received,
     /// and when activity last happened.
     pub fn sync_status(&self) -> SyncStatus {
-        self.space.sync_status()
+        self.joined.sync_status()
     }
 
     /// Run a manual "sync now" checkpoint and report what arrived. Delegates to
@@ -246,7 +227,7 @@ impl<B: Backend + Clone + Send + Sync + 'static> SyncedMesh<B> {
     /// the live session until it goes quiet and returns the real count of
     /// operations that landed during the window. A quiet mesh reports `0` fast.
     pub async fn resync(&self) -> Result<SyncRound, MeshSyncError> {
-        Ok(self.space.resync().await)
+        Ok(self.joined.resync().await)
     }
 }
 

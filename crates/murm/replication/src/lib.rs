@@ -1,15 +1,16 @@
 //! Shared replicated-space mechanics for the Murm peer-exchange family.
 //!
-//! This crate owns the reusable p2panda receive drain, the muniment-backed
-//! operation store, and the policy-before-insert processor. Direct exchange,
-//! Moot, mesh, and other domains keep their operation grammar, authorization,
-//! and deterministic materialization.
+//! This crate owns the reusable p2panda receive drain and its join ceremony,
+//! the muniment-backed operation store, and the policy-before-insert
+//! processor. Direct exchange, Moot, mesh, and other domains keep their
+//! operation grammar, authorization, and deterministic materialization.
 
 #![doc(html_root_url = "https://docs.rs/murm-replication/0.0.1")]
 
 mod authority;
 pub mod drop;
 mod drop_io;
+mod joined_space;
 mod processor;
 #[cfg(test)]
 mod prune_proof;
@@ -33,6 +34,7 @@ pub use drop_io::{
     local_drop_receipt, operation_record, peer_drop_receipt, resume_staged_drop,
     store_peer_drop_receipt,
 };
+pub use joined_space::{JoinError, JoinedSpace};
 pub use processor::{
     Admission, HistoryAction, OperationPolicy, OperationProcessor, ProcessError, ProcessOutcome,
     Reject, StoreTarget,
