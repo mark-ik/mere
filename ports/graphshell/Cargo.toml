@@ -12,6 +12,9 @@ graphshell-client = { path = "../../crates/graphshell/graphshell-client" }
 graphshell-endpoint = { path = "../../crates/graphshell/graphshell-endpoint" }
 graphshell-protocol = { path = "../../crates/graphshell/graphshell-protocol" }
 graphshell-stdio = { path = "../../crates/graphshell/graphshell-stdio" }
+# The application composes Personae (section 3): the profile Graphshell
+# speaks as. The protocol and client crates deliberately do NOT depend on it.
+personae.workspace = true
 sceno.workspace = true
 scenotime.workspace = true
 serde_json.workspace = true

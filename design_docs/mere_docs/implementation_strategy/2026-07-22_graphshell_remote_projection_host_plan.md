@@ -692,11 +692,28 @@ the low-power lane, landed the same week):
   portable boundary; admission belongs to the endpoint/host crate. (The same
   distinction gemot got wrong in prose — posture is about source, not the build
   graph — so state it in the manifest comment when the dep lands.)
-- **G5b — identity.** Give the client and the endpoint personae identities.
-  There is a working pattern to copy rather than invent: merecat's projection
-  endpoint derives a per-session keypair from the profile identity
-  (`derive_keypair`, salt `merecat/projection-endpoint/<session>`) and holds a
-  delegation for it.
+- **G5b — identity. LANDED 2026-07-25.** `ports/graphshell::profile`:
+  `GraphshellIdentity` loads a **user-selected** profile
+  (`GRAPHSHELL_PROFILE`, defaulting to `default` — the profile the Personae
+  SSH agent serves, so Graphshell speaks as the user rather than as a second
+  identity minted behind their back) from the shared vault. `graphshell-client`
+  and `graphshell-protocol` still declare **zero** personae dependencies, per
+  §3; the application composes identity, the protocol crates never see it.
+  **It fails closed, deliberately unlike Merecat.** Merecat falls back to an
+  unsealed seed because a browser refusing to start over a key store is worse
+  than one that says what protects its key. Graphshell must not copy that: it
+  serves peers who *pin* the key they reached, so an invented identity is
+  indistinguishable from an impostor. A vault that will not open is an error.
+  **The endpoint-key proof** replaces the `endpoint_subject` field G5a.1
+  deleted: `attest_session_key` returns a master-signed
+  `DerivedKeyAttestation` binding a per-session derived key to the profile, and
+  `verify_session_key` checks it against a master **the carrier authenticated**
+  — never one from the same frame, or an impostor supplies both halves and they
+  agree with each other. Receipts: a session key derives stably and differs per
+  session; its proof verifies, and fails for another session and against
+  another master; an unopenable vault yields no identity. The attestation test
+  is `expect`-hard on Windows rather than skippable, so "the proof verifies" is
+  never reported without evidence. graphshell 14 tests.
 - **G5c — admission.** Wire `network-policy`'s handshake as Graphshell's
   session admission under a new action triple (`mere.graphshell` /
   `/services/projection` / `connect`). This is the first real consumer of the

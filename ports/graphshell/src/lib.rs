@@ -4,6 +4,7 @@
 //! product models, and source authority remain injected at the edge.
 
 pub mod canary;
+pub mod profile;
 pub mod resume;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod sessions;
