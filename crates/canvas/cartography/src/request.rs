@@ -85,8 +85,10 @@ pub enum FormFactor {
     /// Default: a full-size graph view (orrery root, workbench tile).
     #[default]
     Canvas,
-    /// The orrery (t1 root view) — special-cased so strategies can
-    /// emphasize map-shape over network-shape.
+    /// The cosmos form: a whole mere seen at once, special-cased so
+    /// strategies can emphasize map-shape over network-shape. See lexicon:
+    /// *orrery* (a form factor, narrowed 2026-07-26; the tier-1 sense it used
+    /// to carry is now *your root mere*).
     Orrery,
     /// Expanded-moot radial form. See lexicon: *volvelle*.
     Volvelle,
