@@ -26,7 +26,7 @@
 //! This is the same "recorded fact versus derived state" split the statement
 //! kernel brief draws: the log accumulates, the graph is recomputed.
 
-use chartulary::{Batch, Container, GraphLog, Relation, WriterId};
+use chartulary::{Batch, Container, GraphEdit, GraphLog, Relation, WriterId};
 use codicil::Codicil;
 use muniment::Backend;
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
@@ -34,8 +34,10 @@ use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Topic, VerifyingKe
 use p2panda_store::logs::LogStore;
 use p2panda_store::topics::TopicStore;
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, BTreeSet};
 use stickleback::{
-    Admission, MunimentStore, OperationPolicy, OperationProcessor, Reject, StoreTarget,
+    Admission, MunimentStore, OperationPolicy, OperationProcessor, ProcessError, Reject,
+    StoreTarget,
 };
 
 /// One log per author. The commons has no second log class (no separate
@@ -52,12 +54,28 @@ pub struct CommonsExt {
 /// A chartulary journal batch, the unit that rides the lane.
 pub type CommonsBatch = Batch<Container, Relation>;
 
+/// One recorded commons fact.
+///
+/// `parents` is the exact operation frontier the writer had observed before
+/// authoring this batch. Per-author backlinks still order a writer's own log;
+/// these cross-author parents preserve happens-before across writers. A
+/// deterministic key order is used only between records that are truly
+/// concurrent.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CommonsRecord {
+    /// The graph edit batch.
+    pub batch: CommonsBatch,
+    /// Operation ids at the observed per-author frontier.
+    #[serde(default)]
+    pub parents: Vec<[u8; 32]>,
+}
+
 /// A malformed commons operation.
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum WireError {
     #[error("commons operation has no body")]
     MissingBody,
-    #[error("commons operation body is not a batch")]
+    #[error("commons operation body is not a record")]
     Malformed,
 }
 
@@ -67,11 +85,16 @@ pub fn to_operation(
     signing_seed: [u8; 32],
     container: [u8; 32],
     batch: &CommonsBatch,
+    parents: Vec<[u8; 32]>,
     seq_num: u32,
     backlink: Option<[u8; 32]>,
 ) -> Operation<CommonsExt> {
     let signing_key = SigningKey::from_bytes(&signing_seed);
-    let body_bytes = encode_cbor(batch).expect("a chartulary batch always CBOR-encodes");
+    let record = CommonsRecord {
+        batch: batch.clone(),
+        parents,
+    };
+    let body_bytes = encode_cbor(&record).expect("a commons record always CBOR-encodes");
     let body = Body::new(&body_bytes);
     let mut header = Header {
         version: 1,
@@ -92,10 +115,38 @@ pub fn to_operation(
     }
 }
 
-/// Decode the batch carried by an operation. Does not check the signature.
-pub fn from_operation(op: &Operation<CommonsExt>) -> Result<CommonsBatch, WireError> {
+/// Decode the record carried by an operation. Does not check the signature.
+pub fn from_operation(op: &Operation<CommonsExt>) -> Result<CommonsRecord, WireError> {
     let body = op.body.as_ref().ok_or(WireError::MissingBody)?;
     decode_cbor(body.to_bytes().as_slice()).map_err(|_| WireError::Malformed)
+}
+
+fn record_connect_counters(
+    record: &CommonsRecord,
+    writer: WriterId,
+) -> Result<Vec<u64>, Reject> {
+    let mut counters = Vec::new();
+    for edit in &record.batch.edits {
+        if let GraphEdit::Connect { id, .. } = edit {
+            if id.writer != writer {
+                return Err(Reject::new(
+                    "edge-writer-mismatch",
+                    "a connect id is not scoped to the operation signer",
+                ));
+            }
+            counters.push(id.counter);
+        }
+    }
+    if counters
+        .windows(2)
+        .any(|pair| pair[0].checked_add(1) != Some(pair[1]))
+    {
+        return Err(Reject::new(
+            "edge-counter-sequence",
+            "connect counters inside one batch are not contiguous",
+        ));
+    }
+    Ok(counters)
 }
 
 /// Admission for the commons lane: the operation must address this container,
@@ -123,8 +174,10 @@ impl OperationPolicy<CommonsExt> for CommonsPolicy {
                 "operation signature is invalid",
             ));
         }
-        from_operation(operation)
+        let record = from_operation(operation)
             .map_err(|err| Reject::new("invalid-commons-batch", err.to_string()))?;
+        let writer = WriterId(*operation.header.verifying_key.as_bytes());
+        record_connect_counters(&record, writer)?;
         Ok(Admission::keep(StoreTarget::new(
             Topic::from(self.container),
             COMMONS_LOG,
@@ -139,6 +192,195 @@ pub enum MaterializeError {
     Store(#[from] muniment::StoreError),
     #[error(transparent)]
     Wire(#[from] WireError),
+    #[error(
+        "commons operation {operation} depends on missing operation {parent}"
+    )]
+    MissingCausalParent {
+        operation: String,
+        parent: String,
+    },
+    #[error("commons operation dependencies contain a cycle")]
+    CausalCycle,
+}
+
+#[derive(Clone)]
+struct StoredRecord {
+    operation: Operation<CommonsExt>,
+    record: CommonsRecord,
+    log_id: u64,
+}
+
+async fn load_records<B: Backend + Clone + Send + Sync + 'static>(
+    store: &MunimentStore<B, CommonsExt>,
+    container: [u8; 32],
+) -> Result<Vec<StoredRecord>, MaterializeError> {
+    let by_author: BTreeMap<VerifyingKey, Vec<u64>> =
+        TopicStore::<Topic, VerifyingKey, u64>::resolve(store, &Topic::from(container)).await?;
+    let mut records = Vec::new();
+    for (author, mut logs) in by_author {
+        logs.sort_unstable();
+        logs.dedup();
+        for log_id in logs {
+            let entries =
+                LogStore::<Operation<CommonsExt>, VerifyingKey, u64, u32, Hash>::get_log_entries(
+                    store, &author, &log_id, None, None,
+                )
+                .await?
+                .unwrap_or_default();
+            for (operation, _header_bytes) in entries {
+                let record = from_operation(&operation)?;
+                records.push(StoredRecord {
+                    operation,
+                    record,
+                    log_id,
+                });
+            }
+        }
+    }
+    Ok(records)
+}
+
+fn sort_key(record: &StoredRecord, index: usize) -> (VerifyingKey, u64, u32, [u8; 32], usize) {
+    (
+        record.operation.header.verifying_key,
+        record.log_id,
+        record.operation.header.seq_num,
+        *record.operation.hash.as_bytes(),
+        index,
+    )
+}
+
+fn causal_journal(
+    records: &[StoredRecord],
+) -> Result<Codicil<CommonsBatch>, MaterializeError> {
+    let mut by_hash = BTreeMap::new();
+    for (index, record) in records.iter().enumerate() {
+        by_hash.insert(*record.operation.hash.as_bytes(), index);
+    }
+
+    let mut indegree = vec![0usize; records.len()];
+    let mut dependents = vec![Vec::new(); records.len()];
+    for (index, record) in records.iter().enumerate() {
+        let mut dependencies = BTreeSet::new();
+        if let Some(backlink) = record.operation.header.backlink.as_ref() {
+            dependencies.insert(*backlink.as_bytes());
+        }
+        dependencies.extend(record.record.parents.iter().copied());
+        for dependency in dependencies {
+            let Some(parent_index) = by_hash.get(&dependency).copied() else {
+                return Err(MaterializeError::MissingCausalParent {
+                    operation: record.operation.hash.to_hex(),
+                    parent: Hash::from(dependency).to_hex(),
+                });
+            };
+            indegree[index] += 1;
+            dependents[parent_index].push(index);
+        }
+    }
+
+    let mut ready = BTreeSet::new();
+    for (index, record) in records.iter().enumerate() {
+        if indegree[index] == 0 {
+            ready.insert(sort_key(record, index));
+        }
+    }
+
+    let mut journal = Codicil::new();
+    while let Some(key) = ready.pop_first() {
+        let index = key.4;
+        journal.append(records[index].record.batch.clone());
+        for dependent in dependents[index].iter().copied() {
+            indegree[dependent] -= 1;
+            if indegree[dependent] == 0 {
+                ready.insert(sort_key(&records[dependent], dependent));
+            }
+        }
+    }
+    if journal.len() != records.len() {
+        return Err(MaterializeError::CausalCycle);
+    }
+    Ok(journal)
+}
+
+fn observed_frontier(records: &[StoredRecord]) -> Vec<[u8; 32]> {
+    let mut heads: BTreeMap<(VerifyingKey, u64), (u32, [u8; 32])> = BTreeMap::new();
+    for record in records {
+        let key = (record.operation.header.verifying_key, record.log_id);
+        let candidate = (
+            record.operation.header.seq_num,
+            *record.operation.hash.as_bytes(),
+        );
+        if heads.get(&key).is_none_or(|current| candidate.0 > current.0) {
+            heads.insert(key, candidate);
+        }
+    }
+    heads.into_values().map(|(_, hash)| hash).collect()
+}
+
+fn author_head(
+    records: &[StoredRecord],
+    author: VerifyingKey,
+) -> (u32, Option<[u8; 32]>) {
+    records
+        .iter()
+        .filter(|record| {
+            record.operation.header.verifying_key == author && record.log_id == COMMONS_LOG
+        })
+        .max_by_key(|record| record.operation.header.seq_num)
+        .map(|record| {
+            (
+                record.operation.header.seq_num + 1,
+                Some(*record.operation.hash.as_bytes()),
+            )
+        })
+        .unwrap_or((0, None))
+}
+
+async fn validate_counter_frontier<B: Backend + Clone + Send + Sync + 'static>(
+    store: &MunimentStore<B, CommonsExt>,
+    operation: &Operation<CommonsExt>,
+    record: &CommonsRecord,
+) -> Result<(), ProcessError> {
+    if store.has_operation(&operation.hash).await? {
+        return Ok(());
+    }
+    let writer = WriterId(*operation.header.verifying_key.as_bytes());
+    let counters = record_connect_counters(record, writer)?;
+    if counters.is_empty() {
+        return Ok(());
+    }
+
+    let entries =
+        LogStore::<Operation<CommonsExt>, VerifyingKey, u64, u32, Hash>::get_log_entries(
+            store,
+            &operation.header.verifying_key,
+            &COMMONS_LOG,
+            None,
+            None,
+        )
+        .await?
+        .unwrap_or_default();
+    let mut next = 0u64;
+    for (stored, _header_bytes) in entries {
+        let stored_record = from_operation(&stored)
+            .map_err(|err| Reject::new("invalid-stored-commons-batch", err.to_string()))?;
+        for counter in record_connect_counters(&stored_record, writer)? {
+            next = next.max(counter.saturating_add(1));
+        }
+    }
+    for counter in counters {
+        if counter != next {
+            return Err(Reject::new(
+                "edge-counter-frontier",
+                format!("connect counter {counter} does not continue frontier {next}"),
+            )
+            .into());
+        }
+        next = next
+            .checked_add(1)
+            .ok_or_else(|| Reject::new("edge-counter-exhausted", "edge counter exhausted"))?;
+    }
+    Ok(())
 }
 
 /// Validate and store one operation against `container`'s policy.
@@ -151,6 +393,10 @@ pub async fn accept_into<B: Backend + Clone + Send + Sync + 'static>(
     op: &Operation<CommonsExt>,
 ) -> Result<bool, stickleback::ProcessError> {
     let processor = OperationProcessor::new(store.clone(), CommonsPolicy { container });
+    processor.preflight(op)?;
+    let record = from_operation(op)
+        .map_err(|err| Reject::new("invalid-commons-batch", err.to_string()))?;
+    validate_counter_frontier(store, op, &record).await?;
     Ok(processor.process(op).await?.inserted())
 }
 
@@ -164,32 +410,19 @@ pub async fn materialize<B: Backend + Clone + Send + Sync + 'static>(
     store: &MunimentStore<B, CommonsExt>,
     container: [u8; 32],
 ) -> Result<GraphLog<Container, Relation>, MaterializeError> {
-    let by_author: std::collections::BTreeMap<VerifyingKey, Vec<u64>> =
-        TopicStore::<Topic, VerifyingKey, u64>::resolve(store, &Topic::from(container)).await?;
+    let records = load_records(store, container).await?;
+    Ok(GraphLog::replay(causal_journal(&records)?))
+}
 
-    let mut journal: Codicil<CommonsBatch> = Codicil::new();
-    for (author, mut logs) in by_author {
-        logs.sort_unstable();
-        for log_id in logs {
-            let entries =
-                LogStore::<Operation<CommonsExt>, VerifyingKey, u64, u32, Hash>::get_log_entries(
-                    store, &author, &log_id, None, None,
-                )
-                .await?
-                .unwrap_or_default();
-            // Entries arrive in sequence order. The second tuple element is
-            // the **header** bytes, p2panda's LogSync convention, not the
-            // payload; the batch rides in `op.body`. Reading that `Vec<u8>` as
-            // a batch decodes header bytes as content, which is why this fold
-            // refuses to swallow a decode error: with `.ok()` it silently
-            // dropped every batch and produced an empty graph that looked like
-            // a sync failure.
-            for (op, _header_bytes) in entries {
-                journal.append(from_operation(&op)?);
-            }
-        }
-    }
-    Ok(GraphLog::replay(journal))
+/// A local authoring failure.
+#[derive(Debug, thiserror::Error)]
+pub enum ReplicaError {
+    #[error(transparent)]
+    Materialize(#[from] MaterializeError),
+    #[error(transparent)]
+    Process(#[from] ProcessError),
+    #[error("one authoring turn must append exactly one batch, appended {0}")]
+    BatchCount(usize),
 }
 
 /// One member's replica of one shared container.
@@ -198,11 +431,6 @@ pub struct Replica<B: Backend + Clone + Send + Sync + 'static> {
     container: [u8; 32],
     writer: WriterId,
     signing_seed: [u8; 32],
-    /// This replica's own edits, for minting the next log position and for
-    /// local reads before a sync round lands.
-    local: GraphLog<Container, Relation>,
-    seq: u32,
-    backlink: Option<[u8; 32]>,
 }
 
 impl<B: Backend + Clone + Send + Sync + 'static> Replica<B> {
@@ -220,9 +448,6 @@ impl<B: Backend + Clone + Send + Sync + 'static> Replica<B> {
             container,
             writer,
             signing_seed,
-            local: GraphLog::new().for_writer(writer),
-            seq: 0,
-            backlink: None,
         }
     }
 
@@ -236,31 +461,44 @@ impl<B: Backend + Clone + Send + Sync + 'static> Replica<B> {
         self.writer
     }
 
-    /// Edit the container: apply locally, sign the resulting batch, and store
+    /// Edit the current shared projection, sign the resulting batch, and store
     /// it. Returns the operation so a caller can publish it on a live lane.
+    ///
+    /// The graph and both authoring frontiers are reconstructed from the store
+    /// on every turn. That makes a peer's synced nodes and edges editable and
+    /// makes restart resume both the p2panda log and the writer-scoped edge
+    /// counter instead of returning either to zero.
     pub async fn edit(
         &mut self,
         edit: impl FnOnce(&mut GraphLog<Container, Relation>),
-    ) -> Result<Operation<CommonsExt>, stickleback::ProcessError> {
-        let before = self.local.log().entries().len();
-        edit(&mut self.local);
-        let batch = self
-            .local
+    ) -> Result<Operation<CommonsExt>, ReplicaError> {
+        let records = load_records(&self.store, self.container).await?;
+        let parents = observed_frontier(&records);
+        let journal = causal_journal(&records)?;
+        let mut shared = GraphLog::replay_for_writer(journal, self.writer);
+        let before = shared.log().entries().len();
+        edit(&mut shared);
+        let appended = shared.log().entries().len().saturating_sub(before);
+        if appended != 1 {
+            return Err(ReplicaError::BatchCount(appended));
+        }
+        let batch = shared
             .log()
             .entries()
             .get(before)
             .expect("an edit appends exactly one batch")
             .clone();
 
+        let signing_key = SigningKey::from_bytes(&self.signing_seed);
+        let (seq, backlink) = author_head(&records, signing_key.verifying_key());
         let op = to_operation(
             self.signing_seed,
             self.container,
             &batch,
-            self.seq,
-            self.backlink,
+            parents,
+            seq,
+            backlink,
         );
-        self.seq += 1;
-        self.backlink = Some(*op.hash.as_bytes());
         self.accept(&op).await?;
         Ok(op)
     }

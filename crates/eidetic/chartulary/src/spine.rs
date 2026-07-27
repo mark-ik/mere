@@ -102,6 +102,22 @@ impl<N: Identified, E> GraphLog<N, E> {
     /// the replication identity, not to an [`Author`] label.
     pub fn for_writer(mut self, writer: WriterId) -> Self {
         self.writer = writer;
+        // `for_writer` is also the recovery seam after a full replay. Rebuild
+        // the minting frontier from the journal rather than from live edges:
+        // a previously disconnected edge still consumed its counter.
+        self.next_edge = self
+            .log
+            .entries()
+            .iter()
+            .flat_map(|batch| batch.edits.iter())
+            .filter_map(|edit| match edit {
+                GraphEdit::Connect { id, .. } if id.writer == writer => {
+                    Some(id.counter.saturating_add(1))
+                }
+                _ => None,
+            })
+            .max()
+            .unwrap_or(0);
         self
     }
 
@@ -278,7 +294,17 @@ impl<N: Identified + Clone, E: Clone> GraphLog<N, E> {
 
     /// Rebuild a graph by replaying a batch log from empty.
     pub fn replay(log: Codicil<Batch<N, E>>) -> Self {
-        let mut this = Self::new();
+        Self::replay_for_writer(log, WriterId::LOCAL)
+    }
+
+    /// Rebuild a graph for a specific writer.
+    ///
+    /// Setting the writer before replay lets every historical edge minted by
+    /// this replica restore its counter frontier. This is the multi-writer
+    /// recovery path; [`replay`](Self::replay) remains the legacy
+    /// single-writer path.
+    pub fn replay_for_writer(log: Codicil<Batch<N, E>>, writer: WriterId) -> Self {
+        let mut this = Self::new().for_writer(writer);
         for batch in log.entries() {
             this.apply_batch(batch);
         }
@@ -391,6 +417,19 @@ where
     ) -> Result<Self, StoreError> {
         let log = Self::load_log(slots, log_key).await?;
         Ok(Self::replay(log))
+    }
+
+    /// Load a multi-writer journal for the replica identified by `writer`.
+    ///
+    /// Unlike [`load_full`](Self::load_full), this restores the writer-scoped
+    /// edge counter so the next mint cannot reuse an id from before restart.
+    pub async fn load_full_for_writer<B: Backend, C: Codec>(
+        slots: &SlotStore<B, C>,
+        log_key: &str,
+        writer: WriterId,
+    ) -> Result<Self, StoreError> {
+        let log = Self::load_log(slots, log_key).await?;
+        Ok(Self::replay_for_writer(log, writer))
     }
 
     /// Load from a snapshot at `snap_key` plus the tail of the log at `log_key`. If
@@ -557,6 +596,37 @@ mod tests {
                 "retract by the stable id works"
             );
             assert_eq!(reloaded.graph().edge_count(), 0);
+        });
+    }
+
+    #[test]
+    fn writer_scoped_counter_resumes_after_full_replay() {
+        pollster::block_on(async {
+            let slots = JsonSlots::new(MemoryBackend::new());
+            let writer = WriterId([0xa1; 32]);
+            let mut live = GraphLog::new().for_writer(writer);
+            live.insert_node(&me(), Container::new("a"));
+            live.insert_node(&me(), Container::new("b"));
+            let first = live
+                .connect(&me(), &"a".to_string(), &"b".to_string(), cites())
+                .unwrap();
+            live.disconnect(&me(), first);
+            live.save_log(&slots, "log").await.unwrap();
+
+            let mut reloaded =
+                GraphLog::<Container, Relation>::load_full_for_writer(&slots, "log", writer)
+                    .await
+                    .unwrap();
+            let second = reloaded
+                .connect(&me(), &"a".to_string(), &"b".to_string(), cites())
+                .unwrap();
+
+            assert_eq!(first, EdgeId::new(writer, 0));
+            assert_eq!(
+                second,
+                EdgeId::new(writer, 1),
+                "a disconnected pre-restart id still consumed its counter"
+            );
         });
     }
 

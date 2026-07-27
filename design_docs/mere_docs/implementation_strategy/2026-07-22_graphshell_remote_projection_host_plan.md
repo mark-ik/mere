@@ -534,6 +534,38 @@ their truths separate, and preserves its own arrangement and links.
 **Done when:** each adapter has a headed or hardware-backed task receipt and the
 constrained profile has measured byte budgets rather than desktop assumptions.
 
+### G8. Host the identity agent as a resident service
+
+Mark ruled on 2026-07-22 that **the agent's resident home is Graphshell**
+(recorded in the identity-vault-ssh-agent plan's progress, not here). Nothing
+in this sequence carried it, so it was being counted on without being planned
+or assigned. This is that item.
+
+`personae::agent` is a library module precisely so a resident host serves the
+endpoint in-process rather than as a separate install. Today the endpoint is
+served by a logon-triggered scheduled task plus a relaunch wrapper, which that
+plan labels "interim dogfood scaffolding only, removed when the host adoption
+lands".
+
+- Serve the agent endpoint from the Graphshell host process (Windows named
+  pipe, Unix socket) rather than a standalone bin.
+- Own the lifecycle the wrapper currently fakes: start at host start, survive
+  a crash, and stop for real when the host stops.
+- Add the per-use confirmation UI. `UnlockTier::PerUse` slots currently
+  **refuse to sign**, because signing silently would make the tier a lie, so
+  the tier is unusable until a host can ask.
+- Add the vault pane and lock/unlock control.
+- Retire the scheduled task and the `personae-agent` bin's launch role in the
+  same change that lands the above, not before.
+
+**Done when:** a headed Graphshell run serves a real `ssh` authentication from
+a vault slot with the scheduled task stopped and the stock agent service
+disabled, a PerUse slot prompts and signs, and killing the host stops the
+endpoint rather than leaving an orphan.
+
+**Not gated on the carrier work.** This is host-side and independent of
+G5-G7; it is sequenced last only because it is newest.
+
 ## 9. Repository boundary audit
 
 Repo count is not the target. Put crates together when they share release

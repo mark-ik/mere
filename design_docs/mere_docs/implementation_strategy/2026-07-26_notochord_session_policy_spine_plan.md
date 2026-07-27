@@ -490,6 +490,47 @@ Remaining for the promotion gate: Graphshell G5d over `P2pandaTransport`
 site, which since N1 means `AcceptedSession::session_facts` and
 `admit_session`; Murm's lane already is.
 
+### 2026-07-27 — N2, Graphshell half: the projection carrier
+
+`ports/graphshell/src/carrier.rs` (`115904b5`). `accept_projection_session`
+runs the accept path before a `SessionOpen` byte is read, on the same
+construction site the Murm lane uses: `AcceptedSession::into_session` for the
+facts, `network_policy::admit_session` for the framing and the conclusion. It
+hand-builds no `SessionFacts` and owns no framing of its own.
+
+The transport is borrowed, never owned, which is this lane's independent
+arrival at the rule the Reticulum arm found. On p2panda the mechanism is
+different: quinn's `Drop for SendStream` finishes the stream rather than
+resetting it, *except* when the connection is already errored, which is what
+dropping the endpoint underneath it produces. Two carriers, two unrelated
+drain mechanisms, one shared escape hatch. The rule generalizes; the
+mechanism does not.
+
+**The finding, which the policy layer cannot fix from where it stands.**
+`LocalNetworkPolicy` keys service rules by *path* and checks that the chain
+covers the requested triple. `ServiceRule` has no action vocabulary at all, so
+a chain covering a *different* action at `/services/projection` clears
+admission with that action intact. `DenyReason::ActionNotOffered` exists in
+this crate with **no decision site**, which is the tell. So each service must
+judge the admitted action against what it serves, which is not admission
+duplicated but exactly the ownership this plan assigns: services authorize
+operations after admission under their own vocabulary. Proved rather than
+argued: an admitted `administer` grant at the projection path is refused as
+`ActionNotServed` (graphshell 20).
+
+Worth a ruling at N3 or before: either `ServiceRule` grows an action
+allow-list and `ActionNotOffered` gains a decision site, or the reason is
+documented as service-supplied and every carrier owns the check.
+
+**Both N2 halves now exist, but the gate is not met yet.** The promotion
+receipt asks that a Murm grant cannot open Graphshell *and* a Graphshell
+projection grant cannot open Murm. Only the first direction is proved
+(`a_grant_for_another_service_does_not_open_projections`, graphshell). The
+mirror belongs on Murm's listener, in its crate. **N3 should not start until
+it exists**; without it the cross-domain claim is half-evidenced, and a
+rename would promote an intention, which is the thing this plan set out not
+to do.
+
 ### A transport bug this uncovered
 
 The Reticulum arm of `session_policy.rs` was intermittently timing out with
