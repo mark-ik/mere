@@ -50,7 +50,6 @@ mod peer_id;
 pub mod reticulum_transport;
 #[cfg(feature = "session-policy")]
 pub mod session_policy;
-pub mod synced_space;
 mod transport;
 
 pub use crate::accepted::{AcceptedSession, IngressContext, IngressInterfaceId, TransportKind};
@@ -67,7 +66,6 @@ pub use crate::reticulum_transport::{
 };
 #[cfg(feature = "session-policy")]
 pub use crate::session_policy::{initiator_binding, initiator_link_binding};
-pub use crate::synced_space::{SyncRound, SyncStatus, SyncedSpace};
 pub use crate::transport::Transport;
 pub use p2panda_net::gossip::GossipHandle;
 

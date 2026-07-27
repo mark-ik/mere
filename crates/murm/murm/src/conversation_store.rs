@@ -4,13 +4,13 @@ use std::io::Read;
 use std::path::Path;
 
 use muniment::{Backend, MemoryBackend, RedbBackend, StoreError};
-use murm_replication::{
+use p2panda_core::{Operation, Topic};
+use stickleback::{
     Admission, DropExportProfile, DropImportReport, DropIoError, DropLimits, DropProtector,
     MunimentStore, OperationPolicy, OperationProcessor, ProcessError, ProcessOutcome, Reject,
     StoreTarget, decode_operation_record, export_topic_operations, import_plain_drop,
     import_protected_drop,
 };
-use p2panda_core::{Operation, Topic};
 
 use crate::{CabalExt, ChannelName};
 
@@ -234,7 +234,7 @@ mod tests {
     use super::*;
     use crate::{ChannelName, PostId, PostKind, post_to_operation, sign_post};
     use identity::{IdentityProvider, InMemoryProvider};
-    use murm_replication::{
+    use stickleback::{
         DropExportBudget, DropExportDecision, DropExportSelector, DropRecord,
         decode_operation_record, export_topic_operations_selected,
     };

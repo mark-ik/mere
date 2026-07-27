@@ -34,10 +34,10 @@ mod types;
 pub use chain::{RevocationLedger, TrustedRoot, validate_chain};
 pub use facts::{CarrierKind, IngressFacts, ProofBinding, SessionFacts};
 pub use handshake::{
-    AdmittedPrincipal, HandshakeError, SessionHello, SessionReply, admit, respond,
+    AdmittedPrincipal, AdmittedSession, HandshakeError, SessionHello, SessionReply, admit, respond,
 };
 #[cfg(feature = "tokio")]
-pub use io::{IoHandshakeError, accept_session, initiate_session};
+pub use io::{IoHandshakeError, accept_session, admit_session, initiate_session};
 pub use policy::{
     DiscoveryPolicy, LocalNetworkPolicy, POLICY_VERSION, ServiceAccess, ServiceRule, TransitPolicy,
 };

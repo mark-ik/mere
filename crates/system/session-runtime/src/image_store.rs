@@ -56,10 +56,16 @@ pub async fn load_image(store: &mut dyn Store, image: &ImageRef) -> Result<Optio
 /// live node references the digest — the caller (the Athanor orphan sweep) owns
 /// that reachability check; this performs the drop it decides on.
 pub async fn delete_image(store: &mut dyn Store, image: &ImageRef) -> Result<bool> {
+    delete_image_hex(store, &image.hex()).await
+}
+
+/// Drop a blob by digest hex. This is the apply half used by Athanor's
+/// mark/sweep proposal, which inventories keys before it has an `ImageRef`.
+pub async fn delete_image_hex(store: &mut dyn Store, hex: &str) -> Result<bool> {
     // Probe first: muniment's delete is idempotent (absent keys are not an
     // error), but this reports whether a blob was actually removed — the
     // orphan sweep counts reclamations.
-    let key = image_key(&image.hex());
+    let key = image_key(hex);
     let existed = store.get(&key).await?.is_some();
     store.delete(&key).await?;
     Ok(existed)

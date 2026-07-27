@@ -23,7 +23,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::MurmError;
-use murm_replication::{DropImportReport, DropLimits};
+use stickleback::{DropImportReport, DropLimits};
 
 use crate::{
     CabalKeyEpoch, CabalKeyring, ConversationEngine, ConversationRefresh, InfoEntry, Post, PostId,

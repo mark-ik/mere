@@ -1,11 +1,16 @@
-//! Shared replicated-space mechanics for the Murm peer-exchange family.
+//! Shared replicated-space mechanics for signed peer domains.
 //!
 //! This crate owns the reusable p2panda receive drain and its join ceremony,
 //! the muniment-backed operation store, and the policy-before-insert
 //! processor. Direct exchange, Moot, mesh, and other domains keep their
 //! operation grammar, authorization, and deterministic materialization.
+//!
+//! A domain supplies an [`OperationPolicy`] and, where it prunes history, a
+//! [`CheckpointAuthority`]. Stickleback never infers authority from transport
+//! access or visible membership: it supplies the erasure mechanics and calls
+//! the domain's gate.
 
-#![doc(html_root_url = "https://docs.rs/murm-replication/0.0.1")]
+#![doc(html_root_url = "https://docs.rs/stickleback/0.1.0")]
 
 mod authority;
 pub mod drop;

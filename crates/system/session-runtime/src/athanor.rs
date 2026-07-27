@@ -32,9 +32,11 @@ use eidetic::{
     purge_deleted,
 };
 use kernel::persistence::GraphSnapshot;
+use kernel::types::ImageRole;
 
 use crate::content_store;
 use crate::graph_engram::{self, GraphEngram, RedactionPolicy};
+use crate::image_store;
 use crate::memory_levels::{EvictionPolicy, evictable_short_term};
 
 /// How many of the most-recently-created engrams a consolidation pass considers.
@@ -118,6 +120,148 @@ pub async fn apply_forgetting(store: &mut dyn Store, proposal: &ForgetProposal) 
         }
     }
     Ok(dropped)
+}
+
+/// Stored image blobs not named by any live node.
+///
+/// This is a mark/sweep proposal rather than a per-node deletion: image blobs
+/// are content-addressed and shared, so one node dropping a reference cannot
+/// decide that the blob itself is dead.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ImageGcProposal {
+    pub hexes: Vec<String>,
+}
+
+impl ImageGcProposal {
+    pub fn is_empty(&self) -> bool {
+        self.hexes.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.hexes.len()
+    }
+}
+
+fn referenced_image_hexes(snapshot: &GraphSnapshot) -> HashSet<String> {
+    snapshot
+        .nodes
+        .iter()
+        .flat_map(|node| node.images.values())
+        .map(|image| image.hex())
+        .collect()
+}
+
+/// Diff the image store's inventory against every live node reference. Pure:
+/// the caller supplies the inventory and this mutates neither graph nor store.
+pub fn propose_image_gc(
+    snapshot: &GraphSnapshot,
+    stored_hexes: impl IntoIterator<Item = String>,
+) -> ImageGcProposal {
+    let referenced = referenced_image_hexes(snapshot);
+    let mut hexes: Vec<String> = stored_hexes
+        .into_iter()
+        .filter(|hex| !referenced.contains(hex))
+        .collect();
+    hexes.sort();
+    hexes.dedup();
+    ImageGcProposal { hexes }
+}
+
+/// Apply an accepted image-GC proposal, re-checking the current snapshot
+/// before each delete so a reference added after proposal creation wins.
+pub async fn apply_image_gc(
+    store: &mut dyn Store,
+    snapshot: &GraphSnapshot,
+    proposal: &ImageGcProposal,
+) -> Result<usize> {
+    let referenced = referenced_image_hexes(snapshot);
+    let mut dropped = 0;
+    for hex in &proposal.hexes {
+        if !referenced.contains(hex) && image_store::delete_image_hex(store, hex).await? {
+            dropped += 1;
+        }
+    }
+    Ok(dropped)
+}
+
+/// A role-specific reference Athanor proposes forgetting from a stale
+/// short-term node. The digest is included so apply can refuse a stale
+/// proposal after a newer capture replaces the role.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ImageReferenceDrop {
+    pub node_id: String,
+    pub role: ImageRole,
+    pub hex: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ImageReferenceForgetProposal {
+    pub drops: Vec<ImageReferenceDrop>,
+}
+
+/// Propose disposable image references for the same stale short-term nodes as
+/// ordinary content forgetting. Favicons are re-fetchable; preview/snapshot
+/// roles are retained because they may be the only offline representation.
+/// Promoted nodes never enter `evictable_short_term`.
+pub fn propose_image_reference_forgetting(
+    snapshot: &GraphSnapshot,
+    last_visit_ms: &HashMap<String, u64>,
+    policy: EvictionPolicy,
+    now_ms: u64,
+    current_session: u64,
+) -> ImageReferenceForgetProposal {
+    let evictable: HashSet<String> = evictable_short_term(
+        &snapshot.nodes,
+        last_visit_ms,
+        policy,
+        now_ms,
+        current_session,
+    )
+    .into_iter()
+    .collect();
+    let drops = snapshot
+        .nodes
+        .iter()
+        .filter(|node| evictable.contains(&node.node_id))
+        .filter_map(|node| {
+            node.images
+                .get(&ImageRole::Favicon)
+                .map(|image| ImageReferenceDrop {
+                    node_id: node.node_id.clone(),
+                    role: ImageRole::Favicon,
+                    hex: image.hex(),
+                })
+        })
+        .collect();
+    ImageReferenceForgetProposal { drops }
+}
+
+/// Apply role-specific reference forgetting to a snapshot before it
+/// materializes, re-checking both role and digest. Returns references removed.
+/// The now-unreferenced blob is reclaimed by the separate GC pass.
+pub fn apply_image_reference_forgetting(
+    snapshot: &mut GraphSnapshot,
+    proposal: &ImageReferenceForgetProposal,
+) -> usize {
+    let mut dropped = 0;
+    for proposal in &proposal.drops {
+        let Some(node) = snapshot
+            .nodes
+            .iter_mut()
+            .find(|node| node.node_id == proposal.node_id)
+        else {
+            continue;
+        };
+        let still_same = node
+            .images
+            .get(&proposal.role)
+            .is_some_and(|image| image.hex() == proposal.hex);
+        if still_same {
+            node.images.remove(&proposal.role);
+            dropped += 1;
+        }
+    }
+    dropped
 }
 
 /// A proposal to consolidate: pairs of graph engrams that look like successive
@@ -363,11 +507,8 @@ mod tests {
     }
 
     // The in-memory test store is muniment's (2026-07-12): the
-// hand-rolled one was the same map behind the same seam.
-use muniment::MemoryBackend as MemStore;
-
-
-
+    // hand-rolled one was the same map behind the same seam.
+    use muniment::MemoryBackend as MemStore;
 
     #[test]
     fn apply_drops_proposed_content_and_leaves_the_rest() {
@@ -407,6 +548,121 @@ use muniment::MemoryBackend as MemStore;
         });
     }
 
+    #[test]
+    fn image_gc_marks_only_orphans_and_apply_rechecks_live_references() {
+        pollster::block_on(async {
+            let mut store = MemStore::default();
+            let live = image_store::save_image(&mut store, b"live", 1, 1)
+                .await
+                .unwrap();
+            let orphan = image_store::save_image(&mut store, b"orphan", 1, 1)
+                .await
+                .unwrap();
+            let raced = image_store::save_image(&mut store, b"raced", 1, 1)
+                .await
+                .unwrap();
+            let mut snapshot = sample_snapshot();
+            snapshot.nodes[0].images.insert(ImageRole::Favicon, live);
+
+            let proposal = propose_image_gc(
+                &snapshot,
+                image_store::stored_image_hexes(&mut store).await.unwrap(),
+            );
+            assert_eq!(proposal.len(), 2);
+            assert!(!proposal.hexes.contains(&live.hex()));
+            assert!(proposal.hexes.contains(&orphan.hex()));
+            assert!(proposal.hexes.contains(&raced.hex()));
+
+            // A reference that appears after proposal creation wins at apply.
+            snapshot.nodes[1].images.insert(ImageRole::Preview, raced);
+            assert_eq!(
+                apply_image_gc(&mut store, &snapshot, &proposal)
+                    .await
+                    .unwrap(),
+                1
+            );
+            assert!(
+                image_store::load_image(&mut store, &live)
+                    .await
+                    .unwrap()
+                    .is_some()
+            );
+            assert!(
+                image_store::load_image(&mut store, &raced)
+                    .await
+                    .unwrap()
+                    .is_some()
+            );
+            assert!(
+                image_store::load_image(&mut store, &orphan)
+                    .await
+                    .unwrap()
+                    .is_none()
+            );
+            assert_eq!(
+                apply_image_gc(&mut store, &snapshot, &proposal)
+                    .await
+                    .unwrap(),
+                0,
+                "re-running the accepted proposal is a no-op"
+            );
+        });
+    }
+
+    #[test]
+    fn stale_short_term_drops_favicon_but_keeps_precious_images() {
+        let now = 100 * DAY_MS;
+        let mut snapshot = sample_snapshot();
+        let stale_id = id_of(&snapshot, "stale");
+        let kept_id = id_of(&snapshot, "kept");
+        let favicon = kernel::types::ImageRef::new([1; 32], 1, 1);
+        let snapshot_image = kernel::types::ImageRef::new([2; 32], 1, 1);
+        for node in &mut snapshot.nodes {
+            if node.node_id == stale_id || node.node_id == kept_id {
+                node.images.insert(ImageRole::Favicon, favicon);
+                node.images.insert(ImageRole::Snapshot, snapshot_image);
+            }
+        }
+        let times = HashMap::from([
+            (stale_id.clone(), now - 60 * DAY_MS),
+            (kept_id.clone(), now - 60 * DAY_MS),
+        ]);
+
+        let proposal = propose_image_reference_forgetting(
+            &snapshot,
+            &times,
+            EvictionPolicy::KeepDays(30),
+            now,
+            0,
+        );
+        assert_eq!(proposal.drops.len(), 1, "the promoted node is exempt");
+        assert_eq!(proposal.drops[0].node_id, stale_id);
+        assert_eq!(
+            apply_image_reference_forgetting(&mut snapshot, &proposal),
+            1
+        );
+
+        let stale = snapshot
+            .nodes
+            .iter()
+            .find(|node| node.node_id == stale_id)
+            .unwrap();
+        assert!(!stale.images.contains_key(&ImageRole::Favicon));
+        assert!(stale.images.contains_key(&ImageRole::Snapshot));
+        let kept = snapshot
+            .nodes
+            .iter()
+            .find(|node| node.node_id == kept_id)
+            .unwrap();
+        assert!(kept.images.contains_key(&ImageRole::Favicon));
+        assert!(kept.images.contains_key(&ImageRole::Snapshot));
+        assert_eq!(
+            apply_image_reference_forgetting(&mut snapshot, &proposal),
+            0,
+            "reference forgetting is idempotent"
+        );
+    }
+
     use eidetic::{list_deleted, record_deleted};
 
     fn deleted(node_id: &str, at_ms: u64) -> DeletedNode {
@@ -426,12 +682,15 @@ use muniment::MemoryBackend as MemStore;
     fn propose_retirement_names_only_the_aged_out_tombstones() {
         let now = 100 * DAY_MS;
         let records = [
-            deleted("old", now - 40 * DAY_MS),   // 40d old -> retire
-            deleted("fresh", now - 5 * DAY_MS),   // 5d old -> keep
-            deleted("edge", now - 30 * DAY_MS),   // exactly the window -> retire (<=)
+            deleted("old", now - 40 * DAY_MS),  // 40d old -> retire
+            deleted("fresh", now - 5 * DAY_MS), // 5d old -> keep
+            deleted("edge", now - 30 * DAY_MS), // exactly the window -> retire (<=)
         ];
         let proposal = propose_retirement(&records, 30 * DAY_MS, now);
-        assert_eq!(proposal.node_ids, vec!["edge".to_string(), "old".to_string()]);
+        assert_eq!(
+            proposal.node_ids,
+            vec!["edge".to_string(), "old".to_string()]
+        );
         // A generous window keeps everything; a zero window keeps only the future.
         assert!(propose_retirement(&records, 365 * DAY_MS, now).is_empty());
     }

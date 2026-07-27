@@ -8,7 +8,7 @@ the same container reconverge to one graph on sync, property-tested, before
 any chat implementation slice". Decision 2 (moot-level group keys) stays open
 and is not addressed here.
 
-**Method, as the brief instructed:** check what `murm-replication` already
+**Method, as the brief instructed:** check what `stickleback` already
 inherits from p2panda before designing anything. That check is section 1, and
 it changed the answer: most of the convergence machinery is already present
 and correct, and the gap is narrower and sharper than "define a merge
@@ -17,7 +17,7 @@ no ordering rule can repair.
 
 ## 1. What the substrate already gives (verified against the tree)
 
-`murm-replication`'s `process_batch_atomic` sorts every corpus by
+`stickleback`'s `process_batch_atomic` sorts every corpus by
 `(header.verifying_key, admission.target.log_id, header.seq_num)` before
 committing, then validates each operation against a virtual frontier that
 includes earlier operations in the same batch. So the replication layer

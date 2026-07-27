@@ -2,6 +2,14 @@
 
 **Status**: Active plan.
 **Date**: 2026-07-12.
+**Promotion note (2026-07-26)**: the replication foundation this plan calls
+`murm-replication` is now the Mere-owned `stickleback` package at
+`crates/stickleback`, promoted because Murm, Mesh, Moot, and transport all
+consume it. The boundary this plan drew is unchanged — only the name and path
+moved. See the
+[promotion plan](2026-07-26_stickleback_replication_promotion_plan.md) and its
+[S0 receipt](2026-07-26_stickleback_s0_contract_freeze_receipt.md). The old
+package spelling is retained below as part of this plan's evidence.
 **Scope**: Recast Murm as the reusable peer-exchange family, make Moot a
 governed-space domain over Murm's replication foundation, and remove p2panda
 session assembly from Turnstone. Preserve Mere as an offline-first graph library.

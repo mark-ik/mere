@@ -3,7 +3,7 @@
 
 //! The mesh's store of record — muniment behind the p2panda-store adapter.
 //!
-//! [`MeshStore`] wraps [`murm_replication::MunimentStore`]: one operation store that both
+//! [`MeshStore`] wraps [`stickleback::MunimentStore`]: one operation store that both
 //! the [`JobBoard`] fold and the LogSync session read, backed by muniment — an
 //! in-memory backend for tests, redb on a real device. [`MeshStore::accept`]
 //! applies mesh policy, then persists the operation pointer, log entry, and
@@ -23,13 +23,13 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use muniment::{Backend, MemoryBackend, RedbBackend, StoreError};
-use murm_replication::{
-    Admission, CheckpointAuthority, MunimentStore, OperationPolicy, OperationProcessor,
-    ProcessError, ProcessOutcome, Reject, StoreTarget,
-};
 use p2panda_core::{Hash, Operation, Topic, VerifyingKey};
 use p2panda_store::logs::LogStore;
 use p2panda_store::topics::TopicStore;
+use stickleback::{
+    Admission, CheckpointAuthority, MunimentStore, OperationPolicy, OperationProcessor,
+    ProcessError, ProcessOutcome, Reject, StoreTarget,
+};
 
 use crate::board::JobBoard;
 use crate::retention::{

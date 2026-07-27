@@ -167,8 +167,9 @@ directory path disambiguates (for example the graph kernel's package name is
 | `crates/import` | `import` | Browser-data import: bookmark / history / session models and Chrome-JSON / Netscape-HTML parsers, producing portable page seeds |
 | `crates/crawl` | `crawl` | Site crawling into portable page seeds for the graph |
 | `crates/intel` | `embed`, `infer`, `signals` | Local intelligence: the embedding-provider trait + vector index, inference glue, and signal extraction over memory |
-| `crates/murm` | `murm`, `murm-replication`, `transport` | Peer exchange: direct conversation, the native conversation engine and signed grammar, shared p2panda replication over muniment, and Iroh-based transport |
-| `crates/moot` | `moothold`, `mooting` | Governed community spaces: Moot event grammar, roster, tessera, constitution primitives, and recognition policy over `murm-replication` |
+| `crates/stickleback` | `stickleback` | The shared replicated-space runtime beneath every signed peer domain: joined spaces, policy-before-insert processing, muniment-backed operation storage, checkpoints, retention mechanics, and native drop carriage. Domains supply operation grammar, addressing, authorization, and materialization |
+| `crates/murm` | `murm`, `transport` | Peer exchange: direct conversation, the native conversation engine and signed grammar, and Iroh-based transport |
+| `crates/moot` | `moothold`, `mooting` | Governed community spaces: Moot event grammar, roster, tessera, constitution primitives, and recognition policy over `stickleback` |
 | `crates/mesh` | `mesh` | The personal-space compute mesh: signed job operations over LogSync, a deterministic job board and worker loop, plus policy-bound retention checkpoints and prunable event history |
 | `crates/persona` | `identity`, `gazetteer` | Persona identity and handle resolution: master Ed25519 keypair, OS-keychain integration, per-protocol identity derivation, and WebFinger today |
 | `crates/script` | `script-rhai` | The Rhai backend for the block-evaluator lane (pure Rust, sandboxed); the privileged omnibar command shell layers verb bindings on top |

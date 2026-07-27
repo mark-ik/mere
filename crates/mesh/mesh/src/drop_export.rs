@@ -6,8 +6,8 @@
 
 use std::collections::BTreeMap;
 
-use murm_replication::{DropExportDecision, DropExportSelector};
 use p2panda_core::Operation;
+use stickleback::{DropExportDecision, DropExportSelector};
 
 use crate::board::JobState;
 use crate::store::StoredCheckpoint;
@@ -91,7 +91,7 @@ impl MeshDropSelector {
     }
 
     /// Select privacy-permitted events in radio priority order. The caller
-    /// supplies the radio byte budget to `murm-replication` separately.
+    /// supplies the radio byte budget to `stickleback` separately.
     pub fn radio(privacy: MeshDropPrivacy, priorities: MeshDropPriorities) -> Self {
         Self {
             profile: MeshDropProfile::Radio,
@@ -174,9 +174,9 @@ impl DropExportSelector<MeshExt> for MeshDropSelector {
 mod tests {
     use super::*;
     use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
-    use murm_replication::{DropExportBudget, DropRecord, export_topic_operations_selected};
     use p2panda_core::Topic;
     use proofs::Digest;
+    use stickleback::{DropExportBudget, DropRecord, export_topic_operations_selected};
 
     use crate::retention::{JobBoardSnapshot, LogFrontier, PolicyRevision, RetentionCheckpoint};
     use crate::store::MeshStore;

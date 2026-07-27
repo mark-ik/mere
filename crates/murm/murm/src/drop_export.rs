@@ -1,13 +1,13 @@
 //! Conversation-owned native-drop privacy and priority mapping.
 //!
-//! `murm-replication` owns selection mechanics. This module interprets the
+//! `stickleback` owns selection mechanics. This module interprets the
 //! current native conversation operation grammar without moving conversation
 //! meaning into the shared store.
 
 use std::collections::BTreeMap;
 
-use murm_replication::{DropExportDecision, DropExportSelector};
 use p2panda_core::Operation;
+use stickleback::{DropExportDecision, DropExportSelector};
 
 use crate::CabalExt;
 
@@ -127,7 +127,7 @@ impl ConversationDropSelector {
 
     /// Select privacy-permitted posts in radio priority order.
     ///
-    /// The caller supplies the byte budget to `murm-replication` separately.
+    /// The caller supplies the byte budget to `stickleback` separately.
     pub fn radio(privacy: ConversationDropPrivacy, priorities: ConversationDropPriorities) -> Self {
         Self {
             profile: ConversationDropProfile::Radio,

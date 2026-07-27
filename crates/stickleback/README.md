@@ -1,6 +1,10 @@
-# murm-replication
+# stickleback
 
-Shared replicated-space mechanics for the Murm peer-exchange family.
+Shared replicated-space mechanics for signed peer domains.
+
+Murm, Mesh, Moot, and `mere-transport` all consume this runtime, so it is named
+for the boundary rather than for one of its consumers. It was published as
+`murm-replication` through 0.1.0.
 
 The crate currently owns five proven pieces:
 

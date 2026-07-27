@@ -183,3 +183,69 @@ async fn a_refused_session_never_reaches_the_application() {
         "not one application byte crosses a refused session"
     );
 }
+
+/// N2 groundwork: the shape both service carriers share. An admitted session
+/// hands back the principal and the carrier's facts alongside the stream, and
+/// a refusal consumes the stream instead of returning one.
+#[tokio::test]
+async fn admit_session_yields_the_principal_or_consumes_the_stream() {
+    use network_policy::admit_session;
+
+    for (access, expect_admit) in [
+        (ServiceAccess::MemberOnly, true),
+        (ServiceAccess::Disabled, false),
+    ] {
+        let policy = policy(access);
+        let ledger = RevocationLedger::new();
+        let subject = member().master_public_key().to_bytes();
+        let facts = SessionFacts::authenticated(PROTOCOL, CarrierKind::Memory, subject);
+        let binding = ProofBinding::initiator(PROTOCOL, Some(subject), None);
+        let (mut client, server) = tokio::io::duplex(4096);
+
+        let server_policy = policy.clone();
+        let server_facts = facts.clone();
+        let responder = tokio::spawn(async move {
+            admit_session(server, &server_policy, &ledger, &server_facts, NOW_MS, 0)
+                .await
+                .expect("responder handshake")
+        });
+
+        let reply = initiate_session(
+            &mut client,
+            &hello(&binding, vec![grant_to(subject)]),
+            &policy.limits,
+        )
+        .await
+        .expect("initiator handshake");
+        let outcome = responder.await.expect("responder task");
+
+        assert_eq!(reply.is_accept(), expect_admit, "both ends agree");
+        match outcome {
+            Ok(session) => {
+                assert!(expect_admit);
+                assert_eq!(session.principal.subject, subject);
+                assert_eq!(
+                    session.facts, facts,
+                    "the carrier's facts travel with the admitted session"
+                );
+                assert_eq!(session.principal.action.path, MURM);
+            }
+            Err(reason) => {
+                assert!(!expect_admit);
+                assert_eq!(reason, DenyReason::ServiceNotOffered);
+                // The stream was consumed by the refusal, so the client sees
+                // the end of it rather than waiting on a service that will
+                // never speak.
+                let mut rest = Vec::new();
+                tokio::time::timeout(
+                    std::time::Duration::from_secs(5),
+                    client.read_to_end(&mut rest),
+                )
+                .await
+                .expect("a finished refusal must not leave the peer hanging")
+                .expect("read to end");
+                assert!(rest.is_empty(), "a refusal sends nothing after its reply");
+            }
+        }
+    }
+}

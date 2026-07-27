@@ -319,6 +319,44 @@ pub struct AdmittedPrincipal {
     pub action: RequestedAction,
 }
 
+/// One admitted session: the stream, and the conclusions drawn about it.
+///
+/// The shape every service carrier hands upward (Notochord N2). It exists in
+/// this crate rather than in each carrier's because it is carrier-neutral, and
+/// because two services defining it against their own transports would rebuild
+/// the duplication N1 removed, one level up.
+///
+/// Local and non-`Serialize`, like [`SessionFacts`]: it is a conclusion drawn
+/// from a verified transcript plus the owner's rule, never something that
+/// travels. An application protocol layered on top should carry no principal
+/// of its own.
+#[derive(Debug)]
+pub struct AdmittedSession<S> {
+    /// The stream, now safe to hand to the application.
+    pub stream: S,
+    /// Who was admitted, and under what.
+    pub principal: AdmittedPrincipal,
+    /// What the carrier observed. Retained so a service can apply its own
+    /// rules to the bearer without re-deriving them.
+    pub facts: SessionFacts,
+    /// The bounds the responder holds this session to.
+    ///
+    /// These are the handshake's bounds today. When session-level limits
+    /// (rate, byte budget, duration) become real they want their own type;
+    /// inventing an empty one now would be a shape with no content.
+    pub limits: HandshakeLimits,
+}
+
+impl<S> AdmittedSession<S> {
+    /// Consume the session, returning just the stream.
+    ///
+    /// For call sites that have already applied their own authorization and
+    /// only want the bytes.
+    pub fn into_stream(self) -> S {
+        self.stream
+    }
+}
+
 /// Run the responder half and report *who* was admitted.
 ///
 /// The same evaluation as [`respond`], returning the established principal

@@ -404,6 +404,46 @@ with the promotion.
 Remaining for N2: Murm's real accept path, and Graphshell G5d over
 `P2pandaTransport`.
 
+### 2026-07-27 — `AdmittedSession<S>` and `admit_session`, ahead of the N2 split
+
+Pulled forward out of N2 at the servitor's request, and it was the right call:
+both N2 halves have to return or retain this type, and two services defining
+it against their own carriers would rebuild the duplication N1 just removed,
+one level up. It is carrier-neutral, so it lives here.
+
+`AdmittedSession<S>` carries the stream, the `AdmittedPrincipal`, the
+`SessionFacts` the carrier observed, and the bounds the responder holds the
+session to. `network_policy::admit_session` is the io-level shape both halves
+share: it takes the stream, runs the bounded handshake, and returns either an
+`AdmittedSession` or the `DenyReason`. A refusal **consumes** the stream, so
+there is no way to hand a refused one to an application by accident.
+
+Deviation: the plan sketches `limits: SessionLimits`. No such type exists and
+inventing an empty one would be a shape with no content, so the field is
+`HandshakeLimits` today, documented to move when session-level limits (rate,
+byte budget, duration) become real.
+
+### Refusals are finished, not merely flushed
+
+Both carriers happen to deliver a flushed-then-dropped refusal: a retinue
+relay reads its duplex to EOF before closing the link, and quinn's
+`SendStream::drop` calls `finish` (verified in the servitor's read of quinn
+0.11.11 `send_stream.rs`, correcting an earlier guess that it reset). Relying
+on that is relying on two unrelated `Drop` impls staying correct.
+
+It is also thinner than it looks, and in the same place on both arms: quinn's
+`Drop` bails out early when the connection already has an error, which is
+exactly what dropping the endpoint underneath it produces, and retinue's relay
+is aborted by endpoint teardown for the same reason. **The rule holds on both
+arms by different mechanisms: a short-lived accept task must not own the
+carrier, and the carrier must outlive its sessions.**
+
+`accept_session` and `admit_session` now call `poll_shutdown` on a refusal.
+Worth noting what the servitor found while checking: nothing in the tree called
+`poll_shutdown` anywhere before this. It is implemented on both stream types
+and had zero callers, so every writer flushed and dropped and got away with it.
+That was an accident, not a choice.
+
 ### A transport bug this uncovered
 
 The Reticulum arm of `session_policy.rs` was intermittently timing out with

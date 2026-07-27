@@ -47,8 +47,8 @@ members = [
     "crates/intel/embed",
     "crates/intel/infer",
     "crates/intel/signals",
+    "crates/stickleback",
     "crates/murm/murm",
-    "crates/murm/replication",
     "crates/murm/transport",
     "crates/persona/gazetteer",
     "crates/moot/gemot",
@@ -221,8 +221,14 @@ signals = { package = "mere-signals", path = "crates/intel/signals" }
 # than a branch dep — genet's errand consumes it the same way. Held in
 # stewardship, so the published crate is the stable face.
 misfin = { version = "0.0.4", features = ["ring"] }
+# The shared replicated-space runtime beneath every signed peer domain: joined
+# spaces, policy-before-insert processing, operation storage, checkpoints,
+# retention mechanics, and native drop carriage. Promoted out of the murm
+# supercrate 2026-07-26 (it was `murm-replication`, but Murm, Mesh, Moot, and
+# transport all consume it). Domains keep their own operation grammar,
+# addressing, authorization, and materialization.
+stickleback = { version = "0.1.0", path = "crates/stickleback" }
 murm = { path = "crates/murm/murm" }
-murm-replication = { version = "0.1.0", path = "crates/murm/replication" }
 transport = { package = "mere-transport", path = "crates/murm/transport" }
 
 gemot = { version = "0.1.0", path = "crates/moot/gemot" }

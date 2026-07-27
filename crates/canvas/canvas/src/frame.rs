@@ -340,22 +340,22 @@ impl Canvas {
             };
             // The node carries a reference; the pixels come from the
             // host-registered cache. An unresolved reference does not paint.
-            let Some(favicon) = node.favicon() else {
+            let Some(favicon) = node.favicon().copied() else {
                 continue;
             };
             let Some((rgba, fav_w, fav_h)) = self.resolved_images.get(&favicon.digest) else {
+                self.request_image(favicon);
                 continue;
             };
-            if rgba.is_empty() || *fav_w == 0 || *fav_h == 0 {
+            if rgba.is_empty() || fav_w == 0 || fav_h == 0 {
                 continue;
             }
-            let (fav_w, fav_h) = (*fav_w, *fav_h);
             let img_key = ImageKey::new(IdNamespace(0), favicon_images.len() as u32);
             favicon_images.push(ImageResource {
                 key: img_key,
                 width: fav_w,
                 height: fav_h,
-                data: rgba.clone(),
+                data: rgba,
             });
             // Billboard the favicon too: an upright screen-space square centered on the
             // node's projected anchor (not two projected corners, which would foreshorten
@@ -730,6 +730,28 @@ mod tests {
         assert!(
             image_op_count(&scene) >= 1,
             "a favicon node emits at least one image op"
+        );
+    }
+
+    #[test]
+    fn visible_cache_miss_requests_the_image_once() {
+        let (mut graph, key) = graph_with_one_node("https://ex.test/");
+        let favicon = kernel::types::ImageRef::new([42u8; 32], 2, 2);
+        assert!(graph.set_node_image(key, kernel::types::ImageRole::Favicon, favicon));
+        let mut canvas = Canvas::with_graph(graph);
+
+        let (scene, _) = canvas.frame(800, 600);
+        assert_eq!(
+            image_op_count(&scene),
+            0,
+            "the cold frame has no pixels yet"
+        );
+        assert_eq!(canvas.take_image_requests(), vec![favicon]);
+
+        let _ = canvas.frame(800, 600);
+        assert!(
+            canvas.take_image_requests().is_empty(),
+            "an unresolved blob is not requested every frame"
         );
     }
 

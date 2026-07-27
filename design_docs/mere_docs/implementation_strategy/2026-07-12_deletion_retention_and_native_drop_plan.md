@@ -2,6 +2,13 @@
 
 **Status**: Active plan.
 **Date**: 2026-07-12.
+**Promotion note (2026-07-26)**: every `murm-replication` reference below now
+means the `stickleback` package at `crates/stickleback`. The promotion was a
+name and path cutover only — no stored bytes, topic ids, drop formats, or
+receipt hashes changed, so the receipts below stand as written. This plan's
+remaining work (group encryption, live peer command wiring, durable reopen, the
+Moot mapping, reference tracing, the constitution fold) is unaffected. See the
+[promotion plan](2026-07-26_stickleback_replication_promotion_plan.md).
 **Scope**: Give Mere's p2panda-backed spaces one deletion and retention law,
 then define a transport-independent native drop format for moving the same
 accepted operations, checkpoints, proofs, and payloads over Iroh, Retinue,

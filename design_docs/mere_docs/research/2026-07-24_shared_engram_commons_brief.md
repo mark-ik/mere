@@ -25,7 +25,7 @@ What makes a graph communal is three declarations over that substrate:
    file: each an engram schema per the
    [one-node facets ruling](../technical_architecture/2026-07-18_one_node_facets_layer_map.md));
 2. **a replication policy for those classes**: what syncs to whom, under
-   which privacy selection and byte budgets (murm-replication's
+   which privacy selection and byte budgets (stickleback's
    selector/budget seam; V10 of the
    [managed-network plan](../implementation_strategy/2026-07-24_low_power_managed_network_plan.md));
 3. **membership and moderation**: gemot for who belongs, personae delegation
@@ -54,7 +54,7 @@ frontier catch-up over `ConversationStore`; what no doc decides is the merge
 rule when two members concurrently edit one shared *container* (graph
 structure plus facets) while offline. That is deterministic merge over
 per-author logs, which is p2panda's core model; before designing anything,
-check how much murm-replication already inherits from p2panda's ordering
+check how much stickleback already inherits from p2panda's ordering
 versus what chartulary's GraphJournal needs defined on top.
 
 Done-condition: a written merge rule under which two offline members editing

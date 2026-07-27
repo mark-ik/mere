@@ -45,12 +45,50 @@ impl Canvas {
         width: u32,
         height: u32,
     ) {
-        self.resolved_images.insert(digest, (rgba, width, height));
+        let evicted = self.resolved_images.insert(digest, rgba, width, height);
+        for digest in evicted {
+            self.requested_images.remove(&digest);
+        }
     }
 
     /// Whether decoded pixels are available for a digest.
     pub fn has_resolved_image(&self, digest: &[u8; 32]) -> bool {
-        self.resolved_images.contains_key(digest)
+        self.resolved_images.contains(digest)
+    }
+
+    /// Set the decoded-image working-set ceiling in bytes. Tightening the
+    /// bound evicts least-recently-painted entries immediately; an evicted
+    /// image is requested from the host again if it later becomes visible.
+    pub fn set_resolved_image_cache_limit_bytes(&mut self, limit_bytes: usize) {
+        let evicted = self.resolved_images.set_limit(limit_bytes);
+        for digest in evicted {
+            self.requested_images.remove(&digest);
+        }
+    }
+
+    /// The configured decoded-image byte ceiling.
+    pub fn resolved_image_cache_limit_bytes(&self) -> usize {
+        self.resolved_images.limit_bytes()
+    }
+
+    /// Decoded bytes currently held in the working set.
+    pub fn resolved_image_cache_usage_bytes(&self) -> usize {
+        self.resolved_images.used_bytes()
+    }
+
+    /// Drain image references that were visible but absent from the decoded
+    /// cache during the last frame. The host loads and decodes their durable
+    /// blobs, then calls [`register_resolved_image`](Self::register_resolved_image).
+    pub fn take_image_requests(&mut self) -> Vec<kernel::types::ImageRef> {
+        std::mem::take(&mut self.pending_image_requests)
+            .into_values()
+            .collect()
+    }
+
+    pub(crate) fn request_image(&mut self, image: kernel::types::ImageRef) {
+        if self.requested_images.insert(image.digest) {
+            self.pending_image_requests.insert(image.digest, image);
+        }
     }
 
     pub fn register_scene_sprite(

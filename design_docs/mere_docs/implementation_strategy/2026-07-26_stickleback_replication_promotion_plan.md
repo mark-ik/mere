@@ -1,7 +1,12 @@
 # Stickleback Replication Promotion Plan
 
 **Date:** 2026-07-26
-**Status:** planned; S0 is the first slice.
+**Status:** S0 complete 2026-07-26; **S1 complete 2026-07-27** — the crate is
+`stickleback` at `crates/stickleback` and all consumers build against it
+directly. S2 is the next slice, and S0 reduced it to a deletion. S0's frozen
+contract, its four findings, and its boundary fixtures are recorded in the
+[S0 contract freeze receipt](./2026-07-26_stickleback_s0_contract_freeze_receipt.md);
+S1's result is in [Receipts](#receipts) below.
 **Decision:** promote `murm-replication` to the Mere-owned `stickleback` crate.
 The promotion stays inside the Mere repository. It is a domain-neutral
 boundary and name cutover, not a new sibling repository or a new replication
@@ -210,3 +215,72 @@ it directly; the old package, path, and compatibility re-exports are gone
 unless an evidenced external release requires one bounded forwarding version;
 all stored and wire formats are unchanged; and domain authority remains in
 the domain crates.
+
+## Receipts
+
+### S1 — atomic path and package cutover (complete 2026-07-27)
+
+`crates/murm/replication` is now `crates/stickleback` and the package is
+`stickleback`. Git recorded every source file as a rename, so history follows
+the crate. Import paths, the root workspace member and dependency entry, all
+five consumer manifests, `Cargo.lock`, the crate README, and the live docs moved
+with it. A scoped search finds no build or source reference to the old package
+or module name.
+
+Tests, all green:
+
+| Package | Result |
+|---|---|
+| `stickleback` | 45 passed (40 unit, 5 boundary) |
+| `murm` | 57 passed |
+| `mere-mesh` | 29 passed |
+| `gemot` | 102 passed |
+| `moothold` | 18 passed |
+| `mere-transport` | 40 passed |
+
+`cargo check --workspace --all-targets` exits 0, `cargo fmt` is clean across all
+six packages, and `git diff --check` is clean.
+
+Two notes on the receipt commands themselves:
+
+- `mere-transport`'s `tests/session_policy.rs` needs its optional
+  `session-policy` feature, so the bare `cargo test -p mere-transport` and
+  `cargo check --workspace --all-targets` both fail on that target — before this
+  cutover as much as after. Add `--features mere-transport/session-policy`. This
+  is a pre-existing feature-gating gap, not promotion fallout, and it is the only
+  red in the workspace.
+- Renaming shortened every `use` line by five characters, so rustfmt rewrapped
+  the import blocks in murm, mesh, gemot, and moothold. That is why those four
+  packages carry formatting churn beyond the identifier change.
+
+**No forwarding release was needed.** `murm-replication` 0.1.0 is published, and
+it does have two registry reverse dependencies — but they are `gemot` 0.1.0 and
+`moothold` 0.1.0, both published *from this workspace*. The plan's test is a
+clean-checkout consumer *outside* the workspace, and there is none, so the old
+package and path were deleted in the same cutover. Published gemot/moothold
+0.1.0 keep resolving against the immutable published `murm-replication` 0.1.0;
+their next release will name `stickleback`. The name `stickleback` was
+unclaimed on crates.io.
+
+The `ReceiptPeer` golden vector passes unchanged, which is the direct evidence
+for the "no changed receipt hashes" stop rule: the KDF context string containing
+"murm" survived the sweep.
+
+**Documentation cutover.** Live docs now say Stickleback: the root README crate
+map (a new `crates/stickleback` row, with the crate removed from the `crates/murm`
+row), `design_docs/DOC_README.md` (crate map and index), `TERMINOLOGY.md` (the
+term is promoted out of Murm's sub-list to a top-level comms layer), the crate
+README and `lib.rs` header, `mooting`'s README, the commons convergence plan, and
+the shared-engram commons brief. Promotion notes were added to the two July 12
+plans that define the old ownership and carry open work. The other historical
+plans that mention `murm-replication` in passing
+(2026-06-03 host p2p wiring, 2026-07-09 merecat boundary, 2026-07-17 participant
+gate, 2026-07-22 graphshell projection) and `MURM_AS_BILATERAL.md`, which already
+declares itself superseded, keep their original spelling as evidence.
+
+### S2 — remove compatibility ownership (open)
+
+S0 established that `transport::synced_space` has no callers, so S2 is a
+deletion of that module plus its `pub mod` line, not a migration. It was kept
+out of S1 deliberately, per the stop rule against combining module cleanup with
+the move.

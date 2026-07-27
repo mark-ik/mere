@@ -65,6 +65,8 @@ impl Canvas {
         self.node_sprites.clear();
         self.node_sprite_hulls.clear();
         self.node_materials.clear();
+        self.pending_image_requests.clear();
+        self.requested_images.clear();
         self.node_importance.clear();
         self.importance_dirty = true;
         self.node_recency.clear();
@@ -129,7 +131,9 @@ impl Canvas {
             node_sprites: HashMap::new(),
             node_sprite_hulls: HashMap::new(),
             scene_sprite_textures: HashMap::new(),
-            resolved_images: HashMap::new(),
+            resolved_images: resolved_image_cache::ResolvedImageCache::default(),
+            pending_image_requests: BTreeMap::new(),
+            requested_images: HashSet::new(),
             ambient: None,
             ambient_tincture: ColorF::new(0.0, 0.0, 0.0, 0.0),
             node_materials: HashMap::new(),

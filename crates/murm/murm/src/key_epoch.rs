@@ -8,9 +8,9 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
 
-use murm_replication::{DropProtector, NativeDropError};
 use p2panda_encryption::crypto::Rng;
 use p2panda_encryption::crypto::xchacha20::{x_aead_decrypt, x_aead_encrypt};
+use stickleback::{DropProtector, NativeDropError};
 use zeroize::Zeroizing;
 
 use crate::{CabalId, CabalKey};

@@ -34,21 +34,25 @@ For terms not addressed here, see the donor harvest indexes ([full harvest](mere
 
 ## Comms layers
 
-- **Murm** — the peer-exchange family. Its replication foundation serves
-  direct exchange, Moot, mesh, and other signed shared domains; its public
+- **Stickleback** — the shared replicated-space layer beneath every signed peer
+  domain: joined spaces and their drain, policy-before-insert processing,
+  muniment-backed replicated storage, checkpoints, retention mechanics, and
+  native drop carriage. The package is `stickleback`. It was `murm-replication`
+  until 2026-07-26, when the multi-consumer reality (Murm, Mesh, Moot, and
+  transport) earned it a name for the boundary rather than one consumer. A
+  domain supplies its own operation grammar, addressing, authorization, and
+  materialization — Stickleback never infers authority from transport access or
+  visible membership.
+- **Murm** — the peer-exchange family, a domain over Stickleback. Its public
   conversation service owns invitation-scoped murmurs, mail, and co-op exchange.
-  - **Murm replication** — the role-descriptive lower layer for peer transport,
-    p2panda sessions and processing, muniment-backed replicated storage,
-    retention mechanics, and native drop. The planned package is
-    `murm-replication`.
   - **Murmuring** — retired inner crate. Its signed-operation grammar and
     conversation engine were folded into `murm` on 2026-07-14. Internal
     mechanics use `ConversationEngine` and `ConversationStore`.
-- **Moot** — the governed-space domain over Murm replication. It owns community
+- **Moot** — the governed-space domain over Stickleback. It owns community
   identity, membership, constitution, governed settings, moderation,
   recognition, tessera, and community projections.
   - **Mooting** — current home of recognition policy and, temporarily, the
-    generic `MunimentStore`. The store moves to `murm-replication`; the name is
+    generic `MunimentStore`. The store moves to `stickleback`; the name is
     not a generic-plumbing law.
 - **Moothold** — reserved for actual multi-moot holding or federation behavior.
   The current package also contains single-moot code for historical reasons;

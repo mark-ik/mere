@@ -199,13 +199,13 @@ pub const STAGE: &str = "pre-alpha";
 mod tests {
     use super::*;
     use identity::InMemoryProvider;
-    use murm_replication::{
-        DropExportProfile, DropLimits, export_topic_operations, write_plain_drop,
-        write_protected_drop,
-    };
     use p2panda_core::Topic;
     use std::io::Cursor;
     use std::sync::Arc;
+    use stickleback::{
+        DropExportProfile, DropLimits, export_topic_operations, write_plain_drop,
+        write_protected_drop,
+    };
     use tempfile::tempdir;
     use tokio::io::DuplexStream;
 

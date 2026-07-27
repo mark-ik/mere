@@ -13,9 +13,11 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use crate::chain::RevocationLedger;
 use crate::facts::SessionFacts;
-use crate::handshake::{HandshakeError, SessionHello, SessionReply, respond};
+use crate::handshake::{
+    AdmittedSession, HandshakeError, SessionHello, SessionReply, admit, respond,
+};
 use crate::policy::LocalNetworkPolicy;
-use crate::types::{HandshakeLimits, SessionDecision};
+use crate::types::{DenyReason, HandshakeLimits, SessionDecision};
 
 /// Failure while exchanging a handshake frame.
 #[derive(Debug, thiserror::Error)]
@@ -77,7 +79,66 @@ where
     let hello = read_frame(stream, limits.max_hello_bytes).await?;
     let (reply, decision) = respond(policy, ledger, &hello, facts, now_ms, active_sessions);
     write_frame(stream, &reply).await?;
+    if !decision.is_accept() {
+        finish_refusal(stream).await;
+    }
     Ok(decision)
+}
+
+/// Finish a refused stream rather than leaving it to be dropped.
+///
+/// Both carriers happen to deliver a flushed-then-dropped refusal today: a
+/// retinue relay reads its duplex to EOF before closing the link, and quinn's
+/// `SendStream::drop` calls `finish`. Relying on that is relying on two
+/// unrelated `Drop` implementations staying correct, and on nobody dropping
+/// the endpoint underneath them, which is precisely the failure this lane
+/// already hit once. `poll_shutdown` is implemented on both stream types and,
+/// before this, had no callers anywhere in the tree. A refusal is finished
+/// now, not merely flushed.
+///
+/// Best-effort on purpose: the decision is already made and the reply already
+/// written, so a peer that has hung up cannot turn a refusal into an error.
+async fn finish_refusal<S>(stream: &mut S)
+where
+    S: AsyncWrite + Unpin,
+{
+    let _ = stream.shutdown().await;
+}
+
+/// Responder half that yields the admitted session.
+///
+/// The shape a service carrier wants, and the one N2's two halves share: it
+/// takes the stream, runs the bounded handshake, and hands back either an
+/// [`AdmittedSession`] carrying the principal and the carrier's facts, or the
+/// reason it was refused. A refusal consumes the stream and finishes it, so
+/// there is no way to accidentally pass a refused stream to an application.
+pub async fn admit_session<S>(
+    mut stream: S,
+    policy: &LocalNetworkPolicy,
+    ledger: &RevocationLedger,
+    facts: &SessionFacts,
+    now_ms: u64,
+    active_sessions: u32,
+) -> Result<Result<AdmittedSession<S>, DenyReason>, IoHandshakeError>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    let limits = policy.limits.clamped();
+    let hello = read_frame(&mut stream, limits.max_hello_bytes).await?;
+    let (reply, outcome) = admit(policy, ledger, &hello, facts, now_ms, active_sessions);
+    write_frame(&mut stream, &reply).await?;
+    match outcome {
+        Ok(principal) => Ok(Ok(AdmittedSession {
+            stream,
+            principal,
+            facts: facts.clone(),
+            limits,
+        })),
+        Err(reason) => {
+            finish_refusal(&mut stream).await;
+            Ok(Err(reason))
+        }
+    }
 }
 
 /// Initiator half: write the hello, read the reply.

@@ -5,8 +5,8 @@ use std::io::Read;
 use std::sync::{Arc, Mutex};
 
 use identity::{Ed25519Keypair, Ed25519PublicKey, IdentityProvider};
-use murm_replication::{DropImportReport, DropLimits, MunimentStore, ProcessOutcome};
 use p2panda_core::Operation;
+use stickleback::{DropImportReport, DropLimits, MunimentStore, ProcessOutcome};
 use tokio::sync::{Mutex as AsyncMutex, broadcast};
 
 use crate::{

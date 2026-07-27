@@ -29,7 +29,7 @@
 //! The sample graph, simulation, node-children pool, and the small paint/DOM
 //! helpers live in [`mod@build`].
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 
 use crate::scene_paint::{Camera, ScenePaintStyle};
 use euclid::default::{Box2D, Point2D};
@@ -144,6 +144,8 @@ mod edge_cells;
 mod fields;
 mod frame;
 mod input;
+mod resolved_image_cache;
+pub use resolved_image_cache::DEFAULT_RESOLVED_IMAGE_CACHE_BYTES;
 
 /// Ambient-sim backdrops (non-rapier liveliness painted behind the graph): Conway's
 /// [`GameOfLife`] is the first. (Physics scenes P5.)
@@ -331,9 +333,16 @@ pub struct Canvas {
     /// unresolved handle simply does not paint, which is the correct behavior
     /// for a blob that is missing, not yet synced, or swept.
     ///
-    /// Unbounded today; the plan's phase 4 bounds it by an LRU on the same
-    /// seam, so bounding it changes this map's policy and nothing else.
-    resolved_images: HashMap<[u8; 32], (Vec<u8>, u32, u32)>,
+    /// Byte-bounded LRU: decoded pixels are experience, so only the visible
+    /// working set stays resident. Evicted visible digests are requested from
+    /// the host again through `pending_image_requests`.
+    resolved_images: resolved_image_cache::ResolvedImageCache,
+    /// Misses observed by the paint pass, drained by the host after a frame.
+    pending_image_requests: BTreeMap<[u8; 32], kernel::types::ImageRef>,
+    /// Digests already handed to the host. Keeps an absent or undecodable blob
+    /// from producing an I/O request every frame. LRU eviction removes a digest
+    /// from this set so it can be resolved again when visible.
+    requested_images: HashSet<[u8; 32]>,
     /// An optional ambient-sim backdrop (a non-rapier sim painted behind the graph for atmosphere):
     /// any [`AmbientSim`] (Game of Life, n-body drift, particle-life), advanced + painted as the
     /// bottom layer each [`frame`](Self::frame). `None` until one is loaded. (Physics scenes P5.)
