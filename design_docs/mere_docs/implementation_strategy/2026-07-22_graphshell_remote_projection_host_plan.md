@@ -774,8 +774,46 @@ the low-power lane, landed the same week):
   allow-list and `ActionNotOffered` gets its decision site, or the reason is
   documented as service-supplied. Not changed here; it is a serialized
   owner-policy shape in another lane's crate.
-- **G5e — lifecycle.** Reconnect, expiry, revocation, cache purge, denied
-  score, stale intent, per G5's done-when.
+- **G5e — lifecycle. LANDED 2026-07-27.** `ports/graphshell::lifecycle` joins
+  admitted authority to the session states the protocol already modelled.
+  **No new vocabulary was needed**: `SessionStatus::{Expired, Revoked}`,
+  `CachePolicy::purge_on_revocation`, and `IntentResult::Stale` were all
+  already there from G1; what was missing was anything that *drove* them from
+  the authority the carrier proved. `graphshell-client` gained two status
+  mutators beside its existing `mark_stale`/`mark_disconnected` and still
+  declares zero personae and zero network-policy.
+  - **reconnect** — `projection_session` derives the id from the
+    transcript-bound `AdmittedPrincipal::session_id`, so the client cannot
+    name the session it mounts under. A second admission lands on a different
+    id and cached scenes from the first are unreachable by construction rather
+    than by an enforced rule. Resume *within* one admission is untouched (G2).
+  - **expiry** — `deadline_ms` is the earliest expiry in the chain: a session
+    lives no longer than the shortest-lived link that opened it. `Lapse::
+    Expired` carries the deadline, not the observation time.
+  - **revocation** — checked ahead of expiry, because both can hold at once
+    and an owner's withdrawal is the more useful thing to report.
+  - **cache purge** — `apply_lapse` honours the mounted scene's own
+    `CachePolicy`: purge forgets the session outright (scene *and* every
+    resource cached under it), retention keeps it under a status that cannot
+    still read `Live`.
+  - **denied score** — scores hang below the service path, so Personae's
+    existing scope grammar expresses "this viewer may see one score" with no
+    new mechanism. The `/` boundary in `path_covers` is what makes it safe.
+  - **stale intent** — a lapsed session is refused *without* being told the
+    current revision; replying `Stale` would disclose to a peer whose
+    authority has ended what the current revision is.
+  Receipts (graphshell 33, graphshell-client 7): all six paths above, plus
+  revocation outranking expiry, a per-score grant not reaching a neighbour
+  sharing its prefix (`spiral` vs `spiral-admin`), and an intent naming
+  another session rejected.
+  **Open seam, same shape as G5d's.** `AdmittedPrincipal` is a conclusion and
+  carries no claims, so a session cannot re-ask "is this still true?" without
+  retaining the chain it was admitted on. The sans-io path can (the port holds
+  the hello); **the carrier path cannot** — `network_policy::admit_session`
+  reads and consumes the frame internally and returns only the principal. So a
+  carrier-admitted session is bounded by its deadline but cannot notice a
+  revocation. The fix is for `AdmittedSession` to retain its claims, which is
+  a change in another lane's crate; recorded rather than worked around.
 
 **Only after G5b+G5c does the capability round's deferred sub-delegation become
 buildable**: the endpoint's certificate goes to depth 1 and issues a narrower

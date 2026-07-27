@@ -479,6 +479,24 @@ impl ClientState {
         }
     }
 
+    /// The grant behind this session ran out on schedule.
+    ///
+    /// Separate from [`Self::mark_stale`] because staleness is about the scene
+    /// falling behind and this is about authority ending: a stale session can
+    /// resume, an expired one needs a new admission.
+    pub fn mark_expired(&mut self, session: &ProjectionSession) {
+        if let Some(mounted) = self.mounted.get_mut(session) {
+            mounted.status = SessionStatus::Expired;
+        }
+    }
+
+    /// The grant behind this session was withdrawn by its issuer.
+    pub fn mark_revoked(&mut self, session: &ProjectionSession) {
+        if let Some(mounted) = self.mounted.get_mut(session) {
+            mounted.status = SessionStatus::Revoked;
+        }
+    }
+
     pub fn mounted(&self, session: &ProjectionSession) -> Option<&MountedScene> {
         self.mounted.get(session)
     }

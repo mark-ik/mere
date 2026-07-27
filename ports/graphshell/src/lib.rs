@@ -7,6 +7,7 @@ pub mod admission;
 pub mod canary;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod carrier;
+pub mod lifecycle;
 pub mod profile;
 pub mod resume;
 #[cfg(not(target_arch = "wasm32"))]
