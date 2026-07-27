@@ -1,10 +1,9 @@
 # Notochord Session and Policy Spine Plan
 
 **Date:** 2026-07-26
-**Status:** N0-N2 landed; the N2 promotion gate passed on 2026-07-27.
-The N3 name cutover is unblocked but has not started.
-**Decision:** grow the existing `notochord` crate into the common
-session-admission spine, then promote it to `notochord` when two real service
+**Status:** Complete. N0-N4 landed on 2026-07-27.
+**Decision:** grow the former `network-policy` crate into the common
+session-admission spine, then promote it to `notochord` after two real service
 carriers consume the shared context.
 **Refines:** the
 [low-power radio and managed-network plan](./2026-07-24_low_power_managed_network_plan.md)
@@ -21,19 +20,19 @@ The substrate is real:
 - `notochord` has a deterministic local evaluator, Personae chain
   validation, revocation, bounded handshake framing, transcript proofs, and
   `AdmittedPrincipal`.
-- Memory and Reticulum/TCP run the policy handshake over real transport
-  implementations.
-- Graphshell has its own action triple and consumes the admitted principal.
+- one `mere-transport` adapter turns accepted carrier state into
+  `SessionFacts`;
+- Memory and Reticulum/TCP run the handshake over real transport
+  implementations;
+- Murm and Graphshell consume the same `AdmittedSession`, with Graphshell's
+  carrier proved over real p2panda/Iroh;
+- admitted sessions retain their verified claims, so expiry and later
+  revocation use the authority that actually opened the connection;
+- the host persists versioned owner policy and verified revocations without
+  persisting carrier facts, principals, streams, or live session counts.
 
-The missing boundary is visible in
-`crates/murm/transport/tests/notochord.rs`: each caller manually turns an
-`AcceptedSession` into a `SessionBinding`. Murm's real accept path is still
-open, and Graphshell's p2panda carrier is still open. The facts, proof binding,
-policy decision, and domain handoff therefore remain adjacent pieces rather
-than one reusable session context.
-
-That is what Notochord should name. Renaming `notochord` before the
-context is used would promote an intention.
+That is what Notochord now names. The package and path promotion followed the
+N2 two-consumer receipt.
 
 ## The boundary
 
@@ -68,21 +67,21 @@ AdmittedSession<Stream>
 
 ## Separate facts, claims, and conclusions
 
-The current `SessionRequest` contains `transport_peer`, even though callers are
-instructed to populate it only from transport truth. The rule is sound; the
-type makes it easy to violate. Notochord separates the channels.
+Before N0, `SessionRequest` contained `transport_peer`, even though callers
+were instructed to populate it only from transport truth. The rule was sound;
+the type made it easy to violate. Notochord now separates the channels.
 
 ```rust
 pub struct SessionFacts {
-    pub protocol: ProtocolId,
-    pub transport: TransportKind,
-    pub authenticated_initiator: Option<PeerId>,
+    pub protocol: Vec<u8>,
+    pub transport: CarrierKind,
+    pub authenticated_initiator: Option<[u8; 32]>,
     pub ingress: IngressFacts,
 }
 
 pub struct IngressFacts {
-    pub local_interface: Option<IngressInterfaceId>,
-    pub shared_link: Option<LinkId>,
+    pub local_interface: Option<u64>,
+    pub shared_link: Option<[u8; 16]>,
 }
 
 pub struct SessionClaims {
@@ -96,16 +95,17 @@ pub struct SessionClaims {
 }
 
 pub struct ProofBinding {
-    pub protocol: ProtocolId,
-    pub initiator_transport_identity: Option<PeerId>,
-    pub shared_link: Option<LinkId>,
+    pub protocol: Vec<u8>,
+    pub initiator_transport_identity: Option<[u8; 32]>,
+    pub shared_link: Option<[u8; 16]>,
 }
 
 pub struct AdmittedSession<S> {
     pub stream: S,
     pub principal: AdmittedPrincipal,
     pub facts: SessionFacts,
-    pub limits: SessionLimits,
+    pub claims: SessionClaims,
+    pub limits: HandshakeLimits,
 }
 ```
 
@@ -150,8 +150,8 @@ capacity commitments remain independent settings.
 
 ## Packaging
 
-Keep `notochord` as the package name through N0-N2 so the work is judged
-on use rather than naming.
+`network-policy` remained the package name through N0-N2 so the work was
+judged on use rather than naming. N3 promoted it after the two-consumer gate.
 
 The promoted target is:
 
@@ -159,10 +159,12 @@ The promoted target is:
 crates/system/notochord
   facts.rs
   policy.rs
-  personae.rs
-  revocation.rs
+  owner.rs
+  chain.rs
   handshake.rs
   io.rs
+  types.rs
+  lib.rs
 ```
 
 The base crate remains sans-I/O. Its `tokio` feature continues to supply only
@@ -180,8 +182,8 @@ dependency cycle.
 
 **Files:**
 
-- `crates/system/notochord/src/{types,handshake,policy,lib}.rs`
-- new `crates/system/notochord/src/facts.rs`
+- `crates/system/network-policy/src/{types,handshake,policy,lib}.rs`
+- new `crates/system/network-policy/src/facts.rs`
 - existing matrix and handshake tests
 
 Introduce `SessionFacts`, `IngressFacts`, and `ProofBinding`. Remove transport
@@ -211,7 +213,7 @@ in-workspace callers in N1. Do not publish both request shapes.
 - `crates/murm/transport/Cargo.toml`
 - `crates/murm/transport/src/{accepted,lib}.rs`
 - new focused integration module behind an optional feature
-- `crates/murm/transport/tests/notochord.rs`
+- `crates/murm/transport/tests/session_policy.rs`
 
 Add one inbound conversion owned by the carrier crate:
 
@@ -259,17 +261,17 @@ the direct-PHY/RF proof under the low-power plan's bench gate.
 same facts, handshake, and admitted conclusion with their distinct action
 triples.
 
-### N3. Name and path cutover
+### N3. Name and path cutover — COMPLETE 2026-07-27
 
 After N2:
 
-- move `crates/system/notochord` to `crates/system/notochord`;
+- move `crates/system/network-policy` to `crates/system/notochord`;
 - rename the Cargo package and Rust library to `notochord`;
 - update the workspace dependency, Murm transport integration, Graphshell
   port, docs, and lockfile;
 - keep wire-domain separator constants versioned and stable unless a deliberate
   protocol-version migration is included;
-- remove `notochord` and `notochord` from current source and docs.
+- remove `network-policy` and `network_policy` from current build references.
 
 Before deleting the old package name, check for a published clean-checkout
 consumer. Use one deprecated forwarding release only if that evidence exists.
@@ -291,14 +293,15 @@ git diff --check
 Use the actual feature and package spellings fixed by N1. A scoped search finds
 no current build reference to the old name.
 
-### N4. Owner-facing policy projection
+### N4. Owner-facing policy projection — COMPLETE 2026-07-27
 
 Expose the independent settings through the host without flattening them into
 one public/private switch:
 
 - accepted network and profile revisions;
-- per-service access and transport-identity requirements;
-- per-service session capacity and handshake ceilings;
+- per-service access, admitted domain/actions, and transport-identity
+  requirements;
+- per-service session capacity and per-network handshake ceilings;
 - revocation state;
 - discovery and Retinue transit as separate settings owned by their existing
   subsystems.
@@ -336,7 +339,7 @@ settings remain independent and configurable.
 
 ### 2026-07-26 — N0 landed (facts split from claims)
 
-`crates/system/notochord/src/facts.rs` introduces `SessionFacts`,
+`crates/system/network-policy/src/facts.rs` introduced `SessionFacts`,
 `IngressFacts`, `CarrierKind`, and `ProofBinding`. `SessionRequest` is gone,
 replaced by `SessionClaims`; `evaluate` now takes facts and claims as separate
 arguments, so a caller cannot place an application claim where a carrier fact
@@ -349,8 +352,8 @@ local interface (neither field exists on `SessionClaims`); a claimed subject
 cannot overwrite a carrier-authenticated peer; Reticulum admits a proved
 subject with `authenticated_initiator: None`; replay on a different shared link
 fails; a differing local interface does not change transcript bytes; and the
-V5/V6 matrix stays green. 35 notochord tests, 18 graphshell tests, both
-transport arms.
+V5/V6 matrix stayed green. At this point the package still had its historical
+name: 35 `network-policy` tests, 18 Graphshell tests, both transport arms.
 
 **Two deviations from the plan text, both deliberate:**
 
@@ -365,8 +368,8 @@ transport arms.
 
 ### 2026-07-26 — N1 landed (one audited adapter)
 
-`crates/murm/transport/src/notochord.rs`, behind an optional
-`notochord` feature, owns the only conversion from an acceptance record
+`crates/murm/transport/src/session_policy.rs`, then behind an optional
+`session-policy` feature, introduced the only conversion from an acceptance record
 into carrier facts:
 
 ```rust
@@ -380,9 +383,9 @@ plus the two role-specific initiator constructors, `initiator_binding` (a
 carrier that authenticates peers, from the node's **own** identity) and
 `initiator_link_binding` (a link-oriented carrier that cannot, so the shared
 link carries the weight). The hand-built `facts_for` in
-`tests/notochord.rs` is deleted; both arms now exercise the real adapter.
+`tests/session_policy.rs` was deleted; both arms exercised the real adapter.
 
-The dependency runs mere-transport -> notochord, as the plan requires, so
+The dependency ran mere-transport -> network-policy, as the plan required, so
 the policy core still knows nothing about iroh, p2panda, or retinue and the
 default `mere-transport` build does not pull it in at all.
 
@@ -397,10 +400,10 @@ the acceptance record before a single application byte is read, and
 `SessionFacts` has no deserializer.
 
 **Deviation:** the method is `session_facts()` / `into_session()` rather than
-`into_notochord()`, since the crate is still `notochord` through N2 and
+`into_notochord()`, since the crate was still `network-policy` through N2 and
 naming the method for an unearned promotion would be the same mistake the plan
-warns about. The feature is `notochord` for the same reason. Both rename
-with the promotion.
+warned about. The feature was `session-policy` for the same reason. N3 renamed
+the module and feature to `notochord`; the domain-neutral method names stayed.
 
 Remaining for N2: Murm's real accept path, and Graphshell G5d over
 `P2pandaTransport`.
@@ -414,7 +417,7 @@ one level up. It is carrier-neutral, so it lives here.
 
 `AdmittedSession<S>` carries the stream, the `AdmittedPrincipal`, the
 `SessionFacts` the carrier observed, and the bounds the responder holds the
-session to. `notochord::admit_session` is the io-level shape both halves
+session to. `network_policy::admit_session` was the io-level shape both halves
 share: it takes the stream, runs the bounded handshake, and returns either an
 `AdmittedSession` or the `DenyReason`. A refusal **consumes** the stream, so
 there is no way to hand a refused one to an application by accident.
@@ -496,7 +499,7 @@ Murm's lane already was.
 `ports/graphshell/src/carrier.rs` (`115904b5`). `accept_projection_session`
 runs the accept path before a `SessionOpen` byte is read, on the same
 construction site the Murm lane uses: `AcceptedSession::into_session` for the
-facts, `notochord::admit_session` for the framing and the conclusion. It
+facts, `network_policy::admit_session` for the framing and the conclusion. It
 hand-builds no `SessionFacts` and owns no framing of its own.
 
 The transport is borrowed, never owned, which is this lane's independent
@@ -519,9 +522,12 @@ operations after admission under their own vocabulary. Proved rather than
 argued: an admitted `administer` grant at the projection path is refused as
 `ActionNotServed` (graphshell 20).
 
-Worth a ruling at N3 or before: either `ServiceRule` grows an action
-allow-list and `ActionNotOffered` gains a decision site, or the reason is
-documented as service-supplied and every carrier owns the check.
+This was closed in the final consolidation: `ServiceRule` now persists its
+admission domain and action allow-list, and `LocalNetworkPolicy::evaluate`
+returns `ActionNotOffered` before accepting an unoffered triple. Graphshell
+still checks its compiled service vocabulary after admission, so a permissive
+owner document cannot make the implementation serve an action it does not
+support.
 
 The first carrier receipts in `115904b5` exercised the generic accept path
 through `MemoryTransport`. That proved the shared construction site, but it
@@ -541,12 +547,12 @@ exposed a p2panda stream-lifetime race: finishing a small final frame and then
 dropping the stream could close its last QUIC connection handle before the
 peer received the refusal. `P2pandaStream::poll_shutdown` now keeps that handle
 alive until QUIC acknowledges every final byte, with a transport-level
-regression receipt. Verification: graphshell 35; mere-transport 40 plus its
-notochord integration test.
+regression receipt. Verification: Graphshell 35; mere-transport 40 plus its
+`session-policy` integration test.
 
 ### A transport bug this uncovered
 
-The Reticulum arm of `notochord.rs` was intermittently timing out with
+The Reticulum arm of `session_policy.rs` was intermittently timing out with
 the responder having decided `accept` and written its reply. The cause is not
 in the policy layer.
 
@@ -571,3 +577,67 @@ exactly this seam.
 Note for whoever writes the next transport test: bound every await. An
 unbounded `read_to_end` on a link that never signals EOF is indistinguishable
 from a slow build, and cost this lane a night.
+
+### 2026-07-27 — N2 lifecycle closure
+
+The carrier conclusion originally retained the principal and facts but dropped
+the verified claims. That left carrier-admitted Graphshell sessions unable to
+notice a later revocation because the delegation chain had been consumed with
+the hello. `AdmittedSession<S>` now retains `SessionClaims` after the accepted
+bounded frame is decoded. `SessionAuthority::retain_admitted` derives the live
+deadline and delegation ids from that exact conclusion, and the lifecycle
+receipt proves a later ledger update lapses the session as revoked.
+
+### 2026-07-27 — N3 landed (package promotion)
+
+The package and directory are now `notochord`; the workspace dependency,
+Murm, mere-transport, Graphshell, current docs, features, modules, and tests use
+that name. A scoped sibling-repository search found no clean-checkout build
+consumer of the old package, so no forwarding release was justified.
+
+The two existing transcript-domain byte strings deliberately retain
+`mere/network-policy/.../v1`. They are wire compatibility constants, not
+package identifiers, and changing them would invalidate existing proofs.
+Historical progress entries above retain the old package spelling to keep the
+sequence honest.
+
+### 2026-07-27 — N4 landed (owner policy and headed projection)
+
+`OwnerPolicySet` and `OwnerNetworkPolicy` contain only owner choices and
+verified revocations. Service rules now name the domain and admission actions
+the owner offers, which gives `ActionNotOffered` its missing decision site.
+That schema change founded owner-policy document v2 rather than silently
+reusing v1. Handshake limits clamp at the edit boundary. Deserialization
+rejects unknown document or network-policy versions, duplicate networks, and
+nondeterministic network order.
+
+Session-runtime persists the document at
+`personas/<persona>/settings/notochord.json` using replacement saves. Its
+restart receipts prove the rules return while carrier facts, admitted
+principals, streams, session ids, and live counts have no serialized field.
+
+Graphshell projects the same model into plain owner-facing rows. The committed
+headed receipt changes Murm without changing Graphshell or transit, changes
+transit without changing either service, and reloads the same choices from
+disk:
+
+[`ports/graphshell/docs/receipts/n4_owner_policy.html`](../../../ports/graphshell/docs/receipts/n4_owner_policy.html)
+
+Final focused verification on the completed shape:
+
+- Notochord: 42 tests with async framing enabled;
+- Graphshell: 38 tests, including real p2panda admission, retained-authority
+  revocation, policy-axis independence, and byte-exact receipt regeneration;
+- session-runtime: 3 focused owner-store tests;
+- mere-transport: Memory and Reticulum/TCP Notochord arms;
+- Murm: 4 focused session-lane tests, including unoffered-action refusal
+  before the engine receives a post;
+- warning-denying Clippy for Notochord and Graphshell's own targets;
+- `cargo check --workspace --all-targets`;
+- targeted rustfmt checks and `git diff --check`.
+
+The repository-wide `cargo fmt --all -- --check` remains red on pre-existing
+formatting drift outside this slice. Every Rust file touched here passes
+`rustfmt --check`. The browser harness refused local `file:` navigation, so
+desktop and narrow-width visual inspection of the generated HTML remains
+unclaimed and is recorded in the receipt.

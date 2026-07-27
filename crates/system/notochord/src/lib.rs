@@ -39,7 +39,10 @@ pub use handshake::{
 };
 #[cfg(feature = "tokio")]
 pub use io::{IoHandshakeError, accept_session, admit_session, initiate_session};
-pub use owner::{OWNER_POLICY_VERSION, OwnerNetworkPolicy, OwnerPolicyEdit, OwnerPolicySet};
+pub use owner::{
+    OWNER_POLICY_VERSION, OwnerNetworkPolicy, OwnerPolicyEdit, OwnerPolicySet,
+    OwnerPolicyValidationError,
+};
 pub use policy::{
     DiscoveryPolicy, LocalNetworkPolicy, POLICY_VERSION, ServiceAccess, ServiceRule, TransitPolicy,
 };

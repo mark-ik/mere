@@ -27,6 +27,10 @@ pub struct ServicePolicyView {
     pub path: String,
     /// Plain access label.
     pub access: &'static str,
+    /// Admission domain offered by the owner.
+    pub domain: String,
+    /// Admission actions offered by the owner.
+    pub actions: Vec<String>,
     /// Whether this service insists on carrier-authenticated identity.
     pub requires_transport_identity: bool,
     /// Owner-selected concurrent-session ceiling.
@@ -78,6 +82,8 @@ impl From<&OwnerNetworkPolicy> for PolicySettingsView {
                 .map(|(path, rule)| ServicePolicyView {
                     path: path.clone(),
                     access: access_label(rule.access),
+                    domain: rule.domain.clone(),
+                    actions: rule.actions.iter().cloned().collect(),
                     requires_transport_identity: rule.require_transport_identity,
                     max_sessions: rule.max_sessions,
                 })
@@ -174,11 +180,7 @@ pub fn run_n4_policy_scenario(data_root: &Path, persona: PersonaId) -> io::Resul
 }
 
 fn rule(access: ServiceAccess, max_sessions: Option<u32>) -> ServiceRule {
-    ServiceRule {
-        access,
-        require_transport_identity: false,
-        max_sessions,
-    }
+    ServiceRule::new(access, "mere.network", ["connect"], false, max_sessions)
 }
 
 fn stage(title: &str, note: &str, settings: &OwnerNetworkPolicy) -> PolicyReceiptStage {
@@ -233,8 +235,10 @@ pub fn render_n4_policy_receipt(receipt: &PolicyReceipt) -> String {
         for service in &stage.view.services {
             write!(
                 html,
-                "<div class=\"service\"><div><div class=\"path\">{}</div><div class=\"meta\">transport identity: {} · capacity: {}</div></div><span class=\"badge {}\">{}</span></div>",
+                "<div class=\"service\"><div><div class=\"path\">{}</div><div class=\"meta\">{} · {} · transport identity: {} · capacity: {}</div></div><span class=\"badge {}\">{}</span></div>",
                 escape(&service.path),
+                escape(&service.domain),
+                escape(&service.actions.join(", ")),
                 if service.requires_transport_identity {
                     "required"
                 } else {
@@ -360,6 +364,22 @@ mod tests {
         assert!(decision(&restored, PROJECTION_SERVICE).is_accept());
         assert!(!restored.policy.permits_transit());
 
+        std::fs::remove_dir_all(root).expect("remove scratch");
+    }
+
+    #[test]
+    fn committed_n4_receipt_matches_the_live_policy_scenario() {
+        let root =
+            std::env::temp_dir().join(format!("graphshell-n4-receipt-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let receipt =
+            run_n4_policy_scenario(&root, PersonaId::default_persona()).expect("scenario");
+        let rendered = render_n4_policy_receipt(&receipt);
+
+        assert_eq!(
+            rendered,
+            include_str!("../docs/receipts/n4_owner_policy.html")
+        );
         std::fs::remove_dir_all(root).expect("remove scratch");
     }
 }

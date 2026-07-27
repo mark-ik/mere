@@ -30,9 +30,9 @@ boundary. The radio, Reticulum, and queue work lands in the Retinue workspace.
 
 - The
   [`2026-07-26_notochord_session_policy_spine_plan.md`](./2026-07-26_notochord_session_policy_spine_plan.md)
-  takes the landed V3-V7 session-admission pieces through a shared facts and
-  admitted-session boundary. The `notochord` name remains authoritative
-  until that plan's two-consumer promotion gate passes.
+  took the landed V3-V7 session-admission pieces through a shared facts and
+  admitted-session boundary. Its two-consumer gate passed and `notochord` is
+  now the authoritative package name.
 - Retinue's existing direct-PHY Resource receipt:
   [`2026-07-23_direct_phy_resource_acceptance.md`](https://github.com/mark-ik/retinue/blob/main/design_docs/2026-07-23_direct_phy_resource_acceptance.md)
 - Tulle/RNode headed receipt:
@@ -964,14 +964,15 @@ different Reticulum link is refused too, since the link is in the transcript.
 
 ### 2026-07-26 — V7 first half: the matrix over real transports
 
-`crates/murm/transport/tests/session_policy.rs` runs the handshake through
+`crates/murm/transport/tests/notochord.rs` runs the handshake through
 actual `Transport` implementations. The Memory arm admits and refuses by
 owner rule, and the **Reticulum/TCP arm passes**: acceptance there is
 best-effort (`peer: None`), so the session proof is the only thing that
 names a subject, and it admits on that basis alone, carries application
 bytes, and both ends independently agree on the link id they bound to. The
-adapter turning an `AcceptedSession` into a `SessionBinding` is five lines
-at the call site, as the V6 note predicted.
+adapter now goes through the one audited
+`AcceptedSession::{session_facts,into_session}` construction site established
+by Notochord N1.
 
 **A design bug this arm caught.** The transcript originally bound the
 responder's *local* interface id. `mere-transport` documents that id as

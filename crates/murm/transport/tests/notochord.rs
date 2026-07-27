@@ -12,18 +12,22 @@
 
 use std::collections::BTreeMap;
 
+#[cfg(feature = "reticulum")]
+use identity::Ed25519Keypair;
 use identity::delegation::{
     CapabilityScope, DelegationCertificate, DelegationParent, SignedDelegationCertificate,
 };
-use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
+use identity::{IdentityProvider, InMemoryProvider};
 use notochord::{
     DenyReason, LocalNetworkPolicy, NetworkId, ProfileRef, ProofBinding, RequestedAction,
     RevocationLedger, ServiceAccess, ServiceRule, SessionDecision, SessionHello, TrafficClass,
     TrustedRoot, accept_session, initiate_session,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+#[cfg(feature = "reticulum")]
+use transport::initiator_link_binding;
 use transport::memory::MemoryTransport;
-use transport::{Alpn, PeerID, Transport, initiator_binding, initiator_link_binding};
+use transport::{Alpn, PeerID, Transport, initiator_binding};
 
 const NETWORK: NetworkId = NetworkId([3; 32]);
 const ROOT_AUTHORITY: [u8; 32] = [7; 32];
@@ -76,11 +80,7 @@ fn policy(access: ServiceAccess) -> LocalNetworkPolicy {
     }];
     policy.services = BTreeMap::from([(
         MURM.to_string(),
-        ServiceRule {
-            access,
-            require_transport_identity: false,
-            max_sessions: None,
-        },
+        ServiceRule::new(access, "mere.network", ["connect"], false, None),
     )]);
     policy
 }

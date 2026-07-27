@@ -53,6 +53,9 @@ pub fn save_notochord_policy(
     persona: PersonaId,
     policies: &OwnerPolicySet,
 ) -> io::Result<()> {
+    policies
+        .validate()
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     let target = notochord_policy_path(data_root, persona);
     let directory = target
         .parent()
@@ -107,11 +110,13 @@ mod tests {
         let mut network = OwnerNetworkPolicy::closed(NetworkId([7; 32]));
         network.apply(OwnerPolicyEdit::Service {
             path: "/services/murm".to_string(),
-            rule: ServiceRule {
-                access: ServiceAccess::MemberOnly,
-                require_transport_identity: true,
-                max_sessions: Some(3),
-            },
+            rule: ServiceRule::new(
+                ServiceAccess::MemberOnly,
+                "mere.network",
+                ["connect"],
+                true,
+                Some(3),
+            ),
         });
         network.apply(OwnerPolicyEdit::Transit(true));
         let mut policies = OwnerPolicySet::new();
@@ -162,6 +167,24 @@ mod tests {
                 .with_extension("json.previous")
                 .exists()
         );
+
+        fs::remove_dir_all(root).expect("remove scratch");
+    }
+
+    #[test]
+    fn an_unsupported_document_is_neither_loaded_nor_saved() {
+        let root = scratch("version");
+        let persona = PersonaId::default_persona();
+        let mut policies = settings();
+        policies.version += 1;
+        let error = save_notochord_policy(&root, persona, &policies).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+
+        let path = notochord_policy_path(&root, persona);
+        fs::create_dir_all(path.parent().unwrap()).expect("settings directory");
+        fs::write(&path, serde_json::to_string(&policies).unwrap()).expect("future policy");
+        let error = load_notochord_policy(&root, persona).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
 
         fs::remove_dir_all(root).expect("remove scratch");
     }

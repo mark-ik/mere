@@ -118,11 +118,13 @@ fn policy_with(rule: ServiceRule) -> LocalNetworkPolicy {
 }
 
 fn member_only_rule() -> ServiceRule {
-    ServiceRule {
-        access: ServiceAccess::MemberOnly,
-        require_transport_identity: false,
-        max_sessions: None,
-    }
+    ServiceRule::new(
+        ServiceAccess::MemberOnly,
+        "mere.network",
+        ["connect"],
+        false,
+        None,
+    )
 }
 
 /// Carrier facts for an authenticating carrier that proved the member.
@@ -162,11 +164,13 @@ fn denial(decision: SessionDecision) -> DenyReason {
 
 #[test]
 fn public_service_admits_while_transit_stays_disabled() {
-    let policy = policy_with(ServiceRule {
-        access: ServiceAccess::Public,
-        require_transport_identity: false,
-        max_sessions: None,
-    });
+    let policy = policy_with(ServiceRule::new(
+        ServiceAccess::Public,
+        "mere.network",
+        ["connect"],
+        false,
+        None,
+    ));
     let ledger = RevocationLedger::new();
     let decision = policy.evaluate(&facts(), &request(Vec::new()), &ledger, NOW_MS, 0);
     assert!(
@@ -180,12 +184,40 @@ fn public_service_admits_while_transit_stays_disabled() {
 }
 
 #[test]
+fn public_service_still_refuses_an_unoffered_domain_or_action() {
+    let policy = policy_with(ServiceRule::new(
+        ServiceAccess::Public,
+        "mere.network",
+        ["connect"],
+        false,
+        None,
+    ));
+    let ledger = RevocationLedger::new();
+
+    let mut wrong_action = request(Vec::new());
+    wrong_action.action.action = "administer".to_string();
+    assert_eq!(
+        denial(policy.evaluate(&facts(), &wrong_action, &ledger, NOW_MS, 0)),
+        DenyReason::ActionNotOffered
+    );
+
+    let mut wrong_domain = request(Vec::new());
+    wrong_domain.action.domain = "mere.graphshell".to_string();
+    assert_eq!(
+        denial(policy.evaluate(&facts(), &wrong_domain, &ledger, NOW_MS, 0)),
+        DenyReason::ActionNotOffered
+    );
+}
+
+#[test]
 fn transit_enabled_while_the_service_stays_private() {
-    let mut policy = policy_with(ServiceRule {
-        access: ServiceAccess::Disabled,
-        require_transport_identity: false,
-        max_sessions: None,
-    });
+    let mut policy = policy_with(ServiceRule::new(
+        ServiceAccess::Disabled,
+        "mere.network",
+        ["connect"],
+        false,
+        None,
+    ));
     policy.transit.enabled = true;
     let ledger = RevocationLedger::new();
     assert!(policy.permits_transit());
@@ -213,11 +245,13 @@ fn member_only_service_admits_a_valid_chain_and_refuses_none() {
 
 #[test]
 fn missing_transport_identity_where_one_is_required() {
-    let policy = policy_with(ServiceRule {
-        access: ServiceAccess::Public,
-        require_transport_identity: true,
-        max_sessions: None,
-    });
+    let policy = policy_with(ServiceRule::new(
+        ServiceAccess::Public,
+        "mere.network",
+        ["connect"],
+        true,
+        None,
+    ));
     let ledger = RevocationLedger::new();
     let anonymous_carrier = SessionFacts::new(b"mere/murm/v1".to_vec(), CarrierKind::Reticulum);
     assert_eq!(

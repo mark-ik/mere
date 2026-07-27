@@ -785,23 +785,16 @@ the low-power lane, landed the same week):
   endpoint was torn down and the relay aborted. Two unrelated mechanisms, one
   escape hatch, both opened by dropping the carrier. Taking `&T` makes it
   unspellable.
-  **The finding, and the correction to G5c.** G5c claimed its action re-check
-  was defence in depth because the policy already evaluates the action. It does
-  not. `LocalNetworkPolicy` keys service rules by *path* and checks that the
-  delegation chain covers whatever triple was requested; `ServiceRule` has no
-  action vocabulary at all, so a chain covering a *different* action at
-  `/services/projection` clears admission with that action intact.
-  `DenyReason::ActionNotOffered` exists in the crate with **no decision site**,
-  which is the smell that pointed here. So the check is not redundant and could
-  not be moved into policy construction as first planned: it is the service
-  authorizing an operation after admission under its own vocabulary, which is
-  exactly the split the Notochord plan assigns. Extracted as
-  `admission::serves_action`, shared by the sans-io and carrier paths.
-  Receipts (graphshell 20, notochord 33 unchanged): a connect grant is
-  admitted and served; **an admitted "administer" grant at the projection path
-  is refused as `ActionNotServed`**, which is the hole above, proved rather
-  than argued. The memory carrier authenticates its counterparty, so rule D6
-  forces the fixture's claimed subject to *be* the peer the carrier proved.
+  **The action-vocabulary finding is closed.** G5c exposed that the first
+  `ServiceRule` keyed only by path, so `ActionNotOffered` had no policy decision
+  site. The completed Notochord rule now persists the owner-offered domain and
+  admission actions and refuses an unoffered triple during the handshake.
+  Graphshell still applies `admission::serves_action` after admission because
+  the implementation, rather than a serialized owner document, is final
+  authority over what it actually serves. The receipt deliberately lets the
+  owner allow `administer`, then proves Graphshell refuses it as
+  `ActionNotServed`. The memory carrier authenticates its counterparty, so rule
+  D6 forces the fixture's claimed subject to be the peer the carrier proved.
   The first cut proved the generic path through `MemoryTransport`, not the
   plan's literal p2panda arm. The N2 follow-up runs the same listener over real
   `P2pandaTransport`: an authenticated viewer reaches application bytes only
@@ -809,12 +802,8 @@ the low-power lane, landed the same week):
   `ActionNotCovered` and exposes zero projection bytes. That refusal uncovered
   and fixed a p2panda stream-lifetime race: graceful shutdown now retains the
   last QUIC connection handle until the final frame is acknowledged. Current
-  receipts: graphshell 35; mere-transport 40 plus its session-policy
+  receipts: graphshell 35; mere-transport 40 plus its Notochord
   integration test.
-  Open for whoever owns `notochord`: either `ServiceRule` grows an action
-  allow-list and `ActionNotOffered` gets its decision site, or the reason is
-  documented as service-supplied. Not changed here; it is a serialized
-  owner-policy shape in another lane's crate.
 - **G5e — lifecycle. LANDED 2026-07-27.** `ports/graphshell::lifecycle` joins
   admitted authority to the session states the protocol already modelled.
   **No new vocabulary was needed**: `SessionStatus::{Expired, Revoked}`,
@@ -847,14 +836,11 @@ the low-power lane, landed the same week):
   revocation outranking expiry, a per-score grant not reaching a neighbour
   sharing its prefix (`spiral` vs `spiral-admin`), and an intent naming
   another session rejected.
-  **Open seam, same shape as G5d's.** `AdmittedPrincipal` is a conclusion and
-  carries no claims, so a session cannot re-ask "is this still true?" without
-  retaining the chain it was admitted on. The sans-io path can (the port holds
-  the hello); **the carrier path cannot** — `notochord::admit_session`
-  reads and consumes the frame internally and returns only the principal. So a
-  carrier-admitted session is bounded by its deadline but cannot notice a
-  revocation. The fix is for `AdmittedSession` to retain its claims, which is
-  a change in another lane's crate; recorded rather than worked around.
+  **The carrier revocation seam is closed.** `AdmittedSession` retains the
+  verified claims consumed from the bounded hello. `SessionAuthority::
+  retain_admitted` derives the deadline and delegation ids from that exact
+  conclusion, so a carrier-admitted session can notice later revocation without
+  reconstructing authority from application data.
 
 **Only after G5b+G5c does the capability round's deferred sub-delegation become
 buildable**: the endpoint's certificate goes to depth 1 and issues a narrower

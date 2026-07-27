@@ -70,11 +70,7 @@ fn policy(access: ServiceAccess) -> LocalNetworkPolicy {
     }];
     policy.services = BTreeMap::from([(
         MURM.to_string(),
-        ServiceRule {
-            access,
-            require_transport_identity: false,
-            max_sessions: None,
-        },
+        ServiceRule::new(access, "mere.network", ["connect"], false, None),
     )]);
     policy
 }

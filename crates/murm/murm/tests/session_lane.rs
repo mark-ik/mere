@@ -107,11 +107,7 @@ fn policy(access: ServiceAccess) -> LocalNetworkPolicy {
     }];
     policy.services = BTreeMap::from([(
         MURM_SERVICE.to_string(),
-        ServiceRule {
-            access,
-            require_transport_identity: false,
-            max_sessions: None,
-        },
+        ServiceRule::new(access, "mere.network", ["connect"], false, None),
     )]);
     policy
 }
@@ -121,6 +117,10 @@ fn hello() -> SessionHello {
 }
 
 fn hello_with(delegations: Vec<SignedDelegationCertificate>) -> SessionHello {
+    hello_for_action("connect", delegations)
+}
+
+fn hello_for_action(action: &str, delegations: Vec<SignedDelegationCertificate>) -> SessionHello {
     SessionHello::issue(
         &member(),
         NETWORK,
@@ -131,7 +131,7 @@ fn hello_with(delegations: Vec<SignedDelegationCertificate>) -> SessionHello {
         RequestedAction {
             domain: "mere.network".into(),
             path: MURM_SERVICE.into(),
-            action: "connect".into(),
+            action: action.into(),
         },
         TrafficClass::Interactive,
         [42; 32],
@@ -255,4 +255,12 @@ async fn a_grant_for_another_service_does_not_open_murm() {
         Ok(_) => panic!("a projection grant must not open a cabal"),
     }
     assert_eq!(held, 0, "and nothing it sent reaches the conversation");
+}
+
+#[tokio::test]
+async fn an_unoffered_action_does_not_reach_murm() {
+    let hello = hello_for_action("administer", vec![grant()]);
+    let (outcome, held) = run_with(ServiceAccess::MemberOnly, hello).await;
+    assert_eq!(outcome.unwrap_err(), DenyReason::ActionNotOffered);
+    assert_eq!(held, 0, "the service sees no bytes for an unoffered action");
 }

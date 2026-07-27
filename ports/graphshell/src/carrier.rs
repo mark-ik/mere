@@ -35,12 +35,10 @@
 //!
 //! ## Why the action check is not a second admission
 //!
-//! Admission answers "who is this, and what did they ask for". It cannot
-//! answer "and is that something projections serve", because
-//! `LocalNetworkPolicy` has no action vocabulary to answer it with; see
-//! [`crate::admission::serves_action`]. Splitting it this way is the ownership
-//! the Notochord plan sets out: services authorize operations after admission
-//! under their own action vocabulary.
+//! The owner policy allows only named admission actions. Graphshell checks the
+//! admitted action again through [`crate::admission::serves_action`], because
+//! the service implementation remains authoritative about what it actually
+//! serves even when the owner's serialized vocabulary changes.
 
 use notochord::{
     AdmittedSession, DenyReason, IoHandshakeError, LocalNetworkPolicy, NetworkId, ProfileRef,
@@ -49,7 +47,9 @@ use notochord::{
 use tokio::io::AsyncWriteExt;
 use transport::{Alpn, Transport, TransportError};
 
-use crate::admission::{PROJECTION_PROTOCOL, PROJECTION_SERVICE, serves_action};
+use crate::admission::{
+    CONNECT_ACTION, GRAPHSHELL_DOMAIN, PROJECTION_PROTOCOL, PROJECTION_SERVICE, serves_action,
+};
 
 /// The ALPN a projection session is accepted for.
 ///
@@ -79,11 +79,13 @@ pub fn projection_policy(
     policy.accepted_profiles = accepted_profiles;
     policy.services.insert(
         PROJECTION_SERVICE.to_string(),
-        ServiceRule {
-            access: ServiceAccess::MemberOnly,
-            require_transport_identity: false,
+        ServiceRule::new(
+            ServiceAccess::MemberOnly,
+            GRAPHSHELL_DOMAIN,
+            [CONNECT_ACTION],
+            false,
             max_sessions,
-        },
+        ),
     );
     policy
 }
@@ -269,6 +271,13 @@ mod tests {
         requested.action = action.to_string();
         let delegations = vec![grant(subject, action)];
         let action_owned = action.to_string();
+        let mut serving_policy = policy();
+        serving_policy
+            .services
+            .get_mut(PROJECTION_SERVICE)
+            .expect("projection rule")
+            .actions
+            .insert(action.to_string());
 
         let client_task = tokio::spawn(async move {
             let mut stream = client
@@ -314,10 +323,15 @@ mod tests {
             tokio::time::sleep(std::time::Duration::from_millis(200)).await;
         });
 
-        let outcome =
-            accept_projection_session(&server, &policy(), &RevocationLedger::default(), NOW_MS, 0)
-                .await
-                .expect("accept path");
+        let outcome = accept_projection_session(
+            &server,
+            &serving_policy,
+            &RevocationLedger::default(),
+            NOW_MS,
+            0,
+        )
+        .await
+        .expect("accept path");
         client_task.abort();
 
         outcome.map(|session| session.principal.action.action.clone())
@@ -329,10 +343,8 @@ mod tests {
         assert_eq!(served, CONNECT_ACTION);
     }
 
-    /// The hole the policy layer cannot close. `ServiceRule` has no action
-    /// vocabulary, so a chain covering a *different* action at the projection
-    /// path clears admission with that action intact. This service still
-    /// refuses to serve it, and says so with a different word than a denial.
+    /// Even when the owner document allows an action, the service remains
+    /// authoritative about what its implementation serves.
     #[tokio::test]
     async fn an_admitted_action_this_service_does_not_serve_is_refused() {
         let refusal = run("administer").await.expect_err("must be refused");

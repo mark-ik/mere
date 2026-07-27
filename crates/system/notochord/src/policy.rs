@@ -1,6 +1,6 @@
 //! The owner's local policy and its deterministic session evaluator.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -12,7 +12,7 @@ use crate::types::{
 };
 
 /// Version of the serialized policy shape.
-pub const POLICY_VERSION: u16 = 1;
+pub const POLICY_VERSION: u16 = 2;
 
 /// Who may use one service.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -26,15 +26,47 @@ pub enum ServiceAccess {
 }
 
 /// The owner's rule for one service path.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ServiceRule {
     /// Who may use the service.
     pub access: ServiceAccess,
+    /// Admission domain this service accepts.
+    pub domain: String,
+    /// Admission actions the owner offers at this service path.
+    pub actions: BTreeSet<String>,
     /// Whether a transport-authenticated peer is required (plan D4: this is
     /// a transport fact; Reticulum best-effort sessions cannot satisfy it).
     pub require_transport_identity: bool,
     /// Concurrent-session ceiling, when the owner sets one.
     pub max_sessions: Option<u32>,
+}
+
+impl ServiceRule {
+    /// Build one service rule with a deterministic action allow-list.
+    pub fn new<I, A>(
+        access: ServiceAccess,
+        domain: impl Into<String>,
+        actions: I,
+        require_transport_identity: bool,
+        max_sessions: Option<u32>,
+    ) -> Self
+    where
+        I: IntoIterator<Item = A>,
+        A: Into<String>,
+    {
+        Self {
+            access,
+            domain: domain.into(),
+            actions: actions.into_iter().map(Into::into).collect(),
+            require_transport_identity,
+            max_sessions,
+        }
+    }
+
+    /// Whether the owner offers this admission action at the keyed path.
+    pub fn offers(&self, action: &crate::RequestedAction) -> bool {
+        self.domain == action.domain && self.actions.contains(&action.action)
+    }
 }
 
 /// Whether this node carries Reticulum transit.
@@ -155,6 +187,9 @@ impl LocalNetworkPolicy {
         };
         if rule.access == ServiceAccess::Disabled {
             return deny(DenyReason::ServiceNotOffered);
+        }
+        if !rule.offers(&claims.action) {
+            return deny(DenyReason::ActionNotOffered);
         }
         if rule.require_transport_identity && facts.authenticated_initiator.is_none() {
             return deny(DenyReason::TransportIdentityRequired);

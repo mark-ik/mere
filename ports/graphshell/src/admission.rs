@@ -86,14 +86,10 @@ pub fn open_session<P: IdentityProvider>(
 /// Whether this service serves the action an admitted principal was admitted
 /// for.
 ///
-/// Not a second admission: [`LocalNetworkPolicy`] keys its service rules by
-/// path and verifies that the delegation chain covers the requested triple,
-/// but `ServiceRule` carries no action vocabulary, so it cannot decide which
-/// actions a service offers. A chain covering some *other* action at
-/// `/services/projection` therefore clears admission with that action intact.
-/// Whether projections serve it is Graphshell's question, and this is where it
-/// is answered, for both the sans-io path below and the carrier in
-/// [`crate::carrier`].
+/// The owner rule names the admission actions it offers. This service check is
+/// still kept at the domain boundary so a permissive or stale owner document
+/// cannot make Graphshell serve an operation its implementation does not
+/// support.
 pub fn serves_action(principal: &AdmittedPrincipal) -> bool {
     principal.action == connect_action()
 }
@@ -103,10 +99,9 @@ pub fn serves_action(principal: &AdmittedPrincipal) -> bool {
 /// Returns the reply frame to write in both cases — a refusal is still a
 /// well-formed reply — and the principal when the session is admitted.
 ///
-/// The action is checked, not assumed. The policy refuses a grant minted for
-/// another *service* on its own (the path is not offered); a grant covering
-/// another *action* at this service is not something it can refuse, so
-/// [`serves_action`] does it here.
+/// The action is checked again after policy admission. The policy enforces the
+/// owner's allow-list; [`serves_action`] enforces Graphshell's implemented
+/// vocabulary.
 pub fn admit_session(
     policy: &LocalNetworkPolicy,
     ledger: &RevocationLedger,
@@ -120,17 +115,9 @@ pub fn admit_session(
         if serves_action(&principal) {
             Ok(principal)
         } else {
-            // Not defence in depth, as this comment previously claimed: the
-            // policy cannot make this decision at all. It checks that the
-            // service *path* is offered and that the chain covers whatever
-            // triple was requested, so a chain covering another action at the
-            // projection path reaches here admitted. This is the only place
-            // the action is judged against what projections serve.
-            //
-            // `ActionNotOffered`, not `ActionNotCovered`: the authority did
-            // not fall short — it was fine for what it asked. This listener
-            // simply does not serve that action, which is a different fact and
-            // deserves a different word to whoever reads the refusal.
+            // The owner allowed the action, but this implementation does not
+            // serve it. Authority was sufficient for the request; the local
+            // service vocabulary is the refusal.
             Err(DenyReason::ActionNotOffered)
         }
     });
@@ -207,11 +194,13 @@ mod tests {
         }];
         policy.services = BTreeMap::from([(
             PROJECTION_SERVICE.to_string(),
-            ServiceRule {
-                access: ServiceAccess::MemberOnly,
-                require_transport_identity: false,
-                max_sessions: None,
-            },
+            ServiceRule::new(
+                ServiceAccess::MemberOnly,
+                GRAPHSHELL_DOMAIN,
+                [CONNECT_ACTION],
+                false,
+                None,
+            ),
         )]);
         policy
     }
