@@ -1,10 +1,9 @@
 # Low-Power Radio and Managed Network Plan
 
-**Status (2026-07-27): in execution. V1-V6 and V8 have landed; V7 passes
-over Memory, Reticulum/TCP, and headed Reticulum/direct-PHY RF. Murm's accept
-path landed 2026-07-27 as the session lane (`murm::session_lane`), which
-closes V6 literally. The V0/V2 power and sleep bench and the p2panda arm
-remain open.**
+**Status (2026-07-27): in execution. V1-V8 have landed; V7's carrier matrix
+passes over Memory, real p2panda/Iroh, Reticulum/TCP, and headed
+Reticulum/direct-PHY RF. Murm's accept path consumes the carrier's accepted
+session directly. The V0/V2 power and sleep bench remains open.**
 
 This round joins two pieces that are useful independently and stronger
 together:
@@ -1010,7 +1009,24 @@ This is not power evidence. Both boards remained USB-powered in their
 development personalities; UART Light-sleep, DIO1 wake, current, and energy
 remain in V0/V2.
 
-**Still open for V7:** the p2panda arm.
+### 2026-07-27 — V7 p2panda arm passes
+
+Murm's listener now consumes `AcceptedSession` directly through
+`serve_accepted_session`, so protocol, authenticated peer, and ingress are
+converted at the one audited Notochord construction site before the first
+Murm post frame is read.
+
+Two real p2panda-net/Iroh endpoint receipts close the arm. A member whose
+transport key matches its Personae subject is admitted and lands one signed
+post. A different authenticated endpoint presenting an otherwise valid
+member-signed hello and grant is refused with `SubjectNotTransportPeer` at
+both ends, and the conversation stays empty. The full receipt and loopback
+evidence boundary are in
+[`2026-07-27_murm_v7_p2panda_acceptance.md`](./2026-07-27_murm_v7_p2panda_acceptance.md).
+
+**V7's carrier and policy matrix is closed.** The original sleeping-radio
+qualifier remains a V0/V2 power and wake proof; the USB-powered direct-PHY
+carrier proof does not substitute for it.
 
 **V6 is closed as of 2026-07-27.** The done-condition is literal now: Murm
 grew a session lane (`murm::session_lane`, Notochord N2's Murm half), and an
@@ -1018,11 +1034,11 @@ owner rule admits or refuses a real Murm connection with zero posts crossing
 on a refusal. The note below records what was outstanding before that.
 
 **Was open for V6:** the done-condition names "one real Murm connection".
-What exists is the transport-shaped proof over a `tokio::io::duplex` pair
+What first existed was the transport-shaped proof over a `tokio::io::duplex` pair
 (`tests/over_transport.rs`): an admitted session carries application bytes,
 and a refused one delivers **zero** application bytes. Wiring the adapter
-into murm's real accept path, and running it over p2panda's endpoint, is the
-remaining work and is the natural head of V7.
+into Murm's real accept path and running it over p2panda's endpoint closed
+that gap above.
 
 ## Completion
 

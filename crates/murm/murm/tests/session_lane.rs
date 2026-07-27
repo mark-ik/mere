@@ -17,13 +17,14 @@ use identity::delegation::{
 use identity::{IdentityProvider, InMemoryProvider};
 use murm::{
     Admission, CabalKey, ConversationEngine, Post, SessionOutcome, lane_binding, push_posts,
-    serve_session,
+    serve_accepted_session, serve_session,
 };
 use notochord::{
     CarrierKind, DenyReason, LocalNetworkPolicy, NetworkId, ProfileRef, RequestedAction,
     RevocationLedger, ServiceAccess, ServiceRule, SessionFacts, SessionHello, TrafficClass,
     TrustedRoot,
 };
+use transport::{Alpn, P2pandaTransport, PeerID, Transport, initiator_binding};
 
 const NETWORK: NetworkId = NetworkId([3; 32]);
 const ROOT_AUTHORITY: [u8; 32] = [7; 32];
@@ -263,4 +264,209 @@ async fn an_unoffered_action_does_not_reach_murm() {
     let (outcome, held) = run_with(ServiceAccess::MemberOnly, hello).await;
     assert_eq!(outcome.unwrap_err(), DenyReason::ActionNotOffered);
     assert_eq!(held, 0, "the service sees no bytes for an unoffered action");
+}
+
+mod p2panda {
+    use super::*;
+    use std::time::Duration;
+
+    static RECEIPT_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+    fn alpn() -> Alpn {
+        Alpn::new("mere/murm/v1")
+    }
+
+    async fn pair(
+        client_identity: &InMemoryProvider,
+    ) -> (P2pandaTransport, P2pandaTransport, PeerID, PeerID) {
+        let client =
+            P2pandaTransport::builder_from_seed(client_identity.master_keypair().to_seed())
+                .alpns(vec![alpn()])
+                .bind()
+                .await
+                .expect("bind Murm client");
+        let server = P2pandaTransport::builder_from_seed(
+            InMemoryProvider::from_seed([8; 32])
+                .master_keypair()
+                .to_seed(),
+        )
+        .alpns(vec![alpn()])
+        .bind()
+        .await
+        .expect("bind Murm server");
+        let client_peer = client.local_peer_id();
+        let server_peer = server.local_peer_id();
+
+        let client_addr = tokio::time::timeout(Duration::from_secs(10), client.endpoint_addr())
+            .await
+            .expect("client endpoint address timeout")
+            .expect("client endpoint address");
+        let server_addr = tokio::time::timeout(Duration::from_secs(10), server.endpoint_addr())
+            .await
+            .expect("server endpoint address timeout")
+            .expect("server endpoint address");
+        client
+            .add_peer(server_addr)
+            .await
+            .expect("client registers server");
+        server
+            .add_peer(client_addr)
+            .await
+            .expect("server registers client");
+
+        (server, client, server_peer, client_peer)
+    }
+
+    fn hello_for_peer(local_peer: PeerID) -> SessionHello {
+        SessionHello::issue(
+            &member(),
+            NETWORK,
+            ProfileRef {
+                id: "mere.base".into(),
+                revision: 2,
+            },
+            RequestedAction {
+                domain: "mere.network".into(),
+                path: MURM_SERVICE.into(),
+                action: "connect".into(),
+            },
+            TrafficClass::Interactive,
+            [42; 32],
+            &initiator_binding(&alpn(), local_peer),
+            vec![grant()],
+        )
+        .expect("issue p2panda-bound hello")
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn authenticated_member_reaches_murm_over_real_p2panda() {
+        let _receipt_guard = RECEIPT_LOCK.lock().await;
+        let (engine, cabal_id, post) = fixtures().await;
+        let (server, client, server_peer, client_peer) = pair(&member()).await;
+        assert_eq!(
+            client_peer.to_bytes(),
+            member_key(),
+            "the transport identity is the Personae subject"
+        );
+
+        let server_engine = Arc::clone(&engine);
+        let server_policy = policy(ServiceAccess::MemberOnly);
+        let responder = tokio::spawn(async move {
+            let accepted = tokio::time::timeout(Duration::from_secs(10), server.accept(alpn()))
+                .await
+                .expect("Murm accept timeout")
+                .expect("Murm accept");
+            assert_eq!(accepted.peer, Some(client_peer));
+            let facts = accepted.session_facts();
+            assert_eq!(facts.transport, CarrierKind::P2panda);
+            assert_eq!(facts.authenticated_initiator, Some(client_peer.to_bytes()));
+            serve_accepted_session(
+                accepted,
+                &server_engine,
+                cabal_id,
+                &server_policy,
+                &RevocationLedger::new(),
+                NOW_MS,
+                0,
+            )
+            .await
+            .expect("serve accepted Murm session")
+        });
+
+        let stream =
+            tokio::time::timeout(Duration::from_secs(10), client.connect(server_peer, alpn()))
+                .await
+                .expect("Murm dial timeout")
+                .expect("Murm dial");
+        let pushed = tokio::time::timeout(
+            Duration::from_secs(10),
+            push_posts(
+                stream,
+                &hello_for_peer(client_peer),
+                &policy(ServiceAccess::MemberOnly),
+                std::slice::from_ref(&post),
+            ),
+        )
+        .await
+        .expect("Murm push timeout")
+        .expect("Murm push")
+        .expect("member admitted");
+        let outcome = tokio::time::timeout(Duration::from_secs(10), responder)
+            .await
+            .expect("Murm responder timeout")
+            .expect("Murm responder")
+            .expect("member admitted by responder");
+
+        assert_eq!(pushed, 1);
+        assert_eq!(outcome.posts_ingested, 1);
+        assert_eq!(outcome.posts_rejected, 0);
+        assert_eq!(outcome.principal.subject, member_key());
+        assert_eq!(engine.history(&cabal_id, "general").len(), 1);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn wrong_authenticated_peer_is_refused_before_murm() {
+        let _receipt_guard = RECEIPT_LOCK.lock().await;
+        let attacker = InMemoryProvider::from_seed([6; 32]);
+        let (engine, cabal_id, post) = fixtures().await;
+        let (server, client, server_peer, attacker_peer) = pair(&attacker).await;
+        assert_ne!(
+            attacker_peer.to_bytes(),
+            member_key(),
+            "this connection belongs to the attacker, not the grant subject"
+        );
+
+        let server_engine = Arc::clone(&engine);
+        let server_policy = policy(ServiceAccess::MemberOnly);
+        let responder = tokio::spawn(async move {
+            let accepted = tokio::time::timeout(Duration::from_secs(10), server.accept(alpn()))
+                .await
+                .expect("Murm accept timeout")
+                .expect("Murm accept");
+            assert_eq!(accepted.peer, Some(attacker_peer));
+            serve_accepted_session(
+                accepted,
+                &server_engine,
+                cabal_id,
+                &server_policy,
+                &RevocationLedger::new(),
+                NOW_MS,
+                0,
+            )
+            .await
+            .expect("serve refused Murm session")
+        });
+
+        let stream =
+            tokio::time::timeout(Duration::from_secs(10), client.connect(server_peer, alpn()))
+                .await
+                .expect("Murm dial timeout")
+                .expect("Murm dial");
+        let client_refusal = tokio::time::timeout(
+            Duration::from_secs(10),
+            push_posts(
+                stream,
+                &hello_for_peer(attacker_peer),
+                &policy(ServiceAccess::MemberOnly),
+                std::slice::from_ref(&post),
+            ),
+        )
+        .await
+        .expect("Murm refusal timeout")
+        .expect("Murm refusal")
+        .expect_err("the wrong transport peer must be refused");
+        let server_refusal = tokio::time::timeout(Duration::from_secs(10), responder)
+            .await
+            .expect("Murm responder timeout")
+            .expect("Murm responder")
+            .expect_err("the wrong transport peer must be refused");
+
+        assert_eq!(client_refusal, DenyReason::SubjectNotTransportPeer);
+        assert_eq!(server_refusal, DenyReason::SubjectNotTransportPeer);
+        assert_eq!(
+            engine.history(&cabal_id, "general").len(),
+            0,
+            "the refused connection leaves no post in Murm"
+        );
+    }
 }

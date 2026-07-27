@@ -28,6 +28,7 @@ use notochord::{
     SessionFacts, SessionHello, admit_session, initiate_session,
 };
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use transport::AcceptedSession;
 
 use crate::conversation_engine::ConversationEngine;
 use crate::error::MurmError;
@@ -172,6 +173,42 @@ where
         }
     }
     Ok(Ok(outcome))
+}
+
+/// Serve an inbound transport session using only facts recorded at acceptance.
+///
+/// This is the application-facing listener seam. The transport's
+/// [`AcceptedSession`] is consumed at the boundary, and its protocol,
+/// authenticated peer, and ingress context are converted through the one
+/// audited `mere-transport` adapter before [`serve_session`] reads the
+/// Notochord hello. A caller cannot accidentally substitute claims decoded
+/// from that hello for carrier facts.
+pub async fn serve_accepted_session<S>(
+    accepted: AcceptedSession<S>,
+    engine: &Arc<ConversationEngine>,
+    cabal_id: [u8; 32],
+    policy: &LocalNetworkPolicy,
+    ledger: &RevocationLedger,
+    now_ms: u64,
+    active_sessions: u32,
+) -> Result<Result<SessionOutcome, DenyReason>, MurmError>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    let (stream, facts) = accepted.into_session();
+    serve_session(
+        stream,
+        engine,
+        cabal_id,
+        Admission {
+            policy,
+            ledger,
+            facts: &facts,
+            now_ms,
+            active_sessions,
+        },
+    )
+    .await
 }
 
 /// Open a session as the initiator: prove the subject, then push `posts`.
