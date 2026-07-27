@@ -55,6 +55,17 @@ pub fn save(path: &Path, graph: &Graph) -> io::Result<()> {
 /// session). A malformed file surfaces as an error so the host can decide whether
 /// to fall back to a fresh graph rather than silently discard the session.
 pub fn load(path: &Path) -> io::Result<Option<Graph>> {
+    Ok(load_snapshot(path)?.map(|snapshot| Graph::from_snapshot(&snapshot)))
+}
+
+/// Read the persisted snapshot without converting it into a [`Graph`].
+///
+/// The seam a host needs when something must happen *between* deserializing
+/// and materializing — specifically externalizing pre-phase-2 inline imagery,
+/// since conversion keeps image references only and would drop those pixels
+/// (see `GraphSnapshot::legacy_image_count`). Hosts with nothing to do in
+/// between should call [`load`].
+pub fn load_snapshot(path: &Path) -> io::Result<Option<GraphSnapshot>> {
     let json = match fs::read_to_string(path) {
         Ok(json) => json,
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
@@ -62,7 +73,7 @@ pub fn load(path: &Path) -> io::Result<Option<Graph>> {
     };
     let snapshot: GraphSnapshot =
         serde_json::from_str(&json).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-    Ok(Some(Graph::from_snapshot(&snapshot)))
+    Ok(Some(snapshot))
 }
 
 #[cfg(test)]
