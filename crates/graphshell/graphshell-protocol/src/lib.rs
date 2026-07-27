@@ -375,6 +375,24 @@ pub struct SaveTextV1 {
 pub const EDITABLE_TEXT_SAVE_INTENT: &str = "graphshell.editable-text.save";
 pub const EDITABLE_TEXT_SAVE_SCHEMA: &str = "graphshell.editable-text.save/v1";
 
+/// Typed payload for [`KNOT_CLIP_INSERT_INTENT`].
+///
+/// The target document comes from the invocation binding. `knot_body` is a
+/// semantic Knot block stream without document frontmatter; the endpoint
+/// records the source fields as structured provenance before appending it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InsertKnotClipV1 {
+    pub base_token: Vec<u8>,
+    pub source_url: String,
+    pub title: Option<String>,
+    pub selector: Option<String>,
+    pub knot_body: String,
+}
+
+pub const KNOT_CLIP_INSERT_INTENT: &str = "knot.clip.insert";
+pub const KNOT_CLIP_INSERT_SCHEMA: &str = "knot.clip.insert/v1";
+
 /// A semantic intent invocation. `payload` is deliberately opaque at G1; its
 /// advertised schema is versioned and validation remains endpoint-side.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -710,6 +728,26 @@ mod tests {
             )
             .is_err(),
             "a save payload cannot smuggle endpoint-native authority"
+        );
+
+        let clip = InsertKnotClipV1 {
+            base_token: vec![1, 2, 3],
+            source_url: "https://example.test/field".into(),
+            title: Some("Field report".into()),
+            selector: Some("main > article".into()),
+            knot_body: "# Field report\n\nA finding.\n".into(),
+        };
+        let wire = serde_json::to_string(&clip).unwrap();
+        assert_eq!(
+            serde_json::from_str::<InsertKnotClipV1>(&wire).unwrap(),
+            clip
+        );
+        assert!(
+            serde_json::from_str::<InsertKnotClipV1>(
+                r#"{"base_token":[1],"source_url":"https://example.test","title":null,"selector":null,"knot_body":"x","path":"outside.knot"}"#
+            )
+            .is_err(),
+            "a clip payload cannot smuggle endpoint-native authority"
         );
     }
 

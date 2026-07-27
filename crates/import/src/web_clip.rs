@@ -196,6 +196,31 @@ pub fn fragment_from_body(
     }
 }
 
+/// Build a host-neutral semantic clip when a retained document lane exposes
+/// selected or document text rather than raw response bytes.
+pub fn fragment_from_text(
+    source_url: impl Into<String>,
+    title: Option<String>,
+    text: impl Into<String>,
+    selector: Option<String>,
+    links: Vec<String>,
+) -> ClipFragment {
+    ClipFragment {
+        source_url: source_url.into(),
+        title: title.filter(|title| !title.trim().is_empty()),
+        text: clean_multiline(&text.into()),
+        html: None,
+        selector: selector.filter(|selector| !selector.trim().is_empty()),
+        links: links
+            .into_iter()
+            .filter(|link| !link.trim().is_empty())
+            .collect(),
+        rect: None,
+        visual: None,
+        blocks: None,
+    }
+}
+
 pub fn attach_cropped_visual(
     fragment: &mut ClipFragment,
     snapshot_png: &[u8],
@@ -440,6 +465,27 @@ fn fragment_to_knot(fragment: &ClipFragment) -> String {
         DocumentTrustState::Tofu,
         Some("clip"),
     )
+}
+
+/// Render only the semantic Knot blocks of a clip.
+///
+/// The receiving Knot endpoint owns document provenance and records it from
+/// the typed clip intent. Omitting frontmatter here prevents a second
+/// document header from being inserted into an existing note.
+pub fn fragment_to_knot_body(fragment: &ClipFragment) -> String {
+    let mut body = String::new();
+    EngineDocument {
+        address: fragment.source_url.clone(),
+        title: None,
+        content_type: "text/x-knot".into(),
+        lang: None,
+        provenance: DocumentProvenance::default(),
+        trust: DocumentTrustState::Unknown,
+        diagnostics: Vec::new(),
+        blocks: fragment_blocks(fragment),
+    }
+    .write_knot_body(&mut body);
+    body
 }
 
 fn fragment_blocks(fragment: &ClipFragment) -> Vec<Block> {
@@ -742,6 +788,23 @@ mod tests {
         assert!(knot.contains("note_kind: clip"));
         assert!(knot.contains("A useful paragraph."));
         assert!(knot.contains("https://example.test/ref"));
+    }
+
+    #[test]
+    fn semantic_clip_body_omits_document_frontmatter() {
+        let clip = fragment_from_text(
+            "https://example.test/post",
+            Some("Interesting bit".into()),
+            "A useful paragraph.",
+            Some("main > article".into()),
+            vec!["https://example.test/ref".into()],
+        );
+        let body = fragment_to_knot_body(&clip);
+        assert!(body.contains("# Interesting bit"));
+        assert!(body.contains("A useful paragraph."));
+        assert!(body.contains("https://example.test/ref"));
+        assert!(!body.starts_with("---\n"));
+        assert!(!body.contains("source: https://example.test/post"));
     }
 
     #[test]

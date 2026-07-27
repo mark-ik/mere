@@ -13,7 +13,8 @@ use graphshell_endpoint::{
 use graphshell_protocol::{
     AdvertisedAction, BoundsRelationship, CachePolicy, CardValueV1, CarrierNotice, ContentHash,
     EDITABLE_TEXT_SAVE_INTENT, EDITABLE_TEXT_SAVE_SCHEMA, EditableTextV1, EndpointDescriptor,
-    IntentEffect, IntentInvocation, IntentReference, IntentResult, NativeGlyphV1, PortableCardV1,
+    InsertKnotClipV1, IntentEffect, IntentInvocation, IntentReference, IntentResult,
+    KNOT_CLIP_INSERT_INTENT, KNOT_CLIP_INSERT_SCHEMA, NativeGlyphV1, PortableCardV1,
     PresentationBinding, PresentationCapability, PresentationCodec, PresentationKey,
     PresentationManifest, PresentationOffer, PresentationSemantics, ProjectionAck, ProjectionOffer,
     ProjectionRequest, ProjectionSession, ProjectionSnapshot, ProtocolVersion, ResourceRequest,
@@ -642,6 +643,15 @@ impl KnotEndpoint {
                     payload_schema: EDITABLE_TEXT_SAVE_SCHEMA.into(),
                     effect: IntentEffect::DomainTruth,
                 });
+                editable_semantics.actions.push(AdvertisedAction {
+                    intent: IntentReference(KNOT_CLIP_INSERT_INTENT.into()),
+                    label: "Insert clip".into(),
+                    explanation:
+                        "Append a semantic clip with structured source provenance through Knot authority."
+                            .into(),
+                    payload_schema: KNOT_CLIP_INSERT_SCHEMA.into(),
+                    effect: IntentEffect::DomainTruth,
+                });
                 offers.push(PresentationOffer {
                     codec: PresentationCodec::EditableTextV1,
                     resource: editable_hash,
@@ -803,6 +813,81 @@ impl KnotEndpoint {
         Ok(IntentResult::Accepted)
     }
 
+    fn insert_clip(&mut self, id: &str, payload: InsertKnotClipV1) -> Result<IntentResult, String> {
+        if payload.source_url.is_empty()
+            || payload.source_url.len() > 8 * 1024
+            || payload.source_url.chars().any(char::is_control)
+            || !has_absolute_uri_scheme(&payload.source_url)
+        {
+            return Ok(IntentResult::Rejected {
+                reason: "clip source_url must be an absolute URI of at most 8192 bytes".into(),
+            });
+        }
+        if payload
+            .title
+            .as_ref()
+            .is_some_and(|title| title.len() > 1024)
+        {
+            return Ok(IntentResult::Rejected {
+                reason: "clip title exceeds 1024 bytes".into(),
+            });
+        }
+        if payload
+            .selector
+            .as_ref()
+            .is_some_and(|selector| selector.len() > 4096)
+        {
+            return Ok(IntentResult::Rejected {
+                reason: "clip selector exceeds 4096 bytes".into(),
+            });
+        }
+        if payload.knot_body.trim().is_empty() {
+            return Ok(IntentResult::Rejected {
+                reason: "clip contains no semantic Knot body".into(),
+            });
+        }
+
+        let document = self
+            .documents()
+            .into_iter()
+            .find(|document| document.id == id)
+            .ok_or_else(|| "intent target is no longer present".to_string())?;
+        let Some(current) = self.editable_text(&document) else {
+            return Ok(IntentResult::Rejected {
+                reason: "this document is not currently writable".into(),
+            });
+        };
+        if payload.base_token != current.base_token {
+            return Ok(self.stale_result());
+        }
+
+        let provenance = serde_json::json!({
+            "schema": KNOT_CLIP_INSERT_SCHEMA,
+            "source_url": payload.source_url,
+            "title": payload.title,
+            "selector": payload.selector,
+        });
+        let provenance = serde_json::to_string(&provenance)
+            .map_err(|error| format!("could not encode clip provenance: {error}"))?;
+        let mut source = current.source.trim_end().to_string();
+        if !source.is_empty() {
+            source.push_str("\n\n");
+        }
+        source.push_str("```knot.clip.provenance\n");
+        source.push_str(&provenance);
+        source.push_str("\n```\n\n");
+        source.push_str(payload.knot_body.trim());
+        source.push('\n');
+
+        self.save_text(
+            id,
+            SaveTextV1 {
+                base_token: payload.base_token,
+                source,
+            },
+        )
+    }
+
     fn stale_result(&self) -> IntentResult {
         let (current_epoch, current_revision) = self
             .snapshot
@@ -846,6 +931,17 @@ fn vault_base_token(id: &str, operation: &[u8; 32]) -> Vec<u8> {
     hasher.update(id.as_bytes());
     hasher.update(operation);
     hasher.finalize().as_bytes().to_vec()
+}
+
+fn has_absolute_uri_scheme(address: &str) -> bool {
+    let Some((scheme, _)) = address.split_once(':') else {
+        return false;
+    };
+    let mut chars = scheme.chars();
+    chars
+        .next()
+        .is_some_and(|first| first.is_ascii_alphabetic())
+        && chars.all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '+' | '-' | '.'))
 }
 
 impl ProjectionCatalog for KnotEndpoint {
@@ -973,24 +1069,27 @@ impl IntentSink for KnotEndpoint {
                 current_revision: snapshot.scene.revision,
             });
         }
-        if intent.intent != EDITABLE_TEXT_SAVE_INTENT {
-            return Ok(IntentResult::Rejected {
-                reason: "intent was not advertised by this Knot endpoint".into(),
-            });
-        }
-        let advertised = snapshot
+        let expected_schema = match intent.intent.as_str() {
+            EDITABLE_TEXT_SAVE_INTENT => EDITABLE_TEXT_SAVE_SCHEMA,
+            KNOT_CLIP_INSERT_INTENT => KNOT_CLIP_INSERT_SCHEMA,
+            _ => {
+                return Ok(IntentResult::Rejected {
+                    reason: "intent was not advertised by this Knot endpoint".into(),
+                });
+            }
+        };
+        if !snapshot
             .presentation
             .offers_for(intent.target)
             .into_iter()
             .flatten()
             .flat_map(|offer| &offer.semantics.actions)
             .any(|action| {
-                action.intent.0 == intent.intent
-                    && action.payload_schema == EDITABLE_TEXT_SAVE_SCHEMA
-            });
-        if !advertised {
+                action.intent.0 == intent.intent && action.payload_schema == expected_schema
+            })
+        {
             return Ok(IntentResult::Rejected {
-                reason: "save was not advertised for this target".into(),
+                reason: "intent was not advertised for this target".into(),
             });
         }
         let Some(document_id) = self.bindings.get(&intent.target.0).cloned() else {
@@ -998,15 +1097,32 @@ impl IntentSink for KnotEndpoint {
                 reason: "intent target is not bound in this snapshot".into(),
             });
         };
-        let payload: SaveTextV1 = match serde_json::from_slice(&intent.payload) {
-            Ok(payload) => payload,
-            Err(_) => {
-                return Ok(IntentResult::Rejected {
-                    reason: "save payload does not match graphshell.editable-text.save/v1".into(),
-                });
+        match intent.intent.as_str() {
+            EDITABLE_TEXT_SAVE_INTENT => {
+                let payload: SaveTextV1 = match serde_json::from_slice(&intent.payload) {
+                    Ok(payload) => payload,
+                    Err(_) => {
+                        return Ok(IntentResult::Rejected {
+                            reason: "save payload does not match graphshell.editable-text.save/v1"
+                                .into(),
+                        });
+                    }
+                };
+                self.save_text(&document_id, payload)
             }
-        };
-        self.save_text(&document_id, payload)
+            KNOT_CLIP_INSERT_INTENT => {
+                let payload: InsertKnotClipV1 = match serde_json::from_slice(&intent.payload) {
+                    Ok(payload) => payload,
+                    Err(_) => {
+                        return Ok(IntentResult::Rejected {
+                            reason: "clip payload does not match knot.clip.insert/v1".into(),
+                        });
+                    }
+                };
+                self.insert_clip(&document_id, payload)
+            }
+            _ => unreachable!("intent kind was checked above"),
+        }
     }
 }
 
@@ -1019,8 +1135,8 @@ mod tests {
         ProjectionSource, ResumableProjectionSource,
     };
     use graphshell_protocol::{
-        AdvertisedAction, EditableTextV1, PresentationCodec, ResourceRequest, ResumeReply,
-        ResumeRequest, SaveTextV1,
+        AdvertisedAction, EditableTextV1, InsertKnotClipV1, PresentationCodec, ResourceRequest,
+        ResumeReply, ResumeRequest, SaveTextV1,
     };
     use p2panda_core::SigningKey;
     use tempfile::tempdir;
@@ -1070,6 +1186,37 @@ mod tests {
         }
     }
 
+    fn action_for(
+        snapshot: &ProjectionSnapshot,
+        target: InstanceId,
+        intent: &str,
+    ) -> AdvertisedAction {
+        snapshot
+            .presentation
+            .offers_for(target)
+            .unwrap()
+            .iter()
+            .flat_map(|offer| &offer.semantics.actions)
+            .find(|action| action.intent.0 == intent)
+            .cloned()
+            .unwrap_or_else(|| panic!("{intent} was not advertised"))
+    }
+
+    fn clip_invocation(
+        snapshot: &ProjectionSnapshot,
+        target: InstanceId,
+        payload: &InsertKnotClipV1,
+    ) -> IntentInvocation {
+        IntentInvocation {
+            session: snapshot.session.clone(),
+            target,
+            observed_epoch: snapshot.scene.epoch,
+            observed_revision: snapshot.scene.revision,
+            intent: KNOT_CLIP_INSERT_INTENT.into(),
+            payload: serde_json::to_vec(payload).unwrap(),
+        }
+    }
+
     #[test]
     fn fixture_discloses_cards_and_resources() {
         let mut endpoint = KnotEndpoint::fixture();
@@ -1099,6 +1246,9 @@ mod tests {
         assert_eq!(editable.source, "# Field\n");
         assert_eq!(action.intent.0, EDITABLE_TEXT_SAVE_INTENT);
         assert_eq!(action.payload_schema, EDITABLE_TEXT_SAVE_SCHEMA);
+        let clip_action = action_for(&snapshot, InstanceId(0), KNOT_CLIP_INSERT_INTENT);
+        assert_eq!(clip_action.payload_schema, KNOT_CLIP_INSERT_SCHEMA);
+        assert_eq!(clip_action.effect, IntentEffect::DomainTruth);
         assert_eq!(
             snapshot.cache_policy,
             CachePolicy {
@@ -1199,6 +1349,84 @@ mod tests {
             IntentResult::Rejected { .. }
         ));
         assert_eq!(fs::read_to_string(&path).unwrap(), "# Revised\n");
+    }
+
+    #[test]
+    fn clip_insert_records_typed_provenance_and_refuses_stale_or_invalid_input() {
+        let temp = tempdir().unwrap();
+        let path = temp.path().join("field.knot");
+        fs::write(&path, "# Field\n").unwrap();
+        let mut endpoint =
+            KnotEndpoint::open_writable(temp.path(), KnotWriteGrant::new(4096)).unwrap();
+        let request = endpoint.describe().projections.remove(0).request;
+        let snapshot = endpoint.snapshot(request).unwrap();
+        let (target, editable, _) = editable_resource(&mut endpoint, &snapshot, "field.knot");
+        assert_eq!(
+            endpoint
+                .invoke(clip_invocation(
+                    &snapshot,
+                    target,
+                    &InsertKnotClipV1 {
+                        base_token: editable.base_token.clone(),
+                        source_url: "https://example.test/post".into(),
+                        title: Some("A finding".into()),
+                        selector: Some("main > article".into()),
+                        knot_body: "A useful paragraph.\n".into(),
+                    },
+                ))
+                .unwrap(),
+            IntentResult::Accepted
+        );
+        let saved = fs::read_to_string(&path).unwrap();
+        assert!(saved.starts_with("# Field\n\n```knot.clip.provenance\n"));
+        assert!(saved.contains(r#""schema":"knot.clip.insert/v1""#));
+        assert!(saved.contains(r#""source_url":"https://example.test/post""#));
+        assert!(saved.ends_with("A useful paragraph.\n"));
+
+        let notice = endpoint.poll_notice().unwrap().unwrap();
+        assert!(notice.revision > snapshot.scene.revision);
+        let ResumeReply::Snapshot(current) = endpoint
+            .resume(ResumeRequest {
+                session: snapshot.session.clone(),
+                epoch: snapshot.scene.epoch,
+                revision: snapshot.scene.revision,
+            })
+            .unwrap()
+        else {
+            panic!("clip insert must refresh the projection");
+        };
+        let stale = endpoint
+            .invoke(clip_invocation(
+                &current,
+                target,
+                &InsertKnotClipV1 {
+                    base_token: editable.base_token,
+                    source_url: "https://example.test/stale".into(),
+                    title: None,
+                    selector: None,
+                    knot_body: "Lost update.\n".into(),
+                },
+            ))
+            .unwrap();
+        assert!(matches!(stale, IntentResult::Stale { .. }));
+        assert_eq!(fs::read_to_string(&path).unwrap(), saved);
+
+        let (_, current_editable, _) = editable_resource(&mut endpoint, &current, "field.knot");
+        let invalid = endpoint
+            .invoke(clip_invocation(
+                &current,
+                target,
+                &InsertKnotClipV1 {
+                    base_token: current_editable.base_token,
+                    source_url: "relative/path".into(),
+                    title: None,
+                    selector: None,
+                    knot_body: "Bad source.\n".into(),
+                },
+            ))
+            .unwrap();
+        assert!(matches!(invalid, IntentResult::Rejected { .. }));
+        assert_eq!(fs::read_to_string(&path).unwrap(), saved);
     }
 
     #[test]
