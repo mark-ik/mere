@@ -1,0 +1,34 @@
+# M3 of the commons multi-writer convergence plan (mere design_docs,
+# 2026-07-26): the first bridge from a chartulary container graph to a
+# replicated lane. Nothing in the tree joined those two before this probe.
+#
+# A probe, not a crate, on purpose: the commons spine gets founded (and named)
+# when a consumer pulls it, per the workspace's consumer-pull doctrine. What
+# this proves is that the merge rules M1/M2 settled actually hold over real
+# LogSync reconciliation rather than only over hand-built journals.
+# Standalone (crates/probes is excluded from the mere workspace).
+[package]
+name = "commons-spine"
+version = "0.0.1"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[dependencies]
+chartulary = { path = "../../eidetic/chartulary" }
+codicil = { path = "../../eidetic/codicil" }
+muniment = { path = "../../eidetic/muniment" }
+stickleback = { path = "../../stickleback" }
+p2panda-core = "0.7.0"
+p2panda-store = { version = "0.7.0", default-features = false }
+serde = { version = "1", features = ["derive"] }
+thiserror = "1"
+
+[dev-dependencies]
+identity = { package = "personae", path = "../../persona/personae" }
+transport = { package = "mere-transport", path = "../../murm/transport" }
+p2panda-net = "0.7.0"
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time"] }
+
+[lib]
+path = "src/lib.rs"
