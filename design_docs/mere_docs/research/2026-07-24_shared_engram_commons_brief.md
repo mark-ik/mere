@@ -61,6 +61,20 @@ Done-condition: a written merge rule under which two offline members editing
 the same container reconverge to one graph on sync, property-tested, before
 any chat implementation slice.
 
+**Answered 2026-07-26/27** by the
+[commons multi-writer convergence plan](../implementation_strategy/2026-07-26_commons_multi_writer_convergence_plan.md).
+Checking the substrate first, as this section instructed, changed the answer:
+the replication layer already commits under a deterministic cross-author total
+order, so convergence needed no CRDT and no new ordering mechanism. The real
+gap was that chartulary's `EdgeId` was a per-log counter that **collided**
+between writers, which no merge ordering can repair; edge identity is now
+`(writer, counter)` in chartulary 0.2.0. The merge rules are stated and
+property-tested, with one case (a deletion racing an edit to the same node)
+explicitly left open rather than guessed. That plan's section 6 carries the
+product-facing limits for this profile. Its M3 is the first slice needing new
+machinery: **nothing bridges chartulary to the replication layer today**, so
+the commons spine has to be built before a shared container can ride a lane.
+
 ## Decision 2: group keys (named in murm's remainder, not scoped)
 
 The deletion/retention plan lists production group encryption as remaining

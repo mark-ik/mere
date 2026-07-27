@@ -193,12 +193,48 @@ Done-conditions, not dates.
     common ancestor, so a merge is the shared prefix once plus each side's
     tail; `merge_divergent` models that and the naive `merge` is kept only
     for replicas with no shared history.
-- **M3. Reconvergence over a real lane.** Two `JoinedSpace` instances over
-  Memory, then p2panda, editing one container while partitioned, converging
-  on reconnect. Reuses the join ceremony landed 2026-07-25, so this is a test
-  rather than new machinery.
-- **M4. Write the limit down** in the commons profile: whole-node LWW until
-  facet-grained edits exist, and remove-wins as a stated product behavior.
+- **M3. Reconvergence over a real lane. NOT STARTED, and rescoped 2026-07-27.**
+  This bullet claimed it "reuses the join ceremony landed 2026-07-25, so this
+  is a test rather than new machinery". **That is false, checked against the
+  tree**: no crate bridges chartulary to the replication layer. gemot is the
+  only crate depending on both, and it touches chartulary in exactly one file,
+  for a gate test. A chartulary `Batch` is not a p2panda `Operation`, so
+  nothing today can put a graph edit on a lane.
+
+  M3 is therefore the first real implementation slice, and it is the commons
+  spine rather than a test. What it needs: an extensions type carrying the
+  container address, a wire encoding for `Batch<Container, Relation>`, a
+  `MunimentStore` for those operations, and an `accept` closure that applies
+  received edits into a `GraphLog` through `apply_edit`. The join ceremony is
+  genuinely reusable at that point, but only after the domain exists.
+  Worth its own scoping pass rather than staying a bullet here.
+- **M4. Write the limit down. DONE 2026-07-27**, in section 6 below. The
+  commons profile has no document yet, so the stated behavior lives here and
+  the [commons brief](../research/2026-07-24_shared_engram_commons_brief.md)
+  points at it; fold it into the profile when that document exists.
+
+## 6. Stated behavior, for the commons profile
+
+Written for the product surface, not the merge layer. Each of these is a
+promise a member can rely on and a limit they can be surprised by, so they
+belong in whatever documents a shared container before one ships.
+
+- **A deletion holds against a concurrent edge.** If one member removes a node
+  while another connects something to it, the node stays removed and the edge
+  does not survive. This is true whichever member's change is seen first.
+- **Two members editing one node do not merge; the later one wins the whole
+  node.** Concurrent edits to *unrelated* parts of the same node still cost one
+  of them entirely. This is a known coarseness, not a bug, and it lifts when a
+  facet write becomes its own edit (the one-node facets lane). Until then, a
+  shared container wants either coarse ownership habits or content classes
+  whose nodes are small.
+- **A deletion does not yet hold against a concurrent edit to the same node.**
+  If one member deletes a node while another edits it, the node can come back,
+  carrying the editor's version. Every device agrees on the outcome, so nothing
+  diverges, but the outcome is not yet a decision. See Gap 3 in M2.
+- **Every member converges.** Whatever the rules resolve to, all members reach
+  the same graph, because the order is computed from the operations themselves
+  rather than from arrival time or a clock.
 
 ## 5. Non-goals
 
