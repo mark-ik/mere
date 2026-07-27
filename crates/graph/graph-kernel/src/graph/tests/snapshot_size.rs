@@ -34,6 +34,12 @@ fn snapshot_len(graph: &Graph) -> usize {
         .len()
 }
 
+fn facet_len(graph: &Graph) -> usize {
+    serde_json::to_vec(graph.facets())
+        .expect("a facet store is always serializable")
+        .len()
+}
+
 /// `count` nodes with sequential test URLs, no edges, no properties.
 fn bare_nodes(count: usize) -> (Graph, Vec<NodeKey>) {
     let mut graph = Graph::new();
@@ -44,24 +50,25 @@ fn bare_nodes(count: usize) -> (Graph, Vec<NodeKey>) {
 }
 
 #[test]
-fn common_case_property_metadata_stays_cheap_in_the_snapshot() {
+fn common_case_property_metadata_stays_cheap_in_the_facet_sidecar() {
     const N: usize = 50;
 
     // Baseline: N isolated nodes, no properties.
     let (bare, _) = bare_nodes(N);
-    let bare_len = snapshot_len(&bare);
+    let bare_len = facet_len(&bare);
 
     // Common case: one simple default-scope property per node, no metadata.
     let (mut plain, keys) = bare_nodes(N);
     for &key in &keys {
-        plain.get_node_mut(key).expect("node").properties.push(
+        plain.append_node_property(
+            key,
             NodeProperty::new(
                 "https://schema.org/datePublished".to_string(),
                 "2026-07-04".to_string(),
             ),
         );
     }
-    let plain_len = snapshot_len(&plain);
+    let plain_len = facet_len(&plain);
 
     // Fully annotated: the same property, now scoped + typed + attributed + timed.
     let (mut rich, keys) = bare_nodes(N);
@@ -76,14 +83,14 @@ fn common_case_property_metadata_stays_cheap_in_the_snapshot() {
             Some(1_720_000_000_000),
         );
         property.datatype = Some("http://www.w3.org/2001/XMLSchema#date".to_string());
-        rich.get_node_mut(key).expect("node").properties.push(property);
+        rich.append_node_property(key, property);
     }
-    let rich_len = snapshot_len(&rich);
+    let rich_len = facet_len(&rich);
 
     let per_plain = (plain_len - bare_len) as f64 / N as f64;
     let per_rich = (rich_len - bare_len) as f64 / N as f64;
     println!(
-        "snapshot-size gate (property): bare={bare_len} plain={plain_len} rich={rich_len} \
+        "facet-size gate (property): bare={bare_len} plain={plain_len} rich={rich_len} \
          (common-case {per_plain:.0} B/property, annotated {per_rich:.0} B/property)"
     );
 
@@ -92,7 +99,7 @@ fn common_case_property_metadata_stays_cheap_in_the_snapshot() {
     // if a metadata field becomes mandatory or gains fixed overhead.
     assert!(
         per_plain < 280.0,
-        "common-case property snapshot cost regressed: {per_plain:.0} B/property (bare={bare_len}, plain={plain_len})"
+        "common-case property facet cost regressed: {per_plain:.0} B/property (bare={bare_len}, plain={plain_len})"
     );
 
     // Metadata is pay-per-use: populating the optional fields costs strictly more

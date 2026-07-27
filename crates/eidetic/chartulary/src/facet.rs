@@ -195,6 +195,22 @@ impl<Id: Ord + Clone> FacetStore<Id> {
     pub fn iter(&self) -> impl Iterator<Item = (&Id, &NodeFacets)> {
         self.nodes.iter()
     }
+
+    /// Overlay every facet from `other`, replacing values with the same
+    /// `(node, facet)` key and preserving unrelated local or foreign facets.
+    ///
+    /// This is the load-time convergence seam: a graph may first import legacy
+    /// inline columns into facets, then overlay the already-canonical sidecar.
+    /// The sidecar wins where both contain the same facet.
+    pub fn overlay(&mut self, other: Self) {
+        for (node, facets) in other.nodes {
+            self.nodes
+                .entry(node)
+                .or_default()
+                .facets
+                .extend(facets.facets);
+        }
+    }
 }
 
 // Persistence through muniment, beside the graph (one slot).
@@ -316,6 +332,59 @@ mod tests {
         assert!(
             store.facets_of(&"n1".to_string()).is_none(),
             "emptied node dropped"
+        );
+    }
+
+    #[test]
+    fn overlay_replaces_matching_values_and_preserves_foreign_facets() {
+        let node = "n1".to_string();
+        let mut base: FacetStore<String> = FacetStore::new();
+        base.set(
+            node.clone(),
+            FacetId::new("visit.history"),
+            json!({"last": 1}),
+            &AcceptAll,
+        )
+        .unwrap();
+        base.set(
+            node.clone(),
+            FacetId::new("foreign.keep"),
+            json!(true),
+            &AcceptAll,
+        )
+        .unwrap();
+
+        let mut sidecar: FacetStore<String> = FacetStore::new();
+        sidecar
+            .set(
+                node.clone(),
+                FacetId::new("visit.history"),
+                json!({"last": 2}),
+                &AcceptAll,
+            )
+            .unwrap();
+        sidecar
+            .set(
+                node.clone(),
+                FacetId::new("web.viewer"),
+                json!("reader"),
+                &AcceptAll,
+            )
+            .unwrap();
+
+        base.overlay(sidecar);
+
+        assert_eq!(
+            base.get(&node, &FacetId::new("visit.history")),
+            Some(&json!({"last": 2}))
+        );
+        assert_eq!(
+            base.get(&node, &FacetId::new("foreign.keep")),
+            Some(&json!(true))
+        );
+        assert_eq!(
+            base.get(&node, &FacetId::new("web.viewer")),
+            Some(&json!("reader"))
         );
     }
 

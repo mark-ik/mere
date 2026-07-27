@@ -444,6 +444,42 @@ Worth noting what the servitor found while checking: nothing in the tree called
 and had zero callers, so every writer flushed and dropped and got away with it.
 That was an accident, not a choice.
 
+### 2026-07-27 — N2, Murm half: the session lane
+
+**A finding first, because it changes what N2 asked for.** Murm had no accept
+path to wire admission into. Its peer runtime is topic-shaped — posts arrive on
+a gossip overlay, gaps reconcile by LogSync — and its `accept` is the
+accepted-*operation* path, not session acceptance. `/services/murm` existed
+only as an example string in this crate's own docs and tests. Nothing in the
+tree called `Transport::accept` in production at all.
+
+So the Murm half was not wiring; it was new surface, and Mark ruled on which
+surface. What justifies it is not the promotion gate: it is that **V7 wants
+this service over Reticulum and direct PHY, and a radio bearer has no gossip
+overlay to ride.** A Reticulum link is two peers and a stream. Without a
+session lane a cabal cannot move out there at all, so the lane is what Murm
+needs for the radio arm regardless of Notochord.
+
+`crates/murm/murm/src/session_lane.rs`, behind an optional `session-lane`
+feature, is that lane. `serve_session` admits an inbound session through
+`admit_session` and then ingests posts via the same
+`ConversationEngine::ingest_post` the gossip lane uses — same verification,
+same idempotence, so a post arriving on both lands once. `push_posts` is the
+initiator half. `SessionOutcome` reports the admitted principal beside the
+counts, so traffic is attributed to the subject the proof established rather
+than to whatever the frames claim.
+
+**Receipt (the low-power plan's V6 done-condition, finally literal).** An
+admitted member's post reaches the conversation and is attributed to its
+proved subject; a peer refused by the owner's rule leaves the cabal holding
+**zero** posts. That is "an owner rule admits or rejects one real Murm
+connection before Murm receives application bytes", against a real engine
+rather than a fixture.
+
+Remaining for the promotion gate: Graphshell G5d over `P2pandaTransport`
+(the servitor's lane), and then the cross-service checks — a Murm grant must
+not open Graphshell, and the reverse.
+
 ### A transport bug this uncovered
 
 The Reticulum arm of `session_policy.rs` was intermittently timing out with

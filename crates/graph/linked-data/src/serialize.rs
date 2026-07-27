@@ -135,14 +135,19 @@ mod tests {
             },
         );
 
-        let node = graph.get_node_mut(a).expect("a");
         let mut published = NodeProperty::new(
             "https://schema.org/datePublished".to_string(),
             "2026-07-04".to_string(),
         )
         .with_graph_scope(GraphScope::User);
         published.datatype = Some("http://www.w3.org/2001/XMLSchema#date".to_string());
-        node.properties.push(published);
+        kernel::graph::apply::apply_graph_delta(
+            &mut graph,
+            kernel::graph::apply::GraphDelta::AppendNodeProperty {
+                key: a,
+                property: published,
+            },
+        );
 
         graph
     }

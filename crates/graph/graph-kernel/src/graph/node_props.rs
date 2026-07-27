@@ -20,15 +20,18 @@
 //! construction shape; everything property-setter-shaped lives here.
 
 use std::collections::HashSet;
-use std::time::{Duration, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::Graph;
 use super::identity::NodeKey;
-use super::node::Node;
+use super::node_facets::{
+    ARRANGEMENT_FRAME_LAYOUT, ARRANGEMENT_PIN, ARRANGEMENT_SPLIT_OFFER_SUPPRESSED,
+    PRESENTATION_TAGS, PROVENANCE_DERIVATIONS, PROVENANCE_IMPORT, SEMANTIC_CLASSIFICATIONS,
+    SEMANTIC_PROPERTIES, VISIT_HISTORY, VisitHistoryFacet,
+};
 use crate::types::{
-    ClassificationProvenance, ClassificationScheme, ClassificationStatus, FrameLayoutHint,
-    ImageRef, ImageRole, NodeClassification, NodeImportProvenance, NodeProperty,
-    NodeTagPresentationState,
+    ClassificationScheme, ClassificationStatus, FrameLayoutHint, ImageRef, ImageRole,
+    NodeClassification, NodeImportProvenance, NodeProperty, NodeTagPresentationState,
 };
 
 impl Graph {
@@ -80,11 +83,7 @@ impl Graph {
     /// Set or clear the node's borne graph (`Node.nested`). Structural
     /// containment per the one-node ruling; journals as
     /// `ReplaySetNodeNestedById` so installs replay attributed.
-    pub(crate) fn set_node_nested(
-        &mut self,
-        key: NodeKey,
-        nested: Option<codicil::LogId>,
-    ) -> bool {
+    pub(crate) fn set_node_nested(&mut self, key: NodeKey, nested: Option<codicil::LogId>) -> bool {
         let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
@@ -107,33 +106,36 @@ impl Graph {
     }
 
     pub(crate) fn set_node_pinned(&mut self, key: NodeKey, is_pinned: bool) -> bool {
-        let Some(node) = self.inner.node_mut(key) else {
-            return false;
-        };
-        if node.is_pinned == is_pinned {
+        if self.inner.node(key).is_none() {
             return false;
         }
-        node.is_pinned = is_pinned;
-        true
+        if self.node_is_pinned(key) == Some(is_pinned) {
+            return false;
+        }
+        self.set_node_facet(key, ARRANGEMENT_PIN, &is_pinned)
     }
 
     pub(crate) fn append_frame_layout_hint(&mut self, key: NodeKey, hint: FrameLayoutHint) -> bool {
-        let Some(node) = self.inner.node_mut(key) else {
+        if self.inner.node(key).is_none() {
             return false;
-        };
-        node.frame_layout_hints.push(hint);
-        true
+        }
+        let mut hints =
+            self.node_facet_or_default::<Vec<FrameLayoutHint>>(key, ARRANGEMENT_FRAME_LAYOUT);
+        hints.push(hint);
+        self.set_node_facet(key, ARRANGEMENT_FRAME_LAYOUT, &hints)
     }
 
     pub(crate) fn remove_frame_layout_hint_at(&mut self, key: NodeKey, hint_index: usize) -> bool {
-        let Some(node) = self.inner.node_mut(key) else {
-            return false;
-        };
-        if hint_index >= node.frame_layout_hints.len() {
+        if self.inner.node(key).is_none() {
             return false;
         }
-        node.frame_layout_hints.remove(hint_index);
-        true
+        let mut hints =
+            self.node_facet_or_default::<Vec<FrameLayoutHint>>(key, ARRANGEMENT_FRAME_LAYOUT);
+        if hint_index >= hints.len() {
+            return false;
+        }
+        hints.remove(hint_index);
+        self.set_node_facet(key, ARRANGEMENT_FRAME_LAYOUT, &hints)
     }
 
     pub(crate) fn move_frame_layout_hint(
@@ -142,18 +144,17 @@ impl Graph {
         from_index: usize,
         to_index: usize,
     ) -> bool {
-        let Some(node) = self.inner.node_mut(key) else {
-            return false;
-        };
-        if from_index >= node.frame_layout_hints.len()
-            || to_index >= node.frame_layout_hints.len()
-            || from_index == to_index
-        {
+        if self.inner.node(key).is_none() {
             return false;
         }
-        let hint = node.frame_layout_hints.remove(from_index);
-        node.frame_layout_hints.insert(to_index, hint);
-        true
+        let mut hints =
+            self.node_facet_or_default::<Vec<FrameLayoutHint>>(key, ARRANGEMENT_FRAME_LAYOUT);
+        if from_index >= hints.len() || to_index >= hints.len() || from_index == to_index {
+            return false;
+        }
+        let hint = hints.remove(from_index);
+        hints.insert(to_index, hint);
+        self.set_node_facet(key, ARRANGEMENT_FRAME_LAYOUT, &hints)
     }
 
     pub(crate) fn set_frame_split_offer_suppressed(
@@ -161,47 +162,61 @@ impl Graph {
         key: NodeKey,
         suppressed: bool,
     ) -> bool {
-        let Some(node) = self.inner.node_mut(key) else {
-            return false;
-        };
-        if node.frame_split_offer_suppressed == suppressed {
+        if self.inner.node(key).is_none() {
             return false;
         }
-        node.frame_split_offer_suppressed = suppressed;
-        true
+        if self.frame_split_offer_suppressed(key) == Some(suppressed) {
+            return false;
+        }
+        self.set_node_facet(key, ARRANGEMENT_SPLIT_OFFER_SUPPRESSED, &suppressed)
     }
 
-    pub fn frame_layout_hints(&self, key: NodeKey) -> Option<&[FrameLayoutHint]> {
-        self.get_node(key)
-            .map(|node| node.frame_layout_hints.as_slice())
+    pub fn frame_layout_hints(&self, key: NodeKey) -> Option<Vec<FrameLayoutHint>> {
+        self.get_node(key)?;
+        Some(self.node_facet_or_default(key, ARRANGEMENT_FRAME_LAYOUT))
     }
 
     pub fn frame_split_offer_suppressed(&self, key: NodeKey) -> Option<bool> {
-        self.get_node(key)
-            .map(|node| node.frame_split_offer_suppressed)
+        self.get_node(key)?;
+        Some(self.node_facet_or_default(key, ARRANGEMENT_SPLIT_OFFER_SUPPRESSED))
+    }
+
+    pub fn node_is_pinned(&self, key: NodeKey) -> Option<bool> {
+        self.get_node(key)?;
+        Some(self.node_facet_or_default(key, ARRANGEMENT_PIN))
     }
 
     pub(crate) fn insert_node_tag(&mut self, key: NodeKey, tag: String) -> bool {
-        let Some(node) = self.inner.node_mut(key) else {
-            return false;
+        let inserted = {
+            let Some(node) = self.inner.node_mut(key) else {
+                return false;
+            };
+            node.tags.insert(tag.clone())
         };
-        let inserted = node.tags.insert(tag.clone());
-        if inserted && !node.tag_presentation.ordered_tags.contains(&tag) {
-            node.tag_presentation.ordered_tags.push(tag);
+        if inserted {
+            let mut presentation =
+                self.node_facet_or_default::<NodeTagPresentationState>(key, PRESENTATION_TAGS);
+            if !presentation.ordered_tags.contains(&tag) {
+                presentation.ordered_tags.push(tag);
+                self.set_node_facet(key, PRESENTATION_TAGS, &presentation);
+            }
         }
         inserted
     }
 
     pub(crate) fn remove_node_tag(&mut self, key: NodeKey, tag: &str) -> bool {
-        let Some(node) = self.inner.node_mut(key) else {
-            return false;
+        let removed = {
+            let Some(node) = self.inner.node_mut(key) else {
+                return false;
+            };
+            node.tags.remove(tag)
         };
-        let removed = node.tags.remove(tag);
         if removed {
-            node.tag_presentation
-                .ordered_tags
-                .retain(|entry| entry != tag);
-            node.tag_presentation.icon_overrides.remove(tag);
+            let mut presentation =
+                self.node_facet_or_default::<NodeTagPresentationState>(key, PRESENTATION_TAGS);
+            presentation.ordered_tags.retain(|entry| entry != tag);
+            presentation.icon_overrides.remove(tag);
+            self.set_node_facet(key, PRESENTATION_TAGS, &presentation);
         }
         removed
     }
@@ -227,11 +242,12 @@ impl Graph {
     /// linked-data ingest previously pushed through `get_node_mut` (write-path
     /// migration, 2026-07-01).
     pub(crate) fn append_node_property(&mut self, key: NodeKey, property: NodeProperty) -> bool {
-        let Some(node) = self.inner.node_mut(key) else {
+        if self.inner.node(key).is_none() {
             return false;
-        };
-        if let Some(existing) = node
-            .properties
+        }
+        let mut properties =
+            self.node_facet_or_default::<Vec<NodeProperty>>(key, SEMANTIC_PROPERTIES);
+        if let Some(existing) = properties
             .iter_mut()
             .find(|existing| existing.content_eq(&property))
         {
@@ -240,32 +256,43 @@ impl Graph {
             {
                 existing.provenance_iri = property.provenance_iri;
                 existing.asserted_at_ms = property.asserted_at_ms;
-                return true;
+                return self.set_node_facet(key, SEMANTIC_PROPERTIES, &properties);
             }
             return false;
         }
-        node.properties.push(property);
-        true
+        properties.push(property);
+        self.set_node_facet(key, SEMANTIC_PROPERTIES, &properties)
     }
 
     pub fn node_tags(&self, key: NodeKey) -> Option<&HashSet<String>> {
         self.get_node(key).map(|node| &node.tags)
     }
 
-    pub fn node_tag_presentation(&self, key: NodeKey) -> Option<&NodeTagPresentationState> {
-        self.get_node(key).map(|node| &node.tag_presentation)
+    pub fn node_tag_presentation(&self, key: NodeKey) -> Option<NodeTagPresentationState> {
+        self.get_node(key)?;
+        Some(self.node_facet_or_default(key, PRESENTATION_TAGS))
     }
 
-    pub fn node_import_provenance(&self, key: NodeKey) -> Option<&[NodeImportProvenance]> {
-        self.get_node(key)
-            .map(|node| node.import_provenance.as_slice())
+    pub fn node_import_provenance(&self, key: NodeKey) -> Option<Vec<NodeImportProvenance>> {
+        self.get_node(key)?;
+        Some(self.node_facet_or_default(key, PROVENANCE_IMPORT))
     }
 
     // --- Classification accessors (Stage A) ---
 
-    pub fn node_classifications(&self, key: NodeKey) -> Option<&[NodeClassification]> {
-        self.get_node(key)
-            .map(|node| node.classifications.as_slice())
+    pub fn node_classifications(&self, key: NodeKey) -> Option<Vec<NodeClassification>> {
+        self.get_node(key)?;
+        Some(self.node_facet_or_default(key, SEMANTIC_CLASSIFICATIONS))
+    }
+
+    pub fn node_properties(&self, key: NodeKey) -> Option<Vec<NodeProperty>> {
+        self.get_node(key)?;
+        Some(self.node_facet_or_default(key, SEMANTIC_PROPERTIES))
+    }
+
+    pub fn node_derivations(&self, key: NodeKey) -> Option<Vec<crate::types::NodeDerivation>> {
+        self.get_node(key)?;
+        Some(self.node_facet_or_default(key, PROVENANCE_DERIVATIONS))
     }
 
     /// Add a classification record to a node.
@@ -276,18 +303,19 @@ impl Graph {
         key: NodeKey,
         classification: NodeClassification,
     ) -> bool {
-        let Some(node) = self.inner.node_mut(key) else {
+        if self.inner.node(key).is_none() {
             return false;
-        };
-        let already_exists = node
-            .classifications
+        }
+        let mut classifications =
+            self.node_facet_or_default::<Vec<NodeClassification>>(key, SEMANTIC_CLASSIFICATIONS);
+        let already_exists = classifications
             .iter()
             .any(|c| c.scheme == classification.scheme && c.value == classification.value);
         if already_exists {
             return false;
         }
-        node.classifications.push(classification);
-        true
+        classifications.push(classification);
+        self.set_node_facet(key, SEMANTIC_CLASSIFICATIONS, &classifications)
     }
 
     /// Append a [`NodeDerivation`](crate::types::NodeDerivation) to `key`'s
@@ -301,14 +329,18 @@ impl Graph {
         key: NodeKey,
         derivation: crate::types::NodeDerivation,
     ) -> bool {
-        let Some(node) = self.inner.node_mut(key) else {
-            return false;
-        };
-        if node.derivations.contains(&derivation) {
+        if self.inner.node(key).is_none() {
             return false;
         }
-        node.derivations.push(derivation);
-        true
+        let mut derivations = self.node_facet_or_default::<Vec<crate::types::NodeDerivation>>(
+            key,
+            PROVENANCE_DERIVATIONS,
+        );
+        if derivations.contains(&derivation) {
+            return false;
+        }
+        derivations.push(derivation);
+        self.set_node_facet(key, PROVENANCE_DERIVATIONS, &derivations)
     }
 
     /// Remove all classification records matching `(scheme, value)`.
@@ -320,13 +352,17 @@ impl Graph {
         scheme: &ClassificationScheme,
         value: &str,
     ) -> bool {
-        let Some(node) = self.inner.node_mut(key) else {
+        if self.inner.node(key).is_none() {
             return false;
-        };
-        let before = node.classifications.len();
-        node.classifications
-            .retain(|c| !(c.scheme == *scheme && c.value == value));
-        node.classifications.len() < before
+        }
+        let mut classifications =
+            self.node_facet_or_default::<Vec<NodeClassification>>(key, SEMANTIC_CLASSIFICATIONS);
+        let before = classifications.len();
+        classifications.retain(|c| !(c.scheme == *scheme && c.value == value));
+        if classifications.len() == before {
+            return false;
+        }
+        self.set_node_facet(key, SEMANTIC_CLASSIFICATIONS, &classifications)
     }
 
     /// Update the `status` of a classification record identified by `(scheme, value)`.
@@ -339,17 +375,19 @@ impl Graph {
         value: &str,
         status: ClassificationStatus,
     ) -> bool {
-        let Some(node) = self.inner.node_mut(key) else {
+        if self.inner.node(key).is_none() {
             return false;
-        };
+        }
+        let mut classifications =
+            self.node_facet_or_default::<Vec<NodeClassification>>(key, SEMANTIC_CLASSIFICATIONS);
         let mut found = false;
-        for c in node.classifications.iter_mut() {
+        for c in &mut classifications {
             if c.scheme == *scheme && c.value == value {
                 c.status = status.clone();
                 found = true;
             }
         }
-        found
+        found && self.set_node_facet(key, SEMANTIC_CLASSIFICATIONS, &classifications)
     }
 
     /// Promote a classification record to primary for its scheme; demotes all others.
@@ -361,11 +399,13 @@ impl Graph {
         scheme: &ClassificationScheme,
         value: &str,
     ) -> bool {
-        let Some(node) = self.inner.node_mut(key) else {
+        if self.inner.node(key).is_none() {
             return false;
-        };
+        }
+        let mut classifications =
+            self.node_facet_or_default::<Vec<NodeClassification>>(key, SEMANTIC_CLASSIFICATIONS);
         let mut found = false;
-        for c in node.classifications.iter_mut() {
+        for c in &mut classifications {
             if c.scheme == *scheme {
                 c.primary = c.value == value;
                 if c.value == value {
@@ -373,7 +413,7 @@ impl Graph {
                 }
             }
         }
-        found
+        found && self.set_node_facet(key, SEMANTIC_CLASSIFICATIONS, &classifications)
     }
 
     pub(crate) fn set_node_tag_icon_override(
@@ -382,23 +422,28 @@ impl Graph {
         tag: &str,
         icon: Option<crate::types::BadgeIcon>,
     ) -> bool {
-        let Some(node) = self.inner.node_mut(key) else {
+        let Some(node) = self.inner.node(key) else {
             return false;
         };
         if !node.tags.contains(tag) || tag.starts_with('#') || tag.starts_with("udc:") {
             return false;
         }
+        let mut presentation =
+            self.node_facet_or_default::<NodeTagPresentationState>(key, PRESENTATION_TAGS);
         match icon {
             Some(icon) => {
-                if node.tag_presentation.icon_overrides.get(tag) == Some(&icon) {
+                if presentation.icon_overrides.get(tag) == Some(&icon) {
                     return false;
                 }
-                node.tag_presentation
-                    .icon_overrides
-                    .insert(tag.to_string(), icon);
-                true
+                presentation.icon_overrides.insert(tag.to_string(), icon);
+                self.set_node_facet(key, PRESENTATION_TAGS, &presentation)
             }
-            None => node.tag_presentation.icon_overrides.remove(tag).is_some(),
+            None => {
+                if presentation.icon_overrides.remove(tag).is_none() {
+                    return false;
+                }
+                self.set_node_facet(key, PRESENTATION_TAGS, &presentation)
+            }
         }
     }
 
@@ -417,11 +462,43 @@ impl Graph {
     }
 
     pub(crate) fn set_node_last_visited_at_ms(&mut self, key: NodeKey, timestamp_ms: u64) -> bool {
-        let Some(node) = self.inner.node_mut(key) else {
+        if self.inner.node(key).is_none() {
             return false;
-        };
-        node.last_visited = UNIX_EPOCH + Duration::from_millis(timestamp_ms);
-        true
+        }
+        let mut history = self.node_facet_or_default::<VisitHistoryFacet>(key, VISIT_HISTORY);
+        history.last_visited_ms = Some(timestamp_ms);
+        self.set_node_facet(key, VISIT_HISTORY, &history)
+    }
+
+    pub(crate) fn set_node_last_session_visited(
+        &mut self,
+        key: NodeKey,
+        last_session_visited: u64,
+    ) -> bool {
+        if self.inner.node(key).is_none() {
+            return false;
+        }
+        let mut history = self.node_facet_or_default::<VisitHistoryFacet>(key, VISIT_HISTORY);
+        if history.last_session_visited == last_session_visited {
+            return false;
+        }
+        history.last_session_visited = last_session_visited;
+        self.set_node_facet(key, VISIT_HISTORY, &history)
+    }
+
+    pub fn node_last_visited(&self, key: NodeKey) -> Option<SystemTime> {
+        self.get_node(key)?;
+        self.node_facet_or_default::<VisitHistoryFacet>(key, VISIT_HISTORY)
+            .last_visited_ms
+            .map(|milliseconds| UNIX_EPOCH + std::time::Duration::from_millis(milliseconds))
+    }
+
+    pub fn node_last_session_visited(&self, key: NodeKey) -> Option<u64> {
+        self.get_node(key)?;
+        Some(
+            self.node_facet_or_default::<VisitHistoryFacet>(key, VISIT_HISTORY)
+                .last_session_visited,
+        )
     }
 
     /// Internal setter for `Node::history`. Tightened to `pub(crate)` so the
@@ -452,5 +529,4 @@ impl Graph {
         self.nav.seed_linear(id, history_entries, clamped_index);
         true
     }
-
 }

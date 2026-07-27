@@ -307,7 +307,9 @@ fn frame_layout_metadata_survives_snapshot_roundtrip() {
     ));
     assert!(graph.set_frame_split_offer_suppressed(frame, true));
 
-    let restored = Graph::from_snapshot(&graph.to_snapshot());
+    let facets = graph.facets().clone();
+    let mut restored = Graph::from_snapshot(&graph.to_snapshot());
+    restored.overlay_facets(facets);
     let (restored_frame, _) = restored.get_node_by_url("verso://frame/demo").unwrap();
     let hints = restored.frame_layout_hints(restored_frame).unwrap();
 

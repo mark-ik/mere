@@ -45,13 +45,13 @@ use crate::types::{
 
 pub mod apply;
 pub mod capture;
+/// Cross-graph node copy (tear-out fork): mints a node in this graph from a
+/// donor node in another graph, recording cross-graph derivation provenance.
+pub mod cross_graph;
 /// The edit spine: mere's captured-delta stream as a `codicil` log, replayed into
 /// the graph (the substrate's append-only-log primitive over mere's own edit
 /// vocabulary). See `graph/journal.rs`.
 pub mod journal;
-/// Cross-graph node copy (tear-out fork): mints a node in this graph from a
-/// donor node in another graph, recording cross-graph derivation provenance.
-pub mod cross_graph;
 pub use cross_graph::ComponentCopy;
 pub mod edge_data;
 pub mod edge_payload;
@@ -66,6 +66,7 @@ pub mod history;
 pub mod identity;
 pub mod import_records;
 pub mod node;
+pub mod node_facets;
 pub mod node_props;
 // chartulary capability-trait impls for `Node` (graph re-base, G5).
 mod chart;
@@ -94,6 +95,7 @@ pub use identity::{EdgeKey, GraphDirection, GraphIndex, GraphViewId, NodeKey};
 // decomposition target. Re-exported so `kernel::graph::Node`
 // continues to resolve.
 pub use node::Node;
+pub use node_facets::{NodeFacetStore, VisitHistoryFacet};
 
 // Node navigation history extracted to `history.rs` (2026-05-11
 // kernel-mod decomposition pass). Re-exported so external callers
@@ -133,9 +135,8 @@ pub use edge_taxonomy::{
 // Field-system truth types (2026-05-31). Field/Coupling form a parallel field
 // layer beside the node/edge graph; quint reads them and evaluates.
 pub use numen::{
-    COUPLING_VOCAB, Coupling, CouplingId, CouplingResponse, EdgePath, EdgePathRule, Falloff,
-    Field, FieldDefinition, FieldExtent, FieldId, FieldLifecycle, NodeSelector, ScalarField,
-    VectorField,
+    COUPLING_VOCAB, Coupling, CouplingId, CouplingResponse, EdgePath, EdgePathRule, Falloff, Field,
+    FieldDefinition, FieldExtent, FieldId, FieldLifecycle, NodeSelector, ScalarField, VectorField,
 };
 
 /// Traversal archive payload emitted when dissolving a node.
@@ -272,6 +273,11 @@ pub struct Graph {
     /// [`chartulary::Graph::inner`]. (Graph signals.)
     pub(crate) inner: chartulary::Graph<Node, EdgePayload>,
 
+    /// Atomic optional metadata keyed by stable node id. This is the single
+    /// live authority persisted by the host as `facets.json`; snapshot columns
+    /// are legacy import inputs only.
+    pub(crate) facets: chartulary::FacetStore<Uuid>,
+
     /// URL to node mapping for lookup (supports duplicate URLs).
     pub(crate) url_to_nodes: HashMap<String, Vec<NodeKey>>,
 
@@ -313,6 +319,7 @@ impl Graph {
     pub fn new() -> Self {
         Self {
             inner: chartulary::Graph::new(),
+            facets: chartulary::FacetStore::new(),
             url_to_nodes: HashMap::new(),
             import_records: Vec::new(),
             fields: HashMap::new(),
@@ -398,7 +405,6 @@ impl Graph {
         url: String,
         _position: Point2D<f32>,
     ) -> NodeKey {
-        let now = std::time::SystemTime::now();
         let primary_address = address_from_url(&url);
         let mut container = chartulary::Container::with_identity(id)
             .with_address_record(primary_address)
@@ -406,18 +412,9 @@ impl Graph {
         container.media_type = detect_mime(&url, None);
         let key = self.inner.insert(Node {
             container,
-            tag_presentation: NodeTagPresentationState::default(),
-            import_provenance: Vec::new(),
-            classifications: Vec::new(),
-            derivations: Vec::new(),
-            properties: Vec::new(),
-            is_pinned: false,
-            last_visited: now,
-            last_session_visited: 0,
             images: std::collections::BTreeMap::new(),
-            frame_layout_hints: Vec::new(),
-            frame_split_offer_suppressed: false,
         });
+        self.set_node_last_visited_at_ms(key, Self::epoch_ms());
 
         self.url_to_nodes.entry(url).or_default().push(key);
         self.bump_revision();
@@ -438,7 +435,9 @@ impl Graph {
             for address in &node.addresses {
                 self.remove_url_mapping(address.as_url_str(), key);
             }
-            let removed_id = node.id.to_string();
+            let node_id = node.id;
+            self.remove_facets_for_node(node_id);
+            let removed_id = node_id.to_string();
             for record in &mut self.import_records {
                 record
                     .memberships
@@ -489,9 +488,7 @@ impl Graph {
             self.nav
                 .record_visit(id, url, chartulary::stemma::TransitionKind::UrlTyped, at_ms);
         }
-        if let Some(node) = self.inner.node_mut(key) {
-            node.last_session_visited = self.current_session;
-        }
+        self.set_node_last_session_visited(key, self.current_session);
         self.update_node_url(key, url.to_string());
     }
 
@@ -590,7 +587,6 @@ impl Graph {
             .map(|d| d.as_millis() as u64)
             .unwrap_or(0)
     }
-
 }
 
 // Edge mutators (add_edge, assert_relation, replay_*, dissolve_*,

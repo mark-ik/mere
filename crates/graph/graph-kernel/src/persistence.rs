@@ -259,6 +259,32 @@ impl GraphSnapshot {
             .filter(|n| n.legacy_thumbnail_png.is_some() || n.legacy_favicon_rgba.is_some())
             .count()
     }
+
+    /// How many nodes still carry optional metadata in the pre-facet columns.
+    ///
+    /// A non-zero count asks the host to persist the imported facet store and
+    /// re-save the graph immediately. Canonical snapshots keep these columns
+    /// empty; the values survive only in `facets.json`.
+    pub fn legacy_node_facet_count(&self) -> usize {
+        self.nodes
+            .iter()
+            .filter(|node| {
+                node.is_pinned
+                    || !node.frame_layout_hints.is_empty()
+                    || node.frame_split_offer_suppressed
+                    || node.tag_presentation != NodeTagPresentationState::default()
+                    || !node.import_provenance.is_empty()
+                    || !node.classifications.is_empty()
+                    || !node.properties.is_empty()
+                    || !node.derivations.is_empty()
+                    || node.last_session_visited != 0
+                    || node
+                        .session_state
+                        .as_ref()
+                        .is_some_and(|state| state.last_visited_ms.is_some())
+            })
+            .count()
+    }
 }
 
 // ---------------------------------------------------------------------------

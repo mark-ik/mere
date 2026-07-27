@@ -76,18 +76,20 @@ Nothing here is speculative plumbing; it is what G0-G5 produced:
 
 ## 5. Open questions
 
-> **Amended 2026-07-18** by [one node, atomic facets, and the layer map](2026-07-18_one_node_facets_layer_map.md):
-> 5.1 is retargeted (the kernel `Node` *dissolves* into `chartulary::Container`
-> facet-by-facet; "web page" becomes a turnstone-defined content class) and 5.4 is
+> **Amended 2026-07-27** by [one node, atomic facets, and the layer map](2026-07-18_one_node_facets_layer_map.md):
+> 5.1 is **closed**: the kernel `Node` is a physical wrapper around
+> `chartulary::Container`, with only content-addressed image references retained
+> as explicit D0 experience residue; all other optional metadata is atomic
+> facets, and "web page" is a turnstone-defined content class. 5.4 remains
 > **resolved-redundant** (Container already is the generalized container node,
 > including subgraphs via `GraphBearing`; there is no "above" to build).
 
-1. **turnstone extraction scope.** What leaves mere with the browser (genet host,
-   rendering, page runtime, the web-runtime node facets: favicon, viewer routing,
-   session restore, lifecycle) versus what stays as the orrery (the container graph,
-   RDF, lineage, vault and persona indexing). The capability-trait work already drew
-   this line once: the runtime facets sat on `Node` and did not participate in the
-   generic capabilities. That line is the extraction seam.
+1. **RESOLVED 2026-07-27: turnstone extraction scope.** Turnstone owns genet
+   hosting, page runtime, lifecycle, its `web.*` facets, and the web-page/note
+   content-class definitions. Mere owns the neutral Container graph, the single
+   graph-attached facet store, RDF projection, lineage, and vault/persona
+   indexing. Image bytes are host durability; the kernel carries only their
+   content-addressed references.
 2. **The orrery term.** Retire it, or narrow it to the visualization of the graph
    (the canvas) while mere names the graph itself. Mark's call; naming matters here.
 3. **Vault / persona index surface.** How personae keys vaults, and the cross-vault

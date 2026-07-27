@@ -119,7 +119,9 @@ impl Graph {
                 NodeSelector::All => true,
                 NodeSelector::Tagged(tag) => node.tags.contains(tag),
                 NodeSelector::NotTagged(tag) => !node.tags.contains(tag),
-                NodeSelector::Kind(kind) => node.classifications.iter().any(|c| &c.value == kind),
+                NodeSelector::Kind(kind) => self
+                    .node_classifications(key)
+                    .is_some_and(|classes| classes.iter().any(|c| &c.value == kind)),
             }
         })
     }

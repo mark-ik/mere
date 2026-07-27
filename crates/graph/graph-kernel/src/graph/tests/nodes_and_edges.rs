@@ -83,7 +83,7 @@ fn test_add_node() {
     let node = graph.get_node(key).unwrap();
     assert_eq!(node.url(), "https://example.com");
     assert_eq!(node.title, "https://example.com");
-    assert!(!node.is_pinned);
+    assert_eq!(graph.node_is_pinned(key), Some(false));
 }
 
 #[test]
@@ -144,13 +144,8 @@ fn test_get_node_mut() {
     let mut graph = Graph::new();
     let key = graph.add_node("https://example.com".to_string(), Point2D::new(0.0, 0.0));
 
-    {
-        let node = graph.get_node_mut(key).unwrap();
-        node.is_pinned = true;
-    }
-
-    let node = graph.get_node(key).unwrap();
-    assert!(node.is_pinned);
+    assert!(graph.set_node_pinned(key, true));
+    assert_eq!(graph.node_is_pinned(key), Some(true));
 }
 
 // `test_projected_position_is_the_single_node_position` left with `Node.position`
@@ -254,7 +249,9 @@ fn statement_assert_dedups_by_content_and_retracts_by_id() {
         asserted_at_ms: Some(1_000),
         ..Default::default()
     };
-    let (edge, first) = graph.assert_semantic_statement(a, b, cites.clone()).unwrap();
+    let (edge, first) = graph
+        .assert_semantic_statement(a, b, cites.clone())
+        .unwrap();
     assert!(first.changed, "fresh statement asserts");
 
     // Same content on a different scope = a SECOND fact on the same pair.
@@ -262,16 +259,16 @@ fn statement_assert_dedups_by_content_and_retracts_by_id() {
         graph_scope: GraphScope::Source,
         ..cites.clone()
     };
-    let (edge2, second) = graph
-        .assert_semantic_statement(a, b, source_scope)
-        .unwrap();
+    let (edge2, second) = graph.assert_semantic_statement(a, b, source_scope).unwrap();
     assert_eq!(edge, edge2, "one pair bucket");
     assert!(second.changed);
     assert_ne!(first.statement_id, second.statement_id);
     assert_eq!(graph.get_edge(edge).unwrap().semantic_statements().len(), 2);
 
     // Exact re-assert dedups to the same handle, no change.
-    let (_, again) = graph.assert_semantic_statement(a, b, cites.clone()).unwrap();
+    let (_, again) = graph
+        .assert_semantic_statement(a, b, cites.clone())
+        .unwrap();
     assert_eq!(again.statement_id, first.statement_id);
     assert!(!again.changed, "identical statement is a no-op");
 

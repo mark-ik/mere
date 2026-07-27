@@ -45,6 +45,18 @@ pub struct MergeReport {
 /// remapped. `a`'s `fields` / `couplings` / `navigation` are kept and `b`'s are
 /// dropped (reported) — union is a later refinement once overlap has a rule.
 pub fn merge_snapshots(a: &GraphSnapshot, b: &GraphSnapshot) -> (GraphSnapshot, MergeReport) {
+    let (snapshot, report, _) = merge_snapshots_with_remap(a, b);
+    (snapshot, report)
+}
+
+/// The merge plus `b` node id -> canonical merged node id.
+///
+/// Graph engram composition uses this to carry the separate facet store
+/// through the same URL-identity remap as the graph snapshot.
+pub(crate) fn merge_snapshots_with_remap(
+    a: &GraphSnapshot,
+    b: &GraphSnapshot,
+) -> (GraphSnapshot, MergeReport, HashMap<String, String>) {
     let mut report = MergeReport::default();
     let mut merged = a.clone();
 
@@ -123,8 +135,8 @@ pub fn merge_snapshots(a: &GraphSnapshot, b: &GraphSnapshot) -> (GraphSnapshot, 
     }
 
     // import_records: union by record_id, remapping membership node ids so the
-    // provenance still points at the canonical nodes. (The durable source that
-    // syncs to `node.import_provenance` — decision #1's per-member provenance.)
+    // provenance still points at the canonical nodes. Graph materialization
+    // projects this durable source into the provenance.import facet.
     let existing: HashSet<String> = merged
         .import_records
         .iter()
@@ -148,7 +160,7 @@ pub fn merge_snapshots(a: &GraphSnapshot, b: &GraphSnapshot) -> (GraphSnapshot, 
     report.dropped_couplings = b.couplings.len();
     merged.timestamp_secs = a.timestamp_secs.max(b.timestamp_secs);
 
-    (merged, report)
+    (merged, report, remap)
 }
 
 /// A stable dedup key for an edge: its endpoints plus a `Debug` signature of its

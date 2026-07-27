@@ -1066,7 +1066,6 @@ fn size_by_importance_sizes_nodes_by_the_degree_signal() {
 
 #[test]
 fn size_by_recency_grows_the_newest_node_and_shrinks_the_oldest() {
-    use std::time::{Duration, SystemTime};
     // Three nodes staggered in last_visited: oldest / middle / newest.
     let mut graph = Graph::new();
     let old = graph.add_node(
@@ -1081,11 +1080,16 @@ fn size_by_recency_grows_the_newest_node_and_shrinks_the_oldest() {
         "https://new.example".to_string(),
         PortablePoint::new(2.0, 0.0),
     );
-    graph.get_node_mut(old).unwrap().last_visited = SystemTime::UNIX_EPOCH;
-    graph.get_node_mut(mid).unwrap().last_visited =
-        SystemTime::UNIX_EPOCH + Duration::from_secs(50);
-    graph.get_node_mut(new).unwrap().last_visited =
-        SystemTime::UNIX_EPOCH + Duration::from_secs(100);
+    for (key, timestamp_ms) in [(old, 0), (mid, 50_000), (new, 100_000)] {
+        let id = graph.get_node(key).unwrap().id;
+        kernel::graph::apply::apply_graph_delta(
+            &mut graph,
+            kernel::graph::apply::GraphDelta::ReplayTouchNodeLastVisitedById {
+                node_id: id,
+                timestamp_ms,
+            },
+        );
+    }
     let mut canvas = Canvas::with_graph(graph);
     let key = |url: &str| canvas.graph().get_node_by_url(url).unwrap().0;
     let (ok, mk, nk) = (
@@ -2600,9 +2604,8 @@ fn revisit_stamps_the_durable_recency_clock() {
     canvas.visit("https://recency.example");
     let stamped = canvas
         .graph()
-        .get_node(key)
+        .node_last_visited(key)
         .unwrap()
-        .last_visited
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_millis();

@@ -158,7 +158,7 @@ pub fn facet_projection_for_node(graph: &Graph, key: NodeKey) -> Option<FacetPro
             .iter()
             .map(|t| FacetScalar::Text(t.clone()))
             .collect();
-        for c in &node.classifications {
+        for c in graph.node_classifications(key).unwrap_or_default() {
             udc_values.push(FacetScalar::Text(c.value.clone()));
         }
         if !udc_values.is_empty() {
@@ -172,7 +172,10 @@ pub fn facet_projection_for_node(graph: &Graph, key: NodeKey) -> Option<FacetPro
     // --- Time ---
 
     // last_visited as milliseconds since epoch (best available time source on Node)
-    if let Ok(duration) = node.last_visited.duration_since(std::time::UNIX_EPOCH) {
+    if let Some(duration) = graph
+        .node_last_visited(key)
+        .and_then(|visited| visited.duration_since(std::time::UNIX_EPOCH).ok())
+    {
         proj.insert(
             facet_keys::LAST_TRAVERSAL.to_string(),
             FacetValue::Scalar(FacetScalar::Number(duration.as_millis() as f64)),

@@ -13,12 +13,20 @@ categories = ["network-programming"]
 [lib]
 path = "src/lib.rs"
 
+[features]
+default = []
+# The point-to-point session lane: owner-gated inbound sessions carrying posts
+# (Notochord N2). Off by default because the ordinary peer runtime is
+# topic-shaped; this is what a bearer without a gossip overlay needs.
+session-lane = ["dep:network-policy"]
+
 [dependencies]
 # Path + version: path for local workspace builds; version for `cargo publish`.
 identity.workspace = true
 muniment = { path = "../../eidetic/muniment", features = ["redb"] }
 stickleback = { workspace = true }
 transport.workspace = true
+network-policy = { workspace = true, features = ["tokio"], optional = true }
 blake3 = "1.5"
 hex = "0.4"
 async-trait = "0.1"

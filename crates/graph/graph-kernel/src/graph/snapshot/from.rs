@@ -7,18 +7,14 @@
 //! Extracted from `graph/snapshot.rs` per the 2026-05-11 kernel
 //! decomposition pass.
 
-use std::collections::HashMap;
-use std::time::{Duration, UNIX_EPOCH};
-
 use euclid::default::Point2D;
 use uuid::Uuid;
 
 use super::super::*;
-use super::containment_parent_url;
 use crate::address::{address_from_url, detect_mime};
 use crate::persistence::{
     GraphSnapshot, PersistedArrangementSubKind, PersistedContainmentSubKind,
-    PersistedCouplingResponse, PersistedEdgeFamily, PersistedFieldExtent, PersistedFieldLifecycle,
+    PersistedCouplingResponse, PersistedFieldExtent, PersistedFieldLifecycle,
     PersistedImportedSubKind, PersistedNavigationTrigger, PersistedNodeSelector,
     PersistedProvenanceSubKind, PersistedSemanticSubKind,
 };
@@ -70,16 +66,9 @@ impl Graph {
             // sidecar (the Cartography projection's geometry). Seed at the origin and
             // let the sidecar override on load. (Position gut.)
             let key = graph.add_node_with_id(node_id, node_url, Point2D::new(0.0, 0.0));
-            let mut restore_url_from_session: Option<String> = None;
             if let Some(node) = graph.inner.node_mut(key) {
                 node.title = pnode.title.clone();
                 node.tags = pnode.tags.iter().cloned().collect();
-                node.tag_presentation = pnode.tag_presentation.clone();
-                node.import_provenance = pnode.import_provenance.clone();
-                node.classifications = pnode.classifications.clone();
-                node.properties = pnode.properties.clone();
-                node.derivations = pnode.derivations.clone();
-                node.is_pinned = pnode.is_pinned;
                 // References only. Legacy inline bytes are externalized by the
                 // host before conversion (`session_runtime::image_store::
                 // migrate_legacy_images`), because hashing and blob storage
@@ -89,24 +78,72 @@ impl Graph {
                 node.images = pnode.images.clone();
                 node.media_type = pnode.mime_hint.clone();
                 // address was already set by add_node_with_id from pnode.url; no re-derivation needed.
-                node.frame_layout_hints = pnode.frame_layout_hints.clone();
-                node.frame_split_offer_suppressed = pnode.frame_split_offer_suppressed;
                 node.body = pnode.body.clone();
-                node.last_session_visited = pnode.last_session_visited;
                 node.nested = pnode.nested.clone().map(codicil::LogId::new);
-                if let Some(session) = &pnode.session_state {
-                    // Legacy scroll / form draft stay on the PersistedNode for
-                    // the host's one-time BrowserNodeState migration (the host
-                    // reads them off the snapshot it loaded; the kernel no
-                    // longer carries them — boundary pass slice C).
-                    if let Some(last_visited_ms) = session.last_visited_ms {
-                        node.last_visited = UNIX_EPOCH + Duration::from_millis(last_visited_ms);
-                    }
-                }
+            }
+            // One-time legacy-column import. Canonical saves put these records
+            // in `facets.json`; the old graph fields are written empty.
+            graph.set_node_facet(
+                key,
+                super::super::node_facets::PRESENTATION_TAGS,
+                &pnode.tag_presentation,
+            );
+            graph.set_node_facet(
+                key,
+                super::super::node_facets::PROVENANCE_IMPORT,
+                &pnode.import_provenance,
+            );
+            graph.set_node_facet(
+                key,
+                super::super::node_facets::SEMANTIC_CLASSIFICATIONS,
+                &pnode.classifications,
+            );
+            graph.set_node_facet(
+                key,
+                super::super::node_facets::SEMANTIC_PROPERTIES,
+                &pnode.properties,
+            );
+            graph.set_node_facet(
+                key,
+                super::super::node_facets::PROVENANCE_DERIVATIONS,
+                &pnode.derivations,
+            );
+            graph.set_node_facet(
+                key,
+                super::super::node_facets::ARRANGEMENT_PIN,
+                &pnode.is_pinned,
+            );
+            graph.set_node_facet(
+                key,
+                super::super::node_facets::ARRANGEMENT_FRAME_LAYOUT,
+                &pnode.frame_layout_hints,
+            );
+            graph.set_node_facet(
+                key,
+                super::super::node_facets::ARRANGEMENT_SPLIT_OFFER_SUPPRESSED,
+                &pnode.frame_split_offer_suppressed,
+            );
+            let last_visited_ms = pnode
+                .session_state
+                .as_ref()
+                .and_then(|session| session.last_visited_ms);
+            if let Some(last_visited_ms) = last_visited_ms {
+                graph.set_node_facet(
+                    key,
+                    super::super::node_facets::VISIT_HISTORY,
+                    &super::super::node_facets::VisitHistoryFacet {
+                        last_visited_ms: Some(last_visited_ms),
+                        last_session_visited: pnode.last_session_visited,
+                    },
+                );
+            } else if pnode.last_session_visited != 0 {
+                // Old snapshots could carry a session ordinal without an
+                // explicit visit timestamp. Preserve the creation-time visit
+                // installed by `add_node_with_id` while importing that ordinal.
+                graph.set_node_last_session_visited(key, pnode.last_session_visited);
             }
             // The node's restored current page comes from the shared nav history.
-            restore_url_from_session = graph.nav.current_url(node_id);
-            if let Some(current_url) = restore_url_from_session
+            if let Some(current_url) = graph.nav.current_url(node_id)
                 && !current_url.is_empty()
             {
                 let preserve_route_identity = graph.inner.node(key).is_some_and(|node| {

@@ -6,11 +6,11 @@
 //!
 //! This is the spine of the Alembic memory subsystem (slice A of
 //! `design_docs/mere_docs/implementation_strategy/2026-06-24_alembic_implementation_plan.md`):
-//! "Save as graph engram" freezes a [`Graph`] to a [`GraphSnapshot`], redacts
-//! private / heavy fields, and writes it through the eidetic typed-payload layer
-//! under the `mere.graph-snapshot/v1` schema; "Open as session" thaws an engram
-//! back into a [`Graph`]. Browsing an engram is read-only (immutability holds);
-//! editing forks a thaw.
+//! "Save as graph engram" freezes a [`Graph`] to its [`GraphSnapshot`] plus
+//! atomic facet store, redacts private / heavy state, and writes it through the
+//! eidetic typed-payload layer under the `mere.graph-snapshot/v2` schema; "Open
+//! as session" thaws an engram back into a [`Graph`]. Browsing an engram is
+//! read-only (immutability holds); editing forks a thaw.
 //!
 //! The graph binding lives here rather than in eidetic-core because eidetic is
 //! deliberately graph-agnostic; session-runtime is the lowest crate that knows
@@ -19,17 +19,22 @@
 //! `graph.json` sidecar — a wasm host's OPFS store works the same way.
 
 use eidetic::{
-    BlobManifest, BlobSource, ManifestId, NoFetcher, PayloadSealer, PrivacyClass, ProvenanceOrigin,
-    ProvenanceRecord, Result, SchemaRef, Store, Timestamp, TrustEnvelope, TypedPayload, list_typed,
-    load_typed_sealed, save_typed_sealed,
+    BlobManifest, BlobSource, Error, ManifestId, NoFetcher, PayloadSealer, PrivacyClass,
+    ProvenanceOrigin, ProvenanceRecord, Result, SchemaRef, Store, Timestamp, TrustEnvelope,
+    TypedPayload, list_typed, load_typed_sealed, save_typed_sealed,
 };
 use kernel::graph::Graph;
 use kernel::persistence::GraphSnapshot;
-use kernel::types::{ImageRef, ImageRole};
+use kernel::types::ImageRole;
+use uuid::Uuid;
+
+use crate::NodeFacetStore;
+use eidetic::manifest::load_manifest;
 
 /// Schema id bytes for the graph-snapshot engram schema. The [`SchemaRef`] is the
 /// BLAKE3 of these bytes, so it is stable across builds and machines.
-pub const GRAPH_SNAPSHOT_SCHEMA_ID: &[u8] = b"mere.graph-snapshot/v1";
+pub const GRAPH_SNAPSHOT_SCHEMA_ID: &[u8] = b"mere.graph-snapshot/v2";
+const LEGACY_GRAPH_SNAPSHOT_SCHEMA_ID: &[u8] = b"mere.graph-snapshot/v1";
 
 /// The content-addressed schema reference every graph engram is tagged with.
 ///
@@ -41,15 +46,21 @@ pub fn graph_snapshot_schema_ref() -> SchemaRef {
     SchemaRef::from_id(ManifestId::of_blob(GRAPH_SNAPSHOT_SCHEMA_ID))
 }
 
-/// A [`GraphSnapshot`] bound to the graph-snapshot engram schema.
+fn legacy_graph_snapshot_schema_ref() -> SchemaRef {
+    SchemaRef::from_id(ManifestId::of_blob(LEGACY_GRAPH_SNAPSHOT_SCHEMA_ID))
+}
+
+/// A graph snapshot and its one live facet store, bound to the graph-engram
+/// schema.
 ///
-/// A newtype is required because both [`TypedPayload`] (eidetic) and
-/// [`GraphSnapshot`] (kernel) are foreign to this crate. `#[serde(transparent)]`
-/// keeps the stored bytes identical to a bare `GraphSnapshot`, so the payload is
-/// readable by anything that knows the snapshot shape.
+/// Version 1 carried a bare [`GraphSnapshot`]. Version 2 adds the sidecar because
+/// optional node metadata no longer lives in snapshot columns.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-#[serde(transparent)]
-pub struct GraphEngram(pub GraphSnapshot);
+pub struct GraphEngram {
+    pub snapshot: GraphSnapshot,
+    #[serde(default)]
+    pub facets: NodeFacetStore,
+}
 
 impl TypedPayload for GraphEngram {
     fn schema_ref() -> SchemaRef {
@@ -61,20 +72,39 @@ impl TypedPayload for GraphEngram {
     // doc's stated preference), not load-bearing for the spine.
 }
 
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
+struct LegacyGraphEngram(GraphSnapshot);
+
+impl TypedPayload for LegacyGraphEngram {
+    fn schema_ref() -> SchemaRef {
+        legacy_graph_snapshot_schema_ref()
+    }
+}
+
+impl GraphEngram {
+    fn into_graph(self) -> Graph {
+        let mut graph = Graph::from_snapshot(&self.snapshot);
+        graph.overlay_facets(self.facets);
+        graph
+    }
+}
+
 /// What a graph engram keeps from the live snapshot.
 ///
 /// The default is conservative (Alembic plan open decision #7): private / heavy
-/// per-node fields are stripped, leaving graph structure, addresses, titles,
-/// tags, classifications, provenance, and properties. Callers opt fields back in
-/// explicitly with [`RedactionPolicy::include_all`] or by setting a flag — never
-/// silently — so a shareable engram does not leak screenshots or form drafts.
+/// per-node state is stripped, leaving graph structure, addresses, titles,
+/// tags, classifications, provenance, properties, and other portable facets.
+/// Callers opt state back in explicitly with [`RedactionPolicy::include_all`]
+/// or by setting a flag, so a shareable engram does not leak screenshots,
+/// drafts, or browser-runtime facets.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RedactionPolicy {
-    /// Keep `thumbnail_png` (page screenshots). Off by default (heavy, private).
+    /// Keep preview/snapshot image references. Off by default (heavy, private).
     pub include_thumbnails: bool,
-    /// Keep `favicon_rgba`. Off by default (heavy).
+    /// Keep favicon image references. Off by default (heavy).
     pub include_favicons: bool,
-    /// Keep `session_state` (scroll position + form drafts). Off by default (private).
+    /// Keep legacy session state and `web.*` runtime facets. Off by default.
     pub include_session_state: bool,
 }
 
@@ -114,6 +144,25 @@ impl RedactionPolicy {
             }
             if !self.include_session_state {
                 node.session_state = None;
+            }
+        }
+    }
+
+    fn apply_facets(&self, facets: &mut NodeFacetStore) {
+        if self.include_session_state {
+            return;
+        }
+        let private_runtime_facets = [
+            "web.scroll",
+            "web.form_draft",
+            "web.viewer",
+            "web.compat",
+            "web.content",
+        ];
+        let nodes = facets.iter().map(|(node, _)| *node).collect::<Vec<_>>();
+        for node in nodes {
+            for facet in private_runtime_facets {
+                facets.remove(&node, &chartulary::FacetId::new(facet));
             }
         }
     }
@@ -162,24 +211,33 @@ pub async fn save_graph_engram_sealed(
     redaction: RedactionPolicy,
     created_at: Timestamp,
 ) -> Result<ManifestId> {
-    save_graph_snapshot_engram_sealed(store, sealer, graph.to_snapshot(), redaction, created_at)
-        .await
+    save_graph_snapshot_engram_sealed(
+        store,
+        sealer,
+        graph.to_snapshot(),
+        graph.facets().clone(),
+        redaction,
+        created_at,
+    )
+    .await
 }
 
-/// As [`save_graph_engram`], but from an already-materialized [`GraphSnapshot`].
+/// As [`save_graph_engram`], but from an already-materialized snapshot and
+/// facet store.
 ///
 /// The primitive a host uses when it has snapshotted the graph already — taking
 /// the snapshot ends the borrow of the live graph, so a `&mut Store` borrowed
 /// from the same owner can follow without a conflict. Also the entry the
-/// Timeline's "distil this past state" reuses (slice E). `snapshot` is redacted
-/// in place per `redaction`.
+/// Timeline's "distil this past state" reuses (slice E). Both parts are
+/// redacted in place per `redaction`.
 pub async fn save_graph_snapshot_engram(
     store: &mut dyn Store,
     snapshot: GraphSnapshot,
+    facets: NodeFacetStore,
     redaction: RedactionPolicy,
     created_at: Timestamp,
 ) -> Result<ManifestId> {
-    save_graph_snapshot_engram_sealed(store, None, snapshot, redaction, created_at).await
+    save_graph_snapshot_engram_sealed(store, None, snapshot, facets, redaction, created_at).await
 }
 
 /// As [`save_graph_snapshot_engram`], but sealing the engram at rest under
@@ -188,14 +246,16 @@ pub async fn save_graph_snapshot_engram_sealed(
     store: &mut dyn Store,
     sealer: Option<&dyn PayloadSealer>,
     mut snapshot: GraphSnapshot,
+    mut facets: NodeFacetStore,
     redaction: RedactionPolicy,
     created_at: Timestamp,
 ) -> Result<ManifestId> {
     redaction.apply(&mut snapshot);
+    redaction.apply_facets(&mut facets);
     save_typed_sealed(
         store,
         sealer,
-        &GraphEngram(snapshot),
+        &GraphEngram { snapshot, facets },
         Vec::<BlobSource>::new(),
         PrivacyClass::LocalOnly,
         graph_engram_provenance(created_at),
@@ -218,6 +278,17 @@ pub async fn open_engram_as_session(
     open_engram_as_session_sealed(store, None, id).await
 }
 
+/// Load the persisted graph-engram payload without materializing a live graph.
+///
+/// Legacy v1 payloads are upgraded in memory to the v2 snapshot + facet-store
+/// shape.
+pub async fn load_graph_engram(
+    store: &mut dyn Store,
+    id: ManifestId,
+) -> Result<Option<GraphEngram>> {
+    load_graph_engram_sealed(store, None, id).await
+}
+
 /// As [`open_engram_as_session`], but unsealing a sealed engram with `sealer`.
 /// A sealed engram opened with `sealer = None` is a hard error (from the eidetic
 /// seal seam), never a silent failure.
@@ -227,16 +298,27 @@ pub async fn open_engram_as_session_sealed(
     id: ManifestId,
 ) -> Result<Option<Graph>> {
     let mut fetcher = NoFetcher;
-    let payload: Option<GraphEngram> =
-        load_typed_sealed::<GraphEngram>(store, &mut fetcher, sealer, id).await?;
-    Ok(payload.map(|engram| Graph::from_snapshot(&engram.0)))
+    let Some(manifest) = load_manifest(store, id).await? else {
+        return Ok(None);
+    };
+    if manifest.schema == graph_snapshot_schema_ref() {
+        let payload = load_typed_sealed::<GraphEngram>(store, &mut fetcher, sealer, id).await?;
+        return Ok(payload.map(GraphEngram::into_graph));
+    }
+    if manifest.schema == legacy_graph_snapshot_schema_ref() {
+        let payload =
+            load_typed_sealed::<LegacyGraphEngram>(store, &mut fetcher, sealer, id).await?;
+        return Ok(payload.map(|engram| Graph::from_snapshot(&engram.0)));
+    }
+    Err(Error::new(format!("manifest {} is not a graph engram", id)))
 }
 
-/// List the manifests of every graph engram in the store. Order is store-defined;
-/// callers that want newest-first should sort on `created_at`. Use
-/// [`open_engram_as_session`] on an id to thaw one.
+/// List manifests for current v2 and readable legacy v1 graph engrams. Order is
+/// store-defined; callers that want newest-first should sort on `created_at`.
 pub async fn list_graph_engrams(store: &mut dyn Store) -> Result<Vec<BlobManifest>> {
-    list_typed::<GraphEngram>(store).await
+    let mut manifests = list_typed::<GraphEngram>(store).await?;
+    manifests.extend(list_typed::<LegacyGraphEngram>(store).await?);
+    Ok(manifests)
 }
 
 /// Compose several graph engrams into one by URL-identity merge (Alembic tail B7 /
@@ -272,21 +354,19 @@ pub async fn compose_graph_engrams_sealed(
     if ids.is_empty() {
         return Ok(None);
     }
-    let mut fetcher = NoFetcher;
-    let mut acc: Option<GraphSnapshot> = None;
+    let mut acc: Option<GraphEngram> = None;
     for id in ids {
-        let Some(engram) =
-            load_typed_sealed::<GraphEngram>(store, &mut fetcher, sealer, *id).await?
-        else {
+        let Some(engram) = load_graph_engram_sealed(store, sealer, *id).await? else {
             return Ok(None);
         };
         acc = Some(match acc {
-            None => engram.0,
-            Some(base) => crate::snapshot_merge::merge_snapshots(&base, &engram.0).0,
+            None => engram,
+            Some(base) => merge_graph_engrams(base, engram),
         });
     }
-    let mut snapshot = acc.expect("ids is non-empty, so acc is Some");
-    redaction.apply(&mut snapshot);
+    let mut engram = acc.expect("ids is non-empty, so acc is Some");
+    redaction.apply(&mut engram.snapshot);
+    redaction.apply_facets(&mut engram.facets);
     let provenance = ProvenanceRecord {
         origin: ProvenanceOrigin::Derived,
         upstream: ids.to_vec(),
@@ -302,7 +382,7 @@ pub async fn compose_graph_engrams_sealed(
     let id = save_typed_sealed(
         store,
         sealer,
-        &GraphEngram(snapshot),
+        &engram,
         Vec::<BlobSource>::new(),
         PrivacyClass::LocalOnly,
         provenance,
@@ -313,6 +393,59 @@ pub async fn compose_graph_engrams_sealed(
     Ok(Some(id))
 }
 
+async fn load_graph_engram_sealed(
+    store: &mut dyn Store,
+    sealer: Option<&dyn PayloadSealer>,
+    id: ManifestId,
+) -> Result<Option<GraphEngram>> {
+    let Some(manifest) = load_manifest(store, id).await? else {
+        return Ok(None);
+    };
+    let mut fetcher = NoFetcher;
+    if manifest.schema == graph_snapshot_schema_ref() {
+        return load_typed_sealed::<GraphEngram>(store, &mut fetcher, sealer, id).await;
+    }
+    if manifest.schema == legacy_graph_snapshot_schema_ref() {
+        return Ok(
+            load_typed_sealed::<LegacyGraphEngram>(store, &mut fetcher, sealer, id)
+                .await?
+                .map(|legacy| {
+                    let graph = Graph::from_snapshot(&legacy.0);
+                    GraphEngram {
+                        snapshot: graph.to_snapshot(),
+                        facets: graph.facets().clone(),
+                    }
+                }),
+        );
+    }
+    Err(Error::new(format!("manifest {} is not a graph engram", id)))
+}
+
+fn merge_graph_engrams(a: GraphEngram, b: GraphEngram) -> GraphEngram {
+    let (snapshot, _, remap) =
+        crate::snapshot_merge::merge_snapshots_with_remap(&a.snapshot, &b.snapshot);
+    let mut facets = a.facets;
+    for (node, node_facets) in b.facets.iter() {
+        let canonical = remap
+            .get(&node.to_string())
+            .and_then(|id| Uuid::parse_str(id).ok())
+            .unwrap_or(*node);
+        for (facet, value) in node_facets.iter() {
+            if facets.get(&canonical, facet).is_none() {
+                facets
+                    .set(
+                        canonical,
+                        facet.clone(),
+                        value.clone(),
+                        &chartulary::AcceptAll,
+                    )
+                    .expect("AcceptAll cannot reject a composed facet");
+            }
+        }
+    }
+    GraphEngram { snapshot, facets }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -320,6 +453,7 @@ mod tests {
     use euclid::default::Point2D;
     use kernel::graph::fixtures::GraphFixtures;
     use kernel::persistence::PersistedNodeSessionState;
+    use kernel::types::ImageRef;
     use std::collections::HashMap;
 
     /// In-memory `Store` for the round-trip tests — the same shape
@@ -328,10 +462,25 @@ mod tests {
     // hand-rolled one was the same map behind the same seam.
     use muniment::MemoryBackend as InMemoryStore;
 
+    fn set_pinned(graph: &mut Graph, url: &str, pinned: bool) {
+        let (_, node) = graph.get_node_by_url(url).unwrap();
+        let node_id = node.id;
+        graph
+            .facets_mut()
+            .set(
+                node_id,
+                chartulary::FacetId::new(kernel::graph::node_facets::ARRANGEMENT_PIN),
+                serde_json::json!(pinned),
+                &chartulary::AcceptAll,
+            )
+            .unwrap();
+    }
+
     fn sample_graph() -> Graph {
         let mut graph = Graph::new();
         graph.add_node("https://a.example".to_string(), Point2D::new(1.0, 2.0));
         graph.add_node("https://b.example".to_string(), Point2D::new(3.0, 4.0));
+        set_pinned(&mut graph, "https://a.example", true);
         graph
     }
 
@@ -356,6 +505,89 @@ mod tests {
             assert!(
                 opened.get_node_by_url("https://a.example").is_some(),
                 "the URL index rebuilds from the thawed snapshot",
+            );
+            let (a, _) = opened.get_node_by_url("https://a.example").unwrap();
+            assert_eq!(
+                opened.node_is_pinned(a),
+                Some(true),
+                "the graph-owned facet store survives freeze/thaw"
+            );
+        });
+    }
+
+    #[test]
+    fn legacy_v1_engram_loads_and_imports_its_inline_metadata() {
+        pollster::block_on(async {
+            let mut store = InMemoryStore::default();
+            let mut snapshot = sample_graph().to_snapshot();
+            snapshot.nodes[0].is_pinned = true;
+            let id = save_typed_sealed(
+                &mut store,
+                None,
+                &LegacyGraphEngram(snapshot),
+                Vec::<BlobSource>::new(),
+                PrivacyClass::LocalOnly,
+                graph_engram_provenance(Timestamp(1)),
+                TrustEnvelope::self_asserted(),
+                Timestamp(1),
+            )
+            .await
+            .unwrap();
+
+            let opened = open_engram_as_session(&mut store, id)
+                .await
+                .unwrap()
+                .unwrap();
+            let (a, _) = opened.get_node_by_url("https://a.example").unwrap();
+            assert_eq!(opened.node_is_pinned(a), Some(true));
+        });
+    }
+
+    #[test]
+    fn default_redaction_strips_private_web_facets_but_keeps_other_facets() {
+        pollster::block_on(async {
+            let mut store = InMemoryStore::default();
+            let mut graph = sample_graph();
+            let (_, node) = graph.get_node_by_url("https://a.example").unwrap();
+            let node_id = node.id;
+            graph
+                .facets_mut()
+                .set(
+                    node_id,
+                    chartulary::FacetId::new("web.form_draft"),
+                    serde_json::json!("secret"),
+                    &chartulary::AcceptAll,
+                )
+                .unwrap();
+            graph
+                .facets_mut()
+                .set(
+                    node_id,
+                    chartulary::FacetId::new("foreign.keep"),
+                    serde_json::json!({"portable": true}),
+                    &chartulary::AcceptAll,
+                )
+                .unwrap();
+
+            let id =
+                save_graph_engram(&mut store, &graph, RedactionPolicy::default(), Timestamp(1))
+                    .await
+                    .unwrap();
+            let opened = open_engram_as_session(&mut store, id)
+                .await
+                .unwrap()
+                .unwrap();
+            assert!(
+                opened
+                    .facets()
+                    .get(&node_id, &chartulary::FacetId::new("web.form_draft"))
+                    .is_none()
+            );
+            assert_eq!(
+                opened
+                    .facets()
+                    .get(&node_id, &chartulary::FacetId::new("foreign.keep")),
+                Some(&serde_json::json!({"portable": true}))
             );
         });
     }
@@ -500,9 +732,12 @@ mod tests {
             let mut ga = Graph::new();
             ga.add_node("https://x.example".to_string(), Point2D::new(0.0, 0.0));
             ga.add_node("https://y.example".to_string(), Point2D::new(1.0, 0.0));
+            set_pinned(&mut ga, "https://y.example", false);
             let mut gb = Graph::new();
             gb.add_node("https://y.example".to_string(), Point2D::new(0.0, 0.0));
             gb.add_node("https://z.example".to_string(), Point2D::new(1.0, 0.0));
+            set_pinned(&mut gb, "https://y.example", true);
+            set_pinned(&mut gb, "https://z.example", true);
 
             let id_a = save_graph_engram(&mut store, &ga, RedactionPolicy::default(), Timestamp(1))
                 .await
@@ -533,6 +768,18 @@ mod tests {
             );
             assert!(graph.get_node_by_url("https://x.example").is_some());
             assert!(graph.get_node_by_url("https://z.example").is_some());
+            let (y, _) = graph.get_node_by_url("https://y.example").unwrap();
+            let (z, _) = graph.get_node_by_url("https://z.example").unwrap();
+            assert_eq!(
+                graph.node_is_pinned(y),
+                Some(false),
+                "the canonical source wins a same-node facet conflict"
+            );
+            assert_eq!(
+                graph.node_is_pinned(z),
+                Some(true),
+                "facets on an added node are remapped into the union"
+            );
 
             // The lineage: the composed engram is `Derived` and names both sources —
             // the `upstream` Vec that is empty on every freeze, finally populated.

@@ -11,6 +11,23 @@ impl Canvas {
         &self.graph
     }
 
+    /// The graph's single live atomic-facet store. Hosts persist this beside
+    /// `graph.json` as `facets.json`.
+    pub fn facets(&self) -> &kernel::graph::NodeFacetStore {
+        self.graph.facets()
+    }
+
+    /// Mutable access for host-defined and unknown-forward facet namespaces.
+    pub fn facets_mut(&mut self) -> &mut kernel::graph::NodeFacetStore {
+        self.graph.facets_mut()
+    }
+
+    /// Overlay the canonical sidecar after the graph imported any legacy
+    /// snapshot columns.
+    pub fn overlay_facets(&mut self, facets: kernel::graph::NodeFacetStore) {
+        self.graph.overlay_facets(facets);
+    }
+
     /// The current camera (pan + zoom), for the host to persist as view-intent.
     pub fn camera(&self) -> CameraView {
         CameraView {
@@ -250,7 +267,11 @@ mod tests {
         // Swap back and forth the way a two-window host does, many times.
         for _ in 0..64 {
             canvas.set_viewport(primary);
-            assert_eq!(canvas.viewport(), primary, "the primary is installed exactly");
+            assert_eq!(
+                canvas.viewport(),
+                primary,
+                "the primary is installed exactly"
+            );
             canvas.set_viewport(lens);
             assert_eq!(canvas.viewport(), lens, "the lens is installed exactly");
         }

@@ -1257,10 +1257,12 @@ mod tests {
         assert_eq!(node.preview(), Some(&ImageRef::new([7u8; 32], 1, 1)));
         assert_eq!(node.favicon(), Some(&ImageRef::new([9u8; 32], 1, 1)));
         assert_eq!(node.media_type.as_deref(), Some("text/html"));
-        assert!(node.is_pinned);
+        assert_eq!(graph.node_is_pinned(from), Some(true));
         assert_eq!(node.body.as_deref(), Some("body"));
         assert_eq!(
-            node.last_visited
+            graph
+                .node_last_visited(from)
+                .expect("last visited facet")
                 .duration_since(std::time::UNIX_EPOCH)
                 .expect("last visited since epoch")
                 .as_millis() as u64,
@@ -1269,36 +1271,37 @@ mod tests {
         assert!(!node.tags.contains("research"));
         assert!(node.tags.contains("paper"));
         assert_eq!(
-            node.tag_presentation.icon_overrides.get("paper"),
+            graph
+                .node_tag_presentation(from)
+                .unwrap()
+                .icon_overrides
+                .get("paper"),
             Some(&BadgeIcon::Lucide("file-text".into()))
         );
-        assert_eq!(node.properties.len(), 1);
-        assert_eq!(
-            node.properties[0].predicate,
-            "https://schema.org/datePublished"
-        );
-        assert_eq!(node.properties[0].value, "2026-07-02");
-        assert_eq!(node.classifications.len(), 2);
-        assert!(node.classifications.iter().any(|classification| {
+        let properties = graph.node_properties(from).unwrap();
+        assert_eq!(properties.len(), 1);
+        assert_eq!(properties[0].predicate, "https://schema.org/datePublished");
+        assert_eq!(properties[0].value, "2026-07-02");
+        let classifications = graph.node_classifications(from).unwrap();
+        assert_eq!(classifications.len(), 2);
+        assert!(classifications.iter().any(|classification| {
             classification.value == "article"
                 && classification.status == ClassificationStatus::Verified
                 && !classification.primary
         }));
-        assert!(node.classifications.iter().any(|classification| {
+        assert!(classifications.iter().any(|classification| {
             classification.value == "essay"
                 && classification.status == ClassificationStatus::Suggested
                 && classification.primary
         }));
         assert!(
-            node.classifications
+            classifications
                 .iter()
                 .all(|classification| classification.value != "draft")
         );
-        assert_eq!(node.derivations.len(), 1);
-        assert_eq!(
-            node.derivations[0].sub_kind,
-            ProvenanceSubKind::ExtractedFrom
-        );
+        let derivations = graph.node_derivations(from).unwrap();
+        assert_eq!(derivations.len(), 1);
+        assert_eq!(derivations[0].sub_kind, ProvenanceSubKind::ExtractedFrom);
         assert_eq!(
             payload
                 .semantic_data()
@@ -1308,7 +1311,7 @@ mod tests {
         let history_node_key = graph.get_node_key_by_id(b_id).expect("history node key");
         let history_node = graph.get_node(history_node_key).expect("history node");
         assert_eq!(history_node.url(), "https://b.test/two");
-        assert_eq!(history_node.last_session_visited, 77);
+        assert_eq!(graph.node_last_session_visited(history_node_key), Some(77));
         let history_projection = graph.node_history_projection(history_node_key);
         assert_eq!(
             history_projection.entries,
@@ -1321,7 +1324,7 @@ mod tests {
         let branched_node_key = graph.get_node_key_by_id(c_id).expect("branched node key");
         let branched_node = graph.get_node(branched_node_key).expect("branched node");
         assert_eq!(branched_node.url(), "https://c.test/branched");
-        assert_eq!(branched_node.last_session_visited, 77);
+        assert_eq!(graph.node_last_session_visited(branched_node_key), Some(77));
         let semantic_edge = graph
             .find_edge_key(history_node_key, branched_node_key)
             .expect("semantic edge key");

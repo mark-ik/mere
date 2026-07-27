@@ -24,7 +24,6 @@ use super::identity::NodeKey;
 use super::{Graph, current_unix_timestamp_secs, normalize_import_records};
 use crate::types::{
     ImportRecord, ImportRecordMembership, NodeImportProvenance, NodeImportRecordSummary,
-    format_imported_at_secs,
 };
 
 impl Graph {
@@ -156,13 +155,10 @@ impl Graph {
 
         let node_keys = self.inner.inner().node_indices().collect::<Vec<_>>();
         for node_key in node_keys {
-            let Some(node) = self.inner.node_mut(node_key) else {
-                continue;
-            };
             let mut provenance = provenance_by_node.remove(&node_key).unwrap_or_default();
             provenance.sort();
             provenance.dedup();
-            node.import_provenance = provenance;
+            self.set_node_facet(node_key, super::node_facets::PROVENANCE_IMPORT, &provenance);
         }
     }
 
@@ -179,14 +175,15 @@ impl Graph {
             .collect::<HashMap<_, _>>();
 
         let mut grouped = BTreeMap::<(String, String), Vec<ImportRecordMembership>>::new();
-        for (_node_key, node) in self.nodes() {
-            let node_id = node.id.to_string();
-            for provenance in &node.import_provenance {
+        let nodes = self
+            .nodes()
+            .map(|(node_key, node)| (node_key, node.id))
+            .collect::<Vec<_>>();
+        for (node_key, node_id) in nodes {
+            let node_id = node_id.to_string();
+            for provenance in self.node_import_provenance(node_key).unwrap_or_default() {
                 grouped
-                    .entry((
-                        provenance.source_id.clone(),
-                        provenance.source_label.clone(),
-                    ))
+                    .entry((provenance.source_id, provenance.source_label))
                     .or_default()
                     .push(ImportRecordMembership {
                         node_id: node_id.clone(),
@@ -221,17 +218,16 @@ impl Graph {
         key: NodeKey,
         import_provenance: Vec<NodeImportProvenance>,
     ) -> bool {
-        let node = match self.inner.node_mut(key) {
-            Some(node) => node,
-            None => return false,
-        };
+        if self.inner.node(key).is_none() {
+            return false;
+        }
         let mut normalized = import_provenance;
         normalized.sort();
         normalized.dedup();
-        if node.import_provenance == normalized {
+        if self.node_import_provenance(key).unwrap_or_default() == normalized {
             return false;
         }
-        node.import_provenance = normalized;
+        self.set_node_facet(key, super::node_facets::PROVENANCE_IMPORT, &normalized);
         self.rebuild_import_records_from_node_provenance(current_unix_timestamp_secs());
         true
     }

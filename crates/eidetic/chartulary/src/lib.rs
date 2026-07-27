@@ -62,7 +62,9 @@ pub use caps::{
 };
 pub use commit::{Author, Batch, BatchId, CommitError, Committed, EditSpec};
 pub use container::{Container, ContainerAddress, Relation};
-pub use content_class::{CLASS_FACET, ClassId, ClassMembership, ClassRegistry, ContentClass};
+pub use content_class::{
+    CLASS_FACET, ClassError, ClassId, ClassMembership, ClassRegistry, ContentClass,
+};
 pub use edit::{DerivationKind, DerivationRecord, EdgeId, GraphEdit, WriterId};
 pub use facet::{AcceptAll, FacetError, FacetId, FacetStore, FacetValidator, NodeFacets};
 pub use graph::{EdgeKey, Graph, NodeKey};

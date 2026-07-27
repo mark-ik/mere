@@ -19,10 +19,12 @@ fn test_snapshot_roundtrip_preserves_import_provenance() {
         }],
     ));
 
-    let restored = Graph::from_snapshot(&graph.to_snapshot());
-    let (_, node) = restored.get_node_by_url("https://example.com").unwrap();
+    let facets = graph.facets().clone();
+    let mut restored = Graph::from_snapshot(&graph.to_snapshot());
+    restored.overlay_facets(facets);
+    let (key, _) = restored.get_node_by_url("https://example.com").unwrap();
     assert_eq!(
-        node.import_provenance,
+        restored.node_import_provenance(key).unwrap(),
         vec![NodeImportProvenance {
             source_id: "import:firefox-bookmarks".to_string(),
             source_label: "Firefox bookmarks".to_string(),
@@ -46,10 +48,13 @@ fn test_snapshot_roundtrip_preserves_classifications() {
     };
     assert!(graph.add_node_classification(key, classification.clone()));
 
-    let restored = Graph::from_snapshot(&graph.to_snapshot());
-    let (_, node) = restored.get_node_by_url("https://example.com").unwrap();
-    assert_eq!(node.classifications.len(), 1);
-    let c = &node.classifications[0];
+    let facets = graph.facets().clone();
+    let mut restored = Graph::from_snapshot(&graph.to_snapshot());
+    restored.overlay_facets(facets);
+    let (key, _) = restored.get_node_by_url("https://example.com").unwrap();
+    let classifications = restored.node_classifications(key).unwrap();
+    assert_eq!(classifications.len(), 1);
+    let c = &classifications[0];
     assert_eq!(c.scheme, ClassificationScheme::Udc);
     assert_eq!(c.value, "udc:519.6");
     assert_eq!(c.label.as_deref(), Some("Computational mathematics"));

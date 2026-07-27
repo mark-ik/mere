@@ -989,7 +989,12 @@ a transport test; a hang is indistinguishable from a slow build.
 **Still open for V7:** the p2panda arm, and the direct-PHY/RF arm, which
 waits on the V0/V2 bench.
 
-**Still open for V6:** the done-condition names "one real Murm connection".
+**V6 is closed as of 2026-07-27.** The done-condition is literal now: Murm
+grew a session lane (`murm::session_lane`, Notochord N2's Murm half), and an
+owner rule admits or refuses a real Murm connection with zero posts crossing
+on a refusal. The note below records what was outstanding before that.
+
+**Was open for V6:** the done-condition names "one real Murm connection".
 What exists is the transport-shaped proof over a `tokio::io::duplex` pair
 (`tests/over_transport.rs`): an admitted session carries application bytes,
 and a refused one delivers **zero** application bytes. Wiring the adapter

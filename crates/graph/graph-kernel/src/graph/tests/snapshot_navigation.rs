@@ -208,9 +208,11 @@ fn test_cold_restore_reapplies_last_visited() {
     let snapshot = snapshot_with(node, SharedNavigationMemory::empty());
 
     let restored = Graph::from_snapshot(&snapshot);
-    let (_, node) = restored.get_node_by_url("https://example.com").unwrap();
+    let (key, _) = restored.get_node_by_url("https://example.com").unwrap();
     assert_eq!(
-        node.last_visited
+        restored
+            .node_last_visited(key)
+            .expect("last visited facet")
             .duration_since(std::time::UNIX_EPOCH)
             .expect("last visited since epoch")
             .as_millis() as u64,

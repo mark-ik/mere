@@ -20,8 +20,6 @@ use crate::persistence::{
     PersistedSemanticEdgeData, PersistedSemanticStatement, PersistedSemanticSubKind,
     PersistedTraversalEdgeData, PersistedTraversalMetrics, PersistedTraversalRecord,
 };
-use crate::types::format_imported_at_secs;
-
 fn persisted_semantic_sub_kind(sub_kind: SemanticSubKind) -> PersistedSemanticSubKind {
     match sub_kind {
         SemanticSubKind::Hyperlink => PersistedSemanticSubKind::Hyperlink,
@@ -59,9 +57,9 @@ impl Graph {
                     tags.sort();
                     tags
                 },
-                tag_presentation: node.tag_presentation.clone(),
-                import_provenance: node.import_provenance.clone(),
-                is_pinned: node.is_pinned,
+                tag_presentation: Default::default(),
+                import_provenance: Vec::new(),
+                is_pinned: false,
                 images: node.images.clone(),
                 // Never written: a saved snapshot carries references only.
                 legacy_thumbnail_png: None,
@@ -78,11 +76,7 @@ impl Graph {
                     scroll_x: None,
                     scroll_y: None,
                     form_draft: None,
-                    last_visited_ms: node
-                        .last_visited
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .ok()
-                        .map(|duration| duration.as_millis() as u64),
+                    last_visited_ms: None,
                 }),
                 address: match node.primary_address() {
                     Address::Http(s) => PersistedAddress::Http(s.clone()),
@@ -94,14 +88,14 @@ impl Graph {
                 },
                 // Written for backward compat: pre-Stage C.2 readers use this field.
                 url: node.primary_address().as_url_str().to_string(),
-                classifications: node.classifications.clone(),
+                classifications: Vec::new(),
                 mime_hint: node.media_type.clone(),
-                frame_layout_hints: node.frame_layout_hints.clone(),
-                frame_split_offer_suppressed: node.frame_split_offer_suppressed,
-                properties: node.properties.clone(),
-                derivations: node.derivations.clone(),
+                frame_layout_hints: Vec::new(),
+                frame_split_offer_suppressed: false,
+                properties: Vec::new(),
+                derivations: Vec::new(),
                 body: node.body.clone(),
-                last_session_visited: node.last_session_visited,
+                last_session_visited: 0,
                 nested: node.nested.as_ref().map(|log| log.as_str().to_string()),
             })
             .collect();

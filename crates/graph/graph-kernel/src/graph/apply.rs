@@ -1,8 +1,8 @@
 // Copyright 2026 Mark AB (markik)
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use euclid::default::Point2D;
 use chartulary::stemma::TransitionKind;
+use euclid::default::Point2D;
 use uuid::Uuid;
 
 use super::{
@@ -931,9 +931,7 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
                 .nav
                 .record_visit(node_id, &url, TransitionKind::UrlTyped, timestamp_ms);
             let last_session_visited = graph.current_session;
-            if let Some(node) = graph.inner.node_mut(key) {
-                node.last_session_visited = last_session_visited;
-            }
+            graph.set_node_last_session_visited(key, last_session_visited);
             let _ = graph.update_node_url(key, url.clone());
             record_captured_delta(&CapturedDelta::ReplayNavigateNodeById {
                 node_id: node_id.to_string(),
@@ -1069,9 +1067,7 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
                 graph
                     .nav
                     .record_visit(node_id, &url, transition, timestamp_ms);
-                if let Some(node) = graph.inner.node_mut(key) {
-                    node.last_session_visited = last_session_visited;
-                }
+                graph.set_node_last_session_visited(key, last_session_visited);
                 let _ = graph.update_node_url(key, url.clone());
                 true
             });
@@ -1583,8 +1579,8 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
             if updated
                 && let Some(node_id) = node_id
                 && let Some(timestamp_ms) = graph
-                    .get_node(key)
-                    .and_then(|node| node.last_visited.duration_since(std::time::UNIX_EPOCH).ok())
+                    .node_last_visited(key)
+                    .and_then(|visited| visited.duration_since(std::time::UNIX_EPOCH).ok())
                     .map(|duration| duration.as_millis() as u64)
             {
                 record_captured_delta(&CapturedDelta::ReplayTouchNodeLastVisitedById {

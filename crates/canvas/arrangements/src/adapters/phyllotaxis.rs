@@ -130,8 +130,7 @@ impl LayoutStrategy for PhyllotaxisAdapter {
                 std::cmp::Reverse(
                     request
                         .graph
-                        .get_node(*key)
-                        .map(|node| node.last_visited)
+                        .node_last_visited(*key)
                         .unwrap_or(std::time::SystemTime::UNIX_EPOCH),
                 )
             });
@@ -402,13 +401,18 @@ mod tests {
 
     #[test]
     fn recent_first_puts_the_newest_node_at_the_center() {
-        use std::time::{Duration, SystemTime};
         let (mut graph, keys) = small_graph();
         // Stagger visits: key[i] visited at epoch + i seconds, so the LAST
         // key is the most recent.
         for (i, key) in keys.iter().enumerate() {
-            graph.get_node_mut(*key).unwrap().last_visited =
-                SystemTime::UNIX_EPOCH + Duration::from_secs(i as u64);
+            let id = graph.get_node(*key).unwrap().id;
+            kernel::graph::apply::apply_graph_delta(
+                &mut graph,
+                kernel::graph::apply::GraphDelta::ReplayTouchNodeLastVisitedById {
+                    node_id: id,
+                    timestamp_ms: i as u64 * 1_000,
+                },
+            );
         }
         let signals = IntelligenceSignals::default();
         let request = ProjectionRequest {
@@ -416,7 +420,9 @@ mod tests {
             signals: &signals,
             intent: ViewIntent::default(),
         };
-        let projection = PhyllotaxisAdapter::default().recent_first().project(&request);
+        let projection = PhyllotaxisAdapter::default()
+            .recent_first()
+            .project(&request);
         // Outward orientation: ordinal 0 sits at the center (radius 0) —
         // and RecentFirst assigns ordinal 0 to the newest node.
         let newest = *keys.last().unwrap();
@@ -430,7 +436,12 @@ mod tests {
         // And the default GraphOrder is unchanged: node 0 stays central.
         let plain = PhyllotaxisAdapter::default().project(&request);
         let first = keys[0];
-        let first_pos = plain.nodes.iter().find(|n| n.node == first).unwrap().position;
+        let first_pos = plain
+            .nodes
+            .iter()
+            .find(|n| n.node == first)
+            .unwrap()
+            .position;
         assert!(first_pos.x.abs() < 0.001 && first_pos.y.abs() < 0.001);
     }
 
@@ -441,10 +452,8 @@ mod tests {
         let (graph, _) = small_graph();
         let signals = IntelligenceSignals::default();
         const SIDE: f32 = 36.0;
-        let extents: HashMap<NodeKey, (f32, f32)> = graph
-            .nodes()
-            .map(|(key, _)| (key, (SIDE, SIDE)))
-            .collect();
+        let extents: HashMap<NodeKey, (f32, f32)> =
+            graph.nodes().map(|(key, _)| (key, (SIDE, SIDE))).collect();
         let mut intent = ViewIntent::default();
         intent.extents = Some(extents);
         let request = ProjectionRequest {

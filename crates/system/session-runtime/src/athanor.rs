@@ -27,15 +27,13 @@
 
 use std::collections::{HashMap, HashSet};
 
-use eidetic::{
-    DeletedNode, ManifestId, NoFetcher, ProvenanceOrigin, Result, Store, Timestamp, load_typed,
-    purge_deleted,
-};
+use eidetic::{DeletedNode, ManifestId, ProvenanceOrigin, Result, Store, Timestamp, purge_deleted};
+use kernel::graph::Graph;
 use kernel::persistence::GraphSnapshot;
 use kernel::types::ImageRole;
 
 use crate::content_store;
-use crate::graph_engram::{self, GraphEngram, RedactionPolicy};
+use crate::graph_engram::{self, RedactionPolicy};
 use crate::image_store;
 use crate::memory_levels::{EvictionPolicy, evictable_short_term};
 
@@ -82,26 +80,20 @@ impl ForgetProposal {
 /// only, dated-and-stale only, promoted exempt); this maps the evictable node ids to
 /// their urls, since cached content is url-keyed.
 pub fn propose_forgetting(
-    snapshot: &GraphSnapshot,
+    graph: &Graph,
     last_visit_ms: &HashMap<String, u64>,
     policy: EvictionPolicy,
     now_ms: u64,
     current_session: u64,
 ) -> ForgetProposal {
-    let evictable: HashSet<String> = evictable_short_term(
-        &snapshot.nodes,
-        last_visit_ms,
-        policy,
-        now_ms,
-        current_session,
-    )
-    .into_iter()
-    .collect();
-    let urls = snapshot
-        .nodes
-        .iter()
-        .filter(|node| evictable.contains(&node.node_id))
-        .map(|node| node.url.clone())
+    let evictable: HashSet<String> =
+        evictable_short_term(graph, last_visit_ms, policy, now_ms, current_session)
+            .into_iter()
+            .collect();
+    let urls = graph
+        .nodes()
+        .filter(|(_, node)| evictable.contains(&node.id.to_string()))
+        .map(|(_, node)| node.url().to_string())
         .filter(|url| !url.is_empty())
         .collect();
     ForgetProposal { urls }
@@ -204,30 +196,25 @@ pub struct ImageReferenceForgetProposal {
 /// roles are retained because they may be the only offline representation.
 /// Promoted nodes never enter `evictable_short_term`.
 pub fn propose_image_reference_forgetting(
-    snapshot: &GraphSnapshot,
+    graph: &Graph,
     last_visit_ms: &HashMap<String, u64>,
     policy: EvictionPolicy,
     now_ms: u64,
     current_session: u64,
 ) -> ImageReferenceForgetProposal {
-    let evictable: HashSet<String> = evictable_short_term(
-        &snapshot.nodes,
-        last_visit_ms,
-        policy,
-        now_ms,
-        current_session,
-    )
-    .into_iter()
-    .collect();
-    let drops = snapshot
-        .nodes
-        .iter()
-        .filter(|node| evictable.contains(&node.node_id))
+    let evictable: HashSet<String> =
+        evictable_short_term(graph, last_visit_ms, policy, now_ms, current_session)
+            .into_iter()
+            .collect();
+    let drops = graph
+        .nodes()
+        .filter(|(_, node)| evictable.contains(&node.id.to_string()))
         .filter_map(|node| {
+            let (_, node) = node;
             node.images
                 .get(&ImageRole::Favicon)
                 .map(|image| ImageReferenceDrop {
-                    node_id: node.node_id.clone(),
+                    node_id: node.id.to_string(),
                     role: ImageRole::Favicon,
                     hex: image.hex(),
                 })
@@ -307,19 +294,17 @@ pub async fn propose_consolidation(store: &mut dyn Store) -> Result<Consolidatio
             .any(|m| m.provenance.upstream.contains(&a) && m.provenance.upstream.contains(&b))
     };
 
-    let mut fetcher = NoFetcher;
     let mut candidates: Vec<(ManifestId, HashSet<String>)> = Vec::new();
     for manifest in manifests
         .iter()
         .filter(|m| m.provenance.origin == ProvenanceOrigin::Generated)
         .take(CONSOLIDATION_CANDIDATE_CAP)
     {
-        let Some(engram) = load_typed::<GraphEngram>(store, &mut fetcher, manifest.id).await?
-        else {
+        let Some(engram) = graph_engram::load_graph_engram(store, manifest.id).await? else {
             continue;
         };
         let urls: HashSet<String> = engram
-            .0
+            .snapshot
             .nodes
             .iter()
             .map(|n| n.url.clone())
@@ -438,65 +423,68 @@ mod tests {
 
     const DAY_MS: u64 = 86_400_000;
 
-    /// An empty snapshot with three test nodes (stale / fresh / kept), built through
+    /// A graph with three test nodes (stale / fresh / kept), built through
     /// the real graph API so node ids and urls are valid. "kept" is tagged (long-term).
-    fn sample_snapshot() -> GraphSnapshot {
+    fn sample_graph() -> Graph {
         let mut graph = Graph::new();
         graph.add_node("https://stale.example/".to_string(), Point2D::new(0.0, 0.0));
         graph.add_node("https://fresh.example/".to_string(), Point2D::new(0.0, 0.0));
-        graph.add_node("https://kept.example/".to_string(), Point2D::new(0.0, 0.0));
-        let mut snapshot = graph.to_snapshot();
-        for node in &mut snapshot.nodes {
-            if node.url.contains("kept") {
-                node.tags.push("keep".to_string());
-            }
-        }
-        snapshot
+        let kept = graph.add_node("https://kept.example/".to_string(), Point2D::new(0.0, 0.0));
+        graph.insert_node_tag(kept, "keep".to_string());
+        graph
     }
 
-    fn id_of(snapshot: &GraphSnapshot, fragment: &str) -> String {
-        snapshot
-            .nodes
-            .iter()
-            .find(|n| n.url.contains(fragment))
+    fn id_of(graph: &Graph, fragment: &str) -> String {
+        graph
+            .nodes()
+            .find(|(_, node)| node.url().contains(fragment))
             .expect("a node with that url fragment")
-            .node_id
-            .clone()
+            .1
+            .id
+            .to_string()
     }
 
     #[test]
     fn proposes_only_stale_short_term_urls() {
         let now = 100 * DAY_MS;
-        let snapshot = sample_snapshot();
+        let graph = sample_graph();
         let mut times = HashMap::new();
-        times.insert(id_of(&snapshot, "stale"), now - 60 * DAY_MS); // stale -> propose
-        times.insert(id_of(&snapshot, "fresh"), now - 2 * DAY_MS); // fresh -> keep
-        times.insert(id_of(&snapshot, "kept"), now - 90 * DAY_MS); // stale but tagged -> exempt
+        times.insert(id_of(&graph, "stale"), now - 60 * DAY_MS); // stale -> propose
+        times.insert(id_of(&graph, "fresh"), now - 2 * DAY_MS); // fresh -> keep
+        times.insert(id_of(&graph, "kept"), now - 90 * DAY_MS); // stale but tagged -> exempt
 
-        let proposal = propose_forgetting(&snapshot, &times, EvictionPolicy::KeepDays(30), now, 0);
+        let proposal = propose_forgetting(&graph, &times, EvictionPolicy::KeepDays(30), now, 0);
         assert_eq!(proposal.len(), 1, "only the stale short-term node");
         assert!(proposal.urls[0].contains("stale"));
     }
 
     #[test]
     fn proposes_only_stale_short_term_urls_by_session() {
-        let snapshot = sample_snapshot();
-        let stale_id = id_of(&snapshot, "stale");
-        let fresh_id = id_of(&snapshot, "fresh");
-        let kept_id = id_of(&snapshot, "kept");
-        let mut snapshot = snapshot;
-        for node in &mut snapshot.nodes {
-            if node.node_id == stale_id {
-                node.last_session_visited = 2; // 8 sessions ago -> propose
-            } else if node.node_id == fresh_id {
-                node.last_session_visited = 9; // 1 session ago -> keep
-            } else if node.node_id == kept_id {
-                node.last_session_visited = 1; // stale but tagged -> exempt
-            }
+        let mut graph = sample_graph();
+        for (fragment, session) in [("stale", 2), ("fresh", 9), ("kept", 1)] {
+            let key = graph
+                .nodes()
+                .find(|(_, node)| node.url().contains(fragment))
+                .unwrap()
+                .0;
+            let id = graph.get_node(key).unwrap().id;
+            graph
+                .facets_mut()
+                .set(
+                    id,
+                    chartulary::FacetId::new(kernel::graph::node_facets::VISIT_HISTORY),
+                    serde_json::to_value(kernel::graph::VisitHistoryFacet {
+                        last_visited_ms: None,
+                        last_session_visited: session,
+                    })
+                    .unwrap(),
+                    &chartulary::AcceptAll,
+                )
+                .unwrap();
         }
 
         let proposal = propose_forgetting(
-            &snapshot,
+            &graph,
             &HashMap::new(),
             EvictionPolicy::KeepSessions(3),
             0,
@@ -561,7 +549,7 @@ mod tests {
             let raced = image_store::save_image(&mut store, b"raced", 1, 1)
                 .await
                 .unwrap();
-            let mut snapshot = sample_snapshot();
+            let mut snapshot = sample_graph().to_snapshot();
             snapshot.nodes[0].images.insert(ImageRole::Favicon, live);
 
             let proposal = propose_image_gc(
@@ -612,13 +600,19 @@ mod tests {
     #[test]
     fn stale_short_term_drops_favicon_but_keeps_precious_images() {
         let now = 100 * DAY_MS;
-        let mut snapshot = sample_snapshot();
-        let stale_id = id_of(&snapshot, "stale");
-        let kept_id = id_of(&snapshot, "kept");
+        let mut graph = sample_graph();
+        let stale_id = id_of(&graph, "stale");
+        let kept_id = id_of(&graph, "kept");
         let favicon = kernel::types::ImageRef::new([1; 32], 1, 1);
         let snapshot_image = kernel::types::ImageRef::new([2; 32], 1, 1);
-        for node in &mut snapshot.nodes {
-            if node.node_id == stale_id || node.node_id == kept_id {
+        for (_, node) in graph
+            .nodes()
+            .map(|(key, node)| (key, node.id))
+            .collect::<Vec<_>>()
+        {
+            if node.to_string() == stale_id || node.to_string() == kept_id {
+                let key = graph.get_node_key_by_id(node).unwrap();
+                let node = graph.get_node_mut(key).unwrap();
                 node.images.insert(ImageRole::Favicon, favicon);
                 node.images.insert(ImageRole::Snapshot, snapshot_image);
             }
@@ -629,7 +623,7 @@ mod tests {
         ]);
 
         let proposal = propose_image_reference_forgetting(
-            &snapshot,
+            &graph,
             &times,
             EvictionPolicy::KeepDays(30),
             now,
@@ -637,6 +631,7 @@ mod tests {
         );
         assert_eq!(proposal.drops.len(), 1, "the promoted node is exempt");
         assert_eq!(proposal.drops[0].node_id, stale_id);
+        let mut snapshot = graph.to_snapshot();
         assert_eq!(
             apply_image_reference_forgetting(&mut snapshot, &proposal),
             1

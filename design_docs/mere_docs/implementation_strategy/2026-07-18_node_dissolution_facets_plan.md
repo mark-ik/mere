@@ -13,6 +13,8 @@ invented the sidecar pattern), the
 [participant gate + packs plan](2026-07-17_participant_gate_packs_plan.md)
 (packs ship custom content classes; facet grants join its scope vocabulary),
 and the north star as amended.
+**Status:** complete 2026-07-27. Lane F, Lane S, and D0-D4 are closed; F2
+remains deliberately trigger-gated in the participant plan.
 
 **2026-07-22 boundary amendment:** S0's extracted numen/quint/seiche stack has
 since consolidated into `repos/conatus`. The trigger-gated wholesale canvas
@@ -58,10 +60,11 @@ when a real class wires into mere). F1's earlier "mere-side" filing meant the
   read/write joins the structural cap's scope vocabulary; owned by the
   participant plan's gate lane. Trigger: the first mod-defined facet that a
   denizen petitions to write.
-- **F-follow, the eidetic validator adapter** (mere-side, when D1 wires): a
-  `FacetValidator` impl over eidetic's `SchemaDefinition` engrams, plus
-  persisting class definitions as schema engrams. Small; the seam is already in
-  place.
+- **F-follow, the eidetic validator adapter — DONE 2026-07-27.**
+  `session-runtime::SchemaFacetValidator` preloads eidetic
+  `SchemaDefinition`s behind chartulary's synchronous `FacetValidator` seam.
+  Registered facet schemas and `ContentClass` definitions persist and reload as
+  content-addressed typed engrams; unknown facets remain forward-compatible.
 
 ## Facet convergence of the per-node sidecars (found 2026-07-18, Mark)
 
@@ -167,22 +170,22 @@ The field-by-field map (from the 2026-07-18 read of `graph/node.rs`):
 | `properties` (open literals) | semantic facet (scholia lane) | D3 |
 | `derivations` | chartulary `DerivationRecord` (spine derivations exist) | D3 |
 
-- **D0, images out** (executes the image plan's phase 2, which is already
+- **D0, images out — DONE 2026-07-27** (executes the image plan's phase 2, which is already
   designed: `images: BTreeMap<ImageRole, ImageRef>`, migration included).
   Done when: no pixels ride `Node` or the graph snapshot; sessions migrate
   one-time; switcher/preview surfaces render unchanged.
-- **D1, the web content class founded** (turnstone-side definition, mere-side
+- **D1, the web content class founded — DONE 2026-07-27** (turnstone-side definition, mere-side
   storage): mime/addresses/body land in their Container homes; cached_host
   and viewer-adjacent metadata become the **web-page facet bundle**, the
   first content class defined as F1 data. The dogfood rung: turnstone defines
   it exactly as a modder would. Done when: turnstone browses normally with the
   class in force and a second toy class (a note class) coexists in one graph.
-- **D2, arrangement + presentation + visit facets.** Done when: the fields
+- **D2, arrangement + presentation + visit facets — DONE 2026-07-27.** Done when: the fields
   leave `Node`, their consumers read facets, sessions migrate.
-- **D3, semantic facets.** Done when: provenance/classification/property/
+- **D3, semantic facets — DONE 2026-07-27.** Done when: provenance/classification/property/
   derivation data live in facets or chartulary-native records, and the RDF
   projection reads them there.
-- **D4, the remainder audit.** Done when: what remains of `Node` is
+- **D4, the remainder audit — DONE 2026-07-27.** Done when: what remains of `Node` is
   Container's surface (or the D-gate verdict's physical-representation
   residue, explicitly listed), and the north star's OQ 5.1 is marked closed.
 
@@ -307,9 +310,16 @@ petgraph traversal. It is an order-of-magnitude gate, not a regression budget.
 
 1. RESOLVED 2026-07-18: facet-store home is **chartulary-generic** (F0/F1
    landed there; eidetic validator is a mere-side adapter over the seam).
-2. `body` inline-vs-blob at D1.
-3. `AddressClaim` role mapping onto Container's primary-first address list.
-4. The D-gate acceptance envelope (what load-time regression is tolerable).
+2. RESOLVED 2026-07-27: Container has one content capability with two
+   representations. Small authored text stays in `Container.body`; durable
+   binary/large content uses `Container.content` as a muniment hash. The
+   builders keep the two mutually exclusive.
+3. RESOLVED 2026-07-27: kernel `Address` is Container's host-native address
+   representation; list order carries the role, primary first. No parallel
+   `AddressClaim` role column remains.
+4. RESOLVED 2026-07-26 by the D-gate measurement above: structural
+   dissolution proceeds. The combined post-D0 dissolved path beats the former
+   status quo; the physical web-node fallback is unused.
 
 ## The overmap — sessions as container nodes (Mark, 2026-07-19)
 
@@ -369,6 +379,36 @@ v0 that does not gate on any of this: mint + session-switch.
 
 ## Progress
 
+- **2026-07-27 (PLAN COMPLETE — D0-D4 + F-follow):**
+  - **D0:** node/snapshot pixels are gone. References stay on the node, decoded
+    pixels use the bounded byte-LRU paint cache with demand reload, and original
+    PNG bytes are durable by digest. Eidetic and Turnstone file-sidecar stores
+    deliberately remain two adapters over the same digest/hex/PNG contract.
+    Legacy RGBA migrates before materialization and re-saves immediately;
+    role-aware orphan GC is proposal/apply in session-runtime and mark/sweep in
+    Turnstone.
+  - **D1/F-follow:** kernel `Node` embeds
+    `Container<Uuid, kernel::Address>`; body is the Container inline-text
+    capability, addresses are primary-first, and `cached_host` is derived.
+    Turnstone reconciles web-page and note classes in one graph, validates their
+    required facets through `SchemaFacetValidator`, and the generic adapter
+    persists facet schemas plus content-class definitions as typed Eidetic
+    engrams.
+  - **D2/D3:** `Graph` owns the one live `FacetStore<Uuid>`. Pin, frame layout,
+    split suppression, tag presentation, visit clocks, import provenance,
+    classifications, literal properties, and derivations left `Node`; kernel,
+    canvas, memory eviction, fork/copy, and RDF consumers read typed graph
+    accessors. `graph.json` writes the former columns empty. A legacy snapshot
+    imports them once; canonical `facets.json` overlays and wins, then Turnstone
+    persists the merged store and stripped graph immediately. Graph engrams
+    advance to v2 (`snapshot + facets`), still opening v1 and remapping facets
+    during composition.
+  - **D4:** the live physical remainder is exactly
+    `Node { container, images }`. `images` is the explicitly retained D0
+    experience-handle map, not pixel storage or semantic metadata. The old
+    columns survive only in the deserialize-compatible `PersistedNode` DTO and
+    the one-time importer. RDF projection reads semantic facets. North-star OQ
+    5.1 is closed.
 - **2026-07-22 (CONTAINMENT IS STRUCTURE — `Node.nested` lands on the kernel
   Node):** the orthogonality ruling above got its structural half. The kernel
   `Node` gains `nested: Option<LogId>` (rkyv adapter + serde-defaulted

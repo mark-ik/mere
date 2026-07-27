@@ -16,6 +16,7 @@
 use euclid::default::Point2D;
 use uuid::Uuid;
 
+use super::node_facets::{PROVENANCE_DERIVATIONS, VisitHistoryFacet};
 use super::{Graph, Node, NodeKey, ProvenanceSubKind};
 use crate::types::NodeDerivation;
 
@@ -78,24 +79,20 @@ impl Graph {
         let key = self.inner.insert(Node {
             // --- container content: cloned from the source ---
             container,
-            tag_presentation: source.tag_presentation.clone(),
-            classifications: source.classifications.clone(),
-            properties: source.properties.clone(),
             // References copy freely: the blob is content-addressed and shared,
             // so a cross-graph copy costs ~40 bytes per role, not a duplicated
             // image.
             images: source.images.clone(),
-            // --- provenance: the cross-graph derivation record ---
-            derivations: vec![derivation],
-            // describes the donor's own external import, not this copy:
-            import_provenance: Vec::new(),
-            // --- identity / runtime / session / arrangement: reset ---
-            is_pinned: false,
-            last_visited: std::time::SystemTime::now(),
-            last_session_visited: 0,
-            frame_layout_hints: Vec::new(),
-            frame_split_offer_suppressed: false,
         });
+        self.set_node_facet(key, PROVENANCE_DERIVATIONS, &vec![derivation]);
+        self.set_node_facet(
+            key,
+            super::node_facets::VISIT_HISTORY,
+            &VisitHistoryFacet {
+                last_visited_ms: Some(Self::epoch_ms()),
+                last_session_visited: 0,
+            },
+        );
 
         self.url_to_nodes.entry(url).or_default().push(key);
         self.bump_revision();
@@ -159,6 +156,26 @@ impl Graph {
                 // Position is no longer a node field; the copy is placed by the
                 // destination's layout (seiche / arrangement facets), not carried over.
                 let new_key = self.copy_node_from(node, source_graph.clone(), Point2D::zero());
+                // Content facets travel with a component copy. Runtime,
+                // arrangement, visit, and import provenance do not; the host
+                // may separately carry view/foreign facets through `id_remap`.
+                for facet in [
+                    super::node_facets::PRESENTATION_TAGS,
+                    super::node_facets::SEMANTIC_CLASSIFICATIONS,
+                    super::node_facets::SEMANTIC_PROPERTIES,
+                ] {
+                    let facet_id = chartulary::FacetId::new(facet);
+                    if let Some(value) = source.facets.get(&source_id, &facet_id) {
+                        self.facets
+                            .set(
+                                self.inner.node(new_key).expect("inserted copy").id,
+                                facet_id,
+                                value.clone(),
+                                &chartulary::AcceptAll,
+                            )
+                            .expect("AcceptAll cannot reject copied content");
+                    }
+                }
                 key_remap.insert(old_key, new_key);
                 copy.new_keys.push(new_key);
                 if let Some(new_node) = self.inner.node(new_key) {
@@ -204,14 +221,19 @@ mod tests {
             "https://example.com/article".to_string(),
             Point2D::new(1.0, 2.0),
         );
-        let node = a.inner.node_mut(key).unwrap();
-        node.title = "An Article".to_string();
-        node.tags = HashSet::from(["read-later".to_string(), "research".to_string()]);
-        node.properties = vec![crate::types::NodeProperty::new(
-            "https://schema.org/datePublished".to_string(),
-            "2026-01-01".to_string(),
-        )];
-        node.is_pinned = true;
+        {
+            let node = a.inner.node_mut(key).unwrap();
+            node.title = "An Article".to_string();
+            node.tags = HashSet::from(["read-later".to_string(), "research".to_string()]);
+        }
+        a.append_node_property(
+            key,
+            crate::types::NodeProperty::new(
+                "https://schema.org/datePublished".to_string(),
+                "2026-01-01".to_string(),
+            ),
+        );
+        a.set_node_pinned(key, true);
         (a, key)
     }
 
@@ -235,16 +257,20 @@ mod tests {
         assert_ne!(copy.id, source_id, "copy is a new entity");
         assert_eq!(copy.title, "An Article");
         assert_eq!(copy.tags, source.tags);
-        assert_eq!(copy.properties, source.properties);
         assert_eq!(copy.url(), source.url(), "same content, same address");
 
         // Position is not a node field (not inherited, not carried); the copy is
         // placed by the destination's layout.
-        assert!(!copy.is_pinned, "pin is per-placement, not copied");
+        assert_eq!(
+            b.node_is_pinned(copy_key),
+            Some(false),
+            "pin is per-placement"
+        );
 
         // Derivation records the lineage back to the source.
-        assert_eq!(copy.derivations.len(), 1);
-        let d = &copy.derivations[0];
+        let derivations = b.node_derivations(copy_key).unwrap();
+        assert_eq!(derivations.len(), 1);
+        let d = &derivations[0];
         assert_eq!(d.sub_kind, ProvenanceSubKind::CopiedFrom);
         assert_eq!(d.source_node, source_id.to_string());
         assert_eq!(d.source_graph.as_deref(), Some("graph-A"));
@@ -256,11 +282,13 @@ mod tests {
     #[test]
     fn copy_does_not_carry_the_donor_import_provenance() {
         let (mut a, src_key) = donor_with_content();
-        a.inner.node_mut(src_key).unwrap().import_provenance =
+        a.set_node_import_provenance(
+            src_key,
             vec![crate::types::NodeImportProvenance {
                 source_id: "firefox".to_string(),
                 source_label: "Firefox bookmarks".to_string(),
-            }];
+            }],
+        );
         let source = a.get_node(src_key).unwrap().clone();
 
         let mut b = Graph::new();
@@ -268,11 +296,12 @@ mod tests {
         let copy = b.get_node(copy_key).unwrap();
 
         assert!(
-            copy.import_provenance.is_empty(),
+            b.node_import_provenance(copy_key).unwrap().is_empty(),
             "donor import provenance is the donor's, not the copy's"
         );
         assert_eq!(
-            copy.derivations[0].source_graph, None,
+            b.node_derivations(copy_key).unwrap()[0].source_graph,
+            None,
             "same-graph / unknown source graph"
         );
     }
@@ -308,10 +337,11 @@ mod tests {
         // The component's internal edge is re-pointed onto the copies.
         assert_eq!(b.relations().count(), 1, "the internal edge is re-pointed");
         // Each copy records `CopiedFrom` provenance back to the source graph.
-        for (_, n) in b.nodes() {
-            assert_eq!(n.derivations.len(), 1);
-            assert_eq!(n.derivations[0].sub_kind, ProvenanceSubKind::CopiedFrom);
-            assert_eq!(n.derivations[0].source_graph.as_deref(), Some("graph-A"));
+        for (key, _) in b.nodes() {
+            let derivations = b.node_derivations(key).unwrap();
+            assert_eq!(derivations.len(), 1);
+            assert_eq!(derivations[0].sub_kind, ProvenanceSubKind::CopiedFrom);
+            assert_eq!(derivations[0].source_graph.as_deref(), Some("graph-A"));
         }
         // The id remap pairs each source id with its minted copy's id — the seam
         // the host's facet-carry maps donor facets through (G4-R R0).
@@ -321,7 +351,12 @@ mod tests {
             let (_, source_node) = a.get_node_by_id(*source_id).map(|(k, n)| (k, n)).unwrap();
             let (_, new_node) = b.get_node_by_id(*new_id).map(|(k, n)| (k, n)).unwrap();
             assert_eq!(source_node.url(), new_node.url(), "pairs align by content");
-            assert_eq!(new_node.derivations[0].source_node, source_id.to_string());
+            assert_eq!(
+                b.node_derivations(b.get_node_key_by_id(*new_id).unwrap())
+                    .unwrap()[0]
+                    .source_node,
+                source_id.to_string()
+            );
         }
     }
 }

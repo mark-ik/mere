@@ -14,8 +14,12 @@ graphshell-protocol = { path = "../../crates/graphshell/graphshell-protocol" }
 graphshell-stdio = { path = "../../crates/graphshell/graphshell-stdio" }
 # The application composes Personae (section 3): the profile Graphshell
 # speaks as. The protocol and client crates deliberately do NOT depend on it.
-network-policy.workspace = true
+network-policy = { workspace = true, features = ["tokio"] }
 personae.workspace = true
+# G5d: the projection carrier. `session-policy` brings in the one audited
+# `AcceptedSession -> SessionFacts` adapter (Notochord N1) so this port does
+# not hand-build carrier facts of its own.
+transport = { workspace = true, features = ["session-policy"] }
 sceno.workspace = true
 scenotime.workspace = true
 serde_json.workspace = true

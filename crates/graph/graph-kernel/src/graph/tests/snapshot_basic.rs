@@ -166,32 +166,29 @@ fn node_properties_survive_snapshot_roundtrip() {
     );
     property.statement_id = "stmt-property-1".to_string();
     property.datatype = Some("http://www.w3.org/2001/XMLSchema#date".to_string());
-    graph.get_node_mut(a).unwrap().properties.push(property);
+    graph.append_node_property(a, property);
 
-    let restored = Graph::from_snapshot(&graph.to_snapshot());
+    let facets = graph.facets().clone();
+    let mut restored = Graph::from_snapshot(&graph.to_snapshot());
+    restored.overlay_facets(facets);
 
-    let (_, node) = restored.get_node_by_url("https://a.test/").unwrap();
-    assert_eq!(node.properties.len(), 1);
+    let (key, _) = restored.get_node_by_url("https://a.test/").unwrap();
+    let properties = restored.node_properties(key).unwrap();
+    assert_eq!(properties.len(), 1);
+    assert_eq!(properties[0].predicate, "https://schema.org/datePublished");
+    assert_eq!(properties[0].value, "2026-06-02");
     assert_eq!(
-        node.properties[0].predicate,
-        "https://schema.org/datePublished"
-    );
-    assert_eq!(node.properties[0].value, "2026-06-02");
-    assert_eq!(
-        node.properties[0].datatype.as_deref(),
+        properties[0].datatype.as_deref(),
         Some("http://www.w3.org/2001/XMLSchema#date")
     );
-    assert_eq!(node.properties[0].lang.as_deref(), None);
+    assert_eq!(properties[0].lang.as_deref(), None);
+    assert_eq!(properties[0].graph_scope, crate::types::GraphScope::Source);
+    assert_eq!(properties[0].statement_id, "stmt-property-1");
     assert_eq!(
-        node.properties[0].graph_scope,
-        crate::types::GraphScope::Source
-    );
-    assert_eq!(node.properties[0].statement_id, "stmt-property-1");
-    assert_eq!(
-        node.properties[0].provenance_iri.as_deref(),
+        properties[0].provenance_iri.as_deref(),
         Some("https://people.test/alice")
     );
-    assert_eq!(node.properties[0].asserted_at_ms, Some(1_720_000_000_123));
+    assert_eq!(properties[0].asserted_at_ms, Some(1_720_000_000_123));
 }
 
 #[test]
@@ -202,10 +199,12 @@ fn test_snapshot_roundtrip() {
     let _ = graph.assert_relation(n1, n2, hyperlink());
 
     graph.get_node_mut(n1).unwrap().title = "Site A".to_string();
-    graph.get_node_mut(n2).unwrap().is_pinned = true;
+    graph.set_node_pinned(n2, true);
 
     let snapshot = graph.to_snapshot();
-    let restored = Graph::from_snapshot(&snapshot);
+    let facets = graph.facets().clone();
+    let mut restored = Graph::from_snapshot(&snapshot);
+    restored.overlay_facets(facets);
 
     assert_eq!(restored.node_count(), 2);
     assert_eq!(restored.edge_count(), 1);
@@ -215,8 +214,126 @@ fn test_snapshot_roundtrip() {
     // Positions are no longer graph truth (not a node field, not in the snapshot);
     // they live in the cartography sidecar. (Position gut.)
 
-    let (_, rb) = restored.get_node_by_url("https://b.com").unwrap();
-    assert!(rb.is_pinned);
+    let (rb, _) = restored.get_node_by_url("https://b.com").unwrap();
+    assert_eq!(restored.node_is_pinned(rb), Some(true));
+}
+
+#[test]
+fn legacy_node_metadata_columns_migrate_once_into_facets() {
+    use std::time::UNIX_EPOCH;
+
+    use crate::types::{
+        ClassificationProvenance, ClassificationScheme, ClassificationStatus, FrameLayoutHint,
+        NodeClassification, NodeDerivation, NodeImportProvenance, NodeProperty, SplitOrientation,
+    };
+
+    let mut graph = Graph::new();
+    let key = graph.add_node("https://legacy.test".to_string(), Point2D::new(0.0, 0.0));
+    let node_id = graph.get_node(key).unwrap().id;
+    let mut snapshot = graph.to_snapshot();
+    let legacy = snapshot.nodes.first_mut().unwrap();
+    legacy.tag_presentation.ordered_tags = vec!["research".into()];
+    legacy.import_provenance = vec![NodeImportProvenance {
+        source_id: "bookmarks".into(),
+        source_label: "Bookmarks".into(),
+    }];
+    legacy.is_pinned = true;
+    legacy.classifications = vec![NodeClassification {
+        scheme: ClassificationScheme::ContentKind,
+        value: "article".into(),
+        label: Some("Article".into()),
+        confidence: 1.0,
+        provenance: ClassificationProvenance::Imported,
+        status: ClassificationStatus::Imported,
+        primary: true,
+    }];
+    legacy.frame_layout_hints = vec![FrameLayoutHint::SplitHalf {
+        first: "left".into(),
+        second: "right".into(),
+        orientation: SplitOrientation::Vertical,
+    }];
+    legacy.frame_split_offer_suppressed = true;
+    legacy.properties = vec![NodeProperty::new(
+        "https://schema.org/datePublished".into(),
+        "2026-07-27".into(),
+    )];
+    legacy.derivations = vec![NodeDerivation {
+        sub_kind: ProvenanceSubKind::CopiedFrom,
+        source_node: "source-node".into(),
+        source_graph: Some("source-graph".into()),
+    }];
+    legacy.session_state.as_mut().unwrap().last_visited_ms = Some(42);
+    legacy.last_session_visited = 7;
+    let expected_import_provenance = legacy.import_provenance.clone();
+    let expected_classifications = legacy.classifications.clone();
+    let expected_frame_layout_hints = legacy.frame_layout_hints.clone();
+    let expected_properties = legacy.properties.clone();
+    let expected_derivations = legacy.derivations.clone();
+
+    let restored = Graph::from_snapshot(&snapshot);
+    let restored_key = restored.get_node_key_by_id(node_id).unwrap();
+
+    assert_eq!(restored.node_is_pinned(restored_key), Some(true));
+    assert_eq!(
+        restored
+            .node_tag_presentation(restored_key)
+            .unwrap()
+            .ordered_tags,
+        vec!["research"]
+    );
+    assert_eq!(
+        restored.node_import_provenance(restored_key).unwrap(),
+        expected_import_provenance
+    );
+    assert_eq!(
+        restored.node_classifications(restored_key).unwrap(),
+        expected_classifications
+    );
+    assert_eq!(
+        restored.frame_layout_hints(restored_key).unwrap(),
+        expected_frame_layout_hints
+    );
+    assert_eq!(
+        restored.frame_split_offer_suppressed(restored_key),
+        Some(true)
+    );
+    assert_eq!(
+        restored.node_properties(restored_key).unwrap(),
+        expected_properties
+    );
+    assert_eq!(
+        restored.node_derivations(restored_key).unwrap(),
+        expected_derivations
+    );
+    assert_eq!(
+        restored
+            .node_last_visited(restored_key)
+            .unwrap()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis(),
+        42
+    );
+    assert_eq!(restored.node_last_session_visited(restored_key), Some(7));
+
+    let canonical = restored.to_snapshot();
+    let migrated = canonical.nodes.first().unwrap();
+    assert!(!migrated.is_pinned);
+    assert_eq!(migrated.tag_presentation, Default::default());
+    assert!(migrated.import_provenance.is_empty());
+    assert!(migrated.classifications.is_empty());
+    assert!(migrated.frame_layout_hints.is_empty());
+    assert!(!migrated.frame_split_offer_suppressed);
+    assert!(migrated.properties.is_empty());
+    assert!(migrated.derivations.is_empty());
+    assert_eq!(migrated.last_session_visited, 0);
+    assert_eq!(
+        migrated
+            .session_state
+            .as_ref()
+            .and_then(|state| state.last_visited_ms),
+        None
+    );
 }
 
 #[test]
@@ -454,7 +571,7 @@ fn test_snapshot_duplicate_urls_last_wins() {
                 properties: Vec::new(),
                 derivations: Vec::new(),
                 last_session_visited: 0,
-            nested: None,
+                nested: None,
             },
             PersistedNode {
                 node_id: Uuid::new_v4().to_string(),
@@ -482,7 +599,7 @@ fn test_snapshot_duplicate_urls_last_wins() {
                 properties: Vec::new(),
                 derivations: Vec::new(),
                 last_session_visited: 0,
-            nested: None,
+                nested: None,
             },
         ],
         edges: vec![],

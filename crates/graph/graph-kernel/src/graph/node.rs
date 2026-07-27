@@ -1,8 +1,7 @@
 // Copyright 2026 Mark AB (markik)
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-//! Webpage `Node` — the durable entity that anchors each web page
-//! (or addressable artifact) in the graph.
+//! The kernel's physical node wrapper around chartulary's neutral Container.
 //!
 //! Extracted from `graph/mod.rs` per the 2026-04-30 renderer plan §6.4
 //! decomposition target. The history-projection types (`NodeNavigationMemory`,
@@ -22,57 +21,20 @@ use std::ops::{Deref, DerefMut};
 use uuid::Uuid;
 
 use crate::address::{Address, address_from_url};
-use crate::types::{
-    FrameLayoutHint, ImageRef, ImageRole, NodeClassification, NodeDerivation, NodeImportProvenance,
-    NodeProperty, NodeTagPresentationState,
-};
+use crate::types::{ImageRef, ImageRole};
 
-/// A webpage node in the graph
+/// A neutral Container in the kernel graph.
+///
+/// The only physical residue outside Container is the D0 image-reference map.
+/// Those small, content-addressed experience handles stay here so paint can
+/// resolve them without consulting a metadata facet; pixels remain out of line.
 #[derive(Debug, Clone)]
 pub struct Node {
     /// The one node substrate. Identity, primary-first addresses, authored
     /// content, media type, title, tags, and nested-graph bearing live here.
     ///
-    /// `Deref` keeps the field-level read surface source-compatible while the
-    /// optional remainder below dissolves into facets rung by rung.
+    /// `Deref` keeps the Container capability surface direct.
     pub container: chartulary::Container<Uuid, Address>,
-
-    /// Presentation-only metadata for ordering and icon overrides.
-    pub tag_presentation: NodeTagPresentationState,
-
-    /// Derived external import provenance for this node.
-    pub import_provenance: Vec<NodeImportProvenance>,
-
-    /// Durable provenance-bearing classification records for this node.
-    ///
-    /// Spec: `graph_enrichment_plan.md §Core Data Model` — carries scheme, value,
-    /// label, confidence, provenance, and status for each classification.
-    pub classifications: Vec<NodeClassification>,
-
-    /// Cross-graph derivation provenance: records that this node was copied /
-    /// forked from a node in another graph (tear-out brief §7.5). Empty for a
-    /// natively-minted node. The node-anchored analog of a `Provenance` edge,
-    /// for derivations whose source lives in a different graph.
-    pub derivations: Vec<NodeDerivation>,
-
-    /// Open literal properties: non-curated literal statements an ingest
-    /// preserves (`title` / `tags` are the curated fast-paths), including
-    /// datatype and language-tag metadata when present.
-    pub properties: Vec<NodeProperty>,
-
-    /// Whether this node's position is pinned (doesn't move with physics)
-    pub is_pinned: bool,
-
-    /// Timestamp of last visit
-    pub last_visited: std::time::SystemTime,
-
-    /// The app-launch session number this node was last navigated in, stamped by
-    /// [`super::Graph::navigate_node`] from [`super::Graph::current_session`]. `0`
-    /// means "never stamped" (a node from before this field existed, or never
-    /// re-visited since boot) — by-sessions eviction treats that as undated, never
-    /// evicted (mirrors the by-time policy's "never drop what we cannot date").
-    /// (Alembic B5.)
-    pub last_session_visited: u64,
 
     /// Content-addressed preview imagery, keyed by role. The node carries
     /// ~40-byte [`ImageRef`] handles; the pixels live in the durable blob
@@ -89,13 +51,6 @@ pub struct Node {
     /// Read through [`Node::image`] / [`Node::favicon`] / [`Node::preview`]
     /// rather than indexing the map, so call sites name a role.
     pub images: BTreeMap<ImageRole, ImageRef>,
-
-    /// Durable split arrangement annotations for frame-anchor nodes.
-    pub frame_layout_hints: Vec<FrameLayoutHint>,
-
-    /// Durable opt-out for split-offer affordances on frame-anchor nodes.
-    pub frame_split_offer_suppressed: bool,
-
 }
 
 impl Deref for Node {
@@ -166,17 +121,7 @@ impl Node {
             container: chartulary::Container::with_identity(Uuid::new_v4())
                 .with_address_record(address_from_url(url))
                 .with_title(url),
-            tag_presentation: NodeTagPresentationState::default(),
-            import_provenance: Vec::new(),
-            classifications: Vec::new(),
-            derivations: Vec::new(),
-            properties: Vec::new(),
-            is_pinned: false,
-            last_visited: std::time::SystemTime::now(),
-            last_session_visited: 0,
             images: BTreeMap::new(),
-            frame_layout_hints: Vec::new(),
-            frame_split_offer_suppressed: false,
         }
     }
 }

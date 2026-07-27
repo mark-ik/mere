@@ -51,6 +51,8 @@ mod post;
 mod post_hash;
 mod post_sign;
 mod post_wire;
+#[cfg(feature = "session-lane")]
+mod session_lane;
 
 pub use crate::cabal::{CabalHandle, CabalId, CabalKey, CabalMembership};
 pub use crate::conversation_backend::{ConversationBackend, ConversationStorage};
@@ -68,6 +70,10 @@ pub use crate::post_hash::hash_cabal_id;
 pub use crate::post_sign::{sign_post, verify_post};
 pub use crate::post_wire::{
     CabalExt, decode_post, encode_post, operation_id, operation_to_post, post_to_operation,
+};
+#[cfg(feature = "session-lane")]
+pub use crate::session_lane::{
+    Admission, MAX_POST_FRAME, SessionOutcome, lane_binding, push_posts, serve_session,
 };
 
 // Re-export key types from the layers we sit on, so consumers don't all

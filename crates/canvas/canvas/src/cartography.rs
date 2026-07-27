@@ -561,7 +561,14 @@ impl Canvas {
         let times: Vec<(NodeKey, std::time::SystemTime)> = self
             .graph
             .nodes()
-            .map(|(key, node)| (key, node.last_visited))
+            .map(|(key, _)| {
+                (
+                    key,
+                    self.graph
+                        .node_last_visited(key)
+                        .unwrap_or(std::time::SystemTime::UNIX_EPOCH),
+                )
+            })
             .collect();
         let (Some(oldest), Some(newest)) = (
             times.iter().map(|(_, t)| *t).min(),

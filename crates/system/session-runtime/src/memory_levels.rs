@@ -17,7 +17,7 @@
 
 use std::collections::HashMap;
 
-use kernel::persistence::PersistedNode;
+use kernel::graph::{Graph, NodeKey};
 
 /// A node's memory level.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -34,13 +34,15 @@ pub enum MemoryLevel {
 /// is deliberately *not* a promotion signal: it pins a node's physics position, an
 /// orthogonal spatial choice, not a memory-keep. (A dedicated bookmark flag, if one is
 /// added later, would join `tags` here.)
-pub fn is_promoted(node: &PersistedNode) -> bool {
-    !node.tags.is_empty()
+pub fn is_promoted(graph: &Graph, key: NodeKey) -> bool {
+    graph
+        .get_node(key)
+        .is_some_and(|node| !node.tags.is_empty())
 }
 
 /// The memory level of a node.
-pub fn level_of(node: &PersistedNode) -> MemoryLevel {
-    if is_promoted(node) {
+pub fn level_of(graph: &Graph, key: NodeKey) -> MemoryLevel {
+    if is_promoted(graph, key) {
         MemoryLevel::LongTerm
     } else {
         MemoryLevel::ShortTerm
@@ -57,7 +59,7 @@ pub enum EvictionPolicy {
     /// Evict short-term nodes whose last visit is older than `days` days.
     KeepDays(u32),
     /// Evict short-term nodes not visited in the last `sessions` app launches, per
-    /// [`PersistedNode::last_session_visited`](kernel::persistence::PersistedNode::last_session_visited).
+    /// the graph's `visit.history` facet.
     /// A node never stamped (`last_session_visited == 0`, e.g. never re-visited since
     /// this field shipped) is left alone — undated, like an unset `last_visit_ms`.
     KeepSessions(u32),
@@ -98,12 +100,14 @@ impl EvictionPolicy {
     }
 
     /// Whether `node` is stale under this policy: by-time against `last_visit_ms` +
-    /// `now_ms`, or by-session against `node.last_session_visited` + `current_session`.
+    /// `now_ms`, or by-session against the graph's visit-history facet +
+    /// `current_session`.
     /// Both axes share the same rule — a node with no recorded timing (no visit entry,
     /// or `last_session_visited == 0`) is never stale; we don't drop what we can't date.
     fn is_stale(
         &self,
-        node: &PersistedNode,
+        graph: &Graph,
+        key: NodeKey,
         last_visit_ms: &HashMap<String, u64>,
         now_ms: u64,
         current_session: u64,
@@ -112,14 +116,17 @@ impl EvictionPolicy {
             EvictionPolicy::KeepForever => false,
             EvictionPolicy::KeepDays(days) => {
                 let cutoff = now_ms.saturating_sub(u64::from(*days) * 86_400_000);
+                let Some(node_id) = graph.get_node(key).map(|node| node.id.to_string()) else {
+                    return false;
+                };
                 last_visit_ms
-                    .get(&node.node_id)
+                    .get(&node_id)
                     .is_some_and(|&visited| visited < cutoff)
             }
             EvictionPolicy::KeepSessions(sessions) => {
-                node.last_session_visited != 0
-                    && current_session.saturating_sub(node.last_session_visited)
-                        >= u64::from(*sessions)
+                let last_session_visited = graph.node_last_session_visited(key).unwrap_or_default();
+                last_session_visited != 0
+                    && current_session.saturating_sub(last_session_visited) >= u64::from(*sessions)
             }
         }
     }
@@ -137,17 +144,17 @@ impl EvictionPolicy {
 /// returned. The result is the set the host passes to an eviction pass; this function
 /// decides *what*, never performs it.
 pub fn evictable_short_term(
-    nodes: &[PersistedNode],
+    graph: &Graph,
     last_visit_ms: &HashMap<String, u64>,
     policy: EvictionPolicy,
     now_ms: u64,
     current_session: u64,
 ) -> Vec<String> {
-    nodes
-        .iter()
-        .filter(|node| level_of(node) == MemoryLevel::ShortTerm)
-        .filter(|node| policy.is_stale(node, last_visit_ms, now_ms, current_session))
-        .map(|node| node.node_id.clone())
+    graph
+        .nodes()
+        .filter(|(key, _)| level_of(graph, *key) == MemoryLevel::ShortTerm)
+        .filter(|(key, _)| policy.is_stale(graph, *key, last_visit_ms, now_ms, current_session))
+        .map(|(_, node)| node.id.to_string())
         .collect()
 }
 
@@ -165,17 +172,20 @@ pub struct MemoryCensus {
 
 /// Count the memory levels of `nodes` and how many the `policy` would evict now.
 pub fn census(
-    nodes: &[PersistedNode],
+    graph: &Graph,
     last_visit_ms: &HashMap<String, u64>,
     policy: EvictionPolicy,
     now_ms: u64,
     current_session: u64,
 ) -> MemoryCensus {
-    let long_term = nodes.iter().filter(|n| is_promoted(n)).count();
+    let long_term = graph
+        .nodes()
+        .filter(|(key, _)| is_promoted(graph, *key))
+        .count();
     MemoryCensus {
-        short_term: nodes.len() - long_term,
+        short_term: graph.node_count() - long_term,
         long_term,
-        evictable: evictable_short_term(nodes, last_visit_ms, policy, now_ms, current_session)
+        evictable: evictable_short_term(graph, last_visit_ms, policy, now_ms, current_session)
             .len(),
     }
 }
@@ -183,55 +193,60 @@ pub fn census(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kernel::persistence::{PersistedAddress, PersistedNodeSessionState};
+    use euclid::default::Point2D;
+    use kernel::graph::fixtures::GraphFixtures;
+    use kernel::graph::node_facets::{ARRANGEMENT_PIN, VISIT_HISTORY, VisitHistoryFacet};
+    use uuid::Uuid;
 
     const DAY_MS: u64 = 86_400_000;
 
-    /// A minimal short-term node (no tags, not pinned) with the given id.
-    fn node(id: &str) -> PersistedNode {
-        PersistedNode {
-            node_id: id.to_string(),
-            address: PersistedAddress::default(),
-            url: format!("https://{id}.example"),
-            cached_host: None,
-            title: id.to_string(),
-            body: None,
-            tags: Vec::new(),
-            tag_presentation: Default::default(),
-            import_provenance: Vec::new(),
-            is_pinned: false,
-            images: Default::default(),
-            legacy_thumbnail_png: None,
-            legacy_thumbnail_width: 0,
-            legacy_thumbnail_height: 0,
-            legacy_favicon_rgba: None,
-            legacy_favicon_width: 0,
-            legacy_favicon_height: 0,
-            session_state: None::<PersistedNodeSessionState>,
-            mime_hint: None,
-            classifications: Vec::new(),
-            frame_layout_hints: Vec::new(),
-            frame_split_offer_suppressed: false,
-            properties: Vec::new(),
-            derivations: Vec::new(),
-            last_session_visited: 0,
-            nested: None,
-        }
+    fn node(graph: &mut Graph, id: &str) -> NodeKey {
+        graph.add_node_with_id(
+            Uuid::new_v5(&Uuid::NAMESPACE_URL, id.as_bytes()),
+            format!("https://{id}.example"),
+            Point2D::zero(),
+        )
+    }
+
+    fn set_session(graph: &mut Graph, key: NodeKey, session: u64) {
+        let id = graph.get_node(key).unwrap().id;
+        graph
+            .facets_mut()
+            .set(
+                id,
+                chartulary::FacetId::new(VISIT_HISTORY),
+                serde_json::to_value(VisitHistoryFacet {
+                    last_visited_ms: None,
+                    last_session_visited: session,
+                })
+                .unwrap(),
+                &chartulary::AcceptAll,
+            )
+            .unwrap();
     }
 
     #[test]
     fn a_tag_promotes_to_long_term_but_a_position_pin_does_not() {
-        assert_eq!(level_of(&node("plain")), MemoryLevel::ShortTerm);
+        let mut graph = Graph::new();
+        let plain = node(&mut graph, "plain");
+        let tagged = node(&mut graph, "tagged");
+        let pinned = node(&mut graph, "pinned");
+        graph.insert_node_tag(tagged, "keep".to_string());
+        let pinned_id = graph.get_node(pinned).unwrap().id;
+        graph
+            .facets_mut()
+            .set(
+                pinned_id,
+                chartulary::FacetId::new(ARRANGEMENT_PIN),
+                serde_json::json!(true),
+                &chartulary::AcceptAll,
+            )
+            .unwrap();
 
-        let mut tagged = node("tagged");
-        tagged.tags.push("keep".to_string());
-        assert_eq!(level_of(&tagged), MemoryLevel::LongTerm, "a tag promotes");
-
-        // is_pinned is a physics position-pin, not a memory-keep: it must not promote.
-        let mut pinned = node("pinned");
-        pinned.is_pinned = true;
+        assert_eq!(level_of(&graph, plain), MemoryLevel::ShortTerm);
+        assert_eq!(level_of(&graph, tagged), MemoryLevel::LongTerm);
         assert_eq!(
-            level_of(&pinned),
+            level_of(&graph, pinned),
             MemoryLevel::ShortTerm,
             "a position-pin is orthogonal to memory level",
         );
@@ -239,35 +254,45 @@ mod tests {
 
     #[test]
     fn keep_forever_evicts_nothing() {
-        let nodes = vec![node("a"), node("b")];
+        let mut graph = Graph::new();
+        node(&mut graph, "a");
+        node(&mut graph, "b");
         let mut times = HashMap::new();
         times.insert("a".to_string(), 0u64); // ancient, but policy keeps all
         let out =
-            evictable_short_term(&nodes, &times, EvictionPolicy::KeepForever, 100 * DAY_MS, 0);
+            evictable_short_term(&graph, &times, EvictionPolicy::KeepForever, 100 * DAY_MS, 0);
         assert!(out.is_empty(), "KeepForever never evicts");
     }
 
     #[test]
     fn keep_days_evicts_only_stale_undated_safe_and_promoted_exempt() {
         let now = 100 * DAY_MS;
-        let mut nodes = vec![
-            node("stale"),
-            node("fresh"),
-            node("undated"),
-            node("promoted"),
-        ];
-        nodes[3].tags.push("keep".to_string()); // promoted by a tag: exempt even if stale
+        let mut graph = Graph::new();
+        let stale = node(&mut graph, "stale");
+        let fresh = node(&mut graph, "fresh");
+        node(&mut graph, "undated");
+        let promoted = node(&mut graph, "promoted");
+        graph.insert_node_tag(promoted, "keep".to_string());
 
         let mut times = HashMap::new();
-        times.insert("stale".to_string(), now - 40 * DAY_MS); // older than 30d -> evict
-        times.insert("fresh".to_string(), now - 5 * DAY_MS); // within 30d -> keep
-        times.insert("promoted".to_string(), now - 90 * DAY_MS); // stale but promoted -> keep
+        times.insert(
+            graph.get_node(stale).unwrap().id.to_string(),
+            now - 40 * DAY_MS,
+        );
+        times.insert(
+            graph.get_node(fresh).unwrap().id.to_string(),
+            now - 5 * DAY_MS,
+        );
+        times.insert(
+            graph.get_node(promoted).unwrap().id.to_string(),
+            now - 90 * DAY_MS,
+        );
         // "undated" has no visit record -> never dropped (we don't drop what we can't date)
 
-        let out = evictable_short_term(&nodes, &times, EvictionPolicy::KeepDays(30), now, 0);
+        let out = evictable_short_term(&graph, &times, EvictionPolicy::KeepDays(30), now, 0);
         assert_eq!(
             out,
-            vec!["stale".to_string()],
+            vec![graph.get_node(stale).unwrap().id.to_string()],
             "only the dated, stale, un-promoted node"
         );
     }
@@ -275,20 +300,18 @@ mod tests {
     #[test]
     fn keep_sessions_evicts_only_stale_unstamped_safe_and_promoted_exempt() {
         let current_session = 10u64;
-        let mut nodes = vec![
-            node("stale"),
-            node("fresh"),
-            node("unstamped"),
-            node("promoted"),
-        ];
-        nodes[0].last_session_visited = 2; // 8 sessions ago, older than 3 -> evict
-        nodes[1].last_session_visited = 9; // 1 session ago -> keep
-        // "unstamped" keeps last_session_visited == 0 (never stamped) -> never dropped
-        nodes[3].last_session_visited = 1; // stale but promoted -> keep
-        nodes[3].tags.push("keep".to_string());
+        let mut graph = Graph::new();
+        let stale = node(&mut graph, "stale");
+        let fresh = node(&mut graph, "fresh");
+        node(&mut graph, "unstamped");
+        let promoted = node(&mut graph, "promoted");
+        set_session(&mut graph, stale, 2);
+        set_session(&mut graph, fresh, 9);
+        set_session(&mut graph, promoted, 1);
+        graph.insert_node_tag(promoted, "keep".to_string());
 
         let out = evictable_short_term(
-            &nodes,
+            &graph,
             &HashMap::new(),
             EvictionPolicy::KeepSessions(3),
             0,
@@ -296,7 +319,7 @@ mod tests {
         );
         assert_eq!(
             out,
-            vec!["stale".to_string()],
+            vec![graph.get_node(stale).unwrap().id.to_string()],
             "only the dated, stale, un-promoted node"
         );
     }
@@ -304,14 +327,20 @@ mod tests {
     #[test]
     fn census_counts_levels_and_evictable() {
         let now = 100 * DAY_MS;
-        let mut nodes = vec![node("s1"), node("s2"), node("kept")];
-        nodes[2].tags.push("keep".to_string()); // long-term
+        let mut graph = Graph::new();
+        let s1 = node(&mut graph, "s1");
+        let s2 = node(&mut graph, "s2");
+        let kept = node(&mut graph, "kept");
+        graph.insert_node_tag(kept, "keep".to_string());
 
         let mut times = HashMap::new();
-        times.insert("s1".to_string(), now - 60 * DAY_MS); // evictable
-        times.insert("s2".to_string(), now - 2 * DAY_MS); // fresh
+        times.insert(
+            graph.get_node(s1).unwrap().id.to_string(),
+            now - 60 * DAY_MS,
+        );
+        times.insert(graph.get_node(s2).unwrap().id.to_string(), now - 2 * DAY_MS);
 
-        let c = census(&nodes, &times, EvictionPolicy::KeepDays(30), now, 0);
+        let c = census(&graph, &times, EvictionPolicy::KeepDays(30), now, 0);
         assert_eq!(c.short_term, 2);
         assert_eq!(c.long_term, 1);
         assert_eq!(c.evictable, 1, "only s1 is stale enough");

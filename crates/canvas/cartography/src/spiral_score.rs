@@ -37,11 +37,19 @@ pub fn project_spiral_score(
     let mut ordered: Vec<NodeKey> = graph.nodes().map(|(key, _)| key).collect();
     if recent_first {
         ordered.sort_by_key(|key| {
-            std::cmp::Reverse(
-                graph
-                    .get_node(*key)
-                    .map(|node| node.last_visited)
-                    .unwrap_or(std::time::SystemTime::UNIX_EPOCH),
+            let node = graph
+                .get_node(*key)
+                .expect("node keys came from this graph");
+            (
+                std::cmp::Reverse(
+                    graph
+                        .node_last_visited(*key)
+                        .unwrap_or(std::time::SystemTime::UNIX_EPOCH),
+                ),
+                // Visit facets persist millisecond timestamps, so nodes created
+                // in one tick commonly tie. Stable identity makes that score
+                // order portable instead of inheriting local graph iteration.
+                std::cmp::Reverse(node.id),
             )
         });
     }
@@ -209,5 +217,46 @@ mod tests {
                 .any(|item| item.representation == Representation::Glyph)
         );
         assert_eq!(projected.projection.nodes.len(), 4);
+    }
+
+    #[test]
+    fn equal_recency_uses_stable_identity_order() {
+        let mut graph = Graph::new();
+        let keys: Vec<_> = (1..=3)
+            .map(|id| {
+                add_node(
+                    &mut graph,
+                    Some(Uuid::from_u128(id)),
+                    format!("fixture://{id}"),
+                    PortablePoint::zero(),
+                )
+            })
+            .collect();
+        for key in keys {
+            let node_id = graph.get_node(key).unwrap().id;
+            apply_graph_delta(
+                &mut graph,
+                GraphDelta::ReplayTouchNodeLastVisitedById {
+                    node_id,
+                    timestamp_ms: 7,
+                },
+            );
+        }
+
+        let projected = project_spiral_score(&graph, None, None, true);
+        let ids: Vec<_> = projected
+            .score
+            .items
+            .iter()
+            .map(|item| item.source.id.as_str())
+            .collect();
+        assert_eq!(
+            ids,
+            [
+                Uuid::from_u128(3).to_string(),
+                Uuid::from_u128(2).to_string(),
+                Uuid::from_u128(1).to_string(),
+            ]
+        );
     }
 }

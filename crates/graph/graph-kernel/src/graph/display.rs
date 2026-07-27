@@ -28,7 +28,6 @@
 
 use crate::graph::Graph;
 use crate::graph::identity::NodeKey;
-use crate::graph::node::Node;
 use crate::types::ClassificationScheme;
 
 /// The skolemized-blank-node URI prefix (`linked_data::ingest::skolemize`).
@@ -55,14 +54,14 @@ impl Graph {
             // Anonymous linked-data entity: name it by its role to its referrer
             // (author / publisher / image), then by its type, then a short id.
             self.incoming_role(key)
-                .or_else(|| first_type_term(node))
+                .or_else(|| first_type_term(self, key))
                 .unwrap_or_else(|| short_blank_id(stripped))
         } else {
             // Addressable resource: a filename, else its derived host, else its
             // type, else the scheme-stripped URL.
             url_filename(url)
                 .or_else(|| host_of(url))
-                .or_else(|| first_type_term(node))
+                .or_else(|| first_type_term(self, key))
                 .unwrap_or_else(|| scheme_stripped(url))
         }
     }
@@ -107,8 +106,9 @@ impl Graph {
 /// The humanized local term of the node's first `rdf:type` classification
 /// (`https://schema.org/Organization` → `Organization`, `…/ImageObject` →
 /// `Image Object`). `None` if the node carries no ingested `@type`.
-fn first_type_term(node: &Node) -> Option<String> {
-    node.classifications
+fn first_type_term(graph: &Graph, key: NodeKey) -> Option<String> {
+    graph
+        .node_classifications(key)?
         .iter()
         .find(|c| matches!(&c.scheme, ClassificationScheme::Custom(s) if s == "rdf:type"))
         .map(|c| humanize_term(iri_term(&c.value)))

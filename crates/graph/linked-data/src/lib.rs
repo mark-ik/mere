@@ -63,8 +63,8 @@ pub mod query;
 pub use ingest::{ApplyOutcome, apply_contribution};
 pub use ingest::{
     ContextCache, EdgeContribution, GraphContribution, IngestError, NodeContribution, from_html,
-    from_html_with_contexts, from_jsonld, from_jsonld_with_contexts, from_quads, is_bundled_context,
-    referenced_context_urls,
+    from_html_with_contexts, from_jsonld, from_jsonld_with_contexts, from_quads,
+    is_bundled_context, referenced_context_urls,
 };
 pub use serialize::{from_nquads, from_trig, to_nquads, to_trig};
 pub use statements::{StatementOutcome, apply_link_statements, resolve_rel};
@@ -296,8 +296,8 @@ fn node_direct_quads(graph: &Graph, key: NodeKey, node: &Node) -> Vec<Quad> {
     };
 
     // `rdf:type` from the node's `rdf:type` classifications, sorted + deduped.
-    let mut types: Vec<&str> = node
-        .classifications
+    let classifications = graph.node_classifications(key).unwrap_or_default();
+    let mut types: Vec<&str> = classifications
         .iter()
         .filter(|c| matches!(&c.scheme, ClassificationScheme::Custom(s) if s == "rdf:type"))
         .map(|c| c.value.as_str())
@@ -383,7 +383,7 @@ fn node_direct_quads(graph: &Graph, key: NodeKey, node: &Node) -> Vec<Quad> {
     }
 
     // Open literal properties, sorted by full literal identity.
-    let mut props: Vec<&NodeProperty> = node.properties.iter().collect();
+    let mut props = graph.node_properties(key).unwrap_or_default();
     props.sort_by(|a, b| {
         (
             a.predicate.as_str(),
@@ -405,7 +405,7 @@ fn node_direct_quads(graph: &Graph, key: NodeKey, node: &Node) -> Vec<Quad> {
             &mut quads,
             &subject,
             property.predicate.as_str(),
-            property_literal(property).into(),
+            property_literal(&property).into(),
             &property.graph_scope,
         );
     }
@@ -466,7 +466,7 @@ fn node_metadata_quads(graph: &Graph, key: NodeKey, node: &Node) -> Vec<Quad> {
         );
     }
 
-    let mut properties: Vec<&NodeProperty> = node.properties.iter().collect();
+    let mut properties = graph.node_properties(key).unwrap_or_default();
     properties.sort_by(|a, b| {
         (
             a.predicate.as_str(),
@@ -491,7 +491,7 @@ fn node_metadata_quads(graph: &Graph, key: NodeKey, node: &Node) -> Vec<Quad> {
             &subject,
             property.statement_id.as_str(),
             property.predicate.as_str(),
-            property_literal(property).into(),
+            property_literal(&property).into(),
             &property.graph_scope,
             None,
             property.provenance_iri.as_deref(),
@@ -1028,7 +1028,6 @@ mod tests {
             .expect("raw predicate statement");
 
         // Typed + language-tagged + scoped literals with metadata.
-        let node_a = graph.get_node_mut(a).expect("a");
         let mut published = NodeProperty::new(
             "https://schema.org/datePublished".to_string(),
             "2026-07-04".to_string(),
@@ -1037,13 +1036,25 @@ mod tests {
         published.datatype = Some("http://www.w3.org/2001/XMLSchema#date".to_string());
         published.provenance_iri = Some("https://persona.test/mark".to_string());
         published.asserted_at_ms = Some(1_720_000_200_000);
-        node_a.properties.push(published);
+        kernel::graph::apply::apply_graph_delta(
+            &mut graph,
+            kernel::graph::apply::GraphDelta::AppendNodeProperty {
+                key: a,
+                property: published,
+            },
+        );
         let mut greeting = NodeProperty::new(
             "https://schema.org/description".to_string(),
             "bonjour".to_string(),
         );
         greeting.lang = Some("fr".to_string());
-        node_a.properties.push(greeting);
+        kernel::graph::apply::apply_graph_delta(
+            &mut graph,
+            kernel::graph::apply::GraphDelta::AppendNodeProperty {
+                key: a,
+                property: greeting,
+            },
+        );
 
         // rdf:type via classification (through the delta, the public write).
         let _ = kernel::graph::apply::apply_graph_delta(
@@ -1072,8 +1083,8 @@ mod tests {
         };
         let exported = normalized(&graph);
 
-        let contribution = crate::ingest::from_quads(crate::dataset_quads(&graph), "gate")
-            .expect("quad ingest");
+        let contribution =
+            crate::ingest::from_quads(crate::dataset_quads(&graph), "gate").expect("quad ingest");
         let mut reimported = Graph::new();
         let outcome = crate::ingest::apply_contribution(&mut reimported, &contribution);
         assert!(outcome.edges_skipped == 0, "self-contained contribution");

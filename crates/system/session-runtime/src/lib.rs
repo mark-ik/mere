@@ -74,8 +74,8 @@ pub mod arrangement_facets;
 // The scene.* facet namespace: the graph-scene's own view settings (sizing
 // mode, importance metric, physics damping) as facets of the CONTAINER node
 // (keyed by the session's root_graph_id) — scene-scoped, not per-node.
-pub mod scene_facets;
 pub mod engine_profile_store;
+pub mod scene_facets;
 // Freeze/thaw a live graph into an immutable, content-addressed graph engram over
 // an eidetic Store (the Alembic memory spine; wasm-clean — store-agnostic, not
 // filesystem). Save redacts private fields by default; open thaws read-only.
@@ -124,14 +124,6 @@ pub mod view_intent_store;
 pub mod wallet_grant;
 pub mod wallet_store;
 
-pub use engine_profile_store::{
-    ENGINE_PROFILES_DIR, EngineProfileScope, GRAPHS_DIR, PERSONAS_DIR, SESSIONS_DIR,
-    engine_profile_path, engine_profile_path_for_session,
-};
-pub use denizen_facets::{
-    DENIZEN_BINDING, DenizenBinding, DenizenKind, is_denizen, read_denizen_binding,
-    read_denizen_bindings, remove_denizen_binding, write_denizen_binding,
-};
 pub use arrangement_facets::{
     ARRANGEMENT_FACE, ARRANGEMENT_MATERIAL, ARRANGEMENT_POSITION, ARRANGEMENT_SIZE,
     ARRANGEMENT_SPRITE, ARRANGEMENT_SPRITE_HULL, arrangement_position_facet,
@@ -141,20 +133,19 @@ pub use arrangement_facets::{
     write_arrangement_positions, write_arrangement_sizes, write_arrangement_sprite_hulls,
     write_arrangement_sprites,
 };
-pub use scene_facets::{
-    DEFAULT_PHYSICS_DAMPING, SCENE_IMPORTANCE_METRIC, SCENE_PHYSICS_DAMPING, SCENE_SIZE_BY_DEGREE,
-    SCENE_SIZE_BY_IMPORTANCE, SceneFacets, copy_scene_facets, read_scene_facets,
-    write_scene_facets,
+pub use denizen_facets::{
+    DENIZEN_BINDING, DenizenBinding, DenizenKind, is_denizen, read_denizen_binding,
+    read_denizen_bindings, remove_denizen_binding, write_denizen_binding,
 };
-pub use web_facets::{
-    WEB_COMPAT, WEB_CONTENT, WEB_FORM_DRAFT, WEB_SCROLL, WEB_VIEWER, read_web_states,
-    write_web_state, write_web_states,
+pub use engine_profile_store::{
+    ENGINE_PROFILES_DIR, EngineProfileScope, GRAPHS_DIR, PERSONAS_DIR, SESSIONS_DIR,
+    engine_profile_path, engine_profile_path_for_session,
 };
+pub use engram_seal::WalletEpochSealer;
 pub use facet_store::{
     AcceptAll, FacetError, FacetId, FacetValidator, NODE_FACETS_FILE, NodeFacetStore, NodeFacets,
     copy_node_facets, load_node_facets, node_facets_path, save_node_facets,
 };
-pub use schema_facets::SchemaFacetValidator;
 pub use identity::{StartupUnlockMode, auto_unlock_backend_available};
 pub use manifest::{
     EngineProfileBinding, EngramId, GraphSessionManifest, MANIFEST_SCHEMA_VERSION, PersonaId,
@@ -164,6 +155,15 @@ pub use manifest_store::{LoadFailure, LoadReport, MANIFEST_FILE, ManifestStore, 
 pub use persona_settings_store::{
     PERSONA_SETTINGS_DIR, PERSONA_UI_FILENAME, PersonaSettings, load_persona_settings,
     persona_settings_path, save_persona_settings,
+};
+pub use scene_facets::{
+    DEFAULT_PHYSICS_DAMPING, SCENE_IMPORTANCE_METRIC, SCENE_PHYSICS_DAMPING, SCENE_SIZE_BY_DEGREE,
+    SCENE_SIZE_BY_IMPORTANCE, SceneFacets, copy_scene_facets, read_scene_facets,
+    write_scene_facets,
+};
+pub use schema_facets::{
+    ContentClassEngram, SchemaFacetValidator, content_class_schema_definition,
+    content_class_schema_ref, load_content_class, save_content_class,
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use script_bindings_store::{SCRIPT_BINDINGS_FILENAME, ScriptBinding};
@@ -220,4 +220,7 @@ pub use wallet_store::{
     save_remote_auth_wrapping_key_bridge, stage_persona_private_epoch, unlock_wallet_with_auto_os,
     wallet_local_secrets_locked,
 };
-pub use engram_seal::WalletEpochSealer;
+pub use web_facets::{
+    WEB_COMPAT, WEB_CONTENT, WEB_FORM_DRAFT, WEB_SCROLL, WEB_VIEWER, read_web_states,
+    write_web_state, write_web_states,
+};

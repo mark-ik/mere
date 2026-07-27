@@ -145,6 +145,15 @@ the end-state side of every line drawn here.
 
 ## Progress
 
+- **2026-07-27 (OQ 5.1 CLOSED):** the dissolution ladder completed. Kernel
+  `Node` is now `{ container, images }`: `container` is
+  `chartulary::Container<Uuid, Address>` and `images` is the explicitly retained
+  D0 map of small content-addressed experience handles. Arrangement,
+  presentation, visit, provenance, classification, literal-property, and
+  derivation metadata all live in the graph's one `FacetStore`; Turnstone's
+  web-page and note classes use the same data/schema seam as packs. Legacy
+  snapshot columns and v1 graph engrams migrate on read. The north-star
+  extraction boundary is now settled in code, so its 5.1 question is closed.
 - **2026-07-18 (later):** Implementation plan founded:
   [node dissolution + facets plan](../implementation_strategy/2026-07-18_node_dissolution_facets_plan.md)
   (lanes F/S/D, the D-gate rkyv measurement, the full `Node` field-by-field

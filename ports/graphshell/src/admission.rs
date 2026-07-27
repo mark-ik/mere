@@ -83,6 +83,21 @@ pub fn open_session<P: IdentityProvider>(
     )
 }
 
+/// Whether this service serves the action an admitted principal was admitted
+/// for.
+///
+/// Not a second admission: [`LocalNetworkPolicy`] keys its service rules by
+/// path and verifies that the delegation chain covers the requested triple,
+/// but `ServiceRule` carries no action vocabulary, so it cannot decide which
+/// actions a service offers. A chain covering some *other* action at
+/// `/services/projection` therefore clears admission with that action intact.
+/// Whether projections serve it is Graphshell's question, and this is where it
+/// is answered, for both the sans-io path below and the carrier in
+/// [`crate::carrier`].
+pub fn serves_action(principal: &AdmittedPrincipal) -> bool {
+    principal.action == connect_action()
+}
+
 /// Admit (or refuse) an incoming Graphshell session.
 ///
 /// Returns the reply frame to write in both cases — a refusal is still a
@@ -101,13 +116,15 @@ pub fn admit_session(
 ) -> (Vec<u8>, Result<AdmittedPrincipal, DenyReason>) {
     let (reply, outcome) = admit(policy, ledger, hello_bytes, facts, now_ms, active_sessions);
     let outcome = outcome.and_then(|principal| {
-        if principal.action == connect_action() {
+        if serves_action(&principal) {
             Ok(principal)
         } else {
-            // Defence in depth: the policy already evaluates the requested
-            // action, so reaching here means a hello was admitted for a
-            // different service on a Graphshell listener. Refuse rather than
-            // serve projections on someone else's grant.
+            // Not defence in depth, as this comment previously claimed: the
+            // policy cannot make this decision at all. It checks that the
+            // service *path* is offered and that the chain covers whatever
+            // triple was requested, so a chain covering another action at the
+            // projection path reaches here admitted. This is the only place
+            // the action is judged against what projections serve.
             //
             // `ActionNotOffered`, not `ActionNotCovered`: the authority did
             // not fall short — it was fine for what it asked. This listener

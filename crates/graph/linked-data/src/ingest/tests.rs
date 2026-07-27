@@ -236,21 +236,21 @@ fn a_harvested_hyperlink_records_extracted_from_provenance_on_the_target() {
     let mut graph = Graph::new();
     apply_contribution(&mut graph, &contribution);
 
-    let (_, src) = graph
+    let (src_key, src) = graph
         .get_node_by_url("https://src.test/")
         .expect("source node");
-    let (_, dst) = graph
+    let (dst_key, _dst) = graph
         .get_node_by_url("https://dst.test/")
         .expect("target node");
 
     // The target names the page it was extracted from; the source carries none.
-    assert!(src.derivations.is_empty(), "the source page is not derived");
-    assert_eq!(
-        dst.derivations.len(),
-        1,
-        "the target carries one derivation"
+    assert!(
+        graph.node_derivations(src_key).unwrap().is_empty(),
+        "the source page is not derived"
     );
-    let d = &dst.derivations[0];
+    let derivations = graph.node_derivations(dst_key).unwrap();
+    assert_eq!(derivations.len(), 1, "the target carries one derivation");
+    let d = &derivations[0];
     assert_eq!(d.sub_kind, ProvenanceSubKind::ExtractedFrom);
     assert_eq!(
         d.source_node,
