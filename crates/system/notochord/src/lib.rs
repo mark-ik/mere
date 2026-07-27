@@ -38,7 +38,10 @@ pub use handshake::{
     AdmittedPrincipal, AdmittedSession, HandshakeError, SessionHello, SessionReply, admit, respond,
 };
 #[cfg(feature = "tokio")]
-pub use io::{IoHandshakeError, accept_session, admit_session, initiate_session};
+pub use io::{
+    FrameError, IoHandshakeError, accept_session, admit_session, initiate_session, read_frame,
+    read_frame_or_eof, write_frame,
+};
 pub use owner::{
     OWNER_POLICY_VERSION, OwnerNetworkPolicy, OwnerPolicyEdit, OwnerPolicySet,
     OwnerPolicyValidationError,

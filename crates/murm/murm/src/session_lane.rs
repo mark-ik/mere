@@ -24,10 +24,10 @@
 use std::sync::Arc;
 
 use notochord::{
-    AdmittedPrincipal, DenyReason, LocalNetworkPolicy, ProofBinding, RevocationLedger,
-    SessionFacts, SessionHello, admit_session, initiate_session,
+    AdmittedPrincipal, DenyReason, FrameError, LocalNetworkPolicy, ProofBinding, RevocationLedger,
+    SessionFacts, SessionHello, admit_session, initiate_session, read_frame_or_eof, write_frame,
 };
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use transport::AcceptedSession;
 
 use crate::conversation_engine::ConversationEngine;
@@ -57,55 +57,16 @@ pub struct SessionOutcome {
     pub posts_rejected: u64,
 }
 
-async fn write_frame<S>(stream: &mut S, payload: &[u8]) -> Result<(), MurmError>
-where
-    S: AsyncWrite + Unpin,
-{
-    let len = u32::try_from(payload.len())
-        .map_err(|_| MurmError::Backend("post frame exceeds u32".into()))?;
-    if len > MAX_POST_FRAME {
-        return Err(MurmError::Backend(
-            "post frame exceeds the lane bound".into(),
-        ));
-    }
-    stream
-        .write_all(&len.to_be_bytes())
-        .await
-        .map_err(|e| MurmError::Backend(e.to_string()))?;
-    stream
-        .write_all(payload)
-        .await
-        .map_err(|e| MurmError::Backend(e.to_string()))?;
-    stream
-        .flush()
-        .await
-        .map_err(|e| MurmError::Backend(e.to_string()))?;
-    Ok(())
-}
-
-/// Read one frame, or `None` at a clean end of stream.
-async fn read_frame<S>(stream: &mut S) -> Result<Option<Vec<u8>>, MurmError>
-where
-    S: AsyncRead + Unpin,
-{
-    let mut len = [0u8; 4];
-    match stream.read_exact(&mut len).await {
-        Ok(_) => {}
-        Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(None),
-        Err(e) => return Err(MurmError::Backend(e.to_string())),
-    }
-    let len = u32::from_be_bytes(len);
-    if len > MAX_POST_FRAME {
-        return Err(MurmError::Backend(
-            "post frame exceeds the lane bound".into(),
-        ));
-    }
-    let mut payload = vec![0u8; len as usize];
-    stream
-        .read_exact(&mut payload)
-        .await
-        .map_err(|e| MurmError::Backend(e.to_string()))?;
-    Ok(Some(payload))
+/// Frame errors reach Murm's error type here rather than through a bare `?`,
+/// so a crossed bound still reports which one and by how much.
+///
+/// The framing itself now comes from `notochord`, which had the same
+/// length-prefixed format private in its handshake module while this lane
+/// carried a second copy. [`MAX_POST_FRAME`] stays here: it is Murm's payload
+/// bound, not handshake attack surface, so it is passed in rather than read
+/// out of `HandshakeLimits`.
+fn framing(error: FrameError) -> MurmError {
+    MurmError::Backend(error.to_string())
 }
 
 /// Everything the owner's rule needs to decide one session.
@@ -160,7 +121,10 @@ where
         posts_ingested: 0,
         posts_rejected: 0,
     };
-    while let Some(frame) = read_frame(&mut admitted.stream).await? {
+    while let Some(frame) = read_frame_or_eof(&mut admitted.stream, MAX_POST_FRAME)
+        .await
+        .map_err(framing)?
+    {
         match decode_post(&frame) {
             Ok(post) => {
                 if engine.ingest_post(&cabal_id, post).await.is_ok() {
@@ -232,7 +196,9 @@ where
         notochord::SessionReply::Accept { .. } => {}
     }
     for post in posts {
-        write_frame(&mut stream, &encode_post(post)).await?;
+        write_frame(&mut stream, &encode_post(post), MAX_POST_FRAME)
+            .await
+            .map_err(framing)?;
     }
     let _ = stream.shutdown().await;
     Ok(Ok(posts.len()))
