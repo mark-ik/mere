@@ -21,7 +21,12 @@ the [application prospects brief](../../2026-07-24_application_prospects_brief.m
 [shared-engram commons brief](../research/2026-07-24_shared_engram_commons_brief.md)
 (knot as page content class and the settled convergence/key decisions), and the
 [Graphshell remote projection host plan](2026-07-22_graphshell_remote_projection_host_plan.md)
-(the protocol this port serves).
+(the protocol this port serves). The reconciled
+[authoring and clipping plan](2026-06-24_djot_editor_knot_nodes_plan.md) and
+[evaluation/export plan](../../nematic_docs/implementation_strategy/2026-06-12_knot_evaluation_export_plan.md)
+hold the remaining product-authoring, clipping, effect, consent, HTML, and cache
+work. Those are follow-ons to this port's K0-K7 closure, not missing port
+milestones.
 
 ## 1. Ruling
 

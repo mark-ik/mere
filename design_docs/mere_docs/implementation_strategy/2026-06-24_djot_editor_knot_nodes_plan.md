@@ -1,22 +1,16 @@
 # Djot Editor + Knot Nodes + Web Clips Plan
 
-**Status: building; routed note tile, web-clip command, tall-note banding, and
-focused source writeback live.** The editor surface was reframed 2026-06-27: a
-note is a locally-addressed knot document inker routes to a genet-document tile,
-created by typing a `knot://` address into the omnibar. The mapper, local-knot
-producer, inline `Node.body` persistence, table prerequisite, genet-rendered knot
-tile, themed note sheet, `>clip` semantic plus cropped-visual clip writer, and
-focused `>knot_editor` save path are built. Note tiles now report their laid-out
-height and render cached scroll bands instead of only the top viewport. The bound
-source editor now sits over the focused tile content rect when that tile is
-visible. Source highlighting also landed (2026-06-26, via the
-[illume text lexer plan](2026-06-26_illume_text_lexer_plan.md): illume spans →
-tinct roles → a genet styled field, headed-verified) — see the correction note
-in Progress. Click-to-place and drag-select landed 2026-07-01 (a chrome click
-resolves DOM focus and snaps the caret to the clicked byte; a held press
-extends the selection as the pointer moves), completing Phase 1's mouse input.
-Remaining near-term UI work: live-on-change render refresh, autosave/history,
-and stable anchors for inline clip decorations.
+**Status: reconciled 2026-07-27; historical Meerkat execution record, not a
+current implementation queue.** The routed `knot://` node, inline `Node.body`,
+Meerkat tile, editor overlay, clip command, and crop path described below were
+real and tested. Meerkat was deleted on 2026-07-18 after its reusable pieces
+were harvested, so those statements are no longer claims about the live
+product. Phase 1 and Phase 2 completed in that host; Phase 3 landed its
+portable editor core, keyboard affordances, injection, and completion work;
+the semantic and rendered clip slices also landed there. The surviving
+architecture and remaining work are recut in
+[Reconciliation](#reconciliation-2026-07-27). The dated progress log remains
+as an archaeology receipt.
 Originally scoped 2026-06-24 via multi-agent code sweeps of the live workspace,
 adding the *write* side to a knot/djot stack that is already read-complete, plus an
 element-pick clip path into the graph, with an editor that stays pure Rust (jotdown
@@ -29,6 +23,48 @@ gesture** (pick an element off a live page, land it as a knot node with a
 provenance edge). It does not re-scope the engine, the polyglot block vocabulary,
 the outline lens, or the extraction lane, all of which already have owners. See
 [Cross-references](#cross-references).
+
+---
+
+## Reconciliation (2026-07-27)
+
+This plan mixed three layers that now have separate homes. The separation is
+intentional:
+
+| Concern | Current home | Disposition |
+| --- | --- | --- |
+| Text editing, highlighting, outline/fold derivation, and preview readout | Genet: Cambium's editor primitives plus `components/inker/knot-editor-host` | Built. `ports/knot::KnotEditor` consumes this stack. Do not build another editor core in Mere or Turnstone. |
+| File identity, source truth, format-aware writes, vaults, search, sync, conflicts, and communal encryption | Mere `ports/knot` | K0 through K7 are complete under the [Knot port plan](2026-07-25_knot_port_plan.md). Files and vault documents replace the old inline `Node.body` store. |
+| Product composition and authoring UX | Graphshell with Turnstone and Cambium | Open. The live Knot endpoint discloses a read-only directory and rejects intents. The product still needs an authorized edit/save surface; it must not receive the vault key or become the document store. |
+| Semantic web clipping and `ClippedFrom` provenance | Mere `crates/import::web_clip`; Turnstone Inspector/content lane | The host-neutral producer survived. The Meerkat command did not. A current Inspector selection-to-Knot write path is open. |
+| Outline and folds in the product | Genet readout plus a consumer-pulled Cambium tree/outline; Turnstone Gloss/Inspector | Outline data exists; a Knot authoring consumer and interactive tree are open. This is shared component work, not a Knot parser fork. |
+| Query, agent, diagram, and Wasm blocks | [polyglot block resolver plan](../../nematic_docs/implementation_strategy/2026-06-13_polyglot_block_resolver_plan.md) | Separate resolver work. It is not unfinished Phase 3 editor work. |
+| Transclusion, evaluation, sanitized HTML, consent, and derived-result caching | [Knot evaluation and export plan](../../nematic_docs/implementation_strategy/2026-06-12_knot_evaluation_export_plan.md) | Reconciled there. Pure transforms live in Genet; effect policy and cache live in Knot; the product host presents intents and consent. |
+| Shared documents | Knot sync plus Commons | Personal and communal convergence landed. Public addressing, discovery, and publishing UX remain separate product work, not restoration of `knot://` node storage. |
+
+### Surviving product slices
+
+1. **Authoring consumer.** Expose edit/save as Knot endpoint intents and mount a
+   long-lived Cambium editor surface in the Graphshell/Turnstone composition.
+   The done-condition is a real file or vault document edited through that
+   surface, saved by Knot, with the host holding neither source authority nor a
+   vault key.
+2. **Inspector clip action.** Feed a selected live-document fragment through
+   `crates/import::web_clip`, create or append a Knot document through an
+   authorized intent, and retain `ClippedFrom` provenance. The old Meerkat
+   `>clip` implementation is a donor read, not a module to restore.
+3. **Outline/fold surface.** Let the authoring consumer pull the generic Cambium
+   tree/outline and connect it to `KnotReadout`. Fold state stays view state;
+   source text stays truth.
+4. **Clip fidelity receipt.** Once the current clip action exists, prove stable
+   source anchors and crop geometry in the headed content lane. Sanitized HTML
+   lowering remains in the evaluation plan.
+
+The old `Node.body`, create-on-miss `knot://` routing, Meerkat overlay, render
+banding, and command modules are closed historical shapes. Do not reimplement
+them literally. Multicursor/rope work waits for a demonstrated large-document
+consumer. Query/agent nodes, public publishing, and HTML fidelity keep their
+separate owners above.
 
 ---
 

@@ -1,7 +1,12 @@
 # Knot Evaluation + Export Plan — live blocks in, any protocol out
 
 **Date**: 2026-06-12
-**Status**: Planned.
+**Status**: reconciled 2026-07-27. K5, K1's pure resolve pass, and K2's
+evaluation seam and Rhai/Lua proofs landed. The production effect bridge,
+sanitized HTML lane, consent surface, and derived cache did not. Inker and
+Nematic now live in Genet; Meerkat, the host named throughout the dated
+progress log, was deleted 2026-07-18. The current ownership and remaining
+sequence below supersede the old Meerkat wiring assignments.
 **What this is**: the effectful half the
 [polyglot knot design](2026-05-08_polyglot_knot_design.md) deliberately left
 host-side, plus the export dual it promised. Knots (CommonMark and djot
@@ -22,11 +27,75 @@ The consent *UI* and any genet-fragment rendering are named and gated.
 
 ---
 
+## Reconciliation (2026-07-27)
+
+This is no longer one monolithic Knot plan. It is a pure document engine with
+an effectful Knot service and a product-host consent surface.
+
+| Original slice | Current status | Current owner |
+| --- | --- | --- |
+| K5 exporters | Complete: gemtext already existed; gophermap and text exporters landed | Genet `components/inker/src/document/render/export.rs` |
+| K1 transclusion | Pure policy/resolve pass and file-only rehearsal complete; live network/product bridge open | Pure pass in Genet Inker. Knot owns document trust and invokes an injected fetch capability. |
+| K2 evaluation | `BlockEvaluator`, registry, policy, Rhai backend, bounded Piccolo proof, and nested render complete; production registration and consent open | Seam in Genet Inker; evaluators remain capability providers. Knot chooses and invokes them under document policy. |
+| K4 sanitized HTML clips | Open | Genet Nematic/inker as a pure parse, sanitize, and lower lane |
+| K3 cache and consent | Open | Knot owns sealed derived caches and policy. Graphshell/Turnstone presents declared intents and user consent. |
+
+### Boundary ruling
+
+- **Genet stays pure.** Inker and Nematic parse, lower, export, resolve with
+  caller closures, and evaluate through a trait. They do not acquire network,
+  vault, journal, or product-UI dependencies.
+- **Knot owns effects over documents.** It holds the source, trust state,
+  encryption profile, grants, and derived cache. Fetch and evaluator
+  capabilities are injected into the endpoint; their authority is checked
+  there. This is why document sync, transclusion policy, and evaluation policy
+  belong in Knot even though transport and script engines are supplied
+  elsewhere.
+- **The product host owns consent presentation only.** Graphshell/Turnstone may
+  render Run, Resolve, Refresh, and Save affordances and send declared intents.
+  It does not receive a vault key, silently fetch, or execute a document block.
+- **Recorded fact and derived state stay distinct.** Included content and
+  evaluation output are recomputable projections by default. A cache is sealed,
+  attributable derived state, not a silent edit to the source journal.
+
+The live `KnotEndpoint` is currently read-only and rejects every intent. The
+editor library and the K1/K2 engine passes being complete therefore do not make
+the authoring/effect path complete.
+
+### Remaining sequence
+
+1. **E1, Knot effect service.** Add explicit Resolve and Run intents; inject
+   fetch/evaluator registries; enforce document trust, grants, scheme/language
+   allowlists, recursion limits, and user-configured `auto` / `ask` / `never`
+   modes. Received documents remain inert by default.
+2. **E2, product consent.** Advertise those intents through Graphshell and let
+   the product surface present consent and visible provenance. A stale intent
+   must be rejected against the observed document revision.
+3. **E3, sanitized HTML.** Land an optional html5ever-backed fragment engine in
+   Genet, with scripts, event handlers, iframes, and style authority removed by
+   tests. Keep the semantic sibling as the export path.
+4. **E4, sealed derived cache.** Cache fetched or explicitly cacheable
+   evaluation results inside Knot's encryption profile with source, policy,
+   evaluator/fetcher version, fetched-at, and source-revision attribution.
+   Lock, revocation, and Commons epoch rotation must make the cache unavailable
+   on the same boundary as its source.
+5. **E5, end-to-end receipts.** Prove own-document allow, received-document
+   deny/ask, offline cached transclusion with visible age, budget exhaustion,
+   stale-consent rejection, and sanitized clip rendering over the real mounted
+   lane.
+
+JavaScript backends, public serving, canvas outputs, and additional block kinds
+remain separate consumer-pulled work. They are not closure conditions for this
+plan.
+
+---
+
 ## Execution order
 
-**K5 → K1 → K2 → K4 → K3.** K5 (exporters) is pure functions with zero new
-dependencies — the easy win that also pins down block↔protocol mappings the
-other slices reuse. Each slice lands independently.
+**Historical order: K5 → K1 → K2 → K4 → K3.** K5 (exporters) was pure
+functions with zero new dependencies. The unfinished work now follows E1
+through E5 above; the original K sections remain the design and progress
+record.
 
 ## K5 — protocol exporters (`to_gemtext` and friends)
 
@@ -251,10 +320,10 @@ produces the semantic downgrade.
 - Script results may opt into the same cache (`eval` fences declaring
   deterministic intent), default off.
 - The consent surfaces — the "resolve" / "run" affordance on inert fences
-  in received knots — are shell UX, **gated on the window-composition
-  reshape** (the E5 pattern); until then the `knot-render` bin's flags are
-  the consent mechanism, which keeps the policy code honest ahead of the
-  UI.
+  in received knots — are product-host UX over declared Knot endpoint intents.
+  The current endpoint is read-only, so this is E1/E2 work rather than a
+  window-composition gate. Until then the `knot-render` bin's flags remain only
+  an engine rehearsal, not a product consent mechanism.
 
 **Done when**: second render offline serves the cached transclusion with
 its age shown; cache entries are LocalOnly engrams the GC pass can walk;
@@ -280,10 +349,10 @@ K-lanes read its trust state, nothing more).
   leans visible-until-trusted.
 - TOFU cert-pin store location (file beside the profile vs eidetic
   engrams) — start file-backed, migrate when persona/keys land fully.
-- Where `BlockEvaluator`'s piccolo implementation lives: meerkat (it
-  already deps the genet components) vs a small dedicated crate so the
-  bin can evaluate without the shell. The bin requirement leans toward
-  the small crate.
+- **Resolved 2026-07-27:** evaluator implementations stay with their engine
+  providers. Knot consumes the thin `BlockEvaluator` capability and owns
+  registration, trust policy, and invocation for a document. The product host
+  owns neither the evaluator nor the document authority.
 
 ## Progress
 
