@@ -39,6 +39,7 @@
 //! [`add_peer`]: P2pandaTransport::add_peer
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex as StdMutex};
@@ -69,6 +70,9 @@ pub struct P2pandaStream {
     send: SendStream,
     recv: RecvStream,
     _connection: Connection,
+    shutdown_ack: Option<Pin<Box<dyn Future<Output = std::io::Result<()>> + Send>>>,
+    shutdown_finished: bool,
+    shutdown_complete: bool,
 }
 
 impl std::fmt::Debug for P2pandaStream {
@@ -101,7 +105,46 @@ impl AsyncWrite for P2pandaStream {
         <SendStream as AsyncWrite>::poll_flush(Pin::new(&mut self.send), cx)
     }
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        <SendStream as AsyncWrite>::poll_shutdown(Pin::new(&mut self.send), cx)
+        if self.shutdown_complete {
+            return Poll::Ready(Ok(()));
+        }
+        if self.shutdown_ack.is_none() {
+            // Create this before finishing so `stopped` cannot miss the
+            // acknowledgement that all stream bytes reached the peer. The
+            // connection handle is the stream's last handle in the usual
+            // one-stream case; dropping it immediately after `finish` can
+            // otherwise race the peer reading a small final frame.
+            let stopped = self.send.stopped();
+            self.shutdown_ack = Some(Box::pin(async move {
+                match stopped.await {
+                    Ok(None) => Ok(()),
+                    Ok(Some(code)) => Err(std::io::Error::new(
+                        std::io::ErrorKind::ConnectionReset,
+                        format!("peer stopped stream before acknowledging final bytes: {code}"),
+                    )),
+                    Err(error) => Err(std::io::Error::from(error)),
+                }
+            }));
+        }
+        if !self.shutdown_finished {
+            match <SendStream as AsyncWrite>::poll_shutdown(Pin::new(&mut self.send), cx) {
+                Poll::Pending => return Poll::Pending,
+                Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
+                Poll::Ready(Ok(())) => self.shutdown_finished = true,
+            }
+        }
+        let acknowledgement = self
+            .shutdown_ack
+            .as_mut()
+            .expect("shutdown acknowledgement initialized");
+        match acknowledgement.as_mut().poll(cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(result) => {
+                self.shutdown_ack = None;
+                self.shutdown_complete = result.is_ok();
+                Poll::Ready(result)
+            }
+        }
     }
 }
 
@@ -137,6 +180,9 @@ impl ProtocolHandler for StreamQueueHandler {
                 send,
                 recv,
                 _connection: connection,
+                shutdown_ack: None,
+                shutdown_finished: false,
+                shutdown_complete: false,
             },
             peer,
         });
@@ -555,6 +601,9 @@ impl Transport for P2pandaTransport {
             send,
             recv,
             _connection: conn,
+            shutdown_ack: None,
+            shutdown_finished: false,
+            shutdown_complete: false,
         })
     }
 

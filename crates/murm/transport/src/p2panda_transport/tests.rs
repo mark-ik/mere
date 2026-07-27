@@ -90,6 +90,64 @@ async fn paired_p2panda_transports_round_trip_bytes() {
     assert_eq!(alice_recv, reply);
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn shutdown_keeps_a_small_final_frame_alive_until_acknowledged() {
+    let alpn = Alpn::new("mere/final-frame/v1");
+    let (alice_kp, alice_id) = make_inputs(11);
+    let (bob_kp, bob_id) = make_inputs(12);
+    let alice = P2pandaTransport::bind(&alice_kp, vec![alpn.clone()])
+        .await
+        .expect("bind alice");
+    let bob = P2pandaTransport::bind(&bob_kp, vec![alpn.clone()])
+        .await
+        .expect("bind bob");
+    alice
+        .add_peer(bob.endpoint_addr().await.unwrap())
+        .await
+        .expect("alice.add_peer");
+    bob.add_peer(alice.endpoint_addr().await.unwrap())
+        .await
+        .expect("bob.add_peer");
+    let (server_finished_tx, server_finished_rx) = tokio::sync::oneshot::channel();
+
+    let alice_task = tokio::spawn(async move {
+        let mut stream = alice.connect(bob_id, alpn).await.expect("connect");
+        stream.write_all(b"request").await.expect("write request");
+        stream.flush().await.expect("flush request");
+        let mut final_frame = [0; 4];
+        stream
+            .read_exact(&mut final_frame)
+            .await
+            .expect("read final frame after responder shutdown");
+        let _ = server_finished_rx.await;
+        final_frame
+    });
+
+    let mut session = bob
+        .accept(Alpn::new("mere/final-frame/v1"))
+        .await
+        .expect("accept");
+    assert_eq!(session.peer, Some(alice_id));
+    let mut request = [0; 7];
+    session
+        .stream
+        .read_exact(&mut request)
+        .await
+        .expect("read request");
+    assert_eq!(&request, b"request");
+    session
+        .stream
+        .write_all(b"deny")
+        .await
+        .expect("write final frame");
+    session.stream.shutdown().await.expect("finish final frame");
+    let _ = server_finished_tx.send(());
+    drop(session);
+
+    let final_frame = alice_task.await.expect("alice task");
+    assert_eq!(&final_frame, b"deny");
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn ticket_round_trips_identity_and_registers_the_peer() {
     let (alice_kp, alice_id) = make_inputs(30);

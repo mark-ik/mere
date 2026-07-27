@@ -1,7 +1,8 @@
 # Notochord Session and Policy Spine Plan
 
 **Date:** 2026-07-26
-**Status:** planned; the name cutover is gated on N2.
+**Status:** N0-N2 landed; the N2 promotion gate passed on 2026-07-27.
+The N3 name cutover is unblocked but has not started.
 **Decision:** grow the existing `network-policy` crate into the common
 session-admission spine, then promote it to `notochord` when two real service
 carriers consume the shared context.
@@ -234,7 +235,7 @@ local and opaque. Preserve p2panda's authenticated peer and Reticulum's honest
 reports only carrier-observed facts. A forged application frame cannot alter
 them.
 
-### N2. Two real service carriers
+### N2. Two real service carriers — PASSED 2026-07-27
 
 Wire the shared context through:
 
@@ -485,10 +486,10 @@ test rather than imported, since murm must not depend on a port. G5c already
 proved the mirror (a Murm grant does not open projections), so both directions
 of "one service's grant is not authority in another" now hold.
 
-Remaining for the promotion gate: Graphshell G5d over `P2pandaTransport`
-(the servitor's lane). Both carriers then need to be on the same construction
-site, which since N1 means `AcceptedSession::session_facts` and
-`admit_session`; Murm's lane already is.
+What remained at this point was Graphshell G5d over `P2pandaTransport`
+(the servitor's lane). Both carriers had to be on the same construction site,
+which since N1 means `AcceptedSession::session_facts` and `admit_session`;
+Murm's lane already was.
 
 ### 2026-07-27 — N2, Graphshell half: the projection carrier
 
@@ -522,14 +523,26 @@ Worth a ruling at N3 or before: either `ServiceRule` grows an action
 allow-list and `ActionNotOffered` gains a decision site, or the reason is
 documented as service-supplied and every carrier owns the check.
 
-**Both N2 halves now exist, but the gate is not met yet.** The promotion
-receipt asks that a Murm grant cannot open Graphshell *and* a Graphshell
-projection grant cannot open Murm. Only the first direction is proved
-(`a_grant_for_another_service_does_not_open_projections`, graphshell). The
-mirror belongs on Murm's listener, in its crate. **N3 should not start until
-it exists**; without it the cross-domain claim is half-evidenced, and a
-rename would promote an intention, which is the thing this plan set out not
-to do.
+The first carrier receipts in `115904b5` exercised the generic accept path
+through `MemoryTransport`. That proved the shared construction site, but it
+did not meet N2's literal `P2pandaTransport` requirement. The follow-up adds
+two real p2panda-net/Iroh receipts:
+
+- an authenticated viewer is admitted, its p2panda peer is retained in
+  `AdmittedSession::facts`, and application bytes cross only after admission;
+- a valid Murm grant belonging to that same authenticated peer is refused with
+  `ActionNotCovered`, and zero projection bytes cross.
+
+Together with Murm's listener refusing a Graphshell projection grant while
+leaving its conversation empty, both cross-service directions now hold over
+the real service paths. **The N2 promotion gate is met.** N3 is unblocked, but
+the name and path cutover remains a separate slice. The real refusal also
+exposed a p2panda stream-lifetime race: finishing a small final frame and then
+dropping the stream could close its last QUIC connection handle before the
+peer received the refusal. `P2pandaStream::poll_shutdown` now keeps that handle
+alive until QUIC acknowledges every final byte, with a transport-level
+regression receipt. Verification: graphshell 35; mere-transport 40 plus its
+session-policy integration test.
 
 ### A transport bug this uncovered
 

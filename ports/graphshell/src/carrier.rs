@@ -161,14 +161,17 @@ pub async fn accept_projection_session<T: Transport>(
 mod tests {
     use super::*;
     use crate::admission::{CONNECT_ACTION, GRAPHSHELL_DOMAIN, connect_action, open_session};
-    use network_policy::{RequestedAction, SessionHello, TrafficClass, initiate_session};
+    use network_policy::{
+        CarrierKind, RequestedAction, SessionHello, TrafficClass, initiate_session,
+    };
     use personae::IdentityProvider;
     use personae::InMemoryProvider;
     use personae::delegation::{
         CapabilityScope, DelegationCertificate, DelegationParent, SignedDelegationCertificate,
     };
+    use tokio::io::AsyncReadExt;
     use transport::memory::MemoryTransport;
-    use transport::{PeerID, initiator_binding};
+    use transport::{P2pandaTransport, PeerID, initiator_binding};
 
     const NETWORK: NetworkId = NetworkId([3; 32]);
     const ROOT_AUTHORITY: [u8; 32] = [7; 32];
@@ -189,9 +192,14 @@ mod tests {
         }
     }
 
-    /// A grant from the owner letting `subject` perform `action` at the
-    /// projection service.
-    fn grant(subject: [u8; 32], action: &str) -> SignedDelegationCertificate {
+    /// A grant from the owner letting `subject` perform `action` under one
+    /// service triple.
+    fn grant_for(
+        subject: [u8; 32],
+        domain: &str,
+        path: &str,
+        action: &str,
+    ) -> SignedDelegationCertificate {
         SignedDelegationCertificate::issue(
             &owner(),
             DelegationCertificate::new(
@@ -199,9 +207,9 @@ mod tests {
                 owner().master_public_key().to_bytes(),
                 subject,
                 CapabilityScope {
-                    domain: GRAPHSHELL_DOMAIN.into(),
+                    domain: domain.into(),
                     resource: NETWORK.0.to_vec(),
-                    path_prefix: PROJECTION_SERVICE.into(),
+                    path_prefix: path.into(),
                     actions: [action.to_string()].into_iter().collect(),
                 },
                 5,
@@ -212,6 +220,12 @@ mod tests {
             ),
         )
         .expect("issue certificate")
+    }
+
+    /// A grant from the owner letting `subject` perform `action` at the
+    /// projection service.
+    fn grant(subject: [u8; 32], action: &str) -> SignedDelegationCertificate {
+        grant_for(subject, GRAPHSHELL_DOMAIN, PROJECTION_SERVICE, action)
     }
 
     fn policy() -> LocalNetworkPolicy {
@@ -320,6 +334,210 @@ mod tests {
         assert_eq!(
             refusal,
             ProjectionRefusal::ActionNotServed("administer".to_string())
+        );
+    }
+
+    async fn p2panda_pair() -> (P2pandaTransport, P2pandaTransport, PeerID, PeerID) {
+        let client = P2pandaTransport::builder_from_seed(viewer().master_keypair().to_seed())
+            .alpns(vec![projection_alpn()])
+            .bind()
+            .await
+            .expect("bind projection client");
+        let server = P2pandaTransport::builder_from_seed(owner().master_keypair().to_seed())
+            .alpns(vec![projection_alpn()])
+            .bind()
+            .await
+            .expect("bind projection server");
+        let client_peer = client.local_peer_id();
+        let server_peer = server.local_peer_id();
+
+        let client_addr =
+            tokio::time::timeout(std::time::Duration::from_secs(10), client.endpoint_addr())
+                .await
+                .expect("client endpoint address timeout")
+                .expect("client endpoint address");
+        let server_addr =
+            tokio::time::timeout(std::time::Duration::from_secs(10), server.endpoint_addr())
+                .await
+                .expect("server endpoint address timeout")
+                .expect("server endpoint address");
+        client
+            .add_peer(server_addr)
+            .await
+            .expect("client registers server");
+        server
+            .add_peer(client_addr)
+            .await
+            .expect("server registers client");
+
+        (server, client, server_peer, client_peer)
+    }
+
+    /// The literal G5d receipt. The first carrier tests exercised the generic
+    /// accept path through `MemoryTransport`; this one proves the same path
+    /// against p2panda-net's authenticated Iroh connection and carries
+    /// application bytes only after admission.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn p2panda_admits_the_authenticated_viewer_before_application_bytes() {
+        const APPLICATION_BYTES: &[u8] = b"graphshell-session-open-may-start";
+
+        let viewer = viewer();
+        let subject = viewer.master_public_key().to_bytes();
+        let (server, client, server_peer, client_peer) = p2panda_pair().await;
+        let (server_finished_tx, server_finished_rx) = tokio::sync::oneshot::channel();
+        assert_eq!(
+            client_peer.to_bytes(),
+            subject,
+            "the carrier identity is the Personae subject that signs the hello"
+        );
+
+        let client_task = tokio::spawn(async move {
+            let alpn = projection_alpn();
+            let mut stream = tokio::time::timeout(
+                std::time::Duration::from_secs(10),
+                client.connect(server_peer, alpn.clone()),
+            )
+            .await
+            .expect("projection dial timeout")
+            .expect("projection dial");
+            let binding = initiator_binding(&alpn, client_peer);
+            let hello = open_session(
+                &viewer,
+                NETWORK,
+                profile_ref(),
+                TrafficClass::Interactive,
+                [5; 32],
+                &binding,
+                vec![grant(subject, CONNECT_ACTION)],
+            )
+            .expect("issue projection hello");
+            let reply = tokio::time::timeout(
+                std::time::Duration::from_secs(10),
+                initiate_session(&mut stream, &hello, &policy().limits.clamped()),
+            )
+            .await
+            .expect("projection handshake timeout")
+            .expect("projection handshake");
+            assert!(reply.is_accept(), "the initiator sees admission");
+
+            let mut application = vec![0; APPLICATION_BYTES.len()];
+            tokio::time::timeout(
+                std::time::Duration::from_secs(10),
+                stream.read_exact(&mut application),
+            )
+            .await
+            .expect("application read timeout")
+            .expect("application read");
+            let _ = server_finished_rx.await;
+            application
+        });
+
+        let mut session = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            accept_projection_session(&server, &policy(), &RevocationLedger::default(), NOW_MS, 0),
+        )
+        .await
+        .expect("projection accept timeout")
+        .expect("projection accept path")
+        .expect("projection session admitted");
+        assert_eq!(session.principal.subject, subject);
+        assert_eq!(session.facts.transport, CarrierKind::P2panda);
+        assert_eq!(
+            session.facts.authenticated_initiator,
+            Some(client_peer.to_bytes()),
+            "the admitted session retains the peer p2panda authenticated"
+        );
+        session
+            .stream
+            .write_all(APPLICATION_BYTES)
+            .await
+            .expect("application write");
+        session.stream.shutdown().await.expect("finish application");
+        let _ = server_finished_tx.send(());
+        let principal = session.principal;
+
+        let application = tokio::time::timeout(std::time::Duration::from_secs(10), client_task)
+            .await
+            .expect("projection client timeout")
+            .expect("projection client task");
+        assert_eq!(application, APPLICATION_BYTES);
+        assert_eq!(principal.action, connect_action());
+    }
+
+    /// The same real carrier must preserve the cross-service boundary. The
+    /// grant is valid and belongs to the authenticated peer, but Murm
+    /// authority cannot open Graphshell and not one projection byte follows
+    /// the denial.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn p2panda_murm_grant_is_refused_before_projection_bytes() {
+        let viewer = viewer();
+        let subject = viewer.master_public_key().to_bytes();
+        let (server, client, server_peer, client_peer) = p2panda_pair().await;
+
+        let client_task = tokio::spawn(async move {
+            let alpn = projection_alpn();
+            let mut stream = tokio::time::timeout(
+                std::time::Duration::from_secs(10),
+                client.connect(server_peer, alpn.clone()),
+            )
+            .await
+            .expect("projection dial timeout")
+            .expect("projection dial");
+            let binding = initiator_binding(&alpn, client_peer);
+            let hello = open_session(
+                &viewer,
+                NETWORK,
+                profile_ref(),
+                TrafficClass::Interactive,
+                [5; 32],
+                &binding,
+                vec![grant_for(
+                    subject,
+                    "mere.network",
+                    "/services/murm",
+                    CONNECT_ACTION,
+                )],
+            )
+            .expect("issue projection hello with foreign grant");
+            let reply = tokio::time::timeout(
+                std::time::Duration::from_secs(10),
+                initiate_session(&mut stream, &hello, &policy().limits.clamped()),
+            )
+            .await
+            .expect("projection refusal timeout")
+            .expect("projection refusal");
+            assert!(!reply.is_accept(), "the initiator sees refusal");
+
+            let mut application = Vec::new();
+            tokio::time::timeout(
+                std::time::Duration::from_secs(10),
+                stream.read_to_end(&mut application),
+            )
+            .await
+            .expect("refused stream close timeout")
+            .expect("read refused stream");
+            application
+        });
+
+        let refusal = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            accept_projection_session(&server, &policy(), &RevocationLedger::default(), NOW_MS, 0),
+        )
+        .await
+        .expect("projection accept timeout")
+        .expect("projection accept path")
+        .expect_err("Murm authority must not open Graphshell");
+        let application = tokio::time::timeout(std::time::Duration::from_secs(10), client_task)
+            .await
+            .expect("projection client timeout")
+            .expect("projection client task");
+        assert!(
+            application.is_empty(),
+            "a refusal exposes no application bytes"
+        );
+        assert_eq!(
+            refusal,
+            ProjectionRefusal::NotAdmitted(DenyReason::ActionNotCovered)
         );
     }
 }

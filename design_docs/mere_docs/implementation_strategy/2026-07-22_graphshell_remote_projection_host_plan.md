@@ -802,6 +802,15 @@ the low-power lane, landed the same week):
   is refused as `ActionNotServed`**, which is the hole above, proved rather
   than argued. The memory carrier authenticates its counterparty, so rule D6
   forces the fixture's claimed subject to *be* the peer the carrier proved.
+  The first cut proved the generic path through `MemoryTransport`, not the
+  plan's literal p2panda arm. The N2 follow-up runs the same listener over real
+  `P2pandaTransport`: an authenticated viewer reaches application bytes only
+  after admission, while a valid Murm grant for that peer is refused with
+  `ActionNotCovered` and exposes zero projection bytes. That refusal uncovered
+  and fixed a p2panda stream-lifetime race: graceful shutdown now retains the
+  last QUIC connection handle until the final frame is acknowledged. Current
+  receipts: graphshell 35; mere-transport 40 plus its session-policy
+  integration test.
   Open for whoever owns `network-policy`: either `ServiceRule` grows an action
   allow-list and `ActionNotOffered` gets its decision site, or the reason is
   documented as service-supplied. Not changed here; it is a serialized
