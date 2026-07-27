@@ -12,7 +12,7 @@ use personae::delegation::{
     DelegationCertificate, DelegationId, DelegationParent, SignedDelegationCertificate,
     SignedDelegationRevocation,
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::types::ChainFault;
 
@@ -35,9 +35,46 @@ pub struct TrustedRoot {
 /// and answers membership during chain validation. Revoking a parent
 /// cascades to every chain below it, because every chain that relies on the
 /// parent must present it and validation checks each presented certificate.
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RevocationLedger {
     revoked: BTreeMap<DelegationId, [u8; 32]>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct RevocationRecord {
+    certificate: DelegationId,
+    issuer: [u8; 32],
+}
+
+impl Serialize for RevocationLedger {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.revoked
+            .iter()
+            .map(|(certificate, issuer)| RevocationRecord {
+                certificate: *certificate,
+                issuer: *issuer,
+            })
+            .collect::<Vec<_>>()
+            .serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for RevocationLedger {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let records = Vec::<RevocationRecord>::deserialize(deserializer)?;
+        Ok(Self {
+            revoked: records
+                .into_iter()
+                .map(|record| (record.certificate, record.issuer))
+                .collect(),
+        })
+    }
 }
 
 impl RevocationLedger {

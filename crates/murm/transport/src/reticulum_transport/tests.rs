@@ -140,3 +140,99 @@ async fn bilateral_round_trip_over_tcp_loopback() {
 
     accept.await.expect("accept task");
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn bilateral_round_trip_over_attached_packet_interfaces() {
+    let alpn = Alpn::new("mere/cable/v1");
+
+    let server_kp = Ed25519Keypair::from_seed([3u8; 32]);
+    let client_kp = Ed25519Keypair::from_seed([4u8; 32]);
+    let server_peer = PeerID::from_public_key(server_kp.public_key());
+
+    let server = ReticulumTransport::builder(&server_kp)
+        .alpns(vec![alpn.clone()])
+        .announce_interval(Duration::from_secs(60))
+        .link_mtu(255)
+        .bind()
+        .await
+        .expect("bind server");
+
+    let client = ReticulumTransport::builder(&client_kp)
+        .alpns(vec![alpn.clone()])
+        .announce_interval(Duration::from_secs(60))
+        .connect_timeout(Duration::from_secs(10))
+        .link_mtu(255)
+        .bind()
+        .await
+        .expect("bind client");
+
+    let server_interface = server.attach_packet_interface();
+    let client_interface = client.attach_packet_interface();
+    let (mut server_outbound, server_sink) = server_interface.split();
+    let (mut client_outbound, client_sink) = client_interface.split();
+
+    // This is the same packet seam a Tulle radio driver owns. Keeping the
+    // bridge deterministic proves ReticulumTransport does not depend on TCP
+    // before a serial port and real RF enter the receipt.
+    let bridge = tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                packet = server_outbound.recv() => match packet {
+                    Some(packet) => assert!(
+                        client_sink.deliver(packet),
+                        "client endpoint closed while bridge was active"
+                    ),
+                    None => break,
+                },
+                packet = client_outbound.recv() => match packet {
+                    Some(packet) => assert!(
+                        server_sink.deliver(packet),
+                        "server endpoint closed while bridge was active"
+                    ),
+                    None => break,
+                },
+            }
+        }
+    });
+    server.announce_now();
+
+    let alpn_server = alpn.clone();
+    let accept = tokio::spawn(async move {
+        let accepted =
+            tokio::time::timeout(Duration::from_secs(15), server.accept(alpn_server.clone()))
+                .await
+                .expect("accept timed out")
+                .expect("accept failed");
+
+        assert_eq!(accepted.protocol, alpn_server);
+        assert_eq!(accepted.peer, None);
+        assert_eq!(accepted.ingress.transport, TransportKind::Reticulum);
+        assert!(accepted.ingress.interface.is_some());
+        assert!(accepted.ingress.link.is_some());
+
+        let mut stream = accepted.into_stream();
+        let mut buf = [0u8; 5];
+        stream.read_exact(&mut buf).await.expect("server read");
+        assert_eq!(&buf, b"hello");
+        stream.write_all(b"world").await.expect("server write");
+        stream.flush().await.expect("server flush");
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    });
+
+    let mut stream = client
+        .connect(server_peer, alpn)
+        .await
+        .expect("client connect");
+    stream.write_all(b"hello").await.expect("client write");
+    stream.flush().await.expect("client flush");
+
+    let mut reply = [0u8; 5];
+    tokio::time::timeout(Duration::from_secs(10), stream.read_exact(&mut reply))
+        .await
+        .expect("client read timed out")
+        .expect("client read");
+    assert_eq!(&reply, b"world");
+
+    accept.await.expect("accept task");
+    bridge.abort();
+}

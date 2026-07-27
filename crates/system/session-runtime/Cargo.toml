@@ -15,6 +15,7 @@ incipit.workspace = true
 kernel.workspace = true
 forme.workspace = true
 identity.workspace = true
+notochord.workspace = true
 blake3 = "1.5"
 p2panda-core = "0.7.0"
 chacha20poly1305 = "0.10"

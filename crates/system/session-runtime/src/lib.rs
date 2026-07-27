@@ -89,6 +89,8 @@ pub mod snapshot_merge;
 // short-term vs long-term (a tag/pin promotes), and compute which short-term nodes
 // an eviction policy would drop. Pure logic; the pane/settings wiring layers on top.
 pub mod memory_levels;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod notochord_policy_store;
 // Athanor's forgetting pass (Alembic slice D): propose which short-term cached
 // content to evict (pure, R0) and apply it by dropping content blobs (never graph
 // truth or engrams). The pass logic; the armillary actor that schedules it layers on top.
@@ -152,6 +154,10 @@ pub use manifest::{
     SessionPolicy, SessionPolicyOverride, WorkerKind,
 };
 pub use manifest_store::{LoadFailure, LoadReport, MANIFEST_FILE, ManifestStore, TRASH_DIR};
+#[cfg(not(target_arch = "wasm32"))]
+pub use notochord_policy_store::{
+    NOTOCHORD_POLICY_FILENAME, load_notochord_policy, notochord_policy_path, save_notochord_policy,
+};
 pub use persona_settings_store::{
     PERSONA_SETTINGS_DIR, PERSONA_UI_FILENAME, PersonaSettings, load_persona_settings,
     persona_settings_path, save_persona_settings,

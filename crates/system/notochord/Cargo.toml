@@ -1,5 +1,5 @@
 [package]
-name = "network-policy"
+name = "notochord"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
@@ -15,7 +15,7 @@ default = []
 tokio = ["dep:tokio"]
 
 [lib]
-name = "network_policy"
+name = "notochord"
 path = "src/lib.rs"
 
 [dependencies]

@@ -10,7 +10,7 @@
 
 use std::collections::BTreeMap;
 
-use network_policy::{
+use notochord::{
     CarrierKind, DenyReason, LocalNetworkPolicy, NetworkId, ProfileRef, ProofBinding,
     RequestedAction, RevocationLedger, ServiceAccess, ServiceRule, SessionDecision, SessionFacts,
     SessionHello, TrafficClass, TrustedRoot, accept_session, initiate_session,
@@ -189,7 +189,7 @@ async fn a_refused_session_never_reaches_the_application() {
 /// a refusal consumes the stream instead of returning one.
 #[tokio::test]
 async fn admit_session_yields_the_principal_or_consumes_the_stream() {
-    use network_policy::admit_session;
+    use notochord::admit_session;
 
     for (access, expect_admit) in [
         (ServiceAccess::MemberOnly, true),
@@ -200,6 +200,8 @@ async fn admit_session_yields_the_principal_or_consumes_the_stream() {
         let subject = member().master_public_key().to_bytes();
         let facts = SessionFacts::authenticated(PROTOCOL, CarrierKind::Memory, subject);
         let binding = ProofBinding::initiator(PROTOCOL, Some(subject), None);
+        let hello = hello(&binding, vec![grant_to(subject)]);
+        let expected_claims = hello.claims();
         let (mut client, server) = tokio::io::duplex(4096);
 
         let server_policy = policy.clone();
@@ -210,13 +212,9 @@ async fn admit_session_yields_the_principal_or_consumes_the_stream() {
                 .expect("responder handshake")
         });
 
-        let reply = initiate_session(
-            &mut client,
-            &hello(&binding, vec![grant_to(subject)]),
-            &policy.limits,
-        )
-        .await
-        .expect("initiator handshake");
+        let reply = initiate_session(&mut client, &hello, &policy.limits)
+            .await
+            .expect("initiator handshake");
         let outcome = responder.await.expect("responder task");
 
         assert_eq!(reply.is_accept(), expect_admit, "both ends agree");
@@ -227,6 +225,10 @@ async fn admit_session_yields_the_principal_or_consumes_the_stream() {
                 assert_eq!(
                     session.facts, facts,
                     "the carrier's facts travel with the admitted session"
+                );
+                assert_eq!(
+                    session.claims, expected_claims,
+                    "the verified claims travel with the admitted session for later revocation checks"
                 );
                 assert_eq!(session.principal.action.path, MURM);
             }

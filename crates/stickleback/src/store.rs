@@ -32,6 +32,7 @@
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 use muniment::{Backend, StoreError, WriteOp};
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
@@ -40,6 +41,7 @@ use p2panda_store::logs::LogStore;
 use p2panda_store::operations::OperationStore;
 use p2panda_store::topics::TopicStore;
 use proofs::{BlobRef, DigestAlg};
+use tokio::sync::Mutex;
 
 /// Result of one domain-driven content collection pass.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -73,6 +75,10 @@ struct PlannedOperation<E> {
 /// (over a `Clone` backend), so a handle can be handed to `LogSync`.
 pub struct MunimentStore<B, E> {
     backend: B,
+    /// Process-local serialization for one author/log frontier. Clones share
+    /// this table, which covers LogSync drains and domain authoring handles
+    /// built from the same store.
+    ingress: Arc<Mutex<BTreeMap<String, Arc<Mutex<()>>>>>,
     // `fn() -> E` marks the extension type without owning it, keeping the handle
     // `Send`/`Sync` and covariant regardless of `E`.
     _ext: PhantomData<fn() -> E>,
@@ -82,6 +88,7 @@ impl<B: Clone, E> Clone for MunimentStore<B, E> {
     fn clone(&self) -> Self {
         Self {
             backend: self.backend.clone(),
+            ingress: Arc::clone(&self.ingress),
             _ext: PhantomData,
         }
     }
@@ -92,6 +99,7 @@ impl<B, E> MunimentStore<B, E> {
     pub fn new(backend: B) -> Self {
         Self {
             backend,
+            ingress: Arc::new(Mutex::new(BTreeMap::new())),
             _ext: PhantomData,
         }
     }
@@ -99,6 +107,18 @@ impl<B, E> MunimentStore<B, E> {
     /// The backend this store reads and writes through.
     pub fn backend(&self) -> &B {
         &self.backend
+    }
+
+    pub(crate) async fn ingress_lock<L: LogId>(
+        &self,
+        author: &VerifyingKey,
+        log_id: &L,
+    ) -> Result<Arc<Mutex<()>>, StoreError> {
+        let key = format!("{}/{}", author.to_hex(), log_seg(log_id)?);
+        let mut locks = self.ingress.lock().await;
+        Ok(Arc::clone(
+            locks.entry(key).or_insert_with(|| Arc::new(Mutex::new(()))),
+        ))
     }
 }
 

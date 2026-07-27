@@ -10,8 +10,9 @@ use p2panda_store::logs::LogStore;
 use p2panda_store::topics::TopicStore;
 use serde::{Deserialize, Serialize};
 use stickleback::{
-    Admission, JoinError, JoinedSpace, MunimentStore, OperationPolicy, OperationProcessor,
-    ProcessError, Reject, StoreTarget,
+    Admission, CausalEntry, CausalError, CausalLimits, JoinError, JoinedSpace, MunimentStore,
+    OperationPolicy, OperationProcessor, PendingCausalOperation, ProcessError, Reject, StoreTarget,
+    author_head, causal_projection, observed_frontier, validate_causal_metadata,
 };
 use zeroize::{Zeroize, Zeroizing};
 
@@ -19,11 +20,18 @@ use crate::{KnotVault, VaultDocument};
 
 const LOG_ID: u64 = 0;
 const SYNC_AAD: &[u8] = b"mere.knot.sync-operation.v1";
+const KNOT_CAUSAL_LIMITS: CausalLimits = CausalLimits {
+    max_parents: 64,
+    max_payload_bytes: 16 * 1024 * 1024,
+};
 
 /// Signed addressing extension for one Knot vault space.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KnotSyncExt {
     pub space_id: [u8; 32],
+    /// Exact per-author frontier observed before this event was authored.
+    #[serde(default)]
+    pub parents: Vec<[u8; 32]>,
 }
 
 /// Plaintext event sealed inside the p2panda operation body.
@@ -40,8 +48,12 @@ pub enum KnotSyncError {
     Store(#[from] StoreError),
     #[error(transparent)]
     Process(#[from] ProcessError),
+    #[error(transparent)]
+    Causal(#[from] CausalError),
     #[error("sync payload: {0}")]
     Payload(String),
+    #[error("Knot sync has no durable projection checkpoint")]
+    MissingCheckpoint,
     #[error("document {0} has operations from more than one writer")]
     ConcurrentWriter(String),
 }
@@ -77,11 +89,73 @@ impl OperationPolicy<KnotSyncExt> for KnotSyncPolicy {
                 "Knot sync operations require a sealed body",
             ));
         }
+        validate_causal_metadata(
+            operation,
+            &operation.header.extensions.parents,
+            KNOT_CAUSAL_LIMITS,
+        )
+        .map_err(|error| Reject::new("invalid-knot-causality", error.to_string()))?;
         Ok(Admission::keep(StoreTarget::new(
             Topic::from(self.space_id),
             LOG_ID,
         )))
     }
+}
+
+/// One writer's current contribution to a conflicted document id.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct KnotDocumentVersion {
+    pub writer: [u8; 32],
+    pub operation: [u8; 32],
+    /// `None` is that writer's current deletion.
+    pub document: Option<VaultDocument>,
+}
+
+/// A document id touched by more than one writer.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct KnotDocumentConflict {
+    pub id: String,
+    pub versions: Vec<KnotDocumentVersion>,
+}
+
+/// Knot's current causally closed document view.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct KnotDocumentProjection {
+    pub documents: Vec<VaultDocument>,
+    pub conflicts: Vec<KnotDocumentConflict>,
+    pub pending: Vec<PendingCausalOperation>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KnotAuthorHead {
+    pub author: [u8; 32],
+    pub log_id: u64,
+    pub seq_num: u32,
+    pub operation: [u8; 32],
+}
+
+/// Durable projection boundary required before domain-authorized pruning.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KnotProjectionCheckpoint {
+    pub version: u16,
+    pub space_id: [u8; 32],
+    pub heads: Vec<KnotAuthorHead>,
+    pub document_digests: Vec<(String, [u8; 32])>,
+    pub conflict_ids: Vec<String>,
+    pub pending: Vec<([u8; 32], Vec<[u8; 32]>)>,
+}
+
+/// Exact retained tail after a durable checkpoint.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KnotTailReceipt {
+    pub checkpoint: [u8; 32],
+    pub operations: Vec<[u8; 32]>,
+}
+
+#[derive(Clone)]
+struct StoredKnotOperation {
+    operation: Operation<KnotSyncExt>,
+    log_id: u64,
 }
 
 /// Replicated encrypted event store for one personal Knot vault.
@@ -138,14 +212,10 @@ where
     ) -> Result<Operation<KnotSyncExt>, KnotSyncError> {
         let signing_key = SigningKey::from_bytes(&signing_seed);
         let author = signing_key.verifying_key();
-        let previous = self.store.get_latest_entry(&author, &LOG_ID).await?;
-        let (seq_num, backlink) = match previous {
-            Some(operation) => (
-                operation.header.seq_num + 1,
-                Some(*operation.hash.as_bytes()),
-            ),
-            None => (0, None),
-        };
+        let records = self.load_operations().await?;
+        let entries = causal_entries(&records);
+        let parents = observed_frontier(&entries)?;
+        let (seq_num, backlink) = author_head(&entries, *author.as_bytes(), &LOG_ID)?;
         let plaintext = Zeroizing::new(
             serde_json::to_vec(event).map_err(|error| KnotSyncError::Payload(error.to_string()))?,
         );
@@ -164,6 +234,7 @@ where
             backlink: backlink.map(Hash::from),
             extensions: KnotSyncExt {
                 space_id: self.policy.space_id,
+                parents,
             },
         };
         header.sign(&signing_key);
@@ -182,18 +253,15 @@ where
         Ok(processor.process(operation).await?.inserted())
     }
 
-    /// Fold the sealed logs into documents. A second writer for one id is a
-    /// hard boundary until Knot has a convergence rule.
-    pub async fn documents(&self, vault: &KnotVault) -> Result<Vec<VaultDocument>, KnotSyncError> {
+    async fn load_operations(&self) -> Result<Vec<StoredKnotOperation>, KnotSyncError> {
         let logs: BTreeMap<VerifyingKey, Vec<u64>> = self
             .store
             .resolve(&Topic::from(self.policy.space_id))
             .await?;
-        let mut owners = BTreeMap::<String, [u8; 32]>::new();
-        let mut documents = BTreeMap::<String, VaultDocument>::new();
-
-        for (author, log_ids) in logs {
-            let author_bytes = *author.as_bytes();
+        let mut records = Vec::new();
+        for (author, mut log_ids) in logs {
+            log_ids.sort_unstable();
+            log_ids.dedup();
             for log_id in log_ids {
                 let Some(entries) = self
                     .store
@@ -203,30 +271,193 @@ where
                     continue;
                 };
                 for (operation, _) in entries {
-                    let event = decode_event(vault, &operation)?;
-                    let id = match &event {
-                        KnotSyncEvent::Put(document) => &document.id,
-                        KnotSyncEvent::Delete { id } => id,
-                    };
-                    if let Some(owner) = owners.get(id) {
-                        if owner != &author_bytes {
-                            return Err(KnotSyncError::ConcurrentWriter(id.clone()));
-                        }
-                    } else {
-                        owners.insert(id.clone(), author_bytes);
-                    }
-                    match event {
-                        KnotSyncEvent::Put(document) => {
-                            documents.insert(document.id.clone(), document);
-                        }
-                        KnotSyncEvent::Delete { id } => {
-                            documents.remove(&id);
-                        }
-                    }
+                    records.push(StoredKnotOperation { operation, log_id });
                 }
             }
         }
-        Ok(documents.into_values().collect())
+        Ok(records)
+    }
+
+    /// Fold the causally closed subset into documents while preserving
+    /// document conflicts and missing-history diagnostics.
+    pub async fn projection(
+        &self,
+        vault: &KnotVault,
+    ) -> Result<KnotDocumentProjection, KnotSyncError> {
+        let records = self.load_operations().await?;
+        let projection = causal_projection(&causal_entries(&records))?;
+        let mut current = BTreeMap::<String, BTreeMap<[u8; 32], KnotDocumentVersion>>::new();
+
+        for index in projection.order {
+            let operation = &records[index].operation;
+            let writer = *operation.header.verifying_key.as_bytes();
+            let operation_id = *operation.hash.as_bytes();
+            let event = decode_event(vault, operation)?;
+            let (id, document) = match event {
+                KnotSyncEvent::Put(document) => (document.id.clone(), Some(document)),
+                KnotSyncEvent::Delete { id } => (id, None),
+            };
+            current.entry(id).or_default().insert(
+                writer,
+                KnotDocumentVersion {
+                    writer,
+                    operation: operation_id,
+                    document,
+                },
+            );
+        }
+
+        let mut documents = Vec::new();
+        let mut conflicts = Vec::new();
+        for (id, versions) in current {
+            if versions.len() == 1 {
+                if let Some(document) = versions
+                    .into_values()
+                    .next()
+                    .and_then(|version| version.document)
+                {
+                    documents.push(document);
+                }
+            } else {
+                conflicts.push(KnotDocumentConflict {
+                    id,
+                    versions: versions.into_values().collect(),
+                });
+            }
+        }
+        Ok(KnotDocumentProjection {
+            documents,
+            conflicts,
+            pending: projection.pending,
+        })
+    }
+
+    /// Compatibility view for existing callers. New consumers should use
+    /// [`Self::projection`] so unrelated documents remain available beside an
+    /// explicit conflict.
+    pub async fn documents(&self, vault: &KnotVault) -> Result<Vec<VaultDocument>, KnotSyncError> {
+        let projection = self.projection(vault).await?;
+        if let Some(conflict) = projection.conflicts.first() {
+            return Err(KnotSyncError::ConcurrentWriter(conflict.id.clone()));
+        }
+        Ok(projection.documents)
+    }
+
+    /// Persist the current projection frontier. This is a prerequisite receipt,
+    /// not permission to prune.
+    pub async fn save_checkpoint(
+        &self,
+        vault: &KnotVault,
+    ) -> Result<KnotProjectionCheckpoint, KnotSyncError> {
+        let projection = self.projection(vault).await?;
+        let records = self.load_operations().await?;
+        let mut heads = BTreeMap::<([u8; 32], u64), KnotAuthorHead>::new();
+        for record in records {
+            let operation = &record.operation;
+            let key = (*operation.header.verifying_key.as_bytes(), record.log_id);
+            let candidate = KnotAuthorHead {
+                author: key.0,
+                log_id: key.1,
+                seq_num: operation.header.seq_num,
+                operation: *operation.hash.as_bytes(),
+            };
+            if heads
+                .get(&key)
+                .is_none_or(|current| candidate.seq_num > current.seq_num)
+            {
+                heads.insert(key, candidate);
+            }
+        }
+        let mut document_digests = Vec::new();
+        for document in &projection.documents {
+            let bytes = serde_json::to_vec(document)
+                .map_err(|error| KnotSyncError::Payload(error.to_string()))?;
+            document_digests.push((document.id.clone(), *blake3::hash(&bytes).as_bytes()));
+        }
+        let checkpoint = KnotProjectionCheckpoint {
+            version: 1,
+            space_id: self.policy.space_id,
+            heads: heads.into_values().collect(),
+            document_digests,
+            conflict_ids: projection
+                .conflicts
+                .into_iter()
+                .map(|conflict| conflict.id)
+                .collect(),
+            pending: projection
+                .pending
+                .into_iter()
+                .map(|pending| (pending.operation, pending.missing))
+                .collect(),
+        };
+        let bytes = serde_json::to_vec(&checkpoint)
+            .map_err(|error| KnotSyncError::Payload(error.to_string()))?;
+        self.store
+            .backend()
+            .put(&checkpoint_key(self.policy.space_id), &bytes)
+            .await?;
+        Ok(checkpoint)
+    }
+
+    pub async fn load_checkpoint(
+        &self,
+    ) -> Result<Option<KnotProjectionCheckpoint>, KnotSyncError> {
+        let Some(bytes) = self
+            .store
+            .backend()
+            .get(&checkpoint_key(self.policy.space_id))
+            .await?
+        else {
+            return Ok(None);
+        };
+        let checkpoint: KnotProjectionCheckpoint = serde_json::from_slice(&bytes)
+            .map_err(|error| KnotSyncError::Payload(error.to_string()))?;
+        if checkpoint.version != 1 || checkpoint.space_id != self.policy.space_id {
+            return Err(KnotSyncError::Payload(
+                "checkpoint version or space does not match this store".into(),
+            ));
+        }
+        Ok(Some(checkpoint))
+    }
+
+    /// Name the exact operations newer than the last durable checkpoint.
+    pub async fn tail_receipt(&self) -> Result<KnotTailReceipt, KnotSyncError> {
+        let checkpoint = self
+            .load_checkpoint()
+            .await?
+            .ok_or(KnotSyncError::MissingCheckpoint)?;
+        let bytes = serde_json::to_vec(&checkpoint)
+            .map_err(|error| KnotSyncError::Payload(error.to_string()))?;
+        let checkpoint_id = *blake3::hash(&bytes).as_bytes();
+        let heads: BTreeMap<_, _> = checkpoint
+            .heads
+            .iter()
+            .map(|head| ((head.author, head.log_id), head.seq_num))
+            .collect();
+        let mut tail = Vec::new();
+        for record in self.load_operations().await? {
+            let operation = &record.operation;
+            let key = (*operation.header.verifying_key.as_bytes(), record.log_id);
+            if heads
+                .get(&key)
+                .is_none_or(|seq_num| operation.header.seq_num > *seq_num)
+            {
+                tail.push((
+                    key.0,
+                    key.1,
+                    operation.header.seq_num,
+                    *operation.hash.as_bytes(),
+                ));
+            }
+        }
+        tail.sort();
+        Ok(KnotTailReceipt {
+            checkpoint: checkpoint_id,
+            operations: tail
+                .into_iter()
+                .map(|(_, _, _, operation)| operation)
+                .collect(),
+        })
     }
 
     pub fn sync_store(&self) -> MunimentStore<B, KnotSyncExt> {
@@ -257,6 +488,24 @@ where
         )
         .await
     }
+}
+
+fn causal_entries(records: &[StoredKnotOperation]) -> Vec<CausalEntry<u64>> {
+    records
+        .iter()
+        .map(|record| {
+            CausalEntry::from_operation(
+                &record.operation,
+                record.log_id,
+                record.operation.header.extensions.parents.clone(),
+            )
+        })
+        .collect()
+}
+
+fn checkpoint_key(space_id: [u8; 32]) -> String {
+    let hex: String = space_id.iter().map(|byte| format!("{byte:02x}")).collect();
+    format!("knot-sync/checkpoint/{hex}")
 }
 
 fn operation_aad(space_id: [u8; 32], author: &[u8; 32], seq_num: u32) -> Vec<u8> {
@@ -386,10 +635,142 @@ mod tests {
             )
             .await
             .unwrap();
+        store
+            .author(
+                alice.master_keypair().to_seed(),
+                &vault,
+                &KnotSyncEvent::Put(doc("solo", "still visible")),
+            )
+            .await
+            .unwrap();
+        let projection = store.projection(&vault).await.unwrap();
+        assert_eq!(projection.documents, vec![doc("solo", "still visible")]);
+        assert_eq!(projection.conflicts.len(), 1);
+        assert_eq!(projection.conflicts[0].id, "shared");
+        assert_eq!(projection.conflicts[0].versions.len(), 2);
+        assert!(projection.pending.is_empty());
         assert!(matches!(
             store.documents(&vault).await,
             Err(KnotSyncError::ConcurrentWriter(id)) if id == "shared"
         ));
+    }
+
+    #[tokio::test]
+    async fn missing_history_blocks_only_its_document_branch() {
+        let roots = tempdir().unwrap();
+        let alice = InMemoryProvider::from_seed([0x83; 32]);
+        let bob = InMemoryProvider::from_seed([0x84; 32]);
+        let carol = InMemoryProvider::from_seed([0x85; 32]);
+        let writers = [
+            alice.master_public_key().to_bytes(),
+            bob.master_public_key().to_bytes(),
+            carol.master_public_key().to_bytes(),
+        ];
+        let vault = KnotVault::open(roots.path(), VAULT_KEY).unwrap();
+        let parent_store = KnotSyncStore::in_memory(SPACE, writers);
+        let child_store = KnotSyncStore::in_memory(SPACE, writers);
+        let unrelated_store = KnotSyncStore::in_memory(SPACE, writers);
+        let receiver = KnotSyncStore::in_memory(SPACE, writers);
+
+        let parent = parent_store
+            .author(
+                alice.master_keypair().to_seed(),
+                &vault,
+                &KnotSyncEvent::Put(doc("shared", "parent")),
+            )
+            .await
+            .unwrap();
+        child_store.accept(&parent).await.unwrap();
+        let child = child_store
+            .author(
+                bob.master_keypair().to_seed(),
+                &vault,
+                &KnotSyncEvent::Put(doc("shared", "child")),
+            )
+            .await
+            .unwrap();
+        let unrelated = unrelated_store
+            .author(
+                carol.master_keypair().to_seed(),
+                &vault,
+                &KnotSyncEvent::Put(doc("solo", "visible")),
+            )
+            .await
+            .unwrap();
+
+        receiver.accept(&child).await.unwrap();
+        receiver.accept(&unrelated).await.unwrap();
+        let partial = receiver.projection(&vault).await.unwrap();
+        assert_eq!(partial.documents, vec![doc("solo", "visible")]);
+        assert_eq!(partial.pending.len(), 1);
+        assert_eq!(partial.pending[0].operation, *child.hash.as_bytes());
+        assert_eq!(partial.pending[0].missing, vec![*parent.hash.as_bytes()]);
+
+        receiver.accept(&parent).await.unwrap();
+        let complete = receiver.projection(&vault).await.unwrap();
+        assert!(complete.pending.is_empty());
+        assert_eq!(complete.conflicts.len(), 1);
+        assert_eq!(complete.conflicts[0].id, "shared");
+        assert_eq!(complete.documents, vec![doc("solo", "visible")]);
+    }
+
+    #[tokio::test]
+    async fn redb_reopen_restores_author_head_and_observed_frontier() {
+        let roots = tempdir().unwrap();
+        let database = roots.path().join("knot-sync.redb");
+        let vault = KnotVault::open(roots.path().join("vault"), VAULT_KEY).unwrap();
+        let alice = InMemoryProvider::from_seed([0x83; 32]);
+        let writer = alice.master_public_key().to_bytes();
+        let seed = alice.master_keypair().to_seed();
+
+        let second = {
+            let store = KnotSyncFileStore::open(&database, SPACE, [writer]).unwrap();
+            store
+                .author(seed, &vault, &KnotSyncEvent::Put(doc("one", "first")))
+                .await
+                .unwrap();
+            let second = store
+                .author(seed, &vault, &KnotSyncEvent::Put(doc("two", "second")))
+                .await
+                .unwrap();
+            let checkpoint = store.save_checkpoint(&vault).await.unwrap();
+            assert_eq!(checkpoint.heads.len(), 1);
+            assert_eq!(checkpoint.heads[0].operation, *second.hash.as_bytes());
+            second
+        };
+
+        let reopened = KnotSyncFileStore::open(&database, SPACE, [writer]).unwrap();
+        assert_eq!(
+            reopened
+                .load_checkpoint()
+                .await
+                .unwrap()
+                .unwrap()
+                .heads[0]
+                .operation,
+            *second.hash.as_bytes()
+        );
+        let third = reopened
+            .author(seed, &vault, &KnotSyncEvent::Put(doc("three", "third")))
+            .await
+            .unwrap();
+        assert_eq!(third.header.seq_num, second.header.seq_num + 1);
+        assert_eq!(
+            third.header.backlink.as_ref().map(|hash| *hash.as_bytes()),
+            Some(*second.hash.as_bytes())
+        );
+        assert_eq!(
+            third.header.extensions.parents,
+            vec![*second.hash.as_bytes()]
+        );
+        assert_eq!(
+            reopened.tail_receipt().await.unwrap().operations,
+            vec![*third.hash.as_bytes()]
+        );
+        assert_eq!(
+            reopened.projection(&vault).await.unwrap().documents.len(),
+            3
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

@@ -6,9 +6,9 @@
 //!
 //! - the carrier facts come from [`transport::AcceptedSession::into_session`],
 //!   the one audited adapter (N1), so this port never hand-builds a
-//!   [`SessionFacts`](network_policy::SessionFacts);
+//!   [`SessionFacts`](notochord::SessionFacts);
 //! - the framing and the admitted conclusion come from
-//!   [`network_policy::admit_session`], so a refusal is finished rather than
+//!   [`notochord::admit_session`], so a refusal is finished rather than
 //!   flushed and a refused stream cannot reach an application;
 //! - the delegation grammar stays in Personae, and the owner's rules stay in
 //!   the policy the host supplies.
@@ -42,7 +42,7 @@
 //! the Notochord plan sets out: services authorize operations after admission
 //! under their own action vocabulary.
 
-use network_policy::{
+use notochord::{
     AdmittedSession, DenyReason, IoHandshakeError, LocalNetworkPolicy, NetworkId, ProfileRef,
     RevocationLedger, ServiceAccess, ServiceRule, TrustedRoot, admit_session,
 };
@@ -159,11 +159,11 @@ pub async fn accept_projection_session<T: Transport>(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::OnceLock;
+
     use super::*;
     use crate::admission::{CONNECT_ACTION, GRAPHSHELL_DOMAIN, connect_action, open_session};
-    use network_policy::{
-        CarrierKind, RequestedAction, SessionHello, TrafficClass, initiate_session,
-    };
+    use notochord::{CarrierKind, RequestedAction, SessionHello, TrafficClass, initiate_session};
     use personae::IdentityProvider;
     use personae::InMemoryProvider;
     use personae::delegation::{
@@ -176,6 +176,11 @@ mod tests {
     const NETWORK: NetworkId = NetworkId([3; 32]);
     const ROOT_AUTHORITY: [u8; 32] = [7; 32];
     const NOW_MS: u64 = 50;
+
+    fn p2panda_receipt_lock() -> &'static tokio::sync::Mutex<()> {
+        static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
+    }
 
     fn owner() -> InMemoryProvider {
         InMemoryProvider::from_seed([1; 32])
@@ -379,6 +384,7 @@ mod tests {
     /// application bytes only after admission.
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn p2panda_admits_the_authenticated_viewer_before_application_bytes() {
+        let _receipt_guard = p2panda_receipt_lock().lock().await;
         const APPLICATION_BYTES: &[u8] = b"graphshell-session-open-may-start";
 
         let viewer = viewer();
@@ -447,6 +453,12 @@ mod tests {
             Some(client_peer.to_bytes()),
             "the admitted session retains the peer p2panda authenticated"
         );
+        let retained = crate::lifecycle::SessionAuthority::retain_admitted(&session);
+        assert_eq!(
+            retained.deadline_ms(),
+            Some(100),
+            "the carrier also retains the verified chain needed for later revocation checks"
+        );
         session
             .stream
             .write_all(APPLICATION_BYTES)
@@ -470,6 +482,7 @@ mod tests {
     /// the denial.
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn p2panda_murm_grant_is_refused_before_projection_bytes() {
+        let _receipt_guard = p2panda_receipt_lock().lock().await;
         let viewer = viewer();
         let subject = viewer.master_public_key().to_bytes();
         let (server, client, server_peer, client_peer) = p2panda_pair().await;

@@ -13,8 +13,10 @@
 #![doc(html_root_url = "https://docs.rs/stickleback/0.1.0")]
 
 mod authority;
+mod causal;
 pub mod drop;
 mod drop_io;
+mod group_crypto;
 mod joined_space;
 mod processor;
 #[cfg(test)]
@@ -24,6 +26,10 @@ mod store;
 mod synced_space;
 
 pub use authority::CheckpointAuthority;
+pub use causal::{
+    CausalEntry, CausalError, CausalLimits, CausalProjection, PendingCausalOperation, author_head,
+    causal_projection, happens_before, observed_frontier, validate_causal_metadata,
+};
 pub use drop::{
     DropId, DropLimits, DropManifest, DropProtector, DropReadReport, DropRecord, DropWriteReceipt,
     EvidenceKind, ManifestEntry, NativeDropError, read_plain_drop, read_protected_drop,
@@ -38,6 +44,9 @@ pub use drop_io::{
     import_plain_drop_file, import_protected_drop, import_protected_drop_file, list_staged_drops,
     local_drop_receipt, operation_record, peer_drop_receipt, resume_staged_drop,
     store_peer_drop_receipt,
+};
+pub use group_crypto::{
+    DataKeyring, GroupCiphertext, GroupCryptoError, GroupEncryptionMode, GroupEncryptionProfile,
 };
 pub use joined_space::{JoinError, JoinedSpace};
 pub use processor::{

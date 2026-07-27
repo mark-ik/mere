@@ -23,7 +23,7 @@
 
 use std::sync::Arc;
 
-use network_policy::{
+use notochord::{
     AdmittedPrincipal, DenyReason, LocalNetworkPolicy, ProofBinding, RevocationLedger,
     SessionFacts, SessionHello, admit_session, initiate_session,
 };
@@ -191,8 +191,8 @@ where
         .await
         .map_err(|e| MurmError::Backend(e.to_string()))?;
     match reply {
-        network_policy::SessionReply::Reject { reason } => return Ok(Err(reason)),
-        network_policy::SessionReply::Accept { .. } => {}
+        notochord::SessionReply::Reject { reason } => return Ok(Err(reason)),
+        notochord::SessionReply::Accept { .. } => {}
     }
     for post in posts {
         write_frame(&mut stream, &encode_post(post)).await?;

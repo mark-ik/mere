@@ -336,6 +336,14 @@ pub struct AdmittedSession<S> {
     pub stream: S,
     /// Who was admitted, and under what.
     pub principal: AdmittedPrincipal,
+    /// The verified claims from which [`principal`](Self::principal) was
+    /// concluded.
+    ///
+    /// Retained so a long-lived service can re-check the delegation chain
+    /// against a newer revocation ledger. These remain local, verified
+    /// session state; [`AdmittedSession`] itself is deliberately not
+    /// serializable.
+    pub claims: SessionClaims,
     /// What the carrier observed. Retained so a service can apply its own
     /// rules to the bearer without re-deriving them.
     pub facts: SessionFacts,

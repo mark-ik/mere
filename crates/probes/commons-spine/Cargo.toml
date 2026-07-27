@@ -18,15 +18,18 @@ publish = false
 chartulary = { path = "../../eidetic/chartulary" }
 codicil = { path = "../../eidetic/codicil" }
 muniment = { path = "../../eidetic/muniment", features = ["redb"] }
+personae = { path = "../../persona/personae" }
+servitor = { path = "../../servitor" }
 stickleback = { path = "../../stickleback" }
 p2panda-core = "0.7.0"
+p2panda-encryption = { version = "0.7.0", features = ["data_scheme", "message_scheme"] }
 p2panda-store = { version = "0.7.0", default-features = false }
 serde = { version = "1", features = ["derive"] }
 thiserror = "1"
 
 [dev-dependencies]
-identity = { package = "personae", path = "../../persona/personae" }
-transport = { package = "mere-transport", path = "../../murm/transport" }
+murm = { path = "../../murm/murm" }
+transport = { package = "mere-transport", path = "../../murm/transport", features = ["reticulum"] }
 p2panda-net = "0.7.0"
 proptest = "1"
 tempfile = "3"

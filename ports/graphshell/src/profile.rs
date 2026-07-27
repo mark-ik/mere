@@ -61,11 +61,28 @@ pub struct GraphshellIdentity {
 }
 
 impl GraphshellIdentity {
-    /// Load `profile` from the vault at `vault_dir`.
+    /// Load `profile` from the vault at `vault_dir`, unlocking from the
+    /// environment.
     ///
     /// Errors rather than inventing an identity; see the module note.
     pub fn load(vault_dir: &Path, profile: &ProfileId) -> Result<Self, IdentityError> {
-        let opened = bootstrap::open_storage(vault_dir, Unlock::from_env())?;
+        Self::load_with(vault_dir, profile, Unlock::from_env())
+    }
+
+    /// Load `profile`, naming the unlock rather than reading it from the
+    /// environment.
+    ///
+    /// Exists because [`Unlock::AutoOs`] is only implemented on Windows:
+    /// `personae`'s auto-unlock root is `None` on every other platform, so a
+    /// caller that wants a vault it can actually open elsewhere has to say
+    /// which unlock it means. Tests use it to prove the attestation on any
+    /// platform instead of skipping where the OS ladder is absent.
+    pub fn load_with(
+        vault_dir: &Path,
+        profile: &ProfileId,
+        unlock: Unlock,
+    ) -> Result<Self, IdentityError> {
+        let opened = bootstrap::open_storage(vault_dir, unlock)?;
         let (loaded, created) = bootstrap::load_or_create_profile(&*opened.storage, profile)?;
         if created {
             // Worth saying out loud: a peer that pinned a previous key will
@@ -190,19 +207,21 @@ mod tests {
     #[test]
     fn a_session_key_is_derived_stably_and_its_proof_verifies() {
         let dir = scratch("attest");
-        let loaded = GraphshellIdentity::load(&dir, &ProfileId("test".into()));
-        // Where a sealed backend exists (DPAPI on Windows), this test must
-        // actually run: a silent skip would let "the proof verifies" be
-        // reported with no evidence behind it.
-        #[cfg(windows)]
-        let identity = loaded.expect("the Windows vault opens, so this proves the attestation");
-        #[cfg(not(windows))]
-        let Ok(identity) = loaded else {
-            // No sealed backend and no passphrase: the fail-closed path, which
-            // has its own test below.
-            eprintln!("skipped: no sealed vault backend on this platform");
-            return;
-        };
+        // Named unlock, not the environment's. This test used to take the OS
+        // ladder and skip when it was absent, which meant that on macOS and
+        // Linux it printed "skipped" and still reported **pass** — "the proof
+        // verifies" with no evidence behind it, which is the exact failure the
+        // Windows branch was hardened against. `Unlock::AutoOs` is Windows-only
+        // (personae's auto-unlock root is `None` everywhere else), so the fix
+        // is not to demand a sealed backend that does not exist on the
+        // platform; it is to use the portable vault, which every platform has,
+        // and assert unconditionally.
+        let identity = GraphshellIdentity::load_with(
+            &dir,
+            &ProfileId("test".into()),
+            Unlock::Passphrase(b"graphshell-test-passphrase".to_vec().into()),
+        )
+        .expect("the portable vault opens on every platform, so this proves the attestation");
 
         let first = identity.session_key("s1").unwrap();
         let again = identity.session_key("s1").unwrap();

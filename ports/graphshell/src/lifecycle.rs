@@ -9,7 +9,7 @@
 //! proved.
 //!
 //! The dependency wall holds: `graphshell-client` and `graphshell-protocol`
-//! still declare no Personae and no `network-policy`. The authority lives
+//! still declare no Personae and no `notochord`. The authority lives
 //! here, in the application, and reaches the client only through the mutators
 //! the client already exposed.
 //!
@@ -25,17 +25,17 @@
 //! ## Why the chain is retained
 //!
 //! [`AdmittedPrincipal`] is deliberately a conclusion and carries no claims,
-//! so it cannot answer "is this still true?" later. A session that wants to
-//! notice expiry or revocation must keep the chain it was admitted on, which
-//! is what [`SessionAuthority::retain`] is for. See the note on the carrier
-//! seam at [`SessionAuthority::retain`].
+//! so it cannot answer "is this still true?" later. [`AdmittedSession`]
+//! retains the verified claims beside that conclusion, letting
+//! [`SessionAuthority::retain_admitted`] preserve the chain for expiry and
+//! revocation checks without decoding application bytes a second time.
 
 use graphshell_client::ClientState;
 use graphshell_protocol::{
     CachePolicy, IntentInvocation, IntentResult, ProjectionSession, Revision, SceneEpoch,
     SessionStatus,
 };
-use network_policy::{AdmittedPrincipal, RevocationLedger};
+use notochord::{AdmittedPrincipal, AdmittedSession, RevocationLedger};
 use personae::delegation::SignedDelegationCertificate;
 
 use crate::admission::{CONNECT_ACTION, PROJECTION_SERVICE};
@@ -103,16 +103,23 @@ pub struct SessionAuthority {
 }
 
 impl SessionAuthority {
+    /// Retain the authority carried by an admitted service session.
+    ///
+    /// This is the carrier path. The delegation chain comes from the verified
+    /// claims retained by `notochord::admit_session`, so a long-lived
+    /// session can notice a revocation after admission.
+    pub fn retain_admitted<S>(session: &AdmittedSession<S>) -> Self {
+        Self::retain(
+            session.principal.clone(),
+            session.claims.delegations.clone(),
+        )
+    }
+
     /// Retain the authority a session was admitted on.
     ///
-    /// The chain is supplied by the caller because the admitted conclusion
-    /// does not carry it. On the sans-io path the port has the hello and can
-    /// decode it; **the carrier path in [`crate::carrier`] cannot** —
-    /// `network_policy::admit_session` reads and consumes the frame
-    /// internally, returning only the principal. Until `AdmittedSession`
-    /// retains the claims it was drawn from, a carrier-admitted session can be
-    /// bounded by its deadline but cannot notice a revocation. That is a seam
-    /// in another lane's crate, recorded rather than worked around here.
+    /// This remains useful to the sans-I/O path, where the caller already
+    /// holds the verified hello. Carrier code should use
+    /// [`Self::retain_admitted`] so it cannot accidentally discard the chain.
     pub fn retain(principal: AdmittedPrincipal, chain: Vec<SignedDelegationCertificate>) -> Self {
         Self {
             session: projection_session(&principal),
@@ -274,7 +281,10 @@ mod tests {
     use graphshell_protocol::{
         PresentationManifest, ProjectionSnapshot, ProtocolVersion, SceneSnapshot,
     };
-    use network_policy::{RequestedAction, TrafficClass};
+    use notochord::{
+        CarrierKind, HandshakeLimits, NetworkId, ProfileRef, RequestedAction, SessionClaims,
+        SessionFacts, TrafficClass,
+    };
     use personae::IdentityProvider;
     use personae::InMemoryProvider;
     use personae::delegation::{
@@ -338,6 +348,36 @@ mod tests {
 
     fn authority() -> SessionAuthority {
         authority_at(PROJECTION_SERVICE, [21; 32])
+    }
+
+    fn admitted_authority() -> AdmittedSession<()> {
+        let delegation = grant(PROJECTION_SERVICE);
+        AdmittedSession {
+            stream: (),
+            principal: principal([21; 32]),
+            claims: SessionClaims {
+                wire_version: 1,
+                network: NetworkId(NETWORK),
+                profile: ProfileRef {
+                    id: "mere.base".to_string(),
+                    revision: 1,
+                },
+                action: RequestedAction {
+                    domain: GRAPHSHELL_DOMAIN.to_string(),
+                    path: PROJECTION_SERVICE.to_string(),
+                    action: CONNECT_ACTION.to_string(),
+                },
+                class: TrafficClass::Interactive,
+                subject: viewer().master_public_key().to_bytes(),
+                delegations: vec![delegation],
+            },
+            facts: SessionFacts::authenticated(
+                b"mere/graphshell/v1",
+                CarrierKind::Memory,
+                viewer().master_public_key().to_bytes(),
+            ),
+            limits: HandshakeLimits::default(),
+        }
     }
 
     fn revoked_ledger(chain: &[SignedDelegationCertificate]) -> RevocationLedger {
@@ -418,6 +458,16 @@ mod tests {
         let ledger = revoked_ledger(&authority.chain);
         assert_eq!(authority.lapse(&ledger, NOW_MS), Some(Lapse::Revoked));
         assert_eq!(authority.status(&ledger, NOW_MS), SessionStatus::Revoked);
+    }
+
+    #[test]
+    fn a_carrier_session_retains_enough_authority_to_notice_revocation() {
+        let admitted = admitted_authority();
+        let authority = SessionAuthority::retain_admitted(&admitted);
+        let ledger = revoked_ledger(&admitted.claims.delegations);
+
+        assert_eq!(authority.lapse(&ledger, NOW_MS), Some(Lapse::Revoked));
+        assert_eq!(authority.principal(), &admitted.principal);
     }
 
     #[test]

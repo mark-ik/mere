@@ -376,7 +376,7 @@ pub enum SessionStatus {
 /// Open a session **after** the carrier has admitted it.
 ///
 /// This message carries no principal, and that absence is the design. The
-/// carrier's own handshake (`network-policy`) is the sole admission step: it
+/// carrier's own handshake (`notochord`) is the sole admission step: it
 /// binds a Personae subject, its attested signer, its delegation chain, the
 /// requested action, and a nonce to *this* connection, and withholds the
 /// application stream until that verifies. A principal repeated here would be

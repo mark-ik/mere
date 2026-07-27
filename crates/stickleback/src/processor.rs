@@ -249,11 +249,16 @@ where
 
     /// Validate, authorize, continuity-check, and atomically index one operation.
     ///
-    /// Calls for a given author/log must be serialized until the backend grows
-    /// a compare-and-swap frontier primitive. Current LogSync drains and domain
-    /// authoring actors already provide that serialization.
+    /// Calls for a given author/log are serialized across all processors built
+    /// from clones of the same store. This closes the read-frontier/write race
+    /// until the backend grows a compare-and-swap frontier primitive.
     pub async fn process(&self, operation: &Operation<E>) -> Result<ProcessOutcome, ProcessError> {
         let admission = self.preflight(operation)?;
+        let ingress = self
+            .store
+            .ingress_lock(&operation.header.verifying_key, &admission.target.log_id)
+            .await?;
+        let _guard = ingress.lock().await;
 
         if self.store.has_operation(&operation.hash).await? {
             if let (Some(payload_hash), Some(body)) = (
@@ -677,6 +682,52 @@ mod tests {
                 Err(ProcessError::Backlink(_))
             ));
             assert_eq!(processor.store().operation_count().await.unwrap(), 2);
+        });
+    }
+
+    #[test]
+    fn concurrent_forks_share_one_serialized_author_frontier() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let processor = processor();
+            let signing_key = SigningKey::generate();
+            let left = make_op(&signing_key, 7, 0, None);
+            let body = Body::new(b"different-root");
+            let mut header = Header {
+                version: 1,
+                verifying_key: signing_key.verifying_key(),
+                signature: None,
+                payload_size: body.size(),
+                payload_hash: Some(body.hash()),
+                seq_num: 0,
+                backlink: None,
+                extensions: TestExt { space: 7 },
+            };
+            header.sign(&signing_key);
+            let right = Operation {
+                hash: header.hash(),
+                header,
+                body: Some(body),
+            };
+            let left_processor = processor.clone();
+            let right_processor = processor.clone();
+            let left_task = tokio::spawn(async move { left_processor.process(&left).await });
+            let right_task = tokio::spawn(async move { right_processor.process(&right).await });
+            let left = left_task.await.unwrap();
+            let right = right_task.await.unwrap();
+
+            assert_eq!(
+                usize::from(left.as_ref().is_ok_and(|outcome| outcome.inserted()))
+                    + usize::from(right.as_ref().is_ok_and(|outcome| outcome.inserted())),
+                1
+            );
+            assert!(
+                matches!(left, Err(ProcessError::StaleOperation { .. }))
+                    || matches!(right, Err(ProcessError::StaleOperation { .. }))
+            );
+            assert_eq!(processor.store().operation_count().await.unwrap(), 1);
         });
     }
 }

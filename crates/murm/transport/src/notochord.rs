@@ -7,11 +7,11 @@
 //! instead of off the connection and nothing catches it. There is one
 //! construction site now, and it is this file.
 //!
-//! The dependency deliberately runs this way: `network-policy` never learns
+//! The dependency deliberately runs this way: `notochord` never learns
 //! about iroh, p2panda, or retinue, so the policy core stays carrier-neutral
 //! and no cycle can form.
 
-use network_policy::{CarrierKind, IngressFacts, ProofBinding, SessionFacts};
+use notochord::{CarrierKind, IngressFacts, ProofBinding, SessionFacts};
 
 use crate::{AcceptedSession, Alpn, PeerID, TransportKind};
 
@@ -34,7 +34,7 @@ impl<S> AcceptedSession<S> {
     /// from a claim.
     ///
     /// The local interface id is carried for the owner's policy and never
-    /// enters a proof; see `network_policy::ProofBinding`.
+    /// enters a proof; see `notochord::ProofBinding`.
     pub fn session_facts(&self) -> SessionFacts {
         SessionFacts {
             protocol: self.protocol.as_bytes().to_vec(),

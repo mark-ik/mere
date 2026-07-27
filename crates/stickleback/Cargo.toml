@@ -15,6 +15,7 @@ path = "src/lib.rs"
 [dependencies]
 muniment.workspace = true
 p2panda-core = "0.7.0"
+p2panda-encryption = { version = "0.7.0", features = ["data_scheme", "message_scheme"] }
 p2panda-net = "0.7.0"
 p2panda-store = { version = "0.7.0", default-features = false }
 p2panda-sync = "0.7.0"
@@ -22,7 +23,7 @@ hex = "0.4"
 blake3 = "1.5"
 serde = { version = "1", features = ["derive"] }
 proofs.workspace = true
-tokio = { version = "1", features = ["rt", "time"] }
+tokio = { version = "1", features = ["rt", "sync", "time"] }
 tokio-stream = "0.1"
 thiserror = "1"
 

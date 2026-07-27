@@ -31,7 +31,7 @@ boundary. The radio, Reticulum, and queue work lands in the Retinue workspace.
 - The
   [`2026-07-26_notochord_session_policy_spine_plan.md`](./2026-07-26_notochord_session_policy_spine_plan.md)
   takes the landed V3-V7 session-admission pieces through a shared facts and
-  admitted-session boundary. The `network-policy` name remains authoritative
+  admitted-session boundary. The `notochord` name remains authoritative
   until that plan's two-consumer promotion gate passes.
 - Retinue's existing direct-PHY Resource receipt:
   [`2026-07-23_direct_phy_resource_acceptance.md`](https://github.com/mark-ik/retinue/blob/main/design_docs/2026-07-23_direct_phy_resource_acceptance.md)
@@ -135,7 +135,7 @@ identity later.
 - bounded delegation depth; and
 - signed revocation statements.
 
-The new local network-policy crate validates chains against configured roots
+The new local notochord crate validates chains against configured roots
 and keeps its own revocation ledger. It does not create another membership
 token. Gemot remains responsible for Moot membership and constitutional
 authority.
@@ -182,7 +182,7 @@ independent bearers demonstrate aggregate goodput and graceful lane loss.
   packet classes, queue budgets, forwarding, and path use.
 - **mere-transport** reports authenticated peer and ingress facts without
   deciding policy.
-- **network-policy** evaluates local service policy and runs the bounded
+- **notochord** evaluates local service policy and runs the bounded
   session handshake.
 - **Personae** supplies delegation and revocation proof primitives.
 - **Gemot** owns Moot membership and constitutional authority.
@@ -192,7 +192,7 @@ independent bearers demonstrate aggregate goodput and graceful lane loss.
   authorizers.
 - **The host** persists owner settings and presents them for editing.
 
-`network-policy` is a session-policy component, not a master policy engine.
+`notochord` is a session-policy component, not a master policy engine.
 
 ## Current evidence
 
@@ -443,7 +443,7 @@ correct authenticated peer, and a wrong-peer assertion fails.
 ### V5. Minimal local evaluator
 
 **Repository:** Mere
-**New crate:** `crates/system/network-policy`
+**New crate:** `crates/system/notochord`
 
 Add the crate to the Mere workspace and workspace dependency table.
 
@@ -513,8 +513,8 @@ transit independently.
 **Repository:** Mere
 **Files:**
 
-- `crates/system/network-policy/src/handshake.rs`
-- focused integration tests in `network-policy`
+- `crates/system/notochord/src/handshake.rs`
+- focused integration tests in `notochord`
 - one Murm acceptance adapter
 
 Before application bytes, exchange a bounded postcard frame:
@@ -790,7 +790,7 @@ At each Mere slice:
 ```text
 cargo test -p mere-transport
 cargo test -p mere-transport --features reticulum
-cargo test -p network-policy
+cargo test -p notochord
 cargo test -p personae
 cargo test -p murm
 cargo fmt --all -- --check
@@ -798,7 +798,7 @@ git diff --check
 ```
 
 The exact new crate package name is fixed when V5 lands and then replaces
-`network-policy` in this wall if Cargo naming requires a prefix.
+`notochord` in this wall if Cargo naming requires a prefix.
 
 ### Evidence ladder
 
@@ -879,7 +879,7 @@ a wrong-peer assertion and a real TCP-loopback reticulum round trip.
    worth remembering, it produced no "patch not used" warning). The default
    mere build is unaffected, since reticulum is optional and default-off.
 
-Next code slice is **V5** (the `network-policy` crate and its evaluator),
+Next code slice is **V5** (the `notochord` crate and its evaluator),
 which is pure Rust with no hardware dependency.
 
 ### 2026-07-25 — V1, V2, and V8 landed ahead of V5; blocker 2 cleared
@@ -907,8 +907,8 @@ checkout.
 
 ### 2026-07-25 (evening) — V5 landed
 
-**V5 (Mere).** `crates/system/network-policy` exists (package
-`network-policy`, no prefix needed) with the planned vocabulary
+**V5 (Mere).** `crates/system/notochord` exists (package
+`notochord`, no prefix needed) with the planned vocabulary
 (`NetworkId`, `ProfileRef`, `LocalNetworkPolicy`, `SessionRequest`,
 `SessionDecision`, `DenyReason` + granular `ChainFault`, `TrafficClass`,
 `HandshakeLimits` with compile-time ceilings and a `clamped()`
@@ -931,7 +931,7 @@ id.
 ### 2026-07-26 — V6 landed (handshake), with two deviations
 
 **V6 (Mere).** `SessionHello` / `SessionReply` / `respond` in
-`network-policy::handshake`, postcard-encoded and bounded on both sides.
+`notochord::handshake`, postcard-encoded and bounded on both sides.
 The transcript binds D6's fields, including the responder's **own**
 observation of the connection (`SessionBinding`: protocol, transport peer,
 ingress interface, link) plus the delegation certificate ids, signed by a
@@ -943,7 +943,7 @@ Two deviations from the plan text, both deliberate:
    `tokio` feature** (`accept_session` / `initiate_session`, one bounded
    `u32` length prefix). The plan sketched
    `policy.accept(accepted_session, ...)`, which would have made
-   `network-policy` depend on `mere-transport` and therefore on iroh,
+   `notochord` depend on `mere-transport` and therefore on iroh,
    p2panda, and QUIC. A policy crate should not carry a transport stack, and
    retinue already proves the sans-io-core-plus-shell shape in this
    ecosystem. Consequence: the caller supplies a `SessionBinding` rather

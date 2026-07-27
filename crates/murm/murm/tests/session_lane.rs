@@ -19,7 +19,7 @@ use murm::{
     Admission, CabalKey, ConversationEngine, Post, SessionOutcome, lane_binding, push_posts,
     serve_session,
 };
-use network_policy::{
+use notochord::{
     CarrierKind, DenyReason, LocalNetworkPolicy, NetworkId, ProfileRef, RequestedAction,
     RevocationLedger, ServiceAccess, ServiceRule, SessionFacts, SessionHello, TrafficClass,
     TrustedRoot,

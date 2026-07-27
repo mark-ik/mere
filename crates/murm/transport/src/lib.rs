@@ -48,8 +48,8 @@ pub mod p2panda_transport;
 mod peer_id;
 #[cfg(feature = "reticulum")]
 pub mod reticulum_transport;
-#[cfg(feature = "session-policy")]
-pub mod session_policy;
+#[cfg(feature = "notochord")]
+pub mod notochord;
 mod transport;
 
 pub use crate::accepted::{AcceptedSession, IngressContext, IngressInterfaceId, TransportKind};
@@ -64,8 +64,8 @@ pub use crate::peer_id::PeerID;
 pub use crate::reticulum_transport::{
     ReticulumInterface, ReticulumStream, ReticulumTransport, ReticulumTransportBuilder,
 };
-#[cfg(feature = "session-policy")]
-pub use crate::session_policy::{initiator_binding, initiator_link_binding};
+#[cfg(feature = "notochord")]
+pub use crate::notochord::{initiator_binding, initiator_link_binding};
 pub use crate::transport::Transport;
 pub use p2panda_net::gossip::GossipHandle;
 

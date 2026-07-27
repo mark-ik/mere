@@ -15,11 +15,11 @@ categories = ["network-programming"]
 # default; enable to build and test `ReticulumTransport`. Backed by `retinue`,
 # Mark's own RNS implementation; `hkdf`/`sha2` derive the retinue identity.
 reticulum = ["dep:retinue", "dep:hkdf", "dep:sha2"]
-# Conversion from this crate's acceptance record into the session-policy
+# Conversion from this crate's acceptance record into the notochord
 # layer's carrier facts. The dependency runs in this direction on purpose:
-# `network-policy` stays carrier-neutral and never learns about iroh, p2panda,
+# `notochord` stays carrier-neutral and never learns about iroh, p2panda,
 # or retinue, which is what keeps the cycle from forming (Notochord N1).
-session-policy = ["dep:network-policy"]
+notochord = ["dep:notochord"]
 
 [lib]
 name = "transport"
@@ -51,11 +51,11 @@ p2panda-core = "0.7.0"
 # Reticulum mesh-networking backend (optional, see [features]). `retinue` is
 # Mark's from-scratch RNS stack; `hkdf`/`sha2` derive its identity from the seed.
 retinue = { workspace = true, optional = true }
-network-policy = { workspace = true, optional = true }
+notochord = { workspace = true, optional = true }
 hkdf = { workspace = true, optional = true }
 sha2 = { workspace = true, optional = true }
 
 [dev-dependencies]
-network-policy = { workspace = true, features = ["tokio"] }
+notochord = { workspace = true, features = ["tokio"] }
 tokio = { version = "1", features = ["io-util", "sync", "macros", "rt", "rt-multi-thread", "time"] }
 tokio-stream = "0.1"

@@ -7,7 +7,7 @@
 
 use std::collections::BTreeMap;
 
-use network_policy::{
+use notochord::{
     CarrierKind, ChainFault, DenyReason, HandshakeLimits, LocalNetworkPolicy, NetworkId,
     ProfileRef, ProofBinding, RequestedAction, RevocationLedger, ServiceAccess, ServiceRule,
     SessionDecision, SessionFacts, SessionHello, SessionReply, TrafficClass, TrustedRoot, respond,

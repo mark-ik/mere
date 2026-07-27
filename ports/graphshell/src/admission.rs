@@ -1,11 +1,11 @@
-//! Graphshell's session admission: `network-policy` under the Graphshell
+//! Graphshell's session admission: `notochord` under the Graphshell
 //! action triple.
 //!
 //! G5c. The carrier's handshake is the **sole** admission step (G5a.1): it
 //! binds a Personae subject, its attested signer, its delegation chain, the
 //! requested action, and a nonce to *this* connection, and the application
 //! stream is withheld until that verifies. This module supplies the two things
-//! `network-policy` cannot know — what Graphshell's service is called, and how
+//! `notochord` cannot know — what Graphshell's service is called, and how
 //! a Graphshell host asks — and returns the conclusion as an
 //! [`AdmittedPrincipal`].
 //!
@@ -16,13 +16,13 @@
 //! ## The triple
 //!
 //! `mere.graphshell` / `/services/projection` / `connect`. The action
-//! vocabulary in `network-policy` is deliberately open
+//! vocabulary in `notochord` is deliberately open
 //! (`RequestedAction { domain, path, action }`), so adding Graphshell is a new
 //! triple rather than a change to that crate — and a delegation minted for
 //! Murm's service does not admit a Graphshell session, because the scope's
 //! `domain` and `path_prefix` are part of what the chain has to cover.
 
-use network_policy::{
+use notochord::{
     AdmittedPrincipal, DenyReason, HandshakeError, LocalNetworkPolicy, NetworkId, ProfileRef,
     ProofBinding, RequestedAction, RevocationLedger, SessionFacts, SessionHello, TrafficClass,
     admit,
@@ -56,7 +56,7 @@ pub fn connect_action() -> RequestedAction {
 /// Build and sign the client's hello for `binding`.
 ///
 /// Returns the [`SessionHello`] rather than encoded bytes, so it composes with
-/// `network_policy::initiate_session` (which writes the frame and reads the
+/// `notochord::initiate_session` (which writes the frame and reads the
 /// reply) instead of standing up a second encode path beside it.
 ///
 /// `binding` must describe the connection this hello will actually travel on;
@@ -140,7 +140,7 @@ pub fn admit_session(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use network_policy::{CarrierKind, ServiceAccess, ServiceRule, TrustedRoot};
+    use notochord::{CarrierKind, ServiceAccess, ServiceRule, TrustedRoot};
     use personae::InMemoryProvider;
     use personae::delegation::{
         CapabilityScope, DelegationCertificate, DelegationParent, SignedDelegationCertificate,

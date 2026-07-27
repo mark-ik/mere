@@ -16,7 +16,7 @@ use identity::delegation::{
     CapabilityScope, DelegationCertificate, DelegationParent, SignedDelegationCertificate,
 };
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
-use network_policy::{
+use notochord::{
     DenyReason, LocalNetworkPolicy, NetworkId, ProfileRef, ProofBinding, RequestedAction,
     RevocationLedger, ServiceAccess, ServiceRule, SessionDecision, SessionHello, TrafficClass,
     TrustedRoot, accept_session, initiate_session,

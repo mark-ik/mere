@@ -46,7 +46,7 @@ use tokio::task::JoinHandle;
 use tokio::time::{Instant, interval, sleep, timeout};
 
 use retinue::destination::DestinationName;
-use retinue::endpoint::{Endpoint, LinkStream};
+use retinue::endpoint::{Endpoint, Interface, LinkStream};
 use retinue::hash::AddressHash;
 use retinue::identity::Identity;
 
@@ -90,6 +90,7 @@ pub struct ReticulumTransportBuilder<'a> {
     interfaces: Vec<ReticulumInterface>,
     announce_interval: Duration,
     connect_timeout: Duration,
+    link_mtu: Option<u32>,
 }
 
 impl<'a> ReticulumTransportBuilder<'a> {
@@ -101,6 +102,7 @@ impl<'a> ReticulumTransportBuilder<'a> {
             interfaces: Vec::new(),
             announce_interval: ANNOUNCE_INTERVAL,
             connect_timeout: CONNECT_TIMEOUT,
+            link_mtu: None,
         }
     }
 
@@ -128,6 +130,15 @@ impl<'a> ReticulumTransportBuilder<'a> {
         self
     }
 
+    /// MTU requested and offered by links opened through this transport.
+    ///
+    /// Retinue clamps this to its supported range. Packet radios commonly use
+    /// 255 here so reliable-stream chunks fit the physical frame limit.
+    pub fn link_mtu(mut self, mtu: u32) -> Self {
+        self.link_mtu = Some(mtu);
+        self
+    }
+
     /// Bind the transport: create the retinue endpoint, attach interfaces,
     /// register destinations, and start the announce + accept driver tasks.
     pub async fn bind(self) -> Result<ReticulumTransport, TransportError> {
@@ -137,6 +148,7 @@ impl<'a> ReticulumTransportBuilder<'a> {
             self.interfaces,
             self.announce_interval,
             self.connect_timeout,
+            self.link_mtu,
         )
         .await
     }
@@ -147,6 +159,8 @@ pub struct ReticulumTransport {
     local_peer_id: PeerID,
     endpoint: Arc<Endpoint>,
     peers: PeerMap,
+    names: Arc<HashMap<Alpn, DestinationName>>,
+    app_data: Arc<HashMap<Alpn, Vec<u8>>>,
     /// Per-ALPN inbound accept queue, fed by the accept-router task. Behind an
     /// async mutex because `accept` takes `&self` yet must own the receiver while
     /// awaiting.
@@ -177,12 +191,16 @@ impl ReticulumTransport {
         interfaces: Vec<ReticulumInterface>,
         announce_interval: Duration,
         connect_timeout: Duration,
+        link_mtu: Option<u32>,
     ) -> Result<Self, TransportError> {
         let local_peer_id = PeerID::from_public_key(master.public_key());
         let private_identity = derive_identity(master);
         let identity = *private_identity.public();
 
         let endpoint = Endpoint::new(private_identity);
+        if let Some(link_mtu) = link_mtu {
+            endpoint.set_link_mtu(link_mtu);
+        }
 
         // Attach interfaces.
         for iface in interfaces {
@@ -235,8 +253,8 @@ impl ReticulumTransport {
             // Announce sender: periodically re-announce our destinations.
             tokio::spawn(run_announce_sender(
                 Arc::clone(&endpoint),
-                names,
-                app_data,
+                Arc::clone(&names),
+                Arc::clone(&app_data),
                 announce_interval,
             )),
         ];
@@ -245,10 +263,44 @@ impl ReticulumTransport {
             local_peer_id,
             endpoint,
             peers,
+            names,
+            app_data,
             inbound,
             connect_timeout,
             tasks,
         })
+    }
+
+    /// Attach one transport-neutral Retinue packet interface.
+    ///
+    /// The caller owns the physical driver. Tulle's packet-radio bridge, a
+    /// deterministic test link, or another bearer can drive this same seam
+    /// without putting serial ports or PHY policy into Murm.
+    pub fn attach_packet_interface(&self) -> Interface {
+        self.endpoint.attach_interface()
+    }
+
+    /// Queue one announce for every ALPN registered on this transport.
+    ///
+    /// A packet interface is attached after the transport's background tasks
+    /// start, so their initial timer tick may precede the physical driver.
+    /// Call this after starting that driver to make discovery immediate and to
+    /// avoid short periodic intervals that saturate a half-duplex radio.
+    pub fn announce_now(&self) {
+        for (alpn, name) in self.names.iter() {
+            if let Some(data) = self.app_data.get(alpn) {
+                self.endpoint.announce(name, data);
+            }
+        }
+    }
+
+    /// Stop the Retinue endpoint after allowing already-written link bytes to
+    /// reach its interface queues.
+    ///
+    /// Drop every accepted or connected stream before calling this. A stream
+    /// still held by a caller cannot reach EOF and is bounded by `grace`.
+    pub async fn shutdown(&self, grace: Duration) {
+        self.endpoint.shutdown(grace).await;
     }
 
     /// Poll the announce-populated address book for a peer's retinue identity on

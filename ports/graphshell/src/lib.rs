@@ -8,6 +8,8 @@ pub mod canary;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod carrier;
 pub mod lifecycle;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod policy_projection;
 pub mod profile;
 pub mod resume;
 #[cfg(not(target_arch = "wasm32"))]

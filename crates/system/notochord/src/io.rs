@@ -128,12 +128,20 @@ where
     let (reply, outcome) = admit(policy, ledger, &hello, facts, now_ms, active_sessions);
     write_frame(&mut stream, &reply).await?;
     match outcome {
-        Ok(principal) => Ok(Ok(AdmittedSession {
-            stream,
-            principal,
-            facts: facts.clone(),
-            limits,
-        })),
+        Ok(principal) => {
+            // `admit` accepted this exact bounded frame, so this second decode
+            // cannot turn unverified bytes into retained claims. Keeping the
+            // public sans-I/O return shape stable avoids making every caller
+            // carry claims it does not need.
+            let claims = SessionHello::decode(&hello, &limits)?.claims();
+            Ok(Ok(AdmittedSession {
+                stream,
+                principal,
+                claims,
+                facts: facts.clone(),
+                limits,
+            }))
+        }
         Err(reason) => {
             finish_refusal(&mut stream).await;
             Ok(Err(reason))

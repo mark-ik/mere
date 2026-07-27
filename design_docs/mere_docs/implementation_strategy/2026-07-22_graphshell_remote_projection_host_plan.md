@@ -618,7 +618,7 @@ orderable.
 **What G5 needs that already exists** (more than expected — a windfall from
 the low-power lane, landed the same week):
 
-- `crates/system/network-policy` (V5/V6): a **bounded session handshake** that
+- `crates/system/notochord` (V5/V6): a **bounded session handshake** that
   is exactly G5's "bind Personae identity and a local grant to the session
   handshake". The initiator signs a canonical transcript with a personae-derived
   key attested to its master identity; the responder rebuilds the transcript
@@ -678,13 +678,13 @@ the low-power lane, landed the same week):
   *vocabulary*, not an authenticated runtime principal, and four things were
   wrong:
   1. **Admission was duplicated.** `SessionOpen` repeated a claimed subject and
-     grant, bound to nothing, beside `network-policy`'s handshake, which
+     grant, bound to nothing, beside `notochord`'s handshake, which
      already binds subject, attested signer, delegation chain, action, nonce,
      and transport to *this* connection and withholds the stream until that
      verifies. A second, weaker admission path is how an identity ends up
      trusted for having been asserted twice rather than proved once — the same
      duplication mistake as building a delegation algebra beside personae's,
-     one layer up. **Fixed:** `network-policy` is the sole admission handshake
+     one layer up. **Fixed:** `notochord` is the sole admission handshake
      and now yields the conclusion — `AdmittedPrincipal { subject, class,
      session_id, action }` from a new additive `admit()` (`respond` unchanged
      for callers that only gate the stream). It is deliberately non-`Serialize`:
@@ -706,11 +706,11 @@ the low-power lane, landed the same week):
      `Close` is answered and *ends the loop* (a request after it is never
      served).
 
-  Receipts: network-policy 11, protocol 8, stdio 4 (3 new), client/endpoint/
+  Receipts: notochord 11, protocol 8, stdio 4 (3 new), client/endpoint/
   port green, turnstone 145.
 
   **Sequence recut** (review): G5a.1 as above → **G5b** selected Graphshell
-  profile plus explicit endpoint-key proof → **G5c** `network-policy` producing
+  profile plus explicit endpoint-key proof → **G5c** `notochord` producing
   the admitted principal under the Graphshell action triple → **G5d** carrying
   that accepted context over `P2pandaTransport`.
 
@@ -720,7 +720,7 @@ the low-power lane, landed the same week):
   Personae, loading a user-selected profile from the shared vault, defaulting
   to `default` while remaining configurable.
   *Boundary rule:* the protocol crate should carry the principal and grant as
-  **opaque bytes**, never a `network-policy` or personae dependency. §3 sealed a
+  **opaque bytes**, never a `notochord` or personae dependency. §3 sealed a
   portable boundary; admission belongs to the endpoint/host crate. (The same
   distinction gemot got wrong in prose — posture is about source, not the build
   graph — so state it in the manifest comment when the dep lands.)
@@ -751,11 +751,11 @@ the low-power lane, landed the same week):
   `PROJECTION_PROTOCOL` label that rides the signed transcript, `open_session`
   (initiator) and `admit_session` (responder, returning the
   `AdmittedPrincipal`). The first real consumer of the capability round outside
-  turnstone, and it required **no change to `network-policy`'s vocabulary** —
+  turnstone, and it required **no change to `notochord`'s vocabulary** —
   adding a service really was a new triple, as its open `RequestedAction`
   promised.
   `open_session` returns a `SessionHello` rather than encoded bytes so it
-  composes with `network_policy::initiate_session` instead of standing up a
+  composes with `notochord::initiate_session` instead of standing up a
   second encode path beside it — that crate already owns the framed stream
   handshake (`initiate_session` / `accept_session`), which G5d builds on.
   `admit_session` checks the action after admission. This entry originally said
@@ -767,14 +767,14 @@ the low-power lane, landed the same week):
   subject, which is the point of a per-service triple; and a captured hello
   replayed onto a different connection fails, so admission is per-connection
   rather than per-credential. `graphshell-client` and `graphshell-protocol`
-  still declare zero personae and zero network-policy dependencies.
+  still declare zero personae and zero notochord dependencies.
 - **G5d — carrier. LANDED 2026-07-27.** `ports/graphshell::carrier`:
   `accept_projection_session` runs the full accept path before a single
   `SessionOpen` byte is read. It is Notochord **N2's second service carrier**
   (Murm's real accept path is the first), and it owns none of the machinery it
   uses: carrier facts come from `AcceptedSession::into_session` (N1's one
   audited adapter), framing and the admitted conclusion from
-  `network_policy::admit_session`, delegation from Personae, owner rules from
+  `notochord::admit_session`, delegation from Personae, owner rules from
   the policy the host supplies. What is Graphshell's and lives here: the ALPN,
   the offered service path (`projection_policy`), and which admitted actions
   projections serve.
@@ -797,7 +797,7 @@ the low-power lane, landed the same week):
   authorizing an operation after admission under its own vocabulary, which is
   exactly the split the Notochord plan assigns. Extracted as
   `admission::serves_action`, shared by the sans-io and carrier paths.
-  Receipts (graphshell 20, network-policy 33 unchanged): a connect grant is
+  Receipts (graphshell 20, notochord 33 unchanged): a connect grant is
   admitted and served; **an admitted "administer" grant at the projection path
   is refused as `ActionNotServed`**, which is the hole above, proved rather
   than argued. The memory carrier authenticates its counterparty, so rule D6
@@ -811,7 +811,7 @@ the low-power lane, landed the same week):
   last QUIC connection handle until the final frame is acknowledged. Current
   receipts: graphshell 35; mere-transport 40 plus its session-policy
   integration test.
-  Open for whoever owns `network-policy`: either `ServiceRule` grows an action
+  Open for whoever owns `notochord`: either `ServiceRule` grows an action
   allow-list and `ActionNotOffered` gets its decision site, or the reason is
   documented as service-supplied. Not changed here; it is a serialized
   owner-policy shape in another lane's crate.
@@ -822,7 +822,7 @@ the low-power lane, landed the same week):
   already there from G1; what was missing was anything that *drove* them from
   the authority the carrier proved. `graphshell-client` gained two status
   mutators beside its existing `mark_stale`/`mark_disconnected` and still
-  declares zero personae and zero network-policy.
+  declares zero personae and zero notochord.
   - **reconnect** — `projection_session` derives the id from the
     transcript-bound `AdmittedPrincipal::session_id`, so the client cannot
     name the session it mounts under. A second admission lands on a different
@@ -850,7 +850,7 @@ the low-power lane, landed the same week):
   **Open seam, same shape as G5d's.** `AdmittedPrincipal` is a conclusion and
   carries no claims, so a session cannot re-ask "is this still true?" without
   retaining the chain it was admitted on. The sans-io path can (the port holds
-  the hello); **the carrier path cannot** — `network_policy::admit_session`
+  the hello); **the carrier path cannot** — `notochord::admit_session`
   reads and consumes the frame internally and returns only the principal. So a
   carrier-admitted session is bounded by its deadline but cannot notice a
   revocation. The fix is for `AdmittedSession` to retain its claims, which is

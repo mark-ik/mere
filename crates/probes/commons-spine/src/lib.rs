@@ -26,6 +26,8 @@
 //! split the statement kernel brief draws: the log accumulates, the graph is
 //! recomputed.
 
+pub mod chat;
+
 use chartulary::{Batch, Container, GraphEdit, GraphLog, Relation, WriterId};
 use codicil::Codicil;
 use muniment::Backend;
@@ -33,16 +35,30 @@ use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Topic, VerifyingKey};
 use p2panda_store::logs::LogStore;
 use p2panda_store::topics::TopicStore;
+use personae::DerivedKeyAttestation;
 use serde::{Deserialize, Serialize};
+use servitor::{AuthorityProvider, Cap, Mode, Subject};
 use std::collections::{BTreeMap, BTreeSet};
 use stickleback::{
-    Admission, MunimentStore, OperationPolicy, OperationProcessor, ProcessError, Reject,
-    StoreTarget,
+    Admission, CausalEntry, CausalError, CausalLimits, MunimentStore, OperationPolicy,
+    OperationProcessor, PendingCausalOperation, ProcessError, Reject, StoreTarget, author_head,
+    causal_projection, happens_before, observed_frontier, validate_causal_metadata,
 };
 
 /// One log per author. The commons has no second log class (no separate
 /// checkpoint lane yet), so the log id is a constant.
 pub const COMMONS_LOG: u64 = 0;
+
+/// Desktop Commons admission bounds. Smaller carrier profiles may tighten
+/// these without changing the retained operation format.
+pub const COMMONS_CAUSAL_LIMITS: CausalLimits = CausalLimits {
+    max_parents: 64,
+    max_payload_bytes: 1024 * 1024,
+};
+
+/// One operation remains a reviewable journal turn rather than an unbounded
+/// transaction.
+pub const MAX_EDITS_PER_BATCH: usize = 1024;
 
 /// The signed addressing extension: which container this batch edits.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -68,6 +84,11 @@ pub struct CommonsRecord {
     /// Operation ids at the observed per-author frontier.
     #[serde(default)]
     pub parents: Vec<[u8; 32]>,
+    /// When present, binds the per-container signing key to its stable
+    /// Personae root. An absent attestation means the signer is itself the
+    /// stable root.
+    #[serde(default)]
+    pub writer_attestation: Option<DerivedKeyAttestation>,
 }
 
 /// A malformed commons operation.
@@ -89,10 +110,32 @@ pub fn to_operation(
     seq_num: u32,
     backlink: Option<[u8; 32]>,
 ) -> Operation<CommonsExt> {
+    to_operation_with_attestation(
+        signing_seed,
+        container,
+        batch,
+        parents,
+        seq_num,
+        backlink,
+        None,
+    )
+}
+
+/// Sign a batch under a derived key certified by its stable Personae root.
+pub fn to_operation_with_attestation(
+    signing_seed: [u8; 32],
+    container: [u8; 32],
+    batch: &CommonsBatch,
+    parents: Vec<[u8; 32]>,
+    seq_num: u32,
+    backlink: Option<[u8; 32]>,
+    writer_attestation: Option<DerivedKeyAttestation>,
+) -> Operation<CommonsExt> {
     let signing_key = SigningKey::from_bytes(&signing_seed);
     let record = CommonsRecord {
         batch: batch.clone(),
         parents,
+        writer_attestation,
     };
     let body_bytes = encode_cbor(&record).expect("a commons record always CBOR-encodes");
     let body = Body::new(&body_bytes);
@@ -113,6 +156,63 @@ pub fn to_operation(
         header,
         body: Some(body),
     }
+}
+
+/// Domain-separated salt used for one container's derived signing key.
+pub fn commons_identity_salt(container: [u8; 32]) -> Vec<u8> {
+    let mut salt = Vec::with_capacity(65);
+    salt.extend_from_slice(b"mere.commons.writer.v1/");
+    salt.extend_from_slice(&container);
+    salt
+}
+
+fn stable_subject(
+    operation: &Operation<CommonsExt>,
+    record: &CommonsRecord,
+) -> Result<[u8; 32], Reject> {
+    let signer = *operation.header.verifying_key.as_bytes();
+    let Some(attestation) = &record.writer_attestation else {
+        return Ok(signer);
+    };
+    if !attestation.verify(&commons_identity_salt(
+        operation.header.extensions.container,
+    )) {
+        return Err(Reject::new(
+            "invalid-writer-attestation",
+            "derived writer attestation does not verify for this container",
+        ));
+    }
+    let derived = attestation
+        .derived_public_key()
+        .map_err(|_| {
+            Reject::new(
+                "invalid-derived-writer",
+                "derived writer attestation contains an invalid key",
+            )
+        })?
+        .to_bytes();
+    if derived != signer {
+        return Err(Reject::new(
+            "writer-attestation-mismatch",
+            "derived writer attestation does not bind the operation signer",
+        ));
+    }
+    attestation
+        .master_public_key()
+        .map(|key| key.to_bytes())
+        .map_err(|_| {
+            Reject::new(
+                "invalid-writer-root",
+                "derived writer attestation contains an invalid root key",
+            )
+        })
+}
+
+/// Typed write capability implied by every batch for one container.
+pub fn commons_write_capability(container: [u8; 32]) -> Cap {
+    let hex: String = container.iter().map(|byte| format!("{byte:02x}")).collect();
+    Cap::scope(&format!("commons/container/{hex}"))
+        .expect("a fixed prefix plus lowercase hex is a valid scope")
 }
 
 /// Decode the record carried by an operation. Does not check the signature.
@@ -174,6 +274,18 @@ impl OperationPolicy<CommonsExt> for CommonsPolicy {
         }
         let record = from_operation(operation)
             .map_err(|err| Reject::new("invalid-commons-batch", err.to_string()))?;
+        validate_causal_metadata(operation, &record.parents, COMMONS_CAUSAL_LIMITS)
+            .map_err(|err| Reject::new("invalid-commons-causality", err.to_string()))?;
+        if record.batch.edits.len() > MAX_EDITS_PER_BATCH {
+            return Err(Reject::new(
+                "commons-edit-limit",
+                format!(
+                    "batch contains {} edits; maximum is {MAX_EDITS_PER_BATCH}",
+                    record.batch.edits.len()
+                ),
+            ));
+        }
+        stable_subject(operation, &record)?;
         let writer = WriterId(*operation.header.verifying_key.as_bytes());
         record_connect_counters(&record, writer)?;
         Ok(Admission::keep(StoreTarget::new(
@@ -190,10 +302,10 @@ pub enum MaterializeError {
     Store(#[from] muniment::StoreError),
     #[error(transparent)]
     Wire(#[from] WireError),
-    #[error("commons operation {operation} depends on missing operation {parent}")]
-    MissingCausalParent { operation: String, parent: String },
-    #[error("commons operation dependencies contain a cycle")]
-    CausalCycle,
+    #[error(transparent)]
+    Causal(#[from] CausalError),
+    #[error("stored commons operation has an invalid writer binding: {0}")]
+    WriterBinding(String),
 }
 
 #[derive(Clone)]
@@ -235,106 +347,62 @@ async fn load_records<B: Backend + Clone + Send + Sync + 'static>(
     Ok(records)
 }
 
-fn sort_key(record: &StoredRecord, index: usize) -> (VerifyingKey, u64, u32, [u8; 32], usize) {
-    (
-        record.operation.header.verifying_key,
-        record.log_id,
-        record.operation.header.seq_num,
-        *record.operation.hash.as_bytes(),
-        index,
-    )
-}
-
-fn causal_journal(records: &[StoredRecord]) -> Result<Codicil<CommonsBatch>, MaterializeError> {
-    let mut by_hash = BTreeMap::new();
-    for (index, record) in records.iter().enumerate() {
-        by_hash.insert(*record.operation.hash.as_bytes(), index);
-    }
-
-    let mut indegree = vec![0usize; records.len()];
-    let mut dependents = vec![Vec::new(); records.len()];
-    for (index, record) in records.iter().enumerate() {
-        let mut dependencies = BTreeSet::new();
-        if let Some(backlink) = record.operation.header.backlink.as_ref() {
-            dependencies.insert(*backlink.as_bytes());
-        }
-        dependencies.extend(record.record.parents.iter().copied());
-        for dependency in dependencies {
-            let Some(parent_index) = by_hash.get(&dependency).copied() else {
-                return Err(MaterializeError::MissingCausalParent {
-                    operation: record.operation.hash.to_hex(),
-                    parent: Hash::from(dependency).to_hex(),
-                });
-            };
-            indegree[index] += 1;
-            dependents[parent_index].push(index);
-        }
-    }
-
-    let mut ready = BTreeSet::new();
-    for (index, record) in records.iter().enumerate() {
-        if indegree[index] == 0 {
-            ready.insert(sort_key(record, index));
-        }
-    }
-
-    let mut journal = Codicil::new();
-    while let Some(key) = ready.pop_first() {
-        let index = key.4;
-        journal.append(records[index].record.batch.clone());
-        for dependent in dependents[index].iter().copied() {
-            indegree[dependent] -= 1;
-            if indegree[dependent] == 0 {
-                ready.insert(sort_key(&records[dependent], dependent));
-            }
-        }
-    }
-    if journal.len() != records.len() {
-        return Err(MaterializeError::CausalCycle);
-    }
-    Ok(journal)
-}
-
-fn observed_frontier(records: &[StoredRecord]) -> Vec<[u8; 32]> {
-    let mut heads: BTreeMap<(VerifyingKey, u64), (u32, [u8; 32])> = BTreeMap::new();
-    for record in records {
-        let key = (record.operation.header.verifying_key, record.log_id);
-        let candidate = (
-            record.operation.header.seq_num,
-            *record.operation.hash.as_bytes(),
-        );
-        if heads
-            .get(&key)
-            .is_none_or(|current| candidate.0 > current.0)
-        {
-            heads.insert(key, candidate);
-        }
-    }
-    heads.into_values().map(|(_, hash)| hash).collect()
-}
-
-fn author_head(
-    records: &[StoredRecord],
-    author: VerifyingKey,
-) -> Result<(u32, Option<[u8; 32]>), ProcessError> {
-    let latest = records
+fn causal_entries(records: &[StoredRecord]) -> Vec<CausalEntry<u64>> {
+    records
         .iter()
-        .filter(|record| {
-            record.operation.header.verifying_key == author && record.log_id == COMMONS_LOG
+        .map(|record| {
+            CausalEntry::from_operation(
+                &record.operation,
+                record.log_id,
+                record.record.parents.clone(),
+            )
         })
-        .max_by_key(|record| record.operation.header.seq_num);
-    match latest {
-        Some(record) => Ok((
-            record
-                .operation
-                .header
-                .seq_num
-                .checked_add(1)
-                .ok_or_else(|| Reject::new("author-sequence-exhausted", "author log exhausted"))?,
-            Some(*record.operation.hash.as_bytes()),
-        )),
-        None => Ok((0, None)),
+        .collect()
+}
+
+fn causal_journal(
+    records: &[StoredRecord],
+) -> Result<(Codicil<CommonsBatch>, Vec<PendingCausalOperation>), MaterializeError> {
+    let entries = causal_entries(records);
+    let projection = causal_projection(&entries)?;
+    let effective: BTreeSet<_> = projection.order.iter().copied().collect();
+    let mut journal = Codicil::new();
+    for index in projection.order {
+        journal.append(remove_wins_batch(records, &entries, &effective, index));
     }
+    Ok((journal, projection.pending))
+}
+
+/// Suppress only inserts concurrent with a removal of the same identity.
+/// Causally later inserts remain deliberate recreation.
+fn remove_wins_batch(
+    records: &[StoredRecord],
+    entries: &[CausalEntry<u64>],
+    effective: &BTreeSet<usize>,
+    index: usize,
+) -> CommonsBatch {
+    let operation = entries[index].operation;
+    let mut batch = records[index].record.batch.clone();
+    batch.edits.retain(|edit| {
+        let GraphEdit::InsertNode(node) = edit else {
+            return true;
+        };
+        !records.iter().enumerate().any(|(other_index, other)| {
+            if other_index == index || !effective.contains(&other_index) {
+                return false;
+            }
+            let removes_same_node = other.record.batch.edits.iter().any(
+                |candidate| matches!(candidate, GraphEdit::RemoveNode(id) if id == &node.id),
+            );
+            if !removes_same_node {
+                return false;
+            }
+            let removal = entries[other_index].operation;
+            !happens_before(entries, removal, operation)
+                && !happens_before(entries, operation, removal)
+        })
+    });
+    batch
 }
 
 async fn validate_counter_frontier<B: Backend + Clone + Send + Sync + 'static>(
@@ -406,12 +474,127 @@ pub async fn accept_into<B: Backend + Clone + Send + Sync + 'static>(
 /// the convergence claim. Per-author backlinks and signed cross-author
 /// parents preserve happens-before; the canonical author/log/sequence tuple
 /// orders only concurrent ready records.
+/// One current graph plus retained operations whose causal history is
+/// incomplete.
+pub struct CommonsProjection {
+    pub graph: GraphLog<Container, Relation>,
+    pub pending: Vec<PendingCausalOperation>,
+    pub pending_authority: Vec<AuthorityOperation>,
+    pub revoked: Vec<AuthorityOperation>,
+}
+
+/// One retained operation classified by converged authority.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AuthorityOperation {
+    pub operation: [u8; 32],
+    pub subject: [u8; 32],
+    pub capability: Cap,
+}
+
+/// Effective-state classification over retained authority facts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AuthorityState {
+    Effective,
+    Pending,
+    Revoked,
+}
+
+/// Read boundary supplied by Gemot/Personae authority materialization.
+pub trait CommonsAuthority {
+    fn classify(&self, subject: Subject, capability: &Cap, mode: Mode) -> AuthorityState;
+}
+
+/// Adapter for the existing typed Servitor authority seam plus Gemot's
+/// converged directly-revoked subject set.
+pub struct ServitorAuthorityView<'a, A> {
+    pub provider: &'a A,
+    pub revoked_subjects: &'a BTreeSet<[u8; 32]>,
+}
+
+impl<A: AuthorityProvider> CommonsAuthority for ServitorAuthorityView<'_, A> {
+    fn classify(&self, subject: Subject, capability: &Cap, mode: Mode) -> AuthorityState {
+        if self.revoked_subjects.contains(&subject.0) {
+            AuthorityState::Revoked
+        } else if self.provider.covers(subject, capability, mode) {
+            AuthorityState::Effective
+        } else {
+            AuthorityState::Pending
+        }
+    }
+}
+
+struct AllowAllAuthority;
+
+impl CommonsAuthority for AllowAllAuthority {
+    fn classify(&self, _subject: Subject, _capability: &Cap, _mode: Mode) -> AuthorityState {
+        AuthorityState::Effective
+    }
+}
+
+/// Fold the causally and authoritatively effective subset.
+pub async fn materialize_with_authority<
+    B: Backend + Clone + Send + Sync + 'static,
+    A: CommonsAuthority,
+>(
+    store: &MunimentStore<B, CommonsExt>,
+    container: [u8; 32],
+    authority: &A,
+) -> Result<CommonsProjection, MaterializeError> {
+    let records = load_records(store, container).await?;
+    let entries = causal_entries(&records);
+    let causal = causal_projection(&entries)?;
+    let capability = commons_write_capability(container);
+    let mut journal = Codicil::new();
+    let mut effective = Vec::new();
+    let mut pending_authority = Vec::new();
+    let mut revoked = Vec::new();
+    for index in causal.order {
+        let record = &records[index];
+        let subject = stable_subject(&record.operation, &record.record)
+            .map_err(|error| MaterializeError::WriterBinding(error.to_string()))?;
+        let classified = AuthorityOperation {
+            operation: *record.operation.hash.as_bytes(),
+            subject,
+            capability: capability.clone(),
+        };
+        match authority.classify(Subject(subject), &capability, Mode::Write) {
+            AuthorityState::Effective => effective.push(index),
+            AuthorityState::Pending => pending_authority.push(classified),
+            AuthorityState::Revoked => revoked.push(classified),
+        }
+    }
+    let effective_set: BTreeSet<_> = effective.iter().copied().collect();
+    for index in effective {
+        journal.append(remove_wins_batch(
+            &records,
+            &entries,
+            &effective_set,
+            index,
+        ));
+    }
+    Ok(CommonsProjection {
+        graph: GraphLog::replay(journal),
+        pending: causal.pending,
+        pending_authority,
+        revoked,
+    })
+}
+
+/// Fold the causally closed subset with structural admission as the authority
+/// floor. Communal callers should prefer [`materialize_with_authority`].
+pub async fn materialize_projection<B: Backend + Clone + Send + Sync + 'static>(
+    store: &MunimentStore<B, CommonsExt>,
+    container: [u8; 32],
+) -> Result<CommonsProjection, MaterializeError> {
+    materialize_with_authority(store, container, &AllowAllAuthority).await
+}
+
+/// Compatibility view for callers that only need the current graph.
 pub async fn materialize<B: Backend + Clone + Send + Sync + 'static>(
     store: &MunimentStore<B, CommonsExt>,
     container: [u8; 32],
 ) -> Result<GraphLog<Container, Relation>, MaterializeError> {
-    let records = load_records(store, container).await?;
-    Ok(GraphLog::replay(causal_journal(&records)?))
+    Ok(materialize_projection(store, container).await?.graph)
 }
 
 /// A local authoring failure.
@@ -421,6 +604,8 @@ pub enum ReplicaError {
     Materialize(#[from] MaterializeError),
     #[error(transparent)]
     Process(#[from] ProcessError),
+    #[error("local authoring is blocked by {0} operations with missing causal history")]
+    PendingHistory(usize),
     #[error("one authoring turn must append exactly one batch, appended {0}")]
     BatchCount(usize),
 }
@@ -473,8 +658,12 @@ impl<B: Backend + Clone + Send + Sync + 'static> Replica<B> {
         edit: impl FnOnce(&mut GraphLog<Container, Relation>),
     ) -> Result<Operation<CommonsExt>, ReplicaError> {
         let records = load_records(&self.store, self.container).await?;
-        let parents = observed_frontier(&records);
-        let journal = causal_journal(&records)?;
+        let entries = causal_entries(&records);
+        let parents = observed_frontier(&entries).map_err(MaterializeError::from)?;
+        let (journal, pending) = causal_journal(&records)?;
+        if !pending.is_empty() {
+            return Err(ReplicaError::PendingHistory(pending.len()));
+        }
         let mut shared = GraphLog::replay_for_writer(journal, self.writer);
         let before = shared.log().entries().len();
         edit(&mut shared);
@@ -490,7 +679,12 @@ impl<B: Backend + Clone + Send + Sync + 'static> Replica<B> {
             .clone();
 
         let signing_key = SigningKey::from_bytes(&self.signing_seed);
-        let (seq, backlink) = author_head(&records, signing_key.verifying_key())?;
+        let (seq, backlink) = author_head(
+            &entries,
+            *signing_key.verifying_key().as_bytes(),
+            &COMMONS_LOG,
+        )
+        .map_err(MaterializeError::from)?;
         let op = to_operation(
             self.signing_seed,
             self.container,
@@ -516,6 +710,11 @@ impl<B: Backend + Clone + Send + Sync + 'static> Replica<B> {
     pub async fn materialize(&self) -> Result<GraphLog<Container, Relation>, MaterializeError> {
         materialize(&self.store, self.container).await
     }
+
+    /// Current graph plus operations waiting on unavailable causal parents.
+    pub async fn projection(&self) -> Result<CommonsProjection, MaterializeError> {
+        materialize_projection(&self.store, self.container).await
+    }
 }
 
 #[cfg(test)]
@@ -523,8 +722,8 @@ mod tests {
     use super::*;
     use chartulary::taxonomy::{Recognized, RelationClass};
     use chartulary::{Author, EdgeId};
-    use identity::{IdentityProvider, InMemoryProvider};
     use muniment::{MemoryBackend, RedbBackend};
+    use personae::{IdentityProvider, InMemoryProvider};
     use proptest::prelude::*;
     use std::sync::Arc;
     use std::time::Duration;
@@ -573,6 +772,20 @@ mod tests {
                 GraphEdit::Connect { id, .. } => Some(*id),
                 _ => None,
             })
+    }
+
+    struct FixedAuthority {
+        subject: [u8; 32],
+        state: AuthorityState,
+    }
+
+    impl CommonsAuthority for FixedAuthority {
+        fn classify(&self, subject: Subject, capability: &Cap, mode: Mode) -> AuthorityState {
+            assert_eq!(subject.0, self.subject);
+            assert_eq!(capability, &commons_write_capability(CONTAINER));
+            assert_eq!(mode, Mode::Write);
+            self.state
+        }
     }
 
     /// Two bound transports tagged with each other on the container's overlay
@@ -920,6 +1133,95 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn retained_authority_reprojects_pending_effective_and_revoked() {
+        let author = Author::new("ui");
+        let mut origin = Replica::new(MemoryBackend::new(), CONTAINER, [90; 32]);
+        let operation = origin
+            .edit(|graph| {
+                graph.insert_node(&author, Container::new("authority-fact"));
+            })
+            .await
+            .unwrap();
+        let subject = *operation.header.verifying_key.as_bytes();
+
+        // A different replica is merely the relay/holder. Its own writer key
+        // does not participate in the authority decision.
+        let relay = Replica::new(MemoryBackend::new(), CONTAINER, [91; 32]);
+        relay.accept(&operation).await.unwrap();
+        let retained = relay.sync_store();
+        for (state, nodes, pending, revoked) in [
+            (AuthorityState::Pending, 0, 1, 0),
+            (AuthorityState::Effective, 1, 0, 0),
+            (AuthorityState::Revoked, 0, 0, 1),
+        ] {
+            let projection = materialize_with_authority(
+                &retained,
+                CONTAINER,
+                &FixedAuthority { subject, state },
+            )
+            .await
+            .unwrap();
+            assert_eq!(projection.graph.graph().node_count(), nodes);
+            assert_eq!(projection.pending_authority.len(), pending);
+            assert_eq!(projection.revoked.len(), revoked);
+            assert_eq!(retained.operation_count().await.unwrap(), 1);
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_derived_writer_is_bound_to_its_personae_root() {
+        let root = InMemoryProvider::from_seed([0xa7; 32]);
+        let salt = commons_identity_salt(CONTAINER);
+        let derived = root.derive_keypair(&salt).unwrap();
+        let attestation = root.attest_derived_key(&salt).unwrap();
+        let writer = WriterId(derived.public_key().to_bytes());
+        let author = Author::new("ui");
+        let mut graph = GraphLog::<Container, Relation>::new().for_writer(writer);
+        graph.insert_node(&author, Container::new("derived"));
+        let batch = graph.log().entries().last().unwrap().clone();
+        let operation = to_operation_with_attestation(
+            derived.to_seed(),
+            CONTAINER,
+            &batch,
+            Vec::new(),
+            0,
+            None,
+            Some(attestation.clone()),
+        );
+
+        let receiver = Replica::new(MemoryBackend::new(), CONTAINER, [91; 32]);
+        receiver.accept(&operation).await.unwrap();
+        let projection = materialize_with_authority(
+            &receiver.sync_store(),
+            CONTAINER,
+            &FixedAuthority {
+                subject: root.master_public_key().to_bytes(),
+                state: AuthorityState::Effective,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(projection.graph.graph().node_count(), 1);
+
+        let forged = to_operation_with_attestation(
+            [0xb8; 32],
+            CONTAINER,
+            &batch,
+            Vec::new(),
+            0,
+            None,
+            Some(attestation),
+        );
+        let empty = Replica::new(MemoryBackend::new(), CONTAINER, [92; 32]);
+        let error = empty
+            .accept(&forged)
+            .await
+            .expect_err("another signer cannot claim the certified derived key");
+        assert!(error.to_string().contains("writer-attestation-mismatch"));
+        assert_eq!(empty.sync_store().operation_count().await.unwrap(), 0);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn reconstruction_from_an_existing_store_resumes_both_counters() {
         let backend = MemoryBackend::new();
         let author = Author::new("ui");
@@ -1097,18 +1399,80 @@ mod tests {
 
         let receiver = Replica::new(MemoryBackend::new(), CONTAINER, [92; 32]);
         receiver.accept(&child).await.unwrap();
-        assert!(
-            matches!(
-                receiver.materialize().await,
-                Err(MaterializeError::MissingCausalParent { .. })
-            ),
-            "an incomplete causal history fails closed instead of guessing an order"
-        );
+        let projection = receiver.projection().await.unwrap();
+        assert_eq!(projection.graph.graph().node_count(), 0);
+        assert_eq!(projection.pending.len(), 1);
+        assert_eq!(projection.pending[0].operation, *child.hash.as_bytes());
+        assert_eq!(projection.pending[0].missing, vec![*parent.hash.as_bytes()]);
 
         receiver.accept(&parent).await.unwrap();
+        let projection = receiver.projection().await.unwrap();
+        assert!(projection.pending.is_empty());
+        let key = projection.graph.graph().key_of(&"n".to_string()).unwrap();
+        assert_eq!(projection.graph.graph().node(key).unwrap().title, "child");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn concurrent_remove_wins_but_an_observing_insert_recreates() {
+        let author = Author::new("ui");
+        let mut base_writer = Replica::new(MemoryBackend::new(), CONTAINER, [90; 32]);
+        let base = base_writer
+            .edit(|graph| {
+                graph.insert_node(&author, Container::new("n").with_title("base"));
+            })
+            .await
+            .unwrap();
+
+        let mut remover = Replica::new(MemoryBackend::new(), CONTAINER, [91; 32]);
+        remover.accept(&base).await.unwrap();
+        let removal = remover
+            .edit(|graph| {
+                graph.remove_node(&author, &"n".to_string());
+            })
+            .await
+            .unwrap();
+
+        let mut editor = Replica::new(MemoryBackend::new(), CONTAINER, [92; 32]);
+        editor.accept(&base).await.unwrap();
+        let concurrent_insert = editor
+            .edit(|graph| {
+                graph.insert_node(
+                    &author,
+                    Container::new("n").with_title("unseen concurrent edit"),
+                );
+            })
+            .await
+            .unwrap();
+
+        let receiver = Replica::new(MemoryBackend::new(), CONTAINER, [93; 32]);
+        for operation in [&base, &concurrent_insert, &removal] {
+            receiver.accept(operation).await.unwrap();
+        }
+        assert!(
+            receiver
+                .materialize()
+                .await
+                .unwrap()
+                .graph()
+                .key_of(&"n".to_string())
+                .is_none(),
+            "a concurrent insert cannot resurrect a removed node"
+        );
+
+        let mut recreator = Replica::new(MemoryBackend::new(), CONTAINER, [94; 32]);
+        for operation in [&base, &concurrent_insert, &removal] {
+            recreator.accept(operation).await.unwrap();
+        }
+        let recreation = recreator
+            .edit(|graph| {
+                graph.insert_node(&author, Container::new("n").with_title("deliberate"));
+            })
+            .await
+            .unwrap();
+        receiver.accept(&recreation).await.unwrap();
         let graph = receiver.materialize().await.unwrap();
         let key = graph.graph().key_of(&"n".to_string()).unwrap();
-        assert_eq!(graph.graph().node(key).unwrap().title, "child");
+        assert_eq!(graph.graph().node(key).unwrap().title, "deliberate");
     }
 
     /// The edge ids the wire carries survive a CBOR round trip, including the
@@ -1187,7 +1551,7 @@ mod tests {
         ) {
             let mut records = authored_inserts([90; 32], "alice", alice_count);
             records.extend(authored_inserts([91; 32], "bob", bob_count));
-            let expected = GraphLog::replay(causal_journal(&records).unwrap());
+            let expected = GraphLog::replay(causal_journal(&records).unwrap().0);
             let expected = fingerprint(&expected);
 
             let mut shuffled = records;
@@ -1203,7 +1567,7 @@ mod tests {
             if arrival_keys.first().is_some_and(|value| value % 2 == 1) {
                 shuffled.reverse();
             }
-            let actual = GraphLog::replay(causal_journal(&shuffled).unwrap());
+            let actual = GraphLog::replay(causal_journal(&shuffled).unwrap().0);
 
             prop_assert_eq!(fingerprint(&actual), expected);
         }
