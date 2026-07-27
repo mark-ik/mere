@@ -399,9 +399,7 @@ where
         Ok(checkpoint)
     }
 
-    pub async fn load_checkpoint(
-        &self,
-    ) -> Result<Option<KnotProjectionCheckpoint>, KnotSyncError> {
+    pub async fn load_checkpoint(&self) -> Result<Option<KnotProjectionCheckpoint>, KnotSyncError> {
         let Some(bytes) = self
             .store
             .backend()
@@ -741,13 +739,7 @@ mod tests {
 
         let reopened = KnotSyncFileStore::open(&database, SPACE, [writer]).unwrap();
         assert_eq!(
-            reopened
-                .load_checkpoint()
-                .await
-                .unwrap()
-                .unwrap()
-                .heads[0]
-                .operation,
+            reopened.load_checkpoint().await.unwrap().unwrap().heads[0].operation,
             *second.hash.as_bytes()
         );
         let third = reopened

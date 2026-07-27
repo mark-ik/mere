@@ -5,8 +5,10 @@
 [shared-engram commons brief](../research/2026-07-24_shared_engram_commons_brief.md),
 which asked for "a written merge rule under which two offline members editing
 the same container reconverge to one graph on sync, property-tested, before
-any chat implementation slice". Decision 2 (moot-level group keys) stays open
-and is not addressed here. The tracked `commons-spine` probe is the receipt;
+any chat implementation slice". Decision 2 is answered by the
+[follow-on plan](2026-07-27_commons_authority_keys_consumers_plan.md) and
+[Commons profile](../design/2026-07-27_commons_profile_v1.md), rather than by
+this convergence plan. The tracked `commons-spine` probe is the receipt;
 it remains outside the main workspace until a consumer pulls and names it.
 
 **Method, as the brief instructed:** check what `stickleback` already
@@ -190,21 +192,18 @@ Done-conditions, not dates.
     merely that both peers agree, so the coarseness is pinned rather than
     implied. M3 now makes "last" causal for observed writes and uses key order
     only for genuinely concurrent writes.
-  - **Gap 3 was under-specified, and is now explicit.** "Remove wins" was
-    written about remove-versus-connect and does **not** settle
-    remove-versus-**insert**. `InsertNode` is an upsert, so a concurrent
-    insert that sorts after a removal **resurrects the node**. Every peer
-    still agrees, so this converges; what is unmade is the *choice*. A naive
-    tombstone is wrong, because re-creating a removed id is legitimate and a
-    permanent tombstone would forbid it forever. Distinguishing a concurrent
-    insert from a deliberate re-creation needs causality. The local
+  - **Gap 3 is now settled at the Commons fold.** `InsertNode` remains an
+    upsert in generic chartulary, where a concurrent insert sorted after a
+    removal can resurrect the node. Commons uses the signed causal context to
+    distinguish that case. A truly concurrent remove suppresses the insert;
+    an insert causally after the remove recreates the node. A permanent
+    tombstone would forbid that legitimate recreation. The local
     `commit_batch` scalar `expected` revision is not enough: two replicas can
     have the same journal length and different operation sets. M3's signed
     per-author operation frontier now records the exact causal context.
-    Deliberate re-creation is therefore orderable after the observed delete;
-    the winner for a truly concurrent remove/insert remains the named product
-    choice. Pinned meanwhile by
-    `a_concurrent_insert_that_sorts_later_resurrects_a_removed_node`.
+    Deliberate re-creation is therefore orderable after the observed delete.
+    `concurrent_remove_wins_but_an_observing_insert_recreates` pins both sides
+    of the rule.
   - **A test-model finding worth keeping.** The first draft merged two
     replicas by concatenating their full journals, which replays the shared
     history twice and lets the duplicate seed re-insert a node the other side
@@ -213,7 +212,7 @@ Done-conditions, not dates.
     tail; `merge_divergent` models that and the naive `merge` is kept only
     for replicas with no shared history.
 - **M3. Reconvergence over a real lane. DONE 2026-07-27**, as the tracked
-  `commons-spine` probe (`crates/probes/commons-spine`, 11 test functions
+  `commons-spine` probe (`crates/probes/commons-spine`, 17 test functions
   green, including one 48-case property test).
 
   The bullet originally claimed this "reuses the join ceremony, so this is a
@@ -233,8 +232,9 @@ Done-conditions, not dates.
     batch for another container is refused before mutation; signer/writer
     mismatch and counter reuse are refused; and arbitrary arrival permutations
     of one operation set property-test to one projection. A causal child
-    arriving before its parent stores safely but materialization fails closed
-    until the parent arrives rather than guessing an order.
+    arriving before its parent stores safely and is reported pending while
+    unrelated causally complete state remains visible; it joins the projection
+    when the parent arrives.
   - **The design finding: receipt must not apply edits.** The obvious `accept`
     closure folds each received batch into a live `GraphLog` on arrival. That
     does not converge, because a drain delivers in *arrival* order, which
@@ -256,11 +256,10 @@ Done-conditions, not dates.
     was found by asserting a replica could fold back *its own* edits before
     blaming the network. A fold that silently drops batches converges to a
     confidently wrong graph, which is worse than not converging.
-  - Still open here: this proves convergence, not authority. Admission enforces
-    structural integrity (right container, valid signature, decodable record,
-    edge writer bound to signer, monotonic non-reused counters) and deliberately
-    retains structurally valid facts. Converged Moot and Personae authority must
-    decide which batches are effective during materialization.
+  - The follow-on now adds authority without changing receipt: structural
+    admission retains a valid fact, a Personae root/derived-key attestation
+    binds its signer, and typed Servitor authority reclassifies it as
+    effective, pending, or revoked during materialization.
 - **M4. Write the limit down. DONE 2026-07-27**, in section 5 below. The
   commons profile has no document yet, so the stated behavior lives here and
   the [commons brief](../research/2026-07-24_shared_engram_commons_brief.md)
@@ -281,10 +280,9 @@ belong in whatever documents a shared container before one ships.
   This is a known coarseness, not a bug, and it lifts when a facet write becomes
   its own edit (the one-node facets lane). Until then, a shared container wants
   either coarse ownership habits or content classes whose nodes are small.
-- **A deletion does not yet hold against a concurrent edit to the same node.**
-  If one member deletes a node while another edits it, the node can come back,
-  carrying the editor's version. Every device agrees on the outcome, so nothing
-  diverges, but the outcome is not yet a decision. See Gap 3 in M2.
+- **A deletion holds against a concurrent edit to the same node.** A truly
+  concurrent insert is suppressed. An insert that first observes the removal
+  recreates the node.
 - **Every member converges.** Whatever the rules resolve to, all members reach
   the same graph, because the order is computed from the operations themselves
   rather than from arrival time or a clock.
@@ -294,5 +292,5 @@ belong in whatever documents a shared container before one ships.
 No CRDT library, wall clock, or operational transform. Cross-author causality
 is the signed observed frontier; the existing deterministic tuple remains the
 concurrent tiebreak. No per-facet merge until facet-grained edits exist, which
-is the one-node facets lane's work and not this plan's. Decision 2 (group
-keys) is untouched here; it gates encrypted commons traffic, not convergence.
+is the one-node facets lane's work and not this plan's. Group keys remain a
+separate layer from convergence and are specified by the follow-on profile.

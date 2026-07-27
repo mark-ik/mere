@@ -2,9 +2,9 @@
 
 **Date:** 2026-07-25
 **Status:** implementation complete locally 2026-07-27. K0 through K7 are
-executable. The commons convergence rule has landed, but Knot has not pulled
-it: concurrent writers for one document remain explicitly refused rather than
-silently resolved by whole-document last-writer-wins. Group keys gate a
+executable. Knot has now pulled Stickleback's causal projection seam:
+concurrent writers for one document are reported as a visible conflict while
+unrelated documents remain available. Group keys gate a
 communal multi-member Knot, not the personal multi-device vault. K7 also
 depends on the completed Cambium text primitive still present as uncommitted
 Genet workspace changes; that slice must land on Genet `main` before a clean
@@ -17,8 +17,7 @@ remote Mere checkout can reproduce the local K7 build.
 the [application prospects brief](../../2026-07-24_application_prospects_brief.md)
 (the composition thesis this port instantiates), the
 [shared-engram commons brief](../research/2026-07-24_shared_engram_commons_brief.md)
-(knot as page content class; the settled convergence decision and open group-key
-decision), and the
+(knot as page content class and the settled convergence/key decisions), and the
 [Graphshell remote projection host plan](2026-07-22_graphshell_remote_projection_host_plan.md)
 (the protocol this port serves).
 
@@ -126,24 +125,26 @@ vault inside the app rather than merely a cheaper one.
   hit-testing, and caret/selection geometry; `cambium-winit` supplies key and
   IME translation. Woodshed and Isometry exercise both host-routing shapes.
   Knot remains a consumer through `knot-editor-host`.
-- **The convergence decision has landed; Knot has not pulled it.** The
+- ~~**The convergence decision has landed; Knot has not pulled it.**~~
+  **Cleared 2026-07-27.** The
   [commons convergence plan](2026-07-26_commons_multi_writer_convergence_plan.md)
-  now proves deterministic causal materialization over per-author logs. K5
-  still refuses a second writer for one document because applying that rule to
-  Knot's encrypted document events is a consumer integration choice; using
-  whole-document last-writer-wins would silently discard text. The watcher
-  sharpens the need even for one person across devices. Group keys separately
-  gate communal multi-member Knot; the personal multi-device vault already
-  shares a seal key.
+  proves deterministic causal materialization over per-author logs. K5 now
+  signs exact observed parents, restores author heads after Redb reopen, and
+  returns documents, per-document conflicts, and pending-history diagnostics
+  separately. Its compatibility `documents()` call still returns
+  `ConcurrentWriter`; new consumers use the lossless projection. Knot also
+  persists a document-digest/author-frontier checkpoint and names the retained
+  tail before pruning. Group keys separately gate communal multi-member Knot;
+  the personal multi-device vault already shares a seal key.
 - ~~**Livery is the declared long pole.**~~ **Cleared 2026-07-27.** The Genet
   workspace build is green. Knot's remaining work is its own storage,
   authority, writer, and integration ladder.
 
 ## 5. Sequence
 
-Done-conditions, not dates. Every rung is complete locally. The open
-same-document multi-writer rule remains a product boundary rather than hidden
-inside any rung.
+Done-conditions, not dates. Every rung is complete locally. Same-document
+merge remains a visible Knot-owned product decision rather than a hidden
+whole-document tiebreak.
 
 - **K0. Port scaffold. Complete locally 2026-07-27.** `ports/knot` is a
   workspace member and `knot_endpoint` discloses a fixed fixture through the

@@ -391,9 +391,10 @@ fn remove_wins_batch(
             if other_index == index || !effective.contains(&other_index) {
                 return false;
             }
-            let removes_same_node = other.record.batch.edits.iter().any(
-                |candidate| matches!(candidate, GraphEdit::RemoveNode(id) if id == &node.id),
-            );
+            let removes_same_node =
+                other.record.batch.edits.iter().any(
+                    |candidate| matches!(candidate, GraphEdit::RemoveNode(id) if id == &node.id),
+                );
             if !removes_same_node {
                 return false;
             }
@@ -565,12 +566,7 @@ pub async fn materialize_with_authority<
     }
     let effective_set: BTreeSet<_> = effective.iter().copied().collect();
     for index in effective {
-        journal.append(remove_wins_batch(
-            &records,
-            &entries,
-            &effective_set,
-            index,
-        ));
+        journal.append(remove_wins_batch(&records, &entries, &effective_set, index));
     }
     Ok(CommonsProjection {
         graph: GraphLog::replay(journal),

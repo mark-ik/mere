@@ -4,7 +4,8 @@
 **Status:** direction note from the 2026-07-24 application brainstorm (see
 the [application prospects brief](../../2026-07-24_application_prospects_brief.md)).
 Names what a communal graph actually requires and the two decisions the note
-originally found unowned. Decision 1 is answered; Decision 2 remains open.
+originally found unowned. Both decisions are now answered by executable
+receipts and the [Commons profile](../design/2026-07-27_commons_profile_v1.md).
 
 ## The commons is a profile, not an engine
 
@@ -75,27 +76,33 @@ records. The other gap was chartulary's per-log `EdgeId` counter, which
 is now `(writer, counter)` in chartulary 0.2.0, bound to the operation signer
 and checked against a monotonic stored frontier.
 
-The merge rules are stated and property-tested, with one policy case (a truly
-concurrent deletion racing an edit to the same node) explicitly left open
-rather than guessed. The tracked `commons-spine` probe now bridges chartulary
+The merge rules are stated and property-tested. A truly concurrent removal now
+wins over an insert of the same node, while an insert that causally observes
+the removal deliberately recreates it. The tracked `commons-spine` probe now bridges chartulary
 to real p2panda LogSync: partitioned members reconverge to identical graph
 fingerprints, one member can then edit the other's synced edge and reconverge
 again, and an actual Redb close/reopen resumes both operation and edge
-counters. That plan's section 5 carries the product-facing limits for this
-profile. What remains before chat is authority-aware materialization plus
-Decision 2's group-key contract, not the convergence spine.
+counters. The profile now carries the product-facing limits.
 
-## Decision 2: group keys (named in murm's remainder, not scoped)
+## Decision 2: group keys (answered 2026-07-27)
 
 The deletion/retention plan lists production group encryption as remaining
 work, and p2panda-encryption is the planned lane (per the
 [LXMF brief](2026-07-06_lxmf_key_addressed_mail_research.md)). The undecided
-part is the moot-level contract: key agreement per shared space, rotation on
-membership change (what a join reveals, what a leave forecloses), and the
-requirement that sealed payloads ride any carrier unchanged, because iroh,
-p2panda, and retinue all stay opaque. This is an MLS-shaped problem; decide
-adopt-versus-blueprint the same way the LXMF brief did for mail, and decide
-it once, because every content class inherits the answer.
+part was the moot-level contract: key agreement per shared space, rotation on
+membership change, and byte-identical carriage.
+
+**Answered** by the
+[authority, keys, and consumers plan](../implementation_strategy/2026-07-27_commons_authority_keys_consumers_plan.md)
+and the Commons profile. Mere adopts the `p2panda-encryption` engine rather
+than `p2panda-spaces`. Gemot's converged member set supplies its DGM seam.
+Profiles choose Data Encryption for retained knowledge or Message Encryption
+for forward-secure messages. The first knowledge and chat fixtures both name
+Data Encryption explicitly. Authenticated DCGKA welcome supplies the initial
+epoch; removing a member rotates before later writes and withholds the new
+secret from that member. The key state survives serialization. Application
+bytes are encrypted first and the p2panda operation signs the ciphertext, so
+protected native drop and Reticulum/TCP carry the same signed bytes.
 
 ## The page format candidate: knot
 
@@ -118,12 +125,14 @@ boundary.
 
 ## Sequencing
 
-Not urgent; blocking the day chat is scoped. Done-conditions:
+The software done-conditions are met:
 
-- the two decisions above each have a dated design doc (one doc covering
-  both is fine) before any chat slice lands;
-- the first chat receipt is two members exchanging messages in one shared
-  engram over Memory, then p2panda, then retinue, reusing the managed-network
-  plan's V6/V7 admission matrix;
+- the two decisions have dated plans plus one product profile;
+- the first chat receipt exchanges encrypted immutable messages over Memory
+  and real p2panda LogSync;
+- canonical signed ciphertext survives protected native drop and
+  Reticulum/TCP unchanged;
 - the knowledge commons then adds schemas and profile vocabulary, not
   machinery.
+
+Direct-PHY RF remains a hardware receipt.
