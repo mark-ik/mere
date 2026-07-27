@@ -362,6 +362,20 @@ pub struct EditableTextV1 {
     pub encoding: TextEncoding,
     pub source: String,
     pub base_token: Vec<u8>,
+    /// A host-authorized, non-persisted rendering derived from `source`.
+    ///
+    /// The base token still names the authored source. Consumers must not
+    /// offer this text as the save buffer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub derived: Option<DerivedTextV1>,
+}
+
+/// A revisioned effect result attached to an editable source presentation.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DerivedTextV1 {
+    pub source: String,
+    pub summary: String,
 }
 
 /// Typed payload for [`EDITABLE_TEXT_SAVE_INTENT`].
@@ -392,6 +406,22 @@ pub struct InsertKnotClipV1 {
 
 pub const KNOT_CLIP_INSERT_INTENT: &str = "knot.clip.insert";
 pub const KNOT_CLIP_INSERT_SCHEMA: &str = "knot.clip.insert/v1";
+
+/// Typed consent receipt for Knot's non-persisting document effects.
+///
+/// `confirmed` records an explicit product gesture when policy requires one.
+/// The endpoint still decides whether the action is admitted.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct KnotEffectV1 {
+    pub base_token: Vec<u8>,
+    pub confirmed: bool,
+}
+
+pub const KNOT_TRANSCLUSION_RESOLVE_INTENT: &str = "knot.transclusion.resolve";
+pub const KNOT_TRANSCLUSION_RESOLVE_SCHEMA: &str = "knot.transclusion.resolve/v1";
+pub const KNOT_BLOCK_RUN_INTENT: &str = "knot.block.run";
+pub const KNOT_BLOCK_RUN_SCHEMA: &str = "knot.block.run/v1";
 
 /// A semantic intent invocation. `payload` is deliberately opaque at G1; its
 /// advertised schema is versioned and validation remains endpoint-side.
@@ -709,11 +739,19 @@ mod tests {
             encoding: TextEncoding::Utf8,
             source: "# Field note\n".into(),
             base_token: vec![1, 2, 3],
+            derived: None,
         };
         let bytes = serde_json::to_vec(&editable).unwrap();
         assert_eq!(
             serde_json::from_slice::<EditableTextV1>(&bytes).unwrap(),
             editable
+        );
+        let legacy = br#"{"address":"knot://legacy","media_type":"text/vnd.knot","encoding":"Utf8","source":"old","base_token":[1]}"#;
+        assert!(
+            serde_json::from_slice::<EditableTextV1>(legacy)
+                .unwrap()
+                .derived
+                .is_none()
         );
 
         let save = SaveTextV1 {
@@ -748,6 +786,23 @@ mod tests {
             )
             .is_err(),
             "a clip payload cannot smuggle endpoint-native authority"
+        );
+
+        let effect = KnotEffectV1 {
+            base_token: vec![1, 2, 3],
+            confirmed: true,
+        };
+        let wire = serde_json::to_string(&effect).unwrap();
+        assert_eq!(
+            serde_json::from_str::<KnotEffectV1>(&wire).unwrap(),
+            effect
+        );
+        assert!(
+            serde_json::from_str::<KnotEffectV1>(
+                r#"{"base_token":[1,2,3],"confirmed":true,"command":"rm"}"#
+            )
+            .is_err(),
+            "an effect payload cannot smuggle an evaluator or fetch command"
         );
     }
 

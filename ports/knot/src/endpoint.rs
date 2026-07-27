@@ -12,13 +12,19 @@ use graphshell_endpoint::{
 };
 use graphshell_protocol::{
     AdvertisedAction, BoundsRelationship, CachePolicy, CardValueV1, CarrierNotice, ContentHash,
-    EDITABLE_TEXT_SAVE_INTENT, EDITABLE_TEXT_SAVE_SCHEMA, EditableTextV1, EndpointDescriptor,
-    InsertKnotClipV1, IntentEffect, IntentInvocation, IntentReference, IntentResult,
-    KNOT_CLIP_INSERT_INTENT, KNOT_CLIP_INSERT_SCHEMA, NativeGlyphV1, PortableCardV1,
-    PresentationBinding, PresentationCapability, PresentationCodec, PresentationKey,
-    PresentationManifest, PresentationOffer, PresentationSemantics, ProjectionAck, ProjectionOffer,
-    ProjectionRequest, ProjectionSession, ProjectionSnapshot, ProtocolVersion, ResourceRequest,
-    ResourceResponse, ResumeReply, ResumeRequest, SaveTextV1, SemanticRole, TextEncoding,
+    DerivedTextV1, EDITABLE_TEXT_SAVE_INTENT, EDITABLE_TEXT_SAVE_SCHEMA, EditableTextV1,
+    EndpointDescriptor, InsertKnotClipV1, IntentEffect, IntentInvocation, IntentReference,
+    IntentResult, KNOT_BLOCK_RUN_INTENT, KNOT_BLOCK_RUN_SCHEMA, KNOT_CLIP_INSERT_INTENT,
+    KNOT_CLIP_INSERT_SCHEMA, KNOT_TRANSCLUSION_RESOLVE_INTENT, KNOT_TRANSCLUSION_RESOLVE_SCHEMA,
+    KnotEffectV1, NativeGlyphV1, PortableCardV1, PresentationBinding, PresentationCapability,
+    PresentationCodec, PresentationKey, PresentationManifest, PresentationOffer,
+    PresentationSemantics, ProjectionAck, ProjectionOffer, ProjectionRequest, ProjectionSession,
+    ProjectionSnapshot, ProtocolVersion, ResourceRequest, ResourceResponse, ResumeReply,
+    ResumeRequest, SaveTextV1, SemanticRole, TextEncoding,
+};
+use inker::{
+    BlockEvaluators, DocumentTrustState, Engine, EngineDocument, EngineInput, EvaluationPolicy,
+    Fetched, TransclusionPolicy, evaluate_blocks, resolve_transclusions,
 };
 use personae::{IdentityProvider, InMemoryProvider};
 use sceno::{
@@ -50,6 +56,71 @@ pub struct KnotWriteGrant {
 impl KnotWriteGrant {
     pub const fn new(max_source_bytes: u64) -> Self {
         Self { max_source_bytes }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum KnotEffectMode {
+    Auto,
+    Ask,
+    #[default]
+    Never,
+}
+
+/// User settings and hard limits for Knot's non-persisting effects.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct KnotEffectPolicy {
+    pub resolve: KnotEffectMode,
+    pub run: KnotEffectMode,
+    pub allowed_schemes: Vec<String>,
+    pub allowed_languages: Vec<String>,
+    pub max_depth: u8,
+    pub max_ops: u64,
+}
+
+impl Default for KnotEffectPolicy {
+    fn default() -> Self {
+        Self {
+            resolve: KnotEffectMode::Never,
+            run: KnotEffectMode::Never,
+            allowed_schemes: Vec::new(),
+            allowed_languages: Vec::new(),
+            max_depth: 1,
+            max_ops: 100_000,
+        }
+    }
+}
+
+/// Fetch authority injected by the endpoint host. Implementations own any
+/// path, network, or vault checks before returning source bytes.
+pub trait KnotEffectFetcher: Send {
+    fn fetch(&mut self, address: &str) -> Result<Fetched, String>;
+}
+
+/// Effect capabilities admitted for one endpoint process.
+pub struct KnotEffectAuthority {
+    policy: KnotEffectPolicy,
+    fetcher: Option<Box<dyn KnotEffectFetcher>>,
+    evaluators: BlockEvaluators,
+}
+
+impl KnotEffectAuthority {
+    pub fn new(policy: KnotEffectPolicy) -> Self {
+        Self {
+            policy,
+            fetcher: None,
+            evaluators: BlockEvaluators::new(),
+        }
+    }
+
+    pub fn with_fetcher(mut self, fetcher: impl KnotEffectFetcher + 'static) -> Self {
+        self.fetcher = Some(Box::new(fetcher));
+        self
+    }
+
+    pub fn register_evaluator(mut self, evaluator: impl inker::BlockEvaluator + 'static) -> Self {
+        self.evaluators.register(Box::new(evaluator));
+        self
     }
 }
 
@@ -89,6 +160,12 @@ struct PresentedDocument {
     byte_size: u64,
 }
 
+struct DerivedDocument {
+    base_token: Vec<u8>,
+    document: EngineDocument,
+    summary: String,
+}
+
 /// Knot's read-only Graphshell endpoint.
 pub struct KnotEndpoint {
     source: Source,
@@ -99,6 +176,10 @@ pub struct KnotEndpoint {
     bindings: BTreeMap<u32, String>,
     protocol_version: ProtocolVersion,
     last_announced: Option<Revision>,
+    observed_source_revision: Option<u64>,
+    scene_revision: Revision,
+    effects: Option<KnotEffectAuthority>,
+    derived: BTreeMap<String, DerivedDocument>,
 }
 
 impl KnotEndpoint {
@@ -148,6 +229,10 @@ impl KnotEndpoint {
             bindings: BTreeMap::new(),
             protocol_version: ProtocolVersion::V1,
             last_announced: None,
+            observed_source_revision: None,
+            scene_revision: Revision(0),
+            effects: None,
+            derived: BTreeMap::new(),
         })
     }
 
@@ -201,6 +286,10 @@ impl KnotEndpoint {
             bindings: BTreeMap::new(),
             protocol_version: ProtocolVersion::V1,
             last_announced: None,
+            observed_source_revision: None,
+            scene_revision: Revision(0),
+            effects: None,
+            derived: BTreeMap::new(),
         }
     }
 
@@ -222,6 +311,10 @@ impl KnotEndpoint {
             bindings: BTreeMap::new(),
             protocol_version: ProtocolVersion::V1,
             last_announced: None,
+            observed_source_revision: None,
+            scene_revision: Revision(0),
+            effects: None,
+            derived: BTreeMap::new(),
         }
     }
 
@@ -317,6 +410,8 @@ impl KnotEndpoint {
     pub fn revoke_writes(&mut self) -> bool {
         let had_grant = self.write_grant.take().is_some();
         if had_grant {
+            self.effects = None;
+            self.derived.clear();
             self.snapshot = None;
             self.resources.clear();
             self.bindings.clear();
@@ -331,12 +426,32 @@ impl KnotEndpoint {
         self.bindings.clear();
     }
 
+    pub fn grant_effects(&mut self, authority: KnotEffectAuthority) {
+        self.effects = Some(authority);
+        self.derived.clear();
+        self.snapshot = None;
+        self.resources.clear();
+        self.bindings.clear();
+    }
+
+    pub fn revoke_effects(&mut self) -> bool {
+        let had_authority = self.effects.take().is_some();
+        if had_authority {
+            self.derived.clear();
+            self.snapshot = None;
+            self.resources.clear();
+            self.bindings.clear();
+        }
+        had_authority
+    }
+
     /// Lock a vault endpoint, dropping its key and decrypted documents.
     pub fn lock_vault(&mut self) -> bool {
         let Source::Vault(source) = &mut self.source else {
             return false;
         };
         source.vault.lock();
+        self.derived.clear();
         self.snapshot = None;
         self.resources.clear();
         self.bindings.clear();
@@ -370,6 +485,7 @@ impl KnotEndpoint {
         if refresh_vault {
             self.refresh_vault_projection()?;
         }
+        self.sync_source_revision();
         Ok(())
     }
 
@@ -425,12 +541,29 @@ impl KnotEndpoint {
         }
     }
 
-    fn revision(&self) -> Revision {
+    fn raw_source_revision(&self) -> u64 {
         match &self.source {
-            Source::Directory { source, .. } => Revision(source.revision().max(1)),
-            Source::Fixture(_) => Revision(1),
-            Source::Vault(source) => Revision(source.vault.revision().max(1)),
+            Source::Directory { source, .. } => source.revision(),
+            Source::Fixture(_) => 1,
+            Source::Vault(source) => source.vault.revision(),
         }
+    }
+
+    fn sync_source_revision(&mut self) {
+        let current = self.raw_source_revision();
+        if self.observed_source_revision != Some(current) {
+            self.observed_source_revision = Some(current);
+            self.scene_revision = Revision(self.scene_revision.0.saturating_add(1).max(1));
+            self.derived.clear();
+        }
+    }
+
+    fn advance_derived_revision(&mut self) {
+        self.scene_revision = Revision(self.scene_revision.0.saturating_add(1).max(1));
+    }
+
+    fn revision(&self) -> Revision {
+        self.scene_revision
     }
 
     fn install_projection(&mut self, projection: KnotDocumentProjection) -> Result<(), String> {
@@ -488,12 +621,14 @@ impl KnotEndpoint {
                     return None;
                 }
                 let source = String::from_utf8(bytes.clone()).ok()?;
+                let base_token = file_base_token(&document.id, &bytes);
                 Some(EditableTextV1 {
                     address,
                     media_type,
                     encoding: TextEncoding::Utf8,
                     source,
-                    base_token: file_base_token(&document.id, &bytes),
+                    derived: self.derived_text(&document.id, &base_token),
+                    base_token,
                 })
             }
             Source::Vault(source) => {
@@ -511,16 +646,27 @@ impl KnotEndpoint {
                 }
                 let text = String::from_utf8(body.to_vec()).ok()?;
                 let head = source.document_heads.get(id)?;
+                let base_token = vault_base_token(id, head);
                 Some(EditableTextV1 {
                     address,
                     media_type,
                     encoding: TextEncoding::Utf8,
                     source: text,
-                    base_token: vault_base_token(id, head),
+                    derived: self.derived_text(&document.id, &base_token),
+                    base_token,
                 })
             }
             Source::Fixture(_) => None,
         }
+    }
+
+    fn derived_text(&self, id: &str, base_token: &[u8]) -> Option<DerivedTextV1> {
+        self.derived.get(id).and_then(|derived| {
+            (derived.base_token == base_token).then(|| DerivedTextV1 {
+                source: derived.document.to_knot(),
+                summary: derived.summary.clone(),
+            })
+        })
     }
 
     fn build_snapshot(&mut self) -> Result<ProjectionSnapshot, String> {
@@ -652,6 +798,39 @@ impl KnotEndpoint {
                     payload_schema: KNOT_CLIP_INSERT_SCHEMA.into(),
                     effect: IntentEffect::DomainTruth,
                 });
+                if self.effects.as_ref().is_some_and(|effects| {
+                    effects.policy.resolve != KnotEffectMode::Never && effects.fetcher.is_some()
+                }) {
+                    editable_semantics.actions.push(AdvertisedAction {
+                        intent: IntentReference(KNOT_TRANSCLUSION_RESOLVE_INTENT.into()),
+                        label: "Resolve".into(),
+                        explanation:
+                            "Fetch admitted include fences into a temporary derived preview."
+                                .into(),
+                        payload_schema: KNOT_TRANSCLUSION_RESOLVE_SCHEMA.into(),
+                        effect: IntentEffect::ExternalEffect,
+                    });
+                }
+                if self.effects.as_ref().is_some_and(|effects| {
+                    effects.policy.run != KnotEffectMode::Never
+                        && effects.evaluators.languages().into_iter().any(|language| {
+                            effects
+                                .policy
+                                .allowed_languages
+                                .iter()
+                                .any(|allowed| allowed == language)
+                        })
+                }) {
+                    editable_semantics.actions.push(AdvertisedAction {
+                        intent: IntentReference(KNOT_BLOCK_RUN_INTENT.into()),
+                        label: "Run".into(),
+                        explanation:
+                            "Evaluate admitted code fences into a temporary derived preview."
+                                .into(),
+                        payload_schema: KNOT_BLOCK_RUN_SCHEMA.into(),
+                        effect: IntentEffect::ExternalEffect,
+                    });
+                }
                 offers.push(PresentationOffer {
                     codec: PresentationCodec::EditableTextV1,
                     resource: editable_hash,
@@ -807,6 +986,7 @@ impl KnotEndpoint {
             self.install_projection(projection)?;
         }
 
+        self.sync_source_revision();
         let announced = self.last_announced;
         self.build_snapshot()?;
         self.last_announced = announced;
@@ -888,6 +1068,168 @@ impl KnotEndpoint {
         )
     }
 
+    fn resolve_transclusions(
+        &mut self,
+        id: &str,
+        payload: KnotEffectV1,
+    ) -> Result<IntentResult, String> {
+        let Some((current, mut document)) = self.effect_input(id, &payload.base_token)? else {
+            return Ok(self.stale_result());
+        };
+        let mode = self
+            .effects
+            .as_ref()
+            .map(|effects| effects.policy.resolve)
+            .unwrap_or(KnotEffectMode::Never);
+        if let Some(rejected) = self.check_effect_consent(mode, payload.confirmed) {
+            return Ok(rejected);
+        }
+        if document.trust == DocumentTrustState::Broken {
+            return Ok(IntentResult::Rejected {
+                reason: "Knot refuses effects for a document with broken trust".into(),
+            });
+        }
+
+        let effects = self
+            .effects
+            .as_mut()
+            .ok_or_else(|| "Knot session has no effect authority".to_string())?;
+        let fetcher = effects
+            .fetcher
+            .as_mut()
+            .ok_or_else(|| "Knot session has no transclusion fetcher".to_string())?;
+        let policy = TransclusionPolicy::for_own_notes(
+            effects.policy.allowed_schemes.clone(),
+            effects.policy.max_depth,
+        );
+        let mut fetch = |address: &str| fetcher.fetch(address);
+        let mut render = render_effect_input;
+        let outcome = resolve_transclusions(&mut document, &mut fetch, &mut render, &policy);
+        let summary = format!(
+            "resolved {}; denied {}; failed {}",
+            outcome.resolved,
+            outcome.denied.len(),
+            outcome.failed.len()
+        );
+        self.accept_derived(id, current.base_token, document, summary)
+    }
+
+    fn run_blocks(&mut self, id: &str, payload: KnotEffectV1) -> Result<IntentResult, String> {
+        let Some((current, mut document)) = self.effect_input(id, &payload.base_token)? else {
+            return Ok(self.stale_result());
+        };
+        let mode = self
+            .effects
+            .as_ref()
+            .map(|effects| effects.policy.run)
+            .unwrap_or(KnotEffectMode::Never);
+        if let Some(rejected) = self.check_effect_consent(mode, payload.confirmed) {
+            return Ok(rejected);
+        }
+        if document.trust == DocumentTrustState::Broken {
+            return Ok(IntentResult::Rejected {
+                reason: "Knot refuses effects for a document with broken trust".into(),
+            });
+        }
+
+        let effects = self
+            .effects
+            .as_mut()
+            .ok_or_else(|| "Knot session has no effect authority".to_string())?;
+        let policy = EvaluationPolicy::for_own_notes(effects.policy.allowed_languages.clone());
+        let max_ops = effects.policy.max_ops;
+        let evaluators = &mut effects.evaluators;
+        let mut evaluate =
+            |language: &str, source: &str| evaluators.evaluate(language, source, max_ops);
+        let mut render = render_effect_input;
+        let outcome = evaluate_blocks(&mut document, &mut evaluate, &mut render, &policy);
+        let summary = format!(
+            "ran {}; denied {}; failed {}",
+            outcome.evaluated,
+            outcome.denied.len(),
+            outcome.failed.len()
+        );
+        self.accept_derived(id, current.base_token, document, summary)
+    }
+
+    fn effect_input(
+        &self,
+        id: &str,
+        base_token: &[u8],
+    ) -> Result<Option<(EditableTextV1, EngineDocument)>, String> {
+        let document = self
+            .documents()
+            .into_iter()
+            .find(|document| document.id == id)
+            .ok_or_else(|| "intent target is no longer present".to_string())?;
+        let current = self
+            .editable_text(&document)
+            .ok_or_else(|| "this document is not currently writable".to_string())?;
+        if base_token != current.base_token {
+            return Ok(None);
+        }
+        let derived = self
+            .derived
+            .get(id)
+            .filter(|derived| derived.base_token == current.base_token)
+            .map(|derived| derived.document.clone());
+        let document = match derived {
+            Some(document) => document,
+            None => render_effect_input(
+                &EngineInput::new(current.address.clone(), current.source.clone())
+                    .with_content_type(current.media_type.clone()),
+            )?,
+        };
+        Ok(Some((current, document)))
+    }
+
+    fn check_effect_consent(&self, mode: KnotEffectMode, confirmed: bool) -> Option<IntentResult> {
+        if mode == KnotEffectMode::Never {
+            return Some(IntentResult::Rejected {
+                reason: "this effect is disabled by Knot policy".into(),
+            });
+        }
+        let received = matches!(
+            &self.source,
+            Source::Vault(VaultSource {
+                sync: Some(VaultSyncAuthority::Commons { .. }),
+                ..
+            })
+        );
+        if !confirmed && (mode == KnotEffectMode::Ask || received) {
+            return Some(IntentResult::Rejected {
+                reason: if received {
+                    "received Commons documents require explicit effect confirmation".into()
+                } else {
+                    "this effect requires explicit confirmation".into()
+                },
+            });
+        }
+        None
+    }
+
+    fn accept_derived(
+        &mut self,
+        id: &str,
+        base_token: Vec<u8>,
+        document: EngineDocument,
+        summary: String,
+    ) -> Result<IntentResult, String> {
+        self.derived.insert(
+            id.to_string(),
+            DerivedDocument {
+                base_token,
+                document,
+                summary,
+            },
+        );
+        self.advance_derived_revision();
+        let announced = self.last_announced;
+        self.build_snapshot()?;
+        self.last_announced = announced;
+        Ok(IntentResult::Accepted)
+    }
+
     fn stale_result(&self) -> IntentResult {
         let (current_epoch, current_revision) = self
             .snapshot
@@ -915,6 +1257,26 @@ impl KnotEndpoint {
         }
         Ok(())
     }
+}
+
+fn render_effect_input(input: &EngineInput) -> Result<EngineDocument, String> {
+    let media_type = input.content_type.as_deref();
+    let address = input.address.to_ascii_lowercase();
+    let engine: Box<dyn Engine> = match media_type {
+        Some("text/gemini") => Box::new(nematic::GemtextEngine::new()),
+        Some("text/markdown") => Box::new(nematic::MarkdownEngine::new()),
+        Some("text/x-knot" | "text/vnd.knot") => Box::new(nematic::KnotEngine::new()),
+        Some("text/plain") => Box::new(nematic::TextEngine::new()),
+        _ if address.ends_with(".gmi") || address.ends_with(".gemini") => {
+            Box::new(nematic::GemtextEngine::new())
+        }
+        _ if address.ends_with(".md") || address.ends_with(".markdown") => {
+            Box::new(nematic::MarkdownEngine::new())
+        }
+        _ if address.ends_with(".knot") => Box::new(nematic::KnotEngine::new()),
+        _ => Box::new(nematic::TextEngine::new()),
+    };
+    engine.render(input).map_err(|error| error.to_string())
 }
 
 fn file_base_token(id: &str, bytes: &[u8]) -> Vec<u8> {
@@ -1072,6 +1434,8 @@ impl IntentSink for KnotEndpoint {
         let expected_schema = match intent.intent.as_str() {
             EDITABLE_TEXT_SAVE_INTENT => EDITABLE_TEXT_SAVE_SCHEMA,
             KNOT_CLIP_INSERT_INTENT => KNOT_CLIP_INSERT_SCHEMA,
+            KNOT_TRANSCLUSION_RESOLVE_INTENT => KNOT_TRANSCLUSION_RESOLVE_SCHEMA,
+            KNOT_BLOCK_RUN_INTENT => KNOT_BLOCK_RUN_SCHEMA,
             _ => {
                 return Ok(IntentResult::Rejected {
                     reason: "intent was not advertised by this Knot endpoint".into(),
@@ -1120,6 +1484,28 @@ impl IntentSink for KnotEndpoint {
                     }
                 };
                 self.insert_clip(&document_id, payload)
+            }
+            KNOT_TRANSCLUSION_RESOLVE_INTENT | KNOT_BLOCK_RUN_INTENT => {
+                let payload: KnotEffectV1 = match serde_json::from_slice(&intent.payload) {
+                    Ok(payload) => payload,
+                    Err(_) => {
+                        return Ok(IntentResult::Rejected {
+                            reason: format!(
+                                "effect payload does not match {}",
+                                if intent.intent == KNOT_TRANSCLUSION_RESOLVE_INTENT {
+                                    KNOT_TRANSCLUSION_RESOLVE_SCHEMA
+                                } else {
+                                    KNOT_BLOCK_RUN_SCHEMA
+                                }
+                            ),
+                        });
+                    }
+                };
+                if intent.intent == KNOT_TRANSCLUSION_RESOLVE_INTENT {
+                    self.resolve_transclusions(&document_id, payload)
+                } else {
+                    self.run_blocks(&document_id, payload)
+                }
             }
             _ => unreachable!("intent kind was checked above"),
         }
@@ -1217,6 +1603,37 @@ mod tests {
         }
     }
 
+    fn effect_invocation(
+        snapshot: &ProjectionSnapshot,
+        target: InstanceId,
+        intent: &str,
+        payload: &KnotEffectV1,
+    ) -> IntentInvocation {
+        IntentInvocation {
+            session: snapshot.session.clone(),
+            target,
+            observed_epoch: snapshot.scene.epoch,
+            observed_revision: snapshot.scene.revision,
+            intent: intent.into(),
+            payload: serde_json::to_vec(payload).unwrap(),
+        }
+    }
+
+    struct StubFetcher;
+
+    impl KnotEffectFetcher for StubFetcher {
+        fn fetch(&mut self, address: &str) -> Result<Fetched, String> {
+            if address == "file://fixture/included.md" {
+                Ok(Fetched {
+                    content_type: Some("text/markdown".into()),
+                    body: "## Included\n\nFetched text.\n".into(),
+                })
+            } else {
+                Err(format!("unexpected fetch: {address}"))
+            }
+        }
+    }
+
     #[test]
     fn fixture_discloses_cards_and_resources() {
         let mut endpoint = KnotEndpoint::fixture();
@@ -1249,6 +1666,19 @@ mod tests {
         let clip_action = action_for(&snapshot, InstanceId(0), KNOT_CLIP_INSERT_INTENT);
         assert_eq!(clip_action.payload_schema, KNOT_CLIP_INSERT_SCHEMA);
         assert_eq!(clip_action.effect, IntentEffect::DomainTruth);
+        assert!(
+            snapshot
+                .presentation
+                .offers_for(InstanceId(0))
+                .unwrap()
+                .iter()
+                .flat_map(|offer| &offer.semantics.actions)
+                .all(|action| {
+                    action.intent.0 != KNOT_TRANSCLUSION_RESOLVE_INTENT
+                        && action.intent.0 != KNOT_BLOCK_RUN_INTENT
+                }),
+            "Never/default effect policy must not advertise Resolve or Run"
+        );
         assert_eq!(
             snapshot.cache_policy,
             CachePolicy {
@@ -1427,6 +1857,201 @@ mod tests {
             .unwrap();
         assert!(matches!(invalid, IntentResult::Rejected { .. }));
         assert_eq!(fs::read_to_string(&path).unwrap(), saved);
+    }
+
+    #[test]
+    fn resolve_and_run_are_consented_revisioned_derived_state() {
+        let temp = tempdir().unwrap();
+        let path = temp.path().join("field.knot");
+        let authored = "\
+# Field
+
+```include file://fixture/included.md
+Fallback.
+```
+
+```rhai eval
+40 + 2
+```
+";
+        fs::write(&path, authored).unwrap();
+        let policy = KnotEffectPolicy {
+            resolve: KnotEffectMode::Ask,
+            run: KnotEffectMode::Ask,
+            allowed_schemes: vec!["file".into()],
+            allowed_languages: vec!["rhai".into()],
+            max_depth: 1,
+            max_ops: 10_000,
+        };
+        let effects = KnotEffectAuthority::new(policy)
+            .with_fetcher(StubFetcher)
+            .register_evaluator(script_rhai::RhaiEvaluator::new());
+        let mut endpoint =
+            KnotEndpoint::open_writable(temp.path(), KnotWriteGrant::new(4096)).unwrap();
+        endpoint.grant_effects(effects);
+        let request = endpoint.describe().projections.remove(0).request;
+        let snapshot = endpoint.snapshot(request).unwrap();
+        let (target, editable, _) = editable_resource(&mut endpoint, &snapshot, "field.knot");
+        assert!(editable.derived.is_none());
+        let resolve_action = action_for(&snapshot, target, KNOT_TRANSCLUSION_RESOLVE_INTENT);
+        let run_action = action_for(&snapshot, target, KNOT_BLOCK_RUN_INTENT);
+        assert_eq!(resolve_action.effect, IntentEffect::ExternalEffect);
+        assert_eq!(run_action.effect, IntentEffect::ExternalEffect);
+
+        let unconfirmed = endpoint
+            .invoke(effect_invocation(
+                &snapshot,
+                target,
+                KNOT_TRANSCLUSION_RESOLVE_INTENT,
+                &KnotEffectV1 {
+                    base_token: editable.base_token.clone(),
+                    confirmed: false,
+                },
+            ))
+            .unwrap();
+        assert!(matches!(unconfirmed, IntentResult::Rejected { .. }));
+        assert_eq!(endpoint.poll_notice().unwrap(), None);
+
+        assert_eq!(
+            endpoint
+                .invoke(effect_invocation(
+                    &snapshot,
+                    target,
+                    KNOT_TRANSCLUSION_RESOLVE_INTENT,
+                    &KnotEffectV1 {
+                        base_token: editable.base_token.clone(),
+                        confirmed: true,
+                    },
+                ))
+                .unwrap(),
+            IntentResult::Accepted
+        );
+        assert_eq!(fs::read_to_string(&path).unwrap(), authored);
+        let resolved_notice = endpoint.poll_notice().unwrap().unwrap();
+        assert!(resolved_notice.revision > snapshot.scene.revision);
+        let ResumeReply::Snapshot(resolved) = endpoint
+            .resume(ResumeRequest {
+                session: snapshot.session.clone(),
+                epoch: snapshot.scene.epoch,
+                revision: snapshot.scene.revision,
+            })
+            .unwrap()
+        else {
+            panic!("resolve must refresh the derived presentation");
+        };
+        let (_, resolved_text, _) = editable_resource(&mut endpoint, &resolved, "field.knot");
+        let derived = resolved_text.derived.expect("resolve result");
+        assert!(
+            derived.source.contains("Included"),
+            "derived source: {}\nsummary: {}",
+            derived.source,
+            derived.summary
+        );
+        assert!(derived.source.contains("Fetched text."));
+        assert!(derived.source.contains("rhai eval"));
+        assert_eq!(derived.summary, "resolved 1; denied 0; failed 0");
+
+        assert_eq!(
+            endpoint
+                .invoke(effect_invocation(
+                    &resolved,
+                    target,
+                    KNOT_BLOCK_RUN_INTENT,
+                    &KnotEffectV1 {
+                        base_token: resolved_text.base_token,
+                        confirmed: true,
+                    },
+                ))
+                .unwrap(),
+            IntentResult::Accepted
+        );
+        assert_eq!(fs::read_to_string(&path).unwrap(), authored);
+        let run_notice = endpoint.poll_notice().unwrap().unwrap();
+        assert!(run_notice.revision > resolved.scene.revision);
+        let ResumeReply::Snapshot(ran) = endpoint
+            .resume(ResumeRequest {
+                session: resolved.session,
+                epoch: resolved.scene.epoch,
+                revision: resolved.scene.revision,
+            })
+            .unwrap()
+        else {
+            panic!("run must refresh the derived presentation");
+        };
+        let (_, ran_text, _) = editable_resource(&mut endpoint, &ran, "field.knot");
+        let ran_base_token = ran_text.base_token.clone();
+        let derived = ran_text.derived.expect("run result");
+        assert!(derived.source.contains("Included"));
+        assert!(derived.source.contains("42"));
+        assert!(!derived.source.contains("rhai eval"));
+        assert_eq!(derived.summary, "ran 1; denied 0; failed 0");
+
+        fs::write(&path, "# Changed elsewhere\n").unwrap();
+        let stale = endpoint
+            .invoke(effect_invocation(
+                &ran,
+                target,
+                KNOT_BLOCK_RUN_INTENT,
+                &KnotEffectV1 {
+                    base_token: ran_base_token,
+                    confirmed: true,
+                },
+            ))
+            .unwrap();
+        assert!(matches!(stale, IntentResult::Stale { .. }));
+        assert_eq!(fs::read_to_string(path).unwrap(), "# Changed elsewhere\n");
+    }
+
+    #[test]
+    fn auto_run_stops_at_the_injected_operation_budget() {
+        let temp = tempdir().unwrap();
+        let path = temp.path().join("field.knot");
+        let authored = "# Field\n\n```rhai eval\nloop { }\n```\n";
+        fs::write(&path, authored).unwrap();
+        let policy = KnotEffectPolicy {
+            run: KnotEffectMode::Auto,
+            allowed_languages: vec!["rhai".into()],
+            max_ops: 100,
+            ..KnotEffectPolicy::default()
+        };
+        let effects =
+            KnotEffectAuthority::new(policy).register_evaluator(script_rhai::RhaiEvaluator::new());
+        let mut endpoint =
+            KnotEndpoint::open_writable(temp.path(), KnotWriteGrant::new(4096)).unwrap();
+        endpoint.grant_effects(effects);
+        let request = endpoint.describe().projections.remove(0).request;
+        let snapshot = endpoint.snapshot(request).unwrap();
+        let (target, editable, _) = editable_resource(&mut endpoint, &snapshot, "field.knot");
+
+        assert_eq!(
+            endpoint
+                .invoke(effect_invocation(
+                    &snapshot,
+                    target,
+                    KNOT_BLOCK_RUN_INTENT,
+                    &KnotEffectV1 {
+                        base_token: editable.base_token,
+                        confirmed: false,
+                    },
+                ))
+                .unwrap(),
+            IntentResult::Accepted
+        );
+        let ResumeReply::Snapshot(current) = endpoint
+            .resume(ResumeRequest {
+                session: snapshot.session,
+                epoch: snapshot.scene.epoch,
+                revision: snapshot.scene.revision,
+            })
+            .unwrap()
+        else {
+            panic!("bounded run must produce a derived receipt");
+        };
+        let (_, current, _) = editable_resource(&mut endpoint, &current, "field.knot");
+        let derived = current.derived.expect("bounded failure result");
+        assert_eq!(derived.summary, "ran 0; denied 0; failed 1");
+        assert!(derived.source.contains("loop { }"));
+        assert_eq!(fs::read_to_string(path).unwrap(), authored);
     }
 
     #[test]

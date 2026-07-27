@@ -33,11 +33,13 @@ sceno.workspace = true
 scenotime.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+script-rhai.workspace = true
 servitor.workspace = true
 session-runtime.workspace = true
 sibylla.workspace = true
 stickleback.workspace = true
 thiserror = "1"
+url = "2"
 uuid.workspace = true
 zeroize = { version = "1", features = ["derive"] }
 

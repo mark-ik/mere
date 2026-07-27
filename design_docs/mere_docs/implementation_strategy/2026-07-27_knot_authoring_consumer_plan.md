@@ -1,8 +1,10 @@
 # Knot Authoring Consumer Plan
 
 **Date:** 2026-07-27
-**Status:** implementation in progress. A1 and the writable endpoint core are
-proved; the retained Turnstone consumer is next.
+**Status:** implementation complete locally for A1 through A4, typed Inspector
+clip insertion, and the first Resolve/Run bridge. Deterministic and real-process
+receipts are green. A final OS-headed Genet Probe drive remains an acceptance
+refinement, not an unwired product seam.
 
 **Companions:** the completed [Knot port plan](2026-07-25_knot_port_plan.md),
 the reconciled
@@ -82,11 +84,17 @@ struct EditableTextV1 {
     encoding: TextEncoding,       // v1: UTF-8
     source: String,
     base_token: Vec<u8>,          // opaque, endpoint minted
+    derived: Option<DerivedTextV1>, // non-persisted effect result
 }
 
 struct SaveTextV1 {
     base_token: Vec<u8>,
     source: String,
+}
+
+struct KnotEffectV1 {
+    base_token: Vec<u8>,
+    confirmed: bool,
 }
 ```
 
@@ -120,18 +128,42 @@ Graphshell caches never contain editable source.
 
 - A1 is complete: protocol 1.2 carries strict editable-text resources and save
   payloads, older clients retain card/glyph fallback, and the Graphshell host
-  has a retained mount/resolve/invoke/resume/close session.
-- A2's authority and mutation core is complete for writable directory
+  has a retained mount/resolve/invoke/resume/close session. The optional
+  `DerivedTextV1` field decodes absent for older 1.2 resources and never becomes
+  the editor's save buffer.
+- A2 is complete for writable directory
   documents and injected personal/communal vault stores. Save validates the
   snapshot target, grant, observed revision, format, size, and document base
   token before writing. Vault save authors one signed sync event and
   rematerializes the sealed view from the accepted projection.
-- A real retained Graphshell process test mounts `knot_endpoint
-  directory-write`, saves through the advertised action, receives the revision
-  bell, resumes, closes, and verifies the disk bytes.
-- The sealed-vault receipt proves signed-head advancement, ciphertext opacity,
-  lock-time resource purge, and reopen persistence. Production process launch
-  through startup unlock remains open, as do A3 and the headed A4 receipts.
+- A3 is complete in Turnstone. One background hub owns the retained stdio
+  carrier; each visible document owns one local Cambium `KnotEditor`. Mouse,
+  keyboard, IME, undo, highlighting, outline, folds, preview, explicit Save,
+  reload, stale conflict state, and revision-bell refresh are wired without a
+  carrier round trip per keystroke.
+- A4's executable receipts cover real file save/restart, two-client stale-save
+  refusal, unrelated directory churn, signed sealed-vault persistence,
+  startup-unlocked persona-vault process launch, ciphertext opacity, and
+  lock-time purge. The remaining acceptance refinement is an OS-headed Genet
+  Probe drive of the already-mounted pane.
+- Inspector clip is complete. Genet sessions emit a host-neutral semantic clip;
+  Turnstone sends `knot.clip.insert/v1`; Knot validates provenance, base token,
+  grant, size, target, and source URI before appending through the ordinary
+  file or signed-vault save path. The current static/Livery producer captures
+  the whole semantic document and records no selector; range/DOM selection is
+  a later producer refinement, not inferred provenance.
+- Resolve and Run are complete for the first production capability set.
+  Graphshell carries strict `knot.transclusion.resolve/v1` and
+  `knot.block.run/v1` payloads. Knot owns `auto` / `ask` / `never`, scheme and
+  language allowlists, recursion and Rhai operation budgets, Commons
+  received-document confirmation, rooted file fetch authority, and the
+  derived revision. Turnstone presents the advertised buttons, sends explicit
+  confirmation for Ask, queues Auto on open, and drops a derived preview on
+  local edit.
+- The real-process effect receipt resolves a rooted Markdown include and runs a
+  Rhai fence through the built `knot_endpoint`; both manual Ask and Auto on
+  reopen produce derived refreshes while the authored `.knot` file remains
+  byte-identical.
 
 ### A1. Versioned editable text and a retained session
 
@@ -266,7 +298,7 @@ bytes remain opaque at rest, and the host never receives the vault key.
 
 ## What follows
 
-### Inspector clip action
+### Inspector clip action. Complete locally
 
 The first follow-on uses the same retained session, target binding, write grant,
 base token, stale refusal, and revision-bell refresh. It gets its own typed
@@ -278,13 +310,26 @@ and records the document mutation and provenance.
 Creating a new clip document requires an explicitly advertised Create action.
 Appending to the open document uses the existing target and base token.
 
-### Run and Resolve
+### Run and Resolve. First production bridge complete locally
 
-Only after A1 through A4 establish a writable, revision-checked, grant-checked
-endpoint do transclusion Resolve and block Run land. They reuse the same intent
-advertisement, capability, consent, stale-revision, receipt, and revision-bell
-path from the [evaluation/export plan](../../nematic_docs/implementation_strategy/2026-06-12_knot_evaluation_export_plan.md).
-They do not invent an effect channel beside a read-only endpoint.
+Transclusion Resolve and block Run reuse the same intent advertisement,
+capability, consent, stale-revision, receipt, and revision-bell path from the
+[evaluation/export plan](../../nematic_docs/implementation_strategy/2026-06-12_knot_evaluation_export_plan.md).
+The result is attached to the editable presentation as derived text tied to the
+current base token. It is not written to disk or into a signed vault journal.
+
+Current user settings:
+
+- `TURNSTONE_KNOT_RESOLVE_MODE=auto|ask|never`
+- `TURNSTONE_KNOT_RUN_MODE=auto|ask|never`
+- `TURNSTONE_KNOT_RESOLVE_SCHEMES` and
+  `TURNSTONE_KNOT_RUN_LANGUAGES`
+- `TURNSTONE_KNOT_RESOLVE_MAX_DEPTH` and `TURNSTONE_KNOT_RUN_MAX_OPS`
+
+The shipped providers are rooted `file:` transclusion for directory endpoints
+and sandboxed Rhai evaluation. HTTP/smolweb fetch providers, sanitized HTML,
+and the sealed attributable derived cache remain the evaluation plan's
+consumer-pulled E3/E4 work.
 
 ## Stop rules
 

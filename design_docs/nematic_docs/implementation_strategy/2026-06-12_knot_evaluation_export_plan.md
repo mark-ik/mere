@@ -1,12 +1,13 @@
 # Knot Evaluation + Export Plan — live blocks in, any protocol out
 
 **Date**: 2026-06-12
-**Status**: reconciled 2026-07-27. K5, K1's pure resolve pass, and K2's
-evaluation seam and Rhai/Lua proofs landed. The production effect bridge,
-sanitized HTML lane, consent surface, and derived cache did not. Inker and
-Nematic now live in Genet; Meerkat, the host named throughout the dated
-progress log, was deleted 2026-07-18. The current ownership and remaining
-sequence below supersede the old Meerkat wiring assignments.
+**Status**: reconciled and advanced 2026-07-27. K5, K1's pure resolve pass,
+K2's evaluation seam, the Knot production effect bridge, and Turnstone consent
+surface landed. Sanitized HTML, additional network providers, and the sealed
+derived cache remain open. Inker and Nematic now live in Genet; Meerkat, the
+host named throughout the dated progress log, was deleted 2026-07-18. The
+current ownership and remaining sequence below supersede the old Meerkat
+wiring assignments.
 **What this is**: the effectful half the
 [polyglot knot design](2026-05-08_polyglot_knot_design.md) deliberately left
 host-side, plus the export dual it promised. Knots (CommonMark and djot
@@ -35,10 +36,10 @@ an effectful Knot service and a product-host consent surface.
 | Original slice | Current status | Current owner |
 | --- | --- | --- |
 | K5 exporters | Complete: gemtext already existed; gophermap and text exporters landed | Genet `components/inker/src/document/render/export.rs` |
-| K1 transclusion | Pure policy/resolve pass and file-only rehearsal complete; live network/product bridge open | Pure pass in Genet Inker. Knot owns document trust and invokes an injected fetch capability. |
-| K2 evaluation | `BlockEvaluator`, registry, policy, Rhai backend, bounded Piccolo proof, and nested render complete; production registration and consent open | Seam in Genet Inker; evaluators remain capability providers. Knot chooses and invokes them under document policy. |
+| K1 transclusion | Pure pass plus production rooted-file provider, Knot policy, Graphshell intent, and Turnstone Ask/Auto receipt complete; network providers open | Pure pass in Genet Inker. Knot owns document trust and invokes an injected fetch capability. |
+| K2 evaluation | `BlockEvaluator`, registry, policy, Rhai backend, bounded Piccolo proof, nested render, production registration, and consent complete | Seam in Genet Inker; evaluators remain capability providers. Knot chooses and invokes them under document policy. |
 | K4 sanitized HTML clips | Open | Genet Nematic/inker as a pure parse, sanitize, and lower lane |
-| K3 cache and consent | Open | Knot owns sealed derived caches and policy. Graphshell/Turnstone presents declared intents and user consent. |
+| K3 cache and consent | Consent complete; sealed cache open | Knot owns sealed derived caches and policy. Graphshell/Turnstone presents declared intents and user consent. |
 
 ### Boundary ruling
 
@@ -58,23 +59,26 @@ an effectful Knot service and a product-host consent surface.
   evaluation output are recomputable projections by default. A cache is sealed,
   attributable derived state, not a silent edit to the source journal.
 
-The live `KnotEndpoint` is currently read-only and rejects every intent. The
-editor library and the K1/K2 engine passes being complete therefore do not make
-the authoring/effect path complete. The
+The live `KnotEndpoint` now advertises effects only for writable documents with
+injected capabilities. It validates the target, grant, observed scene revision,
+document base token, consent mode, trust posture, and allowlists before
+invocation. The
 [Knot authoring consumer plan](../../mere_docs/implementation_strategy/2026-07-27_knot_authoring_consumer_plan.md)
-first establishes the retained writable, revision-checked, consent-capable
-intent path that Resolve and Run will reuse.
+holds the retained consumer and mutation receipts.
 
 ### Remaining sequence
 
-1. **E1, Knot effect service.** After the authoring consumer's A1 through A4,
-   add explicit Resolve and Run intents; inject
-   fetch/evaluator registries; enforce document trust, grants, scheme/language
-   allowlists, recursion limits, and user-configured `auto` / `ask` / `never`
-   modes. Received documents remain inert by default.
-2. **E2, product consent.** Advertise those intents through Graphshell and let
-   the product surface present consent and visible provenance. A stale intent
-   must be rejected against the observed document revision.
+1. **E1, Knot effect service. Complete for rooted file + Rhai.** Explicit
+   Resolve and Run intents, injected fetch/evaluator registries, document trust
+   and grant checks, scheme/language allowlists, recursion and operation
+   limits, and user-configured `auto` / `ask` / `never` modes are live.
+   Received Commons documents require explicit confirmation even under Auto.
+   HTTP and smolweb capability providers remain separate additions.
+2. **E2, product consent. Complete.** Graphshell advertises strict versioned
+   actions. Turnstone presents only advertised Resolve/Run controls, sends the
+   user's confirmation, queues Auto on open, and renders the result as
+   non-persisted derived text tied to the current base token. Stale invocations
+   refuse before fetch or evaluation.
 3. **E3, sanitized HTML.** Land an optional html5ever-backed fragment engine in
    Genet, with scripts, event handlers, iframes, and style authority removed by
    tests. Keep the semantic sibling as the export path.
@@ -83,10 +87,11 @@ intent path that Resolve and Run will reuse.
    evaluator/fetcher version, fetched-at, and source-revision attribution.
    Lock, revocation, and Commons epoch rotation must make the cache unavailable
    on the same boundary as its source.
-5. **E5, end-to-end receipts.** Prove own-document allow, received-document
-   deny/ask, offline cached transclusion with visible age, budget exhaustion,
-   stale-consent rejection, and sanitized clip rendering over the real mounted
-   lane.
+5. **E5, end-to-end receipts. Partially complete.** Own-document Ask and Auto,
+   source immutability, derived revision refresh, operation-budget exhaustion,
+   and stale-consent rejection are proved; the real Turnstone process receipt
+   crosses both actions. Received-document deny/ask needs a communal process
+   fixture. Offline age requires E4. Sanitized clip rendering requires E3.
 
 JavaScript backends, public serving, canvas outputs, and additional block kinds
 remain separate consumer-pulled work. They are not closure conditions for this
@@ -325,9 +330,10 @@ produces the semantic downgrade.
   deterministic intent), default off.
 - The consent surfaces — the "resolve" / "run" affordance on inert fences
   in received knots — are product-host UX over declared Knot endpoint intents.
-  The current endpoint is read-only, so this is E1/E2 work rather than a
-  window-composition gate. Until then the `knot-render` bin's flags remain only
-  an engine rehearsal, not a product consent mechanism.
+  E1/E2 now provide that path for writable own documents and require explicit
+  confirmation for received Commons documents. The `knot-render` bin remains
+  an engine rehearsal; the Knot endpoint is the authority-bearing product
+  path.
 
 **Done when**: second render offline serves the cached transclusion with
 its age shown; cache entries are LocalOnly engrams the GC pass can walk;
