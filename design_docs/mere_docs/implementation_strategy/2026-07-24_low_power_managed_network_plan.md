@@ -1,10 +1,10 @@
 # Low-Power Radio and Managed Network Plan
 
 **Status (2026-07-27): in execution. V1-V6 and V8 have landed; V7 passes
-over Memory and Reticulum/TCP. Murm's accept path landed 2026-07-27 as the
-session lane (`murm::session_lane`), which closes V6 literally. The V0 power
-bench, the p2panda arm, and direct-PHY/RF acceptance remain open, the last two
-of those on the bench gate.**
+over Memory, Reticulum/TCP, and headed Reticulum/direct-PHY RF. Murm's accept
+path landed 2026-07-27 as the session lane (`murm::session_lane`), which
+closes V6 literally. The V0/V2 power and sleep bench and the p2panda arm
+remain open.**
 
 This round joins two pieces that are useful independently and stronger
 together:
@@ -988,8 +988,28 @@ hung overnight. `read_to_end` waits for a close a retinue link does not
 promptly signal, and `initiate_session` had no timeout. Bound every await in
 a transport test; a hang is indistinguishable from a slow build.
 
-**Still open for V7:** the p2panda arm, and the direct-PHY/RF arm, which
-waits on the V0/V2 bench.
+### 2026-07-27 — V7 direct-PHY/RF arm passes
+
+The standalone `crates/probes/murm-direct-phy` receipt passed over the
+USB-controlled COM6 ESP32-S3 V4 and COM10 nRF/T114 radios at 906.875 MHz.
+One valid member delegation admitted a signed Murm post; a second session
+under a disabled owner rule returned `ServiceNotOffered` at both ends and
+left the conversation unchanged. Reticulum used a 255-byte reliable link
+with a one-frame window, and the accepted session retained the receiving
+radio interface and shared link used by Notochord.
+
+The headed run found and closed three carrier defects: a 263-byte
+authenticated announce that exceeded the PHY cap, a best-effort stream
+relay that emitted a 435-byte packet despite a negotiated 255-byte MTU, and
+use of best-effort delivery for a multi-frame policy handshake on LoRa. The
+full receipt and evidence boundary are in
+[`2026-07-27_murm_v7_direct_phy_acceptance.md`](./2026-07-27_murm_v7_direct_phy_acceptance.md).
+
+This is not power evidence. Both boards remained USB-powered in their
+development personalities; UART Light-sleep, DIO1 wake, current, and energy
+remain in V0/V2.
+
+**Still open for V7:** the p2panda arm.
 
 **V6 is closed as of 2026-07-27.** The done-condition is literal now: Murm
 grew a session lane (`murm::session_lane`, Notochord N2's Murm half), and an

@@ -10,19 +10,19 @@
 //! ## Identity
 //!
 //! Mere's master key is a single Ed25519 keypair; a retinue identity is dual-key
-//! (X25519 ECDH + Ed25519 signing). [`keys::derive_identity`] stretches the
-//! 32-byte master seed into both keys via HKDF-SHA256, so the same seed always
-//! yields the same retinue destination. The Mere [`PeerID`] stays the master
-//! Ed25519 public key, consistent with the other transports.
+//! (X25519 ECDH + Ed25519 signing). [`keys::derive_identity`] derives the X25519
+//! half via HKDF-SHA256 and uses the Mere key as the Ed25519 half, so a verified
+//! Reticulum announce already carries the [`PeerID`] without another signature.
+//! The same seed always yields the same retinue destination.
 //!
 //! ## Discovery
 //!
-//! A destination hash cannot be synthesized from a [`PeerID`], so peers are learned
-//! from authenticated announces (see [`announce`]). Each announce carries an
-//! `app_data` binding signed by the master key, tying the announcing retinue
-//! identity + destination name to a `PeerID`. `connect` resolves a peer by looking
-//! it up in the announce-populated address book; `accept` waits for an inbound
-//! link on the ALPN's destination.
+//! A destination hash cannot be synthesized from a [`PeerID`], so peers are
+//! learned from authenticated announces (see [`announce`]). The Reticulum
+//! identity's signing key is the `PeerID`; its own announce signature binds that
+//! key, the X25519 half, and the destination name. `connect` resolves a peer by
+//! looking it up in the announce-populated address book; `accept` waits for an
+//! inbound link on the ALPN's destination.
 //!
 //! ## ALPN mapping
 //!
@@ -91,6 +91,9 @@ pub struct ReticulumTransportBuilder<'a> {
     announce_interval: Duration,
     connect_timeout: Duration,
     link_mtu: Option<u32>,
+    reliable_links: bool,
+    reliable_initial_rtt: Option<Duration>,
+    reliable_max_window: Option<u32>,
 }
 
 impl<'a> ReticulumTransportBuilder<'a> {
@@ -103,6 +106,9 @@ impl<'a> ReticulumTransportBuilder<'a> {
             announce_interval: ANNOUNCE_INTERVAL,
             connect_timeout: CONNECT_TIMEOUT,
             link_mtu: None,
+            reliable_links: false,
+            reliable_initial_rtt: None,
+            reliable_max_window: None,
         }
     }
 
@@ -139,6 +145,29 @@ impl<'a> ReticulumTransportBuilder<'a> {
         self
     }
 
+    /// Use Retinue's acknowledged, retransmitted stream lane.
+    ///
+    /// Best-effort remains the default for fast or already-reliable bearers.
+    /// Packet radios should enable this.
+    pub fn reliable_links(mut self, reliable: bool) -> Self {
+        self.reliable_links = reliable;
+        self
+    }
+
+    /// Initial proof-turnaround estimate for reliable links.
+    pub fn reliable_initial_rtt(mut self, rtt: Duration) -> Self {
+        self.reliable_initial_rtt = Some(rtt);
+        self
+    }
+
+    /// Maximum reliable frames in flight.
+    ///
+    /// A strict half-duplex radio normally wants one.
+    pub fn reliable_max_window(mut self, frames: u32) -> Self {
+        self.reliable_max_window = Some(frames);
+        self
+    }
+
     /// Bind the transport: create the retinue endpoint, attach interfaces,
     /// register destinations, and start the announce + accept driver tasks.
     pub async fn bind(self) -> Result<ReticulumTransport, TransportError> {
@@ -149,6 +178,9 @@ impl<'a> ReticulumTransportBuilder<'a> {
             self.announce_interval,
             self.connect_timeout,
             self.link_mtu,
+            self.reliable_links,
+            self.reliable_initial_rtt,
+            self.reliable_max_window,
         )
         .await
     }
@@ -166,6 +198,7 @@ pub struct ReticulumTransport {
     /// awaiting.
     inbound: HashMap<Alpn, Arc<TokioMutex<mpsc::UnboundedReceiver<InboundLink>>>>,
     connect_timeout: Duration,
+    reliable_links: bool,
     /// Background driver tasks (accept router, announce listener, announce
     /// sender), aborted on drop.
     tasks: Vec<JoinHandle<()>>,
@@ -192,6 +225,9 @@ impl ReticulumTransport {
         announce_interval: Duration,
         connect_timeout: Duration,
         link_mtu: Option<u32>,
+        reliable_links: bool,
+        reliable_initial_rtt: Option<Duration>,
+        reliable_max_window: Option<u32>,
     ) -> Result<Self, TransportError> {
         let local_peer_id = PeerID::from_public_key(master.public_key());
         let private_identity = derive_identity(master);
@@ -200,6 +236,12 @@ impl ReticulumTransport {
         let endpoint = Endpoint::new(private_identity);
         if let Some(link_mtu) = link_mtu {
             endpoint.set_link_mtu(link_mtu);
+        }
+        if let Some(rtt) = reliable_initial_rtt {
+            endpoint.set_reliable_initial_rtt(rtt);
+        }
+        if let Some(window) = reliable_max_window {
+            endpoint.set_reliable_max_window(window);
         }
 
         // Attach interfaces.
@@ -226,7 +268,11 @@ impl ReticulumTransport {
             let name = destination_name_for_alpn(alpn);
             let data = build_app_data(&local_peer_id, &name, &identity, master);
             let dest = name.destination_hash(&identity);
-            endpoint.register(name.clone(), &data);
+            if reliable_links {
+                endpoint.register_reliable(name.clone(), &data);
+            } else {
+                endpoint.register(name.clone(), &data);
+            }
 
             let (tx, rx) = mpsc::unbounded_channel();
             inbound_senders.insert(dest, tx);
@@ -243,7 +289,11 @@ impl ReticulumTransport {
         let tasks = vec![
             // Accept router: dispatch each inbound link to its ALPN's queue by the
             // destination it targeted.
-            tokio::spawn(run_accept_router(Arc::clone(&endpoint), inbound_senders)),
+            tokio::spawn(run_accept_router(
+                Arc::clone(&endpoint),
+                inbound_senders,
+                reliable_links,
+            )),
             // Announce listener: learn peers from validated announce bindings.
             tokio::spawn(run_announce_listener(
                 Arc::clone(&endpoint),
@@ -267,6 +317,7 @@ impl ReticulumTransport {
             app_data,
             inbound,
             connect_timeout,
+            reliable_links,
             tasks,
         })
     }
@@ -356,8 +407,17 @@ struct InboundLink {
 async fn run_accept_router(
     endpoint: Arc<Endpoint>,
     senders: HashMap<AddressHash, mpsc::UnboundedSender<InboundLink>>,
+    reliable_links: bool,
 ) {
-    while let Ok(accepted) = endpoint.accept_on_any().await {
+    loop {
+        let accepted = if reliable_links {
+            endpoint.accept_reliable_on_any().await
+        } else {
+            endpoint.accept_on_any().await
+        };
+        let Ok(accepted) = accepted else {
+            break;
+        };
         if let Some(tx) = senders.get(&accepted.destination) {
             // Carry the ingress facts retinue reported (plan V3/V4): the
             // router used to drop them here, which left `accept` unable to say
@@ -433,7 +493,14 @@ impl Transport for ReticulumTransport {
         let identity = self.resolve_peer(&peer, &alpn).await?;
         let dest = destination_name_for_alpn(&alpn).destination_hash(&identity);
 
-        let stream = timeout(self.connect_timeout, self.endpoint.open(dest, identity))
+        let open = async {
+            if self.reliable_links {
+                self.endpoint.open_reliable(dest, identity).await
+            } else {
+                self.endpoint.open(dest, identity).await
+            }
+        };
+        let stream = timeout(self.connect_timeout, open)
             .await
             .map_err(|_| TransportError::Backend("link setup timed out".into()))??;
 

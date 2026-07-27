@@ -1,11 +1,10 @@
 //! Announce-based discovery with an authenticated `PeerID` binding.
 //!
-//! A retinue destination hash cannot be synthesized from a Mere [`PeerID`] (the
-//! retinue identity is dual-key and only the Ed25519 half is in a `PeerID`), so a
-//! peer's destination must be *learned* from an announce. To stop a node from
-//! announcing someone else's `PeerID`, each announce carries an `app_data` blob
-//! signed by the Mere master key that binds the `PeerID` to the announcing retinue
-//! identity and ALPN destination name.
+//! A Retinue destination hash cannot be synthesized from a Mere [`PeerID`]
+//! because the identity also contains an X25519 key, so a destination must be
+//! learned from an announce. Mere uses its master Ed25519 key as the signing
+//! half of that Retinue identity. Retinue's verified announce therefore binds
+//! the `PeerID`, dual-key identity, and destination name without extra app data.
 
 use identity::{Ed25519Keypair, Ed25519Signature};
 use retinue::destination::DestinationName;
@@ -13,12 +12,11 @@ use retinue::identity::Identity;
 
 use crate::PeerID;
 
-/// `peer_id(32) ++ master_signature(64)`.
-const APP_DATA_LEN: usize = 32 + 64;
+/// Legacy `peer_id(32) ++ master_signature(64)` app data.
+const LEGACY_APP_DATA_LEN: usize = 32 + 64;
 
-/// The message the master key signs to bind a `PeerID` to a retinue identity for
-/// one destination name: `x25519_public(32) ++ ed25519_public(32) ++ peer_id(32)
-/// ++ name_hash(10)`.
+/// The message the old discovery format signed to bind a `PeerID` to a Retinue
+/// identity and destination name.
 ///
 /// Binding to the name hash (not just the identity) stops a peer from replaying
 /// one ALPN's binding to claim a `PeerID` on a different ALPN.
@@ -31,28 +29,35 @@ fn binding_message(peer_id: &PeerID, name: &DestinationName, identity: &Identity
     msg
 }
 
-/// Build the announce `app_data`: `peer_id(32) ++ master_signature(64)`.
+/// Build the current announce app data.
+///
+/// It is intentionally empty. The already-signed Retinue identity contains the
+/// Mere public key, saving the 96-byte duplicate binding that made an otherwise
+/// valid announce 263 bytes and therefore too large for a 255-byte LoRa frame.
 pub(super) fn build_app_data(
     peer_id: &PeerID,
-    name: &DestinationName,
+    _name: &DestinationName,
     identity: &Identity,
     master: &Ed25519Keypair,
 ) -> Vec<u8> {
-    let signature = master.sign(&binding_message(peer_id, name, identity));
-    let mut app_data = Vec::with_capacity(APP_DATA_LEN);
-    app_data.extend_from_slice(&peer_id.to_bytes());
-    app_data.extend_from_slice(&signature.to_bytes());
-    app_data
+    debug_assert_eq!(identity.ed25519_bytes(), &peer_id.to_bytes());
+    debug_assert_eq!(master.public_key().to_bytes(), peer_id.to_bytes());
+    Vec::new()
 }
 
-/// Recover the `PeerID` an announce binds to this retinue identity + name, or
-/// `None` if the `app_data` is malformed or the master signature does not verify.
+/// Recover the `PeerID` an announce binds to this Retinue identity.
+///
+/// Empty app data is the current format. The legacy 96-byte binding remains
+/// readable so an updated node can still learn an older peer.
 pub(super) fn recover_peer_id(
     app_data: &[u8],
     name: &DestinationName,
     identity: &Identity,
 ) -> Option<PeerID> {
-    if app_data.len() < APP_DATA_LEN {
+    if app_data.is_empty() {
+        return PeerID::from_bytes(identity.ed25519_bytes()).ok();
+    }
+    if app_data.len() < LEGACY_APP_DATA_LEN {
         return None;
     }
     let peer_bytes: [u8; 32] = app_data[..32].try_into().ok()?;

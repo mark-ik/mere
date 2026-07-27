@@ -46,6 +46,36 @@ async fn derived_identity_is_stable_and_peer_id_matches() {
 }
 
 #[tokio::test]
+async fn announce_identity_is_the_peer_and_fits_a_direct_phy_frame() {
+    let alpn = Alpn::new("mere/murm/v1");
+    let kp = Ed25519Keypair::from_seed([8u8; 32]);
+    let derived = super::keys::derive_identity(&kp);
+    assert_eq!(
+        derived.public().ed25519_bytes(),
+        &kp.public_key().to_bytes(),
+        "the verified Reticulum signing key is Mere's PeerID"
+    );
+
+    let transport = ReticulumTransport::builder(&kp)
+        .alpns(vec![alpn])
+        .announce_interval(Duration::from_secs(60))
+        .bind()
+        .await
+        .expect("bind");
+    let mut interface = transport.attach_packet_interface();
+    transport.announce_now();
+    let packet = tokio::time::timeout(Duration::from_secs(1), interface.next_outbound())
+        .await
+        .expect("announce timed out")
+        .expect("endpoint closed");
+    let encoded_len = packet.encode().len();
+    assert!(
+        encoded_len <= 255,
+        "authenticated announce is {encoded_len} bytes, over the direct-PHY frame cap"
+    );
+}
+
+#[tokio::test]
 async fn accept_unregistered_alpn_errors() {
     let kp = Ed25519Keypair::from_seed([9u8; 32]);
     let t = ReticulumTransport::builder(&kp)
@@ -153,6 +183,9 @@ async fn bilateral_round_trip_over_attached_packet_interfaces() {
         .alpns(vec![alpn.clone()])
         .announce_interval(Duration::from_secs(60))
         .link_mtu(255)
+        .reliable_links(true)
+        .reliable_initial_rtt(Duration::from_millis(50))
+        .reliable_max_window(1)
         .bind()
         .await
         .expect("bind server");
@@ -162,6 +195,9 @@ async fn bilateral_round_trip_over_attached_packet_interfaces() {
         .announce_interval(Duration::from_secs(60))
         .connect_timeout(Duration::from_secs(10))
         .link_mtu(255)
+        .reliable_links(true)
+        .reliable_initial_rtt(Duration::from_millis(50))
+        .reliable_max_window(1)
         .bind()
         .await
         .expect("bind client");
