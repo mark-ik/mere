@@ -29,6 +29,7 @@ serde = { version = "1", features = ["derive"] }
 thiserror = "1"
 
 [dev-dependencies]
+hex = "0.4"
 murm = { path = "../../murm/murm" }
 transport = { package = "mere-transport", path = "../../murm/transport", features = ["reticulum"] }
 proptest = "1"

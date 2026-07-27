@@ -317,23 +317,42 @@ impl KnotEndpoint {
         }
     }
 
-    /// Lock a vault endpoint, dropping its key and decrypted documents.
-    pub fn lock_vault(&mut self) -> bool {
-        let Source::Vault(vault) = &mut self.source else {
-            return false;
-        };
-        vault.lock();
+    pub fn revoke_writes(&mut self) -> bool {
+        let had_grant = self.write_grant.take().is_some();
+        if had_grant {
+            self.snapshot = None;
+            self.resources.clear();
+            self.bindings.clear();
+        }
+        had_grant
+    }
+
+    pub fn grant_writes(&mut self, grant: KnotWriteGrant) {
+        self.write_grant = Some(grant);
         self.snapshot = None;
         self.resources.clear();
+        self.bindings.clear();
+    }
+
+    /// Lock a vault endpoint, dropping its key and decrypted documents.
+    pub fn lock_vault(&mut self) -> bool {
+        let Source::Vault(source) = &mut self.source else {
+            return false;
+        };
+        source.vault.lock();
+        self.snapshot = None;
+        self.resources.clear();
+        self.bindings.clear();
         true
     }
 
     /// Unlock a vault endpoint with a recovered root key.
     pub fn unlock_vault(&mut self, key: [u8; 32]) -> Result<bool, String> {
-        let Source::Vault(vault) = &mut self.source else {
+        let Source::Vault(source) = &mut self.source else {
             return Ok(false);
         };
-        vault.unlock(key)?;
+        source.vault.unlock(key)?;
+        self.refresh_vault_projection()?;
         Ok(true)
     }
 
@@ -368,7 +387,8 @@ impl KnotEndpoint {
                     byte_size: document.byte_size,
                 })
                 .collect(),
-            Source::Vault(vault) => vault
+            Source::Vault(source) => source
+                .vault
                 .documents()
                 .map(|document| {
                     let mut container =
@@ -390,8 +410,46 @@ impl KnotEndpoint {
         match &self.source {
             Source::Directory { source, .. } => Revision(source.revision().max(1)),
             Source::Fixture(_) => Revision(1),
-            Source::Vault(vault) => Revision(vault.revision().max(1)),
+            Source::Vault(source) => Revision(source.vault.revision().max(1)),
         }
+    }
+
+    fn install_projection(&mut self, projection: KnotDocumentProjection) -> Result<(), String> {
+        let Source::Vault(source) = &mut self.source else {
+            return Err("Knot sync projection requires a vault source".into());
+        };
+        source.conflicts = projection
+            .conflicts
+            .iter()
+            .map(|conflict| conflict.id.clone())
+            .collect();
+        source.document_heads = projection.document_heads;
+        source.pending_history = !projection.pending.is_empty();
+        source.vault.replace_projection(projection.documents)?;
+        Ok(())
+    }
+
+    fn refresh_vault_projection(&mut self) -> Result<(), String> {
+        let projection = {
+            let Source::Vault(source) = &self.source else {
+                return Ok(());
+            };
+            match &source.sync {
+                Some(VaultSyncAuthority::Personal { store, .. }) => Some(
+                    pollster::block_on(store.projection(&source.vault))
+                        .map_err(|error| format!("could not project Knot sync store: {error}"))?,
+                ),
+                Some(VaultSyncAuthority::Commons { store, keys, .. }) => Some(
+                    pollster::block_on(store.communal_projection(keys))
+                        .map_err(|error| format!("could not project Commons Knot store: {error}"))?,
+                ),
+                None => None,
+            }
+        };
+        if let Some(projection) = projection {
+            self.install_projection(projection)?;
+        }
+        Ok(())
     }
 
     fn build_snapshot(&mut self) -> Result<ProjectionSnapshot, String> {

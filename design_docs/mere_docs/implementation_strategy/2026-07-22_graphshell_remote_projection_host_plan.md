@@ -842,6 +842,39 @@ the low-power lane, landed the same week):
   conclusion, so a carrier-admitted session can notice later revocation without
   reconstructing authority from application data.
 
+- **G5f — the two-device run. PARTIAL 2026-07-27.**
+  `ports/graphshell/src/bin/g5_peer.rs`, modelled on `mesh-peer`. **Windows
+  laptop → iMac (Q-PC, macOS 15.7.7) over p2panda/iroh QUIC on the LAN**, both
+  at `0ffe8a62`, distinct identity seeds, ticket pasted between them.
+  - *Granted run.* Client: `dialling f541dd2c`, `admitted`, `#1 -> opened,
+    status Live, expires Some(1785188082892)`, `#2 -> descriptor "graphshell
+    fixture" with 1 projection(s)`, `#3 -> closed`. Server: `admitted subject
+    04a11951 for connect`, `served 3 request(s); ended Closed`.
+  - *Revoked run.* Same pair, server started `--revoked`. Client: `admitted`,
+    then `#1 -> refused: session authority was revoked`, then `#2 -> the
+    endpoint closed without answering`. Server: `grant revoked`, `served 1
+    request(s); ended Lapsed(Revoked)`.
+  So the delegation chain now verifies across a real link, and G5e's
+  per-request authority check demonstrably ends a live session on a second
+  machine rather than only in a unit test.
+  **Two bugs a single-process test could not have found**, both in the bin:
+  a certificate with a real `issued_at` and `not_before: 0` violated
+  `issued_at <= not_before`; and seeding the transport with
+  `master_public_key()` rather than the seed that derived it made the carrier
+  and the Personae identity different keys, so D6 refused with
+  `SessionProofInvalid` three layers from the cause. Both are now back-dated
+  by a minute for cross-machine clock skew and checked by `assert_same_key`
+  at bind time.
+  **What this is not.** Two of G5's four done-when clauses remain open.
+  *Resume after interruption* is unproven: the fixture endpoint returns "this
+  fixture does not resume", so no interruption was survived. And the refused
+  request was an `Open`, not an `IntentInvocation` — the same
+  `authority.lapse` gate on a different verb, so "reject a revoked intent" is
+  proven in mechanism but not literally in the shape the clause names.
+  Discovery was also not exercised: the ticket was carried by hand, which the
+  clause permits ("discovery **or** ticket exchange") but which leaves mDNS
+  untested.
+
 **Only after G5b+G5c does the capability round's deferred sub-delegation become
 buildable**: the endpoint's certificate goes to depth 1 and issues a narrower
 one to the viewer (read-only presentation of one scene). Recorded there as "one
