@@ -160,9 +160,39 @@ Done-conditions, not dates.
     green against the new type. The M0 receipts flipped from asserting the
     collision to asserting distinct ids and two addressable edges, the same
     tests now reading the fix.
-- **M2. The two stated rules.** Remove-wins tombstones and whole-node LWW
-  under the section-1 order, each with a property test that pins the losing
-  side rather than only asserting equality.
+- **M2. The two stated rules. DONE 2026-07-27, chartulary 50 tests.** Both
+  hold already; the work was pinning them and finding where the phrasing did
+  not reach.
+  - **Remove wins over a concurrent connect, in either merge order.** Stronger
+    than the plan claimed: it is commutative, so the result does not depend on
+    which writer's key sorts first. Remove-then-connect drops the connect,
+    since `Connect` only lands when both endpoints are present;
+    connect-then-remove lands the edge and reaps it, since `RemoveNode` takes
+    incident edges with it. No tombstone needed for this case.
+  - **Whole-node LWW discards the loser's payload.** The test asserts the
+    *losing* side is gone (a title erased by a concurrent tag write), not
+    merely that both peers agree, so the coarseness is pinned rather than
+    implied.
+  - **Gap 3 was under-specified, and is now explicit.** "Remove wins" was
+    written about remove-versus-connect and does **not** settle
+    remove-versus-**insert**. `InsertNode` is an upsert, so a concurrent
+    insert that sorts after a removal **resurrects the node**. Every peer
+    still agrees, so this converges; what is unmade is the *choice*. A naive
+    tombstone is wrong, because re-creating a removed id is legitimate and a
+    permanent tombstone would forbid it forever. Distinguishing a concurrent
+    insert from a deliberate re-creation needs causality, and the signal
+    already exists in the API but is thrown away: `commit_batch` takes the
+    `expected` revision the petitioner read, and `Batch` does not record it.
+    Recording it would be another wire change, so it is named here rather
+    than guessed. Pinned meanwhile by
+    `a_concurrent_insert_that_sorts_later_resurrects_a_removed_node`.
+  - **A test-model finding worth keeping.** The first draft merged two
+    replicas by concatenating their full journals, which replays the shared
+    history twice and lets the duplicate seed re-insert a node the other side
+    had removed. The test failed and the code was right. A partition shares a
+    common ancestor, so a merge is the shared prefix once plus each side's
+    tail; `merge_divergent` models that and the naive `merge` is kept only
+    for replicas with no shared history.
 - **M3. Reconvergence over a real lane.** Two `JoinedSpace` instances over
   Memory, then p2panda, editing one container while partitioned, converging
   on reconnect. Reuses the join ceremony landed 2026-07-25, so this is a test

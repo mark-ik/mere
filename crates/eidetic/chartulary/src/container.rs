@@ -187,8 +187,11 @@ where
 
 impl<Id, A> ContentBearing for Container<Id, A> {
     fn content(&self) -> Option<ContentHash> {
-        self.content
-            .or_else(|| self.body.as_deref().map(|body| ContentHash::of(body.as_bytes())))
+        self.content.or_else(|| {
+            self.body
+                .as_deref()
+                .map(|body| ContentHash::of(body.as_bytes()))
+        })
     }
     fn media_type(&self) -> Option<&str> {
         self.media_type.as_deref()

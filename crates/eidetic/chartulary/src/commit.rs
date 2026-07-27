@@ -383,6 +383,164 @@ mod tests {
         );
     }
 
+    /// Merge two journals in a stated order, as the replication layer's
+    /// deterministic `(verifying_key, log_id, seq_num)` sort would.
+    fn merge(
+        first: &GraphLog<Container, Relation>,
+        second: &GraphLog<Container, Relation>,
+    ) -> GraphLog<Container, Relation> {
+        let mut merged = codicil::Codicil::new();
+        for batch in first.log().entries().iter().chain(second.log().entries()) {
+            merged.append(batch.clone());
+        }
+        GraphLog::replay(merged)
+    }
+
+    /// Merge two replicas that diverged from `base`: the shared prefix once,
+    /// then each side's own tail.
+    ///
+    /// Concatenating two full journals instead would replay the shared history
+    /// **twice**, and the second copy re-applies inserts the first side had
+    /// already removed. A partition shares a common ancestor; only the tails
+    /// are concurrent.
+    fn merge_divergent(
+        base: &GraphLog<Container, Relation>,
+        first: &GraphLog<Container, Relation>,
+        second: &GraphLog<Container, Relation>,
+    ) -> GraphLog<Container, Relation> {
+        let shared = base.log().entries().len();
+        let mut merged = codicil::Codicil::new();
+        for batch in base
+            .log()
+            .entries()
+            .iter()
+            .chain(first.log().entries().iter().skip(shared))
+            .chain(second.log().entries().iter().skip(shared))
+        {
+            merged.append(batch.clone());
+        }
+        GraphLog::replay(merged)
+    }
+
+    /// M2 of the commons multi-writer convergence plan: **remove wins over a
+    /// concurrent connect**, and it does so in *either* merge order, so the
+    /// outcome does not depend on which writer's key sorts first.
+    ///
+    /// Order matters to the mechanism but not the result. Remove-then-connect
+    /// drops the connect, because `Connect` only lands when both endpoints are
+    /// present. Connect-then-remove lands the edge and then reaps it, because
+    /// `RemoveNode` takes incident edges with it. The two paths converge.
+    #[test]
+    fn remove_wins_over_a_concurrent_connect_in_either_order() {
+        let alice = Author::new("alice");
+        let bob = Author::new("bob");
+
+        // Shared history both replicas already had, then they partition.
+        let mut base = GraphLog::<Container, Relation>::new();
+        base.insert_node(&alice, Container::new("a"));
+        base.insert_node(&alice, Container::new("b"));
+
+        let mut remover = GraphLog::replay(base.log().clone()).for_writer(writer(0xa1));
+        remover.remove_node(&alice, &"a".to_string());
+
+        let mut connector = GraphLog::replay(base.log().clone()).for_writer(writer(0xb2));
+        connector
+            .connect(&bob, &"a".to_string(), &"b".to_string(), cites())
+            .expect("bob connects before he learns of the removal");
+
+        for (label, merged) in [
+            (
+                "remove then connect",
+                merge_divergent(&base, &remover, &connector),
+            ),
+            (
+                "connect then remove",
+                merge_divergent(&base, &connector, &remover),
+            ),
+        ] {
+            assert!(
+                merged.graph().key_of(&"a".to_string()).is_none(),
+                "{label}: the removed node stays removed"
+            );
+            assert_eq!(
+                merged.graph().edge_count(),
+                0,
+                "{label}: the concurrent edge does not survive the removal"
+            );
+        }
+    }
+
+    /// M2: a concurrent edit to one node is **whole-node last-writer-wins**
+    /// under the merge order, and the loser's payload is discarded entirely
+    /// rather than merged field-by-field.
+    ///
+    /// This pins the coarseness, not just the convergence. Per-facet merge is
+    /// the one-node facets lane's work; until a facet write is its own edit,
+    /// concurrent edits to unrelated parts of a node still cost one of them.
+    #[test]
+    fn concurrent_node_edits_are_whole_node_last_writer_wins() {
+        let alice = Author::new("alice");
+        let bob = Author::new("bob");
+
+        let mut a = GraphLog::<Container, Relation>::new().for_writer(writer(0xa1));
+        a.insert_node(&alice, Container::new("n").with_title("alice's title"));
+
+        let mut b = GraphLog::<Container, Relation>::new().for_writer(writer(0xb2));
+        b.insert_node(&bob, Container::new("n").with_tag("bob-only-tag"));
+
+        let merged = merge(&a, &b);
+        let node = merged
+            .graph()
+            .node(merged.graph().key_of(&"n".to_string()).expect("node n"))
+            .expect("node payload");
+
+        assert!(
+            node.tags.iter().any(|t| t == "bob-only-tag"),
+            "the last writer's payload survives"
+        );
+        assert_eq!(
+            node.title, "",
+            "the earlier writer's title is DISCARDED, not merged: whole-node LWW"
+        );
+    }
+
+    /// M2, the case the plan's "remove wins" phrasing does **not** cover, and
+    /// which is recorded as open rather than silently decided.
+    ///
+    /// Remove-versus-*connect* is commutative (above). Remove-versus-*insert*
+    /// is not: `InsertNode` is an upsert, so whichever of the two sorts later
+    /// wins, and a concurrent insert that sorts after a removal **resurrects
+    /// the node**. Both peers agree, so this converges; it is the *choice*
+    /// that is unmade, because with no causality recorded a concurrent insert
+    /// is indistinguishable from a deliberate re-creation after the delete.
+    #[test]
+    fn a_concurrent_insert_that_sorts_later_resurrects_a_removed_node() {
+        let alice = Author::new("alice");
+        let bob = Author::new("bob");
+
+        let mut remover = GraphLog::<Container, Relation>::new().for_writer(writer(0xa1));
+        remover.insert_node(&alice, Container::new("a"));
+        remover.remove_node(&alice, &"a".to_string());
+
+        let mut editor = GraphLog::<Container, Relation>::new().for_writer(writer(0xb2));
+        editor.insert_node(&bob, Container::new("a").with_title("still editing"));
+
+        assert!(
+            merge(&remover, &editor)
+                .graph()
+                .key_of(&"a".to_string())
+                .is_some(),
+            "insert sorted last: the node is back (current behavior, decision open)"
+        );
+        assert!(
+            merge(&editor, &remover)
+                .graph()
+                .key_of(&"a".to_string())
+                .is_none(),
+            "remove sorted last: the node is gone"
+        );
+    }
+
     /// A 0.1.x journal wrote `EdgeId` as a bare integer. Those stores still
     /// load, as the single-writer graphs they always were.
     #[test]
