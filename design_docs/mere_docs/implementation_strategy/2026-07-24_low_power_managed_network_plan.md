@@ -1,8 +1,10 @@
 # Low-Power Radio and Managed Network Plan
 
-**Status (2026-07-26): in execution. V1-V6 and V8 have landed; V7 passes
-over Memory and Reticulum/TCP. The V0 power bench, p2panda, real Murm accept
-path, and direct-PHY/RF acceptance remain open.**
+**Status (2026-07-27): in execution. V1-V6 and V8 have landed; V7 passes
+over Memory and Reticulum/TCP. Murm's accept path landed 2026-07-27 as the
+session lane (`murm::session_lane`), which closes V6 literally. The V0 power
+bench, the p2panda arm, and direct-PHY/RF acceptance remain open, the last two
+of those on the bench gate.**
 
 This round joins two pieces that are useful independently and stronger
 together:

@@ -409,6 +409,12 @@ v0 that does not gate on any of this: mint + session-switch.
     columns survive only in the deserialize-compatible `PersistedNode` DTO and
     the one-time importer. RDF projection reads semantic facets. North-star OQ
     5.1 is closed.
+  - **Final receipts:** 844 tests pass across the eight affected Mere package
+    suites (seven test-bearing packages plus `content-contract`), Turnstone's
+    full 139-test suite passes, and the committed Graphshell G3 endpoint
+    receipt matches the live projection. The last regression exposed by the
+    full run was same-millisecond visit recency inheriting local graph order;
+    spiral scores now use stable node identity as their portable tie-breaker.
 - **2026-07-22 (CONTAINMENT IS STRUCTURE — `Node.nested` lands on the kernel
   Node):** the orthogonality ruling above got its structural half. The kernel
   `Node` gains `nested: Option<LogId>` (rkyv adapter + serde-defaulted
