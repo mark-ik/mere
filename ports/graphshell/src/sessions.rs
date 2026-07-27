@@ -72,6 +72,15 @@ impl RetainedEndpointSession {
         &self.profile
     }
 
+    /// Forget one mounted projection and every resource cached beneath it.
+    ///
+    /// The endpoint process may remain alive for another document, but a
+    /// closed editor must not leave its memory-only source in client state.
+    pub fn forget(&mut self, session: &ProjectionSession) {
+        self.mounted.remove(session);
+        self.client.forget_session(session);
+    }
+
     /// Mount one discovered projection without resolving resources or invoking
     /// any of its actions.
     pub fn mount(&mut self, offer_index: usize) -> Result<ProjectionSession, String> {
@@ -206,6 +215,32 @@ impl RetainedEndpointSession {
             .as_mut()
             .ok_or_else(|| "endpoint carrier is closed".to_string())?;
         resume_after_notice(carrier, &mut self.client, &notice)
+    }
+
+    /// Pump the stdio carrier without waiting for a notice.
+    ///
+    /// The discovery request is a harmless round trip that lets the carrier
+    /// collect any notices already written by the endpoint. This is intended
+    /// for a background owner that polls on a short cadence while its UI
+    /// remains entirely local.
+    pub fn poll_for_change(&mut self) -> Result<bool, String> {
+        match self.carrier_mut()?.request(CarrierRequestBody::Discover)? {
+            CarrierResponseBody::Descriptor(_) => {}
+            other => return Err(unexpected("descriptor", &other)),
+        }
+        let mut changed = false;
+        loop {
+            let notice = self.carrier.as_mut().and_then(StdioCarrier::take_notice);
+            let Some(notice) = notice else {
+                break;
+            };
+            let carrier = self
+                .carrier
+                .as_mut()
+                .ok_or_else(|| "endpoint carrier is closed".to_string())?;
+            changed |= resume_after_notice(carrier, &mut self.client, &notice)?;
+        }
+        Ok(changed)
     }
 
     pub fn close(mut self) -> Result<(), String> {
