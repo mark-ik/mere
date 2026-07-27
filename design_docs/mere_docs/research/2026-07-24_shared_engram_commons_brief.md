@@ -2,9 +2,9 @@
 
 **Date:** 2026-07-24
 **Status:** direction note from the 2026-07-24 application brainstorm (see
-the [application prospects brief](../../2026-07-24_application_prospects_brief.md));
-no code task. Names what a communal graph actually requires, which parts
-exist, and the two decisions nothing currently owns.
+the [application prospects brief](../../2026-07-24_application_prospects_brief.md)).
+Names what a communal graph actually requires and the two decisions the note
+originally found unowned. Decision 1 is answered; Decision 2 remains open.
 
 ## The commons is a profile, not an engine
 
@@ -46,12 +46,12 @@ bespoke feature and a commons later would build the multi-writer and
 group-key machinery twice; the ruling from the brainstorm is one spine, with
 chat as its first content class.
 
-## Decision 1: multi-writer convergence (unowned)
+## Decision 1: multi-writer convergence (answered 2026-07-26/27)
 
-Everything proven so far is single-owner or per-author-log sync. The
-deletion/retention plan's direct-conversation work already gives per-author
-frontier catch-up over `ConversationStore`; what no doc decides is the merge
-rule when two members concurrently edit one shared *container* (graph
+Before this decision, everything proven was single-owner or per-author-log
+sync. The deletion/retention plan's direct-conversation work already gives
+per-author frontier catch-up over `ConversationStore`; what no doc had decided
+was the merge rule when two members concurrently edit one shared *container* (graph
 structure plus facets) while offline. That is deterministic merge over
 per-author logs, which is p2panda's core model; before designing anything,
 check how much stickleback already inherits from p2panda's ordering
@@ -64,16 +64,26 @@ any chat implementation slice.
 **Answered 2026-07-26/27** by the
 [commons multi-writer convergence plan](../implementation_strategy/2026-07-26_commons_multi_writer_convergence_plan.md).
 Checking the substrate first, as this section instructed, changed the answer:
-the replication layer already commits under a deterministic cross-author total
-order, so convergence needed no CRDT and no new ordering mechanism. The real
-gap was that chartulary's `EdgeId` was a per-log counter that **collided**
-between writers, which no merge ordering can repair; edge identity is now
-`(writer, counter)` in chartulary 0.2.0. The merge rules are stated and
-property-tested, with one case (a deletion racing an edit to the same node)
-explicitly left open rather than guessed. That plan's section 6 carries the
-product-facing limits for this profile. Its M3 is the first slice needing new
-machinery: **nothing bridges chartulary to the replication layer today**, so
-the commons spine has to be built before a shared container can ride a lane.
+the replication layer already provides per-author order and a deterministic
+cross-author tiebreak, so convergence needed no CRDT or wall clock. It did
+need application-level causality: author-first sorting alone gives permanent
+public-key priority, so each signed commons record now carries the exact
+per-author operation frontier its writer observed. Materialization preserves
+that happens-before relation and uses the stable key tuple only for concurrent
+records. The other gap was chartulary's per-log `EdgeId` counter, which
+**collided** between writers and which no ordering can repair; edge identity
+is now `(writer, counter)` in chartulary 0.2.0, bound to the operation signer
+and checked against a monotonic stored frontier.
+
+The merge rules are stated and property-tested, with one policy case (a truly
+concurrent deletion racing an edit to the same node) explicitly left open
+rather than guessed. The tracked `commons-spine` probe now bridges chartulary
+to real p2panda LogSync: partitioned members reconverge to identical graph
+fingerprints, one member can then edit the other's synced edge and reconverge
+again, and an actual Redb close/reopen resumes both operation and edge
+counters. That plan's section 5 carries the product-facing limits for this
+profile. What remains before chat is authority-aware materialization plus
+Decision 2's group-key contract, not the convergence spine.
 
 ## Decision 2: group keys (named in murm's remainder, not scoped)
 

@@ -1,19 +1,20 @@
 # Commons Multi-Writer Convergence Plan
 
 **Date:** 2026-07-26
-**Status:** decision doc, no code yet. Answers **Decision 1** of the
+**Status:** implemented decision and executable receipt. Answers **Decision 1** of the
 [shared-engram commons brief](../research/2026-07-24_shared_engram_commons_brief.md),
 which asked for "a written merge rule under which two offline members editing
 the same container reconverge to one graph on sync, property-tested, before
 any chat implementation slice". Decision 2 (moot-level group keys) stays open
-and is not addressed here.
+and is not addressed here. The tracked `commons-spine` probe is the receipt;
+it remains outside the main workspace until a consumer pulls and names it.
 
 **Method, as the brief instructed:** check what `stickleback` already
-inherits from p2panda before designing anything. That check is section 1, and
-it changed the answer: most of the convergence machinery is already present
-and correct, and the gap is narrower and sharper than "define a merge
-strategy". One of the three findings is a structural identity collision that
-no ordering rule can repair.
+inherits from p2panda before designing anything. That check is section 1. It
+found both a useful substrate and two limits: p2panda gives stable per-author
+order plus a deterministic cross-author tiebreak, but author-first sorting is
+not causality; and chartulary's old edge counter collided across writers.
+Both now have executable repairs.
 
 ## 1. What the substrate already gives (verified against the tree)
 
@@ -23,9 +24,8 @@ committing, then validates each operation against a virtual frontier that
 includes earlier operations in the same batch. So the replication layer
 already supplies:
 
-- **a deterministic total order across authors**, rooted in the author's
-  cryptographic public key rather than a wall clock or an arrival time. Every
-  peer computes the same order from the same set of operations;
+- **a deterministic tiebreak across authors**, rooted in the author's
+  cryptographic public key rather than a wall clock or arrival time;
 - **per-author append-only logs** with backlink validation and a
   strictly-advancing retained frontier, so an author's own edits never
   reorder against each other;
@@ -34,9 +34,14 @@ already supplies:
 - **prune and checkpoint law** already reasoned about for concurrent history
   truncation.
 
-This is more than the brief assumed. Convergence does not need a new ordering
-mechanism, a vector clock, or a CRDT library. It needs chartulary's edit
-vocabulary to be well-defined under an order that already exists.
+The tiebreak alone is not a merge order. Because author is the first sort key,
+one writer would permanently outrank another: a lower-key writer could edit
+after observing a higher-key writer's value and still lose to that older
+value. The commons record therefore carries the exact per-author operation
+frontier observed at authoring. Materialization topologically orders those
+causal parents and uses the substrate tuple only among ready, concurrent
+records. This remains smaller than a CRDT library or wall-clock protocol, but
+it is application-level causality that p2panda does not supply on its own.
 
 ## 2. What chartulary needs defined on top
 
@@ -58,11 +63,11 @@ operations while the collision is in the addressing space the operations
 refer to. The graph would converge to *a* state on every peer while retracting
 the wrong edge.
 
-**Rule: edge identity becomes (author, counter), unique by construction.**
-Illustrative, not compile-ready:
+**Rule: edge identity becomes (writer, counter), unique by construction.**
+The landed chartulary 0.2.0 shape:
 
 ```rust
-pub struct EdgeId { pub author: PublicKey, pub counter: u64 }
+pub struct EdgeId { pub writer: WriterId, pub counter: u64 }
 ```
 
 Each writer keeps its cheap local monotonic counter, and uniqueness comes
@@ -84,9 +89,13 @@ existing ids with the local identity.
 under the section-1 order, so there is no divergence, but the loser's whole
 payload is discarded even when the two touched unrelated parts of the node.
 
-**Rule: last-writer-wins under the existing total order**, which is
-deterministic and needs no new mechanism. **And the granularity question is
-named rather than absorbed:** the
+**Rule: causally later wins; concurrent writes use the deterministic substrate
+tiebreak.** Each signed commons record carries the exact operation heads the
+writer observed. A deterministic topological fold preserves happens-before;
+`(verifying_key, log_id, seq_num)` orders only incomparable records. This means
+a member who edits a value after seeing it can actually replace it, regardless
+of public-key rank. **And the granularity question is named rather than
+absorbed:** the
 [one-node facets ruling](../technical_architecture/2026-07-18_one_node_facets_layer_map.md)
 makes facets atomic, so the right long-run answer is that a facet write is
 its own edit and merges per facet. Until facet-grained edits exist, a
@@ -101,12 +110,13 @@ Replay already tolerates a dangling connect (the spine advances `next_edge`
 even then), so every peer reaches the same state, but which state depends on
 an ordering accident rather than a decision.
 
-**Rule: remove wins.** A removed node identity is tombstoned for the
-container, and a later-ordered `Connect` naming it is dropped rather than
-resurrecting it. Chosen to match the destructive-operation reasoning already
-ruled in the murm/moot lane: a deletion the user performed should not be
-undone by someone else's concurrent edge. Add-wins is the defensible
-alternative and is rejected deliberately, not overlooked.
+**Rule: remove wins.** No tombstone is needed for remove-versus-connect:
+remove-then-connect drops the dangling connect because its endpoint is absent;
+connect-then-remove reaps the incident edge. Chosen to match the
+destructive-operation reasoning already ruled in the murm/moot lane: a
+deletion the user performed should not be undone by someone else's concurrent
+edge. Add-wins is the defensible alternative and is rejected deliberately,
+not overlooked.
 
 ### Not gaps
 
@@ -150,6 +160,12 @@ Done-conditions, not dates.
     journal cannot consume our range. Without that, the type change alone
     would still collide after a merge;
     `replaying_a_peers_edits_does_not_advance_our_counter` pins it.
+    The post-M3 review caught the complementary restart case:
+    `GraphLog::replay` began as `WriterId::LOCAL`, so setting the real writer
+    only after replay lost that writer's consumed counter range.
+    `replay_for_writer`, counter-rebuilding `for_writer`, and
+    `load_full_for_writer` now restore it; the disconnected-edge case is
+    pinned by `writer_scoped_counter_resumes_after_full_replay`.
   - **0.1.x data still loads.** A hand-written `Deserialize` reads both the
     bare integer 0.1.x wrote and the current struct, so an existing journal or
     snapshot returns as the single-writer graph it always was. Verified by
@@ -172,7 +188,8 @@ Done-conditions, not dates.
   - **Whole-node LWW discards the loser's payload.** The test asserts the
     *losing* side is gone (a title erased by a concurrent tag write), not
     merely that both peers agree, so the coarseness is pinned rather than
-    implied.
+    implied. M3 now makes "last" causal for observed writes and uses key order
+    only for genuinely concurrent writes.
   - **Gap 3 was under-specified, and is now explicit.** "Remove wins" was
     written about remove-versus-connect and does **not** settle
     remove-versus-**insert**. `InsertNode` is an upsert, so a concurrent
@@ -180,11 +197,13 @@ Done-conditions, not dates.
     still agrees, so this converges; what is unmade is the *choice*. A naive
     tombstone is wrong, because re-creating a removed id is legitimate and a
     permanent tombstone would forbid it forever. Distinguishing a concurrent
-    insert from a deliberate re-creation needs causality, and the signal
-    already exists in the API but is thrown away: `commit_batch` takes the
-    `expected` revision the petitioner read, and `Batch` does not record it.
-    Recording it would be another wire change, so it is named here rather
-    than guessed. Pinned meanwhile by
+    insert from a deliberate re-creation needs causality. The local
+    `commit_batch` scalar `expected` revision is not enough: two replicas can
+    have the same journal length and different operation sets. M3's signed
+    per-author operation frontier now records the exact causal context.
+    Deliberate re-creation is therefore orderable after the observed delete;
+    the winner for a truly concurrent remove/insert remains the named product
+    choice. Pinned meanwhile by
     `a_concurrent_insert_that_sorts_later_resurrects_a_removed_node`.
   - **A test-model finding worth keeping.** The first draft merged two
     replicas by concatenating their full journals, which replays the shared
@@ -193,8 +212,9 @@ Done-conditions, not dates.
     common ancestor, so a merge is the shared prefix once plus each side's
     tail; `merge_divergent` models that and the naive `merge` is kept only
     for replicas with no shared history.
-- **M3. Reconvergence over a real lane. DONE 2026-07-27**, as the
-  `commons-spine` probe (`crates/probes/commons-spine`, 4 tests green).
+- **M3. Reconvergence over a real lane. DONE 2026-07-27**, as the tracked
+  `commons-spine` probe (`crates/probes/commons-spine`, 11 test functions
+  green, including one 48-case property test).
 
   The bullet originally claimed this "reuses the join ceremony, so this is a
   test rather than new machinery". **That was false**: no crate bridged
@@ -205,18 +225,28 @@ Done-conditions, not dates.
     minting an edge before it can see the other, then reconverge over real
     p2panda LogSync on loopback. Both fold to four nodes and two edges, and
     **both edge ids stay separately addressable**, which is M1's fix proven
-    over a lane rather than over a hand-built journal. Plus: a batch for
-    another container is refused before mutation, and a batch round-trips the
-    wire with its writer half intact.
+    over a lane rather than over a hand-built journal. Their exact graph
+    fingerprints match. Bob then retracts Alice's synced edge, publishes the
+    causally-later batch, and both reconverge with Bob's unrelated edge intact.
+    Plus: reconstruction over one in-memory store and an actual Redb
+    close/reopen both resume operation backlink/sequence and edge counter; a
+    batch for another container is refused before mutation; signer/writer
+    mismatch and counter reuse are refused; and arbitrary arrival permutations
+    of one operation set property-test to one projection. A causal child
+    arriving before its parent stores safely but materialization fails closed
+    until the parent arrives rather than guessing an order.
   - **The design finding: receipt must not apply edits.** The obvious `accept`
     closure folds each received batch into a live `GraphLog` on arrival. That
-    does not converge, because the M1/M2 rules hold under the canonical
-    `(verifying_key, log_id, seq_num)` order while a drain delivers in
-    *arrival* order. Whole-node LWW would then mean "last to arrive here" and
-    two peers would disagree. So receipt only **stores**, and the graph is a
-    fold over the store in canonical order. This is the statement kernel
-    brief's recorded-fact versus derived-state split landing in a second
-    place: the log accumulates, the graph is recomputed.
+    does not converge, because a drain delivers in *arrival* order, which
+    differs per peer. So receipt only **stores**, and the graph is a fold over
+    the store. The first fold used author-first canonical order; review caught
+    that this made public-key rank permanent write priority rather than LWW.
+    Each `CommonsRecord` now signs the exact observed operation frontier.
+    Materialization topologically orders that causal DAG, then applies
+    `(verifying_key, log_id, seq_num)` only among concurrent ready records.
+    This is the statement kernel brief's recorded-fact versus derived-state
+    split landing in a second place: the log accumulates, the graph is
+    recomputed.
   - **A bug this caught, worth keeping.** The first fold read the second
     element of `get_log_entries`' tuple as the payload. It is the **header**
     bytes, p2panda's LogSync convention; the batch rides in `op.body`. Because
@@ -226,15 +256,17 @@ Done-conditions, not dates.
     was found by asserting a replica could fold back *its own* edits before
     blaming the network. A fold that silently drops batches converges to a
     confidently wrong graph, which is worse than not converging.
-  - Still open here: this proves convergence, not authority. Admission is
-    deliberately thin (right container, valid signature, decodable batch);
-    membership and capability remain the moot's and personae's jobs.
-- **M4. Write the limit down. DONE 2026-07-27**, in section 6 below. The
+  - Still open here: this proves convergence, not authority. Admission enforces
+    structural integrity (right container, valid signature, decodable record,
+    edge writer bound to signer, monotonic non-reused counters) and deliberately
+    retains structurally valid facts. Converged Moot and Personae authority must
+    decide which batches are effective during materialization.
+- **M4. Write the limit down. DONE 2026-07-27**, in section 5 below. The
   commons profile has no document yet, so the stated behavior lives here and
   the [commons brief](../research/2026-07-24_shared_engram_commons_brief.md)
   points at it; fold it into the profile when that document exists.
 
-## 6. Stated behavior, for the commons profile
+## 5. Stated behavior, for the commons profile
 
 Written for the product surface, not the merge layer. Each of these is a
 promise a member can rely on and a limit they can be surprised by, so they
@@ -243,12 +275,12 @@ belong in whatever documents a shared container before one ships.
 - **A deletion holds against a concurrent edge.** If one member removes a node
   while another connects something to it, the node stays removed and the edge
   does not survive. This is true whichever member's change is seen first.
-- **Two members editing one node do not merge; the later one wins the whole
-  node.** Concurrent edits to *unrelated* parts of the same node still cost one
-  of them entirely. This is a known coarseness, not a bug, and it lifts when a
-  facet write becomes its own edit (the one-node facets lane). Until then, a
-  shared container wants either coarse ownership habits or content classes
-  whose nodes are small.
+- **Two members editing one node do not merge; a causally later edit wins the
+  whole node, and concurrent edits use a stable key tiebreak.** Concurrent
+  edits to *unrelated* parts of the same node still cost one of them entirely.
+  This is a known coarseness, not a bug, and it lifts when a facet write becomes
+  its own edit (the one-node facets lane). Until then, a shared container wants
+  either coarse ownership habits or content classes whose nodes are small.
 - **A deletion does not yet hold against a concurrent edit to the same node.**
   If one member deletes a node while another edits it, the node can come back,
   carrying the editor's version. Every device agrees on the outcome, so nothing
@@ -257,10 +289,10 @@ belong in whatever documents a shared container before one ships.
   the same graph, because the order is computed from the operations themselves
   rather than from arrival time or a clock.
 
-## 5. Non-goals
+## 6. Non-goals
 
-No CRDT library and no new ordering mechanism: the total order exists and is
-deterministic. No operational transform. No per-facet merge until facet-
-grained edits exist, which is the one-node facets lane's work and not this
-plan's. Decision 2 (group keys) is untouched here; it gates encrypted
-commons traffic, not convergence.
+No CRDT library, wall clock, or operational transform. Cross-author causality
+is the signed observed frontier; the existing deterministic tuple remains the
+concurrent tiebreak. No per-facet merge until facet-grained edits exist, which
+is the one-node facets lane's work and not this plan's. Decision 2 (group
+keys) is untouched here; it gates encrypted commons traffic, not convergence.

@@ -15,16 +15,16 @@
 //!
 //! The obvious `accept` closure applies each received batch to a live
 //! `GraphLog` as it arrives. That does not converge. The merge rules settled
-//! in M1/M2 hold under the replication layer's canonical
-//! `(verifying_key, log_id, seq_num)` order, and a live drain delivers in
-//! *arrival* order, which differs per peer. Whole-node last-writer-wins would
-//! then mean "last to arrive here", and two peers would disagree.
+//! in M1/M2 require one deterministic fold, and a live drain delivers in
+//! *arrival* order, which differs per peer.
 //!
 //! So receipt only **stores**, and the graph is a fold over the store in
-//! canonical order ([`Replica::materialize`]). `resolve` already returns a
-//! `BTreeMap` keyed by verifying key, so the first sort key comes for free.
-//! This is the same "recorded fact versus derived state" split the statement
-//! kernel brief draws: the log accumulates, the graph is recomputed.
+//! causal order ([`Replica::materialize`]). Per-author backlinks plus the
+//! signed observed frontier preserve happens-before across writers; the
+//! canonical `(verifying_key, log_id, seq_num)` order breaks ties only between
+//! concurrent records. This is the same "recorded fact versus derived state"
+//! split the statement kernel brief draws: the log accumulates, the graph is
+//! recomputed.
 
 use chartulary::{Batch, Container, GraphEdit, GraphLog, Relation, WriterId};
 use codicil::Codicil;
@@ -121,10 +121,7 @@ pub fn from_operation(op: &Operation<CommonsExt>) -> Result<CommonsRecord, WireE
     decode_cbor(body.to_bytes().as_slice()).map_err(|_| WireError::Malformed)
 }
 
-fn record_connect_counters(
-    record: &CommonsRecord,
-    writer: WriterId,
-) -> Result<Vec<u64>, Reject> {
+fn record_connect_counters(record: &CommonsRecord, writer: WriterId) -> Result<Vec<u64>, Reject> {
     let mut counters = Vec::new();
     for edit in &record.batch.edits {
         if let GraphEdit::Connect { id, .. } = edit {
@@ -150,11 +147,12 @@ fn record_connect_counters(
 }
 
 /// Admission for the commons lane: the operation must address this container,
-/// carry a decodable batch, and be validly signed.
+/// carry a decodable record, be validly signed, and mint edges only under the
+/// signer identity.
 ///
 /// Deliberately thin. Membership and capability are the moot's and personae's
 /// jobs; this probe proves convergence, not authority.
-pub struct CommonsPolicy {
+struct CommonsPolicy {
     container: [u8; 32],
 }
 
@@ -192,13 +190,8 @@ pub enum MaterializeError {
     Store(#[from] muniment::StoreError),
     #[error(transparent)]
     Wire(#[from] WireError),
-    #[error(
-        "commons operation {operation} depends on missing operation {parent}"
-    )]
-    MissingCausalParent {
-        operation: String,
-        parent: String,
-    },
+    #[error("commons operation {operation} depends on missing operation {parent}")]
+    MissingCausalParent { operation: String, parent: String },
     #[error("commons operation dependencies contain a cycle")]
     CausalCycle,
 }
@@ -227,6 +220,8 @@ async fn load_records<B: Backend + Clone + Send + Sync + 'static>(
                 )
                 .await?
                 .unwrap_or_default();
+            // The tuple's second element is encoded header bytes, not the
+            // payload. The signed record is reconstructed from `operation.body`.
             for (operation, _header_bytes) in entries {
                 let record = from_operation(&operation)?;
                 records.push(StoredRecord {
@@ -250,9 +245,7 @@ fn sort_key(record: &StoredRecord, index: usize) -> (VerifyingKey, u64, u32, [u8
     )
 }
 
-fn causal_journal(
-    records: &[StoredRecord],
-) -> Result<Codicil<CommonsBatch>, MaterializeError> {
+fn causal_journal(records: &[StoredRecord]) -> Result<Codicil<CommonsBatch>, MaterializeError> {
     let mut by_hash = BTreeMap::new();
     for (index, record) in records.iter().enumerate() {
         by_hash.insert(*record.operation.hash.as_bytes(), index);
@@ -310,7 +303,10 @@ fn observed_frontier(records: &[StoredRecord]) -> Vec<[u8; 32]> {
             record.operation.header.seq_num,
             *record.operation.hash.as_bytes(),
         );
-        if heads.get(&key).is_none_or(|current| candidate.0 > current.0) {
+        if heads
+            .get(&key)
+            .is_none_or(|current| candidate.0 > current.0)
+        {
             heads.insert(key, candidate);
         }
     }
@@ -320,20 +316,25 @@ fn observed_frontier(records: &[StoredRecord]) -> Vec<[u8; 32]> {
 fn author_head(
     records: &[StoredRecord],
     author: VerifyingKey,
-) -> (u32, Option<[u8; 32]>) {
-    records
+) -> Result<(u32, Option<[u8; 32]>), ProcessError> {
+    let latest = records
         .iter()
         .filter(|record| {
             record.operation.header.verifying_key == author && record.log_id == COMMONS_LOG
         })
-        .max_by_key(|record| record.operation.header.seq_num)
-        .map(|record| {
-            (
-                record.operation.header.seq_num + 1,
-                Some(*record.operation.hash.as_bytes()),
-            )
-        })
-        .unwrap_or((0, None))
+        .max_by_key(|record| record.operation.header.seq_num);
+    match latest {
+        Some(record) => Ok((
+            record
+                .operation
+                .header
+                .seq_num
+                .checked_add(1)
+                .ok_or_else(|| Reject::new("author-sequence-exhausted", "author log exhausted"))?,
+            Some(*record.operation.hash.as_bytes()),
+        )),
+        None => Ok((0, None)),
+    }
 }
 
 async fn validate_counter_frontier<B: Backend + Clone + Send + Sync + 'static>(
@@ -350,16 +351,15 @@ async fn validate_counter_frontier<B: Backend + Clone + Send + Sync + 'static>(
         return Ok(());
     }
 
-    let entries =
-        LogStore::<Operation<CommonsExt>, VerifyingKey, u64, u32, Hash>::get_log_entries(
-            store,
-            &operation.header.verifying_key,
-            &COMMONS_LOG,
-            None,
-            None,
-        )
-        .await?
-        .unwrap_or_default();
+    let entries = LogStore::<Operation<CommonsExt>, VerifyingKey, u64, u32, Hash>::get_log_entries(
+        store,
+        &operation.header.verifying_key,
+        &COMMONS_LOG,
+        None,
+        None,
+    )
+    .await?
+    .unwrap_or_default();
     let mut next = 0u64;
     for (stored, _header_bytes) in entries {
         let stored_record = from_operation(&stored)
@@ -394,18 +394,18 @@ pub async fn accept_into<B: Backend + Clone + Send + Sync + 'static>(
 ) -> Result<bool, stickleback::ProcessError> {
     let processor = OperationProcessor::new(store.clone(), CommonsPolicy { container });
     processor.preflight(op)?;
-    let record = from_operation(op)
-        .map_err(|err| Reject::new("invalid-commons-batch", err.to_string()))?;
+    let record =
+        from_operation(op).map_err(|err| Reject::new("invalid-commons-batch", err.to_string()))?;
     validate_counter_frontier(store, op, &record).await?;
     Ok(processor.process(op).await?.inserted())
 }
 
-/// Fold every stored batch for `container` into a graph, in the replication
-/// layer's canonical order: author, then log, then sequence.
+/// Fold every stored batch for `container` into a graph in causal order.
 ///
 /// Two replicas holding the same operations produce the same graph, which is
-/// the convergence claim. `resolve` returns a `BTreeMap` keyed by verifying
-/// key, so authors already arrive sorted.
+/// the convergence claim. Per-author backlinks and signed cross-author
+/// parents preserve happens-before; the canonical author/log/sequence tuple
+/// orders only concurrent ready records.
 pub async fn materialize<B: Backend + Clone + Send + Sync + 'static>(
     store: &MunimentStore<B, CommonsExt>,
     container: [u8; 32],
@@ -490,7 +490,7 @@ impl<B: Backend + Clone + Send + Sync + 'static> Replica<B> {
             .clone();
 
         let signing_key = SigningKey::from_bytes(&self.signing_seed);
-        let (seq, backlink) = author_head(&records, signing_key.verifying_key());
+        let (seq, backlink) = author_head(&records, signing_key.verifying_key())?;
         let op = to_operation(
             self.signing_seed,
             self.container,
@@ -524,7 +524,8 @@ mod tests {
     use chartulary::taxonomy::{Recognized, RelationClass};
     use chartulary::{Author, EdgeId};
     use identity::{IdentityProvider, InMemoryProvider};
-    use muniment::MemoryBackend;
+    use muniment::{MemoryBackend, RedbBackend};
+    use proptest::prelude::*;
     use std::sync::Arc;
     use std::time::Duration;
     use stickleback::JoinedSpace;
@@ -534,6 +535,44 @@ mod tests {
 
     fn cites() -> Relation {
         Relation::new(RelationClass::recognized(Recognized::Cites))
+    }
+
+    type Fingerprint = (
+        Vec<(String, String, Vec<String>)>,
+        Vec<(String, String, String)>,
+    );
+
+    fn fingerprint(log: &GraphLog<Container, Relation>) -> Fingerprint {
+        let graph = log.graph();
+        let mut nodes = Vec::new();
+        let mut edges = Vec::new();
+        for (key, node) in graph.nodes() {
+            let mut tags: Vec<_> = node.tags.iter().cloned().collect();
+            tags.sort();
+            nodes.push((node.id.clone(), node.title.clone(), tags));
+            for (_, target, edge) in graph.out_edges(key) {
+                edges.push((
+                    node.id.clone(),
+                    graph.node(target).expect("target present").id.clone(),
+                    format!("{:?}", edge.class),
+                ));
+            }
+        }
+        nodes.sort();
+        edges.sort();
+        (nodes, edges)
+    }
+
+    fn connect_id(operation: &Operation<CommonsExt>) -> Option<EdgeId> {
+        from_operation(operation)
+            .ok()?
+            .batch
+            .edits
+            .iter()
+            .find_map(|edit| match edit {
+                GraphEdit::Connect { id, .. } => Some(*id),
+                _ => None,
+            })
     }
 
     /// Two bound transports tagged with each other on the container's overlay
@@ -635,10 +674,8 @@ mod tests {
             minted.expect("bob minted an edge")
         };
 
-        assert_eq!(
-            a_edge.counter, b_edge.counter,
-            "both minted at counter 0 while partitioned"
-        );
+        assert_eq!(a_edge.counter, 0, "alice minted counter 0");
+        assert_eq!(b_edge.counter, 0, "bob minted counter 0");
         assert_ne!(
             a_edge, b_edge,
             "and the ids still differ, because the writer half separates them"
@@ -647,7 +684,7 @@ mod tests {
         // ── Reconnect: join the space on both sides and let LogSync reconcile. ──
         let (a_ep, a_gossip) = alice_t.sync_parts().expect("alice sync parts");
         let a_store = alice.sync_store();
-        let _alice_space = JoinedSpace::join::<_, u64, _, _>(
+        let alice_space = JoinedSpace::join::<_, u64, _, _>(
             alice.sync_store(),
             a_ep,
             a_gossip,
@@ -662,7 +699,7 @@ mod tests {
 
         let (b_ep, b_gossip) = bob_t.sync_parts().expect("bob sync parts");
         let b_store = bob.sync_store();
-        let _bob_space = JoinedSpace::join::<_, u64, _, _>(
+        let bob_space = JoinedSpace::join::<_, u64, _, _>(
             bob.sync_store(),
             b_ep,
             b_gossip,
@@ -688,6 +725,11 @@ mod tests {
         })
         .await;
         let (a_graph, b_graph) = converged.expect("the two replicas converged");
+        assert_eq!(
+            fingerprint(&a_graph),
+            fingerprint(&b_graph),
+            "same operation set means the same exact graph projection"
+        );
 
         for (who, g) in [("alice", &a_graph), ("bob", &b_graph)] {
             assert_eq!(g.graph().node_count(), 4, "{who} sees every node");
@@ -704,6 +746,46 @@ mod tests {
             let b_key = g.edge_key(b_edge).expect("bob's edge addressable");
             assert_ne!(a_key, b_key, "{who}: each id names a different edge");
         }
+
+        // Bob now edits Alice's synced state, not a private Bob-only graph,
+        // and publishes that causally-later edit over the live lane.
+        let retract = bob
+            .edit(|g| {
+                assert!(
+                    g.disconnect(&author, a_edge),
+                    "bob can address alice's synced edge"
+                );
+            })
+            .await
+            .expect("bob retracts alice's edge");
+        bob_space.publish(retract).expect("publish retraction");
+
+        let reconverged = tokio::time::timeout(Duration::from_secs(30), async {
+            loop {
+                let a = alice.materialize().await.unwrap();
+                let b = bob.materialize().await.unwrap();
+                if a.graph().edge_count() == 1 && b.graph().edge_count() == 1 {
+                    return (a, b);
+                }
+                tokio::time::sleep(Duration::from_millis(200)).await;
+            }
+        })
+        .await;
+        let (a_graph, b_graph) = reconverged.expect("the shared retraction converged");
+        assert_eq!(fingerprint(&a_graph), fingerprint(&b_graph));
+        for graph in [&a_graph, &b_graph] {
+            assert!(
+                graph.edge_key(a_edge).is_none(),
+                "alice's retracted edge is gone"
+            );
+            assert!(
+                graph.edge_key(b_edge).is_some(),
+                "bob's unrelated edge survives"
+            );
+        }
+
+        drop(alice_space);
+        drop(bob_space);
     }
 
     /// Before blaming a lane: a replica must be able to fold back its own
@@ -766,12 +848,281 @@ mod tests {
         );
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_signed_batch_cannot_mint_under_another_writer() {
+        let signing_seed = [90; 32];
+        let signer = WriterId(
+            *SigningKey::from_bytes(&signing_seed)
+                .verifying_key()
+                .as_bytes(),
+        );
+        let foreign_writer = WriterId([0xff; 32]);
+        assert_ne!(signer, foreign_writer);
+
+        let author = Author::new("ui");
+        let mut forged = GraphLog::<Container, Relation>::new().for_writer(foreign_writer);
+        forged.insert_node(&author, Container::new("x"));
+        forged.insert_node(&author, Container::new("y"));
+        forged
+            .connect(&author, &"x".to_string(), &"y".to_string(), cites())
+            .unwrap();
+        let batch = forged.log().entries().last().unwrap().clone();
+        let operation = to_operation(signing_seed, CONTAINER, &batch, Vec::new(), 0, None);
+
+        let replica = Replica::new(MemoryBackend::new(), CONTAINER, signing_seed);
+        let error = replica
+            .accept(&operation)
+            .await
+            .expect_err("writer forgery must be rejected");
+        assert!(error.to_string().contains("edge-writer-mismatch"));
+        assert_eq!(replica.sync_store().operation_count().await.unwrap(), 0);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_signed_writer_cannot_reuse_an_edge_counter() {
+        let signing_seed = [90; 32];
+        let author = Author::new("ui");
+        let mut replica = Replica::new(MemoryBackend::new(), CONTAINER, signing_seed);
+        replica
+            .edit(|g| {
+                g.insert_node(&author, Container::new("x"));
+            })
+            .await
+            .unwrap();
+        replica
+            .edit(|g| {
+                g.insert_node(&author, Container::new("y"));
+            })
+            .await
+            .unwrap();
+        let first_edge = replica
+            .edit(|g| {
+                g.connect(&author, &"x".to_string(), &"y".to_string(), cites());
+            })
+            .await
+            .unwrap();
+        let repeated_batch = from_operation(&first_edge).unwrap().batch;
+        let repeated = to_operation(
+            signing_seed,
+            CONTAINER,
+            &repeated_batch,
+            vec![*first_edge.hash.as_bytes()],
+            first_edge.header.seq_num + 1,
+            Some(*first_edge.hash.as_bytes()),
+        );
+
+        let error = replica
+            .accept(&repeated)
+            .await
+            .expect_err("counter reuse must be rejected");
+        assert!(error.to_string().contains("edge-counter-frontier"));
+        assert_eq!(replica.sync_store().operation_count().await.unwrap(), 3);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn reconstruction_from_an_existing_store_resumes_both_counters() {
+        let backend = MemoryBackend::new();
+        let author = Author::new("ui");
+        let mut replica = Replica::new(backend.clone(), CONTAINER, [90; 32]);
+        replica
+            .edit(|g| {
+                g.insert_node(&author, Container::new("x"));
+            })
+            .await
+            .unwrap();
+        replica
+            .edit(|g| {
+                g.insert_node(&author, Container::new("y"));
+            })
+            .await
+            .unwrap();
+        let first = replica
+            .edit(|g| {
+                g.connect(&author, &"x".to_string(), &"y".to_string(), cites());
+            })
+            .await
+            .unwrap();
+        let first_id = connect_id(&first).unwrap();
+        drop(replica);
+
+        let mut restarted = Replica::new(backend, CONTAINER, [90; 32]);
+        let second = restarted
+            .edit(|g| {
+                g.connect(&author, &"x".to_string(), &"y".to_string(), cites());
+            })
+            .await
+            .expect("authoring resumes after restart");
+        let second_id = connect_id(&second).unwrap();
+
+        assert_eq!(second.header.seq_num, first.header.seq_num + 1);
+        assert_eq!(
+            second.header.backlink.as_ref().map(|hash| *hash.as_bytes()),
+            Some(*first.hash.as_bytes())
+        );
+        assert_eq!(first_id.counter, 0);
+        assert_eq!(second_id.counter, 1);
+        assert_eq!(
+            restarted.materialize().await.unwrap().graph().edge_count(),
+            2
+        );
+    }
+
+    /// Durable counterpart to the in-memory reconstruction receipt above.
+    /// Every database handle is dropped before the same file is reopened.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn redb_reopen_resumes_the_operation_head_and_edge_counter() {
+        let dir = tempfile::tempdir().expect("scratch directory");
+        let path = dir.path().join("commons.redb");
+        let author = Author::new("ui");
+
+        let (first, first_id) = {
+            let backend = RedbBackend::open(&path).expect("open initial database");
+            let mut replica = Replica::new(backend, CONTAINER, [90; 32]);
+            replica
+                .edit(|g| {
+                    g.insert_node(&author, Container::new("x"));
+                })
+                .await
+                .expect("insert x");
+            replica
+                .edit(|g| {
+                    g.insert_node(&author, Container::new("y"));
+                })
+                .await
+                .expect("insert y");
+            let first = replica
+                .edit(|g| {
+                    g.connect(&author, &"x".to_string(), &"y".to_string(), cites());
+                })
+                .await
+                .expect("mint first edge");
+            let first_id = connect_id(&first).expect("first edge id");
+            (first, first_id)
+        };
+
+        let backend = RedbBackend::open(&path).expect("reopen database");
+        let mut reopened = Replica::new(backend, CONTAINER, [90; 32]);
+        let second = reopened
+            .edit(|g| {
+                g.connect(&author, &"x".to_string(), &"y".to_string(), cites());
+            })
+            .await
+            .expect("authoring resumes after durable reopen");
+        let second_id = connect_id(&second).expect("second edge id");
+
+        assert_eq!(second.header.seq_num, first.header.seq_num + 1);
+        assert_eq!(
+            second.header.backlink.as_ref().map(|hash| *hash.as_bytes()),
+            Some(*first.hash.as_bytes())
+        );
+        assert_eq!(first_id.counter, 0);
+        assert_eq!(second_id.counter, 1);
+        assert_eq!(
+            reopened.materialize().await.unwrap().graph().edge_count(),
+            2
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_causally_later_lower_key_writer_wins() {
+        let seed_a = [90; 32];
+        let seed_b = [91; 32];
+        let key_a = SigningKey::from_bytes(&seed_a).verifying_key();
+        let key_b = SigningKey::from_bytes(&seed_b).verifying_key();
+        let (higher_seed, lower_seed) = if key_a > key_b {
+            (seed_a, seed_b)
+        } else {
+            (seed_b, seed_a)
+        };
+        let higher_key = SigningKey::from_bytes(&higher_seed).verifying_key();
+        let lower_key = SigningKey::from_bytes(&lower_seed).verifying_key();
+        assert!(lower_key < higher_key);
+
+        let author = Author::new("ui");
+        let mut higher = Replica::new(MemoryBackend::new(), CONTAINER, higher_seed);
+        let old = higher
+            .edit(|g| {
+                g.insert_node(&author, Container::new("n").with_title("old"));
+            })
+            .await
+            .unwrap();
+
+        let mut lower = Replica::new(MemoryBackend::new(), CONTAINER, lower_seed);
+        lower.accept(&old).await.unwrap();
+        let new = lower
+            .edit(|g| {
+                g.insert_node(&author, Container::new("n").with_title("new"));
+            })
+            .await
+            .unwrap();
+        assert!(
+            from_operation(&new)
+                .unwrap()
+                .parents
+                .contains(old.hash.as_bytes()),
+            "the later edit records the operation it observed"
+        );
+        higher.accept(&new).await.unwrap();
+
+        for replica in [&higher, &lower] {
+            let graph = replica.materialize().await.unwrap();
+            let key = graph.graph().key_of(&"n".to_string()).unwrap();
+            assert_eq!(
+                graph.graph().node(key).unwrap().title,
+                "new",
+                "causality outranks permanent verifying-key priority"
+            );
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_causal_child_waits_for_its_missing_parent() {
+        let author = Author::new("ui");
+        let mut parent_writer = Replica::new(MemoryBackend::new(), CONTAINER, [90; 32]);
+        let parent = parent_writer
+            .edit(|g| {
+                g.insert_node(&author, Container::new("n").with_title("parent"));
+            })
+            .await
+            .unwrap();
+
+        let mut child_writer = Replica::new(MemoryBackend::new(), CONTAINER, [91; 32]);
+        child_writer.accept(&parent).await.unwrap();
+        let child = child_writer
+            .edit(|g| {
+                g.insert_node(&author, Container::new("n").with_title("child"));
+            })
+            .await
+            .unwrap();
+
+        let receiver = Replica::new(MemoryBackend::new(), CONTAINER, [92; 32]);
+        receiver.accept(&child).await.unwrap();
+        assert!(
+            matches!(
+                receiver.materialize().await,
+                Err(MaterializeError::MissingCausalParent { .. })
+            ),
+            "an incomplete causal history fails closed instead of guessing an order"
+        );
+
+        receiver.accept(&parent).await.unwrap();
+        let graph = receiver.materialize().await.unwrap();
+        let key = graph.graph().key_of(&"n".to_string()).unwrap();
+        assert_eq!(graph.graph().node(key).unwrap().title, "child");
+    }
+
     /// The edge ids the wire carries survive a CBOR round trip, including the
     /// writer half. A silent loss there would collapse two writers' edges.
     #[test]
     fn a_batch_round_trips_through_the_wire_with_writer_scoped_ids() {
+        let signing_seed = [0xa1; 32];
+        let writer = WriterId(
+            *SigningKey::from_bytes(&signing_seed)
+                .verifying_key()
+                .as_bytes(),
+        );
         let author = Author::new("ui");
-        let mut g = GraphLog::<Container, Relation>::new().for_writer(WriterId([0xa1; 32]));
+        let mut g = GraphLog::<Container, Relation>::new().for_writer(writer);
         g.insert_node(&author, Container::new("x"));
         g.insert_node(&author, Container::new("y"));
         let minted = g
@@ -779,23 +1130,82 @@ mod tests {
             .expect("connect");
 
         let batch = g.log().entries().last().expect("a batch").clone();
-        let op = to_operation([0xa1; 32], CONTAINER, &batch, 0, None);
+        let op = to_operation(signing_seed, CONTAINER, &batch, Vec::new(), 0, None);
         let decoded = from_operation(&op).expect("round trip");
 
-        let carried = decoded.edits.iter().find_map(|e| match e {
+        let carried = decoded.batch.edits.iter().find_map(|e| match e {
             chartulary::GraphEdit::Connect { id, .. } => Some(*id),
             _ => None,
         });
         assert_eq!(carried, Some(minted));
         assert_eq!(
             carried.map(|id| id.writer),
-            Some(WriterId([0xa1; 32])),
-            "the writer half survives the wire"
+            Some(WriterId(*op.header.verifying_key.as_bytes())),
+            "the writer half survives the wire and is bound to the signer"
         );
+        assert!(decoded.parents.is_empty());
         assert_ne!(
             carried,
             Some(EdgeId::local(0)),
             "and it is not a bare counter"
         );
+    }
+
+    fn authored_inserts(seed: [u8; 32], label: &str, count: usize) -> Vec<StoredRecord> {
+        let signing_key = SigningKey::from_bytes(&seed);
+        let writer = WriterId(*signing_key.verifying_key().as_bytes());
+        let author = Author::new(label);
+        let mut graph = GraphLog::<Container, Relation>::new().for_writer(writer);
+        let mut backlink = None;
+        let mut records = Vec::new();
+        for seq in 0..count {
+            graph.insert_node(
+                &author,
+                Container::new(format!("shared-{}", seq % 3)).with_title(format!("{label}-{seq}")),
+            );
+            let batch = graph.log().entries().last().unwrap().clone();
+            let operation = to_operation(seed, CONTAINER, &batch, Vec::new(), seq as u32, backlink);
+            backlink = Some(*operation.hash.as_bytes());
+            let record = from_operation(&operation).unwrap();
+            records.push(StoredRecord {
+                operation,
+                record,
+                log_id: COMMONS_LOG,
+            });
+        }
+        records
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(48))]
+
+        #[test]
+        fn the_same_operation_set_has_one_projection_under_arbitrary_arrival_order(
+            alice_count in 1usize..6,
+            bob_count in 1usize..6,
+            arrival_keys in prop::collection::vec(any::<u8>(), 0..16),
+        ) {
+            let mut records = authored_inserts([90; 32], "alice", alice_count);
+            records.extend(authored_inserts([91; 32], "bob", bob_count));
+            let expected = GraphLog::replay(causal_journal(&records).unwrap());
+            let expected = fingerprint(&expected);
+
+            let mut shuffled = records;
+            shuffled.sort_by_key(|record| {
+                let hash = record.operation.hash.as_bytes();
+                let arrival = if arrival_keys.is_empty() {
+                    hash[0]
+                } else {
+                    arrival_keys[usize::from(hash[0]) % arrival_keys.len()]
+                };
+                (arrival, hash[1], hash[2])
+            });
+            if arrival_keys.first().is_some_and(|value| value % 2 == 1) {
+                shuffled.reverse();
+            }
+            let actual = GraphLog::replay(causal_journal(&shuffled).unwrap());
+
+            prop_assert_eq!(fingerprint(&actual), expected);
+        }
     }
 }

@@ -17,7 +17,7 @@ publish = false
 [dependencies]
 chartulary = { path = "../../eidetic/chartulary" }
 codicil = { path = "../../eidetic/codicil" }
-muniment = { path = "../../eidetic/muniment" }
+muniment = { path = "../../eidetic/muniment", features = ["redb"] }
 stickleback = { path = "../../stickleback" }
 p2panda-core = "0.7.0"
 p2panda-store = { version = "0.7.0", default-features = false }
@@ -28,6 +28,8 @@ thiserror = "1"
 identity = { package = "personae", path = "../../persona/personae" }
 transport = { package = "mere-transport", path = "../../murm/transport" }
 p2panda-net = "0.7.0"
+proptest = "1"
+tempfile = "3"
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time"] }
 
 [lib]

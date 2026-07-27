@@ -2,11 +2,13 @@
 
 **Date:** 2026-07-25
 **Status:** implementation complete locally 2026-07-27. K0 through K7 are
-executable. The remaining boundary is narrower than the old plan: concurrent
-writers for one document are explicitly refused until a convergence rule
-lands. K7 also depends on the completed Cambium text primitive still present as
-uncommitted Genet workspace changes; that slice must land on Genet `main`
-before a clean remote Mere checkout can reproduce the local K7 build.
+executable. The commons convergence rule has landed, but Knot has not pulled
+it: concurrent writers for one document remain explicitly refused rather than
+silently resolved by whole-document last-writer-wins. Group keys gate a
+communal multi-member Knot, not the personal multi-device vault. K7 also
+depends on the completed Cambium text primitive still present as uncommitted
+Genet workspace changes; that slice must land on Genet `main` before a clean
+remote Mere checkout can reproduce the local K7 build.
 
 **Companions:** genet's
 [pelt and knot direction](https://github.com/mark-ik/genet/blob/main/docs/2026-07-24_pelt_knot_direction.md)
@@ -15,7 +17,8 @@ before a clean remote Mere checkout can reproduce the local K7 build.
 the [application prospects brief](../../2026-07-24_application_prospects_brief.md)
 (the composition thesis this port instantiates), the
 [shared-engram commons brief](../research/2026-07-24_shared_engram_commons_brief.md)
-(knot as page content class; the two unowned decisions), and the
+(knot as page content class; the settled convergence decision and open group-key
+decision), and the
 [Graphshell remote projection host plan](2026-07-22_graphshell_remote_projection_host_plan.md)
 (the protocol this port serves).
 
@@ -123,14 +126,15 @@ vault inside the app rather than merely a cheaper one.
   hit-testing, and caret/selection geometry; `cambium-winit` supplies key and
   IME translation. Woodshed and Isometry exercise both host-routing shapes.
   Knot remains a consumer through `knot-editor-host`.
-- **Multi-writer convergence and group keys block concurrent editing.** Both
-  are named unowned in the commons brief. One writer per device is fine today;
-  two devices editing one container offline is undecided, and that is exactly
-  the case that motivated this port. The watcher sharpens it (Mark,
-  2026-07-25): an autonomous disk-side writer makes collision-resistant
-  editing matter before any multi-user scenario. The endpoint serializes the
-  writers it owns, so the gate stays multi-device, but the decision's
-  priority rises.
+- **The convergence decision has landed; Knot has not pulled it.** The
+  [commons convergence plan](2026-07-26_commons_multi_writer_convergence_plan.md)
+  now proves deterministic causal materialization over per-author logs. K5
+  still refuses a second writer for one document because applying that rule to
+  Knot's encrypted document events is a consumer integration choice; using
+  whole-document last-writer-wins would silently discard text. The watcher
+  sharpens the need even for one person across devices. Group keys separately
+  gate communal multi-member Knot; the personal multi-device vault already
+  shares a seal key.
 - ~~**Livery is the declared long pole.**~~ **Cleared 2026-07-27.** The Genet
   workspace build is green. Knot's remaining work is its own storage,
   authority, writer, and integration ladder.
@@ -186,8 +190,9 @@ inside any rung.
   event grammar, admitted-device policy, store, and Stickleback `accept`
   closure. Two memory-backed instances converge through that seam, then two
   real p2panda peers reconcile independently authored logs. A second writer
-  touching the same document returns `ConcurrentWriter`; the port does not
-  improvise last-writer-wins while the commons decision remains open.
+  touching the same document returns `ConcurrentWriter`; the port keeps that
+  refusal until it explicitly pulls the commons causal materializer rather
+  than silently discarding text through whole-document last-writer-wins.
 - **K6. Writers. Complete locally 2026-07-27.** Per-format serializers render
   to `.knot`, `.md`, `.djot`, or `.json`. Untouched files never enter the
   write path. Tests prove foreign-format fixed points, byte-exact canonical
