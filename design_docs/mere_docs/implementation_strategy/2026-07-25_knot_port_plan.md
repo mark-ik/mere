@@ -1,9 +1,12 @@
 # Knot Port Plan
 
 **Date:** 2026-07-25
-**Status:** ruled, no code yet. Records the port's home, its shape, a verified
-survey of what the stack already provides, the three gaps, and a sequence with
-done-conditions. The editor half is gated; the endpoint half is not.
+**Status:** implementation complete locally 2026-07-27. K0 through K7 are
+executable. The remaining boundary is narrower than the old plan: concurrent
+writers for one document are explicitly refused until a convergence rule
+lands. K7 also depends on the completed Cambium text primitive still present as
+uncommitted Genet workspace changes; that slice must land on Genet `main`
+before a clean remote Mere checkout can reproduce the local K7 build.
 
 **Companions:** genet's
 [pelt and knot direction](https://github.com/mark-ik/genet/blob/main/docs/2026-07-24_pelt_knot_direction.md)
@@ -23,7 +26,7 @@ host plus a `knot_endpoint` binary, the shape Turnstone and Isometry already
 use and G4 already proved.
 
 Not a standalone repository: it has no identity apart from Mere, consuming
-chartulary, muniment, eidetic, murm, personae, and sibylla. A separate repo
+chartulary, muniment, eidetic, stickleback, personae, and sibylla. A separate repo
 means git dependencies back into `mere.git`, which is what the 2026-07-23
 consolidation removed. Not a Genet port either: Genet's cone witness enforces
 one-way direction, and Pelt's graph-free discipline is deliberate, so anything
@@ -47,7 +50,7 @@ Anytype would take:
 
 1. read files in place, unencrypted and unmoved;
 2. seal a personal vault, with cheap analysis over it;
-3. sync across devices over Murm;
+3. sync across devices over Stickleback and p2panda;
 4. choose the format a document is saved as;
 5. FOSS and moddable.
 
@@ -62,13 +65,12 @@ vault inside the app rather than merely a cheaper one.
 
 **Already built, reused as-is.**
 
-- **Sync.** `murm/replication` is the deduplicated core, not the messaging
-  domain: `SyncedSpace` is a generic reconciling-log drain whose only injected
-  seam is an `accept` closure deciding whether a received operation counted.
-  Direct exchange, Moot, and mesh already ride it, so a knot space is a fourth
+- **Sync.** Stickleback is the promoted deduplicated core, not the messaging
+  domain: `SyncedSpace` is a generic reconciling-log drain whose injected seam
+  is an `accept` closure deciding whether a received operation counted. Direct
+  exchange, Moot, and Mesh already ride it, so a Knot space is another
   `accept`, not a fork. `drop_io` carries plain and protected drop export with
-  receipts and prune proofs, a sneakernet lane no comparable product has.
-  Transports are p2panda and reticulum.
+  receipts and prune proofs. Transports are p2panda and Reticulum.
 - **Vault.** personae carries `vault.rs`, `seal.rs`, `passphrase_root.rs`,
   `sealed_record_storage.rs`, `startup_unlock.rs`; eidetic-core has `seal.rs`
   and session-runtime has `engram_seal.rs`.
@@ -80,34 +82,47 @@ vault inside the app rather than merely a cheaper one.
   postcard shipped) over backends redb, fjall, zip, and memory.
 - **Typing.** chartulary content classes are data, not code: a class is
   `class_id` plus required facets plus schema references, and an unknown class
-  reads back as `Unknown` rather than erroring. A modder ships a class in a
-  pack.
+  reads back as `Unknown` rather than erroring. Turnstone now exercises the
+  substrate with built-in web-page and note profiles. Knot adopts it; no class
+  registry belongs in this port.
+- **Editing.** The former Meerkat readout stack now lives in Genet:
+  `knot-editor-host` derives Illume highlights, outline/folds, and Nematic's
+  `DjotKnotEngine` preview from one host-owned source buffer. Cambium and
+  Genet/Parley now supply the shared edit, IME, selection, movement, and
+  geometry primitives. K7 is integration, not a new editor core.
 - **Boundary.** graphshell-protocol, -client, -endpoint, and -stdio, with the
   stdio carrier giving a child-process JSON boundary. The G4 receipt mounted
   Turnstone and Isometry sessions into one host with neither product in
   Graphshell's dependency graph.
 
-**Missing, and the reason this plan exists.**
+**Previously missing, now filled.**
 
-- **No disk lane.** Every `impl Backend` in the tree is redb, fjall, zip,
-  memory, or a Murm conversation shim. The `file` scheme appears only inside
-  `register-protocol`'s own contract tests, so the seam exists and the provider
-  does not. `crates/import` is browser data only: bookmarks, history, sessions.
-- **No note or file content class.** `mere.note` appears in the tree only as a
-  doc-comment example. The commons brief names the shared vocabulary as page,
-  post, place, person, and file, so the slot is declared and unfilled.
-- **No writers.** `glossary` projects djot outlines of a graph and `scholia`
-  exports JSON-LD and N-Quads. Neither is "serialize this node as a `.md`
-  file", which is what property 4 needs.
+- **Disk lane.** `DirectorySource` now discovers a real
+  folder, preserves identity across ordinary renames using the filesystem file
+  id, keeps bodies/content absent, applies a configurable ignore policy, and
+  refreshes on Graphshell snapshot/resume. `DirectoryWatcher` receives native
+  recursive OS events and collapses each drained burst into one Servitor-gated,
+  watcher-attributed journal transition. Its key is derived from the host
+  identity; revoking its grant freezes the accepted directory revision while
+  the endpoint keeps serving. A durable facet sidecar remains future storage
+  work rather than disk-authoritative file content.
+- **File/note classes are filled.** Knot now ships `knot.file` and `knot.note`
+  as chartulary class data with Eidetic-compatible facet schemas. This was a
+  missing item in the 2026-07-25 survey and is now K2's completed adoption.
+- **Writers.** `AuthoredFile` now selects `.knot`, Markdown, Djot, or JSON
+  codecs over Genet's Inker/Nematic document model. Untouched source files
+  bypass the write path, caller-selected Save As is explicit, foreign formats
+  reach a fixed point after one parse-write pass, and canonical `.knot`
+  round-trips byte-exactly.
 
 ## 4. Gates
 
-- **Text editing blocks the editor half entirely.** Ruled in the Genet
-  direction doc: one primitive at the cambium/genet layer, three consumers
-  (toolkit `text_input`, fullweb forms then contenteditable, the knot editor).
-  `knot-editor-host` is the lexer and readout half only; real selection, IME,
-  and undo are unbuilt. This is the largest single item the port depends on and
-  it is not ours to build here.
+- ~~**Text editing blocks the editor half entirely.**~~ **Cleared
+  2026-07-27.** Cambium now owns grapheme-correct selection, edit commands,
+  composition, and bounded undo; Genet/Parley owns visual movement, affinity,
+  hit-testing, and caret/selection geometry; `cambium-winit` supplies key and
+  IME translation. Woodshed and Isometry exercise both host-routing shapes.
+  Knot remains a consumer through `knot-editor-host`.
 - **Multi-writer convergence and group keys block concurrent editing.** Both
   are named unowned in the commons brief. One writer per device is fine today;
   two devices editing one container offline is undecided, and that is exactly
@@ -116,55 +131,74 @@ vault inside the app rather than merely a cheaper one.
   editing matter before any multi-user scenario. The endpoint serializes the
   writers it owns, so the gate stays multi-device, but the decision's
   priority rises.
-- **Livery is the declared long pole.** This port is queued behind it the same
-  way the agent-drives-pelt receipt is, deliberately, so it does not compete
-  for focus.
+- ~~**Livery is the declared long pole.**~~ **Cleared 2026-07-27.** The Genet
+  workspace build is green. Knot's remaining work is its own storage,
+  authority, writer, and integration ladder.
 
 ## 5. Sequence
 
-Done-conditions, not dates. K0 through K2 clear no gate and can start whenever
-focus allows; K7 waits.
+Done-conditions, not dates. Every rung is complete locally. The open
+same-document multi-writer rule remains a product boundary rather than hidden
+inside any rung.
 
-- **K0. Port scaffold.** `ports/knot` exists as a workspace member with a
-  `knot_endpoint` binary that discloses a fixed fixture. Done when
-  `g4_sessions` mounts it beside the Turnstone and Isometry endpoints and the
-  receipt is committed and byte-compared like G1's.
-- **K1. Disk lane.** A directory `Backend` plus a watcher. The watcher acts
+- **K0. Port scaffold. Complete locally 2026-07-27.** `ports/knot` is a
+  workspace member and `knot_endpoint` discloses a fixed fixture through the
+  resumable stdio carrier. `g4_sessions` mounted it beside Turnstone and
+  Isometry: four sessions from three endpoint processes. The committed receipt
+  regenerated byte-identically.
+- **K1a. Files-in-place projection. Complete locally 2026-07-27.**
+  `DirectorySource` recursively indexes a caller-selected folder under a
+  configurable ignore policy. Containers carry `file:` addresses, titles,
+  media types, and facets while `body` and `content` stay absent. Native file
+  identity preserves the container id and foreign facets across rename. A disk
+  edit increments the projection revision and returns a replacement snapshot
+  on the next resume.
+- **K1b. Autonomous watcher and authority. Complete locally 2026-07-27.**
+  The recursive native watcher acts
   autonomously under its own servitor identity: its journal ops carry
   attribution, and revoking its grant is the pause switch. The disk stays
   authoritative for file-backed containers; graph-side facets are
   journal-only, and body edits (once the editor exists) write through to the
   file, with the endpoint serializing the two writers it owns. Bulk churn
-  (checkouts, sync tools) is debounced behind an ignore policy. Done when a
-  real folder discloses as chartulary containers whose `Addressed` primary
-  address is the file path, with no file copied, moved, or encrypted; a
-  rename on disk preserves the container and its facets, changing only the
-  address; and a disk edit is visible to a mounted host on its next resume.
-- **K2. File and note content classes.** Class documents plus facet schemas,
-  filling the slot the commons brief declares. Done when an unknown-class file
-  reads back `Unknown` and a known one admits.
-- **K3. Vault lane.** personae sealing inside the endpoint. Done when the host
-  mounts disclosures while the key never leaves the endpoint process, asserted
-  in the test rather than merely arranged.
-- **K4. Analysis.** sibylla index across the disk and vault lanes. The vault
+  (checkouts, sync tools) is debounced behind the existing ignore policy. Done
+  when an OS event produces one attributed journal transition; revoking the
+  watcher grant pauses observation without stopping the endpoint; and a burst
+  collapses into one revision. Tests cover all three.
+- **K2. File and note content classes. Complete locally 2026-07-27.**
+  `knot.file` requires `file.document`; `knot.note` requires both
+  `file.document` and `note.document`. Their schemas use the existing
+  `SchemaFacetValidator` seam. Tests prove a known note admits, malformed known
+  facets fail, and an unknown class remains inert and discoverable.
+- **K3. Vault lane. Complete locally 2026-07-27.** Personae sealing lives
+  inside the endpoint. Tests assert that stored bytes are sealed, lock drops
+  decrypted state, a wrong key cannot reopen it, and Graphshell disclosures
+  contain neither the key nor authored body.
+- **K4. Analysis. Complete locally 2026-07-27.** A Sibylla index spans the
+  disk and vault lanes. The vault
   lane's index is derived content and lives under the seal, because
   embeddings invert. Queries are served in-process by the unlocked endpoint
   under grants, so agents keep the cheap read path: one unlock at startup,
   zero marginal crypto per query, and selectivity is a grant scope rather
   than a second crypto tier (a denizen with a vault-scoped grant gets vault
-  hits; one without gets disk hits only). Done when a query returns hits
-  spanning both lanes, and with the endpoint locked, vault hits are absent
-  and the vault index bytes on disk are sealed, both asserted.
-- **K5. Sync.** The port's own `accept` closure over `SyncedSpace`. Done when
-  two instances converge over Memory, then p2panda, reusing the managed-network
-  plan's admission matrix. Concurrent edits to one container stay out of scope
-  until the commons brief's decision 1 lands.
-- **K6. Writers.** Per-class serializers, so a class renders to `.md`, `.djot`,
-  or `.json`. Untouched files are never rewritten; files-in-place gives that
-  outright. Done when foreign formats round-trip idempotently (one
-  parse-write pass is a fixed point) and `.knot`, where both directions are
-  ours, round-trips byte-exact.
-- **K7. Editor half.** Gated on the cambium text primitive. Not scoped here.
+  hits; one without gets disk hits only). Tests span both lanes, prove grant
+  selectivity, assert sealed index bytes, and remove vault hits on lock.
+- **K5. Sync. Complete locally 2026-07-27.** Knot supplies its own encrypted
+  event grammar, admitted-device policy, store, and Stickleback `accept`
+  closure. Two memory-backed instances converge through that seam, then two
+  real p2panda peers reconcile independently authored logs. A second writer
+  touching the same document returns `ConcurrentWriter`; the port does not
+  improvise last-writer-wins while the commons decision remains open.
+- **K6. Writers. Complete locally 2026-07-27.** Per-format serializers render
+  to `.knot`, `.md`, `.djot`, or `.json`. Untouched files never enter the
+  write path. Tests prove foreign-format fixed points, byte-exact canonical
+  `.knot`, and caller-selected output format.
+- **K7. Editor half. Complete locally 2026-07-27.** `KnotEditor` consumes
+  Cambium's `TextInput` and `TextCommand` as its only source buffer, preserves
+  byte-plus-affinity layout selections, and keeps `KnotReadout` derived for
+  highlights, outline, folds, and preview. IME preedit stays outside committed
+  source, undo restores every readout, and committed source writes through to
+  `.knot`. Reproducibility still waits on the corresponding uncommitted Genet
+  primitive slice reaching `main`.
 
 **Carrier note.** The stdio carrier is pull-only: every frame is
 host-initiated (`CarrierRequestBody` is Discover, Snapshot, Resource, Resume,
@@ -205,3 +239,20 @@ the same users.
   K4 seals the vault-lane index and routes agent reads through grants at
   zero marginal crypto cost. K6 drops universal byte-identity: foreign
   formats round-trip idempotently, `.knot` byte-exact.
+- **2026-07-27.** The Genet text-editing primitive completed T0 through T4 and
+  cleared K7's implementation gate. Fullweb forms and contenteditable remain
+  later consumers of the same primitive and do not block Knot.
+- **2026-07-27, live-tree recut and first execution.** The old plan was stale
+  in three places: replication had promoted to Stickleback, content classes had
+  landed in chartulary and Turnstone, and the Knot readout/editor support had
+  moved into Genet. K0 through K2 landed in that first pass, where `cargo test
+  -p knot` passed twelve tests and warning-denying `cargo clippy -p knot
+  --all-targets --no-deps` passed. The dependency-inclusive warning-denying
+  Clippy gate stopped in pre-existing `numen::FieldId`/`CouplingId`
+  `new_without_default` findings.
+- **2026-07-27, completion pass.** K3 through K7 landed locally. `cargo test -p
+  knot` passes 28 tests, including real p2panda convergence.
+  `cargo clippy -p knot --all-targets --no-deps -- -D warnings` and `cargo
+  check -p knot --all-targets` pass. The independent G4 receipt still mounts
+  four sessions from Turnstone, Isometry, and Knot and regenerates at
+  `28459BF5591CFB67CCCAD09BF5D2AFCD1F829FADE644C724F1E4DEBC6A076E60`.

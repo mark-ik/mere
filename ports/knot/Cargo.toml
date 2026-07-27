@@ -1,0 +1,54 @@
+[package]
+name = "knot"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Files-in-place authoring endpoint for Mere."
+
+[[bin]]
+name = "knot_endpoint"
+path = "src/bin/knot_endpoint.rs"
+
+[dependencies]
+blake3.workspace = true
+cambium.workspace = true
+chartulary.workspace = true
+eidetic.workspace = true
+graphshell-endpoint.workspace = true
+graphshell-protocol.workspace = true
+graphshell-stdio.workspace = true
+inker.workspace = true
+illume.workspace = true
+knot-editor-host.workspace = true
+muniment = { workspace = true, features = ["redb"] }
+nematic.workspace = true
+notify = "8"
+personae.workspace = true
+p2panda-core = "0.7.0"
+p2panda-net = "0.7.0"
+p2panda-store = { version = "0.7.0", default-features = false }
+sceno.workspace = true
+scenotime.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+servitor.workspace = true
+session-runtime.workspace = true
+sibylla.workspace = true
+stickleback.workspace = true
+thiserror = "1"
+zeroize = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+transport.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+] }
+
+[lints]
+workspace = true
