@@ -28,15 +28,15 @@ unit tests, 5 new boundary fixtures).
 ## Findings that change later slices
 
 **1. The compatibility module S2 targets already has zero callers.**
-[`crates/murm/transport/src/synced_space.rs`](../../../crates/murm/transport/src/synced_space.rs)
-is three lines re-exporting `SyncRound`, `SyncStatus`, and `SyncedSpace`. No
-workspace file imports them through transport; Mesh re-exports from
-`murm_replication` directly at [`sync.rs:41`](../../../crates/mesh/mesh/src/sync.rs).
-S2 needs no caller migration — it is a deletion plus the `pub mod` line in
-transport's `lib.rs`. S2 can fold into S1 if convenient.
+`crates/murm/transport/src/synced_space.rs` (removed in S2) was three lines
+re-exporting `SyncRound`, `SyncStatus`, and `SyncedSpace`. No workspace file
+imports them through transport; Mesh re-exports from `murm_replication`
+directly at [`sync.rs:41`](../../../crates/mesh/mesh/src/sync.rs). S2 needs no
+caller migration — it is a deletion plus the `pub mod` line in transport's
+`lib.rs`. S2 can fold into S1 if convenient.
 
 **2. One derivation constant contains "murm" and must not be renamed.**
-[`receipt.rs:79`](../../../crates/murm/replication/src/receipt.rs) derives peer
+[`receipt.rs:79`](../../../crates/stickleback/src/receipt.rs) derives peer
 storage scope through
 `blake3::derive_key("mere murm drop receipt peer scope v1", identity)`. The
 context string is an input to stored muniment keys. A find-and-replace of
@@ -188,7 +188,7 @@ import path; they are a coherent unbuilt feature, not rename residue.
 
 ## Boundary fixtures
 
-[`crates/murm/replication/tests/boundary.rs`](../../../crates/murm/replication/tests/boundary.rs)
+[`crates/stickleback/tests/boundary.rs`](../../../crates/stickleback/tests/boundary.rs)
 covers each generic extension point S0 names, through the public surface only,
 against a neutral test domain called "ledger" that is not Murm, Mesh, or Moot.
 Placing them in `tests/` rather than a `#[cfg(test)]` module is deliberate: an

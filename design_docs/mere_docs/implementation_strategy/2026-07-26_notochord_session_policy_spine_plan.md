@@ -476,9 +476,19 @@ proved subject; a peer refused by the owner's rule leaves the cabal holding
 connection before Murm receives application bytes", against a real engine
 rather than a fixture.
 
+**One half of the cross-service check is closed too**, and it needed nothing
+from the Graphshell side: a grant for `mere.graphshell` /
+`/services/projection` — valid, signed by a trusted root, issued to the very
+peer connecting — is refused by Murm's lane with `ActionNotCovered`, and
+nothing it sent reaches the conversation. The triple is spelled out in murm's
+test rather than imported, since murm must not depend on a port. G5c already
+proved the mirror (a Murm grant does not open projections), so both directions
+of "one service's grant is not authority in another" now hold.
+
 Remaining for the promotion gate: Graphshell G5d over `P2pandaTransport`
-(the servitor's lane), and then the cross-service checks — a Murm grant must
-not open Graphshell, and the reverse.
+(the servitor's lane). Both carriers then need to be on the same construction
+site, which since N1 means `AcceptedSession::session_facts` and
+`admit_session`; Murm's lane already is.
 
 ### A transport bug this uncovered
 

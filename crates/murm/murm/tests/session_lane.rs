@@ -43,6 +43,35 @@ fn member_key() -> [u8; 32] {
     member().master_public_key().to_bytes()
 }
 
+/// A grant for some other service's action triple.
+///
+/// Mirrors Graphshell's (`mere.graphshell` / `/services/projection`), spelled
+/// out rather than imported: murm must not depend on a port, and the point of
+/// the test is that a perfectly valid grant for *someone else's* service is
+/// worthless here.
+fn foreign_grant() -> SignedDelegationCertificate {
+    SignedDelegationCertificate::issue(
+        &root(),
+        DelegationCertificate::new(
+            DelegationParent::Root(ROOT_AUTHORITY),
+            root().master_public_key().to_bytes(),
+            member_key(),
+            CapabilityScope {
+                domain: "mere.graphshell".into(),
+                resource: NETWORK.0.to_vec(),
+                path_prefix: "/services/projection".into(),
+                actions: ["connect".to_string()].into_iter().collect(),
+            },
+            5,
+            10,
+            Some(100),
+            1,
+            [2; 32],
+        ),
+    )
+    .expect("issue certificate")
+}
+
 fn grant() -> SignedDelegationCertificate {
     SignedDelegationCertificate::issue(
         &root(),
@@ -88,6 +117,10 @@ fn policy(access: ServiceAccess) -> LocalNetworkPolicy {
 }
 
 fn hello() -> SessionHello {
+    hello_with(vec![grant()])
+}
+
+fn hello_with(delegations: Vec<SignedDelegationCertificate>) -> SessionHello {
     SessionHello::issue(
         &member(),
         NETWORK,
@@ -103,7 +136,7 @@ fn hello() -> SessionHello {
         TrafficClass::Interactive,
         [42; 32],
         &lane_binding(PROTOCOL, member_key()),
-        vec![grant()],
+        delegations,
     )
     .expect("issue hello")
 }
@@ -136,6 +169,13 @@ async fn fixtures() -> (Arc<ConversationEngine>, [u8; 32], Post) {
 /// Run one session end to end, returning the server's outcome and how many
 /// posts the conversation actually holds afterwards.
 async fn run(access: ServiceAccess) -> (Result<SessionOutcome, DenyReason>, usize) {
+    run_with(access, hello()).await
+}
+
+async fn run_with(
+    access: ServiceAccess,
+    hello: SessionHello,
+) -> (Result<SessionOutcome, DenyReason>, usize) {
     let (engine, cabal_id, post) = fixtures().await;
     let policy = policy(access);
     let ledger = RevocationLedger::new();
@@ -161,7 +201,7 @@ async fn run(access: ServiceAccess) -> (Result<SessionOutcome, DenyReason>, usiz
         .expect("serve session")
     });
 
-    let _ = push_posts(client, &hello(), &policy, std::slice::from_ref(&post))
+    let _ = push_posts(client, &hello, &policy, std::slice::from_ref(&post))
         .await
         .expect("push posts");
     let outcome = responder.await.expect("responder task");
@@ -196,4 +236,23 @@ async fn a_refused_peer_never_reaches_the_engine() {
         held, 0,
         "not one post crosses into the conversation on a refused session"
     );
+}
+
+#[tokio::test]
+async fn a_grant_for_another_service_does_not_open_murm() {
+    // Half of the Notochord promotion gate: "a Graphshell projection grant
+    // cannot open Murm". The chain is valid, signed by a root this node
+    // trusts, and issued to the very peer that is connecting — it simply is
+    // not a grant for *this* service, and that is the whole of the objection.
+    let (outcome, held) =
+        run_with(ServiceAccess::MemberOnly, hello_with(vec![foreign_grant()])).await;
+    match outcome {
+        Err(reason) => assert_eq!(
+            reason,
+            DenyReason::ActionNotCovered,
+            "a valid grant for another domain is still not authority here"
+        ),
+        Ok(_) => panic!("a projection grant must not open a cabal"),
+    }
+    assert_eq!(held, 0, "and nothing it sent reaches the conversation");
 }

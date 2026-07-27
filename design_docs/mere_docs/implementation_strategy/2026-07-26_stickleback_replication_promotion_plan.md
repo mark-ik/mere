@@ -50,6 +50,7 @@ crates/stickleback
     drop_io.rs
     joined_space.rs
     processor.rs
+    prune_proof.rs
     receipt.rs
     store.rs
     synced_space.rs
@@ -244,8 +245,9 @@ Tests, all green:
 | `moothold` | 18 passed |
 | `mere-transport` | 40 passed |
 
-`cargo check --workspace --all-targets` exits 0, `cargo fmt` is clean across all
-six packages, and `git diff --check` is clean.
+`cargo check --workspace --all-targets --features
+mere-transport/session-policy` exits 0, `cargo fmt` is clean across all six
+packages, and `git diff --check` is clean.
 
 Two notes on the receipt commands themselves:
 
