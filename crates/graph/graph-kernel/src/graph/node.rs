@@ -16,33 +16,26 @@
 //! slice C: the graph library holds graph facts; what the browser
 //! knows about a node rides beside the graph, keyed by node id.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
+use std::ops::{Deref, DerefMut};
 
-use rkyv::{Archive, Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::identity::{LogIdAsString, UuidAsBytes};
-use crate::address::{Address, AddressClaim, address_from_url, cached_host_from_url};
+use crate::address::{Address, address_from_url};
 use crate::types::{
     FrameLayoutHint, ImageRef, ImageRole, NodeClassification, NodeDerivation, NodeImportProvenance,
     NodeProperty, NodeTagPresentationState,
 };
 
 /// A webpage node in the graph
-#[derive(Debug, Clone, Archive, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Node {
-    /// Stable node identity.
-    #[rkyv(with = UuidAsBytes)]
-    pub id: Uuid,
-
-    /// Cached hostname derived from the node's address for UI label rendering.
-    pub cached_host: Option<String>,
-
-    /// Page title (or URL if no title)
-    pub title: String,
-
-    /// Canonical durable semantic tags for this node.
-    pub tags: HashSet<String>,
+    /// The one node substrate. Identity, primary-first addresses, authored
+    /// content, media type, title, tags, and nested-graph bearing live here.
+    ///
+    /// `Deref` keeps the field-level read surface source-compatible while the
+    /// optional remainder below dissolves into facets rung by rung.
+    pub container: chartulary::Container<Uuid, Address>,
 
     /// Presentation-only metadata for ordering and icon overrides.
     pub tag_presentation: NodeTagPresentationState,
@@ -71,7 +64,6 @@ pub struct Node {
     pub is_pinned: bool,
 
     /// Timestamp of last visit
-    #[rkyv(with = rkyv::with::AsUnixTime)]
     pub last_visited: std::time::SystemTime,
 
     /// The app-launch session number this node was last navigated in, stamped by
@@ -98,53 +90,26 @@ pub struct Node {
     /// rather than indexing the map, so call sites name a role.
     pub images: BTreeMap<ImageRole, ImageRef>,
 
-    /// Optional declared or sniffed MIME type — content classification
-    /// (what kind of content this node holds), consumed by mere-domain
-    /// surfaces (roster bucketing, note-format detection) and, host-side,
-    /// viewer selection. Set at node creation from URL extension sniffing;
-    /// may be updated by `SetNodeMimeHint` when content-byte detection or
-    /// a Content-Type header provides a more precise value.
-    ///
-    /// Deliberately kernel-side where scroll/viewer/compat state is not:
-    /// mime is a fact about the content; those were facts about the
-    /// browser's handling of it (now the host's `BrowserNodeState`).
-    pub mime_hint: Option<String>,
-
-    /// Inline authored content body — a knot note's djot source, for nodes whose
-    /// content is authored in place rather than fetched. `None` for fetched / remote
-    /// nodes (their content lives in the durable content cache). Mutable (the live note
-    /// editor writes it) and persisted with the node, so it travels on snapshot / sync /
-    /// fork, unlike the local content cache. (Djot editor reframe, slice 3 — the inline
-    /// `Node` body.)
-    pub body: Option<String>,
-
-    /// Address claims attached to this node — Primary + zero-or-more Aliases.
-    ///
-    /// Per the [node identity + duplicates brief](https://github.com/mark-ik/mere/blob/main/design_docs/mere_docs/research/2026-05-18_node_identity_and_duplicates_brief.md):
-    /// identity is `id: Uuid` (above); addresses are properties of the node.
-    /// Exactly one claim must have role `AddressRole::Primary`; the rest are
-    /// `Alias` (mirrors, cross-protocol pairs, user-declared aliases).
-    ///
-    /// Use [`Node::primary_address`] for the canonical retrieval target;
-    /// iterate `addresses` for aliases.
-    pub addresses: Vec<AddressClaim>,
-
     /// Durable split arrangement annotations for frame-anchor nodes.
     pub frame_layout_hints: Vec<FrameLayoutHint>,
 
     /// Durable opt-out for split-offer affordances on frame-anchor nodes.
     pub frame_split_offer_suppressed: bool,
 
-    /// The nested graph this node BEARS, by log identity — structural
-    /// containment (chartulary `GraphBearing`; the one-node ruling's
-    /// containment tier). `None` for the ordinary node. A denizen's inner
-    /// world hangs here; the residency facet keeps only agency (subject +
-    /// kind). Graph truth: persists, journals attributed, and is deliberately
-    /// NOT carried by a cross-graph copy (a fork's copy is un-resided rather
-    /// than sharing one world; the slot-convention world move is the
-    /// follow-on that makes forked worlds real copies).
-    #[rkyv(with = rkyv::with::Map<LogIdAsString>)]
-    pub nested: Option<codicil::LogId>,
+}
+
+impl Deref for Node {
+    type Target = chartulary::Container<Uuid, Address>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.container
+    }
+}
+
+impl DerefMut for Node {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.container
+    }
 }
 
 impl Node {
@@ -178,16 +143,11 @@ impl Node {
         self.images.remove(&role)
     }
 
-    /// Returns the node's canonical retrieval address (the Primary claim).
-    ///
-    /// Panics if the per-node invariant (exactly one Primary claim) is
-    /// violated — which the constructors guarantee.
+    /// Returns the node's canonical retrieval address (the first address).
     pub fn primary_address(&self) -> &Address {
         self.addresses
-            .iter()
-            .find(|c| c.is_primary())
-            .map(|c| &c.address)
-            .expect("Node invariant violated: no Primary AddressClaim")
+            .first()
+            .expect("Node invariant violated: no primary address")
     }
 
     /// Returns the canonical retrieval URL string. Convenience over
@@ -203,10 +163,9 @@ impl Node {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn test_stub(url: &str) -> Self {
         Self {
-            id: Uuid::new_v4(),
-            cached_host: cached_host_from_url(url),
-            title: url.to_string(),
-            tags: HashSet::new(),
+            container: chartulary::Container::with_identity(Uuid::new_v4())
+                .with_address_record(address_from_url(url))
+                .with_title(url),
             tag_presentation: NodeTagPresentationState::default(),
             import_provenance: Vec::new(),
             classifications: Vec::new(),
@@ -216,12 +175,8 @@ impl Node {
             last_visited: std::time::SystemTime::now(),
             last_session_visited: 0,
             images: BTreeMap::new(),
-            mime_hint: None,
-            body: None,
-            addresses: vec![AddressClaim::primary(address_from_url(url))],
             frame_layout_hints: Vec::new(),
             frame_split_offer_suppressed: false,
-            nested: None,
         }
     }
 }

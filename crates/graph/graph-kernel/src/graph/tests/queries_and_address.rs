@@ -44,7 +44,7 @@ fn node_created_with_file_pdf_url_gets_pdf_mime_hint() {
         Point2D::new(0.0, 0.0),
     );
     let node = graph.get_node(key).unwrap();
-    assert_eq!(node.mime_hint.as_deref(), Some("application/pdf"));
+    assert_eq!(node.media_type.as_deref(), Some("application/pdf"));
     assert_eq!(node.primary_address().address_kind(), AddressKind::File);
 }
 
@@ -57,7 +57,7 @@ fn node_created_with_http_url_has_no_mime_hint_by_default() {
     );
     let node = graph.get_node(key).unwrap();
     // Plain HTTP URLs without a recognisable extension yield no MIME hint.
-    assert!(node.mime_hint.is_none());
+    assert!(node.media_type.is_none());
 }
 
 // Address type and function tests have moved to `kernel::address::tests`.
@@ -75,7 +75,7 @@ fn node_address_field_is_consistent_with_url_and_address_kind_at_creation() {
     assert_eq!(node.primary_address().as_url_str(), node.url());
     // Invariant: exactly one Primary claim per node at creation.
     assert_eq!(node.addresses.len(), 1);
-    assert!(node.addresses[0].is_primary());
+    assert_eq!(node.addresses[0], address_from_url("https://example.com"));
 }
 
 #[test]
@@ -123,7 +123,7 @@ fn snapshot_roundtrip_preserves_mime_hint_and_address_kind() {
         Point2D::new(0.0, 0.0),
     );
     assert_eq!(
-        graph.get_node(key).unwrap().mime_hint.as_deref(),
+        graph.get_node(key).unwrap().media_type.as_deref(),
         Some("application/pdf")
     );
     assert_eq!(
@@ -140,7 +140,7 @@ fn snapshot_roundtrip_preserves_mime_hint_and_address_kind() {
     let (_, rnode) = restored
         .get_node_by_url("file:///home/user/report.pdf")
         .unwrap();
-    assert_eq!(rnode.mime_hint.as_deref(), Some("application/pdf"));
+    assert_eq!(rnode.media_type.as_deref(), Some("application/pdf"));
     assert_eq!(rnode.primary_address().address_kind(), AddressKind::File);
 }
 

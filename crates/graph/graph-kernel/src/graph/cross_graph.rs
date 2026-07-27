@@ -69,19 +69,18 @@ impl Graph {
             source_graph,
         };
         let url = source.primary_address().as_url_str().to_string();
+        let mut container = source.container.clone();
+        container.id = id;
+        // Deliberately NOT carried: a copy is un-resided. Carrying the LogId
+        // would leave two nodes bearing one world file.
+        container.nested = None;
 
         let key = self.inner.insert(Node {
-            id,
-            // --- content: cloned from the source ---
-            cached_host: source.cached_host.clone(),
-            title: source.title.clone(),
-            tags: source.tags.clone(),
+            // --- container content: cloned from the source ---
+            container,
             tag_presentation: source.tag_presentation.clone(),
             classifications: source.classifications.clone(),
             properties: source.properties.clone(),
-            addresses: source.addresses.clone(),
-            mime_hint: source.mime_hint.clone(),
-            body: source.body.clone(),
             // References copy freely: the blob is content-addressed and shared,
             // so a cross-graph copy costs ~40 bytes per role, not a duplicated
             // image.
@@ -96,10 +95,6 @@ impl Graph {
             last_session_visited: 0,
             frame_layout_hints: Vec::new(),
             frame_split_offer_suppressed: false,
-            // Deliberately NOT carried: a copy is un-resided. Carrying the
-            // LogId would leave two nodes bearing ONE world file; the fork
-            // instead re-homes worlds when the slot-convention move lands.
-            nested: None,
         });
 
         self.url_to_nodes.entry(url).or_default().push(key);

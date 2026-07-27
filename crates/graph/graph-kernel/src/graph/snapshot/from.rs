@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use super::super::*;
 use super::containment_parent_url;
-use crate::address::{address_from_url, cached_host_from_url, detect_mime};
+use crate::address::{address_from_url, detect_mime};
 use crate::persistence::{
     GraphSnapshot, PersistedArrangementSubKind, PersistedContainmentSubKind,
     PersistedCouplingResponse, PersistedEdgeFamily, PersistedFieldExtent, PersistedFieldLifecycle,
@@ -73,10 +73,6 @@ impl Graph {
             let mut restore_url_from_session: Option<String> = None;
             if let Some(node) = graph.inner.node_mut(key) {
                 node.title = pnode.title.clone();
-                node.cached_host = pnode
-                    .cached_host
-                    .clone()
-                    .or_else(|| cached_host_from_url(node.primary_address().as_url_str()));
                 node.tags = pnode.tags.iter().cloned().collect();
                 node.tag_presentation = pnode.tag_presentation.clone();
                 node.import_provenance = pnode.import_provenance.clone();
@@ -91,7 +87,7 @@ impl Graph {
                 // carries them here has skipped that pass — see
                 // `GraphSnapshot::legacy_image_count`.
                 node.images = pnode.images.clone();
-                node.mime_hint = pnode.mime_hint.clone();
+                node.media_type = pnode.mime_hint.clone();
                 // address was already set by add_node_with_id from pnode.url; no re-derivation needed.
                 node.frame_layout_hints = pnode.frame_layout_hints.clone();
                 node.frame_split_offer_suppressed = pnode.frame_split_offer_suppressed;
@@ -121,12 +117,9 @@ impl Graph {
                     // restored URL. update_node_url then reindexes the
                     // url_to_nodes map.
                     if let Some(node) = graph.inner.node_mut(key) {
-                        node.mime_hint = detect_mime(&current_url, None);
-                        for claim in node.addresses.iter_mut() {
-                            if claim.is_primary() {
-                                claim.address = address_from_url(&current_url);
-                                break;
-                            }
+                        node.media_type = detect_mime(&current_url, None);
+                        if let Some(primary) = node.addresses.first_mut() {
+                            *primary = address_from_url(&current_url);
                         }
                     }
                     let _ = graph.update_node_url(key, current_url);

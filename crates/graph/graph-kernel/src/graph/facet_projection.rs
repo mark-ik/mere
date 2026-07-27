@@ -63,7 +63,7 @@ pub fn facet_projection_for_node(graph: &Graph, key: NodeKey) -> Option<FacetPro
 
     // --- Matter ---
 
-    if let Some(mime) = &node.mime_hint {
+    if let Some(mime) = &node.media_type {
         proj.insert(
             facet_keys::MIME_HINT.to_string(),
             FacetValue::Scalar(FacetScalar::Text(mime.clone())),

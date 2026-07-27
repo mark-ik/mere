@@ -50,7 +50,9 @@ impl Graph {
             .nodes()
             .map(|(_, node)| PersistedNode {
                 node_id: node.id.to_string(),
-                cached_host: node.cached_host.clone(),
+                // Legacy wire field only. Hostnames are derived from the
+                // Container's primary address and are never stored anew.
+                cached_host: None,
                 title: node.title.clone(),
                 tags: {
                     let mut tags = node.tags.iter().cloned().collect::<Vec<_>>();
@@ -93,7 +95,7 @@ impl Graph {
                 // Written for backward compat: pre-Stage C.2 readers use this field.
                 url: node.primary_address().as_url_str().to_string(),
                 classifications: node.classifications.clone(),
-                mime_hint: node.mime_hint.clone(),
+                mime_hint: node.media_type.clone(),
                 frame_layout_hints: node.frame_layout_hints.clone(),
                 frame_split_offer_suppressed: node.frame_split_offer_suppressed,
                 properties: node.properties.clone(),

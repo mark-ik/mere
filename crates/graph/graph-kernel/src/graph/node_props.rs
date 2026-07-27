@@ -99,10 +99,10 @@ impl Graph {
         let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
-        if node.mime_hint == mime_hint {
+        if node.media_type == mime_hint {
             return false;
         }
-        node.mime_hint = mime_hint;
+        node.media_type = mime_hint;
         true
     }
 

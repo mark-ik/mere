@@ -22,7 +22,6 @@ use chartulary::{
     Address, Addressed, Classified, ContentBearing, GraphBearing, Identified, Labeled, Predicated,
     RelationClass,
 };
-use muniment::Hash;
 use uuid::Uuid;
 
 use super::edge_data::predicate_iri;
@@ -39,32 +38,13 @@ impl Identified for Node {
 
 impl Addressed for Node {
     fn addresses(&self) -> Vec<Address> {
-        // Map mere's `AddressClaim`s to chartulary `Address`es, primary first.
-        let mut primary = None;
-        let mut aliases = Vec::new();
-        for claim in &self.addresses {
-            let address = Address::new(claim.address.as_url_str());
-            if claim.is_primary() {
-                primary = Some(address);
-            } else {
-                aliases.push(address);
-            }
-        }
-        let mut out = Vec::new();
-        out.extend(primary);
-        out.extend(aliases);
-        out
+        Addressed::addresses(&self.container)
     }
 }
 
 impl Labeled for Node {
     fn title(&self) -> Option<&str> {
-        // An untitled node seeds `title = url`; an empty title is "no title".
-        if self.title.is_empty() {
-            None
-        } else {
-            Some(&self.title)
-        }
+        Labeled::title(&self.container)
     }
 
     fn tags(&self) -> Vec<String> {
@@ -73,17 +53,12 @@ impl Labeled for Node {
 }
 
 impl ContentBearing for Node {
-    fn content(&self) -> Option<Hash> {
-        // The inline authored body, content-addressed. This is the hash a muniment
-        // `BlobStore::put` would return for the same bytes, so the node names its
-        // content's identity; storing the bytes out-of-line is the follow-on step.
-        // A node with no body (a bare web tab whose content lives in the cache) has
-        // no graph-owned content.
-        self.body.as_ref().map(|body| Hash::of(body.as_bytes()))
+    fn content(&self) -> Option<muniment::Hash> {
+        ContentBearing::content(&self.container)
     }
 
     fn media_type(&self) -> Option<&str> {
-        self.mime_hint.as_deref()
+        ContentBearing::media_type(&self.container)
     }
 }
 
@@ -92,7 +67,7 @@ impl GraphBearing for Node {
         // Structural containment (the one-node ruling): the node BEARS the
         // graph named by this log identity. A denizen's inner world hangs
         // here; agency (subject + kind) stays a facet.
-        self.nested.as_ref()
+        GraphBearing::nested(&self.container)
     }
 }
 
@@ -170,10 +145,10 @@ mod tests {
             "no body: no graph-owned content (a bare web tab's content lives in the cache)"
         );
         node.body = Some("# A note".to_string());
-        node.mime_hint = Some("text/markdown".to_string());
+        node.media_type = Some("text/markdown".to_string());
         assert_eq!(
             ContentBearing::content(&node),
-            Some(Hash::of(b"# A note")),
+            Some(muniment::Hash::of(b"# A note")),
             "content is the body's blake3 hash, the muniment blob address"
         );
         assert_eq!(ContentBearing::media_type(&node), Some("text/markdown"));

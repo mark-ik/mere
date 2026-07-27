@@ -400,12 +400,12 @@ impl Graph {
     ) -> NodeKey {
         let now = std::time::SystemTime::now();
         let primary_address = address_from_url(&url);
+        let mut container = chartulary::Container::with_identity(id)
+            .with_address_record(primary_address)
+            .with_title(url.clone());
+        container.media_type = detect_mime(&url, None);
         let key = self.inner.insert(Node {
-            id,
-            title: url.clone(),
-            cached_host: cached_host_from_url(&url),
-            body: None,
-            tags: HashSet::new(),
+            container,
             tag_presentation: NodeTagPresentationState::default(),
             import_provenance: Vec::new(),
             classifications: Vec::new(),
@@ -415,11 +415,8 @@ impl Graph {
             last_visited: now,
             last_session_visited: 0,
             images: std::collections::BTreeMap::new(),
-            mime_hint: detect_mime(&url, None),
-            addresses: vec![crate::address::AddressClaim::primary(primary_address)],
             frame_layout_hints: Vec::new(),
             frame_split_offer_suppressed: false,
-            nested: None,
         });
 
         self.url_to_nodes.entry(url).or_default().push(key);
@@ -438,8 +435,8 @@ impl Graph {
             // Deregister every URL claim this node carried — Primary plus
             // any aliases. (Aliases are not yet wired into add paths but the
             // index handles them when they land.)
-            for claim in &node.addresses {
-                self.remove_url_mapping(claim.address.as_url_str(), key);
+            for address in &node.addresses {
+                self.remove_url_mapping(address.as_url_str(), key);
             }
             let removed_id = node.id.to_string();
             for record in &mut self.import_records {
@@ -464,21 +461,17 @@ impl Graph {
     pub(crate) fn update_node_url(&mut self, key: NodeKey, new_url: String) -> Option<String> {
         let node = self.inner.node_mut(key)?;
         let old_url = node.primary_address().as_url_str().to_string();
-        node.cached_host = cached_host_from_url(&new_url);
         // A navigation to a different host invalidates the favicon (it was the old
         // site's icon); clear it so a stale favicon does not linger on the tile until
         // the new one loads. A same-host path change keeps it. (Favicon-on-tile.)
-        if cached_host_from_url(&old_url) != node.cached_host {
+        if cached_host_from_url(&old_url) != cached_host_from_url(&new_url) {
             node.clear_image(crate::types::ImageRole::Favicon);
         }
-        // Replace the Primary claim's address; aliases (if any) are
-        // preserved.
+        // Primary-first is Container's address-role mapping. Replace index 0;
+        // aliases (the rest) stay attached.
         let new_primary_address = address_from_url(&new_url);
-        for claim in node.addresses.iter_mut() {
-            if claim.is_primary() {
-                claim.address = new_primary_address.clone();
-                break;
-            }
+        if let Some(primary) = node.addresses.first_mut() {
+            *primary = new_primary_address;
         }
         self.remove_url_mapping(&old_url, key);
         self.url_to_nodes.entry(new_url).or_default().push(key);
@@ -598,11 +591,6 @@ impl Graph {
             .unwrap_or(0)
     }
 
-    pub(crate) fn recompute_cached_hosts(&mut self) {
-        for node in self.inner.node_weights_mut() {
-            node.cached_host = cached_host_from_url(node.primary_address().as_url_str());
-        }
-    }
 }
 
 // Edge mutators (add_edge, assert_relation, replay_*, dissolve_*,

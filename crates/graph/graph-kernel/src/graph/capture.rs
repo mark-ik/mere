@@ -1256,7 +1256,7 @@ mod tests {
         assert_eq!(node.url(), "https://a.test/next");
         assert_eq!(node.preview(), Some(&ImageRef::new([7u8; 32], 1, 1)));
         assert_eq!(node.favicon(), Some(&ImageRef::new([9u8; 32], 1, 1)));
-        assert_eq!(node.mime_hint.as_deref(), Some("text/html"));
+        assert_eq!(node.media_type.as_deref(), Some("text/html"));
         assert!(node.is_pinned);
         assert_eq!(node.body.as_deref(), Some("body"));
         assert_eq!(

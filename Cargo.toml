@@ -243,7 +243,9 @@ identity = { package = "personae", version = "0.1.0", path = "crates/persona/per
 # The denizen authority gate (participant gate B1/B3): document-host derives
 # its import-level Grant from a servitor authority — one grant, two faces.
 servitor = { path = "crates/servitor" }
-muniment = { path = "crates/eidetic/muniment" }
+# Path + version: the path is used for local workspace builds, the version lets
+# a publishable dependent (stickleback) record the crates.io dependency.
+muniment = { version = "0.1.1", path = "crates/eidetic/muniment" }
 # Handle-resolution index (WebFinger today; NIP-05 / atproto-did / moot
 # web-of-trust to come). Incubating, promoted out of the murm supercrate
 # 2026-07-08 (a gazetteer is a directory, not a broadcast gazette); no consumer

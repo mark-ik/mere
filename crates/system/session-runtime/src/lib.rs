@@ -64,6 +64,9 @@ pub mod denizen_facets;
 // graph.json. The durable home the bespoke per-node sidecars (browser/denizen/
 // arrangement) converge onto. Wraps chartulary's FacetStore.
 pub mod facet_store;
+// Mere-side adapter from eidetic SchemaDefinition engrams to chartulary's
+// synchronous FacetValidator seam.
+pub mod schema_facets;
 // The arrangement.* facet namespace: cartography's per-node data (position
 // first; size/sprite/hull/material/face follow) as facets in facets.json —
 // born as facets, since the bespoke cartography sidecar was never wired.
@@ -151,6 +154,7 @@ pub use facet_store::{
     AcceptAll, FacetError, FacetId, FacetValidator, NODE_FACETS_FILE, NodeFacetStore, NodeFacets,
     copy_node_facets, load_node_facets, node_facets_path, save_node_facets,
 };
+pub use schema_facets::SchemaFacetValidator;
 pub use identity::{StartupUnlockMode, auto_unlock_backend_available};
 pub use manifest::{
     EngineProfileBinding, EngramId, GraphSessionManifest, MANIFEST_SCHEMA_VERSION, PersonaId,
