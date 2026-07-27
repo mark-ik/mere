@@ -10,6 +10,7 @@ mod directory;
 mod editor;
 mod endpoint;
 mod search;
+mod startup;
 mod sync;
 mod vault;
 mod watcher;
@@ -22,6 +23,7 @@ pub use directory::{DirectorySource, DiskDocument, IgnorePolicy};
 pub use editor::{EditOutcome, KnotEditor};
 pub use endpoint::{KnotEndpoint, KnotWriteGrant};
 pub use search::{KnotSearch, SearchConfig, SearchHit, SearchLane};
+pub use startup::{StartupUnlockedPersonalVault, persona_vault_root};
 pub use sync::{
     KnotDocumentConflict, KnotDocumentProjection, KnotDocumentVersion, KnotEncryptionProfile,
     KnotProjectionCheckpoint, KnotSyncCipher, KnotSyncError, KnotSyncEvent, KnotSyncExt,

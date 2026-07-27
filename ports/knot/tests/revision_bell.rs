@@ -114,3 +114,123 @@ fn a_retained_graphshell_session_saves_a_real_knot_file() {
         "# Saved over Graphshell\n"
     );
 }
+
+#[cfg(windows)]
+#[test]
+fn a_real_startup_unlocked_vault_process_saves_restarts_and_stays_sealed() {
+    let root = tempdir().unwrap();
+    let persona = personae::PersonaId::new();
+    let settings = session_runtime::settings_store::PersistedSettings {
+        startup_unlock_mode: personae::StartupUnlockMode::AutoOs,
+        ..session_runtime::settings_store::PersistedSettings::default()
+    };
+    session_runtime::settings_store::save_settings(root.path(), &settings).unwrap();
+    session_runtime::wallet_store::ensure_wallet_state(
+        root.path(),
+        persona,
+        "Knot process receipt",
+    )
+    .unwrap();
+    let authority = knot::StartupUnlockedPersonalVault::open(root.path(), persona).unwrap();
+    authority
+        .author_document(knot::VaultDocument {
+            id: "field-note".into(),
+            title: "Field note".into(),
+            body: b"# Private\n".to_vec(),
+            media_type: "text/vnd.knot".into(),
+        })
+        .unwrap();
+    drop(authority);
+
+    let args = vec![
+        OsStr::new("persona-vault").to_os_string(),
+        root.path().as_os_str().to_os_string(),
+        persona.as_uuid().to_string().into(),
+        "4096".into(),
+    ];
+    let profile = CapabilityProfile::new([
+        PresentationCapability::EditableText,
+        PresentationCapability::PortableCard,
+    ]);
+    let mut retained =
+        RetainedEndpointSession::spawn(env!("CARGO_BIN_EXE_knot_endpoint"), &args, profile.clone())
+            .unwrap();
+    let session = retained.mount(0).unwrap();
+    let (target, editable, action) = retained
+        .resolve_all(&session)
+        .unwrap()
+        .into_iter()
+        .find_map(|(target, presentation)| match presentation.content {
+            ResolvedContent::EditableText(editable)
+                if editable.address == "knot://vault/field-note" =>
+            {
+                Some((target, editable, presentation.semantics.actions[0].clone()))
+            }
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(editable.source, "# Private\n");
+    assert_eq!(
+        retained
+            .invoke(
+                &session,
+                target,
+                &action,
+                &SaveTextV1 {
+                    base_token: editable.base_token,
+                    source: "# Private revised\n".into(),
+                },
+            )
+            .unwrap(),
+        IntentResult::Accepted
+    );
+    assert!(retained.wait_for_change().unwrap());
+    retained.close().unwrap();
+
+    let mut reopened =
+        RetainedEndpointSession::spawn(env!("CARGO_BIN_EXE_knot_endpoint"), &args, profile)
+            .unwrap();
+    let session = reopened.mount(0).unwrap();
+    let source = reopened
+        .resolve_all(&session)
+        .unwrap()
+        .into_iter()
+        .find_map(|(_, presentation)| match presentation.content {
+            ResolvedContent::EditableText(editable)
+                if editable.address == "knot://vault/field-note" =>
+            {
+                Some(editable.source)
+            }
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(source, "# Private revised\n");
+    reopened.close().unwrap();
+
+    let clear = b"# Private revised\n";
+    for path in walk_files(root.path()) {
+        let bytes = fs::read(&path).unwrap();
+        assert!(
+            !bytes.windows(clear.len()).any(|window| window == clear),
+            "cleartext leaked to {}",
+            path.display()
+        );
+    }
+}
+
+#[cfg(windows)]
+fn walk_files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut pending = vec![root.to_path_buf()];
+    let mut files = Vec::new();
+    while let Some(path) = pending.pop() {
+        for entry in fs::read_dir(path).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                pending.push(path);
+            } else {
+                files.push(path);
+            }
+        }
+    }
+    files
+}

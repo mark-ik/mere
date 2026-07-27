@@ -20,9 +20,26 @@ fn main() {
             )
             .expect("Knot could not open the requested writable directory")
         }
+        [mode, data_root, persona, max_source_bytes] if mode == "persona-vault" => {
+            let persona = persona
+                .to_string_lossy()
+                .parse::<uuid::Uuid>()
+                .map(personae::PersonaId::from_uuid)
+                .expect("persona-vault persona must be a UUID");
+            let max_source_bytes = max_source_bytes
+                .to_string_lossy()
+                .parse::<u64>()
+                .expect("persona-vault byte limit must be an integer");
+            knot::StartupUnlockedPersonalVault::open(PathBuf::from(data_root), persona)
+                .and_then(|authority| {
+                    authority.into_endpoint(knot::KnotWriteGrant::new(max_source_bytes))
+                })
+                .expect("Knot could not startup-unlock the requested persona vault")
+        }
         _ => panic!(
             "usage: knot_endpoint [directory] | directory <root> | \
-             directory-write <root> <max-source-bytes>"
+             directory-write <root> <max-source-bytes> | \
+             persona-vault <data-root> <persona-id> <max-source-bytes>"
         ),
     };
     graphshell_stdio::serve_resumable_notifying(

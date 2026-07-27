@@ -38,6 +38,7 @@ session-runtime.workspace = true
 sibylla.workspace = true
 stickleback.workspace = true
 thiserror = "1"
+uuid.workspace = true
 zeroize = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
