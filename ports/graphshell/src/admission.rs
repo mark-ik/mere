@@ -23,9 +23,9 @@
 //! `domain` and `path_prefix` are part of what the chain has to cover.
 
 use network_policy::{
-    AdmittedPrincipal, CarrierKind, DenyReason, HandshakeError, LocalNetworkPolicy, NetworkId,
-    ProfileRef, ProofBinding, RequestedAction, RevocationLedger, SessionFacts, SessionHello,
-    TrafficClass, admit,
+    AdmittedPrincipal, DenyReason, HandshakeError, LocalNetworkPolicy, NetworkId, ProfileRef,
+    ProofBinding, RequestedAction, RevocationLedger, SessionFacts, SessionHello, TrafficClass,
+    admit,
 };
 use personae::IdentityProvider;
 use personae::delegation::SignedDelegationCertificate;
@@ -103,9 +103,10 @@ pub fn serves_action(principal: &AdmittedPrincipal) -> bool {
 /// Returns the reply frame to write in both cases — a refusal is still a
 /// well-formed reply — and the principal when the session is admitted.
 ///
-/// The action is checked, not assumed: a chain that admits some *other* service
-/// is refused here, so a peer cannot reach projections with a grant minted for
-/// something else.
+/// The action is checked, not assumed. The policy refuses a grant minted for
+/// another *service* on its own (the path is not offered); a grant covering
+/// another *action* at this service is not something it can refuse, so
+/// [`serves_action`] does it here.
 pub fn admit_session(
     policy: &LocalNetworkPolicy,
     ledger: &RevocationLedger,
@@ -139,7 +140,7 @@ pub fn admit_session(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use network_policy::{ServiceAccess, ServiceRule, TrustedRoot};
+    use network_policy::{CarrierKind, ServiceAccess, ServiceRule, TrustedRoot};
     use personae::InMemoryProvider;
     use personae::delegation::{
         CapabilityScope, DelegationCertificate, DelegationParent, SignedDelegationCertificate,

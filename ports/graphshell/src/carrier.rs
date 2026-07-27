@@ -156,3 +156,170 @@ pub async fn accept_projection_session<T: Transport>(
 
     Ok(Ok(session))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::admission::{CONNECT_ACTION, GRAPHSHELL_DOMAIN, connect_action, open_session};
+    use network_policy::{RequestedAction, SessionHello, TrafficClass, initiate_session};
+    use personae::IdentityProvider;
+    use personae::InMemoryProvider;
+    use personae::delegation::{
+        CapabilityScope, DelegationCertificate, DelegationParent, SignedDelegationCertificate,
+    };
+    use transport::memory::MemoryTransport;
+    use transport::{PeerID, initiator_binding};
+
+    const NETWORK: NetworkId = NetworkId([3; 32]);
+    const ROOT_AUTHORITY: [u8; 32] = [7; 32];
+    const NOW_MS: u64 = 50;
+
+    fn owner() -> InMemoryProvider {
+        InMemoryProvider::from_seed([1; 32])
+    }
+
+    fn viewer() -> InMemoryProvider {
+        InMemoryProvider::from_seed([4; 32])
+    }
+
+    fn profile_ref() -> ProfileRef {
+        ProfileRef {
+            id: "mere.base".into(),
+            revision: 1,
+        }
+    }
+
+    /// A grant from the owner letting `subject` perform `action` at the
+    /// projection service.
+    fn grant(subject: [u8; 32], action: &str) -> SignedDelegationCertificate {
+        SignedDelegationCertificate::issue(
+            &owner(),
+            DelegationCertificate::new(
+                DelegationParent::Root(ROOT_AUTHORITY),
+                owner().master_public_key().to_bytes(),
+                subject,
+                CapabilityScope {
+                    domain: GRAPHSHELL_DOMAIN.into(),
+                    resource: NETWORK.0.to_vec(),
+                    path_prefix: PROJECTION_SERVICE.into(),
+                    actions: [action.to_string()].into_iter().collect(),
+                },
+                5,
+                10,
+                Some(100),
+                1,
+                [1; 32],
+            ),
+        )
+        .expect("issue certificate")
+    }
+
+    fn policy() -> LocalNetworkPolicy {
+        projection_policy(
+            NETWORK,
+            vec![TrustedRoot {
+                authority: ROOT_AUTHORITY,
+                issuer: owner().master_public_key().to_bytes(),
+            }],
+            vec![profile_ref()],
+            None,
+        )
+    }
+
+    /// Drive one session over the paired memory carrier and return what the
+    /// responder decided.
+    ///
+    /// The client half holds its stream until the responder has decided, which
+    /// is what a real client does and what the module docs require of a
+    /// service: neither side may drop the connection out from under a reply
+    /// that has been written.
+    /// `Ok(action)` means the session was served under that action.
+    async fn run(action: &str) -> Result<String, ProjectionRefusal> {
+        let viewer = viewer();
+        let subject = viewer.master_public_key().to_bytes();
+        // The memory carrier authenticates its counterparty by construction,
+        // so policy rule D6 requires the claimed subject to *be* the peer the
+        // carrier proved. Giving the client node the viewer's own key is what
+        // makes this an honest fixture rather than one that dodges the rule.
+        let client_peer = PeerID::from_bytes(&subject).expect("client peer");
+        let server_peer =
+            PeerID::from_bytes(&owner().master_public_key().to_bytes()).expect("server peer");
+        let (server, client) = MemoryTransport::pair(server_peer, client_peer);
+
+        let mut requested = connect_action();
+        requested.action = action.to_string();
+        let delegations = vec![grant(subject, action)];
+        let action_owned = action.to_string();
+
+        let client_task = tokio::spawn(async move {
+            let mut stream = client
+                .connect(server_peer, projection_alpn())
+                .await
+                .expect("dial");
+            let binding = initiator_binding(&projection_alpn(), client_peer);
+            // The connect case goes through Graphshell's own helper, because
+            // that is the path a real viewer takes. The other case cannot:
+            // `open_session` fixes the action to `connect`, and editing a
+            // signed hello afterwards would invalidate it. A peer asking for
+            // something else builds its own hello, which is exactly what the
+            // open action vocabulary allows and what this test needs to be
+            // honest about.
+            let hello = if action_owned == CONNECT_ACTION {
+                open_session(
+                    &viewer,
+                    NETWORK,
+                    profile_ref(),
+                    TrafficClass::Interactive,
+                    [5; 32],
+                    &binding,
+                    delegations,
+                )
+            } else {
+                SessionHello::issue(
+                    &viewer,
+                    NETWORK,
+                    profile_ref(),
+                    RequestedAction {
+                        domain: GRAPHSHELL_DOMAIN.into(),
+                        path: PROJECTION_SERVICE.into(),
+                        action: action_owned,
+                    },
+                    TrafficClass::Interactive,
+                    [5; 32],
+                    &binding,
+                    delegations,
+                )
+            }
+            .expect("issue hello");
+            let _ = initiate_session(&mut stream, &hello, &policy().limits.clamped()).await;
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        });
+
+        let outcome =
+            accept_projection_session(&server, &policy(), &RevocationLedger::default(), NOW_MS, 0)
+                .await
+                .expect("accept path");
+        client_task.abort();
+
+        outcome.map(|session| session.principal.action.action.clone())
+    }
+
+    #[tokio::test]
+    async fn a_connect_grant_is_admitted_and_served() {
+        let served = run(CONNECT_ACTION).await.expect("must be served");
+        assert_eq!(served, CONNECT_ACTION);
+    }
+
+    /// The hole the policy layer cannot close. `ServiceRule` has no action
+    /// vocabulary, so a chain covering a *different* action at the projection
+    /// path clears admission with that action intact. This service still
+    /// refuses to serve it, and says so with a different word than a denial.
+    #[tokio::test]
+    async fn an_admitted_action_this_service_does_not_serve_is_refused() {
+        let refusal = run("administer").await.expect_err("must be refused");
+        assert_eq!(
+            refusal,
+            ProjectionRefusal::ActionNotServed("administer".to_string())
+        );
+    }
+}

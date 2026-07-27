@@ -726,9 +726,9 @@ the low-power lane, landed the same week):
   composes with `network_policy::initiate_session` instead of standing up a
   second encode path beside it — that crate already owns the framed stream
   handshake (`initiate_session` / `accept_session`), which G5d builds on.
-  `admit_session` re-checks the action after admission: the policy already
-  evaluates it, so a mismatch means a hello admitted for another service
-  reached a Graphshell listener, and it is refused rather than served.
+  `admit_session` checks the action after admission. This entry originally said
+  the check was defence in depth because "the policy already evaluates it";
+  **that was wrong, and G5d proved it wrong.** See G5d below.
   Receipts (graphshell 18): a granted viewer is admitted **and named** (the
   principal is the peer the handshake established, not a claim); an ungranted
   stranger is refused; **a Murm grant does not open projections** for the same
@@ -736,7 +736,44 @@ the low-power lane, landed the same week):
   replayed onto a different connection fails, so admission is per-connection
   rather than per-credential. `graphshell-client` and `graphshell-protocol`
   still declare zero personae and zero network-policy dependencies.
-- **G5d — carrier.** One full-peer carrier over `P2pandaTransport`.
+- **G5d — carrier. LANDED 2026-07-27.** `ports/graphshell::carrier`:
+  `accept_projection_session` runs the full accept path before a single
+  `SessionOpen` byte is read. It is Notochord **N2's second service carrier**
+  (Murm's real accept path is the first), and it owns none of the machinery it
+  uses: carrier facts come from `AcceptedSession::into_session` (N1's one
+  audited adapter), framing and the admitted conclusion from
+  `network_policy::admit_session`, delegation from Personae, owner rules from
+  the policy the host supplies. What is Graphshell's and lives here: the ALPN,
+  the offered service path (`projection_policy`), and which admitted actions
+  projections serve.
+  **The transport is borrowed, never owned.** A short-lived accept task owning
+  its transport discards the reply it already wrote, on either arm: quinn's
+  `Drop for SendStream` finishes the stream *except* when the connection is
+  already errored, and retinue's outbound relay drains to EOF *unless* the
+  endpoint was torn down and the relay aborted. Two unrelated mechanisms, one
+  escape hatch, both opened by dropping the carrier. Taking `&T` makes it
+  unspellable.
+  **The finding, and the correction to G5c.** G5c claimed its action re-check
+  was defence in depth because the policy already evaluates the action. It does
+  not. `LocalNetworkPolicy` keys service rules by *path* and checks that the
+  delegation chain covers whatever triple was requested; `ServiceRule` has no
+  action vocabulary at all, so a chain covering a *different* action at
+  `/services/projection` clears admission with that action intact.
+  `DenyReason::ActionNotOffered` exists in the crate with **no decision site**,
+  which is the smell that pointed here. So the check is not redundant and could
+  not be moved into policy construction as first planned: it is the service
+  authorizing an operation after admission under its own vocabulary, which is
+  exactly the split the Notochord plan assigns. Extracted as
+  `admission::serves_action`, shared by the sans-io and carrier paths.
+  Receipts (graphshell 20, network-policy 33 unchanged): a connect grant is
+  admitted and served; **an admitted "administer" grant at the projection path
+  is refused as `ActionNotServed`**, which is the hole above, proved rather
+  than argued. The memory carrier authenticates its counterparty, so rule D6
+  forces the fixture's claimed subject to *be* the peer the carrier proved.
+  Open for whoever owns `network-policy`: either `ServiceRule` grows an action
+  allow-list and `ActionNotOffered` gets its decision site, or the reason is
+  documented as service-supplied. Not changed here; it is a serialized
+  owner-policy shape in another lane's crate.
 - **G5e — lifecycle.** Reconnect, expiry, revocation, cache purge, denied
   score, stale intent, per G5's done-when.
 
