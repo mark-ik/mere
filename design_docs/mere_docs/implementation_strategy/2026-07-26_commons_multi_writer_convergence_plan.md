@@ -193,21 +193,42 @@ Done-conditions, not dates.
     common ancestor, so a merge is the shared prefix once plus each side's
     tail; `merge_divergent` models that and the naive `merge` is kept only
     for replicas with no shared history.
-- **M3. Reconvergence over a real lane. NOT STARTED, and rescoped 2026-07-27.**
-  This bullet claimed it "reuses the join ceremony landed 2026-07-25, so this
-  is a test rather than new machinery". **That is false, checked against the
-  tree**: no crate bridges chartulary to the replication layer. gemot is the
-  only crate depending on both, and it touches chartulary in exactly one file,
-  for a gate test. A chartulary `Batch` is not a p2panda `Operation`, so
-  nothing today can put a graph edit on a lane.
+- **M3. Reconvergence over a real lane. DONE 2026-07-27**, as the
+  `commons-spine` probe (`crates/probes/commons-spine`, 4 tests green).
 
-  M3 is therefore the first real implementation slice, and it is the commons
-  spine rather than a test. What it needs: an extensions type carrying the
-  container address, a wire encoding for `Batch<Container, Relation>`, a
-  `MunimentStore` for those operations, and an `accept` closure that applies
-  received edits into a `GraphLog` through `apply_edit`. The join ceremony is
-  genuinely reusable at that point, but only after the domain exists.
-  Worth its own scoping pass rather than staying a bullet here.
+  The bullet originally claimed this "reuses the join ceremony, so this is a
+  test rather than new machinery". **That was false**: no crate bridged
+  chartulary to the replication layer, so a graph edit could not ride a lane
+  at all. It is a probe rather than a founded crate because the spine gets
+  named when a consumer pulls it, per the workspace's consumer-pull doctrine.
+  - **Receipt**: two members edit one container **while partitioned**, each
+    minting an edge before it can see the other, then reconverge over real
+    p2panda LogSync on loopback. Both fold to four nodes and two edges, and
+    **both edge ids stay separately addressable**, which is M1's fix proven
+    over a lane rather than over a hand-built journal. Plus: a batch for
+    another container is refused before mutation, and a batch round-trips the
+    wire with its writer half intact.
+  - **The design finding: receipt must not apply edits.** The obvious `accept`
+    closure folds each received batch into a live `GraphLog` on arrival. That
+    does not converge, because the M1/M2 rules hold under the canonical
+    `(verifying_key, log_id, seq_num)` order while a drain delivers in
+    *arrival* order. Whole-node LWW would then mean "last to arrive here" and
+    two peers would disagree. So receipt only **stores**, and the graph is a
+    fold over the store in canonical order. This is the statement kernel
+    brief's recorded-fact versus derived-state split landing in a second
+    place: the log accumulates, the graph is recomputed.
+  - **A bug this caught, worth keeping.** The first fold read the second
+    element of `get_log_entries`' tuple as the payload. It is the **header**
+    bytes, p2panda's LogSync convention; the batch rides in `op.body`. Because
+    the fold used `.ok()` it swallowed every decode failure and produced an
+    empty graph, which presented exactly like a sync failure and sent me
+    looking at the lane. The fold now propagates decode errors, and the fix
+    was found by asserting a replica could fold back *its own* edits before
+    blaming the network. A fold that silently drops batches converges to a
+    confidently wrong graph, which is worse than not converging.
+  - Still open here: this proves convergence, not authority. Admission is
+    deliberately thin (right container, valid signature, decodable batch);
+    membership and capability remain the moot's and personae's jobs.
 - **M4. Write the limit down. DONE 2026-07-27**, in section 6 below. The
   commons profile has no document yet, so the stated behavior lives here and
   the [commons brief](../research/2026-07-24_shared_engram_commons_brief.md)
