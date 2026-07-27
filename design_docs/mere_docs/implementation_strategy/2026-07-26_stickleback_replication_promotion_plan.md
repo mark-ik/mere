@@ -1,12 +1,14 @@
 # Stickleback Replication Promotion Plan
 
 **Date:** 2026-07-26
-**Status:** S0 complete 2026-07-26; **S1 complete 2026-07-27** — the crate is
-`stickleback` at `crates/stickleback` and all consumers build against it
-directly. S2 is the next slice, and S0 reduced it to a deletion. S0's frozen
-contract, its four findings, and its boundary fixtures are recorded in the
+**Status:** **complete 2026-07-27.** S0 froze the contract, S1 cut the path and
+package over, S2 deleted the compatibility surface, and S3 passed the
+publishable-boundary review. `stickleback` 0.1.0 is published on crates.io
+(MIT OR Apache-2.0). S0's frozen contract, its four findings, and its boundary
+fixtures are recorded in the
 [S0 contract freeze receipt](./2026-07-26_stickleback_s0_contract_freeze_receipt.md);
-S1's result is in [Receipts](#receipts) below.
+S1 through S3 are in [Receipts](#receipts) below. A sibling repository remains
+gated on a real external consumer and its own plan.
 **Decision:** promote `murm-replication` to the Mere-owned `stickleback` crate.
 The promotion stays inside the Mere repository. It is a domain-neutral
 boundary and name cutover, not a new sibling repository or a new replication
@@ -216,6 +218,10 @@ unless an evidenced external release requires one bounded forwarding version;
 all stored and wire formats are unchanged; and domain authority remains in
 the domain crates.
 
+**Met 2026-07-27**, with one clause overshot: transport does not build against
+Stickleback directly, because S2 removed its last reason to depend on it at all.
+See the S2 receipt.
+
 ## Receipts
 
 ### S1 — atomic path and package cutover (complete 2026-07-27)
@@ -278,9 +284,61 @@ plans that mention `murm-replication` in passing
 gate, 2026-07-22 graphshell projection) and `MURM_AS_BILATERAL.md`, which already
 declares itself superseded, keep their original spelling as evidence.
 
-### S2 — remove compatibility ownership (open)
+### S2 — remove compatibility ownership (complete 2026-07-27)
 
-S0 established that `transport::synced_space` has no callers, so S2 is a
-deletion of that module plus its `pub mod` line, not a migration. It was kept
-out of S1 deliberately, per the stop rule against combining module cleanup with
-the move.
+S0 established that `transport::synced_space` had no callers, so this was a
+deletion, not a migration: the module, its `pub mod` line, and its `pub use`
+re-export are gone. It was kept out of S1 deliberately, per the stop rule
+against combining module cleanup with the move.
+
+One consequence went past the plan's wording and is worth stating plainly.
+`transport`'s *only* use of the shared crate was that facade, so removing it
+left `stickleback` an unused dependency in transport's manifest, and it was
+removed too. **Transport is therefore no longer a Stickleback consumer at all**
+— a stronger outcome than the done condition's "Murm, Mesh, Moot, and transport
+consumers build against it directly", and the right one: transport carries
+streams and authenticated facts, and now depends on nothing replication-shaped.
+The live consumer set is Murm, Mesh, Gemot/Tessera, and Moothold.
+
+`mere-transport` still passes 40 tests with its `session-policy` feature.
+
+### S3 — publishable boundary review (complete 2026-07-27)
+
+`stickleback` 0.1.0 is published on crates.io under MIT OR Apache-2.0.
+
+Reviewed against S3's list:
+
+- **Crate docs state what the domain must provide.** The `lib.rs` header now
+  names the two seams a domain supplies (`OperationPolicy`, and
+  `CheckpointAuthority` where it prunes) and says outright that Stickleback
+  supplies erasure mechanics while the domain holds the gate — S0's finding 3,
+  written where a reader of the crate will find it.
+- **Features drag no domain into a minimal build.** There is no `[features]`
+  table and no domain dependency to gate.
+- **No public error names one domain.** All five public error enums
+  (`ProcessError`, `DropIoError`, `NativeDropError`, `JoinError`,
+  `DropReceiptError`) and every `#[error]` string are domain-neutral.
+- **A neutral example exists.** `examples/ledger.rs` builds a "ledger" domain
+  that is deliberately none of the real consumers, and exercises the whole
+  contract: policy refusal before storage, idempotent re-offer, and the
+  domain-side retention gate. It runs green.
+- **Metadata is current.** License, repository, readme, keywords, and categories
+  were already right; the description was rewritten to lead with the boundary
+  instead of listing Murm, Moot, and mesh, since a crate meant to serve a fourth
+  domain should not read as three domains' plumbing.
+
+The packaging fix S3 actually needed was a dependency version. `muniment` was a
+bare path dependency in the workspace, which `cargo publish` refuses. Both path
+deps are published (`muniment` 0.1.1, `mere-proofs` 0.1.0), so `muniment` gained
+a version alongside its path, matching the convention already used for `proofs`
+and `identity`. A `--dry-run` confirmed the packaged crate compiles against the
+registry copies rather than the workspace paths. The published archive is 17
+files: sources, README, the example, and the boundary fixtures.
+
+**`murm-replication` 0.1.0 was deliberately not yanked.** Published `gemot`
+0.1.0 and `moothold` 0.1.0 depend on it, and yanking would break fresh
+resolution of those releases for no gain. It stays as a dead but resolvable
+version; their next releases will name `stickleback`.
+
+This was packaging rigor, not a repository extraction. A sibling repository
+still requires a real external consumer and its own plan.
