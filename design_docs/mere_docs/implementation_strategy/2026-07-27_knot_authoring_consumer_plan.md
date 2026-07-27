@@ -1,6 +1,6 @@
 # Knot Authoring Consumer Plan
 
-**Date:** 2026-07-27  
+**Date:** 2026-07-27
 **Status:** planned from the live seams; no implementation yet.
 
 **Companions:** the completed [Knot port plan](2026-07-25_knot_port_plan.md),
