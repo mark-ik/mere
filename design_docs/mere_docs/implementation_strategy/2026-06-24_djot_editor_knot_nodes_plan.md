@@ -35,7 +35,7 @@ intentional:
 | --- | --- | --- |
 | Text editing, highlighting, outline/fold derivation, and preview readout | Genet: Cambium's editor primitives plus `components/inker/knot-editor-host` | Built. `ports/knot::KnotEditor` consumes this stack. Do not build another editor core in Mere or Turnstone. |
 | File identity, source truth, format-aware writes, vaults, search, sync, conflicts, and communal encryption | Mere `ports/knot` | K0 through K7 are complete under the [Knot port plan](2026-07-25_knot_port_plan.md). Files and vault documents replace the old inline `Node.body` store. |
-| Product composition and authoring UX | Graphshell with Turnstone and Cambium | Open. The live Knot endpoint discloses a read-only directory and rejects intents. The product still needs an authorized edit/save surface; it must not receive the vault key or become the document store. |
+| Product composition and authoring UX | [Knot authoring consumer plan](2026-07-27_knot_authoring_consumer_plan.md): Graphshell protocol with a Turnstone/Cambium pane | Open. The live Knot endpoint discloses a read-only directory and rejects intents. The dedicated plan owns the authorized editable resource, Save intent, retained session, pane, and receipts. |
 | Semantic web clipping and `ClippedFrom` provenance | Mere `crates/import::web_clip`; Turnstone Inspector/content lane | The host-neutral producer survived. The Meerkat command did not. A current Inspector selection-to-Knot write path is open. |
 | Outline and folds in the product | Genet readout plus a consumer-pulled Cambium tree/outline; Turnstone Gloss/Inspector | Outline data exists; a Knot authoring consumer and interactive tree are open. This is shared component work, not a Knot parser fork. |
 | Query, agent, diagram, and Wasm blocks | [polyglot block resolver plan](../../nematic_docs/implementation_strategy/2026-06-13_polyglot_block_resolver_plan.md) | Separate resolver work. It is not unfinished Phase 3 editor work. |
@@ -43,6 +43,10 @@ intentional:
 | Shared documents | Knot sync plus Commons | Personal and communal convergence landed. Public addressing, discovery, and publishing UX remain separate product work, not restoration of `knot://` node storage. |
 
 ### Surviving product slices
+
+The [Knot authoring consumer plan](2026-07-27_knot_authoring_consumer_plan.md)
+is the executable owner for these slices. This list records how the historical
+plan decomposed; it is not a second queue.
 
 1. **Authoring consumer.** Expose edit/save as Knot endpoint intents and mount a
    long-lived Cambium editor surface in the Graphshell/Turnstone composition.

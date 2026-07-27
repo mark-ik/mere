@@ -185,6 +185,14 @@ mod native {
         })
     }
 
+    /// Stdio's dispatch: the carrier-agnostic verbs come from
+    /// `graphshell_endpoint::dispatch_common`, and only the session-plane
+    /// answers are stdio's own.
+    ///
+    /// Those two refusals are the whole difference between this carrier and an
+    /// authenticated one, which is why they live here rather than in the
+    /// shared dispatcher: an inherited pipe performs no key exchange, and no
+    /// session survives the process.
     fn dispatch<E, F>(
         endpoint: &mut E,
         request: CarrierRequest,
@@ -200,40 +208,26 @@ mod native {
             graphshell_protocol::ResumeRequest,
         ) -> Result<graphshell_protocol::ResumeReply, String>,
     {
-        let id = request.id;
+        let session_plane = match graphshell_endpoint::dispatch_common(endpoint, request, resume) {
+            Ok(response) => return (response, false),
+            Err(session_plane) => session_plane,
+        };
+        let id = session_plane.id;
         let mut close = false;
-        let body = match request.body {
-            CarrierRequestBody::Discover => {
-                Ok(CarrierResponseBody::Descriptor(endpoint.describe()))
-            }
-            CarrierRequestBody::Snapshot(request) => endpoint
-                .snapshot(request)
-                .map(|snapshot| CarrierResponseBody::Snapshot(Box::new(snapshot)))
-                .map_err(|error| error.to_string()),
-            CarrierRequestBody::Resource(request) => endpoint
-                .resource(request)
-                .map(CarrierResponseBody::Resource)
-                .map_err(|error| error.to_string()),
-            CarrierRequestBody::Resume(request) => {
-                resume(endpoint, request).map(CarrierResponseBody::Resume)
-            }
-            CarrierRequestBody::Intent(intent) => endpoint
-                .invoke(intent)
-                .map(CarrierResponseBody::Intent)
-                .map_err(|error| error.to_string()),
+        let body = match session_plane.verb {
             // Inherited pipes perform no key exchange, so stdio cannot make
             // an authenticated session claim.
-            CarrierRequestBody::Open(_) => Err(
+            graphshell_endpoint::SessionPlaneVerb::Open(_) => Err(
                 "the stdio carrier does not authenticate; `open` requires a carrier that proves its peer"
                     .to_string(),
             ),
             // Closing this process-scoped session is honest and terminal.
-            CarrierRequestBody::Close => {
+            graphshell_endpoint::SessionPlaneVerb::Close => {
                 close = true;
                 Ok(CarrierResponseBody::Closed)
             }
             // No stdio session survives the endpoint process.
-            CarrierRequestBody::Suspend => Err(
+            graphshell_endpoint::SessionPlaneVerb::Suspend => Err(
                 "the stdio carrier has no session that outlives its process; `suspend` requires a carrier that can reconnect"
                     .to_string(),
             ),

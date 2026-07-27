@@ -34,8 +34,12 @@ Root-level briefs that span multiple area-docs (not required reading).
 > sync, conflict, and Commons work is complete under the
 > [Knot port plan](mere_docs/implementation_strategy/2026-07-25_knot_port_plan.md).
 > Product authoring intents, Inspector-to-Knot clipping, and a shared
-> outline/fold surface remain open. The older detailed index entry below
-> describes the deleted Meerkat implementation and is not the current queue.
+> outline/fold surface remain open under the dedicated
+> [Knot authoring consumer plan](mere_docs/implementation_strategy/2026-07-27_knot_authoring_consumer_plan.md).
+> The older detailed index entry below describes the deleted Meerkat
+> implementation and is not the current queue.
+
+- [knot_authoring_consumer_plan](mere_docs/implementation_strategy/2026-07-27_knot_authoring_consumer_plan.md) — **planned 2026-07-27 from the live seams**: add a generic versioned editable-text resource and typed Save payload to Graphshell; retain the endpoint carrier instead of using G4's spawn/render/shutdown receipt helper; advertise edit/save only for writable, granted, single-version Knot documents; mount the existing Cambium/Knot readout in a Turnstone Workbench pane while file authority and vault keys stay endpoint-side; then prove file and sealed-vault save, signed sync authorship, stale refusal, unrelated-revision survival, restart persistence, source purge, and revision-bell refresh. Inspector clipping follows through a typed provenance intent; Run/Resolve reuse the same consent and revision path afterward.
 
 Several older plans here carry a 2026-06-09 rename-key banner: their bodies use
 pre-pivot crate names (e.g. `mere-host`, `graph-canvas`, Cable/BLAKE2b) as dated

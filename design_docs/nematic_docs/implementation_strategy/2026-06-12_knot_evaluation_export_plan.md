@@ -60,11 +60,15 @@ an effectful Knot service and a product-host consent surface.
 
 The live `KnotEndpoint` is currently read-only and rejects every intent. The
 editor library and the K1/K2 engine passes being complete therefore do not make
-the authoring/effect path complete.
+the authoring/effect path complete. The
+[Knot authoring consumer plan](../../mere_docs/implementation_strategy/2026-07-27_knot_authoring_consumer_plan.md)
+first establishes the retained writable, revision-checked, consent-capable
+intent path that Resolve and Run will reuse.
 
 ### Remaining sequence
 
-1. **E1, Knot effect service.** Add explicit Resolve and Run intents; inject
+1. **E1, Knot effect service.** After the authoring consumer's A1 through A4,
+   add explicit Resolve and Run intents; inject
    fetch/evaluator registries; enforce document trust, grants, scheme/language
    allowlists, recursion limits, and user-configured `auto` / `ask` / `never`
    modes. Received documents remain inert by default.

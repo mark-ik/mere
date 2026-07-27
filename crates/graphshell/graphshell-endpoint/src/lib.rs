@@ -1,8 +1,11 @@
 //! Traits application adapters implement beside their own source truth.
 
+use std::fmt::Display;
+
 use graphshell_protocol::{
-    CarrierNotice, EndpointDescriptor, IntentInvocation, IntentResult, ProjectionRequest,
-    ProjectionSnapshot, ResourceRequest, ResourceResponse, ResumeReply, ResumeRequest,
+    CarrierFailure, CarrierNotice, CarrierRequest, CarrierRequestBody, CarrierResponse,
+    CarrierResponseBody, EndpointDescriptor, IntentInvocation, IntentResult, ProjectionRequest,
+    ProjectionSnapshot, ResourceRequest, ResourceResponse, ResumeReply, ResumeRequest, SessionOpen,
 };
 
 /// Discovery boundary for a product-neutral host.
@@ -48,4 +51,94 @@ pub trait IntentSink {
     type Error;
 
     fn invoke(&mut self, intent: IntentInvocation) -> Result<IntentResult, Self::Error>;
+}
+
+/// Dispatch the request verbs that mean the same thing on every carrier.
+///
+/// `Discover`, `Snapshot`, `Resource`, `Resume`, and `Intent` are pure
+/// delegation to the traits above: no carrier has an opinion about them, and
+/// every carrier would otherwise write the same five match arms. The session
+/// plane is the opposite — `Open`, `Close`, and `Suspend` are answers about
+/// the *carrier*, not the endpoint, so they are returned unhandled for the
+/// caller to answer for itself.
+///
+/// Stdio refuses `Open` because inherited pipes perform no key exchange, and
+/// refuses `Suspend` because no session outlives its process. An admitted
+/// carrier that authenticated its peer and can be reconnected answers both.
+/// Neither answer belongs in here.
+pub fn dispatch_common<E, F>(
+    endpoint: &mut E,
+    request: CarrierRequest,
+    resume: &mut F,
+) -> Result<CarrierResponse, SessionPlaneRequest>
+where
+    E: ProjectionCatalog + ProjectionSource + PresentationSource + IntentSink,
+    <E as ProjectionSource>::Error: Display,
+    <E as PresentationSource>::Error: Display,
+    <E as IntentSink>::Error: Display,
+    F: FnMut(&mut E, ResumeRequest) -> Result<ResumeReply, String>,
+{
+    let id = request.id;
+    let body = match request.body {
+        CarrierRequestBody::Discover => Ok(CarrierResponseBody::Descriptor(endpoint.describe())),
+        CarrierRequestBody::Snapshot(request) => endpoint
+            .snapshot(request)
+            .map(|snapshot| CarrierResponseBody::Snapshot(Box::new(snapshot)))
+            .map_err(|error| error.to_string()),
+        CarrierRequestBody::Resource(request) => endpoint
+            .resource(request)
+            .map(CarrierResponseBody::Resource)
+            .map_err(|error| error.to_string()),
+        CarrierRequestBody::Resume(request) => {
+            resume(endpoint, request).map(CarrierResponseBody::Resume)
+        }
+        CarrierRequestBody::Intent(intent) => endpoint
+            .invoke(intent)
+            .map(CarrierResponseBody::Intent)
+            .map_err(|error| error.to_string()),
+        CarrierRequestBody::Open(open) => {
+            return Err(SessionPlaneRequest {
+                id,
+                verb: SessionPlaneVerb::Open(open),
+            });
+        }
+        CarrierRequestBody::Close => {
+            return Err(SessionPlaneRequest {
+                id,
+                verb: SessionPlaneVerb::Close,
+            });
+        }
+        CarrierRequestBody::Suspend => {
+            return Err(SessionPlaneRequest {
+                id,
+                verb: SessionPlaneVerb::Suspend,
+            });
+        }
+    };
+    Ok(CarrierResponse {
+        id,
+        body: body.map_err(|message| CarrierFailure { message }),
+    })
+}
+
+/// A session-plane request [`dispatch_common`] declined to answer.
+///
+/// Carries the request id so the caller's answer still correlates.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SessionPlaneRequest {
+    /// The id to answer under.
+    pub id: u64,
+    /// What was asked.
+    pub verb: SessionPlaneVerb,
+}
+
+/// The session-plane verbs whose answer depends on the carrier.
+#[derive(Clone, Debug, PartialEq)]
+pub enum SessionPlaneVerb {
+    /// Negotiate version and capabilities on an already-admitted carrier.
+    Open(Box<SessionOpen>),
+    /// Tear the session down.
+    Close,
+    /// Going away, but keep the session resumable.
+    Suspend,
 }

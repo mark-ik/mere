@@ -13,6 +13,8 @@ pub mod policy_projection;
 pub mod profile;
 pub mod resume;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod session_loop;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod sessions;
 pub mod view;
 
