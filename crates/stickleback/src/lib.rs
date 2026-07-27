@@ -16,6 +16,7 @@ mod authority;
 mod causal;
 pub mod drop;
 mod drop_io;
+mod epoch_retention;
 mod group_crypto;
 mod joined_space;
 mod processor;
@@ -44,6 +45,10 @@ pub use drop_io::{
     import_plain_drop_file, import_protected_drop, import_protected_drop_file, list_staged_drops,
     local_drop_receipt, operation_record, peer_drop_receipt, resume_staged_drop,
     store_peer_drop_receipt,
+};
+pub use epoch_retention::{
+    EpochCheckpointBasis, EpochHold, EpochHoldReason, EpochProposalBlocker, EpochPruningProposal,
+    EpochRetentionFacts, EpochRetentionReason, RetainedEpoch, propose_epoch_pruning,
 };
 pub use group_crypto::{
     DataKeyring, GroupCiphertext, GroupCryptoError, GroupEncryptionMode, GroupEncryptionProfile,

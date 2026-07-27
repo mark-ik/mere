@@ -3,10 +3,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use graphshell_protocol::{
-    AdvertisedAction, CachePolicy, CacheRetention, CapabilityProfile, ContentHash, NativeGlyphV1,
-    PortableCardV1, PresentationChange, PresentationCodec, PresentationManifest,
-    PresentationSemantics, ProjectionAck, ProjectionDiff, ProjectionSession, ProjectionSnapshot,
-    ResourceRequest, ResourceResponse, ResumeReply, ResumeRequest, SemanticRole, SessionStatus,
+    AdvertisedAction, CachePolicy, CacheRetention, CapabilityProfile, ContentHash, EditableTextV1,
+    NativeGlyphV1, PortableCardV1, PresentationCapability, PresentationChange, PresentationCodec,
+    PresentationManifest, PresentationSemantics, ProjectionAck, ProjectionDiff, ProjectionSession,
+    ProjectionSnapshot, ResourceRequest, ResourceResponse, ResumeReply, ResumeRequest,
+    SemanticRole, SessionStatus,
 };
 use sceno::InstanceId;
 use scenotime::{ApplyOutcome, DiffError, SceneSnapshot, SnapshotError};
@@ -33,6 +34,7 @@ pub enum ResolvedContent {
     NativeGlyph(NativeGlyphV1),
     PortableCard(PortableCardV1),
     Image { mime_type: String, bytes: Vec<u8> },
+    EditableText(EditableTextV1),
     LabeledPlaceholder,
 }
 
@@ -340,6 +342,9 @@ impl ClientState {
                 mime_type: mime_type.clone(),
                 bytes: bytes.clone(),
             },
+            PresentationCodec::EditableTextV1 => ResolvedContent::EditableText(
+                serde_json::from_slice(bytes).map_err(|_| ResolutionError::InvalidPayload)?,
+            ),
         };
         Ok(PresentationResolution::Ready(ResolvedPresentation {
             semantics: offer.semantics.clone(),
@@ -494,6 +499,9 @@ impl ClientState {
     pub fn mark_revoked(&mut self, session: &ProjectionSession) {
         if let Some(mounted) = self.mounted.get_mut(session) {
             mounted.status = SessionStatus::Revoked;
+            if mounted.cache_policy.purge_on_revocation {
+                self.resources.retain(|(owner, _), _| owner != session);
+            }
         }
     }
 
@@ -606,6 +614,25 @@ fn validate_presentation(mounted: &MountedScene) -> Result<(), String> {
             return Err(format!("duplicate binding for item {}", binding.instance.0));
         }
     }
+    for offer in mounted.presentation.offers.values().flatten() {
+        let expected = match offer.codec {
+            PresentationCodec::NativeGlyphV1 => PresentationCapability::NativeGlyph,
+            PresentationCodec::PortableCardV1 => PresentationCapability::PortableCard,
+            PresentationCodec::ImageV1 { .. } => PresentationCapability::Image,
+            PresentationCodec::EditableTextV1 => PresentationCapability::EditableText,
+        };
+        if offer.requires != expected {
+            return Err("presentation codec names the wrong required capability".into());
+        }
+        if matches!(offer.codec, PresentationCodec::EditableTextV1)
+            && (mounted.cache_policy.retention != CacheRetention::MemoryOnly
+                || !mounted.cache_policy.purge_on_revocation)
+        {
+            return Err(
+                "editable-text resources must be memory-only and purge on revocation".into(),
+            );
+        }
+    }
     Ok(())
 }
 
@@ -630,8 +657,9 @@ fn check_persistence_policy<E>(
 mod tests {
     use super::*;
     use graphshell_protocol::{
-        BoundsRelationship, PresentationBinding, PresentationCapability, PresentationKey,
-        PresentationOffer, ProtocolVersion,
+        BoundsRelationship, EDITABLE_TEXT_SAVE_INTENT, EDITABLE_TEXT_SAVE_SCHEMA, EditableTextV1,
+        IntentEffect, IntentReference, PresentationBinding, PresentationCapability,
+        PresentationKey, PresentationOffer, ProtocolVersion, TextEncoding,
     };
     use sceno::{Footprint, ProjectedItem, Representation, Scene, Size2, SourceRef, Transform2};
     use scenotime::{Revision, SceneDiff, SceneEpoch, SceneOp};
@@ -776,6 +804,190 @@ mod tests {
             PresentationResolution::Ready(ResolvedPresentation {
                 semantics: semantics("Map tile", SemanticRole::Image),
                 content: ResolvedContent::LabeledPlaceholder,
+            })
+        );
+    }
+
+    #[test]
+    fn editable_capability_selects_source_while_card_only_keeps_the_fallback() {
+        let session = ProjectionSession("loopback:editable".into());
+        let editable_value = EditableTextV1 {
+            address: "knot://field-note".into(),
+            media_type: "text/vnd.knot".into(),
+            encoding: TextEncoding::Utf8,
+            source: "# Field note\n".into(),
+            base_token: vec![7; 32],
+        };
+        let editable = serde_json::to_vec(&editable_value).unwrap();
+        let card_value = PortableCardV1 {
+            title: "Field note".into(),
+            values: Vec::new(),
+            badges: vec!["editable".into()],
+            media: Vec::new(),
+        };
+        let card = serde_json::to_vec(&card_value).unwrap();
+        let mut editable_semantics = semantics("Field note", SemanticRole::Article);
+        editable_semantics.actions.push(AdvertisedAction {
+            intent: IntentReference(EDITABLE_TEXT_SAVE_INTENT.into()),
+            label: "Save".into(),
+            explanation: "Save this document through its endpoint.".into(),
+            payload_schema: EDITABLE_TEXT_SAVE_SCHEMA.into(),
+            effect: IntentEffect::DomainTruth,
+        });
+        let mut snapshot = snapshot_with_offer(
+            &session,
+            PresentationCodec::EditableTextV1,
+            PresentationCapability::EditableText,
+            editable_semantics,
+            &editable,
+            CacheRetention::MemoryOnly,
+        );
+        let key = snapshot.presentation.bindings[0].key.clone();
+        snapshot
+            .presentation
+            .offers
+            .get_mut(&key)
+            .unwrap()
+            .push(PresentationOffer {
+                codec: PresentationCodec::PortableCardV1,
+                resource: ContentHash::of(&card),
+                byte_size: card.len() as u64,
+                requires: PresentationCapability::PortableCard,
+                semantics: semantics("Field note", SemanticRole::Article),
+            });
+        let editable_hash = ContentHash::of(&editable);
+        let card_hash = ContentHash::of(&card);
+        let mut client = ClientState::default();
+        client.apply_snapshot(snapshot).unwrap();
+        client
+            .apply_resource(ResourceResponse {
+                session: session.clone(),
+                resource: editable_hash,
+                bytes: editable,
+            })
+            .unwrap();
+        client
+            .apply_resource(ResourceResponse {
+                session: session.clone(),
+                resource: card_hash,
+                bytes: card,
+            })
+            .unwrap();
+
+        assert_eq!(
+            client
+                .resolve(
+                    &session,
+                    InstanceId(0),
+                    &CapabilityProfile::new([PresentationCapability::EditableText]),
+                )
+                .unwrap(),
+            PresentationResolution::Ready(ResolvedPresentation {
+                semantics: client
+                    .mounted(&session)
+                    .unwrap()
+                    .presentation
+                    .offers_for(InstanceId(0))
+                    .unwrap()[0]
+                    .semantics
+                    .clone(),
+                content: ResolvedContent::EditableText(editable_value),
+            })
+        );
+        assert_eq!(
+            client
+                .resolve(
+                    &session,
+                    InstanceId(0),
+                    &CapabilityProfile::new([PresentationCapability::PortableCard]),
+                )
+                .unwrap(),
+            PresentationResolution::Ready(ResolvedPresentation {
+                semantics: semantics("Field note", SemanticRole::Article),
+                content: ResolvedContent::PortableCard(card_value),
+            })
+        );
+    }
+
+    #[test]
+    fn malformed_editable_payload_and_persistent_policy_fail_closed() {
+        let session = ProjectionSession("loopback:bad-editable".into());
+        let mut snapshot = snapshot_with_offer(
+            &session,
+            PresentationCodec::EditableTextV1,
+            PresentationCapability::EditableText,
+            semantics("Bad", SemanticRole::Article),
+            b"not json",
+            CacheRetention::MemoryOnly,
+        );
+        let hash = ContentHash::of(b"not json");
+        let mut client = ClientState::default();
+        client.apply_snapshot(snapshot.clone()).unwrap();
+        client
+            .apply_resource(ResourceResponse {
+                session: session.clone(),
+                resource: hash,
+                bytes: b"not json".to_vec(),
+            })
+            .unwrap();
+        assert_eq!(
+            client.resolve(
+                &session,
+                InstanceId(0),
+                &CapabilityProfile::new([PresentationCapability::EditableText]),
+            ),
+            Err(ResolutionError::InvalidPayload)
+        );
+
+        snapshot.cache_policy.retention = CacheRetention::EncryptedPersistent;
+        assert!(matches!(
+            ClientState::default().apply_snapshot(snapshot),
+            Err(SnapshotApplyError::InvalidPresentation(_))
+        ));
+    }
+
+    #[test]
+    fn revocation_purges_editable_source_bytes() {
+        let session = ProjectionSession("loopback:revoke-editable".into());
+        let editable = serde_json::to_vec(&EditableTextV1 {
+            address: "knot://private".into(),
+            media_type: "text/plain".into(),
+            encoding: TextEncoding::Utf8,
+            source: "private source".into(),
+            base_token: vec![3; 32],
+        })
+        .unwrap();
+        let hash = ContentHash::of(&editable);
+        let mut client = ClientState::default();
+        client
+            .apply_snapshot(snapshot_with_offer(
+                &session,
+                PresentationCodec::EditableTextV1,
+                PresentationCapability::EditableText,
+                semantics("Private", SemanticRole::Article),
+                &editable,
+                CacheRetention::MemoryOnly,
+            ))
+            .unwrap();
+        client
+            .apply_resource(ResourceResponse {
+                session: session.clone(),
+                resource: hash,
+                bytes: editable,
+            })
+            .unwrap();
+        client.mark_revoked(&session);
+        assert_eq!(
+            client
+                .resolve(
+                    &session,
+                    InstanceId(0),
+                    &CapabilityProfile::new([PresentationCapability::EditableText]),
+                )
+                .unwrap(),
+            PresentationResolution::NeedsResource(ResourceRequest {
+                session,
+                resource: hash,
             })
         );
     }

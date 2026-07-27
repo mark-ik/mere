@@ -199,6 +199,34 @@ impl DirectorySource {
         self.documents.values()
     }
 
+    pub(crate) fn document(&self, id: &str) -> Option<&DiskDocument> {
+        self.documents.get(id)
+    }
+
+    /// Resolve one indexed document back under the configured authority root
+    /// and prove the current target can be opened for writing.
+    pub(crate) fn writable_document_path(&self, id: &str) -> io::Result<PathBuf> {
+        let document = self
+            .document(id)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "document is not indexed"))?;
+        let path = fs::canonicalize(&document.path)?;
+        if !path.starts_with(&self.root) {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "document resolves outside the configured Knot root",
+            ));
+        }
+        let metadata = fs::metadata(&path)?;
+        if !metadata.is_file() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "document target is not a regular file",
+            ));
+        }
+        fs::OpenOptions::new().write(true).open(&path)?;
+        Ok(path)
+    }
+
     /// Runtime facets associated with the files.
     pub fn facets(&self) -> &FacetStore<String> {
         &self.facets

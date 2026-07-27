@@ -109,6 +109,28 @@ impl KnotVault {
         self.save()
     }
 
+    /// Replace the sealed local view with a projection of recorded sync
+    /// operations.
+    ///
+    /// This is deliberately crate-private: callers author through
+    /// `KnotSyncStore`; only the endpoint may rematerialize the derived vault
+    /// index after that operation is accepted.
+    pub(crate) fn replace_projection(
+        &mut self,
+        mut documents: Vec<VaultDocument>,
+    ) -> Result<bool, String> {
+        self.require_unlocked()?;
+        documents.sort_by(|left, right| left.id.cmp(&right.id));
+        if self.index.documents == documents {
+            return Ok(false);
+        }
+        self.index.documents.zeroize();
+        self.index.documents = documents;
+        self.index.revision = self.index.revision.saturating_add(1).max(1);
+        self.save()?;
+        Ok(true)
+    }
+
     /// Read one source body while unlocked.
     pub fn body(&self, id: &str) -> Option<&[u8]> {
         if self.is_locked() {

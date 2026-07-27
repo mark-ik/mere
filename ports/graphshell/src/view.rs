@@ -365,6 +365,27 @@ fn render_item(html: &mut String, presentation: &ResolvedPresentation) {
             render_actions(html, &presentation.semantics.actions);
             html.push_str("</div></div>");
         }
+        ResolvedContent::EditableText(text) => {
+            // Rendered read-only on purpose. This view is the G1 semantic
+            // receipt, not an editor: it has no way to accept a change and no
+            // way to send one back, so showing an editable affordance here
+            // would advertise something the surface cannot do. The address and
+            // media type are disclosed so the reader can see *what* was
+            // offered, and the advertised actions still render.
+            write!(
+                html,
+                "<article class=\"item text\" role=\"{}\" aria-label=\"{}\"><div class=\"card-top\"><div><span class=\"card-kicker\">Editable text (read-only here)</span><h3>{}</h3></div></div><p class=\"text-address\">{} · {}</p><pre>{}</pre>",
+                role,
+                escape(&presentation.semantics.label),
+                escape(&presentation.semantics.label),
+                escape(&text.address),
+                escape(&text.media_type),
+                escape(&text.source)
+            )
+            .unwrap();
+            render_actions(html, &presentation.semantics.actions);
+            html.push_str("</article>");
+        }
         ResolvedContent::LabeledPlaceholder => {
             write!(
                 html,

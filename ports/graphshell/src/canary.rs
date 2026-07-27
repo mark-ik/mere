@@ -4,14 +4,14 @@ use graphshell_client::{
     AccessibilityTree, ClientState, PresentationResolution, ResolutionError, ResolvedPresentation,
     ResourceCacheError, SnapshotApplyError,
 };
-use graphshell_endpoint::{IntentSink, PresentationSource, ProjectionSource};
+use graphshell_endpoint::{IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource};
 use graphshell_protocol::{
     AdvertisedAction, BoundsRelationship, CachePolicy, CapabilityProfile, CardValueV1, ContentHash,
-    IntentEffect, IntentInvocation, IntentReference, IntentResult, NativeGlyphV1, PortableCardV1,
-    PresentationBinding, PresentationCapability, PresentationCodec, PresentationKey,
-    PresentationManifest, PresentationOffer, PresentationSemantics, ProjectionRequest,
-    ProjectionSession, ProjectionSnapshot, ProtocolVersion, ResourceRequest, ResourceResponse,
-    SemanticRole,
+    EndpointDescriptor, IntentEffect, IntentInvocation, IntentReference, IntentResult,
+    NativeGlyphV1, PortableCardV1, PresentationBinding, PresentationCapability, PresentationCodec,
+    PresentationKey, PresentationManifest, PresentationOffer, PresentationSemantics,
+    ProjectionOffer, ProjectionRequest, ProjectionSession, ProjectionSnapshot, ProtocolVersion,
+    ResourceRequest, ResourceResponse, SemanticRole,
 };
 use sceno::{
     Arrangement, Footprint, InstanceId, ProjectedItem, Rect, Representation, Scene, Score, Size2,
@@ -28,6 +28,21 @@ pub enum CanaryError {
     Cache(ResourceCacheError),
     Resolution(ResolutionError),
     Snapshot(SnapshotApplyError),
+}
+
+/// Required by `graphshell_endpoint::dispatch_common`: a carrier reports an
+/// endpoint's failure to a peer as text, and must never leak the endpoint's
+/// own error type onto the wire.
+impl std::fmt::Display for CanaryError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CanaryError::WrongSession => write!(f, "request names another session"),
+            CanaryError::MissingResource => write!(f, "no such resource"),
+            CanaryError::Cache(error) => write!(f, "resource cache: {error:?}"),
+            CanaryError::Resolution(error) => write!(f, "presentation resolution: {error:?}"),
+            CanaryError::Snapshot(error) => write!(f, "snapshot: {error:?}"),
+        }
+    }
 }
 
 impl From<ResourceCacheError> for CanaryError {
@@ -221,6 +236,33 @@ impl FixtureEndpoint {
 impl Default for FixtureEndpoint {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl FixtureEndpoint {
+    /// The request that selects this fixture's one projection.
+    ///
+    /// Public so a carrier can ask for it without knowing the fixture's
+    /// session string, which is how the G5 peer bin drives a real snapshot
+    /// across a link.
+    pub fn request(&self) -> ProjectionRequest {
+        ProjectionRequest {
+            version: ProtocolVersion::V1,
+            session: self.session.clone(),
+            score: Score::new(Arrangement::Spiral(Default::default())),
+        }
+    }
+}
+
+impl ProjectionCatalog for FixtureEndpoint {
+    fn describe(&self) -> EndpointDescriptor {
+        EndpointDescriptor {
+            label: "graphshell fixture".to_string(),
+            projections: vec![ProjectionOffer {
+                label: "G1 presentation".to_string(),
+                request: self.request(),
+            }],
+        }
     }
 }
 

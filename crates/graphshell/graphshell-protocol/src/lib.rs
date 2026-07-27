@@ -20,7 +20,9 @@ pub struct ProtocolVersion {
 
 impl ProtocolVersion {
     /// Protocol 1.1 adds the payload-free carrier revision notice.
-    pub const V1: Self = Self { major: 1, minor: 1 };
+    pub const V1_1: Self = Self { major: 1, minor: 1 };
+    /// Latest protocol 1.x. Protocol 1.2 adds editable-text resources.
+    pub const V1: Self = Self { major: 1, minor: 2 };
 }
 
 /// An endpoint-scoped projection session. It is opaque to Graphshell clients.
@@ -58,6 +60,7 @@ pub enum PresentationCapability {
     NativeGlyph,
     PortableCard,
     Image,
+    EditableText,
 }
 
 /// One named capability set used during offer selection.
@@ -155,6 +158,7 @@ pub enum PresentationCodec {
     NativeGlyphV1,
     PortableCardV1,
     ImageV1 { mime_type: String },
+    EditableTextV1,
 }
 
 /// One independently fetchable representation, ordered richest-first within
@@ -338,6 +342,38 @@ pub struct PortableCardV1 {
     pub badges: Vec<String>,
     pub media: Vec<ContentHash>,
 }
+
+/// Text encodings accepted by the first editable-text resource.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TextEncoding {
+    Utf8,
+}
+
+/// A versioned editable source disclosed by an endpoint.
+///
+/// `base_token` is opaque to the client. It binds the save to the exact
+/// document version the endpoint disclosed without exposing a native path,
+/// vault identifier, or causal frontier.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EditableTextV1 {
+    pub address: String,
+    pub media_type: String,
+    pub encoding: TextEncoding,
+    pub source: String,
+    pub base_token: Vec<u8>,
+}
+
+/// Typed payload for [`EDITABLE_TEXT_SAVE_INTENT`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SaveTextV1 {
+    pub base_token: Vec<u8>,
+    pub source: String,
+}
+
+pub const EDITABLE_TEXT_SAVE_INTENT: &str = "graphshell.editable-text.save";
+pub const EDITABLE_TEXT_SAVE_SCHEMA: &str = "graphshell.editable-text.save/v1";
 
 /// A semantic intent invocation. `payload` is deliberately opaque at G1; its
 /// advertised schema is versioned and validation remains endpoint-side.
@@ -643,6 +679,38 @@ mod tests {
         assert!(response.has_valid_address());
         response.bytes.push(b'!');
         assert!(!response.has_valid_address());
+    }
+
+    #[test]
+    fn editable_text_and_save_payloads_are_versioned_and_strict() {
+        assert_eq!(ProtocolVersion::V1_1.minor, 1);
+        assert_eq!(ProtocolVersion::V1.minor, 2);
+        let editable = EditableTextV1 {
+            address: "knot://field-note".into(),
+            media_type: "text/vnd.knot".into(),
+            encoding: TextEncoding::Utf8,
+            source: "# Field note\n".into(),
+            base_token: vec![1, 2, 3],
+        };
+        let bytes = serde_json::to_vec(&editable).unwrap();
+        assert_eq!(
+            serde_json::from_slice::<EditableTextV1>(&bytes).unwrap(),
+            editable
+        );
+
+        let save = SaveTextV1 {
+            base_token: vec![1, 2, 3],
+            source: "# Revised\n".into(),
+        };
+        let wire = serde_json::to_string(&save).unwrap();
+        assert_eq!(serde_json::from_str::<SaveTextV1>(&wire).unwrap(), save);
+        assert!(
+            serde_json::from_str::<SaveTextV1>(
+                r#"{"base_token":[1,2,3],"source":"x","path":"outside.knot"}"#
+            )
+            .is_err(),
+            "a save payload cannot smuggle endpoint-native authority"
+        );
     }
 
     #[test]

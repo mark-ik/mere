@@ -183,6 +183,11 @@ pub struct KnotDocumentProjection {
     pub documents: Vec<VaultDocument>,
     pub conflicts: Vec<KnotDocumentConflict>,
     pub pending: Vec<PendingCausalOperation>,
+    /// Exact current operation for every causally resolved document id.
+    ///
+    /// Consumers use this as an opaque optimistic-concurrency head rather
+    /// than reducing a replicated document version to its plaintext digest.
+    pub document_heads: BTreeMap<String, [u8; 32]>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -547,13 +552,12 @@ where
 
         let mut documents = Vec::new();
         let mut conflicts = Vec::new();
+        let mut document_heads = BTreeMap::new();
         for (id, versions) in current {
             if versions.len() == 1 {
-                if let Some(document) = versions
-                    .into_values()
-                    .next()
-                    .and_then(|version| version.document)
-                {
+                let version = versions.into_values().next().unwrap();
+                document_heads.insert(id, version.operation);
+                if let Some(document) = version.document {
                     documents.push(document);
                 }
             } else {
@@ -567,6 +571,7 @@ where
             documents,
             conflicts,
             pending: projection.pending,
+            document_heads,
         })
     }
 

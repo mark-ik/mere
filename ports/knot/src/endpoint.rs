@@ -1,6 +1,7 @@
 //! Graphshell disclosure for Knot directory state.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
 use std::io;
 use std::path::Path;
 
@@ -10,12 +11,14 @@ use graphshell_endpoint::{
     ResumableProjectionSource,
 };
 use graphshell_protocol::{
-    BoundsRelationship, CachePolicy, CardValueV1, CarrierNotice, ContentHash, EndpointDescriptor,
-    IntentInvocation, IntentResult, NativeGlyphV1, PortableCardV1, PresentationBinding,
-    PresentationCapability, PresentationCodec, PresentationKey, PresentationManifest,
-    PresentationOffer, PresentationSemantics, ProjectionAck, ProjectionOffer, ProjectionRequest,
-    ProjectionSession, ProjectionSnapshot, ProtocolVersion, ResourceRequest, ResourceResponse,
-    ResumeReply, ResumeRequest, SemanticRole,
+    AdvertisedAction, BoundsRelationship, CachePolicy, CardValueV1, CarrierNotice, ContentHash,
+    EDITABLE_TEXT_SAVE_INTENT, EDITABLE_TEXT_SAVE_SCHEMA, EditableTextV1, EndpointDescriptor,
+    IntentEffect, IntentInvocation, IntentReference, IntentResult, NativeGlyphV1, PortableCardV1,
+    PresentationBinding, PresentationCapability, PresentationCodec, PresentationKey,
+    PresentationManifest, PresentationOffer, PresentationSemantics, ProjectionAck,
+    ProjectionOffer, ProjectionRequest, ProjectionSession, ProjectionSnapshot, ProtocolVersion,
+    ResourceRequest, ResourceResponse, ResumeReply, ResumeRequest, SaveTextV1, SemanticRole,
+    TextEncoding,
 };
 use personae::{IdentityProvider, InMemoryProvider};
 use sceno::{
@@ -23,11 +26,32 @@ use sceno::{
     SourceRef, Transform2, Vec2,
 };
 use scenotime::{Revision, SceneEpoch, SceneSnapshot};
+use stickleback::DataKeyring;
+use zeroize::Zeroizing;
 
-use crate::{DirectorySource, DirectoryWatcher, DiskDocument, KnotVault};
+use crate::{
+    DirectorySource, DirectoryWatcher, DiskDocument, DocumentFormat, KnotDocumentProjection,
+    KnotSyncEvent, KnotSyncFileStore, KnotVault, VaultDocument,
+};
 
 const FIXTURE_SESSION: &str = "loopback:knot:k0";
 const SOURCE_KIND: &str = "knot.file";
+const FILE_TOKEN_CONTEXT: &str = "mere.knot.file-base-token.v1";
+const VAULT_TOKEN_CONTEXT: &str = "mere.knot.vault-base-token.v1";
+
+/// Authority injected into one endpoint session after its caller has been
+/// admitted. Keeping this separate from `IntentInvocation` prevents payloads
+/// from claiming their own grant.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct KnotWriteGrant {
+    pub max_source_bytes: u64,
+}
+
+impl KnotWriteGrant {
+    pub const fn new(max_source_bytes: u64) -> Self {
+        Self { max_source_bytes }
+    }
+}
 
 enum Source {
     Directory {
@@ -35,7 +59,27 @@ enum Source {
         watcher: Box<DirectoryWatcher>,
     },
     Fixture(Vec<DiskDocument>),
-    Vault(KnotVault),
+    Vault(VaultSource),
+}
+
+struct VaultSource {
+    vault: KnotVault,
+    sync: Option<VaultSyncAuthority>,
+    conflicts: BTreeSet<String>,
+    document_heads: BTreeMap<String, [u8; 32]>,
+    pending_history: bool,
+}
+
+enum VaultSyncAuthority {
+    Personal {
+        store: KnotSyncFileStore,
+        signing_seed: Zeroizing<[u8; 32]>,
+    },
+    Commons {
+        store: KnotSyncFileStore,
+        signing_seed: Zeroizing<[u8; 32]>,
+        keys: DataKeyring,
+    },
 }
 
 #[derive(Clone)]
@@ -49,8 +93,11 @@ struct PresentedDocument {
 pub struct KnotEndpoint {
     source: Source,
     session: ProjectionSession,
+    write_grant: Option<KnotWriteGrant>,
     snapshot: Option<ProjectionSnapshot>,
     resources: BTreeMap<ContentHash, Vec<u8>>,
+    bindings: BTreeMap<u32, String>,
+    protocol_version: ProtocolVersion,
     last_announced: Option<Revision>,
 }
 
@@ -60,10 +107,34 @@ impl KnotEndpoint {
         Self::open_with_identity(root, &InMemoryProvider::random())
     }
 
+    /// Serve a real directory with one explicitly injected write grant.
+    pub fn open_writable(
+        root: impl AsRef<Path>,
+        grant: KnotWriteGrant,
+    ) -> io::Result<Self> {
+        Self::open_writable_with_identity(root, &InMemoryProvider::random(), grant)
+    }
+
     /// Serve a real directory with the watcher key derived from `identity`.
     pub fn open_with_identity(
         root: impl AsRef<Path>,
         identity: &impl IdentityProvider,
+    ) -> io::Result<Self> {
+        Self::open_directory(root, identity, None)
+    }
+
+    pub fn open_writable_with_identity(
+        root: impl AsRef<Path>,
+        identity: &impl IdentityProvider,
+        grant: KnotWriteGrant,
+    ) -> io::Result<Self> {
+        Self::open_directory(root, identity, Some(grant))
+    }
+
+    fn open_directory(
+        root: impl AsRef<Path>,
+        identity: &impl IdentityProvider,
+        write_grant: Option<KnotWriteGrant>,
     ) -> io::Result<Self> {
         let source = DirectorySource::open(root)?;
         let watcher = DirectoryWatcher::new(source.root(), identity).map_err(io::Error::other)?;
@@ -74,8 +145,11 @@ impl KnotEndpoint {
                 watcher: Box::new(watcher),
             },
             session: ProjectionSession(format!("knot:directory:{}", &digest.to_hex()[..16])),
+            write_grant,
             snapshot: None,
             resources: BTreeMap::new(),
+            bindings: BTreeMap::new(),
+            protocol_version: ProtocolVersion::V1,
             last_announced: None,
         })
     }
@@ -124,22 +198,81 @@ impl KnotEndpoint {
         Self {
             source: Source::Fixture(documents),
             session: ProjectionSession(FIXTURE_SESSION.into()),
+            write_grant: None,
             snapshot: None,
             resources: BTreeMap::new(),
+            bindings: BTreeMap::new(),
+            protocol_version: ProtocolVersion::V1,
             last_announced: None,
         }
     }
 
-    /// Serve one unlocked sealed vault.
+    /// Serve one unlocked sealed vault read-only.
     pub fn from_vault(vault: KnotVault) -> Self {
         let digest = blake3::hash(vault.root().to_string_lossy().as_bytes());
         Self {
-            source: Source::Vault(vault),
+            source: Source::Vault(VaultSource {
+                vault,
+                sync: None,
+                conflicts: BTreeSet::new(),
+                document_heads: BTreeMap::new(),
+                pending_history: false,
+            }),
             session: ProjectionSession(format!("knot:vault:{}", &digest.to_hex()[..16])),
+            write_grant: None,
             snapshot: None,
             resources: BTreeMap::new(),
+            bindings: BTreeMap::new(),
+            protocol_version: ProtocolVersion::V1,
             last_announced: None,
         }
+    }
+
+    /// Serve a personal sealed vault whose recorded truth is a signed Knot
+    /// sync log. The sealed vault index is rematerialized from that log.
+    pub fn from_synced_vault(
+        vault: KnotVault,
+        store: KnotSyncFileStore,
+        signing_seed: [u8; 32],
+        grant: KnotWriteGrant,
+    ) -> Result<Self, String> {
+        let projection = pollster::block_on(store.projection(&vault))
+            .map_err(|error| format!("could not project Knot sync store: {error}"))?;
+        let mut endpoint = Self::from_vault(vault);
+        endpoint.install_projection(projection)?;
+        let Source::Vault(source) = &mut endpoint.source else {
+            unreachable!()
+        };
+        source.sync = Some(VaultSyncAuthority::Personal {
+            store,
+            signing_seed: Zeroizing::new(signing_seed),
+        });
+        endpoint.write_grant = Some(grant);
+        Ok(endpoint)
+    }
+
+    /// Serve a Commons-backed vault using the group's retained data epochs.
+    pub fn from_communal_vault(
+        vault: KnotVault,
+        store: KnotSyncFileStore,
+        signing_seed: [u8; 32],
+        keys: DataKeyring,
+        grant: KnotWriteGrant,
+    ) -> Result<Self, String> {
+        let projection = pollster::block_on(store.communal_projection(&keys))
+            .map_err(|error| format!("could not project Commons Knot store: {error}"))?;
+        let mut endpoint = Self::from_vault(vault);
+        endpoint.install_projection(projection)?;
+        let Source::Vault(source) = &mut endpoint.source else {
+            unreachable!()
+        };
+        source.sync = Some(VaultSyncAuthority::Commons {
+            store,
+            signing_seed: Zeroizing::new(signing_seed),
+            keys,
+        });
+        endpoint.write_grant = Some(grant);
+        Ok(endpoint)
     }
 
     /// The opaque Graphshell session.

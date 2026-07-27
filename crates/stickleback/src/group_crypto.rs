@@ -59,6 +59,13 @@ pub struct GroupCiphertext {
 pub struct DataKeyring {
     version: u16,
     secrets: SecretBundleState,
+    /// Rotation order is separate from the secret ids, whose lexical order has
+    /// no temporal meaning. Version zero denotes a legacy persisted keyring
+    /// whose chronology is unknown and therefore cannot drive pruning.
+    #[serde(default)]
+    epoch_order_version: u16,
+    #[serde(default)]
+    installed_epochs: Vec<GroupSecretId>,
 }
 
 impl Default for DataKeyring {
@@ -74,6 +81,8 @@ impl DataKeyring {
         Self {
             version: Self::VERSION,
             secrets: SecretBundle::init(),
+            epoch_order_version: 1,
+            installed_epochs: Vec::new(),
         }
     }
 
@@ -94,8 +103,13 @@ impl DataKeyring {
     /// Install an epoch recovered from an authenticated welcome or control
     /// message.
     pub fn install(&mut self, secret: GroupSecret) {
+        let epoch = secret.id();
+        let was_present = self.secrets.contains(&epoch);
         let current = std::mem::replace(&mut self.secrets, SecretBundle::init());
         self.secrets = SecretBundle::insert(current, secret);
+        if !was_present && self.epoch_order_version == 1 {
+            self.installed_epochs.push(epoch);
+        }
     }
 
     pub fn contains(&self, epoch: &GroupSecretId) -> bool {
@@ -110,6 +124,28 @@ impl DataKeyring {
         let mut ids: Vec<_> = self.secrets.ids().copied().collect();
         ids.sort();
         ids
+    }
+
+    /// Current sealing epoch, if the keyring has been initialized.
+    pub fn current_epoch(&self) -> Option<GroupSecretId> {
+        self.secrets.latest().map(GroupSecret::id)
+    }
+
+    /// Exact installation order, oldest first. A legacy keyring remains
+    /// decryptable but returns `None`, because lexical secret-id order is not a
+    /// safe substitute for chronology.
+    pub fn epochs_oldest_first(&self) -> Option<&[GroupSecretId]> {
+        if self.epoch_order_version != 1
+            || self.installed_epochs.len() != self.secrets.len()
+            || self
+                .installed_epochs
+                .iter()
+                .any(|epoch| !self.secrets.contains(epoch))
+            || self.installed_epochs.last().copied() != self.current_epoch()
+        {
+            return None;
+        }
+        Some(&self.installed_epochs)
     }
 
     pub fn seal(&self, plaintext: &[u8], rng: &Rng) -> Result<GroupCiphertext, GroupCryptoError> {
@@ -152,6 +188,9 @@ impl DataKeyring {
         let current = std::mem::replace(&mut self.secrets, SecretBundle::init());
         let (next, removed) = SecretBundle::remove(current, epoch);
         self.secrets = next;
+        if removed.is_some() && self.epoch_order_version == 1 {
+            self.installed_epochs.retain(|candidate| candidate != epoch);
+        }
         removed.is_some()
     }
 
@@ -164,6 +203,16 @@ impl DataKeyring {
             decode_cbor(bytes).map_err(|error| GroupCryptoError::Decode(error.to_string()))?;
         if state.version != Self::VERSION {
             return Err(GroupCryptoError::UnsupportedVersion(state.version));
+        }
+        if state.epoch_order_version > 1 {
+            return Err(GroupCryptoError::UnsupportedEpochOrderVersion(
+                state.epoch_order_version,
+            ));
+        }
+        if state.epoch_order_version == 0 && !state.installed_epochs.is_empty()
+            || state.epoch_order_version == 1 && state.epochs_oldest_first().is_none()
+        {
+            return Err(GroupCryptoError::InvalidEpochOrder);
         }
         Ok(state)
     }
@@ -183,6 +232,10 @@ pub enum GroupCryptoError {
     Decode(String),
     #[error("unsupported group encryption state version {0}")]
     UnsupportedVersion(u16),
+    #[error("unsupported group epoch-order version {0}")]
+    UnsupportedEpochOrderVersion(u16),
+    #[error("group epoch order does not match the retained secrets")]
+    InvalidEpochOrder,
 }
 
 #[cfg(test)]
@@ -317,8 +370,73 @@ mod tests {
         let bytes = alice.to_bytes().unwrap();
         let reopened = DataKeyring::from_bytes(&bytes).unwrap();
         assert_eq!(reopened.epoch_count(), 2);
+        assert_eq!(reopened.epochs_oldest_first(), alice.epochs_oldest_first());
         assert_eq!(reopened.open(&old).unwrap(), b"history");
         assert_eq!(reopened.open(&new).unwrap(), b"after removal");
+    }
+
+    #[test]
+    fn a_legacy_keyring_stays_decryptable_but_cannot_invent_epoch_order() {
+        #[derive(Serialize)]
+        struct LegacyKeyring<'a> {
+            version: u16,
+            secrets: &'a SecretBundleState,
+        }
+
+        let rng = Rng::default();
+        let mut current = DataKeyring::new();
+        current.rotate(&rng).unwrap();
+        current.rotate(&rng).unwrap();
+        let sealed = current.seal(b"legacy history", &rng).unwrap();
+        let bytes = encode_cbor(&LegacyKeyring {
+            version: DataKeyring::VERSION,
+            secrets: &current.secrets,
+        })
+        .unwrap();
+
+        let legacy = DataKeyring::from_bytes(&bytes).unwrap();
+        assert_eq!(legacy.open(&sealed).unwrap(), b"legacy history");
+        assert_eq!(legacy.epoch_count(), 2);
+        assert!(legacy.epochs_oldest_first().is_none());
+
+        let revision = proofs::Digest::blake3(b"authority");
+        let proposal = crate::propose_epoch_pruning(
+            GroupEncryptionProfile::durable_data(1),
+            &legacy,
+            &crate::EpochRetentionFacts {
+                checkpoint: Some(crate::EpochCheckpointBasis {
+                    checkpoint: proofs::Digest::blake3(b"checkpoint"),
+                    authority_revision: revision.clone(),
+                    current_authority_revision: revision,
+                    author_continuation_ready: true,
+                }),
+                holds: Vec::new(),
+            },
+        );
+        assert_eq!(
+            proposal.blockers,
+            vec![crate::EpochProposalBlocker::IncompleteEpochOrder]
+        );
+        assert!(proposal.forget.is_empty());
+        assert_eq!(proposal.retain.len(), 2);
+    }
+
+    #[test]
+    fn authorized_forgetting_updates_the_persisted_order() {
+        let rng = Rng::default();
+        let mut ring = DataKeyring::new();
+        let first = ring.rotate(&rng).unwrap().id();
+        let second = ring.rotate(&rng).unwrap().id();
+        let third = ring.rotate(&rng).unwrap().id();
+
+        assert!(ring.forget_authorized(&second));
+        assert_eq!(ring.epochs_oldest_first(), Some([first, third].as_slice()));
+
+        let reopened = DataKeyring::from_bytes(&ring.to_bytes().unwrap()).unwrap();
+        assert_eq!(
+            reopened.epochs_oldest_first(),
+            Some([first, third].as_slice())
+        );
     }
 
     #[test]

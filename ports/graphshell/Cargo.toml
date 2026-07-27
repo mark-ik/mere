@@ -8,6 +8,7 @@ description = "Graphshell presentation host and loopback acceptance view."
 
 [dependencies]
 base64.workspace = true
+blake3.workspace = true
 graphshell-client = { path = "../../crates/graphshell/graphshell-client" }
 graphshell-endpoint = { path = "../../crates/graphshell/graphshell-endpoint" }
 graphshell-protocol = { path = "../../crates/graphshell/graphshell-protocol" }
@@ -23,6 +24,7 @@ session-runtime.workspace = true
 transport = { workspace = true, features = ["notochord"] }
 sceno.workspace = true
 scenotime.workspace = true
+serde = { version = "1", features = ["derive"] }
 serde_json.workspace = true
 thiserror = "1"
 tokio = { version = "1", features = ["io-util"] }

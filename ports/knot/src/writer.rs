@@ -42,6 +42,20 @@ impl DocumentFormat {
         }
     }
 
+    pub(crate) fn from_media_type(media_type: &str) -> Option<Self> {
+        match media_type {
+            "text/vnd.knot" => Some(Self::Knot),
+            "text/markdown" => Some(Self::Markdown),
+            "text/djot" => Some(Self::Djot),
+            "application/vnd.knot.document+json" | "application/json" => Some(Self::Json),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn validate_source(self, address: &str, source: &str) -> Result<(), String> {
+        self.parse(address, source.as_bytes()).map(|_| ())
+    }
+
     fn parse(self, address: &str, bytes: &[u8]) -> Result<EngineDocument, String> {
         if self == Self::Json {
             return serde_json::from_slice(bytes)

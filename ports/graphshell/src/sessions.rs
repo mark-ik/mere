@@ -1,6 +1,7 @@
 //! Product-neutral local session mounting for the G4 cross-product proof.
 
 use std::collections::BTreeSet;
+use std::ffi::OsStr;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
@@ -8,11 +9,13 @@ use graphshell_client::{
     ClientState, PresentationResolution, ResolvedPresentation, ResumeApplication,
 };
 use graphshell_protocol::{
-    CapabilityProfile, CarrierNotice, CarrierRequestBody, CarrierResponseBody, EndpointDescriptor,
-    IntentInvocation, IntentResult, PresentationCapability, ProjectionSession, ResourceRequest,
+    AdvertisedAction, CapabilityProfile, CarrierNotice, CarrierRequestBody, CarrierResponseBody,
+    EndpointDescriptor, IntentInvocation, IntentResult, PresentationCapability, ProjectionSession,
     ResumeRequest,
 };
 use graphshell_stdio::StdioCarrier;
+use sceno::InstanceId;
+use serde::Serialize;
 
 use crate::view::{
     IntentReceiptView, ProjectionLayoutView, ProjectionReceiptView, render_projection_receipt,
@@ -22,6 +25,229 @@ use crate::view::{
 pub struct SessionProjectionView {
     pub label: String,
     pub projection: ProjectionReceiptView,
+}
+
+/// One retained local endpoint process and its Graphshell client state.
+///
+/// Resource bytes remain in `ClientState` only for this object's lifetime.
+/// `close` and `Drop` both release the child carrier and discard every mounted
+/// session, including memory-only editable source.
+pub struct RetainedEndpointSession {
+    carrier: Option<StdioCarrier>,
+    client: ClientState,
+    profile: CapabilityProfile,
+    descriptor: EndpointDescriptor,
+    mounted: BTreeSet<ProjectionSession>,
+}
+
+impl RetainedEndpointSession {
+    pub fn spawn(
+        program: impl AsRef<OsStr>,
+        args: impl IntoIterator<Item = impl AsRef<OsStr>>,
+        profile: CapabilityProfile,
+    ) -> Result<Self, String> {
+        let mut carrier = StdioCarrier::spawn(program, args).map_err(|error| error.to_string())?;
+        let descriptor = match carrier.request(CarrierRequestBody::Discover)? {
+            CarrierResponseBody::Descriptor(descriptor) => descriptor,
+            other => return Err(unexpected("descriptor", &other)),
+        };
+        Ok(Self {
+            carrier: Some(carrier),
+            client: ClientState::default(),
+            profile,
+            descriptor,
+            mounted: BTreeSet::new(),
+        })
+    }
+
+    pub fn descriptor(&self) -> &EndpointDescriptor {
+        &self.descriptor
+    }
+
+    pub fn client(&self) -> &ClientState {
+        &self.client
+    }
+
+    pub fn profile(&self) -> &CapabilityProfile {
+        &self.profile
+    }
+
+    /// Mount one discovered projection without resolving resources or invoking
+    /// any of its actions.
+    pub fn mount(&mut self, offer_index: usize) -> Result<ProjectionSession, String> {
+        let offer = self
+            .descriptor
+            .projections
+            .get(offer_index)
+            .cloned()
+            .ok_or_else(|| format!("endpoint has no projection {offer_index}"))?;
+        let snapshot = match self
+            .carrier_mut()?
+            .request(CarrierRequestBody::Snapshot(offer.request))?
+        {
+            CarrierResponseBody::Snapshot(snapshot) => *snapshot,
+            other => return Err(unexpected("snapshot", &other)),
+        };
+        let session = snapshot.session.clone();
+        self.client
+            .apply_snapshot(snapshot)
+            .map_err(|error| format!("Graphshell rejected {session:?}: {error:?}"))?;
+        self.mounted.insert(session.clone());
+        Ok(session)
+    }
+
+    /// Resolve one presentation on demand, fetching only the selected
+    /// capability's resource.
+    pub fn resolve(
+        &mut self,
+        session: &ProjectionSession,
+        instance: InstanceId,
+    ) -> Result<ResolvedPresentation, String> {
+        loop {
+            match self
+                .client
+                .resolve(session, instance, &self.profile)
+                .map_err(|error| format!("could not resolve {}: {error:?}", session.0))?
+            {
+                PresentationResolution::Ready(presentation) => return Ok(presentation),
+                PresentationResolution::NeedsResource(request) => {
+                    let response = match self
+                        .carrier_mut()?
+                        .request(CarrierRequestBody::Resource(request))?
+                    {
+                        CarrierResponseBody::Resource(response) => response,
+                        other => return Err(unexpected("resource", &other)),
+                    };
+                    self.client
+                        .apply_resource(response)
+                        .map_err(|error| format!("resource was rejected: {error:?}"))?;
+                }
+            }
+        }
+    }
+
+    pub fn resolve_all(
+        &mut self,
+        session: &ProjectionSession,
+    ) -> Result<Vec<(InstanceId, ResolvedPresentation)>, String> {
+        let instances = self
+            .client
+            .mounted(session)
+            .ok_or_else(|| format!("Graphshell did not mount {}", session.0))?
+            .scene
+            .active_items_in_order()
+            .into_iter()
+            .map(|(instance, _)| instance)
+            .collect::<Vec<_>>();
+        instances
+            .into_iter()
+            .map(|instance| {
+                self.resolve(session, instance)
+                    .map(|value| (instance, value))
+            })
+            .collect()
+    }
+
+    /// Invoke an action exactly as advertised, using the current client
+    /// acknowledgement and a typed, versioned payload.
+    pub fn invoke<T: Serialize>(
+        &mut self,
+        session: &ProjectionSession,
+        target: InstanceId,
+        action: &AdvertisedAction,
+        payload: &T,
+    ) -> Result<IntentResult, String> {
+        let advertised = self
+            .client
+            .mounted(session)
+            .and_then(|mounted| mounted.presentation.offers_for(target))
+            .and_then(|offers| {
+                offers
+                    .iter()
+                    .find(|offer| self.profile.supports(offer.requires))
+            })
+            .is_some_and(|offer| {
+                offer
+                    .semantics
+                    .actions
+                    .iter()
+                    .any(|candidate| candidate == action)
+            });
+        if !advertised {
+            return Err("intent was not advertised for the selected presentation".into());
+        }
+        let ack = self
+            .client
+            .acknowledgement(session)
+            .ok_or_else(|| format!("Graphshell did not acknowledge {}", session.0))?;
+        let payload = serde_json::to_vec(payload)
+            .map_err(|error| format!("could not encode intent payload: {error}"))?;
+        match self
+            .carrier_mut()?
+            .request(CarrierRequestBody::Intent(IntentInvocation {
+                session: session.clone(),
+                target,
+                observed_epoch: ack.epoch,
+                observed_revision: ack.revision,
+                intent: action.intent.0.clone(),
+                payload,
+            }))? {
+            CarrierResponseBody::Intent(result) => Ok(result),
+            other => Err(unexpected("intent result", &other)),
+        }
+    }
+
+    /// Block for one revision bell and recover through the ordinary resume
+    /// path. Source bytes never travel in the notice.
+    pub fn wait_for_change(&mut self) -> Result<bool, String> {
+        let notice = self.carrier_mut()?.wait_for_notice()?;
+        let carrier = self
+            .carrier
+            .as_mut()
+            .ok_or_else(|| "endpoint carrier is closed".to_string())?;
+        resume_after_notice(carrier, &mut self.client, &notice)
+    }
+
+    pub fn close(mut self) -> Result<(), String> {
+        let carrier_result = if let Some(mut carrier) = self.carrier.take() {
+            let response = carrier.request(CarrierRequestBody::Close);
+            let close = match response {
+                Ok(CarrierResponseBody::Closed) => Ok(()),
+                Ok(other) => Err(unexpected("session close", &other)),
+                Err(error) => Err(error),
+            };
+            let shutdown = carrier
+                .shutdown()
+                .map_err(|error| format!("endpoint did not stop cleanly: {error}"));
+            close.and(shutdown)
+        } else {
+            Ok(())
+        };
+        self.purge();
+        carrier_result
+    }
+
+    fn carrier_mut(&mut self) -> Result<&mut StdioCarrier, String> {
+        self.carrier
+            .as_mut()
+            .ok_or_else(|| "endpoint carrier is closed".to_string())
+    }
+
+    fn purge(&mut self) {
+        for session in std::mem::take(&mut self.mounted) {
+            self.client.forget_session(&session);
+        }
+    }
+}
+
+impl Drop for RetainedEndpointSession {
+    fn drop(&mut self) {
+        self.purge();
+        // Dropping StdioCarrier closes stdin and waits for the child. Taking it
+        // makes the order explicit: source bytes are purged before the process
+        // boundary is released.
+        drop(self.carrier.take());
+    }
 }
 
 /// Spawn endpoint processes, discover their projections, and mount each one
@@ -37,19 +263,15 @@ pub fn mount_endpoint_processes(
 }
 
 fn mount_endpoint_process(program: &Path) -> Result<Vec<SessionProjectionView>, String> {
-    let mut carrier = StdioCarrier::spawn(program, std::iter::empty::<&str>())
+    let profile = CapabilityProfile::new([
+        PresentationCapability::PortableCard,
+        PresentationCapability::NativeGlyph,
+        PresentationCapability::Image,
+    ]);
+    let mut retained = RetainedEndpointSession::spawn(program, std::iter::empty::<&str>(), profile)
         .map_err(|error| format!("could not start {}: {error}", program.display()))?;
-    let descriptor = match carrier.request(CarrierRequestBody::Discover)? {
-        CarrierResponseBody::Descriptor(descriptor) => descriptor,
-        other => return Err(unexpected("descriptor", &other)),
-    };
-    let views = mount_descriptor(&mut carrier, descriptor);
-    let shutdown = carrier.shutdown().map_err(|error| {
-        format!(
-            "endpoint {} did not stop cleanly: {error}",
-            program.display()
-        )
-    });
+    let views = mount_descriptor(&mut retained);
+    let shutdown = retained.close();
     match (views, shutdown) {
         (Ok(views), Ok(())) => Ok(views),
         (Err(error), _) => Err(error),
@@ -58,29 +280,23 @@ fn mount_endpoint_process(program: &Path) -> Result<Vec<SessionProjectionView>, 
 }
 
 fn mount_descriptor(
-    carrier: &mut StdioCarrier,
-    descriptor: EndpointDescriptor,
+    retained: &mut RetainedEndpointSession,
 ) -> Result<Vec<SessionProjectionView>, String> {
+    let descriptor = retained.descriptor().clone();
     let mut views = Vec::new();
-    for offer in descriptor.projections {
-        let snapshot = match carrier.request(CarrierRequestBody::Snapshot(offer.request))? {
-            CarrierResponseBody::Snapshot(snapshot) => *snapshot,
-            other => return Err(unexpected("snapshot", &other)),
-        };
-        let session = snapshot.session.clone();
-        let layout = ProjectionLayoutView::from_scene(&snapshot.scene);
-        let item_count = snapshot.scene.active_item_count();
-        let mut client = ClientState::default();
-        client
-            .apply_snapshot(snapshot)
-            .map_err(|error| format!("Graphshell rejected {session:?}: {error:?}"))?;
-        let profile = CapabilityProfile::new([
-            PresentationCapability::PortableCard,
-            PresentationCapability::NativeGlyph,
-            PresentationCapability::Image,
-        ]);
-        let presentations = resolve_presentations(carrier, &mut client, &session, &profile)?;
-        let intents = invoke_advertised_actions(carrier, &client, &session, &presentations)?;
+    for (index, offer) in descriptor.projections.into_iter().enumerate() {
+        let session = retained.mount(index)?;
+        let mounted = retained.client().mounted(&session).unwrap();
+        let layout = ProjectionLayoutView::from_scene(&mounted.scene);
+        let item_count = mounted.scene.active_item_count();
+        let resolved = retained.resolve_all(&session)?;
+        let presentations = resolved
+            .iter()
+            .map(|(_, presentation)| presentation.clone())
+            .collect::<Vec<_>>();
+        let client = retained.client().clone();
+        let intents =
+            invoke_advertised_actions(retained.carrier_mut()?, &client, &session, &presentations)?;
         views.push(SessionProjectionView {
             label: format!("{} · {}", descriptor.label, offer.label),
             projection: ProjectionReceiptView {
@@ -151,48 +367,6 @@ pub fn resume_request_for_notice(
     }
     client.mark_stale(&notice.session);
     Ok(client.resume_request(&notice.session))
-}
-
-fn resolve_presentations(
-    carrier: &mut StdioCarrier,
-    client: &mut ClientState,
-    session: &ProjectionSession,
-    profile: &CapabilityProfile,
-) -> Result<Vec<ResolvedPresentation>, String> {
-    let instances: Vec<_> = client
-        .mounted(session)
-        .ok_or_else(|| format!("Graphshell did not mount {}", session.0))?
-        .scene
-        .active_items_in_order()
-        .into_iter()
-        .map(|(instance, _)| instance)
-        .collect();
-    let mut presentations = Vec::new();
-    for instance in instances {
-        let presentation = loop {
-            match client
-                .resolve(session, instance, profile)
-                .map_err(|error| format!("could not resolve {}: {error:?}", session.0))?
-            {
-                PresentationResolution::Ready(presentation) => break presentation,
-                PresentationResolution::NeedsResource(request) => {
-                    let response =
-                        match carrier.request(CarrierRequestBody::Resource(ResourceRequest {
-                            session: request.session,
-                            resource: request.resource,
-                        }))? {
-                            CarrierResponseBody::Resource(response) => response,
-                            other => return Err(unexpected("resource", &other)),
-                        };
-                    client
-                        .apply_resource(response)
-                        .map_err(|error| format!("resource was rejected: {error:?}"))?;
-                }
-            }
-        };
-        presentations.push(presentation);
-    }
-    Ok(presentations)
 }
 
 fn invoke_advertised_actions(
