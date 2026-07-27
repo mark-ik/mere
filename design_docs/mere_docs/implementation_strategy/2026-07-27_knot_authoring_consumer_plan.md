@@ -1,7 +1,8 @@
 # Knot Authoring Consumer Plan
 
 **Date:** 2026-07-27
-**Status:** planned from the live seams; no implementation yet.
+**Status:** implementation in progress. A1 and the writable endpoint core are
+proved; the retained Turnstone consumer is next.
 
 **Companions:** the completed [Knot port plan](2026-07-25_knot_port_plan.md),
 the reconciled
@@ -114,6 +115,23 @@ death drop the cached source and the retained editor buffer. Persistent
 Graphshell caches never contain editable source.
 
 ## Four rungs
+
+### Current receipt
+
+- A1 is complete: protocol 1.2 carries strict editable-text resources and save
+  payloads, older clients retain card/glyph fallback, and the Graphshell host
+  has a retained mount/resolve/invoke/resume/close session.
+- A2's authority and mutation core is complete for writable directory
+  documents and injected personal/communal vault stores. Save validates the
+  snapshot target, grant, observed revision, format, size, and document base
+  token before writing. Vault save authors one signed sync event and
+  rematerializes the sealed view from the accepted projection.
+- A real retained Graphshell process test mounts `knot_endpoint
+  directory-write`, saves through the advertised action, receives the revision
+  bell, resumes, closes, and verifies the disk bytes.
+- The sealed-vault receipt proves signed-head advancement, ciphertext opacity,
+  lock-time resource purge, and reopen persistence. Production process launch
+  through startup unlock remains open, as do A3 and the headed A4 receipts.
 
 ### A1. Versioned editable text and a retained session
 

@@ -28,6 +28,7 @@ personae.workspace = true
 p2panda-core = "0.7.0"
 p2panda-net = "0.7.0"
 p2panda-store = { version = "0.7.0", default-features = false }
+pollster = "0.4"
 sceno.workspace = true
 scenotime.workspace = true
 serde.workspace = true
@@ -40,6 +41,7 @@ thiserror = "1"
 zeroize = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
+graphshell = { path = "../graphshell" }
 tempfile = "3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
 transport.workspace = true

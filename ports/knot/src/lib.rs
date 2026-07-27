@@ -20,7 +20,7 @@ pub use content_classes::{
 };
 pub use directory::{DirectorySource, DiskDocument, IgnorePolicy};
 pub use editor::{EditOutcome, KnotEditor};
-pub use endpoint::KnotEndpoint;
+pub use endpoint::{KnotEndpoint, KnotWriteGrant};
 pub use search::{KnotSearch, SearchConfig, SearchHit, SearchLane};
 pub use sync::{
     KnotDocumentConflict, KnotDocumentProjection, KnotDocumentVersion, KnotEncryptionProfile,
