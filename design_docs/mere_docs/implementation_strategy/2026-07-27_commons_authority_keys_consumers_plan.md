@@ -29,11 +29,12 @@ Knot therefore pulls the neutral causal machinery into Stickleback:
 - bounded parent and payload admission;
 - pending-parent diagnostics that do not hide unrelated state.
 
-Knot keeps its sealed `Put` and `Delete` document grammar and folds those
-ordered facts into a document projection. A document touched by multiple
-writers remains an explicit conflict until Knot has a document-grained merge
-policy. The conflict does not make unrelated documents unavailable. No
-chartulary batch is manufactured merely to move a document.
+Knot keeps its sealed `Put`, `Delete`, and `Resolve` document grammar and folds
+those ordered facts into a document projection. A document touched by multiple
+writers remains an explicit conflict until a user or policy authors a
+resolution naming the exact causal versions it replaces. An unseen concurrent
+version survives. The conflict does not make unrelated documents unavailable.
+No chartulary batch is manufactured merely to move a document.
 
 This is both the architectural and efficiency boundary: one signed operation,
 one ciphertext body, one retained log. Knot materializes document state from
@@ -180,9 +181,12 @@ Knot authors signed causal parents, reopens over Redb, reports conflicts and
 pending facts without hiding unrelated documents, and restores its author
 frontier. Add a projection checkpoint plus tail receipt before pruning.
 
-Receipt: five Knot sync tests cover Memory and real LogSync convergence,
-same-document conflict reporting, partial projection under missing history,
-Redb reopen, checkpoint persistence, and retained-tail recovery.
+Receipt: ten Knot sync tests cover Memory and real LogSync convergence,
+same-document conflict reporting and explicit causal resolution, preservation
+of unseen concurrent versions, rejection of forged resolutions, personal and
+Commons encryption-profile separation, removed-member epoch rotation, partial
+projection under missing history, Redb reopen, checkpoint persistence, and
+retained-tail recovery.
 
 ### C5. Chat consumer — DONE 2026-07-27
 

@@ -22,7 +22,11 @@ pub use directory::{DirectorySource, DiskDocument, IgnorePolicy};
 pub use editor::{EditOutcome, KnotEditor};
 pub use endpoint::KnotEndpoint;
 pub use search::{KnotSearch, SearchConfig, SearchHit, SearchLane};
-pub use sync::{KnotSyncError, KnotSyncEvent, KnotSyncExt, KnotSyncFileStore, KnotSyncStore};
+pub use sync::{
+    KnotDocumentConflict, KnotDocumentProjection, KnotDocumentVersion, KnotEncryptionProfile,
+    KnotProjectionCheckpoint, KnotSyncCipher, KnotSyncError, KnotSyncEvent, KnotSyncExt,
+    KnotSyncFileStore, KnotSyncStore, KnotTailReceipt,
+};
 pub use vault::{KnotVault, VaultDocument};
 pub use watcher::DirectoryWatcher;
 pub use writer::{AuthoredFile, DocumentFormat, SaveOutcome};

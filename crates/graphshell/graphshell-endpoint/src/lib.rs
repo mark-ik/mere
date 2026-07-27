@@ -1,8 +1,8 @@
 //! Traits application adapters implement beside their own source truth.
 
 use graphshell_protocol::{
-    EndpointDescriptor, IntentInvocation, IntentResult, ProjectionRequest, ProjectionSnapshot,
-    ResourceRequest, ResourceResponse, ResumeReply, ResumeRequest,
+    CarrierNotice, EndpointDescriptor, IntentInvocation, IntentResult, ProjectionRequest,
+    ProjectionSnapshot, ResourceRequest, ResourceResponse, ResumeReply, ResumeRequest,
 };
 
 /// Discovery boundary for a product-neutral host.
@@ -32,6 +32,14 @@ pub trait ResumableProjectionSource {
     type Error;
 
     fn resume(&mut self, request: ResumeRequest) -> Result<ResumeReply, Self::Error>;
+}
+
+/// Payload-free change signal for carriers that support endpoint-initiated
+/// frames. Returning `None` means the source has not advanced.
+pub trait ProjectionNoticeSource {
+    type Error;
+
+    fn poll_notice(&mut self) -> Result<Option<CarrierNotice>, Self::Error>;
 }
 
 /// The write boundary. Implementations validate revision and authority before

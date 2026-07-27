@@ -4,10 +4,13 @@ use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
-use graphshell_client::{ClientState, PresentationResolution, ResolvedPresentation};
+use graphshell_client::{
+    ClientState, PresentationResolution, ResolvedPresentation, ResumeApplication,
+};
 use graphshell_protocol::{
-    CapabilityProfile, CarrierRequestBody, CarrierResponseBody, EndpointDescriptor,
+    CapabilityProfile, CarrierNotice, CarrierRequestBody, CarrierResponseBody, EndpointDescriptor,
     IntentInvocation, IntentResult, PresentationCapability, ProjectionSession, ResourceRequest,
+    ResumeRequest,
 };
 use graphshell_stdio::StdioCarrier;
 
@@ -96,6 +99,58 @@ fn mount_descriptor(
         });
     }
     Ok(views)
+}
+
+/// Block for one endpoint revision bell, mark the mounted scene stale, and
+/// recover through the ordinary revision-addressed resume path.
+pub fn wait_for_session_change(
+    carrier: &mut StdioCarrier,
+    client: &mut ClientState,
+) -> Result<bool, String> {
+    let notice = carrier.wait_for_notice()?;
+    resume_after_notice(carrier, client, &notice)
+}
+
+pub fn resume_after_notice(
+    carrier: &mut StdioCarrier,
+    client: &mut ClientState,
+    notice: &CarrierNotice,
+) -> Result<bool, String> {
+    let Some(mut request) = resume_request_for_notice(client, notice)? else {
+        return Ok(false);
+    };
+    for _ in 0..4 {
+        let reply = match carrier.request(CarrierRequestBody::Resume(request))? {
+            CarrierResponseBody::Resume(reply) => reply,
+            other => return Err(unexpected("resume reply", &other)),
+        };
+        match client
+            .apply_resume(&notice.session, reply)
+            .map_err(|error| {
+                format!(
+                    "Graphshell rejected resume for {}: {error:?}",
+                    notice.session.0
+                )
+            })? {
+            ResumeApplication::Current(_) | ResumeApplication::Applied(_) => return Ok(true),
+            ResumeApplication::Resynchronize(next) => request = next,
+        }
+    }
+    Err("endpoint did not produce an applicable resume after four attempts".into())
+}
+
+pub fn resume_request_for_notice(
+    client: &mut ClientState,
+    notice: &CarrierNotice,
+) -> Result<Option<ResumeRequest>, String> {
+    let acknowledged = client
+        .acknowledgement(&notice.session)
+        .ok_or_else(|| format!("revision notice names unknown session {}", notice.session.0))?;
+    if notice.epoch == acknowledged.epoch && notice.revision <= acknowledged.revision {
+        return Ok(None);
+    }
+    client.mark_stale(&notice.session);
+    Ok(client.resume_request(&notice.session))
 }
 
 fn resolve_presentations(
@@ -276,8 +331,47 @@ fn escape(input: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use graphshell_protocol::{
+        CachePolicy, PresentationManifest, ProjectionSnapshot, ProtocolVersion,
+    };
+    use sceno::Scene;
+    use scenotime::{Revision, SceneEpoch, SceneSnapshot};
+
     use super::*;
     use crate::canary::run_loopback_canary;
+
+    #[test]
+    fn a_revision_notice_marks_the_scene_stale_and_resumes_from_the_host_ack() {
+        let session = ProjectionSession("knot:directory".into());
+        let mut client = ClientState::default();
+        client
+            .apply_snapshot(ProjectionSnapshot {
+                version: ProtocolVersion::V1,
+                session: session.clone(),
+                scene: SceneSnapshot::from_dense(SceneEpoch(1), Revision(3), Scene::new()).unwrap(),
+                presentation: PresentationManifest::default(),
+                cache_policy: CachePolicy::default(),
+            })
+            .unwrap();
+        let request = resume_request_for_notice(
+            &mut client,
+            &CarrierNotice {
+                session: session.clone(),
+                epoch: SceneEpoch(1),
+                revision: Revision(4),
+            },
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(request.session, session);
+        assert_eq!(request.epoch, SceneEpoch(1));
+        assert_eq!(request.revision, Revision(3));
+        assert_eq!(
+            client.mounted(&request.session).unwrap().status,
+            graphshell_protocol::SessionStatus::Stale
+        );
+    }
 
     #[test]
     fn switcher_keeps_each_projection_in_a_separate_keyboard_tab() {

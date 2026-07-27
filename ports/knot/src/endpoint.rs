@@ -6,10 +6,11 @@ use std::path::Path;
 
 use chartulary::{Addressed, Labeled};
 use graphshell_endpoint::{
-    IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource, ResumableProjectionSource,
+    IntentSink, PresentationSource, ProjectionCatalog, ProjectionNoticeSource, ProjectionSource,
+    ResumableProjectionSource,
 };
 use graphshell_protocol::{
-    BoundsRelationship, CachePolicy, CardValueV1, ContentHash, EndpointDescriptor,
+    BoundsRelationship, CachePolicy, CardValueV1, CarrierNotice, ContentHash, EndpointDescriptor,
     IntentInvocation, IntentResult, NativeGlyphV1, PortableCardV1, PresentationBinding,
     PresentationCapability, PresentationCodec, PresentationKey, PresentationManifest,
     PresentationOffer, PresentationSemantics, ProjectionAck, ProjectionOffer, ProjectionRequest,
@@ -50,6 +51,7 @@ pub struct KnotEndpoint {
     session: ProjectionSession,
     snapshot: Option<ProjectionSnapshot>,
     resources: BTreeMap<ContentHash, Vec<u8>>,
+    last_announced: Option<Revision>,
 }
 
 impl KnotEndpoint {
@@ -74,6 +76,7 @@ impl KnotEndpoint {
             session: ProjectionSession(format!("knot:directory:{}", &digest.to_hex()[..16])),
             snapshot: None,
             resources: BTreeMap::new(),
+            last_announced: None,
         })
     }
 
@@ -123,6 +126,7 @@ impl KnotEndpoint {
             session: ProjectionSession(FIXTURE_SESSION.into()),
             snapshot: None,
             resources: BTreeMap::new(),
+            last_announced: None,
         }
     }
 
@@ -134,6 +138,7 @@ impl KnotEndpoint {
             session: ProjectionSession(format!("knot:vault:{}", &digest.to_hex()[..16])),
             snapshot: None,
             resources: BTreeMap::new(),
+            last_announced: None,
         }
     }
 
@@ -379,6 +384,7 @@ impl KnotEndpoint {
             presentation,
             cache_policy: CachePolicy::default(),
         };
+        self.last_announced = Some(snapshot.scene.revision);
         self.snapshot = Some(snapshot.clone());
         Ok(snapshot)
     }
@@ -437,6 +443,7 @@ impl ResumableProjectionSource for KnotEndpoint {
         self.refresh()?;
         let current = self.revision();
         if request.epoch == SceneEpoch(1) && request.revision == current {
+            self.last_announced = Some(current);
             return Ok(ResumeReply::Current(ProjectionAck {
                 session: self.session.clone(),
                 epoch: SceneEpoch(1),
@@ -444,6 +451,30 @@ impl ResumableProjectionSource for KnotEndpoint {
             }));
         }
         Ok(ResumeReply::Snapshot(Box::new(self.build_snapshot()?)))
+    }
+}
+
+impl ProjectionNoticeSource for KnotEndpoint {
+    type Error = String;
+
+    fn poll_notice(&mut self) -> Result<Option<CarrierNotice>, Self::Error> {
+        self.refresh()?;
+        if self.snapshot.is_none() {
+            return Ok(None);
+        }
+        let revision = self.revision();
+        if self
+            .last_announced
+            .is_some_and(|announced| revision <= announced)
+        {
+            return Ok(None);
+        }
+        self.last_announced = Some(revision);
+        Ok(Some(CarrierNotice {
+            session: self.session.clone(),
+            epoch: SceneEpoch(1),
+            revision,
+        }))
     }
 }
 
@@ -496,7 +527,8 @@ mod tests {
     use std::fs;
 
     use graphshell_endpoint::{
-        PresentationSource, ProjectionCatalog, ProjectionSource, ResumableProjectionSource,
+        PresentationSource, ProjectionCatalog, ProjectionNoticeSource, ProjectionSource,
+        ResumableProjectionSource,
     };
     use graphshell_protocol::{ResourceRequest, ResumeReply, ResumeRequest};
     use tempfile::tempdir;
@@ -551,6 +583,23 @@ mod tests {
             .bytes;
         let card: PortableCardV1 = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(card.values[2].value, "13 bytes");
+    }
+
+    #[test]
+    fn disk_edit_rings_once_before_the_host_resumes() {
+        let temp = tempdir().unwrap();
+        let path = temp.path().join("field.knot");
+        fs::write(&path, "one").unwrap();
+        let mut endpoint = KnotEndpoint::open(temp.path()).unwrap();
+        let request = endpoint.describe().projections.remove(0).request;
+        let snapshot = endpoint.snapshot(request).unwrap();
+
+        fs::write(&path, "one two three").unwrap();
+        let notice = endpoint.poll_notice().unwrap().unwrap();
+        assert_eq!(notice.session, snapshot.session);
+        assert_eq!(notice.epoch, snapshot.scene.epoch);
+        assert!(notice.revision > snapshot.scene.revision);
+        assert_eq!(endpoint.poll_notice().unwrap(), None);
     }
 
     #[test]

@@ -1,18 +1,20 @@
-//! Single-writer personal-vault replication over Stickleback.
+//! Causal personal and Commons document replication over Stickleback.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use muniment::{Backend, MemoryBackend, RedbBackend, StoreError};
+use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Topic, VerifyingKey};
 use p2panda_net::{Endpoint, Gossip};
 use p2panda_store::logs::LogStore;
 use p2panda_store::topics::TopicStore;
 use serde::{Deserialize, Serialize};
 use stickleback::{
-    Admission, CausalEntry, CausalError, CausalLimits, JoinError, JoinedSpace, MunimentStore,
-    OperationPolicy, OperationProcessor, PendingCausalOperation, ProcessError, Reject, StoreTarget,
-    author_head, causal_projection, observed_frontier, validate_causal_metadata,
+    Admission, CausalEntry, CausalError, CausalLimits, DataKeyring, GroupCiphertext,
+    GroupCryptoError, JoinError, JoinedSpace, MunimentStore, OperationPolicy, OperationProcessor,
+    PendingCausalOperation, ProcessError, Reject, StoreTarget, author_head, causal_projection,
+    happens_before, observed_frontier, validate_causal_metadata,
 };
 use zeroize::{Zeroize, Zeroizing};
 
@@ -25,10 +27,22 @@ const KNOT_CAUSAL_LIMITS: CausalLimits = CausalLimits {
     max_payload_bytes: 16 * 1024 * 1024,
 };
 
+/// The signed encryption contract for one Knot space.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum KnotEncryptionProfile {
+    /// Personal device sync derives a key from the local vault root.
+    #[default]
+    PersonalVaultV1,
+    /// Commons documents use the group's retained data-encryption epochs.
+    CommonsDataV1,
+}
+
 /// Signed addressing extension for one Knot vault space.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KnotSyncExt {
     pub space_id: [u8; 32],
+    #[serde(default)]
+    pub encryption: KnotEncryptionProfile,
     /// Exact per-author frontier observed before this event was authored.
     #[serde(default)]
     pub parents: Vec<[u8; 32]>,
@@ -38,10 +52,34 @@ pub struct KnotSyncExt {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
 pub enum KnotSyncEvent {
     Put(VaultDocument),
-    Delete { id: String },
+    Delete {
+        id: String,
+    },
+    /// Replace the named causal document versions with one chosen value.
+    Resolve {
+        id: String,
+        supersedes: Vec<[u8; 32]>,
+        document: Option<VaultDocument>,
+    },
 }
 
-/// Knot sync failures, including the deliberately unresolved multi-writer case.
+/// Encryption material used by a Knot replica.
+#[derive(Clone, Copy)]
+pub enum KnotSyncCipher<'a> {
+    Personal(&'a KnotVault),
+    CommonsData(&'a DataKeyring),
+}
+
+impl KnotSyncCipher<'_> {
+    fn profile(self) -> KnotEncryptionProfile {
+        match self {
+            Self::Personal(_) => KnotEncryptionProfile::PersonalVaultV1,
+            Self::CommonsData(_) => KnotEncryptionProfile::CommonsDataV1,
+        }
+    }
+}
+
+/// Knot sync failures.
 #[derive(Debug, thiserror::Error)]
 pub enum KnotSyncError {
     #[error(transparent)]
@@ -50,8 +88,14 @@ pub enum KnotSyncError {
     Process(#[from] ProcessError),
     #[error(transparent)]
     Causal(#[from] CausalError),
+    #[error(transparent)]
+    GroupCrypto(#[from] GroupCryptoError),
     #[error("sync payload: {0}")]
     Payload(String),
+    #[error("sync cipher does not match the space's signed encryption profile")]
+    WrongEncryptionProfile,
+    #[error("invalid conflict resolution: {0}")]
+    InvalidResolution(String),
     #[error("Knot sync has no durable projection checkpoint")]
     MissingCheckpoint,
     #[error("document {0} has operations from more than one writer")]
@@ -62,6 +106,7 @@ pub enum KnotSyncError {
 struct KnotSyncPolicy {
     space_id: [u8; 32],
     writers: BTreeSet<[u8; 32]>,
+    encryption: KnotEncryptionProfile,
 }
 
 impl OperationPolicy<KnotSyncExt> for KnotSyncPolicy {
@@ -74,6 +119,12 @@ impl OperationPolicy<KnotSyncExt> for KnotSyncPolicy {
                 "operation addresses a different Knot vault",
             ));
         }
+        if operation.header.extensions.encryption != self.encryption {
+            return Err(Reject::new(
+                "wrong-knot-encryption-profile",
+                "operation uses a different Knot encryption profile",
+            ));
+        }
         if !self
             .writers
             .contains(operation.header.verifying_key.as_bytes())
@@ -83,11 +134,19 @@ impl OperationPolicy<KnotSyncExt> for KnotSyncPolicy {
                 "operation author is not admitted to this Knot vault",
             ));
         }
-        if operation.body.is_none() {
-            return Err(Reject::new(
+        let body = operation.body.as_ref().ok_or_else(|| {
+            Reject::new(
                 "missing-knot-event",
                 "Knot sync operations require a sealed body",
-            ));
+            )
+        })?;
+        if self.encryption == KnotEncryptionProfile::CommonsDataV1 {
+            decode_cbor::<GroupCiphertext, _>(body.to_bytes().as_slice()).map_err(|error| {
+                Reject::new(
+                    "invalid-knot-group-ciphertext",
+                    format!("Commons Knot body is not a data-envelope: {error}"),
+                )
+            })?;
         }
         validate_causal_metadata(
             operation,
@@ -169,11 +228,27 @@ pub type KnotSyncFileStore = KnotSyncStore<RedbBackend>;
 
 impl KnotSyncStore<MemoryBackend> {
     pub fn in_memory(space_id: [u8; 32], writers: impl IntoIterator<Item = [u8; 32]>) -> Self {
+        Self::in_memory_with_profile(space_id, writers, KnotEncryptionProfile::PersonalVaultV1)
+    }
+
+    pub fn in_memory_commons(
+        space_id: [u8; 32],
+        writers: impl IntoIterator<Item = [u8; 32]>,
+    ) -> Self {
+        Self::in_memory_with_profile(space_id, writers, KnotEncryptionProfile::CommonsDataV1)
+    }
+
+    pub fn in_memory_with_profile(
+        space_id: [u8; 32],
+        writers: impl IntoIterator<Item = [u8; 32]>,
+        encryption: KnotEncryptionProfile,
+    ) -> Self {
         Self {
             store: MunimentStore::new(MemoryBackend::new()),
             policy: KnotSyncPolicy {
                 space_id,
                 writers: writers.into_iter().collect(),
+                encryption,
             },
         }
     }
@@ -185,11 +260,39 @@ impl KnotSyncStore<RedbBackend> {
         space_id: [u8; 32],
         writers: impl IntoIterator<Item = [u8; 32]>,
     ) -> Result<Self, KnotSyncError> {
+        Self::open_with_profile(
+            path,
+            space_id,
+            writers,
+            KnotEncryptionProfile::PersonalVaultV1,
+        )
+    }
+
+    pub fn open_commons(
+        path: impl AsRef<Path>,
+        space_id: [u8; 32],
+        writers: impl IntoIterator<Item = [u8; 32]>,
+    ) -> Result<Self, KnotSyncError> {
+        Self::open_with_profile(
+            path,
+            space_id,
+            writers,
+            KnotEncryptionProfile::CommonsDataV1,
+        )
+    }
+
+    pub fn open_with_profile(
+        path: impl AsRef<Path>,
+        space_id: [u8; 32],
+        writers: impl IntoIterator<Item = [u8; 32]>,
+        encryption: KnotEncryptionProfile,
+    ) -> Result<Self, KnotSyncError> {
         Ok(Self {
             store: MunimentStore::new(RedbBackend::open(path)?),
             policy: KnotSyncPolicy {
                 space_id,
                 writers: writers.into_iter().collect(),
+                encryption,
             },
         })
     }
@@ -203,6 +306,10 @@ where
         self.policy.space_id
     }
 
+    pub fn encryption_profile(&self) -> KnotEncryptionProfile {
+        self.policy.encryption
+    }
+
     /// Seal, sign, admit, and store the next event in this device's log.
     pub async fn author(
         &self,
@@ -210,6 +317,27 @@ where
         vault: &KnotVault,
         event: &KnotSyncEvent,
     ) -> Result<Operation<KnotSyncExt>, KnotSyncError> {
+        self.author_with_cipher(signing_seed, KnotSyncCipher::Personal(vault), event)
+            .await
+    }
+
+    pub async fn author_communal(
+        &self,
+        signing_seed: [u8; 32],
+        keys: &DataKeyring,
+        event: &KnotSyncEvent,
+    ) -> Result<Operation<KnotSyncExt>, KnotSyncError> {
+        self.author_with_cipher(signing_seed, KnotSyncCipher::CommonsData(keys), event)
+            .await
+    }
+
+    pub async fn author_with_cipher(
+        &self,
+        signing_seed: [u8; 32],
+        cipher: KnotSyncCipher<'_>,
+        event: &KnotSyncEvent,
+    ) -> Result<Operation<KnotSyncExt>, KnotSyncError> {
+        self.require_cipher(cipher)?;
         let signing_key = SigningKey::from_bytes(&signing_seed);
         let author = signing_key.verifying_key();
         let records = self.load_operations().await?;
@@ -220,9 +348,7 @@ where
             serde_json::to_vec(event).map_err(|error| KnotSyncError::Payload(error.to_string()))?,
         );
         let aad = operation_aad(self.policy.space_id, author.as_bytes(), seq_num);
-        let ciphertext = vault
-            .seal_sync_payload(&aad, plaintext.as_slice())
-            .map_err(KnotSyncError::Payload)?;
+        let ciphertext = seal_event(cipher, &aad, plaintext.as_slice())?;
         let body = Body::new(&ciphertext);
         let mut header = Header {
             version: 1,
@@ -234,6 +360,7 @@ where
             backlink: backlink.map(Hash::from),
             extensions: KnotSyncExt {
                 space_id: self.policy.space_id,
+                encryption: self.policy.encryption,
                 parents,
             },
         };
@@ -245,6 +372,79 @@ where
         };
         self.accept(&operation).await?;
         Ok(operation)
+    }
+
+    pub async fn resolve_conflict(
+        &self,
+        signing_seed: [u8; 32],
+        vault: &KnotVault,
+        conflict: &KnotDocumentConflict,
+        document: Option<VaultDocument>,
+    ) -> Result<Operation<KnotSyncExt>, KnotSyncError> {
+        self.resolve_conflict_with_cipher(
+            signing_seed,
+            KnotSyncCipher::Personal(vault),
+            conflict,
+            document,
+        )
+        .await
+    }
+
+    pub async fn resolve_communal_conflict(
+        &self,
+        signing_seed: [u8; 32],
+        keys: &DataKeyring,
+        conflict: &KnotDocumentConflict,
+        document: Option<VaultDocument>,
+    ) -> Result<Operation<KnotSyncExt>, KnotSyncError> {
+        self.resolve_conflict_with_cipher(
+            signing_seed,
+            KnotSyncCipher::CommonsData(keys),
+            conflict,
+            document,
+        )
+        .await
+    }
+
+    pub async fn resolve_conflict_with_cipher(
+        &self,
+        signing_seed: [u8; 32],
+        cipher: KnotSyncCipher<'_>,
+        conflict: &KnotDocumentConflict,
+        document: Option<VaultDocument>,
+    ) -> Result<Operation<KnotSyncExt>, KnotSyncError> {
+        if document
+            .as_ref()
+            .is_some_and(|document| document.id != conflict.id)
+        {
+            return Err(KnotSyncError::InvalidResolution(
+                "chosen document id does not match the conflict".into(),
+            ));
+        }
+        let mut supersedes: Vec<_> = conflict
+            .versions
+            .iter()
+            .map(|version| version.operation)
+            .collect();
+        supersedes.sort();
+        supersedes.dedup();
+        self.author_with_cipher(
+            signing_seed,
+            cipher,
+            &KnotSyncEvent::Resolve {
+                id: conflict.id.clone(),
+                supersedes,
+                document,
+            },
+        )
+        .await
+    }
+
+    fn require_cipher(&self, cipher: KnotSyncCipher<'_>) -> Result<(), KnotSyncError> {
+        if cipher.profile() != self.policy.encryption {
+            return Err(KnotSyncError::WrongEncryptionProfile);
+        }
+        Ok(())
     }
 
     /// The Knot-specific `accept` closure target used by Stickleback.
@@ -284,19 +484,57 @@ where
         &self,
         vault: &KnotVault,
     ) -> Result<KnotDocumentProjection, KnotSyncError> {
+        self.projection_with_cipher(KnotSyncCipher::Personal(vault))
+            .await
+    }
+
+    pub async fn communal_projection(
+        &self,
+        keys: &DataKeyring,
+    ) -> Result<KnotDocumentProjection, KnotSyncError> {
+        self.projection_with_cipher(KnotSyncCipher::CommonsData(keys))
+            .await
+    }
+
+    pub async fn projection_with_cipher(
+        &self,
+        cipher: KnotSyncCipher<'_>,
+    ) -> Result<KnotDocumentProjection, KnotSyncError> {
+        self.require_cipher(cipher)?;
         let records = self.load_operations().await?;
-        let projection = causal_projection(&causal_entries(&records))?;
+        let entries = causal_entries(&records);
+        let projection = causal_projection(&entries)?;
         let mut current = BTreeMap::<String, BTreeMap<[u8; 32], KnotDocumentVersion>>::new();
+        let mut event_documents = BTreeMap::<[u8; 32], String>::new();
 
         for index in projection.order {
             let operation = &records[index].operation;
             let writer = *operation.header.verifying_key.as_bytes();
             let operation_id = *operation.hash.as_bytes();
-            let event = decode_event(vault, operation)?;
+            let event = decode_event(cipher, operation)?;
             let (id, document) = match event {
                 KnotSyncEvent::Put(document) => (document.id.clone(), Some(document)),
                 KnotSyncEvent::Delete { id } => (id, None),
+                KnotSyncEvent::Resolve {
+                    id,
+                    supersedes,
+                    document,
+                } => {
+                    let targets = validate_resolution(
+                        &entries,
+                        &event_documents,
+                        operation_id,
+                        &id,
+                        &supersedes,
+                        document.as_ref(),
+                    )?;
+                    if let Some(versions) = current.get_mut(&id) {
+                        versions.retain(|_, version| !targets.contains(&version.operation));
+                    }
+                    (id, document)
+                }
             };
+            event_documents.insert(operation_id, id.clone());
             current.entry(id).or_default().insert(
                 writer,
                 KnotDocumentVersion {
@@ -336,7 +574,23 @@ where
     /// [`Self::projection`] so unrelated documents remain available beside an
     /// explicit conflict.
     pub async fn documents(&self, vault: &KnotVault) -> Result<Vec<VaultDocument>, KnotSyncError> {
-        let projection = self.projection(vault).await?;
+        self.documents_with_cipher(KnotSyncCipher::Personal(vault))
+            .await
+    }
+
+    pub async fn communal_documents(
+        &self,
+        keys: &DataKeyring,
+    ) -> Result<Vec<VaultDocument>, KnotSyncError> {
+        self.documents_with_cipher(KnotSyncCipher::CommonsData(keys))
+            .await
+    }
+
+    pub async fn documents_with_cipher(
+        &self,
+        cipher: KnotSyncCipher<'_>,
+    ) -> Result<Vec<VaultDocument>, KnotSyncError> {
+        let projection = self.projection_with_cipher(cipher).await?;
         if let Some(conflict) = projection.conflicts.first() {
             return Err(KnotSyncError::ConcurrentWriter(conflict.id.clone()));
         }
@@ -349,7 +603,23 @@ where
         &self,
         vault: &KnotVault,
     ) -> Result<KnotProjectionCheckpoint, KnotSyncError> {
-        let projection = self.projection(vault).await?;
+        self.save_checkpoint_with_cipher(KnotSyncCipher::Personal(vault))
+            .await
+    }
+
+    pub async fn save_communal_checkpoint(
+        &self,
+        keys: &DataKeyring,
+    ) -> Result<KnotProjectionCheckpoint, KnotSyncError> {
+        self.save_checkpoint_with_cipher(KnotSyncCipher::CommonsData(keys))
+            .await
+    }
+
+    pub async fn save_checkpoint_with_cipher(
+        &self,
+        cipher: KnotSyncCipher<'_>,
+    ) -> Result<KnotProjectionCheckpoint, KnotSyncError> {
+        let projection = self.projection_with_cipher(cipher).await?;
         let records = self.load_operations().await?;
         let mut heads = BTreeMap::<([u8; 32], u64), KnotAuthorHead>::new();
         for record in records {
@@ -515,8 +785,24 @@ fn operation_aad(space_id: [u8; 32], author: &[u8; 32], seq_num: u32) -> Vec<u8>
     aad
 }
 
+fn seal_event(
+    cipher: KnotSyncCipher<'_>,
+    aad: &[u8],
+    plaintext: &[u8],
+) -> Result<Vec<u8>, KnotSyncError> {
+    match cipher {
+        KnotSyncCipher::Personal(vault) => vault
+            .seal_sync_payload(aad, plaintext)
+            .map_err(KnotSyncError::Payload),
+        KnotSyncCipher::CommonsData(keys) => {
+            let envelope = keys.seal_random(plaintext)?;
+            encode_cbor(&envelope).map_err(|error| KnotSyncError::Payload(error.to_string()))
+        }
+    }
+}
+
 fn decode_event(
-    vault: &KnotVault,
+    cipher: KnotSyncCipher<'_>,
     operation: &Operation<KnotSyncExt>,
 ) -> Result<KnotSyncEvent, KnotSyncError> {
     let body = operation
@@ -528,13 +814,69 @@ fn decode_event(
         operation.header.verifying_key.as_bytes(),
         operation.header.seq_num,
     );
-    let plaintext = Zeroizing::new(
-        vault
+    let plaintext = Zeroizing::new(match cipher {
+        KnotSyncCipher::Personal(vault) => vault
             .unseal_sync_payload(&aad, &body.to_bytes())
             .map_err(KnotSyncError::Payload)?,
-    );
+        KnotSyncCipher::CommonsData(keys) => {
+            let envelope: GroupCiphertext = decode_cbor(body.to_bytes().as_slice())
+                .map_err(|error| KnotSyncError::Payload(error.to_string()))?;
+            keys.open(&envelope)?
+        }
+    });
     serde_json::from_slice(plaintext.as_slice())
         .map_err(|error| KnotSyncError::Payload(error.to_string()))
+}
+
+fn validate_resolution(
+    entries: &[CausalEntry<u64>],
+    event_documents: &BTreeMap<[u8; 32], String>,
+    resolution: [u8; 32],
+    id: &str,
+    supersedes: &[[u8; 32]],
+    document: Option<&VaultDocument>,
+) -> Result<BTreeSet<[u8; 32]>, KnotSyncError> {
+    if supersedes.is_empty() {
+        return Err(KnotSyncError::InvalidResolution(
+            "resolution names no document versions".into(),
+        ));
+    }
+    if supersedes.len() > KNOT_CAUSAL_LIMITS.max_parents {
+        return Err(KnotSyncError::InvalidResolution(format!(
+            "resolution names {} versions; maximum is {}",
+            supersedes.len(),
+            KNOT_CAUSAL_LIMITS.max_parents
+        )));
+    }
+    if document.is_some_and(|document| document.id != id) {
+        return Err(KnotSyncError::InvalidResolution(
+            "chosen document id does not match the resolution".into(),
+        ));
+    }
+    let targets: BTreeSet<_> = supersedes.iter().copied().collect();
+    if targets.len() != supersedes.len() {
+        return Err(KnotSyncError::InvalidResolution(
+            "resolution repeats a document version".into(),
+        ));
+    }
+    for target in &targets {
+        let Some(target_id) = event_documents.get(target) else {
+            return Err(KnotSyncError::InvalidResolution(
+                "resolution names an unavailable document version".into(),
+            ));
+        };
+        if target_id != id {
+            return Err(KnotSyncError::InvalidResolution(
+                "resolution names a version of another document".into(),
+            ));
+        }
+        if !happens_before(entries, *target, resolution) {
+            return Err(KnotSyncError::InvalidResolution(
+                "resolution names a version outside its causal history".into(),
+            ));
+        }
+    }
+    Ok(targets)
 }
 
 #[cfg(test)]
@@ -565,6 +907,14 @@ mod tests {
             InMemoryProvider::from_seed([0x83; 32]),
             InMemoryProvider::from_seed([0x84; 32]),
         )
+    }
+
+    fn paired_group_keys() -> (DataKeyring, DataKeyring) {
+        let mut alice = DataKeyring::new();
+        let secret = alice.rotate_random().unwrap();
+        let mut bob = DataKeyring::new();
+        bob.install(secret);
+        (alice, bob)
     }
 
     #[tokio::test]
@@ -605,6 +955,81 @@ mod tests {
             a.documents(&alice_vault).await.unwrap(),
             b.documents(&bob_vault).await.unwrap()
         );
+    }
+
+    #[tokio::test]
+    async fn commons_documents_use_group_epochs_instead_of_personal_vault_keys() {
+        let roots = tempdir().unwrap();
+        let (alice, bob) = identities();
+        let writers = [
+            alice.master_public_key().to_bytes(),
+            bob.master_public_key().to_bytes(),
+        ];
+        let (mut alice_keys, bob_keys) = paired_group_keys();
+        let a = KnotSyncStore::in_memory_commons(SPACE, writers);
+        let b = KnotSyncStore::in_memory_commons(SPACE, writers);
+        let alice_vault = KnotVault::open(roots.path().join("alice"), [0x91; 32]).unwrap();
+        let bob_vault = KnotVault::open(roots.path().join("bob"), [0x92; 32]).unwrap();
+
+        let old = a
+            .author_communal(
+                alice.master_keypair().to_seed(),
+                &alice_keys,
+                &KnotSyncEvent::Put(doc("shared", "before removal")),
+            )
+            .await
+            .unwrap();
+        b.accept(&old).await.unwrap();
+        assert_eq!(
+            a.communal_documents(&alice_keys).await.unwrap(),
+            b.communal_documents(&bob_keys).await.unwrap()
+        );
+        assert!(matches!(
+            a.projection(&alice_vault).await,
+            Err(KnotSyncError::WrongEncryptionProfile)
+        ));
+        assert!(matches!(
+            b.projection(&bob_vault).await,
+            Err(KnotSyncError::WrongEncryptionProfile)
+        ));
+
+        alice_keys.rotate_random().unwrap();
+        let after_removal = a
+            .author_communal(
+                alice.master_keypair().to_seed(),
+                &alice_keys,
+                &KnotSyncEvent::Put(doc("new", "after removal")),
+            )
+            .await
+            .unwrap();
+        assert!(b.accept(&after_removal).await.unwrap());
+        assert!(matches!(
+            b.communal_projection(&bob_keys).await,
+            Err(KnotSyncError::GroupCrypto(GroupCryptoError::UnknownEpoch(
+                _
+            )))
+        ));
+        assert_eq!(a.communal_documents(&alice_keys).await.unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn a_signed_encryption_profile_cannot_replay_into_another_knot_profile() {
+        let roots = tempdir().unwrap();
+        let alice = InMemoryProvider::from_seed([0x83; 32]);
+        let writer = alice.master_public_key().to_bytes();
+        let vault = KnotVault::open(roots.path(), VAULT_KEY).unwrap();
+        let personal = KnotSyncStore::in_memory(SPACE, [writer]);
+        let communal = KnotSyncStore::in_memory_commons(SPACE, [writer]);
+        let operation = personal
+            .author(
+                alice.master_keypair().to_seed(),
+                &vault,
+                &KnotSyncEvent::Put(doc("note", "personal")),
+            )
+            .await
+            .unwrap();
+
+        assert!(communal.accept(&operation).await.is_err());
     }
 
     #[tokio::test]
@@ -650,6 +1075,151 @@ mod tests {
         assert!(matches!(
             store.documents(&vault).await,
             Err(KnotSyncError::ConcurrentWriter(id)) if id == "shared"
+        ));
+    }
+
+    #[tokio::test]
+    async fn an_explicit_resolution_replaces_exact_conflicting_versions() {
+        let roots = tempdir().unwrap();
+        let (alice, bob) = identities();
+        let writers = [
+            alice.master_public_key().to_bytes(),
+            bob.master_public_key().to_bytes(),
+        ];
+        let vault = KnotVault::open(roots.path(), VAULT_KEY).unwrap();
+        let a = KnotSyncStore::in_memory(SPACE, writers);
+        let b = KnotSyncStore::in_memory(SPACE, writers);
+        let alice_op = a
+            .author(
+                alice.master_keypair().to_seed(),
+                &vault,
+                &KnotSyncEvent::Put(doc("shared", "alice")),
+            )
+            .await
+            .unwrap();
+        let bob_op = b
+            .author(
+                bob.master_keypair().to_seed(),
+                &vault,
+                &KnotSyncEvent::Put(doc("shared", "bob")),
+            )
+            .await
+            .unwrap();
+        a.accept(&bob_op).await.unwrap();
+        b.accept(&alice_op).await.unwrap();
+        let conflict = a.projection(&vault).await.unwrap().conflicts.remove(0);
+        let resolution = a
+            .resolve_conflict(
+                alice.master_keypair().to_seed(),
+                &vault,
+                &conflict,
+                Some(doc("shared", "chosen")),
+            )
+            .await
+            .unwrap();
+        b.accept(&resolution).await.unwrap();
+
+        assert_eq!(
+            a.documents(&vault).await.unwrap(),
+            vec![doc("shared", "chosen")]
+        );
+        assert_eq!(
+            a.documents(&vault).await.unwrap(),
+            b.documents(&vault).await.unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn a_resolution_does_not_erase_an_unseen_concurrent_version() {
+        let roots = tempdir().unwrap();
+        let (alice, bob) = identities();
+        let writers = [
+            alice.master_public_key().to_bytes(),
+            bob.master_public_key().to_bytes(),
+        ];
+        let vault = KnotVault::open(roots.path(), VAULT_KEY).unwrap();
+        let a = KnotSyncStore::in_memory(SPACE, writers);
+        let b = KnotSyncStore::in_memory(SPACE, writers);
+        let alice_op = a
+            .author(
+                alice.master_keypair().to_seed(),
+                &vault,
+                &KnotSyncEvent::Put(doc("shared", "alice")),
+            )
+            .await
+            .unwrap();
+        let local = KnotDocumentConflict {
+            id: "shared".into(),
+            versions: vec![KnotDocumentVersion {
+                writer: alice.master_public_key().to_bytes(),
+                operation: *alice_op.hash.as_bytes(),
+                document: Some(doc("shared", "alice")),
+            }],
+        };
+        a.resolve_conflict(
+            alice.master_keypair().to_seed(),
+            &vault,
+            &local,
+            Some(doc("shared", "alice resolved")),
+        )
+        .await
+        .unwrap();
+        let bob_op = b
+            .author(
+                bob.master_keypair().to_seed(),
+                &vault,
+                &KnotSyncEvent::Put(doc("shared", "bob unseen")),
+            )
+            .await
+            .unwrap();
+        a.accept(&bob_op).await.unwrap();
+
+        let projection = a.projection(&vault).await.unwrap();
+        assert_eq!(projection.conflicts.len(), 1);
+        assert_eq!(projection.conflicts[0].versions.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn a_resolution_cannot_name_a_version_outside_its_causal_history() {
+        let roots = tempdir().unwrap();
+        let (alice, bob) = identities();
+        let writers = [
+            alice.master_public_key().to_bytes(),
+            bob.master_public_key().to_bytes(),
+        ];
+        let vault = KnotVault::open(roots.path(), VAULT_KEY).unwrap();
+        let a = KnotSyncStore::in_memory(SPACE, writers);
+        let b = KnotSyncStore::in_memory(SPACE, writers);
+        let alice_op = a
+            .author(
+                alice.master_keypair().to_seed(),
+                &vault,
+                &KnotSyncEvent::Put(doc("shared", "alice")),
+            )
+            .await
+            .unwrap();
+        let forged_conflict = KnotDocumentConflict {
+            id: "shared".into(),
+            versions: vec![KnotDocumentVersion {
+                writer: alice.master_public_key().to_bytes(),
+                operation: *alice_op.hash.as_bytes(),
+                document: Some(doc("shared", "alice")),
+            }],
+        };
+        let forged_resolution = b
+            .resolve_conflict(
+                bob.master_keypair().to_seed(),
+                &vault,
+                &forged_conflict,
+                Some(doc("shared", "forged")),
+            )
+            .await
+            .unwrap();
+        a.accept(&forged_resolution).await.unwrap();
+
+        assert!(matches!(
+            a.projection(&vault).await,
+            Err(KnotSyncError::InvalidResolution(_))
         ));
     }
 

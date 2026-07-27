@@ -261,9 +261,9 @@ Done-conditions, not dates.
     binds its signer, and typed Servitor authority reclassifies it as
     effective, pending, or revoked during materialization.
 - **M4. Write the limit down. DONE 2026-07-27**, in section 5 below. The
-  commons profile has no document yet, so the stated behavior lives here and
-  the [commons brief](../research/2026-07-24_shared_engram_commons_brief.md)
-  points at it; fold it into the profile when that document exists.
+  [Commons profile](../design/2026-07-27_commons_profile_v1.md) now carries
+  the user-visible merge, missing-history, limit, and durability contract.
+  Section 5 remains the convergence decision's local rationale.
 
 ## 5. Stated behavior, for the commons profile
 

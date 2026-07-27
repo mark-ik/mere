@@ -6,17 +6,21 @@
 
 #[cfg(not(target_arch = "wasm32"))]
 mod native {
+    use std::collections::VecDeque;
     use std::ffi::OsStr;
     use std::fmt::Display;
     use std::io::{self, BufRead, BufReader, BufWriter, Read, Write};
     use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+    use std::sync::mpsc;
+    use std::time::Duration;
 
     use graphshell_endpoint::{
-        IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource,
-        ResumableProjectionSource,
+        IntentSink, PresentationSource, ProjectionCatalog, ProjectionNoticeSource,
+        ProjectionSource, ResumableProjectionSource,
     };
     use graphshell_protocol::{
-        CarrierFailure, CarrierRequest, CarrierRequestBody, CarrierResponse, CarrierResponseBody,
+        CarrierFailure, CarrierNotice, CarrierOutput, CarrierRequest, CarrierRequestBody,
+        CarrierResponse, CarrierResponseBody,
     };
 
     /// Serve discovery, snapshots, resources, and intents until the input
@@ -55,6 +59,82 @@ mod native {
         })
     }
 
+    /// Serve resume plus endpoint-initiated revision notices.
+    ///
+    /// Input framing is read on a helper thread so a quiet client cannot
+    /// prevent the endpoint from polling its native watcher. Only this
+    /// function writes stdout, preserving line-atomic response/notice frames.
+    pub fn serve_resumable_notifying<E, R, W>(
+        endpoint: &mut E,
+        reader: R,
+        writer: W,
+        poll_interval: Duration,
+    ) -> io::Result<()>
+    where
+        E: ProjectionCatalog
+            + ProjectionSource
+            + PresentationSource
+            + IntentSink
+            + ResumableProjectionSource
+            + ProjectionNoticeSource,
+        <E as ProjectionSource>::Error: Display,
+        <E as PresentationSource>::Error: Display,
+        <E as IntentSink>::Error: Display,
+        <E as ResumableProjectionSource>::Error: Display,
+        <E as ProjectionNoticeSource>::Error: Display,
+        R: Read + Send + 'static,
+        W: Write,
+    {
+        let (send, receive) = mpsc::sync_channel(1);
+        std::thread::spawn(move || {
+            for line in BufReader::new(reader).lines() {
+                if send.send(line).is_err() {
+                    return;
+                }
+            }
+        });
+        let mut writer = BufWriter::new(writer);
+        let mut resume =
+            |endpoint: &mut E, request| endpoint.resume(request).map_err(|error| error.to_string());
+        loop {
+            match receive.recv_timeout(poll_interval) {
+                Ok(Ok(line)) => {
+                    if line.trim().is_empty() {
+                        continue;
+                    }
+                    let request = match parse_request(&line) {
+                        Ok(request) => request,
+                        Err(response) => {
+                            write_response(&mut writer, &response)?;
+                            continue;
+                        }
+                    };
+                    let (response, close) = dispatch(endpoint, request, &mut resume);
+                    write_response(&mut writer, &response)?;
+                    if close {
+                        return Ok(());
+                    }
+                    if let Some(notice) = endpoint
+                        .poll_notice()
+                        .map_err(|error| io::Error::other(error.to_string()))?
+                    {
+                        write_notice(&mut writer, &notice)?;
+                    }
+                }
+                Ok(Err(error)) => return Err(error),
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    if let Some(notice) = endpoint
+                        .poll_notice()
+                        .map_err(|error| io::Error::other(error.to_string()))?
+                    {
+                        write_notice(&mut writer, &notice)?;
+                    }
+                }
+                Err(mpsc::RecvTimeoutError::Disconnected) => return Ok(()),
+            }
+        }
+    }
+
     fn serve_with<E, R, W, F>(
         endpoint: &mut E,
         reader: R,
@@ -80,87 +160,103 @@ mod native {
             if line.trim().is_empty() {
                 continue;
             }
-            let request: CarrierRequest = match serde_json::from_str(&line) {
+            let request = match parse_request(&line) {
                 Ok(request) => request,
-                Err(error) => {
-                    write_response(
-                        &mut writer,
-                        &CarrierResponse {
-                            id: 0,
-                            body: Err(CarrierFailure {
-                                message: format!("invalid carrier request: {error}"),
-                            }),
-                        },
-                    )?;
+                Err(response) => {
+                    write_response(&mut writer, &response)?;
                     continue;
                 }
             };
-            let id = request.id;
-            let body = match request.body {
-                CarrierRequestBody::Discover => {
-                    Ok(CarrierResponseBody::Descriptor(endpoint.describe()))
-                }
-                CarrierRequestBody::Snapshot(request) => endpoint
-                    .snapshot(request)
-                    .map(|snapshot| CarrierResponseBody::Snapshot(Box::new(snapshot)))
-                    .map_err(|error| error.to_string()),
-                CarrierRequestBody::Resource(request) => endpoint
-                    .resource(request)
-                    .map(CarrierResponseBody::Resource)
-                    .map_err(|error| error.to_string()),
-                CarrierRequestBody::Resume(request) => {
-                    resume(endpoint, request).map(CarrierResponseBody::Resume)
-                }
-                CarrierRequestBody::Intent(intent) => endpoint
-                    .invoke(intent)
-                    .map(CarrierResponseBody::Intent)
-                    .map_err(|error| error.to_string()),
-                // stdio cannot authenticate a peer: the far end is a
-                // subprocess of the same user, reached over inherited pipes,
-                // with no key exchange anywhere in the profile. So it REFUSES
-                // to open rather than answering `Opened` — a carrier that
-                // cannot verify a principal must not reply as though it had,
-                // or every client above it inherits a false belief. The
-                // authenticated open lands with the full-peer carrier (G5d),
-                // and every other request stays well-formed without one.
-                CarrierRequestBody::Open(_) => Err(
-                    "the stdio carrier does not authenticate; `open` requires a carrier                      that proves its peer"
-                        .to_string(),
-                ),
-                // Close is honest here: end the session by leaving the loop
-                // after the reply is written.
-                CarrierRequestBody::Close => {
-                    write_response(
-                        &mut writer,
-                        &CarrierResponse {
-                            id,
-                            body: Ok(CarrierResponseBody::Closed),
-                        },
-                    )?;
-                    return Ok(());
-                }
-                // Suspend promises the session survives to be resumed. Over
-                // stdio the session IS the process and its pipes, so nothing
-                // would survive; saying `Suspended` would be a promise this
-                // profile cannot keep.
-                CarrierRequestBody::Suspend => Err(
-                    "the stdio carrier has no session that outlives its process;                      `suspend` requires a carrier that can reconnect"
-                        .to_string(),
-                ),
-            };
-            write_response(
-                &mut writer,
-                &CarrierResponse {
-                    id,
-                    body: body.map_err(|message| CarrierFailure { message }),
-                },
-            )?;
+            let (response, close) = dispatch(endpoint, request, &mut resume);
+            write_response(&mut writer, &response)?;
+            if close {
+                return Ok(());
+            }
         }
         Ok(())
     }
 
+    fn parse_request(line: &str) -> Result<CarrierRequest, CarrierResponse> {
+        serde_json::from_str(line).map_err(|error| CarrierResponse {
+            id: 0,
+            body: Err(CarrierFailure {
+                message: format!("invalid carrier request: {error}"),
+            }),
+        })
+    }
+
+    fn dispatch<E, F>(
+        endpoint: &mut E,
+        request: CarrierRequest,
+        resume: &mut F,
+    ) -> (CarrierResponse, bool)
+    where
+        E: ProjectionCatalog + ProjectionSource + PresentationSource + IntentSink,
+        <E as ProjectionSource>::Error: Display,
+        <E as PresentationSource>::Error: Display,
+        <E as IntentSink>::Error: Display,
+        F: FnMut(
+            &mut E,
+            graphshell_protocol::ResumeRequest,
+        ) -> Result<graphshell_protocol::ResumeReply, String>,
+    {
+        let id = request.id;
+        let mut close = false;
+        let body = match request.body {
+            CarrierRequestBody::Discover => {
+                Ok(CarrierResponseBody::Descriptor(endpoint.describe()))
+            }
+            CarrierRequestBody::Snapshot(request) => endpoint
+                .snapshot(request)
+                .map(|snapshot| CarrierResponseBody::Snapshot(Box::new(snapshot)))
+                .map_err(|error| error.to_string()),
+            CarrierRequestBody::Resource(request) => endpoint
+                .resource(request)
+                .map(CarrierResponseBody::Resource)
+                .map_err(|error| error.to_string()),
+            CarrierRequestBody::Resume(request) => {
+                resume(endpoint, request).map(CarrierResponseBody::Resume)
+            }
+            CarrierRequestBody::Intent(intent) => endpoint
+                .invoke(intent)
+                .map(CarrierResponseBody::Intent)
+                .map_err(|error| error.to_string()),
+            // Inherited pipes perform no key exchange, so stdio cannot make
+            // an authenticated session claim.
+            CarrierRequestBody::Open(_) => Err(
+                "the stdio carrier does not authenticate; `open` requires a carrier that proves its peer"
+                    .to_string(),
+            ),
+            // Closing this process-scoped session is honest and terminal.
+            CarrierRequestBody::Close => {
+                close = true;
+                Ok(CarrierResponseBody::Closed)
+            }
+            // No stdio session survives the endpoint process.
+            CarrierRequestBody::Suspend => Err(
+                "the stdio carrier has no session that outlives its process; `suspend` requires a carrier that can reconnect"
+                    .to_string(),
+            ),
+        };
+        (
+            CarrierResponse {
+                id,
+                body: body.map_err(|message| CarrierFailure { message }),
+            },
+            close,
+        )
+    }
+
     fn write_response(writer: &mut impl Write, response: &CarrierResponse) -> io::Result<()> {
-        serde_json::to_writer(&mut *writer, response).map_err(io::Error::other)?;
+        serde_json::to_writer(&mut *writer, &CarrierOutput::Response(response.clone()))
+            .map_err(io::Error::other)?;
+        writer.write_all(b"\n")?;
+        writer.flush()
+    }
+
+    fn write_notice(writer: &mut impl Write, notice: &CarrierNotice) -> io::Result<()> {
+        serde_json::to_writer(&mut *writer, &CarrierOutput::Notice(notice.clone()))
+            .map_err(io::Error::other)?;
         writer.write_all(b"\n")?;
         writer.flush()
     }
@@ -170,6 +266,7 @@ mod native {
         child: Child,
         input: Option<BufWriter<ChildStdin>>,
         output: BufReader<ChildStdout>,
+        notices: VecDeque<CarrierNotice>,
         next_id: u64,
     }
 
@@ -196,6 +293,7 @@ mod native {
                 child,
                 input: Some(BufWriter::new(input)),
                 output: BufReader::new(output),
+                notices: VecDeque::new(),
                 next_id: 1,
             })
         }
@@ -214,22 +312,50 @@ mod native {
                 .write_all(b"\n")
                 .and_then(|()| input.flush())
                 .map_err(|error| format!("could not send carrier request: {error}"))?;
+            loop {
+                match self.read_output()? {
+                    CarrierOutput::Notice(notice) => self.notices.push_back(notice),
+                    CarrierOutput::Response(response) => {
+                        if response.id != id {
+                            return Err(format!(
+                                "carrier response id {} did not match request {id}",
+                                response.id
+                            ));
+                        }
+                        return response.body.map_err(|failure| failure.message);
+                    }
+                }
+            }
+        }
+
+        /// Return a notice already encountered while waiting for a response.
+        pub fn take_notice(&mut self) -> Option<CarrierNotice> {
+            self.notices.pop_front()
+        }
+
+        /// Wait for the endpoint's next revision bell.
+        pub fn wait_for_notice(&mut self) -> Result<CarrierNotice, String> {
+            if let Some(notice) = self.take_notice() {
+                return Ok(notice);
+            }
+            match self.read_output()? {
+                CarrierOutput::Notice(notice) => Ok(notice),
+                CarrierOutput::Response(response) => Err(format!(
+                    "endpoint sent unexpected response {} while Graphshell waited for a notice",
+                    response.id
+                )),
+            }
+        }
+
+        fn read_output(&mut self) -> Result<CarrierOutput, String> {
             let mut line = String::new();
             self.output
                 .read_line(&mut line)
-                .map_err(|error| format!("could not read carrier response: {error}"))?;
+                .map_err(|error| format!("could not read carrier output: {error}"))?;
             if line.is_empty() {
-                return Err("endpoint closed without a response".into());
+                return Err("endpoint closed without an output frame".into());
             }
-            let response: CarrierResponse = serde_json::from_str(&line)
-                .map_err(|error| format!("invalid carrier response: {error}"))?;
-            if response.id != id {
-                return Err(format!(
-                    "carrier response id {} did not match request {id}",
-                    response.id
-                ));
-            }
-            response.body.map_err(|failure| failure.message)
+            serde_json::from_str(&line).map_err(|error| format!("invalid carrier output: {error}"))
         }
 
         pub fn shutdown(mut self) -> io::Result<()> {
@@ -255,26 +381,29 @@ mod native {
     #[cfg(test)]
     mod tests {
         use std::collections::BTreeMap;
-        use std::io::Cursor;
+        use std::io::{Cursor, Read};
+        use std::time::Duration;
 
         use graphshell_endpoint::{
-            IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource,
+            IntentSink, PresentationSource, ProjectionCatalog, ProjectionNoticeSource,
+            ProjectionSource, ResumableProjectionSource,
         };
         use graphshell_protocol::{
-            CachePolicy, CarrierRequest, CarrierRequestBody, CarrierResponse, CarrierResponseBody,
-            CapabilityProfile, EndpointDescriptor, IntentInvocation, IntentResult, ProjectionOffer,
-            ProjectionRequest, SessionOpen,
+            CachePolicy, CapabilityProfile, CarrierNotice, CarrierOutput, CarrierRequest,
+            CarrierRequestBody, CarrierResponse, CarrierResponseBody, EndpointDescriptor,
+            IntentInvocation, IntentResult, ProjectionAck, ProjectionOffer, ProjectionRequest,
             ProjectionSession, ProjectionSnapshot, ProtocolVersion, ResourceRequest,
-            ResourceResponse,
+            ResourceResponse, ResumeReply, ResumeRequest, SessionOpen,
         };
         use sceno::{Arrangement, Scene, Score, Spiral};
         use scenotime::{Revision, SceneEpoch, SceneSnapshot};
 
-        use super::serve_basic;
+        use super::{serve_basic, serve_resumable_notifying};
 
         struct Fixture {
             session: ProjectionSession,
             resources: BTreeMap<graphshell_protocol::ContentHash, Vec<u8>>,
+            notice: Option<CarrierNotice>,
         }
 
         impl ProjectionCatalog for Fixture {
@@ -338,16 +467,42 @@ mod native {
             }
         }
 
+        impl ResumableProjectionSource for Fixture {
+            type Error = String;
+
+            fn resume(&mut self, request: ResumeRequest) -> Result<ResumeReply, Self::Error> {
+                Ok(ResumeReply::Current(ProjectionAck {
+                    session: request.session,
+                    epoch: request.epoch,
+                    revision: request.revision,
+                }))
+            }
+        }
+
+        impl ProjectionNoticeSource for Fixture {
+            type Error = String;
+
+            fn poll_notice(&mut self) -> Result<Option<CarrierNotice>, Self::Error> {
+                Ok(self.notice.take())
+            }
+        }
+
         /// Drive `serve_basic` over a list of requests and return the replies.
         fn exchange(requests: &[CarrierRequest]) -> Vec<CarrierResponse> {
             let mut fixture = Fixture {
                 session: ProjectionSession("fixture:scene".into()),
                 resources: BTreeMap::new(),
+                notice: None,
             };
             let input: String = requests
                 .iter()
-                .map(|request| format!("{}
-", serde_json::to_string(request).unwrap()))
+                .map(|request| {
+                    format!(
+                        "{}
+",
+                        serde_json::to_string(request).unwrap()
+                    )
+                })
                 .collect();
             let mut output = Vec::new();
             serve_basic(&mut fixture, Cursor::new(input), &mut output).unwrap();
@@ -424,6 +579,7 @@ mod native {
             let mut fixture = Fixture {
                 session: session.clone(),
                 resources: BTreeMap::new(),
+                notice: None,
             };
             let discover = CarrierRequest {
                 id: 1,
@@ -457,6 +613,44 @@ mod native {
                 responses[1].body,
                 Ok(CarrierResponseBody::Snapshot(_))
             ));
+        }
+
+        #[test]
+        fn notifying_server_emits_a_payload_free_frame_while_input_is_quiet() {
+            struct DelayedEof;
+
+            impl Read for DelayedEof {
+                fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+                    std::thread::sleep(Duration::from_millis(30));
+                    Ok(0)
+                }
+            }
+
+            let notice = CarrierNotice {
+                session: ProjectionSession("fixture:scene".into()),
+                epoch: SceneEpoch(1),
+                revision: Revision(2),
+            };
+            let mut fixture = Fixture {
+                session: notice.session.clone(),
+                resources: BTreeMap::new(),
+                notice: Some(notice.clone()),
+            };
+            let mut output = Vec::new();
+            serve_resumable_notifying(
+                &mut fixture,
+                DelayedEof,
+                &mut output,
+                Duration::from_millis(5),
+            )
+            .unwrap();
+
+            let frames: Vec<CarrierOutput> = String::from_utf8(output)
+                .unwrap()
+                .lines()
+                .map(|line| serde_json::from_str(line).unwrap())
+                .collect();
+            assert_eq!(frames, vec![CarrierOutput::Notice(notice)]);
         }
     }
 }

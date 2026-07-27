@@ -19,7 +19,8 @@ pub struct ProtocolVersion {
 }
 
 impl ProtocolVersion {
-    pub const V1: Self = Self { major: 1, minor: 0 };
+    /// Protocol 1.1 adds the payload-free carrier revision notice.
+    pub const V1: Self = Self { major: 1, minor: 1 };
 }
 
 /// An endpoint-scoped projection session. It is opaque to Graphshell clients.
@@ -471,10 +472,45 @@ pub struct CarrierResponse {
     pub body: Result<CarrierResponseBody, CarrierFailure>,
 }
 
+/// Payload-free signal that a mounted projection has advanced.
+///
+/// The host still resumes from its own last acknowledgement before receiving
+/// any scene or presentation data.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CarrierNotice {
+    pub session: ProjectionSession,
+    pub epoch: SceneEpoch,
+    pub revision: Revision,
+}
+
+/// One line emitted by a carrier endpoint.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum CarrierOutput {
+    Response(CarrierResponse),
+    Notice(CarrierNotice),
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use sceno::{Arrangement, Scene, Spiral};
+
+    #[test]
+    fn a_revision_notice_is_distinct_from_a_keyed_response() {
+        let notice = CarrierNotice {
+            session: ProjectionSession("knot:directory".into()),
+            epoch: SceneEpoch(1),
+            revision: Revision(7),
+        };
+        let wire = serde_json::to_string(&CarrierOutput::Notice(notice.clone())).unwrap();
+        assert_eq!(
+            serde_json::from_str::<CarrierOutput>(&wire).unwrap(),
+            CarrierOutput::Notice(notice)
+        );
+        assert!(!wire.contains("\"id\""));
+        assert!(!wire.contains("scene"));
+    }
 
     #[test]
     fn an_open_negotiates_capabilities_and_carries_no_principal() {

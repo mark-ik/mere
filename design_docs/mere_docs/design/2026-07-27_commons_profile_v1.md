@@ -55,6 +55,11 @@ Application bytes are encrypted first. The p2panda header then signs the
 ciphertext, its space address, content class, causal parents, author sequence,
 and backlink.
 
+Knot signs `PersonalVaultV1` or `CommonsDataV1` into its addressing extension.
+The Commons knowledge profile requires `CommonsDataV1`; admission rejects an
+operation signed for the personal-vault profile. Personal vault roots are not
+shared merely because two members share a document epoch.
+
 ## Content classes
 
 The first chat vocabulary is:
@@ -69,8 +74,10 @@ they are not rewritten or declared wire-equivalent.
 
 Knot contributes `knot.file` and `knot.note`. Concurrent writers touching one
 document produce a visible `KnotDocumentConflict` with one current version per
-writer. Unrelated documents remain available. Resolution and text merge stay
-Knot-owned.
+writer. Unrelated documents remain available. A Knot `Resolve` event names the
+exact causal operation ids it replaces and carries the chosen document or
+deletion. It cannot erase an unseen concurrent version. Automatic text merge
+stays Knot-owned.
 
 ## Merge and incomplete history
 

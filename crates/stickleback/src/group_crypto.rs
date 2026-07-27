@@ -86,6 +86,11 @@ impl DataKeyring {
         Ok(secret)
     }
 
+    /// Rotate with the engine's operating-system-backed randomness source.
+    pub fn rotate_random(&mut self) -> Result<GroupSecret, GroupCryptoError> {
+        self.rotate(&Rng::default())
+    }
+
     /// Install an epoch recovered from an authenticated welcome or control
     /// message.
     pub fn install(&mut self, secret: GroupSecret) {
@@ -122,6 +127,14 @@ impl DataKeyring {
             nonce,
             ciphertext,
         })
+    }
+
+    /// Seal with the engine's operating-system-backed randomness source.
+    ///
+    /// Domain crates use this convenience when they do not otherwise need to
+    /// depend on the quarantined p2panda encryption engine.
+    pub fn seal_random(&self, plaintext: &[u8]) -> Result<GroupCiphertext, GroupCryptoError> {
+        self.seal(plaintext, &Rng::default())
     }
 
     pub fn open(&self, envelope: &GroupCiphertext) -> Result<Vec<u8>, GroupCryptoError> {

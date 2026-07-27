@@ -4,11 +4,13 @@
 **Status:** implementation complete locally 2026-07-27. K0 through K7 are
 executable. Knot has now pulled Stickleback's causal projection seam:
 concurrent writers for one document are reported as a visible conflict while
-unrelated documents remain available. Group keys gate a
-communal multi-member Knot, not the personal multi-device vault. K7 also
-depends on the completed Cambium text primitive still present as uncommitted
-Genet workspace changes; that slice must land on Genet `main` before a clean
-remote Mere checkout can reproduce the local K7 build.
+unrelated documents remain available, and an explicit resolution names the
+exact causal versions it replaces. Personal vault sync and communal
+multi-member Knot are separate signed encryption profiles; communal documents
+use retained Commons data-key epochs. Graphshell protocol 1.1 now carries the
+payload-free revision bell Knot's native watcher needed. K7's Cambium text
+primitive is committed on local Genet `main` at `44e291afe8b`; publishing that
+commit remains the clean remote-checkout gate.
 
 **Companions:** genet's
 [pelt and knot direction](https://github.com/mark-ik/genet/blob/main/docs/2026-07-24_pelt_knot_direction.md)
@@ -134,16 +136,19 @@ vault inside the app rather than merely a cheaper one.
   separately. Its compatibility `documents()` call still returns
   `ConcurrentWriter`; new consumers use the lossless projection. Knot also
   persists a document-digest/author-frontier checkpoint and names the retained
-  tail before pruning. Group keys separately gate communal multi-member Knot;
-  the personal multi-device vault already shares a seal key.
+  tail before pruning. A `Resolve` event can replace only named causal
+  versions; it cannot erase an unseen concurrent edit. Communal Knot uses
+  Stickleback's retained Commons data epochs, while the personal multi-device
+  profile keeps its vault-derived seal key.
 - ~~**Livery is the declared long pole.**~~ **Cleared 2026-07-27.** The Genet
   workspace build is green. Knot's remaining work is its own storage,
   authority, writer, and integration ladder.
 
 ## 5. Sequence
 
-Done-conditions, not dates. Every rung is complete locally. Same-document
-merge remains a visible Knot-owned product decision rather than a hidden
+Done-conditions, not dates. Every rung is complete locally. Automatic
+same-document text merge remains a Knot-owned product decision; the log now
+has an explicit, causal resolution operation instead of a hidden
 whole-document tiebreak.
 
 - **K0. Port scaffold. Complete locally 2026-07-27.** `ports/knot` is a
@@ -190,10 +195,14 @@ whole-document tiebreak.
 - **K5. Sync. Complete locally 2026-07-27.** Knot supplies its own encrypted
   event grammar, admitted-device policy, store, and Stickleback `accept`
   closure. Two memory-backed instances converge through that seam, then two
-  real p2panda peers reconcile independently authored logs. A second writer
-  touching the same document returns `ConcurrentWriter`; the port keeps that
-  refusal until it explicitly pulls the commons causal materializer rather
-  than silently discarding text through whole-document last-writer-wins.
+  real p2panda peers reconcile independently authored logs. The lossless fold
+  exposes same-document conflicts without hiding unrelated documents.
+  Resolution names exact causal operation ids, and adversarial tests prove it
+  neither erases an unseen concurrent version nor accepts a target outside its
+  history. The signed `PersonalVaultV1` and `CommonsDataV1` profiles prevent
+  cross-profile replay. Separate personal vault keys can read communal
+  documents through a shared group epoch, while a removed member cannot read
+  an operation sealed after rotation.
 - **K6. Writers. Complete locally 2026-07-27.** Per-format serializers render
   to `.knot`, `.md`, `.djot`, or `.json`. Untouched files never enter the
   write path. Tests prove foreign-format fixed points, byte-exact canonical
@@ -203,23 +212,20 @@ whole-document tiebreak.
   byte-plus-affinity layout selections, and keeps `KnotReadout` derived for
   highlights, outline, folds, and preview. IME preedit stays outside committed
   source, undo restores every readout, and committed source writes through to
-  `.knot`. Reproducibility still waits on the corresponding uncommitted Genet
-  primitive slice reaching `main`.
+  `.knot`. The corresponding Genet primitive is committed locally at
+  `44e291afe8b`; remote reproducibility waits only on publishing it.
 
-**Carrier note.** The stdio carrier is pull-only: every frame is
-host-initiated (`CarrierRequestBody` is Discover, Snapshot, Resource, Resume,
-Intent) and every response is keyed to a request id, so an endpoint cannot
-volunteer a diff. K1 therefore ships on revision-addressed resume polling,
-which G2 already made cheap. The destination, proposed 2026-07-25, is a
-revision bell: one endpoint-initiated frame, `CarrierNotice { session, epoch,
-revision }`, carrying no scene payload; the host marks the mounted scene
-stale and re-resumes. Disclosure authorization is untouched, since content
-still flows only through `ProjectionSource` on request, and the leak surface
-is "something changed" alone. Additive, minor protocol version bump; the
-endpoint writer needs line-atomic interleaving between responses. A held-open
-watch request was considered and rejected: the serial serve loop would
-head-of-line block intents behind it. Recorded here because knot forces the
-need; the change itself is graphshell-protocol work.
+**Carrier note.** Graphshell protocol 1.1 adds the revision bell:
+`CarrierNotice { session, epoch, revision }`. It carries no scene payload.
+The notifying stdio server reads requests on a helper thread so quiet input
+does not block watcher polls, while one writer keeps notices and keyed
+responses line-atomic. `StdioCarrier` separates the two frame shapes;
+Graphshell marks the mounted scene stale and resumes from its own last
+acknowledgement. Disclosure authorization is unchanged because content still
+flows only through `ProjectionSource` on request. A real-process receipt edits
+a mounted Knot directory, receives one bell, resumes, and receives the newer
+snapshot. The rejected held-open watch request remains rejected because it
+would head-of-line block other session work.
 
 ## 6. Non-goals
 
@@ -262,3 +268,9 @@ the same users.
   check -p knot --all-targets` pass. The independent G4 receipt still mounts
   four sessions from Turnstone, Isometry, and Knot and regenerates at
   `28459BF5591CFB67CCCAD09BF5D2AFCD1F829FADE644C724F1E4DEBC6A076E60`.
+- **2026-07-27, closure pass.** The Genet text primitive landed locally at
+  `44e291afe8b`. Knot gained signed personal/Commons encryption profiles,
+  retained group data epochs, and explicit causal resolution. Graphshell
+  protocol 1.1 gained the revision bell and the stdio/host recovery path.
+  Focused library suites pass 39 Graphshell, 9 protocol, 5 stdio, and 36 Knot
+  tests; the separate real-process Knot bell/resume test also passes.
