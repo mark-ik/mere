@@ -4,38 +4,25 @@ Mere is the library behind a graph-first browser. Your history and content becom
 nodes in a spatial graph: html pages, gemini capsules, local media, and notes sit
 side by side in one canvas, joined by user-made and inferred relationships. Mere
 composes that world (graph truth, arrangement, persistence, retrieval, identity,
-comms) and hands it to a host; the reference host that renders it is
-[turnstone](https://github.com/mark-ik/turnstone). The graph (the *orrery*) is the
-root surface; tiles, panes, and content cards are projections of it.
+comms) and hands it to a host. [Graphshell](ports/graphshell/) is the reference
+graph host and portal; [turnstone](https://github.com/mark-ik/turnstone) is the
+separate browser host. The graph (the *orrery*) is the root surface; tiles,
+panes, and content cards are projections of it.
 
 <p align="center">
-  <img src="assets/media/mere-demo.gif" alt="The orrery as a live force-directed graph, nodes settling under physics" width="900"><br>
-  <sub>The orrery is a live force-directed graph; nodes settle under physics as you browse.</sub>
+  <img src="assets/screenshots/graphshell-browser-wide.png" alt="Graphshell showing a local Mere graph and the selected object's action surface" width="900"><br>
+  <sub>Graphshell, Mere's reference host: a local graph, selected object, and its advertised action.</sub>
 </p>
-
-<table>
-  <tr>
-    <td width="50%">
-      <img src="assets/media/demo-1.gif" alt="Switching the orrery between layout strategies"><br>
-      <sub>Switch the orrery between layout strategies: force-directed, grid, Penrose, L-system, kanban, timeline.</sub>
-    </td>
-    <td width="50%">
-      <img src="assets/media/demo-2.gif" alt="Recoloring the shell with palette and color-harmony controls"><br>
-      <sub>Recolor the whole shell with palette and live color-harmony controls.</sub>
-    </td>
-  </tr>
-</table>
 
 This repository is a Cargo workspace of 55 member crates organized by concern.
 (That count is the `[workspace] members` list; the `probes` directory in
 `[workspace.exclude]` is not a member and is not counted.)
-Mere is a library workspace. The reference on-screen host is **turnstone**, a
-separate repository (`mark-ik/turnstone`) that composes these crates into a
-window; it obviated the former in-repo `meerkat` host, removed 2026-07-18.
-Mere keeps a launchable `canvas` bin for developing the graph view on its own.
-This is pre-release, AI-assisted development; many crates are partially
-implemented and some capabilities exist in code but are not yet wired into a
-host.
+Mere is a library workspace. **Graphshell** (`ports/graphshell`) is the
+reference graph host and portal, owning a local Mere graph and mounting
+disclosed projections. **Turnstone** is the separate browser host. Mere keeps a
+launchable `canvas` bin for developing the graph view on its own. This is
+pre-release, AI-assisted development; many crates are partially implemented and
+some capabilities exist in code but are not yet wired into a host.
 
 **Made with AI**
 
@@ -77,28 +64,10 @@ Up and down the stack, this pattern repeats:
 
 ## Screenshots
 
-<table>
-  <tr>
-    <td width="50%">
-      <img src="assets/screenshots/graph-and-page.png" alt="The orrery graph on the left, a web page rendered in a tile on the right"><br>
-      <sub>Graph and page side by side: the orrery on the left, an HTML node rendered as a tile on the right.</sub>
-    </td>
-    <td width="50%">
-      <img src="assets/screenshots/welcome.png" alt="The welcome card open beside the graph that builds up as you browse"><br>
-      <sub>Open Mere on the welcome card; your graph builds up behind it as you browse.</sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <img src="assets/screenshots/layouts.png" alt="The orrery settings panel listing deterministic layout strategies"><br>
-      <sub>Arrange the orrery with deterministic layouts: force-directed, grid, Penrose, L-system, kanban by site, timeline by order.</sub>
-    </td>
-    <td width="50%">
-      <img src="assets/screenshots/theming.png" alt="Appearance settings with a palette picker and color-harmony controls"><br>
-      <sub>Theme the whole shell. Pick a palette or build your own with color-harmony controls (here, Sunset).</sub>
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <img src="assets/screenshots/graphshell-local-product.png" alt="Graphshell local graph product with address, filtering, arrangement, scene, and transfer controls" width="900"><br>
+  <sub>Graphshell's local graph product: create and arrange addressed objects, save a scene, and transfer a selected subgraph.</sub>
+</p>
 
 ## Toolchain
 
@@ -128,9 +97,9 @@ cargo test
 cargo test -p kernel
 ```
 
-The on-screen host, `turnstone`, lives in the sibling `mark-ik/turnstone`
-repository (it pulls `mere` as a git dependency); run it from there with
-`cargo run`.
+Run the reference host with `cargo run -p graphshell`. Turnstone, the separate
+browser host, lives in the sibling `mark-ik/turnstone` repository and pulls
+`mere` as a git dependency; run it there with `cargo run`.
 
 The workspace's runnable hosts live under `ports/`. Development binaries that
 exercise a reusable crate may remain beside that crate:
@@ -139,9 +108,9 @@ exercise a reusable crate may remain beside that crate:
   field-canvas, launchable on its own for development and testing. `turnstone`
   hosts the same canvas as its root surface. Likely also the seed of a thin
   wasm client for browser-extension targets.
-- `graphshell` (`ports/graphshell`): Mere's reference remote projection client.
-  It composes the reusable Graphshell session stack into acceptance views and,
-  as the host grows, the canonical runnable shell.
+- `graphshell` (`ports/graphshell`): Mere's reference graph host and remote
+  projection client. It composes a local graph, reusable Graphshell session
+  stack, and acceptance views into the canonical runnable shell.
 
 ## Workspace layout
 
@@ -159,7 +128,7 @@ directory path disambiguates (for example the graph kernel's package name is
 | `crates/graph` | `kernel`, `glossary`, `graphlets`, `linked-data` | Graph truth: the identity/authority/mutation kernel, the term glossary, graphlet subgraphs, and the RDF/JSON-LD ingest-export + SPARQL bridge |
 | `crates/incipit` | `incipit` | Core identity vocabulary: `GraphId`, `SessionId`, and the id/session primitives shared across the stack |
 | `crates/domain` | `apparatus`, `gloss`, `roster`, `trail` | The mere-domain UX panels: facet apparatus, gloss navigator, node roster, and navigation trail |
-| `crates/shell` | `chrome`, `comms` | Host-neutral domain models: chrome view-models and the comms pane model. The pane/split-tree model (`frisket`) moved to `turnstone` with meerkat's deletion |
+| `crates/shell` | `chrome`, `comms` | Host-neutral domain models: chrome view-models and the comms pane model. The pane/split-tree model (`frisket`) is owned by `turnstone` |
 | `crates/system` | `session-runtime`, `shell-state`, `content-contract`, `fetch`, `proofs`, `ux-events`, `registry/register-*` | Runtime services: session/manifest persistence, shell state, the content-reference and fetch contracts, typed proofs, the UX event/probe taxonomy, and the capability registries |
 | `crates/forme` | `forme`, `uxtree` | Per-graph-view arrangement authority and the UX-tree projection |
 | `crates/platen` | `platen`, `domain/*` | Composition surface: compiles arrangements into presentation plans, plus its workbench/accessory domain panels. (Engine selection — `inker`, `document-canvas`, `nematic` — moved to genet 2026-07-10) |
@@ -189,7 +158,7 @@ versions, and licenses are unchanged, and only their repository home moved.
 | `crates/conatus` | `numen`, `quint`, `seiche` | The portable physics stack: field definitions, evaluation, integration. Kernel-free by default |
 | `crates/scenograph` | `sceno`, `scenomise`, `scenotime`, `scenograph` | The projection engine: scene and score contracts, analytic arrangements, and the incremental runtime |
 | `crates/graphshell` | `graphshell-protocol`, `-client`, `-endpoint`, `-stdio` | Mere's reusable remote-session stack: its session grammar, client and endpoint state machines, and first local carrier |
-| `ports/graphshell` | `graphshell` | Mere's reference remote projection client and executable acceptance views |
+| `ports/graphshell` | `graphshell` | Mere's reference graph host, remote-projection client, and executable acceptance views |
 
 ## The printing-press metaphor
 
@@ -255,10 +224,10 @@ Mere consumes these one-way (it depends on them; they never depend on Mere):
   protocols' communities.
 - `boa` (`mark-ik/boa`): the Boa JavaScript document-host lane.
 
-Downstream, four products depend on Mere one-way: **`turnstone`** (the reference
-on-screen host, formerly `meerkat`), **`isometry`**, **`woodshed`**, and
-**`hocket`**. Each owns its own truth and reaches Mere for the graph,
-projection, memory, identity, and session layers.
+Downstream, four products depend on Mere one-way: **`turnstone`** (the browser
+host), **`isometry`**, **`woodshed`**, and **`hocket`**. Each owns its own truth
+and reaches Mere for the graph, projection, memory, identity, and session
+layers.
 
 ## Documentation
 
@@ -279,44 +248,6 @@ implemented to varying degrees; p2p sync, federation, local intelligence, and
 the unified-document-host work are in progress or partially wired. Several design
 docs note capabilities that exist in code but are not yet on the live host path.
 Crate versions are pinned at `0.0.1` and binaries are `publish = false`.
-
-## More screenshots
-
-<table>
-  <tr>
-    <td width="50%">
-      <img src="assets/screenshots/web-page.png" alt="A full HTML page rendered in a tile"><br>
-      <sub>The web lane: a full HTML page rendered in a tile by the genet engine.</sub>
-    </td>
-    <td width="50%">
-      <img src="assets/screenshots/graph-favicons.png" alt="A fuller orrery graph with per-site favicons on the nodes"><br>
-      <sub>The graph fills out as you browse; nodes carry their site's favicon.</sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <img src="assets/screenshots/layout-lsystem.png" alt="The same graph under an L-system layout in the Sunset theme"><br>
-      <sub>The same graph under a different layout (L-system) and the Sunset theme.</sub>
-    </td>
-    <td width="50%">
-      <img src="assets/screenshots/history.png" alt="A page rendered as a card, with a recent list and history mini-map in the side panel"><br>
-      <sub>A recent-pages list and a history mini-map track your navigation lineage beside the graph.</sub>
-    </td>
-  </tr>
-</table>
-
-<table>
-  <tr>
-    <td width="50%">
-      <img src="assets/media/demo-3.gif" alt="Inspecting a node in the inspector panel"><br>
-      <sub>Inspect any node: identity, provenance, and fetch and parse state.</sub>
-    </td>
-    <td width="50%">
-      <img src="assets/media/demo-4.gif" alt="The command menu listing every action"><br>
-      <sub>Every action lives in one command menu: relate nodes, export JSON-LD, open a selection in splits, and more.</sub>
-    </td>
-  </tr>
-</table>
 
 ## License
 
