@@ -7,6 +7,7 @@ use std::fmt::Write;
 
 use graphshell_protocol::{CardValueV1, PortableCardV1};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use uuid::Uuid;
 
 use crate::identity::{
@@ -17,6 +18,12 @@ pub const SIGNING_APPROVE_ONCE_INTENT: &str = "graphshell.identity.signing.appro
 pub const SIGNING_APPROVE_IDLE_INTENT: &str = "graphshell.identity.signing.approve-until-idle";
 pub const SIGNING_DENY_INTENT: &str = "graphshell.identity.signing.deny";
 pub const SIGNING_DECISION_SCHEMA: &str = "graphshell.identity.signing-decision/v1";
+pub const SSH_GENERATE_INTENT: &str = "graphshell.identity.ssh.generate";
+pub const SSH_GENERATE_SCHEMA: &str = "graphshell.identity.ssh.generate/v1";
+pub const SSH_IMPORT_NATIVE_INTENT: &str = "graphshell.identity.ssh.import-native";
+pub const SSH_IMPORT_NATIVE_SCHEMA: &str = "graphshell.identity.ssh.import-native/v1";
+pub const SSH_REMOVE_INTENT: &str = "graphshell.identity.ssh.remove";
+pub const SSH_REMOVE_SCHEMA: &str = "graphshell.identity.ssh.remove/v1";
 
 /// Typed, secret-free signing decision payload.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -25,13 +32,52 @@ pub struct SigningDecisionIntentV1 {
     pub request_id: Uuid,
 }
 
+/// User-selected unlock policy for a generated or natively imported key.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum SshUnlockPolicyIntentV1 {
+    Session,
+    ShortTtl { idle_seconds: u32 },
+    PerUse,
+}
+
+/// Safe input for generating a key entirely inside the resident host.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GenerateSshKeyIntentV1 {
+    pub comment: String,
+    pub unlock_policy: SshUnlockPolicyIntentV1,
+}
+
+/// Options accompanying a native file-picker handoff.
+///
+/// The private key is intentionally absent. The native picker passes the
+/// parsed key object directly to `PersonaeHost::import_ssh_private`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ImportSshKeyNativeIntentV1 {
+    pub unlock_policy: SshUnlockPolicyIntentV1,
+}
+
+/// Explicit removal of one public SSH fingerprint.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RemoveSshKeyIntentV1 {
+    pub fingerprint: String,
+    pub confirmed: bool,
+}
+
 /// One visible action attached to a pending request card.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IdentityProjectionAction {
     pub intent: &'static str,
     pub schema: &'static str,
     pub label: &'static str,
-    pub payload: SigningDecisionIntentV1,
+    /// Pre-bound public fields. `None` means the native host must collect the
+    /// schema's user-configurable fields before invocation.
+    pub payload: Option<Value>,
+    /// H4b actions are local authority controls, not remote projection grants.
+    pub native_only: bool,
 }
 
 /// One portable card plus the actions Graphshell may place beside it.
@@ -56,7 +102,22 @@ pub fn project_identity(snapshot: &IdentitySurfaceSnapshot) -> Vec<IdentityProje
             badges: vec!["Personae".to_string(), "native authority".to_string()],
             media: Vec::new(),
         },
-        actions: Vec::new(),
+        actions: vec![
+            IdentityProjectionAction {
+                intent: SSH_GENERATE_INTENT,
+                schema: SSH_GENERATE_SCHEMA,
+                label: "Generate SSH key…",
+                payload: None,
+                native_only: true,
+            },
+            IdentityProjectionAction {
+                intent: SSH_IMPORT_NATIVE_INTENT,
+                schema: SSH_IMPORT_NATIVE_SCHEMA,
+                label: "Import SSH key…",
+                payload: None,
+                native_only: true,
+            },
+        ],
     }];
 
     cards.extend(
@@ -101,7 +162,19 @@ pub fn project_identity(snapshot: &IdentitySurfaceSnapshot) -> Vec<IdentityProje
             badges: vec!["SSH".to_string(), "public export".to_string()],
             media: Vec::new(),
         },
-        actions: Vec::new(),
+        actions: vec![IdentityProjectionAction {
+            intent: SSH_REMOVE_INTENT,
+            schema: SSH_REMOVE_SCHEMA,
+            label: "Remove key…",
+            payload: Some(
+                serde_json::to_value(RemoveSshKeyIntentV1 {
+                    fingerprint: key.fingerprint.clone(),
+                    confirmed: false,
+                })
+                .expect("SSH removal payload is always serializable"),
+            ),
+            native_only: true,
+        }],
     }));
 
     cards.extend(snapshot.carry.devices.iter().map(|device| {
@@ -168,13 +241,21 @@ pub fn project_identity(snapshot: &IdentitySurfaceSnapshot) -> Vec<IdentityProje
                 intent: SIGNING_APPROVE_ONCE_INTENT,
                 schema: SIGNING_DECISION_SCHEMA,
                 label: "Approve once",
-                payload: payload.clone(),
+                payload: Some(
+                    serde_json::to_value(&payload)
+                        .expect("signing decision payload is always serializable"),
+                ),
+                native_only: true,
             },
             IdentityProjectionAction {
                 intent: SIGNING_DENY_INTENT,
                 schema: SIGNING_DECISION_SCHEMA,
                 label: "Deny",
-                payload: payload.clone(),
+                payload: Some(
+                    serde_json::to_value(&payload)
+                        .expect("signing decision payload is always serializable"),
+                ),
+                native_only: true,
             },
         ];
         if matches!(
@@ -187,7 +268,11 @@ pub fn project_identity(snapshot: &IdentitySurfaceSnapshot) -> Vec<IdentityProje
                     intent: SIGNING_APPROVE_IDLE_INTENT,
                     schema: SIGNING_DECISION_SCHEMA,
                     label: "Approve until idle",
-                    payload,
+                    payload: Some(
+                        serde_json::to_value(payload)
+                            .expect("signing decision payload is always serializable"),
+                    ),
+                    native_only: true,
                 },
             );
         }
@@ -303,13 +388,26 @@ pub fn render_identity_surface(snapshot: &IdentitySurfaceSnapshot) -> String {
         if !projected.actions.is_empty() {
             html.push_str("<div class=\"actions\">");
             for action in projected.actions {
+                let request_id = action
+                    .payload
+                    .as_ref()
+                    .and_then(|payload| payload.get("request_id"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                let payload = action
+                    .payload
+                    .as_ref()
+                    .map(Value::to_string)
+                    .unwrap_or_default();
                 write!(
                     html,
-                    "<button class=\"{}\" data-intent=\"{}\" data-schema=\"{}\" data-request-id=\"{}\">{}</button>",
+                    "<button class=\"{}\" data-intent=\"{}\" data-schema=\"{}\" data-request-id=\"{}\" data-payload=\"{}\" data-native-only=\"{}\">{}</button>",
                     if action.intent == SIGNING_DENY_INTENT { "deny" } else { "approve" },
                     action.intent,
                     action.schema,
-                    action.payload.request_id,
+                    request_id,
+                    escape(&payload),
+                    action.native_only,
                     action.label,
                 )
                 .unwrap();

@@ -876,6 +876,38 @@ nothing left listening.
 identify a device across networks without a stable identifier; do not let
 service *browsing* imply service *admission*, which stays Notochord's.
 
+#### Measured 2026-07-28: peer discovery works locally and not across the LAN
+
+`g5_peer --discover` dials a peer id known in advance and adds nothing to the
+address book, so a successful dial means mDNS resolved the address by itself.
+
+- **Same machine: works.** Two processes on the Windows laptop completed the
+  full three-session flow with no ticket and no `add_peer`.
+- **Across the LAN: fails, both directions.** Windows to iMac and iMac to
+  Windows both end in `address book does not have any iroh address info for
+  node id ...`, consistently, with the server up for 12s, 37s, 62s and 87s. Not
+  a timing problem.
+
+So the code path and API use are right, and something between the two hosts is
+not carrying it. Two facts narrow it further: the Windows OS resolver resolves
+`Q-PC.local` to 192.168.4.105 without trouble, so basic mDNS is not blocked
+outright; and the Windows host is multi-homed (three Wireless LAN pseudo
+adapters, Wi-Fi, Bluetooth PAN, Teredo). A userspace mDNS socket joining the
+multicast group on the wrong interface is the leading hypothesis and matches
+both the same-machine success and the two-way cross-host failure.
+
+**Not concluded.** Whether this is interface selection in p2panda/iroh's mDNS,
+an announcement the responder never sends, or AP-level multicast handling needs
+a packet capture on UDP 5353 at both ends. Until that is measured, the honest
+statement is that **mDNS peer discovery is unproven on this network**, and the
+hand-carried ticket remains the only path with a two-machine receipt behind it.
+
+**Consequence for the printers half.** Even the "easy" capability does not
+deliver a device list: `mere-transport` exposes no way to enumerate what
+discovery found, so mDNS resolves an address for a peer id you already hold. A
+device list needs a new accessor on the transport, and a *service* list needs
+the DNS-SD browser this item scopes.
+
 ## 10. Settings that remain user-controlled
 
 - captured browser APIs and origins;

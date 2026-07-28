@@ -11,7 +11,11 @@ use std::time::Duration;
 use personae::agent::VaultAgent;
 use personae::signing::{ApprovalBroker, DecisionError, RememberApproval, SigningDecision};
 use personae::ssh_slot;
-use personae::{CredentialLineage, IdentityStorage, IdentityVault, UnlockTier};
+use personae::{
+    CredentialLineage, IdentityError, IdentityStorage, IdentityVault, ProtocolKey, UnlockTier,
+};
+use serde::{Deserialize, Serialize};
+use ssh_key::{Algorithm, PrivateKey, PublicKey};
 use uuid::Uuid;
 
 use crate::identity::{
@@ -19,9 +23,13 @@ use crate::identity::{
     VaultProtectionView, VaultView, load_carry_view,
 };
 use crate::identity_projection::{
+    GenerateSshKeyIntentV1, ImportSshKeyNativeIntentV1, RemoveSshKeyIntentV1,
     SIGNING_APPROVE_IDLE_INTENT, SIGNING_APPROVE_ONCE_INTENT, SIGNING_DENY_INTENT,
-    SigningDecisionIntentV1,
+    SSH_GENERATE_INTENT, SSH_IMPORT_NATIVE_INTENT, SSH_REMOVE_INTENT, SigningDecisionIntentV1,
+    SshUnlockPolicyIntentV1,
 };
+
+const MAX_SHORT_TTL_SECONDS: u32 = 24 * 60 * 60;
 
 /// Rejected Graphshell identity action.
 #[derive(Debug, thiserror::Error)]
@@ -32,6 +40,49 @@ pub enum IdentityIntentError {
     InvalidPayload(#[from] serde_json::Error),
     #[error("signing decision rejected: {0}")]
     Decision(#[from] DecisionError),
+    #[error("identity vault operation failed: {0}")]
+    Identity(#[from] IdentityError),
+    #[error("SSH key generation failed")]
+    KeyGeneration,
+    #[error("SSH public key encoding failed")]
+    PublicEncoding,
+    #[error("SSH key comment must be at most 256 printable characters")]
+    InvalidComment,
+    #[error("short idle approval must be between 1 and 86400 seconds")]
+    InvalidIdleWindow,
+    #[error("SSH key removal requires explicit confirmation")]
+    ConfirmationRequired,
+    #[error("SSH key fingerprint is not present in the selected profile")]
+    KeyNotFound,
+    #[error("SSH import requires a native private-key handoff")]
+    NativeHandoffRequired,
+}
+
+/// Public result of a native SSH key mutation.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SshKeyMutationReceipt {
+    pub operation: SshKeyMutationKind,
+    pub fingerprint: String,
+    pub comment: String,
+    pub public_openssh: String,
+    pub unlock_policy: String,
+    pub replaced_existing: bool,
+}
+
+/// Mutation kind safe to retain in a local receipt.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SshKeyMutationKind {
+    Generated,
+    Imported,
+    Removed,
+}
+
+/// Result of applying one local identity control.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum IdentityIntentOutcome {
+    SigningDecision,
+    SshKeyMutation(SshKeyMutationReceipt),
 }
 
 /// Native owner of one shared Personae vault and its SSH adapter.
@@ -80,6 +131,89 @@ impl<S: IdentityStorage + 'static> PersonaeHost<S> {
     /// A fresh per-connection SSH agent session over the resident vault.
     pub fn agent_session(&self) -> VaultAgent<S> {
         self.agent.clone()
+    }
+
+    /// Generate an Ed25519 key entirely inside the resident authority.
+    pub fn generate_ssh_key(
+        &self,
+        request: GenerateSshKeyIntentV1,
+    ) -> Result<SshKeyMutationReceipt, IdentityIntentError> {
+        validate_comment(&request.comment)?;
+        let tier = unlock_tier(request.unlock_policy)?;
+        let mut private = PrivateKey::random(&mut rand_core::OsRng, Algorithm::Ed25519)
+            .map_err(|_| IdentityIntentError::KeyGeneration)?;
+        private.set_comment(&request.comment);
+        self.store_ssh_private(private, tier, SshKeyMutationKind::Generated)
+    }
+
+    /// Store a key received directly from a native file picker.
+    ///
+    /// Callers pass the parsed key object, not serialized key bytes. This API
+    /// is intentionally separate from `apply_intent`.
+    pub fn import_ssh_private(
+        &self,
+        private: PrivateKey,
+        options: ImportSshKeyNativeIntentV1,
+    ) -> Result<SshKeyMutationReceipt, IdentityIntentError> {
+        validate_comment(private.comment())?;
+        let tier = unlock_tier(options.unlock_policy)?;
+        self.store_ssh_private(private, tier, SshKeyMutationKind::Imported)
+    }
+
+    fn store_ssh_private(
+        &self,
+        private: PrivateKey,
+        tier: UnlockTier,
+        operation: SshKeyMutationKind,
+    ) -> Result<SshKeyMutationReceipt, IdentityIntentError> {
+        let key = ssh_slot::protocol_key_for(&private);
+        let slot = ssh_slot::slot_for(&private, tier)?;
+        let public = PublicKey::from(&private);
+        let fingerprint = public.fingerprint(ssh_key::HashAlg::Sha256).to_string();
+        let public_openssh = public
+            .to_openssh()
+            .map_err(|_| IdentityIntentError::PublicEncoding)?;
+        let comment = private.comment().to_string();
+        let mut vault = self.vault.lock().unwrap();
+        let replaced_existing = vault.current_profile().slots.contains_key(&key);
+        vault.add_slot(key, slot)?;
+        Ok(SshKeyMutationReceipt {
+            operation,
+            fingerprint,
+            comment,
+            public_openssh,
+            unlock_policy: unlock_label(tier),
+            replaced_existing,
+        })
+    }
+
+    /// Remove one SSH slot only after the local UI confirms its fingerprint.
+    pub fn remove_ssh_key(
+        &self,
+        request: RemoveSshKeyIntentV1,
+    ) -> Result<SshKeyMutationReceipt, IdentityIntentError> {
+        if !request.confirmed {
+            return Err(IdentityIntentError::ConfirmationRequired);
+        }
+        let key = ProtocolKey::new(ssh_slot::SSH_MOD_ID, Some(request.fingerprint.clone()));
+        let mut vault = self.vault.lock().unwrap();
+        let Some(slot) = vault.current_profile().slots.get(&key) else {
+            return Err(IdentityIntentError::KeyNotFound);
+        };
+        let private = ssh_slot::private_key_from_slot(slot)?;
+        let public = PublicKey::from(&private);
+        let receipt = SshKeyMutationReceipt {
+            operation: SshKeyMutationKind::Removed,
+            fingerprint: public.fingerprint(ssh_key::HashAlg::Sha256).to_string(),
+            comment: private.comment().to_string(),
+            public_openssh: public
+                .to_openssh()
+                .map_err(|_| IdentityIntentError::PublicEncoding)?,
+            unlock_policy: unlock_label(slot.unlock_tier()),
+            replaced_existing: false,
+        };
+        vault.remove_slot(&key)?;
+        Ok(receipt)
     }
 
     /// Secret-free Graphshell read model.
@@ -189,15 +323,65 @@ impl<S: IdentityStorage + 'static> PersonaeHost<S> {
     }
 
     /// Apply one typed action emitted by [`crate::identity_projection`].
-    pub fn apply_intent(&self, intent: &str, payload: &[u8]) -> Result<(), IdentityIntentError> {
-        let payload: SigningDecisionIntentV1 = serde_json::from_slice(payload)?;
+    pub fn apply_intent(
+        &self,
+        intent: &str,
+        payload: &[u8],
+    ) -> Result<IdentityIntentOutcome, IdentityIntentError> {
         match intent {
-            SIGNING_APPROVE_ONCE_INTENT => self.approve_once(payload.request_id)?,
-            SIGNING_APPROVE_IDLE_INTENT => self.approve_until_idle(payload.request_id)?,
-            SIGNING_DENY_INTENT => self.deny(payload.request_id)?,
+            SIGNING_APPROVE_ONCE_INTENT => {
+                let payload: SigningDecisionIntentV1 = serde_json::from_slice(payload)?;
+                self.approve_once(payload.request_id)?;
+                Ok(IdentityIntentOutcome::SigningDecision)
+            }
+            SIGNING_APPROVE_IDLE_INTENT => {
+                let payload: SigningDecisionIntentV1 = serde_json::from_slice(payload)?;
+                self.approve_until_idle(payload.request_id)?;
+                Ok(IdentityIntentOutcome::SigningDecision)
+            }
+            SIGNING_DENY_INTENT => {
+                let payload: SigningDecisionIntentV1 = serde_json::from_slice(payload)?;
+                self.deny(payload.request_id)?;
+                Ok(IdentityIntentOutcome::SigningDecision)
+            }
+            SSH_GENERATE_INTENT => {
+                let payload: GenerateSshKeyIntentV1 = serde_json::from_slice(payload)?;
+                self.generate_ssh_key(payload)
+                    .map(IdentityIntentOutcome::SshKeyMutation)
+            }
+            SSH_REMOVE_INTENT => {
+                let payload: RemoveSshKeyIntentV1 = serde_json::from_slice(payload)?;
+                self.remove_ssh_key(payload)
+                    .map(IdentityIntentOutcome::SshKeyMutation)
+            }
+            SSH_IMPORT_NATIVE_INTENT => {
+                let _: ImportSshKeyNativeIntentV1 = serde_json::from_slice(payload)?;
+                Err(IdentityIntentError::NativeHandoffRequired)
+            }
             _ => return Err(IdentityIntentError::UnknownIntent),
         }
-        Ok(())
+    }
+}
+
+fn validate_comment(comment: &str) -> Result<(), IdentityIntentError> {
+    if comment.chars().count() > 256 || comment.chars().any(char::is_control) {
+        return Err(IdentityIntentError::InvalidComment);
+    }
+    Ok(())
+}
+
+fn unlock_tier(policy: SshUnlockPolicyIntentV1) -> Result<UnlockTier, IdentityIntentError> {
+    match policy {
+        SshUnlockPolicyIntentV1::Session => Ok(UnlockTier::Session),
+        SshUnlockPolicyIntentV1::ShortTtl { idle_seconds }
+            if (1..=MAX_SHORT_TTL_SECONDS).contains(&idle_seconds) =>
+        {
+            Ok(UnlockTier::ShortTtl { idle_seconds })
+        }
+        SshUnlockPolicyIntentV1::ShortTtl { .. } => {
+            Err(IdentityIntentError::InvalidIdleWindow)
+        }
+        SshUnlockPolicyIntentV1::PerUse => Ok(UnlockTier::PerUse),
     }
 }
 
