@@ -3,8 +3,7 @@
 **Date:** 2026-07-27
 **Status:** implementation complete locally for A1 through A4, typed Inspector
 clip insertion, and the first Resolve/Run bridge. Deterministic and real-process
-receipts are green. A final OS-headed Genet Probe drive remains an acceptance
-refinement, not an unwired product seam.
+receipts are green, including the OS-headed Genet Probe drive.
 
 **Companions:** the completed [Knot port plan](2026-07-25_knot_port_plan.md),
 the reconciled
@@ -144,8 +143,12 @@ Graphshell caches never contain editable source.
 - A4's executable receipts cover real file save/restart, two-client stale-save
   refusal, unrelated directory churn, signed sealed-vault persistence,
   startup-unlocked persona-vault process launch, ciphertext opacity, and
-  lock-time purge. The remaining acceptance refinement is an OS-headed Genet
-  Probe drive of the already-mounted pane.
+  lock-time purge. Turnstone's `scenarios/knot_authoring.scn` is the final
+  OS-headed Genet Probe receipt: it opens the rooted file through the real
+  endpoint process, activates the retained content session, clicks Resolve and
+  Run by retained-DOM selector, asserts the disclosed and evaluated derived
+  text, and captures the composed frame. Probe quiescence reads the Knot
+  session's actual in-flight state.
 - Inspector clip is complete. Genet sessions emit a host-neutral semantic clip;
   Turnstone sends `knot.clip.insert/v1`; Knot validates provenance, base token,
   grant, size, target, and source URI before appending through the ordinary
