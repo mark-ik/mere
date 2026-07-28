@@ -848,7 +848,7 @@ the low-power lane, landed the same week):
   conclusion, so a carrier-admitted session can notice later revocation without
   reconstructing authority from application data.
 
-- **G5f — the two-device run. PARTIAL 2026-07-27.**
+- **G5f — the two-device run. LANDED 2026-07-27, one clause short.**
   `ports/graphshell/src/bin/g5_peer.rs`, modelled on `mesh-peer`. **Windows
   laptop → iMac (Q-PC, macOS 15.7.7) over p2panda/iroh QUIC on the LAN**, both
   at `0ffe8a62`, distinct identity seeds, ticket pasted between them.
@@ -871,15 +871,39 @@ the low-power lane, landed the same week):
   `SessionProofInvalid` three layers from the cause. Both are now back-dated
   by a minute for cross-machine clock skew and checked by `assert_same_key`
   at bind time.
-  **What this is not.** Two of G5's four done-when clauses remain open.
-  *Resume after interruption* is unproven: the fixture endpoint returns "this
-  fixture does not resume", so no interruption was survived. And the refused
-  request was an `Open`, not an `IntentInvocation` — the same
-  `authority.lapse` gate on a different verb, so "reject a revoked intent" is
-  proven in mechanism but not literally in the shape the clause names.
-  Discovery was also not exercised: the ticket was carried by hand, which the
-  clause permits ("discovery **or** ticket exchange") but which leaves mDNS
-  untested.
+  **Resume and intent, added the same night.** The first pass used the G1
+  fixture, which answers "this fixture does not resume", so no interruption was
+  survived. `ResumeFixtureEndpoint` already had the hard half — a two-diff
+  history and an epoch-preserving current snapshot — and only lacked the three
+  traits `dispatch_common` needs; it now has them, with `IntentSink` doing real
+  adjudication (an intent on a superseded revision returns `Stale` with the
+  endpoint's current position). `serve` loops against **one** endpoint, because
+  an endpoint that dies with its connection can only ever answer a resume with
+  a fresh snapshot.
+  *Granted run, Windows → Q-PC.* Session 1: `opened, status Live`, `snapshot of
+  2 item(s)`, `suspended` (server: served 3, ended `Suspended`). Interruption:
+  a new dial, a new handshake, a new admission. Session 2: `opened`, **`resumed
+  by replaying 2 contiguous diff(s), revisions 1->2, 2->3`**, `intent
+  Accepted`, `closed` (server: served 4, ended `Closed`).
+  *Revoked run, same pair.* Session 1 served in full and ended `Suspended`;
+  the grant was revoked while the peer was away; session 2 was **admitted** and
+  then refused at its first request with `session authority was revoked`,
+  ending `Lapsed(Revoked)`, so the client's resume and intent were never
+  served.
+  The reply summary names which `ResumeReply` arrived. Before that it printed
+  only "resume", which cannot distinguish a real resume from a fresh snapshot
+  under a nicer name — a receipt that would have proved nothing.
+  **What remains open, precisely.** The revoked run demonstrates the
+  **per-request** authority check, not admission-time chain rejection: the
+  revocation is folded after `accept_projection_session` returns, so session 2
+  passes admission and is stopped at its first request. Those are different
+  paths and only one is exercised. The refused verb is therefore the `Open`
+  that precedes the intent, because the gate fires on whatever comes first, so
+  "reject a revoked intent" holds in mechanism and on the good path (the
+  `IntentInvocation` is sent and `Accepted`) but not literally in the clause's
+  shape. Discovery is still untested: the ticket was carried by hand, which the
+  clause permits ("discovery **or** ticket exchange"), leaving mDNS unexercised.
+  The browser carrier remains separate by G5's own instruction.
 
 **Only after G5b+G5c does the capability round's deferred sub-delegation become
 buildable**: the endpoint's certificate goes to depth 1 and issues a narrower
