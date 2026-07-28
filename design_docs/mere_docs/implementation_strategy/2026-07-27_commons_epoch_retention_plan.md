@@ -1,7 +1,8 @@
 # Safe Commons Epoch Retention
 
 **Date:** 2026-07-27  
-**Status:** active. E0-E1 are complete locally; E2 is next.
+**Status:** complete locally 2026-07-27. E0-E4 have executable receipts in
+Stickleback, Commons chat, and communal Knot.
 
 ## 1. Problem
 
@@ -95,7 +96,7 @@ mode is Data Encryption, chronology is complete, checkpoint authority is
 current, author continuation is ready, and every domain hold names a present
 epoch. Stickleback's 55 unit tests, 5 boundary tests, and doctests pass.
 
-### E2. Authorized Commons checkpoint
+### E2. Authorized Commons checkpoint — DONE 2026-07-27
 
 Files:
 
@@ -117,7 +118,20 @@ The probe may establish the grammar. Authorized pruning does not remain
 probe-only: the consumer that promotes Commons must own the production
 checkpoint store and policy.
 
-### E3. Two consumer proposals
+Receipt: `commons.checkpoint` now occupies a separately selected log and
+carries an encrypted, signed `ChatCheckpoint`. It commits the projected
+channels/messages, snapshot digest, causal frontier, per-author continuation
+frontiers, exact epoch inventory, current authority revision, previous
+checkpoint identity, and epoch holds for pending or authority-reconsiderable
+facts. Admission decrypts and checks the checkpoint before storage. The
+retained-chain loader keeps historical structural validity separate from
+current authority, so an authority rotation cannot invalidate an accepted
+predecessor while stale new checkpoints remain unauthorized. Checkpoint plus
+tail equals full replay. Stale-chain, foreign-space, stale-authority,
+rewinding-frontier, and forged candidates leave the accepted checkpoint
+unchanged. All 20 Commons probe tests pass.
+
+### E3. Two consumer proposals — DONE 2026-07-27
 
 Done when:
 
@@ -127,7 +141,22 @@ Done when:
   and tail without translating document events;
 - both refuse to forget an epoch needed by a pending causal or authority fact.
 
-### E4. Authorized execution and reopen
+Commons receipt: `ChatReplica::epoch_pruning_proposal` supplies Stickleback
+with the accepted checkpoint basis, current authority revision, replay
+equivalence, live ciphertext-tail reachability, checkpoint-recorded
+pending/authority holds, and explicit offline-member recovery holds. Tests
+cover an old pending ciphertext and an offline member each preventing an
+otherwise eligible epoch from entering the exact forget list.
+
+Knot receipt: communal Knot supplies its own durable document/conflict snapshot,
+author heads, pending facts, and exact tail. It does not translate documents
+through Commons graph or chat events. New Knot checkpoints retain the
+Knot-native materialized snapshot; legacy digest-only checkpoints remain
+readable but block pruning. A non-empty tail is retained for decryption and
+fails author-continuation closed until the host writes a new checkpoint. Tests
+prove pending-document, authority-reevaluation, and offline-member holds.
+
+### E4. Authorized execution and reopen — DONE 2026-07-27
 
 Done when:
 
@@ -139,6 +168,17 @@ Done when:
   projection;
 - a member inside the offline recovery window can resume, while a member
   outside it receives the profile's explicit rejoin/bootstrap outcome.
+
+Receipt: Commons chat and communal Knot each recompute the proposal against
+the live checkpoint, current authority revision, retained tail, and policy
+holds before changing a key. A mismatch returns a stale-proposal error.
+Accepted executions clone the keyring, erase only the proposal's exact ids,
+then persist the reduced keyring and serialized receipt through one backend
+`apply`; Redb commits that batch in one transaction. Only after the durable
+commit succeeds does the live keyring switch. Redb reopen tests restore eight
+retained epochs, reproduce the checkpoint projection, decrypt retained
+content, and return either `Resume` or a checkpoint-bearing
+`BootstrapRequired` outcome for an offline member.
 
 ## 5. Stop rules
 

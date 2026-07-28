@@ -25,9 +25,11 @@ use std::collections::HashSet;
 
 use codicil::{Codicil, LogId};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::caps::Identified;
 use crate::edit::{DerivationRecord, EdgeId, GraphEdit};
+use crate::facet::FacetId;
 use crate::spine::GraphLog;
 
 /// An opaque author identity for journal attribution: a denizen id, a personae
@@ -97,6 +99,22 @@ pub enum EditSpec<N: Identified, E> {
         node: N::Id,
         /// Where it came from.
         from: DerivationRecord<N::Id>,
+    },
+    /// Set one independently mergeable facet on a live node.
+    SetFacet {
+        /// The node carrying the facet.
+        node: N::Id,
+        /// The stable, namespaced facet identity.
+        facet: FacetId,
+        /// The host-validated facet value.
+        value: Value,
+    },
+    /// Remove one independently mergeable facet from a live node.
+    RemoveFacet {
+        /// The node carrying the facet.
+        node: N::Id,
+        /// The stable, namespaced facet identity.
+        facet: FacetId,
     },
 }
 
@@ -190,6 +208,11 @@ where
                         return Err(CommitError::UnknownNode(node.clone()));
                     }
                 }
+                EditSpec::SetFacet { node, .. } | EditSpec::RemoveFacet { node, .. } => {
+                    if !present(node, &added, &removed, self) {
+                        return Err(CommitError::UnknownNode(node.clone()));
+                    }
+                }
             }
         }
 
@@ -208,6 +231,10 @@ where
                 }
                 EditSpec::Disconnect(id) => GraphEdit::Disconnect(id),
                 EditSpec::Derive { node, from } => GraphEdit::Derive { node, from },
+                EditSpec::SetFacet { node, facet, value } => {
+                    GraphEdit::SetFacet { node, facet, value }
+                }
+                EditSpec::RemoveFacet { node, facet } => GraphEdit::RemoveFacet { node, facet },
             });
         }
 
@@ -250,8 +277,10 @@ mod tests {
     use super::*;
     use crate::container::{Container, Relation};
     use crate::edit::WriterId;
+    use crate::facet::FacetId;
     use crate::taxonomy::{Recognized, RelationClass};
     use muniment::{JsonSlots, MemoryBackend};
+    use serde_json::json;
 
     fn cites() -> Relation {
         Relation::new(RelationClass::recognized(Recognized::Cites))
@@ -502,6 +531,53 @@ mod tests {
             node.title, "",
             "the earlier writer's title is DISCARDED, not merged: whole-node LWW"
         );
+    }
+
+    #[test]
+    fn concurrent_edits_to_different_facets_both_survive() {
+        let alice = Author::new("alice");
+        let bob = Author::new("bob");
+        let node = "n".to_string();
+        let title = FacetId::new("content.title");
+        let pinned = FacetId::new("arrangement.pin");
+
+        let mut base = GraphLog::<Container, Relation>::new();
+        base.insert_node(&alice, Container::new(node.clone()));
+        let mut a = GraphLog::replay(base.log().clone()).for_writer(writer(0xa1));
+        let mut b = GraphLog::replay(base.log().clone()).for_writer(writer(0xb2));
+        assert!(a.set_facet(&alice, &node, title.clone(), json!("Alice")));
+        assert!(b.set_facet(&bob, &node, pinned.clone(), json!(true)));
+
+        for merged in [
+            merge_divergent(&base, &a, &b),
+            merge_divergent(&base, &b, &a),
+        ] {
+            assert_eq!(merged.facets().get(&node, &title), Some(&json!("Alice")));
+            assert_eq!(merged.facets().get(&node, &pinned), Some(&json!(true)));
+        }
+    }
+
+    #[test]
+    fn node_removal_suppresses_a_concurrent_facet_edit_in_either_order() {
+        let alice = Author::new("alice");
+        let bob = Author::new("bob");
+        let node = "n".to_string();
+        let title = FacetId::new("content.title");
+
+        let mut base = GraphLog::<Container, Relation>::new();
+        base.insert_node(&alice, Container::new(node.clone()));
+        let mut remover = GraphLog::replay(base.log().clone()).for_writer(writer(0xa1));
+        remover.remove_node(&alice, &node);
+        let mut editor = GraphLog::replay(base.log().clone()).for_writer(writer(0xb2));
+        assert!(editor.set_facet(&bob, &node, title.clone(), json!("gone")));
+
+        for merged in [
+            merge_divergent(&base, &remover, &editor),
+            merge_divergent(&base, &editor, &remover),
+        ] {
+            assert!(merged.graph().key_of(&node).is_none());
+            assert!(merged.facets().get(&node, &title).is_none());
+        }
     }
 
     /// M2, the case the plan's "remove wins" phrasing does **not** cover, and

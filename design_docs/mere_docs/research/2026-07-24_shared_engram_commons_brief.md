@@ -121,7 +121,20 @@ changed: retinue's landing re-prices the bridge from a stack migration to a
 small spec-based codec sibling (sennet posture), and the radio business adds
 two demand arguments (day-one Sideband interop for flashed radios;
 propagation as a V9 offered role). LXMF's message-shaped model stays at the
-boundary.
+boundary. The first codec slice now lives in Retinue's `outrider` crate and
+round-trips a captured LXMF 0.9.6 message without importing LXMF types into the
+Commons model.
+
+## Calls
+
+Calls remain their own product, built inside a Commons rather than folded into
+chat replication. The
+[calls plan](../implementation_strategy/2026-07-27_commons_calls_plan.md)
+uses a retained Commons invitation to find an admitted live Notochord session,
+then keeps presence, media control, and carrier quality ephemeral. IP is the
+first live-audio bearer. Reticulum and direct PHY carry invitations, terminal
+state, and voice notes until a separate radio-voice profile earns stronger
+claims.
 
 ## Sequencing
 
@@ -132,7 +145,15 @@ The software done-conditions are met:
   and real p2panda LogSync;
 - canonical signed ciphertext survives protected native drop and
   Reticulum/TCP unchanged;
+- immutable edit and delete facts change the current chat projection without
+  pretending received ciphertext vanished;
+- graph facets merge independently, while Knot owns bounded automatic
+  document-text merge;
+- Outrider owns the LXMF boundary codec, and calls have a separate gated plan;
 - the knowledge commons then adds schemas and profile vocabulary, not
   machinery.
 
-Direct-PHY RF remains a hardware receipt.
+Direct-PHY RF passed on real T114 and Heltec V4 hardware 2026-07-27. The
+received canonical operation retained its p2panda identity and signature,
+decrypted through the saved Stickleback keyring, and recovered the expected
+chat event.

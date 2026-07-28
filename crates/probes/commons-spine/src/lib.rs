@@ -717,10 +717,11 @@ impl<B: Backend + Clone + Send + Sync + 'static> Replica<B> {
 mod tests {
     use super::*;
     use chartulary::taxonomy::{Recognized, RelationClass};
-    use chartulary::{Author, EdgeId};
+    use chartulary::{Author, EdgeId, FacetId};
     use muniment::{MemoryBackend, RedbBackend};
     use personae::{IdentityProvider, InMemoryProvider};
     use proptest::prelude::*;
+    use serde_json::json;
     use std::sync::Arc;
     use std::time::Duration;
     use stickleback::JoinedSpace;
@@ -926,7 +927,11 @@ mod tests {
             loop {
                 let a = alice.materialize().await.unwrap();
                 let b = bob.materialize().await.unwrap();
-                if a.graph().node_count() == 4 && b.graph().node_count() == 4 {
+                if a.graph().node_count() == 4
+                    && b.graph().node_count() == 4
+                    && a.graph().edge_count() == 2
+                    && b.graph().edge_count() == 2
+                {
                     return (a, b);
                 }
                 tokio::time::sleep(Duration::from_millis(200)).await;
@@ -995,6 +1000,49 @@ mod tests {
 
         drop(alice_space);
         drop(bob_space);
+    }
+
+    #[tokio::test]
+    async fn partitioned_edits_to_different_facets_merge_without_node_translation() {
+        let mut alice = Replica::new(MemoryBackend::new(), CONTAINER, [0x71; 32]);
+        let mut bob = Replica::new(MemoryBackend::new(), CONTAINER, [0x72; 32]);
+        let author = Author::new("ui");
+        let node = "shared-note".to_string();
+        let created = alice
+            .edit(|graph| {
+                graph.insert_node(&author, Container::new(node.clone()));
+            })
+            .await
+            .unwrap();
+        bob.accept(&created).await.unwrap();
+
+        let title = FacetId::new("content.title");
+        let pin = FacetId::new("arrangement.pin");
+        let alice_edit = alice
+            .edit(|graph| {
+                assert!(graph.set_facet(&author, &node, title.clone(), json!("Field note")));
+            })
+            .await
+            .unwrap();
+        let bob_edit = bob
+            .edit(|graph| {
+                assert!(graph.set_facet(&author, &node, pin.clone(), json!(true)));
+            })
+            .await
+            .unwrap();
+
+        alice.accept(&bob_edit).await.unwrap();
+        bob.accept(&alice_edit).await.unwrap();
+        for graph in [
+            alice.materialize().await.unwrap(),
+            bob.materialize().await.unwrap(),
+        ] {
+            assert_eq!(
+                graph.facets().get(&node, &title),
+                Some(&json!("Field note"))
+            );
+            assert_eq!(graph.facets().get(&node, &pin), Some(&json!(true)));
+        }
     }
 
     /// Before blaming a lane: a replica must be able to fold back its own

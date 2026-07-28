@@ -165,7 +165,7 @@ impl<Id, A> Container<Id, A> {
 
 impl<Id, A> Identified for Container<Id, A>
 where
-    Id: Clone + Eq + Hash + Debug,
+    Id: Clone + Eq + Ord + Hash + Debug,
 {
     type Id = Id;
     fn id(&self) -> &Id {

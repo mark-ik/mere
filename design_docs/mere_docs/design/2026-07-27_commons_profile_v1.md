@@ -66,9 +66,15 @@ The first chat vocabulary is:
 
 - `commons.channel`: channel identity, title, and membership-facing settings;
 - `commons.message`: immutable body, channel, authored time, and optional reply
-  operation.
+  operation;
+- `commons.message.edit`: an immutable fact naming the original message and
+  replacement body;
+- `commons.message.delete`: an immutable fact naming the original message.
 
-Message edit and delete are absent in v1. Murm `Post` remains the bilateral
+Only the original author may edit or delete a projected message. The latest
+causally ordered edit supplies the visible body. Deletion retracts the current
+projection and its checkpoint entry; signed encrypted facts already received
+remain in retained history. Murm `Post` remains the bilateral
 direct-conversation grammar. Compatible posts may be read into one view, but
 they are not rewritten or declared wire-equivalent.
 
@@ -76,15 +82,21 @@ Knot contributes `knot.file` and `knot.note`. Concurrent writers touching one
 document produce a visible `KnotDocumentConflict` with one current version per
 writer. Unrelated documents remain available. A Knot `Resolve` event names the
 exact causal operation ids it replaces and carries the chosen document or
-deletion. It cannot erase an unseen concurrent version. Automatic text merge
-stays Knot-owned.
+deletion. It cannot erase an unseen concurrent version. For exactly two
+concurrent UTF-8 text versions with a common base, Knot automatically merges
+independent line edits. Overlapping text edits, incompatible title or media
+changes, binary documents, and larger conflict sets remain visible conflicts.
+The automatic result is derived until the next signed write or explicit
+resolution, and is preserved in Knot checkpoints. Knot never translates
+documents through chartulary facets.
 
 ## Merge and incomplete history
 
 - Missing causal history blocks only its operation and descendants. The
   projection returns unrelated causally closed state plus exact pending roots.
-- Whole-node concurrent edits use the stable operation tiebreak. This remains a
-  known coarse merge until facets become independent edits.
+- `SetFacet` and `RemoveFacet` are graph edits. Concurrent writers changing
+  different facets converge without replacing the whole container.
+- Whole-node operations still use the stable operation tiebreak.
 - Remove wins against a truly concurrent insert of the same node.
 - An insert causally after a removal deliberately recreates that node.
 - Remove wins against a concurrent connect, and removes incident edges.
@@ -107,7 +119,12 @@ checkpoint, and tail receipt.
 
 ## Deferred
 
-Facet-grained text merge, message edit/delete, calls, LXMF codecs, RF hardware
-receipts, compressed frontiers, richer content schemas, and automated epoch
-retention policy remain separate work. The carrier-neutral Reticulum packet
-seam is software-proven; a direct-PHY radio result requires real hardware.
+Calls have their own
+[product plan](../implementation_strategy/2026-07-27_commons_calls_plan.md);
+implementation has not started. Group calls, compressed frontiers, richer
+content schemas, and Knot merge beyond the bounded two-version text case remain
+separate work. Automated epoch retention now has authorized checkpoint,
+two-consumer proposal, atomic Redb execution, reopen, and offline-recovery
+receipts. Outrider now owns the LXMF boundary codec without leaking LXMF types
+into Commons. Direct-PHY carrier identity passed on real T114 and Heltec V4
+hardware 2026-07-27.

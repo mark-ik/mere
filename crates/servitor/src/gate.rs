@@ -20,11 +20,11 @@
 //! reserved-namespace node, committed by the gate's own author, so "what may
 //! this denizen do" is a browsable question answered from the graph itself.
 
-use chartulary::{Author, Committed, CommitError, Container, EditSpec, GraphLog, Relation};
+use chartulary::{Author, CommitError, Committed, Container, EditSpec, GraphLog, Relation};
 
+use crate::Subject;
 use crate::cap::{Cap, ScopePath};
 use crate::grant::{AuthorityProvider, Grant, Mode};
-use crate::Subject;
 
 /// The reserved node-id prefix for grant projections. The gate writes these and
 /// refuses any petition that touches them, so a denizen cannot rewrite its own
@@ -151,6 +151,9 @@ fn touched_nodes(spec: &EditSpec<Container, Relation>) -> Vec<&str> {
         EditSpec::Connect { from, to, .. } => vec![from.as_str(), to.as_str()],
         EditSpec::Disconnect(_) => Vec::new(),
         EditSpec::Derive { node, .. } => vec![node.as_str()],
+        EditSpec::SetFacet { node, .. } | EditSpec::RemoveFacet { node, .. } => {
+            vec![node.as_str()]
+        }
     }
 }
 
@@ -195,7 +198,11 @@ impl Gate {
         node.media_type = Some(PROJECTION_MEDIA_TYPE.to_string());
         let expected = nested.revision();
         nested
-            .commit_batch(self.author.clone(), expected, vec![EditSpec::InsertNode(node)])
+            .commit_batch(
+                self.author.clone(),
+                expected,
+                vec![EditSpec::InsertNode(node)],
+            )
             .map_err(GateError::Commit)
     }
 
@@ -242,14 +249,18 @@ impl Gate {
         for spec in &specs {
             for node in touched_nodes(spec) {
                 if node.starts_with(GRANT_PREFIX) {
-                    return Err(GateError::TouchesProjection { node: node.to_string() });
+                    return Err(GateError::TouchesProjection {
+                        node: node.to_string(),
+                    });
                 }
             }
         }
         // 2. Authority: the subject must hold a write cap covering the scope.
         let claimed_cap = Cap::Scope(claimed.clone());
         if !provider.covers(subject, &claimed_cap, Mode::Write) {
-            return Err(GateError::Unauthorized { path: claimed.to_string() });
+            return Err(GateError::Unauthorized {
+                path: claimed.to_string(),
+            });
         }
         // 3. Scope: every touched node must fall under the claimed scope, by
         //    SEGMENT (`trail` does not contain `trailer/x`). A node id that is
@@ -309,9 +320,16 @@ mod tests {
 
         let committed = gate.project_grant(&mut nested, &grant).unwrap();
         let entry = &nested.log().entries()[committed.batch.0 as usize];
-        assert_eq!(entry.author, Author::new("gate"), "projection is the gate's, not the denizen's");
+        assert_eq!(
+            entry.author,
+            Author::new("gate"),
+            "projection is the gate's, not the denizen's"
+        );
         assert!(
-            nested.graph().key_of(&Gate::projection_id(&trail())).is_some(),
+            nested
+                .graph()
+                .key_of(&Gate::projection_id(&trail()))
+                .is_some(),
             "the projection node exists in the nested graph"
         );
     }
@@ -364,14 +382,22 @@ mod tests {
 
         let rev = nested.revision();
         let committed = gate
-            .petition(&auth, &mut nested, sub, &trail_scope(), rev, vec![
-                insert("trail/step1"),
-                insert("trail/step2"),
-            ])
+            .petition(
+                &auth,
+                &mut nested,
+                sub,
+                &trail_scope(),
+                rev,
+                vec![insert("trail/step1"), insert("trail/step2")],
+            )
             .unwrap();
 
         let entry = &nested.log().entries()[committed.batch.0 as usize];
-        assert_eq!(entry.author, sub.to_author(), "the journal attributes the change to the denizen");
+        assert_eq!(
+            entry.author,
+            sub.to_author(),
+            "the journal attributes the change to the denizen"
+        );
         assert_eq!(nested.graph().node_count(), 2);
     }
 
@@ -385,9 +411,21 @@ mod tests {
 
         let rev = nested.revision();
         let err = gate
-            .petition(&auth, &mut nested, intruder, &trail_scope(), rev, vec![insert("trail/x")])
+            .petition(
+                &auth,
+                &mut nested,
+                intruder,
+                &trail_scope(),
+                rev,
+                vec![insert("trail/x")],
+            )
             .unwrap_err();
-        assert_eq!(err, GateError::Unauthorized { path: "trail".into() });
+        assert_eq!(
+            err,
+            GateError::Unauthorized {
+                path: "trail".into()
+            }
+        );
         assert_eq!(nested.graph().node_count(), 0, "nothing applied");
     }
 
@@ -400,11 +438,21 @@ mod tests {
 
         let rev = nested.revision();
         let err = gate
-            .petition(&auth, &mut nested, sub, &trail_scope(), rev, vec![insert("notes/sneaky")])
+            .petition(
+                &auth,
+                &mut nested,
+                sub,
+                &trail_scope(),
+                rev,
+                vec![insert("notes/sneaky")],
+            )
             .unwrap_err();
         assert_eq!(
             err,
-            GateError::OutOfScope { node: "notes/sneaky".into(), path: "trail".into() }
+            GateError::OutOfScope {
+                node: "notes/sneaky".into(),
+                path: "trail".into()
+            }
         );
         assert_eq!(nested.graph().node_count(), 0);
     }
@@ -415,10 +463,14 @@ mod tests {
         let sub = subject(1);
         // Grant the denizen the reserved namespace itself — the guard still bites.
         // Grant the denizen the reserved namespace as a scope; the guard still bites.
-        let auth = GrantTable::new()
-            .with_grant(Grant::new(sub, Cap::scope("grant:").unwrap(), Mode::Write));
+        let auth = GrantTable::new().with_grant(Grant::new(
+            sub,
+            Cap::scope("grant:").unwrap(),
+            Mode::Write,
+        ));
         let mut nested = GraphLog::<Container, Relation>::new();
-        gate.project_grant(&mut nested, &Grant::new(sub, trail(), Mode::Write)).unwrap();
+        gate.project_grant(&mut nested, &Grant::new(sub, trail(), Mode::Write))
+            .unwrap();
 
         let rev = nested.revision();
         let err = gate
@@ -431,9 +483,17 @@ mod tests {
                 vec![EditSpec::RemoveNode(Gate::projection_id(&trail()))],
             )
             .unwrap_err();
-        assert_eq!(err, GateError::TouchesProjection { node: Gate::projection_id(&trail()) });
+        assert_eq!(
+            err,
+            GateError::TouchesProjection {
+                node: Gate::projection_id(&trail())
+            }
+        );
         assert!(
-            nested.graph().key_of(&Gate::projection_id(&trail())).is_some(),
+            nested
+                .graph()
+                .key_of(&Gate::projection_id(&trail()))
+                .is_some(),
             "the projection survived the attempt"
         );
     }
@@ -446,15 +506,33 @@ mod tests {
         let mut nested = GraphLog::<Container, Relation>::new();
         let stale = nested.revision();
         // A concurrent commit moves the revision past `stale`.
-        gate.petition(&auth, &mut nested, sub, &trail_scope(), stale, vec![insert("trail/a")])
-            .unwrap();
+        gate.petition(
+            &auth,
+            &mut nested,
+            sub,
+            &trail_scope(),
+            stale,
+            vec![insert("trail/a")],
+        )
+        .unwrap();
 
         let err = gate
-            .petition(&auth, &mut nested, sub, &trail_scope(), stale, vec![insert("trail/b")])
+            .petition(
+                &auth,
+                &mut nested,
+                sub,
+                &trail_scope(),
+                stale,
+                vec![insert("trail/b")],
+            )
             .unwrap_err();
         match err {
             GateError::Commit(CommitError::RevisionConflict { current }) => {
-                assert_eq!(current, stale + 1, "the denizen learns the revision to rebase onto");
+                assert_eq!(
+                    current,
+                    stale + 1,
+                    "the denizen learns the revision to rebase onto"
+                );
             }
             other => panic!("expected a revision conflict, got {other:?}"),
         }

@@ -1,6 +1,12 @@
 # Graphshell Remote Projection Host Plan
 
 **Date:** 2026-07-22
+**Product scope amended 2026-07-27** by the
+[Graphshell reference host plan](2026-07-27_graphshell_reference_host_plan.md):
+Graphshell is Mere's WASM-safe local reference host as well as its remote
+projection port. The session stack, disclosure boundary, and G-series receipts
+below remain; the claim that Graphshell's only local truth is remote-scene
+curation does not.
 **Superseded in part 2026-07-23** by the
 [repo consolidation plan](2026-07-23_repo_consolidation_plan.md): Graphshell
 is ruled Mere's shell and remote port, and the session protocol is Mere's

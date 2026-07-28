@@ -41,13 +41,14 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use graphshell::admission::{CONNECT_ACTION, GRAPHSHELL_DOMAIN, PROJECTION_SERVICE, open_session};
-use graphshell::canary::FixtureEndpoint;
 use graphshell::carrier::{accept_projection_session, projection_alpn, projection_policy};
 use graphshell::lifecycle::SessionAuthority;
+use graphshell::resume::ResumeFixtureEndpoint;
 use graphshell::session_loop::serve_admitted_session;
+use graphshell_endpoint::ResumableProjectionSource;
 use graphshell_protocol::{
-    CapabilityProfile, CarrierRequest, CarrierRequestBody, CarrierResponse, ProtocolVersion,
-    SessionOpen,
+    CapabilityProfile, CarrierRequest, CarrierRequestBody, CarrierResponse, IntentInvocation,
+    ProjectionSession, ProtocolVersion, ResumeRequest, Revision, SceneEpoch, SessionOpen,
 };
 use notochord::{
     NetworkId, ProfileRef, RevocationLedger, SessionReply, TrafficClass, TrustedRoot,
@@ -58,6 +59,7 @@ use personae::delegation::{
     SignedDelegationCertificate, SignedDelegationRevocation,
 };
 use personae::{IdentityProvider, InMemoryProvider};
+use sceno::{Arrangement, InstanceId, Score};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use transport::p2panda_transport::P2pandaTransport;
 use transport::{Transport, initiator_binding};
@@ -189,69 +191,88 @@ async fn serve(
     );
     let mut ledger = RevocationLedger::new();
 
-    // The accept task must not own the carrier; see `graphshell::carrier`.
-    let outcome = accept_projection_session(&carrier, &policy, &ledger, now_ms(), 0)
+    // One endpoint across every session, because that is what makes a resume
+    // a resume: its diff history and current revision have to outlive the
+    // connection that dropped. A fresh endpoint per session could only ever
+    // answer with a fresh snapshot.
+    let mut endpoint = ResumeFixtureEndpoint::new();
+
+    // Serve sessions until the peer stops coming back. The accept task must
+    // not own the carrier; see `graphshell::carrier`.
+    for attempt in 1.. {
+        println!("  waiting for session {attempt}...");
+        let outcome = accept_projection_session(&carrier, &policy, &ledger, now_ms(), 0)
+            .await
+            .map_err(|e| format!("accept: {e}"))?;
+        let mut session = match outcome {
+            Ok(session) => session,
+            Err(refusal) => {
+                println!("  refused: {refusal:?}");
+                return Ok(());
+            }
+        };
+        println!(
+            "  session {attempt}: admitted subject {} for {}",
+            hex8(&session.principal.subject),
+            session.principal.action.action
+        );
+
+        // `retain_admitted`, not `retain`: carrier code takes the whole
+        // admitted session so it cannot accidentally drop the chain the
+        // conclusion was drawn from, which is what leaves a session blind to
+        // later revocation.
+        let authority = SessionAuthority::retain_admitted(&session);
+
+        // Revoked before the loop, so the ledger the loop consults already
+        // carries it. A real owner revokes out of band; the effect is the
+        // same, because the check runs per request rather than at admission.
+        // Revoked while the peer was away, between its two sessions, which
+        // is when an owner realistically withdraws a grant. Session 1 is
+        // served in full; session 2 is refused at its first request.
+        if revoked && attempt == 2 && ledger.is_empty() {
+            if let Some(certificate) = session.claims.delegations.first() {
+                let statement = SignedDelegationRevocation::issue(
+                    &owner,
+                    DelegationRevocation::new(
+                        certificate.certificate.id(),
+                        owner.master_public_key().to_bytes(),
+                        certificate.certificate.scope.clone(),
+                        now_ms(),
+                        [12; 32],
+                    ),
+                )
+                .expect("issue revocation");
+                assert!(
+                    ledger.fold(&statement),
+                    "the owner's own revocation verifies"
+                );
+                println!("  grant revoked");
+            }
+        }
+
+        let mut resume = |endpoint: &mut ResumeFixtureEndpoint, request| {
+            ResumableProjectionSource::resume(endpoint, request).map_err(|error| error.to_string())
+        };
+        let summary = serve_admitted_session(
+            &mut session,
+            &authority,
+            &ledger,
+            &mut endpoint,
+            &mut resume,
+            now_ms,
+        )
         .await
-        .map_err(|e| format!("accept: {e}"))?;
-    let mut session = match outcome {
-        Ok(session) => session,
-        Err(refusal) => {
-            println!("  refused: {refusal:?}");
+        .map_err(|e| format!("serve: {e}"))?;
+
+        println!(
+            "  session {attempt}: served {} request(s); ended {:?}",
+            summary.answered, summary.end
+        );
+        if matches!(summary.end, graphshell::session_loop::SessionEnd::Lapsed(_)) {
+            println!("  authority lapsed; not accepting further sessions");
             return Ok(());
         }
-    };
-    println!(
-        "  admitted subject {} for {}",
-        hex8(&session.principal.subject),
-        session.principal.action.action
-    );
-
-    // `retain_admitted`, not `retain`: carrier code takes the whole admitted
-    // session so it cannot accidentally drop the chain the conclusion was
-    // drawn from, which is what leaves a session blind to later revocation.
-    let authority = SessionAuthority::retain_admitted(&session);
-
-    // Revoked before the loop, so the ledger the loop consults already carries
-    // it. A real owner revokes out of band; the effect on this session is the
-    // same, because the check runs per request rather than at admission.
-    if revoked {
-        if let Some(certificate) = session.claims.delegations.first() {
-            let statement = SignedDelegationRevocation::issue(
-                &owner,
-                DelegationRevocation::new(
-                    certificate.certificate.id(),
-                    owner.master_public_key().to_bytes(),
-                    certificate.certificate.scope.clone(),
-                    now_ms(),
-                    [12; 32],
-                ),
-            )
-            .expect("issue revocation");
-            assert!(
-                ledger.fold(&statement),
-                "the owner's own revocation verifies"
-            );
-            println!("  grant revoked");
-        }
     }
-
-    let mut endpoint = FixtureEndpoint::new();
-    let mut resume = |_: &mut FixtureEndpoint, _| Err("this fixture does not resume".to_string());
-    let summary = serve_admitted_session(
-        &mut session,
-        &authority,
-        &ledger,
-        &mut endpoint,
-        &mut resume,
-        now_ms,
-    )
-    .await
-    .map_err(|e| format!("serve: {e}"))?;
-
-    println!(
-        "  served {} request(s); ended {:?}",
-        summary.answered, summary.end
-    );
     Ok(())
 }
 
@@ -276,6 +297,100 @@ async fn connect(
     println!("g5_peer connect");
     println!("  dialling {}", hex8(&peer.to_bytes()));
 
+    // Phase one: open, take a snapshot, and suspend. Suspend rather than
+    // close, because the point is a session the peer intends to come back to.
+    println!("  --- session 1 ---");
+    let first = run_session(
+        &carrier,
+        peer,
+        &me,
+        &owner,
+        network,
+        vec![
+            (1, open_body()),
+            (2, CarrierRequestBody::Snapshot(projection_request())),
+            (3, CarrierRequestBody::Suspend),
+        ],
+    )
+    .await?;
+    if first.is_empty() {
+        return Ok(());
+    }
+
+    // The interruption. Phase one's connection is gone; this is a new dial,
+    // a new handshake, and a new admission. Nothing but the endpoint's own
+    // history connects the two.
+    println!("  --- interruption: reconnecting ---");
+    println!("  --- session 2 ---");
+    run_session(
+        &carrier,
+        peer,
+        &me,
+        &owner,
+        network,
+        vec![
+            (4, open_body()),
+            // Resuming from revision 1, which is where a client that
+            // acknowledged the initial snapshot and then dropped would be.
+            // The endpoint has since moved to revision 3, so a correct resume
+            // replays the two contiguous diffs rather than resending a scene.
+            (
+                5,
+                CarrierRequestBody::Resume(ResumeRequest {
+                    session: ProjectionSession(RESUME_SESSION.into()),
+                    epoch: SceneEpoch(3),
+                    revision: Revision(1),
+                }),
+            ),
+            // A real IntentInvocation, so the revoked run refuses the verb the
+            // done-when actually names rather than a stand-in.
+            (
+                6,
+                CarrierRequestBody::Intent(IntentInvocation {
+                    session: ProjectionSession(RESUME_SESSION.into()),
+                    target: InstanceId(1),
+                    observed_epoch: SceneEpoch(3),
+                    observed_revision: Revision(3),
+                    intent: "fixture.inspect".to_string(),
+                    payload: Vec::new(),
+                }),
+            ),
+            (7, CarrierRequestBody::Close),
+        ],
+    )
+    .await?;
+    Ok(())
+}
+
+/// The endpoint's own projection session, which is independent of admission:
+/// two separate admissions resume the same projection, which is what makes an
+/// interruption survivable at all.
+const RESUME_SESSION: &str = "loopback:g2-resume";
+
+fn open_body() -> CarrierRequestBody {
+    CarrierRequestBody::Open(Box::new(SessionOpen {
+        version: ProtocolVersion::V1,
+        capabilities: CapabilityProfile::default(),
+    }))
+}
+
+fn projection_request() -> graphshell_protocol::ProjectionRequest {
+    graphshell_protocol::ProjectionRequest {
+        version: ProtocolVersion::V1,
+        session: ProjectionSession(RESUME_SESSION.into()),
+        score: Score::new(Arrangement::Spiral(Default::default())),
+    }
+}
+
+/// Dial, prove the subject, run `script`, and report each answer.
+async fn run_session(
+    carrier: &P2pandaTransport,
+    peer: transport::PeerID,
+    me: &InMemoryProvider,
+    owner: &InMemoryProvider,
+    network: NetworkId,
+    script: Vec<(u64, CarrierRequestBody)>,
+) -> Result<Vec<CarrierResponse>, String> {
     let mut stream = carrier
         .connect(peer, projection_alpn())
         .await
@@ -285,13 +400,13 @@ async fn connect(
     let local = transport::PeerID::from_bytes(&subject).map_err(|e| format!("peer id: {e}"))?;
     let binding = initiator_binding(&projection_alpn(), local);
     let hello = open_session(
-        &me,
+        me,
         network,
         profile(),
         TrafficClass::Interactive,
         [5; 32],
         &binding,
-        vec![grant(&owner, subject, network, now_ms() + 3_600_000)],
+        vec![grant(owner, subject, network, now_ms() + 3_600_000)],
     )
     .map_err(|e| format!("hello: {e}"))?;
 
@@ -302,7 +417,7 @@ async fn connect(
     {
         SessionReply::Reject { reason } => {
             println!("  refused at admission: {reason:?}");
-            return Ok(());
+            return Ok(Vec::new());
         }
         SessionReply::Accept { .. } => println!("  admitted"),
     }
@@ -311,18 +426,7 @@ async fn connect(
     let (reader, mut writer) = tokio::io::split(stream);
     let mut lines = BufReader::new(reader).lines();
 
-    let script = [
-        (
-            1,
-            CarrierRequestBody::Open(Box::new(SessionOpen {
-                version: ProtocolVersion::V1,
-                capabilities: CapabilityProfile::default(),
-            })),
-        ),
-        (2, CarrierRequestBody::Discover),
-        (3, CarrierRequestBody::Close),
-    ];
-
+    let mut answers = Vec::new();
     for (id, body) in script {
         let mut line =
             serde_json::to_vec(&CarrierRequest { id, body }).map_err(|e| format!("encode: {e}"))?;
@@ -341,6 +445,7 @@ async fn connect(
                     Ok(body) => println!("  #{id} -> {}", summarize(body)),
                     Err(failure) => println!("  #{id} -> refused: {}", failure.message),
                 }
+                answers.push(decoded);
             }
             None => {
                 println!("  #{id} -> the endpoint closed without answering");
@@ -348,7 +453,7 @@ async fn connect(
             }
         }
     }
-    Ok(())
+    Ok(answers)
 }
 
 fn summarize(body: &graphshell_protocol::CarrierResponseBody) -> String {
@@ -367,7 +472,26 @@ fn summarize(body: &graphshell_protocol::CarrierResponseBody) -> String {
             format!("snapshot of {} item(s)", snapshot.scene.active_item_count())
         }
         B::Resource(_) => "resource".to_string(),
-        B::Resume(_) => "resume".to_string(),
+        // Which reply matters: replayed diffs are the thing that makes this a
+        // resume rather than a reconnect that started over.
+        B::Resume(reply) => match reply {
+            graphshell_protocol::ResumeReply::Diffs(diffs) => format!(
+                "resumed by replaying {} contiguous diff(s), revisions {}",
+                diffs.len(),
+                diffs
+                    .iter()
+                    .map(|d| format!("{}->{}", d.scene.base.0, d.scene.revision.0))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            graphshell_protocol::ResumeReply::Snapshot(snapshot) => format!(
+                "resumed by full snapshot at revision {} (history could not bridge the gap)",
+                snapshot.scene.revision.0
+            ),
+            graphshell_protocol::ResumeReply::Current(ack) => {
+                format!("already current at revision {}", ack.revision.0)
+            }
+        },
         B::Intent(result) => format!("intent {result:?}"),
         B::Closed => "closed".to_string(),
         B::Suspended => "suspended".to_string(),

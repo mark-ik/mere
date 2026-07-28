@@ -27,10 +27,12 @@ use std::collections::HashMap;
 use codicil::{Codicil, LogId, Provenance, Seq};
 use muniment::{Backend, Codec, SlotStore, StoreError};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde_json::Value;
 
 use crate::caps::Identified;
 use crate::commit::{Author, Batch, EditSpec};
 use crate::edit::{DerivationRecord, EdgeId, GraphEdit, WriterId};
+use crate::facet::{AcceptAll, FacetId, FacetStore};
 use crate::graph::{EdgeKey, Graph, NodeKey};
 
 /// An event-sourced graph: a materialized [`Graph`] plus the [`Codicil`] of
@@ -41,6 +43,7 @@ pub struct GraphLog<N: Identified, E> {
     pub(crate) by_edge_id: HashMap<EdgeId, EdgeKey>,
     pub(crate) by_edge_key: HashMap<EdgeKey, EdgeId>,
     pub(crate) derivations: HashMap<N::Id, Vec<DerivationRecord<N::Id>>>,
+    pub(crate) facets: FacetStore<N::Id>,
     /// This replica's identity, the writer half of every id it mints.
     pub(crate) writer: WriterId,
     /// This replica's own counter. Advanced only past ids **this** writer
@@ -58,6 +61,9 @@ struct Snapshot<N: Identified, E> {
     nodes: Vec<N>,
     edges: Vec<(EdgeId, N::Id, N::Id, E)>,
     derivations: Vec<(N::Id, DerivationRecord<N::Id>)>,
+    /// Facets are part of the compacted graph materialization.
+    #[serde(default)]
+    facets: FacetStore<N::Id>,
     /// Absent in 0.1.x snapshots, which were single-writer.
     #[serde(default)]
     writer: WriterId,
@@ -74,6 +80,7 @@ impl<N: Identified, E> Default for GraphLog<N, E> {
             by_edge_id: HashMap::new(),
             by_edge_key: HashMap::new(),
             derivations: HashMap::new(),
+            facets: FacetStore::new(),
             writer: WriterId::LOCAL,
             next_edge: 0,
         }
@@ -162,6 +169,11 @@ impl<N: Identified, E> GraphLog<N, E> {
     pub fn derivations(&self, node: &N::Id) -> &[DerivationRecord<N::Id>] {
         self.derivations.get(node).map(Vec::as_slice).unwrap_or(&[])
     }
+
+    /// Independently mergeable node facets materialized from the journal.
+    pub fn facets(&self) -> &FacetStore<N::Id> {
+        &self.facets
+    }
 }
 
 impl<N: Identified + Clone, E: Clone> GraphLog<N, E> {
@@ -182,6 +194,7 @@ impl<N: Identified + Clone, E: Clone> GraphLog<N, E> {
                     self.graph.remove(key);
                 }
                 self.derivations.remove(id);
+                self.facets.remove_node(id);
             }
             GraphEdit::Connect { id, from, to, edge } => {
                 if let (Some(from_key), Some(to_key)) =
@@ -210,6 +223,18 @@ impl<N: Identified + Clone, E: Clone> GraphLog<N, E> {
                     .entry(node.clone())
                     .or_default()
                     .push(from.clone());
+            }
+            GraphEdit::SetFacet { node, facet, value } => {
+                if self.graph.key_of(node).is_some() {
+                    self.facets
+                        .set(node.clone(), facet.clone(), value.clone(), &AcceptAll)
+                        .expect("replay preserves an already-admitted facet value");
+                }
+            }
+            GraphEdit::RemoveFacet { node, facet } => {
+                if self.graph.key_of(node).is_some() {
+                    self.facets.remove(node, facet);
+                }
             }
         }
     }
@@ -284,6 +309,37 @@ impl<N: Identified + Clone, E: Clone> GraphLog<N, E> {
         );
     }
 
+    /// Set one facet as its own attributed journal edit.
+    pub fn set_facet(
+        &mut self,
+        author: &Author,
+        node: &N::Id,
+        facet: FacetId,
+        value: Value,
+    ) -> bool {
+        self.commit_one(
+            author,
+            EditSpec::SetFacet {
+                node: node.clone(),
+                facet,
+                value,
+            },
+        )
+        .is_some()
+    }
+
+    /// Remove one facet as its own attributed journal edit.
+    pub fn remove_facet(&mut self, author: &Author, node: &N::Id, facet: FacetId) -> bool {
+        self.commit_one(
+            author,
+            EditSpec::RemoveFacet {
+                node: node.clone(),
+                facet,
+            },
+        )
+        .is_some()
+    }
+
     /// Fork this graph under a new log identity. The fork is self-contained: it
     /// copies the whole edit history and carries a provenance header pointing back
     /// at the source (see [`provenance`](GraphLog::provenance)), then diverges
@@ -329,6 +385,7 @@ impl<N: Identified + Clone, E: Clone> GraphLog<N, E> {
         for (node, record) in snapshot.derivations {
             this.derivations.entry(node).or_default().push(record);
         }
+        this.facets = snapshot.facets;
         this.writer = snapshot.writer;
         this.next_edge = snapshot.next_edge;
         (this, snapshot.at_seq)
@@ -403,6 +460,7 @@ where
             nodes,
             edges,
             derivations,
+            facets: self.facets.clone(),
             writer: self.writer,
             next_edge: self.next_edge,
             at_seq: self.log.len() as u64,

@@ -1,17 +1,20 @@
 //! Deterministic disconnect and resume acceptance fixture for G2.
 
 use graphshell_client::{ClientState, DiffApplication, ResumeApplication, ResumeApplyError};
-use graphshell_endpoint::{ProjectionSource, ResumableProjectionSource};
+use graphshell_endpoint::{
+    IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource, ResumableProjectionSource,
+};
 use graphshell_protocol::{
-    BoundsRelationship, CachePolicy, PresentationBinding, PresentationCapability,
-    PresentationChange, PresentationCodec, PresentationKey, PresentationManifest,
-    PresentationOffer, PresentationSemantics, ProjectionAck, ProjectionDiff, ProjectionRequest,
-    ProjectionSession, ProjectionSnapshot, ProtocolVersion, ResumeReply, ResumeRequest,
-    SemanticRole, SessionStatus,
+    BoundsRelationship, CachePolicy, EndpointDescriptor, IntentInvocation, IntentResult,
+    PresentationBinding, PresentationCapability, PresentationChange, PresentationCodec,
+    PresentationKey, PresentationManifest, PresentationOffer, PresentationSemantics, ProjectionAck,
+    ProjectionDiff, ProjectionOffer, ProjectionRequest, ProjectionSession, ProjectionSnapshot,
+    ProtocolVersion, ResourceRequest, ResourceResponse, ResumeReply, ResumeRequest, SemanticRole,
+    SessionStatus,
 };
 use sceno::{
-    Footprint, InstanceId, ProjectedItem, Representation, Scene, Size2, SourceIx, SourceRef,
-    Transform2,
+    Arrangement, Footprint, InstanceId, ProjectedItem, Representation, Scene, Score, Size2,
+    SourceIx, SourceRef, Transform2,
 };
 use scenotime::{Revision, SceneDiff, SceneEpoch, SceneOp, SceneSnapshot};
 
@@ -20,6 +23,7 @@ const SESSION: &str = "loopback:g2-resume";
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ResumeFixtureError {
     WrongSession,
+    NoSuchResource,
 }
 
 /// A source with a two-diff history and an epoch-preserving current snapshot.
@@ -180,6 +184,82 @@ impl ResumeFixtureEndpoint {
 impl Default for ResumeFixtureEndpoint {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Required by `graphshell_endpoint::dispatch_common`: a carrier reports an
+/// endpoint's failure to a peer as text and never leaks the endpoint's own
+/// error type onto the wire.
+impl std::fmt::Display for ResumeFixtureError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ResumeFixtureError::WrongSession => write!(f, "request names another session"),
+            ResumeFixtureError::NoSuchResource => write!(f, "no such resource"),
+        }
+    }
+}
+
+impl ResumeFixtureEndpoint {
+    /// The request that selects this fixture's projection.
+    pub fn request(&self) -> ProjectionRequest {
+        ProjectionRequest {
+            version: ProtocolVersion::V1,
+            session: self.session.clone(),
+            score: Score::new(Arrangement::Spiral(Default::default())),
+        }
+    }
+
+    /// The revision a resuming client should currently be able to reach.
+    pub fn current_revision(&self) -> Revision {
+        self.current.scene.revision
+    }
+}
+
+impl ProjectionCatalog for ResumeFixtureEndpoint {
+    fn describe(&self) -> EndpointDescriptor {
+        EndpointDescriptor {
+            label: "graphshell resume fixture".to_string(),
+            projections: vec![ProjectionOffer {
+                label: "G2 resume".to_string(),
+                request: self.request(),
+            }],
+        }
+    }
+}
+
+impl PresentationSource for ResumeFixtureEndpoint {
+    type Error = ResumeFixtureError;
+
+    /// This fixture's scenes carry presentation *bindings* but no resource
+    /// bytes; its point is scene diff and resume, not disclosure. Saying so is
+    /// better than returning empty bytes that would read as a real resource.
+    fn resource(&mut self, _request: ResourceRequest) -> Result<ResourceResponse, Self::Error> {
+        Err(ResumeFixtureError::NoSuchResource)
+    }
+}
+
+impl IntentSink for ResumeFixtureEndpoint {
+    type Error = ResumeFixtureError;
+
+    /// Real adjudication against the scene, not a stub.
+    ///
+    /// An intent naming another session is refused; one raised against a
+    /// revision the endpoint has moved past is `Stale` with the current
+    /// position, which is what lets a client resynchronize rather than guess.
+    /// Only an intent on the current revision is accepted.
+    fn invoke(&mut self, intent: IntentInvocation) -> Result<IntentResult, Self::Error> {
+        if intent.session != self.session {
+            return Err(ResumeFixtureError::WrongSession);
+        }
+        if intent.observed_epoch != self.current.scene.epoch
+            || intent.observed_revision != self.current.scene.revision
+        {
+            return Ok(IntentResult::Stale {
+                current_epoch: self.current.scene.epoch,
+                current_revision: self.current.scene.revision,
+            });
+        }
+        Ok(IntentResult::Accepted)
     }
 }
 

@@ -3,18 +3,22 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use muniment::{Backend, MemoryBackend, RedbBackend, StoreError};
+use muniment::{Backend, MemoryBackend, RedbBackend, StoreError, WriteOp};
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Topic, VerifyingKey};
 use p2panda_net::{Endpoint, Gossip};
 use p2panda_store::logs::LogStore;
 use p2panda_store::topics::TopicStore;
+use proofs::Digest;
 use serde::{Deserialize, Serialize};
+use similar::{Algorithm, TextDiff};
 use stickleback::{
-    Admission, CausalEntry, CausalError, CausalLimits, DataKeyring, GroupCiphertext,
-    GroupCryptoError, JoinError, JoinedSpace, MunimentStore, OperationPolicy, OperationProcessor,
-    PendingCausalOperation, ProcessError, Reject, StoreTarget, author_head, causal_projection,
-    happens_before, observed_frontier, validate_causal_metadata,
+    Admission, CausalEntry, CausalError, CausalLimits, DataKeyring, EpochCheckpointBasis,
+    EpochHold, EpochHoldReason, EpochPruningProposal, EpochRetentionFacts, GroupCiphertext,
+    GroupCryptoError, GroupEncryptionProfile, GroupSecretId, JoinError, JoinedSpace, MunimentStore,
+    OperationPolicy, OperationProcessor, PendingCausalOperation, ProcessError, Reject, StoreTarget,
+    author_head, causal_projection, happens_before, observed_frontier, propose_epoch_pruning,
+    validate_causal_metadata,
 };
 use zeroize::{Zeroize, Zeroizing};
 
@@ -26,6 +30,10 @@ const KNOT_CAUSAL_LIMITS: CausalLimits = CausalLimits {
     max_parents: 64,
     max_payload_bytes: 16 * 1024 * 1024,
 };
+
+/// Communal Knot uses the same retained-data floor as Commons chat.
+pub const KNOT_COMMONS_ENCRYPTION_PROFILE: GroupEncryptionProfile =
+    GroupEncryptionProfile::durable_data(8);
 
 /// The signed encryption contract for one Knot space.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -98,6 +106,10 @@ pub enum KnotSyncError {
     InvalidResolution(String),
     #[error("Knot sync has no durable projection checkpoint")]
     MissingCheckpoint,
+    #[error("reviewed Knot epoch proposal is stale")]
+    StaleRetentionProposal,
+    #[error("Knot epoch proposal is blocked")]
+    BlockedRetentionProposal,
     #[error("document {0} has operations from more than one writer")]
     ConcurrentWriter(String),
 }
@@ -162,7 +174,7 @@ impl OperationPolicy<KnotSyncExt> for KnotSyncPolicy {
 }
 
 /// One writer's current contribution to a conflicted document id.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KnotDocumentVersion {
     pub writer: [u8; 32],
     pub operation: [u8; 32],
@@ -171,10 +183,19 @@ pub struct KnotDocumentVersion {
 }
 
 /// A document id touched by more than one writer.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KnotDocumentConflict {
     pub id: String,
     pub versions: Vec<KnotDocumentVersion>,
+}
+
+/// A clean three-way merge derived from concurrent Knot text versions.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KnotAutomaticTextMerge {
+    pub id: String,
+    pub base: [u8; 32],
+    pub supersedes: Vec<[u8; 32]>,
+    pub document: VaultDocument,
 }
 
 /// Knot's current causally closed document view.
@@ -182,6 +203,7 @@ pub struct KnotDocumentConflict {
 pub struct KnotDocumentProjection {
     pub documents: Vec<VaultDocument>,
     pub conflicts: Vec<KnotDocumentConflict>,
+    pub automatic_merges: Vec<KnotAutomaticTextMerge>,
     pub pending: Vec<PendingCausalOperation>,
     /// Exact current operation for every causally resolved document id.
     ///
@@ -198,6 +220,16 @@ pub struct KnotAuthorHead {
     pub operation: [u8; 32],
 }
 
+/// Knot-native materialized base retained by a projection checkpoint.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KnotCheckpointSnapshot {
+    pub documents: Vec<VaultDocument>,
+    pub conflicts: Vec<KnotDocumentConflict>,
+    #[serde(default)]
+    pub automatic_merges: Vec<KnotAutomaticTextMerge>,
+    pub document_heads: BTreeMap<String, [u8; 32]>,
+}
+
 /// Durable projection boundary required before domain-authorized pruning.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KnotProjectionCheckpoint {
@@ -207,6 +239,10 @@ pub struct KnotProjectionCheckpoint {
     pub document_digests: Vec<(String, [u8; 32])>,
     pub conflict_ids: Vec<String>,
     pub pending: Vec<([u8; 32], Vec<[u8; 32]>)>,
+    /// Added after the original digest-only checkpoint. Legacy checkpoints
+    /// remain readable but cannot authorize epoch pruning.
+    #[serde(default)]
+    pub snapshot: Option<KnotCheckpointSnapshot>,
 }
 
 /// Exact retained tail after a durable checkpoint.
@@ -214,6 +250,32 @@ pub struct KnotProjectionCheckpoint {
 pub struct KnotTailReceipt {
     pub checkpoint: [u8; 32],
     pub operations: Vec<[u8; 32]>,
+}
+
+/// Recovery promise supplied by communal Knot's offline-member policy.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct KnotOfflineMemberEpochHold {
+    pub member: [u8; 32],
+    pub epoch: GroupSecretId,
+}
+
+/// Atomic host receipt for explicit communal Knot epoch erasure.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KnotEpochExecutionReceipt {
+    pub version: u16,
+    pub space_id: [u8; 32],
+    pub checkpoint: Digest,
+    pub authority_revision: Digest,
+    pub forgotten: Vec<GroupSecretId>,
+    pub retained: Vec<GroupSecretId>,
+    pub previous_keyring: Digest,
+    pub persisted_keyring: Digest,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum KnotOfflineMemberRecovery {
+    Resume,
+    BootstrapRequired { checkpoint: Option<Digest> },
 }
 
 #[derive(Clone)]
@@ -511,15 +573,16 @@ where
         let projection = causal_projection(&entries)?;
         let mut current = BTreeMap::<String, BTreeMap<[u8; 32], KnotDocumentVersion>>::new();
         let mut event_documents = BTreeMap::<[u8; 32], String>::new();
+        let mut version_history = Vec::<([u8; 32], String, Option<VaultDocument>)>::new();
 
         for index in projection.order {
             let operation = &records[index].operation;
             let writer = *operation.header.verifying_key.as_bytes();
             let operation_id = *operation.hash.as_bytes();
             let event = decode_event(cipher, operation)?;
-            let (id, document) = match event {
-                KnotSyncEvent::Put(document) => (document.id.clone(), Some(document)),
-                KnotSyncEvent::Delete { id } => (id, None),
+            let (id, document, replaces_observed) = match event {
+                KnotSyncEvent::Put(document) => (document.id.clone(), Some(document), true),
+                KnotSyncEvent::Delete { id } => (id, None, true),
                 KnotSyncEvent::Resolve {
                     id,
                     supersedes,
@@ -536,10 +599,16 @@ where
                     if let Some(versions) = current.get_mut(&id) {
                         versions.retain(|_, version| !targets.contains(&version.operation));
                     }
-                    (id, document)
+                    (id, document, false)
                 }
             };
+            if replaces_observed && let Some(versions) = current.get_mut(&id) {
+                versions.retain(|_, version| {
+                    !happens_before(&entries, version.operation, operation_id)
+                });
+            }
             event_documents.insert(operation_id, id.clone());
+            version_history.push((operation_id, id.clone(), document.clone()));
             current.entry(id).or_default().insert(
                 writer,
                 KnotDocumentVersion {
@@ -552,6 +621,7 @@ where
 
         let mut documents = Vec::new();
         let mut conflicts = Vec::new();
+        let mut automatic_merges = Vec::new();
         let mut document_heads = BTreeMap::new();
         for (id, versions) in current {
             if versions.len() == 1 {
@@ -560,6 +630,19 @@ where
                 if let Some(document) = version.document {
                     documents.push(document);
                 }
+            } else if let Some(automatic) =
+                automatic_text_merge(&entries, &version_history, &id, &versions)
+            {
+                document_heads.insert(
+                    id,
+                    automatic_text_merge_head(
+                        automatic.base,
+                        &automatic.supersedes,
+                        &automatic.document,
+                    )?,
+                );
+                documents.push(automatic.document.clone());
+                automatic_merges.push(automatic);
             } else {
                 conflicts.push(KnotDocumentConflict {
                     id,
@@ -570,6 +653,7 @@ where
         Ok(KnotDocumentProjection {
             documents,
             conflicts,
+            automatic_merges,
             pending: projection.pending,
             document_heads,
         })
@@ -624,6 +708,20 @@ where
         &self,
         cipher: KnotSyncCipher<'_>,
     ) -> Result<KnotProjectionCheckpoint, KnotSyncError> {
+        let checkpoint = self.build_checkpoint_with_cipher(cipher).await?;
+        let bytes = serde_json::to_vec(&checkpoint)
+            .map_err(|error| KnotSyncError::Payload(error.to_string()))?;
+        self.store
+            .backend()
+            .put(&checkpoint_key(self.policy.space_id), &bytes)
+            .await?;
+        Ok(checkpoint)
+    }
+
+    async fn build_checkpoint_with_cipher(
+        &self,
+        cipher: KnotSyncCipher<'_>,
+    ) -> Result<KnotProjectionCheckpoint, KnotSyncError> {
         let projection = self.projection_with_cipher(cipher).await?;
         let records = self.load_operations().await?;
         let mut heads = BTreeMap::<([u8; 32], u64), KnotAuthorHead>::new();
@@ -649,7 +747,13 @@ where
                 .map_err(|error| KnotSyncError::Payload(error.to_string()))?;
             document_digests.push((document.id.clone(), *blake3::hash(&bytes).as_bytes()));
         }
-        let checkpoint = KnotProjectionCheckpoint {
+        let snapshot = KnotCheckpointSnapshot {
+            documents: projection.documents.clone(),
+            conflicts: projection.conflicts.clone(),
+            automatic_merges: projection.automatic_merges.clone(),
+            document_heads: projection.document_heads.clone(),
+        };
+        Ok(KnotProjectionCheckpoint {
             version: 1,
             space_id: self.policy.space_id,
             heads: heads.into_values().collect(),
@@ -664,14 +768,8 @@ where
                 .into_iter()
                 .map(|pending| (pending.operation, pending.missing))
                 .collect(),
-        };
-        let bytes = serde_json::to_vec(&checkpoint)
-            .map_err(|error| KnotSyncError::Payload(error.to_string()))?;
-        self.store
-            .backend()
-            .put(&checkpoint_key(self.policy.space_id), &bytes)
-            .await?;
-        Ok(checkpoint)
+            snapshot: Some(snapshot),
+        })
     }
 
     pub async fn load_checkpoint(&self) -> Result<Option<KnotProjectionCheckpoint>, KnotSyncError> {
@@ -733,6 +831,218 @@ where
         })
     }
 
+    /// Produce communal Knot's dry-run proposal without translating document
+    /// events through the Commons graph or chat grammars.
+    pub async fn communal_epoch_pruning_proposal(
+        &self,
+        keys: &DataKeyring,
+        checkpoint_authority_revision: Digest,
+        current_authority_revision: Digest,
+        authority_reevaluation_epochs: &[GroupSecretId],
+        offline_members: &[KnotOfflineMemberEpochHold],
+    ) -> Result<EpochPruningProposal, KnotSyncError> {
+        if self.policy.encryption != KnotEncryptionProfile::CommonsDataV1 {
+            return Err(KnotSyncError::WrongEncryptionProfile);
+        }
+        let records = self.load_operations().await?;
+        let by_operation: BTreeMap<_, _> = records
+            .iter()
+            .map(|record| (*record.operation.hash.as_bytes(), record))
+            .collect();
+        let mut holds = Vec::new();
+
+        let checkpoint = if let Some(checkpoint) = self.load_checkpoint().await? {
+            let tail = self.tail_receipt().await?;
+            for operation in &tail.operations {
+                let record = by_operation.get(operation).ok_or_else(|| {
+                    KnotSyncError::Payload(
+                        "checkpoint tail names an operation absent from the retained store".into(),
+                    )
+                })?;
+                holds.push(EpochHold {
+                    epoch: communal_operation_epoch(&record.operation)?,
+                    reason: EpochHoldReason::DecryptionReachability,
+                });
+            }
+            for (operation, _) in &checkpoint.pending {
+                let record = by_operation.get(operation).ok_or_else(|| {
+                    KnotSyncError::Payload(
+                        "checkpoint pending set names an operation absent from the retained store"
+                            .into(),
+                    )
+                })?;
+                holds.push(EpochHold {
+                    epoch: communal_operation_epoch(&record.operation)?,
+                    reason: EpochHoldReason::PendingCausality,
+                });
+            }
+            let current = self
+                .build_checkpoint_with_cipher(KnotSyncCipher::CommonsData(keys))
+                .await?;
+            let author_continuation_ready = checkpoint.snapshot.is_some()
+                && tail.operations.is_empty()
+                && current == checkpoint;
+            let bytes = serde_json::to_vec(&checkpoint)
+                .map_err(|error| KnotSyncError::Payload(error.to_string()))?;
+            Some(EpochCheckpointBasis {
+                checkpoint: Digest::blake3(&bytes),
+                authority_revision: checkpoint_authority_revision,
+                current_authority_revision,
+                author_continuation_ready,
+            })
+        } else {
+            for record in &records {
+                holds.push(EpochHold {
+                    epoch: communal_operation_epoch(&record.operation)?,
+                    reason: EpochHoldReason::DecryptionReachability,
+                });
+            }
+            None
+        };
+        holds.extend(
+            authority_reevaluation_epochs
+                .iter()
+                .copied()
+                .map(|epoch| EpochHold {
+                    epoch,
+                    reason: EpochHoldReason::AuthorityReevaluation,
+                }),
+        );
+        holds.extend(offline_members.iter().map(|hold| EpochHold {
+            epoch: hold.epoch,
+            reason: EpochHoldReason::OfflineMember(hold.member),
+        }));
+        Ok(propose_epoch_pruning(
+            KNOT_COMMONS_ENCRYPTION_PROFILE,
+            keys,
+            &EpochRetentionFacts { checkpoint, holds },
+        ))
+    }
+
+    /// Revalidate and explicitly execute a reviewed communal proposal.
+    pub async fn execute_communal_epoch_pruning(
+        &self,
+        keys: &mut DataKeyring,
+        reviewed: &EpochPruningProposal,
+        checkpoint_authority_revision: Digest,
+        current_authority_revision: Digest,
+        authority_reevaluation_epochs: &[GroupSecretId],
+        offline_members: &[KnotOfflineMemberEpochHold],
+    ) -> Result<KnotEpochExecutionReceipt, KnotSyncError> {
+        let current = self
+            .communal_epoch_pruning_proposal(
+                keys,
+                checkpoint_authority_revision.clone(),
+                current_authority_revision,
+                authority_reevaluation_epochs,
+                offline_members,
+            )
+            .await?;
+        if &current != reviewed {
+            return Err(KnotSyncError::StaleRetentionProposal);
+        }
+        if !current.is_executable() {
+            return Err(KnotSyncError::BlockedRetentionProposal);
+        }
+        let checkpoint = current
+            .checkpoint
+            .clone()
+            .ok_or(KnotSyncError::BlockedRetentionProposal)?;
+        let before = keys.to_bytes()?;
+        let mut reduced = DataKeyring::from_bytes(&before)?;
+        for epoch in &current.forget {
+            if !reduced.forget_authorized(epoch) {
+                return Err(KnotSyncError::StaleRetentionProposal);
+            }
+        }
+        let after = reduced.to_bytes()?;
+        let receipt = KnotEpochExecutionReceipt {
+            version: 1,
+            space_id: self.policy.space_id,
+            checkpoint,
+            authority_revision: checkpoint_authority_revision,
+            forgotten: current.forget,
+            retained: reduced
+                .epochs_oldest_first()
+                .ok_or_else(|| {
+                    KnotSyncError::Payload(
+                        "executed keyring lost its proven epoch chronology".into(),
+                    )
+                })?
+                .to_vec(),
+            previous_keyring: Digest::blake3(&before),
+            persisted_keyring: Digest::blake3(&after),
+        };
+        self.store
+            .backend()
+            .apply(&[
+                WriteOp::Put {
+                    key: communal_keyring_key(self.policy.space_id),
+                    value: after,
+                },
+                WriteOp::Put {
+                    key: communal_epoch_receipt_key(self.policy.space_id),
+                    value: serde_json::to_vec(&receipt)
+                        .map_err(|error| KnotSyncError::Payload(error.to_string()))?,
+                },
+            ])
+            .await?;
+        *keys = reduced;
+        Ok(receipt)
+    }
+
+    pub async fn restore_communal_keyring(
+        &self,
+        keys: &mut DataKeyring,
+    ) -> Result<bool, KnotSyncError> {
+        let Some(bytes) = self
+            .store
+            .backend()
+            .get(&communal_keyring_key(self.policy.space_id))
+            .await?
+        else {
+            return Ok(false);
+        };
+        *keys = DataKeyring::from_bytes(&bytes)?;
+        Ok(true)
+    }
+
+    pub async fn communal_epoch_execution_receipt(
+        &self,
+    ) -> Result<Option<KnotEpochExecutionReceipt>, KnotSyncError> {
+        let Some(bytes) = self
+            .store
+            .backend()
+            .get(&communal_epoch_receipt_key(self.policy.space_id))
+            .await?
+        else {
+            return Ok(None);
+        };
+        serde_json::from_slice(&bytes)
+            .map(Some)
+            .map_err(|error| KnotSyncError::Payload(error.to_string()))
+    }
+
+    pub async fn communal_offline_member_recovery(
+        &self,
+        keys: &DataKeyring,
+        required_epoch: GroupSecretId,
+    ) -> Result<KnotOfflineMemberRecovery, KnotSyncError> {
+        if keys.contains(&required_epoch) {
+            return Ok(KnotOfflineMemberRecovery::Resume);
+        }
+        let checkpoint = self
+            .load_checkpoint()
+            .await?
+            .map(|checkpoint| {
+                serde_json::to_vec(&checkpoint)
+                    .map(|bytes| Digest::blake3(&bytes))
+                    .map_err(|error| KnotSyncError::Payload(error.to_string()))
+            })
+            .transpose()?;
+        Ok(KnotOfflineMemberRecovery::BootstrapRequired { checkpoint })
+    }
+
     pub fn sync_store(&self) -> MunimentStore<B, KnotSyncExt> {
         self.store.clone()
     }
@@ -779,6 +1089,28 @@ fn causal_entries(records: &[StoredKnotOperation]) -> Vec<CausalEntry<u64>> {
 fn checkpoint_key(space_id: [u8; 32]) -> String {
     let hex: String = space_id.iter().map(|byte| format!("{byte:02x}")).collect();
     format!("knot-sync/checkpoint/{hex}")
+}
+
+fn communal_keyring_key(space_id: [u8; 32]) -> String {
+    let hex: String = space_id.iter().map(|byte| format!("{byte:02x}")).collect();
+    format!("knot-sync/commons-keyring/{hex}")
+}
+
+fn communal_epoch_receipt_key(space_id: [u8; 32]) -> String {
+    let hex: String = space_id.iter().map(|byte| format!("{byte:02x}")).collect();
+    format!("knot-sync/commons-epoch-receipt/{hex}")
+}
+
+fn communal_operation_epoch(
+    operation: &Operation<KnotSyncExt>,
+) -> Result<GroupSecretId, KnotSyncError> {
+    let body = operation
+        .body
+        .as_ref()
+        .ok_or_else(|| KnotSyncError::Payload("operation body is absent".into()))?;
+    let envelope: GroupCiphertext = decode_cbor(body.to_bytes().as_slice())
+        .map_err(|error| KnotSyncError::Payload(error.to_string()))?;
+    Ok(envelope.epoch)
 }
 
 fn operation_aad(space_id: [u8; 32], author: &[u8; 32], seq_num: u32) -> Vec<u8> {
@@ -831,6 +1163,172 @@ fn decode_event(
     });
     serde_json::from_slice(plaintext.as_slice())
         .map_err(|error| KnotSyncError::Payload(error.to_string()))
+}
+
+fn automatic_text_merge(
+    entries: &[CausalEntry<u64>],
+    history: &[([u8; 32], String, Option<VaultDocument>)],
+    id: &str,
+    versions: &BTreeMap<[u8; 32], KnotDocumentVersion>,
+) -> Option<KnotAutomaticTextMerge> {
+    if versions.len() != 2 {
+        return None;
+    }
+    let versions: Vec<_> = versions.values().collect();
+    let left = versions[0].document.as_ref()?;
+    let right = versions[1].document.as_ref()?;
+    let (base_operation, base) =
+        history
+            .iter()
+            .rev()
+            .find_map(|(operation, event_id, document)| {
+                let document = document.as_ref()?;
+                (event_id == id
+                    && happens_before(entries, *operation, versions[0].operation)
+                    && happens_before(entries, *operation, versions[1].operation))
+                .then_some((*operation, document))
+            })?;
+    let document = merge_text_document(base, left, right)?;
+    let mut supersedes = vec![versions[0].operation, versions[1].operation];
+    supersedes.sort_unstable();
+    Some(KnotAutomaticTextMerge {
+        id: id.into(),
+        base: base_operation,
+        supersedes,
+        document,
+    })
+}
+
+fn merge_text_document(
+    base: &VaultDocument,
+    left: &VaultDocument,
+    right: &VaultDocument,
+) -> Option<VaultDocument> {
+    if base.id != left.id || base.id != right.id {
+        return None;
+    }
+    let title = merge_scalar(&base.title, &left.title, &right.title)?;
+    let media_type = merge_scalar(&base.media_type, &left.media_type, &right.media_type)?;
+    if !media_type.starts_with("text/") {
+        return None;
+    }
+    let base_body = std::str::from_utf8(&base.body).ok()?;
+    let left_body = std::str::from_utf8(&left.body).ok()?;
+    let right_body = std::str::from_utf8(&right.body).ok()?;
+    let body = merge_text_lines(base_body, left_body, right_body)?.into_bytes();
+    Some(VaultDocument {
+        id: base.id.clone(),
+        title,
+        body,
+        media_type,
+    })
+}
+
+fn merge_scalar<T: Clone + Eq>(base: &T, left: &T, right: &T) -> Option<T> {
+    if left == right {
+        Some(left.clone())
+    } else if left == base {
+        Some(right.clone())
+    } else if right == base {
+        Some(left.clone())
+    } else {
+        None
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct LineEdit {
+    start: usize,
+    end: usize,
+    replacement: Vec<String>,
+}
+
+fn line_edits(base: &[&str], branch: &[&str]) -> Vec<LineEdit> {
+    TextDiff::configure()
+        .algorithm(Algorithm::Myers)
+        .diff_slices(base, branch)
+        .ops()
+        .iter()
+        .filter_map(|operation| {
+            let old = operation.old_range();
+            let new = operation.new_range();
+            (old.len() != new.len() || base[old.clone()] != branch[new.clone()]).then(|| LineEdit {
+                start: old.start,
+                end: old.end,
+                replacement: branch[new].iter().map(|line| (*line).to_owned()).collect(),
+            })
+        })
+        .collect()
+}
+
+fn merge_text_lines(base: &str, left: &str, right: &str) -> Option<String> {
+    if left == right {
+        return Some(left.into());
+    }
+    if left == base {
+        return Some(right.into());
+    }
+    if right == base {
+        return Some(left.into());
+    }
+    let base: Vec<_> = base.split_inclusive('\n').collect();
+    let left: Vec<_> = left.split_inclusive('\n').collect();
+    let right: Vec<_> = right.split_inclusive('\n').collect();
+    let left_edits = line_edits(&base, &left);
+    let right_edits = line_edits(&base, &right);
+    for left in &left_edits {
+        for right in &right_edits {
+            if line_edits_conflict(left, right) {
+                return None;
+            }
+        }
+    }
+    let mut edits = left_edits;
+    edits.extend(right_edits);
+    edits.sort_by(|left, right| {
+        (left.start, left.end, &left.replacement).cmp(&(right.start, right.end, &right.replacement))
+    });
+    edits.dedup();
+
+    let mut output = String::new();
+    let mut cursor = 0;
+    for edit in edits {
+        if edit.start < cursor {
+            return None;
+        }
+        output.extend(base[cursor..edit.start].iter().copied());
+        output.extend(edit.replacement.iter().map(String::as_str));
+        cursor = edit.end;
+    }
+    output.extend(base[cursor..].iter().copied());
+    Some(output)
+}
+
+fn line_edits_conflict(left: &LineEdit, right: &LineEdit) -> bool {
+    if left == right {
+        return false;
+    }
+    let left_insert = left.start == left.end;
+    let right_insert = right.start == right.end;
+    match (left_insert, right_insert) {
+        (true, true) => left.start == right.start,
+        (true, false) => left.start > right.start && left.start < right.end,
+        (false, true) => right.start > left.start && right.start < left.end,
+        (false, false) => left.start.max(right.start) < left.end.min(right.end),
+    }
+}
+
+fn automatic_text_merge_head(
+    base: [u8; 32],
+    supersedes: &[[u8; 32]],
+    document: &VaultDocument,
+) -> Result<[u8; 32], KnotSyncError> {
+    let bytes = encode_cbor(&(base, supersedes, document))
+        .map_err(|error| KnotSyncError::Payload(error.to_string()))?;
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(b"mere.knot.automatic-text-merge.v1");
+    hasher.update(&bytes);
+    Ok(*hasher.finalize().as_bytes())
 }
 
 fn validate_resolution(
@@ -920,6 +1418,192 @@ mod tests {
         let mut bob = DataKeyring::new();
         bob.install(secret);
         (alice, bob)
+    }
+
+    #[tokio::test]
+    async fn communal_proposal_keeps_pending_and_policy_held_epochs() {
+        let (alice, bob) = identities();
+        let writers = [
+            alice.master_public_key().to_bytes(),
+            bob.master_public_key().to_bytes(),
+        ];
+        let mut keys = DataKeyring::new();
+        let mut epochs = vec![keys.rotate_random().unwrap().id()];
+        let parent_store = KnotSyncStore::in_memory_commons(SPACE, writers);
+        let child_store = KnotSyncStore::in_memory_commons(SPACE, writers);
+        let receiver = KnotSyncStore::in_memory_commons(SPACE, writers);
+        let parent = parent_store
+            .author_communal(
+                alice.master_keypair().to_seed(),
+                &keys,
+                &KnotSyncEvent::Put(doc("shared", "parent")),
+            )
+            .await
+            .unwrap();
+        child_store.accept(&parent).await.unwrap();
+        let child = child_store
+            .author_communal(
+                bob.master_keypair().to_seed(),
+                &keys,
+                &KnotSyncEvent::Put(doc("shared", "pending child")),
+            )
+            .await
+            .unwrap();
+        receiver.accept(&child).await.unwrap();
+        for _ in 0..9 {
+            epochs.push(keys.rotate_random().unwrap().id());
+        }
+        let checkpoint = receiver.save_communal_checkpoint(&keys).await.unwrap();
+        assert_eq!(checkpoint.pending[0].0, *child.hash.as_bytes());
+
+        let revision = Digest::blake3(b"commons authority");
+        let pending = receiver
+            .communal_epoch_pruning_proposal(&keys, revision.clone(), revision.clone(), &[], &[])
+            .await
+            .unwrap();
+        assert!(pending.is_executable());
+        assert_eq!(pending.forget, vec![epochs[1]]);
+        assert!(pending.retain.iter().any(|retained| {
+            retained.epoch == epochs[0]
+                && retained
+                    .reasons
+                    .contains(&stickleback::EpochRetentionReason::Domain(
+                        EpochHoldReason::PendingCausality,
+                    ))
+        }));
+
+        let policy_held = receiver
+            .communal_epoch_pruning_proposal(
+                &keys,
+                revision.clone(),
+                revision,
+                &[epochs[1]],
+                &[KnotOfflineMemberEpochHold {
+                    member: [0xc3; 32],
+                    epoch: epochs[1],
+                }],
+            )
+            .await
+            .unwrap();
+        assert!(policy_held.is_executable());
+        assert!(policy_held.forget.is_empty());
+    }
+
+    #[tokio::test]
+    async fn communal_execution_revalidates_commits_and_reopens() {
+        let directory = tempdir().unwrap();
+        let database = directory.path().join("communal-retention.redb");
+        let alice = InMemoryProvider::from_seed([0x83; 32]);
+        let writer = alice.master_public_key().to_bytes();
+        let seed = alice.master_keypair().to_seed();
+        let mut keys = DataKeyring::new();
+        let mut epochs = Vec::new();
+        for _ in 0..10 {
+            epochs.push(keys.rotate_random().unwrap().id());
+        }
+        let store = KnotSyncFileStore::open_commons(&database, SPACE, [writer]).unwrap();
+        store
+            .author_communal(
+                seed,
+                &keys,
+                &KnotSyncEvent::Put(doc("one", "before checkpoint")),
+            )
+            .await
+            .unwrap();
+        store.save_communal_checkpoint(&keys).await.unwrap();
+        let revision = Digest::blake3(b"commons authority");
+        let stale = store
+            .communal_epoch_pruning_proposal(&keys, revision.clone(), revision.clone(), &[], &[])
+            .await
+            .unwrap();
+
+        store
+            .author_communal(
+                seed,
+                &keys,
+                &KnotSyncEvent::Put(doc("two", "new checkpoint")),
+            )
+            .await
+            .unwrap();
+        store.save_communal_checkpoint(&keys).await.unwrap();
+        assert!(matches!(
+            store
+                .execute_communal_epoch_pruning(
+                    &mut keys,
+                    &stale,
+                    revision.clone(),
+                    revision.clone(),
+                    &[],
+                    &[],
+                )
+                .await,
+            Err(KnotSyncError::StaleRetentionProposal)
+        ));
+        assert!(
+            store
+                .communal_epoch_execution_receipt()
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(keys.epoch_count(), 10);
+
+        let reviewed = store
+            .communal_epoch_pruning_proposal(&keys, revision.clone(), revision.clone(), &[], &[])
+            .await
+            .unwrap();
+        let receipt = store
+            .execute_communal_epoch_pruning(
+                &mut keys,
+                &reviewed,
+                revision.clone(),
+                revision,
+                &[],
+                &[],
+            )
+            .await
+            .unwrap();
+        assert_eq!(receipt.forgotten, epochs[..2]);
+        assert_eq!(receipt.retained, epochs[2..]);
+        assert_eq!(keys.epoch_count(), 8);
+        drop(store);
+
+        let reopened = KnotSyncFileStore::open_commons(&database, SPACE, [writer]).unwrap();
+        let mut reopened_keys = DataKeyring::new();
+        assert!(
+            reopened
+                .restore_communal_keyring(&mut reopened_keys)
+                .await
+                .unwrap()
+        );
+        assert_eq!(reopened_keys.epochs_oldest_first().unwrap(), &epochs[2..]);
+        assert_eq!(
+            reopened.communal_documents(&reopened_keys).await.unwrap(),
+            vec![
+                doc("one", "before checkpoint"),
+                doc("two", "new checkpoint")
+            ]
+        );
+        assert_eq!(
+            reopened
+                .communal_offline_member_recovery(&reopened_keys, epochs[2])
+                .await
+                .unwrap(),
+            KnotOfflineMemberRecovery::Resume
+        );
+        assert!(matches!(
+            reopened
+                .communal_offline_member_recovery(&reopened_keys, epochs[0])
+                .await
+                .unwrap(),
+            KnotOfflineMemberRecovery::BootstrapRequired {
+                checkpoint: Some(_)
+            }
+        ));
+        assert_eq!(
+            reopened.communal_epoch_execution_receipt().await.unwrap(),
+            Some(receipt)
+        );
     }
 
     #[tokio::test]
@@ -1045,9 +1729,10 @@ mod tests {
             alice.master_public_key().to_bytes(),
             bob.master_public_key().to_bytes(),
         ];
-        let store = KnotSyncStore::in_memory(SPACE, writers);
+        let a = KnotSyncStore::in_memory(SPACE, writers);
+        let b = KnotSyncStore::in_memory(SPACE, writers);
         let vault = KnotVault::open(roots.path(), VAULT_KEY).unwrap();
-        store
+        let alice_version = a
             .author(
                 alice.master_keypair().to_seed(),
                 &vault,
@@ -1055,7 +1740,7 @@ mod tests {
             )
             .await
             .unwrap();
-        store
+        let bob_version = b
             .author(
                 bob.master_keypair().to_seed(),
                 &vault,
@@ -1063,24 +1748,155 @@ mod tests {
             )
             .await
             .unwrap();
-        store
-            .author(
-                alice.master_keypair().to_seed(),
-                &vault,
-                &KnotSyncEvent::Put(doc("solo", "still visible")),
-            )
-            .await
-            .unwrap();
-        let projection = store.projection(&vault).await.unwrap();
+        a.accept(&bob_version).await.unwrap();
+        b.accept(&alice_version).await.unwrap();
+        a.author(
+            alice.master_keypair().to_seed(),
+            &vault,
+            &KnotSyncEvent::Put(doc("solo", "still visible")),
+        )
+        .await
+        .unwrap();
+        let projection = a.projection(&vault).await.unwrap();
         assert_eq!(projection.documents, vec![doc("solo", "still visible")]);
         assert_eq!(projection.conflicts.len(), 1);
         assert_eq!(projection.conflicts[0].id, "shared");
         assert_eq!(projection.conflicts[0].versions.len(), 2);
         assert!(projection.pending.is_empty());
         assert!(matches!(
-            store.documents(&vault).await,
+            a.documents(&vault).await,
             Err(KnotSyncError::ConcurrentWriter(id)) if id == "shared"
         ));
+    }
+
+    #[tokio::test]
+    async fn independent_text_edits_merge_and_a_later_put_makes_them_durable() {
+        let roots = tempdir().unwrap();
+        let (alice, bob) = identities();
+        let writers = [
+            alice.master_public_key().to_bytes(),
+            bob.master_public_key().to_bytes(),
+        ];
+        let vault = KnotVault::open(roots.path(), VAULT_KEY).unwrap();
+        let base_store = KnotSyncStore::in_memory(SPACE, writers);
+        let a = KnotSyncStore::in_memory(SPACE, writers);
+        let b = KnotSyncStore::in_memory(SPACE, writers);
+        let base = base_store
+            .author(
+                alice.master_keypair().to_seed(),
+                &vault,
+                &KnotSyncEvent::Put(doc("shared", "first\nsecond\nthird\n")),
+            )
+            .await
+            .unwrap();
+        a.accept(&base).await.unwrap();
+        b.accept(&base).await.unwrap();
+
+        let left = a
+            .author(
+                alice.master_keypair().to_seed(),
+                &vault,
+                &KnotSyncEvent::Put(doc("shared", "FIRST\nsecond\nthird\n")),
+            )
+            .await
+            .unwrap();
+        let right = b
+            .author(
+                bob.master_keypair().to_seed(),
+                &vault,
+                &KnotSyncEvent::Put(doc("shared", "first\nsecond\nTHIRD\n")),
+            )
+            .await
+            .unwrap();
+        a.accept(&right).await.unwrap();
+        b.accept(&left).await.unwrap();
+
+        let a_projection = a.projection(&vault).await.unwrap();
+        let b_projection = b.projection(&vault).await.unwrap();
+        let merged = doc("shared", "FIRST\nsecond\nTHIRD\n");
+        assert_eq!(a_projection.documents, vec![merged.clone()]);
+        assert_eq!(a_projection, b_projection);
+        assert!(a_projection.conflicts.is_empty());
+        assert_eq!(a_projection.automatic_merges.len(), 1);
+        assert_eq!(a_projection.automatic_merges[0].base, *base.hash.as_bytes());
+        let mut supersedes = vec![*left.hash.as_bytes(), *right.hash.as_bytes()];
+        supersedes.sort_unstable();
+        assert_eq!(a_projection.automatic_merges[0].supersedes, supersedes);
+
+        let durable = doc("shared", "FIRST\nsecond\nTHIRD\nafter merge\n");
+        let durable_operation = a
+            .author(
+                alice.master_keypair().to_seed(),
+                &vault,
+                &KnotSyncEvent::Put(durable.clone()),
+            )
+            .await
+            .unwrap();
+        b.accept(&durable_operation).await.unwrap();
+        for projection in [
+            a.projection(&vault).await.unwrap(),
+            b.projection(&vault).await.unwrap(),
+        ] {
+            assert_eq!(projection.documents, vec![durable.clone()]);
+            assert!(projection.conflicts.is_empty());
+            assert!(projection.automatic_merges.is_empty());
+            assert_eq!(
+                projection.document_heads["shared"],
+                *durable_operation.hash.as_bytes()
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn overlapping_text_edits_remain_an_explicit_conflict() {
+        let roots = tempdir().unwrap();
+        let (alice, bob) = identities();
+        let writers = [
+            alice.master_public_key().to_bytes(),
+            bob.master_public_key().to_bytes(),
+        ];
+        let vault = KnotVault::open(roots.path(), VAULT_KEY).unwrap();
+        let base_store = KnotSyncStore::in_memory(SPACE, writers);
+        let a = KnotSyncStore::in_memory(SPACE, writers);
+        let b = KnotSyncStore::in_memory(SPACE, writers);
+        let base = base_store
+            .author(
+                alice.master_keypair().to_seed(),
+                &vault,
+                &KnotSyncEvent::Put(doc("shared", "one\ntwo\n")),
+            )
+            .await
+            .unwrap();
+        a.accept(&base).await.unwrap();
+        b.accept(&base).await.unwrap();
+        let left = a
+            .author(
+                alice.master_keypair().to_seed(),
+                &vault,
+                &KnotSyncEvent::Put(doc("shared", "alice\ntwo\n")),
+            )
+            .await
+            .unwrap();
+        let right = b
+            .author(
+                bob.master_keypair().to_seed(),
+                &vault,
+                &KnotSyncEvent::Put(doc("shared", "bob\ntwo\n")),
+            )
+            .await
+            .unwrap();
+        a.accept(&right).await.unwrap();
+        b.accept(&left).await.unwrap();
+
+        for projection in [
+            a.projection(&vault).await.unwrap(),
+            b.projection(&vault).await.unwrap(),
+        ] {
+            assert!(projection.documents.is_empty());
+            assert!(projection.automatic_merges.is_empty());
+            assert_eq!(projection.conflicts.len(), 1);
+            assert_eq!(projection.conflicts[0].id, "shared");
+        }
     }
 
     #[tokio::test]
@@ -1282,9 +2098,11 @@ mod tests {
         receiver.accept(&parent).await.unwrap();
         let complete = receiver.projection(&vault).await.unwrap();
         assert!(complete.pending.is_empty());
-        assert_eq!(complete.conflicts.len(), 1);
-        assert_eq!(complete.conflicts[0].id, "shared");
-        assert_eq!(complete.documents, vec![doc("solo", "visible")]);
+        assert!(complete.conflicts.is_empty());
+        assert_eq!(
+            complete.documents,
+            vec![doc("shared", "child"), doc("solo", "visible")]
+        );
     }
 
     #[tokio::test]

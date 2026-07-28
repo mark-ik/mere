@@ -9,8 +9,10 @@
 
 use codicil::LogId;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::caps::Identified;
+use crate::facet::FacetId;
 
 /// Which replica minted an [`EdgeId`].
 ///
@@ -182,5 +184,21 @@ pub enum GraphEdit<N: Identified, E> {
         node: N::Id,
         /// Where it came from.
         from: DerivationRecord<N::Id>,
+    },
+    /// Set one independent facet value on a live node.
+    SetFacet {
+        /// The node carrying the facet.
+        node: N::Id,
+        /// The stable, namespaced facet identity.
+        facet: FacetId,
+        /// The schema-agnostic value accepted by the host.
+        value: Value,
+    },
+    /// Remove one independent facet from a live node.
+    RemoveFacet {
+        /// The node carrying the facet.
+        node: N::Id,
+        /// The stable, namespaced facet identity.
+        facet: FacetId,
     },
 }

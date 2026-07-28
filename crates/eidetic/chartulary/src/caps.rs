@@ -34,7 +34,7 @@ use crate::taxonomy::RelationClass;
 /// identity means (a URN, a slug, a content hash).
 pub trait Identified {
     /// The stable identity type.
-    type Id: Clone + Eq + Hash + Debug;
+    type Id: Clone + Eq + Ord + Hash + Debug;
 
     /// This node's stable identity.
     fn id(&self) -> &Self::Id;

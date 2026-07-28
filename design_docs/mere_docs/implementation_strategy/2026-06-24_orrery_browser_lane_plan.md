@@ -8,6 +8,11 @@ favicon-body nodes, a gloss sidebar, and the orrery as a discrete surface**. The
 companion / smolweb / p2p / federation half of that plan stands as the forward
 vision; this plan is the shippable **v1 with no native sync**.
 
+**Product framing superseded 2026-07-27** by the
+[Graphshell reference host plan](2026-07-27_graphshell_reference_host_plan.md).
+The capture API and browser-delivery findings below remain evidence; Graphshell,
+not the former orrery/Merecat framing, owns the extension and PWA product.
+
 **One line.** A cross-browser extension that uses Mere's *own* orrery and data model
 to turn your real browsing into a rich, owned, queryable graph. The browser stays
 the browser; Mere adds the relational memory layer the browser lacks.

@@ -54,6 +54,7 @@ pub use group_crypto::{
     DataKeyring, GroupCiphertext, GroupCryptoError, GroupEncryptionMode, GroupEncryptionProfile,
 };
 pub use joined_space::{JoinError, JoinedSpace};
+pub use p2panda_encryption::data_scheme::GroupSecretId;
 pub use processor::{
     Admission, HistoryAction, OperationPolicy, OperationProcessor, ProcessError, ProcessOutcome,
     Reject, StoreTarget,

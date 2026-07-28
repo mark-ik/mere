@@ -2,7 +2,8 @@
 
 **Date:** 2026-07-27
 **Status:** implemented 2026-07-27. C1 through C7 have executable software
-receipts. The direct-PHY RF carriage named by C6 remains a hardware receipt.
+receipts. C6's direct-PHY RF carriage passed on real T114 and Heltec V4
+hardware 2026-07-27.
 
 **Companions:** the
 [shared-engram commons brief](../research/2026-07-24_shared_engram_commons_brief.md),
@@ -198,16 +199,20 @@ Receipt: `commons.channel` and immutable `commons.message` use the shared
 causal seam and the durable-data chat profile. Partitioned replicas converge
 through both Memory acceptance and real p2panda LogSync.
 
-### C6. Carrier identity — SOFTWARE RECEIPT DONE 2026-07-27
+### C6. Carrier identity — DONE 2026-07-27
 
 Export the same signed encrypted operations through a protected native drop
 and the Reticulum/TCP carrier. Compare canonical operation bytes before and
-after each carriage. Direct-PHY RF remains a hardware receipt, not a software
-substitute.
+after each carriage. Repeat the verification after direct-PHY RF carriage on
+real boards.
 
 Receipt: one encrypted, signed operation record survives a protected native
 drop and Reticulum/TCP byte-for-byte; the recovered p2panda signature verifies.
-The direct-PHY RF receipt remains deliberately open.
+The same 1,177-byte operation then crossed from a Nordic T114 to a Heltec V4
+through a Retinue Resource over direct PHY. The receiver independently verified
+the p2panda operation identity and signature, decrypted the Stickleback group
+ciphertext, and recovered the expected `commons.message`. See the
+[direct-PHY RF receipt](2026-07-27_commons_direct_phy_rf_receipt.md).
 
 ### C7. Product policy and profile — DONE 2026-07-27
 

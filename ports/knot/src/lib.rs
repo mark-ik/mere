@@ -28,7 +28,9 @@ pub use endpoint::{
 pub use search::{KnotSearch, SearchConfig, SearchHit, SearchLane};
 pub use startup::{StartupUnlockedPersonalVault, persona_vault_root};
 pub use sync::{
+    KNOT_COMMONS_ENCRYPTION_PROFILE, KnotAutomaticTextMerge, KnotCheckpointSnapshot,
     KnotDocumentConflict, KnotDocumentProjection, KnotDocumentVersion, KnotEncryptionProfile,
+    KnotEpochExecutionReceipt, KnotOfflineMemberEpochHold, KnotOfflineMemberRecovery,
     KnotProjectionCheckpoint, KnotSyncCipher, KnotSyncError, KnotSyncEvent, KnotSyncExt,
     KnotSyncFileStore, KnotSyncStore, KnotTailReceipt,
 };

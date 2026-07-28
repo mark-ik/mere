@@ -29,10 +29,12 @@ p2panda-core = "0.7.0"
 p2panda-net = "0.7.0"
 p2panda-store = { version = "0.7.0", default-features = false }
 pollster = "0.4"
+proofs.workspace = true
 sceno.workspace = true
 scenotime.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+similar = "2.7"
 script-rhai.workspace = true
 servitor.workspace = true
 session-runtime.workspace = true

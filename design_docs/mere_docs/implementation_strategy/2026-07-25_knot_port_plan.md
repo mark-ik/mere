@@ -142,8 +142,9 @@ vault inside the app rather than merely a cheaper one.
   returns documents, per-document conflicts, and pending-history diagnostics
   separately. Its compatibility `documents()` call still returns
   `ConcurrentWriter`; new consumers use the lossless projection. Knot also
-  persists a document-digest/author-frontier checkpoint and names the retained
-  tail before pruning. A `Resolve` event can replace only named causal
+  persists a Knot-native document/conflict snapshot plus digest and
+  author-frontier checkpoint, and names the retained tail before pruning. A
+  `Resolve` event can replace only named causal
   versions; it cannot erase an unseen concurrent edit. Communal Knot uses
   Stickleback's retained Commons data epochs, while the personal multi-device
   profile keeps its vault-derived seal key.
