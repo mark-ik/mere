@@ -1,0 +1,123 @@
+:root {
+  color-scheme: dark;
+  font: 15px/1.45 system-ui, sans-serif;
+  background: #071216;
+  color: #e7f0ec;
+}
+
+body {
+  margin: 0;
+  padding: 36px;
+}
+
+header,
+main {
+  width: min(1040px, 100%);
+  margin: 0 auto;
+}
+
+.eyebrow,
+#status,
+.badges {
+  color: #8fbab1;
+}
+
+h1 {
+  margin: 4px 0;
+  font-size: clamp(2rem, 5vw, 4rem);
+}
+
+#cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+  margin-top: 28px;
+}
+
+#disconnect {
+  margin-top: 8px;
+}
+
+.card {
+  display: flex;
+  min-height: 180px;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 18px;
+  border: 1px solid #294840;
+  border-radius: 14px;
+  background: #0d211f;
+}
+
+.card h2 {
+  margin: 0 0 12px;
+}
+
+.card ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card li {
+  margin: 7px 0;
+  overflow-wrap: anywhere;
+}
+
+.card li strong {
+  color: #8fbab1;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.native-import {
+  display: grid;
+  width: 100%;
+  gap: 8px;
+}
+
+.native-import label {
+  display: grid;
+  gap: 4px;
+  color: #8fbab1;
+}
+
+.native-import select,
+.native-import input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid #477c6e;
+  border-radius: 7px;
+  background: #091a18;
+  color: #e7f0ec;
+  font: inherit;
+}
+
+button {
+  padding: 8px 12px;
+  border: 1px solid #75c6ad;
+  border-radius: 8px;
+  background: #15352f;
+  color: inherit;
+  cursor: pointer;
+}
+
+button:hover,
+button:focus-visible {
+  background: #235346;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+[data-state="failed"] {
+  color: #ff9c91;
+}

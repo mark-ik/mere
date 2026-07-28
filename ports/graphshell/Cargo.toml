@@ -14,17 +14,22 @@ default = ["native"]
 native = [
     "dep:blake3",
     "dep:graphshell-stdio",
+    "dep:light-file-dialog",
     "dep:notochord",
     "dep:personae",
     "dep:rand_core",
     "dep:serde",
     "dep:session-runtime",
+    "dep:signature",
     "dep:ssh-agent-lib",
     "dep:ssh-key",
     "dep:thiserror",
     "dep:tokio",
+    "dep:tracing",
+    "dep:tracing-subscriber",
     "dep:transport",
     "dep:uuid",
+    "dep:zeroize",
 ]
 # The browser reference-host cone. H0 proves the dependency boundary; H1 adds
 # the local Mere host adapter on top of this selected graph + canvas surface.
@@ -53,20 +58,33 @@ uuid = { workspace = true, optional = true }
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 blake3 = { workspace = true, optional = true }
 graphshell-stdio = { path = "../../crates/graphshell/graphshell-stdio", optional = true }
+light-file-dialog = { version = "3.21.3", optional = true }
 # The application composes Personae: the profile Graphshell speaks as. The
 # protocol and client crates deliberately do not depend on it.
 notochord = { workspace = true, features = ["tokio"], optional = true }
 personae = { workspace = true, features = ["agent"], optional = true }
 rand_core = { version = "0.6", features = ["getrandom"], optional = true }
 session-runtime = { workspace = true, optional = true }
+signature = { version = "2", optional = true }
 ssh-agent-lib = { version = "0.6", optional = true }
-ssh-key = { version = "0.6", features = ["ed25519"], optional = true }
+ssh-key = { version = "0.6", features = ["ed25519", "encryption"], optional = true }
 thiserror = { version = "1", optional = true }
-tokio = { version = "1", features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"], optional = true }
+tokio = { version = "1", features = ["io-std", "io-util", "macros", "net", "rt-multi-thread", "sync", "time"], optional = true }
+tracing = { workspace = true, optional = true }
+tracing-subscriber = { workspace = true, optional = true }
 # G5d: the projection carrier. `notochord` brings in the one audited
 # `AcceptedSession -> SessionFacts` adapter (Notochord N1) so this port does
 # not hand-build carrier facts of its own.
 transport = { workspace = true, features = ["notochord"], optional = true }
+zeroize = { version = "1", optional = true }
+
+[target.'cfg(all(windows, not(target_arch = "wasm32")))'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+] }
 
 [[bin]]
 name = "g1_receipt"
@@ -98,7 +116,26 @@ name = "graphshell_native_host"
 path = "src/bin/graphshell_native_host.rs"
 required-features = ["native"]
 
+[[bin]]
+name = "graphshell_device_host"
+path = "src/bin/graphshell_device_host.rs"
+required-features = ["native"]
+
+[[bin]]
+name = "h4d_browser_receipt_host"
+path = "src/bin/h4d_browser_receipt_host.rs"
+required-features = ["native"]
+
+[[bin]]
+name = "h4e_browser_import_receipt_host"
+path = "src/bin/h4e_browser_import_receipt_host.rs"
+required-features = ["native"]
+
+[[bin]]
+name = "h4f_agent_probe"
+path = "src/bin/h4f_agent_probe.rs"
+required-features = ["native"]
+
 [dev-dependencies]
 pollster = "0.4"
-signature = "2"
 tokio = { version = "1", features = ["io-util", "macros", "net", "rt", "rt-multi-thread", "time"] }

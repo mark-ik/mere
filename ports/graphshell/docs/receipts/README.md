@@ -48,5 +48,17 @@ The corresponding
 [H4b key-management note](../2026-07-28_h4b_ssh_key_management_receipt.md)
 cover the authority and SSH wire slices. The
 [H4c admitted-endpoint note](../2026-07-28_h4c_admitted_identity_endpoint_receipt.md)
-records the portable-client read and approval path while keeping the actual
-browser carrier and headed receipt open.
+records the portable-client read and approval path. The
+[H4d browser-carrier note](../2026-07-28_h4d_browser_native_carrier_receipt.md)
+adds the real Chromium extension, native host, transcript-bound admission,
+headed identity cards, a real headed per-use approval and signature, and clean
+session close. The
+[H4e native-import note](../2026-07-28_h4e_native_key_import_receipt.md)
+adds the real Windows file picker and password dialog, encrypted-key import,
+user-selected unlock policy, native-dialog re-entry guard, public-card refresh,
+and secret-exclusion checks. The
+[H4f resident-device-host note](../2026-07-28_h4f_resident_device_host_receipt.md)
+adds the one-vault resident process, vault-free browser relay, isolated and
+live standard-agent restart signatures, admitted browser relay proof, and
+reversible Windows lifecycle installer. Remote login and real logon startup
+remain open because the known laptop was offline. The interim task was restored.

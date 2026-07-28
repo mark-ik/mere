@@ -19,8 +19,9 @@ resident Personae vault used for signing:
 
 The portable action model carries only public metadata. The import action has
 no field capable of carrying private key bytes and directs the application to
-its native picker. That picker and its passphrase interaction are still an
-application UI seam, not part of this receipt.
+its native picker. The picker and encrypted-key passphrase interaction were
+subsequently closed by the
+[H4e native import receipt](2026-07-28_h4e_native_key_import_receipt.md).
 
 ## Isolated SSH wire proof
 
@@ -64,10 +65,6 @@ patch-free workspace build.
 
 ## H4 gates still open
 
-- connect the browser identity surface to this authority through an admitted
-  session;
-- wire the native file picker and passphrase interaction to the direct import
-  handoff;
 - bind the standard endpoint and prove a real SSH login after restart;
 - own launch-at-login and crash recovery, then retire the standalone task;
 - add device enrollment, grant, delegation, expiry, and revocation intents;
@@ -78,3 +75,7 @@ patch-free workspace build.
 
 The live `personae-agent` scheduled task and standard Windows SSH-agent pipe
 were inspected read-only and left unchanged.
+
+H4f later exercised the standard endpoint reversibly and restored this task.
+See the
+[resident-device-host receipt](2026-07-28_h4f_resident_device_host_receipt.md).

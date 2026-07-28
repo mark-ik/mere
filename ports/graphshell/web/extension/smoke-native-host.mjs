@@ -1,0 +1,179 @@
+import { randomBytes } from "node:crypto";
+import { mkdirSync } from "node:fs";
+import { endianness } from "node:os";
+import { resolve } from "node:path";
+import { spawn } from "node:child_process";
+
+const [binaryArgument, scratchArgument] = process.argv.slice(2);
+if (!binaryArgument || !scratchArgument) {
+  throw new Error("usage: node smoke-native-host.mjs NATIVE_HOST SCRATCH_ROOT");
+}
+
+const binary = resolve(binaryArgument);
+const scratch = resolve(scratchArgument);
+mkdirSync(scratch, { recursive: true });
+
+const child = spawn(binary, [
+  "chrome-extension://oajkkocppbpbmfblepgbiidagliniofd/",
+], {
+  env: {
+    ...process.env,
+    LOCALAPPDATA: scratch,
+    PERSONAE_PASSPHRASE: "graphshell-h4d-smoke-passphrase",
+  },
+  stdio: ["pipe", "pipe", "pipe"],
+  windowsHide: true,
+});
+
+let stdout = Buffer.alloc(0);
+let stderr = "";
+const readers = [];
+
+child.stdout.on("data", (chunk) => {
+  stdout = Buffer.concat([stdout, chunk]);
+  drainFrames();
+});
+child.stderr.setEncoding("utf8");
+child.stderr.on("data", (chunk) => {
+  stderr += chunk;
+});
+
+function drainFrames() {
+  while (stdout.length >= 4 && readers.length > 0) {
+    const length = endianness() === "LE"
+      ? stdout.readUInt32LE(0)
+      : stdout.readUInt32BE(0);
+    if (length > 1024 * 1024) {
+      readers.shift().reject(new Error(`oversized native message: ${length}`));
+      return;
+    }
+    if (stdout.length < length + 4) {
+      return;
+    }
+    const body = stdout.subarray(4, length + 4);
+    stdout = stdout.subarray(length + 4);
+    readers.shift().resolve(JSON.parse(body.toString("utf8")));
+  }
+}
+
+function readMessage() {
+  return new Promise((resolveFrame, rejectFrame) => {
+    readers.push({ resolve: resolveFrame, reject: rejectFrame });
+    drainFrames();
+  });
+}
+
+function writeMessage(message) {
+  const body = Buffer.from(JSON.stringify(message), "utf8");
+  const prefix = Buffer.alloc(4);
+  if (endianness() === "LE") {
+    prefix.writeUInt32LE(body.length);
+  } else {
+    prefix.writeUInt32BE(body.length);
+  }
+  child.stdin.write(Buffer.concat([prefix, body]));
+}
+
+function responseBody(message) {
+  if (message.type !== "response") {
+    throw new Error(`expected response, got ${JSON.stringify(message)}`);
+  }
+  if (message.response.body.Err) {
+    throw new Error(message.response.body.Err.message);
+  }
+  return message.response.body.Ok;
+}
+
+const challenge = await readMessage();
+if (challenge.type !== "challenge") {
+  throw new Error(`expected challenge, got ${JSON.stringify(challenge)}`);
+}
+writeMessage({
+  type: "connect",
+  schema: "mere.graphshell/browser-connect/v1",
+  host_nonce: challenge.challenge.host_nonce,
+  client_nonce: randomBytes(32).toString("base64url"),
+});
+
+const connected = await readMessage();
+if (connected.type !== "connected") {
+  throw new Error(`expected connected, got ${JSON.stringify(connected)}`);
+}
+
+writeMessage({
+  type: "request",
+  request: {
+    id: 1,
+    body: {
+      Open: {
+        version: { major: 1, minor: 3 },
+        capabilities: { capabilities: ["PortableCard"] },
+      },
+    },
+  },
+});
+const opened = responseBody(await readMessage()).Opened;
+const projection = opened.descriptor.projections[0]?.request;
+if (!projection) {
+  throw new Error("identity projection was not disclosed");
+}
+
+writeMessage({
+  type: "request",
+  request: { id: 2, body: { Snapshot: projection } },
+});
+const snapshot = responseBody(await readMessage()).Snapshot;
+const firstOffer = Object.values(snapshot.presentation.offers)
+  .flat()
+  .find((offer) => offer.codec === "PortableCardV1");
+if (!firstOffer) {
+  throw new Error("identity snapshot contained no portable card");
+}
+
+writeMessage({
+  type: "request",
+  request: {
+    id: 3,
+    body: {
+      Resource: {
+        session: snapshot.session,
+        resource: firstOffer.resource,
+      },
+    },
+  },
+});
+const resource = responseBody(await readMessage()).Resource;
+const resourceText = Buffer.from(resource.bytes).toString("utf8");
+const card = JSON.parse(resourceText);
+if (resourceText.includes("PRIVATE KEY")) {
+  throw new Error("browser resource disclosed private key material");
+}
+
+writeMessage({
+  type: "request",
+  request: { id: 4, body: "Close" },
+});
+const closed = responseBody(await readMessage());
+if (closed !== "Closed") {
+  throw new Error(`session did not close cleanly: ${JSON.stringify(closed)}`);
+}
+child.stdin.end();
+
+const exitCode = await new Promise((resolveExit, rejectExit) => {
+  child.once("error", rejectExit);
+  child.once("exit", resolveExit);
+});
+if (exitCode !== 0) {
+  throw new Error(`native host exited ${exitCode}: ${stderr}`);
+}
+
+process.stdout.write(`${JSON.stringify({
+  schema: "graphshell.h4d.native-messaging-smoke/v1",
+  launcher: connected.launcher,
+  session_bound: connected.session === snapshot.session,
+  subject_present: connected.subject.length > 0,
+  projection: opened.descriptor.label,
+  portable_card: card.title,
+  private_material_absent: true,
+  closed: true,
+}, null, 2)}\n`);

@@ -1,0 +1,9 @@
+{
+  "name": "org.mere.graphshell",
+  "description": "Graphshell local identity and graph host",
+  "path": "__GRAPHSHELL_NATIVE_HOST__",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://oajkkocppbpbmfblepgbiidagliniofd/"
+  ]
+}

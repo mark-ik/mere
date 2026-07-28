@@ -12,7 +12,8 @@ use personae::agent::VaultAgent;
 use personae::signing::{ApprovalBroker, DecisionError, RememberApproval, SigningDecision};
 use personae::ssh_slot;
 use personae::{
-    CredentialLineage, IdentityError, IdentityStorage, IdentityVault, ProtocolKey, UnlockTier,
+    CredentialLineage, DerivedKeyAttestation, Ed25519Keypair, Ed25519PublicKey, IdentityError,
+    IdentityProvider, IdentityStorage, IdentityVault, ProtocolKey, UnlockTier,
 };
 use serde::{Deserialize, Serialize};
 use ssh_key::{Algorithm, PrivateKey, PublicKey};
@@ -30,6 +31,8 @@ use crate::identity_projection::{
 };
 
 const MAX_SHORT_TTL_SECONDS: u32 = 24 * 60 * 60;
+#[cfg(windows)]
+pub const STANDARD_WINDOWS_AGENT_ENDPOINT: &str = r"\\.\pipe\openssh-ssh-agent";
 
 /// Rejected Graphshell identity action.
 #[derive(Debug, thiserror::Error)]
@@ -142,8 +145,7 @@ impl<S: IdentityStorage + 'static> PersonaeHost<S> {
         &self,
         endpoint: &str,
     ) -> std::io::Result<ssh_agent_lib::agent::NamedPipeListener> {
-        const STANDARD_ENDPOINT: &str = r"\\.\pipe\openssh-ssh-agent";
-        if endpoint.eq_ignore_ascii_case(STANDARD_ENDPOINT) {
+        if endpoint.eq_ignore_ascii_case(STANDARD_WINDOWS_AGENT_ENDPOINT) {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::PermissionDenied,
                 "receipt listener cannot bind the standard SSH agent endpoint",
@@ -151,6 +153,66 @@ impl<S: IdentityStorage + 'static> PersonaeHost<S> {
         }
         let listener = ssh_agent_lib::agent::NamedPipeListener::bind(endpoint)?;
         *self.listener.lock().unwrap() = AgentListenerView::ReceiptEndpoint {
+            endpoint: endpoint.to_string(),
+        };
+        Ok(listener)
+    }
+
+    /// Bind an isolated Unix socket for acceptance testing.
+    #[cfg(not(windows))]
+    pub fn bind_receipt_listener(
+        &self,
+        endpoint: &str,
+    ) -> std::io::Result<tokio::net::UnixListener> {
+        if endpoint.trim().is_empty() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "the receipt SSH agent socket path is empty",
+            ));
+        }
+        let listener = tokio::net::UnixListener::bind(endpoint)?;
+        *self.listener.lock().unwrap() = AgentListenerView::ReceiptEndpoint {
+            endpoint: endpoint.to_string(),
+        };
+        Ok(listener)
+    }
+
+    /// Bind the standard Windows OpenSSH endpoint for the resident host.
+    ///
+    /// This is deliberately distinct from [`Self::bind_receipt_listener`]:
+    /// only a lifecycle-managed device host should call it.
+    #[cfg(windows)]
+    pub fn bind_standard_listener(
+        &self,
+        endpoint: &str,
+    ) -> std::io::Result<ssh_agent_lib::agent::NamedPipeListener> {
+        if !endpoint.eq_ignore_ascii_case(STANDARD_WINDOWS_AGENT_ENDPOINT) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "the Windows standard listener must use the OpenSSH agent pipe",
+            ));
+        }
+        let listener = ssh_agent_lib::agent::NamedPipeListener::bind(endpoint)?;
+        *self.listener.lock().unwrap() = AgentListenerView::StandardEndpoint {
+            endpoint: endpoint.to_string(),
+        };
+        Ok(listener)
+    }
+
+    /// Bind the configured Unix `SSH_AUTH_SOCK` for the resident host.
+    #[cfg(not(windows))]
+    pub fn bind_standard_listener(
+        &self,
+        endpoint: &str,
+    ) -> std::io::Result<tokio::net::UnixListener> {
+        if endpoint.trim().is_empty() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "the standard SSH agent socket path is empty",
+            ));
+        }
+        let listener = tokio::net::UnixListener::bind(endpoint)?;
+        *self.listener.lock().unwrap() = AgentListenerView::StandardEndpoint {
             endpoint: endpoint.to_string(),
         };
         Ok(listener)
@@ -386,6 +448,20 @@ impl<S: IdentityStorage + 'static> PersonaeHost<S> {
     }
 }
 
+impl<S: IdentityStorage + 'static> IdentityProvider for PersonaeHost<S> {
+    fn master_public_key(&self) -> Ed25519PublicKey {
+        IdentityProvider::master_public_key(&*self.vault.lock().unwrap())
+    }
+
+    fn derive_keypair(&self, salt: &[u8]) -> Result<Ed25519Keypair, IdentityError> {
+        self.vault.lock().unwrap().derive_keypair(salt)
+    }
+
+    fn attest_derived_key(&self, salt: &[u8]) -> Result<DerivedKeyAttestation, IdentityError> {
+        self.vault.lock().unwrap().attest_derived_key(salt)
+    }
+}
+
 fn validate_comment(comment: &str) -> Result<(), IdentityIntentError> {
     if comment.chars().count() > 256 || comment.chars().any(char::is_control) {
         return Err(IdentityIntentError::InvalidComment);
@@ -562,6 +638,12 @@ mod tests {
                 .unwrap_err()
                 .kind(),
             std::io::ErrorKind::PermissionDenied
+        );
+        assert_eq!(
+            host.bind_standard_listener(r"\\.\pipe\graphshell-not-standard")
+                .unwrap_err()
+                .kind(),
+            std::io::ErrorKind::InvalidInput
         );
         let endpoint = format!(r"\\.\pipe\graphshell-h4-receipt-{}", Uuid::new_v4());
         let listener = host.bind_receipt_listener(&endpoint).unwrap();

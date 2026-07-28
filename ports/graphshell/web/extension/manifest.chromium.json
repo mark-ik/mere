@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Graphshell",
+  "version": "0.1.0",
+  "description": "Open Graphshell's local graph and identity surfaces.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuxQtqbh5xrLn54gyn9mcce0P6hiCIV4bjisqzEIlHbvlb15sG+urgqCxhR4+DHCSzndNaJXgtmqd6Ubb/cjsXUWSPP1TenTstUMTMRTACKxEQhETz4kLVsTh95zzZ6T3Bs1qkecYp7HlOCHSJKYuXEq8lcalUFJlOUMxaVuocexq0JHOU4ElRVjetp6oWSL/RLR7ji7pt3hhj97kXOjaDyTO56X0tPUIxQhbmt08NMdYjz0X9HJZKmNZXFLrCkeCyrF+DqAxpL437xO9bE7ZN3QRoRE8EElnlUJ2Jk3ewsB+UstDP3sJ0Kk/tfOmaGCAW9rzc3cWHppZYayuhmucLQIDAQAB",
+  "permissions": [
+    "nativeMessaging"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Open Graphshell"
+  }
+}

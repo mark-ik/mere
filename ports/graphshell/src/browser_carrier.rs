@@ -16,18 +16,21 @@ use std::io::{Read, Write};
 use base64::Engine;
 use graphshell_protocol::{CarrierRequest, CarrierResponse};
 use notochord::{
-    AdmittedSession, CarrierKind, DenyReason, HandshakeLimits, IoHandshakeError,
-    LocalNetworkPolicy, NetworkId, ProfileRef, ProofBinding, RevocationLedger, SessionFacts,
-    SessionReply, TrafficClass, initiate_session,
+    AdmittedSession, CarrierKind, DenyReason, IoHandshakeError, LocalNetworkPolicy, NetworkId,
+    ProfileRef, ProofBinding, RevocationLedger, SessionFacts, SessionReply, TrafficClass,
+    initiate_session,
 };
 use personae::IdentityProvider;
 use personae::delegation::SignedDelegationCertificate;
 use rand_core::{OsRng, RngCore};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream};
+use tokio::io::{
+    AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, DuplexStream,
+};
 
 use crate::admission::{PROJECTION_PROTOCOL, open_session};
+use crate::identity_projection::SshUnlockPolicyIntentV1;
 
 /// Native messaging host name shared by the extension and installer.
 pub const NATIVE_HOST_NAME: &str = "org.mere.graphshell";
@@ -189,6 +192,57 @@ pub enum BrowserMessage {
     Request {
         request: CarrierRequest,
     },
+    NativeIdentity {
+        request: NativeIdentityRequest,
+    },
+}
+
+/// One native-only identity interaction. The request can select public
+/// options, but it has no field capable of carrying a path, key, or
+/// passphrase.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NativeIdentityRequest {
+    pub id: u64,
+    pub session: String,
+    pub action: NativeIdentityAction,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum NativeIdentityAction {
+    ImportSshPrivate {
+        unlock_policy: SshUnlockPolicyIntentV1,
+    },
+}
+
+/// Public result of a native-only identity interaction.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum NativeIdentityResult {
+    ImportedSshPrivate {
+        fingerprint: String,
+        comment: String,
+        unlock_policy: String,
+        replaced_existing: bool,
+    },
+    Cancelled,
+    Rejected {
+        reason: NativeIdentityFailure,
+    },
+}
+
+/// Bounded public failure vocabulary. Local paths, key bytes, passphrases,
+/// and parser diagnostics never become native-messaging responses.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NativeIdentityFailure {
+    WrongSession,
+    UiUnavailable,
+    SelectedFileUnreadable,
+    SelectedFileTooLarge,
+    InvalidPrivateKey,
+    IncorrectPassphrase,
+    ImportRejected,
 }
 
 /// Host-to-browser messages.
@@ -205,6 +259,10 @@ pub enum BrowserHostMessage {
     },
     Response {
         response: CarrierResponse,
+    },
+    NativeIdentityResult {
+        id: u64,
+        result: NativeIdentityResult,
     },
     Failure {
         message: String,
@@ -353,6 +411,70 @@ where
     Ok(())
 }
 
+/// Read one browser native-messaging JSON frame from an asynchronous stream.
+///
+/// The resident device host uses this variant for its local browser broker.
+/// It has the same size and truncation behavior as [`read_native_message`].
+pub async fn read_native_message_async<R, T>(
+    reader: &mut R,
+) -> Result<Option<T>, BrowserCarrierError>
+where
+    R: AsyncRead + Unpin,
+    T: DeserializeOwned,
+{
+    let mut length = [0u8; 4];
+    let mut read = 0usize;
+    while read < length.len() {
+        match AsyncReadExt::read(reader, &mut length[read..]).await? {
+            0 if read == 0 => return Ok(None),
+            0 => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "native messaging length prefix was truncated",
+                )
+                .into());
+            }
+            count => read += count,
+        }
+    }
+    let length = u32::from_ne_bytes(length);
+    if length > MAX_NATIVE_MESSAGE_BYTES {
+        return Err(BrowserCarrierError::FrameTooLarge {
+            len: u64::from(length),
+            max: MAX_NATIVE_MESSAGE_BYTES,
+        });
+    }
+    let mut body = vec![0u8; length as usize];
+    AsyncReadExt::read_exact(reader, &mut body).await?;
+    Ok(Some(serde_json::from_slice(&body)?))
+}
+
+/// Write one browser native-messaging JSON frame to an asynchronous stream.
+pub async fn write_native_message_async<W, T>(
+    writer: &mut W,
+    message: &T,
+) -> Result<(), BrowserCarrierError>
+where
+    W: AsyncWrite + Unpin,
+    T: Serialize,
+{
+    let body = serde_json::to_vec(message)?;
+    let length = u32::try_from(body.len()).map_err(|_| BrowserCarrierError::FrameTooLarge {
+        len: body.len() as u64,
+        max: MAX_NATIVE_MESSAGE_BYTES,
+    })?;
+    if length > MAX_NATIVE_MESSAGE_BYTES {
+        return Err(BrowserCarrierError::FrameTooLarge {
+            len: u64::from(length),
+            max: MAX_NATIVE_MESSAGE_BYTES,
+        });
+    }
+    AsyncWriteExt::write_all(writer, &length.to_ne_bytes()).await?;
+    AsyncWriteExt::write_all(writer, &body).await?;
+    AsyncWriteExt::flush(writer).await?;
+    Ok(())
+}
+
 /// Run the existing SessionHello admission over a private stream whose link
 /// id was derived from this browser launch.
 ///
@@ -391,7 +513,10 @@ pub async fn admit_browser_session<P: IdentityProvider>(
         async { notochord::admit_session(server, policy, ledger, &facts, now_ms, 0).await };
     let (reply, admitted) = tokio::join!(initiator, responder);
     let reply = reply?;
-    let admitted = admitted??;
+    let admitted = match admitted? {
+        Ok(admitted) => admitted,
+        Err(reason) => return Err(BrowserCarrierError::Refused(reason)),
+    };
     let SessionReply::Accept { session_id, .. } = reply else {
         let SessionReply::Reject { reason } = reply else {
             unreachable!()
@@ -453,12 +578,12 @@ fn decode_nonce(value: &str) -> Result<[u8; 32], BrowserCarrierError> {
 mod tests {
     use super::*;
     use crate::admission::{CONNECT_ACTION, GRAPHSHELL_DOMAIN, PROJECTION_SERVICE};
-    use crate::carrier::projection_policy;
     use notochord::TrustedRoot;
+    use notochord::{HandshakeLimits, ServiceAccess, ServiceRule};
+    use personae::InMemoryProvider;
     use personae::delegation::{
         CapabilityScope, DelegationCertificate, DelegationParent, SignedDelegationCertificate,
     };
-    use personae::{Ed25519Keypair, InMemoryProvider};
     use std::io::Cursor;
 
     const NETWORK: NetworkId = NetworkId([0x41; 32]);
@@ -515,15 +640,23 @@ mod tests {
     }
 
     fn policy(owner: &InMemoryProvider) -> LocalNetworkPolicy {
-        projection_policy(
-            NETWORK,
-            vec![TrustedRoot {
-                authority: ROOT,
-                issuer: owner.master_public_key().to_bytes(),
-            }],
-            vec![profile()],
-            None,
-        )
+        let mut policy = LocalNetworkPolicy::closed(NETWORK);
+        policy.trusted_roots = vec![TrustedRoot {
+            authority: ROOT,
+            issuer: owner.master_public_key().to_bytes(),
+        }];
+        policy.accepted_profiles = vec![profile()];
+        policy.services.insert(
+            PROJECTION_SERVICE.to_string(),
+            ServiceRule::new(
+                ServiceAccess::MemberOnly,
+                GRAPHSHELL_DOMAIN,
+                [CONNECT_ACTION],
+                false,
+                None,
+            ),
+        );
+        policy
     }
 
     #[test]
@@ -538,6 +671,52 @@ mod tests {
         let decoded: BrowserHostMessage = read_native_message(&mut Cursor::new(bytes))
             .unwrap()
             .unwrap();
+        assert_eq!(decoded, message);
+    }
+
+    #[tokio::test]
+    async fn asynchronous_native_framing_matches_the_browser_wire() {
+        let expected = BrowserHostMessage::Failure {
+            message: "resident".into(),
+        };
+        let (mut writer, mut reader) = tokio::io::duplex(1024);
+        let message = expected.clone();
+        let sending = tokio::spawn(async move {
+            write_native_message_async(&mut writer, &message)
+                .await
+                .unwrap();
+        });
+        let decoded: BrowserHostMessage = read_native_message_async(&mut reader)
+            .await
+            .unwrap()
+            .unwrap();
+        sending.await.unwrap();
+        assert_eq!(decoded, expected);
+    }
+
+    #[test]
+    fn native_ssh_import_message_has_no_secret_bearing_fields() {
+        let message = BrowserMessage::NativeIdentity {
+            request: NativeIdentityRequest {
+                id: 17,
+                session: "receipt-session".into(),
+                action: NativeIdentityAction::ImportSshPrivate {
+                    unlock_policy: SshUnlockPolicyIntentV1::ShortTtl { idle_seconds: 90 },
+                },
+            },
+        };
+        let encoded = serde_json::to_string(&message).unwrap();
+
+        assert!(encoded.contains("\"type\":\"native_identity\""));
+        assert!(encoded.contains("\"idle_seconds\":90"));
+        for forbidden in ["\"path\"", "\"passphrase\"", "\"key_bytes\"", "\"payload\""] {
+            assert!(
+                !encoded.contains(forbidden),
+                "{forbidden} leaked into {encoded}"
+            );
+        }
+
+        let decoded: BrowserMessage = serde_json::from_str(&encoded).unwrap();
         assert_eq!(decoded, message);
     }
 
@@ -632,10 +811,5 @@ mod tests {
             0,
         );
         assert!(outcome.is_err());
-    }
-
-    #[test]
-    fn compile_time_identity_provider_shape_stays_native() {
-        let _ = Ed25519Keypair::from_seed([5; 32]);
     }
 }

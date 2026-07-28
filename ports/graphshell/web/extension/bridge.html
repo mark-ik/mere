@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Graphshell identity</title>
+    <link rel="stylesheet" href="bridge.css">
+  </head>
+  <body>
+    <header>
+      <p class="eyebrow">Graphshell · native Personae authority</p>
+      <h1>Identity</h1>
+      <p id="status" role="status" data-state="connecting">Connecting to this device…</p>
+      <button id="disconnect" type="button" disabled>Close device session</button>
+    </header>
+    <main id="cards" aria-live="polite"></main>
+    <template id="card-template">
+      <article class="card">
+        <div class="card-copy">
+          <h2></h2>
+          <ul></ul>
+          <p class="badges"></p>
+        </div>
+        <div class="actions"></div>
+      </article>
+    </template>
+    <script src="bridge.js"></script>
+  </body>
+</html>

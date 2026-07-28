@@ -602,6 +602,10 @@ one should not lose:
 - `ports/graphshell/src/identity_endpoint.rs` (new)
 - `ports/graphshell/src/identity_projection.rs` (new)
 - `ports/graphshell/src/native/personae_host.rs` (new)
+- `ports/graphshell/src/native/device_broker.rs` (new)
+- `ports/graphshell/src/bin/graphshell_device_host.rs` (new)
+- `ports/graphshell/src/bin/graphshell_native_host.rs` (new relay)
+- `ports/graphshell/install-device-host-windows.ps1` (new)
 - `ports/graphshell/src/session_loop.rs`
 - `crates/persona/personae/src/agent.rs`
 - `crates/persona/personae/src/signing.rs` (new only if the approval seam is
@@ -693,9 +697,9 @@ removal. Portable actions contain public options only. On Windows, a guarded
 nonstandard named-pipe listener let a real SSH client list the vault key and
 complete a verified `PerUse` signature through the approval broker. The guard
 refused the standard endpoint, and the live scheduled agent remained
-untouched. Native picker wiring, admitted browser access, standard-endpoint
-cutover, restart/login and lifecycle proof, carry mutations, and mixed-scene
-reopen remain H4 work. See the
+untouched. Native picker wiring and admitted browser access were subsequently
+closed by H4d and H4e. Standard-endpoint cutover, restart/login and lifecycle
+proof, carry mutations, and mixed-scene reopen remain H4 work. See the
 [H4b SSH key-management receipt](../../../ports/graphshell/docs/2026-07-28_h4b_ssh_key_management_receipt.md).
 
 **H4c receipt (2026-07-28):** the resident authority now implements the
@@ -708,6 +712,50 @@ The actual browser-to-device carrier and headed-browser receipt remain open;
 this is the application path they will carry, not a substitute for them. See
 the
 [H4c admitted identity endpoint receipt](../../../ports/graphshell/docs/2026-07-28_h4c_admitted_identity_endpoint_receipt.md).
+
+**H4d receipt (2026-07-28):** the first actual browser-to-device carrier now
+uses WebExtensions native messaging. Exact Chromium and Firefox extension ids
+select the installed native host; fresh host and extension nonces derive a
+private link id; the existing signed `SessionHello` is still the sole
+application admission step. Personae and all signing material stay native.
+Focused tests reject launcher mismatch and captured-hello replay. A real native
+host process served the identity projection, and headed Chromium loaded the
+unpacked extension, reached the admitted session, rendered a real pending
+`PerUse` request, approved it, and replaced it with a completed signing-history
+card without browser errors. The receipt host verified the SSH signature and
+the extension closed the device session cleanly. Headed Firefox remains open.
+Installer manifests and one shared bridge are present for Windows, macOS, and
+Linux; H5 history capture has not started. See the
+[H4d browser native-carrier receipt](../../../ports/graphshell/docs/2026-07-28_h4d_browser_native_carrier_receipt.md).
+
+**H4e receipt (2026-07-28):** the admitted extension can now request native
+SSH-key import using only its projection session id and a user-selected unlock
+policy. The path, encrypted key bytes, and passphrase never enter the browser,
+native-messaging schema, Graphshell protocol, or receipt. A host-owned system
+picker reads a bounded regular file, prompts locally only for an encrypted key,
+zeroizes both buffers, and returns only a public mutation result. Headed
+Chromium selected and unlocked a disposable encrypted Ed25519 key, refreshed
+from two to three public cards, showed `Unlock: every use`, and closed cleanly
+without browser errors. A re-entry guard reduced two immediate activations to
+one native request. The receipt used an in-memory profile and left the user's
+vault, standard endpoint, and live agent task unchanged. Windows is proved;
+Firefox and other desktop dialog providers remain open. See the
+[H4e native encrypted-key import receipt](../../../ports/graphshell/docs/2026-07-28_h4e_native_key_import_receipt.md).
+
+**H4f receipt (2026-07-28):** Graphshell now has a resident device host that
+owns one shared Personae vault, identity signer, approval broker, browser
+broker, and SSH endpoint. The browser-launched native host is a vault-free
+relay; `SessionHello` remains the sole application admission step. An isolated
+DPAPI vault listed, signed, and verified before and after process restart, then
+completed the admitted browser-card smoke path through the relay. A reversible
+live rehearsal bound the real Windows OpenSSH pipe over the user's current
+vault, returned the existing fingerprint, verified signatures before and after
+restart, and served the browser projection from the same authority. The
+interim task was restored with the same fingerprint. The known laptop was
+offline, so remote login remains open. The Graphshell logon task was not
+installed or used to retire the interim task because a real sign-out or reboot
+receipt is still required. See the
+[H4f resident device-host receipt](../../../ports/graphshell/docs/2026-07-28_h4f_resident_device_host_receipt.md).
 
 This is the first integrated reference-host cut: the graph, identity vault, and
 native capability broker work as one product.

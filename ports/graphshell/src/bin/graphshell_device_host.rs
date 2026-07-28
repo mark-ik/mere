@@ -1,0 +1,267 @@
+//! Resident Graphshell authority.
+//!
+//! One process owns the selected Personae profile, OpenSSH agent endpoint, and
+//! private browser-session broker. The browser-launched executable is only a
+//! relay into this process.
+
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use graphshell::browser_carrier::AllowedExtensions;
+use graphshell::identity::VaultProtectionView;
+use graphshell::native::device_broker::{configured_device_endpoint, serve_browser_broker};
+use graphshell::native::identity_ui::SystemNativeIdentityUi;
+use graphshell::native::personae_host::PersonaeHost;
+#[cfg(windows)]
+use graphshell::native::personae_host::STANDARD_WINDOWS_AGENT_ENDPOINT;
+use graphshell::profile::{default_vault_dir, selected_profile};
+use personae::bootstrap::{self, PASSPHRASE_ENV, Unlock};
+use personae::{IdentityVault, ProfileId};
+use ssh_agent_lib::agent::listen;
+
+const EXTRA_EXTENSIONS_ENV: &str = "GRAPHSHELL_EXTENSION_IDS";
+const DATA_ROOT_ENV: &str = "GRAPHSHELL_DATA_ROOT";
+const SESSION_SECONDS_ENV: &str = "GRAPHSHELL_BROWSER_SESSION_SECONDS";
+
+enum AgentEndpoint {
+    Standard(String),
+    Receipt(String),
+}
+
+struct Args {
+    vault_dir: PathBuf,
+    profile: ProfileId,
+    agent: AgentEndpoint,
+    browser_endpoint: String,
+    data_root: Option<PathBuf>,
+    log_file: Option<PathBuf>,
+}
+
+#[tokio::main(flavor = "multi_thread")]
+async fn main() {
+    let args = match parse_args() {
+        Ok(args) => args,
+        Err(message) => {
+            eprintln!("{message}");
+            std::process::exit(2);
+        }
+    };
+    if let Err(error) = init_logging(args.log_file.as_deref()) {
+        eprintln!("graphshell device host: initialize logging: {error}");
+        std::process::exit(1);
+    }
+    if let Err(error) = run(args).await {
+        tracing::error!(%error, "device host stopped");
+        std::process::exit(1);
+    }
+}
+
+fn parse_args() -> Result<Args, String> {
+    let mut vault_dir = default_vault_dir();
+    let mut profile = selected_profile();
+    let mut agent_endpoint = None;
+    let mut receipt_agent_endpoint = None;
+    let mut browser_endpoint = configured_device_endpoint();
+    let mut data_root = std::env::var_os(DATA_ROOT_ENV).map(PathBuf::from);
+    let mut log_file = None;
+    let mut argv = std::env::args().skip(1);
+
+    while let Some(arg) = argv.next() {
+        match arg.as_str() {
+            "--dir" => {
+                vault_dir = PathBuf::from(argv.next().ok_or("--dir needs a value")?);
+            }
+            "--profile" => {
+                profile = ProfileId(argv.next().ok_or("--profile needs a value")?);
+            }
+            "--agent-endpoint" => {
+                agent_endpoint = Some(argv.next().ok_or("--agent-endpoint needs a value")?);
+            }
+            "--receipt-agent-endpoint" => {
+                receipt_agent_endpoint = Some(
+                    argv.next()
+                        .ok_or("--receipt-agent-endpoint needs a value")?,
+                );
+            }
+            "--browser-endpoint" => {
+                browser_endpoint = argv.next().ok_or("--browser-endpoint needs a value")?;
+            }
+            "--data-root" => {
+                data_root = Some(PathBuf::from(
+                    argv.next().ok_or("--data-root needs a value")?,
+                ));
+            }
+            "--log-file" => {
+                log_file = Some(PathBuf::from(
+                    argv.next().ok_or("--log-file needs a value")?,
+                ));
+            }
+            "--help" | "-h" => {
+                return Err(
+                    "usage: graphshell_device_host [--dir <vault-dir>] [--profile <name>] \
+                     [--agent-endpoint <standard-endpoint>] \
+                     [--browser-endpoint <private-endpoint>] [--data-root <dir>] \
+                     [--log-file <path>]\n\
+                     receipt only: --receipt-agent-endpoint <isolated-endpoint>"
+                        .to_string(),
+                );
+            }
+            other => return Err(format!("unknown argument: {other}")),
+        }
+    }
+    if agent_endpoint.is_some() && receipt_agent_endpoint.is_some() {
+        return Err(
+            "--agent-endpoint and --receipt-agent-endpoint are mutually exclusive".to_string(),
+        );
+    }
+    let agent = match receipt_agent_endpoint {
+        Some(endpoint) => AgentEndpoint::Receipt(endpoint),
+        None => AgentEndpoint::Standard(
+            agent_endpoint.unwrap_or_else(|| default_agent_endpoint(&vault_dir)),
+        ),
+    };
+    Ok(Args {
+        vault_dir,
+        profile,
+        agent,
+        browser_endpoint,
+        data_root,
+        log_file,
+    })
+}
+
+fn default_agent_endpoint(vault_dir: &Path) -> String {
+    #[cfg(windows)]
+    {
+        let _ = vault_dir;
+        STANDARD_WINDOWS_AGENT_ENDPOINT.to_string()
+    }
+    #[cfg(not(windows))]
+    {
+        std::env::var("SSH_AUTH_SOCK")
+            .ok()
+            .filter(|endpoint| !endpoint.trim().is_empty())
+            .unwrap_or_else(|| {
+                vault_dir
+                    .join("graphshell-agent.sock")
+                    .display()
+                    .to_string()
+            })
+    }
+}
+
+fn init_logging(path: Option<&Path>) -> Result<(), std::io::Error> {
+    if let Some(path) = path {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)?;
+        tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::INFO)
+            .with_ansi(false)
+            .with_writer(std::sync::Mutex::new(file))
+            .init();
+    } else {
+        tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::INFO)
+            .init();
+    }
+    Ok(())
+}
+
+async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
+    let opened = bootstrap::open_storage(&args.vault_dir, Unlock::from_env())?;
+    tracing::info!(storage = %opened.description, "Personae storage open");
+    let (profile, created) = bootstrap::load_or_create_profile(&*opened.storage, &args.profile)?;
+    if created {
+        tracing::warn!(profile = %args.profile.0, "selected profile was created");
+    }
+    let protection = if std::env::var_os(PASSPHRASE_ENV).is_some() {
+        VaultProtectionView::Passphrase
+    } else {
+        VaultProtectionView::OsProtected
+    };
+    let personae = Arc::new(PersonaeHost::new(
+        IdentityVault::with_profile(opened.storage, profile),
+        args.data_root,
+        protection,
+    ));
+
+    #[cfg(not(windows))]
+    prepare_unix_agent_endpoint(match &args.agent {
+        AgentEndpoint::Standard(endpoint) | AgentEndpoint::Receipt(endpoint) => endpoint,
+    })
+    .await?;
+
+    let agent_listener = match &args.agent {
+        AgentEndpoint::Standard(endpoint) => personae.bind_standard_listener(endpoint)?,
+        AgentEndpoint::Receipt(endpoint) => personae.bind_receipt_listener(endpoint)?,
+    };
+    let agent_endpoint = match &args.agent {
+        AgentEndpoint::Standard(endpoint) | AgentEndpoint::Receipt(endpoint) => endpoint,
+    };
+    #[cfg(not(windows))]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(agent_endpoint, std::fs::Permissions::from_mode(0o600))?;
+    }
+    tracing::info!(endpoint = agent_endpoint, "SSH agent listening");
+
+    let allowlist = AllowedExtensions::default()
+        .with_additional(&std::env::var(EXTRA_EXTENSIONS_ENV).unwrap_or_default());
+    let agent = listen(agent_listener, personae.agent_session());
+    let browser = serve_browser_broker(
+        &args.browser_endpoint,
+        Arc::clone(&personae),
+        Arc::new(SystemNativeIdentityUi::default()),
+        allowlist,
+        session_duration_ms(),
+    );
+    tokio::pin!(agent);
+    tokio::pin!(browser);
+    tokio::select! {
+        result = &mut agent => {
+            result?;
+            Err("SSH agent listener ended unexpectedly".into())
+        }
+        result = &mut browser => {
+            result?;
+            Err("browser device broker ended unexpectedly".into())
+        }
+    }
+}
+
+fn session_duration_ms() -> u64 {
+    let seconds = std::env::var(SESSION_SECONDS_ENV)
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(60 * 60)
+        .clamp(60, 24 * 60 * 60);
+    seconds * 1_000
+}
+
+#[cfg(not(windows))]
+async fn prepare_unix_agent_endpoint(endpoint: &str) -> Result<(), std::io::Error> {
+    match tokio::net::UnixStream::connect(endpoint).await {
+        Ok(_) => Err(std::io::Error::new(
+            std::io::ErrorKind::AddrInUse,
+            "another SSH agent owns the configured socket",
+        )),
+        Err(error)
+            if matches!(
+                error.kind(),
+                std::io::ErrorKind::NotFound | std::io::ErrorKind::ConnectionRefused
+            ) =>
+        {
+            match std::fs::remove_file(endpoint) {
+                Ok(()) => Ok(()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Err(error) => Err(error),
+            }
+        }
+        Err(error) => Err(error),
+    }
+}

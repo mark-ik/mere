@@ -236,6 +236,10 @@ where
 mod tests {
     use super::*;
     use crate::admission::{CONNECT_ACTION, GRAPHSHELL_DOMAIN, PROJECTION_SERVICE};
+    use crate::browser_carrier::{
+        BrowserChallenge, BrowserLauncher, BrowserLink, BrowserMessage, CHROMIUM_EXTENSION_ID,
+        admit_browser_session,
+    };
     use crate::identity::VaultProtectionView;
     use crate::identity_endpoint::IdentityEndpoint;
     use crate::identity_projection::{SIGNING_APPROVE_ONCE_INTENT, SigningDecisionIntentV1};
@@ -246,8 +250,8 @@ mod tests {
         ResourceRequest, ResourceResponse, SessionOpen,
     };
     use notochord::{
-        AdmittedPrincipal, CarrierKind, NetworkId, ProfileRef, RequestedAction, SessionClaims,
-        SessionFacts, TrafficClass,
+        AdmittedPrincipal, CarrierKind, LocalNetworkPolicy, NetworkId, ProfileRef, RequestedAction,
+        ServiceAccess, ServiceRule, SessionClaims, SessionFacts, TrafficClass, TrustedRoot,
     };
     use personae::delegation::{
         CapabilityScope, DelegationCertificate, DelegationParent, DelegationRevocation,
@@ -401,9 +405,13 @@ mod tests {
     }
 
     fn request(id: u64, body: CarrierRequestBody) -> String {
-        let mut line = serde_json::to_string(&CarrierRequest { id, body }).unwrap();
+        let mut line = serde_json::to_string(&carrier_request(id, body)).unwrap();
         line.push('\n');
         line
+    }
+
+    fn carrier_request(id: u64, body: CarrierRequestBody) -> CarrierRequest {
+        CarrierRequest { id, body }
     }
 
     fn open_request(id: u64) -> String {
@@ -458,7 +466,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn admitted_session_delivers_public_identity_cards_to_the_portable_client() {
+    async fn browser_carrier_delivers_public_identity_cards_and_an_approval() {
+        use base64::Engine;
         use ssh_key::{Algorithm, LineEnding};
 
         let mut private =
@@ -504,8 +513,54 @@ mod tests {
         .await
         .unwrap();
 
-        let (peer, server) = tokio::io::duplex(256 * 1024);
-        let mut admitted = admitted(server);
+        let launcher =
+            BrowserLauncher::parse(&[format!("chrome-extension://{CHROMIUM_EXTENSION_ID}/")])
+                .unwrap();
+        let challenge = BrowserChallenge::fresh();
+        let link = BrowserLink::accept(
+            launcher,
+            &challenge,
+            BrowserMessage::Connect {
+                schema: "mere.graphshell/browser-connect/v1".to_string(),
+                host_nonce: challenge.host_nonce.clone(),
+                client_nonce: base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([0x31; 32]),
+            },
+        )
+        .unwrap();
+        let mut policy = LocalNetworkPolicy::closed(NetworkId(NETWORK));
+        policy.accepted_profiles = vec![ProfileRef {
+            id: "mere.base".into(),
+            revision: 1,
+        }];
+        policy.trusted_roots = vec![TrustedRoot {
+            authority: ROOT_AUTHORITY,
+            issuer: owner().master_public_key().to_bytes(),
+        }];
+        policy.services.insert(
+            PROJECTION_SERVICE.to_string(),
+            ServiceRule::new(
+                ServiceAccess::MemberOnly,
+                GRAPHSHELL_DOMAIN,
+                [CONNECT_ACTION],
+                false,
+                None,
+            ),
+        );
+        let (mut browser, mut admitted) = admit_browser_session(
+            &viewer(),
+            NetworkId(NETWORK),
+            ProfileRef {
+                id: "mere.base".into(),
+                revision: 1,
+            },
+            vec![grant()],
+            &link,
+            &policy,
+            &RevocationLedger::default(),
+            NOW_MS,
+        )
+        .await
+        .unwrap();
         let authority = SessionAuthority::retain_admitted(&admitted);
         let mut endpoint = IdentityEndpoint::for_admitted(Arc::clone(&host), &authority);
         let projection = endpoint.request();
@@ -533,19 +588,25 @@ mod tests {
             .unwrap()
         });
 
-        let (reader, mut writer) = tokio::io::split(peer);
-        let mut lines = TokioBufReader::new(reader).lines();
-        writer.write_all(open_request(1).as_bytes()).await.unwrap();
-        let opened: CarrierResponse =
-            serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
-        assert!(matches!(opened.body, Ok(CarrierResponseBody::Opened(_))));
-
-        writer
-            .write_all(request(2, CarrierRequestBody::Snapshot(projection)).as_bytes())
+        let opened = browser
+            .request(&carrier_request(
+                1,
+                CarrierRequestBody::Open(Box::new(SessionOpen {
+                    version: ProtocolVersion { major: 1, minor: 0 },
+                    capabilities: CapabilityProfile::default(),
+                })),
+            ))
             .await
             .unwrap();
-        let snapshot_response: CarrierResponse =
-            serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+        assert!(matches!(opened.body, Ok(CarrierResponseBody::Opened(_))));
+
+        let snapshot_response = browser
+            .request(&carrier_request(
+                2,
+                CarrierRequestBody::Snapshot(projection),
+            ))
+            .await
+            .unwrap();
         let snapshot = match snapshot_response.body {
             Ok(CarrierResponseBody::Snapshot(snapshot)) => *snapshot,
             other => panic!("expected identity snapshot, got {other:?}"),
@@ -568,21 +629,16 @@ mod tests {
         let mut client = ClientState::default();
         client.apply_snapshot(snapshot).unwrap();
         for (offset, resource) in resources.into_iter().enumerate() {
-            writer
-                .write_all(
-                    request(
-                        3 + offset as u64,
-                        CarrierRequestBody::Resource(ResourceRequest {
-                            session: session.clone(),
-                            resource,
-                        }),
-                    )
-                    .as_bytes(),
-                )
+            let response = browser
+                .request(&carrier_request(
+                    3 + offset as u64,
+                    CarrierRequestBody::Resource(ResourceRequest {
+                        session: session.clone(),
+                        resource,
+                    }),
+                ))
                 .await
                 .unwrap();
-            let response: CarrierResponse =
-                serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
             let resource = match response.body {
                 Ok(CarrierResponseBody::Resource(resource)) => resource,
                 other => panic!("expected identity resource, got {other:?}"),
@@ -646,26 +702,20 @@ mod tests {
             other => panic!("expected ready pending card, got {other:?}"),
         };
         let acknowledgement = client.acknowledgement(&session).unwrap();
-        writer
-            .write_all(
-                request(
-                    90,
-                    CarrierRequestBody::Intent(IntentInvocation {
-                        session: session.clone(),
-                        target,
-                        observed_epoch: acknowledgement.epoch,
-                        observed_revision: acknowledgement.revision,
-                        intent: SIGNING_APPROVE_ONCE_INTENT.to_string(),
-                        payload: serde_json::to_vec(&SigningDecisionIntentV1 { request_id })
-                            .unwrap(),
-                    }),
-                )
-                .as_bytes(),
-            )
+        let intent = browser
+            .request(&carrier_request(
+                90,
+                CarrierRequestBody::Intent(IntentInvocation {
+                    session: session.clone(),
+                    target,
+                    observed_epoch: acknowledgement.epoch,
+                    observed_revision: acknowledgement.revision,
+                    intent: SIGNING_APPROVE_ONCE_INTENT.to_string(),
+                    payload: serde_json::to_vec(&SigningDecisionIntentV1 { request_id }).unwrap(),
+                }),
+            ))
             .await
             .unwrap();
-        let intent: CarrierResponse =
-            serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
         assert!(matches!(
             intent.body,
             Ok(CarrierResponseBody::Intent(IntentResult::Accepted))
@@ -674,12 +724,10 @@ mod tests {
         public.key_data().verify(&verify_data, &signature).unwrap();
         assert_eq!(host.snapshot().unwrap().signing_history.len(), 1);
 
-        writer
-            .write_all(request(100, CarrierRequestBody::Close).as_bytes())
+        let closed = browser
+            .request(&carrier_request(100, CarrierRequestBody::Close))
             .await
             .unwrap();
-        let closed: CarrierResponse =
-            serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
         assert!(matches!(closed.body, Ok(CarrierResponseBody::Closed)));
         assert_eq!(server_task.await.unwrap().end, SessionEnd::Closed);
     }
