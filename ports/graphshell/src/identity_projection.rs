@@ -1,7 +1,8 @@
 //! Graphshell presentation of the resident identity read model.
 //!
-//! The cards are portable resources. Approval actions carry only a request id;
-//! authorization remains in [`crate::native::personae_host::PersonaeHost`].
+//! The cards are portable resources. Actions carry only public, typed fields;
+//! authorization and all private key handling remain in
+//! [`crate::native::personae_host::PersonaeHost`].
 
 use std::fmt::Write;
 
@@ -67,7 +68,7 @@ pub struct RemoveSshKeyIntentV1 {
     pub confirmed: bool,
 }
 
-/// One visible action attached to a pending request card.
+/// One visible local-authority action attached to a portable card.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IdentityProjectionAction {
     pub intent: &'static str,
@@ -281,6 +282,7 @@ pub fn project_identity(snapshot: &IdentitySurfaceSnapshot) -> Vec<IdentityProje
             card: PortableCardV1 {
                 title: "Signing approval".to_string(),
                 values: vec![
+                    value("Request", pending.request.request_id.to_string()),
                     value("Profile", &pending.request.profile),
                     value("Key", &pending.request.public_key_fingerprint),
                     value("Operation", &pending.request.operation),
@@ -408,7 +410,7 @@ pub fn render_identity_surface(snapshot: &IdentitySurfaceSnapshot) -> String {
                     request_id,
                     escape(&payload),
                     action.native_only,
-                    action.label,
+                    escape(action.label),
                 )
                 .unwrap();
             }
@@ -481,7 +483,7 @@ mod tests {
     use personae::signing::{PendingSigningRequest, SigningPolicy, SigningRequest};
 
     use super::*;
-    use crate::identity::{CarryView, IdentitySurfaceSnapshot, VaultView};
+    use crate::identity::{CarryView, IdentitySurfaceSnapshot, SshKeyView, VaultView};
 
     fn snapshot(policy: SigningPolicy) -> IdentitySurfaceSnapshot {
         let request = SigningRequest::new(
@@ -559,5 +561,46 @@ mod tests {
         assert!(html.contains("Approve once"));
         assert!(html.contains("Deny"));
         assert!(!html.contains("cleartext-never-projects"));
+    }
+
+    #[test]
+    fn key_controls_are_native_only_and_bind_no_private_payload() {
+        let mut snapshot = snapshot(SigningPolicy::PerUse);
+        snapshot.ssh_keys.push(SshKeyView {
+            profile: "research".to_string(),
+            fingerprint: "SHA256:public".to_string(),
+            comment: "workstation".to_string(),
+            public_openssh: "ssh-ed25519 AAAA-public workstation".to_string(),
+            lineage: "locally generated, externally registered".to_string(),
+            device_loss_note: "register a replacement".to_string(),
+            unlock_policy: "every use".to_string(),
+        });
+        let cards = project_identity(&snapshot);
+        let vault = cards
+            .iter()
+            .find(|card| card.key == "identity:vault")
+            .unwrap();
+        assert_eq!(vault.actions.len(), 2);
+        assert!(vault.actions.iter().all(|action| action.native_only));
+        assert!(vault.actions.iter().all(|action| action.payload.is_none()));
+
+        let key = cards
+            .iter()
+            .find(|card| card.key == "identity:ssh:SHA256:public")
+            .unwrap();
+        let remove = key
+            .actions
+            .iter()
+            .find(|action| action.intent == SSH_REMOVE_INTENT)
+            .unwrap();
+        let payload: RemoveSshKeyIntentV1 =
+            serde_json::from_value(remove.payload.clone().unwrap()).unwrap();
+        assert_eq!(payload.fingerprint, "SHA256:public");
+        assert!(!payload.confirmed);
+        assert!(
+            !serde_json::to_string(remove.payload.as_ref().unwrap())
+                .unwrap()
+                .contains("private")
+        );
     }
 }

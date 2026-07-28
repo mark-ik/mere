@@ -33,7 +33,8 @@ portable file-facet and verification boundaries.
 
 `h4_identity_surface.html` is generated from a resident `PersonaeHost` with a
 real pending per-use SSH signing request. The paired
-`h4_identity_receipt.json` records the typed approval intent, 64-byte signature,
+`h4_identity_receipt.json` records the typed approval intent, key generation,
+direct native import, confirmed removal, an isolated real SSH wire exchange,
 secret-exclusion assertions, and the deliberate decision to leave the standard
 agent endpoint unchanged:
 
@@ -43,5 +44,9 @@ cargo run -p graphshell --bin h4_identity_receipt -- ports/graphshell/docs/recei
 ```
 
 The corresponding
-[H4a receipt note](../2026-07-28_h4a_personae_authority_receipt.md) lists the
-remaining endpoint, restart, browser-admission, and lifecycle gates.
+[H4a authority note](../2026-07-28_h4a_personae_authority_receipt.md) and
+[H4b key-management note](../2026-07-28_h4b_ssh_key_management_receipt.md)
+cover the authority and SSH wire slices. The
+[H4c admitted-endpoint note](../2026-07-28_h4c_admitted_identity_endpoint_receipt.md)
+records the portable-client read and approval path while keeping the actual
+browser carrier and headed receipt open.

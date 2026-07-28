@@ -17,6 +17,8 @@ pub mod handlers;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod identity;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+pub mod identity_endpoint;
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod identity_projection;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod lifecycle;

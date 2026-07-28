@@ -93,7 +93,7 @@ pub struct PersonaeHost<S: IdentityStorage> {
     data_root: Option<PathBuf>,
     protection: VaultProtectionView,
     lock: VaultLockView,
-    listener: AgentListenerView,
+    listener: Arc<Mutex<AgentListenerView>>,
 }
 
 impl<S: IdentityStorage + 'static> PersonaeHost<S> {
@@ -124,13 +124,36 @@ impl<S: IdentityStorage + 'static> PersonaeHost<S> {
             data_root,
             protection,
             lock: VaultLockView::Unlocked,
-            listener: AgentListenerView::StandaloneRetained,
+            listener: Arc::new(Mutex::new(AgentListenerView::StandaloneRetained)),
         }
     }
 
     /// A fresh per-connection SSH agent session over the resident vault.
     pub fn agent_session(&self) -> VaultAgent<S> {
         self.agent.clone()
+    }
+
+    /// Bind an isolated Windows named pipe for acceptance testing.
+    ///
+    /// The standard OpenSSH endpoint is rejected here. Taking it over requires
+    /// a separate cutover path with restart and real-login receipts.
+    #[cfg(windows)]
+    pub fn bind_receipt_listener(
+        &self,
+        endpoint: &str,
+    ) -> std::io::Result<ssh_agent_lib::agent::NamedPipeListener> {
+        const STANDARD_ENDPOINT: &str = r"\\.\pipe\openssh-ssh-agent";
+        if endpoint.eq_ignore_ascii_case(STANDARD_ENDPOINT) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "receipt listener cannot bind the standard SSH agent endpoint",
+            ));
+        }
+        let listener = ssh_agent_lib::agent::NamedPipeListener::bind(endpoint)?;
+        *self.listener.lock().unwrap() = AgentListenerView::ReceiptEndpoint {
+            endpoint: endpoint.to_string(),
+        };
+        Ok(listener)
     }
 
     /// Generate an Ed25519 key entirely inside the resident authority.
@@ -287,7 +310,7 @@ impl<S: IdentityStorage + 'static> PersonaeHost<S> {
             vault: VaultView {
                 protection: self.protection,
                 lock: self.lock,
-                agent: self.listener.clone(),
+                agent: self.listener.lock().unwrap().clone(),
             },
             profiles,
             ssh_keys,
@@ -378,9 +401,7 @@ fn unlock_tier(policy: SshUnlockPolicyIntentV1) -> Result<UnlockTier, IdentityIn
         {
             Ok(UnlockTier::ShortTtl { idle_seconds })
         }
-        SshUnlockPolicyIntentV1::ShortTtl { .. } => {
-            Err(IdentityIntentError::InvalidIdleWindow)
-        }
+        SshUnlockPolicyIntentV1::ShortTtl { .. } => Err(IdentityIntentError::InvalidIdleWindow),
         SshUnlockPolicyIntentV1::PerUse => Ok(UnlockTier::PerUse),
     }
 }
@@ -408,6 +429,7 @@ fn unlock_label(tier: UnlockTier) -> String {
 mod tests {
     use personae::ssh_slot::{protocol_key_for, slot_for};
     use personae::{Ed25519Keypair, InMemoryStorage, Profile, ProfileId};
+    use signature::Verifier;
     use ssh_agent_lib::agent::Session;
     use ssh_agent_lib::proto::SignRequest;
     use ssh_key::{Algorithm, LineEnding};
@@ -508,5 +530,181 @@ mod tests {
             completed.signing_history[0].result,
             personae::signing::SigningRecordResult::Signed { .. }
         ));
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn isolated_named_pipe_lists_and_signs_through_the_ssh_wire_protocol() {
+        use ssh_agent_lib::client::Client;
+        use tokio::net::windows::named_pipe::ClientOptions;
+
+        let mut private =
+            ssh_key::PrivateKey::random(&mut rand_core::OsRng, Algorithm::Ed25519).unwrap();
+        private.set_comment("wire-receipt");
+        let public = ssh_key::PublicKey::from(&private);
+        let mut profile = Profile::new(
+            ProfileId("research".to_string()),
+            "Research",
+            Ed25519Keypair::from_seed([0x3a; 32]),
+        );
+        profile.slots.insert(
+            protocol_key_for(&private),
+            slot_for(&private, UnlockTier::PerUse).unwrap(),
+        );
+        let host = PersonaeHost::with_decision_timeout(
+            IdentityVault::with_profile(InMemoryStorage::new(), profile),
+            None,
+            VaultProtectionView::Ephemeral,
+            Duration::from_secs(2),
+        );
+        assert_eq!(
+            host.bind_receipt_listener(r"\\.\pipe\openssh-ssh-agent")
+                .unwrap_err()
+                .kind(),
+            std::io::ErrorKind::PermissionDenied
+        );
+        let endpoint = format!(r"\\.\pipe\graphshell-h4-receipt-{}", Uuid::new_v4());
+        let listener = host.bind_receipt_listener(&endpoint).unwrap();
+        let server = tokio::spawn(ssh_agent_lib::agent::listen(listener, host.agent_session()));
+
+        let pipe = ClientOptions::new().open(&endpoint).unwrap();
+        let mut client = Client::new(pipe);
+        let identities = client.request_identities().await.unwrap();
+        assert_eq!(identities.len(), 1);
+        assert_eq!(identities[0].comment, "wire-receipt");
+        assert_eq!(
+            host.snapshot().unwrap().vault.agent,
+            AgentListenerView::ReceiptEndpoint {
+                endpoint: endpoint.clone()
+            }
+        );
+
+        let data = b"graphshell-isolated-wire-receipt".to_vec();
+        let verify_data = data.clone();
+        let credential = identities[0].credential.clone();
+        let signing = tokio::spawn(async move {
+            client
+                .sign(SignRequest {
+                    credential,
+                    data,
+                    flags: 0,
+                })
+                .await
+        });
+
+        let pending = tokio::time::timeout(Duration::from_secs(1), async {
+            loop {
+                if let Some(pending) = host.snapshot().unwrap().pending_signing.into_iter().next() {
+                    break pending;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        host.approve_once(pending.request.request_id).unwrap();
+
+        let signature = signing.await.unwrap().unwrap();
+        public.key_data().verify(&verify_data, &signature).unwrap();
+        assert!(matches!(
+            host.snapshot().unwrap().signing_history[0].result,
+            personae::signing::SigningRecordResult::Signed { .. }
+        ));
+
+        server.abort();
+        let _ = server.await;
+    }
+
+    #[test]
+    fn typed_generation_and_confirmed_removal_mutate_the_shared_vault() {
+        let profile = Profile::new(
+            ProfileId("research".to_string()),
+            "Research",
+            Ed25519Keypair::from_seed([0x19; 32]),
+        );
+        let host = PersonaeHost::new(
+            IdentityVault::with_profile(InMemoryStorage::new(), profile),
+            None,
+            VaultProtectionView::Ephemeral,
+        );
+        let generate = serde_json::to_vec(&GenerateSshKeyIntentV1 {
+            comment: "generated in Graphshell".to_string(),
+            unlock_policy: SshUnlockPolicyIntentV1::ShortTtl { idle_seconds: 45 },
+        })
+        .unwrap();
+        let generated = host.apply_intent(SSH_GENERATE_INTENT, &generate).unwrap();
+        let IdentityIntentOutcome::SshKeyMutation(generated) = generated else {
+            panic!("expected SSH key mutation");
+        };
+        assert_eq!(generated.operation, SshKeyMutationKind::Generated);
+        assert_eq!(generated.unlock_policy, "45s idle");
+        assert!(generated.public_openssh.starts_with("ssh-ed25519 "));
+        assert_eq!(host.snapshot().unwrap().ssh_keys.len(), 1);
+
+        let unconfirmed = serde_json::to_vec(&RemoveSshKeyIntentV1 {
+            fingerprint: generated.fingerprint.clone(),
+            confirmed: false,
+        })
+        .unwrap();
+        assert!(matches!(
+            host.apply_intent(SSH_REMOVE_INTENT, &unconfirmed),
+            Err(IdentityIntentError::ConfirmationRequired)
+        ));
+        assert_eq!(host.snapshot().unwrap().ssh_keys.len(), 1);
+
+        let confirmed = serde_json::to_vec(&RemoveSshKeyIntentV1 {
+            fingerprint: generated.fingerprint,
+            confirmed: true,
+        })
+        .unwrap();
+        let removed = host.apply_intent(SSH_REMOVE_INTENT, &confirmed).unwrap();
+        assert!(matches!(
+            removed,
+            IdentityIntentOutcome::SshKeyMutation(SshKeyMutationReceipt {
+                operation: SshKeyMutationKind::Removed,
+                ..
+            })
+        ));
+        assert!(host.snapshot().unwrap().ssh_keys.is_empty());
+    }
+
+    #[test]
+    fn native_import_never_accepts_private_key_bytes_as_an_intent() {
+        let profile = Profile::new(
+            ProfileId("research".to_string()),
+            "Research",
+            Ed25519Keypair::from_seed([0x29; 32]),
+        );
+        let host = PersonaeHost::new(
+            IdentityVault::with_profile(InMemoryStorage::new(), profile),
+            None,
+            VaultProtectionView::Ephemeral,
+        );
+        let mut private =
+            ssh_key::PrivateKey::random(&mut rand_core::OsRng, Algorithm::Ed25519).unwrap();
+        private.set_comment("native import");
+        let private_openssh = private.to_openssh(LineEnding::LF).unwrap().to_string();
+        let receipt = host
+            .import_ssh_private(
+                private,
+                ImportSshKeyNativeIntentV1 {
+                    unlock_policy: SshUnlockPolicyIntentV1::PerUse,
+                },
+            )
+            .unwrap();
+        let public_json = serde_json::to_string(&receipt).unwrap();
+        assert_eq!(receipt.operation, SshKeyMutationKind::Imported);
+        assert!(!public_json.contains(&private_openssh));
+        assert!(!public_json.contains("BEGIN OPENSSH PRIVATE KEY"));
+
+        let options = serde_json::to_vec(&ImportSshKeyNativeIntentV1 {
+            unlock_policy: SshUnlockPolicyIntentV1::Session,
+        })
+        .unwrap();
+        assert!(matches!(
+            host.apply_intent(SSH_IMPORT_NATIVE_INTENT, &options),
+            Err(IdentityIntentError::NativeHandoffRequired)
+        ));
+        assert_eq!(host.snapshot().unwrap().ssh_keys.len(), 1);
     }
 }

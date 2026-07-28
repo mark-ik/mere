@@ -599,8 +599,10 @@ one should not lose:
 **Files:**
 
 - `ports/graphshell/src/identity.rs` (new)
+- `ports/graphshell/src/identity_endpoint.rs` (new)
 - `ports/graphshell/src/identity_projection.rs` (new)
 - `ports/graphshell/src/native/personae_host.rs` (new)
+- `ports/graphshell/src/session_loop.rs`
 - `crates/persona/personae/src/agent.rs`
 - `crates/persona/personae/src/signing.rs` (new only if the approval seam is
   independently useful outside Graphshell)
@@ -683,6 +685,29 @@ and standalone scheduled task were deliberately left unchanged. Browser
 admission, real SSH login after restart, lifecycle cutover, management actions,
 and mixed-scene reopen remain H4 work. See the
 [H4a Personae authority receipt](../../../ports/graphshell/docs/2026-07-28_h4a_personae_authority_receipt.md).
+
+**H4b receipt (2026-07-28):** native Graphshell now generates Ed25519 keys
+inside the resident authority, accepts imported parsed keys only through a
+direct native handoff, and requires public-fingerprint confirmation before
+removal. Portable actions contain public options only. On Windows, a guarded
+nonstandard named-pipe listener let a real SSH client list the vault key and
+complete a verified `PerUse` signature through the approval broker. The guard
+refused the standard endpoint, and the live scheduled agent remained
+untouched. Native picker wiring, admitted browser access, standard-endpoint
+cutover, restart/login and lifecycle proof, carry mutations, and mixed-scene
+reopen remain H4 work. See the
+[H4b SSH key-management receipt](../../../ports/graphshell/docs/2026-07-28_h4b_ssh_key_management_receipt.md).
+
+**H4c receipt (2026-07-28):** the resident authority now implements the
+ordinary Graphshell endpoint traits as a memory-only portable-card projection.
+Its carrier constructor binds the projection to the transcript-derived
+`SessionAuthority` id. A portable client mounted every public card through
+`serve_admitted_session`, reconstructed an approve-once payload from disclosed
+public data, released the waiting real SSH adapter, and verified the signature.
+The actual browser-to-device carrier and headed-browser receipt remain open;
+this is the application path they will carry, not a substitute for them. See
+the
+[H4c admitted identity endpoint receipt](../../../ports/graphshell/docs/2026-07-28_h4c_admitted_identity_endpoint_receipt.md).
 
 This is the first integrated reference-host cut: the graph, identity vault, and
 native capability broker work as one product.
@@ -896,11 +921,40 @@ adapters, Wi-Fi, Bluetooth PAN, Teredo). A userspace mDNS socket joining the
 multicast group on the wrong interface is the leading hypothesis and matches
 both the same-machine success and the two-way cross-host failure.
 
-**Not concluded.** Whether this is interface selection in p2panda/iroh's mDNS,
-an announcement the responder never sends, or AP-level multicast handling needs
-a packet capture on UDP 5353 at both ends. Until that is measured, the honest
-statement is that **mDNS peer discovery is unproven on this network**, and the
-hand-carried ticket remains the only path with a two-machine receipt behind it.
+**Narrowed 2026-07-28, without a capture.** Four things are now established
+and one hypothesis survives.
+
+- **Both peers do advertise.** p2panda's actor calls
+  `.advertise(mode.is_active())`, and both sides run `Active`. So this is not a
+  passive-mode mistake.
+- **The macOS mDNS stack is healthy.** `dns-sd -B _ssh._tcp local` finds
+  `Q-PC` on interfaces 1, 11 and 12 immediately.
+- **`_irohv1._udp` never appears** in an OS-level browse while the Windows peer
+  serves. Weak evidence on its own: the browse was killed with `pkill`, and a
+  block-buffered file may not have flushed, so treat this as suggestive rather
+  than proof.
+- **The library hardcodes `IpClass::Auto`.** `iroh-mdns-address-lookup` builds
+  its `Discoverer` with `IpClass::Auto`, which swarm-discovery documents as
+  "attempt to bind to both ipv4 and ipv6, only error if unable to bind to
+  either" — best effort, with no interface pinning. p2panda exposes **no** way
+  to set the IP class or the interface; `MdnsDiscoveryMode` is the entire knob.
+
+The surviving hypothesis is socket/interface selection below our API: the
+Windows host is multi-homed across five adapters and the gateway is
+IPv6 link-local, so a best-effort bind can plausibly join the group on an
+interface that does not reach the iMac, while same-machine delivery succeeds
+regardless. That fits every observation.
+
+**What this means for the lane.** The failure is beneath the surface Mere
+controls, and the knob that would fix it is not exposed by p2panda. Options are
+upstream work on `iroh-mdns-address-lookup`, a different discovery mechanism, or
+accepting tickets on this network. Note also that `swarm-discovery` is at
+`0.6.0-alpha.2` beneath this path.
+
+**Still not concluded.** A capture on UDP 5353 at both ends would settle
+whether Windows announces at all and on which interface. Until then, **mDNS
+peer discovery is unproven on this network**, and the hand-carried ticket
+remains the only path with a two-machine receipt behind it.
 
 **Consequence for the printers half.** Even the "easy" capability does not
 deliver a device list: `mere-transport` exposes no way to enumerate what

@@ -5,9 +5,10 @@
 A1 through A4, typed Inspector clip insertion, production Resolve/Run
 providers, sanitized HTML lowering, and the sealed attributable resolve cache.
 Deterministic and real-process receipts are green, including the OS-headed
-Genet Probe drive. Selected-range clipping remains a Genet producer seam,
-specified below; Knot already accepts an explicit selector without inventing
-one.
+Genet Probe drive. Exact selected-range clipping is complete for Genet's
+static retained document producer. Livery and scripted documents remain
+producer-specific selection seams; Knot already accepts and preserves an
+explicit selector without inventing one.
 
 **Companions:** the completed [Knot port plan](2026-07-25_knot_port_plan.md),
 the reconciled
@@ -173,9 +174,11 @@ text without the 1.3 cache metadata.
 - Inspector clip is complete. Genet sessions emit a host-neutral semantic clip;
   Turnstone sends `knot.clip.insert/v1`; Knot validates provenance, base token,
   grant, size, target, and source URI before appending through the ordinary
-  file or signed-vault save path. The current static/Livery producer captures
-  the whole semantic document and records no selector; range/DOM selection is
-  a later producer refinement, not inferred provenance.
+  file or signed-vault save path. The static producer now returns exact
+  selected text, links scoped to that range, and a typed DOM-range selector.
+  It retains whole-document clipping with `selector: None` when there is no
+  selection. Livery still supplies that whole-document fallback; the scripted
+  lane supplies no clip yet.
 - Resolve and Run are complete for the first production capability set.
   Graphshell carries strict `knot.transclusion.resolve/v1` and
   `knot.block.run/v1` payloads. Knot owns `auto` / `ask` / `never`, scheme and
@@ -375,24 +378,37 @@ change, lock, and current-epoch change all reduce restoration to a cache miss.
 Resolve refresh starts again from authored source; a completely failed refresh
 reports the failure and retains a still-valid cached document for offline use.
 
-### Selected-range clipping. Exact external gate
+### Selected-range clipping. Static complete; Livery and scripted remain
 
-Knot's `knot.clip.insert/v1` payload already accepts an optional selector and
-records it with the source URI. The missing truth is upstream of Knot:
+Knot's `knot.clip.insert/v1` payload accepts an optional selector and records it
+with the source URI. Exact selection therefore stays with the document producer
+that owns retained layout:
 
-1. Genet's retained `DocumentSession` needs pointer or keyboard selection
-   state, or a host-neutral equivalent.
-2. Static, Livery, and scripted sessions must map retained layout hit positions
-   to stable DOM text offsets.
-3. `DocumentClip` must return the selected normalized text, a stable DOM-range
+1. `DocumentSession` carries the ordinary press, move, and release lifecycle
+   plus a read-only text-target query for automation.
+2. Genet's static incremental layout maps pointer positions to retained DOM text
+   byte offsets. The static session owns the anchor and focused range, paints
+   the highlight, and emits selected normalized text, a versioned DOM-range
    selector, and links scoped to that range.
+3. Genet Probe owns the generic `select-text` gesture. Turnstone only resolves
+   one unambiguous live-session target into window coordinates; Probe drives the
+   same pointer route as a person.
+4. Inspector forwards the resulting `DocumentClip`. Knot validates and stores
+   the selector unchanged.
 
-Today `DocumentSession::clip()` calls `semantic_clip_from_dom`, which extracts
-the whole semantic document and sets `selector: None` for the static and Livery
-lanes; the scripted lane supplies no clip yet. Turnstone cannot recover a
-faithful range from those values, and Knot must not infer one. Whole-document
-clipping remains the explicit fallback where available until this Genet
-producer seam lands.
+The headed `scenarios/knot_selected_clip.scn` receipt selects only
+`only this linked finding`, activates Inspector through Probe's native button
+role, and saves through a real writable Knot endpoint. The saved block contains
+only that phrase, its in-range link, and a `dom-range` selector; the surrounding
+preface and suffix are absent.
+
+Livery remains a distinct producer seam. Its retained `TextFrame` keeps shaped
+inline fragments but currently discards the source byte spans and Parley layout
+needed to map a pointer back to stable source positions. That mapping belongs
+in the Livery session rather than Turnstone or Knot. Scripted documents
+separately need retained selection and clip production. Until those producers
+land, whole-document clipping with `selector: None` remains the explicit
+fallback where available.
 
 ## Stop rules
 
