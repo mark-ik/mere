@@ -400,7 +400,10 @@ The headed `scenarios/knot_selected_clip.scn` receipt selects only
 `only this linked finding`, activates Inspector through Probe's native button
 role, and saves through a real writable Knot endpoint. The saved block contains
 only that phrase, its in-range link, and a `dom-range` selector; the surrounding
-preface and suffix are absent.
+preface and suffix are absent. Unit receipts pin the producer and driver seams
+in `static_session_pointer_selection_scopes_clip_and_selector`,
+`text_selection_is_a_probe_owned_pointer_gesture`, and
+`a_button_role_selector_honors_the_native_button_role`.
 
 Livery remains a distinct producer seam. Its retained `TextFrame` keeps shaped
 inline fragments but currently discards the source byte spans and Parley layout
