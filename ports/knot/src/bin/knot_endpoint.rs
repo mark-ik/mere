@@ -3,6 +3,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use p2panda_core::SigningKey;
+use stickleback::DataKeyring;
+
 fn main() {
     let args = std::env::args_os().skip(1).collect::<Vec<_>>();
     let mut endpoint = match args.as_slice() {
@@ -100,6 +103,21 @@ fn main() {
             ));
             endpoint
         }
+        [
+            mode,
+            root,
+            max_source_bytes,
+            resolve,
+            run,
+            schemes,
+            languages,
+            max_depth,
+            max_ops,
+        ] if mode == "communal-fixture-effects" => communal_fixture_endpoint(
+            PathBuf::from(root),
+            parse_u64(max_source_bytes, "communal fixture byte limit"),
+            effect_authority(resolve, run, schemes, languages, max_depth, max_ops, None),
+        ),
         _ => panic!(
             "usage: knot_endpoint [directory] | directory <root> | \
              directory-write <root> <max-source-bytes> | \
@@ -107,6 +125,8 @@ fn main() {
              <resolve-mode> <run-mode> <schemes> <languages> <max-depth> <max-ops> | \
              persona-vault <data-root> <persona-id> <max-source-bytes> | \
              persona-vault-effects <data-root> <persona-id> <max-source-bytes> \
+             <resolve-mode> <run-mode> <schemes> <languages> <max-depth> <max-ops> | \
+             communal-fixture-effects <root> <max-source-bytes> \
              <resolve-mode> <run-mode> <schemes> <languages> <max-depth> <max-ops>"
         ),
     };
@@ -117,6 +137,67 @@ fn main() {
         Duration::from_millis(100),
     )
     .expect("Knot Graphshell endpoint failed");
+}
+
+/// Process-only received-content fixture. Its keys are minted inside the
+/// endpoint process and the root is caller-owned scratch storage, so this mode
+/// does not turn group keys into CLI or environment authority.
+fn communal_fixture_endpoint(
+    root: PathBuf,
+    max_source_bytes: u64,
+    effects: knot::KnotEffectAuthority,
+) -> knot::KnotEndpoint {
+    const SPACE: [u8; 32] = [0xC1; 32];
+    const RECEIVED_SEED: [u8; 32] = [0xC2; 32];
+    const LOCAL_SEED: [u8; 32] = [0xC3; 32];
+    const VAULT_KEY: [u8; 32] = [0xC4; 32];
+
+    fs::create_dir_all(&root).expect("could not create communal fixture root");
+    let received_writer = *SigningKey::from_bytes(&RECEIVED_SEED)
+        .verifying_key()
+        .as_bytes();
+    let local_writer = *SigningKey::from_bytes(&LOCAL_SEED)
+        .verifying_key()
+        .as_bytes();
+    let store = knot::KnotSyncFileStore::open_commons(
+        root.join("commons.redb"),
+        SPACE,
+        [received_writer, local_writer],
+    )
+    .expect("could not open communal fixture sync store");
+    let mut keys = DataKeyring::new();
+    keys.rotate_random()
+        .expect("could not mint communal fixture data epoch");
+    let source = "\
+# Received calculation
+
+```rhai eval
+40 + 2
+```
+";
+    pollster::block_on(store.author_communal(
+        RECEIVED_SEED,
+        &keys,
+        &knot::KnotSyncEvent::Put(knot::VaultDocument {
+            id: "received".into(),
+            title: "Received calculation".into(),
+            body: source.as_bytes().to_vec(),
+            media_type: "text/vnd.knot".into(),
+        }),
+    ))
+    .expect("could not author received communal fixture document");
+    let vault =
+        knot::KnotVault::open(root.join("vault"), VAULT_KEY).expect("could not open fixture vault");
+    let mut endpoint = knot::KnotEndpoint::from_communal_vault(
+        vault,
+        store,
+        LOCAL_SEED,
+        keys,
+        knot::KnotWriteGrant::new(max_source_bytes),
+    )
+    .expect("could not open communal fixture endpoint");
+    endpoint.grant_effects(effects);
+    endpoint
 }
 
 fn parse_u64(value: &OsStr, label: &str) -> u64 {

@@ -90,8 +90,11 @@ holds the retained consumer and mutation receipts.
 5. **E5, end-to-end receipts. Partially complete.** Own-document Ask and Auto,
    source immutability, derived revision refresh, operation-budget exhaustion,
    and stale-consent rejection are proved; the real Turnstone process receipt
-   crosses both actions. Received-document deny/ask needs a communal process
-   fixture. Offline age requires E4. Sanitized clip rendering requires E3.
+   crosses both actions. A second real-process fixture starts from a
+   differently signed Commons operation under the group-data encryption
+   profile: Auto is rejected, explicit Run succeeds, authored source stays
+   unchanged, and plaintext is absent from the fixture store. Offline age
+   requires E4. Sanitized clip rendering requires E3.
 
 JavaScript backends, public serving, canvas outputs, and additional block kinds
 remain separate consumer-pulled work. They are not closure conditions for this
