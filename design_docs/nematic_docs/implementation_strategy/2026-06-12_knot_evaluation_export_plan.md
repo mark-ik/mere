@@ -7,7 +7,10 @@ surface landed. Sanitized HTML, additional network providers, and the sealed
 derived cache remain open. Inker and Nematic now live in Genet; Meerkat, the
 host named throughout the dated progress log, was deleted 2026-07-18. The
 current ownership and remaining sequence below supersede the old Meerkat
-wiring assignments.
+wiring assignments. The production Knot adapter now supplies anonymous
+HTTP(S) plus read-only Gemini, Gopher, Finger, Spartan, Nex, and Guppy
+fetches; Titan remains excluded because navigation is still a zero-byte
+upload.
 **What this is**: the effectful half the
 [polyglot knot design](2026-05-08_polyglot_knot_design.md) deliberately left
 host-side, plus the export dual it promised. Knots (CommonMark and djot
@@ -36,7 +39,7 @@ an effectful Knot service and a product-host consent surface.
 | Original slice | Current status | Current owner |
 | --- | --- | --- |
 | K5 exporters | Complete: gemtext already existed; gophermap and text exporters landed | Genet `components/inker/src/document/render/export.rs` |
-| K1 transclusion | Pure pass plus production rooted-file provider, Knot policy, Graphshell intent, and Turnstone Ask/Auto receipt complete; network providers open | Pure pass in Genet Inker. Knot owns document trust and invokes an injected fetch capability. |
+| K1 transclusion | Complete: pure pass plus production rooted-file, anonymous HTTP(S), and read-only smolweb providers; Knot policy, Graphshell intent, and Turnstone Ask/Auto receipt complete | Pure pass in Genet Inker. Knot owns document trust and invokes an injected fetch capability. |
 | K2 evaluation | `BlockEvaluator`, registry, policy, Rhai backend, bounded Piccolo proof, nested render, production registration, and consent complete | Seam in Genet Inker; evaluators remain capability providers. Knot chooses and invokes them under document policy. |
 | K4 sanitized HTML clips | Open | Genet Nematic/inker as a pure parse, sanitize, and lower lane |
 | K3 cache and consent | Consent complete; sealed cache open | Knot owns sealed derived caches and policy. Graphshell/Turnstone presents declared intents and user consent. |
@@ -68,12 +71,17 @@ holds the retained consumer and mutation receipts.
 
 ### Remaining sequence
 
-1. **E1, Knot effect service. Complete for rooted file + Rhai.** Explicit
+1. **E1, Knot effect service. Complete.** Explicit
    Resolve and Run intents, injected fetch/evaluator registries, document trust
    and grant checks, scheme/language allowlists, recursion and operation
-   limits, and user-configured `auto` / `ask` / `never` modes are live.
-   Received Commons documents require explicit confirmation even under Auto.
-   HTTP and smolweb capability providers remain separate additions.
+   limits, and user-configured `auto` / `ask` / `never` modes are live. The
+   production adapter routes rooted files, anonymous HTTP(S), and read-only
+   Gemini/Gopher/Finger/Spartan/Nex/Guppy through the same injected fetch seam.
+   HTTP effects cannot borrow the browser cookie jar; bodies use the endpoint's
+   source-byte cap. Gemini pins are in-memory for the endpoint lifetime, so
+   durable pin storage remains a separate trust-store improvement. Titan is
+   rejected because its nominal fetch is an upload. Received Commons documents
+   require explicit confirmation even under Auto.
 2. **E2, product consent. Complete.** Graphshell advertises strict versioned
    actions. Turnstone presents only advertised Resolve/Run controls, sends the
    user's confirmation, queues Auto on open, and renders the result as

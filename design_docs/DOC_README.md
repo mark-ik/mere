@@ -259,8 +259,9 @@ names as receipts).
 > **Knot effects correction, 2026-07-27:** the
 > [evaluation/export plan](nematic_docs/implementation_strategy/2026-06-12_knot_evaluation_export_plan.md)
 > has landed exporters plus the pure transclusion/evaluation seams and their
-> Rhai/Lua proofs. The live network/evaluator bridge, sanitized HTML, consent,
-> and sealed derived cache remain open. Pure transforms live in Genet; Knot
+> Rhai/Lua proofs. The Knot effect bridge, anonymous HTTP/read-only smolweb
+> providers, and consent surface are live; sanitized HTML and the sealed
+> derived cache remain open. Pure transforms live in Genet; Knot
 > owns document policy and caches; the Graphshell/Turnstone product surface
 > presents authorized intents. The older summary below overstates product
 > completion.

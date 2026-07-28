@@ -230,6 +230,34 @@ pub async fn fetch_page_capped(url: &str, max_bytes: usize) -> Result<Fetched, S
     }
 }
 
+/// Fetch a page without the browser session's cookie jar or other installed
+/// authenticated HTTP state. Effect providers use this path so resolving a
+/// transclusion cannot silently borrow the user's browsing authority.
+///
+/// Smolweb requests use errand's process-level trust store. A host that admits
+/// Gemini should install one explicitly with
+/// [`install_in_memory_smolweb_tofu`] or its own durable store.
+pub async fn fetch_page_anonymous_capped(
+    url: &str,
+    max_bytes: usize,
+) -> Result<Fetched, String> {
+    match scheme_of(url).and_then(errand::Scheme::parse) {
+        Some(_) => fetch_page_capped(url, max_bytes).await,
+        None => {
+            let cx = netfetcher::FetchContext::permissive();
+            do_fetch_ua_with_context(url, max_bytes, None, &cx).await
+        }
+    }
+}
+
+/// Pin Gemini certificates for the lifetime of this process. This is stronger
+/// than errand's permissive default, but it deliberately makes no restart
+/// durability claim; a host with durable trust state should install its own
+/// [`errand::TofuStore`] instead.
+pub fn install_in_memory_smolweb_tofu() {
+    errand::set_trust_store(Arc::new(errand::InMemoryTofu::new()));
+}
+
 /// Fetch a page as the **crawler**, identifying with [`CRAWLER_USER_AGENT`]. http(s)
 /// sends the descriptive bot UA; smolweb routes through errand as usual (errand owns
 /// its UA). The crawl actor fetches every page (and robots.txt) through this, so a
@@ -337,8 +365,17 @@ async fn do_fetch_ua(
     max_bytes: usize,
     user_agent: Option<&str>,
 ) -> Result<Fetched, String> {
-    let parsed = url::Url::parse(url).map_err(|e| format!("bad URL: {e}"))?;
     let cx = session_context();
+    do_fetch_ua_with_context(url, max_bytes, user_agent, &cx).await
+}
+
+async fn do_fetch_ua_with_context(
+    url: &str,
+    max_bytes: usize,
+    user_agent: Option<&str>,
+    cx: &netfetcher::FetchContext,
+) -> Result<Fetched, String> {
+    let parsed = url::Url::parse(url).map_err(|e| format!("bad URL: {e}"))?;
     let mut request = netfetcher::Request::get(parsed);
     if let Some(ua) = user_agent {
         // netfetcher only injects its default UA when none is set, so this wins.
@@ -346,7 +383,7 @@ async fn do_fetch_ua(
             .headers
             .push(("user-agent".to_owned(), ua.to_owned()));
     }
-    let response = netfetcher::fetch(request, &cx).await;
+    let response = netfetcher::fetch(request, cx).await;
     if response.is_network_error() {
         return Err("network error".to_string());
     }

@@ -330,8 +330,9 @@ Current user settings:
 - `TURNSTONE_KNOT_RESOLVE_MAX_DEPTH` and `TURNSTONE_KNOT_RUN_MAX_OPS`
 
 The shipped providers are rooted `file:` transclusion for directory endpoints
-and sandboxed Rhai evaluation. HTTP/smolweb fetch providers, sanitized HTML,
-and the sealed attributable derived cache remain the evaluation plan's
+and sandboxed Rhai evaluation. Anonymous HTTP(S) and the read-only smolweb
+providers now join the rooted-file lane under the same Knot authority.
+Sanitized HTML and the sealed attributable derived cache remain the evaluation plan's
 consumer-pulled E3/E4 work.
 
 ## Stop rules

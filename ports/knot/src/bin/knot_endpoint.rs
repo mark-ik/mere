@@ -52,6 +52,7 @@ fn main() {
                 languages,
                 max_depth,
                 max_ops,
+                max_source_bytes,
                 Some(&root),
             ));
             endpoint
@@ -99,7 +100,14 @@ fn main() {
                     })
                     .expect("Knot could not startup-unlock the requested persona vault");
             endpoint.grant_effects(effect_authority(
-                resolve, run, schemes, languages, max_depth, max_ops, None,
+                resolve,
+                run,
+                schemes,
+                languages,
+                max_depth,
+                max_ops,
+                max_source_bytes,
+                None,
             ));
             endpoint
         }
@@ -116,7 +124,16 @@ fn main() {
         ] if mode == "communal-fixture-effects" => communal_fixture_endpoint(
             PathBuf::from(root),
             parse_u64(max_source_bytes, "communal fixture byte limit"),
-            effect_authority(resolve, run, schemes, languages, max_depth, max_ops, None),
+            effect_authority(
+                resolve,
+                run,
+                schemes,
+                languages,
+                max_depth,
+                max_ops,
+                max_source_bytes,
+                None,
+            ),
         ),
         _ => panic!(
             "usage: knot_endpoint [directory] | directory <root> | \
@@ -234,6 +251,7 @@ fn effect_authority(
     languages: &OsStr,
     max_depth: &OsStr,
     max_ops: &OsStr,
+    max_fetch_bytes: &OsStr,
     file_root: Option<&Path>,
 ) -> knot::KnotEffectAuthority {
     let policy = knot::KnotEffectPolicy {
@@ -246,21 +264,106 @@ fn effect_authority(
             .expect("effect max depth must fit in u8"),
         max_ops: parse_u64(max_ops, "effect operation limit"),
     };
+    assert!(
+        !policy
+            .allowed_schemes
+            .iter()
+            .any(|scheme| scheme == "titan"),
+        "Titan is an upload protocol and cannot be admitted as a Knot read effect",
+    );
     let has_file = policy.allowed_schemes.iter().any(|scheme| scheme == "file");
+    let has_network = policy
+        .allowed_schemes
+        .iter()
+        .any(|scheme| is_read_network_scheme(scheme));
     let has_rhai = policy
         .allowed_languages
         .iter()
         .any(|language| language == "rhai");
     let mut authority = knot::KnotEffectAuthority::new(policy);
-    if has_file {
-        let root = file_root.expect("file effects require a directory-root endpoint");
-        authority = authority
-            .with_fetcher(RootedFileFetcher::new(root).expect("could not admit effect file root"));
+    if has_file || has_network {
+        let file = has_file.then(|| {
+            RootedFileFetcher::new(
+                file_root.expect("file effects require a directory-root endpoint"),
+            )
+            .expect("could not admit effect file root")
+        });
+        let network = has_network.then(|| {
+            NetworkEffectFetcher::new(
+                parse_u64(max_fetch_bytes, "effect fetch byte limit")
+                    .try_into()
+                    .expect("effect fetch byte limit must fit in usize"),
+            )
+            .expect("could not start Knot network effect provider")
+        });
+        authority = authority.with_fetcher(RoutedEffectFetcher { file, network });
     }
     if has_rhai {
         authority = authority.register_evaluator(script_rhai::RhaiEvaluator::new());
     }
     authority
+}
+
+fn is_read_network_scheme(scheme: &str) -> bool {
+    matches!(
+        scheme,
+        "http" | "https" | "gemini" | "gopher" | "finger" | "spartan" | "nex" | "guppy"
+    )
+}
+
+struct RoutedEffectFetcher {
+    file: Option<RootedFileFetcher>,
+    network: Option<NetworkEffectFetcher>,
+}
+
+impl knot::KnotEffectFetcher for RoutedEffectFetcher {
+    fn fetch(&mut self, address: &str) -> Result<inker::Fetched, String> {
+        let scheme = url::Url::parse(address)
+            .map_err(|error| format!("could not parse effect address {address}: {error}"))?
+            .scheme()
+            .to_ascii_lowercase();
+        match scheme.as_str() {
+            "file" => self
+                .file
+                .as_mut()
+                .ok_or_else(|| "Knot has no file effect provider".to_string())?
+                .fetch(address),
+            scheme if is_read_network_scheme(scheme) => self
+                .network
+                .as_mut()
+                .ok_or_else(|| format!("Knot has no {scheme} effect provider"))?
+                .fetch(address),
+            _ => Err(format!("Knot has no fetch provider for {address}")),
+        }
+    }
+}
+
+struct NetworkEffectFetcher {
+    runtime: tokio::runtime::Runtime,
+    max_bytes: usize,
+}
+
+impl NetworkEffectFetcher {
+    fn new(max_bytes: usize) -> Result<Self, String> {
+        fetch::install_in_memory_smolweb_tofu();
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .map_err(|error| format!("could not build effect fetch runtime: {error}"))?;
+        Ok(Self { runtime, max_bytes })
+    }
+}
+
+impl knot::KnotEffectFetcher for NetworkEffectFetcher {
+    fn fetch(&mut self, address: &str) -> Result<inker::Fetched, String> {
+        let fetched = self
+            .runtime
+            .block_on(fetch::fetch_page_anonymous_capped(address, self.max_bytes))?;
+        Ok(inker::Fetched {
+            content_type: fetched.content_type,
+            body: fetched.body,
+        })
+    }
 }
 
 struct RootedFileFetcher {
@@ -315,5 +418,108 @@ fn content_type(path: &Path) -> Option<String> {
         Some("knot") => Some("text/x-knot".into()),
         Some("txt") => Some("text/plain".into()),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::thread;
+
+    fn serve_http_cookie_probe(
+        body: &'static str,
+    ) -> (String, thread::JoinHandle<Vec<String>>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind HTTP fixture");
+        let address = listener.local_addr().expect("read HTTP fixture address");
+        let handle = thread::spawn(move || {
+            let mut requests = Vec::new();
+            for seed_session in [true, false] {
+                let (mut stream, _) = listener.accept().expect("accept HTTP fixture");
+                let mut request = [0_u8; 4096];
+                let read = stream.read(&mut request).expect("read HTTP request");
+                let set_cookie = if seed_session {
+                    "Set-Cookie: knot-browser-authority=secret; Path=/\r\n"
+                } else {
+                    ""
+                };
+                write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/markdown\r\n{set_cookie}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body,
+                )
+                .expect("write HTTP response");
+                requests.push(String::from_utf8_lossy(&request[..read]).into_owned());
+            }
+            requests
+        });
+        (format!("http://{address}/note"), handle)
+    }
+
+    fn serve_gopher_once(body: &'static str) -> (String, thread::JoinHandle<String>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind Gopher fixture");
+        let address = listener.local_addr().expect("read Gopher fixture address");
+        let handle = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept Gopher fixture");
+            let mut request = [0_u8; 256];
+            let read = stream.read(&mut request).expect("read Gopher request");
+            stream
+                .write_all(body.as_bytes())
+                .expect("write Gopher response");
+            String::from_utf8_lossy(&request[..read]).into_owned()
+        });
+        (format!("gopher://{address}/0note"), handle)
+    }
+
+    #[test]
+    fn network_effect_fetcher_reads_anonymous_http() {
+        let (url, server) = serve_http_cookie_probe("# from HTTP\n");
+        let mut fetcher = NetworkEffectFetcher::new(1024).expect("start fetcher");
+        fetcher
+            .runtime
+            .block_on(fetch::fetch_page_capped(&url, 1024))
+            .expect("seed browser session cookie");
+        let fetched =
+            knot::KnotEffectFetcher::fetch(&mut fetcher, &url).expect("fetch HTTP effect");
+
+        assert_eq!(fetched.content_type.as_deref(), Some("text/markdown"));
+        assert_eq!(fetched.body, "# from HTTP\n");
+        let requests = server.join().expect("join HTTP fixture");
+        assert_eq!(requests.len(), 2);
+        assert!(requests[1].starts_with("GET /note HTTP/"));
+        assert!(
+            !requests[1].to_ascii_lowercase().contains("\r\ncookie:"),
+            "effect fetch must not borrow browser cookies: {}",
+            requests[1],
+        );
+    }
+
+    #[test]
+    fn network_effect_fetcher_reads_gopher_as_plain_text() {
+        let (url, server) = serve_gopher_once("from Gopher\r\n");
+        let mut fetcher = NetworkEffectFetcher::new(1024).expect("start fetcher");
+        let fetched =
+            knot::KnotEffectFetcher::fetch(&mut fetcher, &url).expect("fetch Gopher effect");
+
+        assert_eq!(fetched.content_type.as_deref(), Some("text/plain"));
+        assert_eq!(fetched.body, "from Gopher\r\n");
+        assert_eq!(server.join().expect("join Gopher fixture"), "note\r\n");
+    }
+
+    #[test]
+    #[should_panic(expected = "Titan is an upload protocol")]
+    fn effect_authority_rejects_titan_read_grants() {
+        effect_authority(
+            OsStr::new("ask"),
+            OsStr::new("never"),
+            OsStr::new("titan"),
+            OsStr::new(""),
+            OsStr::new("1"),
+            OsStr::new("1"),
+            OsStr::new("1024"),
+            None,
+        );
     }
 }
